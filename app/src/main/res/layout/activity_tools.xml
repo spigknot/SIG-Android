@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:background="#000000"
+	android:fillViewport="true">
+
+	<LinearLayout
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:orientation="vertical"
+		android:padding="20dp"
+		android:gravity="center_horizontal">
+
+		<!-- Voltar discreto (ImageButton) -->
+		<ImageButton
+			android:id="@+id/btnBack"
+			android:layout_width="40dp"
+			android:layout_height="40dp"
+			android:layout_gravity="start"
+			android:background="?attr/selectableItemBackgroundBorderless"
+			android:contentDescription="Voltar"
+			android:src="@drawable/ic_arrow_back"
+			android:tint="#FFFFFFFF" />
+
+		<Space android:layout_width="match_parent" android:layout_height="8dp"/>
+
+		<!-- Título -->
+		<TextView
+			android:id="@+id/tools_title"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:text="Ferramentas"
+			android:textSize="20sp"
+			android:textStyle="bold"
+			android:textColor="#FFFFFFFF"
+			android:layout_marginTop="8dp"
+			android:layout_marginBottom="18dp"/>
+
+		<!-- DIGITO RG -->
+		<TextView
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:text="Dígito RG"
+			android:textColor="#FFFFFFFF"
+			android:textSize="16sp"
+			android:layout_marginTop="8dp"/>
+
+		<EditText
+			android:id="@+id/input_rg"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:inputType="number"
+			android:hint="Digite o número do RG (somente dígitos)"
+			android:maxLines="1"
+			android:padding="12dp"
+			android:textColor="#FFFFFF"
+			android:backgroundTint="#444444"
+			android:textColorHint="#88FFFFFF"/>
+
+		<TextView
+			android:id="@+id/result_rg"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:text="Dígito: —"
+			android:textSize="16sp"
+			android:textColor="#FFBB33"
+			android:layout_marginTop="8dp"/>
+
+		<View android:layout_width="match_parent" android:layout_height="18dp"/>
+
+		<!-- DIGITO IMEI -->
+		<TextView
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:text="Dígito IMEI"
+			android:textColor="#FFFFFFFF"
+			android:textSize="16sp"
+			android:layout_marginTop="8dp"/>
+
+		<EditText
+			android:id="@+id/input_imei"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:inputType="number"
+			android:hint="Digite os 14 primeiros dígitos"
+			android:maxLines="1"
+			android:padding="12dp"
+			android:textColor="#FFFFFF"
+			android:backgroundTint="#444444"
+			android:textColorHint="#88FFFFFF"/>
+
+		<TextView
+			android:id="@+id/result_imei"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:text="Dígito: —"
+			android:textSize="16sp"
+			android:textColor="#FFBB33"
+			android:layout_marginTop="8dp"
+			/>
+
+		<TextView
+			android:id="@+id/result_imei_model"
+			android:layout_width="match_parent"
+			android:layout_height="wrap_content"
+			android:text=""
+			android:textColor="@android:color/white"
+			android:textSize="12sp"
+			android:paddingTop="8dp"
+			android:paddingBottom="4dp" />
+
+		<View
+			android:layout_width="match_parent"
+			android:layout_height="18dp" />
+
+		</LinearLayout>
+</ScrollView>

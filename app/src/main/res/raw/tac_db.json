@@ -1,0 +1,92 @@
+[
+  {
+    "tac": "35298210",
+    "brand": "Samsung",
+    "model": "Galaxy S21"
+  },
+  {
+    "tac": "35391805",
+    "brand": "Samsung",
+    "model": "Galaxy A52"
+  },
+  {
+    "tac": "35391806",
+    "brand": "Samsung",
+    "model": "Galaxy A72"
+  },
+  {
+    "tac": "35499410",
+    "brand": "Apple",
+    "model": "iPhone 12"
+  },
+  {
+    "tac": "35391510",
+    "brand": "Apple",
+    "model": "iPhone 11"
+  },
+  {
+    "tac": "35824005",
+    "brand": "Apple",
+    "model": "iPhone SE (2020)"
+  },
+  {
+    "tac": "35985308",
+    "brand": "Motorola",
+    "model": "Moto G100"
+  },
+  {
+    "tac": "35253110",
+    "brand": "Motorola",
+    "model": "Moto G9 Plus"
+  },
+  {
+    "tac": "86195905",
+    "brand": "Xiaomi",
+    "model": "Redmi Note 10"
+  },
+  {
+    "tac": "86617404",
+    "brand": "Xiaomi",
+    "model": "Mi 11"
+  },
+  {
+    "tac": "86857604",
+    "brand": "Huawei",
+    "model": "P40 Pro"
+  },
+  {
+    "tac": "35226510",
+    "brand": "Huawei",
+    "model": "Mate 40"
+  },
+  {
+    "tac": "35391807",
+    "brand": "Nokia",
+    "model": "8.3 5G"
+  },
+  {
+    "tac": "35851109",
+    "brand": "LG",
+    "model": "Velvet"
+  },
+  {
+    "tac": "35391804",
+    "brand": "ASUS",
+    "model": "Zenfone 8"
+  },
+  {
+    "tac": "35699610",
+    "brand": "Realme",
+    "model": "Realme GT"
+  },
+  {
+    "tac": "35391809",
+    "brand": "OnePlus",
+    "model": "OnePlus 9"
+  },
+  {
+    "tac": "35843010",
+    "brand": "Google",
+    "model": "Pixel 5"
+  }
+]
