@@ -49,6 +49,7 @@ class WebViewActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        keepContentInsideSystemBars()
         setContentView(R.layout.activity_webview)
 
         val startUrl = intent.getStringExtra(EXTRA_URL) ?: "about:blank"

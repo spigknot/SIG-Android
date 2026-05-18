@@ -11,8 +11,8 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
 
         buildConfigField "String", "IMEICHECK_API_KEY", "\"AC98-7B2E-E1DC-48A0-0F34-46VN\""
     }
@@ -41,9 +41,8 @@ kotlin {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
-    implementation 'androidx.webkit:webkit:1.10.0'
-    implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'androidx.browser:browser:1.8.0'  // ← Custom Tabs
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
+    implementation("com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.1.1")
 
 }

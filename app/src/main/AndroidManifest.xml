@@ -11,10 +11,26 @@
         android:allowBackup="true"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+        android:theme="@style/Theme.SIG">
 
         <activity
             android:name=".WebViewActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".RgCalculatorActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ImeiCalculatorActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".FfmpegCutActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".FfmpegActivity"
             android:exported="false" />
 
         <activity

@@ -1,118 +1,320 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-	android:layout_width="match_parent"
-	android:layout_height="match_parent"
-	android:background="#000000"
-	android:fillViewport="true">
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:fitsSystemWindows="true">
 
-	<LinearLayout
-		android:layout_width="match_parent"
-		android:layout_height="wrap_content"
-		android:orientation="vertical"
-		android:padding="20dp"
-		android:gravity="center_horizontal">
+    <ImageView
+        android:id="@+id/tools_wallpaper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:src="@drawable/wallpaper_ferramentas" />
 
-		<!-- Voltar discreto (ImageButton) -->
-		<ImageButton
-			android:id="@+id/btnBack"
-			android:layout_width="40dp"
-			android:layout_height="40dp"
-			android:layout_gravity="start"
-			android:background="?attr/selectableItemBackgroundBorderless"
-			android:contentDescription="Voltar"
-			android:src="@drawable/ic_arrow_back"
-			android:tint="#FFFFFFFF" />
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#77000000" />
 
-		<Space android:layout_width="match_parent" android:layout_height="8dp"/>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true">
 
-		<!-- Título -->
-		<TextView
-			android:id="@+id/tools_title"
-			android:layout_width="wrap_content"
-			android:layout_height="wrap_content"
-			android:text="Ferramentas"
-			android:textSize="20sp"
-			android:textStyle="bold"
-			android:textColor="#FFFFFFFF"
-			android:layout_marginTop="8dp"
-			android:layout_marginBottom="18dp"/>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="20dp">
 
-		<!-- DIGITO RG -->
-		<TextView
-			android:layout_width="match_parent"
-			android:layout_height="wrap_content"
-			android:text="Dígito RG"
-			android:textColor="#FFFFFFFF"
-			android:textSize="16sp"
-			android:layout_marginTop="8dp"/>
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_gravity="start"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Voltar"
+                android:src="@drawable/ic_arrow_back"
+                android:tint="#FFFFFFFF" />
 
-		<EditText
-			android:id="@+id/input_rg"
-			android:layout_width="match_parent"
-			android:layout_height="wrap_content"
-			android:inputType="number"
-			android:hint="Digite o número do RG (somente dígitos)"
-			android:maxLines="1"
-			android:padding="12dp"
-			android:textColor="#FFFFFF"
-			android:backgroundTint="#444444"
-			android:textColorHint="#88FFFFFF"/>
+            <TextView
+                android:id="@+id/tools_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="18dp"
+                android:text="Ferramentas"
+                android:textColor="#FFFFFFFF"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
-		<TextView
-			android:id="@+id/result_rg"
-			android:layout_width="wrap_content"
-			android:layout_height="wrap_content"
-			android:text="Dígito: —"
-			android:textSize="16sp"
-			android:textColor="#FFBB33"
-			android:layout_marginTop="8dp"/>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="10dp"
+                android:text="Ativas"
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold" />
 
-		<View android:layout_width="match_parent" android:layout_height="18dp"/>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
 
-		<!-- DIGITO IMEI -->
-		<TextView
-			android:layout_width="match_parent"
-			android:layout_height="wrap_content"
-			android:text="Dígito IMEI"
-			android:textColor="#FFFFFFFF"
-			android:textSize="16sp"
-			android:layout_marginTop="8dp"/>
+                <LinearLayout
+                    android:id="@+id/button_rg_calculator"
+                    android:layout_width="0dp"
+                    android:layout_height="132dp"
+                    android:layout_marginEnd="7dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tool_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="14dp">
 
-		<EditText
-			android:id="@+id/input_imei"
-			android:layout_width="match_parent"
-			android:layout_height="wrap_content"
-			android:inputType="number"
-			android:hint="Digite os 14 primeiros dígitos"
-			android:maxLines="1"
-			android:padding="12dp"
-			android:textColor="#FFFFFF"
-			android:backgroundTint="#444444"
-			android:textColorHint="#88FFFFFF"/>
+                    <ImageView
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_shortcut_document"
+                        android:tint="#FFFFFFFF" />
 
-		<TextView
-			android:id="@+id/result_imei"
-			android:layout_width="wrap_content"
-			android:layout_height="wrap_content"
-			android:text="Dígito: —"
-			android:textSize="16sp"
-			android:textColor="#FFBB33"
-			android:layout_marginTop="8dp"
-			/>
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Dígitos de RG/CPF"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
 
-		<TextView
-			android:id="@+id/result_imei_model"
-			android:layout_width="match_parent"
-			android:layout_height="wrap_content"
-			android:text=""
-			android:textColor="@android:color/white"
-			android:textSize="12sp"
-			android:paddingTop="8dp"
-			android:paddingBottom="4dp" />
+                </LinearLayout>
 
-		<View
-			android:layout_width="match_parent"
-			android:layout_height="18dp" />
+                <LinearLayout
+                    android:id="@+id/button_imei_calculator"
+                    android:layout_width="0dp"
+                    android:layout_height="132dp"
+                    android:layout_marginStart="7dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tool_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="14dp">
 
-		</LinearLayout>
-</ScrollView>
+                    <ImageView
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_tool_imei"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Dígito IMEI"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="10dp"
+                android:text="Ideias"
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="118dp"
+                    android:layout_marginEnd="7dp"
+                    android:layout_weight="1"
+                    android:alpha="0.72"
+                    android:background="@drawable/tool_card_bg_disabled"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <ImageView
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_tool_id_card"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="CPF/CNPJ"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:background="@drawable/tool_badge_bg"
+                        android:paddingStart="7dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="7dp"
+                        android:paddingBottom="2dp"
+                        android:text="EM BREVE"
+                        android:textColor="#DDFFFFFF"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/button_ffmpeg"
+                    android:layout_width="0dp"
+                    android:layout_height="118dp"
+                    android:layout_marginStart="7dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tool_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <ImageView
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_tool_audio"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="FFmpeg"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="118dp"
+                    android:layout_marginEnd="7dp"
+                    android:layout_weight="1"
+                    android:alpha="0.72"
+                    android:background="@drawable/tool_card_bg_disabled"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <ImageView
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_tool_plate"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="Placas"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:background="@drawable/tool_badge_bg"
+                        android:paddingStart="7dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="7dp"
+                        android:paddingBottom="2dp"
+                        android:text="EM BREVE"
+                        android:textColor="#DDFFFFFF"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="118dp"
+                    android:layout_marginStart="7dp"
+                    android:layout_weight="1"
+                    android:alpha="0.72"
+                    android:background="@drawable/tool_card_bg_disabled"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <ImageView
+                        android:layout_width="30dp"
+                        android:layout_height="30dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_shortcut_search"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="Consultas"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:background="@drawable/tool_badge_bg"
+                        android:paddingStart="7dp"
+                        android:paddingTop="2dp"
+                        android:paddingEnd="7dp"
+                        android:paddingBottom="2dp"
+                        android:text="EM BREVE"
+                        android:textColor="#DDFFFFFF"
+                        android:textSize="10sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <include layout="@layout/view_sig_echo_footer" />
+</FrameLayout>
