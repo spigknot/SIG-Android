@@ -50,9 +50,13 @@ class FfmpegRangeSlider @JvmOverloads constructor(
         this.durationMs = max(durationMs, 1L)
         this.startMs = startMs.coerceIn(0L, this.durationMs)
         this.endMs = endMs.coerceIn(this.startMs, this.durationMs)
-        this.currentMs = currentMs.coerceIn(0L, this.durationMs)
+        val previousCurrent = currentMs
+        this.currentMs = currentMs.coerceIn(this.startMs, this.endMs)
         invalidate()
         onRangeChanged?.invoke(this.startMs, this.endMs, fromUser, activeThumb)
+        if (currentMs != previousCurrent) {
+            onPositionChanged?.invoke(currentMs, fromUser)
+        }
     }
 
     fun setStart(startMs: Long, fromUser: Boolean = false) {
@@ -68,7 +72,7 @@ class FfmpegRangeSlider @JvmOverloads constructor(
     fun getEndMs(): Long = endMs
 
     fun setCurrent(positionMs: Long, fromUser: Boolean = false) {
-        val nextPosition = positionMs.coerceIn(0L, durationMs)
+        val nextPosition = positionMs.coerceIn(startMs, endMs)
         if (nextPosition == currentMs && !fromUser) return
         currentMs = nextPosition
         invalidate()
@@ -142,7 +146,7 @@ class FfmpegRangeSlider @JvmOverloads constructor(
             }
 
             Thumb.CURRENT -> {
-                currentMs = value.coerceIn(0L, durationMs)
+                currentMs = value.coerceIn(startMs, endMs)
             }
 
             null -> return

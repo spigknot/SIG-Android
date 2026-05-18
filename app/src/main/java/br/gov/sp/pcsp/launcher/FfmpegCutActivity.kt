@@ -76,7 +76,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                 if (position < startMs) {
                     videoPreview.pause()
                     playWhenSeekCompletes = true
-                    seekPreview(startMs)
+                    seekPreview(startMs, forPlaybackStart = true)
                 } else if (position >= endMs) {
                     videoPreview.pause()
                     playWhenSeekCompletes = false
@@ -453,10 +453,15 @@ class FfmpegCutActivity : AppCompatActivity() {
         syncingFields = false
     }
 
-    private fun seekPreview(positionMs: Long, updateTimeline: Boolean = true) {
+    private fun seekPreview(positionMs: Long, updateTimeline: Boolean = true, forPlaybackStart: Boolean = false) {
         if (videoPreview.visibility == View.VISIBLE) {
             val safePosition = positionMs.coerceIn(0L, durationMs)
-            videoPreview.seekTo(safePosition.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            val player = previewPlayer
+            if (forPlaybackStart && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && player != null) {
+                player.seekTo(safePosition, MediaPlayer.SEEK_NEXT_SYNC)
+            } else {
+                videoPreview.seekTo(safePosition.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+            }
             if (updateTimeline) {
                 timeline.setCurrent(safePosition)
             }
@@ -479,7 +484,7 @@ class FfmpegCutActivity : AppCompatActivity() {
             val playFromMs = if (currentMs < startMs || currentMs >= endMs) startMs else currentMs
             if (currentMs < startMs || currentMs >= endMs) {
                 playWhenSeekCompletes = true
-                seekPreview(playFromMs)
+                seekPreview(playFromMs, forPlaybackStart = true)
                 setPlaybackButtonPlaying(true)
                 if (previewPlayer == null) {
                     videoPreview.postDelayed({
