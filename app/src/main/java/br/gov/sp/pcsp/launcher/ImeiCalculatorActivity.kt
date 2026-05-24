@@ -1,8 +1,10 @@
 package br.gov.sp.pcsp.launcher
 
+import android.annotation.SuppressLint
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.KeyEvent
 import android.view.View
@@ -46,6 +48,7 @@ class ImeiCalculatorActivity : AppCompatActivity() {
     private var isHistoryExpanded = false
     private var isFormattingImei = false
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -56,6 +59,7 @@ class ImeiCalculatorActivity : AppCompatActivity() {
         historyHeaderView = findViewById(R.id.history_imei_header)
         historyView = findViewById(R.id.history_imei)
         toggleHistoryView = findViewById(R.id.toggle_history_imei)
+        configureHistoryBox(historyView)
         resultModel = findViewById(R.id.result_imei_model)
         val inputImeiTac = findViewById<EditText>(R.id.input_imei_tac)
         val inputImeiSn = findViewById<EditText>(R.id.input_imei_sn)
@@ -100,6 +104,14 @@ class ImeiCalculatorActivity : AppCompatActivity() {
                 processImeiDigits(tacDigits, resultImei)
                 true
             }
+        }
+    }
+
+    private fun configureHistoryBox(historyView: TextView) {
+        historyView.movementMethod = ScrollingMovementMethod.getInstance()
+        historyView.setOnTouchListener { view, _ ->
+            view.parent.requestDisallowInterceptTouchEvent(true)
+            false
         }
     }
 

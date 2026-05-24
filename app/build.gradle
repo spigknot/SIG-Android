@@ -6,6 +6,7 @@ plugins {
 android {
     namespace 'br.gov.sp.pcsp.launcher'
     compileSdk 35
+    ndkVersion "27.2.12479018"
 
     defaultConfig {
         applicationId "br.gov.sp.pcsp.launcher"
@@ -14,11 +15,22 @@ android {
         versionCode 2
         versionName "1.1"
 
+        ndk {
+            abiFilters 'arm64-v8a', 'x86_64'
+        }
+
         buildConfigField "String", "IMEICHECK_API_KEY", "\"AC98-7B2E-E1DC-48A0-0F34-46VN\""
     }
 
     buildFeatures {
         buildConfig true
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file("src/main/cpp/CMakeLists.txt")
+            version "3.22.1"
+        }
     }
 
     compileOptions {
@@ -42,6 +54,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.browser:browser:1.8.0'  // ← Custom Tabs
+    implementation 'androidx.documentfile:documentfile:1.0.1'
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
     implementation("com.moizhassan.ffmpeg:ffmpeg-kit-16kb:6.1.1")
 

@@ -64,7 +64,8 @@
                 android:text="Ativas"
                 android:textColor="#CCFFFFFF"
                 android:textSize="13sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:visibility="gone" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -97,7 +98,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="12dp"
-                        android:text="Dígitos de RG/CPF"
+                        android:text="Dígito RG"
                         android:textColor="#FFFFFFFF"
                         android:textSize="16sp"
                         android:textStyle="bold" />
@@ -105,10 +106,61 @@
                 </LinearLayout>
 
                 <LinearLayout
-                    android:id="@+id/button_imei_calculator"
+                    android:id="@+id/button_cpf_calculator"
                     android:layout_width="0dp"
                     android:layout_height="132dp"
                     android:layout_marginStart="7dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/tool_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:padding="14dp">
+
+                    <ImageView
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_tool_id_card"
+                        android:tint="#FFFFFFFF" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Dígitos CPF"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="10dp"
+                android:text="Ideias"
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:id="@+id/button_imei_calculator"
+                    android:layout_width="0dp"
+                    android:layout_height="132dp"
+                    android:layout_marginEnd="7dp"
                     android:layout_weight="1"
                     android:background="@drawable/tool_card_bg"
                     android:clickable="true"
@@ -133,72 +185,12 @@
                         android:textColor="#FFFFFFFF"
                         android:textSize="16sp"
                         android:textStyle="bold" />
-
-                </LinearLayout>
-            </LinearLayout>
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="10dp"
-                android:text="Ideias"
-                android:textColor="#CCFFFFFF"
-                android:textSize="13sp"
-                android:textStyle="bold" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="118dp"
-                    android:layout_marginEnd="7dp"
-                    android:layout_weight="1"
-                    android:alpha="0.72"
-                    android:background="@drawable/tool_card_bg_disabled"
-                    android:gravity="center_vertical"
-                    android:orientation="vertical"
-                    android:padding="14dp">
-
-                    <ImageView
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_tool_id_card"
-                        android:tint="#FFFFFFFF" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:text="CPF/CNPJ"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="5dp"
-                        android:background="@drawable/tool_badge_bg"
-                        android:paddingStart="7dp"
-                        android:paddingTop="2dp"
-                        android:paddingEnd="7dp"
-                        android:paddingBottom="2dp"
-                        android:text="EM BREVE"
-                        android:textColor="#DDFFFFFF"
-                        android:textSize="10sp"
-                        android:textStyle="bold" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/button_ffmpeg"
                     android:layout_width="0dp"
-                    android:layout_height="118dp"
+                    android:layout_height="132dp"
                     android:layout_marginStart="7dp"
                     android:layout_weight="1"
                     android:background="@drawable/tool_card_bg"
@@ -210,8 +202,8 @@
                     android:padding="14dp">
 
                     <ImageView
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
                         android:contentDescription="@null"
                         android:src="@drawable/ic_tool_audio"
                         android:tint="#FFFFFFFF" />
@@ -219,12 +211,13 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
+                        android:layout_marginTop="12dp"
                         android:text="FFmpeg"
                         android:textColor="#FFFFFFFF"
-                        android:textSize="15sp"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
                 </LinearLayout>
+
             </LinearLayout>
 
             <LinearLayout
@@ -235,88 +228,41 @@
                 android:orientation="horizontal">
 
                 <LinearLayout
+                    android:id="@+id/button_whisper"
                     android:layout_width="0dp"
-                    android:layout_height="118dp"
+                    android:layout_height="132dp"
                     android:layout_marginEnd="7dp"
                     android:layout_weight="1"
-                    android:alpha="0.72"
-                    android:background="@drawable/tool_card_bg_disabled"
+                    android:background="@drawable/tool_card_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
                     android:gravity="center_vertical"
                     android:orientation="vertical"
                     android:padding="14dp">
 
                     <ImageView
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
+                        android:layout_width="34dp"
+                        android:layout_height="34dp"
                         android:contentDescription="@null"
-                        android:src="@drawable/ic_tool_plate"
+                        android:src="@drawable/ic_tool_whisper"
                         android:tint="#FFFFFFFF" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:text="Placas"
+                        android:layout_marginTop="12dp"
+                        android:text="Whisper"
                         android:textColor="#FFFFFFFF"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="5dp"
-                        android:background="@drawable/tool_badge_bg"
-                        android:paddingStart="7dp"
-                        android:paddingTop="2dp"
-                        android:paddingEnd="7dp"
-                        android:paddingBottom="2dp"
-                        android:text="EM BREVE"
-                        android:textColor="#DDFFFFFF"
-                        android:textSize="10sp"
+                        android:textSize="16sp"
                         android:textStyle="bold" />
                 </LinearLayout>
 
-                <LinearLayout
+                <Space
                     android:layout_width="0dp"
-                    android:layout_height="118dp"
+                    android:layout_height="132dp"
                     android:layout_marginStart="7dp"
-                    android:layout_weight="1"
-                    android:alpha="0.72"
-                    android:background="@drawable/tool_card_bg_disabled"
-                    android:gravity="center_vertical"
-                    android:orientation="vertical"
-                    android:padding="14dp">
-
-                    <ImageView
-                        android:layout_width="30dp"
-                        android:layout_height="30dp"
-                        android:contentDescription="@null"
-                        android:src="@drawable/ic_shortcut_search"
-                        android:tint="#FFFFFFFF" />
-
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="10dp"
-                        android:text="Consultas"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="5dp"
-                        android:background="@drawable/tool_badge_bg"
-                        android:paddingStart="7dp"
-                        android:paddingTop="2dp"
-                        android:paddingEnd="7dp"
-                        android:paddingBottom="2dp"
-                        android:text="EM BREVE"
-                        android:textColor="#DDFFFFFF"
-                        android:textSize="10sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
+                    android:layout_weight="1" />
             </LinearLayout>
         </LinearLayout>
     </ScrollView>

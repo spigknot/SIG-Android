@@ -1,0 +1,511 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:fitsSystemWindows="true">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:src="@drawable/wallpaper_ferramentas" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#88000000" />
+
+    <ScrollView
+        android:id="@+id/extract_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingBottom="76dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginBottom="18dp">
+
+                <ImageButton
+                    android:id="@+id/btnBack"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Voltar"
+                    android:src="@drawable/ic_arrow_back"
+                    android:tint="#FFFFFFFF" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="Extrair áudio"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="44dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="start|top"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageButton
+                        android:id="@+id/button_select_source"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:contentDescription="Selecionar origem"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:padding="9dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_select_file" />
+
+                    <ImageView
+                        android:id="@+id/arrow_input_output"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:src="@drawable/ic_arrow_right"
+                        android:tint="#88FFFFFF"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/button_select_output_folder"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:contentDescription="Selecionar pasta de saída"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:padding="9dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_folder"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <TextureView
+                android:id="@+id/video_preview"
+                android:layout_width="match_parent"
+                android:layout_height="360dp"
+                android:layout_marginTop="0dp"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/selection_summary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text=""
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/playback_controls"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageButton
+                    android:id="@+id/button_speed_down"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="Desacelerar"
+                    android:focusable="true"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_speed_down" />
+
+                <ImageButton
+                    android:id="@+id/button_play_pause"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="Reproduzir"
+                    android:focusable="true"
+                    android:padding="2dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_play" />
+
+                <ImageButton
+                    android:id="@+id/button_speed_up"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="Acelerar"
+                    android:focusable="true"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_speed_up" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/timeline_frame"
+                android:layout_width="match_parent"
+                android:layout_height="42dp"
+                android:layout_marginTop="-8dp"
+                android:visibility="gone">
+
+                <br.gov.sp.pcsp.launcher.FfmpegRangeSlider
+                    android:id="@+id/timeline"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:enabled="false"
+                    android:paddingStart="30dp"
+                    android:paddingEnd="30dp" />
+
+                <TextView
+                    android:id="@+id/playback_speed_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal|bottom"
+                    android:background="@android:color/transparent"
+                    android:fontFamily="monospace"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="1x"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+            </FrameLayout>
+
+            <TextView
+                android:id="@+id/current_time"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:text="00:00:00.000"
+                android:textColor="#AAFFFFFF"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/time_fields"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="7dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Início"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="11sp" />
+
+                    <EditText
+                        android:id="@+id/input_from"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:backgroundTint="#555555"
+                        android:fontFamily="monospace"
+                        android:hint="00:00:00.000"
+                        android:inputType="text"
+                        android:maxLines="1"
+                        android:padding="9dp"
+                        android:selectAllOnFocus="true"
+                        android:textColor="#FFFFFFFF"
+                        android:textColorHint="#88FFFFFF"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="7dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Fim"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="11sp" />
+
+                    <EditText
+                        android:id="@+id/input_to"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:backgroundTint="#555555"
+                        android:fontFamily="monospace"
+                        android:hint="00:00:00.000"
+                        android:inputType="text"
+                        android:maxLines="1"
+                        android:padding="9dp"
+                        android:selectAllOnFocus="true"
+                        android:textColor="#FFFFFFFF"
+                        android:textColorHint="#88FFFFFF"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/transcription_presets"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/button_preset_local"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:gravity="center"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="Padrão para transcrição local"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/button_preset_remote"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:gravity="center"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="Padrão para transcrição remota"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/button_output_extension"
+                android:layout_width="wrap_content"
+                android:layout_height="38dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/ffmpeg_outline_button_bg"
+                android:gravity="center"
+                android:minWidth="92dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text=".wav"
+                android:textColor="#FFFFFFFF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/advanced_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Configurações avançadas"
+                android:textColor="#FF5EDAF2"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/advanced_options"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/button_sample_rate"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginEnd="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:gravity="center"
+                    android:text="16000 Hz"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/button_channels"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="5dp"
+                    android:layout_marginEnd="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:gravity="center"
+                    android:text="mono"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/button_bitrate"
+                    android:layout_width="0dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="5dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:gravity="center"
+                    android:text="128k"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <ScrollView
+                android:id="@+id/selected_list_box"
+                android:layout_width="match_parent"
+                android:layout_height="154dp"
+                android:layout_marginTop="12dp"
+                android:background="#AA1B1B1B"
+                android:fillViewport="true"
+                android:overScrollMode="ifContentScrolls"
+                android:padding="12dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/selected_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="12sp" />
+            </ScrollView>
+
+            <ImageButton
+                android:id="@+id/button_extract"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="16dp"
+                android:alpha="0.45"
+                android:background="@drawable/ffmpeg_outline_green_button_bg"
+                android:clickable="false"
+                android:contentDescription="Extrair áudio"
+                android:focusable="false"
+                android:foreground="?attr/selectableItemBackground"
+                android:padding="8dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_ffmpeg_extract_audio"
+                android:visibility="gone" />
+
+            <ProgressBar
+                android:id="@+id/progress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:indeterminate="true"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text=""
+                android:textColor="#DDFFFFFF"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/output_file_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:ellipsize="middle"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textColor="#FF5EDAF2"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/output_actions"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageButton
+                    android:id="@+id/button_save_to_folder"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Salvar na pasta"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_save" />
+
+                <ImageButton
+                    android:id="@+id/button_output_folder"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="14dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Abrir pasta"
+                    android:padding="7dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_folder" />
+
+                <ImageButton
+                    android:id="@+id/button_output_share"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="14dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Compartilhar"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_share" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <include layout="@layout/view_sig_echo_footer" />
+</FrameLayout>

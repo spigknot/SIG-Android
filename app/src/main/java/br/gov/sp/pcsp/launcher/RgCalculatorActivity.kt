@@ -1,10 +1,12 @@
 package br.gov.sp.pcsp.launcher
 
+import android.annotation.SuppressLint
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
+import android.text.method.ScrollingMovementMethod
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageButton
@@ -19,9 +21,16 @@ import java.util.Locale
 class RgCalculatorActivity : AppCompatActivity() {
 
     companion object {
+        const val EXTRA_MODE = "calculator_mode"
+        const val MODE_RG = "rg"
+        const val MODE_CPF = "cpf"
+
+        private const val MODE_BOTH = "both"
         private const val HISTORY_FILE = "rg_history.txt"
         private const val CPF_HISTORY_FILE = "cpf_history.txt"
         private const val HISTORY_COLLAPSED_LIMIT = 10
+        private const val MAX_POSSIBILITIES = 5000
+        private const val MAX_SEARCH_SPACE = 1_000_000L
     }
 
     private var lastSavedRg = ""
@@ -39,14 +48,19 @@ class RgCalculatorActivity : AppCompatActivity() {
     private var isCpfHistoryExpanded = false
     private var isFormattingRg = false
     private var isFormattingCpf = false
+    private var calculatorMode = MODE_BOTH
     private val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR"))
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
         setContentView(R.layout.activity_rg_calculator)
 
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+        calculatorMode = intent.getStringExtra(EXTRA_MODE)
+            ?.takeIf { it == MODE_RG || it == MODE_CPF }
+            ?: MODE_BOTH
 
         rgHistoryHeaderView = findViewById(R.id.history_rg_header)
         rgHistoryView = findViewById(R.id.history_rg)
@@ -54,10 +68,30 @@ class RgCalculatorActivity : AppCompatActivity() {
         cpfHistoryHeaderView = findViewById(R.id.history_cpf_header)
         cpfHistoryView = findViewById(R.id.history_cpf)
         cpfToggleHistoryView = findViewById(R.id.toggle_history_cpf)
+        configureHistoryBox(rgHistoryView)
+        configureHistoryBox(cpfHistoryView)
+        val titleView = findViewById<TextView>(R.id.calculator_title)
+        val labelRg = findViewById<TextView>(R.id.label_rg)
+        val labelCpf = findViewById<TextView>(R.id.label_cpf)
         val inputRg = findViewById<EditText>(R.id.input_rg)
         val resultRg = findViewById<TextView>(R.id.result_rg)
+        val rgPossibilitiesPanel = findViewById<View>(R.id.rg_possibilities_panel)
+        val inputRgPattern = findViewById<EditText>(R.id.input_rg_pattern)
+        val resultRgPossibilities = findViewById<TextView>(R.id.result_rg_possibilities)
         val inputCpf = findViewById<EditText>(R.id.input_cpf)
         val resultCpf = findViewById<TextView>(R.id.result_cpf)
+        val cpfPossibilitiesPanel = findViewById<View>(R.id.cpf_possibilities_panel)
+        val inputCpfPattern = findViewById<EditText>(R.id.input_cpf_pattern)
+        val resultCpfPossibilities = findViewById<TextView>(R.id.result_cpf_possibilities)
+        configureHistoryBox(resultRgPossibilities)
+        configureHistoryBox(resultCpfPossibilities)
+        titleView.text = when (calculatorMode) {
+            MODE_RG -> "Calculadora de RG"
+            MODE_CPF -> "Calculadora de CPF"
+            else -> "Calculadora de Dígitos"
+        }
+        setVisibleIfNeeded(listOf(labelRg, inputRg, resultRg, rgPossibilitiesPanel), showsRg())
+        setVisibleIfNeeded(listOf(labelCpf, inputCpf, resultCpf, cpfPossibilitiesPanel), showsCpf())
 
         rgToggleHistoryView.setOnClickListener {
             isRgHistoryExpanded = !isRgHistoryExpanded
@@ -73,9 +107,20 @@ class RgCalculatorActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.clear_history_cpf).setOnClickListener {
             confirmClearCpfHistory()
         }
+        findViewById<TextView>(R.id.button_find_rg_possibilities).setOnClickListener {
+            showRgPossibilities(inputRgPattern.text?.toString().orEmpty(), resultRgPossibilities)
+        }
+        findViewById<TextView>(R.id.button_find_cpf_possibilities).setOnClickListener {
+            showCpfPossibilities(inputCpfPattern.text?.toString().orEmpty(), resultCpfPossibilities)
+        }
 
         refreshRgHistory()
         refreshCpfHistory()
+
+        when {
+            showsRg() -> inputRg.requestFocus()
+            showsCpf() -> inputCpf.requestFocus()
+        }
 
         inputRg.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -138,6 +183,19 @@ class RgCalculatorActivity : AppCompatActivity() {
         })
     }
 
+    private fun configureHistoryBox(historyView: TextView) {
+        historyView.movementMethod = ScrollingMovementMethod.getInstance()
+        historyView.setOnTouchListener { view, _ ->
+            view.parent.requestDisallowInterceptTouchEvent(true)
+            false
+        }
+    }
+
+    private fun setVisibleIfNeeded(views: List<View>, isVisible: Boolean) {
+        val visibility = if (isVisible) View.VISIBLE else View.GONE
+        views.forEach { it.visibility = visibility }
+    }
+
     override fun onDestroy() {
         cancelPendingRgHistorySave()
         cancelPendingCpfHistorySave()
@@ -172,6 +230,147 @@ class RgCalculatorActivity : AppCompatActivity() {
         }.sum()
         val remainder = sum % 11
         return if (remainder < 2) 0 else 11 - remainder
+    }
+
+    private fun showRgPossibilities(rawPattern: String, resultView: TextView) {
+        val pattern = normalizeRgPattern(rawPattern)
+        if (pattern.isEmpty()) {
+            showPossibilitiesResult(resultView, "Informe pelo menos um dígito conhecido.")
+            return
+        }
+
+        val basePattern = pattern.take(8)
+        val checkPattern = pattern.getOrNull(8)
+        if (basePattern.any { it != '?' && !it.isDigit() }) {
+            showPossibilitiesResult(resultView, "Use X apenas na posição do dígito verificador.")
+            return
+        }
+        val unknownBaseCount = basePattern.count { it == '?' }
+        val searchSpace = pow10(unknownBaseCount)
+        if (searchSpace > MAX_SEARCH_SPACE) {
+            showPossibilitiesResult(
+                resultView,
+                "Muitas combinações possíveis. Informe mais posições conhecidas."
+            )
+            return
+        }
+
+        val matches = mutableListOf<String>()
+        generateCombinations(basePattern) { base ->
+            val digit = computeRgDigit(base)
+            if (checkPattern == null || checkPattern == '?' || checkPattern.toString() == digit) {
+                matches += "${formatRg(base)}-$digit"
+            }
+            matches.size < MAX_POSSIBILITIES
+        }
+        showPossibilitiesResult(resultView, formatPossibilities(matches))
+    }
+
+    private fun showCpfPossibilities(rawPattern: String, resultView: TextView) {
+        val pattern = normalizeCpfPattern(rawPattern)
+        if (pattern.isEmpty()) {
+            showPossibilitiesResult(resultView, "Informe pelo menos um dígito conhecido.")
+            return
+        }
+
+        val basePattern = pattern.take(9)
+        val checkPattern = pattern.drop(9)
+        val unknownBaseCount = basePattern.count { it == '?' }
+        val searchSpace = pow10(unknownBaseCount)
+        if (searchSpace > MAX_SEARCH_SPACE) {
+            showPossibilitiesResult(
+                resultView,
+                "Muitas combinações possíveis. Informe mais posições conhecidas."
+            )
+            return
+        }
+
+        val matches = mutableListOf<String>()
+        generateCombinations(basePattern) { base ->
+            val digits = computeCpfDigits(base)
+            val matchesCheckDigits = checkPattern.withIndex().all { (index, ch) ->
+                ch == '?' || ch == digits[index]
+            }
+            if (matchesCheckDigits) {
+                matches += "${formatCpf(base)}-$digits"
+            }
+            matches.size < MAX_POSSIBILITIES
+        }
+        showPossibilitiesResult(resultView, formatPossibilities(matches))
+    }
+
+    private fun normalizeRgPattern(rawPattern: String): String {
+        val known = rawPattern.uppercase(Locale.ROOT)
+            .mapNotNull { ch ->
+                when {
+                    ch.isDigit() -> ch
+                    ch == 'X' -> ch
+                    ch == '?' || ch == '_' || ch == '*' -> '?'
+                    else -> null
+                }
+            }
+            .take(9)
+            .joinToString("")
+        if (known.isEmpty()) return ""
+        return known.padEnd(9, '?')
+    }
+
+    private fun normalizeCpfPattern(rawPattern: String): String {
+        val known = rawPattern
+            .mapNotNull { ch ->
+                when {
+                    ch.isDigit() -> ch
+                    ch == '?' || ch == '_' || ch == '*' -> '?'
+                    else -> null
+                }
+            }
+            .take(11)
+            .joinToString("")
+        if (known.isEmpty()) return ""
+        return known.padEnd(11, '?')
+    }
+
+    private fun generateCombinations(pattern: String, onCandidate: (String) -> Boolean) {
+        val chars = pattern.toCharArray()
+
+        fun fill(index: Int): Boolean {
+            if (index == chars.size) {
+                return onCandidate(String(chars))
+            }
+            if (chars[index] != '?') return fill(index + 1)
+            for (digit in '0'..'9') {
+                chars[index] = digit
+                if (!fill(index + 1)) {
+                    chars[index] = '?'
+                    return false
+                }
+            }
+            chars[index] = '?'
+            return true
+        }
+
+        fill(0)
+    }
+
+    private fun pow10(exponent: Int): Long {
+        var value = 1L
+        repeat(exponent) { value *= 10L }
+        return value
+    }
+
+    private fun formatPossibilities(matches: List<String>): String {
+        if (matches.isEmpty()) return "Nenhuma possibilidade encontrada."
+        val suffix = if (matches.size >= MAX_POSSIBILITIES) {
+            "\n\nMostrando as primeiras $MAX_POSSIBILITIES possibilidades."
+        } else {
+            ""
+        }
+        return "${matches.size} possibilidade(s):\n\n${matches.joinToString("\n")}$suffix"
+    }
+
+    private fun showPossibilitiesResult(resultView: TextView, text: String) {
+        resultView.text = text
+        resultView.visibility = View.VISIBLE
     }
 
     private fun formatRg(digits: String): String {
@@ -237,6 +436,10 @@ class RgCalculatorActivity : AppCompatActivity() {
     }
 
     private fun refreshRgHistory() {
+        if (!showsRg()) {
+            hideHistory(rgHistoryHeaderView, rgHistoryView, rgToggleHistoryView)
+            return
+        }
         refreshHistory(
             rgHistoryFile(),
             rgHistoryHeaderView,
@@ -247,6 +450,10 @@ class RgCalculatorActivity : AppCompatActivity() {
     }
 
     private fun refreshCpfHistory() {
+        if (!showsCpf()) {
+            hideHistory(cpfHistoryHeaderView, cpfHistoryView, cpfToggleHistoryView)
+            return
+        }
         refreshHistory(
             cpfHistoryFile(),
             cpfHistoryHeaderView,
@@ -254,6 +461,17 @@ class RgCalculatorActivity : AppCompatActivity() {
             cpfToggleHistoryView,
             isCpfHistoryExpanded
         )
+    }
+
+    private fun showsRg(): Boolean = calculatorMode != MODE_CPF
+
+    private fun showsCpf(): Boolean = calculatorMode != MODE_RG
+
+    private fun hideHistory(headerView: View, historyView: TextView, toggleHistoryView: TextView) {
+        headerView.visibility = View.GONE
+        historyView.text = ""
+        historyView.visibility = View.GONE
+        toggleHistoryView.visibility = View.GONE
     }
 
     private fun refreshHistory(
@@ -264,10 +482,7 @@ class RgCalculatorActivity : AppCompatActivity() {
         isExpanded: Boolean
     ) {
         if (!file.exists() || file.length() == 0L) {
-            headerView.visibility = View.GONE
-            historyView.text = ""
-            historyView.visibility = View.GONE
-            toggleHistoryView.visibility = View.GONE
+            hideHistory(headerView, historyView, toggleHistoryView)
             return
         }
 

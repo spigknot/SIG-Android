@@ -17,5 +17,11 @@ class FfmpegActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_cut_media).setOnClickListener {
             startActivity(Intent(this, FfmpegCutActivity::class.java))
         }
+        findViewById<View>(R.id.button_extract_audio).setOnClickListener {
+            startActivity(Intent(this, FfmpegExtractAudioActivity::class.java))
+        }
+        findViewById<View>(R.id.button_rotate_video).setOnClickListener {
+            startActivity(Intent(this, FfmpegRotateVideoActivity::class.java))
+        }
     }
 }

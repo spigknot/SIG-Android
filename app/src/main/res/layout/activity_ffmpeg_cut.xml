@@ -59,30 +59,61 @@
             </FrameLayout>
 
             <FrameLayout
+                android:id="@+id/preview_frame"
                 android:layout_width="match_parent"
-                android:layout_height="450dp">
+                android:layout_height="88dp">
 
-                <VideoView
+                <TextureView
                     android:id="@+id/video_preview"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:layout_gravity="center"
-                    android:background="#99000000"
                     android:visibility="gone" />
 
-                <ImageButton
-                    android:id="@+id/button_select_file"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_gravity="start|top"
-                    android:background="@drawable/ffmpeg_outline_button_bg"
-                    android:clickable="true"
-                    android:contentDescription="Selecionar arquivo"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:padding="9dp"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_ffmpeg_select_file" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <ImageButton
+                        android:id="@+id/button_select_file"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:contentDescription="Selecionar arquivo"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:padding="9dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_select_file" />
+
+                    <ImageView
+                        android:id="@+id/arrow_input_output"
+                        android:layout_width="16dp"
+                        android:layout_height="16dp"
+                        android:layout_marginStart="8dp"
+                        android:layout_marginEnd="8dp"
+                        android:src="@drawable/ic_arrow_right"
+                        android:tint="#88FFFFFF"
+                        android:visibility="gone" />
+
+                    <ImageButton
+                        android:id="@+id/button_select_output_folder"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:contentDescription="Selecionar pasta de saída"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:padding="9dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_folder"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/selected_file"
@@ -91,28 +122,91 @@
                     android:visibility="gone" />
             </FrameLayout>
 
-            <ImageButton
-                android:id="@+id/button_play_pause"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginTop="10dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:clickable="true"
-                android:contentDescription="Reproduzir"
-                android:focusable="true"
-                android:padding="2dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_ffmpeg_play"
+            <br.gov.sp.pcsp.launcher.FfmpegWaveformView
+                android:id="@+id/audio_waveform"
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:layout_marginTop="8dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
                 android:visibility="gone" />
 
-            <br.gov.sp.pcsp.launcher.FfmpegRangeSlider
-                android:id="@+id/timeline"
+            <LinearLayout
+                android:id="@+id/playback_controls"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageButton
+                    android:id="@+id/button_speed_down"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="Desacelerar"
+                    android:focusable="true"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_speed_down" />
+
+                <ImageButton
+                    android:id="@+id/button_play_pause"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_marginStart="12dp"
+                    android:layout_marginEnd="12dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="Reproduzir"
+                    android:focusable="true"
+                    android:padding="2dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_play" />
+
+                <ImageButton
+                    android:id="@+id/button_speed_up"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:contentDescription="Acelerar"
+                    android:focusable="true"
+                    android:padding="6dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_speed_up" />
+            </LinearLayout>
+
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="42dp"
-                android:layout_marginTop="4dp"
-                android:enabled="false"
-                android:paddingStart="30dp"
-                android:paddingEnd="30dp" />
+                android:layout_marginTop="-8dp">
+
+                <br.gov.sp.pcsp.launcher.FfmpegRangeSlider
+                    android:id="@+id/timeline"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:enabled="false"
+                    android:paddingStart="30dp"
+                    android:paddingEnd="30dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/playback_speed_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_horizontal|bottom"
+                    android:background="@android:color/transparent"
+                    android:fontFamily="monospace"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="1"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp"
+                    android:visibility="gone" />
+            </FrameLayout>
 
             <TextView
                 android:id="@+id/current_time"
@@ -122,14 +216,17 @@
                 android:gravity="center"
                 android:text="00:00:00"
                 android:textColor="#AAFFFFFF"
-                android:textSize="12sp" />
+                android:textSize="12sp"
+                android:visibility="gone" />
 
             <LinearLayout
+                android:id="@+id/time_fields"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:baselineAligned="false"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -198,14 +295,15 @@
                 android:layout_height="44dp"
                 android:layout_marginTop="18dp"
                 android:alpha="0.45"
-                android:background="@drawable/ffmpeg_outline_button_bg"
+                android:background="@drawable/ffmpeg_outline_green_button_bg"
                 android:clickable="false"
                 android:contentDescription="Cortar"
                 android:focusable="false"
                 android:foreground="?attr/selectableItemBackground"
                 android:padding="8dp"
                 android:scaleType="fitCenter"
-                android:src="@drawable/ic_ffmpeg_scissors" />
+                android:src="@drawable/ic_ffmpeg_scissors"
+                android:visibility="gone" />
 
             <ProgressBar
                 android:id="@+id/progress"
@@ -250,9 +348,20 @@
                 android:visibility="gone">
 
                 <ImageButton
+                    android:id="@+id/button_save_to_folder"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Salvar na pasta"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_save" />
+
+                <ImageButton
                     android:id="@+id/button_output_folder"
                     android:layout_width="42dp"
                     android:layout_height="42dp"
+                    android:layout_marginStart="14dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="Abrir pasta"
                     android:padding="7dp"

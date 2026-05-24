@@ -3,15 +3,24 @@
     package="br.gov.sp.pcsp.launcher">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:label="SIG"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="true"
+        android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/Theme.SIG">
+
+        <uses-native-library
+            android:name="libOpenCL.so"
+            android:required="false" />
 
         <activity
             android:name=".WebViewActivity"
@@ -30,8 +39,30 @@
             android:exported="false" />
 
         <activity
+            android:name=".FfmpegExtractAudioActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".FfmpegRotateVideoActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".WhisperActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".FfmpegActivity"
             android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/share_paths" />
+        </provider>
 
         <activity
             android:name=".MainActivity"

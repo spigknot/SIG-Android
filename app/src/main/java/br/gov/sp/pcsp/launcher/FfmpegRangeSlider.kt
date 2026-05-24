@@ -45,6 +45,12 @@ class FfmpegRangeSlider @JvmOverloads constructor(
     private var endMs = 1L
     private var currentMs = 0L
     private var activeThumb: Thumb? = null
+    private var rangeMarkersVisible = true
+
+    fun setRangeMarkersVisible(visible: Boolean) {
+        rangeMarkersVisible = visible
+        invalidate()
+    }
 
     fun setRange(durationMs: Long, startMs: Long, endMs: Long, fromUser: Boolean = false) {
         this.durationMs = max(durationMs, 1L)
@@ -99,8 +105,10 @@ class FfmpegRangeSlider @JvmOverloads constructor(
         trackRect.set(startX, centerY - trackHeight / 2f, endX, centerY + trackHeight / 2f)
         canvas.drawRoundRect(trackRect, trackHeight, trackHeight, activePaint)
 
-        drawMarker(canvas, startX, centerY, markerHalfHeight, rangeMarkerPaint)
-        drawMarker(canvas, endX, centerY, markerHalfHeight, rangeMarkerPaint)
+        if (rangeMarkersVisible) {
+            drawMarker(canvas, startX, centerY, markerHalfHeight, rangeMarkerPaint)
+            drawMarker(canvas, endX, centerY, markerHalfHeight, rangeMarkerPaint)
+        }
 
         val currentX = valueToX(currentMs)
         drawMarker(canvas, currentX, centerY, markerHalfHeight, currentPaint)
@@ -160,6 +168,8 @@ class FfmpegRangeSlider @JvmOverloads constructor(
     }
 
     private fun nearestThumb(x: Float): Thumb {
+        if (!rangeMarkersVisible) return Thumb.CURRENT
+
         val startDistance = abs(x - valueToX(startMs))
         val endDistance = abs(x - valueToX(endMs))
         val currentDistance = abs(x - valueToX(currentMs))

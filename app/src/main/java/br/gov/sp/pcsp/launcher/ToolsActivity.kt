@@ -15,13 +15,25 @@ class ToolsActivity : AppCompatActivity() {
 
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<View>(R.id.button_rg_calculator).setOnClickListener {
-            startActivity(Intent(this, RgCalculatorActivity::class.java))
+            startActivity(
+                Intent(this, RgCalculatorActivity::class.java)
+                    .putExtra(RgCalculatorActivity.EXTRA_MODE, RgCalculatorActivity.MODE_RG)
+            )
+        }
+        findViewById<View>(R.id.button_cpf_calculator).setOnClickListener {
+            startActivity(
+                Intent(this, RgCalculatorActivity::class.java)
+                    .putExtra(RgCalculatorActivity.EXTRA_MODE, RgCalculatorActivity.MODE_CPF)
+            )
         }
         findViewById<View>(R.id.button_imei_calculator).setOnClickListener {
             startActivity(Intent(this, ImeiCalculatorActivity::class.java))
         }
         findViewById<View>(R.id.button_ffmpeg).setOnClickListener {
             startActivity(Intent(this, FfmpegActivity::class.java))
+        }
+        findViewById<View>(R.id.button_whisper).setOnClickListener {
+            startActivity(Intent(this, WhisperActivity::class.java))
         }
     }
 }

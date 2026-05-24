@@ -43,6 +43,7 @@
                     android:tint="#FFFFFFFF" />
 
                 <TextView
+                    android:id="@+id/calculator_title"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
@@ -53,6 +54,7 @@
             </FrameLayout>
 
             <TextView
+                android:id="@+id/label_rg"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="RG"
@@ -109,6 +111,11 @@
                 android:layout_marginTop="4dp"
                 android:background="#AA1B1B1B"
                 android:padding="14dp"
+                android:fadeScrollbars="false"
+                android:maxLines="10"
+                android:minLines="1"
+                android:overScrollMode="ifContentScrolls"
+                android:scrollbars="vertical"
                 android:text=""
                 android:textColor="#DDFFFFFF"
                 android:textIsSelectable="true"
@@ -130,7 +137,70 @@
                 android:textSize="12sp"
                 android:visibility="gone" />
 
+            <LinearLayout
+                android:id="@+id/rg_possibilities_panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="34dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Encontrar RG por posições"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/input_rg_pattern"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#444444"
+                    android:hint="Use ? para o que não souber. Ex: 12?.456-?"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:padding="12dp"
+                    android:textColor="#FFFFFFFF"
+                    android:textColorHint="#88FFFFFF" />
+
+                <TextView
+                    android:id="@+id/button_find_rg_possibilities"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:layout_marginTop="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="8dp"
+                    android:text="buscar possibilidades"
+                    android:textColor="#FFBB33"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/result_rg_possibilities"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="#AA1B1B1B"
+                    android:fadeScrollbars="false"
+                    android:maxLines="10"
+                    android:minLines="1"
+                    android:overScrollMode="ifContentScrolls"
+                    android:padding="14dp"
+                    android:scrollbars="vertical"
+                    android:text=""
+                    android:textColor="#DDFFFFFF"
+                    android:textIsSelectable="true"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+
             <TextView
+                android:id="@+id/label_cpf"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
@@ -188,6 +258,11 @@
                 android:layout_marginTop="4dp"
                 android:background="#AA1B1B1B"
                 android:padding="14dp"
+                android:fadeScrollbars="false"
+                android:maxLines="10"
+                android:minLines="1"
+                android:overScrollMode="ifContentScrolls"
+                android:scrollbars="vertical"
                 android:text=""
                 android:textColor="#DDFFFFFF"
                 android:textIsSelectable="true"
@@ -208,6 +283,68 @@
                 android:textColor="#AAFFFFFF"
                 android:textSize="12sp"
                 android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/cpf_possibilities_panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="34dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Encontrar CPF por posições"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <EditText
+                    android:id="@+id/input_cpf_pattern"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:backgroundTint="#444444"
+                    android:hint="Use ? para o que não souber. Ex: 123.???_789-??"
+                    android:inputType="text"
+                    android:maxLines="1"
+                    android:padding="12dp"
+                    android:textColor="#FFFFFFFF"
+                    android:textColorHint="#88FFFFFF" />
+
+                <TextView
+                    android:id="@+id/button_find_cpf_possibilities"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="end"
+                    android:layout_marginTop="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="8dp"
+                    android:text="buscar possibilidades"
+                    android:textColor="#FFBB33"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/result_cpf_possibilities"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:background="#AA1B1B1B"
+                    android:fadeScrollbars="false"
+                    android:maxLines="10"
+                    android:minLines="1"
+                    android:overScrollMode="ifContentScrolls"
+                    android:padding="14dp"
+                    android:scrollbars="vertical"
+                    android:text=""
+                    android:textColor="#DDFFFFFF"
+                    android:textIsSelectable="true"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
 
         </LinearLayout>
     </ScrollView>
