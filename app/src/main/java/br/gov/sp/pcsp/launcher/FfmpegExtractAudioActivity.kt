@@ -16,11 +16,15 @@ import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.Editable
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.TextWatcher
+import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.Gravity
 import android.view.View
 import android.widget.EditText
+import android.widget.CheckBox
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -30,6 +34,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.graphics.Matrix
+import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
@@ -55,6 +60,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private lateinit var extractScroll: ScrollView
     private lateinit var selectionSummary: TextView
     private lateinit var videoPreview: TextureView
+    private lateinit var audioWaveform: FfmpegWaveformView
     private lateinit var playbackControls: View
     private lateinit var buttonSpeedDown: ImageButton
     private lateinit var buttonPlayPause: ImageButton
@@ -67,16 +73,19 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private lateinit var inputFrom: EditText
     private lateinit var inputTo: EditText
     private lateinit var transcriptionPresets: View
-    private lateinit var buttonPresetLocal: TextView
-    private lateinit var buttonPresetRemote: TextView
+    private lateinit var checkboxTranscriptionStandard: CheckBox
+    private lateinit var helpTranscriptionStandard: TextView
+    private lateinit var checkboxCompactStandard: CheckBox
+    private lateinit var helpCompactStandard: TextView
     private lateinit var buttonOutputExtension: TextView
-    private lateinit var advancedToggle: TextView
     private lateinit var advancedOptions: View
     private lateinit var buttonSampleRate: TextView
     private lateinit var buttonChannels: TextView
     private lateinit var buttonBitrate: TextView
     private lateinit var selectedListBox: ScrollView
     private lateinit var selectedList: TextView
+    private lateinit var terminalBox: ScrollView
+    private lateinit var terminalText: TextView
     private lateinit var buttonExtract: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
@@ -87,6 +96,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     private val selectedVideos = mutableListOf<SelectedVideo>()
     private val outputItems = mutableListOf<OutputItem>()
+    private val terminalLines = StringBuilder()
     private var selectedOutputFolder: DocumentFile? = null
     private var zipFile: File? = null
     private var sourcePopup: PopupWindow? = null
@@ -112,8 +122,9 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private val surfaceListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
             previewSurface = Surface(surfaceTexture)
-            if (selectedVideos.size == 1) {
-                preparePreview(selectedVideos.first().uri)
+            val selected = selectedVideos.singleOrNull()
+            if (selected != null && isVideo(selected.mime, selected.name)) {
+                preparePreview(selected.uri)
             }
         }
 
@@ -135,6 +146,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private var sampleRate = 16000
     private var channels = 1
     private var bitrate = "128k"
+    private var refreshingOutputSettings = false
     private var isProcessing = false
     @Volatile private var currentSessionId: Long? = null
  
@@ -146,12 +158,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private val tempOutputFiles = mutableListOf<File>()
     private var hasSaved = false
 
-    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f, 4f)
+    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f)
 
     private val progressTicker = object : Runnable {
         override fun run() {
             val player = previewPlayer
-            if (videoPreview.visibility == View.VISIBLE && player?.isPlaying == true) {
+            if ((videoPreview.visibility == View.VISIBLE || audioWaveform.visibility == View.VISIBLE) && player?.isPlaying == true) {
                 val position = player.currentPosition.toLong()
                 val startMs = timeline.getStartMs()
                 val endMs = timeline.getEndMs()
@@ -167,6 +179,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     setPlaybackButtonPlaying(false)
                 } else {
                     timeline.setCurrent(position)
+                    audioWaveform.setCurrent(position)
                     currentTime.text = formatTime(position)
                 }
             }
@@ -182,6 +195,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         extractScroll = findViewById(R.id.extract_scroll)
         selectionSummary = findViewById(R.id.selection_summary)
         videoPreview = findViewById(R.id.video_preview)
+        audioWaveform = findViewById(R.id.audio_waveform)
         videoPreview.surfaceTextureListener = surfaceListener
         playbackControls = findViewById(R.id.playback_controls)
         buttonSpeedDown = findViewById(R.id.button_speed_down)
@@ -195,16 +209,19 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         inputFrom = findViewById(R.id.input_from)
         inputTo = findViewById(R.id.input_to)
         transcriptionPresets = findViewById(R.id.transcription_presets)
-        buttonPresetLocal = findViewById(R.id.button_preset_local)
-        buttonPresetRemote = findViewById(R.id.button_preset_remote)
+        checkboxTranscriptionStandard = findViewById(R.id.checkbox_transcription_standard)
+        helpTranscriptionStandard = findViewById(R.id.help_transcription_standard)
+        checkboxCompactStandard = findViewById(R.id.checkbox_compact_standard)
+        helpCompactStandard = findViewById(R.id.help_compact_standard)
         buttonOutputExtension = findViewById(R.id.button_output_extension)
-        advancedToggle = findViewById(R.id.advanced_toggle)
         advancedOptions = findViewById(R.id.advanced_options)
         buttonSampleRate = findViewById(R.id.button_sample_rate)
         buttonChannels = findViewById(R.id.button_channels)
         buttonBitrate = findViewById(R.id.button_bitrate)
         selectedListBox = findViewById(R.id.selected_list_box)
         selectedList = findViewById(R.id.selected_list)
+        terminalBox = findViewById(R.id.extract_terminal_box)
+        terminalText = findViewById(R.id.extract_terminal_text)
         buttonExtract = findViewById(R.id.button_extract)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
@@ -226,10 +243,15 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         buttonExtract.setOnClickListener {
             if (isProcessing) cancelExtraction() else extractSelectedAudio()
         }
-        buttonPresetLocal.setOnClickListener { togglePreset(AudioPreset.LOCAL) }
-        buttonPresetRemote.setOnClickListener { togglePreset(AudioPreset.REMOTE) }
+        checkboxTranscriptionStandard.setOnCheckedChangeListener { _, checked ->
+            if (!refreshingOutputSettings) setTranscriptionStandard(checked)
+        }
+        checkboxCompactStandard.setOnCheckedChangeListener { _, checked ->
+            if (!refreshingOutputSettings) setCompactStandard(checked)
+        }
+        helpTranscriptionStandard.setOnClickListener { showTranscriptionStandardHelp() }
+        helpCompactStandard.setOnClickListener { showCompactStandardHelp() }
         buttonOutputExtension.setOnClickListener { showExtensionMenu() }
-        advancedToggle.setOnClickListener { toggleAdvancedOptions() }
         buttonSampleRate.setOnClickListener { showSampleRateMenu() }
         buttonChannels.setOnClickListener { showChannelsMenu() }
         buttonBitrate.setOnClickListener { showBitrateMenu() }
@@ -254,15 +276,18 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
         setExtractEnabled(false)
         timeline.onRangeChanged = { startMs, endMs, fromUser, thumb ->
+            audioWaveform.setRange(startMs, endMs)
             if (fromUser) {
                 updateTimeFields(startMs, endMs)
                 val target = if (thumb == FfmpegRangeSlider.Thumb.END) endMs else startMs
                 currentTime.text = formatTime(target)
+                audioWaveform.setCurrent(target)
                 seekPreview(target)
             }
         }
         timeline.onPositionChanged = { positionMs, fromUser ->
             currentTime.text = formatTime(positionMs)
+            audioWaveform.setCurrent(positionMs)
             if (fromUser) seekPreview(positionMs, updateTimeline = false)
         }
         inputFrom.addTextChangedListener(timeFieldWatcher { value ->
@@ -271,6 +296,13 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         inputTo.addTextChangedListener(timeFieldWatcher { value ->
             timeline.setEnd(value.coerceIn(timeline.getStartMs(), durationMs))
         })
+        handleIncomingShareIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingShareIntent(intent)
     }
 
     override fun onResume() {
@@ -297,14 +329,13 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun preparePreview(uri: Uri) {
-        val surface = previewSurface ?: return
         releasePreviewPlayer()
         playbackSpeed = 1f
         updateSpeedButton()
         status.text = ""
         previewPlayer = MediaPlayer().apply {
             setDataSource(this@FfmpegExtractAudioActivity, uri)
-            setSurface(surface)
+            previewSurface?.takeIf { videoPreview.visibility == View.VISIBLE }?.let { setSurface(it) }
             setOnErrorListener { _, what, extra ->
                 Log.w(TAG, "previewPlayer error: what=$what, extra=$extra")
                 true // suppress error dialog
@@ -319,10 +350,14 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 currentTime.text = formatTime(0L)
                 updateTimeFields(0L, durationMs)
                 applyPreviewTransform()
+                audioWaveform.configure(selectedVideos.firstOrNull()?.name ?: "áudio", durationMs)
+                audioWaveform.setRange(0L, durationMs)
+                audioWaveform.setCurrent(0L)
                 seekPreview(0L)
             }
             setOnCompletionListener {
                 timeline.setCurrent(durationMs)
+                audioWaveform.setCurrent(durationMs)
                 currentTime.text = formatTime(durationMs)
                 setPlaybackButtonPlaying(false)
             }
@@ -357,7 +392,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             background = getDrawable(R.drawable.ffmpeg_popup_menu_bg)
             addView(sourceMenuItem("Selecionar arquivos") {
                 sourcePopup?.dismiss()
-                openVideoPicker()
+                openMediaPicker()
             })
             addView(sourceMenuItem("Selecionar pasta") {
                 sourcePopup?.dismiss()
@@ -429,10 +464,11 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun openVideoPicker() {
+    private fun openMediaPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "video/*"
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*"))
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
@@ -454,6 +490,51 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         startActivityForResult(intent, REQUEST_PICK_FOLDER)
     }
 
+    private fun handleIncomingShareIntent(intent: Intent?) {
+        val action = intent?.action ?: return
+        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
+        val videos = sharedUrisFrom(intent).mapNotNull { uri ->
+            tryTakeReadPermission(uri, intent.flags)
+            val name = queryDisplayName(uri) ?: "midia"
+            val mime = contentResolver.getType(uri).orEmpty().ifBlank { mimeFromName(name) }
+            if (!isSupportedMedia(mime, name)) return@mapNotNull null
+            SelectedVideo(uri, name, mime)
+        }
+        selectedOutputFolder = null
+        if (videos.isEmpty()) {
+            clearSelection("Compartilhe um arquivo de áudio ou vídeo.")
+            return
+        }
+        selectedVideos.clear()
+        selectedVideos.addAll(videos.distinctBy { it.uri })
+        showSelection()
+        status.text = "Arquivo recebido pelo compartilhamento."
+    }
+
+    @Suppress("DEPRECATION")
+    private fun sharedUrisFrom(intent: Intent): List<Uri> {
+        val uris = mutableListOf<Uri>()
+        intent.clipData?.let { clip ->
+            for (index in 0 until clip.itemCount) {
+                clip.getItemAt(index).uri?.let { uris += it }
+            }
+        }
+        if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
+            intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris += it }
+        } else {
+            intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris += it }
+        }
+        intent.data?.let { uris += it }
+        return uris.distinct()
+    }
+
+    private fun tryTakeReadPermission(uri: Uri, flags: Int) {
+        try {
+            contentResolver.takePersistableUriPermission(uri, flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Throwable) {
+        }
+    }
+
     private fun loadPickedVideos(data: Intent) {
         val uris = mutableListOf<Uri>()
         data.clipData?.let { clip ->
@@ -465,18 +546,18 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
         val videos = uris.distinct().mapNotNull { uri ->
             val mime = contentResolver.getType(uri).orEmpty()
-            val name = queryDisplayName(uri) ?: "video"
-            if (!isVideo(mime, name)) return@mapNotNull null
+            val name = queryDisplayName(uri) ?: "midia"
+            if (!isSupportedMedia(mime, name)) return@mapNotNull null
             try {
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (_: SecurityException) {
             }
-            SelectedVideo(uri, name, mime.ifBlank { "video/*" })
+            SelectedVideo(uri, name, mime.ifBlank { mimeFromName(name) })
         }
 
         selectedOutputFolder = null
         if (videos.isEmpty()) {
-            clearSelection("Escolha apenas arquivos de vídeo.")
+            clearSelection("Escolha arquivos de áudio ou vídeo.")
             return
         }
 
@@ -503,12 +584,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
 
         val videos = folder.listFiles()
-            .filter { it.isFile && isVideo(it.type.orEmpty(), it.name.orEmpty()) }
-            .map { SelectedVideo(it.uri, it.name ?: "video", it.type.orEmpty().ifBlank { "video/*" }) }
+            .filter { it.isFile && isSupportedMedia(it.type.orEmpty(), it.name.orEmpty()) }
+            .map { SelectedVideo(it.uri, it.name ?: "midia", it.type.orEmpty().ifBlank { mimeFromName(it.name.orEmpty()) }) }
 
         selectedOutputFolder = null
         if (videos.isEmpty()) {
-            clearSelection("A pasta escolhida não tem vídeos reconhecidos.")
+            clearSelection("A pasta escolhida não tem áudio ou vídeo reconhecido.")
             return
         }
 
@@ -525,7 +606,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         selectionSummary.text = if (count == 1) {
             selectedVideos.first().name
         } else {
-            "$count vídeos selecionados"
+            "$count arquivos selecionados"
         }
         showOutputSettings(true)
 
@@ -538,9 +619,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
 
         if (count == 1) {
+            val selected = selectedVideos.first()
             selectedListBox.visibility = View.GONE
-            videoPreview.visibility = View.VISIBLE
-            showSingleVideoControls(true)
+            val previewVideo = isVideo(selected.mime, selected.name)
+            videoPreview.visibility = if (previewVideo) View.VISIBLE else View.GONE
+            audioWaveform.visibility = if (previewVideo) View.GONE else View.VISIBLE
+            showSingleMediaControls(true, showTimeFields = previewVideo)
             durationMs = 0L
             playbackSpeed = 1f
             updateSpeedButton()
@@ -549,14 +633,17 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             timeline.setRange(1L, 0L, 1L)
             timeline.setCurrent(0L)
             currentTime.text = formatTime(0L)
-            if (videoPreview.isAvailable) {
+            if (previewVideo && videoPreview.isAvailable) {
                 previewSurface = Surface(videoPreview.surfaceTexture)
-                preparePreview(selectedVideos.first().uri)
+                preparePreview(selected.uri)
+            } else if (!previewVideo) {
+                preparePreview(selected.uri)
             }
         } else {
             releasePreviewPlayer()
             videoPreview.visibility = View.GONE
-            showSingleVideoControls(false)
+            audioWaveform.visibility = View.GONE
+            showSingleMediaControls(false)
             selectedListBox.visibility = View.VISIBLE
             selectedList.text = buildSelectedListText()
         }
@@ -586,16 +673,17 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             status.text = "Libere o acesso a todos os arquivos para salvar na pasta SIG."
             return
         }
-        val isSingleVideo = selectedVideos.size == 1
-        val startMs = if (isSingleVideo) parseTime(inputFrom.text.toString()) else 0L
-        val endMs = if (isSingleVideo) parseTime(inputTo.text.toString()) else null
-        if (isSingleVideo && (startMs == null || endMs == null || endMs <= startMs)) {
+        val trimSingleVideo = selectedVideos.size == 1 && isVideo(selectedVideos.first().mime, selectedVideos.first().name)
+        val startMs = if (trimSingleVideo) parseTime(inputFrom.text.toString()) else 0L
+        val endMs = if (trimSingleVideo) parseTime(inputTo.text.toString()) else null
+        if (trimSingleVideo && (startMs == null || endMs == null || endMs <= startMs)) {
             status.text = "Confira os tempos de início e fim."
             return
         }
 
         val processingStartMs = SystemClock.elapsedRealtime()
         clearOutputResult()
+        clearTerminal()
         setProcessing(true)
 
         Thread {
@@ -615,10 +703,11 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
                 try {
                     val inputFile = copyUriToCache(video.uri, video.name)
+                    appendTerminalAudioInfo("original: ${describeAudioFile(inputFile)}")
                     val outputName = buildOutputName(video.name, usedNames)
                     val tempOutput = File(cacheDir, "audio_${System.currentTimeMillis()}_$outputName")
-                    val trimStartMs = if (isSingleVideo) startMs ?: 0L else 0L
-                    val trimEndMs = if (isSingleVideo) endMs else null
+                    val trimStartMs = if (trimSingleVideo) startMs ?: 0L else 0L
+                    val trimEndMs = if (trimSingleVideo) endMs else null
                     val expectedDuration = trimEndMs?.let { it - trimStartMs } ?: readDuration(video.uri)
                     val session = executeFfmpegWithProgress(
                         buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs),
@@ -637,6 +726,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                         failures.add("${video.name}: ${logTail.ifBlank { "sem áudio extraído" }}")
                         continue
                     }
+                    appendTerminalAudioInfo("gerado: ${describeAudioFile(tempOutput)}")
                     tempOutputFiles.add(tempOutput)
                     results.add(OutputItem(Uri.fromFile(tempOutput), outputName, currentOutputMime()))
                 } catch (e: Exception) {
@@ -694,7 +784,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 args.addAll(listOf("-c:a", "pcm_s16le", "-f", "wav"))
             }
             AudioExtension.MP3 -> {
-                args.addAll(listOf("-c:a", "libmp3lame", "-b:a", settings.bitrate))
+                args.addAll(listOf("-c:a", "libmp3lame", "-b:a", settings.bitrate, "-minrate", settings.bitrate, "-maxrate", settings.bitrate))
             }
             AudioExtension.M4A -> {
                 args.addAll(listOf("-c:a", "aac", "-b:a", settings.bitrate, "-movflags", "+faststart"))
@@ -706,7 +796,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 args.addAll(listOf("-c:a", "libvorbis", "-b:a", settings.bitrate))
             }
             AudioExtension.OPUS -> {
-                args.addAll(listOf("-c:a", "opus", "-b:a", settings.bitrate))
+                args.addAll(listOf(
+                    "-c:a", "libopus",
+                    "-application", "voip",
+                    "-b:a", settings.bitrate,
+                    "-vbr", "off"
+                ))
             }
             AudioExtension.FLAC -> {
                 args.addAll(listOf("-c:a", "flac"))
@@ -830,22 +925,24 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         return candidate
     }
 
-    private fun togglePreset(preset: AudioPreset) {
-        outputPreset = if (outputPreset == preset) AudioPreset.NONE else preset
-        when (outputPreset) {
-            AudioPreset.LOCAL -> {
-                outputExtension = AudioExtension.WAV
-                sampleRate = 16000
-                channels = 1
-                bitrate = "256k"
-            }
-            AudioPreset.REMOTE -> {
-                outputExtension = AudioExtension.OPUS
-                sampleRate = 16000
-                channels = 1
-                bitrate = "24k"
-            }
-            AudioPreset.NONE -> Unit
+    private fun setTranscriptionStandard(enabled: Boolean) {
+        outputPreset = if (enabled) AudioPreset.LOCAL else AudioPreset.NONE
+        if (enabled) {
+            outputExtension = AudioExtension.WAV
+            sampleRate = 16000
+            channels = 1
+            bitrate = "256k"
+        }
+        refreshOutputSettingsUi()
+    }
+
+    private fun setCompactStandard(enabled: Boolean) {
+        outputPreset = if (enabled) AudioPreset.COMPACT else AudioPreset.NONE
+        if (enabled) {
+            outputExtension = AudioExtension.OGG
+            sampleRate = 16000
+            channels = 1
+            bitrate = "32k"
         }
         refreshOutputSettingsUi()
     }
@@ -853,7 +950,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private fun currentAudioSettings(): AudioSettings {
         return when (outputPreset) {
             AudioPreset.LOCAL -> AudioSettings(AudioExtension.WAV, 16000, 1, "256k")
-            AudioPreset.REMOTE -> AudioSettings(AudioExtension.OPUS, 16000, 1, "24k")
+            AudioPreset.COMPACT -> AudioSettings(AudioExtension.OGG, 16000, 1, "32k")
             AudioPreset.NONE -> AudioSettings(outputExtension, sampleRate, channels, bitrate)
         }
     }
@@ -866,46 +963,56 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         val visibility = if (visible) View.VISIBLE else View.GONE
         transcriptionPresets.visibility = visibility
         buttonOutputExtension.visibility = visibility
-        advancedToggle.visibility = visibility
-        if (!visible) advancedOptions.visibility = View.GONE
+        advancedOptions.visibility = visibility
         refreshOutputSettingsUi()
     }
 
     private fun refreshOutputSettingsUi() {
         val settings = currentAudioSettings()
-        buttonPresetLocal.isSelected = outputPreset == AudioPreset.LOCAL
-        buttonPresetRemote.isSelected = outputPreset == AudioPreset.REMOTE
-        buttonPresetLocal.alpha = if (outputPreset == AudioPreset.LOCAL) 1f else 0.72f
-        buttonPresetRemote.alpha = if (outputPreset == AudioPreset.REMOTE) 1f else 0.72f
+        refreshingOutputSettings = true
+        try {
+            if (checkboxTranscriptionStandard.isChecked != (outputPreset == AudioPreset.LOCAL)) {
+                checkboxTranscriptionStandard.isChecked = outputPreset == AudioPreset.LOCAL
+            }
+            if (checkboxCompactStandard.isChecked != (outputPreset == AudioPreset.COMPACT)) {
+                checkboxCompactStandard.isChecked = outputPreset == AudioPreset.COMPACT
+            }
+        } finally {
+            refreshingOutputSettings = false
+        }
         buttonOutputExtension.text = ".${settings.extension.ext}"
         val customEnabled = outputPreset == AudioPreset.NONE
         buttonOutputExtension.isEnabled = customEnabled
         buttonOutputExtension.alpha = if (customEnabled) 1f else 0.45f
         buttonSampleRate.text = "${settings.sampleRate} Hz"
         buttonChannels.text = if (settings.channels == 1) "mono" else "estéreo"
-        buttonBitrate.text = settings.bitrate
-        listOf(buttonSampleRate, buttonChannels, buttonBitrate).forEach { button ->
+        buttonBitrate.text = if (settings.extension.supportsBitrate) settings.bitrate else settings.extension.fixedBitrateLabel
+        listOf(buttonSampleRate, buttonChannels).forEach { button ->
             button.isEnabled = customEnabled
             button.alpha = if (customEnabled) 1f else 0.45f
         }
+        val bitrateEnabled = customEnabled && settings.extension.supportsBitrate
+        buttonBitrate.isEnabled = bitrateEnabled
+        buttonBitrate.alpha = if (bitrateEnabled) 1f else 0.45f
     }
 
     private fun showExtensionMenu() {
         if (outputPreset != AudioPreset.NONE) return
         PopupMenu(this, buttonOutputExtension).apply {
-            AudioExtension.values().forEach { menu.add(it.ext) }
+            val extensions = listOf(
+                AudioExtension.WAV,
+                AudioExtension.OGG,
+                AudioExtension.M4A,
+                AudioExtension.MP3
+            )
+            extensions.forEach { menu.add(it.ext) }
             setOnMenuItemClickListener { item ->
-                outputExtension = AudioExtension.values().first { it.ext == item.title.toString() }
+                outputExtension = extensions.first { it.ext == item.title.toString() }
                 refreshOutputSettingsUi()
                 true
             }
             show()
         }
-    }
-
-    private fun toggleAdvancedOptions() {
-        advancedOptions.visibility = if (advancedOptions.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        refreshOutputSettingsUi()
     }
 
     private fun showSampleRateMenu() {
@@ -937,6 +1044,10 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     private fun showBitrateMenu() {
         if (outputPreset != AudioPreset.NONE) return
+        if (!outputExtension.supportsBitrate) {
+            Toast.makeText(this, "Este formato não usa bitrate configurável.", Toast.LENGTH_SHORT).show()
+            return
+        }
         PopupMenu(this, buttonBitrate).apply {
             listOf("24k", "32k", "48k", "64k", "96k", "128k", "192k", "256k").forEach { menu.add(it) }
             setOnMenuItemClickListener { item ->
@@ -948,16 +1059,30 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun showSingleVideoControls(visible: Boolean) {
+    private fun showTranscriptionStandardHelp() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setMessage("O padrão para transcrição gera um WAV 16-bit PCM, 16000 Hz e mono. É o formato pronto para transcrição por IA local ou remota quando você quer máxima compatibilidade e menos chance de erro de leitura.")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun showCompactStandardHelp() {
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setMessage("O padrão compacto gera um OGG mono, 16000 Hz e 32k. Ele é indicado quando você quer enviar o áudio pela rede usando menos dados, mantendo um formato leve para transcrição remota.")
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
+    private fun showSingleMediaControls(visible: Boolean, showTimeFields: Boolean = visible) {
         val visibility = if (visible) View.VISIBLE else View.GONE
         playbackControls.visibility = visibility
         timelineFrame.visibility = visibility
         currentTime.visibility = visibility
-        timeFields.visibility = visibility
+        timeFields.visibility = if (showTimeFields) View.VISIBLE else View.GONE
     }
 
     private fun togglePreviewPlayback() {
-        if (videoPreview.visibility != View.VISIBLE) return
+        if (videoPreview.visibility != View.VISIBLE && audioWaveform.visibility != View.VISIBLE) return
         val player = previewPlayer ?: return
         if (player.isPlaying) {
             player.pause()
@@ -974,6 +1099,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             playWhenSeekCompletes = true
             seekPreview(playFromMs, forPlaybackStart = true)
             setPlaybackButtonPlaying(true)
+            syncPlaybackButtonSoon()
             return
         }
 
@@ -984,16 +1110,18 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private fun startPreview() {
         applyPlaybackSpeed()
         previewPlayer?.start()
-        setPlaybackButtonPlaying(true)
+        setPlaybackButtonPlaying(previewPlayer?.isPlaying == true)
+        syncPlaybackButtonSoon()
     }
 
     private fun seekPreview(positionMs: Long, updateTimeline: Boolean = true, forPlaybackStart: Boolean = false) {
-        if (videoPreview.visibility != View.VISIBLE) return
+        if (videoPreview.visibility != View.VISIBLE && audioWaveform.visibility != View.VISIBLE) return
         val safePosition = positionMs.coerceIn(0L, durationMs).coerceAtMost(Int.MAX_VALUE.toLong())
         
         if (updateTimeline) {
             timeline.setCurrent(safePosition)
         }
+        audioWaveform.setCurrent(safePosition)
         currentTime.text = formatTime(safePosition)
 
         if (forPlaybackStart) {
@@ -1034,10 +1162,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         val safeIndex = if (currentIndex >= 0) currentIndex else speedSteps.indexOfFirst { it == 1f }
         playbackSpeed = speedSteps[(safeIndex + direction).coerceIn(0, speedSteps.lastIndex)]
         updateSpeedButton()
-        val player = previewPlayer
-        if (videoPreview.visibility == View.VISIBLE && player?.isPlaying == true) {
-            applyPlaybackSpeed()
-        }
+        applyPlaybackSpeed()
     }
 
     private fun applyPlaybackSpeed() {
@@ -1062,7 +1187,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             0.5f -> "0,5x"
             1f -> "1x"
             2f -> "2x"
-            4f -> "4x"
             else -> String.format(Locale("pt", "BR"), "%.2fx", playbackSpeed)
         }
         playbackSpeedLabel.text = label
@@ -1075,6 +1199,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private fun setPlaybackButtonPlaying(isPlaying: Boolean) {
         buttonPlayPause.setImageResource(if (isPlaying) R.drawable.ic_ffmpeg_pause else R.drawable.ic_ffmpeg_play)
         buttonPlayPause.contentDescription = if (isPlaying) "Pausar" else "Reproduzir"
+    }
+
+    private fun syncPlaybackButtonSoon() {
+        handler.postDelayed({
+            setPlaybackButtonPlaying((videoPreview.visibility == View.VISIBLE || audioWaveform.visibility == View.VISIBLE) && previewPlayer?.isPlaying == true)
+        }, 180L)
     }
 
     private fun parseTime(value: String): Long? {
@@ -1264,6 +1394,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
+        val startedAt = SystemClock.elapsedRealtime()
+        val taskLabel = if (itemCount > 1) {
+            "Extraindo áudio $itemIndex/$itemCount"
+        } else {
+            "Extraindo áudio"
+        }
         val session = FFmpegKit.executeWithArgumentsAsync(
             arguments,
             { session ->
@@ -1277,7 +1413,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     .coerceIn(0, 99)
                 runOnUiThread {
                     if (progress.visibility == View.VISIBLE) {
-                        status.text = "Extraindo $itemIndex/$itemCount... $percent%"
+                        status.text = formatProgressStatus(taskLabel, percent, statistics.time, startedAt)
                     }
                 }
             }
@@ -1288,10 +1424,149 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         return sessionRef.get() ?: session
     }
 
+    private fun formatProgressStatus(task: String, percent: Int, processedMs: Double, startedAtMs: Long): String {
+        val elapsedSeconds = ((SystemClock.elapsedRealtime() - startedAtMs) / 1000.0).coerceAtLeast(0.001)
+        val processedSeconds = (processedMs.coerceAtLeast(0.0) / 1000.0)
+        val efficiency = processedSeconds / elapsedSeconds
+        return "$task... $percent% | ${String.format(Locale.US, "%.2fx", efficiency)}"
+    }
+
+    private fun clearTerminal() {
+        synchronized(terminalLines) { terminalLines.clear() }
+        terminalBox.visibility = View.GONE
+        terminalText.text = ""
+    }
+
+    private fun appendTerminalAudioInfo(line: String) {
+        synchronized(terminalLines) {
+            terminalLines.append(AUDIO_INFO_START).append(line).append(AUDIO_INFO_END).append('\n')
+        }
+        runOnUiThread { updateTerminalText() }
+    }
+
+    private fun updateTerminalText() {
+        val rawText = synchronized(terminalLines) { terminalLines.toString() }
+        terminalBox.visibility = if (rawText.isBlank()) View.GONE else View.VISIBLE
+        terminalText.text = renderTerminalText(rawText)
+        terminalText.post {
+            val layout = terminalText.layout ?: return@post
+            val scrollAmount = layout.getLineTop(terminalText.lineCount) - terminalText.height + terminalText.totalPaddingTop + terminalText.totalPaddingBottom
+            terminalText.scrollTo(0, scrollAmount.coerceAtLeast(0))
+        }
+    }
+
+    private fun renderTerminalText(rawText: String): SpannableString {
+        val clean = StringBuilder()
+        val ranges = mutableListOf<IntRange>()
+        var index = 0
+        while (index < rawText.length) {
+            val start = rawText.indexOf(AUDIO_INFO_START, index)
+            if (start < 0) {
+                clean.append(rawText.substring(index))
+                break
+            }
+            clean.append(rawText.substring(index, start))
+            val textStart = clean.length
+            val contentStart = start + AUDIO_INFO_START.length
+            val end = rawText.indexOf(AUDIO_INFO_END, contentStart)
+            if (end < 0) {
+                clean.append(rawText.substring(contentStart))
+                ranges += textStart until clean.length
+                break
+            }
+            clean.append(rawText.substring(contentStart, end))
+            ranges += textStart until clean.length
+            index = end + AUDIO_INFO_END.length
+        }
+        val spannable = SpannableString(clean.toString())
+        ranges.forEach { range ->
+            if (!range.isEmpty()) {
+                spannable.setSpan(
+                    ForegroundColorSpan(Color.rgb(255, 216, 86)),
+                    range.first,
+                    range.last + 1,
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+        return spannable
+    }
+
+    private fun describeAudioFile(file: File): String {
+        val info = probeAudioFile(file)
+        val sampleRate = if (
+            file.extension.equals(AudioExtension.OPUS.ext, ignoreCase = true) &&
+            info.sampleRate == "48000hz"
+        ) {
+            "48000hz (Opus)"
+        } else {
+            info.sampleRate.ifBlank { "hz ?" }
+        }
+        return listOf(
+            ".${file.extension.lowercase(Locale.ROOT).ifBlank { "sem extensão" }}",
+            sampleRate,
+            info.channels.ifBlank { "canal ?" },
+            info.bitrate.ifBlank { "bitrate ?" }
+        ).joinToString(", ")
+    }
+
+    private fun probeAudioFile(file: File): AudioProbe {
+        return try {
+            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", file.absolutePath))
+            val logs = session.allLogsAsString.orEmpty()
+            val audioLine = logs.lines().firstOrNull { it.contains("Audio:", ignoreCase = true) }.orEmpty()
+            val sampleRate = Regex("""(\d+)\s*Hz""", RegexOption.IGNORE_CASE)
+                .find(audioLine)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let { "${it}hz" }
+                .orEmpty()
+            val channels = when {
+                audioLine.contains("mono", ignoreCase = true) -> "mono"
+                audioLine.contains("stereo", ignoreCase = true) -> "stereo"
+                else -> Regex("""(\d+)\s*channels""", RegexOption.IGNORE_CASE)
+                    .find(audioLine)
+                    ?.groupValues
+                    ?.getOrNull(1)
+                    ?.let { "${it}ch" }
+                    .orEmpty()
+            }
+            val bitrate = Regex("""(\d+(?:\.\d+)?)\s*kb/s""", RegexOption.IGNORE_CASE)
+                .find(logs)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.let { "${it.removeSuffix(".0")}k" }
+                ?: estimateBitrate(file)
+            AudioProbe(sampleRate, channels, bitrate)
+        } catch (_: Throwable) {
+            AudioProbe("", "", "")
+        }
+    }
+
+    private fun estimateBitrate(file: File): String {
+        val durationMs = readDuration(file)
+        if (durationMs <= 0L) return ""
+        val kbps = ((file.length().toDouble() * 8.0) / durationMs.toDouble()).toInt().coerceAtLeast(1)
+        return "${kbps}k"
+    }
+
     private fun readDuration(uri: Uri): Long {
         return try {
             android.media.MediaMetadataRetriever().use { retriever ->
                 retriever.setDataSource(this, uri)
+                retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull()
+                    ?: 1L
+            }
+        } catch (e: Exception) {
+            1L
+        }
+    }
+
+    private fun readDuration(file: File): Long {
+        return try {
+            android.media.MediaMetadataRetriever().use { retriever ->
+                retriever.setDataSource(file.absolutePath)
                 retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
                     ?.toLongOrNull()
                     ?: 1L
@@ -1321,6 +1596,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         buttonSelectOutputFolder.visibility = View.GONE
         arrowInputOutput.visibility = View.GONE
         clearOutputResult()
+        clearTerminal()
         setExtractEnabled(false)
         status.text = message
     }
@@ -1350,6 +1626,20 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         return VIDEO_EXTENSIONS.any { lowerName.endsWith(it) }
     }
 
+    private fun isAudio(mime: String, name: String): Boolean {
+        if (mime.startsWith("audio/")) return true
+        val lowerName = name.lowercase(Locale.ROOT)
+        return AUDIO_EXTENSIONS.any { lowerName.endsWith(it) }
+    }
+
+    private fun isSupportedMedia(mime: String, name: String): Boolean {
+        return isVideo(mime, name) || isAudio(mime, name)
+    }
+
+    private fun mimeFromName(name: String): String {
+        return if (isAudio("", name)) "audio/*" else "video/*"
+    }
+
     companion object {
         private const val REQUEST_PICK_VIDEOS = 5101
         private const val REQUEST_PICK_FOLDER = 5102
@@ -1358,7 +1648,10 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         private const val OUTPUT_FOLDER_NAME = "SIG"
         private const val OUTPUT_MIME = "audio/mp4"
         private const val TAG = "FfmpegExtractAudio"
+        private const val AUDIO_INFO_START = "\uE000AI\uE000"
+        private const val AUDIO_INFO_END = "\uE000AE\uE000"
         private val VIDEO_EXTENSIONS = setOf(".mp4", ".mkv", ".mov", ".avi", ".webm", ".3gp", ".m4v")
+        private val AUDIO_EXTENSIONS = setOf(".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".wma", ".amr")
     }
 
     private data class SelectedVideo(
@@ -1385,22 +1678,30 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         val error: String?
     )
 
+    private data class AudioProbe(
+        val sampleRate: String,
+        val channels: String,
+        val bitrate: String
+    )
+
     private enum class AudioPreset {
         NONE,
         LOCAL,
-        REMOTE
+        COMPACT
     }
 
     private enum class AudioExtension(
         val ext: String,
-        val mime: String
+        val mime: String,
+        val supportsBitrate: Boolean,
+        val fixedBitrateLabel: String = ""
     ) {
-        WAV("wav", "audio/wav"),
-        M4A("m4a", "audio/mp4"),
-        MP3("mp3", "audio/mpeg"),
-        AAC("aac", "audio/aac"),
-        OGG("ogg", "audio/ogg"),
-        OPUS("opus", "audio/opus"),
-        FLAC("flac", "audio/flac")
+        WAV("wav", "audio/wav", false, "PCM"),
+        M4A("m4a", "audio/mp4", true),
+        MP3("mp3", "audio/mpeg", true),
+        AAC("aac", "audio/aac", true),
+        OGG("ogg", "audio/ogg", true),
+        OPUS("opus", "audio/opus", true),
+        FLAC("flac", "audio/flac", false, "FLAC")
     }
 }

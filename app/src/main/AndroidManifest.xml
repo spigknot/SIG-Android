@@ -3,6 +3,7 @@
     package="br.gov.sp.pcsp.launcher">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -10,12 +11,13 @@
 
     <application
         android:label="SIG"
+        android:name=".SigApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="true"
         android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
-        android:usesCleartextTraffic="false"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.SIG">
 
         <uses-native-library
@@ -36,19 +38,91 @@
 
         <activity
             android:name=".FfmpegCutActivity"
-            android:exported="false" />
+            android:exported="true"
+            android:label="SIG - Cortar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".FfmpegExtractAudioActivity"
-            android:exported="false" />
+            android:exported="true"
+            android:label="SIG - Extrair áudio">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".FfmpegRotateVideoActivity"
             android:exported="false" />
 
         <activity
+            android:name=".FfmpegJoinVideosActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".FfmpegCleanAudioActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".WhisperActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".FasterWhisperServerActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".GraniteSpeechActivity"
+            android:exported="true"
+            android:label="SIG - Transcrever Granite">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".FfmpegActivity"

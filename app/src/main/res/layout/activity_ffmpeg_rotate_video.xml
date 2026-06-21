@@ -68,6 +68,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:layout_gravity="center"
+                    android:layout_marginTop="36dp"
                     android:visibility="gone" />
 
                 <LinearLayout
@@ -92,12 +93,12 @@
 
                     <ImageView
                         android:id="@+id/arrow_input_output"
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
                         android:layout_marginStart="8dp"
                         android:layout_marginEnd="8dp"
                         android:src="@drawable/ic_arrow_right"
-                        android:tint="#88FFFFFF"
+                        android:tint="#FFFFFFFF"
                         android:visibility="gone" />
 
                     <ImageButton
@@ -109,7 +110,7 @@
                         android:contentDescription="Selecionar pasta de saída"
                         android:focusable="true"
                         android:foreground="?attr/selectableItemBackground"
-                        android:padding="9dp"
+                        android:padding="12dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_ffmpeg_folder"
                         android:visibility="gone" />
@@ -124,18 +125,52 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <ImageButton
-                    android:id="@+id/button_play_pause"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
+                <LinearLayout
+                    android:id="@+id/playback_controls"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:clickable="true"
-                    android:contentDescription="Reproduzir"
-                    android:focusable="true"
-                    android:padding="2dp"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_ffmpeg_play" />
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <ImageButton
+                        android:id="@+id/button_speed_down"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:contentDescription="Desacelerar"
+                        android:focusable="true"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_speed_down" />
+
+                    <ImageButton
+                        android:id="@+id/button_play_pause"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="12dp"
+                        android:layout_marginEnd="12dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:contentDescription="Reproduzir"
+                        android:focusable="true"
+                        android:padding="2dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_play" />
+
+                    <ImageButton
+                        android:id="@+id/button_speed_up"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:contentDescription="Acelerar"
+                        android:focusable="true"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_speed_up" />
+                </LinearLayout>
 
                 <br.gov.sp.pcsp.launcher.FfmpegRangeSlider
                     android:id="@+id/timeline"
@@ -145,6 +180,16 @@
                     android:enabled="false"
                     android:paddingStart="30dp"
                     android:paddingEnd="30dp" />
+
+                <TextView
+                    android:id="@+id/playback_speed_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:text="1x"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp" />
 
                 <TextView
                     android:id="@+id/current_time"
@@ -252,6 +297,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:buttonTint="#FFFFFFFF"
+                            android:checked="true"
                             android:text="Girar pelos metadados"
                             android:textColor="#FFFFFFFF"
                             android:textSize="13sp" />
@@ -296,6 +342,33 @@
                             android:textSize="13sp"
                             android:textStyle="bold" />
                     </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <CheckBox
+                        android:id="@+id/check_parallel_keyframes"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#FFFFFFFF"
+                        android:text="Processar em paralelo"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/help_parallel_keyframes"
+                        android:layout_width="22dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:minHeight="40dp"
+                        android:text="?"
+                        android:textColor="#99FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
                 </LinearLayout>
 
                 <ImageButton

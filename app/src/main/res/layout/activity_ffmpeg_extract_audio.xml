@@ -83,12 +83,12 @@
 
                     <ImageView
                         android:id="@+id/arrow_input_output"
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
                         android:layout_marginStart="8dp"
                         android:layout_marginEnd="8dp"
                         android:src="@drawable/ic_arrow_right"
-                        android:tint="#88FFFFFF"
+                        android:tint="#FFFFFFFF"
                         android:visibility="gone" />
 
                     <ImageButton
@@ -100,7 +100,7 @@
                         android:contentDescription="Selecionar pasta de saída"
                         android:focusable="true"
                         android:foreground="?attr/selectableItemBackground"
-                        android:padding="9dp"
+                        android:padding="12dp"
                         android:scaleType="fitCenter"
                         android:src="@drawable/ic_ffmpeg_folder"
                         android:visibility="gone" />
@@ -111,6 +111,15 @@
                 android:id="@+id/video_preview"
                 android:layout_width="match_parent"
                 android:layout_height="360dp"
+                android:layout_marginTop="0dp"
+                android:visibility="gone" />
+
+            <br.gov.sp.pcsp.launcher.FfmpegWaveformView
+                android:id="@+id/audio_waveform"
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
                 android:layout_marginTop="0dp"
                 android:visibility="gone" />
 
@@ -288,36 +297,52 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:visibility="gone">
 
-                <TextView
-                    android:id="@+id/button_preset_local"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_marginEnd="6dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/ffmpeg_outline_button_bg"
-                    android:gravity="center"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:text="Padrão para transcrição local"
+                <CheckBox
+                    android:id="@+id/checkbox_transcription_standard"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="#FF5EDAF2"
+                    android:fontFamily="sans"
+                    android:text="Padrão para transcrição"
                     android:textColor="#FFFFFFFF"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
 
                 <TextView
-                    android:id="@+id/button_preset_remote"
-                    android:layout_width="0dp"
-                    android:layout_height="42dp"
-                    android:layout_marginStart="6dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:id="@+id/help_transcription_standard"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="2dp"
                     android:gravity="center"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:text="Padrão para transcrição remota"
+                    android:text="?"
+                    android:textColor="#FF5EDAF2"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <CheckBox
+                    android:id="@+id/checkbox_compact_standard"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="12dp"
+                    android:buttonTint="#FF5EDAF2"
+                    android:fontFamily="sans"
+                    android:text="Padrão compacto"
                     android:textColor="#FFFFFFFF"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/help_compact_standard"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:layout_marginStart="2dp"
+                    android:gravity="center"
+                    android:text="?"
+                    android:textColor="#FF5EDAF2"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <TextView
@@ -333,17 +358,6 @@
                 android:text=".wav"
                 android:textColor="#FFFFFFFF"
                 android:textSize="12sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <TextView
-                android:id="@+id/advanced_toggle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Configurações avançadas"
-                android:textColor="#FF5EDAF2"
-                android:textSize="13sp"
                 android:textStyle="bold"
                 android:visibility="gone" />
 
@@ -438,6 +452,27 @@
                 android:layout_marginTop="16dp"
                 android:indeterminate="true"
                 android:visibility="gone" />
+
+            <ScrollView
+                android:id="@+id/extract_terminal_box"
+                android:layout_width="match_parent"
+                android:layout_height="132dp"
+                android:layout_marginTop="10dp"
+                android:background="#AA050809"
+                android:fillViewport="true"
+                android:overScrollMode="ifContentScrolls"
+                android:padding="10dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/extract_terminal_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="#DDFFFFFF"
+                    android:textIsSelectable="true"
+                    android:textSize="11sp" />
+            </ScrollView>
 
             <TextView
                 android:id="@+id/status"

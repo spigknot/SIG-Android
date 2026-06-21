@@ -34,6 +34,8 @@ import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
+import android.widget.CheckBox
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
@@ -60,6 +62,8 @@ class FfmpegCutActivity : AppCompatActivity() {
     private lateinit var inputFrom: EditText
     private lateinit var inputTo: EditText
     private lateinit var timeFields: View
+    private lateinit var keyframeOptions: View
+    private lateinit var cutByKeyframes: CheckBox
     private lateinit var playbackControls: View
     private lateinit var buttonSpeedDown: ImageButton
     private lateinit var buttonPlayPause: ImageButton
@@ -79,6 +83,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private var finalOutputDirUri: Uri? = null
     private val tempOutputFiles = mutableListOf<File>()
     private var hasSaved = false
+    @Volatile private var isSaving = false
 
     private val handler = Handler(Looper.getMainLooper())
     private var selectedUri: Uri? = null
@@ -129,7 +134,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
     }
 
-    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f, 4f)
+    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f)
 
     private val progressTicker = object : Runnable {
         override fun run() {
@@ -173,6 +178,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         inputFrom = findViewById(R.id.input_from)
         inputTo = findViewById(R.id.input_to)
         timeFields = findViewById(R.id.time_fields)
+        keyframeOptions = findViewById(R.id.keyframe_options)
+        cutByKeyframes = findViewById(R.id.check_cut_keyframes)
         playbackControls = findViewById(R.id.playback_controls)
         buttonSpeedDown = findViewById(R.id.button_speed_down)
         buttonPlayPause = findViewById(R.id.button_play_pause)
@@ -196,6 +203,12 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonSpeedDown.setOnClickListener { changePlaybackSpeed(-1) }
         buttonPlayPause.setOnClickListener { togglePreviewPlayback() }
         buttonSpeedUp.setOnClickListener { changePlaybackSpeed(1) }
+        findViewById<TextView>(R.id.help_cut_keyframes).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setMessage("O corte por keyframes é mais rápido e não recodifica o arquivo. Porém, o FFmpeg pode precisar começar no keyframe anterior ao tempo escolhido, fazendo alguns segundos se repetirem entre cortes consecutivos. Desmarcado, o app recodifica para cortar exatamente nos pontos escolhidos.")
+                .setPositiveButton("OK", null)
+                .show()
+        }
         buttonCut.setOnClickListener {
             if (isProcessing) cancelCut() else cutSelectedMedia()
         }
@@ -207,6 +220,7 @@ class FfmpegCutActivity : AppCompatActivity() {
             startActivityForResult(intent, REQUEST_CHOOSE_PRE_OUTPUT_DIR)
         }
         buttonSaveToFolder.setOnClickListener {
+            if (isSaving) return@setOnClickListener
             val preUri = preSelectedOutputDirUri
             if (preUri != null) {
                 saveTempOutputsToUri(preUri)
@@ -235,6 +249,13 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
         inputFrom.addTextChangedListener(timeFieldWatcher { value -> timeline.setStart(value) })
         inputTo.addTextChangedListener(timeFieldWatcher { value -> timeline.setEnd(value) })
+        handleIncomingShareIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingShareIntent(intent)
     }
 
     override fun onResume() {
@@ -306,6 +327,34 @@ class FfmpegCutActivity : AppCompatActivity() {
             addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         startActivityForResult(intent, REQUEST_PICK_MEDIA)
+    }
+
+    private fun handleIncomingShareIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        val uri = sharedUrisFrom(intent).firstOrNull() ?: return
+        tryTakeReadPermission(uri, intent.flags)
+        loadSelectedMedia(uri)
+        status.text = "Arquivo recebido pelo compartilhamento."
+    }
+
+    @Suppress("DEPRECATION")
+    private fun sharedUrisFrom(intent: Intent): List<Uri> {
+        val uris = mutableListOf<Uri>()
+        intent.clipData?.let { clip ->
+            for (index in 0 until clip.itemCount) {
+                clip.getItemAt(index).uri?.let { uris += it }
+            }
+        }
+        intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.let { uris += it }
+        intent.data?.let { uris += it }
+        return uris.distinct()
+    }
+
+    private fun tryTakeReadPermission(uri: Uri, flags: Int) {
+        try {
+            contentResolver.takePersistableUriPermission(uri, flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Throwable) {
+        }
     }
 
     private fun loadSelectedMedia(uri: Uri) {
@@ -387,17 +436,28 @@ class FfmpegCutActivity : AppCompatActivity() {
             return
         }
 
+        val keyframeMode = cutByKeyframes.isChecked
+        val producedMime = outputMimeFor(keyframeMode)
         clearOutputResult()
         setProcessing(true)
         Thread {
+            var inputFile: File? = null
+            var tempOutput: File? = null
+            var keepOutput = false
             try {
-                val inputFile = copyUriToCache(uri, selectedName)
-                val outputName = buildOutputName(selectedName)
-                val tempOutput = File(cacheDir, "${System.currentTimeMillis()}_$outputName")
-                val arguments = buildFfmpegArguments(inputFile, tempOutput, startMs, endMs)
-                val session = executeFfmpegWithProgress(arguments, endMs - startMs)
+                val currentInputFile = copyUriToCache(uri, selectedName)
+                inputFile = currentInputFile
+                val outputName = buildOutputName(selectedName, keyframeMode)
+                val currentTempOutput = File(cacheDir, "${System.currentTimeMillis()}_$outputName")
+                tempOutput = currentTempOutput
+                val arguments = buildFfmpegArguments(currentInputFile, currentTempOutput, startMs, endMs, keyframeMode)
+                val taskLabel = if (keyframeMode) "Cortando por keyframes" else "Cortando com precisão"
+                val session = executeFfmpegWithProgress(arguments, endMs - startMs, taskLabel)
                 val success = ReturnCode.isSuccess(session.returnCode)
                 val logs = session.allLogsAsString.orEmpty().lines().takeLast(3).joinToString("\n")
+                if (success && currentTempOutput.exists() && currentTempOutput.length() > 0L) {
+                    keepOutput = true
+                }
                 runOnUiThread {
                     if (ReturnCode.isCancel(session.returnCode)) {
                         setProcessing(false)
@@ -412,8 +472,9 @@ class FfmpegCutActivity : AppCompatActivity() {
  
                     setProcessing(false)
                     tempOutputFiles.clear()
-                    tempOutputFiles.add(tempOutput)
+                    tempOutputFiles.add(currentTempOutput)
                     hasSaved = false
+                    lastOutputMime = producedMime
  
                     status.text = "Processamento concluído com sucesso! Clique no disquete para salvar."
                     outputFileName.text = outputName
@@ -433,6 +494,9 @@ class FfmpegCutActivity : AppCompatActivity() {
                     setProcessing(false)
                     status.text = "Erro ao cortar: ${e.message ?: "falha inesperada"}"
                 }
+            } finally {
+                inputFile?.delete()
+                if (!keepOutput) tempOutput?.delete()
             }
         }.start()
     }
@@ -446,18 +510,89 @@ class FfmpegCutActivity : AppCompatActivity() {
         return inputFile
     }
 
-    private fun buildFfmpegArguments(inputFile: File, outputFile: File, startMs: Long, endMs: Long): Array<String> {
+    private fun buildFfmpegArguments(
+        inputFile: File,
+        outputFile: File,
+        startMs: Long,
+        endMs: Long,
+        keyframeMode: Boolean
+    ): Array<String> {
         val duration = (endMs - startMs) / 1000.0
-        return arrayOf(
+        if (keyframeMode) {
+            return arrayOf(
+                "-y",
+                "-ss", formatSeconds(startMs),
+                "-i", inputFile.absolutePath,
+                "-t", String.format(Locale.US, "%.3f", duration),
+                "-map", "0",
+                "-c", "copy",
+                "-avoid_negative_ts", "make_zero",
+                outputFile.absolutePath
+            )
+        }
+
+        val args = mutableListOf(
             "-y",
-            "-ss", formatSeconds(startMs),
             "-i", inputFile.absolutePath,
-            "-t", String.format(Locale.US, "%.3f", duration),
-            "-map", "0",
-            "-c", "copy",
-            "-avoid_negative_ts", "make_zero",
-            outputFile.absolutePath
+            "-ss", formatSeconds(startMs),
+            "-t", String.format(Locale.US, "%.3f", duration)
         )
+        val streamBitrates = detectStreamBitrates(inputFile)
+        if (selectedMime.startsWith("video/")) {
+            args.addAll(
+                listOf(
+                    "-map", "0:v:0?",
+                    "-map", "0:a:0?",
+                    "-map_metadata", "0",
+                    "-map_chapters", "0",
+                    "-c:v", "h264_mediacodec",
+                    "-b:v", streamBitrates.video ?: FALLBACK_VIDEO_BITRATE,
+                    "-c:a", "aac",
+                    "-b:a", streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE,
+                    "-movflags", "+faststart",
+                    "-avoid_negative_ts", "make_zero"
+                )
+            )
+        } else {
+            args.addAll(listOf("-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0", "-vn"))
+            args.addAll(preciseAudioEncoderArguments(selectedName, streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE))
+        }
+        args.add(outputFile.absolutePath)
+        return args.toTypedArray()
+    }
+
+    private fun preciseAudioEncoderArguments(name: String, bitrate: String): List<String> {
+        return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+            "wav" -> listOf("-c:a", "pcm_s16le")
+            "mp3" -> listOf("-c:a", "libmp3lame", "-b:a", bitrate)
+            "m4a", "aac" -> listOf("-c:a", "aac", "-b:a", bitrate)
+            "ogg" -> listOf("-c:a", "libvorbis", "-b:a", bitrate)
+            "opus" -> listOf("-c:a", "libopus", "-b:a", bitrate)
+            "flac" -> listOf("-c:a", "flac")
+            else -> listOf("-c:a", "aac", "-b:a", bitrate)
+        }
+    }
+
+    private fun detectStreamBitrates(inputFile: File): StreamBitrates {
+        return try {
+            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", inputFile.absolutePath))
+            val logs = session.allLogsAsString.orEmpty()
+            val videoLine = logs.lines().firstOrNull { it.contains("Video:", ignoreCase = true) }.orEmpty()
+            val audioLine = logs.lines().firstOrNull { it.contains("Audio:", ignoreCase = true) }.orEmpty()
+            StreamBitrates(
+                video = parseBitrateFromText(videoLine) ?: parseBitrateFromText(logs),
+                audio = parseBitrateFromText(audioLine)
+            )
+        } catch (e: Throwable) {
+            Log.w(TAG, "Could not detect stream bitrates", e)
+            StreamBitrates()
+        }
+    }
+
+    private fun parseBitrateFromText(text: String): String? {
+        val match = Regex("""(\d+(?:\.\d+)?)\s*kb/s""", RegexOption.IGNORE_CASE).find(text) ?: return null
+        val kbps = match.groupValues[1].toDoubleOrNull()?.takeIf { it > 0.0 } ?: return null
+        return "${kbps.toInt().coerceAtLeast(1)}k"
     }
 
     private fun saveTempOutputsToUri(treeUri: Uri) {
@@ -466,46 +601,128 @@ class FfmpegCutActivity : AppCompatActivity() {
             status.text = "Erro: pasta de destino inválida."
             return
         }
- 
-        var savedCount = 0
-        var lastSavedUri: Uri? = null
-        var lastSavedName = ""
- 
-        for (tempFile in tempOutputFiles) {
-            if (!tempFile.exists()) continue
-            val outputName = tempFile.name.substringAfter('_')
-            try {
-                val document = destDir.createFile(selectedMime.ifBlank { "application/octet-stream" }, outputName)
-                if (document != null) {
-                    contentResolver.openOutputStream(document.uri)?.use { output ->
-                        tempFile.inputStream().use { input ->
-                            input.copyTo(output)
-                        }
+
+        val filesToSave = tempOutputFiles.filter { it.exists() && it.length() > 0L }
+        if (filesToSave.isEmpty()) {
+            status.text = "Não encontrei o arquivo processado para salvar."
+            return
+        }
+
+        isSaving = true
+        buttonSaveToFolder.isEnabled = false
+        buttonSaveToFolder.alpha = 0.45f
+        status.text = "Salvando arquivo grande... 0%"
+
+        Thread {
+            var savedCount = 0
+            var lastSavedUri: Uri? = null
+            var lastSavedName = ""
+            var failure: Throwable? = null
+
+            for (tempFile in filesToSave) {
+                val outputName = pendingOutputName(tempFile)
+                var document: DocumentFile? = null
+                try {
+                    document = destDir.createFile(lastOutputMime.ifBlank { currentOutputMime() }, outputName)
+                        ?: throw IllegalStateException("não consegui criar o arquivo de destino")
+                    val copied = copyLargeFileToDocument(tempFile, document, outputName)
+                    val expected = tempFile.length()
+                    if (copied != expected) {
+                        throw IllegalStateException("cópia incompleta: ${formatBytes(copied)} de ${formatBytes(expected)}")
                     }
                     savedCount++
                     lastSavedUri = document.uri
-                    lastSavedName = outputName
+                    lastSavedName = document.name ?: outputName
+                } catch (e: Throwable) {
+                    Log.e(TAG, "Failed to save file $outputName to selected folder", e)
+                    try {
+                        document?.delete()
+                    } catch (_: Throwable) {
+                    }
+                    failure = e
+                    break
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to save file $outputName to selected folder", e)
+            }
+
+            runOnUiThread {
+                isSaving = false
+                buttonSaveToFolder.isEnabled = true
+                buttonSaveToFolder.alpha = 1f
+                if (failure == null && savedCount == filesToSave.size) {
+                    hasSaved = true
+                    finalOutputDirUri = treeUri
+                    lastOutputUri = lastSavedUri
+                    lastOutputMime = lastOutputMime.ifBlank { currentOutputMime() }
+                    lastOutputName = lastSavedName
+
+                    val folderName = destDir.name ?: "Pasta selecionada"
+                    status.text = "Arquivo(s) salvo(s) na pasta \"$folderName\""
+
+                    buttonSaveToFolder.visibility = View.GONE
+                    buttonOutputFolder.visibility = View.VISIBLE
+                    buttonOutputShare.visibility = View.VISIBLE
+                    filesToSave.forEach { it.delete() }
+                    tempOutputFiles.removeAll(filesToSave.toSet())
+                } else {
+                    status.text = "Erro ao salvar. Arquivo parcial removido. ${failure?.message.orEmpty()}".trim()
+                }
+            }
+        }.start()
+    }
+
+    private fun pendingOutputName(tempFile: File): String {
+        val visibleName = outputFileName.text?.toString()?.trim().orEmpty()
+        if (tempOutputFiles.size == 1 && visibleName.isNotBlank()) return visibleName
+        return tempFile.name.substringAfter('_')
+    }
+
+    private fun copyLargeFileToDocument(source: File, document: DocumentFile, outputName: String): Long {
+        val total = source.length().coerceAtLeast(1L)
+        var copied = 0L
+        var lastUiUpdate = 0L
+        val buffer = ByteArray(1024 * 1024)
+        val output = contentResolver.openOutputStream(document.uri, "w")
+            ?: throw IllegalStateException("não consegui abrir o arquivo de destino")
+        output.use { out ->
+            source.inputStream().use { input ->
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    out.write(buffer, 0, read)
+                    copied += read.toLong()
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastUiUpdate >= 500L || copied == total) {
+                        lastUiUpdate = now
+                        val percent = ((copied * 100L) / total).coerceIn(0L, 100L)
+                        runOnUiThread {
+                            status.text = "Salvando \"$outputName\"... $percent% (${formatBytes(copied)} / ${formatBytes(total)})"
+                        }
+                    }
+                }
+            }
+            out.flush()
+            if (out is FileOutputStream) {
+                try {
+                    out.fd.sync()
+                } catch (_: Throwable) {
+                }
             }
         }
- 
-        if (savedCount > 0) {
-            hasSaved = true
-            finalOutputDirUri = treeUri
-            lastOutputUri = lastSavedUri
-            lastOutputMime = selectedMime
-            lastOutputName = lastSavedName
- 
-            val folderName = destDir.name ?: "Pasta selecionada"
-            status.text = "Arquivo(s) salvo(s) na pasta \"$folderName\""
- 
-            buttonSaveToFolder.visibility = View.GONE
-            buttonOutputFolder.visibility = View.VISIBLE
-            buttonOutputShare.visibility = View.VISIBLE
+        return copied
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        val units = arrayOf("B", "KB", "MB", "GB")
+        var value = bytes.toDouble()
+        var unitIndex = 0
+        while (value >= 1024.0 && unitIndex < units.lastIndex) {
+            value /= 1024.0
+            unitIndex++
+        }
+        return if (unitIndex == 0) {
+            "${bytes} B"
         } else {
-            status.text = "Erro ao salvar os arquivos na pasta selecionada."
+            String.format(Locale.US, "%.1f %s", value, units[unitIndex])
         }
     }
  
@@ -549,22 +766,41 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
-    private fun buildOutputName(name: String): String {
+    private fun buildOutputName(name: String, keyframeMode: Boolean): String {
         val dotIndex = name.lastIndexOf('.')
         if (dotIndex <= 0) return "${name}_cortado"
-        return "${name.substring(0, dotIndex)}_cortado${name.substring(dotIndex)}"
+        val extension = if (!keyframeMode && selectedMime.startsWith("video/")) ".mp4" else name.substring(dotIndex)
+        return "${name.substring(0, dotIndex)}_cortado$extension"
+    }
+
+    private fun currentOutputMime(): String {
+        return outputMimeFor(cutByKeyframes.isChecked)
+    }
+
+    private fun outputMimeFor(keyframeMode: Boolean): String {
+        return if (!keyframeMode && selectedMime.startsWith("video/")) {
+            "video/mp4"
+        } else {
+            selectedMime.ifBlank { "application/octet-stream" }
+        }
     }
 
     private fun setProcessing(processing: Boolean) {
         isProcessing = processing
         progress.visibility = if (processing) View.VISIBLE else View.GONE
+        cutByKeyframes.isEnabled = !processing
+        cutByKeyframes.alpha = if (processing) 0.45f else 1f
         buttonCut.isEnabled = true
         buttonCut.isClickable = true
         buttonCut.isFocusable = true
         buttonCut.alpha = 1f
         if (processing) {
             status.movementMethod = null
-            status.text = "Cortando... 0%"
+            status.text = if (cutByKeyframes.isChecked) {
+                "Cortando por keyframes... 0% | 0.00x"
+            } else {
+                "Cortando com precisão... 0% | 0.00x"
+            }
             clearOutputResult()
             buttonCut.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
             buttonCut.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
@@ -590,10 +826,11 @@ class FfmpegCutActivity : AppCompatActivity() {
         currentSessionId?.let { FFmpegKit.cancel(it) } ?: FFmpegKit.cancel()
     }
 
-    private fun executeFfmpegWithProgress(arguments: Array<String>, expectedDurationMs: Long): FFmpegSession {
+    private fun executeFfmpegWithProgress(arguments: Array<String>, expectedDurationMs: Long, taskLabel: String): FFmpegSession {
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
+        val startedAt = SystemClock.elapsedRealtime()
         val session = FFmpegKit.executeWithArgumentsAsync(
             arguments,
             { session ->
@@ -607,7 +844,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                     .coerceIn(0, 99)
                 runOnUiThread {
                     if (progress.visibility == View.VISIBLE) {
-                        status.text = "Cortando... $percent%"
+                        status.text = formatProgressStatus(taskLabel, percent, statistics.time, startedAt)
                     }
                 }
             }
@@ -618,11 +855,19 @@ class FfmpegCutActivity : AppCompatActivity() {
         return sessionRef.get() ?: session
     }
 
+    private fun formatProgressStatus(task: String, percent: Int, processedMs: Double, startedAtMs: Long): String {
+        val elapsedSeconds = ((SystemClock.elapsedRealtime() - startedAtMs) / 1000.0).coerceAtLeast(0.001)
+        val processedSeconds = (processedMs.coerceAtLeast(0.0) / 1000.0)
+        val efficiency = processedSeconds / elapsedSeconds
+        return "$task... $percent% | ${String.format(Locale.US, "%.2fx", efficiency)}"
+    }
+
     private fun showEditingControls(visible: Boolean) {
         val visibility = if (visible) View.VISIBLE else View.GONE
         timeline.visibility = visibility
         currentTime.visibility = visibility
         timeFields.visibility = visibility
+        keyframeOptions.visibility = visibility
         buttonCut.visibility = visibility
     }
 
@@ -725,16 +970,19 @@ class FfmpegCutActivity : AppCompatActivity() {
             playWhenSeekCompletes = true
             seekPreview(playFromMs, forPlaybackStart = true)
             setPlaybackButtonPlaying(true)
+            syncPlaybackButtonSoon()
             if (videoPreview.visibility != View.VISIBLE) {
                 playWhenSeekCompletes = false
                 startPreview()
-                setPlaybackButtonPlaying(true)
+                setPlaybackButtonPlaying(isPreviewPlaying())
+                syncPlaybackButtonSoon()
             } else if (previewPlayer == null) {
                 videoPreview.postDelayed({
                     if (playWhenSeekCompletes) {
                         playWhenSeekCompletes = false
                         startPreview()
-                        setPlaybackButtonPlaying(true)
+                        setPlaybackButtonPlaying(isPreviewPlaying())
+                        syncPlaybackButtonSoon()
                     }
                 }, 100L)
             }
@@ -744,7 +992,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         timeline.setCurrent(playFromMs)
         audioWaveform.setCurrent(playFromMs)
         startPreview()
-        setPlaybackButtonPlaying(true)
+        setPlaybackButtonPlaying(isPreviewPlaying())
+        syncPlaybackButtonSoon()
     }
 
     private fun updatePlayPauseLabel() {
@@ -756,6 +1005,12 @@ class FfmpegCutActivity : AppCompatActivity() {
     private fun setPlaybackButtonPlaying(isPlaying: Boolean) {
         buttonPlayPause.setImageResource(if (isPlaying) R.drawable.ic_ffmpeg_pause else R.drawable.ic_ffmpeg_play)
         buttonPlayPause.contentDescription = if (isPlaying) "Pausar" else "Reproduzir"
+    }
+
+    private fun syncPlaybackButtonSoon() {
+        handler.postDelayed({
+            setPlaybackButtonPlaying(isPreviewPlaying())
+        }, 180L)
     }
 
     private fun prepareAudioPreview(uri: Uri) {
@@ -897,9 +1152,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         val safeIndex = if (currentIndex >= 0) currentIndex else speedSteps.indexOfFirst { it == 1f }
         playbackSpeed = speedSteps[(safeIndex + direction).coerceIn(0, speedSteps.lastIndex)]
         updateSpeedButton()
-        if (isPreviewPlaying()) {
-            applyPlaybackSpeed()
-        }
+        applyPlaybackSpeed()
     }
 
     private fun applyPlaybackSpeed() {
@@ -928,7 +1181,6 @@ class FfmpegCutActivity : AppCompatActivity() {
             0.5f -> "0,5x"
             1f -> "1x"
             2f -> "2x"
-            4f -> "4x"
             else -> String.format(Locale("pt", "BR"), "%.2fx", playbackSpeed)
         }
         playbackSpeedLabel.text = label
@@ -973,6 +1225,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         lastOutputUri = null
         lastOutputMime = ""
         lastOutputName = ""
+        tempOutputFiles.forEach { it.delete() }
         tempOutputFiles.clear()
         hasSaved = false
         outputFileName.visibility = View.GONE
@@ -997,8 +1250,15 @@ class FfmpegCutActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 4102
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 4103
         private const val SIG_OUTPUT_FOLDER = "SIG"
+        private const val FALLBACK_VIDEO_BITRATE = "15M"
+        private const val FALLBACK_AUDIO_BITRATE = "192k"
         private const val TAG = "FfmpegCut"
     }
+
+    private data class StreamBitrates(
+        val video: String? = null,
+        val audio: String? = null
+    )
 
     private data class SaveResult(
         val uri: Uri?,

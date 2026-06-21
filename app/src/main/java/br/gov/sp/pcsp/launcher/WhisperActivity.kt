@@ -1138,7 +1138,7 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun createSessionDir(): File {
-        val root = File(cacheDir, "whisper_temp_outputs").apply { mkdirs() }
+        val root = File(File(Environment.getExternalStorageDirectory(), SIG_OUTPUT_FOLDER), WHISPER_OUTPUT_FOLDER).apply { mkdirs() }
         val stamp = SimpleDateFormat("yyyy-MM-dd 'as' HH'h'mm", Locale.US).format(Date())
         var candidate = File(root, stamp)
         var suffix = 2
@@ -1146,7 +1146,7 @@ class WhisperActivity : AppCompatActivity() {
             candidate = File(root, "${stamp}_$suffix")
             suffix++
         }
-        if (!candidate.mkdirs()) throw IllegalStateException("não consegui criar a pasta da sessão temporária")
+        if (!candidate.mkdirs()) throw IllegalStateException("não consegui criar a pasta da sessão")
         return candidate
     }
 
