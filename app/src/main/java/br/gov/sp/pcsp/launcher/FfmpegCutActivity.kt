@@ -61,6 +61,10 @@ class FfmpegCutActivity : AppCompatActivity() {
     private lateinit var currentTime: TextView
     private lateinit var inputFrom: EditText
     private lateinit var inputTo: EditText
+    private lateinit var buttonFromPrev: ImageButton
+    private lateinit var buttonFromNext: ImageButton
+    private lateinit var buttonToPrev: ImageButton
+    private lateinit var buttonToNext: ImageButton
     private lateinit var timeFields: View
     private lateinit var keyframeOptions: View
     private lateinit var cutByKeyframes: CheckBox
@@ -100,6 +104,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private var hasPreviewPlaybackStarted = false
     private var playbackSpeed = 1f
     private var isProcessing = false
+    private var videoKeyframes: List<Long> = emptyList()
     @Volatile private var currentSessionId: Long? = null
     private var lastSeekTime = 0L
     private var pendingSeekPos = -1L
@@ -177,6 +182,10 @@ class FfmpegCutActivity : AppCompatActivity() {
         currentTime = findViewById(R.id.current_time)
         inputFrom = findViewById(R.id.input_from)
         inputTo = findViewById(R.id.input_to)
+        buttonFromPrev = findViewById(R.id.button_from_prev)
+        buttonFromNext = findViewById(R.id.button_from_next)
+        buttonToPrev = findViewById(R.id.button_to_prev)
+        buttonToNext = findViewById(R.id.button_to_next)
         timeFields = findViewById(R.id.time_fields)
         keyframeOptions = findViewById(R.id.keyframe_options)
         cutByKeyframes = findViewById(R.id.check_cut_keyframes)
@@ -229,13 +238,30 @@ class FfmpegCutActivity : AppCompatActivity() {
                 startActivityForResult(intent, REQUEST_CHOOSE_OUTPUT_DIR)
             }
         }
+        
+        buttonFromPrev.setOnClickListener { adjustTimelineBound(true, -1) }
+        buttonFromNext.setOnClickListener { adjustTimelineBound(true, 1) }
+        buttonToPrev.setOnClickListener { adjustTimelineBound(false, -1) }
+        buttonToNext.setOnClickListener { adjustTimelineBound(false, 1) }
+
         setCutEnabled(false)
 
         timeline.onRangeChanged = { startMs, endMs, fromUser, thumb ->
             if (fromUser) {
-                updateTimeFields(startMs, endMs)
-                audioWaveform.setRange(startMs, endMs)
-                val target = if (thumb == FfmpegRangeSlider.Thumb.END) endMs else startMs
+                var finalStart = startMs
+                var finalEnd = endMs
+                if (cutByKeyframes.isChecked && videoKeyframes.isNotEmpty()) {
+                    if (thumb == FfmpegRangeSlider.Thumb.START) {
+                        finalStart = findNearestKeyframe(startMs)
+                        timeline.setStart(finalStart, fromUser = false)
+                    } else if (thumb == FfmpegRangeSlider.Thumb.END) {
+                        finalEnd = findNearestKeyframe(endMs)
+                        timeline.setEnd(finalEnd, fromUser = false)
+                    }
+                }
+                updateTimeFields(finalStart, finalEnd)
+                audioWaveform.setRange(finalStart, finalEnd)
+                val target = if (thumb == FfmpegRangeSlider.Thumb.END) finalEnd else finalStart
                 currentTime.text = formatTime(target)
                 seekPreview(target)
             }
@@ -249,6 +275,30 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
         inputFrom.addTextChangedListener(timeFieldWatcher { value -> timeline.setStart(value) })
         inputTo.addTextChangedListener(timeFieldWatcher { value -> timeline.setEnd(value) })
+
+        buttonFromPrev.setOnClickListener { stepTime(isStart = true, forward = false) }
+        buttonFromNext.setOnClickListener { stepTime(isStart = true, forward = true) }
+        buttonToPrev.setOnClickListener { stepTime(isStart = false, forward = false) }
+        buttonToNext.setOnClickListener { stepTime(isStart = false, forward = true) }
+        
+        cutByKeyframes.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && videoKeyframes.isNotEmpty()) {
+                val currentStart = timeline.getStartMs()
+                val currentEnd = timeline.getEndMs()
+                val snappedStart = findNearestKeyframe(currentStart)
+                val snappedEnd = findNearestKeyframe(currentEnd)
+                
+                if (currentStart != snappedStart || currentEnd != snappedEnd) {
+                    timeline.setStart(snappedStart, fromUser = false)
+                    timeline.setEnd(snappedEnd, fromUser = false)
+                    updateTimeFields(snappedStart, snappedEnd)
+                    audioWaveform.setRange(snappedStart, snappedEnd)
+                    currentTime.text = formatTime(snappedStart)
+                    seekPreview(snappedStart)
+                }
+            }
+        }
+        
         handleIncomingShareIntent(intent)
     }
 
@@ -424,12 +474,54 @@ class FfmpegCutActivity : AppCompatActivity() {
             releasePreviewPlayer()
             playWhenSeekCompletes = false
         }
+        
+        videoKeyframes = emptyList()
+        if (selectedMime.startsWith("video/")) {
+            extractKeyframes(uri)
+        }
+    }
+
+    private fun extractKeyframes(uri: Uri) {
+        Thread {
+            val extractor = android.media.MediaExtractor()
+            try {
+                extractor.setDataSource(this, uri, null)
+                var videoTrackIndex = -1
+                for (i in 0 until extractor.trackCount) {
+                    val format = extractor.getTrackFormat(i)
+                    val mime = format.getString(android.media.MediaFormat.KEY_MIME)
+                    if (mime?.startsWith("video/") == true) {
+                        videoTrackIndex = i
+                        break
+                    }
+                }
+                if (videoTrackIndex >= 0) {
+                    extractor.selectTrack(videoTrackIndex)
+                    val keyframes = mutableListOf<Long>()
+                    while (true) {
+                        val sampleTime = extractor.sampleTime
+                        if (sampleTime < 0) break
+                        if ((extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                            keyframes.add(sampleTime / 1000L)
+                        }
+                        extractor.advance()
+                    }
+                    runOnUiThread {
+                        videoKeyframes = keyframes
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("FfmpegCutActivity", "Error extracting keyframes", e)
+            } finally {
+                extractor.release()
+            }
+        }.start()
     }
 
     private fun cutSelectedMedia() {
         val uri = selectedUri ?: return
-        val startMs = parseTime(inputFrom.text.toString())
-        val endMs = parseTime(inputTo.text.toString())
+        var startMs = parseTime(inputFrom.text.toString())
+        var endMs = parseTime(inputTo.text.toString())
 
         if (startMs == null || endMs == null || endMs <= startMs) {
             status.text = "Confira os tempos de início e fim."
@@ -437,9 +529,25 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
 
         val keyframeMode = cutByKeyframes.isChecked
+        if (keyframeMode && videoKeyframes.isNotEmpty()) {
+            val snappedStart = findNearestKeyframe(startMs)
+            val snappedEnd = findNearestKeyframe(endMs)
+            if (startMs != snappedStart || endMs != snappedEnd) {
+                startMs = snappedStart
+                endMs = snappedEnd
+                timeline.setStart(startMs, fromUser = false)
+                timeline.setEnd(endMs, fromUser = false)
+                updateTimeFields(startMs, endMs)
+                audioWaveform.setRange(startMs, endMs)
+                currentTime.text = formatTime(startMs)
+                seekPreview(startMs)
+            }
+        }
+
         val producedMime = outputMimeFor(keyframeMode)
         clearOutputResult()
         setProcessing(true)
+        val processingStartMs = SystemClock.elapsedRealtime()
         Thread {
             var inputFile: File? = null
             var tempOutput: File? = null
@@ -452,7 +560,9 @@ class FfmpegCutActivity : AppCompatActivity() {
                 tempOutput = currentTempOutput
                 val arguments = buildFfmpegArguments(currentInputFile, currentTempOutput, startMs, endMs, keyframeMode)
                 val taskLabel = if (keyframeMode) "Cortando por keyframes" else "Cortando com precisão"
-                val session = executeFfmpegWithProgress(arguments, endMs - startMs, taskLabel)
+                val tracker = FfmpegTaskTracker(status, listOf("Preparando arquivo", taskLabel))
+                tracker.completeCurrentTask()
+                val session = executeFfmpegWithProgress(arguments, endMs - startMs, tracker)
                 val success = ReturnCode.isSuccess(session.returnCode)
                 val logs = session.allLogsAsString.orEmpty().lines().takeLast(3).joinToString("\n")
                 if (success && currentTempOutput.exists() && currentTempOutput.length() > 0L) {
@@ -461,22 +571,27 @@ class FfmpegCutActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (ReturnCode.isCancel(session.returnCode)) {
                         setProcessing(false)
-                        status.text = "Operação cancelada."
+                        tracker.fail("Operação cancelada.")
                         return@runOnUiThread
                     }
                     if (!success) {
                         setProcessing(false)
-                        status.text = "Não foi possível cortar com FFmpeg.\n$logs".trim()
+                        tracker.fail("Falha no FFmpeg:\n$logs")
                         return@runOnUiThread
                     }
  
+                    val durationMs = endMs - startMs
+                    val elapsedMs = SystemClock.elapsedRealtime() - processingStartMs
+                    val elapsedSeconds = (elapsedMs / 1000.0).coerceAtLeast(0.001)
+                    val mediaSeconds = durationMs / 1000.0
+                    val efficiency = String.format(Locale.US, "%.2fx", mediaSeconds / elapsedSeconds)
+                    tracker.success("Tempo de processamento: ${formatTime(elapsedMs)}\nMídia processada: ${formatTime(durationMs)}\nEficiência: $efficiency")
                     setProcessing(false)
                     tempOutputFiles.clear()
                     tempOutputFiles.add(currentTempOutput)
                     hasSaved = false
                     lastOutputMime = producedMime
  
-                    status.text = "Processamento concluído com sucesso! Clique no disquete para salvar."
                     outputFileName.text = outputName
                     outputFileName.visibility = View.VISIBLE
  
@@ -796,11 +911,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonCut.alpha = 1f
         if (processing) {
             status.movementMethod = null
-            status.text = if (cutByKeyframes.isChecked) {
-                "Cortando por keyframes... 0% | 0.00x"
-            } else {
-                "Cortando com precisão... 0% | 0.00x"
-            }
+            status.text = ""
             clearOutputResult()
             buttonCut.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
             buttonCut.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
@@ -826,7 +937,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         currentSessionId?.let { FFmpegKit.cancel(it) } ?: FFmpegKit.cancel()
     }
 
-    private fun executeFfmpegWithProgress(arguments: Array<String>, expectedDurationMs: Long, taskLabel: String): FFmpegSession {
+    private fun executeFfmpegWithProgress(arguments: Array<String>, expectedDurationMs: Long, tracker: FfmpegTaskTracker): FFmpegSession {
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
@@ -842,11 +953,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                 val percent = ((statistics.time / safeDuration.toDouble()) * 100.0)
                     .toInt()
                     .coerceIn(0, 99)
-                runOnUiThread {
-                    if (progress.visibility == View.VISIBLE) {
-                        status.text = formatProgressStatus(taskLabel, percent, statistics.time, startedAt)
-                    }
-                }
+                tracker.setProgress(percent)
             }
         )
         currentSessionId = session.sessionId
@@ -1243,6 +1350,89 @@ class FfmpegCutActivity : AppCompatActivity() {
                 update(value.coerceIn(0L, durationMs))
             }
         }
+    }
+
+    private fun stepTime(isStart: Boolean, forward: Boolean) {
+        val currentMs = if (isStart) timeline.getStartMs() else timeline.getEndMs()
+        val nextMs = if (cutByKeyframes.isChecked && videoKeyframes.isNotEmpty()) {
+            if (forward) findNextKeyframe(currentMs) else findPreviousKeyframe(currentMs)
+        } else {
+            val seconds = currentMs / 1000.0
+            val nextSeconds = if (forward) {
+                kotlin.math.floor(seconds + 1.0)
+            } else {
+                kotlin.math.ceil(seconds - 1.0)
+            }
+            (nextSeconds * 1000).toLong()
+        }
+        
+        if (isStart) {
+            val clamped = nextMs.coerceIn(0L, timeline.getEndMs() - 100L)
+            timeline.setStart(clamped, fromUser = true)
+        } else {
+            val clamped = nextMs.coerceIn(timeline.getStartMs() + 100L, durationMs)
+            timeline.setEnd(clamped, fromUser = true)
+        }
+    }
+
+    private fun adjustTimelineBound(isStart: Boolean, direction: Int) {
+        val currentMs = if (isStart) timeline.getStartMs() else timeline.getEndMs()
+        var newMs = currentMs
+        
+        if (cutByKeyframes.isChecked && videoKeyframes.isNotEmpty()) {
+            val target = if (direction > 0) {
+                videoKeyframes.firstOrNull { it > currentMs + 50 } ?: durationMs
+            } else {
+                videoKeyframes.lastOrNull { it < currentMs - 50 } ?: 0L
+            }
+            newMs = target
+        } else {
+            val currentSeconds = currentMs / 1000.0
+            val targetSeconds = if (direction > 0) {
+                kotlin.math.floor(currentSeconds + 1.001)
+            } else {
+                kotlin.math.ceil(currentSeconds - 1.001)
+            }
+            newMs = (targetSeconds * 1000.0).toLong().coerceIn(0L, durationMs)
+        }
+        
+        if (isStart) {
+            timeline.setStart(newMs.coerceAtMost(timeline.getEndMs()), true)
+        } else {
+            timeline.setEnd(newMs.coerceAtLeast(timeline.getStartMs()), true)
+        }
+    }
+
+    private fun findNearestKeyframe(timeMs: Long): Long {
+        if (videoKeyframes.isEmpty()) return timeMs
+        val index = videoKeyframes.binarySearch(timeMs)
+        if (index >= 0) return videoKeyframes[index]
+        val insertionPoint = -index - 1
+        if (insertionPoint == 0) return videoKeyframes.first()
+        if (insertionPoint == videoKeyframes.size) return videoKeyframes.last()
+        val before = videoKeyframes[insertionPoint - 1]
+        val after = videoKeyframes[insertionPoint]
+        return if (timeMs - before <= after - timeMs) before else after
+    }
+
+    private fun findPreviousKeyframe(timeMs: Long): Long {
+        if (videoKeyframes.isEmpty()) return timeMs
+        val index = videoKeyframes.binarySearch(timeMs)
+        if (index >= 0) {
+            return if (index > 0) videoKeyframes[index - 1] else videoKeyframes[0]
+        }
+        val insertionPoint = -index - 1
+        return if (insertionPoint > 0) videoKeyframes[insertionPoint - 1] else videoKeyframes.first()
+    }
+
+    private fun findNextKeyframe(timeMs: Long): Long {
+        if (videoKeyframes.isEmpty()) return timeMs
+        val index = videoKeyframes.binarySearch(timeMs)
+        if (index >= 0) {
+            return if (index < videoKeyframes.size - 1) videoKeyframes[index + 1] else videoKeyframes.last()
+        }
+        val insertionPoint = -index - 1
+        return if (insertionPoint < videoKeyframes.size) videoKeyframes[insertionPoint] else videoKeyframes.last()
     }
 
     companion object {

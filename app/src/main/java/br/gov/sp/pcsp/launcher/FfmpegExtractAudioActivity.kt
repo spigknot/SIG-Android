@@ -690,15 +690,18 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             val results = mutableListOf<OutputItem>()
             val failures = mutableListOf<String>()
             val usedNames = mutableSetOf<String>()
+            val taskList = selectedVideos.mapIndexed { index, _ -> 
+                if (selectedVideos.size > 1) "Extraindo áudio ${index + 1}/${selectedVideos.size}" else "Extraindo áudio" 
+            }
+            val tracker = FfmpegTaskTracker(status, taskList)
+            var totalDurationMs = 0L
             var cancelled = false
 
             for ((index, video) in selectedVideos.withIndex()) {
                 if (Thread.interrupted()) {
                     cancelled = true
+                    tracker.fail("Cancelado")
                     break
-                }
-                runOnUiThread {
-                    status.text = "Extraindo ${index + 1}/${selectedVideos.size}..."
                 }
 
                 try {
@@ -709,14 +712,15 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     val trimStartMs = if (trimSingleVideo) startMs ?: 0L else 0L
                     val trimEndMs = if (trimSingleVideo) endMs else null
                     val expectedDuration = trimEndMs?.let { it - trimStartMs } ?: readDuration(video.uri)
+                    totalDurationMs += expectedDuration
                     val session = executeFfmpegWithProgress(
                         buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs),
                         expectedDuration,
-                        index + 1,
-                        selectedVideos.size
+                        tracker
                     )
 
                     if (ReturnCode.isCancel(session.returnCode)) {
+                        tracker.fail("Operação cancelada.")
                         cancelled = true
                         break
                     }
@@ -724,8 +728,10 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     if (!ReturnCode.isSuccess(session.returnCode) || !tempOutput.exists() || tempOutput.length() == 0L) {
                         val logTail = session.allLogsAsString.orEmpty().lines().takeLast(2).joinToString(" ")
                         failures.add("${video.name}: ${logTail.ifBlank { "sem áudio extraído" }}")
+                        tracker.fail("Falhou em ${video.name}")
                         continue
                     }
+                    tracker.completeCurrentTask()
                     appendTerminalAudioInfo("gerado: ${describeAudioFile(tempOutput)}")
                     tempOutputFiles.add(tempOutput)
                     results.add(OutputItem(Uri.fromFile(tempOutput), outputName, currentOutputMime()))
@@ -734,17 +740,16 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     failures.add("${video.name}: ${e.message ?: "falha inesperada"}")
                 }
             }
- 
+
             runOnUiThread {
                 setProcessing(false)
                 if (cancelled) {
-                    status.text = "Operação cancelada."
+                    // Já atualizado pelo tracker
                 } else if (results.isNotEmpty()) {
                     hasSaved = false
                     outputItems.clear()
                     outputItems.addAll(results)
  
-                    status.text = "Processamento concluído com sucesso! Clique no disquete para salvar."
                     outputFileName.text = if (results.size == 1) results.first().name else "${results.size} arquivos de áudio"
                     outputFileName.visibility = View.VISIBLE
  
@@ -754,8 +759,14 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     buttonSaveToFolder.visibility = View.VISIBLE
                     buttonOutputFolder.visibility = View.GONE
                     buttonOutputShare.visibility = View.GONE
+                    
+                    val elapsedMs = SystemClock.elapsedRealtime() - processingStartMs
+                    val elapsedSeconds = (elapsedMs / 1000.0).coerceAtLeast(0.001)
+                    val mediaSeconds = totalDurationMs / 1000.0
+                    val efficiency = String.format(Locale.US, "%.2fx", mediaSeconds / elapsedSeconds)
+                    tracker.success("Tempo de processamento: ${formatTime(elapsedMs)}\nMídia processada: ${formatTime(totalDurationMs)}\nEficiência: $efficiency")
                 } else {
-                    status.text = "Não consegui extrair áudio.\n${failures.take(3).joinToString("\n")}".trim()
+                    tracker.fail("Não consegui extrair áudio.\n${failures.take(3).joinToString("\n")}".trim())
                 }
             }
         }.start()
@@ -1367,6 +1378,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         buttonExtract.alpha = 1f
         buttonExtract.visibility = View.VISIBLE
         if (processing) {
+            status.text = ""
             clearOutputResult()
             buttonExtract.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
             buttonExtract.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
@@ -1388,18 +1400,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private fun executeFfmpegWithProgress(
         arguments: Array<String>,
         expectedDurationMs: Long,
-        itemIndex: Int,
-        itemCount: Int
+        tracker: FfmpegTaskTracker
     ): FFmpegSession {
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
         val startedAt = SystemClock.elapsedRealtime()
-        val taskLabel = if (itemCount > 1) {
-            "Extraindo áudio $itemIndex/$itemCount"
-        } else {
-            "Extraindo áudio"
-        }
         val session = FFmpegKit.executeWithArgumentsAsync(
             arguments,
             { session ->
@@ -1411,11 +1417,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 val percent = ((statistics.time / safeDuration.toDouble()) * 100.0)
                     .toInt()
                     .coerceIn(0, 99)
-                runOnUiThread {
-                    if (progress.visibility == View.VISIBLE) {
-                        status.text = formatProgressStatus(taskLabel, percent, statistics.time, startedAt)
-                    }
-                }
+                tracker.setProgress(percent)
             }
         )
         currentSessionId = session.sessionId

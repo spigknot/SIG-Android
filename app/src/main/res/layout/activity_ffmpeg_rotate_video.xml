@@ -321,26 +321,6 @@
                         android:layout_weight="1"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
-
-                        <CheckBox
-                            android:id="@+id/check_use_mpeg4"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:buttonTint="#FFFFFFFF"
-                            android:text="Usar encoder mpeg4"
-                            android:textColor="#FFFFFFFF"
-                            android:textSize="13sp" />
-
-                        <TextView
-                            android:id="@+id/help_use_mpeg4"
-                            android:layout_width="22dp"
-                            android:layout_height="wrap_content"
-                            android:gravity="center"
-                            android:minHeight="40dp"
-                            android:text="?"
-                            android:textColor="#99FFFFFF"
-                            android:textSize="13sp"
-                            android:textStyle="bold" />
                     </LinearLayout>
                 </LinearLayout>
 
@@ -370,6 +350,8 @@
                         android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
+
+
 
                 <ImageButton
                     android:id="@+id/button_rotate"

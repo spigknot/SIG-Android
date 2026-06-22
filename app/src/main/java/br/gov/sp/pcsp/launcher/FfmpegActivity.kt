@@ -23,5 +23,11 @@ class FfmpegActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_rotate_video).setOnClickListener {
             startActivity(Intent(this, FfmpegRotateVideoActivity::class.java))
         }
+        findViewById<View>(R.id.button_join_videos).setOnClickListener {
+            startActivity(Intent(this, FfmpegJoinVideosActivity::class.java))
+        }
+        findViewById<View>(R.id.button_clean_audio).setOnClickListener {
+            startActivity(Intent(this, FfmpegCleanAudioActivity::class.java))
+        }
     }
 }

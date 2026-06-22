@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    android:fitsSystemWindows="true">
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        android:src="@drawable/wallpaper_ferramentas" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#88000000" />
+
+    <ScrollView
+        android:id="@+id/join_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:paddingBottom="76dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginBottom="18dp">
+
+                <ImageButton
+                    android:id="@+id/btnBack"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Voltar"
+                    android:src="@drawable/ic_arrow_back"
+                    android:tint="#FFFFFFFF" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="Juntar vídeos"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/button_select_videos"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:contentDescription="Selecionar vídeos"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:padding="9dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_select_file" />
+
+                <ImageView
+                    android:id="@+id/arrow_input_output"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_marginEnd="8dp"
+                    android:src="@drawable/ic_arrow_right"
+                    android:tint="#FFFFFFFF"
+                    android:visibility="gone" />
+
+                <ImageButton
+                    android:id="@+id/button_select_output_folder"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:contentDescription="Selecionar pasta de saída"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:padding="12dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_folder"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/selected_count"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:text="Nenhum vídeo selecionado"
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp" />
+
+            <HorizontalScrollView
+                android:id="@+id/timeline_scroll"
+                android:layout_width="match_parent"
+                android:layout_height="142dp"
+                android:layout_marginTop="12dp"
+                android:fillViewport="false"
+                android:overScrollMode="never"
+                android:scrollbars="horizontal">
+
+                <br.gov.sp.pcsp.launcher.FfmpegJoinTimelineView
+                    android:id="@+id/join_timeline"
+                    android:layout_width="wrap_content"
+                    android:layout_height="128dp" />
+            </HorizontalScrollView>
+
+            <LinearLayout
+                android:id="@+id/join_controls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/button_transition"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:ellipsize="end"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:maxLines="1"
+                        android:minWidth="132dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="Transição: Fade in/out"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/help_transition"
+                        android:layout_width="26dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:minHeight="40dp"
+                        android:text="?"
+                        android:textColor="#99FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <EditText
+                        android:id="@+id/input_transition_time"
+                        android:layout_width="68dp"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:digits="0123456789.,"
+                        android:fontFamily="monospace"
+                        android:gravity="center"
+                        android:hint="seg"
+                        android:inputType="numberDecimal"
+                        android:maxLength="4"
+                        android:singleLine="true"
+                        android:text="0.5"
+                        android:textColor="#FFFFFFFF"
+                        android:textColorHint="#88FFFFFF"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <CheckBox
+                        android:id="@+id/check_reencode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#FFFFFFFF"
+                        android:text="Reencodar"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/help_reencode"
+                        android:layout_width="26dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:minHeight="40dp"
+                        android:text="?"
+                        android:textColor="#99FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <CheckBox
+                        android:id="@+id/check_smart_join"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#FFFFFFFF"
+                        android:text="SmartJoin (Experimental)"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/help_smart_join"
+                        android:layout_width="26dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:minHeight="40dp"
+                        android:text="?"
+                        android:textColor="#99FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <ImageButton
+                    android:id="@+id/button_join"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="8dp"
+                    android:alpha="0.45"
+                    android:background="@drawable/ffmpeg_outline_green_button_bg"
+                    android:clickable="false"
+                    android:contentDescription="Juntar vídeos"
+                    android:focusable="false"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_join_videos" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/progress"
+                style="?android:attr/progressBarStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:indeterminate="true"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="start"
+                android:text=""
+                android:textColor="#DDFFFFFF"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/output_file_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:ellipsize="middle"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:maxLines="1"
+                android:textColor="#FF5EDAF2"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/output_actions"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <ImageButton
+                    android:id="@+id/button_save_to_folder"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Salvar na pasta"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_save" />
+
+                <ImageButton
+                    android:id="@+id/button_output_folder"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="14dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Abrir pasta"
+                    android:padding="7dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_folder" />
+
+                <ImageButton
+                    android:id="@+id/button_output_share"
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="14dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Compartilhar"
+                    android:padding="8dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_ffmpeg_share" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+
+    <include layout="@layout/view_sig_echo_footer" />
+</FrameLayout>

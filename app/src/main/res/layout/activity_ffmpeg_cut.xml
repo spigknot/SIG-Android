@@ -243,20 +243,45 @@
                         android:textColor="#FFFFFFFF"
                         android:textSize="11sp" />
 
-                    <EditText
-                        android:id="@+id/input_from"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:backgroundTint="#555555"
-                        android:fontFamily="monospace"
-                        android:hint="00:00:00"
-                        android:inputType="text"
-                        android:maxLines="1"
-                        android:padding="9dp"
-                        android:selectAllOnFocus="true"
-                        android:textColor="#FFFFFFFF"
-                        android:textColorHint="#88FFFFFF"
-                        android:textSize="13sp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageButton
+                            android:id="@+id/button_from_prev"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_ffmpeg_minus"
+                            android:tint="#FFFFFFFF" />
+
+                        <EditText
+                            android:id="@+id/input_from"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:backgroundTint="#555555"
+                            android:fontFamily="monospace"
+                            android:hint="00:00:00"
+                            android:inputType="text"
+                            android:gravity="center"
+                            android:maxLines="1"
+                            android:padding="9dp"
+                            android:selectAllOnFocus="true"
+                            android:textColor="#FFFFFFFF"
+                            android:textColorHint="#88FFFFFF"
+                            android:textSize="13sp" />
+
+                        <ImageButton
+                            android:id="@+id/button_from_next"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_ffmpeg_plus"
+                            android:tint="#FFFFFFFF" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <LinearLayout
@@ -273,20 +298,45 @@
                         android:textColor="#FFFFFFFF"
                         android:textSize="11sp" />
 
-                    <EditText
-                        android:id="@+id/input_to"
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:backgroundTint="#555555"
-                        android:fontFamily="monospace"
-                        android:hint="00:00:00"
-                        android:inputType="text"
-                        android:maxLines="1"
-                        android:padding="9dp"
-                        android:selectAllOnFocus="true"
-                        android:textColor="#FFFFFFFF"
-                        android:textColorHint="#88FFFFFF"
-                        android:textSize="13sp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <ImageButton
+                            android:id="@+id/button_to_prev"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_ffmpeg_minus"
+                            android:tint="#FFFFFFFF" />
+
+                        <EditText
+                            android:id="@+id/input_to"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:backgroundTint="#555555"
+                            android:fontFamily="monospace"
+                            android:hint="00:00:00"
+                            android:inputType="text"
+                            android:gravity="center"
+                            android:maxLines="1"
+                            android:padding="9dp"
+                            android:selectAllOnFocus="true"
+                            android:textColor="#FFFFFFFF"
+                            android:textColorHint="#88FFFFFF"
+                            android:textSize="13sp" />
+
+                        <ImageButton
+                            android:id="@+id/button_to_next"
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:src="@drawable/ic_ffmpeg_plus"
+                            android:tint="#FFFFFFFF" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 

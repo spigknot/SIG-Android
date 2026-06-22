@@ -28,6 +28,9 @@ import android.widget.TextView
 import android.widget.Toast
 import android.app.DownloadManager
 import androidx.appcompat.app.AlertDialog
+import android.widget.Button
+import android.widget.PopupMenu
+import android.media.MediaCodecList
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
@@ -57,7 +60,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private lateinit var metadataRotation: CheckBox
     private lateinit var flipHorizontal: CheckBox
     private lateinit var flipVertical: CheckBox
-    private lateinit var useMpeg4: CheckBox
     private lateinit var parallelKeyframes: CheckBox
     private lateinit var buttonPlayPause: ImageButton
     private lateinit var buttonSpeedDown: ImageButton
@@ -97,6 +99,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     @Volatile private var isSaving = false
     private var lastOutputMime = "video/mp4"
     private var lastOutputName = ""
+
+    private var selectedCodec: VideoEncoderChoice? = null
+    private val availableCodecs = mutableListOf<VideoEncoderChoice>()
 
     private val progressTicker = object : Runnable {
         override fun run() {
@@ -145,7 +150,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         metadataRotation = findViewById(R.id.check_metadata_rotation)
         flipHorizontal = findViewById(R.id.check_flip_horizontal)
         flipVertical = findViewById(R.id.check_flip_vertical)
-        useMpeg4 = findViewById(R.id.check_use_mpeg4)
         parallelKeyframes = findViewById(R.id.check_parallel_keyframes)
         buttonPlayPause = findViewById(R.id.button_play_pause)
         buttonSpeedDown = findViewById(R.id.button_speed_down)
@@ -190,11 +194,12 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 startActivityForResult(intent, REQUEST_CHOOSE_OUTPUT_DIR)
             }
         }
+        
+        detectAvailableCodecs()
+
+        
         findViewById<TextView>(R.id.help_metadata_rotation).setOnClickListener {
             showHelp("Giro quase instantâneo, sem reencodar o vídeo. Nem todo player respeita.")
-        }
-        findViewById<TextView>(R.id.help_use_mpeg4).setOnClickListener {
-            showHelp("Tende a ser mais rápido, mas com menor qualidade e arquivo de saída maior")
         }
         findViewById<TextView>(R.id.help_parallel_keyframes).setOnClickListener {
             showHelp("Modo experimental: o app corta o vídeo em trechos próximos de 1 minuto usando keyframes, gira os trechos em paralelo e junta tudo no final. Pode acelerar vídeos grandes em alguns aparelhos, mas também pode não ajudar quando o encoder já estiver no limite.")
@@ -221,7 +226,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             recordToggleSelection(TransformOp.VFLIP, checked)
             applyPreviewTransform()
         }
-        useMpeg4.setOnCheckedChangeListener { _, _ -> updateMetadataModeState() }
         parallelKeyframes.setOnCheckedChangeListener { _, _ -> updateMetadataModeState() }
         metadataRotation.isChecked = true
         updateMetadataModeState()
@@ -396,15 +400,23 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 val outputName = buildOutputName(selectedName)
                 val currentTempOutput = File(cacheDir, "rotate_${System.currentTimeMillis()}_$outputName")
                 tempOutput = currentTempOutput
-                val usedMpeg4 = !metadataOnly && useMpeg4.isChecked
                 val canUseParallel = !metadataOnly && parallelKeyframes.isChecked && buildOrderedFilters().isNotBlank()
-                val result = if (canUseParallel) {
-                    executeParallelKeyframeRotation(currentInputFile, currentTempOutput, usedMpeg4)
+                
+                val tracker: FfmpegTaskTracker
+                if (canUseParallel) {
+                    tracker = FfmpegTaskTracker(status, listOf("Dividindo vídeo em trechos"))
                 } else {
                     val taskLabel = if (metadataOnly) "Aplicando metadados" else "Girando vídeo"
+                    tracker = FfmpegTaskTracker(status, listOf("Preparando rotação", taskLabel))
+                    tracker.completeCurrentTask()
+                }
+
+                val result = if (canUseParallel) {
+                    executeParallelKeyframeRotation(currentInputFile, currentTempOutput, availableCodecs.first(), tracker)
+                } else {
                     val session = executeFfmpegWithProgress(
-                        buildFfmpegArguments(currentInputFile, currentTempOutput, degrees, useMpeg4Encoder = usedMpeg4, metadataOnly = metadataOnly),
-                        taskLabel
+                        buildFfmpegArguments(currentInputFile, currentTempOutput, degrees, encoder = availableCodecs.first(), metadataOnly = metadataOnly),
+                        tracker
                     )
                     RotationExecutionResult(
                         success = ReturnCode.isSuccess(session.returnCode) &&
@@ -414,8 +426,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                         failureMessage = session.allLogsAsString.orEmpty().lines().takeLast(2).joinToString(" ").take(90),
                         encoderInfo = when {
                             metadataOnly -> "\nModo: metadados"
-                            usedMpeg4 -> "\nEncoder: mpeg4"
-                            else -> "\nEncoder: h264_mediacodec"
+                            else -> ""
                         }
                     )
                 }
@@ -425,19 +436,26 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 runOnUiThread {
                     setProcessing(false)
                     if (result.cancelled) {
-                        status.text = "Operação cancelada."
+                        tracker.fail("Operação cancelada.")
                         return@runOnUiThread
                     }
                     if (!success) {
-                        status.text = "Não consegui girar o vídeo. ${result.failureMessage}"
+                        tracker.fail("Não consegui girar o vídeo. ${result.failureMessage}")
                         return@runOnUiThread
                     }
+                    
+                    val elapsedMs = SystemClock.elapsedRealtime() - processingStartMs
+                    val elapsedSeconds = (elapsedMs / 1000.0).coerceAtLeast(0.001)
+                    val mediaSeconds = durationMs / 1000.0
+                    val efficiency = String.format(Locale.US, "%.2fx", mediaSeconds / elapsedSeconds)
+                    tracker.success("Tempo de processamento: ${formatTime(elapsedMs)}\nMídia processada: ${formatTime(durationMs)}\nEficiência: $efficiency${result.encoderInfo}")
                     
                     tempOutputFiles.clear()
                     tempOutputFiles.add(currentTempOutput)
                     lastOutputName = outputName
 
-                    status.text = "Giro concluído com sucesso! Clique no disquete para salvar.${result.encoderInfo}"
+                    lastOutputName = outputName
+
                     outputActions.visibility = View.VISIBLE
                     buttonSaveToFolder.visibility = View.VISIBLE
                     buttonOutputFolder.visibility = View.GONE
@@ -458,7 +476,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun executeFfmpegWithProgress(arguments: Array<String>, taskLabel: String): FFmpegSession {
+    private fun executeFfmpegWithProgress(arguments: Array<String>, tracker: FfmpegTaskTracker): FFmpegSession {
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val safeDuration = durationMs.coerceAtLeast(1L)
@@ -474,11 +492,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 val percent = ((statistics.time / safeDuration.toDouble()) * 100.0)
                     .toInt()
                     .coerceIn(0, 99)
-                runOnUiThread {
-                    if (progress.visibility == View.VISIBLE) {
-                        status.text = formatProgressStatus(taskLabel, percent, statistics.time, startedAt)
-                    }
-                }
+                tracker.setProgress(percent)
             }
         )
         currentSessionId = session.sessionId
@@ -490,33 +504,71 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private fun executeParallelKeyframeRotation(
         inputFile: File,
         outputFile: File,
-        useMpeg4Encoder: Boolean
+        encoder: VideoEncoderChoice,
+        tracker: FfmpegTaskTracker
     ): RotationExecutionResult {
         parallelProcessing = true
         val workDir = File(cacheDir, "rotate_parallel_${System.currentTimeMillis()}").apply { mkdirs() }
         val segmentDir = File(workDir, "segments").apply { mkdirs() }
         val rotatedDir = File(workDir, "rotated").apply { mkdirs() }
         val videoBitrate = detectVideoBitrate(inputFile)
-        val encoder = chooseParallelEncoder(useMpeg4Encoder, videoBitrate)
 
         try {
+            val numCores = Runtime.getRuntime().availableProcessors().minus(1).coerceAtLeast(1)
+            
+            val keyframesMs = extractKeyframesSync(inputFile).filter { it > 100L && it < durationMs - 100L }
+            val splitPoints = mutableListOf<Double>()
+            
+            if (keyframesMs.size < numCores - 1) {
+                splitPoints.addAll(keyframesMs.map { it / 1000.0 })
+            } else {
+                val targetSegmentDurationMs = durationMs / numCores.toDouble()
+                val usedKeyframes = mutableSetOf<Long>()
+                for (i in 1 until numCores) {
+                    val targetMs = targetSegmentDurationMs * i
+                    val bestKeyframe = keyframesMs.filter { it !in usedKeyframes }.minByOrNull { kotlin.math.abs(it - targetMs) }
+                    if (bestKeyframe != null) {
+                        usedKeyframes.add(bestKeyframe)
+                        splitPoints.add(bestKeyframe / 1000.0)
+                    }
+                }
+            }
+
             val segmentPattern = File(segmentDir, "part_%05d.mp4").absolutePath
-            runOnUiThread { status.text = "Cortando por keyframes... 0% | 0.00x" }
-            val splitSession = executeFfmpegWithProgress(
-                arrayOf(
-                    "-y",
-                    "-i", inputFile.absolutePath,
-                    "-map", "0",
-                    "-c", "copy",
-                    "-f", "segment",
-                    "-segment_time", "60",
-                    "-reset_timestamps", "1",
-                    "-segment_format", "mp4",
-                    "-avoid_negative_ts", "make_zero",
-                    segmentPattern
-                ),
-                "Cortando por keyframes"
-            )
+            val splitSession = if (splitPoints.isNotEmpty()) {
+                val times = splitPoints.sorted().joinToString(",") { String.format(Locale.US, "%.3f", it) }
+                executeFfmpegWithProgress(
+                    arrayOf(
+                        "-y",
+                        "-i", inputFile.absolutePath,
+                        "-map", "0",
+                        "-c", "copy",
+                        "-f", "segment",
+                        "-segment_times", times,
+                        "-reset_timestamps", "1",
+                        "-segment_format", "mp4",
+                        "-avoid_negative_ts", "make_zero",
+                        segmentPattern
+                    ),
+                    tracker
+                )
+            } else {
+                executeFfmpegWithProgress(
+                    arrayOf(
+                        "-y",
+                        "-i", inputFile.absolutePath,
+                        "-map", "0",
+                        "-c", "copy",
+                        "-f", "segment",
+                        "-segment_time", String.format(Locale.US, "%.1f", (durationMs / 1000.0) / numCores.toDouble()),
+                        "-reset_timestamps", "1",
+                        "-segment_format", "mp4",
+                        "-avoid_negative_ts", "make_zero",
+                        segmentPattern
+                    ),
+                    tracker
+                )
+            }
             if (ReturnCode.isCancel(splitSession.returnCode)) {
                 return RotationExecutionResult(false, true, "", "")
             }
@@ -536,45 +588,48 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 return RotationExecutionResult(false, false, "Nenhum trecho foi gerado.", encoder.description)
             }
 
+            val segmentTasks = segments.mapIndexed { i, _ -> "Girando trecho ${i + 1}" }
+            tracker.appendTasks(segmentTasks)
+            tracker.appendTasks(listOf("Juntando vídeo final"))
+            
             val filters = buildOrderedFilters()
-            val workerCount = minOf(
-                segments.size,
-                Runtime.getRuntime().availableProcessors().minus(2).coerceAtLeast(1),
-                MAX_PARALLEL_SEGMENTS
-            ).coerceAtLeast(1)
+            val workerCount = numCores
             val executor = Executors.newFixedThreadPool(workerCount)
-            val doneCount = AtomicInteger(0)
             val cancelCount = AtomicInteger(0)
             val failures = Collections.synchronizedList(mutableListOf<String>())
             val startedAt = SystemClock.elapsedRealtime()
-
-            runOnUiThread {
-                status.text = "Girando ${segments.size} trechos em paralelo ($workerCount por vez)... 0% | 0.00x"
-            }
 
             val futures = segments.mapIndexed { index, segment ->
                 val chunkOutput = File(rotatedDir, "rotated_${index.toString().padStart(5, '0')}.mp4")
                 executor.submit {
                     try {
-                        val session = FFmpegKit.executeWithArguments(
-                            buildSegmentRotationArguments(segment, chunkOutput, filters, encoder).toTypedArray()
+                        val durationMs = detectDurationMs(segment).coerceAtLeast(1000L)
+                        val latch = CountDownLatch(1)
+                        var finalSession: FFmpegSession? = null
+                        FFmpegKit.executeWithArgumentsAsync(
+                            buildSegmentRotationArguments(segment, chunkOutput, filters, encoder, videoBitrate).toTypedArray(),
+                            { s ->
+                                finalSession = s
+                                latch.countDown()
+                            },
+                            { },
+                            { statistics ->
+                                val percent = ((statistics.time / durationMs.toDouble()) * 100.0).toInt().coerceIn(0, 99)
+                                tracker.setTaskProgress(1 + index, percent)
+                            }
                         )
-                        when {
-                            ReturnCode.isCancel(session.returnCode) -> cancelCount.incrementAndGet()
-                            ReturnCode.isSuccess(session.returnCode) && chunkOutput.exists() && chunkOutput.length() > 0L -> Unit
-                            else -> failures += session.allLogsAsString.orEmpty().lines().takeLast(2).joinToString(" ").take(160)
+                        latch.await()
+                        
+                        val session = finalSession!!
+                        if (ReturnCode.isCancel(session.returnCode)) {
+                            cancelCount.incrementAndGet()
+                        } else if (ReturnCode.isSuccess(session.returnCode) && chunkOutput.exists() && chunkOutput.length() > 0L) {
+                            tracker.completeTask(1 + index)
+                        } else {
+                            failures += session.allLogsAsString.orEmpty().lines().takeLast(2).joinToString(" ").take(160)
                         }
                     } catch (e: Throwable) {
                         failures += (e.message ?: "falha ao girar trecho")
-                    } finally {
-                        val done = doneCount.incrementAndGet()
-                        val percent = ((done / segments.size.toDouble()) * 100.0).toInt().coerceIn(0, 99)
-                        val processedMs = (durationMs * (done / segments.size.toDouble())).coerceAtLeast(0.0)
-                        runOnUiThread {
-                            if (progress.visibility == View.VISIBLE) {
-                                status.text = formatProgressStatus("Girando trechos em paralelo", percent, processedMs, startedAt)
-                            }
-                        }
                     }
                 }
             }
@@ -596,12 +651,12 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 return RotationExecutionResult(false, false, "Nem todos os trechos foram processados.", encoder.description)
             }
 
-            val listFile = File(workDir, "concat_list.txt")
+            val listFile = File(workDir, "rotate_list.txt")
             listFile.writeText(
                 rotatedSegments.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" },
                 Charsets.UTF_8
             )
-            runOnUiThread { status.text = "Juntando trechos... 0% | 0.00x" }
+            tracker.completeCurrentTask()
             val concatSession = executeFfmpegWithProgress(
                 arrayOf(
                     "-y",
@@ -614,26 +669,75 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     "-movflags", "+faststart",
                     outputFile.absolutePath
                 ),
-                "Juntando trechos"
+                tracker
             )
-
+            val concatSuccess = ReturnCode.isSuccess(concatSession.returnCode) && outputFile.exists() && outputFile.length() > 0L
+            if (concatSuccess) tracker.completeTask(1 + segments.size)
             return RotationExecutionResult(
-                success = ReturnCode.isSuccess(concatSession.returnCode) && outputFile.exists() && outputFile.length() > 0L,
+                success = concatSuccess,
                 cancelled = ReturnCode.isCancel(concatSession.returnCode),
-                failureMessage = concatSession.allLogsAsString.orEmpty().lines().takeLast(2).joinToString(" ").take(120),
-                encoderInfo = "\nModo: paralelo por keyframes\nTrechos: ${segments.size}\nEncoder: ${encoder.description}"
+                failureMessage = concatSession.allLogsAsString.orEmpty().lines().takeLast(2).joinToString(" ").take(90),
+                encoderInfo = "\nEncoder: ${encoder.description}\nParalelo: ${segments.size} trechos ($numCores threads)"
             )
+        } catch (e: Throwable) {
+            return RotationExecutionResult(false, false, e.message.orEmpty(), encoder.description)
         } finally {
             parallelProcessing = false
             workDir.deleteRecursively()
         }
     }
 
+    private fun detectDurationMs(file: File): Long {
+        return try {
+            val retriever = android.media.MediaMetadataRetriever()
+            retriever.setDataSource(file.absolutePath)
+            val dur = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            retriever.release()
+            dur
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    private fun extractKeyframesSync(inputFile: File): List<Long> {
+        val extractor = android.media.MediaExtractor()
+        val keyframes = mutableListOf<Long>()
+        try {
+            extractor.setDataSource(inputFile.absolutePath)
+            var videoTrackIndex = -1
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(android.media.MediaFormat.KEY_MIME)
+                if (mime?.startsWith("video/") == true) {
+                    videoTrackIndex = i
+                    break
+                }
+            }
+            if (videoTrackIndex >= 0) {
+                extractor.selectTrack(videoTrackIndex)
+                while (true) {
+                    val sampleTime = extractor.sampleTime
+                    if (sampleTime < 0) break
+                    if ((extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                        keyframes.add(sampleTime / 1000L)
+                    }
+                    extractor.advance()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error extracting keyframes", e)
+        } finally {
+            extractor.release()
+        }
+        return keyframes
+    }
+
     private fun buildSegmentRotationArguments(
         inputFile: File,
         outputFile: File,
         filters: String,
-        encoder: VideoEncoderChoice
+        encoder: VideoEncoderChoice,
+        videoBitrate: String
     ): List<String> {
         return mutableListOf(
             "-y",
@@ -643,6 +747,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             "-vf", filters
         ).apply {
             addAll(encoder.arguments)
+            addAll(listOf("-b:v", videoBitrate))
             addAll(
                 listOf(
                     "-c:a", "copy",
@@ -655,35 +760,23 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
     }
 
-    private fun chooseParallelEncoder(useMpeg4Encoder: Boolean, videoBitrate: String): VideoEncoderChoice {
-        if (useMpeg4Encoder) {
-            return VideoEncoderChoice("mpeg4", listOf("-c:v", "mpeg4", "-b:v", videoBitrate))
+    private var cachedEncodersList: String? = null
+
+    private fun getEncodersList(): String {
+        if (cachedEncodersList == null) {
+            cachedEncodersList = try {
+                val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-encoders"))
+                session.allLogsAsString.orEmpty()
+            } catch (e: Throwable) {
+                Log.w(TAG, "Could not inspect ffmpeg encoders", e)
+                ""
+            }
         }
-        return if (isEncoderAvailable("libx264")) {
-            VideoEncoderChoice(
-                "libx264",
-                listOf(
-                    "-c:v", "libx264",
-                    "-preset", "veryfast",
-                    "-b:v", videoBitrate,
-                    "-maxrate", videoBitrate,
-                    "-bufsize", bufferSizeFor(videoBitrate),
-                    "-pix_fmt", "yuv420p"
-                )
-            )
-        } else {
-            VideoEncoderChoice("h264_mediacodec (libx264 indisponível)", listOf("-c:v", "h264_mediacodec", "-b:v", videoBitrate))
-        }
+        return cachedEncodersList!!
     }
 
     private fun isEncoderAvailable(encoder: String): Boolean {
-        return try {
-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-encoders"))
-            session.allLogsAsString.orEmpty().contains(encoder, ignoreCase = true)
-        } catch (e: Throwable) {
-            Log.w(TAG, "Could not inspect ffmpeg encoders", e)
-            false
-        }
+        return getEncodersList().contains(encoder, ignoreCase = true)
     }
 
     private fun bufferSizeFor(bitrate: String): String {
@@ -720,11 +813,53 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
     }
 
+    private data class SoftwareEncoderCandidate(
+        val ffmpegName: String,
+        val displayName: String,
+        val extraArgs: List<String>
+    )
+
+    private fun detectAvailableCodecs() {
+        // 1) Hardware encoders via MediaCodecList
+        val codecInfos = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+        val hasH264 = codecInfos.any { it.isEncoder && it.supportedTypes.contains("video/avc") }
+        val hasHevc = codecInfos.any { it.isEncoder && it.supportedTypes.contains("video/hevc") }
+
+        if (hasH264) availableCodecs.add(VideoEncoderChoice("h264_mediacodec (Hardware)", listOf("-c:v", "h264_mediacodec")))
+        if (hasHevc) availableCodecs.add(VideoEncoderChoice("hevc_mediacodec (Hardware)", listOf("-c:v", "hevc_mediacodec")))
+        
+        // 2) Software/CPU encoders detectados dinamicamente no FFmpeg
+        val knownSoftwareEncoders = listOf(
+            SoftwareEncoderCandidate("libx264", "libx264 (CPU, H.264)", listOf("-preset", "ultrafast")),
+            SoftwareEncoderCandidate("libx265", "libx265 (CPU, H.265)", listOf("-preset", "ultrafast")),
+            SoftwareEncoderCandidate("libsvtav1", "SVT-AV1 (CPU, AV1)", listOf("-preset", "8")),
+            SoftwareEncoderCandidate("libaom-av1", "libaom-av1 (CPU, AV1)", listOf("-cpu-used", "8")),
+            SoftwareEncoderCandidate("libvpx", "libvpx (CPU, VP8)", listOf("-deadline", "realtime", "-cpu-used", "8")),
+            SoftwareEncoderCandidate("libvpx-vp9", "libvpx-vp9 (CPU, VP9)", listOf("-deadline", "realtime", "-cpu-used", "8")),
+            SoftwareEncoderCandidate("mpeg4", "mpeg4 (CPU, MPEG-4)", listOf("-qscale:v", "2")),
+            SoftwareEncoderCandidate("mpeg2video", "mpeg2video (CPU, MPEG-2)", listOf("-qscale:v", "2")),
+            SoftwareEncoderCandidate("libxvid", "libxvid (CPU, Xvid)", listOf("-qscale:v", "2")),
+            SoftwareEncoderCandidate("mjpeg", "mjpeg (CPU, Motion JPEG)", listOf("-qscale:v", "2"))
+        )
+
+        for (candidate in knownSoftwareEncoders) {
+            if (isEncoderAvailable(candidate.ffmpegName)) {
+                val args = mutableListOf("-c:v", candidate.ffmpegName)
+                args.addAll(candidate.extraArgs)
+                availableCodecs.add(VideoEncoderChoice(candidate.displayName, args))
+            }
+        }
+
+        selectedCodec = availableCodecs.firstOrNull()
+    }
+
+
+
     private fun buildFfmpegArguments(
         inputFile: File,
         outputFile: File,
         degrees: Int,
-        useMpeg4Encoder: Boolean,
+        encoder: VideoEncoderChoice,
         metadataOnly: Boolean
     ): Array<String> {
         if (metadataOnly) {
@@ -746,11 +881,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         val args = mutableListOf("-y", "-i", inputFile.absolutePath)
         if (filters.isNotEmpty()) {
             args.addAll(listOf("-vf", filters))
-            if (useMpeg4Encoder) {
-                args.addAll(listOf("-c:v", "mpeg4", "-b:v", videoBitrate))
-            } else {
-                args.addAll(listOf("-c:v", "h264_mediacodec", "-b:v", videoBitrate))
-            }
+            args.addAll(encoder.arguments)
+            args.addAll(listOf("-b:v", videoBitrate))
             args.addAll(
                 listOf(
                     "-c:a", "copy",
@@ -860,20 +992,19 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         if (metadataOnly) {
             flipHorizontal.isChecked = false
             flipVertical.isChecked = false
-            useMpeg4.isChecked = false
             parallelKeyframes.isChecked = false
             transformOrder.remove(TransformOp.HFLIP)
             transformOrder.remove(TransformOp.VFLIP)
         }
         flipHorizontal.isEnabled = !metadataOnly
         flipVertical.isEnabled = !metadataOnly
-        useMpeg4.isEnabled = !metadataOnly
         parallelKeyframes.isEnabled = !metadataOnly
         val alpha = if (metadataOnly) 0.42f else 1f
         flipHorizontal.alpha = alpha
         flipVertical.alpha = alpha
-        useMpeg4.alpha = alpha
         parallelKeyframes.alpha = alpha
+        
+
     }
 
     private fun normalizeMetadataDegrees(degrees: Int): Int {
@@ -950,7 +1081,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             buttonRotate.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
             buttonRotate.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
             buttonRotate.contentDescription = "Cancelar"
-            status.text = "Preparando giro... 0% | 0.00x"
+            status.text = ""
         } else {
             currentSessionId = null
             buttonRotate.setImageResource(R.drawable.ic_ffmpeg_rotate_video)
