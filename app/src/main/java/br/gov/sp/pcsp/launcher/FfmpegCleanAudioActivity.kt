@@ -87,7 +87,11 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         buttonOutputFolder = findViewById(R.id.button_output_folder)
         buttonOutputShare = findViewById(R.id.button_output_share)
 
-        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+        val exitHandler = installCancelAndExitGuard(
+            isTaskRunning = { isProcessing },
+            cancelTask = { cancelCleaning() }
+        )
+        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
         findViewById<View>(R.id.button_select_audio).setOnClickListener { openAudioPicker() }
         buttonSelectOutputFolder.setOnClickListener {
             startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQUEST_CHOOSE_PRE_OUTPUT_DIR)

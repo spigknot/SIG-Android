@@ -95,11 +95,15 @@
             android:exported="false" />
 
         <activity
+            android:name=".experimental.npu.NpuTestActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".FasterWhisperServerActivity"
             android:exported="false" />
 
         <activity
-            android:name=".GraniteSpeechActivity"
+            android:name=".RemoteSttActivity"
             android:exported="true"
             android:label="SIG - Transcrever Granite">
             <intent-filter>
@@ -123,6 +127,14 @@
                 <data android:mimeType="video/*" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".GrokTestActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ModelSettingsActivity"
+            android:exported="false" />
 
         <activity
             android:name=".FfmpegActivity"

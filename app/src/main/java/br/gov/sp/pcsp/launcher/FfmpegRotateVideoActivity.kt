@@ -169,7 +169,11 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         arrowInputOutput.visibility = View.GONE
 
         videoPreview.surfaceTextureListener = surfaceListener
-        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+        val exitHandler = installCancelAndExitGuard(
+            isTaskRunning = { isProcessing || parallelProcessing || isSaving },
+            cancelTask = { if (isProcessing || parallelProcessing) cancelRotation() }
+        )
+        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
         findViewById<View>(R.id.button_select_video).setOnClickListener { openVideoPicker() }
         buttonPlayPause.setOnClickListener { togglePlayback() }
         buttonSpeedDown.setOnClickListener { changePlaybackSpeed(-1) }
@@ -492,7 +496,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 val percent = ((statistics.time / safeDuration.toDouble()) * 100.0)
                     .toInt()
                     .coerceIn(0, 99)
-                tracker.setProgress(percent)
+                val elapsedMs = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(1L)
+                val relativeSpeed = statistics.time.toDouble() / elapsedMs.toDouble()
+                tracker.setProgress(percent, String.format(Locale.US, "%.1fx", relativeSpeed))
             }
         )
         currentSessionId = session.sessionId
@@ -604,6 +610,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 executor.submit {
                     try {
                         val durationMs = detectDurationMs(segment).coerceAtLeast(1000L)
+                        val segmentStartedAt = SystemClock.elapsedRealtime()
                         val latch = CountDownLatch(1)
                         var finalSession: FFmpegSession? = null
                         FFmpegKit.executeWithArgumentsAsync(
@@ -615,7 +622,13 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                             { },
                             { statistics ->
                                 val percent = ((statistics.time / durationMs.toDouble()) * 100.0).toInt().coerceIn(0, 99)
-                                tracker.setTaskProgress(1 + index, percent)
+                                val elapsedMs = (SystemClock.elapsedRealtime() - segmentStartedAt).coerceAtLeast(1L)
+                                val relativeSpeed = statistics.time.toDouble() / elapsedMs.toDouble()
+                                tracker.setTaskProgress(
+                                    1 + index,
+                                    percent,
+                                    String.format(Locale.US, "%.1fx", relativeSpeed)
+                                )
                             }
                         )
                         latch.await()

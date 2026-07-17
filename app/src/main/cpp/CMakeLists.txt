@@ -92,3 +92,8 @@ target_link_libraries(sig_whisper
         whisper
         android
         log)
+
+# Experimental and optional. This target probes QAIRT/QNN dynamically and is
+# deliberately independent from the stable Whisper/GGML library above.
+add_library(sig_npu_probe SHARED npu_probe_jni.cpp)
+target_link_libraries(sig_npu_probe android log dl)

@@ -200,7 +200,11 @@ class WhisperActivity : AppCompatActivity() {
         buttonLanguage.text = selectedLanguage.shortLabel
         buttonBackend.text = selectedBackend.shortLabel
         logToggle.visibility = View.VISIBLE
-        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+        val exitHandler = installCancelAndExitGuard(
+            isTaskRunning = { isTranscribing || isBusy },
+            cancelTask = { cancelRunningTaskForExit() }
+        )
+        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
         findViewById<View>(R.id.button_select_media).setOnClickListener { showSourceMenu(it) }
         buttonTranscribe.setOnClickListener {
             if (isTranscribing) cancelTranscription() else transcribeSelectedMedia()
@@ -1731,6 +1735,20 @@ class WhisperActivity : AppCompatActivity() {
         if (!isTranscribing || cancelRequested) return
         cancelRequested = true
         setTranscriptionStatus("Cancelando transcrição...")
+        try {
+            WhisperNative.cancelTranscription()
+        } catch (_: Throwable) {
+        }
+    }
+
+    private fun cancelRunningTaskForExit() {
+        cancelRequested = true
+        if (isTranscribing) {
+            cancelTranscription()
+        } else {
+            FFmpegKit.cancel()
+            setBusy(false)
+        }
         try {
             WhisperNative.cancelTranscription()
         } catch (_: Throwable) {

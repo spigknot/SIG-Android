@@ -12,6 +12,7 @@ class FfmpegTaskTracker(
 ) {
     private val tasks = mutableListOf<String>()
     private val taskProgresses = mutableListOf<Int>()
+    private val taskDetails = mutableListOf<String>()
     private val taskStates = mutableListOf<TaskState>()
     private var isFailed = false
     private var failureMessage = ""
@@ -37,6 +38,7 @@ class FfmpegTaskTracker(
         tasks.addAll(newTasks)
         for (i in newTasks.indices) {
             taskProgresses.add(0)
+            taskDetails.add("")
             taskStates.add(TaskState.PENDING)
         }
         render()
@@ -44,8 +46,12 @@ class FfmpegTaskTracker(
 
     // Para uso sequencial legado:
     fun setProgress(progress: Int) {
+        setProgress(progress, "")
+    }
+
+    fun setProgress(progress: Int, detail: String) {
         if (isFailed || currentLinearIndex >= tasks.size) return
-        setTaskProgress(currentLinearIndex, progress)
+        setTaskProgress(currentLinearIndex, progress, detail)
     }
 
     fun completeCurrentTask() {
@@ -56,9 +62,14 @@ class FfmpegTaskTracker(
 
     // Uso concorrente e específico:
     fun setTaskProgress(index: Int, progress: Int) {
+        setTaskProgress(index, progress, "")
+    }
+
+    fun setTaskProgress(index: Int, progress: Int, detail: String) {
         if (isFailed || index >= tasks.size) return
         taskStates[index] = TaskState.RUNNING
         taskProgresses[index] = progress.coerceIn(0, 100)
+        taskDetails[index] = detail
         render()
     }
 
@@ -102,6 +113,7 @@ class FfmpegTaskTracker(
         for (i in tasks.indices) {
             taskStates[i] = TaskState.PENDING
             taskProgresses[i] = 0
+            taskDetails[i] = ""
         }
         render()
     }
@@ -114,6 +126,7 @@ class FfmpegTaskTracker(
                 val taskName = tasks[i]
                 val state = taskStates[i]
                 val progress = taskProgresses[i]
+                val detail = taskDetails[i].takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
                 val lineStart = builder.length
                 
                 when (state) {
@@ -126,7 +139,7 @@ class FfmpegTaskTracker(
                         builder.setSpan(ForegroundColorSpan(colorError), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                     }
                     TaskState.RUNNING -> {
-                        builder.append("$taskName $progress%\n")
+                        builder.append("$taskName - $progress%$detail\n")
                         builder.setSpan(ForegroundColorSpan(colorActive), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                     }
                     TaskState.PENDING -> {

@@ -340,35 +340,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/keyframe_options"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:orientation="horizontal"
-                android:visibility="gone">
-
-                <CheckBox
-                    android:id="@+id/check_cut_keyframes"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:buttonTint="#FFFFFFFF"
-                    android:text="Cortar por keyframes"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="13sp" />
-
-                <TextView
-                    android:id="@+id/help_cut_keyframes"
-                    android:layout_width="26dp"
-                    android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:minHeight="40dp"
-                    android:text="?"
-                    android:textColor="#99FFFFFF"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-
             <ImageButton
                 android:id="@+id/button_cut"
                 android:layout_width="44dp"

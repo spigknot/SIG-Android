@@ -4,6 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -111,6 +114,14 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     private lateinit var buttonSaveToFolder: ImageButton
     private lateinit var buttonOutputExport: ImageButton
     private lateinit var buttonOutputFolder: ImageButton
+    private lateinit var buttonCopyTranscript: ImageButton
+    private lateinit var liveTranscriptTextView: TextView
+    private lateinit var liveAiProgress: TextView
+    private lateinit var livePostActions: View
+    private lateinit var buttonHistory: TextView
+    private lateinit var buttonPersonSelector: TextView
+    private lateinit var buttonStatement: TextView
+    private lateinit var buttonPasteTranscript: TextView
     private lateinit var serverGate: View
     private lateinit var sourceBar: View
     private lateinit var serverGateStatus: TextView
@@ -155,6 +166,7 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     private var preSelectedOutputDirUri: Uri? = null
     private var finalOutputDirUri: Uri? = null
     private var lastSession: OutputSession? = null
+    private var lastTranscriptionResults: List<TranscriptionResult> = emptyList()
     private var zipFile: File? = null
     private var playWhenSeekCompletes = false
     private var selectedPrepareMode: PrepareMode? = null
@@ -164,6 +176,11 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     private var serverEntries: List<ServerEntry> = emptyList()
     private var mediaRecorder: MediaRecorder? = null
     private var recordingFile: File? = null
+    @Volatile private var recordingActive = false
+    @Volatile private var recordingAudioRecord: AudioRecord? = null
+    private var recordingThread: Thread? = null
+    private var recordingPcmFile: File? = null
+    private var whiteMicSelection = false
     private var recordingStartedAt = 0L
     @Volatile private var liveTranscribing = false
     @Volatile private var liveFinalizing = false
@@ -184,6 +201,18 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     private var livePausedAccumulatedMs = 0L
     private var selectedLiveLanguage = LiveLanguage.PT
     private var pendingAudioPermissionAction = AudioPermissionAction.NONE
+    private val assistantCalls = Collections.synchronizedSet(mutableSetOf<Call>())
+    private var assistantRequestGeneration = 0
+    private var historyTaskState = AssistantTaskState.IDLE
+    private var namesTaskState = AssistantTaskState.IDLE
+    private var statementTaskState = AssistantTaskState.IDLE
+    private var historyElapsedMs: Long? = null
+    private var namesElapsedMs: Long? = null
+    private var statementElapsedMs: Long? = null
+    private var assistantNames: List<String> = emptyList()
+    private var progressPhase = ProgressPhase.TRANSCRIPTION
+    private var transcriptionTaskState = AssistantTaskState.IDLE
+    private var refiningTaskState = AssistantTaskState.IDLE
 
     private val progressTicker = object : Runnable {
         override fun run() {
@@ -209,7 +238,7 @@ class FasterWhisperServerActivity : AppCompatActivity() {
 
     private val recordingTicker = object : Runnable {
         override fun run() {
-            if (mediaRecorder != null || liveTranscribing) {
+            if (recordingActive || mediaRecorder != null || liveTranscribing) {
                 val now = SystemClock.elapsedRealtime()
                 val elapsed = if (liveTranscribing) {
                     val pausedNow = if (livePaused && livePausedAt > 0L) now - livePausedAt else 0L
@@ -304,6 +333,14 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         buttonSaveToFolder = findViewById(R.id.button_save_to_folder)
         buttonOutputExport = findViewById(R.id.button_output_export)
         buttonOutputFolder = findViewById(R.id.button_output_folder)
+        buttonCopyTranscript = findViewById(R.id.button_copy_transcript)
+        liveTranscriptTextView = findViewById(R.id.live_transcript_text)
+        liveAiProgress = findViewById(R.id.live_ai_progress)
+        livePostActions = findViewById(R.id.live_post_actions)
+        buttonHistory = findViewById(R.id.button_history)
+        buttonPersonSelector = findViewById(R.id.button_person_selector)
+        buttonStatement = findViewById(R.id.button_statement)
+        buttonPasteTranscript = findViewById(R.id.button_paste_transcript)
 
         videoPreview.surfaceTextureListener = surfaceListener
         terminalText.movementMethod = ScrollingMovementMethod.getInstance()
@@ -314,13 +351,28 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             }
             false
         }
+        liveTranscriptTextView.movementMethod = ScrollingMovementMethod.getInstance()
+        liveTranscriptTextView.setOnTouchListener { view, event ->
+            view.parent.requestDisallowInterceptTouchEvent(true)
+            if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
+                view.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            false
+        }
 
-        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+        val exitHandler = installCancelAndExitGuard(
+            isTaskRunning = { hasRunningTaskForExit() },
+            cancelTask = { cancelRunningTaskForExit() }
+        )
+        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
+        findViewById<ImageButton>(R.id.button_model_settings).setOnClickListener {
+            startActivity(Intent(this, ModelSettingsActivity::class.java))
+        }
         findViewById<View>(R.id.button_select_media).setOnClickListener { showSourceMenu(it) }
         buttonPingServer.setOnClickListener { testManualServerIp() }
-        buttonServerSelector.setOnClickListener { showServerMenu() }
+        buttonServerSelector.visibility = View.GONE
         buttonRecordingAction.setOnClickListener {
-            if (mediaRecorder == null) startMicrophoneRecording() else stopMicrophoneRecording()
+            if (!recordingActive) startMicrophoneRecording() else stopMicrophoneRecording()
         }
         buttonLiveMicTest.setOnClickListener {
             if (liveTranscribing) toggleLiveMicPause() else startLiveMicTranscription()
@@ -339,8 +391,13 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             val preUri = preSelectedOutputDirUri
             if (preUri != null) saveTempOutputsToUri(preUri) else openOutputFolderPicker(REQUEST_CHOOSE_OUTPUT_DIR)
         }
-        buttonOutputExport.setOnClickListener { showExportMenu(it) }
+        buttonOutputExport.setOnClickListener { showTranscriptShareMenu(it) }
         buttonOutputFolder.setOnClickListener { openOutputFolder() }
+        buttonCopyTranscript.setOnClickListener { copyTranscriptToClipboard() }
+        buttonHistory.setOnClickListener { requestHistory() }
+        buttonPersonSelector.setOnClickListener { showPersonMenu() }
+        buttonStatement.setOnClickListener { requestStatement() }
+        buttonPasteTranscript.setOnClickListener { pasteTranscriptFromClipboard() }
         outputFileName.setOnClickListener { openOutputFile(lastSession?.txtFile, "text/plain") }
 
         timeline.onRangeChanged = { startMs, endMs, fromUser, _ ->
@@ -371,6 +428,7 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         handler.post(progressTicker)
+        refreshModelSummaryStatusIfIdle()
     }
 
     override fun onPause() {
@@ -385,12 +443,43 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             currentCalls.forEach { it.cancel() }
             currentCalls.clear()
         }
+        synchronized(assistantCalls) {
+            assistantCalls.forEach { it.cancel() }
+            assistantCalls.clear()
+        }
         stopLiveMicTranscription(generateDefinitive = false)
         releaseRecorder()
         releasePreviewPlayers()
         previewSurface?.release()
         previewSurface = null
         super.onDestroy()
+    }
+
+    private fun hasRunningTaskForExit(): Boolean {
+        return isProcessing ||
+            recordingActive ||
+            mediaRecorder != null ||
+            liveTranscribing ||
+            liveFinalizing ||
+            liveThread != null ||
+            liveUploadExecutor != null ||
+            synchronized(currentCalls) { currentCalls.isNotEmpty() } ||
+            synchronized(assistantCalls) { assistantCalls.isNotEmpty() }
+    }
+
+    private fun cancelRunningTaskForExit() {
+        if (isProcessing) cancelTranscription()
+        stopLiveMicTranscription(generateDefinitive = false)
+        releaseRecorder()
+        synchronized(currentCalls) {
+            currentCalls.forEach { it.cancel() }
+            currentCalls.clear()
+        }
+        synchronized(assistantCalls) {
+            assistantCalls.forEach { it.cancel() }
+            assistantCalls.clear()
+        }
+        FFmpegKit.cancel()
     }
 
     private fun hideToolsUntilServer() {
@@ -414,6 +503,10 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         status.visibility = View.GONE
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
+        liveTranscriptTextView.visibility = View.GONE
+        buttonPasteTranscript.visibility = View.GONE
+        liveAiProgress.visibility = View.GONE
+        livePostActions.visibility = View.GONE
         terminalText.visibility = View.GONE
         serverGateStatus.text = "Procurando server.txt..."
     }
@@ -429,10 +522,33 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         recordingPanel.visibility = View.VISIBLE
         buttonTranscribe.visibility = View.VISIBLE
         status.visibility = View.VISIBLE
-        terminalText.visibility = View.VISIBLE
-        terminalText.text = "$ faster-whisper-server --server $serverBaseUrl --aguardando arquivo"
-        status.text = "Servidor conectado: $serverName ($ip:$SERVER_PORT)"
+        terminalText.visibility = View.GONE
+        terminalText.text = ""
+        status.text = ModelSelectionSummary.current()
+        liveTranscriptTextView.visibility = View.VISIBLE
+        buttonPasteTranscript.visibility = View.VISIBLE
+        livePostActions.visibility = View.VISIBLE
+        buttonHistory.isEnabled = true
+        buttonHistory.alpha = 1f
+        buttonPersonSelector.isEnabled = true
+        buttonPersonSelector.alpha = 1f
+        buttonStatement.isEnabled = true
+        buttonStatement.alpha = 1f
+        resetTranscriptionProgress()
+        liveAiProgress.visibility = View.GONE
         updateTranscribeEnabled()
+    }
+
+    private fun refreshModelSummaryStatusIfIdle() {
+        if (!::status.isInitialized || status.visibility != View.VISIBLE) return
+        val current = status.text?.toString().orEmpty()
+        if (
+            current.isBlank() ||
+            current.startsWith("Servidor conectado:") ||
+            current.startsWith("Modelo de transcrição:")
+        ) {
+            status.text = ModelSelectionSummary.current()
+        }
     }
 
     private fun loadServersAndActivateDefault() {
@@ -711,64 +827,62 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             )
             return
         }
-        try {
-            releaseRecorder()
-            releasePreviewPlayers()
-            clearOutputResult()
-            selectedItems.clear()
-            selectedPrepareMode = null
-            updatePrepareModeButtons()
-            showSinglePreview(null)
-            recordingPanel.visibility = View.VISIBLE
-            buttonSaveRecording.visibility = View.GONE
-            recordingTimer.text = "00:00.000"
-            val file = File(cacheDir, "faster_whisper_gravacao_${System.currentTimeMillis()}.m4a")
-            recordingFile = file
-            val recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(this) else MediaRecorder()
-            mediaRecorder = recorder
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-            recorder.setAudioSamplingRate(44100)
-            recorder.setAudioEncodingBitRate(128000)
-            recorder.setOutputFile(file.absolutePath)
-            recorder.prepare()
-            recorder.start()
-            recordingStartedAt = SystemClock.elapsedRealtime()
-            recordingPanel.visibility = View.VISIBLE
-            buttonRecordingAction.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
-            buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
-            buttonRecordingAction.contentDescription = "Parar gravação"
-            status.text = "Gravando áudio..."
-            handler.post(recordingTicker)
-        } catch (e: Throwable) {
-            Log.e(TAG, "Could not start recording", e)
-            releaseRecorder()
-            Toast.makeText(this, "Não consegui iniciar a gravação.", Toast.LENGTH_SHORT).show()
-            resetRecordingButton()
-        }
+        releaseRecorder()
+        releasePreviewPlayers()
+        clearOutputResult()
+        selectedItems.clear()
+        whiteMicSelection = false
+        selectedPrepareMode = PrepareMode.READY
+        updatePrepareModeButtons()
+        showSinglePreview(null)
+        prepareWhiteRecordingUi()
+        recordingPanel.visibility = View.VISIBLE
+        buttonSaveRecording.visibility = View.GONE
+        recordingTimer.text = "00:00.000"
+        val stamp = System.currentTimeMillis()
+        recordingFile = File(cacheDir, "faster_whisper_gravacao_$stamp.wav")
+        recordingPcmFile = File(cacheDir, "faster_whisper_gravacao_$stamp.pcm")
+        recordingActive = true
+        recordingStartedAt = SystemClock.elapsedRealtime()
+        buttonRecordingAction.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
+        buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+        buttonRecordingAction.contentDescription = "Parar gravação"
+        status.text = ""
+        handler.post(recordingTicker)
+        recordingThread = Thread { recordWhiteMicrophonePcm() }.also { it.start() }
     }
 
     private fun stopMicrophoneRecording() {
+        recordingActive = false
+        runCatching { recordingAudioRecord?.stop() }
+        recordingThread?.join(3_000)
+        recordingThread = null
+        recordingAudioRecord = null
         val file = recordingFile
-        try {
-            mediaRecorder?.stop()
-        } catch (e: Throwable) {
-            Log.w(TAG, "Recording stop failed", e)
-        } finally {
-            releaseRecorder()
+        val pcmFile = recordingPcmFile
+        if (file != null && pcmFile?.exists() == true && pcmFile.length() > 0L) {
+            writeWavFile(file, pcmFile, WHITE_RECORDING_SAMPLE_RATE)
         }
+        pcmFile?.delete()
+        recordingPcmFile = null
         resetRecordingButton()
         if (file == null || !file.exists() || file.length() == 0L) {
+            transcriptionTaskState = AssistantTaskState.ERROR
+            renderLiveProgress()
             status.text = "Gravação vazia."
             return
         }
-        buttonSaveRecording.visibility = View.VISIBLE
-        val item = MediaItem(Uri.fromFile(file), file.name, "audio/mp4", readDurationFromFile(file))
+        buttonSaveRecording.visibility = View.GONE
+        val item = MediaItem(Uri.fromFile(file), file.name, "audio/wav", readDurationFromFile(file))
         applySelection(listOf(item))
-        recordingPanel.visibility = View.VISIBLE
+        whiteMicSelection = true
+        selectedPrepareMode = PrepareMode.READY
+        transcriptionTaskState = AssistantTaskState.DONE
+        renderLiveProgress()
+        updateTranscribeEnabled()
+        recordingPanel.visibility = View.GONE
         recordingTimer.text = formatElapsedCompact(item.durationMs)
-        status.text = "Áudio gravado. Ajuste os marcadores e escolha o formato de envio."
+        status.text = ""
     }
 
     private fun resetRecordingButton() {
@@ -780,8 +894,55 @@ class FasterWhisperServerActivity : AppCompatActivity() {
 
     private fun releaseRecorder() {
         handler.removeCallbacks(recordingTicker)
+        recordingActive = false
+        runCatching { recordingAudioRecord?.stop() }
+        recordingAudioRecord?.release()
+        recordingAudioRecord = null
+        recordingThread?.interrupt()
+        recordingThread = null
+        recordingPcmFile?.delete()
+        recordingPcmFile = null
         mediaRecorder?.runCatching { release() }
         mediaRecorder = null
+    }
+
+    private fun recordWhiteMicrophonePcm() {
+        val channelConfig = AudioFormat.CHANNEL_IN_MONO
+        val encoding = AudioFormat.ENCODING_PCM_16BIT
+        val minBuffer = AudioRecord.getMinBufferSize(WHITE_RECORDING_SAMPLE_RATE, channelConfig, encoding)
+        if (minBuffer <= 0) {
+            runOnUiThread {
+                recordingActive = false
+                status.text = "Microfone indisponível."
+                resetRecordingButton()
+            }
+            return
+        }
+        val recorder = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            WHITE_RECORDING_SAMPLE_RATE,
+            channelConfig,
+            encoding,
+            minBuffer * 2
+        )
+        recordingAudioRecord = recorder
+        try {
+            val pcmFile = recordingPcmFile ?: return
+            FileOutputStream(pcmFile).use { output ->
+                val buffer = ByteArray(minBuffer)
+                recorder.startRecording()
+                while (recordingActive) {
+                    val read = recorder.read(buffer, 0, buffer.size)
+                    if (read > 0) output.write(buffer, 0, read)
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "WAV recording failed", e)
+        } finally {
+            runCatching { recorder.stop() }
+            recorder.release()
+            if (recordingAudioRecord == recorder) recordingAudioRecord = null
+        }
     }
 
     private fun saveRecordedAudioToUri(treeUri: Uri) {
@@ -791,7 +952,7 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         }
         val dir = DocumentFile.fromTreeUri(this, treeUri) ?: return
         try {
-            copyFileToDocument(file, dir, "audio/mp4")
+            copyFileToDocument(file, dir, "audio/wav")
             Toast.makeText(this, "Áudio salvo.", Toast.LENGTH_SHORT).show()
         } catch (e: Throwable) {
             Toast.makeText(this, "Não consegui salvar o áudio.", Toast.LENGTH_SHORT).show()
@@ -839,8 +1000,10 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             liveCurrentCallIsFinal = false
         }
         refreshLiveLanguageButton()
-        terminalText.visibility = View.VISIBLE
-        terminalText.text = ""
+        prepareLiveTranscriptUi()
+        transcriptionTaskState = AssistantTaskState.RUNNING
+        refiningTaskState = AssistantTaskState.IDLE
+        renderLiveProgress()
         status.visibility = View.VISIBLE
         status.text = "Ouvindo e transcrevendo ao vivo..."
         recordingPanel.visibility = View.VISIBLE
@@ -907,6 +1070,13 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         buttonLiveMicTest.alpha = 1f
         buttonLiveMicTest.contentDescription = "Transcrição ao vivo"
         buttonLiveMicStop.visibility = View.GONE
+        if (generateDefinitive) {
+            progressPhase = ProgressPhase.TRANSCRIPTION
+            transcriptionTaskState = AssistantTaskState.DONE
+            refiningTaskState = AssistantTaskState.RUNNING
+            liveAiProgress.visibility = View.VISIBLE
+            renderLiveProgress()
+        }
         if (::status.isInitialized && status.visibility == View.VISIBLE) {
             status.text = if (generateDefinitive) {
                 "Enviando áudio integral para a transcrição definitiva..."
@@ -1252,7 +1422,8 @@ class FasterWhisperServerActivity : AppCompatActivity() {
                     }
                     runOnUiThread {
                         updateLiveTerminalText()
-                        status.text = "Transcrição definitiva concluída."
+                        refiningTaskState = AssistantTaskState.DONE
+                        renderLiveProgress()
                     }
                     finishLiveTranscriptOutput(null)
                 } finally {
@@ -1261,6 +1432,8 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             } catch (e: Throwable) {
                 Log.e(TAG, "Definitive live transcription failed", e)
                 runOnUiThread {
+                    refiningTaskState = AssistantTaskState.ERROR
+                    renderLiveProgress()
                     status.text = e.message ?: "Não consegui gerar a transcrição definitiva."
                 }
                 finishLiveTranscriptOutput(null)
@@ -1298,17 +1471,20 @@ class FasterWhisperServerActivity : AppCompatActivity() {
                     val logFile = File(sessionDir, "log.txt")
                     val terminalFile = File(sessionDir, "terminal.txt")
                     txtFile.writeText(text + "\n", Charsets.UTF_8)
-                    htmlFile.writeText("<!doctype html><meta charset=\"utf-8\"><pre>${escapeHtml(text)}</pre>", Charsets.UTF_8)
+                    htmlFile.writeText(buildLiveHtml(text), Charsets.UTF_8)
                     logFile.writeText("", Charsets.UTF_8)
                     terminalFile.writeText(text + "\n", Charsets.UTF_8)
                     File(sessionDir, "Transcricoes").mkdirs()
                     lastSession = OutputSession(sessionDir, txtFile, htmlFile, logFile, terminalFile)
-                    outputFileName.text = txtFile.name
-                    outputFileName.visibility = View.VISIBLE
+                    outputFileName.visibility = View.GONE
                     outputActions.visibility = View.VISIBLE
                     buttonOutputFolder.visibility = View.GONE
-                    status.text = "Transcrição ao vivo pronta para salvar."
-                    serverScroll.post { serverScroll.smoothScrollTo(0, outputActions.bottom) }
+                    liveTranscriptTextView.setMinLines(0)
+                    livePostActions.visibility = View.VISIBLE
+                    renderLiveProgress()
+                    liveAiProgress.visibility = View.VISIBLE
+                    status.text = ""
+                    serverScroll.post { serverScroll.smoothScrollTo(0, livePostActions.bottom) }
                 } catch (e: Throwable) {
                     status.text = "Não consegui gerar o arquivo de transcrição."
                 }
@@ -1391,7 +1567,8 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         releasePreviewPlayers()
         selectedItems.clear()
         selectedItems.addAll(items)
-        selectedPrepareMode = null
+        if (!recordingActive) whiteMicSelection = false
+        selectedPrepareMode = if (items.isNotEmpty()) PrepareMode.READY else null
         updatePrepareModeButtons()
         clearOutputResult()
         status.text = ""
@@ -1440,32 +1617,18 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     }
 
     private fun updatePrepareModeButtons() {
-        val hasSelection = selectedItems.isNotEmpty()
-        val hasVideo = selectedItems.any { isVideo(it.mime, it.name) }
-        
-        if (hasSelection && hasVideo) {
-            selectedPrepareMode = PrepareMode.READY
-        }
+        prepareModeButtons.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
+        videoPrepareWarning.visibility = View.GONE
 
-        prepareModeButtons.visibility = if (hasSelection && !hasVideo) View.VISIBLE else View.GONE
-        videoPrepareWarning.visibility = if (hasSelection && hasVideo) View.VISIBLE else View.GONE
-        
-        buttonCompactFiles.isEnabled = !hasVideo
-        buttonReadyFiles.isEnabled = !hasVideo
-        buttonOriginalFiles.isEnabled = !hasVideo
-        
-        buttonCompactFiles.alpha = if (hasVideo) 0.5f else 1.0f
-        buttonReadyFiles.alpha = if (hasVideo) 0.5f else 1.0f
-        buttonOriginalFiles.alpha = if (hasVideo) 0.5f else 1.0f
-
+        val selected = selectedPrepareMode
         buttonCompactFiles.setBackgroundResource(
-            if (selectedPrepareMode == PrepareMode.COMPACT) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
+            if (selected == PrepareMode.COMPACT) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
         )
         buttonReadyFiles.setBackgroundResource(
-            if (selectedPrepareMode == PrepareMode.READY) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
+            if (selected == PrepareMode.READY) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
         )
         buttonOriginalFiles.setBackgroundResource(
-            if (selectedPrepareMode == PrepareMode.ORIGINAL) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
+            if (selected == PrepareMode.ORIGINAL) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
         )
     }
 
@@ -1545,6 +1708,20 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     }
 
     private fun startServerTranscription() {
+        val whiteRecording = whiteMicSelection
+        if (whiteRecording) {
+            progressPhase = ProgressPhase.WHITE_TRANSCRIPTION
+            transcriptionTaskState = AssistantTaskState.RUNNING
+            liveAiProgress.visibility = View.VISIBLE
+            liveTranscriptTextView.visibility = View.VISIBLE
+            buttonPasteTranscript.visibility = View.VISIBLE
+            liveTranscriptTextView.text = ""
+            livePostActions.visibility = View.GONE
+            outputActions.visibility = View.GONE
+            renderLiveProgress()
+        } else {
+            hideLiveTranscriptUi()
+        }
         val items = selectedItems.toList()
         if (items.isEmpty()) return
         if (serverBaseUrl.isBlank()) {
@@ -1634,14 +1811,29 @@ class FasterWhisperServerActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     lastSession = OutputSession(sessionDir, txtFile, htmlFile, logFile, terminalFile)
+                    lastTranscriptionResults = orderedResults
                     status.text = report
-                    outputFileName.text = "transcricoes.txt"
-                    outputFileName.visibility = View.VISIBLE
+                    outputFileName.visibility = View.GONE
                     outputActions.visibility = View.VISIBLE
                     buttonOutputFolder.visibility = View.GONE
+                    if (whiteRecording) {
+                        val transcript = orderedResults.firstOrNull()?.text.orEmpty().trim()
+                        replaceLiveTranscript(transcript)
+                        transcriptionTaskState = AssistantTaskState.DONE
+                        renderLiveProgress()
+                        livePostActions.visibility = View.VISIBLE
+                        terminalText.visibility = View.GONE
+                    } else {
+                        val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
+                        liveTranscriptTextView.text = transcriptDisplay
+                        liveTranscriptTextView.setMinLines(0)
+                        liveTranscriptTextView.visibility = View.VISIBLE
+                        buttonPasteTranscript.visibility = View.VISIBLE
+                        livePostActions.visibility = View.VISIBLE
+                        updateTerminalText(terminalLines)
+                    }
                     setProcessing(false)
-                    updateTerminalText(terminalLines)
-                    serverScroll.post { serverScroll.smoothScrollTo(0, outputActions.bottom) }
+                    serverScroll.post { serverScroll.fullScroll(View.FOCUS_DOWN) }
                 }
             } catch (e: CancellationException) {
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
@@ -1649,6 +1841,10 @@ class FasterWhisperServerActivity : AppCompatActivity() {
                 appendTerminal(terminalLines, "Tempo decorrido: ${formatElapsedCompact(elapsedMs)}")
                 sessionDir?.let { writeFailureFiles(it, terminalLines, logLines, "Cancelado após ${formatElapsedCompact(elapsedMs)}") }
                 runOnUiThread {
+                    if (whiteRecording) {
+                        transcriptionTaskState = AssistantTaskState.ERROR
+                        renderLiveProgress()
+                    }
                     status.text = "Transcrição cancelada."
                     setProcessing(false)
                     updateTerminalText(terminalLines)
@@ -1661,6 +1857,10 @@ class FasterWhisperServerActivity : AppCompatActivity() {
                 appendTerminal(terminalLines, "Tempo decorrido: ${formatElapsedCompact(elapsedMs)}")
                 sessionDir?.let { writeFailureFiles(it, terminalLines, logLines, "Erro: $message") }
                 runOnUiThread {
+                    if (whiteRecording) {
+                        transcriptionTaskState = AssistantTaskState.ERROR
+                        renderLiveProgress()
+                    }
                     status.text = "Erro: $message\nTempo decorrido: ${formatElapsedCompact(elapsedMs)}"
                     setProcessing(false)
                     updateTerminalText(terminalLines)
@@ -1764,6 +1964,11 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             PrepareMode.COMPACT -> prepareCompactUpload(inputFile, tempDir, index, item, startMs, durationMs, terminalLines)
             PrepareMode.ORIGINAL -> prepareOriginalUpload(inputFile, tempDir, index, item, startMs, durationMs, terminalLines)
             PrepareMode.READY -> {
+                val fullFile = startMs <= 0L && durationMs >= item.durationMs - 10L
+                if (fullFile && isAlreadyReadyWav(inputFile, item.name, terminalLines)) {
+                    appendTerminal(terminalLines, "[${item.name}] conversão ignorada: WAV já está pronto para envio")
+                    return UploadFile(inputFile, "audio/wav", "wav original 16 kHz mono PCM s16le")
+                }
                 val wavFile = File(tempDir, "${index}_${safeBaseName(item.name)}.wav")
                 convertToReadyWav(inputFile, wavFile, item.name, startMs, durationMs, terminalLines)
                 UploadFile(wavFile, "audio/wav", "wav 16 kHz mono PCM s16le")
@@ -1869,6 +2074,27 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             logs.contains("mono") &&
             (logs.contains("32 kb/s") || logs.contains("32kb/s") || logs.contains("bitrate: 32 kb/s"))
         return isAudioLineCompatible
+    }
+
+    private fun isAlreadyReadyWav(inputFile: File, originalName: String, terminalLines: StringBuilder): Boolean {
+        if (!originalName.lowercase(Locale.ROOT).endsWith(".wav")) return false
+        appendTerminal(terminalLines, "[${originalName}] analisando metadados para envio pronto")
+        val probe = probeAudioFile(inputFile)
+        appendTerminal(terminalLines, "[${originalName}] metadados: ${metadataSummary(probe)}")
+        return !probe.hasVideo &&
+            probe.codec == "pcm_s16le" &&
+            probe.sampleRateHz == 16000 &&
+            probe.channelCount == 1
+    }
+
+    private fun metadataSummary(probe: AudioProbe): String {
+        return listOf(
+            "codec=${probe.codec.ifBlank { "?" }}",
+            "hz=${probe.sampleRate.ifBlank { "?" }}",
+            "canais=${probe.channels.ifBlank { "?" }}",
+            "bitrate=${probe.bitrate.ifBlank { "?" }}",
+            "video=${if (probe.hasVideo) "sim" else "não"}"
+        ).joinToString(", ")
     }
 
     private fun describeAudioFile(file: File): String {
@@ -2157,7 +2383,7 @@ class FasterWhisperServerActivity : AppCompatActivity() {
                     runOnUiThread {
                         val serverName = serverNameForIp(ip)
                         buttonServerSelector.text = "Servidor: $serverName"
-                        status.text = "Servidor conectado: $serverName ($ip:$SERVER_PORT)"
+                        status.text = ModelSelectionSummary.current()
                     }
                     return serverBaseUrl
                 }
@@ -2440,6 +2666,28 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         }
     }
 
+    private fun showTranscriptShareMenu(anchor: View) {
+        val session = lastSession
+        PopupMenu(this, anchor).apply {
+            menu.add("txt")
+            menu.add("html")
+            setOnMenuItemClickListener { item ->
+                when (item.title.toString()) {
+                    "txt" -> shareTranscriptAsTextOrFile()
+                    "html" -> {
+                        if (session != null && session.htmlFile.exists()) {
+                            shareFile(session.htmlFile, "text/html")
+                        } else {
+                            Toast.makeText(this@FasterWhisperServerActivity, "Ainda não há HTML para compartilhar.", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+                true
+            }
+            show()
+        }
+    }
+
     private fun openOutputFile(file: File?, mime: String) {
         if (file == null || !file.exists()) return
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
@@ -2481,11 +2729,368 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         startActivity(Intent.createChooser(intent, "Compartilhar"))
     }
 
+    private fun shareOutputText() {
+        val text = currentShareableTranscriptText()
+        if (text.isBlank()) {
+            Toast.makeText(this, "Ainda não há texto para compartilhar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        startActivity(Intent.createChooser(intent, "Compartilhar transcrição"))
+    }
+
+    private fun shareTranscriptAsTextOrFile() {
+        val session = lastSession
+        if (lastTranscriptionResults.size > 1 && session?.txtFile?.exists() == true) {
+            shareFile(session.txtFile, "text/plain")
+            return
+        }
+        shareOutputText()
+    }
+
+    private fun copyTranscriptToClipboard() {
+        val text = liveTranscriptTextView.text?.toString()?.trim().orEmpty()
+            .ifBlank { currentShareableTranscriptText() }
+        if (text.isBlank()) {
+            Toast.makeText(this, "Ainda não há texto para copiar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Transcrição", text))
+        Toast.makeText(this, "Texto copiado.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun pasteTranscriptFromClipboard() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip ?: return
+        if (clip.itemCount == 0) return
+        val pasted = clip.getItemAt(0).coerceToText(this)?.toString()?.trim().orEmpty()
+        if (pasted.isBlank()) return
+        if (liveTranscriptTextView.text?.toString()?.isBlank() != false) {
+            replaceLiveTranscript(pasted)
+            return
+        }
+        AlertDialog.Builder(this)
+            .setMessage("Deseja sobrescrever?")
+            .setPositiveButton("Sim") { _, _ -> replaceLiveTranscript(pasted) }
+            .setNegativeButton("Não", null)
+            .show()
+    }
+
+    private fun prepareLiveTranscriptUi() {
+        synchronized(assistantCalls) {
+            assistantCalls.forEach { it.cancel() }
+            assistantCalls.clear()
+        }
+        assistantRequestGeneration += 1
+        assistantNames = emptyList()
+        historyTaskState = AssistantTaskState.IDLE
+        namesTaskState = AssistantTaskState.IDLE
+        statementTaskState = AssistantTaskState.IDLE
+        historyElapsedMs = null
+        namesElapsedMs = null
+        statementElapsedMs = null
+        progressPhase = ProgressPhase.TRANSCRIPTION
+        transcriptionTaskState = AssistantTaskState.IDLE
+        refiningTaskState = AssistantTaskState.IDLE
+        buttonPersonSelector.text = ""
+        buttonHistory.isEnabled = true
+        buttonHistory.alpha = 1f
+        liveAiProgress.visibility = View.VISIBLE
+        renderLiveProgress()
+        livePostActions.visibility = View.GONE
+        liveTranscriptTextView.text = ""
+        liveTranscriptTextView.setMinLines(10)
+        liveTranscriptTextView.visibility = View.VISIBLE
+        buttonPasteTranscript.visibility = View.VISIBLE
+        outputFileName.visibility = View.GONE
+        outputActions.visibility = View.GONE
+        terminalText.visibility = View.GONE
+    }
+
+    private fun prepareWhiteRecordingUi() {
+        synchronized(assistantCalls) {
+            assistantCalls.forEach { it.cancel() }
+            assistantCalls.clear()
+        }
+        assistantRequestGeneration += 1
+        assistantNames = emptyList()
+        buttonPersonSelector.text = ""
+        historyTaskState = AssistantTaskState.IDLE
+        namesTaskState = AssistantTaskState.IDLE
+        statementTaskState = AssistantTaskState.IDLE
+        historyElapsedMs = null
+        namesElapsedMs = null
+        statementElapsedMs = null
+        progressPhase = ProgressPhase.WHITE_RECORDING
+        transcriptionTaskState = AssistantTaskState.RUNNING
+        refiningTaskState = AssistantTaskState.IDLE
+        liveTranscriptTextView.text = ""
+        liveTranscriptTextView.setMinLines(10)
+        liveTranscriptTextView.visibility = View.VISIBLE
+        buttonPasteTranscript.visibility = View.VISIBLE
+        livePostActions.visibility = View.GONE
+        liveAiProgress.visibility = View.VISIBLE
+        outputFileName.visibility = View.GONE
+        outputActions.visibility = View.GONE
+        terminalText.visibility = View.GONE
+        renderLiveProgress()
+    }
+
+    private fun hideLiveTranscriptUi() {
+        liveTranscriptTextView.visibility = View.GONE
+        buttonPasteTranscript.visibility = View.GONE
+        liveAiProgress.visibility = View.GONE
+        livePostActions.visibility = View.GONE
+    }
+
+    private fun requestHistory() {
+        val transcript = liveTranscriptTextView.text?.toString()?.trim().orEmpty()
+        if (transcript.isBlank()) {
+            Toast.makeText(this, "Ainda não há transcrição para processar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        synchronized(assistantCalls) {
+            assistantCalls.forEach { it.cancel() }
+            assistantCalls.clear()
+        }
+        val generation = ++assistantRequestGeneration
+        val requestStartedAt = SystemClock.elapsedRealtime()
+        progressPhase = ProgressPhase.ASSISTANT
+        historyTaskState = AssistantTaskState.RUNNING
+        namesTaskState = AssistantTaskState.RUNNING
+        statementTaskState = AssistantTaskState.IDLE
+        historyElapsedMs = null
+        namesElapsedMs = null
+        statementElapsedMs = null
+        assistantNames = emptyList()
+        buttonPersonSelector.text = ""
+        buttonHistory.isEnabled = false
+        buttonHistory.alpha = 0.55f
+        liveAiProgress.visibility = View.VISIBLE
+        renderLiveProgress()
+        val extractionMethod = PartsExtractionSettings.selectedMethod(this)
+        val nameDatabase = if (extractionMethod == PartsExtractionSettings.Method.NAME_DATABASE) {
+            NameDatabaseStore.load(this)
+        } else {
+            emptySet()
+        }
+
+        val calls = TranscriptAssistantClient.requestHistoryAndNames(
+            client = client,
+            serverConfig = ModelServerStore.selectedConfig(),
+            transcript = transcript,
+            historyPrompt = PromptTemplateStore.historyPrompt(),
+            partsPrompt = PromptTemplateStore.partsPrompt(),
+            extractionMethod = extractionMethod,
+            nameDatabase = nameDatabase,
+            onHistory = { result ->
+                runOnUiThread {
+                    if (generation != assistantRequestGeneration) return@runOnUiThread
+                    result.fold(
+                        onSuccess = { history ->
+                            historyElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
+                            historyTaskState = AssistantTaskState.DONE
+                            replaceLiveTranscript(history)
+                        },
+                        onFailure = {
+                            historyElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
+                            historyTaskState = AssistantTaskState.ERROR
+                            Toast.makeText(
+                                this,
+                                it.message ?: "Não consegui gerar o histórico.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    )
+                    finishAssistantTaskIfReady()
+                }
+            },
+            onNames = { result, extractionElapsedMs ->
+                runOnUiThread {
+                    if (generation != assistantRequestGeneration) return@runOnUiThread
+                    result.fold(
+                        onSuccess = { names ->
+                            namesElapsedMs = extractionElapsedMs
+                            namesTaskState = AssistantTaskState.DONE
+                            assistantNames = names
+                            buttonPersonSelector.text = names.firstOrNull().orEmpty()
+                        },
+                        onFailure = {
+                            namesElapsedMs = extractionElapsedMs
+                            namesTaskState = AssistantTaskState.ERROR
+                            Toast.makeText(
+                                this,
+                                it.message ?: "Não consegui identificar os envolvidos.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    )
+                    finishAssistantTaskIfReady()
+                }
+            }
+        )
+        synchronized(assistantCalls) { assistantCalls.addAll(calls) }
+    }
+
+    private fun requestStatement() {
+        val material = liveTranscriptTextView.text?.toString()?.trim().orEmpty()
+        if (material.isBlank()) {
+            Toast.makeText(this, "Ainda não há texto para redigir a oitiva.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        synchronized(assistantCalls) {
+            assistantCalls.forEach { it.cancel() }
+            assistantCalls.clear()
+        }
+        val generation = ++assistantRequestGeneration
+        val requestStartedAt = SystemClock.elapsedRealtime()
+        val selectedName = buttonPersonSelector.text?.toString()?.trim()?.takeIf { it.isNotBlank() }
+        progressPhase = ProgressPhase.STATEMENT
+        statementTaskState = AssistantTaskState.RUNNING
+        statementElapsedMs = null
+        buttonStatement.isEnabled = false
+        buttonStatement.alpha = 0.55f
+        liveAiProgress.visibility = View.VISIBLE
+        renderLiveProgress()
+
+        val call = TranscriptAssistantClient.requestStatement(
+            client = client,
+            serverConfig = ModelServerStore.selectedConfig(),
+            material = material,
+            statementPrompt = PromptTemplateStore.statementPrompt(selectedName)
+        ) { result ->
+            runOnUiThread {
+                if (generation != assistantRequestGeneration) return@runOnUiThread
+                result.fold(
+                    onSuccess = { statement ->
+                        statementElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
+                        statementTaskState = AssistantTaskState.DONE
+                        replaceLiveTranscript(statement)
+                    },
+                    onFailure = {
+                        statementElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
+                        statementTaskState = AssistantTaskState.ERROR
+                        Toast.makeText(
+                            this,
+                            it.message ?: "Não consegui redigir a oitiva.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                )
+                renderLiveProgress()
+                buttonStatement.isEnabled = true
+                buttonStatement.alpha = 1f
+                synchronized(assistantCalls) { assistantCalls.clear() }
+            }
+        }
+        synchronized(assistantCalls) { assistantCalls.add(call) }
+    }
+
+    private fun replaceLiveTranscript(text: String) {
+        val clean = text.trim()
+        liveTranscriptTextView.text = clean
+        liveTranscriptTextView.setMinLines(0)
+        synchronized(liveTranscriptText) {
+            liveTranscriptText.clear()
+            liveTranscriptText.append(clean)
+            liveDraftText = ""
+            rebuildLiveTranscriptDisplayLocked()
+        }
+        lastSession?.let { session ->
+            runCatching {
+                session.txtFile.writeText(clean + "\n", Charsets.UTF_8)
+                session.htmlFile.writeText(buildLiveHtml(clean), Charsets.UTF_8)
+                session.terminalFile.writeText(clean + "\n", Charsets.UTF_8)
+            }
+        }
+    }
+
+    private fun finishAssistantTaskIfReady() {
+        renderLiveProgress()
+        if (historyTaskState != AssistantTaskState.RUNNING && namesTaskState != AssistantTaskState.RUNNING) {
+            buttonHistory.isEnabled = true
+            buttonHistory.alpha = 1f
+            synchronized(assistantCalls) { assistantCalls.clear() }
+        }
+    }
+
+    private fun resetTranscriptionProgress() {
+        progressPhase = ProgressPhase.TRANSCRIPTION
+        transcriptionTaskState = AssistantTaskState.IDLE
+        refiningTaskState = AssistantTaskState.IDLE
+        renderLiveProgress()
+    }
+
+    private fun renderLiveProgress() {
+        val entries = when (progressPhase) {
+            ProgressPhase.WHITE_RECORDING -> listOf(
+                Triple("Gravando", transcriptionTaskState, null)
+            )
+            ProgressPhase.WHITE_TRANSCRIPTION -> listOf(
+                Triple("Transcrevendo", transcriptionTaskState, null)
+            )
+            ProgressPhase.TRANSCRIPTION -> listOf(
+                Triple("Transcrevendo...", transcriptionTaskState, null),
+                Triple("Refinando", refiningTaskState, null)
+            )
+            ProgressPhase.ASSISTANT -> listOf(
+                Triple("Redigindo histórico", historyTaskState, historyElapsedMs),
+                Triple("Identificando partes", namesTaskState, namesElapsedMs)
+            )
+            ProgressPhase.STATEMENT -> listOf(
+                Triple("Redigindo oitiva", statementTaskState, statementElapsedMs)
+            )
+        }
+        val text = entries.joinToString("\n") { (label, state, elapsedMs) ->
+            when (state) {
+                AssistantTaskState.DONE -> "100% $label${formatRequestElapsed(elapsedMs)}"
+                AssistantTaskState.ERROR -> "ERRO $label"
+                else -> "0% $label"
+            }
+        }
+        val spannable = SpannableString(text)
+        var start = 0
+        entries.forEachIndexed { index, (_, state, _) ->
+            val end = if (index == entries.lastIndex) text.length else text.indexOf('\n', start)
+            val color = when (state) {
+                AssistantTaskState.IDLE -> Color.rgb(145, 145, 145)
+                AssistantTaskState.RUNNING -> Color.WHITE
+                AssistantTaskState.DONE -> Color.rgb(94, 240, 142)
+                AssistantTaskState.ERROR -> Color.rgb(255, 92, 92)
+            }
+            spannable.setSpan(ForegroundColorSpan(color), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            start = end + 1
+        }
+        liveAiProgress.text = spannable
+    }
+
+    private fun formatRequestElapsed(elapsedMs: Long?): String {
+        if (elapsedMs == null) return ""
+        return String.format(Locale.US, " (%.1fs)", elapsedMs / 1000.0)
+    }
+
+    private fun showPersonMenu() {
+        if (assistantNames.isEmpty()) return
+        PopupMenu(this, buttonPersonSelector).apply {
+            assistantNames.forEach { menu.add(it) }
+            setOnMenuItemClickListener {
+                buttonPersonSelector.text = it.title
+                true
+            }
+            show()
+        }
+    }
+
     private fun clearOutputResult() {
         outputItems.clear()
         zipFile = null
         tempOutputFiles.clear()
         lastSession = null
+        lastTranscriptionResults = emptyList()
         finalOutputDirUri = null
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
@@ -2556,13 +3161,51 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     }
 
     private fun updateLiveTerminalText() {
-        val rawText = synchronized(liveTerminalLines) { liveTerminalLines.toString() }
-        terminalText.text = renderTerminalText(rawText)
-        terminalText.post {
-            val layout = terminalText.layout ?: return@post
-            val scrollAmount = layout.getLineTop(terminalText.lineCount) - terminalText.height + terminalText.totalPaddingTop + terminalText.totalPaddingBottom
-            terminalText.scrollTo(0, scrollAmount.coerceAtLeast(0))
+        val text = synchronized(liveTranscriptText) {
+            buildString {
+                val committed = liveTranscriptText.toString().trim()
+                val draft = liveDraftText.trim()
+                if (committed.isNotBlank()) append(committed)
+                if (draft.isNotBlank()) {
+                    if (isNotEmpty()) append('\n')
+                    append(draft)
+                }
+            }.trim()
         }
+        liveTranscriptTextView.visibility = View.VISIBLE
+        buttonPasteTranscript.visibility = View.VISIBLE
+        liveTranscriptTextView.text = text
+        liveTranscriptTextView.post {
+            val layout = liveTranscriptTextView.layout ?: return@post
+            val scrollAmount = layout.getLineTop(liveTranscriptTextView.lineCount) -
+                liveTranscriptTextView.height +
+                liveTranscriptTextView.totalPaddingTop +
+                liveTranscriptTextView.totalPaddingBottom
+            liveTranscriptTextView.scrollTo(0, scrollAmount.coerceAtLeast(0))
+        }
+    }
+
+    private fun currentShareableTranscriptText(): String {
+        if (::liveTranscriptTextView.isInitialized && liveTranscriptTextView.visibility == View.VISIBLE) {
+            liveTranscriptTextView.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        }
+        val liveText = synchronized(liveTranscriptText) {
+            buildString {
+                val committed = liveTranscriptText.toString().trim()
+                val draft = liveDraftText.trim()
+                if (committed.isNotBlank()) append(committed)
+                if (draft.isNotBlank()) {
+                    if (isNotEmpty()) append('\n')
+                    append(draft)
+                }
+            }.trim()
+        }
+        if (liveText.isNotBlank()) return liveText
+        return lastSession?.txtFile
+            ?.takeIf { it.exists() }
+            ?.readText(Charsets.UTF_8)
+            ?.trim()
+            .orEmpty()
     }
 
     private fun renderTerminalText(rawText: String): SpannableString {
@@ -2691,6 +3334,35 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         """.trimIndent()
     }
 
+    private fun buildLiveHtml(text: String): String {
+        return """
+            <!doctype html>
+            <html lang="pt-BR">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Transcrição ao vivo</title>
+              <style>
+                body { font-family: sans-serif; margin: 24px; color: #111; background: #f6f6f6; }
+                h1 { margin: 0 0 16px; font-size: 22px; }
+                .box {
+                  border: 1px solid #bbb;
+                  background: #fff;
+                  padding: 16px;
+                  line-height: 1.45;
+                  white-space: pre-wrap;
+                  overflow-wrap: anywhere;
+                }
+              </style>
+            </head>
+            <body>
+              <h1>Transcrição ao vivo</h1>
+              <div class="box">${escapeHtml(text)}</div>
+            </body>
+            </html>
+        """.trimIndent()
+    }
+
     private fun buildTranscriptionsText(results: List<TranscriptionResult>): String {
         val builder = StringBuilder()
         results.forEach { result ->
@@ -2699,6 +3371,14 @@ class FasterWhisperServerActivity : AppCompatActivity() {
             appendTranscriptionSeparator(builder)
         }
         return builder.toString()
+    }
+
+    private fun buildTranscriptDisplayText(results: List<TranscriptionResult>): String {
+        return if (results.size == 1) {
+            results.firstOrNull()?.text.orEmpty().trim()
+        } else {
+            buildTranscriptionsText(results).trim()
+        }
     }
 
     private fun escapeHtml(value: String): String {
@@ -2971,6 +3651,21 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         LIVE_TEST
     }
 
+    private enum class AssistantTaskState {
+        IDLE,
+        RUNNING,
+        DONE,
+        ERROR
+    }
+
+    private enum class ProgressPhase {
+        WHITE_RECORDING,
+        WHITE_TRANSCRIPTION,
+        TRANSCRIPTION,
+        ASSISTANT,
+        STATEMENT
+    }
+
     companion object {
         private const val REQUEST_PICK_MEDIA = 7201
         private const val REQUEST_PICK_FOLDER = 7202
@@ -2987,6 +3682,7 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         private const val MIN_LIVE_DRAFT_INTERVAL_MILLIS = 100
         private const val MAX_LIVE_DRAFT_INTERVAL_MILLIS = 10000
         private const val LIVE_FINAL_CHUNK_MILLIS = 30000
+        private const val WHITE_RECORDING_SAMPLE_RATE = 16000
         private const val TAG = "FasterWhisperServer"
         private const val TRANSCRIPTION_START = "\uE000TS\uE000"
         private const val TRANSCRIPTION_END = "\uE000TE\uE000"

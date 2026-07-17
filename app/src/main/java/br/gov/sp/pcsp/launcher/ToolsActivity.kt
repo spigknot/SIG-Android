@@ -7,6 +7,7 @@ import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import br.gov.sp.pcsp.launcher.experimental.npu.NpuTestActivity
 import java.util.Locale
 
 class ToolsActivity : AppCompatActivity() {
@@ -46,8 +47,15 @@ class ToolsActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_faster_whisper_server).setOnClickListener {
             startActivity(Intent(this, FasterWhisperServerActivity::class.java))
         }
-        findViewById<View>(R.id.button_granite_speech).setOnClickListener {
-            startActivity(Intent(this, GraniteSpeechActivity::class.java))
+        findViewById<View>(R.id.button_remote_stt).setOnClickListener {
+            startActivity(Intent(this, RemoteSttActivity::class.java))
+        }
+        findViewById<View>(R.id.button_grok_tests).setOnClickListener {
+            startActivity(Intent(this, GrokTestActivity::class.java))
+        }
+        findViewById<View>(R.id.button_npu_tests).apply {
+            visibility = if (BuildConfig.ENABLE_NPU_TESTS) View.VISIBLE else View.GONE
+            setOnClickListener { startActivity(Intent(this@ToolsActivity, NpuTestActivity::class.java)) }
         }
     }
 

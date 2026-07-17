@@ -235,7 +235,11 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         buttonSelectOutputFolder.visibility = View.GONE
         arrowInputOutput.visibility = View.GONE
  
-        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+        val exitHandler = installCancelAndExitGuard(
+            isTaskRunning = { isProcessing },
+            cancelTask = { cancelExtraction() }
+        )
+        findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
         findViewById<View>(R.id.button_select_source).setOnClickListener { showSourceMenu(it) }
         buttonSpeedDown.setOnClickListener { changePlaybackSpeed(-1) }
         buttonPlayPause.setOnClickListener { togglePreviewPlayback() }
