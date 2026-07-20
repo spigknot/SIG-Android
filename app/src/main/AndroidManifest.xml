@@ -129,10 +129,6 @@
         </activity>
 
         <activity
-            android:name=".GrokTestActivity"
-            android:exported="false" />
-
-        <activity
             android:name=".ModelSettingsActivity"
             android:exported="false" />
 

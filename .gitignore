@@ -8,3 +8,9 @@ captures/
 .externalNativeBuild/
 .cxx/
 .DS_Store
+.codex/
+.external/
+.kotlin/errors/
+__pycache__/
+*.pyc
+*.hprof

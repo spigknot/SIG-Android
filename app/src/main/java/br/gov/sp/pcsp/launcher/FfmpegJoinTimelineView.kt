@@ -90,8 +90,6 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
         canvas.drawRoundRect(full, radius, radius, bgPaint)
 
         if (clips.isEmpty()) {
-            val text = "Adicione vídeos para montar a sequência"
-            canvas.drawText(text, (width - textPaint.measureText(text)) / 2f, height / 2f, timePaint)
             return
         }
 

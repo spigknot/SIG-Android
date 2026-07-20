@@ -50,9 +50,6 @@ class ToolsActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_remote_stt).setOnClickListener {
             startActivity(Intent(this, RemoteSttActivity::class.java))
         }
-        findViewById<View>(R.id.button_grok_tests).setOnClickListener {
-            startActivity(Intent(this, GrokTestActivity::class.java))
-        }
         findViewById<View>(R.id.button_npu_tests).apply {
             visibility = if (BuildConfig.ENABLE_NPU_TESTS) View.VISIBLE else View.GONE
             setOnClickListener { startActivity(Intent(this@ToolsActivity, NpuTestActivity::class.java)) }

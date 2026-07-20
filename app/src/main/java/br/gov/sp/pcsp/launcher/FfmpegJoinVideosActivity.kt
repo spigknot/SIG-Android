@@ -53,6 +53,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var inputTransitionTime: EditText
     private lateinit var checkReencode: CheckBox
     private lateinit var checkSmartJoin: CheckBox
+    private lateinit var buttonVideoEncoder: TextView
     private lateinit var buttonJoin: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
@@ -76,6 +77,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private var lastOutputUri: Uri? = null
     private var lastOutputName = ""
     private val processingSteps = mutableListOf<ProcessingStep>()
+    private var availableVideoEncoders: List<FfmpegVideoEncoder> = emptyList()
+    private var selectedVideoEncoder: FfmpegVideoEncoder? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,6 +94,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         inputTransitionTime = findViewById(R.id.input_transition_time)
         checkReencode = findViewById(R.id.check_reencode)
         checkSmartJoin = findViewById(R.id.check_smart_join)
+        buttonVideoEncoder = findViewById(R.id.button_video_encoder)
         buttonJoin = findViewById(R.id.button_join)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
@@ -110,6 +114,10 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_select_videos).setOnClickListener { openVideoPicker() }
         buttonSelectOutputFolder.setOnClickListener { openOutputFolderPicker(REQUEST_CHOOSE_PRE_OUTPUT_DIR) }
         buttonTransition.setOnClickListener { showTransitionMenu() }
+        buttonVideoEncoder.setOnClickListener { showVideoEncoderMenu() }
+        findViewById<TextView>(R.id.help_video_encoder).setOnClickListener {
+            FfmpegVideoEncoderRegistry.showHelp(this)
+        }
         findViewById<TextView>(R.id.help_transition).setOnClickListener { showTransitionHelp() }
         findViewById<TextView>(R.id.help_reencode).setOnClickListener { showReencodeHelp() }
         findViewById<TextView>(R.id.help_smart_join).setOnClickListener { showSmartJoinHelp() }
@@ -128,6 +136,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 selectedTransition = "fade"
                 buttonTransition.text = "Transição: $selectedTransition"
             }
+            updateReencodeControls()
         }
         timeline.onOrderChanged = { ids ->
             val byId = clips.associateBy { it.id }
@@ -135,6 +144,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             clips.addAll(ids.mapNotNull { byId[it] })
             updateSelectionUi()
         }
+        detectVideoEncoders()
         updateReencodeControls()
         updateSelectionUi()
     }
@@ -233,6 +243,35 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val alpha = if (enabled) 1f else 0.42f
         buttonTransition.alpha = alpha
         inputTransitionTime.alpha = alpha
+        val encoderEnabled = (checkReencode.isChecked || checkSmartJoin.isChecked) &&
+            selectedVideoEncoder != null && !isProcessing
+        buttonVideoEncoder.isEnabled = encoderEnabled
+        buttonVideoEncoder.alpha = if (encoderEnabled) 1f else 0.42f
+    }
+
+    private fun detectVideoEncoders() {
+        availableVideoEncoders = FfmpegVideoEncoderRegistry.detect()
+        selectedVideoEncoder = availableVideoEncoders.firstOrNull()
+        updateVideoEncoderButton()
+    }
+
+    private fun showVideoEncoderMenu() {
+        if (availableVideoEncoders.isEmpty() || isProcessing) return
+        PopupMenu(this, buttonVideoEncoder).apply {
+            availableVideoEncoders.forEach { menu.add(it.displayName) }
+            setOnMenuItemClickListener { item ->
+                selectedVideoEncoder = availableVideoEncoders.firstOrNull { it.displayName == item.title.toString() }
+                updateVideoEncoderButton()
+                true
+            }
+            show()
+        }
+    }
+
+    private fun updateVideoEncoderButton() {
+        val encoder = selectedVideoEncoder
+        buttonVideoEncoder.text = if (encoder == null) "Encoder indisponível" else encoder.shortName
+        updateReencodeControls()
     }
 
     private fun setJoinEnabled(enabled: Boolean) {
@@ -279,6 +318,10 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private fun startJoin() {
         if (clips.size < 2) return
+        if ((checkReencode.isChecked || checkSmartJoin.isChecked) && selectedVideoEncoder == null) {
+            status.text = "Nenhum encoder de vídeo compatível está disponível."
+            return
+        }
         clearOutputResult()
         initProcessingSteps()
         setProcessing(true)
@@ -295,25 +338,28 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 val outputName = buildJoinedOutputName()
                 val tempOutput = File(cacheDir, "join_${System.currentTimeMillis()}_$outputName")
                 val useOrientationSafeReencode = shouldUseOrientationSafeReencode()
+                val sourceProfile = detectOutputProfile(copiedInputs.firstOrNull(), clips.firstOrNull())
+                val encoder = selectedVideoEncoder
+                val fastEncoderCompatible = encoder != null && encoder.codecFamily == sourceProfile.videoCodec
 
                 val result = if (checkSmartJoin.isChecked) {
-                    if (useOrientationSafeReencode) {
+                    if (useOrientationSafeReencode || !fastEncoderCompatible) {
                         executeFullReencodeJoin(
                             copiedInputs,
                             tempOutput,
-                            "Normalizando orientações (h264_mediacodec + aac)"
+                            "Normalizando vídeos (${encoder?.ffmpegName ?: "encoder indisponível"} + aac)"
                         )
                     } else {
                         executeSmartJoinExperiment(copiedInputs, tempOutput)
                     }
                 } else if (checkReencode.isChecked) {
-                    if (isFadeInOutTransition()) {
+                    if (isFadeInOutTransition() && fastEncoderCompatible) {
                         executeMinimalTransitionJoin(copiedInputs, tempOutput)
                     } else {
                         executeFullReencodeJoin(
                             copiedInputs,
                             tempOutput,
-                            "Aplicando transições (h264_mediacodec + aac)"
+                            "Aplicando transições (${encoder?.ffmpegName ?: "encoder indisponível"} + aac)"
                         )
                     }
                 } else {
@@ -386,7 +432,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun executeFadeInOutReencodeJoin(
         inputs: List<File>,
         outputFile: File,
-        taskLabel: String = "Aplicando Fade in/out (h264_mediacodec + aac)"
+        taskLabel: String = "Aplicando Fade in/out"
     ): JoinExecutionResult {
         val session = executeFfmpegWithProgress(
             buildFadeInOutReencodeArguments(inputs, outputFile),
@@ -564,12 +610,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             "-map", "[aout]"
         )
         
-        val targetCodec = if (profile.videoCodec == "hevc") "libx265" else "libx264"
-        if (isEncoderAvailable(targetCodec)) {
-            args.addAll(listOf("-c:v", targetCodec, "-preset", "ultrafast"))
-        } else {
-            args.addAll(listOf("-c:v", profile.videoEncoder))
-        }
+        args.addAll(requireVideoEncoder().arguments)
 
         args.addAll(
             listOf(
@@ -968,12 +1009,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             "-map", "[aout]"
         )
         
-        val targetCodec = if (profile.videoCodec == "hevc") "libx265" else "libx264"
-        if (isEncoderAvailable(targetCodec)) {
-            args.addAll(listOf("-c:v", targetCodec, "-preset", "ultrafast"))
-        } else {
-            args.addAll(listOf("-c:v", profile.videoEncoder))
-        }
+        args.addAll(requireVideoEncoder().arguments)
 
         args.addAll(
             listOf(
@@ -1044,14 +1080,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             )
         )
         
-        val targetCodec = if (profile.videoCodec == "hevc") "libx265" else "libx264"
-        if (isEncoderAvailable(targetCodec)) {
-            args.addAll(listOf("-c:v", targetCodec, "-preset", "ultrafast"))
-        } else {
-            // Se o codec de software nativo não existir na compilação do ffmpeg-kit do usuário,
-            // temos que usar o encoder detectado (mesmo sendo hardware) e torcer pra não travar.
-            args.addAll(listOf("-c:v", profile.videoEncoder))
-        }
+        args.addAll(requireVideoEncoder().arguments)
 
         args.addAll(
             listOf(
@@ -1133,8 +1162,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             listOf(
                 "-filter_complex", filter,
                 "-map", "[vout]",
-                "-map", "[aout]",
-                "-c:v", "h264_mediacodec",
+                "-map", "[aout]"
+            ) + requireVideoEncoder().arguments + listOf(
                 "-b:v", outputProfile.videoBitrate,
                 "-minrate", outputProfile.videoBitrate,
                 "-maxrate", outputProfile.videoBitrate,
@@ -1161,8 +1190,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             listOf(
                 "-filter_complex", filter,
                 "-map", "[vout]",
-                "-map", "[aout]",
-                "-c:v", "h264_mediacodec",
+                "-map", "[aout]"
+            ) + requireVideoEncoder().arguments + listOf(
                 "-b:v", outputProfile.videoBitrate,
                 "-minrate", outputProfile.videoBitrate,
                 "-maxrate", outputProfile.videoBitrate,
@@ -1579,7 +1608,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         processingSteps += ProcessingStep("Preparar arquivos de entrada")
         val useOrientationSafeReencode = shouldUseOrientationSafeReencode()
         if (useOrientationSafeReencode) {
-            processingSteps += ProcessingStep("Normalizando orientações (h264_mediacodec + aac)")
+            processingSteps += ProcessingStep("Normalizando orientações (${selectedVideoEncoder?.ffmpegName ?: "encoder"} + aac)")
         } else if (usesFastPieceJoin()) {
             clips.forEachIndexed { index, _ ->
                 processingSteps += ProcessingStep("Copiando corpo ${index + 1}/${clips.size} (TS)")
@@ -1592,7 +1621,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             if (isFadeInOutTransition()) {
                 processingSteps += ProcessingStep("Analisando keyframes")
             } else {
-                processingSteps += ProcessingStep("Aplicando transições (h264_mediacodec + aac)")
+                processingSteps += ProcessingStep("Aplicando transições (${selectedVideoEncoder?.ffmpegName ?: "encoder"} + aac)")
             }
         } else {
             processingSteps += ProcessingStep("Juntando sem reencodar")
@@ -1780,20 +1809,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return kbps.toInt().coerceAtLeast(1)
     }
 
-    private var knownEncoders: String? = null
-
-    private fun isEncoderAvailable(encoder: String): Boolean {
-        if (knownEncoders == null) {
-            try {
-                val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-encoders"))
-                knownEncoders = session.allLogsAsString.orEmpty()
-            } catch (e: Throwable) {
-                knownEncoders = ""
-            }
-        }
-        return knownEncoders!!.contains(encoder, ignoreCase = true)
-    }
-
     private fun detectOutputProfile(inputFile: File?, firstClip: JoinClip?): OutputProfile {
         val fallbackWidth = makeEven(firstClip?.width ?: 1280).coerceAtLeast(2)
         val fallbackHeight = makeEven(firstClip?.height ?: 720).coerceAtLeast(2)
@@ -1959,10 +1974,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun videoEncoderFor(codec: String): String {
-        return when (codec) {
+        return selectedVideoEncoder?.ffmpegName ?: when (codec) {
             "hevc" -> "hevc_mediacodec"
             else -> "h264_mediacodec"
         }
+    }
+
+    private fun requireVideoEncoder(): FfmpegVideoEncoder {
+        return selectedVideoEncoder ?: error("Encoder de vídeo indisponível")
     }
 
     private fun videoBitstreamFilterFor(codec: String): String {

@@ -5,16 +5,6 @@
     android:background="#000000"
     android:fitsSystemWindows="true">
 
-    <ImageView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clickable="false"
-        android:contentDescription="Fundo RG CPF"
-        android:focusable="false"
-        android:importantForAccessibility="no"
-        android:scaleType="fitCenter"
-        android:src="@drawable/wallpaper_rg_cpf" />
-
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

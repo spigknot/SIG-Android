@@ -42,10 +42,21 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:text="Faster-whisper-server"
+                    android:text="TTS Remoto"
                     android:textColor="#FFFFFFFF"
                     android:textSize="18sp"
                     android:textStyle="bold" />
+
+                <ImageButton
+                    android:id="@+id/button_model_settings"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Configurações de modelos"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_settings_outline"
+                    android:tint="#FFFFFFFF" />
             </FrameLayout>
 
             <LinearLayout
@@ -193,6 +204,59 @@
                     android:scaleType="fitCenter"
                     android:src="@drawable/ic_ffmpeg_select_file" />
 
+                <LinearLayout
+                    android:id="@+id/live_interval_controls"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="8dp"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/button_live_interval_minus"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:text="-"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/input_live_interval"
+                        android:layout_width="68dp"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="5dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:fontFamily="monospace"
+                        android:gravity="center"
+                        android:includeFontPadding="false"
+                        android:textAlignment="center"
+                        android:text="t = 1.0"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/button_live_interval_plus"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="5dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:text="+"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
                 <ImageView
                     android:id="@+id/arrow_input_output"
                     android:layout_width="36dp"
@@ -254,37 +318,30 @@
                     android:scaleType="fitCenter"
                     android:src="@drawable/ic_mic_outline" />
 
-                <LinearLayout
+                <ImageButton
+                    android:id="@+id/button_live_mic_test"
                     android:layout_width="44dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="44dp"
                     android:layout_marginStart="8dp"
-                    android:gravity="center"
-                    android:orientation="vertical">
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:contentDescription="Pausar transcrição ao vivo"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:padding="9dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_live_pause_yellow"
+                    android:visibility="invisible" />
 
-                    <ImageButton
-                        android:id="@+id/button_live_mic_test"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:background="@drawable/ffmpeg_outline_button_bg"
-                        android:contentDescription="Transcrição ao vivo"
-                        android:foreground="?attr/selectableItemBackground"
-                        android:padding="9dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_mic_outline_red" />
-
-                    <ImageButton
-                        android:id="@+id/button_live_mic_stop"
-                        android:layout_width="44dp"
-                        android:layout_height="44dp"
-                        android:layout_marginTop="6dp"
-                        android:background="@drawable/ffmpeg_outline_red_button_bg"
-                        android:contentDescription="Parar e transcrever áudio completo"
-                        android:foreground="?attr/selectableItemBackground"
-                        android:padding="9dp"
-                        android:scaleType="fitCenter"
-                        android:src="@drawable/ic_ffmpeg_cancel_red"
-                        android:visibility="gone" />
-                </LinearLayout>
+                <ImageButton
+                    android:id="@+id/button_live_mic_stop"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:contentDescription="Transcrição ao vivo"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:padding="9dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_mic_outline_red" />
             </LinearLayout>
 
             <LinearLayout
@@ -297,96 +354,56 @@
                 android:visibility="gone">
 
                 <LinearLayout
-                    android:id="@+id/live_interval_controls"
-                    android:layout_width="wrap_content"
+                    android:id="@+id/grok_diarize_row"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:id="@+id/button_live_interval_minus"
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:background="@drawable/ffmpeg_outline_button_bg"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground"
-                        android:gravity="center"
-                        android:text="-"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-
-                    <LinearLayout
-                        android:layout_width="92dp"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/ffmpeg_outline_button_bg"
-                        android:gravity="center"
-                        android:orientation="horizontal"
-                        android:paddingStart="7dp"
-                        android:paddingEnd="4dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:text="t ="
-                            android:textColor="#CCFFFFFF"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
-                        <EditText
-                            android:id="@+id/input_live_interval"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="1"
-                            android:background="@android:color/transparent"
-                            android:digits="0123456789.,"
-                            android:fontFamily="monospace"
-                            android:gravity="center"
-                            android:inputType="numberDecimal"
-                            android:maxLength="4"
-                            android:singleLine="true"
-                            android:text="1.0"
-                            android:textColor="#FFFFFFFF"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <TextView
-                        android:id="@+id/button_live_interval_plus"
-                        android:layout_width="32dp"
-                        android:layout_height="32dp"
-                        android:layout_marginStart="8dp"
-                        android:background="@drawable/ffmpeg_outline_button_bg"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground"
-                        android:gravity="center"
-                        android:text="+"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <TextView
-                    android:id="@+id/button_live_language"
-                    android:layout_width="wrap_content"
-                    android:layout_height="34dp"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/ffmpeg_outline_button_bg"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:gravity="center"
-                    android:minWidth="156dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:text="Idioma: pt"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <CheckBox
+                        android:id="@+id/checkbox_live_diarize"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:buttonTint="#FF5EDAF2"
+                        android:text="Diarização"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="12sp" />
+
+                    <TextView
+                        android:id="@+id/button_live_diarize_help"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:gravity="center"
+                        android:text="?"
+                        android:textColor="#FFB8F7FF"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/button_live_language"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_marginEnd="20dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:paddingStart="9dp"
+                        android:paddingEnd="9dp"
+                        android:text="Idioma: pt"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/recording_timer"
@@ -689,6 +706,107 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/advanced_toggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start"
+                android:layout_marginStart="20dp"
+                android:layout_marginTop="8dp"
+                android:text="Configurações avançadas"
+                android:textColor="#FF5EDAF2"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/advanced_panel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginTop="6dp"
+                android:background="#661B1B1B"
+                android:orientation="vertical"
+                android:padding="10dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/advanced_endpoint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="Endpoint: POST /transcribe"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/advanced_server"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="Servidor: 100.110.211.23:8100"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="Modelo: granite-speech-4.1-2b-nar"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/advanced_batch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="Lote: todos os arquivos em campos multipart files"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/advanced_conversion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="Conversão: paralela, núcleos - 2"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="Compactado: ogg opus mono 16 kHz 32k"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="Pronto: wav mono 16 kHz PCM s16le"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="monospace"
+                    android:text="Resposta: JSON com text/transcription/results/transcriptions"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
             <ScrollView
                 android:id="@+id/selected_list_box"
                 android:layout_width="match_parent"
@@ -759,7 +877,7 @@
                     android:fontFamily="monospace"
                     android:gravity="top|start"
                     android:maxLines="30"
-                    android:minLines="10"
+                    android:minLines="5"
                     android:overScrollMode="ifContentScrolls"
                     android:paddingStart="10dp"
                     android:paddingTop="10dp"
@@ -772,23 +890,45 @@
                     android:visibility="gone" />
             </FrameLayout>
 
-            <TextView
-                android:id="@+id/button_paste_transcript"
-                android:layout_width="58dp"
+            <LinearLayout
+                android:id="@+id/live_transcript_clipboard_actions"
+                android:layout_width="wrap_content"
                 android:layout_height="30dp"
                 android:layout_gravity="end"
                 android:layout_marginEnd="6dp"
                 android:layout_marginTop="2dp"
-                android:background="@drawable/ffmpeg_outline_button_bg"
-                android:clickable="true"
-                android:focusable="true"
-                android:foreground="?attr/selectableItemBackground"
-                android:gravity="center"
-                android:text="COLAR"
-                android:textColor="#FFFFFFFF"
-                android:textSize="10sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/button_copy_live_transcript"
+                    android:layout_width="58dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="COPIAR"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/button_paste_transcript"
+                    android:layout_width="58dp"
+                    android:layout_height="30dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="COLAR"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/live_post_actions"
@@ -803,9 +943,8 @@
 
                 <TextView
                     android:id="@+id/button_history"
-                    android:layout_width="0dp"
+                    android:layout_width="match_parent"
                     android:layout_height="38dp"
-                    android:layout_weight="1"
                     android:background="@drawable/ffmpeg_outline_button_bg"
                     android:clickable="true"
                     android:focusable="true"
@@ -815,13 +954,89 @@
                     android:textColor="#FFFFFFFF"
                     android:textSize="12sp"
                     android:textStyle="bold" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/history_output_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/history_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="#CC050607"
+                    android:fontFamily="monospace"
+                    android:gravity="top|start"
+                    android:maxLines="30"
+                    android:minLines="5"
+                    android:overScrollMode="ifContentScrolls"
+                    android:padding="10dp"
+                    android:scrollbars="vertical"
+                    android:textColor="#FFB8F7FF"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/history_clipboard_actions"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_gravity="end"
+                android:layout_marginEnd="6dp"
+                android:layout_marginTop="2dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/button_copy_history"
+                    android:layout_width="58dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="COPIAR"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/button_paste_history"
+                    android:layout_width="58dp"
+                    android:layout_height="30dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="COLAR"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/history_post_actions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <TextView
                     android:id="@+id/button_person_selector"
-                    android:layout_width="80dp"
+                    android:layout_width="0dp"
                     android:layout_height="38dp"
-                    android:layout_marginStart="8dp"
-                    android:layout_marginEnd="8dp"
+                    android:layout_weight="1"
                     android:background="@drawable/ffmpeg_outline_button_bg"
                     android:clickable="true"
                     android:ellipsize="end"
@@ -840,6 +1055,7 @@
                     android:id="@+id/button_statement"
                     android:layout_width="0dp"
                     android:layout_height="38dp"
+                    android:layout_marginStart="8dp"
                     android:layout_weight="1"
                     android:background="@drawable/ffmpeg_outline_button_bg"
                     android:clickable="true"
@@ -849,6 +1065,71 @@
                     android:text="Oitiva"
                     android:textColor="#FFFFFFFF"
                     android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/statement_output_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/statement_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="#CC050607"
+                    android:fontFamily="monospace"
+                    android:gravity="top|start"
+                    android:maxLines="30"
+                    android:minLines="5"
+                    android:overScrollMode="ifContentScrolls"
+                    android:padding="10dp"
+                    android:scrollbars="vertical"
+                    android:textColor="#FFB8F7FF"
+                    android:textIsSelectable="true"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/statement_clipboard_actions"
+                android:layout_width="wrap_content"
+                android:layout_height="30dp"
+                android:layout_gravity="end"
+                android:layout_marginEnd="6dp"
+                android:layout_marginTop="2dp"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/button_copy_statement"
+                    android:layout_width="58dp"
+                    android:layout_height="30dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="COPIAR"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/button_paste_statement"
+                    android:layout_width="58dp"
+                    android:layout_height="30dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:text="COLAR"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -955,18 +1236,10 @@
                 android:textColor="#DDFFFFFF"
                 android:textSize="13sp" />
 
-            <ImageButton
-                android:id="@+id/button_model_settings"
-                android:layout_width="38dp"
-                android:layout_height="38dp"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="10dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Configurações de modelos"
-                android:padding="7dp"
-                android:src="@drawable/ic_settings_outline" />
         </LinearLayout>
     </ScrollView>
 
     <include layout="@layout/view_sig_echo_footer" />
 </FrameLayout>
+
+

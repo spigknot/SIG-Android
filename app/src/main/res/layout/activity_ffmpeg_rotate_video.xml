@@ -5,18 +5,6 @@
     android:background="#000000"
     android:fitsSystemWindows="true">
 
-    <ImageView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:contentDescription="@null"
-        android:scaleType="centerCrop"
-        android:src="@drawable/wallpaper_ferramentas" />
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#88000000" />
-
     <ScrollView
         android:id="@+id/rotate_scroll"
         android:layout_width="match_parent"
@@ -201,6 +189,129 @@
                     android:textColor="#AAFFFFFF"
                     android:textSize="12sp" />
 
+                <LinearLayout
+                    android:id="@+id/time_fields"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="7dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Início"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="11sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageButton
+                                android:id="@+id/button_from_prev"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="Diminuir início"
+                                android:src="@drawable/ic_ffmpeg_minus"
+                                android:tint="#FFFFFFFF" />
+
+                            <EditText
+                                android:id="@+id/input_from"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:backgroundTint="#555555"
+                                android:fontFamily="monospace"
+                                android:gravity="center"
+                                android:hint="00:00:00.000"
+                                android:inputType="text"
+                                android:maxLines="1"
+                                android:padding="9dp"
+                                android:selectAllOnFocus="true"
+                                android:textColor="#FFFFFFFF"
+                                android:textColorHint="#88FFFFFF"
+                                android:textSize="13sp" />
+
+                            <ImageButton
+                                android:id="@+id/button_from_next"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="Aumentar início"
+                                android:src="@drawable/ic_ffmpeg_plus"
+                                android:tint="#FFFFFFFF" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="7dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Fim"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="11sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <ImageButton
+                                android:id="@+id/button_to_prev"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="Diminuir fim"
+                                android:src="@drawable/ic_ffmpeg_minus"
+                                android:tint="#FFFFFFFF" />
+
+                            <EditText
+                                android:id="@+id/input_to"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:backgroundTint="#555555"
+                                android:fontFamily="monospace"
+                                android:gravity="center"
+                                android:hint="00:00:00.000"
+                                android:inputType="text"
+                                android:maxLines="1"
+                                android:padding="9dp"
+                                android:selectAllOnFocus="true"
+                                android:textColor="#FFFFFFFF"
+                                android:textColorHint="#88FFFFFF"
+                                android:textSize="13sp" />
+
+                            <ImageButton
+                                android:id="@+id/button_to_next"
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:contentDescription="Aumentar fim"
+                                android:src="@drawable/ic_ffmpeg_plus"
+                                android:tint="#FFFFFFFF" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+
                 <RadioGroup
                     android:id="@+id/rotation_options"
                     android:layout_width="match_parent"
@@ -321,37 +432,63 @@
                         android:layout_weight="1"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
+
+                        <CheckBox
+                            android:id="@+id/check_parallel_keyframes"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:buttonTint="#FFFFFFFF"
+                            android:text="Processar em paralelo"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="13sp" />
+
+                        <TextView
+                            android:id="@+id/help_parallel_keyframes"
+                            android:layout_width="22dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:minHeight="40dp"
+                            android:text="?"
+                            android:textColor="#99FFFFFF"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
                     </LinearLayout>
                 </LinearLayout>
 
                 <LinearLayout
-                    android:layout_width="match_parent"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
-                    <CheckBox
-                        android:id="@+id/check_parallel_keyframes"
+                    <TextView
+                        android:id="@+id/button_video_encoder"
                         android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:buttonTint="#FFFFFFFF"
-                        android:text="Processar em paralelo"
+                        android:layout_height="40dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:minWidth="190dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:text="Encoder: detectando..."
                         android:textColor="#FFFFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
 
                     <TextView
-                        android:id="@+id/help_parallel_keyframes"
-                        android:layout_width="22dp"
-                        android:layout_height="wrap_content"
+                        android:id="@+id/help_video_encoder"
+                        android:layout_width="28dp"
+                        android:layout_height="40dp"
                         android:gravity="center"
-                        android:minHeight="40dp"
                         android:text="?"
                         android:textColor="#99FFFFFF"
                         android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
-
-
 
                 <ImageButton
                     android:id="@+id/button_rotate"
