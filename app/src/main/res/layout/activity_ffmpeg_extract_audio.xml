@@ -98,14 +98,15 @@
             <TextureView
                 android:id="@+id/video_preview"
                 android:layout_width="match_parent"
-                android:layout_height="360dp"
+                android:layout_height="288dp"
                 android:layout_marginTop="0dp"
+                android:scaleX="0.8"
                 android:visibility="gone" />
 
             <br.gov.sp.pcsp.launcher.FfmpegWaveformView
                 android:id="@+id/audio_waveform"
                 android:layout_width="match_parent"
-                android:layout_height="96dp"
+                android:layout_height="77dp"
                 android:layout_marginStart="20dp"
                 android:layout_marginEnd="20dp"
                 android:layout_marginTop="0dp"
@@ -229,6 +230,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:gravity="center"
                         android:text="Início"
                         android:textColor="#FFFFFFFF"
                         android:textSize="11sp" />
@@ -259,6 +261,7 @@
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:gravity="center"
                         android:text="Fim"
                         android:textColor="#FFFFFFFF"
                         android:textSize="11sp" />

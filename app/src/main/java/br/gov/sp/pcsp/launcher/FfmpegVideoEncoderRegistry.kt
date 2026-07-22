@@ -1,24 +1,23 @@
 package br.gov.sp.pcsp.launcher
 
 import android.content.Context
+import android.os.Build
 import android.media.MediaCodecList
 import androidx.appcompat.app.AlertDialog
-import com.arthenica.ffmpegkit.FFmpegKit
 
 data class FfmpegVideoEncoder(
     val ffmpegName: String,
     val codecFamily: String,
-    val extraArguments: List<String> = emptyList(),
     val displayName: String = ffmpegName
 ) {
-    val arguments: List<String>
-        get() = listOf("-c:v", ffmpegName) + extraArguments
-
     val shortName: String
-        get() = when (codecFamily) {
+        get() = when {
+            ffmpegName == "libx264" -> "cpu"
+            else -> when (codecFamily) {
             "h264" -> "h264"
             "hevc" -> "hevc"
             else -> "mpeg"
+            }
         }
 }
 
@@ -30,22 +29,10 @@ object FfmpegVideoEncoderRegistry {
     fun detect(): List<FfmpegVideoEncoder> {
         cachedEncoders?.let { return it }
 
-        val ffmpegEncoders = try {
-            FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-encoders"))
-                .allLogsAsString
-                .orEmpty()
-        } catch (_: Throwable) {
-            ""
-        }
         val mediaCodecs = try {
             MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.toList()
         } catch (_: Throwable) {
             emptyList()
-        }
-
-        fun ffmpegHas(name: String): Boolean {
-            return Regex("(?m)^\\s*V\\S*\\s+${Regex.escape(name)}(?:\\s|$)")
-                .containsMatchIn(ffmpegEncoders)
         }
 
         fun androidHas(mime: String): Boolean {
@@ -55,26 +42,52 @@ object FfmpegVideoEncoderRegistry {
         }
 
         cachedEncoders = buildList {
-            if (ffmpegHas("h264_mediacodec") && androidHas("video/avc")) {
+            if (androidHas("video/avc")) {
                 add(FfmpegVideoEncoder("h264_mediacodec", "h264"))
             }
-            if (ffmpegHas("hevc_mediacodec") && androidHas("video/hevc")) {
+            if (androidHas("video/hevc")) {
                 add(FfmpegVideoEncoder("hevc_mediacodec", "hevc"))
             }
-            if (ffmpegHas("libx264")) {
-                add(
-                    FfmpegVideoEncoder(
-                        "libx264",
-                        "h264",
-                        listOf("-preset", "ultrafast"),
-                        "libx264 (CPU)"
-                    )
+            add(
+                FfmpegVideoEncoder(
+                    "libx264",
+                    "h264",
+                    "libx264 (CPU)"
                 )
-            } else if (ffmpegHas("mpeg4")) {
-                add(FfmpegVideoEncoder("mpeg4", "mpeg4", displayName = "mpeg4 (CPU)"))
-            }
+            )
         }
         return cachedEncoders.orEmpty()
+    }
+
+    fun advertisedMaxInstances(encoder: FfmpegVideoEncoder): Int? {
+        if (!encoder.ffmpegName.endsWith("_mediacodec")) return null
+        val mime = when (encoder.codecFamily) {
+            "h264" -> "video/avc"
+            "hevc" -> "video/hevc"
+            else -> return null
+        }
+        return try {
+            val candidates = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                .filter { codec ->
+                    codec.isEncoder && codec.supportedTypes.any { it.equals(mime, ignoreCase = true) }
+                }
+                .filter { codec ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        codec.isHardwareAccelerated
+                    } else {
+                        codec.name.contains("qti", ignoreCase = true) ||
+                            codec.name.contains("qcom", ignoreCase = true) ||
+                            codec.name.contains("omx", ignoreCase = true)
+                    }
+                }
+            candidates.mapNotNull { codec ->
+                runCatching { codec.getCapabilitiesForType(mime).maxSupportedInstances }
+                    .getOrNull()
+                    ?.takeIf { it > 0 }
+            }.minOrNull()
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     fun showHelp(context: Context) {

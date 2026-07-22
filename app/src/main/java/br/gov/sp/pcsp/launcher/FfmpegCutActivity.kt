@@ -73,6 +73,8 @@ class FfmpegCutActivity : AppCompatActivity() {
     private lateinit var playbackSpeedLabel: TextView
     private lateinit var buttonVideoEncoder: TextView
     private lateinit var helpVideoEncoder: TextView
+    private lateinit var buttonVideoQuality: TextView
+    private lateinit var helpVideoQuality: TextView
     private lateinit var buttonCut: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
@@ -106,6 +108,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private var isProcessing = false
     private var availableVideoEncoders: List<FfmpegVideoEncoder> = emptyList()
     private var selectedVideoEncoder: FfmpegVideoEncoder? = null
+    private var selectedVideoQuality = FfmpegVideoQuality.default
     @Volatile private var currentSessionId: Long? = null
     private var lastSeekTime = 0L
     private var pendingSeekPos = -1L
@@ -195,6 +198,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         playbackSpeedLabel = findViewById(R.id.playback_speed_label)
         buttonVideoEncoder = findViewById(R.id.button_video_encoder)
         helpVideoEncoder = findViewById(R.id.help_video_encoder)
+        buttonVideoQuality = findViewById(R.id.button_video_quality)
+        helpVideoQuality = findViewById(R.id.help_video_quality)
         buttonCut = findViewById(R.id.button_cut)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
@@ -216,6 +221,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_select_file).setOnClickListener { openFilePicker() }
         buttonVideoEncoder.setOnClickListener { showVideoEncoderMenu() }
         helpVideoEncoder.setOnClickListener { FfmpegVideoEncoderRegistry.showHelp(this) }
+        buttonVideoQuality.setOnClickListener { showVideoQualityMenu() }
+        helpVideoQuality.setOnClickListener { selectedVideoQuality.showHelp(this) }
         buttonSpeedDown.setOnClickListener { changePlaybackSpeed(-1) }
         buttonPlayPause.setOnClickListener { togglePreviewPlayback() }
         buttonSpeedUp.setOnClickListener { changePlaybackSpeed(1) }
@@ -583,20 +590,9 @@ class FfmpegCutActivity : AppCompatActivity() {
         val streamBitrates = detectStreamBitrates(inputFile)
         if (selectedMime.startsWith("video/")) {
             val encoder = selectedVideoEncoder ?: error("Encoder de vídeo indisponível")
-            args.addAll(
-                listOf(
-                    "-map", "0:v:0?",
-                    "-map", "0:a:0?",
-                    "-map_metadata", "0",
-                    "-map_chapters", "0",
-                ) + encoder.arguments + listOf(
-                    "-b:v", streamBitrates.video ?: FALLBACK_VIDEO_BITRATE,
-                    "-c:a", "aac",
-                    "-b:a", streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE,
-                    "-movflags", "+faststart",
-                    "-avoid_negative_ts", "make_zero"
-                )
-            )
+            args.addAll(listOf("-map", "0:v:0?", "-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0"))
+            args.addAll(videoEncodingArguments(encoder, streamBitrates.video ?: FALLBACK_VIDEO_BITRATE))
+            args.addAll(listOf("-c:a", "aac", "-b:a", streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE, "-movflags", "+faststart", "-avoid_negative_ts", "make_zero"))
         } else {
             args.addAll(listOf("-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0", "-vn"))
             args.addAll(preciseAudioEncoderArguments(selectedName, streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE))
@@ -774,9 +770,8 @@ class FfmpegCutActivity : AppCompatActivity() {
             "-t", String.format(Locale.US, "%.3f", duration),
             "-map", "0:v:0?", "-map", "0:a:0?"
         )
-        args += encoder.arguments
+        args += videoEncodingArguments(encoder, bitrates.video ?: FALLBACK_VIDEO_BITRATE)
         args += listOf(
-            "-b:v", bitrates.video ?: FALLBACK_VIDEO_BITRATE,
             "-c:a", "aac", "-b:a", bitrates.audio ?: FALLBACK_AUDIO_BITRATE,
             "-avoid_negative_ts", "make_zero", "-mpegts_flags", "+resend_headers",
             "-f", "mpegts", outputFile.absolutePath
@@ -1163,6 +1158,10 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonCut.visibility = visibility
         buttonVideoEncoder.visibility = if (visible && selectedMime.startsWith("video/")) View.VISIBLE else View.GONE
         helpVideoEncoder.visibility = buttonVideoEncoder.visibility
+        findViewById<View>(R.id.label_video_encoder).visibility = buttonVideoEncoder.visibility
+        buttonVideoQuality.visibility = buttonVideoEncoder.visibility
+        helpVideoQuality.visibility = buttonVideoEncoder.visibility
+        findViewById<View>(R.id.label_video_quality).visibility = buttonVideoEncoder.visibility
     }
 
     private fun detectVideoEncoders() {
@@ -1189,6 +1188,29 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonVideoEncoder.text = if (encoder == null) "Encoder indisponível" else encoder.shortName
         buttonVideoEncoder.isEnabled = encoder != null && !isProcessing
         buttonVideoEncoder.alpha = if (buttonVideoEncoder.isEnabled) 1f else 0.42f
+        buttonVideoQuality.text = selectedVideoQuality.label
+        buttonVideoQuality.isEnabled = encoder != null && !isProcessing
+        buttonVideoQuality.alpha = if (buttonVideoQuality.isEnabled) 1f else 0.42f
+    }
+
+    private fun showVideoQualityMenu() {
+        if (selectedVideoEncoder == null || isProcessing) return
+        PopupMenu(this, buttonVideoQuality).apply {
+            FfmpegVideoQuality.entries.forEach { menu.add(it.menuLabel) }
+            setOnMenuItemClickListener { item ->
+                selectedVideoQuality = FfmpegVideoQuality.entries.first { it.menuLabel == item.title.toString() }
+                updateVideoEncoderButton()
+                true
+            }
+            show()
+        }
+    }
+
+    private fun videoEncodingArguments(encoder: FfmpegVideoEncoder, sourceBitrate: String): List<String> {
+        val settings = encoder.encodingFor(selectedVideoQuality, sourceBitrate)
+        return settings.arguments + settings.targetBitrate.orEmpty().takeIf { it.isNotBlank() }
+            ?.let { listOf("-b:v", it) }
+            .orEmpty()
     }
 
     private fun setPreviewFrameHeight(heightDp: Int) {

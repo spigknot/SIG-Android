@@ -218,4 +218,17 @@
 
     <include layout="@layout/view_sig_echo_footer" />
 
+    <ImageButton
+        android:id="@+id/button_share_location"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="10dp"
+        android:layout_marginBottom="46dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Enviar localização"
+        android:padding="7dp"
+        android:src="@drawable/ic_location_outline"
+        android:tint="#FFFFFFFF" />
+
 </FrameLayout>

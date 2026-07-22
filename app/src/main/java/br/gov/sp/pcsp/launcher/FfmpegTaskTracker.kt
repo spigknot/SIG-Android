@@ -18,6 +18,7 @@ class FfmpegTaskTracker(
     private var failureMessage = ""
     private var isSuccess = false
     private var successMessage = ""
+    private var liveStatus = ""
 
     private var currentLinearIndex = 0
 
@@ -67,6 +68,9 @@ class FfmpegTaskTracker(
 
     fun setTaskProgress(index: Int, progress: Int, detail: String) {
         if (isFailed || index >= tasks.size) return
+        // FFmpeg pode entregar uma estatistica atrasada apos o callback de conclusao.
+        // Uma etapa concluida nao deve voltar visualmente para 99%.
+        if (taskStates[index] == TaskState.COMPLETED) return
         taskStates[index] = TaskState.RUNNING
         taskProgresses[index] = progress.coerceIn(0, 100)
         taskDetails[index] = detail
@@ -104,12 +108,26 @@ class FfmpegTaskTracker(
         render()
     }
 
+    /** Informacao transitória, exibida abaixo das etapas sem se tornar uma tarefa. */
+    fun setLiveStatus(message: String) {
+        if (isFailed) return
+        liveStatus = message
+        render()
+    }
+
+    fun clearLiveStatus() {
+        if (liveStatus.isBlank()) return
+        liveStatus = ""
+        render()
+    }
+
     fun reset() {
         currentLinearIndex = 0
         isFailed = false
         failureMessage = ""
         isSuccess = false
         successMessage = ""
+        liveStatus = ""
         for (i in tasks.indices) {
             taskStates[i] = TaskState.PENDING
             taskProgresses[i] = 0
@@ -147,6 +165,12 @@ class FfmpegTaskTracker(
                         builder.setSpan(ForegroundColorSpan(colorPending), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                     }
                 }
+            }
+
+            if (liveStatus.isNotBlank()) {
+                val lineStart = builder.length
+                builder.append("$liveStatus\n")
+                builder.setSpan(ForegroundColorSpan(colorActive), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
 
             if (isFailed && failureMessage.isNotBlank()) {

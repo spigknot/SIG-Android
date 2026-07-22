@@ -4,6 +4,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -26,18 +28,22 @@
 
         <activity
             android:name=".WebViewActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".RgCalculatorActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".ImeiCalculatorActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".FfmpegCutActivity"
+            android:screenOrientation="portrait"
             android:exported="true"
             android:label="SIG - Cortar">
             <intent-filter>
@@ -54,6 +60,7 @@
 
         <activity
             android:name=".FfmpegExtractAudioActivity"
+            android:screenOrientation="portrait"
             android:exported="true"
             android:label="SIG - Extrair áudio">
             <intent-filter>
@@ -80,30 +87,37 @@
 
         <activity
             android:name=".FfmpegRotateVideoActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".FfmpegJoinVideosActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".FfmpegCleanAudioActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".WhisperActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".experimental.npu.NpuTestActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".FasterWhisperServerActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".RemoteSttActivity"
+            android:screenOrientation="portrait"
             android:exported="true"
             android:label="SIG - Transcrever Granite">
             <intent-filter>
@@ -130,10 +144,12 @@
 
         <activity
             android:name=".ModelSettingsActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <activity
             android:name=".FfmpegActivity"
+            android:screenOrientation="portrait"
             android:exported="false" />
 
         <provider
@@ -148,6 +164,7 @@
 
         <activity
             android:name=".MainActivity"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.SIG"
             android:exported="true">
 
@@ -156,6 +173,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <activity android:name=".ToolsActivity" android:exported="false" />
+        <activity android:name=".ToolsActivity" android:screenOrientation="portrait" android:exported="false" />
     </application>
 </manifest>

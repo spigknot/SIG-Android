@@ -6,9 +6,12 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.SurfaceTexture
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -20,6 +23,8 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.View
+import android.view.Surface
+import android.view.TextureView
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.HorizontalScrollView
@@ -47,6 +52,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var joinScroll: ScrollView
     private lateinit var timelineScroll: HorizontalScrollView
     private lateinit var timeline: FfmpegJoinTimelineView
+    private lateinit var resultPreviewContainer: View
+    private lateinit var resultVideoPreview: TextureView
+    private lateinit var resultTimeline: FfmpegRangeSlider
+    private lateinit var resultCurrentTime: TextView
+    private lateinit var resultPlayPause: ImageButton
+    private lateinit var resultSpeedDown: ImageButton
+    private lateinit var resultSpeedUp: ImageButton
     private lateinit var selectedCount: TextView
     private lateinit var controls: View
     private lateinit var buttonTransition: TextView
@@ -54,6 +66,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var checkReencode: CheckBox
     private lateinit var checkSmartJoin: CheckBox
     private lateinit var buttonVideoEncoder: TextView
+    private lateinit var buttonVideoQuality: TextView
     private lateinit var buttonJoin: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
@@ -79,6 +92,24 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private val processingSteps = mutableListOf<ProcessingStep>()
     private var availableVideoEncoders: List<FfmpegVideoEncoder> = emptyList()
     private var selectedVideoEncoder: FfmpegVideoEncoder? = null
+    private var selectedVideoQuality = FfmpegVideoQuality.default
+    private var resultPreviewPlayer: MediaPlayer? = null
+    private var resultPreviewSurface: Surface? = null
+    private var pendingResultPreviewFile: File? = null
+    private var resultPreviewDurationMs = 0L
+    private var resultPlaybackSpeed = 1f
+    private val resultSpeedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f)
+    private val resultPreviewTicker = object : Runnable {
+        override fun run() {
+            val player = resultPreviewPlayer ?: return
+            if (player.isPlaying) {
+                val position = player.currentPosition.toLong().coerceIn(0L, resultPreviewDurationMs)
+                resultTimeline.setCurrent(position)
+                resultCurrentTime.text = formatTime(position)
+                handler.postDelayed(this, 100L)
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,6 +119,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         joinScroll = findViewById(R.id.join_scroll)
         timelineScroll = findViewById(R.id.timeline_scroll)
         timeline = findViewById(R.id.join_timeline)
+        resultPreviewContainer = findViewById(R.id.result_preview_container)
+        resultVideoPreview = findViewById(R.id.result_video_preview)
+        resultTimeline = findViewById(R.id.result_timeline)
+        resultCurrentTime = findViewById(R.id.result_current_time)
+        resultPlayPause = findViewById(R.id.result_play_pause)
+        resultSpeedDown = findViewById(R.id.result_speed_down)
+        resultSpeedUp = findViewById(R.id.result_speed_up)
         selectedCount = findViewById(R.id.selected_count)
         controls = findViewById(R.id.join_controls)
         buttonTransition = findViewById(R.id.button_transition)
@@ -95,6 +133,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         checkReencode = findViewById(R.id.check_reencode)
         checkSmartJoin = findViewById(R.id.check_smart_join)
         buttonVideoEncoder = findViewById(R.id.button_video_encoder)
+        buttonVideoQuality = findViewById(R.id.button_video_quality)
         buttonJoin = findViewById(R.id.button_join)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
@@ -118,6 +157,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.help_video_encoder).setOnClickListener {
             FfmpegVideoEncoderRegistry.showHelp(this)
         }
+        buttonVideoQuality.setOnClickListener { showVideoQualityMenu() }
+        findViewById<TextView>(R.id.help_video_quality).setOnClickListener { selectedVideoQuality.showHelp(this) }
         findViewById<TextView>(R.id.help_transition).setOnClickListener { showTransitionHelp() }
         findViewById<TextView>(R.id.help_reencode).setOnClickListener { showReencodeHelp() }
         findViewById<TextView>(R.id.help_smart_join).setOnClickListener { showSmartJoinHelp() }
@@ -129,6 +170,33 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         buttonOutputFolder.setOnClickListener { openOutputFolder() }
         buttonOutputShare.setOnClickListener { shareOutputFile() }
         outputFileName.setOnClickListener { openOutputFile() }
+        resultPlayPause.setOnClickListener { toggleResultPlayback() }
+        resultSpeedDown.setOnClickListener { changeResultPlaybackSpeed(-1) }
+        resultSpeedUp.setOnClickListener { changeResultPlaybackSpeed(1) }
+        resultTimeline.setRangeMarkersVisible(false)
+        resultTimeline.isEnabled = false
+        resultTimeline.onPositionChanged = { position, fromUser ->
+            if (fromUser) seekResultPreview(position)
+        }
+        resultVideoPreview.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
+                resultPreviewSurface = Surface(surfaceTexture)
+                pendingResultPreviewFile?.let(::prepareJoinedPreview)
+            }
+
+            override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
+                applyResultPreviewTransform()
+            }
+
+            override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
+                resultPreviewPlayer?.setSurface(null)
+                resultPreviewSurface?.release()
+                resultPreviewSurface = null
+                return true
+            }
+
+            override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
+        }
 
         checkReencode.setOnCheckedChangeListener { _, _ -> updateReencodeControls() }
         checkSmartJoin.setOnCheckedChangeListener { _, isChecked ->
@@ -247,6 +315,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             selectedVideoEncoder != null && !isProcessing
         buttonVideoEncoder.isEnabled = encoderEnabled
         buttonVideoEncoder.alpha = if (encoderEnabled) 1f else 0.42f
+        buttonVideoQuality.isEnabled = encoderEnabled
+        buttonVideoQuality.alpha = if (encoderEnabled) 1f else 0.42f
     }
 
     private fun detectVideoEncoders() {
@@ -271,7 +341,21 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun updateVideoEncoderButton() {
         val encoder = selectedVideoEncoder
         buttonVideoEncoder.text = if (encoder == null) "Encoder indisponível" else encoder.shortName
+        buttonVideoQuality.text = selectedVideoQuality.label
         updateReencodeControls()
+    }
+
+    private fun showVideoQualityMenu() {
+        if (selectedVideoEncoder == null || isProcessing) return
+        PopupMenu(this, buttonVideoQuality).apply {
+            FfmpegVideoQuality.entries.forEach { menu.add(it.menuLabel) }
+            setOnMenuItemClickListener { item ->
+                selectedVideoQuality = FfmpegVideoQuality.entries.first { it.menuLabel == item.title.toString() }
+                updateVideoEncoderButton()
+                true
+            }
+            show()
+        }
     }
 
     private fun setJoinEnabled(enabled: Boolean) {
@@ -402,6 +486,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     buttonSaveToFolder.visibility = View.VISIBLE
                     buttonOutputFolder.visibility = View.GONE
                     buttonOutputShare.visibility = View.GONE
+                    showJoinedPreview(tempOutput)
                     joinScroll.post { joinScroll.smoothScrollTo(0, outputActions.bottom) }
                 }
             } catch (e: Throwable) {
@@ -610,14 +695,10 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             "-map", "[aout]"
         )
         
-        args.addAll(requireVideoEncoder().arguments)
+        args.addAll(videoEncodingArguments(profile, constrained = true))
 
         args.addAll(
             listOf(
-                "-b:v", profile.videoBitrate,
-                "-minrate", profile.videoBitrate,
-                "-maxrate", profile.videoBitrate,
-                "-bufsize", profile.videoBufferSize,
                 "-r", profile.fps,
                 "-vsync", "cfr",
                 "-g", fadeGopSize(profile.fps),
@@ -663,7 +744,16 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 )
             }
 
-            val keyframesByInput = inputs.map { extractVideoKeyframesMs(it) }
+            val keyframeTask = "Lendo keyframes dos vídeos"
+            updateStep(keyframeTask, 0, StepState.RUNNING)
+            val keyframesByInput = inputs.mapIndexed { index, input ->
+                updateStep(keyframeTask, ((index * 100.0) / inputs.size.coerceAtLeast(1)).toInt(), StepState.RUNNING, "vídeo ${index + 1}/${inputs.size}")
+                extractVideoKeyframesMs(input)
+            }
+            updateStep(keyframeTask, 100, StepState.DONE)
+
+            val boundariesTask = "Calculando limites da transição"
+            updateStep(boundariesTask, 0, StepState.RUNNING)
             val fadeOutStarts = inputs.indices.map { index ->
                 if (index == inputs.lastIndex) {
                     (clips[index].durationMs / 1000.0).coerceAtLeast(0.001)
@@ -685,7 +775,10 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     )
                 }
             }
+            updateStep(boundariesTask, 100, StepState.DONE)
 
+            val preserveTask = "Verificando trechos preserváveis"
+            updateStep(preserveTask, 0, StepState.RUNNING)
             val bodyDurations = inputs.indices.map { index ->
                 val clipSeconds = (clips[index].durationMs / 1000.0).coerceAtLeast(0.001)
                 (fadeOutStarts[index] - fadeInEnds[index]).coerceIn(0.0, clipSeconds)
@@ -695,6 +788,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             val containsShortClip = clips.any {
                 (it.durationMs / 1000.0) <= FAST_FADE_MIN_CLIP_SECONDS
             }
+            updateStep(preserveTask, 100, StepState.DONE)
             if (containsShortClip || bodyDurations.all { it <= 0.12 }) {
                 val taskLabel = "Aplicando Fade in/out completo (vídeos curtos)"
                 configureFadeProcessingPlan(listOf(taskLabel))
@@ -1009,15 +1103,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             "-map", "[aout]"
         )
         
-        args.addAll(requireVideoEncoder().arguments)
+        args.addAll(videoEncodingArguments(profile, constrained = true))
 
         args.addAll(
             listOf(
                 "-bsf:v", profile.videoBitstreamFilter,
-                "-b:v", profile.videoBitrate,
-                "-minrate", profile.videoBitrate,
-                "-maxrate", profile.videoBitrate,
-                "-bufsize", profile.videoBufferSize,
                 "-r", profile.fps,
                 "-vsync", "cfr",
                 "-g", "1",
@@ -1080,15 +1170,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             )
         )
         
-        args.addAll(requireVideoEncoder().arguments)
+        args.addAll(videoEncodingArguments(profile, constrained = true))
 
         args.addAll(
             listOf(
                 "-bsf:v", profile.videoBitstreamFilter,
-                "-b:v", profile.videoBitrate,
-                "-minrate", profile.videoBitrate,
-                "-maxrate", profile.videoBitrate,
-                "-bufsize", profile.videoBufferSize,
                 "-r", profile.fps,
                 "-vsync", "cfr",
                 "-g", fadeGopSize(profile.fps),
@@ -1158,25 +1244,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val filter = buildFilterComplex(outputProfile, transitionSeconds)
         val args = mutableListOf("-y")
         inputs.forEach { input -> args.addAll(listOf("-i", input.absolutePath)) }
-        args.addAll(
-            listOf(
-                "-filter_complex", filter,
-                "-map", "[vout]",
-                "-map", "[aout]"
-            ) + requireVideoEncoder().arguments + listOf(
-                "-b:v", outputProfile.videoBitrate,
-                "-minrate", outputProfile.videoBitrate,
-                "-maxrate", outputProfile.videoBitrate,
-                "-bufsize", outputProfile.videoBufferSize,
-                "-r", outputProfile.fps,
-                "-c:a", "aac",
-                "-b:a", outputProfile.audioBitrate,
-                "-ar", outputProfile.audioSampleRate.toString(),
-                "-ac", outputProfile.audioChannels.toString(),
-                "-movflags", "+faststart",
-                outputFile.absolutePath
-            )
-        )
+        args.addAll(listOf("-filter_complex", filter, "-map", "[vout]", "-map", "[aout]"))
+        args.addAll(videoEncodingArguments(outputProfile, constrained = true))
+        args.addAll(listOf("-r", outputProfile.fps, "-c:a", "aac", "-b:a", outputProfile.audioBitrate, "-ar", outputProfile.audioSampleRate.toString(), "-ac", outputProfile.audioChannels.toString(), "-movflags", "+faststart", outputFile.absolutePath))
         return args.toTypedArray()
     }
 
@@ -1186,25 +1256,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val filter = buildFadeInOutFilterComplex(outputProfile, transitionSeconds)
         val args = mutableListOf("-y")
         inputs.forEach { input -> args.addAll(listOf("-i", input.absolutePath)) }
-        args.addAll(
-            listOf(
-                "-filter_complex", filter,
-                "-map", "[vout]",
-                "-map", "[aout]"
-            ) + requireVideoEncoder().arguments + listOf(
-                "-b:v", outputProfile.videoBitrate,
-                "-minrate", outputProfile.videoBitrate,
-                "-maxrate", outputProfile.videoBitrate,
-                "-bufsize", outputProfile.videoBufferSize,
-                "-r", outputProfile.fps,
-                "-c:a", "aac",
-                "-b:a", outputProfile.audioBitrate,
-                "-ar", outputProfile.audioSampleRate.toString(),
-                "-ac", outputProfile.audioChannels.toString(),
-                "-movflags", "+faststart",
-                outputFile.absolutePath
-            )
-        )
+        args.addAll(listOf("-filter_complex", filter, "-map", "[vout]", "-map", "[aout]"))
+        args.addAll(videoEncodingArguments(outputProfile, constrained = true))
+        args.addAll(listOf("-r", outputProfile.fps, "-c:a", "aac", "-b:a", outputProfile.audioBitrate, "-ar", outputProfile.audioSampleRate.toString(), "-ac", outputProfile.audioChannels.toString(), "-movflags", "+faststart", outputFile.absolutePath))
         return args.toTypedArray()
     }
 
@@ -1564,7 +1618,142 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
     }
 
+    private fun showJoinedPreview(file: File) {
+        pendingResultPreviewFile = file
+        timelineScroll.visibility = View.GONE
+        resultPreviewContainer.visibility = View.VISIBLE
+        resultVideoPreview.visibility = View.VISIBLE
+        resultCurrentTime.text = formatTime(0L)
+        resultTimeline.isEnabled = false
+        resultTimeline.setRange(1L, 0L, 1L)
+        resultTimeline.setCurrent(0L)
+        updateResultPlaybackButton(false)
+        updateResultSpeedButtons()
+        if (resultVideoPreview.isAvailable) {
+            resultPreviewSurface?.release()
+            resultPreviewSurface = Surface(resultVideoPreview.surfaceTexture)
+            prepareJoinedPreview(file)
+        }
+    }
+
+    private fun prepareJoinedPreview(file: File) {
+        val surface = resultPreviewSurface ?: return
+        if (!file.exists()) return
+        handler.removeCallbacks(resultPreviewTicker)
+        resultPreviewPlayer?.release()
+        resultPreviewPlayer = MediaPlayer().apply {
+            setDataSource(file.absolutePath)
+            setSurface(surface)
+            setOnPreparedListener { player ->
+                resultPreviewDurationMs = player.duration.toLong().coerceAtLeast(1L)
+                resultTimeline.isEnabled = true
+                resultTimeline.setRange(resultPreviewDurationMs, 0L, resultPreviewDurationMs)
+                resultTimeline.setCurrent(0L)
+                resultCurrentTime.text = formatTime(0L)
+                applyResultPreviewTransform()
+            }
+            setOnVideoSizeChangedListener { _, _, _ -> applyResultPreviewTransform() }
+            setOnCompletionListener {
+                resultTimeline.setCurrent(resultPreviewDurationMs)
+                resultCurrentTime.text = formatTime(resultPreviewDurationMs)
+                updateResultPlaybackButton(false)
+            }
+            prepareAsync()
+        }
+    }
+
+    private fun toggleResultPlayback() {
+        val player = resultPreviewPlayer ?: return
+        if (player.isPlaying) {
+            player.pause()
+            handler.removeCallbacks(resultPreviewTicker)
+            updateResultPlaybackButton(false)
+        } else {
+            if (player.currentPosition.toLong() >= resultPreviewDurationMs) {
+                player.seekTo(0)
+                resultTimeline.setCurrent(0L)
+                resultCurrentTime.text = formatTime(0L)
+            }
+            player.start()
+            updateResultPlaybackButton(true)
+            handler.removeCallbacks(resultPreviewTicker)
+            handler.post(resultPreviewTicker)
+        }
+    }
+
+    private fun changeResultPlaybackSpeed(direction: Int) {
+        val index = resultSpeedSteps.indexOfFirst { it == resultPlaybackSpeed }.let { if (it >= 0) it else 2 }
+        resultPlaybackSpeed = resultSpeedSteps[(index + direction).coerceIn(0, resultSpeedSteps.lastIndex)]
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            resultPreviewPlayer?.let { player ->
+                player.playbackParams = player.playbackParams.setSpeed(resultPlaybackSpeed)
+            }
+        }
+        updateResultSpeedButtons()
+    }
+
+    private fun seekResultPreview(positionMs: Long) {
+        val player = resultPreviewPlayer ?: return
+        val safePosition = positionMs.coerceIn(0L, resultPreviewDurationMs).toInt()
+        player.seekTo(safePosition)
+        resultCurrentTime.text = formatTime(safePosition.toLong())
+    }
+
+    private fun updateResultPlaybackButton(playing: Boolean) {
+        resultPlayPause.setImageResource(if (playing) R.drawable.ic_ffmpeg_pause else R.drawable.ic_ffmpeg_play)
+        resultPlayPause.contentDescription = if (playing) "Pausar" else "Reproduzir"
+    }
+
+    private fun updateResultSpeedButtons() {
+        resultSpeedDown.alpha = if (resultPlaybackSpeed <= resultSpeedSteps.first()) 0.35f else 1f
+        resultSpeedUp.alpha = if (resultPlaybackSpeed >= resultSpeedSteps.last()) 0.35f else 1f
+    }
+
+    private fun applyResultPreviewTransform() {
+        val player = resultPreviewPlayer ?: return
+        val viewWidth = resultVideoPreview.width
+        val viewHeight = resultVideoPreview.height
+        if (viewWidth <= 0 || viewHeight <= 0 || player.videoWidth <= 0 || player.videoHeight <= 0) return
+        val scale = minOf(
+            viewWidth.toFloat() / player.videoWidth.toFloat(),
+            viewHeight.toFloat() / player.videoHeight.toFloat()
+        )
+        val width = player.videoWidth * scale
+        val height = player.videoHeight * scale
+        resultVideoPreview.setTransform(Matrix().apply {
+            setScale(scale, scale)
+            postTranslate((viewWidth - width) / 2f, (viewHeight - height) / 2f)
+        })
+    }
+
+    private fun clearJoinedPreview() {
+        handler.removeCallbacks(resultPreviewTicker)
+        resultPreviewPlayer?.release()
+        resultPreviewPlayer = null
+        pendingResultPreviewFile = null
+        resultPreviewDurationMs = 0L
+        resultPlaybackSpeed = 1f
+        resultPreviewContainer.visibility = View.GONE
+        resultVideoPreview.visibility = View.GONE
+        timelineScroll.visibility = View.VISIBLE
+    }
+
+    override fun onPause() {
+        resultPreviewPlayer?.pause()
+        handler.removeCallbacks(resultPreviewTicker)
+        updateResultPlaybackButton(false)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        clearJoinedPreview()
+        resultPreviewSurface?.release()
+        resultPreviewSurface = null
+        super.onDestroy()
+    }
+
     private fun clearOutputResult() {
+        clearJoinedPreview()
         tempOutputFiles.clear()
         tempSmartJoinDiagnosticFile = null
         lastOutputUri = null
@@ -1619,7 +1808,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             processingSteps += ProcessingStep("Juntando experimento (TS -> MP4)")
         } else if (checkReencode.isChecked) {
             if (isFadeInOutTransition()) {
-                processingSteps += ProcessingStep("Analisando keyframes")
+                processingSteps += ProcessingStep("Lendo keyframes dos vídeos")
+                processingSteps += ProcessingStep("Calculando limites da transição")
+                processingSteps += ProcessingStep("Verificando trechos preserváveis")
             } else {
                 processingSteps += ProcessingStep("Aplicando transições (${selectedVideoEncoder?.ffmpegName ?: "encoder"} + aac)")
             }
@@ -1636,8 +1827,12 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 ?: ProcessingStep("Preparar arquivos de entrada", 100, StepState.DONE)
             val save = processingSteps.firstOrNull { it.label == "Preparar arquivo para salvar" }
                 ?: ProcessingStep("Preparar arquivo para salvar")
+            val completedOrActiveSteps = processingSteps.filter {
+                it.label != "Preparar arquivos de entrada" && it.label != "Preparar arquivo para salvar"
+            }
             processingSteps.clear()
             processingSteps += preparation
+            processingSteps += completedOrActiveSteps
             taskLabels.forEach { processingSteps += ProcessingStep(it) }
             processingSteps += save
             renderProcessingSteps()
@@ -1977,6 +2172,18 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return selectedVideoEncoder?.ffmpegName ?: when (codec) {
             "hevc" -> "hevc_mediacodec"
             else -> "h264_mediacodec"
+        }
+    }
+
+    private fun videoEncodingArguments(profile: OutputProfile, constrained: Boolean): List<String> {
+        val settings = requireVideoEncoder().encodingFor(selectedVideoQuality, profile.videoBitrate)
+        val targetBitrate = settings.targetBitrate ?: return settings.arguments
+        return buildList {
+            addAll(settings.arguments)
+            addAll(listOf("-b:v", targetBitrate))
+            if (constrained) {
+                addAll(listOf("-minrate", targetBitrate, "-maxrate", targetBitrate, "-bufsize", bufferSizeFor(targetBitrate)))
+            }
         }
     }
 

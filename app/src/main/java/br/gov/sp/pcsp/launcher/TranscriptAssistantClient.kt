@@ -87,6 +87,39 @@ object TranscriptAssistantClient {
         return listOf(historyCall)
     }
 
+    fun requestNames(
+        client: OkHttpClient,
+        serverConfig: ModelServerStore.Config,
+        material: String,
+        partsPrompt: String,
+        extractionMethod: PartsExtractionSettings.Method,
+        nameDatabase: Set<String>,
+        callback: (Result<List<String>>, Long) -> Unit
+    ): Call? {
+        val startedAt = System.nanoTime()
+        if (extractionMethod != PartsExtractionSettings.Method.AI) {
+            val names = when (extractionMethod) {
+                PartsExtractionSettings.Method.UPPERCASE -> extractUppercaseNames(material)
+                PartsExtractionSettings.Method.NAME_DATABASE -> extractNamesFromDatabase(material, nameDatabase)
+                PartsExtractionSettings.Method.AI -> emptyList()
+            }
+            callback(Result.success(names), elapsedMillis(startedAt))
+            return null
+        }
+        val call = client.newCall(buildRequest(serverConfig, partsPrompt, material))
+        call.enqueue(
+            resultCallback(
+                parser = { body ->
+                    parseNames(extractOutputText(body)).ifEmpty {
+                        throw IllegalStateException("O servidor não devolveu nomes reconhecíveis.")
+                    }
+                },
+                callback = { result -> callback(result, elapsedMillis(startedAt)) }
+            )
+        )
+        return call
+    }
+
     private fun elapsedMillis(startedAt: Long): Long {
         return ((System.nanoTime() - startedAt) / 1_000_000L).coerceAtLeast(0L)
     }
