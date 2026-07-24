@@ -750,7 +750,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:fontFamily="monospace"
-                    android:text="Servidor: 100.110.211.23:8100"
+                    android:text="Servidor: avare:8100"
                     android:textColor="#DDFFFFFF"
                     android:textSize="11sp" />
 

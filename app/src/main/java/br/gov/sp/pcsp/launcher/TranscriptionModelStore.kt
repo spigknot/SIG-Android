@@ -218,20 +218,20 @@ object TranscriptionModelStore {
 
     private val FALLBACK_CONFIG = Config(
         name = "Avare-speech",
-        url = "http://100.110.211.23:8100",
+        url = "http://avare:8100",
         parameters = JSONObject().put("model", "granite-speech-4.1-2b-nar"),
         selected = true
     )
 
     private val AVARE_CONTENT = listOf(
         "*Avare-speech",
-        "http://100.110.211.23:8100",
+        "http://avare:8100",
         "\"model\": \"granite-speech-4.1-2b-nar\""
     ).joinToString("\t\t")
 
     private val TAGUAI_CONTENT = listOf(
         "Taguai-speech",
-        "http://100.70.207.12:8100",
+        "http://servidor:8100",
         "\"model\": \"granite-speech-4.1-2b-nar\""
     ).joinToString("\t\t")
 

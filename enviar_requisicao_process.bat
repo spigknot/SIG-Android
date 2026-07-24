@@ -2,7 +2,7 @@
 setlocal
 set "BAT_PATH=%~f0"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:BAT_PATH; $raw=Get-Content -LiteralPath $path -Raw -Encoding UTF8; $marker='::JSON::'; $idx=$raw.LastIndexOf($marker); if ($idx -lt 0) { throw 'Marcador JSON nao encontrado.' }; $body=$raw.Substring($idx + $marker.Length).TrimStart([char[]]\"`r`n\"); $response=Invoke-RestMethod -Uri 'http://100.110.211.23:8500/process' -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 180; $texts=@($response.output | ForEach-Object { if ($_.content) { $_.content | ForEach-Object { if ($_.text) { $_.text } } } }); if ($texts.Count -gt 0) { $texts -join \"`r`n`r`n\" } else { $response | ConvertTo-Json -Depth 20 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:BAT_PATH; $raw=Get-Content -LiteralPath $path -Raw -Encoding UTF8; $marker='::JSON::'; $idx=$raw.LastIndexOf($marker); if ($idx -lt 0) { throw 'Marcador JSON nao encontrado.' }; $body=$raw.Substring($idx + $marker.Length).TrimStart([char[]]\"`r`n\"); $response=Invoke-RestMethod -Uri 'http://avare:8500/process' -Method Post -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 180; $texts=@($response.output | ForEach-Object { if ($_.content) { $_.content | ForEach-Object { if ($_.text) { $_.text } } } }); if ($texts.Count -gt 0) { $texts -join \"`r`n`r`n\" } else { $response | ConvertTo-Json -Depth 20 }"
 echo.
 pause
 

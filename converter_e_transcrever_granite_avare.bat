@@ -5,7 +5,7 @@ if /I "%~1"=="__convert_worker" goto convert_worker
 if /I "%~1"=="__transcribe_worker" goto transcribe_worker
 if /I "%~1"=="__worker" goto transcribe_worker
 
-set "SERVER=http://100.110.211.23:8100/transcribe"
+set "SERVER=http://avare:8100/transcribe"
 set "MAX_CONVERT_PARALLEL=6"
 set "MAX_TRANSCRIBE_PARALLEL=8"
 set "WAVDIR=%CD%\wav_16000"

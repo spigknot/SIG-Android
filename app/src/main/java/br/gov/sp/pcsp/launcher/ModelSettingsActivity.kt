@@ -103,7 +103,7 @@ class ModelSettingsActivity : AppCompatActivity() {
             setPadding((24 * density).toInt(), (8 * density).toInt(), (24 * density).toInt(), (4 * density).toInt())
         }
         val name = createServerField("Ex.: Taguai-speech", InputType.TYPE_CLASS_TEXT)
-        val url = createServerField("http://100.70.207.12:8100", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        val url = createServerField("http://servidor:8100", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         val model = createServerField("Ex.: granite-speech-4.1-2b-nar", InputType.TYPE_CLASS_TEXT)
         container.addView(createServerLabel("Nome do Servidor:"))
         container.addView(name)
@@ -188,7 +188,7 @@ class ModelSettingsActivity : AppCompatActivity() {
             setPadding((24 * density).toInt(), (8 * density).toInt(), (24 * density).toInt(), (4 * density).toInt())
         }
         val name = createServerField("Ex.: Taguai-grok", InputType.TYPE_CLASS_TEXT)
-        val url = createServerField("http://100.70.207.12:8500", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
+        val url = createServerField("http://servidor:8500", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
         val model = createServerField("Ex.: grok-4.5", InputType.TYPE_CLASS_TEXT)
         container.addView(createServerLabel("Nome do Servidor:"))
         container.addView(name)

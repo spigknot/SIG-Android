@@ -254,7 +254,7 @@ object ModelServerStore {
 
     private val FALLBACK_CONFIG = Config(
         name = "Avare-grok",
-        url = "http://100.110.211.23:8500",
+        url = "http://avare:8500",
         parameters = JSONObject()
             .put("model", "grok-4.5")
             .put("temperature", 0.0)
@@ -266,7 +266,7 @@ object ModelServerStore {
     private val DEFAULT_CONTENT = listOf(
         listOf(
             "*Avare-grok",
-            "http://100.110.211.23:8500",
+            "http://avare:8500",
             "\"model\": \"grok-4.5\"",
             "\"temperature\": 0.0",
             "\"max_tokens\": 5000",
@@ -274,7 +274,7 @@ object ModelServerStore {
         ).joinToString("\t\t"),
         listOf(
             "Taguai-grok",
-            "http://100.70.207.12:8500",
+            "http://servidor:8500",
             "\"model\": \"grok-4.5\"",
             "\"temperature\": 0.0",
             "\"max_tokens\": 5000",
@@ -282,7 +282,7 @@ object ModelServerStore {
         ).joinToString("\t\t"),
         listOf(
             "Avare-llama",
-            "http://100.110.211.23:8400/api/generate",
+            "http://avare:8400/api/generate",
             "\"model\": \"mannix/llama3.1-8b-abliterated\"",
             "\"temperature\": 0.0",
             "\"max_tokens\": 5000",
@@ -291,7 +291,7 @@ object ModelServerStore {
         ).joinToString("\t\t"),
         listOf(
             "Avare-gemma3",
-            "http://100.110.211.23:8400/api/generate",
+            "http://avare:8400/api/generate",
             "\"model\": \"gemma3:12B\"",
             "\"temperature\": 0.0",
             "\"max_tokens\": 5000",
@@ -302,7 +302,7 @@ object ModelServerStore {
 
     private val TAGUAI_GROK_CONTENT = listOf(
         "Taguai-grok",
-        "http://100.70.207.12:8500",
+        "http://servidor:8500",
         "\"model\": \"grok-4.5\"",
         "\"temperature\": 0.0",
         "\"max_tokens\": 5000",

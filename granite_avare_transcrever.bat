@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
 
-set "SERVER=http://100.110.211.23:8100/transcribe"
+set "SERVER=http://avare:8100/transcribe"
 set "OUTDIR=%CD%\out"
 
 if not exist "%OUTDIR%" mkdir "%OUTDIR%"

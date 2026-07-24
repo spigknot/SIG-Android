@@ -5026,7 +5026,7 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 7204
         private const val REQUEST_SAVE_RECORDING_DIR = 7205
         private const val REQUEST_RECORD_AUDIO_PERMISSION = 7206
-        private const val DEFAULT_SERVER_IP = "100.110.211.23"
+        private const val DEFAULT_SERVER_IP = "avare"
         private const val DEFAULT_SERVER_NAME = "Avare"
         private const val SERVER_PORT = 8100
         private const val SERVER_WORKERS = 8

@@ -11,4 +11,4 @@ Saidas:
 
 Configuracoes:
 - Salvas em %APPDATA%\sig\settings.json.
-- Padrao: 100.110.211.23:8100, 4 conversoes FFmpeg e 8 requisicoes.
+- Padrao: avare:8100, 4 conversoes FFmpeg e 8 requisicoes.
