@@ -10,7 +10,7 @@ exit /b %ERRORLEVEL%
 
 ::JSON::
 {
-    "model": "grok-4.3",
+    "model": "grok-4.5",
     "temperature": 0.2,
     "max_tokens": 10000,
     "reasoning": {"effort": "none"},

@@ -189,7 +189,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         }
         val name = createServerField("Ex.: Taguai-grok", InputType.TYPE_CLASS_TEXT)
         val url = createServerField("http://100.70.207.12:8500", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI)
-        val model = createServerField("Ex.: grok-4.3", InputType.TYPE_CLASS_TEXT)
+        val model = createServerField("Ex.: grok-4.5", InputType.TYPE_CLASS_TEXT)
         container.addView(createServerLabel("Nome do Servidor:"))
         container.addView(name)
         container.addView(createServerLabel("URL:"))

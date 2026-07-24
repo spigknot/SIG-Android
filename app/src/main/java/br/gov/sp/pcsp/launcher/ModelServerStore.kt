@@ -43,6 +43,10 @@ object ModelServerStore {
                 "\"model\": \"llama3.1-8b-abliterated\"",
                 "\"model\": \"mannix/llama3.1-8b-abliterated\""
             )
+            current = current.replace(
+                "\"model\": \"${LEGACY_GROK_MODEL}\"",
+                "\"model\": \"grok-4.5\""
+            )
             current = migrateDefaultServerUrls(current)
             current = migrateTaguaiGrok(current)
             val normalized = ensureSelectedLine(current)
@@ -245,13 +249,14 @@ object ModelServerStore {
 
     private const val FILE_NAME = "modelos_de_texto.txt"
     private const val LEGACY_FILE_NAME = "modelos.txt"
+    private const val LEGACY_GROK_MODEL = "grok-4." + "3"
     private const val TAGUAI_GROK_MIGRATION_MARKER = "sig:taguai-grok-v1"
 
     private val FALLBACK_CONFIG = Config(
         name = "Avare-grok",
         url = "http://100.110.211.23:8500",
         parameters = JSONObject()
-            .put("model", "grok-4.3")
+            .put("model", "grok-4.5")
             .put("temperature", 0.0)
             .put("max_tokens", 5000)
             .put("reasoning", JSONObject().put("effort", "none")),
@@ -262,7 +267,7 @@ object ModelServerStore {
         listOf(
             "*Avare-grok",
             "http://100.110.211.23:8500",
-            "\"model\": \"grok-4.3\"",
+            "\"model\": \"grok-4.5\"",
             "\"temperature\": 0.0",
             "\"max_tokens\": 5000",
             "\"reasoning\": {\"effort\": \"none\"}"
@@ -270,7 +275,7 @@ object ModelServerStore {
         listOf(
             "Taguai-grok",
             "http://100.70.207.12:8500",
-            "\"model\": \"grok-4.3\"",
+            "\"model\": \"grok-4.5\"",
             "\"temperature\": 0.0",
             "\"max_tokens\": 5000",
             "\"reasoning\": {\"effort\": \"none\"}"
@@ -298,7 +303,7 @@ object ModelServerStore {
     private val TAGUAI_GROK_CONTENT = listOf(
         "Taguai-grok",
         "http://100.70.207.12:8500",
-        "\"model\": \"grok-4.3\"",
+        "\"model\": \"grok-4.5\"",
         "\"temperature\": 0.0",
         "\"max_tokens\": 5000",
         "\"reasoning\": {\"effort\": \"none\"}"
