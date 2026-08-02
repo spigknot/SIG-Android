@@ -1,6 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -37,7 +38,6 @@ class ImeiCalculatorActivity : AppCompatActivity() {
     }
 
     private val client = OkHttpClient()
-    private val apiKey = BuildConfig.IMEICHECK_API_KEY
     private val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR"))
     private var lastProcessedImei = ""
 
@@ -55,6 +55,9 @@ class ImeiCalculatorActivity : AppCompatActivity() {
         setContentView(R.layout.activity_imei_calculator)
 
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+        findViewById<ImageButton>(R.id.button_imei_settings).setOnClickListener {
+            startActivity(Intent(this, ImeiSettingsActivity::class.java))
+        }
 
         historyHeaderView = findViewById(R.id.history_imei_header)
         historyView = findViewById(R.id.history_imei)
@@ -192,6 +195,7 @@ class ImeiCalculatorActivity : AppCompatActivity() {
     }
 
     private fun fetchImeiInfo(imei: String) {
+        val apiKey = ImeiApiSettings.apiKey()
         if (apiKey.isBlank()) {
             resultModel.text = "Chave da consulta IMEI não configurada"
             return

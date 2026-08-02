@@ -41,6 +41,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".ImeiSettingsActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
+        <activity
             android:name=".FfmpegCutActivity"
             android:screenOrientation="portrait"
             android:exported="true"
