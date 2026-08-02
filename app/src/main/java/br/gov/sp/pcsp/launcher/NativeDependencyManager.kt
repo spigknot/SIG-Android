@@ -21,12 +21,12 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://drive.usercontent.google.com/download?id=1jkc9kbyTmoMxkvWRgpuEEndDCjDwHd21&export=download&confirm=t",
+            "https://drive.usercontent.google.com/download?id=1Ni3EpuvgX-KGOjSDkVR4iAtF7ZL-ueM2&export=download&confirm=t",
             "b777ae0dfe90ae73fe91a2c72286a75d36d49a40bcf14fb49de3aed05f8f2533",
             41_353_214L
         ),
         "x86_64" to PackageSpec(
-            "https://drive.usercontent.google.com/download?id=1TyswpxFeSFWf1RYVfqx8kkUbT99kAe_Q&export=download&confirm=t",
+            "https://drive.usercontent.google.com/download?id=1arpCKqFr-sUbpmjty9ZLHTeVHjUGQehC&export=download&confirm=t",
             "0d8b5b948b7b6a50a3dd3e3533374d837a0ec78d937d28addcee7ff2eaf9fb8f",
             43_186_016L
         )
