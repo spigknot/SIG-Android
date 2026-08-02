@@ -183,10 +183,12 @@ class RgCalculatorActivity : AppCompatActivity() {
         })
     }
 
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
     private fun configureHistoryBox(historyView: TextView) {
         historyView.movementMethod = ScrollingMovementMethod.getInstance()
-        historyView.setOnTouchListener { view, _ ->
+        historyView.setOnTouchListener { view, event ->
             view.parent.requestDisallowInterceptTouchEvent(true)
+            if (event.actionMasked == android.view.MotionEvent.ACTION_UP) view.performClick()
             false
         }
     }

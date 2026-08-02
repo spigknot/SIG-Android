@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
 import android.text.TextUtils
 import android.util.AttributeSet
@@ -62,6 +63,11 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
         strokeCap = Paint.Cap.ROUND
         strokeWidth = dp(2f)
     }
+    private val fullRect = RectF()
+    private val segmentRect = RectF()
+    private val mediaRect = RectF()
+    private val sourceRect = Rect()
+    private val ellipsizePaint = android.text.TextPaint(textPaint)
 
     private var itemWidth = dp(122f)
     private val itemGap = dp(7f)
@@ -93,8 +99,8 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val radius = dp(6f)
-        val full = RectF(0f, 0f, width.toFloat(), height.toFloat())
-        canvas.drawRoundRect(full, radius, radius, bgPaint)
+        fullRect.set(0f, 0f, width.toFloat(), height.toFloat())
+        canvas.drawRoundRect(fullRect, radius, radius, bgPaint)
 
         if (clips.isEmpty()) {
             return
@@ -103,15 +109,15 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
         clips.forEachIndexed { index, clip ->
             val left = sidePadding + index * (itemWidth + itemGap)
             val top = topPadding
-            val rect = RectF(left, top, left + itemWidth, height - topPadding)
-            canvas.drawRoundRect(rect, radius, radius, segmentPaint)
-            if (clip.isAudio) drawWaveform(canvas, clip, rect) else drawThumbnail(canvas, clip.thumbnail, rect)
-            canvas.drawRoundRect(rect, radius, radius, if (index == draggingIndex) activeBorderPaint else borderPaint)
-            canvas.drawLine(rect.left, rect.bottom + dp(3f), rect.right, rect.bottom + dp(3f), snapPaint)
+            segmentRect.set(left, top, left + itemWidth, height - topPadding)
+            canvas.drawRoundRect(segmentRect, radius, radius, segmentPaint)
+            if (clip.isAudio) drawWaveform(canvas, clip, segmentRect) else drawThumbnail(canvas, clip.thumbnail, segmentRect)
+            canvas.drawRoundRect(segmentRect, radius, radius, if (index == draggingIndex) activeBorderPaint else borderPaint)
+            canvas.drawLine(segmentRect.left, segmentRect.bottom + dp(3f), segmentRect.right, segmentRect.bottom + dp(3f), snapPaint)
 
-            val title = TextUtils.ellipsize(clip.title, android.text.TextPaint(textPaint), rect.width() - dp(14f), TextUtils.TruncateAt.MIDDLE)
-            canvas.drawText(title.toString(), rect.left + dp(7f), rect.bottom - dp(22f), textPaint)
-            canvas.drawText(formatDuration(clip.durationMs), rect.left + dp(7f), rect.bottom - dp(7f), timePaint)
+            val title = TextUtils.ellipsize(clip.title, ellipsizePaint, segmentRect.width() - dp(14f), TextUtils.TruncateAt.MIDDLE)
+            canvas.drawText(title.toString(), segmentRect.left + dp(7f), segmentRect.bottom - dp(22f), textPaint)
+            canvas.drawText(formatDuration(clip.durationMs), segmentRect.left + dp(7f), segmentRect.bottom - dp(7f), timePaint)
         }
     }
 
@@ -142,6 +148,7 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 if (draggingIndex >= 0) {
+                    if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
                     draggingIndex = -1
                     parent.requestDisallowInterceptTouchEvent(false)
                     invalidate()
@@ -152,32 +159,37 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
         return true
     }
 
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
+    }
+
     private fun drawThumbnail(canvas: Canvas, bitmap: Bitmap?, rect: RectF) {
         if (bitmap == null) return
-        val target = RectF(rect.left + dp(5f), rect.top + dp(5f), rect.right - dp(5f), rect.bottom - dp(34f))
-        val scale = max(target.width() / bitmap.width.toFloat(), target.height() / bitmap.height.toFloat())
+        mediaRect.set(rect.left + dp(5f), rect.top + dp(5f), rect.right - dp(5f), rect.bottom - dp(34f))
+        val scale = max(mediaRect.width() / bitmap.width.toFloat(), mediaRect.height() / bitmap.height.toFloat())
         val width = bitmap.width * scale
         val height = bitmap.height * scale
-        val srcLeft = ((width - target.width()) / 2f / scale).coerceAtLeast(0f)
-        val srcTop = ((height - target.height()) / 2f / scale).coerceAtLeast(0f)
+        val srcLeft = ((width - mediaRect.width()) / 2f / scale).coerceAtLeast(0f)
+        val srcTop = ((height - mediaRect.height()) / 2f / scale).coerceAtLeast(0f)
         val srcRight = (bitmap.width - srcLeft).coerceAtMost(bitmap.width.toFloat())
         val srcBottom = (bitmap.height - srcTop).coerceAtMost(bitmap.height.toFloat())
-        val src = android.graphics.Rect(srcLeft.toInt(), srcTop.toInt(), srcRight.toInt(), srcBottom.toInt())
-        canvas.drawBitmap(bitmap, src, target, bitmapPaint)
+        sourceRect.set(srcLeft.toInt(), srcTop.toInt(), srcRight.toInt(), srcBottom.toInt())
+        canvas.drawBitmap(bitmap, sourceRect, mediaRect, bitmapPaint)
     }
 
     private fun drawWaveform(canvas: Canvas, clip: Clip, rect: RectF) {
-        val target = RectF(rect.left + dp(7f), rect.top + dp(7f), rect.right - dp(7f), rect.bottom - dp(36f))
-        val center = target.centerY()
-        val count = max(18, (target.width() / dp(5f)).toInt())
-        val gap = target.width() / count
+        mediaRect.set(rect.left + dp(7f), rect.top + dp(7f), rect.right - dp(7f), rect.bottom - dp(36f))
+        val center = mediaRect.centerY()
+        val count = max(18, (mediaRect.width() / dp(5f)).toInt())
+        val gap = mediaRect.width() / count
         var seed = clip.title.fold(0x2A1F3C) { acc, char -> acc * 31 + char.code }
         repeat(count) { index ->
             seed = seed * 1103515245 + 12345
             val random = abs(seed % 1000) / 1000f
             val envelope = 0.45f + 0.55f * abs(kotlin.math.sin((index + 1) * 0.43f))
-            val amplitude = target.height() * (0.16f + random * 0.35f) * envelope
-            val x = target.left + gap * (index + 0.5f)
+            val amplitude = mediaRect.height() * (0.16f + random * 0.35f) * envelope
+            val x = mediaRect.left + gap * (index + 0.5f)
             canvas.drawLine(x, center - amplitude, x, center + amplitude, waveformPaint)
         }
     }

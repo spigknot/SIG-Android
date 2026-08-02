@@ -339,6 +339,7 @@ class RemoteSttActivity : AppCompatActivity() {
         override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
     }
 
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -449,6 +450,7 @@ class RemoteSttActivity : AppCompatActivity() {
             if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
                 view.parent.requestDisallowInterceptTouchEvent(false)
             }
+            if (event.actionMasked == android.view.MotionEvent.ACTION_UP) view.performClick()
             false
         }
         liveTranscriptTextView.movementMethod = ScrollingMovementMethod.getInstance()
@@ -459,6 +461,7 @@ class RemoteSttActivity : AppCompatActivity() {
             if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
                 view.parent.requestDisallowInterceptTouchEvent(false)
             }
+            if (event.actionMasked == android.view.MotionEvent.ACTION_UP) view.performClick()
             false
         }
         listOf(historyTextView, statementTextView).forEach { textView ->
@@ -467,6 +470,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
                     view.parent.requestDisallowInterceptTouchEvent(false)
                 }
+                if (event.actionMasked == android.view.MotionEvent.ACTION_UP) view.performClick()
                 false
             }
         }
@@ -848,7 +852,17 @@ class RemoteSttActivity : AppCompatActivity() {
             val process = ProcessBuilder("/system/bin/ping", "-c", "1", "-W", "1", ip)
                 .redirectErrorStream(true)
                 .start()
-            val finished = process.waitFor(1600, TimeUnit.MILLISECONDS)
+            val deadline = SystemClock.elapsedRealtime() + 1600L
+            var finished = false
+            while (SystemClock.elapsedRealtime() < deadline) {
+                try {
+                    process.exitValue()
+                    finished = true
+                    break
+                } catch (_: IllegalThreadStateException) {
+                    Thread.sleep(40L)
+                }
+            }
             if (!finished) {
                 process.destroy()
                 return false
@@ -1043,6 +1057,14 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun recordWhiteMicrophonePcm() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            runOnUiThread {
+                recordingActive = false
+                status.text = "Permissão do microfone removida."
+                resetRecordingButton()
+            }
+            return
+        }
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
         val encoding = AudioFormat.ENCODING_PCM_16BIT
         val minBuffer = AudioRecord.getMinBufferSize(WHITE_RECORDING_SAMPLE_RATE, channelConfig, encoding)
@@ -1342,6 +1364,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun startGrokAudioCaptureIfNeeded() {
         if (liveThread != null) return
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            finishGrokWebSocketPermanently("permissão do microfone removida")
+            return
+        }
         val minBuffer = AudioRecord.getMinBufferSize(
             LIVE_SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -1765,6 +1791,11 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun runLiveMicLoop() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            runOnUiThread { status.text = "Permissão do microfone removida." }
+            stopLiveMicTranscription()
+            return
+        }
         val sampleRate = 16000
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
         val encoding = AudioFormat.ENCODING_PCM_16BIT
@@ -3885,11 +3916,6 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun applyPlaybackSpeed() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            playbackSpeed = 1f
-            updateSpeedButton()
-            return
-        }
         val player = currentPlayer() ?: return
         try {
             player.playbackParams = player.playbackParams.setSpeed(playbackSpeed)
@@ -4488,21 +4514,21 @@ class RemoteSttActivity : AppCompatActivity() {
             runOnUiThread {
                 if (generation != assistantRequestGeneration) return@runOnUiThread
                 result.fold(
-                        onSuccess = { statement ->
+                    onSuccess = { statement ->
                         statementElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
                         statementTaskState = AssistantTaskState.DONE
-                            showStatementText(statement)
-                            updateTextEditorsLock()
+                        showStatementText(statement)
+                        updateTextEditorsLock()
                     },
-                        onFailure = {
+                    onFailure = {
                         statementElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
                         statementTaskState = AssistantTaskState.ERROR
-                            Toast.makeText(
+                        Toast.makeText(
                             this,
                             it.message ?: "Não consegui redigir a oitiva.",
                             Toast.LENGTH_LONG
-                            ).show()
-                            updateTextEditorsLock()
+                        ).show()
+                        updateTextEditorsLock()
                     }
                 )
                 renderLiveProgress()
@@ -5068,24 +5094,26 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun readDuration(uri: Uri): Long {
+        val retriever = MediaMetadataRetriever()
         return try {
-            MediaMetadataRetriever().use { retriever ->
-                retriever.setDataSource(this, uri)
-                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 1L
-            }
+            retriever.setDataSource(this, uri)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 1L
         } catch (_: Exception) {
             1L
+        } finally {
+            retriever.release()
         }
     }
 
     private fun readDurationFromFile(file: File): Long {
+        val retriever = MediaMetadataRetriever()
         return try {
-            MediaMetadataRetriever().use { retriever ->
-                retriever.setDataSource(file.absolutePath)
-                retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 1L
-            }
+            retriever.setDataSource(file.absolutePath)
+            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 1L
         } catch (_: Exception) {
             1L
+        } finally {
+            retriever.release()
         }
     }
 

@@ -329,7 +329,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             REQUEST_PICK_VIDEO -> {
                 val uri = data?.data ?: return
                 try {
-                    contentResolver.takePersistableUriPermission(uri, data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    if (data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) {
+                        contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
                 } catch (_: SecurityException) {
                 }
                 loadSelectedVideo(uri)

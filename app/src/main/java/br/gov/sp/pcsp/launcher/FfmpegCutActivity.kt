@@ -319,9 +319,17 @@ class FfmpegCutActivity : AppCompatActivity() {
         when (requestCode) {
             REQUEST_PICK_MEDIA -> {
                 val uri = data?.data ?: return
-                val flags = data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                 try {
-                    contentResolver.takePersistableUriPermission(uri, flags)
+                    val canRead = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+                    val canWrite = data.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0
+                    when {
+                        canRead && canWrite -> contentResolver.takePersistableUriPermission(
+                            uri,
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                        )
+                        canRead -> contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        canWrite -> contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    }
                 } catch (_: SecurityException) {}
                 loadSelectedMedia(uri)
             }
@@ -1498,14 +1506,6 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun applyPlaybackSpeed() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            if (playbackSpeed != 1f) {
-                playbackSpeed = 1f
-                updateSpeedButton()
-                Toast.makeText(this, "Este Android não permite mudar a velocidade.", Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
         val player = previewPlayer ?: audioPlayer ?: return
         try {
             player.playbackParams = player.playbackParams.setSpeed(playbackSpeed)

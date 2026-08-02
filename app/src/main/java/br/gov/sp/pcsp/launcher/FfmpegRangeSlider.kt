@@ -133,6 +133,7 @@ class FfmpegRangeSlider @JvmOverloads constructor(
             MotionEvent.ACTION_UP,
             MotionEvent.ACTION_CANCEL -> {
                 updateThumb(event.x, true)
+                if (event.actionMasked == MotionEvent.ACTION_UP) performClick()
                 activeThumb = null
                 parent.requestDisallowInterceptTouchEvent(false)
                 return true
@@ -140,6 +141,11 @@ class FfmpegRangeSlider @JvmOverloads constructor(
         }
 
         return super.onTouchEvent(event)
+    }
+
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
 
     private fun updateThumb(x: Float, fromUser: Boolean) {

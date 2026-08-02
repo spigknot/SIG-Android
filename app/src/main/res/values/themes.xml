@@ -1,21 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.Material3.DayNight.NoActionBar" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+<resources>
+    <style name="Theme.SIG.Base" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="android:statusBarColor">@color/black</item>
         <item name="android:navigationBarColor">@color/black</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
         <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
     </style>
-    <style name="Theme.SIG" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Cor da status bar -->
-        <item name="android:statusBarColor">@color/black</item>
-        <item name="android:navigationBarColor">@color/black</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
-        <!-- Garante contraste automático -->
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowLightNavigationBar">false</item>
-    </style>
+    <style name="Theme.SIG" parent="Theme.SIG.Base" />
     <style name="NpuSectionTitle">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>

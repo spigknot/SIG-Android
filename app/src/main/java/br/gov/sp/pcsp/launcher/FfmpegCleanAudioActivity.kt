@@ -441,13 +441,14 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     }
 
     private fun readDuration(file: File): Long {
+        val retriever = android.media.MediaMetadataRetriever()
         return try {
-            android.media.MediaMetadataRetriever().use { retriever ->
-                retriever.setDataSource(file.absolutePath)
-                retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 1L
-            }
+            retriever.setDataSource(file.absolutePath)
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 1L
         } catch (_: Exception) {
             1L
+        } finally {
+            retriever.release()
         }
     }
 

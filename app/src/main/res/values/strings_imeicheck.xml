@@ -1,4 +1,0 @@
-<resources>
-    <string name="imei_api_base">https://alpha.imeicheck.com/api/modelBrandName</string>
-    <string name="imei_api_key"></string>
-</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="decrease_start_time">Diminuir tempo inicial</string>
+    <string name="increase_start_time">Aumentar tempo inicial</string>
+    <string name="decrease_end_time">Diminuir tempo final</string>
+    <string name="increase_end_time">Aumentar tempo final</string>
+</resources>

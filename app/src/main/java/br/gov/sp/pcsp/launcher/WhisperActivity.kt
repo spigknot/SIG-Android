@@ -107,6 +107,7 @@ class WhisperActivity : AppCompatActivity() {
         }
     }
 
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -188,6 +189,7 @@ class WhisperActivity : AppCompatActivity() {
             if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
                 view.parent.requestDisallowInterceptTouchEvent(false)
             }
+            if (event.action == MotionEvent.ACTION_UP) view.performClick()
             false
         }
         logText.setOnTouchListener { view, event ->
@@ -195,6 +197,7 @@ class WhisperActivity : AppCompatActivity() {
             if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
                 view.parent.requestDisallowInterceptTouchEvent(false)
             }
+            if (event.action == MotionEvent.ACTION_UP) view.performClick()
             false
         }
         buttonLanguage.text = selectedLanguage.shortLabel
@@ -354,9 +357,10 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun loadPickedFolder(data: Intent) {
         val treeUri = data.data ?: return
-        val flags = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION
         try {
-            contentResolver.takePersistableUriPermission(treeUri, flags)
+            if (data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) {
+                contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
         } catch (_: SecurityException) {
         }
 

@@ -37,7 +37,7 @@ class ImeiCalculatorActivity : AppCompatActivity() {
     }
 
     private val client = OkHttpClient()
-    private val apiKey = "AC98-7B2E-E1DC-48A0-0F34-46VN"
+    private val apiKey = BuildConfig.IMEICHECK_API_KEY
     private val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale("pt", "BR"))
     private var lastProcessedImei = ""
 
@@ -107,10 +107,12 @@ class ImeiCalculatorActivity : AppCompatActivity() {
         }
     }
 
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
     private fun configureHistoryBox(historyView: TextView) {
         historyView.movementMethod = ScrollingMovementMethod.getInstance()
-        historyView.setOnTouchListener { view, _ ->
+        historyView.setOnTouchListener { view, event ->
             view.parent.requestDisallowInterceptTouchEvent(true)
+            if (event.actionMasked == android.view.MotionEvent.ACTION_UP) view.performClick()
             false
         }
     }
@@ -190,6 +192,10 @@ class ImeiCalculatorActivity : AppCompatActivity() {
     }
 
     private fun fetchImeiInfo(imei: String) {
+        if (apiKey.isBlank()) {
+            resultModel.text = "Chave da consulta IMEI não configurada"
+            return
+        }
         val url =
             "https://alpha.imeicheck.com/api/free_with_key/modelBrandName?key=$apiKey&imei=$imei&format=json"
         val request = Request.Builder().url(url).build()

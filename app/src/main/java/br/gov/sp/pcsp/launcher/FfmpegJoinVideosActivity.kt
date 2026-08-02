@@ -264,7 +264,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
         val loaded = uris.distinct().mapNotNull { uri ->
             try {
-                contentResolver.takePersistableUriPermission(uri, flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
             } catch (_: SecurityException) {
             }
             loadClip(uri)
@@ -1780,10 +1782,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun changeResultPlaybackSpeed(direction: Int) {
         val index = resultSpeedSteps.indexOfFirst { it == resultPlaybackSpeed }.let { if (it >= 0) it else 2 }
         resultPlaybackSpeed = resultSpeedSteps[(index + direction).coerceIn(0, resultSpeedSteps.lastIndex)]
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            resultPreviewPlayer?.let { player ->
-                player.playbackParams = player.playbackParams.setSpeed(resultPlaybackSpeed)
-            }
+        resultPreviewPlayer?.let { player ->
+            player.playbackParams = player.playbackParams.setSpeed(resultPlaybackSpeed)
         }
         updateResultSpeedButtons()
     }

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#000000"
@@ -33,7 +34,7 @@
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="Voltar"
                     android:src="@drawable/ic_arrow_back"
-                    android:tint="#FFFFFFFF" />
+                    app:tint="#FFFFFFFF" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -66,12 +67,13 @@
 
                 <ImageView
                     android:id="@+id/arrow_input_output"
+                    android:contentDescription="@null"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
                     android:layout_marginStart="8dp"
                     android:layout_marginEnd="8dp"
                     android:src="@drawable/ic_arrow_right"
-                    android:tint="#FFFFFFFF"
+                    app:tint="#FFFFFFFF"
                     android:visibility="gone" />
 
                 <ImageButton
@@ -149,7 +151,7 @@
                             android:contentDescription="Desacelerar"
                             android:padding="6dp"
                             android:src="@drawable/ic_ffmpeg_speed_down"
-                            android:tint="#FFFFFFFF" />
+                            app:tint="#FFFFFFFF" />
 
                         <ImageButton
                             android:id="@+id/result_play_pause"
@@ -161,7 +163,7 @@
                             android:contentDescription="Reproduzir"
                             android:padding="4dp"
                             android:src="@drawable/ic_ffmpeg_play"
-                            android:tint="#FFFFFFFF" />
+                            app:tint="#FFFFFFFF" />
 
                         <ImageButton
                             android:id="@+id/result_speed_up"
@@ -171,7 +173,7 @@
                             android:contentDescription="Acelerar"
                             android:padding="6dp"
                             android:src="@drawable/ic_ffmpeg_speed_up"
-                            android:tint="#FFFFFFFF" />
+                            app:tint="#FFFFFFFF" />
                     </LinearLayout>
 
                     <br.gov.sp.pcsp.launcher.FfmpegRangeSlider

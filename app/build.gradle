@@ -3,6 +3,79 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+def zigVersion = "0.16.0"
+def zigArchiveName = "zig-x86_64-windows-${zigVersion}.zip"
+def zigDownloadUrl = "https://ziglang.org/download/${zigVersion}/${zigArchiveName}"
+def zigSha256 = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
+def zigToolsDir = rootProject.file(".tools/zig-${zigVersion}")
+def zigExecutable = new File(zigToolsDir, "zig.exe")
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.isFile()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+def imeiCheckApiKey = System.getenv("IMEICHECK_API_KEY")
+        ?: localProperties.getProperty("IMEICHECK_API_KEY", "")
+def quotedImeiCheckApiKey = '"' + imeiCheckApiKey
+        .replace('\\', '\\\\')
+        .replace('"', '\\"') + '"'
+
+tasks.register("prepareZig") {
+    group = "build setup"
+    description = "Baixa e valida o Zig usado para compilar as ferramentas Vulkan no Windows."
+    onlyIf { System.getProperty("os.name").toLowerCase().contains("windows") }
+    outputs.file(zigExecutable)
+
+    doLast {
+        if (zigExecutable.isFile()) return
+
+        def downloadsDir = rootProject.file(".tools/downloads")
+        def archive = new File(downloadsDir, zigArchiveName)
+        downloadsDir.mkdirs()
+
+        if (!archive.isFile()) {
+            logger.lifecycle("Baixando Zig ${zigVersion}...")
+            new URI(zigDownloadUrl).toURL().withInputStream { input ->
+                archive.withOutputStream { output -> output << input }
+            }
+        }
+
+        def digest = java.security.MessageDigest.getInstance("SHA-256")
+        archive.withInputStream { input ->
+            byte[] buffer = new byte[1024 * 1024]
+            int read
+            while ((read = input.read(buffer)) != -1) digest.update(buffer, 0, read)
+        }
+        def actualSha256 = digest.digest().encodeHex().toString()
+        if (!actualSha256.equalsIgnoreCase(zigSha256)) {
+            archive.delete()
+            throw new GradleException("Checksum inválido no download do Zig: ${actualSha256}")
+        }
+
+        def extractionDir = rootProject.file(".tools/zig-extract-${zigVersion}")
+        delete(extractionDir)
+        copy {
+            from zipTree(archive)
+            into extractionDir
+        }
+        def extractedRoot = extractionDir.listFiles()?.find {
+            it.isDirectory() && it.name.startsWith("zig-x86_64-windows-")
+        }
+        if (extractedRoot == null) {
+            throw new GradleException("Estrutura inesperada no arquivo do Zig.")
+        }
+        delete(zigToolsDir)
+        copy {
+            from extractedRoot
+            into zigToolsDir
+        }
+        delete(extractionDir)
+        if (!zigExecutable.isFile()) {
+            throw new GradleException("O executável do Zig não foi extraído corretamente.")
+        }
+    }
+}
+
 android {
     namespace 'br.gov.sp.pcsp.launcher'
     compileSdk 35
@@ -19,8 +92,14 @@ android {
             abiFilters 'arm64-v8a', 'x86_64'
         }
 
-        buildConfigField "String", "IMEICHECK_API_KEY", "\"AC98-7B2E-E1DC-48A0-0F34-46VN\""
+        buildConfigField "String", "IMEICHECK_API_KEY", quotedImeiCheckApiKey
         buildConfigField "boolean", "ENABLE_NPU_TESTS", "true"
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DSIG_ZIG_EXE=${zigExecutable.absolutePath.replace('\\', '/')}"
+            }
+        }
     }
 
     buildFeatures {
@@ -44,6 +123,12 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+tasks.configureEach { task ->
+    if (task.name.startsWith("configureCMake") || task.name.startsWith("buildCMake")) {
+        task.dependsOn("prepareZig")
     }
 }
 

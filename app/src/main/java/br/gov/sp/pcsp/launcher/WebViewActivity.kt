@@ -55,9 +55,7 @@ class WebViewActivity : AppCompatActivity() {
         val startUrl = intent.getStringExtra(EXTRA_URL) ?: "about:blank"
         webView = findViewById(R.id.webview)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            WebView.setWebContentsDebuggingEnabled(true)
-        }
+        WebView.setWebContentsDebuggingEnabled(true)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
@@ -140,7 +138,7 @@ class WebViewActivity : AppCompatActivity() {
                     error: WebResourceError
                 ) {
                     if (request.isForMainFrame) {
-                        val desc = if (Build.VERSION.SDK_INT >= 23) error.description else "erro"
+                        val desc = error.description
                         Log.e(TAG, "WebView error: $desc (${error.errorCode})")
                         view.loadData(
                             """

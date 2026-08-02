@@ -572,12 +572,17 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     private fun loadPickedFolder(data: Intent) {
         val treeUri = data.data ?: return
-        val flags = data.flags and (
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
         try {
-            contentResolver.takePersistableUriPermission(treeUri, flags)
+            val canRead = data.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+            val canWrite = data.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0
+            when {
+                canRead && canWrite -> contentResolver.takePersistableUriPermission(
+                    treeUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                canRead -> contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                canWrite -> contentResolver.takePersistableUriPermission(treeUri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
         } catch (_: SecurityException) {
         }
 
@@ -1181,11 +1186,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun applyPlaybackSpeed() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            playbackSpeed = 1f
-            updateSpeedButton()
-            return
-        }
         val player = previewPlayer ?: return
         try {
             player.playbackParams = player.playbackParams.setSpeed(playbackSpeed)
@@ -1557,28 +1557,30 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun readDuration(uri: Uri): Long {
+        val retriever = android.media.MediaMetadataRetriever()
         return try {
-            android.media.MediaMetadataRetriever().use { retriever ->
-                retriever.setDataSource(this, uri)
-                retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
-                    ?.toLongOrNull()
-                    ?: 1L
-            }
+            retriever.setDataSource(this, uri)
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+                ?: 1L
         } catch (e: Exception) {
             1L
+        } finally {
+            retriever.release()
         }
     }
 
     private fun readDuration(file: File): Long {
+        val retriever = android.media.MediaMetadataRetriever()
         return try {
-            android.media.MediaMetadataRetriever().use { retriever ->
-                retriever.setDataSource(file.absolutePath)
-                retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
-                    ?.toLongOrNull()
-                    ?: 1L
-            }
+            retriever.setDataSource(file.absolutePath)
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+                ?: 1L
         } catch (e: Exception) {
             1L
+        } finally {
+            retriever.release()
         }
     }
 
