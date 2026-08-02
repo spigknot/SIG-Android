@@ -1382,7 +1382,8 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun vadModelFile(): File {
-        return File(File(modelsDir(), "silero"), VAD_MODEL_NAME)
+        val bundled = NativeDependencyManager.sileroModelFile(this)
+        return if (bundled.isFile) bundled else File(File(modelsDir(), "silero"), VAD_MODEL_NAME)
     }
 
     private fun confirmVadDownload(onReady: () -> Unit) {

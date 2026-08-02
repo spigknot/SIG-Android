@@ -1,8 +1,11 @@
 package br.gov.sp.pcsp.launcher.experimental.npu
 
+import br.gov.sp.pcsp.launcher.NativeDependencyManager
+import br.gov.sp.pcsp.launcher.SigApplication
+
 internal object NpuNativeProbe {
     private val loadError: Throwable? = runCatching {
-        System.loadLibrary("sig_npu_probe")
+        NativeDependencyManager.loadLibrary(SigApplication.appInstance, "sig_npu_probe")
     }.exceptionOrNull()
 
     private external fun diagnose(): String

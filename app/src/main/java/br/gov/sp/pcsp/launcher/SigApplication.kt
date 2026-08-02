@@ -6,6 +6,7 @@ class SigApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         appInstance = this
+        NativeDependencyManager.activateIfInstalled(this)
         Thread {
             AppCacheManager.cleanOlderThanOneDay(this)
             PromptTemplateStore.ensureDefaults()

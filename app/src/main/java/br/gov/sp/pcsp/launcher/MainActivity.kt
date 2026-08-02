@@ -69,6 +69,7 @@ class MainActivity : AppCompatActivity() {
             showLocationRecipientDialog(sendAfterSaving = false)
             true
         }
+        NativeDependencyPrompt.showIfNeeded(this)
     }
 
     override fun onRequestPermissionsResult(

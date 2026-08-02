@@ -3407,13 +3407,9 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun ensureBundledSileroVadModel(): File {
-        val target = File(File(getExternalFilesDir("whisper_models"), "silero"), SILERO_VAD_MODEL_NAME)
-        if (target.exists() && target.length() > 100_000L) return target
-        target.parentFile?.mkdirs()
-        assets.open("silero/$SILERO_VAD_MODEL_NAME").use { input ->
-            FileOutputStream(target).use { output -> input.copyTo(output) }
+        return NativeDependencyManager.sileroModelFile(this).also {
+            check(it.isFile && it.length() > 100_000L) { "Modelo Silero não instalado." }
         }
-        return target
     }
 
     private fun prepareOriginalUpload(

@@ -2,7 +2,7 @@ package br.gov.sp.pcsp.launcher
 
 object WhisperNative {
     init {
-        System.loadLibrary("sig_whisper")
+        NativeDependencyManager.loadLibrary(SigApplication.appInstance, "sig_whisper")
     }
 
     interface Callback {

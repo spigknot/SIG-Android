@@ -19,6 +19,8 @@ def imeiCheckApiKey = System.getenv("IMEICHECK_API_KEY")
 def quotedImeiCheckApiKey = '"' + imeiCheckApiKey
         .replace('\\', '\\\\')
         .replace('"', '\\"') + '"'
+def buildNativeComponents = providers.gradleProperty("buildNativeComponents")
+        .orNull?.toBoolean() ?: false
 
 tasks.register("prepareZig") {
     group = "build setup"
@@ -85,19 +87,20 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 20
-        versionName "1.457"
-
-        ndk {
-            abiFilters 'arm64-v8a', 'x86_64'
-        }
+        versionCode 21
+        versionName "1.458"
 
         buildConfigField "String", "IMEICHECK_API_KEY", quotedImeiCheckApiKey
         buildConfigField "boolean", "ENABLE_NPU_TESTS", "true"
 
-        externalNativeBuild {
-            cmake {
-                arguments "-DSIG_ZIG_EXE=${zigExecutable.absolutePath.replace('\\', '/')}"
+        if (buildNativeComponents) {
+            ndk {
+                abiFilters 'arm64-v8a', 'x86_64'
+            }
+            externalNativeBuild {
+                cmake {
+                    arguments "-DSIG_ZIG_EXE=${zigExecutable.absolutePath.replace('\\', '/')}"
+                }
             }
         }
     }
@@ -106,10 +109,12 @@ android {
         buildConfig true
     }
 
-    externalNativeBuild {
-        cmake {
-            path file("src/main/cpp/CMakeLists.txt")
-            version "3.22.1"
+    if (buildNativeComponents) {
+        externalNativeBuild {
+            cmake {
+                path file("src/main/cpp/CMakeLists.txt")
+                version "3.22.1"
+            }
         }
     }
 
@@ -142,7 +147,7 @@ dependencies {
     implementation 'androidx.browser:browser:1.8.0'  // ← Custom Tabs
     implementation 'androidx.documentfile:documentfile:1.0.1'
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
-    implementation files('libs/ffmpeg-kit-6.1.1-gpl-x264-16kb.aar')
+    implementation files('libs/ffmpeg-kit-api.jar')
     implementation("com.arthenica:smart-exception-java:0.2.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.10.0")
