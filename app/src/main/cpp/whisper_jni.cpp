@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -19,6 +20,7 @@
 #include "whisper.h"
 #include "ggml.h"
 #include "ggml-backend.h"
+#include "webrtc/common_audio/vad/include/webrtc_vad.h"
 
 #define LOG_TAG "SIGWhisper"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
@@ -30,6 +32,11 @@ static std::string g_last_error;
 static std::string g_last_load_log;
 
 extern "C" const char * sig_opencl_loader_last_error();
+
+static const char * backend_label(int backend);
+static ggml_backend_dev_t find_gpu_device(int backend, int * gpu_index, std::string * name);
+static bool can_initialize_gpu_backend(int backend_kind, int & gpu_index, std::string & error);
+static void configure_vulkan_memory_limit(std::string & log);
 
 static int pipe_stderr[2];
 static pthread_t thread_stderr;
@@ -216,6 +223,186 @@ static bool read_wav_mono_16k(const char * path, std::vector<float> & samples, s
     samples.resize(pcm.size());
     for (size_t i = 0; i < pcm.size(); ++i) {
         samples[i] = pcm[i] / 32768.0f;
+    }
+    return true;
+}
+
+static bool write_wav_mono_16k(const char * path, const std::vector<float> & samples, std::string & error) {
+    FILE * file = fopen(path, "wb");
+    if (!file) {
+        error = "não consegui criar o WAV filtrado";
+        return false;
+    }
+
+    const uint32_t data_size = static_cast<uint32_t>(samples.size() * sizeof(int16_t));
+    const uint32_t riff_size = 36 + data_size;
+    const uint16_t format = 1;
+    const uint16_t channels = 1;
+    const uint32_t sample_rate = WHISPER_SAMPLE_RATE;
+    const uint32_t byte_rate = sample_rate * channels * sizeof(int16_t);
+    const uint16_t block_align = channels * sizeof(int16_t);
+    const uint16_t bits_per_sample = 16;
+    fwrite("RIFF", 1, 4, file);
+    fwrite(&riff_size, sizeof(riff_size), 1, file);
+    fwrite("WAVEfmt ", 1, 8, file);
+    const uint32_t fmt_size = 16;
+    fwrite(&fmt_size, sizeof(fmt_size), 1, file);
+    fwrite(&format, sizeof(format), 1, file);
+    fwrite(&channels, sizeof(channels), 1, file);
+    fwrite(&sample_rate, sizeof(sample_rate), 1, file);
+    fwrite(&byte_rate, sizeof(byte_rate), 1, file);
+    fwrite(&block_align, sizeof(block_align), 1, file);
+    fwrite(&bits_per_sample, sizeof(bits_per_sample), 1, file);
+    fwrite("data", 1, 4, file);
+    fwrite(&data_size, sizeof(data_size), 1, file);
+    for (float value : samples) {
+        const float clamped = std::max(-1.0f, std::min(1.0f, value));
+        const int16_t pcm = static_cast<int16_t>(std::lrintf(clamped * 32767.0f));
+        fwrite(&pcm, sizeof(pcm), 1, file);
+    }
+    fclose(file);
+    return true;
+}
+
+static void append_speech_frame(std::vector<float> & output, const std::vector<float> & input, size_t start, size_t end, bool & had_segment) {
+    constexpr size_t kSeparatorSamples = WHISPER_SAMPLE_RATE / 10;
+    if (had_segment) output.insert(output.end(), kSeparatorSamples, 0.0f);
+    output.insert(output.end(), input.begin() + static_cast<long>(start), input.begin() + static_cast<long>(end));
+    had_segment = true;
+}
+
+static bool filter_with_webrtc_vad(const std::vector<float> & input, int aggressiveness, std::vector<float> & output, int & segments, std::string & error) {
+    constexpr int kFrameSamples = 480; // 30 ms at 16 kHz.
+    std::vector<int16_t> pcm(input.size());
+    for (size_t i = 0; i < input.size(); ++i) {
+        pcm[i] = static_cast<int16_t>(std::lrintf(std::max(-1.0f, std::min(1.0f, input[i])) * 32767.0f));
+    }
+    VadInst * vad = WebRtcVad_Create();
+    if (vad == nullptr || WebRtcVad_Init(vad) != 0 || WebRtcVad_set_mode(vad, aggressiveness) != 0) {
+        if (vad != nullptr) WebRtcVad_Free(vad);
+        error = "não consegui inicializar o WebRTC VAD";
+        return false;
+    }
+
+    const size_t frame_count = (pcm.size() + kFrameSamples - 1) / kFrameSamples;
+    std::vector<bool> speech(frame_count, false);
+    std::vector<int16_t> frame(kFrameSamples, 0);
+    for (size_t i = 0; i < frame_count; ++i) {
+        const size_t start = i * kFrameSamples;
+        const size_t count = std::min<size_t>(kFrameSamples, pcm.size() - start);
+        std::fill(frame.begin(), frame.end(), 0);
+        std::copy_n(pcm.begin() + static_cast<long>(start), count, frame.begin());
+        speech[i] = WebRtcVad_Process(vad, WHISPER_SAMPLE_RATE, frame.data(), kFrameSamples) == 1;
+    }
+    WebRtcVad_Free(vad);
+
+    constexpr int kPaddingFrames = 7; // 210 ms around detected speech.
+    for (size_t i = 0; i < frame_count; ++i) {
+        if (!speech[i]) continue;
+        const size_t from = i > kPaddingFrames ? i - kPaddingFrames : 0;
+        const size_t to = std::min(frame_count, i + kPaddingFrames + 1);
+        for (size_t j = from; j < to; ++j) speech[j] = true;
+    }
+    bool in_segment = false;
+    bool had_segment = false;
+    size_t segment_start = 0;
+    for (size_t i = 0; i <= frame_count; ++i) {
+        const bool active = i < frame_count && speech[i];
+        if (active && !in_segment) {
+            in_segment = true;
+            segment_start = i * kFrameSamples;
+        } else if (!active && in_segment) {
+            const size_t end = std::min(input.size(), i * kFrameSamples);
+            if (end > segment_start) {
+                append_speech_frame(output, input, segment_start, end, had_segment);
+                ++segments;
+            }
+            in_segment = false;
+        }
+    }
+    if (output.empty()) {
+        error = "WebRTC VAD não encontrou fala";
+        return false;
+    }
+    return true;
+}
+
+static bool filter_with_silero_vad(const std::vector<float> & input, const char * model_path, bool request_gpu, int aggressiveness, std::vector<float> & output, int & segments, std::string & backend, std::string & error) {
+    whisper_vad_context_params params = whisper_vad_default_context_params();
+    params.n_threads = 4;
+    params.use_gpu = false;
+    params.gpu_device = 0;
+    backend = "CPU";
+    if (request_gpu) {
+        // The VAD graph uses a separate GGML context. Some Android GPU drivers can
+        // terminate the process while compiling that small graph, before JNI has a
+        // chance to return an initialization error. Keep the explicit option safe
+        // until this backend has a per-device stability probe.
+        backend = "CPU (fallback preventivo; GPU VAD instável neste dispositivo)";
+    }
+    whisper_vad_context * context = whisper_vad_init_from_file_with_params(model_path, params);
+    if (context == nullptr && params.use_gpu) {
+        params.use_gpu = false;
+        params.gpu_device = 0;
+        backend = "CPU (fallback; GPU não inicializou)";
+        context = whisper_vad_init_from_file_with_params(model_path, params);
+    }
+    if (context == nullptr) {
+        error = "não consegui carregar o modelo Silero VAD";
+        return false;
+    }
+
+    whisper_vad_params vad_params = whisper_vad_default_params();
+    switch (aggressiveness) {
+        case 0:
+            vad_params.threshold = 0.40f;
+            vad_params.min_speech_duration_ms = 120;
+            vad_params.min_silence_duration_ms = 500;
+            vad_params.speech_pad_ms = 200;
+            break;
+        case 1:
+            vad_params.threshold = 0.50f;
+            vad_params.min_speech_duration_ms = 200;
+            vad_params.min_silence_duration_ms = 350;
+            vad_params.speech_pad_ms = 120;
+            break;
+        case 2:
+            vad_params.threshold = 0.60f;
+            vad_params.min_speech_duration_ms = 300;
+            vad_params.min_silence_duration_ms = 250;
+            vad_params.speech_pad_ms = 80;
+            break;
+        case 3:
+            vad_params.threshold = 0.70f;
+            vad_params.min_speech_duration_ms = 400;
+            vad_params.min_silence_duration_ms = 150;
+            vad_params.speech_pad_ms = 40;
+            break;
+        default:
+            error = "nível de agressividade VAD inválido";
+            whisper_vad_free(context);
+            return false;
+    }
+    vad_params.samples_overlap = 0.0f;
+    whisper_vad_segments * detected = whisper_vad_segments_from_samples(context, vad_params, input.data(), static_cast<int>(input.size()));
+    if (detected == nullptr) {
+        whisper_vad_free(context);
+        error = "Silero VAD não conseguiu analisar o áudio";
+        return false;
+    }
+    bool had_segment = false;
+    segments = whisper_vad_segments_n_segments(detected);
+    for (int i = 0; i < segments; ++i) {
+        // whisper.cpp stores VAD timestamps in centiseconds, not seconds.
+        const size_t start = std::min(input.size(), static_cast<size_t>(std::max(0.0f, whisper_vad_segments_get_segment_t0(detected, i)) * WHISPER_SAMPLE_RATE / 100.0f));
+        const size_t end = std::min(input.size(), static_cast<size_t>(std::max(0.0f, whisper_vad_segments_get_segment_t1(detected, i)) * WHISPER_SAMPLE_RATE / 100.0f));
+        if (end > start) append_speech_frame(output, input, start, end, had_segment);
+    }
+    whisper_vad_free_segments(detected);
+    whisper_vad_free(context);
+    if (output.empty()) {
+        error = "Silero VAD não encontrou fala";
+        return false;
     }
     return true;
 }
@@ -628,6 +815,57 @@ Java_br_gov_sp_pcsp_launcher_WhisperNative_transcribe(
     }
 
     return env->NewStringUTF(result.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_br_gov_sp_pcsp_launcher_WhisperNative_filterVad(
+        JNIEnv * env,
+        jobject,
+        jstring inputWavPath,
+        jstring outputWavPath,
+        jstring sileroModelPath,
+        jint mode,
+        jint aggressiveness) {
+    const char * input_path = env->GetStringUTFChars(inputWavPath, nullptr);
+    const char * output_path = env->GetStringUTFChars(outputWavPath, nullptr);
+    const char * model_path = env->GetStringUTFChars(sileroModelPath, nullptr);
+    std::vector<float> input;
+    std::vector<float> filtered;
+    std::string error;
+    if (!read_wav_mono_16k(input_path, input, error)) {
+        env->ReleaseStringUTFChars(inputWavPath, input_path);
+        env->ReleaseStringUTFChars(outputWavPath, output_path);
+        env->ReleaseStringUTFChars(sileroModelPath, model_path);
+        return env->NewStringUTF(("ERRO|" + error).c_str());
+    }
+
+    int segments = 0;
+    std::string backend;
+    bool ok = false;
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        if (aggressiveness < 0 || aggressiveness > 3) {
+            error = "nível de agressividade VAD inválido";
+        } else if (mode == 3) {
+            backend = "WebRTC";
+            ok = filter_with_webrtc_vad(input, aggressiveness, filtered, segments, error);
+        } else {
+            if (model_path == nullptr || model_path[0] == '\0') {
+                error = "modelo Silero VAD ausente";
+            } else {
+                ok = filter_with_silero_vad(input, model_path, mode == 2, aggressiveness, filtered, segments, backend, error);
+            }
+        }
+    }
+    if (ok) ok = write_wav_mono_16k(output_path, filtered, error);
+    env->ReleaseStringUTFChars(inputWavPath, input_path);
+    env->ReleaseStringUTFChars(outputWavPath, output_path);
+    env->ReleaseStringUTFChars(sileroModelPath, model_path);
+    if (!ok) return env->NewStringUTF(("ERRO|" + error).c_str());
+
+    std::ostringstream result;
+    result << "OK|" << input.size() << "|" << filtered.size() << "|" << segments << "|" << backend;
+    return env->NewStringUTF(result.str().c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -77,9 +77,19 @@ endif()
 
 add_library(sig_whisper SHARED whisper_jni.cpp)
 
+file(GLOB_RECURSE SIG_WEBRTC_VAD_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/webrtcvad/webrtc/common_audio/signal_processing/*.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/webrtcvad/webrtc/common_audio/third_party/*.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/webrtcvad/webrtc/common_audio/vad/*.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/webrtcvad/webrtc/rtc_base/checks.cc")
+target_sources(sig_whisper PRIVATE ${SIG_WEBRTC_VAD_SOURCES})
+
 target_include_directories(sig_whisper PRIVATE
         whisper.cpp/include
-        whisper.cpp/ggml/include)
+        whisper.cpp/ggml/include
+        webrtcvad)
+
+target_compile_definitions(sig_whisper PRIVATE WEBRTC_POSIX)
 
 target_compile_definitions(sig_whisper PRIVATE
         SIG_BUILD_GGML_OPENCL=1

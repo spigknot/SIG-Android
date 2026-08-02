@@ -71,6 +71,7 @@
                 android:visibility="gone">
 
                 <TextView
+                    android:id="@+id/advanced_model"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:gravity="center"
@@ -710,6 +711,59 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/vad_mode_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="VAD:"
+                    android:textColor="#99FFFFFF"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/button_vad_mode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:paddingStart="11dp"
+                    android:paddingEnd="11dp"
+                    android:text="Sem VAD"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/button_vad_level"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:paddingStart="11dp"
+                    android:paddingEnd="11dp"
+                    android:text="Nível: 1"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/advanced_toggle"
                 android:layout_width="wrap_content"
@@ -759,7 +813,7 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
                     android:fontFamily="monospace"
-                    android:text="Modelo: granite-speech-4.1-2b-nar"
+                    android:text="Modelo: granite-speech-4.1-2b-plus-ar"
                     android:textColor="#DDFFFFFF"
                     android:textSize="11sp" />
 
@@ -883,10 +937,7 @@
                     android:maxLines="30"
                     android:minLines="5"
                     android:overScrollMode="ifContentScrolls"
-                    android:paddingStart="10dp"
-                    android:paddingTop="10dp"
-                    android:paddingEnd="10dp"
-                    android:paddingBottom="44dp"
+                    android:padding="10dp"
                     android:scrollbars="vertical"
                     android:textColor="#FFB8F7FF"
                     android:inputType="textMultiLine|textCapSentences"
@@ -903,25 +954,30 @@
                 android:layout_marginTop="2dp"
                 android:visibility="gone">
 
-                <TextView
+                <ImageButton
                     android:id="@+id/button_recover_transcript"
-                    android:layout_width="wrap_content"
+                    android:layout_width="30dp"
                     android:layout_height="30dp"
                     android:background="@drawable/ffmpeg_outline_button_bg"
                     android:clickable="true"
+                    android:contentDescription="Recuperar transcrição"
                     android:focusable="true"
                     android:foreground="?attr/selectableItemBackground"
-                    android:gravity="center"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:text="RECUPERAR TRANSCRIÇÃO"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="9sp"
-                    android:textStyle="bold" />
+                    android:padding="6dp"
+                    android:src="@drawable/ic_reload_outline" />
 
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp" />
+                <CheckBox
+                    android:id="@+id/checkbox_timestamps"
+                    android:layout_width="wrap_content"
+                    android:layout_height="30dp"
+                    android:layout_gravity="start|center_vertical"
+                    android:layout_marginStart="35dp"
+                    android:gravity="center_vertical"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="3dp"
+                    android:text="Timestamps"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="9sp" />
 
                 <TextView
                     android:id="@+id/button_history"

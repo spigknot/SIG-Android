@@ -174,5 +174,6 @@
             </intent-filter>
         </activity>
         <activity android:name=".ToolsActivity" android:screenOrientation="portrait" android:exported="false" />
+        <activity android:name=".CalculatorToolsActivity" android:screenOrientation="portrait" android:exported="false" />
     </application>
 </manifest>

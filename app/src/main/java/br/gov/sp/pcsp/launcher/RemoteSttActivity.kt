@@ -100,6 +100,9 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var inputFrom: EditText
     private lateinit var inputTo: EditText
     private lateinit var prepareModeButtons: View
+    private lateinit var vadModeRow: View
+    private lateinit var buttonVadMode: TextView
+    private lateinit var buttonVadLevel: TextView
     private lateinit var videoPrepareWarning: TextView
     private lateinit var buttonCompactFiles: TextView
     private lateinit var buttonPrepareHelp: TextView
@@ -108,6 +111,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var advancedToggle: TextView
     private lateinit var advancedPanel: View
     private lateinit var advancedServer: TextView
+    private lateinit var advancedModel: TextView
     private lateinit var advancedConversion: TextView
     private lateinit var selectedFile: TextView
     private lateinit var selectedListBox: View
@@ -146,7 +150,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var buttonCopyHistory: View
     private lateinit var buttonPasteStatement: View
     private lateinit var buttonCopyStatement: View
-    private lateinit var buttonRecoverTranscript: TextView
+    private lateinit var buttonRecoverTranscript: ImageButton
+    private lateinit var checkboxTimestamps: CheckBox
     private lateinit var buttonClearTranscript: TextView
     private lateinit var buttonClearHistory: TextView
     private lateinit var buttonClearStatement: TextView
@@ -207,9 +212,13 @@ class RemoteSttActivity : AppCompatActivity() {
     private var lastSession: OutputSession? = null
     private var lastTranscriptionResults: List<TranscriptionResult> = emptyList()
     private var lastReceivedTranscription: String = ""
+    private var timestampPlainTranscript: String = ""
+    private var timestampedTranscript: String = ""
     private var zipFile: File? = null
     private var playWhenSeekCompletes = false
     private var selectedPrepareMode: PrepareMode? = null
+    private var selectedVadMode: VadMode = VadMode.NONE
+    private var selectedVadLevel: Int = 1
     private var serverBaseUrl: String = ""
     private var serverFallbackIps: List<String> = emptyList()
     private var serverIpIndex = -1
@@ -358,6 +367,9 @@ class RemoteSttActivity : AppCompatActivity() {
         inputFrom = findViewById(R.id.input_from)
         inputTo = findViewById(R.id.input_to)
         prepareModeButtons = findViewById(R.id.prepare_mode_buttons)
+        vadModeRow = findViewById(R.id.vad_mode_row)
+        buttonVadMode = findViewById(R.id.button_vad_mode)
+        buttonVadLevel = findViewById(R.id.button_vad_level)
         videoPrepareWarning = findViewById(R.id.video_prepare_warning)
         buttonCompactFiles = findViewById(R.id.button_compact_files)
         buttonPrepareHelp = findViewById(R.id.button_prepare_help)
@@ -366,6 +378,7 @@ class RemoteSttActivity : AppCompatActivity() {
         advancedToggle = findViewById(R.id.advanced_toggle)
         advancedPanel = findViewById(R.id.advanced_panel)
         advancedServer = findViewById(R.id.advanced_server)
+        advancedModel = findViewById(R.id.advanced_model)
         advancedConversion = findViewById(R.id.advanced_conversion)
         selectedFile = findViewById(R.id.selected_file)
         selectedListBox = findViewById(R.id.selected_list_box)
@@ -419,6 +432,8 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonPasteStatement = findViewById(R.id.button_paste_statement)
         buttonCopyStatement = findViewById(R.id.button_copy_statement)
         buttonRecoverTranscript = findViewById(R.id.button_recover_transcript)
+        checkboxTimestamps = findViewById(R.id.checkbox_timestamps)
+        updateTimestampControl()
         buttonClearTranscript = findViewById(R.id.button_clear_transcript)
         buttonClearHistory = findViewById(R.id.button_clear_history)
         buttonClearStatement = findViewById(R.id.button_clear_statement)
@@ -505,6 +520,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         buttonCopyStatement.setOnClickListener { copyTextToClipboard(statementTextView, "Oitiva") }
         buttonRecoverTranscript.setOnClickListener { recoverLastTranscription() }
+        checkboxTimestamps.setOnCheckedChangeListener { _, checked -> toggleTranscriptTimestamps(checked) }
         buttonClearTranscript.setOnClickListener { clearTextWithConfirmation(liveTranscriptTextView, "Transcrição") }
         buttonClearHistory.setOnClickListener { clearTextWithConfirmation(historyTextView, "Histórico") }
         buttonClearStatement.setOnClickListener { clearTextWithConfirmation(statementTextView, "Oitiva") }
@@ -532,6 +548,15 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonPrepareHelp.setOnClickListener { showPrepareModeHelp() }
         buttonReadyFiles.setOnClickListener { selectPrepareMode(PrepareMode.READY) }
         buttonOriginalFiles.setOnClickListener { selectPrepareMode(PrepareMode.ORIGINAL) }
+        selectedVadMode = VadMode.fromPreference(
+            getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE).getString(VAD_MODE_KEY, VadMode.NONE.preferenceKey)
+        )
+        selectedVadLevel = getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE)
+            .getInt(VAD_LEVEL_KEY, 1)
+            .coerceIn(0, 3)
+        updateVadModeButton()
+        buttonVadMode.setOnClickListener { showVadModeMenu() }
+        buttonVadLevel.setOnClickListener { showVadLevelMenu() }
         advancedToggle.setOnClickListener { toggleAdvancedPanel() }
         setupLiveIntervalControls()
         updateSpeedButton()
@@ -1101,7 +1126,7 @@ class RemoteSttActivity : AppCompatActivity() {
         liveFullPcmFile?.delete()
         liveFullPcmFile = if (useGrokWebSocket) null else File(cacheDir, "live_full_${System.currentTimeMillis()}.pcm")
         liveUsesGrokWebSocket = useGrokWebSocket
-        if (useGrokWebSocket) liveDraftIntervalMillis = GROK_WEBSOCKET_CHUNK_MILLIS
+        if (useGrokWebSocket) liveDraftIntervalMillis = grokWebSocketChunkMillis()
         liveTranscribing = true
         updateTextEditorsLock()
         liveFinalizing = false
@@ -1290,7 +1315,7 @@ class RemoteSttActivity : AppCompatActivity() {
             val replay = if (reconnectSucceeded) grokReplayBuffer.snapshot() else ByteArray(0)
             var offset = 0
             while (offset < replay.size) {
-                val length = minOf(GROK_WEBSOCKET_CHUNK_BYTES, replay.size - offset)
+                val length = minOf(grokWebSocketChunkBytes(), replay.size - offset)
                 if (!webSocket.send(replay.toByteString(offset, length))) {
                     replaySucceeded = false
                     break
@@ -1331,7 +1356,7 @@ class RemoteSttActivity : AppCompatActivity() {
             LIVE_SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
             AudioFormat.ENCODING_PCM_16BIT,
-            maxOf(minBuffer * 2, GROK_WEBSOCKET_CHUNK_BYTES * 2)
+            maxOf(minBuffer * 2, grokWebSocketChunkBytes() * 2)
         )
         if (recorder.state != AudioRecord.STATE_INITIALIZED) {
             recorder.release()
@@ -1340,7 +1365,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         liveAudioRecord = recorder
         liveThread = Thread {
-            val buffer = ByteArray(GROK_WEBSOCKET_CHUNK_BYTES)
+            val buffer = ByteArray(grokWebSocketChunkBytes())
             try {
                 recorder.startRecording()
                 while (liveTranscribing && liveUsesGrokWebSocket) {
@@ -1454,11 +1479,12 @@ class RemoteSttActivity : AppCompatActivity() {
         webSocket.close(1000, "Concluído")
         emitGrokConnectionEvent(GrokConnectionEvent.DISCONNECTED)
         runOnUiThread {
-            lastReceivedTranscription = mergedFinal
+            storeReceivedTranscription(mergedFinal)
             transcriptionTaskState = AssistantTaskState.DONE
             refiningTaskState = AssistantTaskState.IDLE
             renderLiveProgress()
             updateLiveTerminalText()
+            renderTranscriptAccordingToTimestampSelection()
             status.text = ""
             updateTextEditorsLock()
         }
@@ -1928,7 +1954,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun sendGrokApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
         val apiKey = GrokApiSettings.apiKey()
-        require(apiKey.isNotBlank()) { "Insira a chave API do Grok nas configurações." }
+        require(GrokApiSettings.isPlausibleXaiKey(apiKey)) { "A chave API da xAI salva nas configurações é inválida." }
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("language", selectedLiveLanguage.serverCode)
@@ -2021,8 +2047,8 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonLiveIntervalMinus.visibility = if (grokTranscription) View.GONE else View.VISIBLE
         buttonLiveIntervalPlus.visibility = if (grokTranscription) View.GONE else View.VISIBLE
         if (grokTranscription) {
-            liveDraftIntervalMillis = GROK_WEBSOCKET_CHUNK_MILLIS
-        } else if (liveDraftIntervalMillis == GROK_WEBSOCKET_CHUNK_MILLIS) {
+            liveDraftIntervalMillis = grokWebSocketChunkMillis()
+        } else if (liveDraftIntervalMillis == grokWebSocketChunkMillis()) {
             liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
         }
         refreshLiveIntervalInput()
@@ -2333,6 +2359,9 @@ class RemoteSttActivity : AppCompatActivity() {
         historyTextView.setMinLines(if (draft.history.isBlank()) 5 else 0)
         statementTextView.setMinLines(if (draft.statement.isBlank()) 5 else 0)
         lastReceivedTranscription = draft.lastTranscription
+        timestampPlainTranscript = draft.lastTranscription.ifBlank { draft.transcript }
+        timestampedTranscript = ""
+        updateTimestampControl()
         assistantNames = draft.personNames
         buttonPersonSelector.text = draft.selectedPerson.ifBlank { "Partes" }
         terminalText.text = draft.terminal
@@ -2448,6 +2477,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun updatePrepareModeButtons() {
         prepareModeButtons.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
+        vadModeRow.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
         videoPrepareWarning.visibility = View.GONE
         advancedToggle.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
         if (selectedItems.isEmpty()) advancedPanel.visibility = View.GONE
@@ -2464,6 +2494,49 @@ class RemoteSttActivity : AppCompatActivity() {
         )
     }
 
+    private fun showVadModeMenu() {
+        PopupMenu(this, buttonVadMode).apply {
+            VadMode.entries.forEach { mode ->
+                menu.add(mode.label).setOnMenuItemClickListener {
+                    selectedVadMode = mode
+                    getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE)
+                        .edit()
+                        .putString(VAD_MODE_KEY, mode.preferenceKey)
+                        .apply()
+                    updateVadModeButton()
+                    true
+                }
+            }
+            show()
+        }
+    }
+
+    private fun updateVadModeButton() {
+        if (::buttonVadMode.isInitialized) buttonVadMode.text = selectedVadMode.label
+        if (::buttonVadLevel.isInitialized) {
+            buttonVadLevel.text = "Nível: $selectedVadLevel"
+            buttonVadLevel.isEnabled = selectedVadMode != VadMode.NONE
+            buttonVadLevel.alpha = if (buttonVadLevel.isEnabled) 1f else 0.38f
+        }
+    }
+
+    private fun showVadLevelMenu() {
+        PopupMenu(this, buttonVadLevel).apply {
+            (0..3).forEach { level ->
+                menu.add(level.toString()).setOnMenuItemClickListener {
+                    selectedVadLevel = level
+                    getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE)
+                        .edit()
+                        .putInt(VAD_LEVEL_KEY, level)
+                        .apply()
+                    updateVadModeButton()
+                    true
+                }
+            }
+            show()
+        }
+    }
+
     private fun toggleAdvancedPanel() {
         advancedPanel.visibility = if (advancedPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
         updateAdvancedInfo()
@@ -2473,6 +2546,7 @@ class RemoteSttActivity : AppCompatActivity() {
         if (!::advancedServer.isInitialized) return
         val base = if (serverBaseUrl.isBlank()) "$DEFAULT_SERVER_IP:$SERVER_PORT" else serverBaseUrl.removePrefix("http://")
         advancedServer.text = "Servidor: $base"
+        advancedModel.text = "Modelo: ${TranscriptionModelStore.selectedConfig().modelName}"
         advancedConversion.text = "Conversão: paralela, ${conversionParallelism()} por vez (núcleos - 2)"
     }
 
@@ -2585,9 +2659,12 @@ class RemoteSttActivity : AppCompatActivity() {
         clearOutputResult()
         setProcessing(true)
         val startedAt = SystemClock.elapsedRealtime()
-        val terminalLines = newTerminalSession("$ granite-speech --server $serverBaseUrl --endpoint /transcribe")
+        val terminalLines = newTerminalSession(
+            "$ stt-remoto --server ${TranscriptionModelStore.selectedConfig().url} --endpoint /transcribe"
+        )
         val logLines = StringBuilder()
         val results = mutableListOf<TranscriptionResult>()
+        val vadStats = VadRunStats()
         val serverStartedAt = AtomicLong(0L)
         val serverFinishedAt = AtomicLong(0L)
 
@@ -2598,7 +2675,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 val transcriptionDir = File(sessionDir, "Transcricoes").apply { mkdirs() }
                 val tempDir = File(cacheDir, "granite_speech_temp_${System.currentTimeMillis()}").apply { mkdirs() }
                 appendTerminal(terminalLines, "temporários: ${tempDir.absolutePath}")
-                appendLog(logLines, "Servidor: $serverBaseUrl")
+                appendLog(logLines, "Servidor: ${TranscriptionModelStore.selectedConfig().url}")
                 appendLog(logLines, "Pasta temporária: ${tempDir.absolutePath}")
                 appendLog(logLines, "Arquivos: ${items.size}")
                 appendLog(logLines, "Preparo: ${prepareMode.label}")
@@ -2617,7 +2694,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 val uploadExecutor = Executors.newFixedThreadPool(uploadParallelism)
                 val uploadCompletion = ExecutorCompletionService<TranscriptionResult>(uploadExecutor)
                 items.forEachIndexed { index, item ->
-                    prepareCompletion.submit(prepareUploadTask(items, prepareMode, tempDir, terminalLines, index, item))
+                    prepareCompletion.submit(prepareUploadTask(items, prepareMode, tempDir, terminalLines, index, item, vadStats))
                 }
 
                 var totalSentSeconds = 0.0
@@ -2652,7 +2729,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 txtFile.writeText(finalText, Charsets.UTF_8)
                 htmlFile.writeText(buildHtml(orderedResults), Charsets.UTF_8)
                 val serverElapsedMs = calculateServerElapsedMs(serverStartedAt, serverFinishedAt)
-                val report = buildReport(items.size, totalSentSeconds, elapsedMs, serverElapsedMs, prepareMode)
+                val report = buildReport(items.size, totalSentSeconds, elapsedMs, serverElapsedMs, prepareMode, vadStats)
                 appendLog(logLines, report)
                 logFile.writeText(logLines.toString(), Charsets.UTF_8)
                 terminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
@@ -2668,7 +2745,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     buttonOutputFolder.visibility = View.GONE
                     if (whiteRecording) {
                         val transcript = orderedResults.firstOrNull()?.text.orEmpty().trim()
-                        lastReceivedTranscription = transcript
+                        storeReceivedTranscription(transcript, orderedResults.firstOrNull()?.timestampedText.orEmpty())
                         replaceLiveTranscript(transcript)
                         transcriptionTaskState = AssistantTaskState.DONE
                         renderLiveProgress()
@@ -2676,8 +2753,11 @@ class RemoteSttActivity : AppCompatActivity() {
                         terminalText.visibility = View.GONE
                     } else {
                         val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
-                        lastReceivedTranscription = transcriptDisplay
-                        liveTranscriptTextView.setText(transcriptDisplay)
+                        storeReceivedTranscription(
+                            transcriptDisplay,
+                            buildTimestampedDisplayText(orderedResults)
+                        )
+                        renderTranscriptAccordingToTimestampSelection()
                         liveTranscriptTextView.setMinLines(0)
                         liveTranscriptTextView.visibility = View.VISIBLE
                         liveTranscriptClipboardActions.visibility = View.VISIBLE
@@ -2727,7 +2807,8 @@ class RemoteSttActivity : AppCompatActivity() {
         tempDir: File,
         terminalLines: StringBuilder,
         index: Int,
-        item: MediaItem
+        item: MediaItem,
+        vadStats: VadRunStats
     ): Callable<PreparedUpload> {
         return Callable {
             ensureNotCancelled()
@@ -2744,7 +2825,7 @@ class RemoteSttActivity : AppCompatActivity() {
             val startMs = if (items.size == 1) timeline.getStartMs() else 0L
             val endMs = if (items.size == 1) timeline.getEndMs() else item.durationMs.coerceAtLeast(1L)
             val durationToSend = (endMs - startMs).coerceAtLeast(1L)
-            val uploadFile = prepareUploadFile(
+            val preparedUploadFile = prepareUploadFile(
                 mode = mode,
                 inputFile = inputFile,
                 tempDir = tempDir,
@@ -2754,6 +2835,17 @@ class RemoteSttActivity : AppCompatActivity() {
                 durationMs = durationToSend,
                 terminalLines = terminalLines
             )
+            val uploadFile = applySelectedVad(
+                preparedUploadFile = preparedUploadFile,
+                sourceFile = inputFile,
+                tempDir = tempDir,
+                index = number,
+                item = item,
+                startMs = startMs,
+                durationMs = durationToSend,
+                terminalLines = terminalLines,
+                vadStats = vadStats
+            )
             val sentAudioInfo = describeAudioFile(uploadFile.file)
             appendTerminal(terminalLines, "prepare done[$number/${items.size}]: ${item.name}")
             runOnUiThread { updateTerminalText(terminalLines) }
@@ -2762,8 +2854,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun conversionParallelism(): Int {
-        val cores = Runtime.getRuntime().availableProcessors()
-        return (cores - 2).coerceAtLeast(1)
+        return ConversionParallelismSettings.selected(this)
     }
 
     private fun uploadParallelism(itemCount: Int): Int {
@@ -3046,7 +3137,7 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             val clean = item.text.trim()
             if (clean.isNotBlank()) appendTerminalTranscription(terminalLines, clean)
-            TranscriptionResult(prepared.index, prepared.item.name, clean)
+            TranscriptionResult(prepared.index, prepared.item.name, clean, item.timestampedText)
         }
     }
 
@@ -3070,7 +3161,9 @@ class RemoteSttActivity : AppCompatActivity() {
             ?: fallbackName
         val directText = listOf("text", "transcription", "transcript", "result", "output")
             .firstNotNullOfOrNull { key -> json.optString(key).takeIf { it.isNotBlank() } }
-        if (directText != null) return listOf(ParsedText(name, directText))
+        if (directText != null) {
+            return listOf(ParsedText(name, directText, extractTimestampedText(json)))
+        }
 
         listOf("results", "files", "items", "data", "transcriptions", "segments").forEach { key ->
             if (!json.has(key) || json.isNull(key)) return@forEach
@@ -3078,7 +3171,13 @@ class RemoteSttActivity : AppCompatActivity() {
             val nested = parsedTextsFromAny(value, name)
             if (nested.isNotEmpty()) {
                 if (key == "segments") {
-                    return listOf(ParsedText(name, nested.joinToString("") { it.text }))
+                    return listOf(
+                        ParsedText(
+                            name,
+                            nested.joinToString("") { it.text },
+                            nested.mapNotNull { it.timestampedText.takeIf(String::isNotBlank) }.joinToString("\n")
+                        )
+                    )
                 }
                 return nested
             }
@@ -3114,6 +3213,74 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun extractTimestampedText(json: JSONObject): String {
+        val segments = json.optJSONArray("segments")
+        if (segments != null) {
+            return timedEntriesFromArray(segments, groupWords = false)
+        }
+        val words = json.optJSONArray("words")
+        if (words != null) {
+            return timedEntriesFromArray(words, groupWords = true)
+        }
+        val direct = timedEntryFromObject(json)
+        return direct?.let { formatTimedEntry(it) }.orEmpty()
+    }
+
+    private fun timedEntriesFromArray(array: JSONArray, groupWords: Boolean): String {
+        val entries = buildList {
+            for (index in 0 until array.length()) {
+                array.optJSONObject(index)?.let(::timedEntryFromObject)?.let(::add)
+            }
+        }
+        if (entries.isEmpty()) return ""
+        if (!groupWords) return entries.joinToString("\n", transform = ::formatTimedEntry)
+
+        val phrases = mutableListOf<TimedEntry>()
+        var currentText = StringBuilder()
+        var currentStart = entries.first().startSeconds
+        var currentEnd = entries.first().endSeconds
+        entries.forEachIndexed { index, entry ->
+            if (currentText.isNotEmpty() && !entry.text.matches(Regex("""^[,.;:!?]$"""))) {
+                currentText.append(' ')
+            }
+            currentText.append(entry.text)
+            currentEnd = entry.endSeconds
+            if (entry.text.matches(Regex(""".*[.!?]$""")) || index == entries.lastIndex) {
+                phrases += TimedEntry(currentText.toString().trim(), currentStart, currentEnd)
+                currentText = StringBuilder()
+                if (index < entries.lastIndex) currentStart = entries[index + 1].startSeconds
+            }
+        }
+        return phrases.joinToString("\n", transform = ::formatTimedEntry)
+    }
+
+    private fun timedEntryFromObject(json: JSONObject): TimedEntry? {
+        val text = listOf("text", "word", "transcript")
+            .firstNotNullOfOrNull { key -> json.optString(key).trim().takeIf(String::isNotBlank) }
+            ?: return null
+        val start = json.optFiniteDouble("start")
+            ?: json.optFiniteDouble("start_time")
+            ?: json.optJSONArray("timestamp")?.optDouble(0)?.takeIf(Double::isFinite)
+            ?: return null
+        val end = json.optFiniteDouble("end")
+            ?: json.optFiniteDouble("end_time")
+            ?: json.optJSONArray("timestamp")?.optDouble(1)?.takeIf(Double::isFinite)
+            ?: json.optFiniteDouble("duration")?.let { start + it }
+            ?: return null
+        if (start < 0.0 || end < start) return null
+        return TimedEntry(text, start, end)
+    }
+
+    private fun JSONObject.optFiniteDouble(key: String): Double? {
+        if (!has(key) || isNull(key)) return null
+        return optDouble(key, Double.NaN).takeIf(Double::isFinite)
+    }
+
+    private fun formatTimedEntry(entry: TimedEntry): String {
+        return "[${formatTimestamp((entry.startSeconds * 1000).toLong())} -> " +
+            "${formatTimestamp((entry.endSeconds * 1000).toLong())}] ${entry.text}"
+    }
+
     private fun prepareUploadFile(
         mode: PrepareMode,
         inputFile: File,
@@ -3138,6 +3305,84 @@ class RemoteSttActivity : AppCompatActivity() {
                 UploadFile(wavFile, "audio/wav", "wav 16 kHz mono PCM s16le")
             }
         }
+    }
+
+    /**
+     * VAD is intentionally applied after the normal media preparation. This keeps the
+     * existing compact/original/ready choices untouched when VAD is disabled and gives
+     * every enabled VAD implementation the same PCM 16 kHz mono input.
+     */
+    private fun applySelectedVad(
+        preparedUploadFile: UploadFile,
+        sourceFile: File,
+        tempDir: File,
+        index: Int,
+        item: MediaItem,
+        startMs: Long,
+        durationMs: Long,
+        terminalLines: StringBuilder,
+        vadStats: VadRunStats
+    ): UploadFile {
+        val mode = selectedVadMode
+        if (mode == VadMode.NONE) return preparedUploadFile
+
+        ensureNotCancelled()
+        val startedAt = SystemClock.elapsedRealtime()
+        runOnUiThread { status.text = "Filtrando voz com VAD..." }
+        appendTerminal(terminalLines, "[${item.name}] VAD selecionado: ${mode.label}")
+        appendTerminal(terminalLines, "[${item.name}] Agressividade VAD: $selectedVadLevel")
+        runOnUiThread { updateTerminalText(terminalLines) }
+
+        val readyWav = if (preparedUploadFile.mime == "audio/wav" &&
+            preparedUploadFile.file.name.lowercase(Locale.ROOT).endsWith(".wav") &&
+            isAlreadyReadyWav(preparedUploadFile.file, preparedUploadFile.file.name, terminalLines)
+        ) {
+            preparedUploadFile.file
+        } else {
+            File(tempDir, "${index}_${safeBaseName(item.name)}_vad_input.wav").also { wav ->
+                convertToReadyWav(sourceFile, wav, item.name, startMs, durationMs, terminalLines)
+            }
+        }
+        val filteredWav = File(tempDir, "${index}_${safeBaseName(item.name)}_vad.wav")
+        val modelPath = if (mode.usesSilero) ensureBundledSileroVadModel().absolutePath else ""
+        val nativeResult = WhisperNative.filterVad(
+            readyWav.absolutePath,
+            filteredWav.absolutePath,
+            modelPath,
+            mode.nativeMode,
+            selectedVadLevel
+        )
+        ensureNotCancelled()
+        val fields = nativeResult.split("|")
+        if (fields.firstOrNull() != "OK" || fields.size < 5) {
+            throw IllegalStateException(nativeResult.removePrefix("ERRO|").ifBlank { "falha no VAD local" })
+        }
+        val originalSamples = fields[1].toLongOrNull() ?: 0L
+        val filteredSamples = fields[2].toLongOrNull() ?: 0L
+        val segments = fields[3].toIntOrNull() ?: 0
+        val backend = fields.drop(4).joinToString("|")
+        val reducedSamples = (originalSamples - filteredSamples).coerceAtLeast(0L)
+        val reductionPercent = if (originalSamples > 0L) reducedSamples * 100.0 / originalSamples else 0.0
+        val elapsed = SystemClock.elapsedRealtime() - startedAt
+        vadStats.record(readyWav.length(), filteredWav.length(), elapsed)
+        appendTerminal(
+            terminalLines,
+            "[${item.name}] VAD concluído: $segments segmentos; reduziu ${String.format(Locale.US, "%.2f", reducedSamples / 16000.0)}s " +
+                "(${String.format(Locale.US, "%.1f", reductionPercent)}%); backend=$backend; tempo=${formatElapsedCompact(elapsed)}; " +
+                "tamanho: ${readyWav.length()} bytes -> ${filteredWav.length()} bytes"
+        )
+        runOnUiThread { updateTerminalText(terminalLines) }
+        return UploadFile(filteredWav, "audio/wav", "WAV 16 kHz mono PCM s16le filtrado por ${mode.label}")
+    }
+
+    private fun ensureBundledSileroVadModel(): File {
+        val target = File(File(getExternalFilesDir("whisper_models"), "silero"), SILERO_VAD_MODEL_NAME)
+        if (target.exists() && target.length() > 100_000L) return target
+        target.parentFile?.mkdirs()
+        assets.open("silero/$SILERO_VAD_MODEL_NAME").use { input ->
+            FileOutputStream(target).use { output -> input.copyTo(output) }
+        }
+        return target
     }
 
     private fun prepareOriginalUpload(
@@ -3399,7 +3644,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val textBuilder = StringBuilder()
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
-            .addFormDataPart("model", GRANITE_MODEL)
+            .addFormDataPart("model", TranscriptionModelStore.selectedConfig().modelName)
             .addFormDataPart("stream", "true")
             .addFormDataPart("file", uploadFile.file.name, uploadFile.file.asRequestBody(uploadFile.mime.toMediaType()))
             .build()
@@ -3872,7 +4117,15 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun clearTextWithConfirmation(target: EditText, label: String) {
-        val clear = { target.setText("") }
+        val clear = {
+            target.setText("")
+            if (target === liveTranscriptTextView) {
+                checkboxTimestamps.isChecked = false
+                timestampPlainTranscript = ""
+                timestampedTranscript = ""
+                updateTimestampControl()
+            }
+        }
         if (target.text?.toString()?.trim().isNullOrBlank()) {
             clear()
             return
@@ -3886,7 +4139,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun recoverLastTranscription() {
         if (lastReceivedTranscription.isBlank()) return
-        val restore = { replaceLiveTranscript(lastReceivedTranscription) }
+        val restore = {
+            timestampPlainTranscript = lastReceivedTranscription
+            renderTranscriptAccordingToTimestampSelection()
+        }
         if (liveTranscriptTextView.text?.toString()?.trim().isNullOrBlank()) {
             restore()
             return
@@ -3896,6 +4152,58 @@ class RemoteSttActivity : AppCompatActivity() {
             .setPositiveButton("Sim") { _, _ -> restore() }
             .setNegativeButton("Não", null)
             .show()
+    }
+
+    private fun toggleTranscriptTimestamps(checked: Boolean) {
+        if (checked && timestampedTranscript.isBlank()) {
+            checkboxTimestamps.isChecked = false
+            return
+        }
+        renderTranscriptAccordingToTimestampSelection()
+    }
+
+    private fun storeReceivedTranscription(text: String, timestampedText: String = "") {
+        val clean = text.trim()
+        lastReceivedTranscription = clean
+        timestampPlainTranscript = clean
+        timestampedTranscript = timestampedText.trim()
+        updateTimestampControl()
+    }
+
+    private fun updateTimestampControl() {
+        if (!::checkboxTimestamps.isInitialized) return
+        val available = timestampedTranscript.isNotBlank()
+        if (!available && checkboxTimestamps.isChecked) checkboxTimestamps.isChecked = false
+        checkboxTimestamps.isEnabled = available
+        checkboxTimestamps.alpha = if (available) 1f else 0.38f
+    }
+
+    private fun renderTranscriptAccordingToTimestampSelection() {
+        val text = if (checkboxTimestamps.isChecked && timestampedTranscript.isNotBlank()) {
+            timestampedTranscript
+        } else {
+            timestampPlainTranscript.ifBlank { lastReceivedTranscription }
+        }
+        liveTranscriptTextView.setText(text)
+        liveTranscriptTextView.setMinLines(if (text.isBlank()) 5 else 0)
+        liveTranscriptTextView.visibility = View.VISIBLE
+    }
+
+    private fun plainTranscriptForRequests(): String {
+        return if (checkboxTimestamps.isChecked) {
+            timestampPlainTranscript.trim()
+        } else {
+            liveTranscriptTextView.text?.toString()?.trim().orEmpty()
+        }
+    }
+
+    private fun formatTimestamp(timeMs: Long): String {
+        val safe = timeMs.coerceAtLeast(0L)
+        val hours = safe / 3_600_000L
+        val minutes = (safe / 60_000L) % 60L
+        val seconds = (safe / 1_000L) % 60L
+        val millis = safe % 1_000L
+        return String.format(Locale.US, "%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
     }
 
     private fun updateTextEditorsLock() {
@@ -3996,6 +4304,10 @@ class RemoteSttActivity : AppCompatActivity() {
         livePostActions.visibility = View.GONE
         clearAssistantOutputViews()
         liveTranscriptTextView.setText("")
+        checkboxTimestamps.isChecked = false
+        timestampPlainTranscript = ""
+        timestampedTranscript = ""
+        updateTimestampControl()
         liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
         liveTranscriptClipboardActions.visibility = View.VISIBLE
@@ -4022,6 +4334,10 @@ class RemoteSttActivity : AppCompatActivity() {
         transcriptionTaskState = AssistantTaskState.RUNNING
         refiningTaskState = AssistantTaskState.IDLE
         liveTranscriptTextView.setText("")
+        checkboxTimestamps.isChecked = false
+        timestampPlainTranscript = ""
+        timestampedTranscript = ""
+        updateTimestampControl()
         liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
         liveTranscriptClipboardActions.visibility = View.VISIBLE
@@ -4043,7 +4359,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun requestHistory() {
-        val transcript = liveTranscriptTextView.text?.toString()?.trim().orEmpty()
+        val transcript = plainTranscriptForRequests()
         if (transcript.isBlank()) {
             Toast.makeText(this, "Ainda não há transcrição para processar.", Toast.LENGTH_SHORT).show()
             return
@@ -4079,6 +4395,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val calls = TranscriptAssistantClient.requestHistoryAndNames(
             client = client,
             serverConfig = ModelServerStore.selectedConfig(),
+            partsServerConfig = PartsExtractionSettings.selectedConfig(this),
             transcript = transcript,
             historyPrompt = PromptTemplateStore.historyPrompt(),
             partsPrompt = PromptTemplateStore.partsPrompt(),
@@ -4140,7 +4457,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun requestStatement() {
         val material = historyTextView.text?.toString()?.trim()
             ?.takeIf { it.isNotBlank() }
-            ?: liveTranscriptTextView.text?.toString()?.trim().orEmpty()
+            ?: plainTranscriptForRequests()
         if (material.isBlank()) {
             Toast.makeText(this, "Ainda não há texto para redigir a oitiva.", Toast.LENGTH_SHORT).show()
             return
@@ -4199,6 +4516,12 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun replaceLiveTranscript(text: String) {
         val clean = text.trim()
+        if (clean != timestampPlainTranscript) {
+            timestampPlainTranscript = clean
+            timestampedTranscript = ""
+            updateTimestampControl()
+        }
+        if (checkboxTimestamps.isChecked) checkboxTimestamps.isChecked = false
         liveTranscriptTextView.setText(clean)
         liveTranscriptTextView.setMinLines(0)
         synchronized(liveTranscriptText) {
@@ -4318,7 +4641,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val database = if (method == PartsExtractionSettings.Method.NAME_DATABASE) NameDatabaseStore.load(this) else emptySet()
         val call = TranscriptAssistantClient.requestNames(
             client,
-            ModelServerStore.selectedConfig(),
+            PartsExtractionSettings.selectedConfig(this),
             history,
             PromptTemplateStore.partsPrompt(),
             method,
@@ -4545,14 +4868,15 @@ class RemoteSttActivity : AppCompatActivity() {
         totalAudioSeconds: Double,
         elapsedMs: Long,
         serverElapsedMs: Long,
-        mode: PrepareMode
+        mode: PrepareMode,
+        vadStats: VadRunStats
     ): String {
         val elapsedSeconds = (elapsedMs / 1000.0).coerceAtLeast(0.001)
         val serverSeconds = (serverElapsedMs / 1000.0).coerceAtLeast(0.001)
         val generalEfficiency = totalAudioSeconds / elapsedSeconds
         val serverEfficiency = totalAudioSeconds / serverSeconds
-        return listOf(
-            "Servidor: $serverBaseUrl",
+        val lines = mutableListOf(
+            "Servidor: ${TranscriptionModelStore.selectedConfig().url}",
             "Formato enviado: ${mode.reportLabel}",
             "Arquivos: $fileCount",
             "Total de áudio enviado: ${formatSeconds(totalAudioSeconds)}s",
@@ -4560,7 +4884,14 @@ class RemoteSttActivity : AppCompatActivity() {
             "Tempo no servidor: ${formatSeconds(serverSeconds)}s",
             "Eficiência geral: ${String.format(Locale.US, "%.2fx", generalEfficiency)}",
             "Eficiência do servidor: ${String.format(Locale.US, "%.2fx", serverEfficiency)}"
-        ).joinToString("\n")
+        )
+        vadStats.snapshot()?.let { summary ->
+            lines += "VAD: ${selectedVadMode.label}, nível $selectedVadLevel (${summary.files} arquivo(s))"
+            lines += "Tempo de filtragem VAD: ${formatElapsedCompact(summary.elapsedMs)}"
+            lines += "Tamanho antes do VAD: ${summary.beforeBytes} bytes"
+            lines += "Tamanho após o VAD: ${summary.afterBytes} bytes"
+        }
+        return lines.joinToString("\n")
     }
 
     private fun buildHtml(results: List<TranscriptionResult>): String {
@@ -4638,6 +4969,21 @@ class RemoteSttActivity : AppCompatActivity() {
             results.firstOrNull()?.text.orEmpty().trim()
         } else {
             buildTranscriptionsText(results).trim()
+        }
+    }
+
+    private fun buildTimestampedDisplayText(results: List<TranscriptionResult>): String {
+        if (results.isEmpty() || results.any { it.timestampedText.isBlank() }) return ""
+        return if (results.size == 1) {
+            results.first().timestampedText.trim()
+        } else {
+            buildString {
+                results.forEach { result ->
+                    appendTranscriptionHeader(this, result.fileName)
+                    append(result.timestampedText.trim()).append('\n')
+                    appendTranscriptionSeparator(this)
+                }
+            }.trim()
         }
     }
 
@@ -4837,7 +5183,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private data class TranscriptionResult(
         val index: Int,
         val fileName: String,
-        val text: String
+        val text: String,
+        val timestampedText: String = ""
     )
 
     private data class OutputSession(
@@ -4876,7 +5223,14 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private data class ParsedText(
         val name: String?,
-        val text: String
+        val text: String,
+        val timestampedText: String = ""
+    )
+
+    private data class TimedEntry(
+        val text: String,
+        val startSeconds: Double,
+        val endSeconds: Double
     )
 
     private data class AudioProbe(
@@ -4889,6 +5243,33 @@ class RemoteSttActivity : AppCompatActivity() {
         val bitrateKbps: Double?,
         val hasVideo: Boolean
     )
+
+    private data class VadRunSnapshot(
+        val files: Int,
+        val beforeBytes: Long,
+        val afterBytes: Long,
+        val elapsedMs: Long
+    )
+
+    private class VadRunStats {
+        private var files = 0
+        private var beforeBytes = 0L
+        private var afterBytes = 0L
+        private var elapsedMs = 0L
+
+        @Synchronized
+        fun record(before: Long, after: Long, elapsed: Long) {
+            files++
+            beforeBytes += before
+            afterBytes += after
+            elapsedMs += elapsed
+        }
+
+        @Synchronized
+        fun snapshot(): VadRunSnapshot? {
+            return if (files == 0) null else VadRunSnapshot(files, beforeBytes, afterBytes, elapsedMs)
+        }
+    }
 
     private data class RemoteSttDraft(
         val items: List<MediaItem>,
@@ -4917,6 +5298,24 @@ class RemoteSttActivity : AppCompatActivity() {
         COMPACT("Enviar compactado", "ogg opus 16 kHz mono 32k"),
         ORIGINAL("Enviar como está", "arquivo original, sem conversão local"),
         READY("Arquivos prontos", "wav 16 kHz mono PCM s16le")
+    }
+
+    private enum class VadMode(
+        val preferenceKey: String,
+        val label: String,
+        val nativeMode: Int,
+        val usesSilero: Boolean
+    ) {
+        NONE("none", "Sem VAD", 0, false),
+        SILERO_CPU("silero_cpu", "Silero VAD (CPU)", 1, true),
+        SILERO_GPU("silero_gpu", "Silero VAD (GPU)", 2, true),
+        WEBRTC("webrtc", "WebRTC VAD", 3, false);
+
+        companion object {
+            fun fromPreference(value: String?): VadMode {
+                return entries.firstOrNull { it.preferenceKey == value } ?: NONE
+            }
+        }
     }
 
     private enum class LiveLanguage(
@@ -5016,6 +5415,11 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun grokWebSocketChunkMillis(): Int = GrokApiSettings.grokChunkMillis()
+
+    private fun grokWebSocketChunkBytes(): Int =
+        (LIVE_SAMPLE_RATE * 2L * grokWebSocketChunkMillis() / 1000L).toInt().coerceAtLeast(640)
+
     companion object {
         @Volatile
         private var inMemoryDraft: RemoteSttDraft? = null
@@ -5033,8 +5437,6 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val LIVE_UPLOAD_WORKERS = 1
         private const val LIVE_SAMPLE_RATE = 16_000
         private const val DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS = 1000
-        private const val GROK_WEBSOCKET_CHUNK_MILLIS = 100
-        private const val GROK_WEBSOCKET_CHUNK_BYTES = LIVE_SAMPLE_RATE * 2 / 10
         private const val GROK_REPLAY_BUFFER_SECONDS = 8
         private const val GROK_PCM_BYTES_PER_SECOND = LIVE_SAMPLE_RATE * 2
         private const val GROK_REPLAY_BUFFER_BYTES = GROK_PCM_BYTES_PER_SECOND * GROK_REPLAY_BUFFER_SECONDS
@@ -5053,7 +5455,10 @@ class RemoteSttActivity : AppCompatActivity() {
         )
         private const val LIVE_FINAL_CHUNK_MILLIS = 30000
         private const val WHITE_RECORDING_SAMPLE_RATE = 16000
-        private const val GRANITE_MODEL = "granite-speech-4.1-2b-nar"
+        private const val VAD_PREFERENCES = "remote_stt_vad"
+        private const val VAD_MODE_KEY = "selected_mode"
+        private const val VAD_LEVEL_KEY = "aggressiveness_level"
+        private const val SILERO_VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
         private const val TAG = "GraniteSpeech"
         private const val TRANSCRIPTION_START = "\uE000TS\uE000"
         private const val TRANSCRIPTION_END = "\uE000TE\uE000"

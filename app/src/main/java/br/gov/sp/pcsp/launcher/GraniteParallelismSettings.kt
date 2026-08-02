@@ -5,18 +5,18 @@ import android.content.Context
 object GraniteParallelismSettings {
     private const val PREFERENCES_NAME = "granite_parallelism_settings"
     private const val KEY_REQUESTS = "parallel_requests"
-    const val DEFAULT_REQUESTS = 2
-    val OPTIONS = listOf(1, 2, 4, 8)
+    const val DEFAULT_REQUESTS = 10
+    val OPTIONS = (1..32).toList()
 
     fun selectedRequests(context: Context): Int {
         val stored = context
             .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
             .getInt(KEY_REQUESTS, DEFAULT_REQUESTS)
-        return stored.coerceIn(1, 8)
+        return stored.coerceIn(1, 32)
     }
 
     fun select(context: Context, value: Int) {
-        val normalized = value.coerceIn(1, 8)
+        val normalized = value.coerceIn(1, 32)
         context
             .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
             .edit()

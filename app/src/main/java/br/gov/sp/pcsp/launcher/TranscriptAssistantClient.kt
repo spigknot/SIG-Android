@@ -18,6 +18,7 @@ object TranscriptAssistantClient {
     fun requestHistoryAndNames(
         client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
+        partsServerConfig: ModelServerStore.Config = serverConfig,
         transcript: String,
         historyPrompt: String,
         partsPrompt: String,
@@ -30,7 +31,7 @@ object TranscriptAssistantClient {
 
         if (extractionMethod == PartsExtractionSettings.Method.AI) {
             val namesStartedAt = System.nanoTime()
-            val namesCall = client.newCall(buildRequest(serverConfig, partsPrompt, transcript))
+            val namesCall = client.newCall(buildRequest(partsServerConfig, partsPrompt, transcript))
             historyCall.enqueue(
                 resultCallback(
                     parser = { body ->
@@ -209,18 +210,14 @@ object TranscriptAssistantClient {
         transcript: String
     ): String {
         val payload = JSONObject(serverConfig.parameters.toString())
-        if (serverConfig.isGrokApi || serverConfig.name.contains("grok", ignoreCase = true)) {
-            // Mantem a mesma configuracao do Grok tanto no backend interno quanto na API direta.
-            payload.put("model", "grok-4.5")
-            payload.put("temperature", 0.0)
-            payload.remove("max_tokens")
-            payload.put("max_output_tokens", 5000)
-            payload.put("reasoning", JSONObject().put("effort", "low"))
-        }
         if (serverConfig.url.contains("/api/generate", ignoreCase = true)) {
             payload.put("system", systemPrompt)
             payload.put("prompt", transcript)
             if (!payload.has("stream")) payload.put("stream", false)
+        } else if (serverConfig.provider == "deepseek" || serverConfig.isDeepseekApi) {
+            payload.put("messages", JSONArray()
+                .put(JSONObject().put("role", "system").put("content", systemPrompt))
+                .put(JSONObject().put("role", "user").put("content", transcript)))
         } else {
             payload.put(
                 "input",
@@ -249,8 +246,12 @@ object TranscriptAssistantClient {
             .url(serverConfig.url)
             .post(buildPayload(serverConfig, systemPrompt, material).toRequestBody(jsonMediaType))
         if (serverConfig.isGrokApi) {
-            val key = GrokApiSettings.apiKey()
-            require(key.isNotBlank()) { "Insira a chave API do Grok nas configurações." }
+            val key = GrokApiSettings.xaiApiKey()
+            require(GrokApiSettings.isPlausibleXaiKey(key)) { "A chave API da xAI salva nas configurações é inválida." }
+            builder.header("Authorization", "Bearer $key")
+        } else if (serverConfig.isDeepseekApi) {
+            val key = GrokApiSettings.deepseekApiKey()
+            require(GrokApiSettings.isPlausibleDeepseekKey(key)) { "A chave API do Deepseek salva nas configurações é inválida." }
             builder.header("Authorization", "Bearer $key")
         }
         return builder.build()
@@ -261,6 +262,9 @@ object TranscriptAssistantClient {
         root.stringValue("response")?.let { return it }
         root.stringValue("output_text")?.let { return it }
         root.stringValue("text")?.let { return it }
+
+        root.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
+            ?.stringValue("content")?.let { return it }
 
         val output = root.optJSONArray("output")
             ?: throw IllegalStateException("A resposta não contém output.")

@@ -1910,8 +1910,7 @@ class FasterWhisperServerActivity : AppCompatActivity() {
     }
 
     private fun conversionParallelism(): Int {
-        val cores = Runtime.getRuntime().availableProcessors()
-        return (cores - 2).coerceAtLeast(1)
+        return ConversionParallelismSettings.selected(this)
     }
 
     private fun uploadParallelism(itemCount: Int): Int {
@@ -2882,6 +2881,7 @@ class FasterWhisperServerActivity : AppCompatActivity() {
         val calls = TranscriptAssistantClient.requestHistoryAndNames(
             client = client,
             serverConfig = ModelServerStore.selectedConfig(),
+            partsServerConfig = PartsExtractionSettings.selectedConfig(this),
             transcript = transcript,
             historyPrompt = PromptTemplateStore.historyPrompt(),
             partsPrompt = PromptTemplateStore.partsPrompt(),

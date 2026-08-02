@@ -1,296 +1,52 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#000000"
-    android:fitsSystemWindows="true">
-
-    <ScrollView
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:fillViewport="true">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:paddingStart="20dp"
-            android:paddingTop="20dp"
-            android:paddingEnd="20dp"
-            android:paddingBottom="28dp">
-
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="40dp"
-                android:layout_marginBottom="22dp">
-
-                <ImageButton
-                    android:id="@+id/btnBack"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:layout_gravity="start|center_vertical"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Voltar"
-                    android:src="@drawable/ic_arrow_back"
-                    android:tint="#FFFFFFFF" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="Configurações"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000" android:fitsSystemWindows="true">
+    <ScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="20dp" android:paddingTop="20dp" android:paddingEnd="20dp" android:paddingBottom="76dp">
+            <FrameLayout android:layout_width="match_parent" android:layout_height="40dp" android:layout_marginBottom="18dp">
+                <ImageButton android:id="@+id/btnBack" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Voltar" android:src="@drawable/ic_arrow_back" android:tint="#FFFFFFFF" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Configurações" android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" />
             </FrameLayout>
+            <TextView style="@style/SettingsHeader" android:text="Chaves API" />
+            <EditText android:id="@+id/edit_xai_key" style="@style/SettingsEdit" android:hint="Chave API da xAI" android:inputType="textPassword" />
+            <EditText android:id="@+id/edit_deepseek_key" style="@style/SettingsEdit" android:hint="Chave API do Deepseek" android:inputType="textPassword" />
+            <Button android:id="@+id/button_save_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="4dp" android:paddingBottom="4dp" android:text="Salvar chaves" android:textAllCaps="false" />
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Modelo de transcrição"
-                android:textColor="#FF5EDAF2"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="As opções são lidas de SIG/Servidores/modelos_de_transcricao.txt"
-                android:textColor="#FFAAAAAA"
-                android:textSize="10sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="top"
-                android:orientation="horizontal">
-
-                <RadioGroup
-                    android:id="@+id/radio_transcription_models"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="#88101418"
-                    android:orientation="vertical"
-                    android:padding="8dp" />
-
-                <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:orientation="vertical">
-
-                    <ImageButton
-                        android:id="@+id/button_add_transcription_server"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Adicionar servidor"
-                        android:padding="9dp"
-                        android:src="@drawable/ic_ffmpeg_plus"
-                        android:tint="#FF62F28F" />
-
-                    <ImageButton
-                        android:id="@+id/button_remove_transcription_server"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Remover servidor selecionado"
-                        android:padding="9dp"
-                        android:src="@drawable/ic_ffmpeg_minus"
-                        android:tint="#FFFF5A5A" />
+            <TextView style="@style/SettingsHeader" android:text="Modelo de transcrição" />
+            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#88101418" android:paddingStart="8dp" android:paddingTop="8dp" android:paddingEnd="0dp" android:paddingBottom="8dp">
+                <RadioGroup android:id="@+id/radio_transcription_models" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+                <LinearLayout android:id="@+id/layout_grok_chunk" android:layout_width="wrap_content" android:layout_height="48dp" android:layout_gravity="end|bottom" android:translationY="7dp" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chunk size (ms): " android:textColor="#FFFFFFFF" />
+                    <Spinner android:id="@+id/spinner_grok_chunk" android:layout_width="96dp" android:layout_height="wrap_content" />
                 </LinearLayout>
+            </FrameLayout>
+            <TextView android:id="@+id/transcription_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
+
+            <TextView style="@style/SettingsHeader" android:text="Modelo de texto" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="top">
+                <RadioGroup android:id="@+id/radio_text_models" style="@style/SettingsGroup" android:layout_width="0dp" android:layout_weight="1" />
+                <RadioGroup android:id="@+id/radio_text_reasoning" style="@style/SettingsGroup" android:layout_width="116dp" android:layout_marginStart="8dp" android:visibility="gone" />
+            </LinearLayout>
+            <TextView android:id="@+id/text_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
+
+            <TextView style="@style/SettingsHeader" android:text="Extração de partes" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="144dp" android:orientation="horizontal" android:gravity="top" android:background="#88101418" android:padding="8dp">
+                <RadioGroup android:id="@+id/radio_parts_extraction" android:layout_width="148dp" android:layout_height="match_parent" android:orientation="vertical" />
+                <RadioGroup android:id="@+id/radio_parts_model" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginStart="8dp" android:orientation="vertical" android:visibility="gone" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/transcription_models_empty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Nenhum modelo de transcrição válido foi encontrado."
-                android:textColor="#FFFF7777"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="22dp"
-                android:background="#665EDAF2" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Modelos de texto"
-                android:textColor="#FF5EDAF2"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="As opções são lidas de SIG/Servidores/modelos_de_texto.txt"
-                android:textColor="#FFAAAAAA"
-                android:textSize="10sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="top"
-                android:orientation="horizontal">
-
-                <RadioGroup
-                    android:id="@+id/radio_text_models"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="#88101418"
-                    android:orientation="vertical"
-                    android:padding="8dp" />
-
-                <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:orientation="vertical">
-
-                    <ImageButton
-                        android:id="@+id/button_add_text_model"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Adicionar modelo de texto"
-                        android:padding="9dp"
-                        android:src="@drawable/ic_ffmpeg_plus"
-                        android:tint="#FF62F28F" />
-
-                    <ImageButton
-                        android:id="@+id/button_remove_text_model"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Remover modelo de texto selecionado"
-                        android:padding="9dp"
-                        android:src="@drawable/ic_ffmpeg_minus"
-                        android:tint="#FFFF5A5A" />
+            <TextView style="@style/SettingsHeader" android:text="Paralelismo" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#88101418" android:orientation="vertical" android:padding="8dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Conversões paralelas" android:textColor="#FFFFFFFF" />
+                    <EditText android:id="@+id/edit_conversion_parallelism" android:layout_width="74dp" android:layout_height="wrap_content" android:gravity="center" android:inputType="number" android:textColor="#FFFFFFFF" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Requisições paralelas" android:textColor="#FFFFFFFF" />
+                    <EditText android:id="@+id/edit_request_parallelism" android:layout_width="74dp" android:layout_height="wrap_content" android:gravity="center" android:inputType="number" android:textColor="#FFFFFFFF" />
                 </LinearLayout>
             </LinearLayout>
-
-            <TextView
-                android:id="@+id/text_models_empty"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:text="Nenhum modelo de texto válido foi encontrado."
-                android:textColor="#FFFF7777"
-                android:textSize="12sp"
-                android:visibility="gone" />
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="22dp"
-                android:background="#665EDAF2" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Extração de partes"
-                android:textColor="#FF5EDAF2"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Escolha como os nomes serão identificados no histórico."
-                android:textColor="#FFAAAAAA"
-                android:textSize="10sp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:gravity="top"
-                android:orientation="horizontal">
-
-                <RadioGroup
-                    android:id="@+id/radio_parts_extraction"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:background="#88101418"
-                    android:orientation="vertical"
-                    android:padding="8dp" />
-
-                <LinearLayout
-                    android:layout_width="40dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="6dp"
-                    android:orientation="vertical">
-
-                    <ImageButton
-                        android:id="@+id/button_add_part_name"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Adicionar nome à base de partes"
-                        android:padding="9dp"
-                        android:src="@drawable/ic_ffmpeg_plus"
-                        android:tint="#FF62F28F" />
-
-                    <ImageButton
-                        android:id="@+id/button_remove_part_name"
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:background="?attr/selectableItemBackgroundBorderless"
-                        android:contentDescription="Remover nome da base de partes"
-                        android:padding="9dp"
-                        android:src="@drawable/ic_ffmpeg_minus"
-                        android:tint="#FFFF5A5A" />
-                </LinearLayout>
-            </LinearLayout>
-
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="22dp"
-                android:background="#665EDAF2" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="STT Remoto"
-                android:textColor="#FF5EDAF2"
-                android:textSize="15sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="Quantidade máxima de áudios enviados ao servidor ao mesmo tempo."
-                android:textColor="#FFAAAAAA"
-                android:textSize="10sp" />
-
-            <RadioGroup
-                android:id="@+id/radio_granite_parallelism"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:background="#88101418"
-                android:orientation="vertical"
-                android:padding="8dp" />
         </LinearLayout>
     </ScrollView>
-
     <include layout="@layout/view_sig_echo_footer" />
 </FrameLayout>

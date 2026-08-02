@@ -23,29 +23,14 @@ class ToolsActivity : AppCompatActivity() {
         updateCacheButton()
 
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
-        findViewById<View>(R.id.button_rg_calculator).setOnClickListener {
-            startActivity(
-                Intent(this, RgCalculatorActivity::class.java)
-                    .putExtra(RgCalculatorActivity.EXTRA_MODE, RgCalculatorActivity.MODE_RG)
-            )
-        }
-        findViewById<View>(R.id.button_cpf_calculator).setOnClickListener {
-            startActivity(
-                Intent(this, RgCalculatorActivity::class.java)
-                    .putExtra(RgCalculatorActivity.EXTRA_MODE, RgCalculatorActivity.MODE_CPF)
-            )
-        }
-        findViewById<View>(R.id.button_imei_calculator).setOnClickListener {
-            startActivity(Intent(this, ImeiCalculatorActivity::class.java))
+        findViewById<View>(R.id.button_calculator).setOnClickListener {
+            startActivity(Intent(this, CalculatorToolsActivity::class.java))
         }
         findViewById<View>(R.id.button_ffmpeg).setOnClickListener {
             startActivity(Intent(this, FfmpegActivity::class.java))
         }
         findViewById<View>(R.id.button_whisper).setOnClickListener {
             startActivity(Intent(this, WhisperActivity::class.java))
-        }
-        findViewById<View>(R.id.button_faster_whisper_server).setOnClickListener {
-            startActivity(Intent(this, FasterWhisperServerActivity::class.java))
         }
         findViewById<View>(R.id.button_remote_stt).setOnClickListener {
             startActivity(Intent(this, RemoteSttActivity::class.java))

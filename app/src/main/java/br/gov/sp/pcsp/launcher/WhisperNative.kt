@@ -23,6 +23,13 @@ object WhisperNative {
         callback: Callback
     ): String
     external fun cancelTranscription()
+    external fun filterVad(
+        inputWavPath: String,
+        outputWavPath: String,
+        sileroModelPath: String,
+        mode: Int,
+        aggressiveness: Int
+    ): String
     external fun systemInfo(): String
     external fun buildInfo(): String
     external fun backendInfo(): String
