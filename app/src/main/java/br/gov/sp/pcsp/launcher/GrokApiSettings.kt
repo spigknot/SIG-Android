@@ -16,7 +16,6 @@ object GrokApiSettings {
     private const val KEY_DEEPSEEK_API = "deepseek_api_key"
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
-    private const val KEY_TEXT_PROVIDER = "text_proxy_provider"
     private const val KEY_TEXT_REASONING = "text_reasoning"
     private const val KEY_GROK_CHUNK_MS = "grok_chunk_ms"
 
@@ -76,13 +75,6 @@ object GrokApiSettings {
 
     fun selectText(selected: Boolean) {
         selectText(if (selected) TEXT_NAME else IA_PROXY_NAME)
-    }
-
-    fun textProvider(): String = preferences().getString(KEY_TEXT_PROVIDER, "grok")
-        .orEmpty().lowercase().takeIf { it == "grok" || it == "deepseek" } ?: "grok"
-
-    fun setTextProvider(value: String) {
-        preferences().edit().putString(KEY_TEXT_PROVIDER, value.lowercase()).apply()
     }
 
     fun textReasoning(): String = preferences().getString(KEY_TEXT_REASONING, "low")

@@ -9,8 +9,6 @@ class SigApplication : Application() {
         Thread {
             AppCacheManager.cleanOlderThanOneDay(this)
             PromptTemplateStore.ensureDefaults()
-            ModelServerStore.ensureDefaults()
-            TranscriptionModelStore.ensureDefaults()
             NameDatabaseStore.ensureDefault(this)
         }.start()
     }

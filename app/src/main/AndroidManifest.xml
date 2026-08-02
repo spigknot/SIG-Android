@@ -111,11 +111,6 @@
             android:exported="false" />
 
         <activity
-            android:name=".FasterWhisperServerActivity"
-            android:screenOrientation="portrait"
-            android:exported="false" />
-
-        <activity
             android:name=".RemoteSttActivity"
             android:screenOrientation="portrait"
             android:exported="true"

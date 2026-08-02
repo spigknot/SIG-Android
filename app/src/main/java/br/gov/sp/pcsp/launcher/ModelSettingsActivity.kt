@@ -63,7 +63,19 @@ class ModelSettingsActivity : AppCompatActivity() {
         GrokApiSettings.setXaiApiKey(xaiKey.text.toString())
         GrokApiSettings.setDeepseekApiKey(deepseekKey.text.toString())
         populateAll()
-        Toast.makeText(this, "Chaves salvas.", Toast.LENGTH_SHORT).show()
+        val xaiStatus = keyStatus(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)
+        val deepseekStatus = keyStatus(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)
+        Toast.makeText(
+            this,
+            "Chaves salvas. xAI: $xaiStatus; Deepseek: $deepseekStatus.",
+            Toast.LENGTH_LONG
+        ).show()
+    }
+
+    private fun keyStatus(value: String, validator: (String) -> Boolean): String = when {
+        value.isBlank() -> "não informada"
+        validator(value) -> "válida"
+        else -> "inválida"
     }
 
     private fun populateAll() {

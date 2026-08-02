@@ -34,13 +34,6 @@ object PartsExtractionSettings {
         preferences(context).edit().putString(KEY_MODEL, model).apply()
     }
 
-    fun proxyProvider(context: Context): String = preferences(context)
-        .getString(KEY_PROVIDER, "grok").orEmpty().takeIf { it == "deepseek" } ?: "grok"
-
-    fun setProxyProvider(context: Context, provider: String) {
-        preferences(context).edit().putString(KEY_PROVIDER, provider).apply()
-    }
-
     fun selectedConfig(context: Context): ModelServerStore.Config =
         ModelServerStore.configForParts(
             selectedModel(context),
@@ -53,5 +46,4 @@ object PartsExtractionSettings {
     private const val PREFERENCES_NAME = "parts_extraction_settings"
     private const val KEY_METHOD = "method"
     private const val KEY_MODEL = "ai_model"
-    private const val KEY_PROVIDER = "proxy_provider"
 }

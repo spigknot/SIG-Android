@@ -16,8 +16,6 @@ object TranscriptionModelStore {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
     }
 
-    fun ensureDefaults() = Unit
-
     fun readConfigs(): List<Config> {
         val available = mutableListOf(
             Config(AVARE_NAME, "http://avare:8100", JSONObject().put("model", "granite-speech-4.1-2b-plus-ar")),
@@ -32,8 +30,9 @@ object TranscriptionModelStore {
             )
         }
         val selected = GrokApiSettings.selectedTranscription()
-        return available.map { it.copy(selected = it.name == selected) }
-            .let { list -> if (list.none { it.selected }) list.mapIndexed { index, item -> item.copy(selected = index == 0) } else list }
+        val resolved = if (available.any { it.name == selected }) selected else available.first().name
+        if (resolved != selected) GrokApiSettings.selectTranscription(resolved)
+        return available.map { it.copy(selected = it.name == resolved) }
     }
 
     fun selectedConfig(): Config = readConfigs().first { it.selected }
@@ -44,6 +43,4 @@ object TranscriptionModelStore {
         return true
     }
 
-    fun addConfig(name: String, url: String, modelName: String) = false
-    fun removeConfig(name: String) = false
 }

@@ -39,7 +39,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_gravity="center"
-                    android:text="Juntar vídeos"
+                    android:text="Juntar áudios/vídeos"
                     android:textColor="#FFFFFFFF"
                     android:textSize="20sp"
                     android:textStyle="bold" />
@@ -57,7 +57,7 @@
                     android:layout_height="44dp"
                     android:background="@drawable/ffmpeg_outline_button_bg"
                     android:clickable="true"
-                    android:contentDescription="Selecionar vídeos"
+                    android:contentDescription="Selecionar áudios ou vídeos"
                     android:focusable="true"
                     android:foreground="?attr/selectableItemBackground"
                     android:padding="9dp"
@@ -95,7 +95,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:gravity="center"
-                android:text="Nenhum vídeo selecionado"
+                android:text="Nenhum áudio ou vídeo selecionado"
                 android:textColor="#CCFFFFFF"
                 android:textSize="13sp" />
 
@@ -311,6 +311,7 @@
                 </LinearLayout>
 
                 <LinearLayout
+                    android:id="@+id/video_encoding_controls"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
@@ -399,7 +400,7 @@
                     android:alpha="0.45"
                     android:background="@drawable/ffmpeg_outline_green_button_bg"
                     android:clickable="false"
-                    android:contentDescription="Juntar vídeos"
+                    android:contentDescription="Juntar áudios ou vídeos"
                     android:focusable="false"
                     android:foreground="?attr/selectableItemBackground"
                     android:padding="8dp"

@@ -67,6 +67,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var checkSmartJoin: CheckBox
     private lateinit var buttonVideoEncoder: TextView
     private lateinit var buttonVideoQuality: TextView
+    private lateinit var videoEncodingControls: View
     private lateinit var buttonJoin: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
@@ -134,6 +135,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         checkSmartJoin = findViewById(R.id.check_smart_join)
         buttonVideoEncoder = findViewById(R.id.button_video_encoder)
         buttonVideoQuality = findViewById(R.id.button_video_quality)
+        videoEncodingControls = findViewById(R.id.video_encoding_controls)
         buttonJoin = findViewById(R.id.button_join)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
@@ -150,7 +152,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             cancelTask = { cancelJoin() }
         )
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
-        findViewById<View>(R.id.button_select_videos).setOnClickListener { openVideoPicker() }
+        findViewById<View>(R.id.button_select_videos).setOnClickListener { openMediaPicker() }
         buttonSelectOutputFolder.setOnClickListener { openOutputFolderPicker(REQUEST_CHOOSE_PRE_OUTPUT_DIR) }
         buttonTransition.setOnClickListener { showTransitionMenu() }
         buttonVideoEncoder.setOnClickListener { showVideoEncoderMenu() }
@@ -223,7 +225,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         if (resultCode != Activity.RESULT_OK) return
 
         when (requestCode) {
-            REQUEST_PICK_VIDEOS -> handlePickedVideos(data)
+            REQUEST_PICK_VIDEOS -> handlePickedMedia(data)
             REQUEST_CHOOSE_PRE_OUTPUT_DIR -> data?.data?.let {
                 takeTreePermission(it)
                 preSelectedOutputDirUri = it
@@ -237,10 +239,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
     }
 
-    private fun openVideoPicker() {
+    private fun openMediaPicker() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "video/*"
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("video/*", "audio/*"))
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
@@ -248,7 +251,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         startActivityForResult(intent, REQUEST_PICK_VIDEOS)
     }
 
-    private fun handlePickedVideos(data: Intent?) {
+    private fun handlePickedMedia(data: Intent?) {
         val flags = data?.flags ?: 0
         val uris = mutableListOf<Uri>()
         data?.clipData?.let { clipData ->
@@ -259,29 +262,39 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         data?.data?.let { uris += it }
         if (uris.isEmpty()) return
 
-        clearOutputResult()
-        uris.distinct().forEach { uri ->
+        val loaded = uris.distinct().mapNotNull { uri ->
             try {
                 contentResolver.takePersistableUriPermission(uri, flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (_: SecurityException) {
             }
-            loadClip(uri)?.let { clips += it }
+            loadClip(uri)
         }
+        val combinedKinds = (clips + loaded).map { it.isAudio }.distinct()
+        if (combinedKinds.size > 1) {
+            Toast.makeText(this, "Selecione apenas áudios ou apenas vídeos por vez.", Toast.LENGTH_LONG).show()
+            return
+        }
+        clearOutputResult()
+        clips += loaded
         updateSelectionUi()
     }
 
     private fun loadClip(uri: Uri): JoinClip? {
-        val name = queryDisplayName(uri) ?: "video_${clips.size + 1}.mp4"
+        val name = queryDisplayName(uri) ?: "midia_${clips.size + 1}"
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(this, uri)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.coerceAtLeast(1L) ?: 1L
-            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()?.coerceAtLeast(2) ?: 1280
-            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()?.coerceAtLeast(2) ?: 720
+            val rawWidth = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()
+            val rawHeight = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()
+            val width = rawWidth?.coerceAtLeast(2) ?: 1280
+            val height = rawHeight?.coerceAtLeast(2) ?: 720
             val rotationDegrees = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
             val hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
             val thumbnail = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-            JoinClip(System.nanoTime(), uri, name, durationMs, width, height, rotationDegrees, hasAudio, thumbnail)
+            val isAudio = rawWidth == null && rawHeight == null && thumbnail == null && hasAudio
+            if (!hasAudio && isAudio) error("Arquivo sem faixa de áudio")
+            JoinClip(System.nanoTime(), uri, name, durationMs, width, height, rotationDegrees, hasAudio, isAudio, thumbnail)
         } catch (e: Throwable) {
             Log.e(TAG, "Could not load clip $name", e)
             Toast.makeText(this, "Não consegui ler $name.", Toast.LENGTH_SHORT).show()
@@ -292,15 +305,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun updateSelectionUi() {
+        val noun = if (currentJoinIsAudio()) "áudio" else "vídeo"
         selectedCount.text = when (clips.size) {
-            0 -> "Nenhum vídeo selecionado"
-            1 -> "1 vídeo selecionado"
-            else -> "${clips.size} vídeos selecionados"
+            0 -> "Nenhum áudio ou vídeo selecionado"
+            1 -> "1 $noun selecionado"
+            else -> "${clips.size} ${noun}s selecionados"
         }
         controls.visibility = if (clips.isNotEmpty()) View.VISIBLE else View.GONE
         arrowInputOutput.visibility = if (clips.isNotEmpty()) View.VISIBLE else View.GONE
         buttonSelectOutputFolder.visibility = if (clips.isNotEmpty()) View.VISIBLE else View.GONE
-        timeline.setClips(clips.map { FfmpegJoinTimelineView.Clip(it.id, it.name, it.durationMs, it.thumbnail) })
+        timeline.setClips(clips.map { FfmpegJoinTimelineView.Clip(it.id, it.name, it.durationMs, it.thumbnail, it.isAudio) })
+        videoEncodingControls.visibility = if (currentJoinIsAudio()) View.GONE else View.VISIBLE
         setJoinEnabled(clips.size >= 2 && !isProcessing)
     }
 
@@ -311,7 +326,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val alpha = if (enabled) 1f else 0.42f
         buttonTransition.alpha = alpha
         inputTransitionTime.alpha = alpha
-        val encoderEnabled = (checkReencode.isChecked || checkSmartJoin.isChecked) &&
+        val encoderEnabled = !currentJoinIsAudio() && (checkReencode.isChecked || checkSmartJoin.isChecked) &&
             selectedVideoEncoder != null && !isProcessing
         buttonVideoEncoder.isEnabled = encoderEnabled
         buttonVideoEncoder.alpha = if (encoderEnabled) 1f else 0.42f
@@ -380,15 +395,25 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun showReencodeHelp() {
+        val message = if (currentJoinIsAudio()) {
+            "Sem reencodar, a junção usa -c copy e é rápida e sem perda, mas exige áudios compatíveis.\n\nCom reencode, o app normaliza taxa de amostragem, canais e bitrate, permitindo aplicar fade ou crossfade."
+        } else {
+            "Sem reencodar, a junção usa -c copy e tende a ser rápida e sem perda, mas só funciona bem quando os vídeos têm formatos compatíveis.\n\nCom reencode, o app normaliza os vídeos e aplica a transição reencodando a saída, mantendo bitrate, resolução e fps sempre que conseguir detectar."
+        }
         AlertDialog.Builder(this)
-            .setMessage("Sem reencodar, a junção usa -c copy e tende a ser rápida e sem perda, mas só funciona bem quando os vídeos têm formatos compatíveis.\n\nCom reencode, o app normaliza os vídeos e aplica a transição reencodando a saída, mantendo bitrate, resolução e fps sempre que conseguir detectar.")
+            .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
     }
 
     private fun showTransitionHelp() {
+        val message = if (currentJoinIsAudio()) {
+            "Fade in/out reduz o volume no fim de um áudio e aumenta no começo do seguinte, sem sobreposição.\n\nAs demais opções usam crossfade, sobrepondo suavemente o fim e o começo dos áudios pelo tempo escolhido."
+        } else {
+            "Fade in/out escurece o fim de um vídeo até preto e clareia o começo do próximo vídeo a partir do preto.\n\nAs outras opções são transições do FFmpeg. Elas podem ficar mais sofisticadas, mas exigem reencodar a saída de forma mais pesada."
+        }
         AlertDialog.Builder(this)
-            .setMessage("Fade in/out escurece o fim de um vídeo até preto e clareia o começo do próximo vídeo a partir do preto.\n\nAs outras opções são transições do FFmpeg. Elas podem ficar mais sofisticadas, mas exigem reencodar a saída de forma mais pesada.")
+            .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
     }
@@ -402,7 +427,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private fun startJoin() {
         if (clips.size < 2) return
-        if ((checkReencode.isChecked || checkSmartJoin.isChecked) && selectedVideoEncoder == null) {
+        if (!currentJoinIsAudio() && (checkReencode.isChecked || checkSmartJoin.isChecked) && selectedVideoEncoder == null) {
             status.text = "Nenhum encoder de vídeo compatível está disponível."
             return
         }
@@ -421,12 +446,15 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 updateStep("Preparar arquivos de entrada", 100, StepState.DONE)
                 val outputName = buildJoinedOutputName()
                 val tempOutput = File(cacheDir, "join_${System.currentTimeMillis()}_$outputName")
-                val useOrientationSafeReencode = shouldUseOrientationSafeReencode()
+                val audioOnly = currentJoinIsAudio()
+                val useOrientationSafeReencode = !audioOnly && shouldUseOrientationSafeReencode()
                 val sourceProfile = detectOutputProfile(copiedInputs.firstOrNull(), clips.firstOrNull())
                 val encoder = selectedVideoEncoder
                 val fastEncoderCompatible = encoder != null && encoder.codecFamily == sourceProfile.videoCodec
 
-                val result = if (checkSmartJoin.isChecked) {
+                val result = if (audioOnly) {
+                    executeAudioJoin(copiedInputs, tempOutput, sourceProfile)
+                } else if (checkSmartJoin.isChecked) {
                     if (useOrientationSafeReencode || !fastEncoderCompatible) {
                         executeFullReencodeJoin(
                             copiedInputs,
@@ -490,7 +518,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     joinScroll.post { joinScroll.smoothScrollTo(0, outputActions.bottom) }
                 }
             } catch (e: Throwable) {
-                Log.e(TAG, "Failed to join videos", e)
+                Log.e(TAG, "Failed to join media", e)
                 runOnUiThread {
                     setProcessing(false)
                     failActiveStep("Erro: ${e.message ?: "falha inesperada"}")
@@ -514,6 +542,69 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         )
     }
 
+    private fun executeAudioJoin(inputs: List<File>, outputFile: File, profile: OutputProfile): JoinExecutionResult {
+        val reencode = checkReencode.isChecked || checkSmartJoin.isChecked
+        val label = if (reencode) "Aplicando transição de áudio" else "Juntando áudios sem reencodar"
+        val arguments = if (reencode) {
+            buildAudioReencodeArguments(inputs, outputFile, profile)
+        } else {
+            buildDirectConcatArguments(inputs, outputFile)
+        }
+        val session = executeFfmpegWithProgress(arguments, totalDurationMs(), label)
+        return JoinExecutionResult(
+            success = ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L,
+            cancelled = ReturnCode.isCancel(session.returnCode),
+            failureMessage = ffmpegFailureMessage(label, session)
+        )
+    }
+
+    private fun buildAudioReencodeArguments(inputs: List<File>, outputFile: File, profile: OutputProfile): Array<String> {
+        val transitionSeconds = safeTransitionSeconds()
+            .coerceAtMost((clips.minOfOrNull { it.durationMs } ?: 1L) / 2000.0)
+            .coerceAtLeast(0.01)
+        val parts = mutableListOf<String>()
+        clips.forEachIndexed { index, clip ->
+            val clipSeconds = (clip.durationMs / 1000.0).coerceAtLeast(0.01)
+            val fades = mutableListOf<String>()
+            if (isFadeInOutTransition()) {
+                if (index > 0) fades += "afade=t=in:st=0:d=${formatDecimal(transitionSeconds)}"
+                if (index < clips.lastIndex) {
+                    fades += "afade=t=out:st=${formatDecimal((clipSeconds - transitionSeconds).coerceAtLeast(0.0))}:d=${formatDecimal(transitionSeconds)}"
+                }
+            }
+            parts += buildString {
+                append("[$index:a]")
+                append(audioNormalizeFilter(profile))
+                fades.forEach { append(',').append(it) }
+                append(",asetpts=PTS-STARTPTS[a$index]")
+            }
+        }
+        if (isFadeInOutTransition()) {
+            parts += clips.indices.joinToString("") { "[a$it]" } + "concat=n=${clips.size}:v=0:a=1[aout]"
+        } else {
+            var previous = "a0"
+            for (index in 1 until clips.size) {
+                val output = "ax$index"
+                parts += "[$previous][a$index]acrossfade=d=${formatDecimal(transitionSeconds)}:c1=tri:c2=tri[$output]"
+                previous = output
+            }
+            parts += "[$previous]anull[aout]"
+        }
+        val args = mutableListOf("-y")
+        inputs.forEach { args += listOf("-i", it.absolutePath) }
+        args += listOf(
+            "-filter_complex", parts.joinToString(";"),
+            "-map", "[aout]",
+            "-c:a", "aac",
+            "-b:a", profile.audioBitrate,
+            "-ar", profile.audioSampleRate.toString(),
+            "-ac", profile.audioChannels.toString(),
+            "-movflags", "+faststart",
+            outputFile.absolutePath
+        )
+        return args.toTypedArray()
+    }
+
     private fun executeFadeInOutReencodeJoin(
         inputs: List<File>,
         outputFile: File,
@@ -534,15 +625,16 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun buildDirectConcatArguments(inputs: List<File>, outputFile: File): Array<String> {
         val listFile = File(cacheDir, "join_list_${System.currentTimeMillis()}.txt")
         listFile.writeText(inputs.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" }, Charsets.UTF_8)
-        return arrayOf(
+        val args = mutableListOf(
             "-y",
             "-f", "concat",
             "-safe", "0",
             "-i", listFile.absolutePath,
-            "-c", "copy",
-            "-movflags", "+faststart",
-            outputFile.absolutePath
+            "-c", "copy"
         )
+        if (!currentJoinIsAudio()) args += listOf("-movflags", "+faststart")
+        args += outputFile.absolutePath
+        return args.toTypedArray()
     }
 
     private fun executeSmartJoinExperiment(inputs: List<File>, outputFile: File): JoinExecutionResult {
@@ -1498,7 +1590,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             currentSessionId = null
             buttonJoin.setImageResource(R.drawable.ic_ffmpeg_join_videos)
             buttonJoin.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
-            buttonJoin.contentDescription = "Juntar vídeos"
+            buttonJoin.contentDescription = "Juntar áudios ou vídeos"
             setJoinEnabled(clips.size >= 2)
         }
         updateReencodeControls()
@@ -1535,7 +1627,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
         try {
             val outputName = lastOutputName.ifBlank { tempFile.name }
-            val document = destDir.createFile("video/mp4", outputName)
+            val outputMime = if (currentJoinIsAudio()) audioMimeType(outputName) else "video/mp4"
+            val document = destDir.createFile(outputMime, outputName)
             if (document == null) {
                 status.text = "Erro ao criar arquivo na pasta selecionada."
                 return
@@ -1580,11 +1673,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val uri = lastOutputUri ?: return
         try {
             startActivity(Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "video/mp4")
+            setDataAndType(uri, if (currentJoinIsAudio()) audioMimeType(lastOutputName) else "video/mp4")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             })
         } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "Não encontrei um app para abrir o vídeo.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Não encontrei um app para abrir a mídia.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1609,7 +1702,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val uri = lastOutputUri ?: return
         try {
             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                type = "video/mp4"
+                type = if (currentJoinIsAudio()) audioMimeType(lastOutputName) else "video/mp4"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }, "Compartilhar arquivo"))
@@ -1622,14 +1715,16 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         pendingResultPreviewFile = file
         timelineScroll.visibility = View.GONE
         resultPreviewContainer.visibility = View.VISIBLE
-        resultVideoPreview.visibility = View.VISIBLE
+        resultVideoPreview.visibility = if (currentJoinIsAudio()) View.GONE else View.VISIBLE
         resultCurrentTime.text = formatTime(0L)
         resultTimeline.isEnabled = false
         resultTimeline.setRange(1L, 0L, 1L)
         resultTimeline.setCurrent(0L)
         updateResultPlaybackButton(false)
         updateResultSpeedButtons()
-        if (resultVideoPreview.isAvailable) {
+        if (currentJoinIsAudio()) {
+            prepareJoinedPreview(file)
+        } else if (resultVideoPreview.isAvailable) {
             resultPreviewSurface?.release()
             resultPreviewSurface = Surface(resultVideoPreview.surfaceTexture)
             prepareJoinedPreview(file)
@@ -1637,13 +1732,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun prepareJoinedPreview(file: File) {
-        val surface = resultPreviewSurface ?: return
+        val surface = resultPreviewSurface
+        if (!currentJoinIsAudio() && surface == null) return
         if (!file.exists()) return
         handler.removeCallbacks(resultPreviewTicker)
         resultPreviewPlayer?.release()
         resultPreviewPlayer = MediaPlayer().apply {
             setDataSource(file.absolutePath)
-            setSurface(surface)
+            if (surface != null) setSurface(surface)
             setOnPreparedListener { player ->
                 resultPreviewDurationMs = player.duration.toLong().coerceAtLeast(1L)
                 resultTimeline.isEnabled = true
@@ -1795,6 +1891,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun initProcessingSteps() {
         processingSteps.clear()
         processingSteps += ProcessingStep("Preparar arquivos de entrada")
+        if (currentJoinIsAudio()) {
+            val label = if (checkReencode.isChecked || checkSmartJoin.isChecked) {
+                "Aplicando transição de áudio"
+            } else {
+                "Juntando áudios sem reencodar"
+            }
+            processingSteps += ProcessingStep(label)
+            processingSteps += ProcessingStep("Preparar arquivo para salvar")
+            renderProcessingSteps()
+            return
+        }
         val useOrientationSafeReencode = shouldUseOrientationSafeReencode()
         if (useOrientationSafeReencode) {
             processingSteps += ProcessingStep("Normalizando orientações (${selectedVideoEncoder?.ffmpegName ?: "encoder"} + aac)")
@@ -1962,9 +2069,26 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val baseName = clips.joinToString("+") { clip ->
             sanitizeFileNameBase(clip.name.substringBeforeLast('.', clip.name))
         }.ifBlank {
-            "videos_juntos"
+            if (currentJoinIsAudio()) "audios_juntos" else "videos_juntos"
         }
-        return "$baseName.mp4"
+        val extension = if (currentJoinIsAudio()) {
+            if (checkReencode.isChecked || checkSmartJoin.isChecked) "m4a"
+            else clips.firstOrNull()?.name?.substringAfterLast('.', "m4a")?.lowercase(Locale.ROOT) ?: "m4a"
+        } else {
+            "mp4"
+        }
+        return "$baseName.$extension"
+    }
+
+    private fun currentJoinIsAudio(): Boolean = clips.isNotEmpty() && clips.all { it.isAudio }
+
+    private fun audioMimeType(name: String): String = when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+        "mp3" -> "audio/mpeg"
+        "wav" -> "audio/wav"
+        "ogg", "opus" -> "audio/ogg"
+        "flac" -> "audio/flac"
+        "aac" -> "audio/aac"
+        else -> "audio/mp4"
     }
 
     private fun sanitizeFileNameBase(name: String): String {
@@ -2262,6 +2386,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val height: Int,
         val rotationDegrees: Int,
         val hasAudio: Boolean,
+        val isAudio: Boolean,
         val thumbnail: Bitmap?
     )
 

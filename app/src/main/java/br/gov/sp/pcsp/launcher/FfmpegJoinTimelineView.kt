@@ -11,6 +11,7 @@ import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import kotlin.math.max
+import kotlin.math.abs
 
 class FfmpegJoinTimelineView @JvmOverloads constructor(
     context: Context,
@@ -22,7 +23,8 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
         val id: Long,
         val title: String,
         val durationMs: Long,
-        val thumbnail: Bitmap?
+        val thumbnail: Bitmap?,
+        val isAudio: Boolean = false
     )
 
     var onOrderChanged: ((List<Long>) -> Unit)? = null
@@ -55,6 +57,11 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
         typeface = android.graphics.Typeface.MONOSPACE
     }
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val waveformPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(94, 218, 242)
+        strokeCap = Paint.Cap.ROUND
+        strokeWidth = dp(2f)
+    }
 
     private var itemWidth = dp(122f)
     private val itemGap = dp(7f)
@@ -98,7 +105,7 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
             val top = topPadding
             val rect = RectF(left, top, left + itemWidth, height - topPadding)
             canvas.drawRoundRect(rect, radius, radius, segmentPaint)
-            drawThumbnail(canvas, clip.thumbnail, rect)
+            if (clip.isAudio) drawWaveform(canvas, clip, rect) else drawThumbnail(canvas, clip.thumbnail, rect)
             canvas.drawRoundRect(rect, radius, radius, if (index == draggingIndex) activeBorderPaint else borderPaint)
             canvas.drawLine(rect.left, rect.bottom + dp(3f), rect.right, rect.bottom + dp(3f), snapPaint)
 
@@ -157,6 +164,22 @@ class FfmpegJoinTimelineView @JvmOverloads constructor(
         val srcBottom = (bitmap.height - srcTop).coerceAtMost(bitmap.height.toFloat())
         val src = android.graphics.Rect(srcLeft.toInt(), srcTop.toInt(), srcRight.toInt(), srcBottom.toInt())
         canvas.drawBitmap(bitmap, src, target, bitmapPaint)
+    }
+
+    private fun drawWaveform(canvas: Canvas, clip: Clip, rect: RectF) {
+        val target = RectF(rect.left + dp(7f), rect.top + dp(7f), rect.right - dp(7f), rect.bottom - dp(36f))
+        val center = target.centerY()
+        val count = max(18, (target.width() / dp(5f)).toInt())
+        val gap = target.width() / count
+        var seed = clip.title.fold(0x2A1F3C) { acc, char -> acc * 31 + char.code }
+        repeat(count) { index ->
+            seed = seed * 1103515245 + 12345
+            val random = abs(seed % 1000) / 1000f
+            val envelope = 0.45f + 0.55f * abs(kotlin.math.sin((index + 1) * 0.43f))
+            val amplitude = target.height() * (0.16f + random * 0.35f) * envelope
+            val x = target.left + gap * (index + 0.5f)
+            canvas.drawLine(x, center - amplitude, x, center + amplitude, waveformPaint)
+        }
     }
 
     private fun indexAt(x: Float): Int {

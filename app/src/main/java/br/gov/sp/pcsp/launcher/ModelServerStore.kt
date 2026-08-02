@@ -18,7 +18,6 @@ object ModelServerStore {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
     }
 
-    fun ensureDefaults() = Unit
     fun defaultConfig() = selectedConfig()
 
     fun readConfigs(): List<Config> {
@@ -26,8 +25,9 @@ object ModelServerStore {
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrok()
         if (GrokApiSettings.isPlausibleDeepseekKey()) available += directDeepseek()
         val selected = GrokApiSettings.selectedText()
-        return available.map { it.copy(selected = it.name == selected) }
-            .let { list -> if (list.none { it.selected }) list.mapIndexed { index, item -> item.copy(selected = index == 0) } else list }
+        val resolved = if (available.any { it.name == selected }) selected else available.first().name
+        if (resolved != selected) GrokApiSettings.selectText(resolved)
+        return available.map { it.copy(selected = it.name == resolved) }
     }
 
     fun selectedConfig(): Config = readConfigs().first { it.selected }
@@ -44,9 +44,6 @@ object ModelServerStore {
         PartsExtractionSettings.MODEL_PROXY_DEEPSEEK -> proxyConfig("deepseek", parts = true)
         else -> proxyConfig(proxyProvider, parts = true)
     }
-
-    fun addConfig(name: String, url: String, modelName: String) = false
-    fun removeConfig(name: String) = false
 
     private fun proxyConfig(provider: String = "grok", parts: Boolean = false): Config {
         val normalized = if (provider == "deepseek") "deepseek" else "grok"

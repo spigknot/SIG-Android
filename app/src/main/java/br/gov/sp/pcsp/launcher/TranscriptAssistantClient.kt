@@ -7,9 +7,11 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.RequestBody.Companion.toRequestBody
+import okio.Timeout
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 
 object TranscriptAssistantClient {
 
@@ -27,11 +29,11 @@ object TranscriptAssistantClient {
         onHistory: (Result<String>) -> Unit,
         onNames: (Result<List<String>>, Long) -> Unit
     ): List<Call> {
-        val historyCall = client.newCall(buildRequest(serverConfig, historyPrompt, transcript))
+        val historyCall = newCall(client, serverConfig, historyPrompt, transcript)
 
         if (extractionMethod == PartsExtractionSettings.Method.AI) {
             val namesStartedAt = System.nanoTime()
-            val namesCall = client.newCall(buildRequest(partsServerConfig, partsPrompt, transcript))
+            val namesCall = newCall(client, partsServerConfig, partsPrompt, transcript)
             historyCall.enqueue(
                 resultCallback(
                     parser = { body ->
@@ -107,7 +109,7 @@ object TranscriptAssistantClient {
             callback(Result.success(names), elapsedMillis(startedAt))
             return null
         }
-        val call = client.newCall(buildRequest(serverConfig, partsPrompt, material))
+        val call = newCall(client, serverConfig, partsPrompt, material)
         call.enqueue(
             resultCallback(
                 parser = { body ->
@@ -163,7 +165,7 @@ object TranscriptAssistantClient {
         statementPrompt: String,
         callback: (Result<String>) -> Unit
     ): Call {
-        val call = client.newCall(buildRequest(serverConfig, statementPrompt, material))
+        val call = newCall(client, serverConfig, statementPrompt, material)
         call.enqueue(
             resultCallback(
                 parser = { body ->
@@ -240,10 +242,11 @@ object TranscriptAssistantClient {
     private fun buildRequest(
         serverConfig: ModelServerStore.Config,
         systemPrompt: String,
-        material: String
+        material: String,
+        url: String = serverConfig.url
     ): Request {
         val builder = Request.Builder()
-            .url(serverConfig.url)
+            .url(url)
             .post(buildPayload(serverConfig, systemPrompt, material).toRequestBody(jsonMediaType))
         if (serverConfig.isGrokApi) {
             val key = GrokApiSettings.xaiApiKey()
@@ -255,6 +258,108 @@ object TranscriptAssistantClient {
             builder.header("Authorization", "Bearer $key")
         }
         return builder.build()
+    }
+
+    private fun newCall(
+        client: OkHttpClient,
+        serverConfig: ModelServerStore.Config,
+        systemPrompt: String,
+        material: String
+    ): Call {
+        val primary = buildRequest(serverConfig, systemPrompt, material)
+        val fallbackUrl = serverConfig.fallbackUrl.trim()
+        if (fallbackUrl.isBlank()) return client.newCall(primary)
+        return newFallbackCall(client, primary, buildRequest(serverConfig, systemPrompt, material, fallbackUrl))
+    }
+
+    internal fun newFallbackCall(client: OkHttpClient, primary: Request, fallback: Request): Call =
+        FallbackCall(client, primary, fallback)
+
+    private class FallbackCall(
+        private val client: OkHttpClient,
+        private val primaryRequest: Request,
+        private val fallbackRequest: Request
+    ) : Call {
+        private val executed = AtomicBoolean(false)
+        private val canceled = AtomicBoolean(false)
+        @Volatile private var currentCall: Call? = null
+
+        override fun request(): Request = primaryRequest
+
+        override fun execute(): Response {
+            check(executed.compareAndSet(false, true)) { "Already Executed" }
+            if (canceled.get()) throw IOException("Canceled")
+            val primary = client.newCall(primaryRequest).also { currentCall = it }
+            try {
+                val response = primary.execute()
+                if (response.isSuccessful || canceled.get()) return response
+                response.close()
+            } catch (error: IOException) {
+                if (canceled.get()) throw error
+            }
+            val fallback = client.newCall(fallbackRequest).also { currentCall = it }
+            if (canceled.get()) {
+                fallback.cancel()
+                throw IOException("Canceled")
+            }
+            return fallback.execute()
+        }
+
+        override fun enqueue(responseCallback: Callback) {
+            check(executed.compareAndSet(false, true)) { "Already Executed" }
+            if (canceled.get()) {
+                responseCallback.onFailure(this, IOException("Canceled"))
+                return
+            }
+            val primary = client.newCall(primaryRequest).also { currentCall = it }
+            primary.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (canceled.get()) responseCallback.onFailure(this@FallbackCall, e)
+                    else enqueueFallback(responseCallback)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    if (response.isSuccessful || canceled.get()) {
+                        responseCallback.onResponse(this@FallbackCall, response)
+                    } else {
+                        response.close()
+                        enqueueFallback(responseCallback)
+                    }
+                }
+            })
+        }
+
+        private fun enqueueFallback(responseCallback: Callback) {
+            if (canceled.get()) {
+                responseCallback.onFailure(this, IOException("Canceled"))
+                return
+            }
+            val fallback = client.newCall(fallbackRequest).also { currentCall = it }
+            if (canceled.get()) {
+                fallback.cancel()
+                responseCallback.onFailure(this, IOException("Canceled"))
+                return
+            }
+            fallback.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    responseCallback.onFailure(this@FallbackCall, e)
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    responseCallback.onResponse(this@FallbackCall, response)
+                }
+            })
+        }
+
+        override fun cancel() {
+            canceled.set(true)
+            currentCall?.cancel()
+        }
+
+        override fun isExecuted(): Boolean = executed.get()
+        override fun isCanceled(): Boolean = canceled.get()
+        override fun timeout(): Timeout = currentCall?.timeout() ?: Timeout.NONE
+        override fun clone(): Call = FallbackCall(client, primaryRequest, fallbackRequest)
     }
 
     private fun extractOutputText(body: String): String {
