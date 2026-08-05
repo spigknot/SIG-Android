@@ -7,9 +7,9 @@ object GrokApiSettings {
 
     const val TRANSCRIPTION_NAME = "Grok STT"
     const val TEXT_NAME = "grok-4.5"
-    const val DEEPSEEK_TEXT_NAME = "deepseek-v4-pro"
+    const val DEEPSEEK_TEXT_NAME = "deepseek-v4-flash"
     const val IA_PROXY_NAME = "IA-Proxy (grok-4.5)"
-    const val IA_PROXY_DEEPSEEK_NAME = "IA-Proxy (deepseek-v4-pro)"
+    const val IA_PROXY_DEEPSEEK_NAME = "IA-Proxy (deepseek-v4-flash)"
 
     private const val PREFERENCES = "model_api_settings"
     private const val KEY_XAI_API = "xai_api_key"
@@ -64,7 +64,14 @@ object GrokApiSettings {
 
     fun selectedText(): String {
         val stored = preferences().getString(KEY_TEXT, IA_PROXY_NAME).orEmpty()
-        return if (stored == "IA-Proxy") IA_PROXY_NAME else stored
+        return when (stored) {
+            "IA-Proxy" -> IA_PROXY_NAME
+            "deepseek-v4-pro" -> DEEPSEEK_TEXT_NAME
+            "IA-Proxy (deepseek-v4-pro)" -> IA_PROXY_DEEPSEEK_NAME
+            else -> stored
+        }.also { migrated ->
+            if (migrated != stored) selectText(migrated)
+        }
     }
 
     fun selectText(name: String) {

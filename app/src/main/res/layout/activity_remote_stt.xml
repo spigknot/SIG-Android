@@ -766,106 +766,72 @@
                     android:textStyle="bold" />
             </LinearLayout>
 
-            <TextView
-                android:id="@+id/advanced_toggle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="start"
-                android:layout_marginStart="20dp"
-                android:layout_marginTop="8dp"
-                android:text="Configurações avançadas"
-                android:textColor="#FF5EDAF2"
-                android:textSize="13sp"
-                android:textStyle="bold"
-                android:visibility="gone" />
-
-            <LinearLayout
-                android:id="@+id/advanced_panel"
+            <HorizontalScrollView
+                android:id="@+id/batch_options_row"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="20dp"
                 android:layout_marginEnd="20dp"
                 android:layout_marginTop="6dp"
-                android:background="#661B1B1B"
-                android:orientation="vertical"
-                android:padding="10dp"
+                android:fillViewport="false"
+                android:scrollbars="none"
                 android:visibility="gone">
 
-                <TextView
-                    android:id="@+id/advanced_endpoint"
-                    android:layout_width="match_parent"
+                <LinearLayout
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:fontFamily="monospace"
-                    android:text="Endpoint: POST /transcribe"
-                    android:textColor="#DDFFFFFF"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                <CheckBox
+                    android:id="@+id/checkbox_only_convert"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:gravity="center_vertical"
+                    android:text="Apenas converter"
+                    android:textColor="#FFFFFFFF"
                     android:textSize="11sp" />
 
-                <TextView
-                    android:id="@+id/advanced_server"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="monospace"
-                    android:text="Servidor: avare:8100"
-                    android:textColor="#DDFFFFFF"
+                <CheckBox
+                    android:id="@+id/checkbox_only_vad"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="6dp"
+                    android:gravity="center_vertical"
+                    android:text="Apenas VAD"
+                    android:textColor="#FFFFFFFF"
                     android:textSize="11sp" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="monospace"
-                    android:text="Modelo: granite-speech-4.1-2b-plus-ar"
-                    android:textColor="#DDFFFFFF"
-                    android:textSize="11sp" />
+                <CheckBox
+                    android:id="@+id/checkbox_send_zip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="6dp"
+                    android:gravity="center_vertical"
+                    android:text="Enviar em ZIP"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp"
+                    android:visibility="gone" />
 
                 <TextView
-                    android:id="@+id/advanced_batch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="monospace"
-                    android:text="Lote: todos os arquivos em campos multipart files"
-                    android:textColor="#DDFFFFFF"
-                    android:textSize="11sp" />
-
-                <TextView
-                    android:id="@+id/advanced_conversion"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="monospace"
-                    android:text="Conversão: paralela, núcleos - 2"
-                    android:textColor="#DDFFFFFF"
-                    android:textSize="11sp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="monospace"
-                    android:text="Compactado: ogg opus mono 16 kHz 32k"
-                    android:textColor="#DDFFFFFF"
-                    android:textSize="11sp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="monospace"
-                    android:text="Pronto: wav mono 16 kHz PCM s16le"
-                    android:textColor="#DDFFFFFF"
-                    android:textSize="11sp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:fontFamily="monospace"
-                    android:text="Resposta: JSON com text/transcription/results/transcriptions"
-                    android:textColor="#DDFFFFFF"
-                    android:textSize="11sp" />
-            </LinearLayout>
+                    android:id="@+id/button_zip_level"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:layout_marginStart="6dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:paddingStart="9dp"
+                    android:paddingEnd="9dp"
+                    android:text="Nível ZIP: 1"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+                </LinearLayout>
+            </HorizontalScrollView>
 
             <ScrollView
                 android:id="@+id/selected_list_box"

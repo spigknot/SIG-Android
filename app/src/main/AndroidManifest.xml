@@ -105,6 +105,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".FfmpegInsertAudioActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
+        <activity
             android:name=".WhisperActivity"
             android:screenOrientation="portrait"
             android:exported="false" />

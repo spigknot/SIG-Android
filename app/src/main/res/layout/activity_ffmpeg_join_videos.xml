@@ -139,39 +139,42 @@
                     <LinearLayout
                         android:id="@+id/result_playback_controls"
                         android:layout_width="wrap_content"
-                        android:layout_height="32dp"
+                        android:layout_height="48dp"
                         android:gravity="center_vertical"
                         android:orientation="horizontal">
 
                         <ImageButton
                             android:id="@+id/result_speed_down"
-                            android:layout_width="30dp"
-                            android:layout_height="30dp"
+                            android:layout_width="42dp"
+                            android:layout_height="42dp"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             android:contentDescription="Desacelerar"
                             android:padding="6dp"
+                            android:scaleType="fitCenter"
                             android:src="@drawable/ic_ffmpeg_speed_down"
                             app:tint="#FFFFFFFF" />
 
                         <ImageButton
                             android:id="@+id/result_play_pause"
-                            android:layout_width="34dp"
-                            android:layout_height="34dp"
-                            android:layout_marginStart="8dp"
-                            android:layout_marginEnd="8dp"
+                            android:layout_width="48dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="12dp"
+                            android:layout_marginEnd="12dp"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             android:contentDescription="Reproduzir"
-                            android:padding="4dp"
+                            android:padding="2dp"
+                            android:scaleType="fitCenter"
                             android:src="@drawable/ic_ffmpeg_play"
                             app:tint="#FFFFFFFF" />
 
                         <ImageButton
                             android:id="@+id/result_speed_up"
-                            android:layout_width="30dp"
-                            android:layout_height="30dp"
+                            android:layout_width="42dp"
+                            android:layout_height="42dp"
                             android:background="?attr/selectableItemBackgroundBorderless"
                             android:contentDescription="Acelerar"
                             android:padding="6dp"
+                            android:scaleType="fitCenter"
                             android:src="@drawable/ic_ffmpeg_speed_up"
                             app:tint="#FFFFFFFF" />
                     </LinearLayout>
@@ -191,6 +194,75 @@
                         android:textSize="11sp" />
                 </LinearLayout>
             </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/join_playback_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <br.gov.sp.pcsp.launcher.FfmpegJoinPlaybackTimelineView
+                    android:id="@+id/join_playback_timeline"
+                    android:layout_width="match_parent"
+                    android:layout_height="112dp"
+                    android:enabled="false" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <ImageButton
+                        android:id="@+id/join_speed_down"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Desacelerar"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_speed_down"
+                        app:tint="#FFFFFFFF" />
+
+                    <ImageButton
+                        android:id="@+id/join_play_pause"
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_marginStart="12dp"
+                        android:layout_marginEnd="12dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Reproduzir"
+                        android:padding="2dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_play"
+                        app:tint="#FFFFFFFF" />
+
+                    <ImageButton
+                        android:id="@+id/join_speed_up"
+                        android:layout_width="42dp"
+                        android:layout_height="42dp"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:contentDescription="Acelerar"
+                        android:padding="6dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_ffmpeg_speed_up"
+                        app:tint="#FFFFFFFF" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/join_current_time"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:text="00:00:00.000"
+                    android:textColor="#AAFFFFFF"
+                    android:textSize="12sp" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/join_controls"

@@ -9,8 +9,18 @@
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Configurações" android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" />
             </FrameLayout>
             <TextView style="@style/SettingsHeader" android:text="Chaves API" />
-            <EditText android:id="@+id/edit_xai_key" style="@style/SettingsEdit" android:hint="Chave API da xAI" android:inputType="textPassword" />
-            <EditText android:id="@+id/edit_deepseek_key" style="@style/SettingsEdit" android:hint="Chave API do Deepseek" android:inputType="textPassword" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="xAI:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_xai_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da xAI" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepseek:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_deepseek_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepseek" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Imei Check:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_imei_check_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Imei Check" android:inputType="textPassword" />
+            </LinearLayout>
             <Button android:id="@+id/button_save_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="4dp" android:paddingBottom="4dp" android:text="Salvar chaves" android:textAllCaps="false" />
 
             <TextView style="@style/SettingsHeader" android:text="Modelo de transcrição" />

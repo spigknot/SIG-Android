@@ -158,7 +158,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private val tempOutputFiles = mutableListOf<File>()
     private var hasSaved = false
 
-    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f)
+    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f, 4f)
 
     private val progressTicker = object : Runnable {
         override fun run() {

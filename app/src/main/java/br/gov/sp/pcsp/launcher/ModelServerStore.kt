@@ -74,7 +74,7 @@ object ModelServerStore {
     )
 
     private fun parameters(provider: String, reasoning: String): JSONObject = if (provider == "deepseek") {
-        JSONObject().put("model", "deepseek-v4-pro").put("temperature", 0.0)
+        JSONObject().put("model", "deepseek-v4-flash").put("temperature", 0.0)
             .put("max_tokens", 10000).put("reasoning_effort", reasoning.takeIf { it == "high" } ?: "none")
     } else {
         JSONObject().put("model", "grok-4.5").put("temperature", 0.0)

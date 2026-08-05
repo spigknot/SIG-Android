@@ -29,5 +29,8 @@ class FfmpegActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_clean_audio).setOnClickListener {
             startActivity(Intent(this, FfmpegCleanAudioActivity::class.java))
         }
+        findViewById<View>(R.id.button_insert_audio).setOnClickListener {
+            startActivity(Intent(this, FfmpegInsertAudioActivity::class.java))
+        }
     }
 }

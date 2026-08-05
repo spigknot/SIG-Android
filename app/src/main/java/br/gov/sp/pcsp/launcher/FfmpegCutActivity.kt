@@ -143,7 +143,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
     }
 
-    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f)
+    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f, 4f)
 
     private val progressTicker = object : Runnable {
         override fun run() {

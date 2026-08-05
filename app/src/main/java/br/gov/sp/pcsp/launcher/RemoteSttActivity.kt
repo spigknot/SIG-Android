@@ -81,6 +81,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlin.math.pow
 import kotlin.random.Random
@@ -103,16 +104,17 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var vadModeRow: View
     private lateinit var buttonVadMode: TextView
     private lateinit var buttonVadLevel: TextView
+    private lateinit var batchOptionsRow: View
+    private lateinit var checkboxOnlyConvert: CheckBox
+    private lateinit var checkboxOnlyVad: CheckBox
+    private lateinit var checkboxSendZip: CheckBox
+    private lateinit var buttonZipLevel: TextView
     private lateinit var videoPrepareWarning: TextView
     private lateinit var buttonCompactFiles: TextView
     private lateinit var buttonPrepareHelp: TextView
     private lateinit var buttonReadyFiles: TextView
     private lateinit var buttonOriginalFiles: TextView
-    private lateinit var advancedToggle: TextView
-    private lateinit var advancedPanel: View
-    private lateinit var advancedServer: TextView
     private lateinit var advancedModel: TextView
-    private lateinit var advancedConversion: TextView
     private lateinit var selectedFile: TextView
     private lateinit var selectedListBox: View
     private lateinit var selectedList: TextView
@@ -183,7 +185,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private val tempOutputFiles = mutableListOf<File>()
     private val outputItems = mutableListOf<OutputItem>()
     private val handler = Handler(Looper.getMainLooper())
-    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f)
+    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f, 4f)
     private val client = OkHttpClient.Builder()
         .connectTimeout(0, TimeUnit.MILLISECONDS)
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -219,6 +221,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var selectedPrepareMode: PrepareMode? = null
     private var selectedVadMode: VadMode = VadMode.NONE
     private var selectedVadLevel: Int = 1
+    private var selectedZipLevel: Int = 1
     private var serverBaseUrl: String = ""
     private var serverFallbackIps: List<String> = emptyList()
     private var serverIpIndex = -1
@@ -371,16 +374,17 @@ class RemoteSttActivity : AppCompatActivity() {
         vadModeRow = findViewById(R.id.vad_mode_row)
         buttonVadMode = findViewById(R.id.button_vad_mode)
         buttonVadLevel = findViewById(R.id.button_vad_level)
+        batchOptionsRow = findViewById(R.id.batch_options_row)
+        checkboxOnlyConvert = findViewById(R.id.checkbox_only_convert)
+        checkboxOnlyVad = findViewById(R.id.checkbox_only_vad)
+        checkboxSendZip = findViewById(R.id.checkbox_send_zip)
+        buttonZipLevel = findViewById(R.id.button_zip_level)
         videoPrepareWarning = findViewById(R.id.video_prepare_warning)
         buttonCompactFiles = findViewById(R.id.button_compact_files)
         buttonPrepareHelp = findViewById(R.id.button_prepare_help)
         buttonReadyFiles = findViewById(R.id.button_ready_files)
         buttonOriginalFiles = findViewById(R.id.button_original_files)
-        advancedToggle = findViewById(R.id.advanced_toggle)
-        advancedPanel = findViewById(R.id.advanced_panel)
-        advancedServer = findViewById(R.id.advanced_server)
         advancedModel = findViewById(R.id.advanced_model)
-        advancedConversion = findViewById(R.id.advanced_conversion)
         selectedFile = findViewById(R.id.selected_file)
         selectedListBox = findViewById(R.id.selected_list_box)
         selectedList = findViewById(R.id.selected_list)
@@ -561,7 +565,31 @@ class RemoteSttActivity : AppCompatActivity() {
         updateVadModeButton()
         buttonVadMode.setOnClickListener { showVadModeMenu() }
         buttonVadLevel.setOnClickListener { showVadLevelMenu() }
-        advancedToggle.setOnClickListener { toggleAdvancedPanel() }
+        checkboxOnlyConvert.setOnCheckedChangeListener { _, checked ->
+            if (checked) {
+                checkboxOnlyVad.isChecked = false
+                checkboxSendZip.isChecked = false
+                if (selectedPrepareMode == PrepareMode.ORIGINAL) selectedPrepareMode = PrepareMode.READY
+            }
+            updatePrepareModeButtons()
+            updateTranscribeEnabled()
+        }
+        checkboxOnlyVad.setOnCheckedChangeListener { _, checked ->
+            if (checked) {
+                checkboxOnlyConvert.isChecked = false
+                checkboxSendZip.isChecked = false
+            }
+            updateBatchOptionVisibility()
+            updateTranscribeEnabled()
+        }
+        checkboxSendZip.setOnCheckedChangeListener { _, checked ->
+            if (checked) {
+                checkboxOnlyConvert.isChecked = false
+                checkboxOnlyVad.isChecked = false
+            }
+            updateBatchOptionVisibility()
+        }
+        buttonZipLevel.setOnClickListener { showZipLevelMenu() }
         setupLiveIntervalControls()
         updateSpeedButton()
         refreshGrokApiControls()
@@ -583,6 +611,7 @@ class RemoteSttActivity : AppCompatActivity() {
         super.onResume()
         handler.post(progressTicker)
         refreshGrokApiControls()
+        updateBatchOptionVisibility()
         refreshModelSummaryStatusIfIdle()
     }
 
@@ -656,8 +685,6 @@ class RemoteSttActivity : AppCompatActivity() {
         selectedFile.visibility = View.GONE
         selectedListBox.visibility = View.GONE
         prepareModeButtons.visibility = View.GONE
-        advancedToggle.visibility = View.GONE
-        advancedPanel.visibility = View.GONE
         buttonTranscribe.visibility = View.GONE
         progress.visibility = View.GONE
         status.visibility = View.GONE
@@ -980,6 +1007,9 @@ class RemoteSttActivity : AppCompatActivity() {
         clearOutputResult()
         selectedItems.clear()
         whiteMicSelection = false
+        checkboxOnlyConvert.isChecked = false
+        checkboxOnlyVad.isChecked = false
+        checkboxSendZip.isChecked = false
         selectedPrepareMode = PrepareMode.READY
         updatePrepareModeButtons()
         showSinglePreview(null)
@@ -1024,15 +1054,15 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         buttonSaveRecording.visibility = View.GONE
         val item = MediaItem(Uri.fromFile(file), file.name, "audio/wav", readDurationFromFile(file))
-        applySelection(listOf(item))
+        selectedItems.clear()
+        selectedItems += item
         whiteMicSelection = true
-        selectedPrepareMode = PrepareMode.READY
+        selectedPrepareMode = PrepareMode.ORIGINAL
         transcriptionTaskState = AssistantTaskState.DONE
         renderLiveProgress()
-        updateTranscribeEnabled()
-        recordingPanel.visibility = View.GONE
         recordingTimer.text = formatElapsedCompact(item.durationMs)
         status.text = ""
+        startServerTranscription()
     }
 
     private fun resetRecordingButton() {
@@ -2370,7 +2400,6 @@ class RemoteSttActivity : AppCompatActivity() {
             fromTime = inputFrom.text?.toString().orEmpty(),
             toTime = inputTo.text?.toString().orEmpty(),
             outputFolderUri = preSelectedOutputDirUri,
-            advancedPanelVisible = advancedPanel.visibility == View.VISIBLE
         )
     }
 
@@ -2405,8 +2434,6 @@ class RemoteSttActivity : AppCompatActivity() {
         preSelectedOutputDirUri = draft.outputFolderUri
         inputFrom.setText(draft.fromTime)
         inputTo.setText(draft.toTime)
-        advancedPanel.visibility = if (draft.advancedPanelVisible && draft.items.isNotEmpty()) View.VISIBLE else View.GONE
-        if (advancedPanel.visibility == View.VISIBLE) updateAdvancedInfo()
         updateTranscribeEnabled()
         updateTextEditorsLock()
     }
@@ -2509,9 +2536,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun updatePrepareModeButtons() {
         prepareModeButtons.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
         vadModeRow.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
+        updateBatchOptionVisibility()
         videoPrepareWarning.visibility = View.GONE
-        advancedToggle.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
-        if (selectedItems.isEmpty()) advancedPanel.visibility = View.GONE
 
         val selected = selectedPrepareMode
         buttonCompactFiles.setBackgroundResource(
@@ -2523,6 +2549,34 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonOriginalFiles.setBackgroundResource(
             if (selected == PrepareMode.ORIGINAL) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
         )
+        buttonOriginalFiles.isEnabled = !checkboxOnlyConvert.isChecked
+        buttonOriginalFiles.alpha = if (buttonOriginalFiles.isEnabled) 1f else 0.38f
+    }
+
+    private fun updateBatchOptionVisibility() {
+        if (!::batchOptionsRow.isInitialized) return
+        val hasFiles = selectedItems.isNotEmpty()
+        val zipAllowed = selectedItems.size > 1 && !TranscriptionModelStore.selectedConfig().isGrokApi
+        batchOptionsRow.visibility = if (hasFiles) View.VISIBLE else View.GONE
+        checkboxSendZip.visibility = if (zipAllowed) View.VISIBLE else View.GONE
+        if (!zipAllowed && checkboxSendZip.isChecked) checkboxSendZip.isChecked = false
+        buttonZipLevel.visibility = if (zipAllowed && checkboxSendZip.isChecked) View.VISIBLE else View.GONE
+        checkboxOnlyVad.isEnabled = selectedVadMode != VadMode.NONE
+        checkboxOnlyVad.alpha = if (checkboxOnlyVad.isEnabled) 1f else 0.38f
+        if (!checkboxOnlyVad.isEnabled && checkboxOnlyVad.isChecked) checkboxOnlyVad.isChecked = false
+    }
+
+    private fun showZipLevelMenu() {
+        PopupMenu(this, buttonZipLevel).apply {
+            (0..9).forEach { level ->
+                menu.add(level.toString()).setOnMenuItemClickListener {
+                    selectedZipLevel = level
+                    buttonZipLevel.text = "Nível ZIP: $level"
+                    true
+                }
+            }
+            show()
+        }
     }
 
     private fun showVadModeMenu() {
@@ -2535,6 +2589,8 @@ class RemoteSttActivity : AppCompatActivity() {
                         .putString(VAD_MODE_KEY, mode.preferenceKey)
                         .apply()
                     updateVadModeButton()
+                    updateBatchOptionVisibility()
+                    updateTranscribeEnabled()
                     true
                 }
             }
@@ -2568,17 +2624,9 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleAdvancedPanel() {
-        advancedPanel.visibility = if (advancedPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-        updateAdvancedInfo()
-    }
-
     private fun updateAdvancedInfo() {
-        if (!::advancedServer.isInitialized) return
-        val base = if (serverBaseUrl.isBlank()) "$DEFAULT_SERVER_IP:$SERVER_PORT" else serverBaseUrl.removePrefix("http://")
-        advancedServer.text = "Servidor: $base"
+        if (!::advancedModel.isInitialized) return
         advancedModel.text = "Modelo: ${TranscriptionModelStore.selectedConfig().modelName}"
-        advancedConversion.text = "Conversão: paralela, ${conversionParallelism()} por vez (núcleos - 2)"
     }
 
     private fun showSinglePreview(item: MediaItem?) {
@@ -2673,15 +2721,22 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         val items = selectedItems.toList()
         if (items.isEmpty()) return
-        if (serverBaseUrl.isBlank() && !TranscriptionModelStore.selectedConfig().isGrokApi) {
+        val onlyConvert = checkboxOnlyConvert.isChecked
+        val onlyVad = checkboxOnlyVad.isChecked
+        val sendZip = checkboxSendZip.isChecked && items.size > 1
+        if (onlyVad && selectedVadMode == VadMode.NONE) {
+            status.text = "Escolha um VAD antes de usar Apenas VAD."
+            return
+        }
+        if (!onlyConvert && !onlyVad && serverBaseUrl.isBlank() && !TranscriptionModelStore.selectedConfig().isGrokApi) {
             status.text = "Informe e teste o IP do servidor."
             return
         }
-        if (TranscriptionModelStore.selectedConfig().isGrokApi && !GrokApiSettings.hasApiKey()) {
+        if (!onlyConvert && !onlyVad && TranscriptionModelStore.selectedConfig().isGrokApi && !GrokApiSettings.hasApiKey()) {
             status.text = "Insira a chave API do Grok nas configurações."
             return
         }
-        val prepareMode = selectedPrepareMode ?: run {
+        val prepareMode = (if (whiteRecording) PrepareMode.ORIGINAL else selectedPrepareMode) ?: run {
             status.text = "Escolha uma forma de envio."
             updateTranscribeEnabled()
             return
@@ -2710,6 +2765,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 appendLog(logLines, "Pasta temporária: ${tempDir.absolutePath}")
                 appendLog(logLines, "Arquivos: ${items.size}")
                 appendLog(logLines, "Preparo: ${prepareMode.label}")
+                appendLog(logLines, "Modo: ${when { onlyConvert -> "Apenas converter"; onlyVad -> "Apenas VAD"; sendZip -> "ZIP nível $selectedZipLevel"; else -> "Transcrição normal" }}")
                 val cores = Runtime.getRuntime().availableProcessors()
                 val parallelism = conversionParallelism()
                 val uploadParallelism = uploadParallelism(items.size)
@@ -2722,10 +2778,16 @@ class RemoteSttActivity : AppCompatActivity() {
 
                 val conversionExecutor = Executors.newFixedThreadPool(parallelism)
                 val prepareCompletion = ExecutorCompletionService<PreparedUpload>(conversionExecutor)
-                val uploadExecutor = Executors.newFixedThreadPool(uploadParallelism)
-                val uploadCompletion = ExecutorCompletionService<TranscriptionResult>(uploadExecutor)
+                val uploadExecutor = if (!onlyConvert && !onlyVad && !sendZip) Executors.newFixedThreadPool(uploadParallelism) else null
+                val uploadCompletion = uploadExecutor?.let { ExecutorCompletionService<TranscriptionResult>(it) }
+                val preparedUploads = mutableListOf<PreparedUpload>()
                 items.forEachIndexed { index, item ->
-                    prepareCompletion.submit(prepareUploadTask(items, prepareMode, tempDir, terminalLines, index, item, vadStats))
+                    prepareCompletion.submit(
+                        prepareUploadTask(
+                            items, prepareMode, tempDir, terminalLines, index, item, vadStats,
+                            applyVad = !onlyConvert && !whiteRecording
+                        )
+                    )
                 }
 
                 var totalSentSeconds = 0.0
@@ -2736,17 +2798,35 @@ class RemoteSttActivity : AppCompatActivity() {
                         val prepared = prepareCompletion.take().get()
                         ensureNotCancelled()
                         totalSentSeconds += prepared.durationMs / 1000.0
-                        uploadCompletion.submit(uploadTask(prepared, items.size, transcriptionDir, terminalLines, serverStartedAt, serverFinishedAt))
-                        submittedUploads++
+                        if (onlyConvert || onlyVad || sendZip) {
+                            preparedUploads += prepared
+                        } else {
+                            uploadCompletion!!.submit(uploadTask(prepared, items.size, transcriptionDir, terminalLines, serverStartedAt, serverFinishedAt))
+                            submittedUploads++
+                        }
                     }
 
-                    repeat(submittedUploads) {
-                        ensureNotCancelled()
-                        results += uploadCompletion.take().get()
+                    if (onlyConvert || onlyVad) {
+                        finishPreparedOnly(
+                            sessionDir, preparedUploads.sortedBy { it.index }, onlyVad,
+                            terminalLines, logLines, startedAt
+                        )
+                        tempDir.deleteRecursively()
+                        return@Thread
+                    } else if (sendZip) {
+                        results += sendZipBatchToServer(
+                            preparedUploads.sortedBy { it.index }, transcriptionDir, tempDir,
+                            terminalLines, serverStartedAt, serverFinishedAt, selectedZipLevel
+                        )
+                    } else {
+                        repeat(submittedUploads) {
+                            ensureNotCancelled()
+                            results += uploadCompletion!!.take().get()
+                        }
                     }
                 } finally {
                     conversionExecutor.shutdownNow()
-                    uploadExecutor.shutdownNow()
+                    uploadExecutor?.shutdownNow()
                 }
 
                 val orderedResults = results.sortedBy { it.index }
@@ -2839,7 +2919,8 @@ class RemoteSttActivity : AppCompatActivity() {
         terminalLines: StringBuilder,
         index: Int,
         item: MediaItem,
-        vadStats: VadRunStats
+        vadStats: VadRunStats,
+        applyVad: Boolean = true
     ): Callable<PreparedUpload> {
         return Callable {
             ensureNotCancelled()
@@ -2866,17 +2947,21 @@ class RemoteSttActivity : AppCompatActivity() {
                 durationMs = durationToSend,
                 terminalLines = terminalLines
             )
-            val uploadFile = applySelectedVad(
-                preparedUploadFile = preparedUploadFile,
-                sourceFile = inputFile,
-                tempDir = tempDir,
-                index = number,
-                item = item,
-                startMs = startMs,
-                durationMs = durationToSend,
-                terminalLines = terminalLines,
-                vadStats = vadStats
-            )
+            val uploadFile = if (applyVad) {
+                applySelectedVad(
+                    preparedUploadFile = preparedUploadFile,
+                    sourceFile = inputFile,
+                    tempDir = tempDir,
+                    index = number,
+                    item = item,
+                    startMs = startMs,
+                    durationMs = durationToSend,
+                    terminalLines = terminalLines,
+                    vadStats = vadStats
+                )
+            } else {
+                preparedUploadFile
+            }
             val sentAudioInfo = describeAudioFile(uploadFile.file)
             appendTerminal(terminalLines, "prepare done[$number/${items.size}]: ${item.name}")
             runOnUiThread { updateTerminalText(terminalLines) }
@@ -2955,6 +3040,142 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         runOnUiThread { updateTerminalText(terminalLines) }
         return results
+    }
+
+    private fun finishPreparedOnly(
+        sessionDir: File,
+        preparedUploads: List<PreparedUpload>,
+        onlyVad: Boolean,
+        terminalLines: StringBuilder,
+        logLines: StringBuilder,
+        startedAt: Long
+    ) {
+        val outputDir = File(sessionDir, if (onlyVad) "VAD" else "Convertidos").apply { mkdirs() }
+        preparedUploads.forEachIndexed { index, prepared ->
+            ensureNotCancelled()
+            val suffix = prepared.uploadFile.file.extension.takeIf { it.isNotBlank() }?.let { ".$it" } ?: ".wav"
+            val marker = if (onlyVad) "_vad" else "_convertido"
+            val target = uniqueFile(outputDir, "${safeBaseName(prepared.item.name)}$marker$suffix")
+            prepared.uploadFile.file.copyTo(target, overwrite = true)
+            appendTerminal(terminalLines, "salvo ${index + 1}/${preparedUploads.size}: ${target.name}")
+        }
+        val elapsed = SystemClock.elapsedRealtime() - startedAt
+        val summary = "${if (onlyVad) "VAD" else "Conversão"} concluído: ${preparedUploads.size} arquivo(s) em ${formatElapsedCompact(elapsed)}"
+        appendTerminal(terminalLines, summary)
+        appendLog(logLines, summary)
+        val txtFile = File(sessionDir, "resultado.txt").apply { writeText(summary + "\n", Charsets.UTF_8) }
+        val htmlFile = File(sessionDir, "resultado.html").apply {
+            writeText("<meta charset=\"utf-8\"><p>${escapeHtml(summary)}</p>", Charsets.UTF_8)
+        }
+        val logFile = File(sessionDir, "log.txt").apply { writeText(logLines.toString(), Charsets.UTF_8) }
+        val terminalFile = File(sessionDir, "terminal.txt").apply { writeText(snapshotText(terminalLines), Charsets.UTF_8) }
+        runOnUiThread {
+            lastSession = OutputSession(sessionDir, txtFile, htmlFile, logFile, terminalFile)
+            status.text = summary
+            outputActions.visibility = View.VISIBLE
+            buttonOutputFolder.visibility = View.GONE
+            setProcessing(false)
+            updateTerminalText(terminalLines)
+        }
+    }
+
+    private fun sendZipBatchToServer(
+        preparedUploads: List<PreparedUpload>,
+        transcriptionDir: File,
+        tempDir: File,
+        terminalLines: StringBuilder,
+        serverStartedAt: AtomicLong,
+        serverFinishedAt: AtomicLong,
+        compressionLevel: Int
+    ): List<TranscriptionResult> {
+        val config = TranscriptionModelStore.selectedConfig()
+        if (config.isGrokApi) throw IllegalStateException("Envio ZIP não está disponível para o Grok STT.")
+        val level = compressionLevel.coerceIn(0, 9)
+        val requestZip = File(tempDir, "lote_nivel_$level.zip")
+        val usedNames = mutableSetOf<String>()
+        val entryStemByIndex = mutableMapOf<Int, String>()
+        appendTerminal(terminalLines, "Criando ZIP nível $level: 0/${preparedUploads.size}")
+        ZipOutputStream(FileOutputStream(requestZip)).use { zip ->
+            zip.setLevel(if (level == 0) Deflater.NO_COMPRESSION else level)
+            preparedUploads.forEachIndexed { index, prepared ->
+                ensureNotCancelled()
+                val extension = prepared.uploadFile.file.extension.takeIf { it.isNotBlank() }?.let { ".$it" } ?: ".wav"
+                var entryName = "${safeBaseName(prepared.item.name)}$extension"
+                var suffix = 2
+                while (!usedNames.add(entryName.lowercase(Locale.ROOT))) {
+                    entryName = "${safeBaseName(prepared.item.name)}_$suffix$extension"
+                    suffix++
+                }
+                entryStemByIndex[prepared.index] = safeBaseName(entryName).lowercase(Locale.ROOT)
+                zip.putNextEntry(ZipEntry(entryName))
+                prepared.uploadFile.file.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+                appendTerminal(terminalLines, "Criando ZIP nível $level: ${index + 1}/${preparedUploads.size}")
+                runOnUiThread {
+                    status.text = "Criando ZIP: ${index + 1}/${preparedUploads.size}"
+                    progress.progress = ((index + 1) * 35 / preparedUploads.size.coerceAtLeast(1))
+                    updateTerminalText(terminalLines)
+                }
+            }
+        }
+        zipFile = requestZip
+        appendTerminal(terminalLines, "ZIP pronto: ${humanFileSize(requestZip.length())}")
+        runOnUiThread { status.text = "Enviando ZIP e aguardando o servidor..." }
+
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .apply {
+                addTranscriptionParameters(config)
+                addFormDataPart("files", requestZip.name, requestZip.asRequestBody("application/zip".toMediaType()))
+            }
+            .build()
+        val request = Request.Builder()
+            .url(config.url)
+            .addHeader("accept", "application/zip, application/octet-stream")
+            .post(requestBody)
+            .build()
+        val call = client.newCall(request)
+        currentCalls.add(call)
+        val responseBytes = try {
+            serverStartedAt.compareAndSet(0L, SystemClock.elapsedRealtime())
+            call.execute().use { response ->
+                appendTerminal(terminalLines, "http ${response.code} ${response.message}")
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("servidor respondeu ${response.code}. ${response.body?.string().orEmpty().take(240)}")
+                }
+                response.body?.bytes() ?: throw IllegalStateException("resposta ZIP vazia")
+            }
+        } finally {
+            markServerFinished(serverFinishedAt)
+            currentCalls.remove(call)
+        }
+
+        val texts = mutableMapOf<String, String>()
+        ZipInputStream(responseBytes.inputStream()).use { zip ->
+            while (true) {
+                ensureNotCancelled()
+                val entry = zip.nextEntry ?: break
+                val leafName = entry.name.replace('\\', '/').substringAfterLast('/')
+                if (!entry.isDirectory && leafName.lowercase(Locale.ROOT).endsWith(".txt")) {
+                    texts[safeBaseName(leafName).lowercase(Locale.ROOT)] =
+                        ByteArrayOutputStream().use { output -> zip.copyTo(output); output.toString(Charsets.UTF_8.name()) }
+                }
+                zip.closeEntry()
+            }
+        }
+        if (texts.isEmpty()) throw IllegalStateException("o servidor não retornou arquivos TXT no ZIP")
+        return preparedUploads.sortedBy { it.index }.mapIndexed { index, prepared ->
+            val key = entryStemByIndex[prepared.index] ?: safeBaseName(prepared.item.name).lowercase(Locale.ROOT)
+            val text = texts[key]?.trim() ?: throw IllegalStateException("TXT não retornado para ${prepared.item.name}")
+            uniqueFile(transcriptionDir, "${safeBaseName(prepared.item.name)}.txt").writeText(text + "\n", Charsets.UTF_8)
+            appendTerminal(terminalLines, "Resposta ZIP: ${index + 1}/${preparedUploads.size}")
+            runOnUiThread {
+                status.text = "Processando resposta ZIP: ${index + 1}/${preparedUploads.size}"
+                progress.progress = 70 + ((index + 1) * 30 / preparedUploads.size.coerceAtLeast(1))
+                updateTerminalText(terminalLines)
+            }
+            TranscriptionResult(prepared.index, prepared.item.name, text)
+        }
     }
 
     private fun sendSingleToServer(
@@ -3820,9 +4041,10 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun updateTranscribeEnabled() {
         if (isProcessing) return
         val enabled = selectedItems.isNotEmpty() &&
-            selectedItems.all { isAudio(it.mime, it.name) } &&
-            selectedPrepareMode != null
-        buttonTranscribe.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { isAudio(it.mime, it.name) }) {
+            selectedItems.all { isSupportedMedia(it.mime, it.name) } &&
+            selectedPrepareMode != null &&
+            (!checkboxOnlyVad.isChecked || selectedVadMode != VadMode.NONE)
+        buttonTranscribe.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { isSupportedMedia(it.mime, it.name) }) {
             View.VISIBLE
         } else {
             View.GONE
@@ -3986,6 +4208,15 @@ class RemoteSttActivity : AppCompatActivity() {
             val transcriptionsDoc = sessionDoc.createDirectory("Transcricoes") ?: sessionDoc
             File(session.dir, "Transcricoes").listFiles()?.forEach { file ->
                 copyFileToDocument(file, transcriptionsDoc, "text/plain")
+            }
+            listOf("Convertidos", "VAD").forEach { folderName ->
+                val localDir = File(session.dir, folderName)
+                if (localDir.isDirectory) {
+                    val outputDoc = sessionDoc.createDirectory(folderName) ?: sessionDoc
+                    localDir.listFiles()?.forEach { file ->
+                        copyFileToDocument(file, outputDoc, contentResolver.getType(Uri.fromFile(file)) ?: "application/octet-stream")
+                    }
+                }
             }
             finalOutputDirUri = sessionDoc.uri
             buttonOutputFolder.visibility = View.VISIBLE
@@ -5311,8 +5542,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val diarize: Boolean,
         val fromTime: String,
         val toTime: String,
-        val outputFolderUri: Uri?,
-        val advancedPanelVisible: Boolean
+        val outputFolderUri: Uri?
     )
 
     private enum class PrepareMode(

@@ -24,6 +24,7 @@ class ModelSettingsActivity : AppCompatActivity() {
     private lateinit var partsModelGroup: RadioGroup
     private lateinit var xaiKey: EditText
     private lateinit var deepseekKey: EditText
+    private lateinit var imeiCheckKey: EditText
     private lateinit var chunkSpinner: Spinner
     private lateinit var conversionParallelism: EditText
     private lateinit var requestParallelism: EditText
@@ -40,6 +41,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         partsModelGroup = findViewById(R.id.radio_parts_model)
         xaiKey = findViewById(R.id.edit_xai_key)
         deepseekKey = findViewById(R.id.edit_deepseek_key)
+        imeiCheckKey = findViewById(R.id.edit_imei_check_key)
         chunkSpinner = findViewById(R.id.spinner_grok_chunk)
         conversionParallelism = findViewById(R.id.edit_conversion_parallelism)
         requestParallelism = findViewById(R.id.edit_request_parallelism)
@@ -51,6 +53,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         super.onResume()
         xaiKey.setText(GrokApiSettings.xaiApiKey())
         deepseekKey.setText(GrokApiSettings.deepseekApiKey())
+        imeiCheckKey.setText(ImeiApiSettings.apiKey())
         populateAll()
     }
 
@@ -62,6 +65,7 @@ class ModelSettingsActivity : AppCompatActivity() {
     private fun saveKeys() {
         GrokApiSettings.setXaiApiKey(xaiKey.text.toString())
         GrokApiSettings.setDeepseekApiKey(deepseekKey.text.toString())
+        ImeiApiSettings.setApiKey(imeiCheckKey.text.toString())
         populateAll()
         val xaiStatus = keyStatus(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)
         val deepseekStatus = keyStatus(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)
@@ -110,7 +114,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         ModelServerStore.readConfigs().forEach { config ->
             val label = when {
                 config.isGrokApi -> "xAI (grok-4.5)"
-                config.isDeepseekApi -> "Deepseek (deepseek-v4-pro)"
+                config.isDeepseekApi -> "Deepseek (deepseek-v4-flash)"
                 else -> config.name
             }
             textGroup.addView(radio(label, config.selected) {

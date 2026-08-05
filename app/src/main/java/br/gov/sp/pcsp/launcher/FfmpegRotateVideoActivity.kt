@@ -102,7 +102,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private var playbackSpeed = 1f
     private val transformOrder = mutableListOf<TransformOp>()
     @Volatile private var currentSessionId: Long? = null
-    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f)
+    private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f, 4f)
 
     private lateinit var buttonOutputFolder: ImageButton
     private lateinit var buttonOutputShare: ImageButton
