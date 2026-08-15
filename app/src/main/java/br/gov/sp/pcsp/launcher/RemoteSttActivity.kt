@@ -2159,39 +2159,48 @@ class RemoteSttActivity : AppCompatActivity() {
                 .forEach { append("&keyterm=${Uri.encode(it)}") }
         }
         val requestBody = uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
-        val call = client.newCall(
-            Request.Builder()
-                .url(url)
-                .header("Authorization", "Token $apiKey")
-                .post(requestBody)
-                .build()
-        )
-        currentCalls.add(call)
-        if (isLiveFinal != null) {
-            synchronized(liveRequestLock) {
-                liveCurrentCall = call
-                liveCurrentCallIsFinal = isLiveFinal
-            }
-        }
-        try {
-            call.execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) throw IllegalStateException("Deepgram respondeu ${response.code}: ${body.take(240)}")
-                val payload = JSONObject(body)
-                val results = payload.optJSONObject("results")
-                val channels = results?.optJSONArray("channels")
-                val alternatives = channels?.optJSONObject(0)?.optJSONArray("alternatives")
-                val rawText = alternatives?.optJSONObject(0)?.optString("transcript")?.trim().orEmpty()
-                if (rawText.isBlank()) throw IllegalStateException("O Deepgram retornou uma transcrição vazia.")
-                return rawText
-            }
-        } finally {
-            currentCalls.remove(call)
+        var attempt = 0
+        while (true) {
+            attempt += 1
+            val call = client.newCall(
+                Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Token $apiKey")
+                    .post(requestBody)
+                    .build()
+            )
+            currentCalls.add(call)
             if (isLiveFinal != null) {
                 synchronized(liveRequestLock) {
-                    if (liveCurrentCall == call) {
-                        liveCurrentCall = null
-                        liveCurrentCallIsFinal = false
+                    liveCurrentCall = call
+                    liveCurrentCallIsFinal = isLiveFinal
+                }
+            }
+            try {
+                call.execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) throw IllegalStateException("Deepgram respondeu ${response.code}: ${body.take(240)}")
+                    val payload = JSONObject(body)
+                    val results = payload.optJSONObject("results")
+                    val channels = results?.optJSONArray("channels")
+                    val alternatives = channels?.optJSONObject(0)?.optJSONArray("alternatives")
+                    val rawText = alternatives?.optJSONObject(0)?.optString("transcript")?.trim().orEmpty()
+                    if (rawText.isBlank()) throw IllegalStateException("O Deepgram retornou uma transcrição vazia.")
+                    return rawText
+                }
+            } catch (error: java.io.IOException) {
+                // StreamReset HTTP/2 (race de conexão) é benigno: o body é um
+                // arquivo (replayable) e uma única nova tentativa resolve.
+                if (attempt >= 2) throw IllegalStateException("Deepgram falhou após 2 tentativas: ${error.message}")
+                Thread.sleep(300)
+            } finally {
+                currentCalls.remove(call)
+                if (isLiveFinal != null) {
+                    synchronized(liveRequestLock) {
+                        if (liveCurrentCall == call) {
+                            liveCurrentCall = null
+                            liveCurrentCallIsFinal = false
+                        }
                     }
                 }
             }
@@ -3451,6 +3460,12 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isGrokApi) {
             return preparedUploads.sortedBy { it.index }.map { prepared ->
                 val text = sendGrokApiTranscription(prepared.uploadFile)
+                TranscriptionResult(prepared.index, prepared.item.name, text)
+            }
+        }
+        if (config.isDeepgramApi) {
+            return preparedUploads.sortedBy { it.index }.map { prepared ->
+                val text = sendDeepgramApiTranscription(prepared.uploadFile)
                 TranscriptionResult(prepared.index, prepared.item.name, text)
             }
         }
