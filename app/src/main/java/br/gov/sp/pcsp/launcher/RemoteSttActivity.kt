@@ -2185,7 +2185,14 @@ class RemoteSttActivity : AppCompatActivity() {
                     val channels = results?.optJSONArray("channels")
                     val alternatives = channels?.optJSONObject(0)?.optJSONArray("alternatives")
                     val rawText = alternatives?.optJSONObject(0)?.optString("transcript")?.trim().orEmpty()
-                    if (rawText.isBlank()) throw IllegalStateException("O Deepgram retornou uma transcrição vazia.")
+                    if (rawText.isBlank()) {
+                        val duration = results?.optString("duration").orEmpty()
+                        val language = channels?.optJSONObject(0)?.optString("detected_language").orEmpty()
+                        throw IllegalStateException(
+                            "O Deepgram retornou uma transcrição vazia (duration=${duration.ifBlank { "?" }}, " +
+                                "language=${language.ifBlank { "?" }}, resposta=${body.take(300)})"
+                        )
+                    }
                     return rawText
                 }
             } catch (error: java.io.IOException) {
