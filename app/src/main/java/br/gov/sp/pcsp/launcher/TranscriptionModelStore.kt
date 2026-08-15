@@ -11,7 +11,8 @@ object TranscriptionModelStore {
         val url: String,
         val parameters: JSONObject,
         val selected: Boolean = false,
-        val isGrokApi: Boolean = false
+        val isGrokApi: Boolean = false,
+        val isDeepgramApi: Boolean = false
     ) {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
     }
@@ -27,6 +28,14 @@ object TranscriptionModelStore {
                 "https://api.x.ai/v1/stt",
                 JSONObject().put("model", "grok-2-audio"),
                 isGrokApi = true
+            )
+        }
+        if (GrokApiSettings.hasDeepgramApiKey()) {
+            available += Config(
+                GrokApiSettings.DEEPGRAM_TRANSCRIPTION_NAME,
+                "https://api.deepgram.com/v1/listen",
+                JSONObject().put("model", "nova-3"),
+                isDeepgramApi = true
             )
         }
         val selected = GrokApiSettings.selectedTranscription()

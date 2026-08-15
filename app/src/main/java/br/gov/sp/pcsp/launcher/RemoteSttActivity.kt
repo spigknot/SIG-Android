@@ -238,6 +238,7 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var liveFinalizing = false
     @Volatile private var livePaused = false
     @Volatile private var liveUsesGrokWebSocket = false
+    @Volatile private var sttIsDeepgram = false
     @Volatile private var liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
     private var liveThread: Thread? = null
     private var liveUploadExecutor: ExecutorService? = null
@@ -254,6 +255,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var grokReconnectAttempts = 0
     private var grokReconnectRunnable: Runnable? = null
     private var grokStableResetRunnable: Runnable? = null
+    private var deepgramFinishRunnable: Runnable? = null
     private var grokEverConnected = false
     private var grokDisconnectedAudioBytes = 0L
     private var grokAudioLossReported = false
@@ -1149,13 +1151,18 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun startLiveMicTranscription() {
         val transcriptionConfig = TranscriptionModelStore.selectedConfig()
-        val useGrokWebSocket = transcriptionConfig.isGrokApi
-        if (serverBaseUrl.isBlank() && !useGrokWebSocket) {
+        val useWebSocket = transcriptionConfig.isGrokApi || transcriptionConfig.isDeepgramApi
+        sttIsDeepgram = transcriptionConfig.isDeepgramApi
+        if (serverBaseUrl.isBlank() && !useWebSocket) {
             status.text = "Informe e teste o IP do servidor."
             return
         }
-        if (useGrokWebSocket && !GrokApiSettings.hasApiKey()) {
+        if (useWebSocket && transcriptionConfig.isGrokApi && !GrokApiSettings.hasApiKey()) {
             status.text = "Insira a chave API do Grok nas configurações."
+            return
+        }
+        if (useWebSocket && transcriptionConfig.isDeepgramApi && !GrokApiSettings.hasDeepgramApiKey()) {
+            status.text = "Insira a chave API do Deepgram nas configurações."
             return
         }
         if (isProcessing) return
@@ -1176,16 +1183,16 @@ class RemoteSttActivity : AppCompatActivity() {
         stopMicrophonePreview()
         clearOutputResult()
         liveFullPcmFile?.delete()
-        liveFullPcmFile = if (useGrokWebSocket) null else File(cacheDir, "live_full_${System.currentTimeMillis()}.pcm")
-        liveUsesGrokWebSocket = useGrokWebSocket
-        if (useGrokWebSocket) liveDraftIntervalMillis = grokWebSocketChunkMillis()
+        liveFullPcmFile = if (useWebSocket) null else File(cacheDir, "live_full_${System.currentTimeMillis()}.pcm")
+        liveUsesGrokWebSocket = useWebSocket
+        if (useWebSocket) liveDraftIntervalMillis = grokWebSocketChunkMillis()
         liveTranscribing = true
         updateTextEditorsLock()
         liveFinalizing = false
         livePaused = false
         livePausedAt = 0L
         livePausedAccumulatedMs = 0L
-        liveUploadExecutor = if (useGrokWebSocket) null else Executors.newFixedThreadPool(LIVE_UPLOAD_WORKERS)
+        liveUploadExecutor = if (useWebSocket) null else Executors.newFixedThreadPool(LIVE_UPLOAD_WORKERS)
         synchronized(liveTerminalLines) { liveTerminalLines.clear() }
         synchronized(liveTranscriptText) {
             liveTranscriptText.clear()
@@ -1202,6 +1209,8 @@ class RemoteSttActivity : AppCompatActivity() {
             grokAudioLossReported = false
         }
         cancelGrokReconnectCallbacks()
+        deepgramFinishRunnable?.let(handler::removeCallbacks)
+        deepgramFinishRunnable = null
         grokReconnectAttempts = 0
         grokEverConnected = false
         grokSocketReady = false
@@ -1233,7 +1242,7 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonLiveMicStop.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
         buttonLiveMicStop.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
         buttonLiveMicStop.contentDescription = "Finalizar transcrição ao vivo"
-        if (useGrokWebSocket) {
+        if (useWebSocket) {
             emitGrokConnectionEvent(GrokConnectionEvent.CONNECTING)
             connectGrokLiveWebSocket()
         } else {
@@ -1267,19 +1276,32 @@ class RemoteSttActivity : AppCompatActivity() {
             if (reconnecting) GrokConnectionEvent.RECONNECTING else GrokConnectionEvent.CONNECTING,
             if (reconnecting) "tentativa $grokReconnectAttempts/$GROK_MAX_RECONNECT_ATTEMPTS" else null
         )
-        val apiKey = GrokApiSettings.apiKey()
-        val request = Request.Builder()
-            .url(grokWebSocketUrl())
-            .header("Authorization", "Bearer $apiKey")
-            .build()
+        val request = if (sttIsDeepgram) {
+            Request.Builder()
+                .url(deepgramWebSocketUrl())
+                .header("Authorization", "Token ${GrokApiSettings.deepgramApiKey()}")
+                .build()
+        } else {
+            val apiKey = GrokApiSettings.apiKey()
+            Request.Builder()
+                .url(grokWebSocketUrl())
+                .header("Authorization", "Bearer $apiKey")
+                .build()
+        }
         val isReconnectAttempt = reconnecting
         grokLiveWebSocket = grokWebSocketClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (grokLiveWebSocket !== webSocket) return
-                emitGrokConnectionEvent(
-                    if (isReconnectAttempt) GrokConnectionEvent.RECONNECTING else GrokConnectionEvent.CONNECTING,
-                    "sessão aberta; aguardando o Grok"
-                )
+                if (sttIsDeepgram) {
+                    // O Metadata do Deepgram pode demorar ~12s; o socket aberto
+                    // já está pronto para receber áudio (onOpen).
+                    onGrokWebSocketReady(webSocket)
+                } else {
+                    emitGrokConnectionEvent(
+                        if (isReconnectAttempt) GrokConnectionEvent.RECONNECTING else GrokConnectionEvent.CONNECTING,
+                        "sessão aberta; aguardando o Grok"
+                    )
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -1325,6 +1347,22 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun deepgramWebSocketUrl(): String {
+        return buildString {
+            append("wss://api.deepgram.com/v1/listen?model=nova-3")
+            append("&language=${selectedLiveLanguage.serverCode}")
+            append("&smart_format=true&punctuate=true")
+            append("&encoding=linear16&sample_rate=16000&channels=1")
+            append("&interim_results=true&endpointing=900")
+            if (checkboxLiveDiarize.isChecked) append("&diarize=true")
+            GrokApiSettings.deepgramKeyterms()
+                .split(',', '\n')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .forEach { append("&keyterm=${Uri.encode(it)}") }
+        }
+    }
+
     private fun handleGrokLiveEvent(webSocket: WebSocket, rawEvent: String) {
         val event = runCatching { JSONObject(rawEvent) }.getOrElse {
             handleGrokWebSocketDisconnect(webSocket, "resposta inválida do Grok")
@@ -1332,6 +1370,27 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         when (event.optString("type")) {
             "transcript.created" -> onGrokWebSocketReady(webSocket)
+            "Metadata" -> if (sttIsDeepgram) onGrokWebSocketReady(webSocket)
+            "Results" -> if (sttIsDeepgram) {
+                val channel = event.optJSONObject("channel")
+                val alternatives = channel?.optJSONArray("alternatives")
+                val text = (0 until (alternatives?.length() ?: 0))
+                    .firstNotNullOfOrNull { index ->
+                        alternatives?.optJSONObject(index)?.optString("transcript")?.trim()?.takeIf { it.isNotBlank() }
+                    }.orEmpty()
+                if (text.isEmpty()) return
+                val isFinal = event.optBoolean("is_final", false) || event.optBoolean("speech_final", false)
+                synchronized(grokLiveFinalSegments) {
+                    if (isFinal) {
+                        if (grokLiveFinalSegments.lastOrNull() != text) grokLiveFinalSegments += text
+                        grokLivePartialSegment = ""
+                    } else {
+                        grokLivePartialSegment = text
+                    }
+                    updateGrokLiveTranscriptLocked()
+                }
+                runOnUiThread { updateLiveTerminalText() }
+            }
             "transcript.partial" -> {
                 val text = formatGrokDiarizedTranscript(event, event.optString("text").trim())
                 if (text.isBlank()) return
@@ -1519,6 +1578,8 @@ class RemoteSttActivity : AppCompatActivity() {
         }
 
         grokCompletionHandled = true
+        deepgramFinishRunnable?.let(handler::removeCallbacks)
+        deepgramFinishRunnable = null
         synchronized(liveTranscriptText) {
             liveTranscriptText.clear()
             liveTranscriptText.append(mergedFinal)
@@ -1630,14 +1691,17 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun sendGrokAudioDone(webSocket: WebSocket) {
         if (grokLiveWebSocket !== webSocket || !grokSocketReady) return
-        if (!webSocket.send("{\"type\":\"audio.done\"}")) {
-            handleGrokWebSocketDisconnect(webSocket, "não consegui finalizar o áudio no Grok")
+        val payload = if (sttIsDeepgram) "{\"type\":\"CloseStream\"}" else "{\"type\":\"audio.done\"}"
+        if (!webSocket.send(payload)) {
+            handleGrokWebSocketDisconnect(webSocket, "não consegui finalizar o áudio no servidor")
         }
     }
 
     private fun finishGrokWebSocketPermanently(message: String) {
         grokIntentionalClose = true
         cancelGrokReconnectCallbacks()
+        deepgramFinishRunnable?.let(handler::removeCallbacks)
+        deepgramFinishRunnable = null
         val socket = grokLiveWebSocket
         grokLiveWebSocket = null
         grokSocketReady = false
@@ -1654,7 +1718,7 @@ class RemoteSttActivity : AppCompatActivity() {
             transcriptionTaskState = AssistantTaskState.ERROR
             refiningTaskState = AssistantTaskState.IDLE
             renderLiveProgress()
-            status.text = "Erro do Grok: $message"
+            status.text = "Erro do ${sttProviderName()}: $message"
             resetLiveMicButtons()
             updateTextEditorsLock()
         }
@@ -1667,19 +1731,22 @@ class RemoteSttActivity : AppCompatActivity() {
         grokStableResetRunnable = null
     }
 
+    private fun sttProviderName(): String = if (sttIsDeepgram) "Deepgram" else "Grok"
+
     private fun emitGrokConnectionEvent(event: GrokConnectionEvent, detail: String? = null) {
         grokConnectionState = event.state
-        Log.i(TAG, "Grok WebSocket: ${event.state.label}${detail?.let { " - $it" }.orEmpty()}")
+        val provider = sttProviderName()
+        Log.i(TAG, "$provider WebSocket: ${event.state.label}${detail?.let { " - $it" }.orEmpty()}")
         runOnUiThread {
             if (!::status.isInitialized) return@runOnUiThread
             status.text = when (event) {
-                GrokConnectionEvent.CONNECTING -> "Conectando ao Grok${detail?.let { ": $it" }.orEmpty()}..."
-                GrokConnectionEvent.CONNECTED -> "Conectado ao Grok. Ouvindo e transcrevendo..."
-                GrokConnectionEvent.RECONNECTING -> "Reconectando ao Grok${detail?.let { ": $it" }.orEmpty()}"
-                GrokConnectionEvent.RECONNECTED -> "Reconectado ao Grok. Áudio recente reenviado."
-                GrokConnectionEvent.RECONNECT_FAILED -> "Falha na conexão com o Grok${detail?.let { ": $it" }.orEmpty()}"
+                GrokConnectionEvent.CONNECTING -> "Conectando ao $provider${detail?.let { ": $it" }.orEmpty()}..."
+                GrokConnectionEvent.CONNECTED -> "Conectado ao $provider. Ouvindo e transcrevendo..."
+                GrokConnectionEvent.RECONNECTING -> "Reconectando ao $provider${detail?.let { ": $it" }.orEmpty()}"
+                GrokConnectionEvent.RECONNECTED -> "Reconectado ao $provider. Áudio recente reenviado."
+                GrokConnectionEvent.RECONNECT_FAILED -> "Falha na conexão com o $provider${detail?.let { ": $it" }.orEmpty()}"
                 GrokConnectionEvent.AUDIO_LOST -> "Áudio perdido durante a reconexão: ${detail.orEmpty()}"
-                GrokConnectionEvent.DISCONNECTED -> "Desconectado do Grok."
+                GrokConnectionEvent.DISCONNECTED -> "Desconectado do $provider."
             }
             if (event == GrokConnectionEvent.AUDIO_LOST) {
                 Toast.makeText(this, status.text, Toast.LENGTH_LONG).show()
@@ -1756,10 +1823,19 @@ class RemoteSttActivity : AppCompatActivity() {
                 grokFinishRequested = true
                 liveAiProgress.visibility = View.VISIBLE
                 renderLiveProgress()
-                status.text = "Recebendo a transcrição final do Grok..."
+                status.text = if (sttIsDeepgram) "Recebendo a transcrição final do Deepgram..." else "Recebendo a transcrição final do Grok..."
                 val socket = grokLiveWebSocket
                 if (socket != null && grokSocketReady) {
                     sendGrokAudioDone(socket)
+                    if (sttIsDeepgram) {
+                        deepgramFinishRunnable?.let(handler::removeCallbacks)
+                        val timeout = Runnable {
+                            deepgramFinishRunnable = null
+                            grokLiveWebSocket?.let { completeGrokLiveTranscription(it, "") }
+                        }
+                        deepgramFinishRunnable = timeout
+                        handler.postDelayed(timeout, DEEPGRAM_FINISH_TIMEOUT_MILLIS)
+                    }
                 } else if (grokReconnectRunnable == null && socket == null) {
                     scheduleGrokReconnect("conexão perdida antes da finalização")
                 }
@@ -1977,6 +2053,7 @@ class RemoteSttActivity : AppCompatActivity() {
         isFinal: Boolean
     ): String {
         if (config.isGrokApi) return sendGrokApiTranscription(uploadFile, isFinal)
+        if (config.isDeepgramApi) return sendDeepgramApiTranscription(uploadFile, isFinal)
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addTranscriptionParameters(config)
@@ -2067,6 +2144,60 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun sendDeepgramApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
+        val apiKey = GrokApiSettings.deepgramApiKey()
+        require(GrokApiSettings.isPlausibleDeepgramKey(apiKey)) { "A chave API do Deepgram salva nas configurações é inválida." }
+        val url = buildString {
+            append("https://api.deepgram.com/v1/listen?model=nova-3")
+            append("&language=${selectedLiveLanguage.serverCode}")
+            append("&smart_format=true&punctuate=true")
+            if (checkboxLiveDiarize.isChecked) append("&diarize=true")
+            GrokApiSettings.deepgramKeyterms()
+                .split(',', '\n')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .forEach { append("&keyterm=${Uri.encode(it)}") }
+        }
+        val requestBody = uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
+        val call = client.newCall(
+            Request.Builder()
+                .url(url)
+                .header("Authorization", "Token $apiKey")
+                .post(requestBody)
+                .build()
+        )
+        currentCalls.add(call)
+        if (isLiveFinal != null) {
+            synchronized(liveRequestLock) {
+                liveCurrentCall = call
+                liveCurrentCallIsFinal = isLiveFinal
+            }
+        }
+        try {
+            call.execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw IllegalStateException("Deepgram respondeu ${response.code}: ${body.take(240)}")
+                val payload = JSONObject(body)
+                val results = payload.optJSONObject("results")
+                val channels = results?.optJSONArray("channels")
+                val alternatives = channels?.optJSONObject(0)?.optJSONArray("alternatives")
+                val rawText = alternatives?.optJSONObject(0)?.optString("transcript")?.trim().orEmpty()
+                if (rawText.isBlank()) throw IllegalStateException("O Deepgram retornou uma transcrição vazia.")
+                return rawText
+            }
+        } finally {
+            currentCalls.remove(call)
+            if (isLiveFinal != null) {
+                synchronized(liveRequestLock) {
+                    if (liveCurrentCall == call) {
+                        liveCurrentCall = null
+                        liveCurrentCallIsFinal = false
+                    }
+                }
+            }
+        }
+    }
+
     private fun formatGrokDiarizedTranscript(payload: JSONObject, fallback: String): String {
         if (!checkboxLiveDiarize.isChecked) return fallback
         val words = payload.optJSONArray("words") ?: return fallback
@@ -2102,18 +2233,19 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun refreshGrokApiControls() {
-        val grokTranscription = TranscriptionModelStore.selectedConfig().isGrokApi
-        buttonLiveLanguage.visibility = if (grokTranscription) View.VISIBLE else View.GONE
-        grokDiarizeRow.visibility = if (grokTranscription) View.VISIBLE else View.GONE
-        buttonLiveIntervalMinus.visibility = if (grokTranscription) View.GONE else View.VISIBLE
-        buttonLiveIntervalPlus.visibility = if (grokTranscription) View.GONE else View.VISIBLE
-        if (grokTranscription) {
+        val config = TranscriptionModelStore.selectedConfig()
+        val apiTranscription = config.isGrokApi || config.isDeepgramApi
+        buttonLiveLanguage.visibility = if (apiTranscription) View.VISIBLE else View.GONE
+        grokDiarizeRow.visibility = if (apiTranscription) View.VISIBLE else View.GONE
+        buttonLiveIntervalMinus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
+        buttonLiveIntervalPlus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
+        if (apiTranscription) {
             liveDraftIntervalMillis = grokWebSocketChunkMillis()
         } else if (liveDraftIntervalMillis == grokWebSocketChunkMillis()) {
             liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
         }
         refreshLiveIntervalInput()
-        if (!grokTranscription) checkboxLiveDiarize.isChecked = false
+        if (!apiTranscription) checkboxLiveDiarize.isChecked = false
     }
 
     private fun showDiarizationHelp() {
@@ -4650,8 +4782,10 @@ class RemoteSttActivity : AppCompatActivity() {
             serverConfig = ModelServerStore.selectedConfig(),
             partsServerConfig = PartsExtractionSettings.selectedConfig(this),
             transcript = transcript,
-            historyPrompt = PromptTemplateStore.historyPrompt(),
-            partsPrompt = PromptTemplateStore.partsPrompt(),
+            historySystemPrompt = PromptTemplateStore.historySystemPrompt(),
+            historyUserPrompt = PromptTemplateStore.historyUserPrompt(transcript),
+            partsSystemPrompt = PromptTemplateStore.partsSystemPrompt(),
+            partsUserPrompt = PromptTemplateStore.partsUserPromptFromTranscription(transcript),
             extractionMethod = extractionMethod,
             nameDatabase = nameDatabase,
             onHistory = { result ->
@@ -4736,7 +4870,8 @@ class RemoteSttActivity : AppCompatActivity() {
             client = client,
             serverConfig = ModelServerStore.selectedConfig(),
             material = material,
-            statementPrompt = PromptTemplateStore.statementPrompt(selectedName)
+            statementSystemPrompt = PromptTemplateStore.statementSystemPrompt(),
+            statementUserPrompt = PromptTemplateStore.statementUserPrompt(selectedName, material)
         ) { result ->
             runOnUiThread {
                 if (generation != assistantRequestGeneration) return@runOnUiThread
@@ -4896,7 +5031,8 @@ class RemoteSttActivity : AppCompatActivity() {
             client,
             PartsExtractionSettings.selectedConfig(this),
             history,
-            PromptTemplateStore.partsPrompt(),
+            PromptTemplateStore.partsSystemPrompt(),
+            PromptTemplateStore.partsUserPromptFromHistory(history),
             method,
             database
         ) { result, elapsed ->
@@ -5698,6 +5834,7 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val GROK_RECONNECT_BASE_MILLIS = 500L
         private const val GROK_RECONNECT_MAX_MILLIS = 7000L
         private const val GROK_STABLE_CONNECTION_MILLIS = 10000L
+        private const val DEEPGRAM_FINISH_TIMEOUT_MILLIS = 20000L
         private const val GROK_MIN_OVERLAP_WORDS = 2
         private const val GROK_MAX_OVERLAP_WORDS = 80
         private const val MIN_LIVE_DRAFT_INTERVAL_MILLIS = 100

@@ -6,14 +6,18 @@ import android.content.Context
 object GrokApiSettings {
 
     const val TRANSCRIPTION_NAME = "Grok STT"
-    const val TEXT_NAME = "grok-4.5"
+    const val DEEPGRAM_TRANSCRIPTION_NAME = "Deepgram Nova 3"
+    const val TEXT_NAME = "grok-4.6"
+    const val GROK_NON_REASONING_TEXT_NAME = "grok-4.20-0309-non-reasoning"
     const val DEEPSEEK_TEXT_NAME = "deepseek-v4-flash"
-    const val IA_PROXY_NAME = "IA-Proxy (grok-4.5)"
+    const val IA_PROXY_NAME = "IA-Proxy (grok-4.6)"
     const val IA_PROXY_DEEPSEEK_NAME = "IA-Proxy (deepseek-v4-flash)"
 
     private const val PREFERENCES = "model_api_settings"
     private const val KEY_XAI_API = "xai_api_key"
     private const val KEY_DEEPSEEK_API = "deepseek_api_key"
+    private const val KEY_DEEPGRAM_API = "deepgram_api_key"
+    private const val KEY_DEEPGRAM_KEYTERMS = "deepgram_keyterms"
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
     private const val KEY_TEXT_REASONING = "text_reasoning"
@@ -45,6 +49,25 @@ object GrokApiSettings {
         return key.length == 35 && key.startsWith("sk-")
     }
 
+    fun deepgramApiKey(): String = preferences().getString(KEY_DEEPGRAM_API, "").orEmpty().trim()
+
+    fun setDeepgramApiKey(value: String) {
+        preferences().edit().putString(KEY_DEEPGRAM_API, value.trim()).apply()
+    }
+
+    fun isPlausibleDeepgramKey(value: String = deepgramApiKey()): Boolean {
+        val key = value.trim()
+        return key.length == 40 && key.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
+    }
+
+    fun hasDeepgramApiKey(): Boolean = isPlausibleDeepgramKey()
+
+    fun deepgramKeyterms(): String = preferences().getString(KEY_DEEPGRAM_KEYTERMS, "").orEmpty().trim()
+
+    fun setDeepgramKeyterms(value: String) {
+        preferences().edit().putString(KEY_DEEPGRAM_KEYTERMS, value.trim()).apply()
+    }
+
     fun hasApiKey(): Boolean = isPlausibleXaiKey()
 
     fun selectedTranscription(): String = preferences().getString(
@@ -66,6 +89,7 @@ object GrokApiSettings {
         val stored = preferences().getString(KEY_TEXT, IA_PROXY_NAME).orEmpty()
         return when (stored) {
             "IA-Proxy" -> IA_PROXY_NAME
+            "grok-4.20-non-reasoning" -> GROK_NON_REASONING_TEXT_NAME
             "deepseek-v4-pro" -> DEEPSEEK_TEXT_NAME
             "IA-Proxy (deepseek-v4-pro)" -> IA_PROXY_DEEPSEEK_NAME
             else -> stored

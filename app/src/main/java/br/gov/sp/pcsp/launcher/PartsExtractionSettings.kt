@@ -4,9 +4,10 @@ import android.content.Context
 
 object PartsExtractionSettings {
 
-    const val MODEL_PROXY = "IA-Proxy (grok-4.5)"
+    const val MODEL_PROXY = "IA-Proxy (grok-4.6)"
     const val MODEL_PROXY_DEEPSEEK = "IA-Proxy (deepseek-v4-flash)"
-    const val MODEL_GROK = "grok-4.5"
+    const val MODEL_GROK = "grok-4.6"
+    const val MODEL_GROK_NON_REASONING = "grok-4.20-0309-non-reasoning"
     const val MODEL_DEEPSEEK = "deepseek-v4-flash"
 
     enum class Method(val storedValue: String) {
@@ -30,6 +31,7 @@ object PartsExtractionSettings {
     fun selectedModel(context: Context): String {
         val stored = preferences(context).getString(KEY_MODEL, MODEL_PROXY).orEmpty()
         val migrated = when (stored) {
+            "grok-4.20-non-reasoning" -> MODEL_GROK_NON_REASONING
             "deepseek-v4-pro" -> MODEL_DEEPSEEK
             "IA-Proxy (deepseek-v4-pro)" -> MODEL_PROXY_DEEPSEEK
             else -> stored

@@ -24,6 +24,8 @@ class ModelSettingsActivity : AppCompatActivity() {
     private lateinit var partsModelGroup: RadioGroup
     private lateinit var xaiKey: EditText
     private lateinit var deepseekKey: EditText
+    private lateinit var deepgramKey: EditText
+    private lateinit var deepgramKeyterms: EditText
     private lateinit var imeiCheckKey: EditText
     private lateinit var chunkSpinner: Spinner
     private lateinit var conversionParallelism: EditText
@@ -41,6 +43,8 @@ class ModelSettingsActivity : AppCompatActivity() {
         partsModelGroup = findViewById(R.id.radio_parts_model)
         xaiKey = findViewById(R.id.edit_xai_key)
         deepseekKey = findViewById(R.id.edit_deepseek_key)
+        deepgramKey = findViewById(R.id.edit_deepgram_key)
+        deepgramKeyterms = findViewById(R.id.edit_deepgram_keyterms)
         imeiCheckKey = findViewById(R.id.edit_imei_check_key)
         chunkSpinner = findViewById(R.id.spinner_grok_chunk)
         conversionParallelism = findViewById(R.id.edit_conversion_parallelism)
@@ -53,6 +57,8 @@ class ModelSettingsActivity : AppCompatActivity() {
         super.onResume()
         xaiKey.setText(GrokApiSettings.xaiApiKey())
         deepseekKey.setText(GrokApiSettings.deepseekApiKey())
+        deepgramKey.setText(GrokApiSettings.deepgramApiKey())
+        deepgramKeyterms.setText(GrokApiSettings.deepgramKeyterms())
         imeiCheckKey.setText(ImeiApiSettings.apiKey())
         populateAll()
     }
@@ -65,13 +71,16 @@ class ModelSettingsActivity : AppCompatActivity() {
     private fun saveKeys() {
         GrokApiSettings.setXaiApiKey(xaiKey.text.toString())
         GrokApiSettings.setDeepseekApiKey(deepseekKey.text.toString())
+        GrokApiSettings.setDeepgramApiKey(deepgramKey.text.toString())
+        GrokApiSettings.setDeepgramKeyterms(deepgramKeyterms.text.toString())
         ImeiApiSettings.setApiKey(imeiCheckKey.text.toString())
         populateAll()
         val xaiStatus = keyStatus(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)
         val deepseekStatus = keyStatus(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)
+        val deepgramStatus = keyStatus(GrokApiSettings.deepgramApiKey(), GrokApiSettings::isPlausibleDeepgramKey)
         Toast.makeText(
             this,
-            "Chaves salvas. xAI: $xaiStatus; Deepseek: $deepseekStatus.",
+            "Chaves salvas. xAI: $xaiStatus; Deepseek: $deepseekStatus; Deepgram: $deepgramStatus.",
             Toast.LENGTH_LONG
         ).show()
     }
@@ -95,7 +104,11 @@ class ModelSettingsActivity : AppCompatActivity() {
     private fun populateTranscription() {
         transcriptionGroup.removeAllViews()
         TranscriptionModelStore.readConfigs().forEach { config ->
-            val label = if (config.isGrokApi) "Grok STT" else "${config.name} (${config.modelName})"
+            val label = when {
+                config.isGrokApi -> "Grok STT"
+                config.isDeepgramApi -> "Deepgram Nova 3"
+                else -> "${config.name} (${config.modelName})"
+            }
             transcriptionGroup.addView(radio(label, config.selected) {
                 TranscriptionModelStore.select(config.name)
                 refreshVisibility()
@@ -113,7 +126,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         textGroup.removeAllViews()
         ModelServerStore.readConfigs().forEach { config ->
             val label = when {
-                config.isGrokApi -> "xAI (grok-4.5)"
+                config.isGrokApi -> "xAI (${config.modelName})"
                 config.isDeepseekApi -> "Deepseek (deepseek-v4-flash)"
                 else -> config.name
             }
@@ -129,6 +142,10 @@ class ModelSettingsActivity : AppCompatActivity() {
         val config = ModelServerStore.selectedConfig()
         val provider = config.provider
         reasoningGroup.removeAllViews()
+        if (config.modelName == GrokApiSettings.GROK_NON_REASONING_TEXT_NAME) {
+            reasoningGroup.visibility = View.GONE
+            return
+        }
         val options = if (provider == "deepseek") listOf("none" to "Nenhum", "high" to "High") else listOf("low" to "Low", "high" to "High")
         val current = GrokApiSettings.textReasoning().takeIf { saved -> options.any { it.first == saved } } ?: options.first().first
         if (current != GrokApiSettings.textReasoning()) GrokApiSettings.setTextReasoning(current)
@@ -151,6 +168,7 @@ class ModelSettingsActivity : AppCompatActivity() {
         partsModelGroup.removeAllViews()
         val models = mutableListOf(PartsExtractionSettings.MODEL_PROXY, PartsExtractionSettings.MODEL_PROXY_DEEPSEEK)
         if (GrokApiSettings.isPlausibleXaiKey()) models += PartsExtractionSettings.MODEL_GROK
+        if (GrokApiSettings.isPlausibleXaiKey()) models += PartsExtractionSettings.MODEL_GROK_NON_REASONING
         if (GrokApiSettings.isPlausibleDeepseekKey()) models += PartsExtractionSettings.MODEL_DEEPSEEK
         if (PartsExtractionSettings.selectedModel(this) !in models) PartsExtractionSettings.selectModel(this, PartsExtractionSettings.MODEL_PROXY)
         models.forEach { model ->
@@ -205,7 +223,8 @@ class ModelSettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshVisibility() {
-        findViewById<View>(R.id.layout_grok_chunk).visibility = if (TranscriptionModelStore.selectedConfig().isGrokApi) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.layout_grok_chunk).visibility =
+            if (TranscriptionModelStore.selectedConfig().isGrokApi || TranscriptionModelStore.selectedConfig().isDeepgramApi) View.VISIBLE else View.GONE
         val text = ModelServerStore.selectedConfig()
         reasoningGroup.visibility = if (text.isGrokApi || text.isDeepseekApi || text.isProxy) View.VISIBLE else View.GONE
         refreshReasoning()

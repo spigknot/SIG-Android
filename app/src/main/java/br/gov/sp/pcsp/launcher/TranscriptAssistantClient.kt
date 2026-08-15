@@ -22,18 +22,20 @@ object TranscriptAssistantClient {
         serverConfig: ModelServerStore.Config,
         partsServerConfig: ModelServerStore.Config = serverConfig,
         transcript: String,
-        historyPrompt: String,
-        partsPrompt: String,
+        historySystemPrompt: String,
+        historyUserPrompt: String,
+        partsSystemPrompt: String,
+        partsUserPrompt: String,
         extractionMethod: PartsExtractionSettings.Method,
         nameDatabase: Set<String>,
         onHistory: (Result<String>) -> Unit,
         onNames: (Result<List<String>>, Long) -> Unit
     ): List<Call> {
-        val historyCall = newCall(client, serverConfig, historyPrompt, transcript)
+        val historyCall = newCall(client, serverConfig, historySystemPrompt, historyUserPrompt)
 
         if (extractionMethod == PartsExtractionSettings.Method.AI) {
             val namesStartedAt = System.nanoTime()
-            val namesCall = newCall(client, partsServerConfig, partsPrompt, transcript)
+            val namesCall = newCall(client, partsServerConfig, partsSystemPrompt, partsUserPrompt)
             historyCall.enqueue(
                 resultCallback(
                     parser = { body ->
@@ -94,7 +96,8 @@ object TranscriptAssistantClient {
         client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
         material: String,
-        partsPrompt: String,
+        partsSystemPrompt: String,
+        partsUserPrompt: String,
         extractionMethod: PartsExtractionSettings.Method,
         nameDatabase: Set<String>,
         callback: (Result<List<String>>, Long) -> Unit
@@ -109,7 +112,7 @@ object TranscriptAssistantClient {
             callback(Result.success(names), elapsedMillis(startedAt))
             return null
         }
-        val call = newCall(client, serverConfig, partsPrompt, material)
+        val call = newCall(client, serverConfig, partsSystemPrompt, partsUserPrompt)
         call.enqueue(
             resultCallback(
                 parser = { body ->
@@ -162,10 +165,11 @@ object TranscriptAssistantClient {
         client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
         material: String,
-        statementPrompt: String,
+        statementSystemPrompt: String,
+        statementUserPrompt: String,
         callback: (Result<String>) -> Unit
     ): Call {
-        val call = newCall(client, serverConfig, statementPrompt, material)
+        val call = newCall(client, serverConfig, statementSystemPrompt, statementUserPrompt)
         call.enqueue(
             resultCallback(
                 parser = { body ->
@@ -264,12 +268,12 @@ object TranscriptAssistantClient {
         client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
         systemPrompt: String,
-        material: String
+        userPrompt: String
     ): Call {
-        val primary = buildRequest(serverConfig, systemPrompt, material)
+        val primary = buildRequest(serverConfig, systemPrompt, userPrompt)
         val fallbackUrl = serverConfig.fallbackUrl.trim()
         if (fallbackUrl.isBlank()) return client.newCall(primary)
-        return newFallbackCall(client, primary, buildRequest(serverConfig, systemPrompt, material, fallbackUrl))
+        return newFallbackCall(client, primary, buildRequest(serverConfig, systemPrompt, userPrompt, fallbackUrl))
     }
 
     internal fun newFallbackCall(client: OkHttpClient, primary: Request, fallback: Request): Call =

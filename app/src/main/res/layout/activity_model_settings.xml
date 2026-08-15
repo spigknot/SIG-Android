@@ -18,6 +18,14 @@
                 <EditText android:id="@+id/edit_deepseek_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepseek" android:inputType="textPassword" />
             </LinearLayout>
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepgram:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_deepgram_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepgram" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Termos:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_deepgram_keyterms" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Palavras-chave do Deepgram (vírgula)" android:inputType="text" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
                 <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Imei Check:" android:textColor="#FFFFFFFF" />
                 <EditText android:id="@+id/edit_imei_check_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Imei Check" android:inputType="textPassword" />
             </LinearLayout>

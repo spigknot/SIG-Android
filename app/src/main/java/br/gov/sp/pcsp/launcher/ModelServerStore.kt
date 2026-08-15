@@ -23,6 +23,7 @@ object ModelServerStore {
     fun readConfigs(): List<Config> {
         val available = mutableListOf(proxyConfig("grok"), proxyConfig("deepseek"))
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrok()
+        if (GrokApiSettings.isPlausibleXaiKey()) available += directGrokNonReasoning()
         if (GrokApiSettings.isPlausibleDeepseekKey()) available += directDeepseek()
         val selected = GrokApiSettings.selectedText()
         val resolved = if (available.any { it.name == selected }) selected else available.first().name
@@ -40,6 +41,7 @@ object ModelServerStore {
 
     fun configForParts(name: String, proxyProvider: String): Config = when (name) {
         GrokApiSettings.TEXT_NAME -> directGrok()
+        GrokApiSettings.GROK_NON_REASONING_TEXT_NAME -> directGrokNonReasoning()
         GrokApiSettings.DEEPSEEK_TEXT_NAME -> directDeepseek()
         PartsExtractionSettings.MODEL_PROXY_DEEPSEEK -> proxyConfig("deepseek", parts = true)
         else -> proxyConfig(proxyProvider, parts = true)
@@ -65,6 +67,17 @@ object ModelServerStore {
         provider = "grok"
     )
 
+    private fun directGrokNonReasoning() = Config(
+        GrokApiSettings.GROK_NON_REASONING_TEXT_NAME,
+        "https://api.x.ai/v1/responses",
+        JSONObject()
+            .put("model", GrokApiSettings.GROK_NON_REASONING_TEXT_NAME)
+            .put("temperature", 0.0)
+            .put("max_output_tokens", 10000),
+        isGrokApi = true,
+        provider = "grok"
+    )
+
     private fun directDeepseek() = Config(
         GrokApiSettings.DEEPSEEK_TEXT_NAME,
         "https://api.deepseek.com/chat/completions",
@@ -77,7 +90,7 @@ object ModelServerStore {
         JSONObject().put("model", "deepseek-v4-flash").put("temperature", 0.0)
             .put("max_tokens", 10000).put("reasoning_effort", reasoning.takeIf { it == "high" } ?: "none")
     } else {
-        JSONObject().put("model", "grok-4.5").put("temperature", 0.0)
+        JSONObject().put("model", "grok-4.6").put("temperature", 0.0)
             .put("max_output_tokens", 10000).put("reasoning", JSONObject().put("effort", reasoning.takeIf { it == "high" } ?: "low"))
     }
 

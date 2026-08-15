@@ -3,60 +3,129 @@ package br.gov.sp.pcsp.launcher
 import android.os.Environment
 import java.io.File
 
+/**
+ * Keeps the editable prompt files in SIG/Prompts in sync with the prompt
+ * assets shipped by the Windows and Android applications.
+ */
 object PromptTemplateStore {
 
-    private const val PERSON_INSTRUCTION_MARKER = "{{INSTRUCAO_PESSOA}}"
     private const val SELECTED_NAME_MARKER = "{{NOME_SELECIONADO}}"
+    private const val TRANSCRIPT_MARKER = "{{conteudo_caixa_transcricao}}"
+    private const val TRANSCRIPT_TRIPLE_MARKER = "{{{conteudo_caixa_transcricao}}}"
+    private const val HISTORY_TRIPLE_MARKER = "{{{conteudo_caixa_historico}}}"
+    private const val LEGACY_HISTORY_MARKER =
+        "{{{INSERIR_AQUI_O_CONTEUDO_DA_CAIXA_DE_TEXTO_DO_HISTORICO}}}"
+
+    private val promptFiles = listOf(
+        "historico_system.txt",
+        "historico_user.txt",
+        "partes_system.txt",
+        "partes_user_botao_historico.txt",
+        "partes_user_botao_detectar.txt",
+        "oitiva_system.txt",
+        "oitiva_user.txt",
+        "qualificacao_system.txt",
+        "qualificacao_user.txt"
+    )
 
     fun ensureDefaults() {
         runCatching {
             val dir = promptDirectory().apply { mkdirs() }
-            createIfMissing(File(dir, "historico.txt"), TranscriptAssistantClient.DEFAULT_HISTORY_PROMPT)
-            createIfMissing(File(dir, "partes.txt"), TranscriptAssistantClient.DEFAULT_PARTS_PROMPT)
-            createIfMissing(File(dir, "oitiva.txt"), TranscriptAssistantClient.DEFAULT_STATEMENT_TEMPLATE)
-            createIfMissing(File(dir, "oitiva_parte.txt"), DEFAULT_STATEMENT_PERSON_INSTRUCTION)
+            promptFiles.forEach { fileName ->
+                val target = File(dir, fileName)
+                if (!target.exists()) copyBundledPrompt(fileName, target)
+            }
             createIfMissing(File(dir, "LEIA-ME.txt"), README)
         }
     }
 
-    fun historyPrompt(): String {
-        return readPrompt("historico.txt", TranscriptAssistantClient.DEFAULT_HISTORY_PROMPT)
-    }
+    fun historySystemPrompt(): String = readPrompt("historico_system.txt")
 
-    fun partsPrompt(): String {
-        return readPrompt("partes.txt", TranscriptAssistantClient.DEFAULT_PARTS_PROMPT)
-    }
+    fun historyUserPrompt(transcription: String): String =
+        readPrompt("historico_user.txt")
+            .replace(TRANSCRIPT_MARKER, transcription.trim())
+            .trim()
 
-    fun statementPrompt(selectedName: String?): String {
-        val template = readPrompt("oitiva.txt", TranscriptAssistantClient.DEFAULT_STATEMENT_TEMPLATE)
-        val name = selectedName?.trim().orEmpty()
-        val instruction = if (name.isBlank()) {
-            ""
-        } else {
-            readPrompt("oitiva_parte.txt", DEFAULT_STATEMENT_PERSON_INSTRUCTION)
-                .replace(SELECTED_NAME_MARKER, name)
-        }
-        return template
-            .replace(PERSON_INSTRUCTION_MARKER, instruction)
-            .replace(SELECTED_NAME_MARKER, name)
-            .replace(Regex("""[ \t]{2,}"""), " ")
+    fun partsSystemPrompt(): String = readPrompt("partes_system.txt")
+
+    fun partsUserPromptFromTranscription(transcription: String): String =
+        readPrompt("partes_user_botao_historico.txt")
+            .replace(TRANSCRIPT_TRIPLE_MARKER, transcription.trim())
+            .trim()
+
+    fun partsUserPromptFromHistory(history: String): String =
+        readPrompt("partes_user_botao_detectar.txt")
+            .replace(HISTORY_TRIPLE_MARKER, history.trim())
+            .trim()
+
+    fun statementSystemPrompt(): String = readPrompt("oitiva_system.txt")
+
+    fun statementUserPrompt(selectedName: String?, material: String): String =
+        readPrompt("oitiva_user.txt")
+            .replace(SELECTED_NAME_MARKER, selectedName?.trim().orEmpty())
+            .replace(HISTORY_TRIPLE_MARKER, material.trim())
+            .replace(LEGACY_HISTORY_MARKER, material.trim())
+            .trim()
+
+    fun qualificationSystemPrompt(): String = readPrompt("qualificacao_system.txt")
+
+    fun qualificationUserPrompt(fieldIds: List<String>, rawText: String): String {
+        val knownFields = setOf(
+            "nome", "nascimento", "rg", "cpf", "naturalidade", "sexo",
+            "estado_civil", "profissao", "altura", "pele", "olhos", "cabelo",
+            "pai", "mae", "instrucao", "endereco", "bairro", "cidade", "telefone"
+        )
+        val extras = fieldIds
+            .map(String::trim)
+            .filter { it.isNotBlank() && it !in knownFields }
+            .distinct()
+        val extraSuffix = if (extras.isEmpty()) "" else ", ${extras.joinToString(", ")}"
+        val raw = rawText.trim()
+        return readPrompt("qualificacao_user.txt")
+            .replace(
+                "{{{INSERIR_AQUI_OUTROS_DADOS_FORNECIDOS_PELO_USUARIO_SEPARANDO_POR_VIRGULA+ESPAÇO}}}",
+                extraSuffix
+            )
+            .replace("{{{TEXTO_DA_CAIXA_AQUI}}}", raw)
+            .replace("{{FIELD_IDS}}", fieldIds.joinToString(", "))
+            .replace("{{RAW_TEXT}}", raw)
             .trim()
     }
+
+    // Compatibility helpers for callers that still use the old API.
+    fun historyPrompt(): String = historySystemPrompt()
+    fun partsPrompt(): String = partsSystemPrompt()
+    fun statementPrompt(selectedName: String?): String = statementSystemPrompt()
 
     fun promptDirectory(): File {
         return File(File(Environment.getExternalStorageDirectory(), "SIG"), "Prompts")
     }
 
-    private fun readPrompt(fileName: String, defaultValue: String): String {
+    private fun readPrompt(fileName: String): String {
         ensureDefaults()
         return runCatching {
             File(promptDirectory(), fileName)
-                .takeIf { it.exists() }
+                .takeIf { it.isFile }
                 ?.readText(Charsets.UTF_8)
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
-                ?: defaultValue
-        }.getOrDefault(defaultValue)
+                ?: bundledPrompt(fileName)
+        }.getOrElse { bundledPrompt(fileName) }
+    }
+
+    private fun copyBundledPrompt(fileName: String, target: File) {
+        val content = bundledPrompt(fileName)
+        if (content.isNotBlank()) target.writeText(content.trim() + "\n", Charsets.UTF_8)
+    }
+
+    private fun bundledPrompt(fileName: String): String {
+        return runCatching {
+            SigApplication.appInstance.assets
+                .open("prompts/$fileName")
+                .bufferedReader(Charsets.UTF_8)
+                .use { it.readText() }
+                .trim()
+        }.getOrDefault("")
     }
 
     private fun createIfMissing(file: File, content: String) {
@@ -66,34 +135,28 @@ object PromptTemplateStore {
     private val README = """
         MODELOS DE PROMPT DO SIG
 
-        Estes arquivos são lidos novamente a cada clique. Não é necessário reiniciar o aplicativo depois de editá-los.
+        Estes arquivos são lidos novamente a cada requisição. Edite-os diretamente
+        nesta pasta para ajustar os prompts sem recompilar o aplicativo.
 
-        historico.txt
-        Texto de sistema usado pelo botão Histórico.
+        historico_system.txt / historico_user.txt
+        Prompt de sistema e prompt do usuário usados pelo botão Histórico.
+        O arquivo do usuário usa {{conteudo_caixa_transcricao}}.
 
-        partes.txt
-        Texto de sistema usado pela requisição paralela que identifica os nomes.
-        A resposta deve continuar sendo uma lista JSON, por exemplo: ["MARIA","JOAO"].
+        partes_system.txt
+        Prompt de sistema da extração de partes.
 
-        oitiva.txt
-        Texto de sistema usado pelo botão Oitiva.
+        partes_user_botao_historico.txt
+        Prompt do usuário usado junto com Histórico. Usa {{{conteudo_caixa_transcricao}}}.
 
-        oitiva_parte.txt
-        Instrução acrescentada ao prompt de oitiva quando um nome estiver selecionado.
-        Use {{NOME_SELECIONADO}} onde o nome escolhido deve aparecer.
+        partes_user_botao_detectar.txt
+        Prompt do usuário usado pelo botão Detectar. Usa {{{conteudo_caixa_historico}}}.
 
-        Marcadores disponíveis em oitiva.txt:
-        {{INSTRUCAO_PESSOA}}
-        Vira a frase completa que define o ponto de vista da pessoa selecionada. Se nenhum nome estiver selecionado, o marcador desaparece.
+        oitiva_system.txt / oitiva_user.txt
+        Prompt de sistema e prompt do usuário usados pelo botão Oitiva.
+        O arquivo do usuário usa {{NOME_SELECIONADO}} e {{{conteudo_caixa_historico}}}.
 
-        {{NOME_SELECIONADO}}
-        Vira somente o nome atualmente selecionado. Se nenhum nome estiver selecionado, o marcador desaparece.
-
-        A transcrição ou o histórico exibido na caixa não precisa ser colocado nestes arquivos. O app o envia separadamente como mensagem do usuário.
-
-        Se um arquivo for apagado, o app o recriará com o modelo padrão. Se ficar vazio, o modelo padrão será usado naquela requisição.
+        qualificacao_system.txt / qualificacao_user.txt
+        Prompts da qualificação. O arquivo do usuário aceita os marcadores
+        {{{TEXTO_DA_CAIXA_AQUI}}}, {{FIELD_IDS}} e {{RAW_TEXT}}.
     """.trimIndent()
-
-    private const val DEFAULT_STATEMENT_PERSON_INSTRUCTION =
-        "A oitiva conterá os fatos do ponto de vista de {{NOME_SELECIONADO}}, colocando na oitiva dele(a) as coisas que ele(a) presenciou e sabe, pois essa será a oitiva dele(a)."
 }
