@@ -155,7 +155,6 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var buttonPasteStatement: View
     private lateinit var buttonCopyStatement: View
     private lateinit var buttonRecoverTranscript: ImageButton
-    private lateinit var checkboxTimestamps: CheckBox
     private lateinit var buttonClearTranscript: TextView
     private lateinit var buttonClearHistory: TextView
     private lateinit var buttonClearStatement: TextView
@@ -323,12 +322,8 @@ class RemoteSttActivity : AppCompatActivity() {
         override fun run() {
             if (recordingActive || mediaRecorder != null || liveTranscribing) {
                 val now = SystemClock.elapsedRealtime()
-                val elapsed = if (liveTranscribing) {
-                    val pausedNow = if (livePaused && livePausedAt > 0L) now - livePausedAt else 0L
-                    now - recordingStartedAt - livePausedAccumulatedMs - pausedNow
-                } else {
-                    now - recordingStartedAt
-                }
+                val pausedNow = if ((livePaused || recordingPaused) && livePausedAt > 0L) now - livePausedAt else 0L
+                val elapsed = now - recordingStartedAt - livePausedAccumulatedMs - pausedNow
                 recordingTimer.text = formatElapsedCompact(elapsed.coerceAtLeast(0L))
                 handler.postDelayed(this, 80L)
             }
@@ -453,8 +448,6 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonPasteStatement = findViewById(R.id.button_paste_statement)
         buttonCopyStatement = findViewById(R.id.button_copy_statement)
         buttonRecoverTranscript = findViewById(R.id.button_recover_transcript)
-        checkboxTimestamps = findViewById(R.id.checkbox_timestamps)
-        updateTimestampControl()
         buttonClearTranscript = findViewById(R.id.button_clear_transcript)
         buttonClearHistory = findViewById(R.id.button_clear_history)
         buttonClearStatement = findViewById(R.id.button_clear_statement)
@@ -544,7 +537,6 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         buttonCopyStatement.setOnClickListener { copyTextToClipboard(statementTextView, "Oitiva") }
         buttonRecoverTranscript.setOnClickListener { recoverLastTranscription() }
-        checkboxTimestamps.setOnCheckedChangeListener { _, checked -> toggleTranscriptTimestamps(checked) }
         buttonClearTranscript.setOnClickListener { clearTextWithConfirmation(liveTranscriptTextView, "Transcrição") }
         buttonClearHistory.setOnClickListener { clearTextWithConfirmation(historyTextView, "Histórico") }
         buttonClearStatement.setOnClickListener { clearTextWithConfirmation(statementTextView, "Oitiva") }
@@ -1040,6 +1032,8 @@ class RemoteSttActivity : AppCompatActivity() {
         recordingPaused = false
         updateTextEditorsLock()
         recordingStartedAt = SystemClock.elapsedRealtime()
+        livePausedAt = 0L
+        livePausedAccumulatedMs = 0L
         buttonRecordingAction.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
         buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
         buttonRecordingAction.contentDescription = "Parar gravação"
@@ -1179,11 +1173,26 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         val dir = DocumentFile.fromTreeUri(this, treeUri) ?: return
         try {
-            copyFileToDocument(file, dir, "audio/wav")
-            Toast.makeText(this, "Áudio salvo.", Toast.LENGTH_SHORT).show()
+            val targetName = nextRecordedAudioName(dir)
+            copyFileToDocumentAs(file, dir, targetName, "audio/wav")
+            Toast.makeText(this, "Áudio salvo como $targetName.", Toast.LENGTH_SHORT).show()
         } catch (e: Throwable) {
             Toast.makeText(this, "Não consegui salvar o áudio.", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /** Nome "audio-dd-mm-yyyy_nnn.wav" com sequencial diário (próximo número livre na pasta). */
+    private fun nextRecordedAudioName(dir: DocumentFile): String {
+        val today = SimpleDateFormat("dd-MM-yyyy", Locale.US).format(Date())
+        val prefix = "audio-$today-"
+        val lastSequence = dir.listFiles()
+            .mapNotNull { it.name }
+            .filter { it.startsWith(prefix) && it.endsWith(".wav") }
+            .mapNotNull { name ->
+                name.removePrefix(prefix).removeSuffix(".wav").toIntOrNull()
+            }
+            .maxOrNull() ?: 0
+        return String.format(Locale.US, "%s%03d.wav", prefix, lastSequence + 1)
     }
 
     private fun startLiveMicTranscription() {
@@ -1960,6 +1969,13 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun toggleMicPause() {
         if (recordingActive) {
             recordingPaused = !recordingPaused
+            val now = SystemClock.elapsedRealtime()
+            if (recordingPaused) {
+                livePausedAt = now
+            } else {
+                if (livePausedAt > 0L) livePausedAccumulatedMs += now - livePausedAt
+                livePausedAt = 0L
+            }
             buttonLiveMicTest.alpha = if (recordingPaused) 0.55f else 1f
             buttonLiveMicTest.contentDescription =
                 if (recordingPaused) "Retomar gravação" else "Pausar gravação"
@@ -2782,7 +2798,6 @@ class RemoteSttActivity : AppCompatActivity() {
             buttonSaveRecording.visibility = View.GONE
             historyOutputContainer.visibility = View.GONE
             statementOutputContainer.visibility = View.GONE
-            checkboxTimestamps.visibility = View.GONE
             buttonHistory.visibility = View.GONE
             buttonStatement.visibility = View.GONE
             buttonPersonSelector.visibility = View.GONE
@@ -2806,7 +2821,6 @@ class RemoteSttActivity : AppCompatActivity() {
             buttonHistory.visibility = View.VISIBLE
             buttonStatement.visibility = View.VISIBLE
             buttonPersonSelector.visibility = View.VISIBLE
-            checkboxTimestamps.visibility = View.VISIBLE
             historyOutputContainer.visibility = View.VISIBLE
             statementOutputContainer.visibility = View.VISIBLE
             buttonRecordingAction.visibility = View.VISIBLE
@@ -2828,8 +2842,11 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonLiveLanguage.visibility = if (graniteModel) View.GONE else View.VISIBLE
         refreshLiveLanguageButton()
         grokDiarizeRow.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
-        buttonLiveIntervalMinus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
-        buttonLiveIntervalPlus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
+        // O seletor t= e seus botões existem apenas para o Granite NAR.
+        val narModel = config.name == TranscriptionModelStore.SERVER_NAME
+        buttonLiveIntervalMinus.visibility = if (narModel) View.VISIBLE else View.GONE
+        inputLiveInterval.visibility = if (narModel) View.VISIBLE else View.GONE
+        buttonLiveIntervalPlus.visibility = if (narModel) View.VISIBLE else View.GONE
         if (apiTranscription) {
             liveDraftIntervalMillis = grokWebSocketChunkMillis()
         } else if (liveDraftIntervalMillis == grokWebSocketChunkMillis()) {
@@ -4985,11 +5002,14 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun copyFileToDocument(file: File, dir: DocumentFile, mime: String) {
-        val existingName = file.name
-        val doc = dir.createFile(mime, existingName) ?: throw IllegalStateException("não consegui criar $existingName")
+        copyFileToDocumentAs(file, dir, file.name, mime)
+    }
+
+    private fun copyFileToDocumentAs(file: File, dir: DocumentFile, targetName: String, mime: String) {
+        val doc = dir.createFile(mime, targetName) ?: throw IllegalStateException("não consegui criar $targetName")
         contentResolver.openOutputStream(doc.uri)?.use { output ->
             file.inputStream().use { input -> input.copyTo(output) }
-        } ?: throw IllegalStateException("não consegui escrever $existingName")
+        } ?: throw IllegalStateException("não consegui escrever $targetName")
     }
 
     private fun showExportMenu(anchor: View) {
@@ -5130,10 +5150,8 @@ class RemoteSttActivity : AppCompatActivity() {
         val clear = {
             target.setText("")
             if (target === liveTranscriptTextView) {
-                checkboxTimestamps.isChecked = false
                 timestampPlainTranscript = ""
                 timestampedTranscript = ""
-                updateTimestampControl()
             }
         }
         if (target.text?.toString()?.trim().isNullOrBlank()) {
@@ -5165,11 +5183,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun toggleTranscriptTimestamps(checked: Boolean) {
-        if (checked && timestampedTranscript.isBlank()) {
-            checkboxTimestamps.isChecked = false
-            return
-        }
-        renderTranscriptAccordingToTimestampSelection()
+        // Checkbox de timestamps removida.
     }
 
     private fun storeReceivedTranscription(text: String, timestampedText: String = "") {
@@ -5181,30 +5195,19 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun updateTimestampControl() {
-        if (!::checkboxTimestamps.isInitialized) return
-        val available = timestampedTranscript.isNotBlank()
-        if (!available && checkboxTimestamps.isChecked) checkboxTimestamps.isChecked = false
-        checkboxTimestamps.isEnabled = available
-        checkboxTimestamps.alpha = if (available) 1f else 0.38f
+        // Checkbox de timestamps removida; mantido como no-op para
+        // preservar os pontos de chamada.
     }
 
     private fun renderTranscriptAccordingToTimestampSelection() {
-        val text = if (checkboxTimestamps.isChecked && timestampedTranscript.isNotBlank()) {
-            timestampedTranscript
-        } else {
-            timestampPlainTranscript.ifBlank { lastReceivedTranscription }
-        }
+        val text = timestampPlainTranscript.ifBlank { lastReceivedTranscription }
         liveTranscriptTextView.setText(text)
         liveTranscriptTextView.setMinLines(if (text.isBlank()) 5 else 0)
         liveTranscriptTextView.visibility = View.VISIBLE
     }
 
     private fun plainTranscriptForRequests(): String {
-        return if (checkboxTimestamps.isChecked) {
-            timestampPlainTranscript.trim()
-        } else {
-            liveTranscriptTextView.text?.toString()?.trim().orEmpty()
-        }
+        return liveTranscriptTextView.text?.toString()?.trim().orEmpty()
     }
 
     private fun formatTimestamp(timeMs: Long): String {
@@ -5314,10 +5317,8 @@ class RemoteSttActivity : AppCompatActivity() {
         livePostActions.visibility = View.GONE
         clearAssistantOutputViews()
         liveTranscriptTextView.setText("")
-        checkboxTimestamps.isChecked = false
         timestampPlainTranscript = ""
         timestampedTranscript = ""
-        updateTimestampControl()
         liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
         liveTranscriptClipboardActions.visibility = View.VISIBLE
@@ -5344,10 +5345,8 @@ class RemoteSttActivity : AppCompatActivity() {
         transcriptionTaskState = AssistantTaskState.RUNNING
         refiningTaskState = AssistantTaskState.IDLE
         liveTranscriptTextView.setText("")
-        checkboxTimestamps.isChecked = false
         timestampPlainTranscript = ""
         timestampedTranscript = ""
-        updateTimestampControl()
         liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
         liveTranscriptClipboardActions.visibility = View.VISIBLE
@@ -5532,9 +5531,7 @@ class RemoteSttActivity : AppCompatActivity() {
         if (clean != timestampPlainTranscript) {
             timestampPlainTranscript = clean
             timestampedTranscript = ""
-            updateTimestampControl()
         }
-        if (checkboxTimestamps.isChecked) checkboxTimestamps.isChecked = false
         liveTranscriptTextView.setText(clean)
         liveTranscriptTextView.setMinLines(0)
         synchronized(liveTranscriptText) {
@@ -5576,13 +5573,16 @@ class RemoteSttActivity : AppCompatActivity() {
             ProgressPhase.WHITE_TRANSCRIPTION -> listOf(
                 Triple("Transcrevendo", transcriptionTaskState, null)
             )
-            ProgressPhase.TRANSCRIPTION -> if (liveUsesGrokWebSocket || TranscriptionModelStore.selectedConfig().isGrokApi) {
-                listOf(Triple("Transcrevendo...", transcriptionTaskState, null))
-            } else {
-                listOf(
-                    Triple("Transcrevendo...", transcriptionTaskState, null),
-                    Triple("Refinando", refiningTaskState, null)
-                )
+            ProgressPhase.TRANSCRIPTION -> {
+                val graniteNar = TranscriptionModelStore.selectedConfig().name == TranscriptionModelStore.SERVER_NAME
+                if (graniteNar) {
+                    listOf(
+                        Triple("Transcrevendo", transcriptionTaskState, null),
+                        Triple("Refinando", refiningTaskState, null)
+                    )
+                } else {
+                    listOf(Triple("Transcrevendo", transcriptionTaskState, null))
+                }
             }
             ProgressPhase.ASSISTANT -> listOf(
                 Triple("Redigindo histórico", historyTaskState, historyElapsedMs),
@@ -5594,9 +5594,9 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         val text = entries.joinToString("\n") { (label, state, elapsedMs) ->
             when (state) {
-                AssistantTaskState.DONE -> "100% $label${formatRequestElapsed(elapsedMs)}"
+                AssistantTaskState.DONE -> label
                 AssistantTaskState.ERROR -> "ERRO $label"
-                else -> "0% $label"
+                else -> label
             }
         }
         val spannable = SpannableString(text)
