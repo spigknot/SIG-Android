@@ -3795,19 +3795,18 @@ class RemoteSttActivity : AppCompatActivity() {
                         livePostActions.visibility = View.VISIBLE
                         terminalText.visibility = View.GONE
                     } else if (transcriptionMode) {
-                        // Ferramenta Transcrição: a saída é a tabela HTML/TXT e a
-                        // transcrição vai para a caixa de texto (o quadro do lote
-                        // é recolhido para liberar o espaço).
-                        val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
-                        storeReceivedTranscription(
-                            stripDiarizationLabels(transcriptDisplay),
-                            transcriptDisplay
-                        )
-                        batchSessionFinished = true
-                        batchProgressBox.visibility = View.GONE
-                        batchProgressRows.removeAllViews()
-                        batchRowCells.clear()
-                        liveTranscriptTextView.visibility = View.VISIBLE
+                        // Ferramenta Transcrição: a saída é a tabela HTML/TXT e os
+                        // botões de compartilhar/salvar. A caixa de texto com a
+                        // transcrição só aparece para UM arquivo; com vários, a
+                        // tabela permanece na tela com os estados finais.
+                        if (orderedResults.size <= 1) {
+                            val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
+                            storeReceivedTranscription(
+                                stripDiarizationLabels(transcriptDisplay),
+                                transcriptDisplay
+                            )
+                            liveTranscriptTextView.visibility = View.VISIBLE
+                        }
                         outputFileName.visibility = View.GONE
                         outputActions.visibility = View.VISIBLE
                         buttonOutputFolder.visibility = View.GONE

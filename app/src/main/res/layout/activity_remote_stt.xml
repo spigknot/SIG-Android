@@ -460,7 +460,8 @@
                         android:id="@+id/batch_progress_rows"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical" />
+                        android:orientation="vertical"
+                        android:padding="1dp" />
                 </ScrollView>
             </LinearLayout>
 
