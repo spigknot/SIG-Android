@@ -15,7 +15,9 @@ object SttDiarization {
         "assemblyai" -> true
         // Scribe v2 REST suporta; Scribe v2 Realtime (WS) não.
         "elevenlabs" -> !isLive
-        // Grok (xAI) não suporta diarização em nenhum modo.
+        // Grok (xAI): a documentação confirma o suporte à diarização
+        // acústica (campo numérico speaker nas palavras).
+        "grok" -> true
         else -> false
     }
 
@@ -37,6 +39,10 @@ object SttDiarization {
     /** ElevenLabs WS (Realtime): não suporta — nunca enviar parâmetros. */
     fun elevenlabsWsQuery(checked: Boolean): String? = null
 
-    /** Grok: não suporta — nunca enviar parâmetros. */
-    fun grokQuery(checked: Boolean): String? = null
+    /** Grok: diarize=true na query (REST multipart e WebSocket). */
+    fun grokQuery(checked: Boolean): String? =
+        if (checked) "diarize=true" else null
+
+    /** Grok REST: diarize=true no form (o campo file deve ser o último). */
+    fun grokRestDiarize(checked: Boolean): Boolean = checked
 }

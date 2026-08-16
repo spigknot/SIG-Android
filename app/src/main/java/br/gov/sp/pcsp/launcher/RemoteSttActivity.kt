@@ -1439,7 +1439,7 @@ class RemoteSttActivity : AppCompatActivity() {
             append("&interim_results=true")
             SttLanguageSettings.grokLanguageParam()?.let { append("&language=$it") }
             append("&format=true&smart_turn=0.65&endpointing=900&filler_words=false")
-            // Grok (xAI) não suporta diarização: nunca envia parâmetros.
+            SttDiarization.grokQuery(checkboxLiveDiarize.isChecked)?.let { append("&$it") }
         }
     }
 
@@ -2363,7 +2363,13 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             .addFormDataPart("format", "true")
             .addFormDataPart("filler_words", "false")
-            // Grok (xAI) não suporta diarização: nenhum parâmetro é enviado.
+            .apply {
+                // Grok: diarize=true ativa a identificação numérica de falantes.
+                // O campo file DEVE ser o último do multipart.
+                if (SttDiarization.grokRestDiarize(checkboxLiveDiarize.isChecked)) {
+                    addFormDataPart("diarize", "true")
+                }
+            }
             // xAI requires the binary file field to be the last multipart field.
             .addFormDataPart(
                 "file",
@@ -2994,8 +3000,8 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         val diarizeEnabled = apiProvider != null &&
             SttDiarization.supportsDiarize(apiProvider, isLive = !transcriptionMode)
-        // A checkbox nem aparece para o granite e para o Grok (não suportam).
-        val diarizeHidden = graniteModel || config.isGrokApi
+        // A checkbox nem aparece apenas para o granite (não suporta).
+        val diarizeHidden = graniteModel
         // Para o granite, escondemos apenas os filhos (idioma/diarização); o
         // cronômetro vive na mesma linha e precisa continuar visível na
         // Ocorrência. Na Transcrição o row só existe para API (o timer não aparece).

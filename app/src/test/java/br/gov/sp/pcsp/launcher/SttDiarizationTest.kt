@@ -74,13 +74,15 @@ class SttDiarizationTest {
         assertTrue(SttDiarization.supportsDiarize("elevenlabs", isLive = false))
     }
 
-    // 10. Grok REST & WS: sem parâmetros de diarização e checkbox desabilitada.
+    // 10. Grok REST & WS: diarize=true quando marcada; checkbox habilitada.
     @Test
-    fun grok_neverSendsParamsAndDisabled() {
-        assertNull(SttDiarization.grokQuery(true))
+    fun grok_sendsDiarizeAndEnabled() {
+        assertEquals("diarize=true", SttDiarization.grokQuery(true))
         assertNull(SttDiarization.grokQuery(false))
-        assertFalse(SttDiarization.supportsDiarize("grok", isLive = true))
-        assertFalse(SttDiarization.supportsDiarize("grok", isLive = false))
+        assertTrue(SttDiarization.grokRestDiarize(true))
+        assertFalse(SttDiarization.grokRestDiarize(false))
+        assertTrue(SttDiarization.supportsDiarize("grok", isLive = true))
+        assertTrue(SttDiarization.supportsDiarize("grok", isLive = false))
     }
 
     // 11. Isolamento entre provedores: os parâmetros de um provedor nunca
@@ -89,8 +91,6 @@ class SttDiarizationTest {
     fun providerParams_areIsolated() {
         // O Deepgram nunca recebe speaker_labels.
         assertNull(SttDiarization.assemblyaiWsQuery(false))
-        // O Grok nunca recebe nada de diarização.
-        assertNull(SttDiarization.grokQuery(true))
         // O WS do ElevenLabs nunca recebe nada.
         assertNull(SttDiarization.elevenlabsWsQuery(true))
         // Deepgram e AssemblyAI continuam habilitados em ambos os modos.

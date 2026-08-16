@@ -111,10 +111,10 @@ Add android.sync.suppressAgpWarnings=LIBRARY_CONSTRAINTS_SHOULD_BE_DISABLED to t
 > Task :app:writeDebugSigningConfigVersions UP-TO-DATE
 
 > Task :app:compileDebugKotlin
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:2856:59 'field scaledDensity: Float' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3251:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3259:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3267:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:2862:59 'field scaledDensity: Float' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3257:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3265:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3273:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 
 > Task :app:compileDebugJavaWithJavac UP-TO-DATE
 > Task :app:processDebugJavaRes UP-TO-DATE
@@ -122,14 +122,14 @@ w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttAc
 > Task :app:bundleDebugClassesToRuntimeJar
 > Task :app:bundleDebugClassesToCompileJar
 > Task :app:dexBuilderDebug
-> Task :app:compileDebugUnitTestKotlin UP-TO-DATE
-> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
-> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
-> Task :app:testDebugUnitTest
 > Task :app:mergeProjectDexDebug
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect UP-TO-DATE
 > Task :app:assembleDebug
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testDebugUnitTest
 
 [Incubating] Problems report is available at: file:///D:/Projetos/SIG/build/reports/problems/problems-report.html
 
@@ -140,5 +140,5 @@ You can use '--warning-mode all' to show the individual deprecation warnings and
 For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
 BUILD SUCCESSFUL in 9s
-42 actionable tasks: 7 executed, 35 up-to-date
+42 actionable tasks: 8 executed, 34 up-to-date
 Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
