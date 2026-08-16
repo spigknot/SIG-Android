@@ -405,7 +405,7 @@
                         android:gravity="center"
                         android:paddingStart="9dp"
                         android:paddingEnd="9dp"
-                        android:text="Idioma: pt"
+                        android:text="Idioma"
                         android:textColor="#FFFFFFFF"
                         android:textSize="12sp"
                         android:textStyle="bold"

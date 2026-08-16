@@ -2700,6 +2700,7 @@ class RemoteSttActivity : AppCompatActivity() {
             config.isAssemblyaiApi || config.isElevenlabsApi
         val diarizeSupported = config.isGrokApi || config.isDeepgramApi || config.isAssemblyaiApi
         buttonLiveLanguage.visibility = View.VISIBLE
+        refreshLiveLanguageButton()
         grokDiarizeRow.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
         buttonLiveIntervalMinus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
         buttonLiveIntervalPlus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
