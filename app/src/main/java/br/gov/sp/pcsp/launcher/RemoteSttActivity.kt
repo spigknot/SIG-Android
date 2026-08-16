@@ -27,6 +27,7 @@ import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.text.Editable
 import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.TextWatcher
 import android.text.method.ScrollingMovementMethod
@@ -2743,30 +2744,53 @@ class RemoteSttActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Quadro de progresso do lote: uma linha por arquivo (como a aba Transcrição do Windows). */
+    /** Quadro de progresso do lote: uma linha por arquivo, duas colunas
+     *  (nome | estado), como a aba Transcrição do Windows. */
+    private var batchSnapshotKey: String = ""
+
     private fun refreshBatchProgressUi() {
         if (!transcriptionMode || selectedItems.size < 2) {
             batchProgressBox.visibility = View.GONE
             if (transcriptionMode) liveTranscriptTextView.visibility = View.VISIBLE
+            batchSnapshotKey = ""
             batchLines.clear()
             return
         }
         batchProgressBox.visibility = View.VISIBLE
         liveTranscriptTextView.visibility = View.GONE
-        synchronized(batchLines) {
-            batchLines.clear()
-            selectedItems.forEachIndexed { index, item ->
-                batchLines += "${index + 1}. ${item.name} — aguardando"
+        val key = selectedItems.joinToString("|") { it.name }
+        if (key != batchSnapshotKey) {
+            batchSnapshotKey = key
+            synchronized(batchLines) {
+                batchLines.clear()
+                selectedItems.forEach { item -> batchLines += "${item.name}\tAguardando" }
             }
+            renderBatchLines()
         }
-        renderBatchLines()
     }
 
     private fun renderBatchLines() {
         runOnUiThread {
-            if (::batchProgressList.isInitialized) {
-                batchProgressList.text = synchronized(batchLines) { batchLines.joinToString("\n") }
+            if (!::batchProgressList.isInitialized) return@runOnUiThread
+            val spannable = SpannableStringBuilder()
+            val lines = synchronized(batchLines) { batchLines.toList() }
+            lines.forEachIndexed { index, line ->
+                if (index > 0) spannable.append('\n')
+                val parts = line.split('\t', limit = 2)
+                val name = parts.firstOrNull().orEmpty()
+                val state = parts.getOrNull(1).orEmpty()
+                val padded = String.format("%-30.30s", name)
+                spannable.append(padded).append("  ")
+                val stateStart = spannable.length
+                spannable.append(state)
+                if (state == "OK") {
+                    spannable.setSpan(
+                        ForegroundColorSpan(Color.rgb(94, 240, 142)),
+                        stateStart, spannable.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
             }
+            batchProgressList.text = spannable
         }
     }
 
@@ -2776,7 +2800,7 @@ class RemoteSttActivity : AppCompatActivity() {
         synchronized(batchLines) {
             if (index < 0 || index >= batchLines.size) return
             val name = selectedItems.getOrNull(index)?.name ?: return
-            batchLines[index] = "$number. $name — $state"
+            batchLines[index] = "$name\t$state"
         }
         renderBatchLines()
     }
@@ -3611,6 +3635,15 @@ class RemoteSttActivity : AppCompatActivity() {
                         renderLiveProgress()
                         livePostActions.visibility = View.VISIBLE
                         terminalText.visibility = View.GONE
+                    } else if (transcriptionMode) {
+                        // Ferramenta Transcrição: a saída é a tabela HTML/TXT;
+                        // exibe os botões de compartilhar/salvar e mantém as
+                        // caixas de texto (Histórico/Oitiva) ocultas.
+                        outputFileName.visibility = View.GONE
+                        outputActions.visibility = View.VISIBLE
+                        buttonOutputFolder.visibility = View.GONE
+                        updateTerminalText(terminalLines)
+                        applyToolModeVisibility()
                     } else {
                         val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
                         storeReceivedTranscription(
@@ -3675,7 +3708,7 @@ class RemoteSttActivity : AppCompatActivity() {
         return Callable {
             ensureNotCancelled()
             val number = index + 1
-            updateBatchProgressLine(number, "preparando...")
+            updateBatchProgressLine(number, if (applyVad) "VAD" else "Convertendo")
             appendTerminal(terminalLines, "")
             appendTerminal(terminalLines, "prepare input[$number/${items.size}]: ${item.name}")
             runOnUiThread {
@@ -3743,7 +3776,7 @@ class RemoteSttActivity : AppCompatActivity() {
             ensureNotCancelled()
             val item = prepared.item
             val number = prepared.index
-            updateBatchProgressLine(number, "enviando...")
+            updateBatchProgressLine(number, "Transcrevendo")
             appendTerminal(terminalLines, "upload liberado: ${item.name}")
             appendTerminalAudioInfo(terminalLines, "original: ${prepared.originalAudioInfo}")
             appendTerminalAudioInfo(terminalLines, "enviado: ${prepared.sentAudioInfo}")
@@ -3759,7 +3792,7 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             val individual = uniqueFile(transcriptionDir, "${safeBaseName(result.fileName)}.txt")
             individual.writeText(result.text.trim() + "\n", Charsets.UTF_8)
-            updateBatchProgressLine(number, "concluído")
+            updateBatchProgressLine(number, "OK")
             runOnUiThread { updateTerminalText(terminalLines) }
             result
         }
@@ -5350,6 +5383,8 @@ class RemoteSttActivity : AppCompatActivity() {
         liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
         liveTranscriptClipboardActions.visibility = View.VISIBLE
+        batchSnapshotKey = ""
+        applyToolModeVisibility()
         livePostActions.visibility = View.GONE
         clearAssistantOutputViews()
         liveAiProgress.visibility = View.VISIBLE
