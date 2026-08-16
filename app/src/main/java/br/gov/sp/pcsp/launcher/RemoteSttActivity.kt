@@ -2756,7 +2756,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     "deepgram" -> "Códigos aceitos pelo Deepgram"
                     "assemblyai" -> "Códigos aceitos pelo Universal-3.5 Pro"
                     "grok" -> "Códigos aceitos pelo Grok (xAI)"
-                    else -> "Códigos de idioma do Scribe v2 (2 letras)"
+                    else -> "Códigos de idioma do Scribe v2"
                 }
             )
             .setView(scroll)
