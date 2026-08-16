@@ -28,6 +28,8 @@ object GrokApiSettings {
     private const val KEY_ASSEMBLYAI_CUSTOM = "assemblyai_language_custom"
     private const val KEY_ELEVENLABS_LANGUAGE = "elevenlabs_language_mode"
     private const val KEY_ELEVENLABS_CUSTOM = "elevenlabs_language_custom"
+    private const val KEY_GROK_LANGUAGE = "grok_language_mode"
+    private const val KEY_GROK_CUSTOM = "grok_language_custom"
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
     private const val KEY_TEXT_REASONING = "text_reasoning"
@@ -210,6 +212,20 @@ object GrokApiSettings {
 
     fun setElevenlabsCustomLanguage(value: String) {
         preferences().edit().putString(KEY_ELEVENLABS_CUSTOM, value.trim()).apply()
+    }
+
+    fun grokLanguageMode(): String =
+        preferences().getString(KEY_GROK_LANGUAGE, "pt").orEmpty()
+
+    fun setGrokLanguageMode(value: String) {
+        preferences().edit().putString(KEY_GROK_LANGUAGE, value).apply()
+    }
+
+    fun grokCustomLanguage(): String =
+        preferences().getString(KEY_GROK_CUSTOM, "").orEmpty().trim()
+
+    fun setGrokCustomLanguage(value: String) {
+        preferences().edit().putString(KEY_GROK_CUSTOM, value.trim()).apply()
     }
 
     private fun preferences() = SigApplication.appInstance.getSharedPreferences(

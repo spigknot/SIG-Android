@@ -48,6 +48,15 @@ object SttLanguageSettings {
         "wol", "xho", "yor", "zul"
     )
 
+    // Grok STT (xAI): códigos ISO-639-1 de 2 letras (lista exata do prompt).
+    val GROK_CODES: Set<String> = setOf(
+        "af", "ar", "az", "be", "bg", "bn", "bs", "ca", "cs", "cy", "da", "de", "el", "en",
+        "es", "et", "fa", "fi", "fr", "gl", "gu", "he", "hi", "hr", "hu", "hy", "id", "is",
+        "it", "ja", "kn", "ko", "la", "lt", "lv", "mk", "mr", "ms", "ne", "nl", "no", "pl",
+        "pt", "ro", "ru", "sk", "sl", "so", "sq", "sr", "sv", "sw", "ta", "te", "th", "tr",
+        "uk", "ur", "vi", "zh", "zu"
+    )
+
     /** Normaliza a entrada do usuário: " en ,  es , pt " -> listOf("en", "es", "pt"). */
     fun parseCodes(raw: String): List<String> =
         raw.split(',', '\n')
@@ -61,12 +70,15 @@ object SttLanguageSettings {
     fun isValidElevenlabs(code: String): Boolean =
         code in ELEVENLABS_CODES_2 || code in ELEVENLABS_CODES_3
 
+    fun isValidGrok(code: String): Boolean = code in GROK_CODES
+
     /** Códigos inválidos para o provedor (lista vazia = tudo válido). */
     fun invalidCodes(provider: String, codes: List<String>): List<String> = codes.filter { code ->
         when (provider) {
             "deepgram" -> !isValidDeepgram(code)
             "assemblyai" -> !isValidAssemblyai(code)
             "elevenlabs" -> !isValidElevenlabs(code)
+            "grok" -> !isValidGrok(code)
             else -> false
         }
     }
@@ -126,6 +138,21 @@ object SttLanguageSettings {
                 if (codes.isEmpty()) null to emptyList() else codes.first() to codes.drop(1)
             }
             else -> mode to emptyList()
+        }
+    }
+
+    // ---------------- Grok (xAI): language=<valor> em REST e WS ----------------
+
+    /** Valor do parâmetro language do Grok (REST e WS).
+     *  multi e custom com 2+ códigos omitem o parâmetro (null); a xAI não
+     *  aceita listas nem "multi"/"auto" como valor. */
+    fun grokLanguageParam(): String? {
+        val mode = GrokApiSettings.grokLanguageMode()
+        return when {
+            mode == "multi" -> null
+            mode == "custom" -> parseCodes(GrokApiSettings.grokCustomLanguage())
+                .takeIf { it.size == 1 }?.first()
+            else -> mode.ifBlank { null }
         }
     }
 }

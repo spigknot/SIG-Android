@@ -1414,7 +1414,7 @@ class RemoteSttActivity : AppCompatActivity() {
         return buildString {
             append("wss://api.x.ai/v1/stt?sample_rate=16000&encoding=pcm")
             append("&interim_results=true")
-            append("&language=${selectedLiveLanguage.serverCode}")
+            SttLanguageSettings.grokLanguageParam()?.let { append("&language=$it") }
             append("&format=true&smart_turn=0.65&endpointing=900&filler_words=false")
             if (checkboxLiveDiarize.isChecked) append("&diarize=true")
         }
@@ -2332,7 +2332,10 @@ class RemoteSttActivity : AppCompatActivity() {
         require(GrokApiSettings.isPlausibleXaiKey(apiKey)) { "A chave API da xAI salva nas configurações é inválida." }
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
-            .addFormDataPart("language", selectedLiveLanguage.serverCode)
+            .apply {
+                // multi/custom com vários omitem o language (detecção nativa da xAI).
+                SttLanguageSettings.grokLanguageParam()?.let { addFormDataPart("language", it) }
+            }
             .addFormDataPart("format", "true")
             .addFormDataPart("filler_words", "false")
             .apply {
@@ -2587,6 +2590,7 @@ class RemoteSttActivity : AppCompatActivity() {
             config.isDeepgramApi -> "deepgram"
             config.isAssemblyaiApi -> "assemblyai"
             config.isElevenlabsApi -> "elevenlabs"
+            config.isGrokApi -> "grok"
             else -> null
         }
         if (apiProvider == null) {
@@ -2626,6 +2630,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "deepgram" -> GrokApiSettings.setDeepgramLanguageMode(mode)
             "assemblyai" -> GrokApiSettings.setAssemblyaiLanguageMode(mode)
             "elevenlabs" -> GrokApiSettings.setElevenlabsLanguageMode(mode)
+            "grok" -> GrokApiSettings.setGrokLanguageMode(mode)
         }
     }
 
@@ -2634,6 +2639,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "deepgram" -> GrokApiSettings.deepgramLanguageMode() to GrokApiSettings.deepgramCustomLanguage()
             "assemblyai" -> GrokApiSettings.assemblyaiLanguageMode() to GrokApiSettings.assemblyaiCustomLanguage()
             "elevenlabs" -> GrokApiSettings.elevenlabsLanguageMode() to GrokApiSettings.elevenlabsCustomLanguage()
+            "grok" -> GrokApiSettings.grokLanguageMode() to GrokApiSettings.grokCustomLanguage()
             else -> return selectedLiveLanguage.shortLabel
         }
         return if (mode == "custom" && custom.isNotBlank()) custom else mode
@@ -2688,6 +2694,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     val providerName = when (provider) {
                         "deepgram" -> "Deepgram"
                         "assemblyai" -> "Universal-3.5 Pro"
+                        "grok" -> "Grok"
                         else -> "Scribe v2"
                     }
                     val listed = invalid.joinToString(", ")
@@ -2709,6 +2716,10 @@ class RemoteSttActivity : AppCompatActivity() {
                             GrokApiSettings.setElevenlabsCustomLanguage(normalized)
                             GrokApiSettings.setElevenlabsLanguageMode("custom")
                         }
+                        "grok" -> {
+                            GrokApiSettings.setGrokCustomLanguage(normalized)
+                            GrokApiSettings.setGrokLanguageMode("custom")
+                        }
                     }
                     refreshLiveLanguageButton()
                     dialog.dismiss()
@@ -2722,6 +2733,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val codes = when (provider) {
             "deepgram" -> SttLanguageSettings.DEEPGRAM_CODES.sorted().joinToString(", ")
             "assemblyai" -> SttLanguageSettings.ASSEMBLYAI_CODES.sorted().joinToString(", ")
+            "grok" -> SttLanguageSettings.GROK_CODES.sorted().joinToString(", ")
             // ElevenLabs: a tela "?" mostra APENAS os códigos de 2 letras.
             else -> SttLanguageSettings.ELEVENLABS_CODES_2.sorted().joinToString(", ")
         }
@@ -2992,6 +3004,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 config.isDeepgramApi -> providerLanguageLabel("deepgram")
                 config.isAssemblyaiApi -> providerLanguageLabel("assemblyai")
                 config.isElevenlabsApi -> providerLanguageLabel("elevenlabs")
+                config.isGrokApi -> providerLanguageLabel("grok")
                 else -> selectedLiveLanguage.shortLabel
             }
             buttonLiveLanguage.text = "Idioma: $label"
@@ -5855,7 +5868,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         val text = entries.joinToString("\n") { (label, state, elapsedMs) ->
             when (state) {
-                AssistantTaskState.DONE -> label
+                AssistantTaskState.DONE -> "$label${formatRequestElapsed(elapsedMs)}"
                 AssistantTaskState.ERROR -> "ERRO $label"
                 else -> label
             }
