@@ -247,6 +247,7 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var livePaused = false
     private var transcriptionMode = false
     @Volatile private var recordingPaused = false
+    private var diarizeMemory = false
     private lateinit var batchProgressBox: View
     private lateinit var batchProgressRows: LinearLayout
     private val batchRowCells = mutableListOf<Triple<TextView, TextView, TextView>>()
@@ -515,6 +516,18 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         buttonLiveLanguage.setOnClickListener { showLiveLanguageMenu() }
         buttonLiveDiarizeHelp.setOnClickListener { showDiarizationHelp() }
+        checkboxLiveDiarize.setOnCheckedChangeListener { _, _ ->
+            // A diarização muda os parâmetros da conexão: se houver uma sessão
+            // ativa, encerre-a para que a próxima abra com os valores novos.
+            if (liveTranscribing) {
+                stopLiveMicTranscription()
+                Toast.makeText(
+                    this,
+                    "Diarização alterada: inicie novamente a transcrição ao vivo.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
         buttonSaveRecording.setOnClickListener { openOutputFolderPicker(REQUEST_SAVE_RECORDING_DIR) }
         buttonSelectOutputFolder.setOnClickListener { openOutputFolderPicker(REQUEST_CHOOSE_PRE_OUTPUT_DIR) }
         buttonPlayPause.setOnClickListener { togglePlayback() }
@@ -1419,7 +1432,7 @@ class RemoteSttActivity : AppCompatActivity() {
             append("&interim_results=true")
             SttLanguageSettings.grokLanguageParam()?.let { append("&language=$it") }
             append("&format=true&smart_turn=0.65&endpointing=900&filler_words=false")
-            if (checkboxLiveDiarize.isChecked) append("&diarize=true")
+            // Grok (xAI) não suporta diarização: nunca envia parâmetros.
         }
     }
 
@@ -1430,7 +1443,7 @@ class RemoteSttActivity : AppCompatActivity() {
             append("&smart_format=true&punctuate=true")
             append("&encoding=linear16&sample_rate=16000&channels=1")
             append("&interim_results=true&endpointing=900")
-            if (checkboxLiveDiarize.isChecked) append("&diarize=true")
+            SttDiarization.deepgramQuery(checkboxLiveDiarize.isChecked)?.let { append("&$it") }
             GrokApiSettings.deepgramKeyterms()
                 .split(',', '\n')
                 .map { it.trim() }
@@ -1450,7 +1463,7 @@ class RemoteSttActivity : AppCompatActivity() {
             SttLanguageSettings.assemblyaiWsLanguageCodes().forEach { code ->
                 append("&language_codes=${Uri.encode(code)}")
             }
-            if (checkboxLiveDiarize.isChecked) append("&speaker_labels=true")
+            SttDiarization.assemblyaiWsQuery(checkboxLiveDiarize.isChecked)?.let { append("&$it") }
         }
     }
 
@@ -2341,9 +2354,7 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             .addFormDataPart("format", "true")
             .addFormDataPart("filler_words", "false")
-            .apply {
-                if (checkboxLiveDiarize.isChecked) addFormDataPart("diarize", "true")
-            }
+            // Grok (xAI) não suporta diarização: nenhum parâmetro é enviado.
             // xAI requires the binary file field to be the last multipart field.
             .addFormDataPart(
                 "file",
@@ -2394,7 +2405,7 @@ class RemoteSttActivity : AppCompatActivity() {
             append("https://api.deepgram.com/v1/listen?model=nova-3")
             append("&language=${SttLanguageSettings.deepgramLanguageParam()}")
             append("&smart_format=true&punctuate=true")
-            if (checkboxLiveDiarize.isChecked) append("&diarize=true")
+            SttDiarization.deepgramQuery(checkboxLiveDiarize.isChecked)?.let { append("&$it") }
             GrokApiSettings.deepgramKeyterms()
                 .split(',', '\n')
                 .map { it.trim() }
@@ -2469,6 +2480,12 @@ class RemoteSttActivity : AppCompatActivity() {
                     addFormDataPart("language_detection", "true")
                 }
                 languageCode?.let { addFormDataPart("language_code", it) }
+                val (speakerLabels, punctuate) =
+                    SttDiarization.assemblyaiRest(checkboxLiveDiarize.isChecked)
+                if (speakerLabels) {
+                    addFormDataPart("speaker_labels", "true")
+                    addFormDataPart("punctuate", "true")
+                }
             }
             .addFormDataPart(
                 "audio",
@@ -2522,6 +2539,10 @@ class RemoteSttActivity : AppCompatActivity() {
             .addFormDataPart("model_id", "scribe_v2")
             .apply {
                 languageCode?.let { addFormDataPart("language_code", it) }
+                // Scribe v2 REST: diarize=true quando a checkbox está marcada.
+                if (SttDiarization.elevenlabsRestDiarize(checkboxLiveDiarize.isChecked)) {
+                    addFormDataPart("diarize", "true")
+                }
             }
             .addFormDataPart(
                 "file",
@@ -2952,16 +2973,38 @@ class RemoteSttActivity : AppCompatActivity() {
         // diarização; todos os demais modelos exibem ambos.
         val graniteModel = config.name == TranscriptionModelStore.AVARE_NAME ||
             config.name == TranscriptionModelStore.SERVER_NAME
-        val diarizeSupported = !graniteModel
+        // Regra de diarização por provedor: Deepgram e AssemblyAI sempre;
+        // Scribe v2 só em REST (a Ocorrência usa WebSocket/Realtime);
+        // Grok nunca; granite não exibe a checkbox.
+        val apiProvider = when {
+            config.isDeepgramApi -> "deepgram"
+            config.isAssemblyaiApi -> "assemblyai"
+            config.isElevenlabsApi -> "elevenlabs"
+            config.isGrokApi -> "grok"
+            else -> null
+        }
+        val diarizeEnabled = apiProvider != null &&
+            SttDiarization.supportsDiarize(apiProvider, isLive = !transcriptionMode)
         // Para o granite, escondemos apenas os filhos (idioma/diarização); o
         // cronômetro vive na mesma linha e precisa continuar visível na
         // Ocorrência. Na Transcrição o row só existe para API (o timer não aparece).
-        checkboxLiveDiarize.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
-        buttonLiveDiarizeHelp.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
+        checkboxLiveDiarize.visibility = if (graniteModel) View.GONE else View.VISIBLE
+        buttonLiveDiarizeHelp.visibility = if (graniteModel) View.GONE else View.VISIBLE
         buttonLiveLanguage.visibility = if (graniteModel) View.GONE else View.VISIBLE
         refreshLiveLanguageButton()
         grokDiarizeRow.visibility =
             if (graniteModel && transcriptionMode) View.GONE else View.VISIBLE
+        // Desabilitar a checkbox (Grok, Scribe Realtime) não destrói a
+        // preferência: o valor é guardado e restaurado ao voltar a um
+        // provedor que suporta.
+        if (diarizeEnabled) {
+            checkboxLiveDiarize.isEnabled = true
+            checkboxLiveDiarize.isChecked = diarizeMemory
+        } else if (!graniteModel) {
+            diarizeMemory = checkboxLiveDiarize.isChecked
+            checkboxLiveDiarize.isEnabled = false
+            checkboxLiveDiarize.isChecked = false
+        }
         // O seletor t= e seus botões existem apenas para o Granite NAR.
         val narModel = config.name == TranscriptionModelStore.SERVER_NAME
         buttonLiveIntervalMinus.visibility = if (narModel) View.VISIBLE else View.GONE
@@ -2973,7 +3016,6 @@ class RemoteSttActivity : AppCompatActivity() {
             liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
         }
         refreshLiveIntervalInput()
-        if (!diarizeSupported) checkboxLiveDiarize.isChecked = false
         applyToolModeVisibility()
     }
 
@@ -4139,6 +4181,12 @@ class RemoteSttActivity : AppCompatActivity() {
             put("speech_models", JSONArray().put("universal-3-5-pro").put("universal-2"))
             if (languageDetection) put("language_detection", true)
             languageCode?.let { put("language_code", it) }
+            val (speakerLabels, punctuate) =
+                SttDiarization.assemblyaiRest(checkboxLiveDiarize.isChecked)
+            if (speakerLabels) {
+                put("speaker_labels", true)
+                put("punctuate", true)
+            }
         }
         val submitCall = client.newCall(
             Request.Builder()
