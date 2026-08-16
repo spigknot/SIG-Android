@@ -726,6 +726,7 @@ class RemoteSttActivity : AppCompatActivity() {
         liveTranscriptClipboardActions.visibility = View.VISIBLE
         livePostActions.visibility = View.VISIBLE
         clearAssistantOutputViews()
+        applyToolModeVisibility()
         buttonHistory.isEnabled = true
         buttonHistory.alpha = 1f
         buttonPersonSelector.isEnabled = true
@@ -2771,13 +2772,28 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun formatMediaSize(bytes: Long): String {
-        val kb = 1024.0
-        return when {
-            bytes < kb -> "${bytes}B"
-            bytes < kb * kb -> String.format(Locale.US, "%.1f KB", bytes / kb).replace('.', ',')
-            bytes < kb * kb * kb -> String.format(Locale.US, "%.1f MB", bytes / (kb * kb)).replace('.', ',')
-            else -> String.format(Locale.US, "%.1f GB", bytes / (kb * kb * kb)).replace('.', ',')
+        val units = arrayOf("b", "kb", "mb", "gb")
+        var value = bytes.coerceAtLeast(0L)
+        var unit = 0
+        while (value >= 1024L && unit < units.lastIndex) {
+            value /= 1024L
+            unit++
         }
+        return String.format(Locale.US, "%4d%s", value, units[unit])
+    }
+
+    /** Encurta o nome pelo meio com "...", preservando a extensão, até caber
+     *  exatamente em maxChars (monospace). */
+    private fun truncateMiddleKeepExt(name: String, maxChars: Int): String {
+        if (maxChars <= 0) return ""
+        if (name.length <= maxChars) return String.format("%-${maxChars}s", name)
+        val dot = name.lastIndexOf('.')
+        val ext = if (dot > 0 && name.length - dot <= 6) name.substring(dot) else ""
+        val available = maxChars - ext.length - 3
+        if (available <= 2) return name.substring(0, maxChars)
+        val tail = available / 2
+        val head = available - tail
+        return name.substring(0, head) + "..." + name.substring(name.length - ext.length - tail) + ext
     }
 
     private fun refreshBatchProgressUi() {
@@ -2800,6 +2816,8 @@ class RemoteSttActivity : AppCompatActivity() {
                 }
             }
             renderBatchLines()
+            // Re-renderiza após o layout para usar a largura real medida.
+            batchProgressList.post { renderBatchLines() }
         }
     }
 
@@ -2808,6 +2826,17 @@ class RemoteSttActivity : AppCompatActivity() {
             if (!::batchProgressList.isInitialized) return@runOnUiThread
             val spannable = SpannableStringBuilder()
             val lines = synchronized(batchLines) { batchLines.toList() }
+            // Largura total em caracteres monospace (medida real quando disponível).
+            val charWidth = batchProgressList.paint.measureText("0")
+            var totalChars = 46
+            if (charWidth > 0f && batchProgressList.width > 0) {
+                val inner = batchProgressList.width - batchProgressList.paddingLeft - batchProgressList.paddingRight
+                totalChars = (inner / charWidth).toInt().coerceAtLeast(28)
+            }
+            val stateCol = 16
+            val sizeCol = 6
+            val sep = 2
+            val nameCol = (totalChars - stateCol - sizeCol - sep * 2).coerceAtLeast(8)
             lines.forEachIndexed { index, line ->
                 if (index > 0) spannable.append('\n')
                 val parts = line.split('\t', limit = 3)
@@ -2815,10 +2844,9 @@ class RemoteSttActivity : AppCompatActivity() {
                 val size = parts.getOrNull(1).orEmpty()
                 val state = parts.getOrNull(2).orEmpty()
                 val lineStart = spannable.length
-                val padded = String.format("%-24.24s", name)
-                spannable.append(padded).append("  ")
-                spannable.append(String.format("%9s", size)).append("  ")
-                spannable.append(state)
+                spannable.append(truncateMiddleKeepExt(name, nameCol)).append("  ")
+                spannable.append(String.format(Locale.US, "%${sizeCol}s", size)).append("  ")
+                spannable.append(String.format(Locale.US, "%${stateCol}s", state))
                 if (state == "OK") {
                     // Linha inteira verde nas três colunas.
                     spannable.setSpan(
@@ -2867,6 +2895,8 @@ class RemoteSttActivity : AppCompatActivity() {
             historyClipboardActions.visibility = View.GONE
             historyPostActions.visibility = View.GONE
             statementClipboardActions.visibility = View.GONE
+            // Sem o quadro de log (fonte azul) na ferramenta Transcrição.
+            terminalText.visibility = View.GONE
             // O painel de gravação permanece para o seletor de idioma e a diarização.
             recordingPanel.visibility = View.VISIBLE
         } else {
@@ -3747,7 +3777,7 @@ class RemoteSttActivity : AppCompatActivity() {
         return Callable {
             ensureNotCancelled()
             val number = index + 1
-            updateBatchProgressLine(number, if (applyVad) "VAD" else "Convertendo")
+            updateBatchProgressLine(number, if (applyVad) "Aplicando VAD" else "Convertendo")
             appendTerminal(terminalLines, "")
             appendTerminal(terminalLines, "prepare input[$number/${items.size}]: ${item.name}")
             runOnUiThread {
