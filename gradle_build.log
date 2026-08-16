@@ -72,9 +72,10 @@ WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints
 To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
 Add android.sync.suppressAgpWarnings=LIBRARY_CONSTRAINTS_SHOULD_BE_DISABLED to the gradle.properties file to suppress this warning.
 
-> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :app:preBuild UP-TO-DATE
 > Task :app:preDebugBuild UP-TO-DATE
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
 > Task :app:generateDebugBuildConfig UP-TO-DATE
 > Task :app:checkDebugAarMetadata UP-TO-DATE
 > Task :app:generateDebugResValues UP-TO-DATE
@@ -92,10 +93,7 @@ Add android.sync.suppressAgpWarnings=LIBRARY_CONSTRAINTS_SHOULD_BE_DISABLED to t
 > Task :app:processDebugManifestForPackage UP-TO-DATE
 > Task :app:processDebugResources UP-TO-DATE
 > Task :app:javaPreCompileDebug UP-TO-DATE
-> Task :app:preDebugUnitTestBuild UP-TO-DATE
-> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
-> Task :app:javaPreCompileDebugUnitTest
 > Task :app:mergeDebugAssets UP-TO-DATE
 > Task :app:compressDebugAssets UP-TO-DATE
 > Task :app:generateDebugGlobalSynthetics UP-TO-DATE
@@ -112,22 +110,16 @@ Add android.sync.suppressAgpWarnings=LIBRARY_CONSTRAINTS_SHOULD_BE_DISABLED to t
 
 > Task :app:compileDebugKotlin
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:2847:59 'field scaledDensity: Float' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3240:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3248:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3256:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3242:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3250:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3258:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 
 > Task :app:compileDebugJavaWithJavac UP-TO-DATE
 > Task :app:processDebugJavaRes UP-TO-DATE
 > Task :app:mergeDebugJavaResource UP-TO-DATE
-> Task :app:bundleDebugClassesToRuntimeJar
-> Task :app:bundleDebugClassesToCompileJar
 > Task :app:dexBuilderDebug
 > Task :app:mergeProjectDexDebug
-> Task :app:compileDebugUnitTestKotlin
 > Task :app:packageDebug
-> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
-> Task :app:processDebugUnitTestJavaRes
-> Task :app:testDebugUnitTest
 > Task :app:createDebugApkListingFileRedirect UP-TO-DATE
 > Task :app:assembleDebug
 
@@ -139,6 +131,6 @@ You can use '--warning-mode all' to show the individual deprecation warnings and
 
 For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
-BUILD SUCCESSFUL in 13s
-42 actionable tasks: 10 executed, 32 up-to-date
+BUILD SUCCESSFUL in 8s
+36 actionable tasks: 4 executed, 32 up-to-date
 Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html

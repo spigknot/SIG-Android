@@ -2985,22 +2985,24 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         val diarizeEnabled = apiProvider != null &&
             SttDiarization.supportsDiarize(apiProvider, isLive = !transcriptionMode)
+        // A checkbox nem aparece para o granite e para o Grok (não suportam).
+        val diarizeHidden = graniteModel || config.isGrokApi
         // Para o granite, escondemos apenas os filhos (idioma/diarização); o
         // cronômetro vive na mesma linha e precisa continuar visível na
         // Ocorrência. Na Transcrição o row só existe para API (o timer não aparece).
-        checkboxLiveDiarize.visibility = if (graniteModel) View.GONE else View.VISIBLE
-        buttonLiveDiarizeHelp.visibility = if (graniteModel) View.GONE else View.VISIBLE
+        checkboxLiveDiarize.visibility = if (diarizeHidden) View.GONE else View.VISIBLE
+        buttonLiveDiarizeHelp.visibility = if (diarizeHidden) View.GONE else View.VISIBLE
         buttonLiveLanguage.visibility = if (graniteModel) View.GONE else View.VISIBLE
         refreshLiveLanguageButton()
         grokDiarizeRow.visibility =
             if (graniteModel && transcriptionMode) View.GONE else View.VISIBLE
-        // Desabilitar a checkbox (Grok, Scribe Realtime) não destrói a
+        // Desabilitar a checkbox (Scribe Realtime) não destrói a
         // preferência: o valor é guardado e restaurado ao voltar a um
         // provedor que suporta.
         if (diarizeEnabled) {
             checkboxLiveDiarize.isEnabled = true
             checkboxLiveDiarize.isChecked = diarizeMemory
-        } else if (!graniteModel) {
+        } else if (!diarizeHidden) {
             diarizeMemory = checkboxLiveDiarize.isChecked
             checkboxLiveDiarize.isEnabled = false
             checkboxLiveDiarize.isChecked = false
