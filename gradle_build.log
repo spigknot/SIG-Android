@@ -109,9 +109,9 @@ Add android.sync.suppressAgpWarnings=LIBRARY_CONSTRAINTS_SHOULD_BE_DISABLED to t
 > Task :app:writeDebugSigningConfigVersions UP-TO-DATE
 
 > Task :app:compileDebugKotlin
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3171:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3179:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3187:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3198:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3206:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3214:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 
 > Task :app:compileDebugJavaWithJavac UP-TO-DATE
 > Task :app:processDebugJavaRes UP-TO-DATE

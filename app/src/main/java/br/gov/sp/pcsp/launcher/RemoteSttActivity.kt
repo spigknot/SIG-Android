@@ -10,6 +10,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.media.AudioFormat
@@ -2774,13 +2776,13 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun formatMediaSize(bytes: Long): String {
         val units = arrayOf("b", "kb", "mb", "gb")
-        var value = bytes.coerceAtLeast(0L)
+        var value = bytes.coerceAtLeast(0L).toDouble()
         var unit = 0
-        while (value >= 1024L && unit < units.lastIndex) {
-            value /= 1024L
+        while (value >= 1024.0 && unit < units.lastIndex) {
+            value /= 1024.0
             unit++
         }
-        return String.format(Locale.US, "%4d%s", value, units[unit])
+        return String.format(Locale.US, "%.1f%s", value, units[unit])
     }
 
     /** Encurta o nome pelo meio com "...", preservando a extensão, até caber
@@ -2827,17 +2829,24 @@ class RemoteSttActivity : AppCompatActivity() {
             if (!::batchProgressList.isInitialized) return@runOnUiThread
             val spannable = SpannableStringBuilder()
             val lines = synchronized(batchLines) { batchLines.toList() }
-            // Largura total em caracteres monospace (medida real quando disponível).
-            val charWidth = batchProgressList.paint.measureText("0")
+            // Medida exata do caractere monospace (Paint explícito com o textSize real).
+            val measurePaint = Paint().apply {
+                textSize = batchProgressList.textSize
+                typeface = Typeface.MONOSPACE
+            }
+            val charWidth = measurePaint.measureText("0")
             var totalChars = 46
             if (charWidth > 0f && batchProgressList.width > 0) {
                 val inner = batchProgressList.width - batchProgressList.paddingLeft - batchProgressList.paddingRight
-                totalChars = (inner / charWidth).toInt().coerceAtLeast(28)
+                totalChars = ((inner / charWidth).toInt() - 1).coerceAtLeast(30)
             }
             val stateCol = 16
-            val sizeCol = 6
-            val sep = 2
+            val sizeCol = 8
+            val sep = 3 // " | "
             val nameCol = (totalChars - stateCol - sizeCol - sep * 2).coerceAtLeast(8)
+            val borderColor = Color.parseColor("#995EDAF2")
+            val okColor = Color.rgb(94, 240, 142)
+
             lines.forEachIndexed { index, line ->
                 if (index > 0) spannable.append('\n')
                 val parts = line.split('\t', limit = 3)
@@ -2845,19 +2854,37 @@ class RemoteSttActivity : AppCompatActivity() {
                 val size = parts.getOrNull(1).orEmpty()
                 val state = parts.getOrNull(2).orEmpty()
                 val lineStart = spannable.length
-                spannable.append(truncateMiddleKeepExt(name, nameCol)).append("  ")
-                spannable.append(String.format(Locale.US, "%${sizeCol}s", size)).append("  ")
+                val nameStart = spannable.length
+                spannable.append(truncateMiddleKeepExt(name, nameCol))
+                val nameEnd = spannable.length
+                appendColumnSep(spannable, borderColor)
+                val sizeStart = spannable.length
+                spannable.append(String.format(Locale.US, "%${sizeCol}s", size))
+                val sizeEnd = spannable.length
+                appendColumnSep(spannable, borderColor)
+                val stateStart = spannable.length
                 spannable.append(String.format(Locale.US, "%${stateCol}s", state))
                 if (state == "OK") {
-                    // Linha inteira verde nas três colunas.
-                    spannable.setSpan(
-                        ForegroundColorSpan(Color.rgb(94, 240, 142)),
-                        lineStart, spannable.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
+                    // Conteúdo verde nas três colunas (os traços mantêm a cor da borda).
+                    for ((start, end) in listOf(
+                        nameStart to nameEnd, sizeStart to sizeEnd, stateStart to spannable.length
+                    )) {
+                        spannable.setSpan(ForegroundColorSpan(okColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    }
                 }
             }
             batchProgressList.text = spannable
         }
+    }
+
+    private fun appendColumnSep(spannable: SpannableStringBuilder, borderColor: Int) {
+        val sepStart = spannable.length
+        spannable.append(" | ")
+        // O traço vertical usa a cor da borda da tabela.
+        spannable.setSpan(
+            ForegroundColorSpan(borderColor),
+            sepStart + 1, sepStart + 2, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
     }
 
     private fun updateBatchProgressLine(number: Int, state: String) {
