@@ -1438,6 +1438,12 @@ class RemoteSttActivity : AppCompatActivity() {
                     updateGrokLiveTranscriptLocked()
                 }
                 runOnUiThread { updateLiveTerminalText() }
+                // O speech_final é o sinal definitivo do Deepgram: se a
+                // finalização já foi pedida, completa na hora (o Deepgram
+                // às vezes mantém a sessão aberta após o CloseStream).
+                if (event.optBoolean("speech_final", false) && grokFinishRequested && !grokCompletionHandled) {
+                    completeGrokLiveTranscription(webSocket, "")
+                }
             }
             "Begin" -> if (sttIsAssemblyai) onGrokWebSocketReady(webSocket)
             "Turn" -> if (sttIsAssemblyai) {
