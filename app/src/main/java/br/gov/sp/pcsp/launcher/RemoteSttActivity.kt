@@ -2396,6 +2396,7 @@ class RemoteSttActivity : AppCompatActivity() {
         require(GrokApiSettings.isPlausibleElevenlabsKey(apiKey)) { "A chave API da ElevenLabs salva nas configurações é inválida." }
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
+            .addFormDataPart("model_id", "scribe_v2")
             .addFormDataPart(
                 "file",
                 uploadFile.file.name,
@@ -2404,7 +2405,7 @@ class RemoteSttActivity : AppCompatActivity() {
             .build()
         val call = client.newCall(
             Request.Builder()
-                .url("https://api.elevenlabs.io/v1/speech-to-text?model_id=scribe_v2")
+                .url("https://api.elevenlabs.io/v1/speech-to-text")
                 .header("xi-api-key", apiKey)
                 .post(requestBody)
                 .build()
