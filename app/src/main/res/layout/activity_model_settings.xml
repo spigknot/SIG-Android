@@ -42,10 +42,6 @@
             <TextView style="@style/SettingsHeader" android:text="Modelo de transcrição" />
             <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#88101418" android:paddingStart="8dp" android:paddingTop="8dp" android:paddingEnd="0dp" android:paddingBottom="8dp">
                 <RadioGroup android:id="@+id/radio_transcription_models" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
-                <LinearLayout android:id="@+id/layout_grok_chunk" android:layout_width="wrap_content" android:layout_height="48dp" android:layout_gravity="end|bottom" android:translationY="7dp" android:gravity="center_vertical" android:orientation="horizontal" android:visibility="gone">
-                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Chunk size (ms): " android:textColor="#FFFFFFFF" />
-                    <Spinner android:id="@+id/spinner_grok_chunk" android:layout_width="96dp" android:layout_height="wrap_content" />
-                </LinearLayout>
             </FrameLayout>
             <TextView android:id="@+id/transcription_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
 

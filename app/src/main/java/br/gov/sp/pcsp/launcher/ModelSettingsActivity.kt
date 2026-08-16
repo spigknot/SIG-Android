@@ -29,7 +29,6 @@ class ModelSettingsActivity : AppCompatActivity() {
     private lateinit var assemblyaiKey: EditText
     private lateinit var elevenlabsKey: EditText
     private lateinit var imeiCheckKey: EditText
-    private lateinit var chunkSpinner: Spinner
     private lateinit var conversionParallelism: EditText
     private lateinit var requestParallelism: EditText
     private var populating = false
@@ -50,7 +49,6 @@ class ModelSettingsActivity : AppCompatActivity() {
         assemblyaiKey = findViewById(R.id.edit_assemblyai_key)
         elevenlabsKey = findViewById(R.id.edit_elevenlabs_key)
         imeiCheckKey = findViewById(R.id.edit_imei_check_key)
-        chunkSpinner = findViewById(R.id.spinner_grok_chunk)
         conversionParallelism = findViewById(R.id.edit_conversion_parallelism)
         requestParallelism = findViewById(R.id.edit_request_parallelism)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
@@ -123,12 +121,6 @@ class ModelSettingsActivity : AppCompatActivity() {
                 TranscriptionModelStore.select(config.name)
                 refreshVisibility()
             })
-        }
-        val chunkOptions = listOf(50, 100, 200, 500, 1000)
-        val selectedChunk = GrokApiSettings.grokChunkMillis().takeIf { it in chunkOptions } ?: 100
-        GrokApiSettings.setGrokChunkMillis(selectedChunk)
-        bindSpinner(chunkSpinner, chunkOptions, selectedChunk) {
-            GrokApiSettings.setGrokChunkMillis(it)
         }
     }
 
@@ -233,8 +225,6 @@ class ModelSettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshVisibility() {
-        findViewById<View>(R.id.layout_grok_chunk).visibility =
-            if (TranscriptionModelStore.selectedConfig().isGrokApi || TranscriptionModelStore.selectedConfig().isDeepgramApi) View.VISIBLE else View.GONE
         val text = ModelServerStore.selectedConfig()
         reasoningGroup.visibility = if (text.isGrokApi || text.isDeepseekApi || text.isProxy) View.VISIBLE else View.GONE
         refreshReasoning()
