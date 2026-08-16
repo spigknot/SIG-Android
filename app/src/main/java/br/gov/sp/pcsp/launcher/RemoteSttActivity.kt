@@ -2374,7 +2374,8 @@ class RemoteSttActivity : AppCompatActivity() {
                         val language = channels?.optJSONObject(0)?.optString("detected_language").orEmpty()
                         throw IllegalStateException(
                             "O Deepgram retornou uma transcrição vazia (duration=${duration.ifBlank { "?" }}, " +
-                                "language=${language.ifBlank { "?" }}, resposta=${body.take(300)})"
+                                "language=${language.ifBlank { "?" }}, arquivo=${uploadFile.file.name} " +
+                                "(${uploadFile.file.length()} bytes), resposta=${body.take(300)})"
                         )
                     }
                     return rawText
@@ -3389,7 +3390,8 @@ class RemoteSttActivity : AppCompatActivity() {
                     prepareCompletion.submit(
                         prepareUploadTask(
                             items, prepareMode, tempDir, terminalLines, index, item, vadStats,
-                            applyVad = !onlyConvert && !whiteRecording
+                            applyVad = !onlyConvert && !whiteRecording,
+                            useTimeline = !whiteRecording
                         )
                     )
                 }
@@ -3524,7 +3526,8 @@ class RemoteSttActivity : AppCompatActivity() {
         index: Int,
         item: MediaItem,
         vadStats: VadRunStats,
-        applyVad: Boolean = true
+        applyVad: Boolean = true,
+        useTimeline: Boolean = true
     ): Callable<PreparedUpload> {
         return Callable {
             ensureNotCancelled()
@@ -3538,8 +3541,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
             val inputFile = copyUriToCache(item.uri, item.name)
             val originalAudioInfo = describeAudioFile(inputFile)
-            val startMs = if (items.size == 1) timeline.getStartMs() else 0L
-            val endMs = if (items.size == 1) timeline.getEndMs() else item.durationMs.coerceAtLeast(1L)
+            // A timeline do editor só se aplica a arquivos selecionados; a
+            // gravação do microfone branco envia SEMPRE o áudio inteiro.
+            val startMs = if (items.size == 1 && useTimeline) timeline.getStartMs() else 0L
+            val endMs = if (items.size == 1 && useTimeline) timeline.getEndMs() else item.durationMs.coerceAtLeast(1L)
             val durationToSend = (endMs - startMs).coerceAtLeast(1L)
             val preparedUploadFile = prepareUploadFile(
                 mode = mode,
