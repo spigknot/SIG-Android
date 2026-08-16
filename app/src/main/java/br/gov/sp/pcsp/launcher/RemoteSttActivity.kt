@@ -188,6 +188,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var grokDiarizeRow: View
     private lateinit var checkboxLiveDiarize: CheckBox
     private lateinit var buttonLiveDiarizeHelp: TextView
+    private lateinit var buttonLiveDiarizeRealtimeHelp: TextView
 
     private val selectedItems = mutableListOf<MediaItem>()
     private val tempOutputFiles = mutableListOf<File>()
@@ -425,6 +426,7 @@ class RemoteSttActivity : AppCompatActivity() {
         grokDiarizeRow = findViewById(R.id.grok_diarize_row)
         checkboxLiveDiarize = findViewById(R.id.checkbox_live_diarize)
         buttonLiveDiarizeHelp = findViewById(R.id.button_live_diarize_help)
+        buttonLiveDiarizeRealtimeHelp = findViewById(R.id.button_live_diarize_realtime_help)
         arrowInputOutput = findViewById(R.id.arrow_input_output)
         buttonServerSelector = findViewById(R.id.button_server_selector)
         buttonPlayPause = findViewById(R.id.button_play_pause)
@@ -519,6 +521,15 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         buttonLiveLanguage.setOnClickListener { showLiveLanguageMenu() }
         buttonLiveDiarizeHelp.setOnClickListener { showDiarizationHelp() }
+        buttonLiveDiarizeRealtimeHelp.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setMessage(
+                    "O ElevenLabs (Scribe v2) só aceita diarização por requisições REST " +
+                        "(envio de arquivos). A transcrição ao vivo (WebSocket) não aplica diarização."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+        }
         checkboxLiveDiarize.setOnCheckedChangeListener { _, _ ->
             // Alternância instantânea entre texto plano e por interlocutores
             // (0ms, sem novas chamadas de rede).
@@ -3007,6 +3018,9 @@ class RemoteSttActivity : AppCompatActivity() {
         // Ocorrência. Na Transcrição o row só existe para API (o timer não aparece).
         checkboxLiveDiarize.visibility = if (diarizeHidden) View.GONE else View.VISIBLE
         buttonLiveDiarizeHelp.visibility = if (diarizeHidden) View.GONE else View.VISIBLE
+        // O "?" vermelho (aviso REST vs WebSocket) só existe para o ElevenLabs.
+        buttonLiveDiarizeRealtimeHelp.visibility =
+            if (!diarizeHidden && config.isElevenlabsApi) View.VISIBLE else View.GONE
         buttonLiveLanguage.visibility = if (graniteModel) View.GONE else View.VISIBLE
         refreshLiveLanguageButton()
         grokDiarizeRow.visibility =

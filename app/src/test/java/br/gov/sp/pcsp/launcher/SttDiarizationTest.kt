@@ -65,12 +65,13 @@ class SttDiarizationTest {
         assertFalse(SttDiarization.elevenlabsRestDiarize(false))
     }
 
-    // 9. ElevenLabs WS: nenhum parâmetro, independente do estado salvo no REST.
+    // 9. ElevenLabs WS: a checkbox fica liberada (o "?" vermelho avisa que o
+    //    Realtime não aplica diarização), mas NUNCA são enviados parâmetros.
     @Test
     fun elevenlabsWs_neverSendsParams() {
         assertNull(SttDiarization.elevenlabsWsQuery(true))
         assertNull(SttDiarization.elevenlabsWsQuery(false))
-        assertFalse(SttDiarization.supportsDiarize("elevenlabs", isLive = true))
+        assertTrue(SttDiarization.supportsDiarize("elevenlabs", isLive = true))
         assertTrue(SttDiarization.supportsDiarize("elevenlabs", isLive = false))
     }
 

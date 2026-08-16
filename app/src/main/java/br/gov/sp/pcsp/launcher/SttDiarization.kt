@@ -13,8 +13,9 @@ object SttDiarization {
     fun supportsDiarize(provider: String, isLive: Boolean): Boolean = when (provider) {
         "deepgram" -> true
         "assemblyai" -> true
-        // Scribe v2 REST suporta; Scribe v2 Realtime (WS) não.
-        "elevenlabs" -> !isLive
+        // Scribe v2: checkbox liberada; o "?" vermelho avisa que o Realtime
+        // (WS) não aplica diarização — só o REST envia diarize=true.
+        "elevenlabs" -> true
         // Grok (xAI): a documentação confirma o suporte à diarização
         // acústica (campo numérico speaker nas palavras).
         "grok" -> true
