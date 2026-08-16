@@ -99,8 +99,8 @@ Add android.sync.suppressAgpWarnings=LIBRARY_CONSTRAINTS_SHOULD_BE_DISABLED to t
 > Task :app:desugarDebugFileDependencies UP-TO-DATE
 > Task :app:mergeExtDexDebug UP-TO-DATE
 > Task :app:mergeLibDexDebug UP-TO-DATE
-> Task :app:mergeDebugJniLibFolders UP-TO-DATE
 > Task :app:parseDebugLocalResources
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
 > Task :app:mergeDebugNativeLibs NO-SOURCE
 > Task :app:stripDebugDebugSymbols NO-SOURCE
 > Task :app:validateSigningDebug UP-TO-DATE
@@ -109,6 +109,9 @@ Add android.sync.suppressAgpWarnings=LIBRARY_CONSTRAINTS_SHOULD_BE_DISABLED to t
 > Task :app:processDebugResources
 
 > Task :app:compileDebugKotlin
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt:97:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt:108:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt:146:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt:237:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt:246:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt:367:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
@@ -116,14 +119,16 @@ w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtra
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt:277:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt:480:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt:494:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt:186:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt:815:60 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt:287:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt:1711:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt:236:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt:245:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt:368:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3010:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3018:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3026:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3060:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3068:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3076:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt:220:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt:228:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt:437:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
@@ -147,6 +152,6 @@ You can use '--warning-mode all' to show the individual deprecation warnings and
 
 For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
-BUILD SUCCESSFUL in 14s
+BUILD SUCCESSFUL in 15s
 36 actionable tasks: 11 executed, 25 up-to-date
 Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html

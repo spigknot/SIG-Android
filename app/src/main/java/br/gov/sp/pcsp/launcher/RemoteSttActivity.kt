@@ -241,6 +241,9 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var livePaused = false
     private var transcriptionMode = false
     @Volatile private var recordingPaused = false
+    private lateinit var batchProgressBox: View
+    private lateinit var batchProgressList: TextView
+    private val batchLines = mutableListOf<String>()
     @Volatile private var liveUsesGrokWebSocket = false
     @Volatile private var sttIsDeepgram = false
     @Volatile private var sttIsAssemblyai = false
@@ -399,6 +402,8 @@ class RemoteSttActivity : AppCompatActivity() {
         selectedFile = findViewById(R.id.selected_file)
         selectedListBox = findViewById(R.id.selected_list_box)
         selectedList = findViewById(R.id.selected_list)
+        batchProgressBox = findViewById(R.id.batch_progress_box)
+        batchProgressList = findViewById(R.id.batch_progress_list)
         terminalText = findViewById(R.id.terminal_text)
         buttonSelectOutputFolder = findViewById(R.id.button_select_output_folder)
         recordingPanel = findViewById(R.id.recording_panel)
@@ -2722,12 +2727,51 @@ class RemoteSttActivity : AppCompatActivity() {
             .show()
     }
 
+    /** Quadro de progresso do lote: uma linha por arquivo (como a aba Transcrição do Windows). */
+    private fun refreshBatchProgressUi() {
+        if (!transcriptionMode || selectedItems.size < 2) {
+            batchProgressBox.visibility = View.GONE
+            if (transcriptionMode) liveTranscriptTextView.visibility = View.VISIBLE
+            batchLines.clear()
+            return
+        }
+        batchProgressBox.visibility = View.VISIBLE
+        liveTranscriptTextView.visibility = View.GONE
+        synchronized(batchLines) {
+            batchLines.clear()
+            selectedItems.forEachIndexed { index, item ->
+                batchLines += "${index + 1}. ${item.name} — aguardando"
+            }
+        }
+        renderBatchLines()
+    }
+
+    private fun renderBatchLines() {
+        runOnUiThread {
+            if (::batchProgressList.isInitialized) {
+                batchProgressList.text = synchronized(batchLines) { batchLines.joinToString("\n") }
+            }
+        }
+    }
+
+    private fun updateBatchProgressLine(number: Int, state: String) {
+        if (!transcriptionMode) return
+        val index = number - 1
+        synchronized(batchLines) {
+            if (index < 0 || index >= batchLines.size) return
+            val name = selectedItems.getOrNull(index)?.name ?: return
+            batchLines[index] = "$number. $name — $state"
+        }
+        renderBatchLines()
+    }
+
     private fun applyToolModeVisibility() {
         findViewById<TextView>(R.id.tool_mode_title).text =
             if (transcriptionMode) "Transcrição" else "Ocorrência"
         if (transcriptionMode) {
             // Ferramenta Transcrição: somente arquivos (sem microfones, sem
-            // controles de live, sem Histórico/Oitiva e sem timestamps).
+            // controles de live, sem Histórico/Oitiva, sem timestamps e sem os
+            // conjuntos de botões das caixas de texto).
             buttonRecordingAction.visibility = View.GONE
             buttonLiveMicTest.visibility = View.GONE
             buttonLiveMicStop.visibility = View.GONE
@@ -2742,6 +2786,11 @@ class RemoteSttActivity : AppCompatActivity() {
             buttonHistory.visibility = View.GONE
             buttonStatement.visibility = View.GONE
             buttonPersonSelector.visibility = View.GONE
+            liveTranscriptClipboardActions.visibility = View.GONE
+            livePostActions.visibility = View.GONE
+            historyClipboardActions.visibility = View.GONE
+            historyPostActions.visibility = View.GONE
+            statementClipboardActions.visibility = View.GONE
             // O painel de gravação permanece para o seletor de idioma e a diarização.
             recordingPanel.visibility = View.VISIBLE
         } else {
@@ -2764,6 +2813,7 @@ class RemoteSttActivity : AppCompatActivity() {
             buttonLiveMicTest.visibility = View.INVISIBLE
             buttonLiveMicStop.visibility = View.VISIBLE
         }
+        refreshBatchProgressUi()
     }
 
     private fun refreshGrokApiControls() {
@@ -2792,7 +2842,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun showDiarizationHelp() {
         AlertDialog.Builder(this)
-            .setMessage("Diarização tenta identificar interlocutores diferentes na transcrição. As falas retornadas pelo Grok recebem rótulos como Interlocutor 1 e Interlocutor 2.")
+            .setMessage("A diarização identifica interlocutores diferentes na transcrição. As falas de cada pessoa recebem rótulos como Interlocutor 1 e Interlocutor 2.")
             .setPositiveButton("OK", null)
             .show()
     }
@@ -3608,6 +3658,7 @@ class RemoteSttActivity : AppCompatActivity() {
         return Callable {
             ensureNotCancelled()
             val number = index + 1
+            updateBatchProgressLine(number, "preparando...")
             appendTerminal(terminalLines, "")
             appendTerminal(terminalLines, "prepare input[$number/${items.size}]: ${item.name}")
             runOnUiThread {
@@ -3675,6 +3726,7 @@ class RemoteSttActivity : AppCompatActivity() {
             ensureNotCancelled()
             val item = prepared.item
             val number = prepared.index
+            updateBatchProgressLine(number, "enviando...")
             appendTerminal(terminalLines, "upload liberado: ${item.name}")
             appendTerminalAudioInfo(terminalLines, "original: ${prepared.originalAudioInfo}")
             appendTerminalAudioInfo(terminalLines, "enviado: ${prepared.sentAudioInfo}")
@@ -3690,6 +3742,7 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             val individual = uniqueFile(transcriptionDir, "${safeBaseName(result.fileName)}.txt")
             individual.writeText(result.text.trim() + "\n", Charsets.UTF_8)
+            updateBatchProgressLine(number, "concluído")
             runOnUiThread { updateTerminalText(terminalLines) }
             result
         }
@@ -4755,6 +4808,7 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonTranscribe.alpha = if (enabled) 1f else 0.45f
         buttonTranscribe.isClickable = enabled
         buttonTranscribe.isFocusable = enabled
+        refreshBatchProgressUi()
     }
 
     private fun togglePlayback() {

@@ -296,6 +296,11 @@
                     app:tint="#FFFFFFFF"
                     android:visibility="gone" />
 
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
                 <ImageButton
                     android:id="@+id/button_select_output_folder"
                     android:layout_width="44dp"
@@ -309,11 +314,6 @@
                     android:scaleType="fitCenter"
                     android:src="@drawable/ic_ffmpeg_folder"
                     android:visibility="gone" />
-
-                <View
-                    android:layout_width="0dp"
-                    android:layout_height="1dp"
-                    android:layout_weight="1" />
 
                 <ImageButton
                     android:id="@+id/button_save_recording"
@@ -407,27 +407,24 @@
                         android:layout_height="1dp"
                         android:layout_weight="1" />
 
+                    <TextView
+                        android:id="@+id/button_live_language"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_marginEnd="20dp"
+                        android:background="@drawable/ffmpeg_outline_button_bg"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:foreground="?attr/selectableItemBackground"
+                        android:gravity="center"
+                        android:paddingStart="9dp"
+                        android:paddingEnd="9dp"
+                        android:text="Idioma"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:visibility="gone" />
                 </LinearLayout>
-
-                <TextView
-                    android:id="@+id/button_live_language"
-                    android:layout_width="wrap_content"
-                    android:layout_height="32dp"
-                    android:layout_gravity="end"
-                    android:layout_marginTop="6dp"
-                    android:layout_marginEnd="20dp"
-                    android:background="@drawable/ffmpeg_outline_button_bg"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground"
-                    android:gravity="center"
-                    android:paddingStart="9dp"
-                    android:paddingEnd="9dp"
-                    android:text="Idioma"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/recording_timer"
@@ -438,6 +435,32 @@
                     android:text="00:00.000"
                     android:textColor="#DDFFFFFF"
                     android:textSize="13sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/batch_progress_box"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="300dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clipToPadding="false"
+                    android:fillViewport="false"
+                    android:padding="8dp">
+
+                    <TextView
+                        android:id="@+id/batch_progress_list"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:textColor="#DDFFFFFF"
+                        android:textSize="12sp" />
+                </ScrollView>
             </LinearLayout>
 
             <FrameLayout
