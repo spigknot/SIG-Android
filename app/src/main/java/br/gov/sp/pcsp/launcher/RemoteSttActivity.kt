@@ -28,6 +28,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.text.Editable
+import android.text.TextUtils
 import android.text.SpannableString
 import android.text.SpannableStringBuilder
 import android.text.Spanned
@@ -38,6 +39,8 @@ import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import android.view.View
+import android.view.Gravity
+import android.view.MotionEvent
 import android.widget.EditText
 import android.widget.Button
 import android.widget.CheckBox
