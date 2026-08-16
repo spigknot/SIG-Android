@@ -454,16 +454,13 @@
                     android:layout_height="300dp"
                     android:background="@drawable/ffmpeg_outline_button_bg"
                     android:clipToPadding="false"
-                    android:fillViewport="false"
-                    android:padding="8dp">
+                    android:fillViewport="false">
 
-                    <TextView
-                        android:id="@+id/batch_progress_list"
+                    <LinearLayout
+                        android:id="@+id/batch_progress_rows"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:fontFamily="monospace"
-                        android:textColor="#DDFFFFFF"
-                        android:textSize="12sp" />
+                        android:orientation="vertical" />
                 </ScrollView>
             </LinearLayout>
 

@@ -245,8 +245,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private var transcriptionMode = false
     @Volatile private var recordingPaused = false
     private lateinit var batchProgressBox: View
-    private lateinit var batchProgressList: TextView
-    private val batchLines = mutableListOf<String>()
+    private lateinit var batchProgressRows: LinearLayout
+    private val batchRowCells = mutableListOf<Triple<TextView, TextView, TextView>>()
     @Volatile private var liveUsesGrokWebSocket = false
     @Volatile private var sttIsDeepgram = false
     @Volatile private var sttIsAssemblyai = false
@@ -402,7 +402,7 @@ class RemoteSttActivity : AppCompatActivity() {
         selectedListBox = findViewById(R.id.selected_list_box)
         selectedList = findViewById(R.id.selected_list)
         batchProgressBox = findViewById(R.id.batch_progress_box)
-        batchProgressList = findViewById(R.id.batch_progress_list)
+        batchProgressRows = findViewById(R.id.batch_progress_rows)
         terminalText = findViewById(R.id.terminal_text)
         buttonSelectOutputFolder = findViewById(R.id.button_select_output_folder)
         recordingPanel = findViewById(R.id.recording_panel)
@@ -2760,9 +2760,11 @@ class RemoteSttActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Quadro de progresso do lote: uma linha por arquivo, duas colunas
-     *  (nome | estado), como a aba Transcrição do Windows. */
+    /** Quadro de progresso do lote: tabela real com colunas de largura fixa
+     *  (nome estica | tamanho fixo | estado fixo na borda direita) e bordas
+     *  verticais contínuas entre as colunas. */
     private var batchSnapshotKey: String = ""
+    private var batchSessionFinished = false
     private val batchSizeCache = mutableMapOf<Uri, String>()
 
     private fun resolveMediaSize(item: MediaItem): String {
@@ -2797,117 +2799,86 @@ class RemoteSttActivity : AppCompatActivity() {
         return String.format(Locale.US, "%.1f%s", value, units[unit])
     }
 
-    /** Encurta o nome pelo meio com "...", preservando a extensão, até caber
-     *  exatamente em maxChars (monospace). */
-    private fun truncateMiddleKeepExt(name: String, maxChars: Int): String {
-        if (maxChars <= 0) return ""
-        if (name.length <= maxChars) return String.format("%-${maxChars}s", name)
-        val dot = name.lastIndexOf('.')
-        val ext = if (dot > 0 && name.length - dot <= 6) name.substring(dot) else ""
-        val available = maxChars - ext.length - 3
-        if (available <= 2) return name.substring(0, maxChars)
-        val tail = available / 2
-        val head = available - tail
-        return name.substring(0, head) + "..." + name.substring(name.length - ext.length - tail) + ext
-    }
-
     private fun refreshBatchProgressUi() {
-        if (!transcriptionMode || selectedItems.size < 2) {
+        val key = selectedItems.joinToString("|") { it.name }
+        if (key != batchSnapshotKey) {
+            batchSnapshotKey = key
+            batchSessionFinished = false
+        }
+        if (!transcriptionMode || selectedItems.size < 2 || batchSessionFinished) {
             batchProgressBox.visibility = View.GONE
             if (transcriptionMode) liveTranscriptTextView.visibility = View.VISIBLE
-            batchSnapshotKey = ""
-            batchLines.clear()
+            batchRowCells.clear()
+            if (::batchProgressRows.isInitialized) batchProgressRows.removeAllViews()
             return
         }
         batchProgressBox.visibility = View.VISIBLE
         liveTranscriptTextView.visibility = View.GONE
-        val key = selectedItems.joinToString("|") { it.name }
-        if (key != batchSnapshotKey) {
-            batchSnapshotKey = key
-            synchronized(batchLines) {
-                batchLines.clear()
-                selectedItems.forEach { item ->
-                    batchLines += "${item.name}\t${resolveMediaSize(item)}\tAguardando"
+        if (batchRowCells.size != selectedItems.size) {
+            batchRowCells.clear()
+            batchProgressRows.removeAllViews()
+            val sizeCellWidth = dp(88)
+            val stateCellWidth = dp(118)
+            val cellPadding = dp(4)
+            val cellPaddingEnd = dp(6)
+            selectedItems.forEach { item ->
+                val nameView = TextView(this).apply {
+                    text = item.name
+                    textSize = 12f
+                    typeface = Typeface.MONOSPACE
+                    setTextColor(Color.WHITE)
+                    maxLines = 1
+                    ellipsize = TextUtils.TruncateAt.MIDDLE
+                    setPadding(cellPadding, dp(5), cellPadding, dp(5))
                 }
+                val sizeView = TextView(this).apply {
+                    text = resolveMediaSize(item)
+                    textSize = 12f
+                    typeface = Typeface.MONOSPACE
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.END
+                    maxLines = 1
+                    setBackgroundResource(R.drawable.batch_cell_left_border)
+                    setPadding(cellPadding, dp(5), cellPaddingEnd, dp(5))
+                }
+                val stateView = TextView(this).apply {
+                    text = "Aguardando"
+                    textSize = 12f
+                    typeface = Typeface.MONOSPACE
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.END
+                    maxLines = 1
+                    setBackgroundResource(R.drawable.batch_cell_left_border)
+                    setPadding(cellPadding, dp(5), cellPaddingEnd, dp(5))
+                }
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(nameView, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    addView(sizeView, LinearLayout.LayoutParams(sizeCellWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
+                    addView(stateView, LinearLayout.LayoutParams(stateCellWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
+                }
+                batchProgressRows.addView(row)
+                batchRowCells += Triple(nameView, sizeView, stateView)
             }
-            renderBatchLines()
-            // Re-renderiza após o layout para usar a largura real medida.
-            batchProgressList.post { renderBatchLines() }
         }
     }
 
-    private fun renderBatchLines() {
-        runOnUiThread {
-            if (!::batchProgressList.isInitialized) return@runOnUiThread
-            val spannable = SpannableStringBuilder()
-            val lines = synchronized(batchLines) { batchLines.toList() }
-            // Medida exata do caractere monospace (Paint explícito com o textSize real).
-            val measurePaint = Paint().apply {
-                textSize = batchProgressList.textSize
-                typeface = Typeface.MONOSPACE
-            }
-            val charWidth = measurePaint.measureText("0")
-            var totalChars = 46
-            if (charWidth > 0f && batchProgressList.width > 0) {
-                val inner = batchProgressList.width - batchProgressList.paddingLeft - batchProgressList.paddingRight
-                totalChars = ((inner / charWidth).toInt() - 1).coerceAtLeast(30)
-            }
-            val stateCol = 16
-            val sizeCol = 8
-            val sep = 3 // " | "
-            val nameCol = (totalChars - stateCol - sizeCol - sep * 2).coerceAtLeast(8)
-            val borderColor = Color.parseColor("#995EDAF2")
-            val okColor = Color.rgb(94, 240, 142)
-
-            lines.forEachIndexed { index, line ->
-                if (index > 0) spannable.append('\n')
-                val parts = line.split('\t', limit = 3)
-                val name = parts.firstOrNull().orEmpty()
-                val size = parts.getOrNull(1).orEmpty()
-                val state = parts.getOrNull(2).orEmpty()
-                val lineStart = spannable.length
-                val nameStart = spannable.length
-                spannable.append(truncateMiddleKeepExt(name, nameCol))
-                val nameEnd = spannable.length
-                appendColumnSep(spannable, borderColor)
-                val sizeStart = spannable.length
-                spannable.append(String.format(Locale.US, "%${sizeCol}s", size))
-                val sizeEnd = spannable.length
-                appendColumnSep(spannable, borderColor)
-                val stateStart = spannable.length
-                spannable.append(String.format(Locale.US, "%${stateCol}s", state))
-                if (state == "OK") {
-                    // Conteúdo verde nas três colunas (os traços mantêm a cor da borda).
-                    for ((start, end) in listOf(
-                        nameStart to nameEnd, sizeStart to sizeEnd, stateStart to spannable.length
-                    )) {
-                        spannable.setSpan(ForegroundColorSpan(okColor), start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                    }
-                }
-            }
-            batchProgressList.text = spannable
-        }
-    }
-
-    private fun appendColumnSep(spannable: SpannableStringBuilder, borderColor: Int) {
-        val sepStart = spannable.length
-        spannable.append(" | ")
-        // O traço vertical usa a cor da borda da tabela.
-        spannable.setSpan(
-            ForegroundColorSpan(borderColor),
-            sepStart + 1, sepStart + 2, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-        )
-    }
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)
 
     private fun updateBatchProgressLine(number: Int, state: String) {
         if (!transcriptionMode) return
         val index = number - 1
-        synchronized(batchLines) {
-            if (index < 0 || index >= batchLines.size) return
-            val item = selectedItems.getOrNull(index) ?: return
-            batchLines[index] = "${item.name}\t${resolveMediaSize(item)}\t$state"
+        runOnUiThread {
+            val cells = batchRowCells.getOrNull(index) ?: return@runOnUiThread
+            cells.third.text = state
+            if (state == "OK") {
+                val green = Color.rgb(94, 240, 142)
+                cells.first.setTextColor(green)
+                cells.second.setTextColor(green)
+                cells.third.setTextColor(green)
+            }
         }
-        renderBatchLines()
     }
 
     private fun applyToolModeVisibility() {
@@ -2972,9 +2943,15 @@ class RemoteSttActivity : AppCompatActivity() {
         val graniteModel = config.name == TranscriptionModelStore.AVARE_NAME ||
             config.name == TranscriptionModelStore.SERVER_NAME
         val diarizeSupported = !graniteModel
+        // Para o granite, escondemos apenas os filhos (idioma/diarização); o
+        // cronômetro vive na mesma linha e precisa continuar visível na
+        // Ocorrência. Na Transcrição o row só existe para API (o timer não aparece).
+        checkboxLiveDiarize.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
+        buttonLiveDiarizeHelp.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
         buttonLiveLanguage.visibility = if (graniteModel) View.GONE else View.VISIBLE
         refreshLiveLanguageButton()
-        grokDiarizeRow.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
+        grokDiarizeRow.visibility =
+            if (graniteModel && transcriptionMode) View.GONE else View.VISIBLE
         // O seletor t= e seus botões existem apenas para o Granite NAR.
         val narModel = config.name == TranscriptionModelStore.SERVER_NAME
         buttonLiveIntervalMinus.visibility = if (narModel) View.VISIBLE else View.GONE
@@ -3746,9 +3723,19 @@ class RemoteSttActivity : AppCompatActivity() {
                         livePostActions.visibility = View.VISIBLE
                         terminalText.visibility = View.GONE
                     } else if (transcriptionMode) {
-                        // Ferramenta Transcrição: a saída é a tabela HTML/TXT;
-                        // exibe os botões de compartilhar/salvar e mantém as
-                        // caixas de texto (Histórico/Oitiva) ocultas.
+                        // Ferramenta Transcrição: a saída é a tabela HTML/TXT e a
+                        // transcrição vai para a caixa de texto (o quadro do lote
+                        // é recolhido para liberar o espaço).
+                        val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
+                        storeReceivedTranscription(
+                            transcriptDisplay,
+                            buildTimestampedDisplayText(orderedResults)
+                        )
+                        batchSessionFinished = true
+                        batchProgressBox.visibility = View.GONE
+                        batchProgressRows.removeAllViews()
+                        batchRowCells.clear()
+                        liveTranscriptTextView.visibility = View.VISIBLE
                         outputFileName.visibility = View.GONE
                         outputActions.visibility = View.VISIBLE
                         buttonOutputFolder.visibility = View.GONE
