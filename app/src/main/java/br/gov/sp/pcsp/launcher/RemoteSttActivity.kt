@@ -36,8 +36,10 @@ import android.view.Surface
 import android.view.TextureView
 import android.view.View
 import android.widget.EditText
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -1376,7 +1378,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun deepgramWebSocketUrl(): String {
         return buildString {
             append("wss://api.deepgram.com/v1/listen?model=nova-3")
-            append("&language=${selectedLiveLanguage.serverCode}")
+            append("&language=${SttLanguageSettings.deepgramLanguageParam()}")
             append("&smart_format=true&punctuate=true")
             append("&encoding=linear16&sample_rate=16000&channels=1")
             append("&interim_results=true&endpointing=900")
@@ -1395,6 +1397,11 @@ class RemoteSttActivity : AppCompatActivity() {
             append("?speech_model=universal-3-5-pro")
             append("&encoding=pcm_s16le&sample_rate=16000")
             append("&continuous_partials=true")
+            // language_codes como parâmetro REPETIDO (formato confirmado na API).
+            // Lista vazia = multi: o parâmetro é omitido (code-switching nativo).
+            SttLanguageSettings.assemblyaiWsLanguageCodes().forEach { code ->
+                append("&language_codes=${Uri.encode(code)}")
+            }
             if (checkboxLiveDiarize.isChecked) append("&speaker_labels=true")
         }
     }
@@ -1404,7 +1411,10 @@ class RemoteSttActivity : AppCompatActivity() {
             append("wss://api.elevenlabs.io/v1/speech-to-text/realtime")
             append("?model_id=scribe_v2_realtime")
             append("&audio_format=pcm_16000")
-            append("&language_code=${selectedLiveLanguage.serverCode}")
+            val (primary, secondary) = SttLanguageSettings.elevenlabsWsLanguage()
+            if (primary != null) append("&language_code=${Uri.encode(primary)}")
+            // secondary_languages como parâmetro REPETIDO (formato confirmado na API).
+            secondary.forEach { code -> append("&secondary_languages=${Uri.encode(code)}") }
             append("&commit_strategy=vad")
             append("&vad_silence_threshold_secs=1.0")
             append("&include_timestamps=true")
@@ -1443,6 +1453,13 @@ class RemoteSttActivity : AppCompatActivity() {
                 // às vezes mantém a sessão aberta após o CloseStream).
                 if (event.optBoolean("speech_final", false) && grokFinishRequested && !grokCompletionHandled) {
                     completeGrokLiveTranscription(webSocket, "")
+                    return
+                }
+                // Blindagem extra: o speech_final nem sempre chega (com alguns
+                // valores de language). Se a finalização foi pedida e os finais
+                // estão chegando, completa 3s após a última rajada.
+                if (isFinal && grokFinishRequested && !grokCompletionHandled) {
+                    rescheduleDeepgramFastFinish()
                 }
             }
             "Begin" -> if (sttIsAssemblyai) onGrokWebSocketReady(webSocket)
@@ -1517,6 +1534,16 @@ class RemoteSttActivity : AppCompatActivity() {
                 event.optString("message", "erro desconhecido")
             )
         }
+    }
+
+    private fun rescheduleDeepgramFastFinish() {
+        deepgramFinishRunnable?.let(handler::removeCallbacks)
+        val timeout = Runnable {
+            deepgramFinishRunnable = null
+            completeGrokLiveTranscription(finishingSocket ?: grokLiveWebSocket, "")
+        }
+        deepgramFinishRunnable = timeout
+        handler.postDelayed(timeout, DEEPGRAM_FINISH_FAST_MILLIS)
     }
 
     private fun sendAudioChunk(webSocket: WebSocket, bytes: ByteArray, offset: Int, length: Int): Boolean {
@@ -2294,7 +2321,7 @@ class RemoteSttActivity : AppCompatActivity() {
         require(GrokApiSettings.isPlausibleDeepgramKey(apiKey)) { "A chave API do Deepgram salva nas configurações é inválida." }
         val url = buildString {
             append("https://api.deepgram.com/v1/listen?model=nova-3")
-            append("&language=${selectedLiveLanguage.serverCode}")
+            append("&language=${SttLanguageSettings.deepgramLanguageParam()}")
             append("&smart_format=true&punctuate=true")
             if (checkboxLiveDiarize.isChecked) append("&diarize=true")
             GrokApiSettings.deepgramKeyterms()
@@ -2362,8 +2389,15 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun sendAssemblyaiApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
         val apiKey = GrokApiSettings.assemblyaiApiKey()
         require(GrokApiSettings.isPlausibleAssemblyaiKey(apiKey)) { "A chave API da AssemblyAI salva nas configurações é inválida." }
+        val (languageDetection, languageCode) = SttLanguageSettings.assemblyaiRestLanguage()
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
+            .apply {
+                if (languageDetection) {
+                    addFormDataPart("language_detection", "true")
+                }
+                languageCode?.let { addFormDataPart("language_code", it) }
+            }
             .addFormDataPart(
                 "audio",
                 uploadFile.file.name,
@@ -2410,9 +2444,13 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun sendElevenlabsApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
         val apiKey = GrokApiSettings.elevenlabsApiKey()
         require(GrokApiSettings.isPlausibleElevenlabsKey(apiKey)) { "A chave API da ElevenLabs salva nas configurações é inválida." }
+        val languageCode = SttLanguageSettings.elevenlabsRestLanguageCode()
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("model_id", "scribe_v2")
+            .apply {
+                languageCode?.let { addFormDataPart("language_code", it) }
+            }
             .addFormDataPart(
                 "file",
                 uploadFile.file.name,
@@ -2478,15 +2516,170 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun showLiveLanguageMenu() {
+        val config = TranscriptionModelStore.selectedConfig()
+        val apiProvider = when {
+            config.isDeepgramApi -> "deepgram"
+            config.isAssemblyaiApi -> "assemblyai"
+            config.isElevenlabsApi -> "elevenlabs"
+            else -> null
+        }
+        if (apiProvider == null) {
+            PopupMenu(this, buttonLiveLanguage).apply {
+                LiveLanguage.values().forEach { language -> menu.add(language.label) }
+                setOnMenuItemClickListener { item ->
+                    selectedLiveLanguage = LiveLanguage.values().first { it.label == item.title.toString() }
+                    refreshLiveLanguageButton()
+                    true
+                }
+                show()
+            }
+            return
+        }
+        val options = when (apiProvider) {
+            "deepgram" -> listOf("multi", "pt-BR", "en", "es", "custom")
+            else -> listOf("multi", "pt", "es", "en", "custom")
+        }
         PopupMenu(this, buttonLiveLanguage).apply {
-            LiveLanguage.values().forEach { language -> menu.add(language.label) }
+            options.forEach { menu.add(it) }
             setOnMenuItemClickListener { item ->
-                selectedLiveLanguage = LiveLanguage.values().first { it.label == item.title.toString() }
-                refreshLiveLanguageButton()
+                val chosen = item.title.toString()
+                if (chosen == "custom") {
+                    showCustomLanguageDialog(apiProvider)
+                } else {
+                    setProviderLanguageMode(apiProvider, chosen)
+                    refreshLiveLanguageButton()
+                }
                 true
             }
             show()
         }
+    }
+
+    private fun setProviderLanguageMode(provider: String, mode: String) {
+        when (provider) {
+            "deepgram" -> GrokApiSettings.setDeepgramLanguageMode(mode)
+            "assemblyai" -> GrokApiSettings.setAssemblyaiLanguageMode(mode)
+            "elevenlabs" -> GrokApiSettings.setElevenlabsLanguageMode(mode)
+        }
+    }
+
+    private fun providerLanguageLabel(provider: String): String {
+        val (mode, custom) = when (provider) {
+            "deepgram" -> GrokApiSettings.deepgramLanguageMode() to GrokApiSettings.deepgramCustomLanguage()
+            "assemblyai" -> GrokApiSettings.assemblyaiLanguageMode() to GrokApiSettings.assemblyaiCustomLanguage()
+            "elevenlabs" -> GrokApiSettings.elevenlabsLanguageMode() to GrokApiSettings.elevenlabsCustomLanguage()
+            else -> return selectedLiveLanguage.shortLabel
+        }
+        return if (mode == "custom" && custom.isNotBlank()) custom else mode
+    }
+
+    private fun showCustomLanguageDialog(provider: String) {
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 24, 48, 8)
+        }
+        val edit = EditText(this).apply {
+            hint = if (provider == "deepgram") "código do idioma (ex.: fr-CA)" else "Ex: en, es, pt"
+            setSingleLine(true)
+            inputType = android.text.InputType.TYPE_CLASS_TEXT
+        }
+        container.addView(
+            edit,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        )
+        val helpButton = Button(this).apply {
+            text = "?"
+            setOnClickListener { showLanguageCodesHelp(provider) }
+        }
+        container.addView(
+            helpButton,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 12 }
+        )
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Código do idioma")
+            .setMessage(
+                if (provider == "deepgram") "Digite o código do idioma desejado."
+                else "Digite um ou mais códigos, separados por vírgula."
+            )
+            .setView(container)
+            .setNegativeButton("Voltar", null)
+            .setPositiveButton("OK", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val raw = edit.text.toString()
+                val codes = SttLanguageSettings.parseCodes(raw)
+                val invalid = SttLanguageSettings.invalidCodes(provider, codes)
+                if (codes.isEmpty()) {
+                    edit.error = "Digite pelo menos um código de idioma."
+                } else if (invalid.isNotEmpty()) {
+                    val providerName = when (provider) {
+                        "deepgram" -> "Deepgram"
+                        "assemblyai" -> "Universal-3.5 Pro"
+                        else -> "Scribe v2"
+                    }
+                    val listed = invalid.joinToString(", ")
+                    val verb = if (invalid.size == 1) "não suporta o código $listed" else "não suporta os códigos $listed"
+                    edit.error = "$providerName $verb."
+                    // Mantém a entrada para o usuário corrigir; o diálogo não fecha.
+                } else {
+                    val normalized = codes.joinToString(",")
+                    when (provider) {
+                        "deepgram" -> {
+                            GrokApiSettings.setDeepgramCustomLanguage(normalized)
+                            GrokApiSettings.setDeepgramLanguageMode("custom")
+                        }
+                        "assemblyai" -> {
+                            GrokApiSettings.setAssemblyaiCustomLanguage(normalized)
+                            GrokApiSettings.setAssemblyaiLanguageMode("custom")
+                        }
+                        "elevenlabs" -> {
+                            GrokApiSettings.setElevenlabsCustomLanguage(normalized)
+                            GrokApiSettings.setElevenlabsLanguageMode("custom")
+                        }
+                    }
+                    refreshLiveLanguageButton()
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun showLanguageCodesHelp(provider: String) {
+        val codes = when (provider) {
+            "deepgram" -> SttLanguageSettings.DEEPGRAM_CODES.sorted().joinToString(", ")
+            "assemblyai" -> SttLanguageSettings.ASSEMBLYAI_CODES.sorted().joinToString(", ")
+            // ElevenLabs: a tela "?" mostra APENAS os códigos de 2 letras.
+            else -> SttLanguageSettings.ELEVENLABS_CODES_2.sorted().joinToString(", ")
+        }
+        val scroll = ScrollView(this).apply {
+            addView(
+                TextView(this@RemoteSttActivity).apply {
+                    text = codes
+                    setTextColor(Color.WHITE)
+                    textSize = 14f
+                    setPadding(40, 28, 40, 28)
+                }
+            )
+        }
+        AlertDialog.Builder(this)
+            .setTitle(
+                when (provider) {
+                    "deepgram" -> "Códigos aceitos pelo Deepgram"
+                    "assemblyai" -> "Códigos aceitos pelo Universal-3.5 Pro"
+                    else -> "Códigos de idioma do Scribe v2 (2 letras)"
+                }
+            )
+            .setView(scroll)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun refreshGrokApiControls() {
@@ -2494,7 +2687,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
             config.isAssemblyaiApi || config.isElevenlabsApi
         val diarizeSupported = config.isGrokApi || config.isDeepgramApi || config.isAssemblyaiApi
-        buttonLiveLanguage.visibility = if (apiTranscription) View.VISIBLE else View.GONE
+        buttonLiveLanguage.visibility = View.VISIBLE
         grokDiarizeRow.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
         buttonLiveIntervalMinus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
         buttonLiveIntervalPlus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
@@ -2516,7 +2709,14 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun refreshLiveLanguageButton() {
         if (::buttonLiveLanguage.isInitialized) {
-            buttonLiveLanguage.text = "Idioma: ${selectedLiveLanguage.shortLabel}"
+            val config = TranscriptionModelStore.selectedConfig()
+            val label = when {
+                config.isDeepgramApi -> providerLanguageLabel("deepgram")
+                config.isAssemblyaiApi -> providerLanguageLabel("assemblyai")
+                config.isElevenlabsApi -> providerLanguageLabel("elevenlabs")
+                else -> selectedLiveLanguage.shortLabel
+            }
+            buttonLiveLanguage.text = "Idioma: $label"
         }
     }
 
@@ -6111,7 +6311,8 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val GROK_RECONNECT_BASE_MILLIS = 500L
         private const val GROK_RECONNECT_MAX_MILLIS = 7000L
         private const val GROK_STABLE_CONNECTION_MILLIS = 10000L
-        private const val DEEPGRAM_FINISH_TIMEOUT_MILLIS = 20000L
+        private const val DEEPGRAM_FINISH_TIMEOUT_MILLIS = 10000L
+        private const val DEEPGRAM_FINISH_FAST_MILLIS = 3000L
         private const val GROK_MIN_OVERLAP_WORDS = 2
         private const val GROK_MAX_OVERLAP_WORDS = 80
         private const val MIN_LIVE_DRAFT_INTERVAL_MILLIS = 100

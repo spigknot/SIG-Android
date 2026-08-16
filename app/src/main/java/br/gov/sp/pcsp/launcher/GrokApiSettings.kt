@@ -22,6 +22,12 @@ object GrokApiSettings {
     private const val KEY_DEEPGRAM_KEYTERMS = "deepgram_keyterms"
     private const val KEY_ASSEMBLYAI_API = "assemblyai_api_key"
     private const val KEY_ELEVENLABS_API = "elevenlabs_api_key"
+    private const val KEY_DEEPGRAM_LANGUAGE = "deepgram_language_mode"
+    private const val KEY_DEEPGRAM_CUSTOM = "deepgram_language_custom"
+    private const val KEY_ASSEMBLYAI_LANGUAGE = "assemblyai_language_mode"
+    private const val KEY_ASSEMBLYAI_CUSTOM = "assemblyai_language_custom"
+    private const val KEY_ELEVENLABS_LANGUAGE = "elevenlabs_language_mode"
+    private const val KEY_ELEVENLABS_CUSTOM = "elevenlabs_language_custom"
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
     private const val KEY_TEXT_REASONING = "text_reasoning"
@@ -161,6 +167,49 @@ object GrokApiSettings {
 
     fun setGrokChunkMillis(value: Int) {
         preferences().edit().putInt(KEY_GROK_CHUNK_MS, value.coerceIn(20, 2000)).apply()
+    }
+
+    // --- Seleção de idioma por provedor (independente e persistente) ---
+    fun deepgramLanguageMode(): String =
+        preferences().getString(KEY_DEEPGRAM_LANGUAGE, "pt-BR").orEmpty()
+
+    fun setDeepgramLanguageMode(value: String) {
+        preferences().edit().putString(KEY_DEEPGRAM_LANGUAGE, value).apply()
+    }
+
+    fun deepgramCustomLanguage(): String =
+        preferences().getString(KEY_DEEPGRAM_CUSTOM, "").orEmpty().trim()
+
+    fun setDeepgramCustomLanguage(value: String) {
+        preferences().edit().putString(KEY_DEEPGRAM_CUSTOM, value.trim()).apply()
+    }
+
+    fun assemblyaiLanguageMode(): String =
+        preferences().getString(KEY_ASSEMBLYAI_LANGUAGE, "pt").orEmpty()
+
+    fun setAssemblyaiLanguageMode(value: String) {
+        preferences().edit().putString(KEY_ASSEMBLYAI_LANGUAGE, value).apply()
+    }
+
+    fun assemblyaiCustomLanguage(): String =
+        preferences().getString(KEY_ASSEMBLYAI_CUSTOM, "").orEmpty().trim()
+
+    fun setAssemblyaiCustomLanguage(value: String) {
+        preferences().edit().putString(KEY_ASSEMBLYAI_CUSTOM, value.trim()).apply()
+    }
+
+    fun elevenlabsLanguageMode(): String =
+        preferences().getString(KEY_ELEVENLABS_LANGUAGE, "pt").orEmpty()
+
+    fun setElevenlabsLanguageMode(value: String) {
+        preferences().edit().putString(KEY_ELEVENLABS_LANGUAGE, value).apply()
+    }
+
+    fun elevenlabsCustomLanguage(): String =
+        preferences().getString(KEY_ELEVENLABS_CUSTOM, "").orEmpty().trim()
+
+    fun setElevenlabsCustomLanguage(value: String) {
+        preferences().edit().putString(KEY_ELEVENLABS_CUSTOM, value.trim()).apply()
     }
 
     private fun preferences() = SigApplication.appInstance.getSharedPreferences(
