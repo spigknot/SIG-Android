@@ -109,34 +109,9 @@ Add android.sync.suppressAgpWarnings=LIBRARY_CONSTRAINTS_SHOULD_BE_DISABLED to t
 > Task :app:writeDebugSigningConfigVersions UP-TO-DATE
 
 > Task :app:compileDebugKotlin
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt:97:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt:108:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt:146:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt:237:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt:246:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt:367:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt:269:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt:277:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt:480:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt:494:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt:186:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt:815:60 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt:287:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt:1711:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt:236:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt:245:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt:368:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3191:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3199:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3207:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/SystemBars.kt:11:12 'var statusBarColor: Int' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/SystemBars.kt:12:12 'var navigationBarColor: Int' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/SystemBars.kt:20:16 'var isStatusBarContrastEnforced: Boolean' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt:220:13 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt:228:17 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt:437:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt:450:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
-w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt:460:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3192:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3200:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///D:/Projetos/SIG/app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt:3208:9 'fun startActivityForResult(p0: Intent, p1: Int): Unit' is deprecated. Deprecated in Java.
 
 > Task :app:compileDebugJavaWithJavac UP-TO-DATE
 > Task :app:processDebugJavaRes UP-TO-DATE
@@ -155,6 +130,6 @@ You can use '--warning-mode all' to show the individual deprecation warnings and
 
 For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
 
-BUILD SUCCESSFUL in 15s
+BUILD SUCCESSFUL in 7s
 36 actionable tasks: 4 executed, 32 up-to-date
 Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
