@@ -248,6 +248,9 @@ class RemoteSttActivity : AppCompatActivity() {
     private var transcriptionMode = false
     @Volatile private var recordingPaused = false
     private var diarizeMemory = false
+    // Trava se a requisição atual solicitou diarização (controle da
+    // alternância instantânea entre texto plano e por interlocutores).
+    @Volatile private var wasDiarizationRequested = false
     private lateinit var batchProgressBox: View
     private lateinit var batchProgressRows: LinearLayout
     private val batchRowCells = mutableListOf<Triple<TextView, TextView, TextView>>()
@@ -517,6 +520,9 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonLiveLanguage.setOnClickListener { showLiveLanguageMenu() }
         buttonLiveDiarizeHelp.setOnClickListener { showDiarizationHelp() }
         checkboxLiveDiarize.setOnCheckedChangeListener { _, _ ->
+            // Alternância instantânea entre texto plano e por interlocutores
+            // (0ms, sem novas chamadas de rede).
+            renderTranscriptAccordingToTimestampSelection()
             // A diarização muda os parâmetros da conexão: se houver uma sessão
             // ativa, encerre-a para que a próxima abra com os valores novos.
             if (liveTranscribing) {
@@ -1218,6 +1224,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun startLiveMicTranscription() {
         val transcriptionConfig = TranscriptionModelStore.selectedConfig()
+        wasDiarizationRequested = checkboxLiveDiarize.isChecked && checkboxLiveDiarize.isEnabled
         val useWebSocket = transcriptionConfig.isGrokApi || transcriptionConfig.isDeepgramApi ||
             transcriptionConfig.isAssemblyaiApi || transcriptionConfig.isElevenlabsApi
         sttIsDeepgram = transcriptionConfig.isDeepgramApi
@@ -1799,6 +1806,8 @@ class RemoteSttActivity : AppCompatActivity() {
             liveDraftText = ""
             rebuildLiveTranscriptDisplayLocked()
         }
+        // Guarda o par plano/diarizado para a alternância instantânea da checkbox.
+        storeReceivedTranscription(stripDiarizationLabels(mergedFinal), mergedFinal)
         grokIntentionalClose = true
         grokFinishRequested = false
         grokSocketReady = false
@@ -3619,6 +3628,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun startServerTranscription() {
         val whiteRecording = whiteMicSelection
+        wasDiarizationRequested = checkboxLiveDiarize.isChecked && checkboxLiveDiarize.isEnabled
         if (whiteRecording) {
             progressPhase = ProgressPhase.WHITE_TRANSCRIPTION
             transcriptionTaskState = AssistantTaskState.RUNNING
@@ -3769,9 +3779,11 @@ class RemoteSttActivity : AppCompatActivity() {
                     outputActions.visibility = View.GONE
                     buttonOutputFolder.visibility = View.GONE
                     if (whiteRecording) {
-                        val transcript = orderedResults.firstOrNull()?.text.orEmpty().trim()
-                        storeReceivedTranscription(transcript, orderedResults.firstOrNull()?.timestampedText.orEmpty())
-                        replaceLiveTranscript(transcript)
+                        val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
+                        storeReceivedTranscription(
+                            stripDiarizationLabels(transcriptDisplay),
+                            transcriptDisplay
+                        )
                         transcriptionTaskState = AssistantTaskState.DONE
                         renderLiveProgress()
                         livePostActions.visibility = View.VISIBLE
@@ -3782,8 +3794,8 @@ class RemoteSttActivity : AppCompatActivity() {
                         // é recolhido para liberar o espaço).
                         val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
                         storeReceivedTranscription(
-                            transcriptDisplay,
-                            buildTimestampedDisplayText(orderedResults)
+                            stripDiarizationLabels(transcriptDisplay),
+                            transcriptDisplay
                         )
                         batchSessionFinished = true
                         batchProgressBox.visibility = View.GONE
@@ -5507,11 +5519,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun storeReceivedTranscription(text: String, timestampedText: String = "") {
         val clean = text.trim()
-        lastReceivedTranscription = clean
+        lastReceivedTranscription = if (timestampedText.isNotBlank()) timestampedText.trim() else clean
         timestampPlainTranscript = clean
         timestampedTranscript = timestampedText.trim()
-        liveTranscriptTextView.setText(clean)
-        liveTranscriptTextView.setMinLines(if (clean.isBlank()) 5 else 0)
+        renderTranscriptAccordingToTimestampSelection()
     }
 
     private fun updateTimestampControl() {
@@ -5520,7 +5531,15 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun renderTranscriptAccordingToTimestampSelection() {
-        val text = timestampPlainTranscript.ifBlank { lastReceivedTranscription }
+        val diarized = timestampedTranscript
+        val plain = timestampPlainTranscript.ifBlank { lastReceivedTranscription }
+        // Alternância instantânea: só mostra o texto por interlocutores quando a
+        // requisição SOLICITOU diarização E a checkbox está marcada.
+        val text = if (wasDiarizationRequested && checkboxLiveDiarize.isChecked && diarized.isNotBlank()) {
+            diarized
+        } else {
+            plain
+        }
         liveTranscriptTextView.setText(text)
         liveTranscriptTextView.setMinLines(if (text.isBlank()) 5 else 0)
         liveTranscriptTextView.visibility = View.VISIBLE
@@ -6299,6 +6318,14 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         return builder.toString()
     }
+
+    /** Texto plano: remove os rótulos "Interlocutor N:" do texto diarizado. */
+    private fun stripDiarizationLabels(text: String): String =
+        text.lineSequence()
+            .joinToString("\n") { line ->
+                line.replaceFirst(Regex("^\\s*Interlocutor\\s+\\d+\\s*:\\s*"), "").trim()
+            }
+            .trim()
 
     private fun buildTranscriptDisplayText(results: List<TranscriptionResult>): String {
         return if (results.size == 1) {
