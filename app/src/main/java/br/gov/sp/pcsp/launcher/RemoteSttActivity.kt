@@ -57,6 +57,7 @@ import com.arthenica.ffmpegkit.ReturnCode
 import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -4042,14 +4043,139 @@ class RemoteSttActivity : AppCompatActivity() {
         serverStartedAt: AtomicLong,
         serverFinishedAt: AtomicLong
     ): TranscriptionResult {
-        val result = sendBatchToServerOnce(
-            preparedUploads = listOf(prepared),
-            terminalLines = terminalLines,
-            config = TranscriptionModelStore.selectedConfig(),
-            serverStartedAt = serverStartedAt,
-            serverFinishedAt = serverFinishedAt
-        ).firstOrNull() ?: TranscriptionResult(prepared.index, prepared.item.name, "")
+        val config = TranscriptionModelStore.selectedConfig()
+        val result = if (config.isAssemblyaiApi && prepared.item.durationMs >= 120000L) {
+            // A Sync API da AssemblyAI aceita até 2 minutos: arquivos maiores
+            // vão para o fluxo assíncrono (upload + submit + polling a cada 3s).
+            sendAssemblyaiAsyncTranscription(prepared, terminalLines)
+        } else {
+            sendBatchToServerOnce(
+                preparedUploads = listOf(prepared),
+                terminalLines = terminalLines,
+                config = config,
+                serverStartedAt = serverStartedAt,
+                serverFinishedAt = serverFinishedAt
+            ).firstOrNull() ?: TranscriptionResult(prepared.index, prepared.item.name, "")
+        }
         return result.copy(index = prepared.index, fileName = prepared.item.name)
+    }
+
+    /** Fluxo async da AssemblyAI (v2/upload -> v2/transcript -> polling GET /v2/transcript/{id}
+     *  a cada 3 segundos), usado quando o áudio tem 2 minutos ou mais. */
+    private fun sendAssemblyaiAsyncTranscription(
+        prepared: PreparedUpload,
+        terminalLines: StringBuilder
+    ): TranscriptionResult {
+        val uploadFile = prepared.uploadFile
+        val apiKey = GrokApiSettings.assemblyaiApiKey()
+        require(GrokApiSettings.isPlausibleAssemblyaiKey(apiKey)) {
+            "A chave API da AssemblyAI salva nas configurações é inválida."
+        }
+
+        // 1) Upload do áudio para obter o upload_url.
+        val uploadCall = client.newCall(
+            Request.Builder()
+                .url("https://api.assemblyai.com/v2/upload")
+                .header("Authorization", apiKey)
+                .post(uploadFile.file.asRequestBody("application/octet-stream".toMediaType()))
+                .build()
+        )
+        currentCalls.add(uploadCall)
+        val uploadUrl = try {
+            uploadCall.execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("AssemblyAI upload respondeu ${response.code}: ${body.take(240)}")
+                }
+                JSONObject(body).optString("upload_url").ifBlank {
+                    throw IllegalStateException("AssemblyAI não retornou upload_url: ${body.take(240)}")
+                }
+            }
+        } finally {
+            currentCalls.remove(uploadCall)
+        }
+
+        // 2) Submissão assíncrona.
+        val (languageDetection, languageCode) = SttLanguageSettings.assemblyaiRestLanguage()
+        val params = JSONObject().apply {
+            put("audio_url", uploadUrl)
+            put("speech_models", JSONArray().put("universal-3-5-pro").put("universal-2"))
+            if (languageDetection) put("language_detection", true)
+            languageCode?.let { put("language_code", it) }
+        }
+        val submitCall = client.newCall(
+            Request.Builder()
+                .url("https://api.assemblyai.com/v2/transcript")
+                .header("Authorization", apiKey)
+                .post(params.toString().toRequestBody("application/json".toMediaType()))
+                .build()
+        )
+        currentCalls.add(submitCall)
+        val transcriptId = try {
+            submitCall.execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("AssemblyAI async respondeu ${response.code}: ${body.take(240)}")
+                }
+                JSONObject(body).optString("id").ifBlank {
+                    throw IllegalStateException("AssemblyAI não retornou id: ${body.take(240)}")
+                }
+            }
+        } finally {
+            currentCalls.remove(submitCall)
+        }
+
+        // 3) Polling a cada 3 segundos até completed/error.
+        var attempt = 0
+        while (true) {
+            attempt++
+            ensureNotCancelled()
+            runOnUiThread {
+                status.text = "AssemblyAI: aguardando transcrição assíncrona (${prepared.item.name}, tentativa $attempt)..."
+            }
+            appendTerminal(terminalLines, "AssemblyAI async: aguardando resposta (tentativa $attempt)")
+            runOnUiThread { updateTerminalText(terminalLines) }
+
+            val pollCall = client.newCall(
+                Request.Builder()
+                    .url("https://api.assemblyai.com/v2/transcript/$transcriptId")
+                    .header("Authorization", apiKey)
+                    .get()
+                    .build()
+            )
+            currentCalls.add(pollCall)
+            val (statusName, text, error) = try {
+                pollCall.execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        throw IllegalStateException("AssemblyAI poll respondeu ${response.code}: ${body.take(240)}")
+                    }
+                    val payload = JSONObject(body)
+                    Triple(payload.optString("status"), payload.optString("text"), payload.optString("error"))
+                }
+            } finally {
+                currentCalls.remove(pollCall)
+            }
+
+            when (statusName) {
+                "completed" -> {
+                    if (text.isBlank()) {
+                        throw IllegalStateException("A AssemblyAI retornou uma transcrição vazia (async).")
+                    }
+                    return TranscriptionResult(prepared.index, prepared.item.name, text)
+                }
+                "error" -> throw IllegalStateException(
+                    "AssemblyAI async falhou: ${error.ifBlank { "erro desconhecido" }}"
+                )
+                else -> {
+                    // Espera 3 segundos em fatias para respeitar o cancelamento.
+                    repeat(6) {
+                        ensureNotCancelled()
+                        Thread.sleep(500L)
+                    }
+                }
+            }
+        }
     }
 
     private fun describeUploadFile(file: File): String {
