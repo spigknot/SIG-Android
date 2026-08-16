@@ -258,6 +258,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var grokReconnectRunnable: Runnable? = null
     private var grokStableResetRunnable: Runnable? = null
     private var deepgramFinishRunnable: Runnable? = null
+    private var finishingSocket: WebSocket? = null
     private val assemblyaiSpeakerNumbers = mutableMapOf<String, Int>()
     private var grokEverConnected = false
     private var grokDisconnectedAudioBytes = 0L
@@ -1226,6 +1227,7 @@ class RemoteSttActivity : AppCompatActivity() {
         cancelGrokReconnectCallbacks()
         deepgramFinishRunnable?.let(handler::removeCallbacks)
         deepgramFinishRunnable = null
+        finishingSocket = null
         grokReconnectAttempts = 0
         grokEverConnected = false
         grokSocketReady = false
@@ -1545,6 +1547,11 @@ class RemoteSttActivity : AppCompatActivity() {
                 grokDisconnectedAudioBytes = 0L
             }
         }
+        // Se o usuário já pediu a finalização durante a reconexão, finaliza
+        // imediatamente (o timeout de backup continua de segurança).
+        if (grokSocketReady && grokFinishRequested && !grokCompletionHandled) {
+            sendGrokAudioDone(webSocket)
+        }
         if (!replaySucceeded) {
             handleGrokWebSocketDisconnect(webSocket, "não consegui reenviar o áudio bufferizado")
             return
@@ -1661,9 +1668,12 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     @Synchronized
-    private fun completeGrokLiveTranscription(webSocket: WebSocket, finalText: String) {
+    private fun completeGrokLiveTranscription(webSocket: WebSocket?, finalText: String) {
         if (grokCompletionHandled) return
-        if (grokLiveWebSocket !== webSocket && grokLiveWebSocket != null) return
+        // Durante a finalização (finishRequested), aceita o complete de
+        // qualquer fonte (onClosed, disconnect ou timeout de backup) mesmo
+        // que o socket atual já tenha sido trocado/anulado.
+        if (grokLiveWebSocket !== webSocket && grokLiveWebSocket != null && !grokFinishRequested) return
 
         val accumulatedText = synchronized(grokLiveFinalSegments) {
             buildString {
@@ -1700,7 +1710,7 @@ class RemoteSttActivity : AppCompatActivity() {
         liveFinalizing = false
         liveUsesGrokWebSocket = false
         if (grokLiveWebSocket === webSocket) grokLiveWebSocket = null
-        webSocket.close(1000, "Concluído")
+        webSocket?.close(1000, "Concluído")
         emitGrokConnectionEvent(GrokConnectionEvent.DISCONNECTED)
         runOnUiThread {
             storeReceivedTranscription(mergedFinal)
@@ -1952,20 +1962,20 @@ class RemoteSttActivity : AppCompatActivity() {
                 renderLiveProgress()
                 status.text = "Recebendo a transcrição final do ${sttProviderName()}..."
                 val socket = grokLiveWebSocket
-                if (socket != null && grokSocketReady) {
+                finishingSocket = socket
+                if (socket != null) {
                     sendGrokAudioDone(socket)
-                    if (sttIsDeepgram || sttIsAssemblyai || sttIsElevenlabs) {
-                        deepgramFinishRunnable?.let(handler::removeCallbacks)
-                        val timeout = Runnable {
-                            deepgramFinishRunnable = null
-                            grokLiveWebSocket?.let { completeGrokLiveTranscription(it, "") }
-                        }
-                        deepgramFinishRunnable = timeout
-                        handler.postDelayed(timeout, DEEPGRAM_FINISH_TIMEOUT_MILLIS)
-                    }
-                } else if (grokReconnectRunnable == null && socket == null) {
-                    scheduleGrokReconnect("conexão perdida antes da finalização")
                 }
+                // Backup incondicional: mesmo sem socket pronto, o timeout
+                // finaliza com o texto já recebido (evita ficar preso em
+                // "esperando a transcrição final" quando a conexão caiu).
+                deepgramFinishRunnable?.let(handler::removeCallbacks)
+                val timeout = Runnable {
+                    deepgramFinishRunnable = null
+                    completeGrokLiveTranscription(finishingSocket ?: grokLiveWebSocket, "")
+                }
+                deepgramFinishRunnable = timeout
+                handler.postDelayed(timeout, DEEPGRAM_FINISH_TIMEOUT_MILLIS)
             } else {
                 grokIntentionalClose = true
                 grokFinishRequested = false
