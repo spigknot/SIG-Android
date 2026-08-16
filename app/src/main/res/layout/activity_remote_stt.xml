@@ -393,24 +393,27 @@
                         android:layout_height="1dp"
                         android:layout_weight="1" />
 
-                    <TextView
-                        android:id="@+id/button_live_language"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_marginEnd="20dp"
-                        android:background="@drawable/ffmpeg_outline_button_bg"
-                        android:clickable="true"
-                        android:focusable="true"
-                        android:foreground="?attr/selectableItemBackground"
-                        android:gravity="center"
-                        android:paddingStart="9dp"
-                        android:paddingEnd="9dp"
-                        android:text="Idioma"
-                        android:textColor="#FFFFFFFF"
-                        android:textSize="12sp"
-                        android:textStyle="bold"
-                        android:visibility="gone" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/button_live_language"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_gravity="end"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginEnd="20dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:paddingStart="9dp"
+                    android:paddingEnd="9dp"
+                    android:text="Idioma"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/recording_timer"
