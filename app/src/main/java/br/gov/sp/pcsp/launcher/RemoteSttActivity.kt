@@ -2800,7 +2800,7 @@ class RemoteSttActivity : AppCompatActivity() {
             value /= 1024.0
             unit++
         }
-        return String.format(Locale.US, "%.1f%s", value, units[unit])
+        return String.format(Locale.US, "%.1f %s", value, units[unit])
     }
 
     private fun refreshBatchProgressUi() {
@@ -2821,10 +2821,15 @@ class RemoteSttActivity : AppCompatActivity() {
         if (batchRowCells.size != selectedItems.size) {
             batchRowCells.clear()
             batchProgressRows.removeAllViews()
-            val sizeCellWidth = dp(88)
-            val stateCellWidth = dp(118)
+            // Larguras medidas: cada coluna tem 20% a mais que o conteúdo máximo.
+            val measurePaint = Paint().apply {
+                textSize = 12f * resources.displayMetrics.scaledDensity
+                typeface = Typeface.MONOSPACE
+            }
             val cellPadding = dp(4)
             val cellPaddingEnd = dp(6)
+            val sizeCellWidth = (measurePaint.measureText("9999.9 mb") * 1.2f).toInt() + cellPadding + cellPaddingEnd
+            val stateCellWidth = (measurePaint.measureText("Aplicando VAD") * 1.2f).toInt() + cellPadding + cellPaddingEnd
             selectedItems.forEach { item ->
                 val nameView = TextView(this).apply {
                     text = item.name
@@ -2850,10 +2855,10 @@ class RemoteSttActivity : AppCompatActivity() {
                     textSize = 12f
                     typeface = Typeface.MONOSPACE
                     setTextColor(Color.WHITE)
-                    gravity = Gravity.END
+                    gravity = Gravity.CENTER
                     maxLines = 1
                     setBackgroundResource(R.drawable.batch_cell_left_border)
-                    setPadding(cellPadding, dp(5), cellPaddingEnd, dp(5))
+                    setPadding(cellPadding, dp(5), cellPadding, dp(5))
                 }
                 val row = LinearLayout(this).apply {
                     orientation = LinearLayout.HORIZONTAL
@@ -2882,6 +2887,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 cells.second.setTextColor(green)
                 cells.third.setTextColor(green)
             }
+            applyToolModeVisibility()
         }
     }
 
@@ -5454,7 +5460,8 @@ class RemoteSttActivity : AppCompatActivity() {
         lastReceivedTranscription = clean
         timestampPlainTranscript = clean
         timestampedTranscript = timestampedText.trim()
-        updateTimestampControl()
+        liveTranscriptTextView.setText(clean)
+        liveTranscriptTextView.setMinLines(if (clean.isBlank()) 5 else 0)
     }
 
     private fun updateTimestampControl() {
