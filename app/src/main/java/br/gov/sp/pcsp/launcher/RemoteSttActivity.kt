@@ -1438,7 +1438,9 @@ class RemoteSttActivity : AppCompatActivity() {
             handleGrokWebSocketDisconnect(webSocket, "resposta inválida do Grok")
             return
         }
-        when (event.optString("type")) {
+        // O Scribe v2 usa "message_type"; os demais provedores usam "type".
+        val eventType = event.optString("type").ifBlank { event.optString("message_type") }
+        when (eventType) {
             "transcript.created" -> onGrokWebSocketReady(webSocket)
             "Metadata" -> if (sttIsDeepgram) onGrokWebSocketReady(webSocket)
             "Results" -> if (sttIsDeepgram) {
@@ -1735,7 +1737,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val sessionText = finalText.trim().ifBlank { accumulatedText }
         val mergedFinal = mergeGrokTranscript(grokTranscriptPrefix, sessionText)
         if (mergedFinal.isBlank()) {
-            finishGrokWebSocketPermanently("o Grok retornou uma transcrição vazia")
+            finishGrokWebSocketPermanently("o ${sttProviderName()} retornou uma transcrição vazia")
             return
         }
 
