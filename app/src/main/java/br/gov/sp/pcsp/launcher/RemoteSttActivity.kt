@@ -4156,7 +4156,12 @@ class RemoteSttActivity : AppCompatActivity() {
         serverFinishedAt: AtomicLong
     ): TranscriptionResult {
         val config = TranscriptionModelStore.selectedConfig()
-        val result = if (config.isAssemblyaiApi && prepared.item.durationMs >= 120000L) {
+        // A decisão sync/async usa a duração REAL do arquivo preparado (medida
+        // pelo ffprobe), não o metadata do item — que pode divergir em alguns
+        // codecs (ex.: .opus do WhatsApp) e enviaria curto como async.
+        val audioDurationMs = probeDurationMs(prepared.uploadFile.file)
+            ?: prepared.item.durationMs
+        val result = if (config.isAssemblyaiApi && audioDurationMs >= 120000L) {
             // A Sync API da AssemblyAI aceita até 2 minutos: arquivos maiores
             // vão para o fluxo assíncrono (upload + submit + polling a cada 3s).
             sendAssemblyaiAsyncTranscription(prepared, terminalLines)
@@ -4326,6 +4331,19 @@ class RemoteSttActivity : AppCompatActivity() {
         val kb = bytes / 1024.0
         if (kb < 1024.0) return String.format(Locale.US, "%.1f KB", kb)
         return String.format(Locale.US, "%.2f MB", kb / 1024.0)
+    }
+
+    private fun probeDurationMs(file: File): Long? {
+        return try {
+            val session = FFmpegKit.executeWithArguments(
+                arrayOf("-hide_banner", "-i", file.absolutePath)
+            )
+            parseDurationSeconds(session.allLogsAsString.orEmpty())
+                ?.takeIf { it > 0.0 }
+                ?.let { (it * 1000.0).toLong() }
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     private fun probeAudioFile(file: File): AudioProbe {
