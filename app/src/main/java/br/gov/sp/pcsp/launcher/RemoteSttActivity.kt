@@ -1042,8 +1042,13 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun stopMicrophoneRecording() {
         recordingActive = false
         updateTextEditorsLock()
-        runCatching { recordingAudioRecord?.stop() }
-        recordingThread?.join(3_000)
+        // Espera a thread de gravação terminar (ela própria para o AudioRecord
+        // e fecha o stream do PCM). O stop() aqui é só um fallback defensivo.
+        recordingThread?.join(5_000)
+        if (recordingThread?.isAlive == true) {
+            runCatching { recordingAudioRecord?.stop() }
+            recordingThread?.join(2_000)
+        }
         recordingThread = null
         recordingAudioRecord = null
         val file = recordingFile
@@ -1127,9 +1132,16 @@ class RemoteSttActivity : AppCompatActivity() {
             FileOutputStream(pcmFile).use { output ->
                 val buffer = ByteArray(minBuffer)
                 recorder.startRecording()
-                while (recordingActive) {
-                    val read = recorder.read(buffer, 0, buffer.size)
-                    if (read > 0) output.write(buffer, 0, read)
+                try {
+                    while (recordingActive) {
+                        val read = recorder.read(buffer, 0, buffer.size)
+                        if (read > 0) output.write(buffer, 0, read)
+                    }
+                } finally {
+                    // O stop() roda DENTRO da thread: garante que o último buffer
+                    // é escrito e o stream fechado antes do writeWavFile ler o PCM.
+                    runCatching { recorder.stop() }
+                    output.flush()
                 }
             }
         } catch (e: Throwable) {
