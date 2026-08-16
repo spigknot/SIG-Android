@@ -2747,6 +2747,38 @@ class RemoteSttActivity : AppCompatActivity() {
     /** Quadro de progresso do lote: uma linha por arquivo, duas colunas
      *  (nome | estado), como a aba Transcrição do Windows. */
     private var batchSnapshotKey: String = ""
+    private val batchSizeCache = mutableMapOf<Uri, String>()
+
+    private fun resolveMediaSize(item: MediaItem): String {
+        batchSizeCache[item.uri]?.let { return it }
+        val size = try {
+            val file = item.uri.path?.let { File(it) }
+            if (file != null && file.exists()) {
+                file.length()
+            } else {
+                contentResolver.query(
+                    item.uri, arrayOf(OpenableColumns.SIZE), null, null, null
+                )?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getLong(0) else -1L
+                } ?: -1L
+            }
+        } catch (e: Throwable) {
+            -1L
+        }
+        val formatted = if (size >= 0L) formatMediaSize(size) else "?"
+        batchSizeCache[item.uri] = formatted
+        return formatted
+    }
+
+    private fun formatMediaSize(bytes: Long): String {
+        val kb = 1024.0
+        return when {
+            bytes < kb -> "${bytes}B"
+            bytes < kb * kb -> String.format(Locale.US, "%.1f KB", bytes / kb).replace('.', ',')
+            bytes < kb * kb * kb -> String.format(Locale.US, "%.1f MB", bytes / (kb * kb)).replace('.', ',')
+            else -> String.format(Locale.US, "%.1f GB", bytes / (kb * kb * kb)).replace('.', ',')
+        }
+    }
 
     private fun refreshBatchProgressUi() {
         if (!transcriptionMode || selectedItems.size < 2) {
@@ -2763,7 +2795,9 @@ class RemoteSttActivity : AppCompatActivity() {
             batchSnapshotKey = key
             synchronized(batchLines) {
                 batchLines.clear()
-                selectedItems.forEach { item -> batchLines += "${item.name}\tAguardando" }
+                selectedItems.forEach { item ->
+                    batchLines += "${item.name}\t${resolveMediaSize(item)}\tAguardando"
+                }
             }
             renderBatchLines()
         }
@@ -2776,17 +2810,20 @@ class RemoteSttActivity : AppCompatActivity() {
             val lines = synchronized(batchLines) { batchLines.toList() }
             lines.forEachIndexed { index, line ->
                 if (index > 0) spannable.append('\n')
-                val parts = line.split('\t', limit = 2)
+                val parts = line.split('\t', limit = 3)
                 val name = parts.firstOrNull().orEmpty()
-                val state = parts.getOrNull(1).orEmpty()
-                val padded = String.format("%-30.30s", name)
+                val size = parts.getOrNull(1).orEmpty()
+                val state = parts.getOrNull(2).orEmpty()
+                val lineStart = spannable.length
+                val padded = String.format("%-24.24s", name)
                 spannable.append(padded).append("  ")
-                val stateStart = spannable.length
+                spannable.append(String.format("%9s", size)).append("  ")
                 spannable.append(state)
                 if (state == "OK") {
+                    // Linha inteira verde nas três colunas.
                     spannable.setSpan(
                         ForegroundColorSpan(Color.rgb(94, 240, 142)),
-                        stateStart, spannable.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        lineStart, spannable.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
                 }
             }
@@ -2799,8 +2836,8 @@ class RemoteSttActivity : AppCompatActivity() {
         val index = number - 1
         synchronized(batchLines) {
             if (index < 0 || index >= batchLines.size) return
-            val name = selectedItems.getOrNull(index)?.name ?: return
-            batchLines[index] = "$name\t$state"
+            val item = selectedItems.getOrNull(index) ?: return
+            batchLines[index] = "${item.name}\t${resolveMediaSize(item)}\t$state"
         }
         renderBatchLines()
     }
@@ -2850,6 +2887,8 @@ class RemoteSttActivity : AppCompatActivity() {
             buttonRecordingAction.visibility = View.VISIBLE
             buttonLiveMicTest.visibility = View.INVISIBLE
             buttonLiveMicStop.visibility = View.VISIBLE
+            // O botão verde Executar só existe na ferramenta Transcrição.
+            buttonTranscribe.visibility = View.GONE
         }
         refreshBatchProgressUi()
     }
@@ -4846,6 +4885,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun updateTranscribeEnabled() {
         if (isProcessing) return
+        if (!transcriptionMode) {
+            buttonTranscribe.visibility = View.GONE
+            return
+        }
         val enabled = selectedItems.isNotEmpty() &&
             selectedItems.all { isSupportedMedia(it.mime, it.name) } &&
             selectedPrepareMode != null &&
