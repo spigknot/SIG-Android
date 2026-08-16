@@ -26,6 +26,8 @@ class ModelSettingsActivity : AppCompatActivity() {
     private lateinit var deepseekKey: EditText
     private lateinit var deepgramKey: EditText
     private lateinit var deepgramKeyterms: EditText
+    private lateinit var assemblyaiKey: EditText
+    private lateinit var elevenlabsKey: EditText
     private lateinit var imeiCheckKey: EditText
     private lateinit var chunkSpinner: Spinner
     private lateinit var conversionParallelism: EditText
@@ -45,6 +47,8 @@ class ModelSettingsActivity : AppCompatActivity() {
         deepseekKey = findViewById(R.id.edit_deepseek_key)
         deepgramKey = findViewById(R.id.edit_deepgram_key)
         deepgramKeyterms = findViewById(R.id.edit_deepgram_keyterms)
+        assemblyaiKey = findViewById(R.id.edit_assemblyai_key)
+        elevenlabsKey = findViewById(R.id.edit_elevenlabs_key)
         imeiCheckKey = findViewById(R.id.edit_imei_check_key)
         chunkSpinner = findViewById(R.id.spinner_grok_chunk)
         conversionParallelism = findViewById(R.id.edit_conversion_parallelism)
@@ -59,6 +63,8 @@ class ModelSettingsActivity : AppCompatActivity() {
         deepseekKey.setText(GrokApiSettings.deepseekApiKey())
         deepgramKey.setText(GrokApiSettings.deepgramApiKey())
         deepgramKeyterms.setText(GrokApiSettings.deepgramKeyterms())
+        assemblyaiKey.setText(GrokApiSettings.assemblyaiApiKey())
+        elevenlabsKey.setText(GrokApiSettings.elevenlabsApiKey())
         imeiCheckKey.setText(ImeiApiSettings.apiKey())
         populateAll()
     }
@@ -73,6 +79,8 @@ class ModelSettingsActivity : AppCompatActivity() {
         GrokApiSettings.setDeepseekApiKey(deepseekKey.text.toString())
         GrokApiSettings.setDeepgramApiKey(deepgramKey.text.toString())
         GrokApiSettings.setDeepgramKeyterms(deepgramKeyterms.text.toString())
+        GrokApiSettings.setAssemblyaiApiKey(assemblyaiKey.text.toString())
+        GrokApiSettings.setElevenlabsApiKey(elevenlabsKey.text.toString())
         ImeiApiSettings.setApiKey(imeiCheckKey.text.toString())
         populateAll()
         val xaiStatus = keyStatus(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)
@@ -107,6 +115,8 @@ class ModelSettingsActivity : AppCompatActivity() {
             val label = when {
                 config.isGrokApi -> "Grok STT"
                 config.isDeepgramApi -> "Deepgram Nova 3"
+                config.isAssemblyaiApi -> "AssemblyAI Universal-3.5 Pro"
+                config.isElevenlabsApi -> "ElevenLabs Scribe v2 Realtime"
                 else -> "${config.name} (${config.modelName})"
             }
             transcriptionGroup.addView(radio(label, config.selected) {

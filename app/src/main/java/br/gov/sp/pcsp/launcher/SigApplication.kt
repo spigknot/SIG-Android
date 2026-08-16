@@ -7,6 +7,7 @@ class SigApplication : Application() {
         super.onCreate()
         appInstance = this
         NativeDependencyManager.activateIfInstalled(this)
+        GrokApiSettings.seedDefaultApiKeys()
         Thread {
             AppCacheManager.cleanOlderThanOneDay(this)
             PromptTemplateStore.ensureDefaults()

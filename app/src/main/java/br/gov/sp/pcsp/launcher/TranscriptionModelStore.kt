@@ -12,7 +12,9 @@ object TranscriptionModelStore {
         val parameters: JSONObject,
         val selected: Boolean = false,
         val isGrokApi: Boolean = false,
-        val isDeepgramApi: Boolean = false
+        val isDeepgramApi: Boolean = false,
+        val isAssemblyaiApi: Boolean = false,
+        val isElevenlabsApi: Boolean = false
     ) {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
     }
@@ -36,6 +38,22 @@ object TranscriptionModelStore {
                 "https://api.deepgram.com/v1/listen",
                 JSONObject().put("model", "nova-3"),
                 isDeepgramApi = true
+            )
+        }
+        if (GrokApiSettings.hasAssemblyaiApiKey()) {
+            available += Config(
+                GrokApiSettings.ASSEMBLYAI_TRANSCRIPTION_NAME,
+                "https://sync.assemblyai.com/transcribe",
+                JSONObject().put("model", "universal-3-5-pro"),
+                isAssemblyaiApi = true
+            )
+        }
+        if (GrokApiSettings.hasElevenlabsApiKey()) {
+            available += Config(
+                GrokApiSettings.ELEVENLABS_TRANSCRIPTION_NAME,
+                "https://api.elevenlabs.io/v1/speech-to-text",
+                JSONObject().put("model", "scribe_v2"),
+                isElevenlabsApi = true
             )
         }
         val selected = GrokApiSettings.selectedTranscription()

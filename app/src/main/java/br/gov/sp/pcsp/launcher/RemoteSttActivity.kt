@@ -239,6 +239,8 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var livePaused = false
     @Volatile private var liveUsesGrokWebSocket = false
     @Volatile private var sttIsDeepgram = false
+    @Volatile private var sttIsAssemblyai = false
+    @Volatile private var sttIsElevenlabs = false
     @Volatile private var liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
     private var liveThread: Thread? = null
     private var liveUploadExecutor: ExecutorService? = null
@@ -256,6 +258,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var grokReconnectRunnable: Runnable? = null
     private var grokStableResetRunnable: Runnable? = null
     private var deepgramFinishRunnable: Runnable? = null
+    private val assemblyaiSpeakerNumbers = mutableMapOf<String, Int>()
     private var grokEverConnected = false
     private var grokDisconnectedAudioBytes = 0L
     private var grokAudioLossReported = false
@@ -1151,8 +1154,11 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun startLiveMicTranscription() {
         val transcriptionConfig = TranscriptionModelStore.selectedConfig()
-        val useWebSocket = transcriptionConfig.isGrokApi || transcriptionConfig.isDeepgramApi
+        val useWebSocket = transcriptionConfig.isGrokApi || transcriptionConfig.isDeepgramApi ||
+            transcriptionConfig.isAssemblyaiApi || transcriptionConfig.isElevenlabsApi
         sttIsDeepgram = transcriptionConfig.isDeepgramApi
+        sttIsAssemblyai = transcriptionConfig.isAssemblyaiApi
+        sttIsElevenlabs = transcriptionConfig.isElevenlabsApi
         if (serverBaseUrl.isBlank() && !useWebSocket) {
             status.text = "Informe e teste o IP do servidor."
             return
@@ -1163,6 +1169,14 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         if (useWebSocket && transcriptionConfig.isDeepgramApi && !GrokApiSettings.hasDeepgramApiKey()) {
             status.text = "Insira a chave API do Deepgram nas configurações."
+            return
+        }
+        if (useWebSocket && transcriptionConfig.isAssemblyaiApi && !GrokApiSettings.hasAssemblyaiApiKey()) {
+            status.text = "Insira a chave API da AssemblyAI nas configurações."
+            return
+        }
+        if (useWebSocket && transcriptionConfig.isElevenlabsApi && !GrokApiSettings.hasElevenlabsApiKey()) {
+            status.text = "Insira a chave API da ElevenLabs nas configurações."
             return
         }
         if (isProcessing) return
@@ -1208,6 +1222,7 @@ class RemoteSttActivity : AppCompatActivity() {
             grokDisconnectedAudioBytes = 0L
             grokAudioLossReported = false
         }
+        assemblyaiSpeakerNumbers.clear()
         cancelGrokReconnectCallbacks()
         deepgramFinishRunnable?.let(handler::removeCallbacks)
         deepgramFinishRunnable = null
@@ -1276,25 +1291,34 @@ class RemoteSttActivity : AppCompatActivity() {
             if (reconnecting) GrokConnectionEvent.RECONNECTING else GrokConnectionEvent.CONNECTING,
             if (reconnecting) "tentativa $grokReconnectAttempts/$GROK_MAX_RECONNECT_ATTEMPTS" else null
         )
-        val request = if (sttIsDeepgram) {
-            Request.Builder()
+        val request = when {
+            sttIsDeepgram -> Request.Builder()
                 .url(deepgramWebSocketUrl())
                 .header("Authorization", "Token ${GrokApiSettings.deepgramApiKey()}")
                 .build()
-        } else {
-            val apiKey = GrokApiSettings.apiKey()
-            Request.Builder()
-                .url(grokWebSocketUrl())
-                .header("Authorization", "Bearer $apiKey")
+            sttIsAssemblyai -> Request.Builder()
+                .url(assemblyaiWebSocketUrl())
+                .header("Authorization", GrokApiSettings.assemblyaiApiKey())
                 .build()
+            sttIsElevenlabs -> Request.Builder()
+                .url(elevenlabsWebSocketUrl())
+                .header("xi-api-key", GrokApiSettings.elevenlabsApiKey())
+                .build()
+            else -> {
+                val apiKey = GrokApiSettings.apiKey()
+                Request.Builder()
+                    .url(grokWebSocketUrl())
+                    .header("Authorization", "Bearer $apiKey")
+                    .build()
+            }
         }
         val isReconnectAttempt = reconnecting
         grokLiveWebSocket = grokWebSocketClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (grokLiveWebSocket !== webSocket) return
-                if (sttIsDeepgram) {
-                    // O Metadata do Deepgram pode demorar ~12s; o socket aberto
-                    // já está pronto para receber áudio (onOpen).
+                if (sttIsDeepgram || sttIsAssemblyai || sttIsElevenlabs) {
+                    // Deepgram (Metadata ~12s), AssemblyAI e Scribe aceitam áudio
+                    // assim que o socket abre (onOpen).
                     onGrokWebSocketReady(webSocket)
                 } else {
                     emitGrokConnectionEvent(
@@ -1363,6 +1387,28 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun assemblyaiWebSocketUrl(): String {
+        return buildString {
+            append("wss://streaming.assemblyai.com/v3/ws")
+            append("?speech_model=universal-3-5-pro")
+            append("&encoding=pcm_s16le&sample_rate=16000")
+            append("&continuous_partials=true")
+            if (checkboxLiveDiarize.isChecked) append("&speaker_labels=true")
+        }
+    }
+
+    private fun elevenlabsWebSocketUrl(): String {
+        return buildString {
+            append("wss://api.elevenlabs.io/v1/speech-to-text/realtime")
+            append("?model_id=scribe_v2_realtime")
+            append("&audio_format=pcm_16000")
+            append("&language_code=${selectedLiveLanguage.serverCode}")
+            append("&commit_strategy=vad")
+            append("&vad_silence_threshold_secs=1.0")
+            append("&include_timestamps=true")
+        }
+    }
+
     private fun handleGrokLiveEvent(webSocket: WebSocket, rawEvent: String) {
         val event = runCatching { JSONObject(rawEvent) }.getOrElse {
             handleGrokWebSocketDisconnect(webSocket, "resposta inválida do Grok")
@@ -1391,6 +1437,54 @@ class RemoteSttActivity : AppCompatActivity() {
                 }
                 runOnUiThread { updateLiveTerminalText() }
             }
+            "Begin" -> if (sttIsAssemblyai) onGrokWebSocketReady(webSocket)
+            "Turn" -> if (sttIsAssemblyai) {
+                var text = event.optString("transcript").trim()
+                if (text.isEmpty()) return
+                if (checkboxLiveDiarize.isChecked && event.has("speaker_label")) {
+                    val label = event.optString("speaker_label")
+                    val number = assemblyaiSpeakerNumbers.getOrPut(label) { assemblyaiSpeakerNumbers.size + 1 }
+                    text = "Interlocutor $number: $text"
+                }
+                val isFinal = event.optBoolean("end_of_turn", false)
+                synchronized(grokLiveFinalSegments) {
+                    if (isFinal) {
+                        if (grokLiveFinalSegments.lastOrNull() != text) grokLiveFinalSegments += text
+                        grokLivePartialSegment = ""
+                    } else {
+                        grokLivePartialSegment = text
+                    }
+                    updateGrokLiveTranscriptLocked()
+                }
+                runOnUiThread { updateLiveTerminalText() }
+            }
+            "Termination" -> if (sttIsAssemblyai) completeGrokLiveTranscription(webSocket, "")
+            "session_started" -> if (sttIsElevenlabs) onGrokWebSocketReady(webSocket)
+            "partial_transcript" -> if (sttIsElevenlabs) {
+                val text = event.optString("text").trim()
+                if (text.isEmpty()) return
+                synchronized(grokLiveFinalSegments) {
+                    grokLivePartialSegment = text
+                    updateGrokLiveTranscriptLocked()
+                }
+                runOnUiThread { updateLiveTerminalText() }
+            }
+            "final_transcript" -> if (sttIsElevenlabs) {
+                val text = event.optString("text").trim()
+                if (text.isEmpty()) return
+                synchronized(grokLiveFinalSegments) {
+                    if (grokLiveFinalSegments.lastOrNull() != text) grokLiveFinalSegments += text
+                    grokLivePartialSegment = ""
+                    updateGrokLiveTranscriptLocked()
+                }
+                runOnUiThread { updateLiveTerminalText() }
+            }
+            "committed_transcript" -> if (sttIsElevenlabs) {
+                if (grokFinishRequested) completeGrokLiveTranscription(webSocket, "")
+            }
+            "committed_transcript_with_timestamps" -> if (sttIsElevenlabs) {
+                if (grokFinishRequested) completeGrokLiveTranscription(webSocket, "")
+            }
             "transcript.partial" -> {
                 val text = formatGrokDiarizedTranscript(event, event.optString("text").trim())
                 if (text.isBlank()) return
@@ -1417,6 +1511,19 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun sendAudioChunk(webSocket: WebSocket, bytes: ByteArray, offset: Int, length: Int): Boolean {
+        if (sttIsElevenlabs) {
+            val chunk = bytes.copyOfRange(offset, offset + length)
+            val payload = JSONObject()
+                .put("message_type", "input_audio_chunk")
+                .put("audio_base_64", android.util.Base64.encodeToString(chunk, android.util.Base64.NO_WRAP))
+                .put("commit", false)
+                .put("sample_rate", LIVE_SAMPLE_RATE)
+            return webSocket.send(payload.toString())
+        }
+        return webSocket.send(bytes.toByteString(offset, length))
+    }
+
     private fun onGrokWebSocketReady(webSocket: WebSocket) {
         if ((!liveTranscribing && !liveFinalizing) || grokLiveWebSocket !== webSocket) return
         if (grokSocketReady) return
@@ -1427,7 +1534,7 @@ class RemoteSttActivity : AppCompatActivity() {
             var offset = 0
             while (offset < replay.size) {
                 val length = minOf(grokWebSocketChunkBytes(), replay.size - offset)
-                if (!webSocket.send(replay.toByteString(offset, length))) {
+                if (!sendAudioChunk(webSocket, replay, offset, length)) {
                     replaySucceeded = false
                     break
                 }
@@ -1492,7 +1599,7 @@ class RemoteSttActivity : AppCompatActivity() {
                         grokReplayBuffer.append(buffer, 0, read)
                         val socket = grokLiveWebSocket
                         if (grokSocketReady && socket != null) {
-                            if (!socket.send(buffer.toByteString(0, read))) failedSocket = socket
+                            if (!sendAudioChunk(socket, buffer, 0, read)) failedSocket = socket
                         } else {
                             grokDisconnectedAudioBytes += read
                             if (!grokAudioLossReported && grokDisconnectedAudioBytes > GROK_REPLAY_BUFFER_BYTES) {
@@ -1691,7 +1798,22 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun sendGrokAudioDone(webSocket: WebSocket) {
         if (grokLiveWebSocket !== webSocket || !grokSocketReady) return
-        val payload = if (sttIsDeepgram) "{\"type\":\"CloseStream\"}" else "{\"type\":\"audio.done\"}"
+        val payload = when {
+            sttIsDeepgram -> "{\"type\":\"CloseStream\"}"
+            sttIsAssemblyai -> "{\"type\":\"Terminate\"}"
+            sttIsElevenlabs -> {
+                // Força a finalização com um chunk de silêncio commitado (a VAD
+                // fecharia sozinha, mas o commit garante o último segmento).
+                val silence = ByteArray(3200)
+                JSONObject()
+                    .put("message_type", "input_audio_chunk")
+                    .put("audio_base_64", android.util.Base64.encodeToString(silence, android.util.Base64.NO_WRAP))
+                    .put("commit", true)
+                    .put("sample_rate", LIVE_SAMPLE_RATE)
+                    .toString()
+            }
+            else -> "{\"type\":\"audio.done\"}"
+        }
         if (!webSocket.send(payload)) {
             handleGrokWebSocketDisconnect(webSocket, "não consegui finalizar o áudio no servidor")
         }
@@ -1731,7 +1853,12 @@ class RemoteSttActivity : AppCompatActivity() {
         grokStableResetRunnable = null
     }
 
-    private fun sttProviderName(): String = if (sttIsDeepgram) "Deepgram" else "Grok"
+    private fun sttProviderName(): String = when {
+        sttIsDeepgram -> "Deepgram"
+        sttIsAssemblyai -> "AssemblyAI"
+        sttIsElevenlabs -> "Scribe"
+        else -> "Grok"
+    }
 
     private fun emitGrokConnectionEvent(event: GrokConnectionEvent, detail: String? = null) {
         grokConnectionState = event.state
@@ -1823,11 +1950,11 @@ class RemoteSttActivity : AppCompatActivity() {
                 grokFinishRequested = true
                 liveAiProgress.visibility = View.VISIBLE
                 renderLiveProgress()
-                status.text = if (sttIsDeepgram) "Recebendo a transcrição final do Deepgram..." else "Recebendo a transcrição final do Grok..."
+                status.text = "Recebendo a transcrição final do ${sttProviderName()}..."
                 val socket = grokLiveWebSocket
                 if (socket != null && grokSocketReady) {
                     sendGrokAudioDone(socket)
-                    if (sttIsDeepgram) {
+                    if (sttIsDeepgram || sttIsAssemblyai || sttIsElevenlabs) {
                         deepgramFinishRunnable?.let(handler::removeCallbacks)
                         val timeout = Runnable {
                             deepgramFinishRunnable = null
@@ -2054,6 +2181,8 @@ class RemoteSttActivity : AppCompatActivity() {
     ): String {
         if (config.isGrokApi) return sendGrokApiTranscription(uploadFile, isFinal)
         if (config.isDeepgramApi) return sendDeepgramApiTranscription(uploadFile, isFinal)
+        if (config.isAssemblyaiApi) return sendAssemblyaiApiTranscription(uploadFile, isFinal)
+        if (config.isElevenlabsApi) return sendElevenlabsApiTranscription(uploadFile, isFinal)
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addTranscriptionParameters(config)
@@ -2214,6 +2343,101 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun sendAssemblyaiApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
+        val apiKey = GrokApiSettings.assemblyaiApiKey()
+        require(GrokApiSettings.isPlausibleAssemblyaiKey(apiKey)) { "A chave API da AssemblyAI salva nas configurações é inválida." }
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "audio",
+                uploadFile.file.name,
+                uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
+            )
+            .build()
+        val call = client.newCall(
+            Request.Builder()
+                .url("https://sync.assemblyai.com/transcribe")
+                .header("Authorization", apiKey)
+                .header("X-AAI-Model", "u3-sync-pro")
+                .post(requestBody)
+                .build()
+        )
+        currentCalls.add(call)
+        if (isLiveFinal != null) {
+            synchronized(liveRequestLock) {
+                liveCurrentCall = call
+                liveCurrentCallIsFinal = isLiveFinal
+            }
+        }
+        try {
+            call.execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw IllegalStateException("AssemblyAI respondeu ${response.code}: ${body.take(240)}")
+                val payload = JSONObject(body)
+                val rawText = payload.optString("text").trim()
+                if (rawText.isEmpty()) throw IllegalStateException("A AssemblyAI retornou uma transcrição vazia.")
+                return rawText
+            }
+        } finally {
+            currentCalls.remove(call)
+            if (isLiveFinal != null) {
+                synchronized(liveRequestLock) {
+                    if (liveCurrentCall == call) {
+                        liveCurrentCall = null
+                        liveCurrentCallIsFinal = false
+                    }
+                }
+            }
+        }
+    }
+
+    private fun sendElevenlabsApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
+        val apiKey = GrokApiSettings.elevenlabsApiKey()
+        require(GrokApiSettings.isPlausibleElevenlabsKey(apiKey)) { "A chave API da ElevenLabs salva nas configurações é inválida." }
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "file",
+                uploadFile.file.name,
+                uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
+            )
+            .build()
+        val call = client.newCall(
+            Request.Builder()
+                .url("https://api.elevenlabs.io/v1/speech-to-text?model_id=scribe_v2")
+                .header("xi-api-key", apiKey)
+                .post(requestBody)
+                .build()
+        )
+        currentCalls.add(call)
+        if (isLiveFinal != null) {
+            synchronized(liveRequestLock) {
+                liveCurrentCall = call
+                liveCurrentCallIsFinal = isLiveFinal
+            }
+        }
+        try {
+            call.execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw IllegalStateException("ElevenLabs respondeu ${response.code}: ${body.take(240)}")
+                val payload = JSONObject(body)
+                val rawText = payload.optString("text").trim()
+                if (rawText.isEmpty()) throw IllegalStateException("A ElevenLabs retornou uma transcrição vazia.")
+                return rawText
+            }
+        } finally {
+            currentCalls.remove(call)
+            if (isLiveFinal != null) {
+                synchronized(liveRequestLock) {
+                    if (liveCurrentCall == call) {
+                        liveCurrentCall = null
+                        liveCurrentCallIsFinal = false
+                    }
+                }
+            }
+        }
+    }
+
     private fun formatGrokDiarizedTranscript(payload: JSONObject, fallback: String): String {
         if (!checkboxLiveDiarize.isChecked) return fallback
         val words = payload.optJSONArray("words") ?: return fallback
@@ -2250,9 +2474,11 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun refreshGrokApiControls() {
         val config = TranscriptionModelStore.selectedConfig()
-        val apiTranscription = config.isGrokApi || config.isDeepgramApi
+        val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
+            config.isAssemblyaiApi || config.isElevenlabsApi
+        val diarizeSupported = config.isGrokApi || config.isDeepgramApi || config.isAssemblyaiApi
         buttonLiveLanguage.visibility = if (apiTranscription) View.VISIBLE else View.GONE
-        grokDiarizeRow.visibility = if (apiTranscription) View.VISIBLE else View.GONE
+        grokDiarizeRow.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
         buttonLiveIntervalMinus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
         buttonLiveIntervalPlus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
         if (apiTranscription) {
@@ -2261,7 +2487,7 @@ class RemoteSttActivity : AppCompatActivity() {
             liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
         }
         refreshLiveIntervalInput()
-        if (!apiTranscription) checkboxLiveDiarize.isChecked = false
+        if (!diarizeSupported) checkboxLiveDiarize.isChecked = false
     }
 
     private fun showDiarizationHelp() {
@@ -3473,6 +3699,18 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isDeepgramApi) {
             return preparedUploads.sortedBy { it.index }.map { prepared ->
                 val text = sendDeepgramApiTranscription(prepared.uploadFile)
+                TranscriptionResult(prepared.index, prepared.item.name, text)
+            }
+        }
+        if (config.isAssemblyaiApi) {
+            return preparedUploads.sortedBy { it.index }.map { prepared ->
+                val text = sendAssemblyaiApiTranscription(prepared.uploadFile)
+                TranscriptionResult(prepared.index, prepared.item.name, text)
+            }
+        }
+        if (config.isElevenlabsApi) {
+            return preparedUploads.sortedBy { it.index }.map { prepared ->
+                val text = sendElevenlabsApiTranscription(prepared.uploadFile)
                 TranscriptionResult(prepared.index, prepared.item.name, text)
             }
         }

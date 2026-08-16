@@ -7,6 +7,8 @@ object GrokApiSettings {
 
     const val TRANSCRIPTION_NAME = "Grok STT"
     const val DEEPGRAM_TRANSCRIPTION_NAME = "Deepgram Nova 3"
+    const val ASSEMBLYAI_TRANSCRIPTION_NAME = "AssemblyAI Universal-3.5 Pro"
+    const val ELEVENLABS_TRANSCRIPTION_NAME = "ElevenLabs Scribe v2 Realtime"
     const val TEXT_NAME = "grok-4.6"
     const val GROK_NON_REASONING_TEXT_NAME = "grok-4.20-0309-non-reasoning"
     const val DEEPSEEK_TEXT_NAME = "deepseek-v4-flash"
@@ -18,6 +20,8 @@ object GrokApiSettings {
     private const val KEY_DEEPSEEK_API = "deepseek_api_key"
     private const val KEY_DEEPGRAM_API = "deepgram_api_key"
     private const val KEY_DEEPGRAM_KEYTERMS = "deepgram_keyterms"
+    private const val KEY_ASSEMBLYAI_API = "assemblyai_api_key"
+    private const val KEY_ELEVENLABS_API = "elevenlabs_api_key"
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
     private const val KEY_TEXT_REASONING = "text_reasoning"
@@ -66,6 +70,44 @@ object GrokApiSettings {
 
     fun setDeepgramKeyterms(value: String) {
         preferences().edit().putString(KEY_DEEPGRAM_KEYTERMS, value.trim()).apply()
+    }
+
+    fun assemblyaiApiKey(): String = preferences().getString(KEY_ASSEMBLYAI_API, "").orEmpty().trim()
+
+    fun setAssemblyaiApiKey(value: String) {
+        preferences().edit().putString(KEY_ASSEMBLYAI_API, value.trim()).apply()
+    }
+
+    fun isPlausibleAssemblyaiKey(value: String = assemblyaiApiKey()): Boolean {
+        val key = value.trim()
+        return key.length in 32..64 && key.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
+    }
+
+    fun hasAssemblyaiApiKey(): Boolean = isPlausibleAssemblyaiKey()
+
+    fun elevenlabsApiKey(): String = preferences().getString(KEY_ELEVENLABS_API, "").orEmpty().trim()
+
+    fun setElevenlabsApiKey(value: String) {
+        preferences().edit().putString(KEY_ELEVENLABS_API, value.trim()).apply()
+    }
+
+    fun isPlausibleElevenlabsKey(value: String = elevenlabsApiKey()): Boolean {
+        val key = value.trim()
+        return key.length in 20..64 && key.all { it.isLetterOrDigit() || it == '-' || it == '_' }
+    }
+
+    fun hasElevenlabsApiKey(): Boolean = isPlausibleElevenlabsKey()
+
+    /** Semeia as chaves padrão na primeira execução (usuário pode trocar nas configurações). */
+    fun seedDefaultApiKeys() {
+        val editor = preferences().edit()
+        if (assemblyaiApiKey().isEmpty()) {
+            editor.putString(KEY_ASSEMBLYAI_API, "35beb8949e8045cd9894015594535d5f")
+        }
+        if (elevenlabsApiKey().isEmpty()) {
+            editor.putString(KEY_ELEVENLABS_API, "sk_3441e8d05c2d6c6f32ae1105d05d7c6e4accd063d6fddbd0")
+        }
+        editor.apply()
     }
 
     fun hasApiKey(): Boolean = isPlausibleXaiKey()
