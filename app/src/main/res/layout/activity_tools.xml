@@ -20,6 +20,10 @@
                 <include android:id="@+id/button_whisper" layout="@layout/view_tool_whisper" android:layout_width="0dp" android:layout_height="132dp" android:layout_weight="1" android:layout_marginEnd="7dp" />
                 <include android:id="@+id/button_remote_stt" layout="@layout/view_tool_remote_stt" android:layout_width="0dp" android:layout_height="132dp" android:layout_weight="1" android:layout_marginStart="7dp" />
             </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:orientation="horizontal" android:baselineAligned="false">
+                <include android:id="@+id/button_transcription" layout="@layout/view_tool_transcription" android:layout_width="0dp" android:layout_height="132dp" android:layout_weight="1" android:layout_marginEnd="7dp" />
+                <View android:layout_width="0dp" android:layout_height="1dp" android:layout_weight="1" android:layout_marginStart="7dp" />
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
     <include layout="@layout/view_sig_echo_footer" />

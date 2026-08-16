@@ -239,6 +239,8 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var liveTranscribing = false
     @Volatile private var liveFinalizing = false
     @Volatile private var livePaused = false
+    private var transcriptionMode = false
+    @Volatile private var recordingPaused = false
     @Volatile private var liveUsesGrokWebSocket = false
     @Volatile private var sttIsDeepgram = false
     @Volatile private var sttIsAssemblyai = false
@@ -355,6 +357,7 @@ class RemoteSttActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
         setContentView(R.layout.activity_remote_stt)
+        transcriptionMode = intent.getStringExtra(EXTRA_MODE) == MODE_TRANSCRIPTION
 
         serverScroll = findViewById(R.id.server_scroll)
         serverGate = findViewById(R.id.server_gate)
@@ -501,7 +504,7 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonRecordingAction.setOnClickListener {
             if (!recordingActive) startMicrophoneRecording() else stopMicrophoneRecording()
         }
-        buttonLiveMicTest.setOnClickListener { toggleLiveMicPause() }
+        buttonLiveMicTest.setOnClickListener { toggleMicPause() }
         buttonLiveMicStop.setOnClickListener {
             if (liveTranscribing) stopLiveMicTranscription() else startLiveMicWithOverwriteCheck()
         }
@@ -1029,11 +1032,15 @@ class RemoteSttActivity : AppCompatActivity() {
         recordingFile = File(cacheDir, "granite_speech_gravacao_$stamp.wav")
         recordingPcmFile = File(cacheDir, "granite_speech_gravacao_$stamp.pcm")
         recordingActive = true
+        recordingPaused = false
         updateTextEditorsLock()
         recordingStartedAt = SystemClock.elapsedRealtime()
         buttonRecordingAction.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
         buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
         buttonRecordingAction.contentDescription = "Parar gravação"
+        buttonLiveMicTest.visibility = View.VISIBLE
+        buttonLiveMicTest.alpha = 1f
+        buttonLiveMicTest.contentDescription = "Pausar gravação"
         status.text = ""
         handler.post(recordingTicker)
         recordingThread = Thread { recordWhiteMicrophonePcm() }.also { it.start() }
@@ -1051,6 +1058,9 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         recordingThread = null
         recordingAudioRecord = null
+        recordingPaused = false
+        buttonLiveMicTest.visibility = View.INVISIBLE
+        buttonLiveMicTest.alpha = 1f
         val file = recordingFile
         val pcmFile = recordingPcmFile
         if (file != null && pcmFile?.exists() == true && pcmFile.length() > 0L) {
@@ -1065,7 +1075,7 @@ class RemoteSttActivity : AppCompatActivity() {
             status.text = "Gravação vazia."
             return
         }
-        buttonSaveRecording.visibility = View.GONE
+        buttonSaveRecording.visibility = View.VISIBLE
         val item = MediaItem(Uri.fromFile(file), file.name, "audio/wav", readDurationFromFile(file))
         selectedItems.clear()
         selectedItems += item
@@ -1134,6 +1144,10 @@ class RemoteSttActivity : AppCompatActivity() {
                 recorder.startRecording()
                 try {
                     while (recordingActive) {
+                        if (recordingPaused) {
+                            Thread.sleep(20)
+                            continue
+                        }
                         val read = recorder.read(buffer, 0, buffer.size)
                         if (read > 0) output.write(buffer, 0, read)
                     }
@@ -1938,6 +1952,17 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun toggleMicPause() {
+        if (recordingActive) {
+            recordingPaused = !recordingPaused
+            buttonLiveMicTest.alpha = if (recordingPaused) 0.55f else 1f
+            buttonLiveMicTest.contentDescription =
+                if (recordingPaused) "Retomar gravação" else "Pausar gravação"
+            return
+        }
+        toggleLiveMicPause()
+    }
+
     private fun toggleLiveMicPause() {
         if (!liveTranscribing) return
         val now = SystemClock.elapsedRealtime()
@@ -2697,12 +2722,60 @@ class RemoteSttActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun applyToolModeVisibility() {
+        findViewById<TextView>(R.id.tool_mode_title).text =
+            if (transcriptionMode) "Transcrição" else "Ocorrência"
+        if (transcriptionMode) {
+            // Ferramenta Transcrição: somente arquivos (sem microfones, sem
+            // controles de live, sem Histórico/Oitiva e sem timestamps).
+            buttonRecordingAction.visibility = View.GONE
+            buttonLiveMicTest.visibility = View.GONE
+            buttonLiveMicStop.visibility = View.GONE
+            buttonLiveIntervalMinus.visibility = View.GONE
+            inputLiveInterval.visibility = View.GONE
+            buttonLiveIntervalPlus.visibility = View.GONE
+            recordingTimer.visibility = View.GONE
+            buttonSaveRecording.visibility = View.GONE
+            historyOutputContainer.visibility = View.GONE
+            statementOutputContainer.visibility = View.GONE
+            checkboxTimestamps.visibility = View.GONE
+            buttonHistory.visibility = View.GONE
+            buttonStatement.visibility = View.GONE
+            buttonPersonSelector.visibility = View.GONE
+            // O painel de gravação permanece para o seletor de idioma e a diarização.
+            recordingPanel.visibility = View.VISIBLE
+        } else {
+            // Ferramenta Ocorrência: sem seleção de arquivos, preview, timeline,
+            // conversão, VAD e opções de lote.
+            findViewById<View>(R.id.button_select_media).visibility = View.GONE
+            previewFrame.visibility = View.GONE
+            timelineFrame.visibility = View.GONE
+            prepareModeButtons.visibility = View.GONE
+            vadModeRow.visibility = View.GONE
+            batchOptionsRow.visibility = View.GONE
+            selectedListBox.visibility = View.GONE
+            buttonHistory.visibility = View.VISIBLE
+            buttonStatement.visibility = View.VISIBLE
+            buttonPersonSelector.visibility = View.VISIBLE
+            checkboxTimestamps.visibility = View.VISIBLE
+            historyOutputContainer.visibility = View.VISIBLE
+            statementOutputContainer.visibility = View.VISIBLE
+            buttonRecordingAction.visibility = View.VISIBLE
+            buttonLiveMicTest.visibility = View.INVISIBLE
+            buttonLiveMicStop.visibility = View.VISIBLE
+        }
+    }
+
     private fun refreshGrokApiControls() {
         val config = TranscriptionModelStore.selectedConfig()
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
             config.isAssemblyaiApi || config.isElevenlabsApi
-        val diarizeSupported = config.isGrokApi || config.isDeepgramApi || config.isAssemblyaiApi
-        buttonLiveLanguage.visibility = View.VISIBLE
+        // Granite (avare e servidor/NAR) não oferece seleção de idioma nem
+        // diarização; todos os demais modelos exibem ambos.
+        val graniteModel = config.name == TranscriptionModelStore.AVARE_NAME ||
+            config.name == TranscriptionModelStore.SERVER_NAME
+        val diarizeSupported = !graniteModel
+        buttonLiveLanguage.visibility = if (graniteModel) View.GONE else View.VISIBLE
         refreshLiveLanguageButton()
         grokDiarizeRow.visibility = if (diarizeSupported) View.VISIBLE else View.GONE
         buttonLiveIntervalMinus.visibility = if (apiTranscription) View.GONE else View.VISIBLE
@@ -2714,6 +2787,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         refreshLiveIntervalInput()
         if (!diarizeSupported) checkboxLiveDiarize.isChecked = false
+        applyToolModeVisibility()
     }
 
     private fun showDiarizationHelp() {
@@ -6308,6 +6382,10 @@ class RemoteSttActivity : AppCompatActivity() {
         (LIVE_SAMPLE_RATE * 2L * grokWebSocketChunkMillis() / 1000L).toInt().coerceAtLeast(640)
 
     companion object {
+        const val EXTRA_MODE = "remote_stt_mode"
+        const val MODE_TRANSCRIPTION = "transcription"
+        const val MODE_OCCURRENCE = "occurrence"
+
         @Volatile
         private var inMemoryDraft: RemoteSttDraft? = null
 
