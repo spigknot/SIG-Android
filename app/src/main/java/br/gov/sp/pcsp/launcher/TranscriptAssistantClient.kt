@@ -211,6 +211,7 @@ object TranscriptAssistantClient {
     }
 
     private fun buildPayload(
+        client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
         systemPrompt: String,
         transcript: String
@@ -224,6 +225,11 @@ object TranscriptAssistantClient {
             payload.put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put("content", systemPrompt))
                 .put(JSONObject().put("role", "user").put("content", transcript)))
+        } else if (serverConfig.provider == "servidor") {
+            payload.put("messages", JSONArray()
+                .put(JSONObject().put("role", "system").put("content", systemPrompt))
+                .put(JSONObject().put("role", "user").put("content", transcript)))
+            payload.put("max_tokens", countInputTokens(client, serverConfig, systemPrompt, transcript))
         } else {
             payload.put(
                 "input",
@@ -244,6 +250,7 @@ object TranscriptAssistantClient {
     }
 
     private fun buildRequest(
+        client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
         systemPrompt: String,
         material: String,
@@ -251,7 +258,7 @@ object TranscriptAssistantClient {
     ): Request {
         val builder = Request.Builder()
             .url(url)
-            .post(buildPayload(serverConfig, systemPrompt, material).toRequestBody(jsonMediaType))
+            .post(buildPayload(client, serverConfig, systemPrompt, material).toRequestBody(jsonMediaType))
         if (serverConfig.isGrokApi) {
             val key = GrokApiSettings.xaiApiKey()
             require(GrokApiSettings.isPlausibleXaiKey(key)) { "A chave API da xAI salva nas configurações é inválida." }
@@ -270,10 +277,47 @@ object TranscriptAssistantClient {
         systemPrompt: String,
         userPrompt: String
     ): Call {
-        val primary = buildRequest(serverConfig, systemPrompt, userPrompt)
+        val primary = buildRequest(client, serverConfig, systemPrompt, userPrompt)
         val fallbackUrl = serverConfig.fallbackUrl.trim()
         if (fallbackUrl.isBlank()) return client.newCall(primary)
-        return newFallbackCall(client, primary, buildRequest(serverConfig, systemPrompt, userPrompt, fallbackUrl))
+        return newFallbackCall(client, primary, buildRequest(client, serverConfig, systemPrompt, userPrompt, fallbackUrl))
+    }
+
+    /** max_tokens = nº de tokens do input (vLLM /tokenize) com fallback local. */
+    private fun countInputTokens(
+        client: OkHttpClient,
+        serverConfig: ModelServerStore.Config,
+        systemPrompt: String,
+        transcript: String
+    ): Int {
+        val text = "$systemPrompt\n$transcript"
+        val bases = listOf(serverConfig.url, serverConfig.fallbackUrl)
+            .filter { it.isNotBlank() }
+            .map { it.substringBefore("/v1/chat/completions").trimEnd('/') + "/tokenize" }
+            .distinct()
+        val tokenizeClient = client.newBuilder()
+            .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+        for (tokenizeUrl in bases) {
+            try {
+                val body = JSONObject()
+                    .put("model", serverConfig.parameters.optString("model", ModelServerStore.SERVER_GEMMA_MODEL))
+                    .put("prompt", text)
+                    .toString()
+                    .toRequestBody(jsonMediaType)
+                val request = Request.Builder().url(tokenizeUrl).post(body).build()
+                tokenizeClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val count = JSONObject(response.body?.string().orEmpty()).optInt("count", -1)
+                        if (count > 0) return count
+                    }
+                }
+            } catch (_: IOException) {
+            } catch (_: Exception) {
+            }
+        }
+        return maxOf(1, Math.round(text.length / 4.0).toInt())
     }
 
     internal fun newFallbackCall(client: OkHttpClient, primary: Request, fallback: Request): Call =

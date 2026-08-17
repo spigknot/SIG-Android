@@ -4,6 +4,9 @@ import org.json.JSONObject
 
 object ModelServerStore {
 
+    const val SERVER_GEMMA_NAME = "servidor (gemma-4-26B-A4B-abliterated)"
+    const val SERVER_GEMMA_MODEL = "gemma4"
+
     data class Config(
         val name: String,
         val url: String,
@@ -21,7 +24,7 @@ object ModelServerStore {
     fun defaultConfig() = selectedConfig()
 
     fun readConfigs(): List<Config> {
-        val available = mutableListOf(proxyConfig("grok"), proxyConfig("deepseek"))
+        val available = mutableListOf(proxyConfig("grok"), proxyConfig("deepseek"), serverGemma())
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrok()
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrokNonReasoning()
         if (GrokApiSettings.isPlausibleDeepseekKey()) available += directDeepseek()
@@ -58,6 +61,20 @@ object ModelServerStore {
             fallbackUrl = "http://avare:8500"
         )
     }
+
+    private fun serverGemma() = Config(
+        SERVER_GEMMA_NAME,
+        "http://servidor:8500/v1/chat/completions",
+        JSONObject()
+            .put("model", SERVER_GEMMA_MODEL)
+            .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+            .put("temperature", 0.0)
+            .put("seed", 1)
+            .put("top_k", 1)
+            .put("top_p", 1),
+        provider = "servidor",
+        fallbackUrl = "http://avare:8500/v1/chat/completions"
+    )
 
     private fun directGrok() = Config(
         GrokApiSettings.TEXT_NAME,
