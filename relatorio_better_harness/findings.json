@@ -1,0 +1,133 @@
+{
+  "summary": {
+    "projectName": "SIG",
+    "locale": "en",
+    "modelId": "agent-work-loop-v4",
+    "reportContractVersion": 25,
+    "overview": "O projeto fixa bem a toolchain e documenta comandos básicos, mas o fluxo crítico de STT ainda pode ser alterado, compilado e entregue sem uma prova funcional equivalente ao risco. O pacote nativo segue uma rota manual separada, e a evidência de falhas não preserva toda a correlação necessária para diagnóstico.",
+    "dimensions": [
+      {
+        "id": "task-understanding",
+        "label": "Task Understanding",
+        "score": 54,
+        "summary": "O README orienta a preparação e os comandos básicos, mas não mapeia o hotspot de STT, provedores, componentes nativos e verificadores correspondentes.",
+        "findingRefs": [
+          "critical-path-routing"
+        ]
+      },
+      {
+        "id": "controlled-execution",
+        "label": "Controlled Execution",
+        "score": 72,
+        "summary": "JDK, SDK, NDK, CMake e Zig estão fixados, e o download do Zig valida SHA-256 antes da extração.",
+        "findingRefs": [
+          "async-polling-no-bound"
+        ]
+      },
+      {
+        "id": "change-validation",
+        "label": "Change Validation",
+        "score": 45,
+        "summary": "Há testes unitários focados em fallback e diarização, mas o registro atual de aceitação comprova apenas assembleDebug e não cobre o fluxo assíncrono principal.",
+        "findingRefs": [
+          "stt-acceptance-compile-only",
+          "async-polling-no-bound",
+          "stt-failure-correlation"
+        ]
+      },
+      {
+        "id": "reliable-delivery",
+        "label": "Reliable Delivery",
+        "score": 42,
+        "summary": "O build comum exclui componentes nativos por desenho, enquanto a geração e publicação do pacote completo dependem de passos manuais sem uma porta de aceitação do repositório.",
+        "findingRefs": [
+          "native-release-gap"
+        ]
+      },
+      {
+        "id": "learning-capture",
+        "label": "Learning Capture",
+        "score": 35,
+        "summary": "As evidências recentes não contêm episódios independentes suficientes para confirmar uma prática reutilizável, e os artefatos de falha do STT perdem parte da correlação operacional.",
+        "findingRefs": [
+          "stt-failure-correlation"
+        ]
+      }
+    ],
+    "assignmentSummaries": []
+  },
+  "findings": [
+    {
+      "id": "critical-path-routing",
+      "title": "O guia de entrada não roteia alterações no hotspot de STT",
+      "severity": "Medium",
+      "reason": "README.txt registra requisitos e três comandos Gradle, mas não informa quais verificadores correspondem aos provedores, ao fluxo REST/WebSocket, à montagem nativa ou a RemoteSttActivity.kt. Esse arquivo concentra milhares de linhas e centenas de funções, de modo que o próximo agente precisa redescobrir fronteiras e riscos antes de saber o que validar.",
+      "dimensionRefs": [
+        "task-understanding"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nCrie a menor orientação de projeto que roteie alterações no SIG Android sem duplicar o README inteiro. Nomeie RemoteSttActivity.kt como hotspot, separe as rotas REST/WebSocket, a camada de provedores e o pacote nativo, e associe cada rota aos verificadores já existentes no projeto.\n\n## Validation\n\n- Execute `git diff --check`\n- Confirme por inspeção que cada rota crítica aponta para um comando existente no README ou em native-dependencies/README.md\n- Não invente comandos, credenciais ou etapas de publicação",
+      "expectedArtifact": "Rule",
+      "expectedOutput": [
+        "Entregar ao próximo agente um mapa curto de ownership, riscos e verificadores para STT e componentes nativos."
+      ]
+    },
+    {
+      "id": "stt-acceptance-compile-only",
+      "title": "A aceitação registrada do STT prova compilação, não comportamento",
+      "severity": "High",
+      "reason": "gradle_build.log termina com assembleDebug bem-sucedido, enquanto os únicos testes unitários encontrados cobrem fallback HTTP e parâmetros de diarização. Não há teste observado para preparar mídia, escolher síncrono versus assíncrono, submeter, consultar, cancelar e registrar falhas; uma regressão nesse caminho pode passar pelo mesmo registro de aceitação.",
+      "dimensionRefs": [
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nCrie um seam mínimo e testes focados para o fluxo assíncrono de transcrição, sem refatorar toda a Activity. Cubra submissão, decisão síncrona/assíncrona, polling concluído, erro remoto, cancelamento e persistência de falha com MockWebServer ou o mecanismo de teste já usado no projeto.\n\n## Validation\n\n- Execute `.\\gradlew.bat :app:testDebugUnitTest`\n- Execute `.\\gradlew.bat :app:lintDebug`\n- Execute `.\\gradlew.bat :app:assembleDebug`\n- Registre qual teste falha antes da correção e passa depois",
+      "expectedArtifact": "Test",
+      "expectedOutput": [
+        "Produzir uma prova reproduzível de que os estados principais do STT assíncrono terminam corretamente."
+      ]
+    },
+    {
+      "id": "async-polling-no-bound",
+      "title": "O polling assíncrono pode permanecer ativo sem limite terminal",
+      "severity": "High",
+      "reason": "RemoteSttActivity.kt configura connectTimeout, readTimeout, writeTimeout e callTimeout como zero e consulta o resultado dentro de `while (true)`. O cancelamento local é verificado, mas não há prazo, número máximo de tentativas ou estado de expiração; uma API que permaneça pendente pode deixar a tarefa sem conclusão observável.",
+      "dimensionRefs": [
+        "controlled-execution",
+        "change-validation"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nAdicione um orçamento explícito e configurável ao polling assíncrono, preservando cancelamento e mensagens existentes. O encerramento por prazo deve produzir estado terminal, diagnóstico e arquivo de falha; não aplique timeout curto ao upload de mídias grandes.\n\n## Validation\n\n- Adicione um teste com MockWebServer que mantenha o status pendente até o orçamento expirar\n- Execute `.\\gradlew.bat :app:testDebugUnitTest`\n- Execute `.\\gradlew.bat :app:assembleDebug`\n- Confirme que sucesso e cancelamento continuam terminando pelos caminhos atuais",
+      "expectedArtifact": "Guardrail",
+      "expectedOutput": [
+        "Garantir que toda transcrição assíncrona alcance sucesso, erro, cancelamento ou expiração com diagnóstico preservado."
+      ]
+    },
+    {
+      "id": "native-release-gap",
+      "title": "O build comum não valida o pacote nativo distribuído",
+      "severity": "High",
+      "reason": "native-dependencies/README.md declara que assembleDebug não executa CMake nem inclui bibliotecas nativas. O caminho completo exige `-PbuildNativeComponents=true`, um script adicional e atualização manual de versão, URLs, tamanhos e SHA-256 em NativeDependencyManager.kt; não há workflow do aplicativo no repositório que execute e aceite essa cadeia.",
+      "dimensionRefs": [
+        "reliable-delivery"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nCrie uma porta de aceitação reproduzível para o pacote nativo sem alterar o build rápido comum. A verificação deve compilar os componentes, gerar os ZIPs por arquitetura e falhar quando versão, tamanho ou SHA-256 publicados não corresponderem ao manifesto do aplicativo.\n\n## Validation\n\n- Execute `.\\gradlew.bat assembleDebug -PbuildNativeComponents=true`\n- Execute `.\\scripts\\build-android-native-dependencies.ps1 -Version 2`\n- Verifique por inspeção automatizada a correspondência entre artefatos gerados e NativeDependencyManager.kt\n- Não publique nem assine artefatos sem aprovação explícita",
+      "expectedArtifact": "Workflow",
+      "expectedOutput": [
+        "Separar o build rápido da porta de release, mas impedir que APK e dependências nativas incompatíveis sejam promovidos juntos."
+      ]
+    },
+    {
+      "id": "stt-failure-correlation",
+      "title": "Falhas de STT podem perder a correlação necessária ao diagnóstico",
+      "severity": "Medium",
+      "reason": "O identificador remoto da transcrição fica local ao método de polling, enquanto writeFailureFiles grava apenas snapshots genéricos e ignora qualquer exceção de escrita. Se a gravação falhar ou uma consulta ficar pendente, o artefato resultante pode não informar qual operação remota consultar nem que o próprio diagnóstico foi perdido.",
+      "dimensionRefs": [
+        "change-validation",
+        "learning-capture"
+      ],
+      "aiFixPrompt": "/better-harness fix this issue\n\nIntroduza um identificador estável de execução e preserve, quando disponível, provedor, transcriptId, arquivo original, estado terminal e falha de persistência. Mantenha o conteúdo de áudio e credenciais fora do diagnóstico. Faça a escrita falhar de forma observável, sem mascarar o erro original.\n\n## Validation\n\n- Adicione testes para falha remota e falha ao escrever os artefatos\n- Execute `.\\gradlew.bat :app:testDebugUnitTest`\n- Execute `.\\gradlew.bat :app:assembleDebug`\n- Confirme que nenhum segredo ou corpo de áudio é registrado",
+      "expectedArtifact": "Diagnostic artifact",
+      "expectedOutput": [
+        "Gerar um registro de falha correlacionável e seguro, inclusive quando a persistência do diagnóstico não puder ser concluída."
+      ]
+    }
+  ]
+}

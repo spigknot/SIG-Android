@@ -252,6 +252,9 @@ class RemoteSttActivity : AppCompatActivity() {
     // Trava se a requisição atual solicitou diarização (controle da
     // alternância instantânea entre texto plano e por interlocutores).
     @Volatile private var wasDiarizationRequested = false
+    // Correlação do fluxo async da AssemblyAI (diagnóstico de falha).
+    @Volatile private var assemblyaiRunId: String? = null
+    @Volatile private var assemblyaiLastTranscriptId: String? = null
     private lateinit var batchProgressBox: View
     private lateinit var batchProgressRows: LinearLayout
     private val batchRowCells = mutableListOf<Triple<TextView, TextView, TextView>>()
@@ -4161,7 +4164,9 @@ class RemoteSttActivity : AppCompatActivity() {
         // codecs (ex.: .opus do WhatsApp) e enviaria curto como async.
         val audioDurationMs = probeDurationMs(prepared.uploadFile.file)
             ?: prepared.item.durationMs
-        val result = if (config.isAssemblyaiApi && audioDurationMs >= 120000L) {
+        val result = if (config.isAssemblyaiApi &&
+            AssemblyAiAsyncFlow.shouldUseAsync(audioDurationMs)
+        ) {
             // A Sync API da AssemblyAI aceita até 2 minutos: arquivos maiores
             // vão para o fluxo assíncrono (upload + submit + polling a cada 3s).
             sendAssemblyaiAsyncTranscription(prepared, terminalLines)
@@ -4247,58 +4252,59 @@ class RemoteSttActivity : AppCompatActivity() {
         } finally {
             currentCalls.remove(submitCall)
         }
+        assemblyaiLastTranscriptId = transcriptId
+        assemblyaiRunId = "aai-" + java.util.UUID.randomUUID().toString().substring(0, 8)
 
-        // 3) Polling a cada 3 segundos até completed/error.
-        var attempt = 0
-        while (true) {
-            attempt++
-            ensureNotCancelled()
-            runOnUiThread {
-                status.text = "AssemblyAI: aguardando transcrição assíncrona (${prepared.item.name}, tentativa $attempt)..."
-            }
-            appendTerminal(terminalLines, "AssemblyAI async: aguardando resposta (tentativa $attempt)")
-            runOnUiThread { updateTerminalText(terminalLines) }
-
-            val pollCall = client.newCall(
-                Request.Builder()
-                    .url("https://api.assemblyai.com/v2/transcript/$transcriptId")
-                    .header("Authorization", apiKey)
-                    .get()
-                    .build()
-            )
-            currentCalls.add(pollCall)
-            val (statusName, text, error) = try {
-                pollCall.execute().use { response ->
-                    val body = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) {
-                        throw IllegalStateException("AssemblyAI poll respondeu ${response.code}: ${body.take(240)}")
-                    }
-                    val payload = JSONObject(body)
-                    Triple(payload.optString("status"), payload.optString("text"), payload.optString("error"))
-                }
-            } finally {
-                currentCalls.remove(pollCall)
-            }
-
-            when (statusName) {
-                "completed" -> {
-                    if (text.isBlank()) {
-                        throw IllegalStateException("A AssemblyAI retornou uma transcrição vazia (async).")
-                    }
-                    return TranscriptionResult(prepared.index, prepared.item.name, text)
-                }
-                "error" -> throw IllegalStateException(
-                    "AssemblyAI async falhou: ${error.ifBlank { "erro desconhecido" }}"
+        // 3) Polling a cada 3 segundos com orçamento terminal (AssemblyAiAsyncFlow).
+        val outcome = AssemblyAiAsyncFlow.pollUntilTerminal(
+            fetchStatus = {
+                val pollCall = client.newCall(
+                    Request.Builder()
+                        .url("https://api.assemblyai.com/v2/transcript/$transcriptId")
+                        .header("Authorization", apiKey)
+                        .get()
+                        .build()
                 )
-                else -> {
-                    // Espera 3 segundos em fatias para respeitar o cancelamento.
-                    repeat(6) {
-                        ensureNotCancelled()
-                        Thread.sleep(500L)
+                currentCalls.add(pollCall)
+                try {
+                    pollCall.execute().use { response ->
+                        val body = response.body?.string().orEmpty()
+                        if (!response.isSuccessful) {
+                            throw IllegalStateException("AssemblyAI poll respondeu ${response.code}: ${body.take(240)}")
+                        }
+                        val payload = JSONObject(body)
+                        Triple(payload.optString("status"), payload.optString("text"), payload.optString("error"))
                     }
+                } finally {
+                    currentCalls.remove(pollCall)
                 }
+            },
+            isCancelled = { cancelRequested },
+            onAttempt = { attempt ->
+                runOnUiThread {
+                    status.text = "AssemblyAI: aguardando transcrição assíncrona (${prepared.item.name}, tentativa $attempt)..."
+                }
+                appendTerminal(terminalLines, "AssemblyAI async: aguardando resposta (tentativa $attempt)")
+                runOnUiThread { updateTerminalText(terminalLines) }
+            },
+        )
+        when (outcome) {
+            is AssemblyAiAsyncFlow.PollOutcome.Completed ->
+                return TranscriptionResult(prepared.index, prepared.item.name, outcome.text)
+            is AssemblyAiAsyncFlow.PollOutcome.Failed ->
+                throw IllegalStateException(outcome.message)
+            is AssemblyAiAsyncFlow.PollOutcome.Cancelled -> {
+                ensureNotCancelled()
+                throw IllegalStateException("AssemblyAI async cancelado.")
             }
+            is AssemblyAiAsyncFlow.PollOutcome.TimedOut -> throw IllegalStateException(
+                "AssemblyAI async expirou após ${outcome.attempts} tentativas " +
+                    "(~${AssemblyAiAsyncFlow.POLL_BUDGET_MILLIS / 60000} min); " +
+                    "transcriptId=$transcriptId — a transcrição pode concluir depois."
+            )
         }
+        @Suppress("UNREACHABLE_CODE")
+        throw IllegalStateException("AssemblyAI async terminou sem estado.")
     }
 
     private fun describeUploadFile(file: File): String {
@@ -6073,10 +6079,26 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun writeFailureFiles(sessionDir: File, terminalLines: StringBuilder, logLines: StringBuilder, message: String) {
-        try {
-            File(sessionDir, "terminal.txt").writeText(snapshotText(terminalLines), Charsets.UTF_8)
-            File(sessionDir, "log.txt").writeText(logLines.toString() + "\n$message\n", Charsets.UTF_8)
-        } catch (_: Throwable) {
+        // Correlação reader-safe (F5): run id + transcriptId + provedor quando
+        // disponíveis; nenhum segredo nem corpo de áudio entra aqui.
+        val correlation = buildMap {
+            assemblyaiRunId?.let { put("run_id", it) }
+            assemblyaiLastTranscriptId?.let { put("transcript_id", it) }
+            if (assemblyaiRunId != null || assemblyaiLastTranscriptId != null) {
+                put("provider", "AssemblyAI")
+            }
+        }
+        val warnings = AssemblyAiAsyncFlow.writeDiagnostics(
+            sessionDir = sessionDir,
+            correlation = correlation,
+            terminalSnapshot = snapshotText(terminalLines),
+            logSnapshot = logLines.toString(),
+            message = message,
+        )
+        // A falha de persistência do diagnóstico é OBSERVÁVEL (não mascarada).
+        for (warning in warnings) {
+            appendTerminal(logLines, "Aviso: $warning")
+            runOnUiThread { updateTerminalText(logLines) }
         }
     }
 
