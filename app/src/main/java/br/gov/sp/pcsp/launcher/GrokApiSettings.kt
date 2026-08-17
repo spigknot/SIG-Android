@@ -106,18 +106,6 @@ object GrokApiSettings {
 
     fun hasElevenlabsApiKey(): Boolean = isPlausibleElevenlabsKey()
 
-    /** Semeia as chaves padrão na primeira execução (usuário pode trocar nas configurações). */
-    fun seedDefaultApiKeys() {
-        val editor = preferences().edit()
-        if (assemblyaiApiKey().isEmpty()) {
-            editor.putString(KEY_ASSEMBLYAI_API, "35beb8949e8045cd9894015594535d5f")
-        }
-        if (elevenlabsApiKey().isEmpty()) {
-            editor.putString(KEY_ELEVENLABS_API, "sk_3441e8d05c2d6c6f32ae1105d05d7c6e4accd063d6fddbd0")
-        }
-        editor.apply()
-    }
-
     fun hasApiKey(): Boolean = isPlausibleXaiKey()
 
     fun selectedTranscription(): String = preferences().getString(

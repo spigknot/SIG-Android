@@ -8,11 +8,7 @@ object ImeiApiSettings {
 
     fun apiKey(): String {
         val preferences = preferences()
-        return if (preferences.contains(KEY_API)) {
-            preferences.getString(KEY_API, "").orEmpty().trim()
-        } else {
-            BuildConfig.IMEICHECK_API_KEY.trim()
-        }
+        return preferences.getString(KEY_API, "").orEmpty().trim()
     }
 
     fun setApiKey(value: String) {

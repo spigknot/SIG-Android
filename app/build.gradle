@@ -14,11 +14,6 @@ def localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.isFile()) {
     localPropertiesFile.withInputStream { localProperties.load(it) }
 }
-def imeiCheckApiKey = System.getenv("IMEICHECK_API_KEY")
-        ?: localProperties.getProperty("IMEICHECK_API_KEY", "")
-def quotedImeiCheckApiKey = '"' + imeiCheckApiKey
-        .replace('\\', '\\\\')
-        .replace('"', '\\"') + '"'
 def buildNativeComponents = providers.gradleProperty("buildNativeComponents")
         .orNull?.toBoolean() ?: false
 
@@ -90,7 +85,6 @@ android {
         versionCode 26
         versionName "1.463"
 
-        buildConfigField "String", "IMEICHECK_API_KEY", quotedImeiCheckApiKey
         buildConfigField "boolean", "ENABLE_NPU_TESTS", "true"
 
         if (buildNativeComponents) {
