@@ -2637,6 +2637,11 @@ class RemoteSttActivity : AppCompatActivity() {
         return output.toString().trim().ifBlank { fallback }
     }
 
+    // Labels de exibição do idioma (SOMENTE cosmético): o usuário vê "auto",
+    // mas o valor salvo/enviado continua sendo "multi". Nunca mude os valores.
+    private fun languageLabel(value: String): String = if (value == "multi") "auto" else value
+    private fun languageValue(label: String): String = if (label == "auto") "multi" else label
+
     private fun showLiveLanguageMenu() {
         val config = TranscriptionModelStore.selectedConfig()
         val apiProvider = when {
@@ -2663,9 +2668,9 @@ class RemoteSttActivity : AppCompatActivity() {
             else -> listOf("multi", "pt", "es", "en", "custom")
         }
         PopupMenu(this, buttonLiveLanguage).apply {
-            options.forEach { menu.add(it) }
+            options.forEach { menu.add(languageLabel(it)) }
             setOnMenuItemClickListener { item ->
-                val chosen = item.title.toString()
+                val chosen = languageValue(item.title.toString())
                 if (chosen == "custom") {
                     showCustomLanguageDialog(apiProvider)
                 } else {
@@ -2695,7 +2700,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "grok" -> GrokApiSettings.grokLanguageMode() to GrokApiSettings.grokCustomLanguage()
             else -> return selectedLiveLanguage.shortLabel
         }
-        return if (mode == "custom" && custom.isNotBlank()) custom else mode
+        return if (mode == "custom" && custom.isNotBlank()) custom else languageLabel(mode)
     }
 
     private fun showCustomLanguageDialog(provider: String) {
