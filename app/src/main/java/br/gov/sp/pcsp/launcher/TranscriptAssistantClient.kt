@@ -283,7 +283,13 @@ object TranscriptAssistantClient {
         return newFallbackCall(client, primary, buildRequest(client, serverConfig, systemPrompt, userPrompt, fallbackUrl))
     }
 
-    /** max_tokens = nº de tokens do input (vLLM /tokenize) com fallback local. */
+    /** max_tokens = tokens do input com a margem do template do chat.
+     *
+     * O servidor é um llama.cpp: /tokenize conta o texto CRU via
+     * {"content": <texto>} -> {"tokens": [...]}; o template do chat (turnos
+     * system/user) adiciona ~50% em textos curtos, então aplicamos a margem
+     * 1.5 (no teste real bateu com o usage.prompt_tokens). Sem o /tokenize,
+     * estimativa de 4 caracteres por token, também com a margem. */
     private fun countInputTokens(
         client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
@@ -302,22 +308,23 @@ object TranscriptAssistantClient {
         for (tokenizeUrl in bases) {
             try {
                 val body = JSONObject()
-                    .put("model", serverConfig.parameters.optString("model", ModelServerStore.SERVER_GEMMA_MODEL))
-                    .put("prompt", text)
+                    .put("content", text)
                     .toString()
                     .toRequestBody(jsonMediaType)
                 val request = Request.Builder().url(tokenizeUrl).post(body).build()
                 tokenizeClient.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
-                        val count = JSONObject(response.body?.string().orEmpty()).optInt("count", -1)
-                        if (count > 0) return count
+                        val root = JSONObject(response.body?.string().orEmpty())
+                        var count = root.optInt("count", -1)
+                        if (count <= 0) count = root.optJSONArray("tokens")?.length() ?: 0
+                        if (count > 0) return maxOf(1, Math.round(count * 1.5).toInt())
                     }
                 }
             } catch (_: IOException) {
             } catch (_: Exception) {
             }
         }
-        return maxOf(1, Math.round(text.length / 4.0).toInt())
+        return maxOf(1, Math.round((text.length / 4.0) * 1.5).toInt())
     }
 
     internal fun newFallbackCall(client: OkHttpClient, primary: Request, fallback: Request): Call =
