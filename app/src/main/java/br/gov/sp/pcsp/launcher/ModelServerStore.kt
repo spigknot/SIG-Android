@@ -64,7 +64,7 @@ object ModelServerStore {
 
     private fun serverGemma() = Config(
         SERVER_GEMMA_NAME,
-        "http://servidor:8500/v1/chat/completions",
+        "http://servidor:8400/v1/chat/completions",
         JSONObject()
             .put("model", SERVER_GEMMA_MODEL)
             .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
@@ -73,7 +73,7 @@ object ModelServerStore {
             .put("top_k", 1)
             .put("top_p", 1),
         provider = "servidor",
-        fallbackUrl = "http://avare:8500/v1/chat/completions"
+        fallbackUrl = "http://avare:8400/v1/chat/completions"
     )
 
     private fun directGrok() = Config(
