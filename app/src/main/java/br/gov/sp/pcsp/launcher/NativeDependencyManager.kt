@@ -68,8 +68,58 @@ object NativeDependencyManager {
     fun activateIfInstalled(context: Context): Boolean {
         if (!isInstalled(context)) return false
         val abi = supportedAbi() ?: return false
-        System.setProperty(LIBRARY_PROPERTY, File(installedRoot(context, abi), "lib").absolutePath)
-        return true
+        val libDir = File(installedRoot(context, abi), "lib")
+        System.setProperty(LIBRARY_PROPERTY, libDir.absolutePath)
+        val loaded = preloadFfmpegLibraries(context, libDir)
+        debugLog(context, "activateIfInstalled: dir=$libDir preload=$loaded")
+        return loaded
+    }
+
+    /** Pré-carrega as libs nativas do pacote NA ORDEM DE DEPENDÊNCIA antes do
+     * primeiro uso do FFmpegKit (o wrapper as carrega via System.load; aqui
+     * garantimos a ordem e logamos cada passo para diagnóstico). */
+    private fun preloadFfmpegLibraries(context: Context, libDir: File): Boolean {
+        val order = listOf(
+            "libc++_shared.so",
+            "libomp.so",
+            "libavutil.so",
+            "libswresample.so",
+            "libswscale.so",
+            "libavformat.so",
+            "libavcodec.so",
+            "libavfilter.so",
+            "libavdevice.so",
+            "libffmpegkit_abidetect.so",
+            "libffmpegkit.so",
+            "libsig_whisper.so",
+            "libsig_npu_probe.so",
+        )
+        var ok = true
+        for (name in order) {
+            val lib = File(libDir, name)
+            if (!lib.isFile) {
+                debugLog(context, "preload: FALTA $name")
+                ok = false
+                continue
+            }
+            try {
+                System.load(lib.absolutePath)
+                debugLog(context, "preload: OK $name")
+            } catch (error: Throwable) {
+                debugLog(context, "preload: ERRO $name -> ${error.javaClass.simpleName}: ${error.message}")
+                ok = false
+            }
+        }
+        return ok
+    }
+
+    private fun debugLog(context: Context, message: String) {
+        android.util.Log.i("SigNative", message)
+        try {
+            val file = File(context.filesDir, "native_debug.txt")
+            file.appendText("${System.currentTimeMillis()} $message\n")
+        } catch (_: Throwable) {
+        }
     }
 
     fun sileroModelFile(context: Context): File {
