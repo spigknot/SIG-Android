@@ -647,6 +647,63 @@ class RemoteSttActivity : AppCompatActivity() {
         if (!handleIncomingShareIntent(intent)) {
             restoreInMemoryDraft()
         }
+        ensureNativeDependenciesPrompt()
+    }
+
+    /** Na abertura do app: oferece o download dos componentes nativos quando
+     * ainda não instalados. Se o usuário recusar, o aviso volta na próxima
+     * abertura até o download ser aceito/concluído. */
+    private fun ensureNativeDependenciesPrompt() {
+        if (NativeDependencyManager.isInstalled(this)) return
+        AlertDialog.Builder(this)
+            .setTitle("Componentes nativos")
+            .setMessage("Para usar as ferramentas de vídeo/áudio e o transcritor offline, o SIG precisa baixar os componentes nativos (~39 MB, somente na primeira vez). Deseja baixar agora?")
+            .setPositiveButton("Baixar") { _, _ -> downloadNativeDependencies() }
+            .setNegativeButton("Agora não", null)
+            .setCancelable(false)
+            .show()
+    }
+
+    private fun downloadNativeDependencies() {
+        val progressView = layoutInflater.inflate(R.layout.dialog_native_download, null)
+        val statusText = progressView.findViewById<TextView>(R.id.nativeStatusText)
+        val progressBar = progressView.findViewById<ProgressBar>(R.id.nativeProgressBar)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Baixando componentes nativos")
+            .setView(progressView)
+            .setCancelable(false)
+            .create()
+        dialog.show()
+        Thread {
+            val result = NativeDependencyManager.install(this) { progress ->
+                runOnUiThread {
+                    statusText.text = if (progress.total > 0) {
+                        "${progress.stage} · ${progress.downloaded * 100 / progress.total}%"
+                    } else {
+                        progress.stage
+                    }
+                    progressBar.max = progress.total.toInt().coerceAtLeast(1)
+                    progressBar.progress = progress.downloaded.toInt()
+                }
+            }
+            runOnUiThread {
+                dialog.dismiss()
+                result.fold(
+                    onSuccess = {
+                        NativeDependencyManager.activateIfInstalled(this)
+                    },
+                    onFailure = { error ->
+                        AlertDialog.Builder(this)
+                            .setTitle("Falha ao baixar os componentes nativos")
+                            .setMessage(error.message ?: error.javaClass.simpleName)
+                            .setPositiveButton("Tentar novamente") { _, _ -> downloadNativeDependencies() }
+                            .setNegativeButton("Agora não", null)
+                            .setCancelable(false)
+                            .show()
+                    }
+                )
+            }
+        }.start()
     }
 
     override fun onNewIntent(intent: Intent) {
