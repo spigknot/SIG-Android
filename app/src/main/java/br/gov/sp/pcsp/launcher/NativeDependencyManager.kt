@@ -70,9 +70,15 @@ object NativeDependencyManager {
         val abi = supportedAbi() ?: return false
         val libDir = File(installedRoot(context, abi), "lib")
         System.setProperty(LIBRARY_PROPERTY, libDir.absolutePath)
-        val loaded = preloadFfmpegLibraries(context, libDir)
-        debugLog(context, "activateIfInstalled: dir=$libDir preload=$loaded")
-        return loaded
+        debugLog(context, "activateIfInstalled: dir=$libDir")
+        return true
+    }
+
+    /** Versão pública: pré-carrega as libs do pacote do aparelho (no momento do
+     * uso, nunca na abertura — um crash nativo aqui não trava o app). */
+    fun preloadFfmpegLibraries(context: Context) {
+        val abi = supportedAbi() ?: return
+        preloadFfmpegLibraries(context, File(installedRoot(context, abi), "lib"))
     }
 
     /** Pré-carrega as libs nativas do pacote NA ORDEM DE DEPENDÊNCIA antes do
