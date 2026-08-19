@@ -17,8 +17,11 @@ class FfmpegKitClasspathTest {
 
     @Test
     fun `FFmpegKitConfig e a dependencia smart-exception estao no classpath`() {
-        assertNotNull(Class.forName("com.arthenica.ffmpegkit.FFmpegKitConfig"))
-        assertNotNull(Class.forName("com.arthenica.smartexception.java.Exceptions"))
-        assertNotNull(Class.forName("com.arthenica.ffmpegkit.FFmpegKit"))
+        // initialize=false: verifica a PRESENCA da classe sem rodar o <clinit>
+        // (que carregaria a lib nativa do Android, ausente no JVM dos testes).
+        val loader = javaClass.classLoader!!
+        assertNotNull(Class.forName("com.arthenica.ffmpegkit.FFmpegKitConfig", false, loader))
+        assertNotNull(Class.forName("com.arthenica.smartexception.java.Exceptions", false, loader))
+        assertNotNull(Class.forName("com.arthenica.ffmpegkit.FFmpegKit", false, loader))
     }
 }
