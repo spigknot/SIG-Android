@@ -32,13 +32,5 @@ class FfmpegActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_insert_audio).setOnClickListener {
             startActivity(Intent(this, FfmpegInsertAudioActivity::class.java))
         }
-
-        // Pré-carrega as libs do ffmpeg no momento do USO (nunca na abertura do
-        // app — um crash nativo aqui não trava a inicialização).
-        if (NativeDependencyManager.isInstalled(this)) {
-            Thread {
-                NativeDependencyManager.preloadFfmpegLibraries(this)
-            }.start()
-        }
     }
 }

@@ -74,8 +74,14 @@ object NativeDependencyManager {
         return true
     }
 
-    /** Versão pública: pré-carrega as libs do pacote do aparelho (no momento do
-     * uso, nunca na abertura — um crash nativo aqui não trava o app). */
+    /** Pré-carrega as libs nativas do pacote NA ORDEM DE DEPENDÊNCIA antes do
+     * primeiro uso do FFmpegKit.
+     *
+     * ATENÇÃO: o wrapper do FFmpegKit (NativeLoader) já carrega as libs sozinho
+     * via sig.native.library.dir — o System.load manual do libffmpegkit.so fora
+     * desse fluxo causa SIGSEGV (observado no campo). NÃO chame este método no
+     * fluxo normal; fica apenas como ferramenta de diagnóstico. */
+    @Suppress("unused")
     fun preloadFfmpegLibraries(context: Context) {
         val abi = supportedAbi() ?: return
         preloadFfmpegLibraries(context, File(installedRoot(context, abi), "lib"))
