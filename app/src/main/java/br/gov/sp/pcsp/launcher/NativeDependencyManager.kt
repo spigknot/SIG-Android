@@ -77,7 +77,9 @@ object NativeDependencyManager {
 
     /** Pré-carrega as libs nativas do pacote NA ORDEM DE DEPENDÊNCIA antes do
      * primeiro uso do FFmpegKit (o wrapper as carrega via System.load; aqui
-     * garantimos a ordem e logamos cada passo para diagnóstico). */
+     * garantimos a ordem e logamos cada passo para diagnóstico).
+     * Carrega SÓ o núcleo do ffmpeg — o sig_whisper e o npu_probe têm carga
+     * própria (WhisperNative) e NÃO podem bloquear as ferramentas de vídeo. */
     private fun preloadFfmpegLibraries(context: Context, libDir: File): Boolean {
         val order = listOf(
             "libc++_shared.so",
@@ -91,8 +93,6 @@ object NativeDependencyManager {
             "libavdevice.so",
             "libffmpegkit_abidetect.so",
             "libffmpegkit.so",
-            "libsig_whisper.so",
-            "libsig_npu_probe.so",
         )
         var ok = true
         for (name in order) {
