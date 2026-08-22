@@ -3060,10 +3060,9 @@ class RemoteSttActivity : AppCompatActivity() {
         val config = TranscriptionModelStore.selectedConfig()
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
             config.isAssemblyaiApi || config.isElevenlabsApi
-        // Granite (avare e servidor/NAR) não oferece seleção de idioma nem
+        // Granite (servidor/NAR) não oferece seleção de idioma nem
         // diarização; todos os demais modelos exibem ambos.
-        val graniteModel = config.name == TranscriptionModelStore.AVARE_NAME ||
-            config.name == TranscriptionModelStore.SERVER_NAME
+        val graniteModel = config.name == TranscriptionModelStore.SERVER_NAME
         // Regra de diarização por provedor: Deepgram e AssemblyAI sempre;
         // Scribe v2 só em REST (a Ocorrência usa WebSocket/Realtime);
         // Grok nunca; granite não exibe a checkbox.
@@ -6919,8 +6918,8 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 7204
         private const val REQUEST_SAVE_RECORDING_DIR = 7205
         private const val REQUEST_RECORD_AUDIO_PERMISSION = 7206
-        private const val DEFAULT_SERVER_IP = "avare"
-        private const val DEFAULT_SERVER_NAME = "Avare"
+        private const val DEFAULT_SERVER_IP = "servidor"
+        private const val DEFAULT_SERVER_NAME = "Servidor"
         private const val SERVER_PORT = 8100
         private const val SERVER_WORKERS = 8
         private const val LIVE_UPLOAD_WORKERS = 1

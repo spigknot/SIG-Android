@@ -58,7 +58,6 @@ object ModelServerStore {
             parameters(normalized, if (parts) defaultReasoning(normalized) else GrokApiSettings.textReasoning()),
             isProxy = true,
             provider = normalized,
-            fallbackUrl = "http://avare:8500"
         )
     }
 
@@ -73,7 +72,6 @@ object ModelServerStore {
             .put("top_k", 1)
             .put("top_p", 1),
         provider = "servidor",
-        fallbackUrl = "http://avare:8400/v1/chat/completions"
     )
 
     private fun directGrok() = Config(

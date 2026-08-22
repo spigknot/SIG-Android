@@ -3,7 +3,6 @@ package br.gov.sp.pcsp.launcher
 import org.json.JSONObject
 
 object TranscriptionModelStore {
-    const val AVARE_NAME = "avare"
     const val SERVER_NAME = "servidor"
 
     data class Config(
@@ -21,7 +20,6 @@ object TranscriptionModelStore {
 
     fun readConfigs(): List<Config> {
         val available = mutableListOf(
-            Config(AVARE_NAME, "http://avare:8100", JSONObject().put("model", "granite-speech-4.1-2b-plus-ar")),
             Config(SERVER_NAME, "http://servidor:8100", JSONObject().put("model", "granite-speech-4.1-2b-nar"))
         )
         if (GrokApiSettings.isPlausibleXaiKey()) {

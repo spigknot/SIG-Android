@@ -110,7 +110,7 @@ object GrokApiSettings {
 
     fun selectedTranscription(): String = preferences().getString(
         KEY_TRANSCRIPTION,
-        TranscriptionModelStore.AVARE_NAME
+        TranscriptionModelStore.SERVER_NAME
     ).orEmpty()
 
     fun selectTranscription(name: String) {
@@ -120,7 +120,7 @@ object GrokApiSettings {
     fun isTranscriptionSelected(): Boolean = selectedTranscription() == TRANSCRIPTION_NAME
 
     fun selectTranscription(selected: Boolean) {
-        selectTranscription(if (selected) TRANSCRIPTION_NAME else TranscriptionModelStore.AVARE_NAME)
+        selectTranscription(if (selected) TRANSCRIPTION_NAME else TranscriptionModelStore.SERVER_NAME)
     }
 
     fun selectedText(): String {
