@@ -21,12 +21,12 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://drive.usercontent.google.com/download?id=1Ni3EpuvgX-KGOjSDkVR4iAtF7ZL-ueM2&export=download&confirm=t",
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-arm64-v8a.zip",
             "b777ae0dfe90ae73fe91a2c72286a75d36d49a40bcf14fb49de3aed05f8f2533",
             41_353_214L
         ),
         "x86_64" to PackageSpec(
-            "https://drive.usercontent.google.com/download?id=1arpCKqFr-sUbpmjty9ZLHTeVHjUGQehC&export=download&confirm=t",
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-x86_64.zip",
             "0d8b5b948b7b6a50a3dd3e3533374d837a0ec78d937d28addcee7ff2eaf9fb8f",
             43_186_016L
         )
