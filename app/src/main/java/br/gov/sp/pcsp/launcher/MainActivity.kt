@@ -70,6 +70,7 @@ class MainActivity : AppCompatActivity() {
             true
         }
         NativeDependencyPrompt.showIfNeeded(this)
+        AppUpdateChecker.check(this)
     }
 
     override fun onRequestPermissionsResult(
