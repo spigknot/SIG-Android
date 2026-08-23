@@ -24,7 +24,7 @@ object ModelServerStore {
     fun defaultConfig() = selectedConfig()
 
     fun readConfigs(): List<Config> {
-        val available = mutableListOf(proxyConfig("grok"), proxyConfig("deepseek"), serverGemma())
+        val available = mutableListOf(proxyConfig(), serverGemma())
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrok()
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrokNonReasoning()
         if (GrokApiSettings.isPlausibleDeepseekKey()) available += directDeepseek()
@@ -42,20 +42,23 @@ object ModelServerStore {
         return true
     }
 
-    fun configForParts(name: String, proxyProvider: String): Config = when (name) {
-        GrokApiSettings.TEXT_NAME -> directGrok()
+    fun configForParts(name: String, reasoning: String): Config = when (name) {
+        GrokApiSettings.IA_PROXY_NAME,
+        GrokApiSettings.IA_PROXY_DEEPSEEK_NAME -> proxyConfig()
+        GrokApiSettings.TEXT_NAME -> directGrok(reasoning)
         GrokApiSettings.GROK_NON_REASONING_TEXT_NAME -> directGrokNonReasoning()
-        GrokApiSettings.DEEPSEEK_TEXT_NAME -> directDeepseek()
-        PartsExtractionSettings.MODEL_PROXY_DEEPSEEK -> proxyConfig("deepseek", parts = true)
-        else -> proxyConfig(proxyProvider, parts = true)
+        GrokApiSettings.DEEPSEEK_TEXT_NAME -> directDeepseek(reasoning)
+        SERVER_GEMMA_NAME -> serverGemma()
+        else -> proxyConfig()
     }
 
-    private fun proxyConfig(provider: String = "grok", parts: Boolean = false): Config {
-        val normalized = if (provider == "deepseek") "deepseek" else "grok"
+    private fun proxyConfig(): Config {
+        val model = GrokApiSettings.selectedProxyModel()
+        val normalized = if (model == GrokApiSettings.DEEPSEEK_TEXT_NAME) "deepseek" else "grok"
         return Config(
-            if (normalized == "deepseek") GrokApiSettings.IA_PROXY_DEEPSEEK_NAME else GrokApiSettings.IA_PROXY_NAME,
+            GrokApiSettings.IA_PROXY_NAME,
             "http://servidor:8500",
-            parameters(normalized, if (parts) defaultReasoning(normalized) else GrokApiSettings.textReasoning()),
+            parameters(normalized, defaultReasoning(normalized), model),
             isProxy = true,
             provider = normalized,
         )
@@ -74,10 +77,10 @@ object ModelServerStore {
         provider = "servidor",
     )
 
-    private fun directGrok() = Config(
+    private fun directGrok(reasoning: String = GrokApiSettings.textReasoning()) = Config(
         GrokApiSettings.TEXT_NAME,
         "https://api.x.ai/v1/responses",
-        parameters("grok", GrokApiSettings.textReasoning()),
+        parameters("grok", reasoning, GrokApiSettings.TEXT_NAME),
         isGrokApi = true,
         provider = "grok"
     )
@@ -93,20 +96,25 @@ object ModelServerStore {
         provider = "grok"
     )
 
-    private fun directDeepseek() = Config(
+    private fun directDeepseek(reasoning: String = GrokApiSettings.textReasoning()) = Config(
         GrokApiSettings.DEEPSEEK_TEXT_NAME,
         "https://api.deepseek.com/chat/completions",
-        parameters("deepseek", GrokApiSettings.textReasoning()),
+        parameters("deepseek", reasoning, GrokApiSettings.DEEPSEEK_TEXT_NAME),
         isDeepseekApi = true,
         provider = "deepseek"
     )
 
-    private fun parameters(provider: String, reasoning: String): JSONObject = if (provider == "deepseek") {
-        JSONObject().put("model", "deepseek-v4-flash").put("temperature", 0.0)
-            .put("max_tokens", 10000).put("reasoning_effort", reasoning.takeIf { it == "high" } ?: "none")
+    private fun parameters(provider: String, reasoning: String, model: String): JSONObject = if (provider == "deepseek") {
+        JSONObject().put("model", model).put("temperature", 0.0)
+            .put("max_tokens", 10000).put("reasoning_effort", reasoning)
     } else {
-        JSONObject().put("model", "grok-4.6").put("temperature", 0.0)
-            .put("max_output_tokens", 10000).put("reasoning", JSONObject().put("effort", reasoning.takeIf { it == "high" } ?: "low"))
+        JSONObject().put("model", model).put("temperature", 0.0)
+            .put("max_output_tokens", 10000)
+            .apply {
+                if (model != GrokApiSettings.GROK_NON_REASONING_TEXT_NAME) {
+                    put("reasoning", JSONObject().put("effort", reasoning))
+                }
+            }
     }
 
     private fun defaultReasoning(provider: String) = if (provider == "deepseek") "none" else "low"

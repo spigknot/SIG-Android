@@ -5,23 +5,28 @@ import android.graphics.Color
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.RadioButton
 import android.widget.RadioGroup
-import android.widget.Spinner
-import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class ModelSettingsActivity : AppCompatActivity() {
     private lateinit var transcriptionGroup: RadioGroup
     private lateinit var textGroup: RadioGroup
+    private lateinit var textProxyControls: View
+    private lateinit var textProxyGroup: RadioGroup
+    private lateinit var textReasoningControls: View
     private lateinit var reasoningGroup: RadioGroup
     private lateinit var partsMethodGroup: RadioGroup
+    private lateinit var partsModelControls: View
     private lateinit var partsModelGroup: RadioGroup
+    private lateinit var partsProxyModelLabel: View
+    private lateinit var partsProxyModelGroup: RadioGroup
+    private lateinit var partsReasoningLabel: View
+    private lateinit var partsReasoningGroup: RadioGroup
     private lateinit var xaiKey: EditText
     private lateinit var deepseekKey: EditText
     private lateinit var deepgramKey: EditText
@@ -39,9 +44,17 @@ class ModelSettingsActivity : AppCompatActivity() {
         setContentView(R.layout.activity_model_settings)
         transcriptionGroup = findViewById(R.id.radio_transcription_models)
         textGroup = findViewById(R.id.radio_text_models)
+        textProxyControls = findViewById(R.id.text_proxy_controls)
+        textProxyGroup = findViewById(R.id.radio_text_proxy_models)
+        textReasoningControls = findViewById(R.id.text_reasoning_controls)
         reasoningGroup = findViewById(R.id.radio_text_reasoning)
         partsMethodGroup = findViewById(R.id.radio_parts_extraction)
+        partsModelControls = findViewById(R.id.parts_model_controls)
         partsModelGroup = findViewById(R.id.radio_parts_model)
+        partsProxyModelLabel = findViewById(R.id.label_parts_proxy_model)
+        partsProxyModelGroup = findViewById(R.id.radio_parts_proxy_model)
+        partsReasoningLabel = findViewById(R.id.label_parts_reasoning)
+        partsReasoningGroup = findViewById(R.id.radio_parts_reasoning)
         xaiKey = findViewById(R.id.edit_xai_key)
         deepseekKey = findViewById(R.id.edit_deepseek_key)
         deepgramKey = findViewById(R.id.edit_deepgram_key)
@@ -127,31 +140,86 @@ class ModelSettingsActivity : AppCompatActivity() {
     private fun populateText() {
         textGroup.removeAllViews()
         ModelServerStore.readConfigs().forEach { config ->
-            val label = when {
-                config.isGrokApi -> "xAI (${config.modelName})"
-                config.isDeepseekApi -> "Deepseek (deepseek-v4-flash)"
-                else -> config.name
-            }
-            textGroup.addView(radio(label, config.selected) {
+            textGroup.addView(radio(modelLabel(config), config.selected) {
                 ModelServerStore.select(config.name)
                 refreshVisibility()
             })
         }
-        refreshReasoning()
+        populateProxyModelGroup(textProxyGroup)
+        refreshTextControls()
     }
 
-    private fun refreshReasoning() {
+    private fun modelLabel(config: ModelServerStore.Config): String = when {
+        config.name == ModelServerStore.SERVER_GEMMA_NAME ->
+            "${config.name} (${config.modelName})"
+        else -> config.name
+    }
+
+    private fun populateProxyModelGroup(group: RadioGroup) {
+        group.removeAllViews()
+        val selected = GrokApiSettings.selectedProxyModel()
+        GrokApiSettings.IA_PROXY_MODELS.forEach { model ->
+            group.addView(radio(model, model == selected) {
+                GrokApiSettings.selectProxyModel(model)
+                refreshVisibility()
+            })
+        }
+    }
+
+    private fun reasoningOptions(model: String): List<Pair<String, String>> = when (model) {
+        GrokApiSettings.TEXT_NAME -> listOf(
+            "low" to "Low",
+            "medium" to "Medium",
+            "high" to "High",
+            "xhigh" to "XHigh",
+        )
+        GrokApiSettings.DEEPSEEK_TEXT_NAME -> listOf(
+            "none" to "Nenhum",
+            "low" to "Low",
+            "high" to "High",
+            "max" to "Max",
+        )
+        else -> emptyList()
+    }
+
+    private fun populateReasoningGroup(
+        group: RadioGroup,
+        model: String,
+        selected: String,
+        onSelected: (String) -> Unit,
+    ) {
+        group.removeAllViews()
+        val options = reasoningOptions(model)
+        val current = selected.takeIf { saved -> options.any { it.first == saved } }
+            ?: options.firstOrNull()?.first
+        options.forEach { (value, label) ->
+            group.addView(radio(label, value == current) { onSelected(value) })
+        }
+    }
+
+    private fun refreshTextControls() {
         val config = ModelServerStore.selectedConfig()
-        val provider = config.provider
-        reasoningGroup.removeAllViews()
-        if (config.modelName == GrokApiSettings.GROK_NON_REASONING_TEXT_NAME) {
-            reasoningGroup.visibility = View.GONE
+        if (config.isProxy) {
+            textProxyControls.visibility = View.VISIBLE
+            textReasoningControls.visibility = View.GONE
+            populateProxyModelGroup(textProxyGroup)
             return
         }
-        val options = if (provider == "deepseek") listOf("none" to "Nenhum", "high" to "High") else listOf("low" to "Low", "high" to "High")
-        val current = GrokApiSettings.textReasoning().takeIf { saved -> options.any { it.first == saved } } ?: options.first().first
+        textProxyControls.visibility = View.GONE
+        val options = reasoningOptions(config.modelName)
+        if (options.isEmpty()) {
+            textReasoningControls.visibility = View.GONE
+            reasoningGroup.removeAllViews()
+            return
+        }
+        val current = GrokApiSettings.textReasoning()
+            .takeIf { saved -> options.any { it.first == saved } }
+            ?: options.first().first
         if (current != GrokApiSettings.textReasoning()) GrokApiSettings.setTextReasoning(current)
-        options.forEach { (value, label) -> reasoningGroup.addView(radio(label, value == current) { GrokApiSettings.setTextReasoning(value) }) }
+        populateReasoningGroup(reasoningGroup, config.modelName, current) { value ->
+            GrokApiSettings.setTextReasoning(value)
+        }
+        textReasoningControls.visibility = View.VISIBLE
     }
 
     private fun populateParts() {
@@ -168,15 +236,58 @@ class ModelSettingsActivity : AppCompatActivity() {
             })
         }
         partsModelGroup.removeAllViews()
-        val models = mutableListOf(PartsExtractionSettings.MODEL_PROXY, PartsExtractionSettings.MODEL_PROXY_DEEPSEEK)
-        if (GrokApiSettings.isPlausibleXaiKey()) models += PartsExtractionSettings.MODEL_GROK
-        if (GrokApiSettings.isPlausibleXaiKey()) models += PartsExtractionSettings.MODEL_GROK_NON_REASONING
-        if (GrokApiSettings.isPlausibleDeepseekKey()) models += PartsExtractionSettings.MODEL_DEEPSEEK
-        if (PartsExtractionSettings.selectedModel(this) !in models) PartsExtractionSettings.selectModel(this, PartsExtractionSettings.MODEL_PROXY)
-        models.forEach { model ->
-            partsModelGroup.addView(radio(model, model == PartsExtractionSettings.selectedModel(this)) {
-                PartsExtractionSettings.selectModel(this, model)
+        val configs = ModelServerStore.readConfigs()
+        val selectedModel = PartsExtractionSettings.selectedModel(this)
+        val resolvedModel = selectedModel.takeIf { model -> configs.any { it.name == model } }
+            ?: PartsExtractionSettings.MODEL_PROXY.also {
+                PartsExtractionSettings.selectModel(this, it)
+            }
+        configs.forEach { config ->
+            partsModelGroup.addView(radio(modelLabel(config), config.name == resolvedModel) {
+                PartsExtractionSettings.selectModel(this, config.name)
+                refreshVisibility()
             })
+        }
+        populateProxyModelGroup(partsProxyModelGroup)
+        refreshPartsModelControls()
+    }
+
+    private fun refreshPartsModelControls() {
+        val selected = PartsExtractionSettings.selectedModel(this)
+        val config = ModelServerStore.readConfigs().firstOrNull { it.name == selected }
+        if (config == null || PartsExtractionSettings.selectedMethod(this) != PartsExtractionSettings.Method.AI) {
+            partsProxyModelLabel.visibility = View.GONE
+            partsProxyModelGroup.visibility = View.GONE
+            partsReasoningLabel.visibility = View.GONE
+            partsReasoningGroup.visibility = View.GONE
+            return
+        }
+        if (config.isProxy) {
+            partsProxyModelLabel.visibility = View.VISIBLE
+            partsProxyModelGroup.visibility = View.VISIBLE
+            partsReasoningLabel.visibility = View.GONE
+            partsReasoningGroup.visibility = View.GONE
+            populateProxyModelGroup(partsProxyModelGroup)
+            return
+        }
+        partsProxyModelLabel.visibility = View.GONE
+        partsProxyModelGroup.visibility = View.GONE
+        val options = reasoningOptions(config.modelName)
+        if (options.isEmpty()) {
+            partsReasoningLabel.visibility = View.GONE
+            partsReasoningGroup.visibility = View.GONE
+            return
+        }
+        val current = PartsExtractionSettings.reasoning(this)
+            .takeIf { saved -> options.any { it.first == saved } }
+            ?: options.first().first
+        if (current != PartsExtractionSettings.reasoning(this)) {
+            PartsExtractionSettings.selectReasoning(this, current)
+        }
+        partsReasoningLabel.visibility = View.VISIBLE
+        partsReasoningGroup.visibility = View.VISIBLE
+        populateReasoningGroup(partsReasoningGroup, config.modelName, current) { value ->
+            PartsExtractionSettings.selectReasoning(this, value)
         }
     }
 
@@ -199,36 +310,11 @@ class ModelSettingsActivity : AppCompatActivity() {
         requestParallelism.setText(requests.toString())
     }
 
-    private fun bindSpinner(spinner: Spinner, options: List<Int>, selected: Int, save: (Int) -> Unit) {
-        val labels = options.map(Int::toString)
-        spinner.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, labels) {
-            init {
-                setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-            }
-
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                return super.getView(position, convertView, parent).also { view ->
-                    (view as? TextView)?.apply {
-                        setTextColor(Color.WHITE)
-                        gravity = android.view.Gravity.CENTER
-                    }
-                }
-            }
-        }
-        spinner.setSelection(options.indexOf(selected).coerceAtLeast(0), false)
-        spinner.setOnItemSelectedListener(object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) = Unit
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
-                save(options[position])
-            }
-        })
-    }
-
     private fun refreshVisibility() {
-        val text = ModelServerStore.selectedConfig()
-        reasoningGroup.visibility = if (text.isGrokApi || text.isDeepseekApi || text.isProxy) View.VISIBLE else View.GONE
-        refreshReasoning()
-        partsModelGroup.visibility = if (PartsExtractionSettings.selectedMethod(this) == PartsExtractionSettings.Method.AI) View.VISIBLE else View.GONE
+        refreshTextControls()
+        val partsVisible = PartsExtractionSettings.selectedMethod(this) == PartsExtractionSettings.Method.AI
+        partsModelControls.visibility = if (partsVisible) View.VISIBLE else View.GONE
+        refreshPartsModelControls()
     }
 
     private fun radio(label: String, checked: Boolean, onSelected: () -> Unit): RadioButton = RadioButton(this).apply {

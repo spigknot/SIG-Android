@@ -46,16 +46,30 @@
             <TextView android:id="@+id/transcription_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
 
             <TextView style="@style/SettingsHeader" android:text="Modelo de texto" />
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="top">
-                <RadioGroup android:id="@+id/radio_text_models" style="@style/SettingsGroup" android:layout_width="0dp" android:layout_weight="1" />
-                <RadioGroup android:id="@+id/radio_text_reasoning" style="@style/SettingsGroup" android:layout_width="116dp" android:layout_marginStart="8dp" android:visibility="gone" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="#88101418" android:padding="8dp">
+                <RadioGroup android:id="@+id/radio_text_models" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+                <LinearLayout android:id="@+id/text_proxy_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
+                    <TextView android:layout_width="96dp" android:layout_height="wrap_content" android:text="Modelo" android:textColor="#FFFFFFFF" />
+                    <RadioGroup android:id="@+id/radio_text_proxy_models" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/text_reasoning_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
+                    <TextView android:layout_width="96dp" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" />
+                    <RadioGroup android:id="@+id/radio_text_reasoning" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" />
+                </LinearLayout>
             </LinearLayout>
             <TextView android:id="@+id/text_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
 
             <TextView style="@style/SettingsHeader" android:text="Extração de partes" />
-            <LinearLayout android:layout_width="match_parent" android:layout_height="144dp" android:orientation="horizontal" android:gravity="top" android:background="#88101418" android:padding="8dp">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="top" android:background="#88101418" android:padding="8dp">
                 <RadioGroup android:id="@+id/radio_parts_extraction" android:layout_width="148dp" android:layout_height="match_parent" android:orientation="vertical" />
-                <RadioGroup android:id="@+id/radio_parts_model" android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" android:layout_marginStart="8dp" android:orientation="vertical" android:visibility="gone" />
+                <LinearLayout android:id="@+id/parts_model_controls" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:orientation="vertical" android:visibility="gone">
+                    <TextView android:id="@+id/label_parts_model" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Modelo" android:textColor="#FFFFFFFF" />
+                    <RadioGroup android:id="@+id/radio_parts_model" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+                    <TextView android:id="@+id/label_parts_proxy_model" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Modelo do IA-Proxy" android:textColor="#FFFFFFFF" android:visibility="gone" />
+                    <RadioGroup android:id="@+id/radio_parts_proxy_model" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" />
+                    <TextView android:id="@+id/label_parts_reasoning" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" android:visibility="gone" />
+                    <RadioGroup android:id="@+id/radio_parts_reasoning" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView style="@style/SettingsHeader" android:text="Paralelismo" />

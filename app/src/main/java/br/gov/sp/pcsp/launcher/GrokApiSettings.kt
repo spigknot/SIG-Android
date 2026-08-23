@@ -12,8 +12,14 @@ object GrokApiSettings {
     const val TEXT_NAME = "grok-4.6"
     const val GROK_NON_REASONING_TEXT_NAME = "grok-4.20-0309-non-reasoning"
     const val DEEPSEEK_TEXT_NAME = "deepseek-v4-flash"
-    const val IA_PROXY_NAME = "IA-Proxy (grok-4.6)"
+    const val IA_PROXY_NAME = "IA-Proxy"
     const val IA_PROXY_DEEPSEEK_NAME = "IA-Proxy (deepseek-v4-flash)"
+
+    val IA_PROXY_MODELS = listOf(
+        GROK_NON_REASONING_TEXT_NAME,
+        TEXT_NAME,
+        DEEPSEEK_TEXT_NAME,
+    )
 
     private const val PREFERENCES = "model_api_settings"
     private const val KEY_XAI_API = "xai_api_key"
@@ -33,6 +39,7 @@ object GrokApiSettings {
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
     private const val KEY_TEXT_REASONING = "text_reasoning"
+    private const val KEY_PROXY_MODEL = "ia_proxy_model"
     private const val KEY_GROK_CHUNK_MS = "grok_chunk_ms"
 
     fun apiKey(): String = xaiApiKey()
@@ -125,11 +132,13 @@ object GrokApiSettings {
 
     fun selectedText(): String {
         val stored = preferences().getString(KEY_TEXT, IA_PROXY_NAME).orEmpty()
+        if (stored == IA_PROXY_DEEPSEEK_NAME) selectProxyModel(DEEPSEEK_TEXT_NAME)
+        if (stored == "IA-Proxy (grok-4.6)") selectProxyModel(TEXT_NAME)
         return when (stored) {
-            "IA-Proxy" -> IA_PROXY_NAME
+            IA_PROXY_DEEPSEEK_NAME, "IA-Proxy (grok-4.6)" -> IA_PROXY_NAME
             "grok-4.20-non-reasoning" -> GROK_NON_REASONING_TEXT_NAME
             "deepseek-v4-pro" -> DEEPSEEK_TEXT_NAME
-            "IA-Proxy (deepseek-v4-pro)" -> IA_PROXY_DEEPSEEK_NAME
+            "IA-Proxy (deepseek-v4-pro)" -> IA_PROXY_NAME
             else -> stored
         }.also { migrated ->
             if (migrated != stored) selectText(migrated)
@@ -151,6 +160,23 @@ object GrokApiSettings {
 
     fun setTextReasoning(value: String) {
         preferences().edit().putString(KEY_TEXT_REASONING, value.lowercase()).apply()
+    }
+
+    fun selectedProxyModel(): String {
+        val stored = preferences().getString(KEY_PROXY_MODEL, TEXT_NAME).orEmpty()
+        val normalized = when (stored) {
+            "grok-4.20-non-reasoning" -> GROK_NON_REASONING_TEXT_NAME
+            "deepseek-v4-pro" -> DEEPSEEK_TEXT_NAME
+            else -> stored
+        }.takeIf { it in IA_PROXY_MODELS } ?: TEXT_NAME
+        if (normalized != stored) selectProxyModel(normalized)
+        return normalized
+    }
+
+    fun selectProxyModel(value: String) {
+        if (value in IA_PROXY_MODELS) {
+            preferences().edit().putString(KEY_PROXY_MODEL, value).apply()
+        }
     }
 
     fun grokChunkMillis(): Int = preferences().getInt(KEY_GROK_CHUNK_MS, 100).coerceIn(20, 2000)
