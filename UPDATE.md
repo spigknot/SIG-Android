@@ -28,14 +28,14 @@ bump da versão (3 lugares) → build (test+lint+assemble) → APK no O:\ → co
   3. `app/build.gradle` → `versionName` (incrementar em 1)
 - **Formato da versão**: `YYYYMMDD_NNN` (mesma data, número sequencial seguinte; ex.: se está `20260823_001`, gere `20260823_002`). O `APP_VERSION` usa underscore; a comparação do checker ignora `_`/`-` (tags antigas como `20260817-002` continuam válidas).
 - **APK de saída**: `app/build/outputs/apk/debug/app-debug.apk`.
-- **Destino O:\**: `O:\SIG-Android-Deepgram-20260822.apk` (MESMO nome sempre). O `O:\` é unidade de rede que às vezes está desmontada — se o `cp` falhar, IGNORAR (é o destino menos importante) e seguir com o GitHub.
+- **Destino O:\**: `O:\sig.apk` (MESMO nome sempre). O `O:\` é unidade de rede que às vezes está desmontada — se o `cp` falhar, IGNORAR (é o destino menos importante) e seguir com o GitHub.
 
 ## 0.2 Regras obrigatórias (não negociáveis)
 
 1. **Build com o gate completo**: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` — os TRÊS juntos (assembleDebug sozinho prova só compilação). Critério: `BUILD SUCCESSFUL`. NUNCA publicar com FAIL.
 2. **Bump em 3 lugares** (seção 2) — esquecer o `APP_VERSION` quebra o update checker (o app novo se ofereceria a própria versão como atualização).
 3. **APK no GitHub SEMPRE**: asset com o nome exato `sig.apk`, tag = `YYYYMMDD_NNN` (a release anterior é deletada — regra "só a versão atual").
-4. **APK no O:\** com o mesmo nome de sempre; falha de envio para O:\ → ignorar e seguir (menos importante).
+4. **APK no O:\** com o nome fixo `sig.apk`; falha de envio para O:\ → ignorar e seguir (menos importante).
 5. **Verificar o SHA-256 do asset publicado** contra o build local (lição: o GitHub já serviu APK velho — nunca confiar em data/aparência).
 6. **Commit + push na main ANTES de criar a release** do GitHub.
 7. **NUNCA embutir chaves de API** no código/APK (campos nascem vazios; o usuário digita nas configurações). Não commitar `local.properties`, `release/r2_config.json` nem `app/src/main/assets` com segredos.
@@ -80,10 +80,10 @@ cd "D:/Projetos/SIG"
 ```bash
 cd "D:/Projetos/SIG"
 ls /o/ 2>/dev/null | head -1   # conferir se a unidade está montada
-cp app/build/outputs/apk/debug/app-debug.apk "/o/SIG-Android-Deepgram-20260822.apk" && echo "APK copiado"
+cp app/build/outputs/apk/debug/app-debug.apk "/o/sig.apk" && echo "APK copiado"
 ```
 
-- **Mesmo nome sempre** (`SIG-Android-Deepgram-20260822.apk`).
+- **Mesmo nome sempre** (`sig.apk`).
 - Se o `cp` falhar (unidade desmontada): **ignorar** e seguir para o commit — o destino importante é o GitHub.
 
 ## 5. Commit e push (na main)
