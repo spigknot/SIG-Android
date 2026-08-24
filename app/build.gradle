@@ -9,11 +9,6 @@ def zigDownloadUrl = "https://ziglang.org/download/${zigVersion}/${zigArchiveNam
 def zigSha256 = "68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
 def zigToolsDir = rootProject.file(".tools/zig-${zigVersion}")
 def zigExecutable = new File(zigToolsDir, "zig.exe")
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.isFile()) {
-    localPropertiesFile.withInputStream { localProperties.load(it) }
-}
 def buildNativeComponents = providers.gradleProperty("buildNativeComponents")
         .orNull?.toBoolean() ?: false
 
@@ -82,8 +77,8 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 28
-        versionName "1.465"
+        versionCode 29
+        versionName "1.466"
 
         buildConfigField "boolean", "ENABLE_NPU_TESTS", "true"
 

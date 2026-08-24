@@ -44,18 +44,18 @@ object GrokApiSettings {
 
     fun apiKey(): String = xaiApiKey()
 
-    fun xaiApiKey(): String = preferences().getString(KEY_XAI_API, "").orEmpty().trim()
+    fun xaiApiKey(): String = EncryptedApiKeyStore.get(preferences(), KEY_XAI_API)
 
     fun setApiKey(value: String) = setXaiApiKey(value)
 
     fun setXaiApiKey(value: String) {
-        preferences().edit().putString(KEY_XAI_API, value.trim()).apply()
+        EncryptedApiKeyStore.put(preferences(), KEY_XAI_API, value)
     }
 
-    fun deepseekApiKey(): String = preferences().getString(KEY_DEEPSEEK_API, "").orEmpty().trim()
+    fun deepseekApiKey(): String = EncryptedApiKeyStore.get(preferences(), KEY_DEEPSEEK_API)
 
     fun setDeepseekApiKey(value: String) {
-        preferences().edit().putString(KEY_DEEPSEEK_API, value.trim()).apply()
+        EncryptedApiKeyStore.put(preferences(), KEY_DEEPSEEK_API, value)
     }
 
     fun isPlausibleXaiKey(value: String = xaiApiKey()): Boolean {
@@ -68,10 +68,10 @@ object GrokApiSettings {
         return key.length == 35 && key.startsWith("sk-")
     }
 
-    fun deepgramApiKey(): String = preferences().getString(KEY_DEEPGRAM_API, "").orEmpty().trim()
+    fun deepgramApiKey(): String = EncryptedApiKeyStore.get(preferences(), KEY_DEEPGRAM_API)
 
     fun setDeepgramApiKey(value: String) {
-        preferences().edit().putString(KEY_DEEPGRAM_API, value.trim()).apply()
+        EncryptedApiKeyStore.put(preferences(), KEY_DEEPGRAM_API, value)
     }
 
     fun isPlausibleDeepgramKey(value: String = deepgramApiKey()): Boolean {
@@ -87,10 +87,10 @@ object GrokApiSettings {
         preferences().edit().putString(KEY_DEEPGRAM_KEYTERMS, value.trim()).apply()
     }
 
-    fun assemblyaiApiKey(): String = preferences().getString(KEY_ASSEMBLYAI_API, "").orEmpty().trim()
+    fun assemblyaiApiKey(): String = EncryptedApiKeyStore.get(preferences(), KEY_ASSEMBLYAI_API)
 
     fun setAssemblyaiApiKey(value: String) {
-        preferences().edit().putString(KEY_ASSEMBLYAI_API, value.trim()).apply()
+        EncryptedApiKeyStore.put(preferences(), KEY_ASSEMBLYAI_API, value)
     }
 
     fun isPlausibleAssemblyaiKey(value: String = assemblyaiApiKey()): Boolean {
@@ -100,10 +100,10 @@ object GrokApiSettings {
 
     fun hasAssemblyaiApiKey(): Boolean = isPlausibleAssemblyaiKey()
 
-    fun elevenlabsApiKey(): String = preferences().getString(KEY_ELEVENLABS_API, "").orEmpty().trim()
+    fun elevenlabsApiKey(): String = EncryptedApiKeyStore.get(preferences(), KEY_ELEVENLABS_API)
 
     fun setElevenlabsApiKey(value: String) {
-        preferences().edit().putString(KEY_ELEVENLABS_API, value.trim()).apply()
+        EncryptedApiKeyStore.put(preferences(), KEY_ELEVENLABS_API, value)
     }
 
     fun isPlausibleElevenlabsKey(value: String = elevenlabsApiKey()): Boolean {

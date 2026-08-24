@@ -1272,59 +1272,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return args.toTypedArray()
     }
 
-    private fun buildTransitionArguments(
-        firstInput: File,
-        secondInput: File,
-        firstClip: JoinClip,
-        secondClip: JoinClip,
-        outputFile: File,
-        transitionSeconds: Double,
-        profile: OutputProfile
-    ): Array<String> {
-        val windowSeconds = transitionWindowSeconds(firstClip, secondClip, transitionSeconds)
-        val firstStart = ((firstClip.durationMs / 1000.0) - windowSeconds).coerceAtLeast(0.0)
-        val filter = buildTransitionFilter(firstClip, secondClip, profile, transitionSeconds, windowSeconds)
-        val args = mutableListOf(
-            "-y",
-            "-fflags", "+genpts",
-            "-noautorotate",
-            "-ss", formatDecimal(firstStart),
-            "-t", formatDecimal(windowSeconds),
-            "-i", firstInput.absolutePath,
-            "-noautorotate",
-            "-ss", "0",
-            "-t", formatDecimal(windowSeconds),
-            "-i", secondInput.absolutePath,
-            "-filter_complex", filter,
-            "-map", "[vout]",
-            "-map", "[aout]"
-        )
-        
-        args.addAll(videoEncodingArguments(profile, constrained = true))
-
-        args.addAll(
-            listOf(
-                "-bsf:v", profile.videoBitstreamFilter,
-                "-r", profile.fps,
-                "-vsync", "cfr",
-                "-g", "1",
-                "-bf", "0",
-                "-force_key_frames", "expr:gte(t,n_forced*0.25)",
-                "-c:a", "aac",
-                "-b:a", profile.audioBitrate,
-                "-ar", profile.audioSampleRate.toString(),
-                "-ac", profile.audioChannels.toString(),
-                "-avoid_negative_ts", "make_zero",
-                "-mpegts_flags", "+resend_headers",
-                "-muxdelay", "0",
-                "-muxpreload", "0",
-                "-f", "mpegts",
-                outputFile.absolutePath
-            )
-        )
-        return args.toTypedArray()
-    }
-
     private fun buildFadeEdgeArguments(
         inputFile: File,
         outputFile: File,
@@ -2438,17 +2385,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             .ifBlank { "video" }
     }
 
-    private fun detectVideoBitrate(inputFile: File?): String? {
-        if (inputFile == null) return null
-        return try {
-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", inputFile.absolutePath))
-            val logs = session.allLogsAsString.orEmpty()
-            bestVideoBitrate(inputFile, logs, logs.lines().firstOrNull { it.contains("Video:", ignoreCase = true) }.orEmpty())
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
     private fun parseBitrateFromText(text: String): String? {
         return parseBitrateKbpsFromText(text)?.let { "${it.coerceAtLeast(1)}k" }
     }
@@ -2546,10 +2482,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             parseBitrateKbpsFromText(logs)
         )
         return candidates.maxOrNull()?.let { "${it.coerceAtLeast(1)}k" }
-    }
-
-    private fun detectContainerBitrate(inputFile: File): String? {
-        return detectContainerBitrateKbps(inputFile)?.let { "${it.coerceAtLeast(1)}k" }
     }
 
     private fun detectContainerBitrateKbps(inputFile: File): Int? {

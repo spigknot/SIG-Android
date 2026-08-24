@@ -132,7 +132,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="Pacotes QNN separados dos modelos GGML normais."
+                android:text="Pacotes QNN separados dos modelos GGML normais. Importe manualmente enquanto o download não for publicado."
                 android:textColor="#FFB8C8C8"
                 android:textSize="11sp" />
 

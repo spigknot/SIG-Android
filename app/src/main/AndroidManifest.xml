@@ -16,7 +16,7 @@
         android:name=".SigApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
@@ -25,11 +25,6 @@
         <uses-native-library
             android:name="libOpenCL.so"
             android:required="false" />
-
-        <activity
-            android:name=".WebViewActivity"
-            android:screenOrientation="portrait"
-            android:exported="false" />
 
         <activity
             android:name=".RgCalculatorActivity"

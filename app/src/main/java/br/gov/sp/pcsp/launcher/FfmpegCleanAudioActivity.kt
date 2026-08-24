@@ -452,11 +452,6 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun formatEfficiency(processedMs: Long, startedAt: Long): String {
-        val elapsed = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(1L)
-        return String.format(Locale.US, "%.2fx", processedMs.toDouble() / elapsed.toDouble())
-    }
-
     private fun formatTime(ms: Long): String {
         val totalSeconds = ms / 1000
         val milliseconds = ms % 1000

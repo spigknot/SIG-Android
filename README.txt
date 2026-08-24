@@ -11,7 +11,7 @@ Requisitos de build:
 
 Configuracao local:
 - Defina sdk.dir em local.properties.
-- Defina IMEICHECK_API_KEY em local.properties ou como variavel de ambiente.
+- Configure a chave do serviço de consulta do IMEI na tela de configurações do app.
 - local.properties e demais segredos nao sao versionados.
 
 Comandos:

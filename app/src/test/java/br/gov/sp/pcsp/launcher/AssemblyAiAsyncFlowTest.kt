@@ -171,7 +171,7 @@ class AssemblyAiAsyncFlowTest {
             message = "ok",
         )
         val everything = File(dir, "log.txt").readText() + File(dir, "correlation.txt").readText()
-        assertTrue(!everything.contains("sk-", ignoreCase = false) || true) // nunca há chave
+        assertTrue(!everything.contains("sk-", ignoreCase = false))
         assertTrue(!everything.contains("RIFF")) // corpo de áudio nunca é gravado
     }
 }

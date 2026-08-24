@@ -22,7 +22,7 @@ Esse caminho não executa CMake e não inclui bibliotecas nativas no APK.
 2. Gere o JAR de API do FFmpegKit e os ZIPs por arquitetura:
 
 ```powershell
-.\scripts\build-android-native-dependencies.ps1 -Version 2
+.\scripts\build-android-native-dependencies.ps1 -Version 1
 ```
 
 3. Publique os ZIPs, atualize `COMPONENT_VERSION`, URLs, tamanhos e SHA-256

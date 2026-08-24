@@ -1151,13 +1151,6 @@ class FfmpegCutActivity : AppCompatActivity() {
         return sessionRef.get() ?: session
     }
 
-    private fun formatProgressStatus(task: String, percent: Int, processedMs: Double, startedAtMs: Long): String {
-        val elapsedSeconds = ((SystemClock.elapsedRealtime() - startedAtMs) / 1000.0).coerceAtLeast(0.001)
-        val processedSeconds = (processedMs.coerceAtLeast(0.0) / 1000.0)
-        val efficiency = processedSeconds / elapsedSeconds
-        return "$task... $percent% | ${String.format(Locale.US, "%.2fx", efficiency)}"
-    }
-
     private fun showEditingControls(visible: Boolean) {
         val visibility = if (visible) View.VISIBLE else View.GONE
         timeline.visibility = visibility
@@ -1627,7 +1620,6 @@ class FfmpegCutActivity : AppCompatActivity() {
         private const val REQUEST_PICK_MEDIA = 4101
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 4102
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 4103
-        private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val FALLBACK_VIDEO_BITRATE = "15M"
         private const val FALLBACK_AUDIO_BITRATE = "192k"
         private const val HYBRID_CUT_MAX_ATTEMPTS = 3

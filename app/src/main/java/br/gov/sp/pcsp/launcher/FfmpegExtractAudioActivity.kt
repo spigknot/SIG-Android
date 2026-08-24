@@ -901,28 +901,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun sigOutputDir(): File {
-        val sigRoot = File(Environment.getExternalStorageDirectory(), OUTPUT_FOLDER_NAME)
-        return File(sigRoot, currentOutputDateFolder())
-    }
-
-    private fun currentOutputDateFolder(): String {
-        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-    }
-
-    private fun uniqueOutputFile(outputDir: File, outputName: String): File {
-        val base = outputName.substringBeforeLast('.', outputName)
-        val extension = outputName.substringAfterLast('.', "")
-        var candidate = File(outputDir, outputName)
-        var suffix = 2
-        while (candidate.exists()) {
-            val name = if (extension.isBlank()) "${base}_$suffix" else "${base}_$suffix.$extension"
-            candidate = File(outputDir, name)
-            suffix++
-        }
-        return candidate
-    }
-
     private fun copyUriToCache(uri: Uri, displayName: String): File {
         val extension = displayName.substringAfterLast('.', "tmp")
         val inputFile = File(cacheDir, "extract_input_${System.currentTimeMillis()}.$extension")
@@ -1265,38 +1243,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun setSuccessStatus(results: List<OutputItem>, failures: List<String>, elapsedMs: Long) {
-        val summary = when {
-            results.size == 1 && failures.isEmpty() -> "Arquivo salvo:"
-            results.size == 1 -> "Arquivo salvo, com aviso:"
-            failures.isEmpty() -> "${results.size} arquivos salvos:"
-            else -> "${results.size} arquivos salvos, ${failures.size} falha(s):"
-        }
-        status.text = "$summary\nTempo: ${formatElapsedTime(elapsedMs)}"
-        outputFileName.text = if (results.size == 1) {
-            results.first().name
-        } else {
-            "$OUTPUT_FOLDER_NAME/${currentOutputDateFolder()}"
-        }
-        outputFileName.visibility = View.VISIBLE
-        outputActions.visibility = View.VISIBLE
-        if (failures.isNotEmpty()) {
-            selectedListBox.visibility = View.VISIBLE
-            selectedList.text = failures.take(10).joinToString("\n")
-        }
-        extractScroll.post {
-            extractScroll.smoothScrollTo(0, outputActions.bottom)
-        }
-    }
-
-    private fun formatElapsedTime(elapsedMs: Long): String {
-        val totalSeconds = elapsedMs / 1000
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        val milliseconds = elapsedMs % 1000
-        return String.format(Locale.US, "%02d:%02d.%03d", minutes, seconds, milliseconds)
-    }
-
     private fun openOutputFile(item: OutputItem) {
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(item.uri, item.mime)
@@ -1428,13 +1374,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         latch.await()
         currentSessionId = null
         return sessionRef.get() ?: session
-    }
-
-    private fun formatProgressStatus(task: String, percent: Int, processedMs: Double, startedAtMs: Long): String {
-        val elapsedSeconds = ((SystemClock.elapsedRealtime() - startedAtMs) / 1000.0).coerceAtLeast(0.001)
-        val processedSeconds = (processedMs.coerceAtLeast(0.0) / 1000.0)
-        val efficiency = processedSeconds / elapsedSeconds
-        return "$task... $percent% | ${String.format(Locale.US, "%.2fx", efficiency)}"
     }
 
     private fun clearTerminal() {
@@ -1654,7 +1593,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 5103
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 5104
         private const val OUTPUT_FOLDER_NAME = "SIG"
-        private const val OUTPUT_MIME = "audio/mp4"
         private const val TAG = "FfmpegExtractAudio"
         private const val AUDIO_INFO_START = "\uE000AI\uE000"
         private const val AUDIO_INFO_END = "\uE000AE\uE000"

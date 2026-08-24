@@ -7,8 +7,8 @@
 # build rápido comum (assembleDebug sem nativos) da porta de release.
 #
 # Uso:
-#   .\scripts\build-android-native-dependencies.ps1 -Version 2
-#   .\scripts\verify-native-dependencies.ps1 -Version 2 -OutputDir native-dependencies\build
+#   .\scripts\build-android-native-dependencies.ps1 -Version 1
+#   .\scripts\verify-native-dependencies.ps1 -Version 1 -OutputDir native-dependencies\build
 #
 # Saída: exit 0 com o resumo aceito; exit 1 com cada divergência (versão,
 # tamanho ou SHA-256) e a instrução de correção.

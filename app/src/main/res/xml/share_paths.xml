@@ -4,6 +4,9 @@
         name="cache"
         path="." />
     <external-path
-        name="external"
+        name="sig"
+        path="SIG/" />
+    <external-files-path
+        name="external_files"
         path="." />
 </paths>

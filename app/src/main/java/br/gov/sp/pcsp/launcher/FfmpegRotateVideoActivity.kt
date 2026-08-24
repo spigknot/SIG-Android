@@ -36,7 +36,6 @@ import android.app.DownloadManager
 import androidx.appcompat.app.AlertDialog
 import android.widget.PopupMenu
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegKitConfig
@@ -113,9 +112,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private var preSelectedOutputDirUri: Uri? = null
     private var finalOutputDirUri: Uri? = null
     private val tempOutputFiles = mutableListOf<File>()
-    private var hasSaved = false
     @Volatile private var isSaving = false
-    private var lastOutputMime = "video/mp4"
     private var lastOutputName = ""
 
     private var selectedCodec: FfmpegVideoEncoder? = null
@@ -544,8 +541,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     
                     tempOutputFiles.clear()
                     tempOutputFiles.add(currentTempOutput)
-                    lastOutputName = outputName
-
                     lastOutputName = outputName
 
                     outputActions.visibility = View.VISIBLE
@@ -1033,23 +1028,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
     }
 
-    private fun bufferSizeFor(bitrate: String): String {
-        val match = Regex("""(\d+)""").find(bitrate) ?: return "30M"
-        val value = match.groupValues[1].toIntOrNull() ?: return "30M"
-        return if (bitrate.endsWith("M", ignoreCase = true)) {
-            "${(value * 2).coerceAtLeast(2)}M"
-        } else {
-            "${(value * 2).coerceAtLeast(2)}k"
-        }
-    }
-
-    private fun formatProgressStatus(task: String, percent: Int, processedMs: Double, startedAtMs: Long): String {
-        val elapsedSeconds = ((SystemClock.elapsedRealtime() - startedAtMs) / 1000.0).coerceAtLeast(0.001)
-        val processedSeconds = (processedMs.coerceAtLeast(0.0) / 1000.0)
-        val efficiency = processedSeconds / elapsedSeconds
-        return "$task... $percent% | ${String.format(Locale.US, "%.2fx", efficiency)}"
-    }
-
     private fun recordRotationSelection() {
         if (readDegrees() == 0) {
             transformOrder.remove(TransformOp.ROTATE)
@@ -1402,7 +1380,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         lastOutputUri = null
         tempOutputFiles.forEach { it.delete() }
         tempOutputFiles.clear()
-        hasSaved = false
         outputFileName.text = ""
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
@@ -1462,7 +1439,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 buttonSaveToFolder.isEnabled = true
                 buttonSaveToFolder.alpha = 1f
                 if (failure == null && savedCount == filesToSave.size) {
-                    hasSaved = true
                     finalOutputDirUri = treeUri
                     lastOutputUri = lastSavedUri
                     lastOutputName = lastSavedName
@@ -1572,14 +1548,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             Log.w(TAG, "Could not share output file", e)
             Toast.makeText(this, "Não consegui compartilhar o arquivo.", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun formatElapsedTime(elapsedMs: Long): String {
-        val totalSeconds = elapsedMs / 1000
-        val minutes = totalSeconds / 60
-        val seconds = totalSeconds % 60
-        val milliseconds = elapsedMs % 1000
-        return String.format(Locale.US, "%02d:%02d.%03d", minutes, seconds, milliseconds)
     }
 
     private fun formatFfmpegTime(valueMs: Long): String =
@@ -1704,38 +1672,10 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         return inputFile
     }
 
-    private fun saveOutput(outputFile: File, outputName: String): SaveResult {
-        return try {
-            val outputDir = sigOutputDir()
-            if (!outputDir.exists() && !outputDir.mkdirs()) {
-                return SaveResult(null, "não consegui criar a pasta SIG")
-            }
-            val destination = uniqueOutputFile(outputDir, outputName)
-            outputFile.inputStream().use { input ->
-                destination.outputStream().use { output -> input.copyTo(output) }
-            }
-            SaveResult(FileProvider.getUriForFile(this, "$packageName.fileprovider", destination), null)
-        } catch (e: Exception) {
-            SaveResult(null, e.message)
-        }
-    }
-
     private fun buildOutputName(name: String): String {
         val base = name.substringBeforeLast('.', name).ifBlank { "video" }
             .replace(Regex("""[\\/:*?"<>|]"""), "_")
         return "${base}_girado.mp4"
-    }
-
-    private fun uniqueOutputFile(outputDir: File, outputName: String): File {
-        val base = outputName.substringBeforeLast('.', outputName)
-        val extension = outputName.substringAfterLast('.', "")
-        var candidate = File(outputDir, outputName)
-        var suffix = 2
-        while (candidate.exists()) {
-            candidate = File(outputDir, "${base}_$suffix.$extension")
-            suffix++
-        }
-        return candidate
     }
 
     private fun sigOutputDir(): File {
@@ -1748,19 +1688,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
 
     private fun hasSigStorageAccess(): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
-    }
-
-    private fun requestSigStorageAccess() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        val appSettings = Intent(
-            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-            Uri.parse("package:$packageName")
-        )
-        try {
-            startActivity(appSettings)
-        } catch (_: ActivityNotFoundException) {
-            startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-        }
     }
 
     private fun openOutputFile() {

@@ -145,9 +145,18 @@ class NpuTestActivity : AppCompatActivity() {
             selectedModel = models.firstOrNull { it.id == id }
             selectedModel?.let {
                 modelStatus.text = packageDetails(it)
-                findViewById<Button>(R.id.button_download_npu_package).isEnabled = it.downloadUrl != null && it.packageSha256 != null
             }
+            updateDownloadButton()
         }
+        updateDownloadButton()
+    }
+
+    private fun updateDownloadButton(enabled: Boolean = true) {
+        val button = findViewById<Button>(R.id.button_download_npu_package)
+        val model = selectedModel
+        val available = model?.downloadUrl != null && model.packageSha256 != null
+        button.visibility = if (available) View.VISIBLE else View.GONE
+        button.isEnabled = enabled && available && !downloadInProgress
     }
 
     private fun packageDetails(model: NpuModelDescriptor): String {
@@ -248,11 +257,7 @@ class NpuTestActivity : AppCompatActivity() {
         findViewById<Button>(R.id.button_import_npu_package).isEnabled = enabled
         findViewById<Button>(R.id.button_verify_npu_package).isEnabled = enabled
         findViewById<Button>(R.id.button_delete_npu_package).isEnabled = enabled
-        if (!downloadInProgress) {
-            val model = selectedModel
-            findViewById<Button>(R.id.button_download_npu_package).isEnabled =
-                enabled && model?.downloadUrl != null && model.packageSha256 != null
-        }
+        updateDownloadButton(enabled)
     }
 
     private fun appendLog(line: String) {

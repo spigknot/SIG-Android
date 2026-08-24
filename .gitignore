@@ -25,3 +25,4 @@ captures/
 __pycache__/
 *.pyc
 *.hprof
+release/r2_config.json

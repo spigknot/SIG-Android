@@ -1096,15 +1096,6 @@ class WhisperActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleLog() {
-        if (logText.visibility == View.VISIBLE) {
-            logText.visibility = View.GONE
-        } else {
-            logText.text = readGlobalLog()
-            logText.visibility = View.VISIBLE
-        }
-    }
-
     private fun toggleAdvancedSettings() {
         advancedPanel.visibility = if (advancedPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
     }
@@ -1454,23 +1445,6 @@ class WhisperActivity : AppCompatActivity() {
                 runOnUiThread { status.text = "Erro ao baixar $label: ${e.message ?: "falha inesperada"}" }
             }
         }.start()
-    }
-
-    private fun hasSigStorageAccess(): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
-    }
-
-    private fun requestSigStorageAccess() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        val appSettings = Intent(
-            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-            Uri.parse("package:$packageName")
-        )
-        try {
-            startActivity(appSettings)
-        } catch (_: ActivityNotFoundException) {
-            startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-        }
     }
 
     private fun openOutputFile(file: File?, mimeType: String) {

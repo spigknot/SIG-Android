@@ -173,7 +173,6 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var sourceBar: View
     private lateinit var serverGateStatus: TextView
     private lateinit var buttonPingServer: ImageButton
-    private lateinit var buttonServerSelector: TextView
     private lateinit var ipInputs: List<EditText>
     private lateinit var recordingPanel: View
     private lateinit var buttonRecordingAction: ImageButton
@@ -431,7 +430,6 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonLiveDiarizeHelp = findViewById(R.id.button_live_diarize_help)
         buttonLiveDiarizeRealtimeHelp = findViewById(R.id.button_live_diarize_realtime_help)
         arrowInputOutput = findViewById(R.id.arrow_input_output)
-        buttonServerSelector = findViewById(R.id.button_server_selector)
         buttonPlayPause = findViewById(R.id.button_play_pause)
         buttonSpeedDown = findViewById(R.id.button_speed_down)
         buttonSpeedUp = findViewById(R.id.button_speed_up)
@@ -514,7 +512,6 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.button_select_media).setOnClickListener { showSourceMenu(it) }
         buttonPingServer.setOnClickListener { testManualServerIp() }
-        buttonServerSelector.visibility = View.GONE
         buttonRecordingAction.setOnClickListener {
             if (!recordingActive) startMicrophoneRecording() else stopMicrophoneRecording()
         }
@@ -774,42 +771,10 @@ class RemoteSttActivity : AppCompatActivity() {
         FFmpegKit.cancel()
     }
 
-    private fun hideToolsUntilServer() {
-        serverBaseUrl = ""
-        serverFallbackIps = emptyList()
-        serverIpIndex = -1
-        serverGate.visibility = View.VISIBLE
-        sourceBar.visibility = View.GONE
-        recordingPanel.visibility = View.VISIBLE
-        previewFrame.visibility = View.GONE
-        audioWaveform.visibility = View.GONE
-        playbackControls.visibility = View.GONE
-        timelineFrame.visibility = View.GONE
-        currentTime.visibility = View.GONE
-        timeFields.visibility = View.GONE
-        selectedFile.visibility = View.GONE
-        selectedListBox.visibility = View.GONE
-        prepareModeButtons.visibility = View.GONE
-        buttonTranscribe.visibility = View.GONE
-        progress.visibility = View.GONE
-        status.visibility = View.GONE
-        outputFileName.visibility = View.GONE
-        outputActions.visibility = View.GONE
-        liveTranscriptTextView.visibility = View.GONE
-        liveTranscriptClipboardActions.visibility = View.GONE
-        liveAiProgress.visibility = View.GONE
-        livePostActions.visibility = View.GONE
-        clearAssistantOutputViews(showEditors = false)
-        terminalText.visibility = View.GONE
-        serverGateStatus.text = "Procurando server.txt..."
-    }
-
     private fun activateServer(ip: String, candidates: List<String> = listOf(ip), index: Int = 0) {
         serverFallbackIps = candidates
         serverIpIndex = index
         serverBaseUrl = "http://$ip:$SERVER_PORT"
-        val serverName = serverNameForIp(ip)
-        if (::buttonServerSelector.isInitialized) buttonServerSelector.text = "Servidor: $serverName"
         serverGate.visibility = View.GONE
         sourceBar.visibility = View.VISIBLE
         recordingPanel.visibility = View.VISIBLE
@@ -853,22 +818,6 @@ class RemoteSttActivity : AppCompatActivity() {
         activateServerEntry(serverEntries[defaultIndex])
     }
 
-    private fun showServerMenu() {
-        if (serverEntries.isEmpty()) serverEntries = loadServerEntries()
-        PopupMenu(this, buttonServerSelector).apply {
-            serverEntries.forEachIndexed { index, entry ->
-                menu.add(0, index, index, entry.name)
-            }
-            setOnMenuItemClickListener { item ->
-                serverEntries.getOrNull(item.itemId)?.let { entry ->
-                    activateServerEntry(entry)
-                    true
-                } ?: false
-            }
-            show()
-        }
-    }
-
     private fun activateServerEntry(entry: ServerEntry) {
         val orderedEntries = listOf(entry) + serverEntries.filter { it.ip != entry.ip }
         activateServer(entry.ip, orderedEntries.map { it.ip }, 0)
@@ -906,31 +855,6 @@ class RemoteSttActivity : AppCompatActivity() {
         return ServerEntry(ip, name)
     }
 
-    private fun resolveServerOnEnter() {
-        Thread {
-            val serverFile = File(getExternalFilesDir(null), "server.txt")
-            if (!serverFile.exists()) {
-                runOnUiThread { serverGateStatus.text = "" }
-                return@Thread
-            }
-
-            val candidates = readServerIps(serverFile)
-            if (candidates.isEmpty()) {
-                runOnUiThread { serverGateStatus.text = "" }
-                return@Thread
-            }
-
-            candidates.forEachIndexed { index, ip ->
-                runOnUiThread { serverGateStatus.text = "Testando ${index + 1}/${candidates.size}: $ip" }
-                if (pingIp(ip)) {
-                    runOnUiThread { activateServer(ip, candidates, index) }
-                    return@Thread
-                }
-            }
-            runOnUiThread { serverGateStatus.text = "" }
-        }.start()
-    }
-
     private fun testManualServerIp() {
         val ip = manualIpOrNull()
         if (ip == null) {
@@ -957,20 +881,6 @@ class RemoteSttActivity : AppCompatActivity() {
             input.text.toString().toIntOrNull()?.takeIf { it in 0..255 } ?: return null
         }
         return octets.joinToString(".")
-    }
-
-    private fun readServerIps(file: File): List<String> {
-        return try {
-            file.readLines(Charsets.UTF_8)
-                .mapNotNull { parseServerLine(it)?.ip }
-                .distinct()
-        } catch (_: Throwable) {
-            emptyList()
-        }
-    }
-
-    private fun sanitizeIpLine(line: String): String? {
-        return parseServerLine(line)?.ip
     }
 
     private fun isValidIpv4(value: String): Boolean {
@@ -1064,14 +974,6 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             show()
         }
-    }
-
-    private fun showRecordingPanel() {
-        if (isProcessing) return
-        recordingPanel.visibility = View.VISIBLE
-        buttonSaveRecording.visibility = if (recordingFile?.exists() == true && mediaRecorder == null) View.VISIBLE else View.GONE
-        recordingTimer.text = "00:00.000"
-        serverScroll.post { serverScroll.smoothScrollTo(0, recordingPanel.top) }
     }
 
     private fun setupLiveIntervalControls() {
@@ -3427,7 +3329,6 @@ class RemoteSttActivity : AppCompatActivity() {
         lastReceivedTranscription = draft.lastTranscription
         timestampPlainTranscript = draft.lastTranscription.ifBlank { draft.transcript }
         timestampedTranscript = ""
-        updateTimestampControl()
         assistantNames = draft.personNames
         buttonPersonSelector.text = draft.selectedPerson.ifBlank { "Partes" }
         terminalText.text = draft.terminal
@@ -4042,38 +3943,6 @@ class RemoteSttActivity : AppCompatActivity() {
             runOnUiThread { updateTerminalText(terminalLines) }
             result
         }
-    }
-
-    private fun sendBatchToServer(
-        preparedUploads: List<PreparedUpload>,
-        transcriptionDir: File,
-        terminalLines: StringBuilder
-    ): List<TranscriptionResult> {
-        val preparedOrdered = preparedUploads.sortedBy { it.index }
-        preparedOrdered.forEach { prepared ->
-            appendTerminal(
-                terminalLines,
-                "lote: ${prepared.item.name} -> ${prepared.uploadFile.file.name} (${prepared.uploadFile.label}; ${describeUploadFile(prepared.uploadFile.file)})"
-            )
-            appendTerminalAudioInfo(terminalLines, "original: ${prepared.originalAudioInfo}")
-            appendTerminalAudioInfo(terminalLines, "enviado: ${prepared.sentAudioInfo}")
-        }
-        runOnUiThread {
-            status.text = "Enviando lote com ${preparedOrdered.size} arquivo(s)"
-            updateTerminalText(terminalLines)
-        }
-
-        val results = sendBatchToServerWithFallback(preparedOrdered, terminalLines)
-        results.forEach { result ->
-            if (result.text.isBlank()) {
-                appendTerminal(terminalLines, "transcrição vazia em ${result.fileName}")
-                throw IllegalStateException("transcrição vazia em ${result.fileName}")
-            }
-            val individual = uniqueFile(transcriptionDir, "${safeBaseName(result.fileName)}.txt")
-            individual.writeText(result.text.trim() + "\n", Charsets.UTF_8)
-        }
-        runOnUiThread { updateTerminalText(terminalLines) }
-        return results
     }
 
     private fun finishPreparedOnly(
@@ -5053,32 +4922,6 @@ class RemoteSttActivity : AppCompatActivity() {
         return sessionRef.get() ?: session
     }
 
-    private fun sendToServer(
-        uploadFile: UploadFile,
-        originalName: String,
-        itemIndex: Int,
-        itemCount: Int,
-        terminalLines: StringBuilder
-    ): String {
-        var lastError: Throwable? = null
-        while (true) {
-            val baseUrl = serverBaseUrl
-            try {
-                return sendToServerOnce(uploadFile, originalName, itemIndex, itemCount, terminalLines, baseUrl)
-            } catch (e: ServerUnavailableException) {
-                lastError = e
-                val nextUrl = activateNextServerAfterFailure(terminalLines, baseUrl)
-                if (nextUrl == null) break
-                appendTerminal(terminalLines, "tentando próximo servidor: $nextUrl")
-                runOnUiThread {
-                    status.text = "Tentando próximo servidor..."
-                    updateTerminalText(terminalLines)
-                }
-            }
-        }
-        throw lastError ?: ServerUnavailableException()
-    }
-
     private fun sendToServerOnce(
         uploadFile: UploadFile,
         originalName: String,
@@ -5156,8 +4999,6 @@ class RemoteSttActivity : AppCompatActivity() {
                     serverIpIndex = index
                     serverBaseUrl = "http://$ip:$SERVER_PORT"
                     runOnUiThread {
-                        val serverName = serverNameForIp(ip)
-                        buttonServerSelector.text = "Servidor: $serverName"
                         status.text = ModelSelectionSummary.current()
                         updateAdvancedInfo()
                     }
@@ -5447,22 +5288,6 @@ class RemoteSttActivity : AppCompatActivity() {
         } ?: throw IllegalStateException("não consegui escrever $targetName")
     }
 
-    private fun showExportMenu(anchor: View) {
-        val session = lastSession ?: return
-        PopupMenu(this, anchor).apply {
-            menu.add("txt")
-            menu.add("html")
-            setOnMenuItemClickListener { item ->
-                when (item.title.toString()) {
-                    "txt" -> shareFile(session.txtFile, "text/plain")
-                    "html" -> shareFile(session.htmlFile, "text/html")
-                }
-                true
-            }
-            show()
-        }
-    }
-
     private fun showTranscriptShareMenu(anchor: View) {
         val session = lastSession
         PopupMenu(this, anchor).apply {
@@ -5617,21 +5442,12 @@ class RemoteSttActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun toggleTranscriptTimestamps(checked: Boolean) {
-        // Checkbox de timestamps removida.
-    }
-
     private fun storeReceivedTranscription(text: String, timestampedText: String = "") {
         val clean = text.trim()
         lastReceivedTranscription = if (timestampedText.isNotBlank()) timestampedText.trim() else clean
         timestampPlainTranscript = clean
         timestampedTranscript = timestampedText.trim()
         renderTranscriptAccordingToTimestampSelection()
-    }
-
-    private fun updateTimestampControl() {
-        // Checkbox de timestamps removida; mantido como no-op para
-        // preservar os pontos de chamada.
     }
 
     private fun renderTranscriptAccordingToTimestampSelection() {
@@ -6921,7 +6737,6 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val DEFAULT_SERVER_IP = "servidor"
         private const val DEFAULT_SERVER_NAME = "Servidor"
         private const val SERVER_PORT = 8100
-        private const val SERVER_WORKERS = 8
         private const val LIVE_UPLOAD_WORKERS = 1
         private const val LIVE_SAMPLE_RATE = 16_000
         private const val DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS = 1000
@@ -6948,7 +6763,6 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val VAD_PREFERENCES = "remote_stt_vad"
         private const val VAD_MODE_KEY = "selected_mode"
         private const val VAD_LEVEL_KEY = "aggressiveness_level"
-        private const val SILERO_VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
         private const val TAG = "GraniteSpeech"
         private const val TRANSCRIPTION_START = "\uE000TS\uE000"
         private const val TRANSCRIPTION_END = "\uE000TE\uE000"

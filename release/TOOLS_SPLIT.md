@@ -29,7 +29,7 @@ transcrição/WS intactos.
   após a gravação) e o botão amarelo de pausa também ativo na gravação
   branca (`recordingPaused`).
 
-## Regra Granite NAR (avare e servidor)
+## Regra Granite NAR (servidor)
 
 Sem seletor de idioma e sem diarização nas DUAS ferramentas; os demais
 modelos exibem ambos (inclusive o Scribe).
