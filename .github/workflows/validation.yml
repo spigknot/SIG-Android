@@ -1,0 +1,46 @@
+name: SIG validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-gates:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21 for Gradle
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Run the quiet repository gate
+        shell: pwsh
+        run: |
+          & .\scripts\validate-agent-harness.ps1 `
+            -RunAndroidGates `
+            -Quiet `
+            -Json `
+            -EvidencePath build\harness-validation.json
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload bounded gate evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sig-validation-evidence
+          path: build/harness-validation.json
+          if-no-files-found: warn
