@@ -31,7 +31,7 @@ import kotlin.math.roundToInt
 object AppUpdateChecker {
 
     /** Versão deste APK — atualizar junto com a release (formato YYYYMMDD_NNN). */
-    const val APP_VERSION = "20260823_003"
+    const val APP_VERSION = "20260824_001"
 
     private const val RELEASES_URL = "https://api.github.com/repos/spigknot/SIG-Android/releases/latest"
     private const val APK_ASSET_NAME = "sig.apk"
