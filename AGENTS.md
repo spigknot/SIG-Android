@@ -15,13 +15,31 @@ funcional completa antes de aceitar.
 | Decisão sync/async + polling AssemblyAI | `AssemblyAiAsyncFlow.kt` (seam puro) + `sendAssemblyaiAsyncTranscription` | loop sem término, perda de diagnóstico | `.\gradlew.bat :app:testDebugUnitTest` (AssemblyAiAsyncFlowTest) |
 | Parâmetros de idioma por provedor | `SttLanguageSettings.kt` | vazamento de parâmetro entre provedores | testes unitários (SttLanguageSettings/SttDiarizationTest) |
 | Diarização por provedor | `SttDiarization.kt` | parâmetro errado por provedor/modo | testes unitários (SttDiarizationTest) |
-| Fluxo REST (arquivos) | `send*ApiTranscription` + `transcription_form_fields` | erro de form/header por provedor | testes unitários + teste real com chave |
-| Fluxo WebSocket (ao vivo) | handlers `handleGrokLiveEvent`/Deepgram/AssemblyAI/Scribe | finalização travada, reconexão | testes unitários + teste em campo |
+| Contratos de requisição REST/WS | `SttRequestBuilders.kt` + `send*ApiTranscription` | erro de URL/form/header por provedor | `SttRequestBuildersTest` + gates completos |
+| Fluxo REST (arquivos) | `send*ApiTranscription` + `transcription_form_fields` | erro de form/header por provedor | testes de contrato + teste real com chave |
+| Fluxo WebSocket (ao vivo) | handlers `handleGrokLiveEvent`/Deepgram/AssemblyAI/Scribe | finalização travada, reconexão | testes de contrato + teste em campo |
+| Correlação de diagnóstico live | `LiveDiagnosticContext.kt` + `emitGrokConnectionEvent` | estado sem vínculo com resultado/diagnóstico | `LiveDiagnosticContextTest` + cenário de reconexão |
 | Regras de idioma/diarização na UI | `refreshGrokApiControls` / `showLiveLanguageMenu` | checkbox/idioma sumindo por modo | testes unitários + `.\gradlew.bat :app:lintDebug` |
 
 Antes de aceitar QUALQUER mudança no hotspot: `.\gradlew.bat :app:testDebugUnitTest`,
 `.\gradlew.bat :app:lintDebug` e `.\gradlew.bat :app:assembleDebug`. Uma mudança
 no fluxo assíncrono sem teste novo no `AssemblyAiAsyncFlowTest` não está pronta.
+
+## Aceitação REST e WebSocket
+
+O roteiro executável e os limites de credencial estão em
+`docs/validation/STT_ACCEPTANCE.md`. Ele complementa este mapa sem mover o
+ownership para outra Activity ou para um Skill.
+
+| Prova | Entrada controlada | Resultado obrigatório | Evidência de falha |
+|---|---|---|---|
+| REST (arquivos) | Áudio curto aprovado + provedor/chave de teste autorizados | Resposta HTTP esperada e transcrição não vazia, com form/header conforme a rota | `terminal.txt`, `log.txt` e `correlation.txt` redigidos; nunca chave ou áudio |
+| WebSocket (ao vivo) | Dispositivo aprovado + microfone autorizado + provedor live | sequência de conexão, parcial/final, finalização e desconexão sem travamento; reconexão deve ser observável quando provocada | estados `RECONNECTING`, `RECONNECTED`, `RECONNECT_FAILED`, `AUDIO_LOST` e diagnóstico redigido |
+
+Antes de qualquer prova real, executar os testes unitários focais disponíveis.
+Depois de qualquer mudança no hotspot, executar obrigatoriamente o gate
+completo já listado acima. Testes de campo não recebem chaves no repositório,
+não usam dados de produção e não promovem APK ou pacote nativo sem aprovação.
 
 ## Pacote nativo (release apenas)
 

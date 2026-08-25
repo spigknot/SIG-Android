@@ -17,6 +17,28 @@ object TranscriptAssistantClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
+    fun requestHistory(
+        client: OkHttpClient,
+        serverConfig: ModelServerStore.Config,
+        transcript: String,
+        historySystemPrompt: String,
+        historyUserPrompt: String,
+        callback: (Result<String>) -> Unit
+    ): Call {
+        val call = newCall(client, serverConfig, historySystemPrompt, historyUserPrompt)
+        call.enqueue(
+            resultCallback(
+                parser = { body ->
+                    extractOutputText(body).trim().ifBlank {
+                        throw IllegalStateException("O servidor devolveu um histórico vazio.")
+                    }
+                },
+                callback = callback
+            )
+        )
+        return call
+    }
+
     fun requestHistoryAndNames(
         client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
@@ -221,7 +243,11 @@ object TranscriptAssistantClient {
             payload.put("system", systemPrompt)
             payload.put("prompt", transcript)
             if (!payload.has("stream")) payload.put("stream", false)
-        } else if (serverConfig.provider == "deepseek" || serverConfig.isDeepseekApi) {
+        } else if (
+            serverConfig.provider == "deepseek" ||
+            serverConfig.isDeepseekApi ||
+            serverConfig.isProxy
+        ) {
             payload.put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put("content", systemPrompt))
                 .put(JSONObject().put("role", "user").put("content", transcript)))

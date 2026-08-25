@@ -8,67 +8,56 @@
                 <ImageButton android:id="@+id/btnBack" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Voltar" android:src="@drawable/ic_arrow_back" app:tint="#FFFFFFFF" />
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Configurações" android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" />
             </FrameLayout>
-            <TextView style="@style/SettingsHeader" android:text="Chaves API" />
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="xAI:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_xai_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da xAI" android:inputType="textPassword" />
-            </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepseek:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_deepseek_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepseek" android:inputType="textPassword" />
-            </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepgram:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_deepgram_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepgram" android:inputType="textPassword" />
-            </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Termos:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_deepgram_keyterms" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Palavras-chave do Deepgram (vírgula)" android:inputType="text" />
-            </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="AssemblyAI:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_assemblyai_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da AssemblyAI" android:inputType="textPassword" />
-            </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="ElevenLabs:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_elevenlabs_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da ElevenLabs" android:inputType="textPassword" />
-            </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Imei Check:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_imei_check_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Imei Check" android:inputType="textPassword" />
-            </LinearLayout>
-            <Button android:id="@+id/button_save_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="4dp" android:paddingBottom="4dp" android:text="Salvar chaves" android:textAllCaps="false" />
 
-            <TextView style="@style/SettingsHeader" android:text="Modelo de transcrição" />
+            <TextView style="@style/SettingsHeader" android:text="Acesso rápido" />
+            <Button android:id="@+id/button_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="5dp" android:paddingBottom="5dp" android:text="API KEYS" android:textAllCaps="false" />
+
+            <TextView style="@style/SettingsHeader" android:text="Transcrição" />
             <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#88101418" android:paddingStart="8dp" android:paddingTop="8dp" android:paddingEnd="0dp" android:paddingBottom="8dp">
                 <RadioGroup android:id="@+id/radio_transcription_models" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
             </FrameLayout>
             <TextView android:id="@+id/transcription_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
 
-            <TextView style="@style/SettingsHeader" android:text="Modelo de texto" />
+            <TextView style="@style/SettingsHeader" android:text="Histórico" />
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="#88101418" android:padding="8dp">
-                <RadioGroup android:id="@+id/radio_text_models" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
-                <LinearLayout android:id="@+id/text_proxy_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
+                <RadioGroup android:id="@+id/radio_history_models" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+                <LinearLayout android:id="@+id/history_proxy_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
                     <TextView android:layout_width="96dp" android:layout_height="wrap_content" android:text="Modelo" android:textColor="#FFFFFFFF" />
-                    <RadioGroup android:id="@+id/radio_text_proxy_models" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" />
+                    <RadioGroup android:id="@+id/radio_history_proxy_models" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" />
                 </LinearLayout>
-                <LinearLayout android:id="@+id/text_reasoning_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
+                <LinearLayout android:id="@+id/history_reasoning_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
                     <TextView android:layout_width="96dp" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" />
-                    <RadioGroup android:id="@+id/radio_text_reasoning" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" />
+                    <RadioGroup android:id="@+id/radio_history_reasoning" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" />
                 </LinearLayout>
             </LinearLayout>
-            <TextView android:id="@+id/text_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
+            <TextView android:id="@+id/history_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
 
-            <TextView style="@style/SettingsHeader" android:text="Extração de partes" />
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="top" android:background="#88101418" android:padding="8dp">
-                <RadioGroup android:id="@+id/radio_parts_extraction" android:layout_width="148dp" android:layout_height="match_parent" android:orientation="vertical" />
-                <LinearLayout android:id="@+id/parts_model_controls" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:orientation="vertical" android:visibility="gone">
-                    <TextView android:id="@+id/label_parts_model" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Modelo" android:textColor="#FFFFFFFF" />
-                    <RadioGroup android:id="@+id/radio_parts_model" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
-                    <TextView android:id="@+id/label_parts_proxy_model" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Modelo do IA-Proxy" android:textColor="#FFFFFFFF" android:visibility="gone" />
-                    <RadioGroup android:id="@+id/radio_parts_proxy_model" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" />
-                    <TextView android:id="@+id/label_parts_reasoning" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" android:visibility="gone" />
-                    <RadioGroup android:id="@+id/radio_parts_reasoning" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone" />
+            <TextView style="@style/SettingsHeader" android:text="Oitiva" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:background="#88101418" android:padding="8dp">
+                <RadioGroup android:id="@+id/radio_statement_models" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+                <LinearLayout android:id="@+id/statement_proxy_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
+                    <TextView android:layout_width="96dp" android:layout_height="wrap_content" android:text="Modelo" android:textColor="#FFFFFFFF" />
+                    <RadioGroup android:id="@+id/radio_statement_proxy_models" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/statement_reasoning_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
+                    <TextView android:layout_width="96dp" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" />
+                    <RadioGroup android:id="@+id/radio_statement_reasoning" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" />
+                </LinearLayout>
+            </LinearLayout>
+            <TextView android:id="@+id/statement_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
+
+            <LinearLayout android:id="@+id/parts_extraction_section" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:alpha="0.45">
+                <TextView style="@style/SettingsHeader" android:text="Extração de Partes (temporariamente inativa)" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="top" android:background="#88101418" android:padding="8dp">
+                    <RadioGroup android:id="@+id/radio_parts_extraction" android:layout_width="148dp" android:layout_height="match_parent" android:orientation="vertical" />
+                    <LinearLayout android:id="@+id/parts_model_controls" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="8dp" android:orientation="vertical" android:visibility="gone">
+                        <TextView android:id="@+id/label_parts_model" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Modelo" android:textColor="#FFFFFFFF" />
+                        <RadioGroup android:id="@+id/radio_parts_model" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" />
+                        <TextView android:id="@+id/label_parts_proxy_model" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Modelo do IA-Proxy" android:textColor="#FFFFFFFF" android:visibility="gone" />
+                        <RadioGroup android:id="@+id/radio_parts_proxy_model" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" />
+                        <TextView android:id="@+id/label_parts_reasoning" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" android:visibility="gone" />
+                        <RadioGroup android:id="@+id/radio_parts_reasoning" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 

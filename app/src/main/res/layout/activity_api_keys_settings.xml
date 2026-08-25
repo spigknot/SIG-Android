@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent" android:layout_height="match_parent" android:background="#000000" android:fitsSystemWindows="true">
+    <ScrollView android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingStart="20dp" android:paddingTop="20dp" android:paddingEnd="20dp" android:paddingBottom="76dp">
+            <FrameLayout android:layout_width="match_parent" android:layout_height="40dp" android:layout_marginBottom="18dp">
+                <ImageButton android:id="@+id/btnBack" android:layout_width="40dp" android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless" android:contentDescription="Voltar" android:src="@drawable/ic_arrow_back" app:tint="#FFFFFFFF" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="API KEYS" android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" />
+            </FrameLayout>
+            <TextView style="@style/SettingsHeader" android:text="Chaves de serviços" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="xAI:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_xai_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da xAI" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepseek:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_deepseek_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepseek" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepgram:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_deepgram_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepgram" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Keyterms:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_deepgram_keyterms" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Palavras-chave do Deepgram (vírgula)" android:inputType="text" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="AssemblyAI:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_assemblyai_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da AssemblyAI" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="ElevenLabs:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_elevenlabs_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da ElevenLabs" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Imei Check:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_imei_check_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Imei Check" android:inputType="textPassword" />
+            </LinearLayout>
+            <Button android:id="@+id/button_save_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="4dp" android:paddingBottom="4dp" android:text="Salvar chaves" android:textAllCaps="false" />
+        </LinearLayout>
+    </ScrollView>
+    <include layout="@layout/view_sig_echo_footer" />
+</FrameLayout>

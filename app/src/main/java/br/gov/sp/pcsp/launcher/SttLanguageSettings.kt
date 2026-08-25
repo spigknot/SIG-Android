@@ -85,74 +85,103 @@ object SttLanguageSettings {
 
     // ---------------- Deepgram: language=<valor> em REST e WS ----------------
 
-    fun deepgramLanguageParam(): String {
-        val mode = GrokApiSettings.deepgramLanguageMode()
-        return if (mode == "custom") GrokApiSettings.deepgramCustomLanguage().trim() else mode
-    }
+    fun deepgramLanguageParam(mode: String, custom: String): String =
+        if (mode == "custom") custom.trim() else mode
+
+    fun deepgramLanguageParam(): String =
+        deepgramLanguageParam(
+            mode = GrokApiSettings.deepgramLanguageMode(),
+            custom = GrokApiSettings.deepgramCustomLanguage()
+        )
 
     // ---------------- AssemblyAI: language_code (REST) / language_codes (WS) ----------------
 
     /** REST: (language_detection, language_code). detection=true => omitir language_code. */
-    fun assemblyaiRestLanguage(): Pair<Boolean, String?> {
-        val mode = GrokApiSettings.assemblyaiLanguageMode()
+    fun assemblyaiRestLanguage(mode: String, custom: String): Pair<Boolean, String?> {
         return when {
             mode == "multi" -> true to null
             mode == "custom" -> {
-                val codes = parseCodes(GrokApiSettings.assemblyaiCustomLanguage())
+                val codes = parseCodes(custom)
                 if (codes.size >= 2) true to null else false to codes.firstOrNull()
             }
             else -> false to mode
         }
     }
 
+    fun assemblyaiRestLanguage(): Pair<Boolean, String?> =
+        assemblyaiRestLanguage(
+            mode = GrokApiSettings.assemblyaiLanguageMode(),
+            custom = GrokApiSettings.assemblyaiCustomLanguage()
+        )
+
     /** WS: lista de códigos para language_codes (vazia = omitir o parâmetro = multi). */
-    fun assemblyaiWsLanguageCodes(): List<String> {
-        val mode = GrokApiSettings.assemblyaiLanguageMode()
+    fun assemblyaiWsLanguageCodes(mode: String, custom: String): List<String> {
         return when {
             mode == "multi" -> emptyList()
-            mode == "custom" -> parseCodes(GrokApiSettings.assemblyaiCustomLanguage())
+            mode == "custom" -> parseCodes(custom)
             else -> listOf(mode)
         }
     }
 
+    fun assemblyaiWsLanguageCodes(): List<String> =
+        assemblyaiWsLanguageCodes(
+            mode = GrokApiSettings.assemblyaiLanguageMode(),
+            custom = GrokApiSettings.assemblyaiCustomLanguage()
+        )
+
     // ---------------- ElevenLabs: language_code (+ secondary_languages no WS) ----------------
 
     /** REST: language_code ou null (multi e custom com vários omitem). */
-    fun elevenlabsRestLanguageCode(): String? {
-        val mode = GrokApiSettings.elevenlabsLanguageMode()
+    fun elevenlabsRestLanguageCode(mode: String, custom: String): String? {
         return when {
             mode == "multi" -> null
-            mode == "custom" -> parseCodes(GrokApiSettings.elevenlabsCustomLanguage())
+            mode == "custom" -> parseCodes(custom)
                 .takeIf { it.size == 1 }?.first()
             else -> mode
         }
     }
 
+    fun elevenlabsRestLanguageCode(): String? =
+        elevenlabsRestLanguageCode(
+            mode = GrokApiSettings.elevenlabsLanguageMode(),
+            custom = GrokApiSettings.elevenlabsCustomLanguage()
+        )
+
     /** WS: (language_code, secondary_languages). O primeiro código digitado é o principal. */
-    fun elevenlabsWsLanguage(): Pair<String?, List<String>> {
-        val mode = GrokApiSettings.elevenlabsLanguageMode()
+    fun elevenlabsWsLanguage(mode: String, custom: String): Pair<String?, List<String>> {
         return when {
             mode == "multi" -> null to emptyList()
             mode == "custom" -> {
-                val codes = parseCodes(GrokApiSettings.elevenlabsCustomLanguage())
+                val codes = parseCodes(custom)
                 if (codes.isEmpty()) null to emptyList() else codes.first() to codes.drop(1)
             }
             else -> mode to emptyList()
         }
     }
 
+    fun elevenlabsWsLanguage(): Pair<String?, List<String>> =
+        elevenlabsWsLanguage(
+            mode = GrokApiSettings.elevenlabsLanguageMode(),
+            custom = GrokApiSettings.elevenlabsCustomLanguage()
+        )
+
     // ---------------- Grok (xAI): language=<valor> em REST e WS ----------------
 
     /** Valor do parâmetro language do Grok (REST e WS).
      *  multi e custom com 2+ códigos omitem o parâmetro (null); a xAI não
      *  aceita listas nem "multi"/"auto" como valor. */
-    fun grokLanguageParam(): String? {
-        val mode = GrokApiSettings.grokLanguageMode()
+    fun grokLanguageParam(mode: String, custom: String): String? {
         return when {
             mode == "multi" -> null
-            mode == "custom" -> parseCodes(GrokApiSettings.grokCustomLanguage())
+            mode == "custom" -> parseCodes(custom)
                 .takeIf { it.size == 1 }?.first()
             else -> mode.ifBlank { null }
         }
     }
+
+    fun grokLanguageParam(): String? =
+        grokLanguageParam(
+            mode = GrokApiSettings.grokLanguageMode(),
+            custom = GrokApiSettings.grokCustomLanguage()
+        )
 }

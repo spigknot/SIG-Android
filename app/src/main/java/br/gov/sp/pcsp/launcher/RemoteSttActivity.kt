@@ -66,6 +66,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -254,6 +255,10 @@ class RemoteSttActivity : AppCompatActivity() {
     // Correlação do fluxo async da AssemblyAI (diagnóstico de falha).
     @Volatile private var assemblyaiRunId: String? = null
     @Volatile private var assemblyaiLastTranscriptId: String? = null
+    // Correlação reader-safe de qualquer sessão live (REST definitivo ou WS).
+    @Volatile private var liveDiagnosticContext: LiveDiagnosticContext? = null
+    private val liveDiagnosticLock = Any()
+    private var liveDiagnosticDir: File? = null
     private lateinit var batchProgressBox: View
     private lateinit var batchProgressRows: LinearLayout
     private val batchRowCells = mutableListOf<Triple<TextView, TextView, TextView>>()
@@ -305,6 +310,9 @@ class RemoteSttActivity : AppCompatActivity() {
     private var historyElapsedMs: Long? = null
     private var namesElapsedMs: Long? = null
     private var statementElapsedMs: Long? = null
+    private var historyRequestModel: String? = null
+    private var namesRequestModel: String? = null
+    private var statementRequestModel: String? = null
     private var assistantNames: List<String> = emptyList()
     private var progressPhase = ProgressPhase.TRANSCRIPTION
     private var transcriptionTaskState = AssistantTaskState.IDLE
@@ -1243,6 +1251,10 @@ class RemoteSttActivity : AppCompatActivity() {
         liveFullPcmFile?.delete()
         liveFullPcmFile = if (useWebSocket) null else File(cacheDir, "live_full_${System.currentTimeMillis()}.pcm")
         liveUsesGrokWebSocket = useWebSocket
+        liveDiagnosticContext = LiveDiagnosticContext.create(
+            provider = if (useWebSocket) sttProviderName() else "server",
+        ).also { it.recordState("STARTING") }
+        synchronized(liveDiagnosticLock) { liveDiagnosticDir = null }
         if (useWebSocket) liveDraftIntervalMillis = grokWebSocketChunkMillis()
         liveTranscribing = true
         updateTextEditorsLock()
@@ -1336,27 +1348,39 @@ class RemoteSttActivity : AppCompatActivity() {
             if (reconnecting) GrokConnectionEvent.RECONNECTING else GrokConnectionEvent.CONNECTING,
             if (reconnecting) "tentativa $grokReconnectAttempts/$GROK_MAX_RECONNECT_ATTEMPTS" else null
         )
-        val request = when {
-            sttIsDeepgram -> Request.Builder()
-                .url(deepgramWebSocketUrl())
-                .header("Authorization", "Token ${GrokApiSettings.deepgramApiKey()}")
-                .build()
-            sttIsAssemblyai -> Request.Builder()
-                .url(assemblyaiWebSocketUrl())
-                .header("Authorization", GrokApiSettings.assemblyaiApiKey())
-                .build()
-            sttIsElevenlabs -> Request.Builder()
-                .url(elevenlabsWebSocketUrl())
-                .header("xi-api-key", GrokApiSettings.elevenlabsApiKey())
-                .build()
-            else -> {
-                val apiKey = GrokApiSettings.apiKey()
-                Request.Builder()
-                    .url(grokWebSocketUrl())
-                    .header("Authorization", "Bearer $apiKey")
-                    .build()
+        val requestSpec = when {
+            sttIsDeepgram -> SttRequestBuilders.deepgramWebSocket(
+                apiKey = GrokApiSettings.deepgramApiKey(),
+                language = SttLanguageSettings.deepgramLanguageParam(),
+                diarize = checkboxLiveDiarize.isChecked,
+                keyterms = GrokApiSettings.deepgramKeyterms()
+                    .split(',', '\n')
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() },
+            )
+            sttIsAssemblyai -> SttRequestBuilders.assemblyaiWebSocket(
+                apiKey = GrokApiSettings.assemblyaiApiKey(),
+                languageCodes = SttLanguageSettings.assemblyaiWsLanguageCodes(),
+                diarize = checkboxLiveDiarize.isChecked,
+            )
+            sttIsElevenlabs -> {
+                val (primary, secondary) = SttLanguageSettings.elevenlabsWsLanguage()
+                SttRequestBuilders.elevenlabsWebSocket(
+                    apiKey = GrokApiSettings.elevenlabsApiKey(),
+                    primaryLanguage = primary,
+                    secondaryLanguages = secondary,
+                )
             }
+            else -> SttRequestBuilders.grokWebSocket(
+                apiKey = GrokApiSettings.apiKey(),
+                language = SttLanguageSettings.grokLanguageParam(),
+                diarize = checkboxLiveDiarize.isChecked,
+            )
         }
+        val request = Request.Builder()
+            .url(requestSpec.url)
+            .header(requestSpec.header.name, requestSpec.header.value)
+            .build()
         val isReconnectAttempt = reconnecting
         grokLiveWebSocket = grokWebSocketClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -1404,62 +1428,6 @@ class RemoteSttActivity : AppCompatActivity() {
                 }
             }
         })
-    }
-
-    private fun grokWebSocketUrl(): String {
-        return buildString {
-            append("wss://api.x.ai/v1/stt?sample_rate=16000&encoding=pcm")
-            append("&interim_results=true")
-            SttLanguageSettings.grokLanguageParam()?.let { append("&language=$it") }
-            append("&format=true&smart_turn=0.65&endpointing=900&filler_words=false")
-            SttDiarization.grokQuery(checkboxLiveDiarize.isChecked)?.let { append("&$it") }
-        }
-    }
-
-    private fun deepgramWebSocketUrl(): String {
-        return buildString {
-            append("wss://api.deepgram.com/v1/listen?model=nova-3")
-            append("&language=${SttLanguageSettings.deepgramLanguageParam()}")
-            append("&smart_format=true&punctuate=true")
-            append("&encoding=linear16&sample_rate=16000&channels=1")
-            append("&interim_results=true&endpointing=900")
-            SttDiarization.deepgramQuery(checkboxLiveDiarize.isChecked)?.let { append("&$it") }
-            GrokApiSettings.deepgramKeyterms()
-                .split(',', '\n')
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .forEach { append("&keyterm=${Uri.encode(it)}") }
-        }
-    }
-
-    private fun assemblyaiWebSocketUrl(): String {
-        return buildString {
-            append("wss://streaming.assemblyai.com/v3/ws")
-            append("?speech_model=universal-3-5-pro")
-            append("&encoding=pcm_s16le&sample_rate=16000")
-            append("&continuous_partials=true")
-            // language_codes como parâmetro REPETIDO (formato confirmado na API).
-            // Lista vazia = multi: o parâmetro é omitido (code-switching nativo).
-            SttLanguageSettings.assemblyaiWsLanguageCodes().forEach { code ->
-                append("&language_codes=${Uri.encode(code)}")
-            }
-            SttDiarization.assemblyaiWsQuery(checkboxLiveDiarize.isChecked)?.let { append("&$it") }
-        }
-    }
-
-    private fun elevenlabsWebSocketUrl(): String {
-        return buildString {
-            append("wss://api.elevenlabs.io/v1/speech-to-text/realtime")
-            append("?model_id=scribe_v2_realtime")
-            append("&audio_format=pcm_16000")
-            val (primary, secondary) = SttLanguageSettings.elevenlabsWsLanguage()
-            if (primary != null) append("&language_code=${Uri.encode(primary)}")
-            // secondary_languages como parâmetro REPETIDO (formato confirmado na API).
-            secondary.forEach { code -> append("&secondary_languages=${Uri.encode(code)}") }
-            append("&commit_strategy=vad")
-            append("&vad_silence_threshold_secs=1.0")
-            append("&include_timestamps=true")
-        }
     }
 
     private fun handleGrokLiveEvent(webSocket: WebSocket, rawEvent: String) {
@@ -1789,6 +1757,7 @@ class RemoteSttActivity : AppCompatActivity() {
         liveUsesGrokWebSocket = false
         if (grokLiveWebSocket === webSocket) grokLiveWebSocket = null
         webSocket?.close(1000, "Concluído")
+        liveDiagnosticContext?.recordState("DONE")
         emitGrokConnectionEvent(GrokConnectionEvent.DISCONNECTED)
         runOnUiThread {
             storeReceivedTranscription(mergedFinal)
@@ -1924,6 +1893,7 @@ class RemoteSttActivity : AppCompatActivity() {
         liveThread = null
         socket?.cancel()
         emitGrokConnectionEvent(GrokConnectionEvent.RECONNECT_FAILED, message)
+        writeLiveFailureDiagnostics("websocket_terminal_failure")
         runOnUiThread {
             transcriptionTaskState = AssistantTaskState.ERROR
             refiningTaskState = AssistantTaskState.IDLE
@@ -1950,6 +1920,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun emitGrokConnectionEvent(event: GrokConnectionEvent, detail: String? = null) {
         grokConnectionState = event.state
+        liveDiagnosticContext?.recordState(event.name)
         val provider = sttProviderName()
         Log.i(TAG, "$provider WebSocket: ${event.state.label}${detail?.let { " - $it" }.orEmpty()}")
         runOnUiThread {
@@ -2022,6 +1993,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun stopLiveMicTranscription(generateDefinitive: Boolean = true) {
         if (!liveTranscribing && liveThread == null && liveUploadExecutor == null && grokLiveWebSocket == null) return
         val useGrokWebSocket = liveUsesGrokWebSocket
+        liveDiagnosticContext?.recordState(if (generateDefinitive) "FINALIZING" else "STOPPED")
         liveTranscribing = false
         updateTextEditorsLock()
         livePaused = false
@@ -2196,6 +2168,8 @@ class RemoteSttActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             if (liveTranscribing) {
                 Log.e(TAG, "Live mic failed", e)
+                liveDiagnosticContext?.recordState("FAILED")
+                writeLiveFailureDiagnostics("microphone_capture_failure")
                 runOnUiThread {
                     status.text = "Erro no microfone ao vivo."
                 }
@@ -2280,6 +2254,33 @@ class RemoteSttActivity : AppCompatActivity() {
         return this
     }
 
+    private fun buildMultipartBody(spec: SttRequestSpec, uploadFile: UploadFile): RequestBody {
+        val fileField = requireNotNull(spec.fileField) { "Contrato STT sem campo de arquivo." }
+        return MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .apply {
+                spec.multipartFields.forEach { field ->
+                    addFormDataPart(field.name, field.value)
+                }
+            }
+            // O arquivo permanece por último para preservar o contrato do Grok.
+            .addFormDataPart(
+                fileField,
+                uploadFile.file.name,
+                uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
+            )
+            .build()
+    }
+
+    private fun buildPostRequest(spec: SttRequestSpec, body: RequestBody): Request =
+        Request.Builder()
+            .url(spec.url)
+            .apply {
+                spec.headers.forEach { header(it.name, it.value) }
+            }
+            .post(body)
+            .build()
+
     private fun sendLiveChunkToServerOnce(
         uploadFile: UploadFile,
         config: TranscriptionModelStore.Config,
@@ -2328,34 +2329,15 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun sendGrokApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
         val apiKey = GrokApiSettings.apiKey()
         require(GrokApiSettings.isPlausibleXaiKey(apiKey)) { "A chave API da xAI salva nas configurações é inválida." }
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .apply {
-                // multi/custom com vários omitem o language (detecção nativa da xAI).
-                SttLanguageSettings.grokLanguageParam()?.let { addFormDataPart("language", it) }
-            }
-            .addFormDataPart("format", "true")
-            .addFormDataPart("filler_words", "false")
-            .apply {
-                // Grok: diarize=true ativa a identificação numérica de falantes.
-                // O campo file DEVE ser o último do multipart.
-                if (SttDiarization.grokRestDiarize(checkboxLiveDiarize.isChecked)) {
-                    addFormDataPart("diarize", "true")
-                }
-            }
-            // xAI requires the binary file field to be the last multipart field.
-            .addFormDataPart(
-                "file",
-                uploadFile.file.name,
-                uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
-            )
-            .build()
+        val requestSpec = SttRequestBuilders.grokRest(
+            apiKey = apiKey,
+            // multi/custom com vários omitem o language (detecção nativa da xAI).
+            language = SttLanguageSettings.grokLanguageParam(),
+            diarize = SttDiarization.grokRestDiarize(checkboxLiveDiarize.isChecked),
+        )
+        val requestBody = buildMultipartBody(requestSpec, uploadFile)
         val call = client.newCall(
-            Request.Builder()
-                .url("https://api.x.ai/v1/stt")
-                .header("Authorization", "Bearer $apiKey")
-                .post(requestBody)
-                .build()
+            buildPostRequest(requestSpec, requestBody)
         )
         currentCalls.add(call)
         if (isLiveFinal != null) {
@@ -2389,28 +2371,20 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun sendDeepgramApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
         val apiKey = GrokApiSettings.deepgramApiKey()
         require(GrokApiSettings.isPlausibleDeepgramKey(apiKey)) { "A chave API do Deepgram salva nas configurações é inválida." }
-        val url = buildString {
-            append("https://api.deepgram.com/v1/listen?model=nova-3")
-            append("&language=${SttLanguageSettings.deepgramLanguageParam()}")
-            append("&smart_format=true&punctuate=true")
-            SttDiarization.deepgramQuery(checkboxLiveDiarize.isChecked)?.let { append("&$it") }
-            GrokApiSettings.deepgramKeyterms()
+        val requestSpec = SttRequestBuilders.deepgramRest(
+            apiKey = apiKey,
+            language = SttLanguageSettings.deepgramLanguageParam(),
+            diarize = checkboxLiveDiarize.isChecked,
+            keyterms = GrokApiSettings.deepgramKeyterms()
                 .split(',', '\n')
                 .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .forEach { append("&keyterm=${Uri.encode(it)}") }
-        }
+                .filter { it.isNotBlank() },
+        )
         val requestBody = uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
         var attempt = 0
         while (true) {
             attempt += 1
-            val call = client.newCall(
-                Request.Builder()
-                    .url(url)
-                    .header("Authorization", "Token $apiKey")
-                    .post(requestBody)
-                    .build()
-            )
+            val call = client.newCall(buildPostRequest(requestSpec, requestBody))
             currentCalls.add(call)
             if (isLiveFinal != null) {
                 synchronized(liveRequestLock) {
@@ -2461,33 +2435,18 @@ class RemoteSttActivity : AppCompatActivity() {
         val apiKey = GrokApiSettings.assemblyaiApiKey()
         require(GrokApiSettings.isPlausibleAssemblyaiKey(apiKey)) { "A chave API da AssemblyAI salva nas configurações é inválida." }
         val (languageDetection, languageCode) = SttLanguageSettings.assemblyaiRestLanguage()
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .apply {
-                if (languageDetection) {
-                    addFormDataPart("language_detection", "true")
-                }
-                languageCode?.let { addFormDataPart("language_code", it) }
-                val (speakerLabels, punctuate) =
-                    SttDiarization.assemblyaiRest(checkboxLiveDiarize.isChecked)
-                if (speakerLabels) {
-                    addFormDataPart("speaker_labels", "true")
-                    addFormDataPart("punctuate", "true")
-                }
-            }
-            .addFormDataPart(
-                "audio",
-                uploadFile.file.name,
-                uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
-            )
-            .build()
+        val (speakerLabels, punctuate) =
+            SttDiarization.assemblyaiRest(checkboxLiveDiarize.isChecked)
+        val requestSpec = SttRequestBuilders.assemblyaiRest(
+            apiKey = apiKey,
+            languageDetection = languageDetection,
+            languageCode = languageCode,
+            speakerLabels = speakerLabels,
+            punctuate = punctuate,
+        )
+        val requestBody = buildMultipartBody(requestSpec, uploadFile)
         val call = client.newCall(
-            Request.Builder()
-                .url("https://sync.assemblyai.com/transcribe")
-                .header("Authorization", apiKey)
-                .header("X-AAI-Model", "u3-sync-pro")
-                .post(requestBody)
-                .build()
+            buildPostRequest(requestSpec, requestBody)
         )
         currentCalls.add(call)
         if (isLiveFinal != null) {
@@ -2522,28 +2481,15 @@ class RemoteSttActivity : AppCompatActivity() {
         val apiKey = GrokApiSettings.elevenlabsApiKey()
         require(GrokApiSettings.isPlausibleElevenlabsKey(apiKey)) { "A chave API da ElevenLabs salva nas configurações é inválida." }
         val languageCode = SttLanguageSettings.elevenlabsRestLanguageCode()
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("model_id", "scribe_v2")
-            .apply {
-                languageCode?.let { addFormDataPart("language_code", it) }
-                // Scribe v2 REST: diarize=true quando a checkbox está marcada.
-                if (SttDiarization.elevenlabsRestDiarize(checkboxLiveDiarize.isChecked)) {
-                    addFormDataPart("diarize", "true")
-                }
-            }
-            .addFormDataPart(
-                "file",
-                uploadFile.file.name,
-                uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
-            )
-            .build()
+        val requestSpec = SttRequestBuilders.elevenlabsRest(
+            apiKey = apiKey,
+            languageCode = languageCode,
+            // Scribe v2 REST: diarize=true quando a checkbox está marcada.
+            diarize = SttDiarization.elevenlabsRestDiarize(checkboxLiveDiarize.isChecked),
+        )
+        val requestBody = buildMultipartBody(requestSpec, uploadFile)
         val call = client.newCall(
-            Request.Builder()
-                .url("https://api.elevenlabs.io/v1/speech-to-text")
-                .header("xi-api-key", apiKey)
-                .post(requestBody)
-                .build()
+            buildPostRequest(requestSpec, requestBody)
         )
         currentCalls.add(call)
         if (isLiveFinal != null) {
@@ -2946,7 +2892,7 @@ class RemoteSttActivity : AppCompatActivity() {
             selectedListBox.visibility = View.GONE
             buttonHistory.visibility = View.VISIBLE
             buttonStatement.visibility = View.VISIBLE
-            buttonPersonSelector.visibility = View.VISIBLE
+            buttonPersonSelector.visibility = View.GONE
             historyOutputContainer.visibility = View.VISIBLE
             statementOutputContainer.visibility = View.VISIBLE
             buttonRecordingAction.visibility = View.VISIBLE
@@ -3133,6 +3079,8 @@ class RemoteSttActivity : AppCompatActivity() {
             try {
                 recordingThread?.join(5_000)
                 if (pcmFile == null || !pcmFile.exists() || pcmFile.length() < 1024) {
+                    liveDiagnosticContext?.recordState("FAILED")
+                    writeLiveFailureDiagnostics("missing_audio")
                     runOnUiThread { status.text = "Nenhum áudio foi gravado." }
                     finishLiveTranscriptOutput(null)
                     return@Thread
@@ -3158,12 +3106,15 @@ class RemoteSttActivity : AppCompatActivity() {
                         refiningTaskState = AssistantTaskState.DONE
                         renderLiveProgress()
                     }
+                    liveDiagnosticContext?.recordState("DONE")
                     finishLiveTranscriptOutput(null)
                 } finally {
                     wavFile.delete()
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Definitive live transcription failed", e)
+                liveDiagnosticContext?.recordState("FAILED")
+                writeLiveFailureDiagnostics("rest_finalization_failure")
                 runOnUiThread {
                     refiningTaskState = AssistantTaskState.ERROR
                     renderLiveProgress()
@@ -3207,6 +3158,10 @@ class RemoteSttActivity : AppCompatActivity() {
                     htmlFile.writeText(buildLiveHtml(text), Charsets.UTF_8)
                     logFile.writeText("", Charsets.UTF_8)
                     terminalFile.writeText(text + "\n", Charsets.UTF_8)
+                    liveDiagnosticContext?.let { context ->
+                        File(sessionDir, "correlation.txt")
+                            .writeText(context.correlationText(), Charsets.UTF_8)
+                    }
                     File(sessionDir, "Transcricoes").mkdirs()
                     lastSession = OutputSession(sessionDir, txtFile, htmlFile, logFile, terminalFile)
                     outputFileName.visibility = View.GONE
@@ -5565,6 +5520,9 @@ class RemoteSttActivity : AppCompatActivity() {
         historyElapsedMs = null
         namesElapsedMs = null
         statementElapsedMs = null
+        historyRequestModel = null
+        namesRequestModel = null
+        statementRequestModel = null
         progressPhase = ProgressPhase.TRANSCRIPTION
         transcriptionTaskState = AssistantTaskState.IDLE
         refiningTaskState = AssistantTaskState.IDLE
@@ -5600,6 +5558,9 @@ class RemoteSttActivity : AppCompatActivity() {
         historyElapsedMs = null
         namesElapsedMs = null
         statementElapsedMs = null
+        historyRequestModel = null
+        namesRequestModel = null
+        statementRequestModel = null
         progressPhase = ProgressPhase.WHITE_RECORDING
         transcriptionTaskState = AssistantTaskState.RUNNING
         refiningTaskState = AssistantTaskState.IDLE
@@ -5642,88 +5603,54 @@ class RemoteSttActivity : AppCompatActivity() {
         val requestStartedAt = SystemClock.elapsedRealtime()
         progressPhase = ProgressPhase.ASSISTANT
         historyTaskState = AssistantTaskState.RUNNING
-        namesTaskState = AssistantTaskState.RUNNING
+        namesTaskState = AssistantTaskState.IDLE
         statementTaskState = AssistantTaskState.IDLE
         historyElapsedMs = null
         namesElapsedMs = null
         statementElapsedMs = null
+        namesRequestModel = null
+        statementRequestModel = null
+        val historyConfig = ModelServerStore.selectedConfig(TextModelPurpose.HISTORY)
+        historyRequestModel = RequestModelLabel.from(historyConfig)
         assistantNames = emptyList()
-        buttonPersonSelector.text = "Partes"
         clearAssistantOutputViews()
         buttonHistory.isEnabled = false
         buttonHistory.alpha = 0.55f
         liveAiProgress.visibility = View.VISIBLE
         renderLiveProgress()
         updateTextEditorsLock()
-        val extractionMethod = PartsExtractionSettings.selectedMethod(this)
-        val nameDatabase = if (extractionMethod == PartsExtractionSettings.Method.NAME_DATABASE) {
-            NameDatabaseStore.load(this)
-        } else {
-            emptySet()
-        }
 
-        val calls = TranscriptAssistantClient.requestHistoryAndNames(
+        val call = TranscriptAssistantClient.requestHistory(
             client = client,
-            serverConfig = ModelServerStore.selectedConfig(),
-            partsServerConfig = PartsExtractionSettings.selectedConfig(this),
+            serverConfig = historyConfig,
             transcript = transcript,
             historySystemPrompt = PromptTemplateStore.historySystemPrompt(),
             historyUserPrompt = PromptTemplateStore.historyUserPrompt(transcript),
-            partsSystemPrompt = PromptTemplateStore.partsSystemPrompt(),
-            partsUserPrompt = PromptTemplateStore.partsUserPromptFromTranscription(transcript),
-            extractionMethod = extractionMethod,
-            nameDatabase = nameDatabase,
-            onHistory = { result ->
-                runOnUiThread {
-                    if (generation != assistantRequestGeneration) return@runOnUiThread
-                    result.fold(
-                        onSuccess = { history ->
-                            historyElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
-                            historyTaskState = AssistantTaskState.DONE
-                            showHistoryText(history)
-                            updateTextEditorsLock()
-                        },
-                        onFailure = {
-                            historyElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
-                            historyTaskState = AssistantTaskState.ERROR
-                            Toast.makeText(
-                                this,
-                                it.message ?: "Não consegui gerar o histórico.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                            updateTextEditorsLock()
-                        }
-                    )
-                    finishAssistantTaskIfReady()
-                }
-            },
-            onNames = { result, extractionElapsedMs ->
-                runOnUiThread {
-                    if (generation != assistantRequestGeneration) return@runOnUiThread
-                    result.fold(
-                        onSuccess = { names ->
-                            namesElapsedMs = extractionElapsedMs
-                            namesTaskState = AssistantTaskState.DONE
-                            assistantNames = names
-                            buttonPersonSelector.text = names.firstOrNull() ?: "Partes"
-                            updateTextEditorsLock()
-                        },
-                        onFailure = {
-                            namesElapsedMs = extractionElapsedMs
-                            namesTaskState = AssistantTaskState.ERROR
-                            Toast.makeText(
-                                this,
-                                it.message ?: "Não consegui identificar os envolvidos.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                            updateTextEditorsLock()
-                        }
-                    )
-                    finishAssistantTaskIfReady()
-                }
+        ) { result ->
+            runOnUiThread {
+                if (generation != assistantRequestGeneration) return@runOnUiThread
+                result.fold(
+                    onSuccess = { history ->
+                        historyElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
+                        historyTaskState = AssistantTaskState.DONE
+                        showHistoryText(history)
+                        updateTextEditorsLock()
+                    },
+                    onFailure = {
+                        historyElapsedMs = SystemClock.elapsedRealtime() - requestStartedAt
+                        historyTaskState = AssistantTaskState.ERROR
+                        Toast.makeText(
+                            this,
+                            it.message ?: "Não consegui gerar o histórico.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        updateTextEditorsLock()
+                    }
+                )
+                finishAssistantTaskIfReady()
             }
-        )
-        synchronized(assistantCalls) { assistantCalls.addAll(calls) }
+        }
+        synchronized(assistantCalls) { assistantCalls.add(call) }
     }
 
     private fun requestStatement() {
@@ -5740,11 +5667,11 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         val generation = ++assistantRequestGeneration
         val requestStartedAt = SystemClock.elapsedRealtime()
-        val selectedName = buttonPersonSelector.text?.toString()?.trim()
-            ?.takeIf { it.isNotBlank() && it != "Partes" }
         progressPhase = ProgressPhase.STATEMENT
         statementTaskState = AssistantTaskState.RUNNING
         statementElapsedMs = null
+        val statementConfig = ModelServerStore.selectedConfig(TextModelPurpose.STATEMENT)
+        statementRequestModel = RequestModelLabel.from(statementConfig)
         buttonStatement.isEnabled = false
         buttonStatement.alpha = 0.55f
         liveAiProgress.visibility = View.VISIBLE
@@ -5753,10 +5680,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
         val call = TranscriptAssistantClient.requestStatement(
             client = client,
-            serverConfig = ModelServerStore.selectedConfig(),
+            serverConfig = statementConfig,
             material = material,
             statementSystemPrompt = PromptTemplateStore.statementSystemPrompt(),
-            statementUserPrompt = PromptTemplateStore.statementUserPrompt(selectedName, material)
+            statementUserPrompt = PromptTemplateStore.statementUserPrompt(null, material)
         ) { result ->
             runOnUiThread {
                 if (generation != assistantRequestGeneration) return@runOnUiThread
@@ -5812,7 +5739,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun finishAssistantTaskIfReady() {
         renderLiveProgress()
-        if (historyTaskState != AssistantTaskState.RUNNING && namesTaskState != AssistantTaskState.RUNNING) {
+        if (historyTaskState != AssistantTaskState.RUNNING) {
             buttonHistory.isEnabled = true
             buttonHistory.alpha = 1f
             synchronized(assistantCalls) { assistantCalls.clear() }
@@ -5845,12 +5772,22 @@ class RemoteSttActivity : AppCompatActivity() {
                     listOf(Triple("Transcrevendo", transcriptionTaskState, null))
                 }
             }
-            ProgressPhase.ASSISTANT -> listOf(
-                Triple("Redigindo histórico", historyTaskState, historyElapsedMs),
-                Triple("Identificando partes", namesTaskState, namesElapsedMs)
-            )
+            ProgressPhase.ASSISTANT -> buildList {
+                historyRequestModel?.let { model ->
+                    add(Triple("Histórico requisitado - $model", historyTaskState, historyElapsedMs))
+                }
+                namesRequestModel?.let { model ->
+                    if (namesTaskState != AssistantTaskState.IDLE) {
+                        add(Triple("Partes requisitadas - $model", namesTaskState, namesElapsedMs))
+                    }
+                }
+            }
             ProgressPhase.STATEMENT -> listOf(
-                Triple("Redigindo oitiva", statementTaskState, statementElapsedMs)
+                Triple(
+                    "Oitiva requisitada - ${statementRequestModel ?: "modelo não identificado"}",
+                    statementTaskState,
+                    statementElapsedMs
+                )
             )
         }
         val text = entries.joinToString("\n") { (label, state, elapsedMs) ->
@@ -5903,19 +5840,23 @@ class RemoteSttActivity : AppCompatActivity() {
             Toast.makeText(this, "Escreva ou gere um histórico antes de detectar as partes.", Toast.LENGTH_SHORT).show()
             return
         }
+        val method = PartsExtractionSettings.selectedMethod(this)
+        val partsConfig = PartsExtractionSettings.selectedConfig(this)
         namesTaskState = AssistantTaskState.RUNNING
         namesElapsedMs = null
+        namesRequestModel = method
+            .takeIf { it == PartsExtractionSettings.Method.AI }
+            ?.let { RequestModelLabel.from(partsConfig) }
         assistantNames = emptyList()
         buttonPersonSelector.text = "Partes"
         liveAiProgress.visibility = View.VISIBLE
         progressPhase = ProgressPhase.ASSISTANT
         renderLiveProgress()
         updateTextEditorsLock()
-        val method = PartsExtractionSettings.selectedMethod(this)
         val database = if (method == PartsExtractionSettings.Method.NAME_DATABASE) NameDatabaseStore.load(this) else emptySet()
         val call = TranscriptAssistantClient.requestNames(
             client,
-            PartsExtractionSettings.selectedConfig(this),
+            partsConfig,
             history,
             PromptTemplateStore.partsSystemPrompt(),
             PromptTemplateStore.partsUserPromptFromHistory(history),
@@ -5977,6 +5918,28 @@ class RemoteSttActivity : AppCompatActivity() {
             appendTerminal(logLines, "Aviso: $warning")
             runOnUiThread { updateTerminalText(logLines) }
         }
+    }
+
+    private fun writeLiveFailureDiagnostics(category: String) {
+        val context = liveDiagnosticContext ?: return
+        val sessionDir = synchronized(liveDiagnosticLock) {
+            liveDiagnosticDir ?: runCatching { createSessionDir() }
+                .getOrNull()
+                ?.also { liveDiagnosticDir = it }
+        }
+        if (sessionDir == null) {
+            Log.w(TAG, "não consegui criar a pasta de diagnóstico live")
+            return
+        }
+        val safeCategory = category.replace(Regex("[^A-Za-z0-9_-]"), "_").take(64)
+        val warnings = AssemblyAiAsyncFlow.writeDiagnostics(
+            sessionDir = sessionDir,
+            correlation = context.correlation(),
+            terminalSnapshot = context.correlationText(),
+            logSnapshot = "outcome=failure\nfailure_category=$safeCategory",
+            message = "outcome=failure",
+        )
+        warnings.forEach { warning -> Log.w(TAG, warning) }
     }
 
     private fun appendTerminal(builder: StringBuilder, line: String) {

@@ -2,6 +2,11 @@ package br.gov.sp.pcsp.launcher
 
 import org.json.JSONObject
 
+enum class TextModelPurpose {
+    HISTORY,
+    STATEMENT,
+}
+
 object ModelServerStore {
 
     const val SERVER_GEMMA_NAME = "servidor (gemma-4-26B-A4B-abliterated)"
@@ -21,25 +26,40 @@ object ModelServerStore {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
     }
 
-    fun defaultConfig() = selectedConfig()
+    fun defaultConfig() = selectedConfig(TextModelPurpose.HISTORY)
 
-    fun readConfigs(): List<Config> {
+    fun readConfigs(purpose: TextModelPurpose = TextModelPurpose.HISTORY): List<Config> {
         val available = mutableListOf(proxyConfig(), serverGemma())
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrok()
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrokNonReasoning()
         if (GrokApiSettings.isPlausibleDeepseekKey()) available += directDeepseek()
-        val selected = GrokApiSettings.selectedText()
+        val selected = selectedText(purpose)
         val resolved = if (available.any { it.name == selected }) selected else available.first().name
-        if (resolved != selected) GrokApiSettings.selectText(resolved)
+        if (resolved != selected) selectText(purpose, resolved)
         return available.map { it.copy(selected = it.name == resolved) }
     }
 
-    fun selectedConfig(): Config = readConfigs().first { it.selected }
+    fun selectedConfig(purpose: TextModelPurpose = TextModelPurpose.HISTORY): Config =
+        readConfigs(purpose).first { it.selected }
 
-    fun select(name: String): Boolean {
-        if (readConfigs().none { it.name == name }) return false
-        GrokApiSettings.selectText(name)
+    fun select(name: String): Boolean = select(TextModelPurpose.HISTORY, name)
+
+    fun select(purpose: TextModelPurpose, name: String): Boolean {
+        if (readConfigs(purpose).none { it.name == name }) return false
+        selectText(purpose, name)
         return true
+    }
+
+    private fun selectedText(purpose: TextModelPurpose): String = when (purpose) {
+        TextModelPurpose.HISTORY -> GrokApiSettings.selectedHistoryText()
+        TextModelPurpose.STATEMENT -> GrokApiSettings.selectedStatementText()
+    }
+
+    private fun selectText(purpose: TextModelPurpose, name: String) {
+        when (purpose) {
+            TextModelPurpose.HISTORY -> GrokApiSettings.selectHistoryText(name)
+            TextModelPurpose.STATEMENT -> GrokApiSettings.selectStatementText(name)
+        }
     }
 
     fun configForParts(name: String, reasoning: String): Config = when (name) {

@@ -38,6 +38,8 @@ object GrokApiSettings {
     private const val KEY_GROK_CUSTOM = "grok_language_custom"
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
+    private const val KEY_HISTORY_TEXT = "history_text_model"
+    private const val KEY_STATEMENT_TEXT = "statement_text_model"
     private const val KEY_TEXT_REASONING = "text_reasoning"
     private const val KEY_PROXY_MODEL = "ia_proxy_model"
     private const val KEY_GROK_CHUNK_MS = "grok_chunk_ms"
@@ -132,19 +134,49 @@ object GrokApiSettings {
 
     fun selectedText(): String {
         val stored = preferences().getString(KEY_TEXT, IA_PROXY_NAME).orEmpty()
-        if (stored == IA_PROXY_DEEPSEEK_NAME) selectProxyModel(DEEPSEEK_TEXT_NAME)
-        if (stored == "IA-Proxy (grok-4.6)") selectProxyModel(TEXT_NAME)
-        return when (stored) {
+        val migrated = normalizeTextSelection(stored)
+        if (migrated != stored) {
+            preferences().edit().putString(KEY_TEXT, migrated).apply()
+        }
+        return migrated
+    }
+
+    /** Seleção usada pela geração de histórico. Migra o valor antigo na primeira leitura. */
+    fun selectedHistoryText(): String = selectedTextFor(KEY_HISTORY_TEXT)
+
+    fun selectHistoryText(name: String) {
+        selectTextFor(KEY_HISTORY_TEXT, name)
+    }
+
+    /** Seleção usada pela redação de oitiva. Migra o valor antigo na primeira leitura. */
+    fun selectedStatementText(): String = selectedTextFor(KEY_STATEMENT_TEXT)
+
+    fun selectStatementText(name: String) {
+        selectTextFor(KEY_STATEMENT_TEXT, name)
+    }
+
+    private fun selectedTextFor(key: String): String {
+        val prefs = preferences()
+        val stored = prefs.getString(key, null)
+        val fallback = stored ?: selectedText()
+        val migrated = normalizeTextSelection(fallback)
+        if (stored == null || migrated != stored) {
+            prefs.edit().putString(key, migrated).apply()
+        }
+        return migrated
+    }
+
+    private fun selectTextFor(key: String, name: String) {
+        preferences().edit().putString(key, normalizeTextSelection(name)).apply()
+    }
+
+    private fun normalizeTextSelection(stored: String): String = when (stored) {
             IA_PROXY_DEEPSEEK_NAME, "IA-Proxy (grok-4.6)" -> IA_PROXY_NAME
             "grok-4.20-non-reasoning" -> GROK_NON_REASONING_TEXT_NAME
             "deepseek-v4-pro" -> DEEPSEEK_TEXT_NAME
             "IA-Proxy (deepseek-v4-pro)" -> IA_PROXY_NAME
             else -> stored
-        }.also { migrated ->
-            if (migrated != stored) selectText(migrated)
         }
-    }
-
     fun selectText(name: String) {
         preferences().edit().putString(KEY_TEXT, name).apply()
     }

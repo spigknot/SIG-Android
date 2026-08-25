@@ -1068,8 +1068,8 @@
                 android:layout_marginTop="2dp"
                 android:visibility="gone">
 
-                <TextView
-                    android:id="@+id/button_person_selector"
+        <TextView
+            android:id="@+id/button_person_selector"
                     android:layout_width="wrap_content"
                     android:layout_height="30dp"
                     android:layout_gravity="start|center_vertical"
@@ -1083,7 +1083,8 @@
                     android:maxLines="1"
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
-                    android:text="Partes"
+            android:text="Partes"
+            android:visibility="gone"
                     android:textColor="#FF5EF08E"
                     android:textSize="10sp"
                     android:textStyle="bold" />

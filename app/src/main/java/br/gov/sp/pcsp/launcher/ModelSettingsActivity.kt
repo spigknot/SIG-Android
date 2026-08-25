@@ -1,5 +1,6 @@
 package br.gov.sp.pcsp.launcher
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
@@ -10,16 +11,21 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.RadioButton
 import android.widget.RadioGroup
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
 class ModelSettingsActivity : AppCompatActivity() {
+    private data class TextModelControls(
+        val modelGroup: RadioGroup,
+        val proxyControls: View,
+        val proxyGroup: RadioGroup,
+        val reasoningControls: View,
+        val reasoningGroup: RadioGroup,
+    )
+
     private lateinit var transcriptionGroup: RadioGroup
-    private lateinit var textGroup: RadioGroup
-    private lateinit var textProxyControls: View
-    private lateinit var textProxyGroup: RadioGroup
-    private lateinit var textReasoningControls: View
-    private lateinit var reasoningGroup: RadioGroup
+    private lateinit var historyControls: TextModelControls
+    private lateinit var statementControls: TextModelControls
+    private lateinit var partsSection: View
     private lateinit var partsMethodGroup: RadioGroup
     private lateinit var partsModelControls: View
     private lateinit var partsModelGroup: RadioGroup
@@ -27,13 +33,6 @@ class ModelSettingsActivity : AppCompatActivity() {
     private lateinit var partsProxyModelGroup: RadioGroup
     private lateinit var partsReasoningLabel: View
     private lateinit var partsReasoningGroup: RadioGroup
-    private lateinit var xaiKey: EditText
-    private lateinit var deepseekKey: EditText
-    private lateinit var deepgramKey: EditText
-    private lateinit var deepgramKeyterms: EditText
-    private lateinit var assemblyaiKey: EditText
-    private lateinit var elevenlabsKey: EditText
-    private lateinit var imeiCheckKey: EditText
     private lateinit var conversionParallelism: EditText
     private lateinit var requestParallelism: EditText
     private var populating = false
@@ -43,11 +42,21 @@ class ModelSettingsActivity : AppCompatActivity() {
         keepContentInsideSystemBars()
         setContentView(R.layout.activity_model_settings)
         transcriptionGroup = findViewById(R.id.radio_transcription_models)
-        textGroup = findViewById(R.id.radio_text_models)
-        textProxyControls = findViewById(R.id.text_proxy_controls)
-        textProxyGroup = findViewById(R.id.radio_text_proxy_models)
-        textReasoningControls = findViewById(R.id.text_reasoning_controls)
-        reasoningGroup = findViewById(R.id.radio_text_reasoning)
+        historyControls = TextModelControls(
+            modelGroup = findViewById(R.id.radio_history_models),
+            proxyControls = findViewById(R.id.history_proxy_controls),
+            proxyGroup = findViewById(R.id.radio_history_proxy_models),
+            reasoningControls = findViewById(R.id.history_reasoning_controls),
+            reasoningGroup = findViewById(R.id.radio_history_reasoning),
+        )
+        statementControls = TextModelControls(
+            modelGroup = findViewById(R.id.radio_statement_models),
+            proxyControls = findViewById(R.id.statement_proxy_controls),
+            proxyGroup = findViewById(R.id.radio_statement_proxy_models),
+            reasoningControls = findViewById(R.id.statement_reasoning_controls),
+            reasoningGroup = findViewById(R.id.radio_statement_reasoning),
+        )
+        partsSection = findViewById(R.id.parts_extraction_section)
         partsMethodGroup = findViewById(R.id.radio_parts_extraction)
         partsModelControls = findViewById(R.id.parts_model_controls)
         partsModelGroup = findViewById(R.id.radio_parts_model)
@@ -55,28 +64,16 @@ class ModelSettingsActivity : AppCompatActivity() {
         partsProxyModelGroup = findViewById(R.id.radio_parts_proxy_model)
         partsReasoningLabel = findViewById(R.id.label_parts_reasoning)
         partsReasoningGroup = findViewById(R.id.radio_parts_reasoning)
-        xaiKey = findViewById(R.id.edit_xai_key)
-        deepseekKey = findViewById(R.id.edit_deepseek_key)
-        deepgramKey = findViewById(R.id.edit_deepgram_key)
-        deepgramKeyterms = findViewById(R.id.edit_deepgram_keyterms)
-        assemblyaiKey = findViewById(R.id.edit_assemblyai_key)
-        elevenlabsKey = findViewById(R.id.edit_elevenlabs_key)
-        imeiCheckKey = findViewById(R.id.edit_imei_check_key)
         conversionParallelism = findViewById(R.id.edit_conversion_parallelism)
         requestParallelism = findViewById(R.id.edit_request_parallelism)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
-        findViewById<Button>(R.id.button_save_api_keys).setOnClickListener { saveKeys() }
+        findViewById<Button>(R.id.button_api_keys).setOnClickListener {
+            startActivity(Intent(this, ApiKeysSettingsActivity::class.java))
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        xaiKey.setText(GrokApiSettings.xaiApiKey())
-        deepseekKey.setText(GrokApiSettings.deepseekApiKey())
-        deepgramKey.setText(GrokApiSettings.deepgramApiKey())
-        deepgramKeyterms.setText(GrokApiSettings.deepgramKeyterms())
-        assemblyaiKey.setText(GrokApiSettings.assemblyaiApiKey())
-        elevenlabsKey.setText(GrokApiSettings.elevenlabsApiKey())
-        imeiCheckKey.setText(ImeiApiSettings.apiKey())
         populateAll()
     }
 
@@ -85,35 +82,11 @@ class ModelSettingsActivity : AppCompatActivity() {
         saveParallelismFields()
     }
 
-    private fun saveKeys() {
-        GrokApiSettings.setXaiApiKey(xaiKey.text.toString())
-        GrokApiSettings.setDeepseekApiKey(deepseekKey.text.toString())
-        GrokApiSettings.setDeepgramApiKey(deepgramKey.text.toString())
-        GrokApiSettings.setDeepgramKeyterms(deepgramKeyterms.text.toString())
-        GrokApiSettings.setAssemblyaiApiKey(assemblyaiKey.text.toString())
-        GrokApiSettings.setElevenlabsApiKey(elevenlabsKey.text.toString())
-        ImeiApiSettings.setApiKey(imeiCheckKey.text.toString())
-        populateAll()
-        val xaiStatus = keyStatus(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)
-        val deepseekStatus = keyStatus(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)
-        val deepgramStatus = keyStatus(GrokApiSettings.deepgramApiKey(), GrokApiSettings::isPlausibleDeepgramKey)
-        Toast.makeText(
-            this,
-            "Chaves salvas. xAI: $xaiStatus; Deepseek: $deepseekStatus; Deepgram: $deepgramStatus.",
-            Toast.LENGTH_LONG
-        ).show()
-    }
-
-    private fun keyStatus(value: String, validator: (String) -> Boolean): String = when {
-        value.isBlank() -> "não informada"
-        validator(value) -> "válida"
-        else -> "inválida"
-    }
-
     private fun populateAll() {
         populating = true
         populateTranscription()
-        populateText()
+        populateText(TextModelPurpose.HISTORY, historyControls)
+        populateText(TextModelPurpose.STATEMENT, statementControls)
         populateParts()
         populateParallelism()
         populating = false
@@ -137,16 +110,16 @@ class ModelSettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun populateText() {
-        textGroup.removeAllViews()
-        ModelServerStore.readConfigs().forEach { config ->
-            textGroup.addView(radio(modelLabel(config), config.selected) {
-                ModelServerStore.select(config.name)
+    private fun populateText(purpose: TextModelPurpose, controls: TextModelControls) {
+        controls.modelGroup.removeAllViews()
+        ModelServerStore.readConfigs(purpose).forEach { config ->
+            controls.modelGroup.addView(radio(modelLabel(config), config.selected) {
+                ModelServerStore.select(purpose, config.name)
                 refreshVisibility()
             })
         }
-        populateProxyModelGroup(textProxyGroup)
-        refreshTextControls()
+        populateProxyModelGroup(controls.proxyGroup)
+        refreshTextControls(purpose, controls)
     }
 
     private fun modelLabel(config: ModelServerStore.Config): String = when {
@@ -197,29 +170,29 @@ class ModelSettingsActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshTextControls() {
-        val config = ModelServerStore.selectedConfig()
+    private fun refreshTextControls(purpose: TextModelPurpose, controls: TextModelControls) {
+        val config = ModelServerStore.selectedConfig(purpose)
         if (config.isProxy) {
-            textProxyControls.visibility = View.VISIBLE
-            textReasoningControls.visibility = View.GONE
-            populateProxyModelGroup(textProxyGroup)
+            controls.proxyControls.visibility = View.VISIBLE
+            controls.reasoningControls.visibility = View.GONE
+            populateProxyModelGroup(controls.proxyGroup)
             return
         }
-        textProxyControls.visibility = View.GONE
+        controls.proxyControls.visibility = View.GONE
         val options = reasoningOptions(config.modelName)
         if (options.isEmpty()) {
-            textReasoningControls.visibility = View.GONE
-            reasoningGroup.removeAllViews()
+            controls.reasoningControls.visibility = View.GONE
+            controls.reasoningGroup.removeAllViews()
             return
         }
         val current = GrokApiSettings.textReasoning()
             .takeIf { saved -> options.any { it.first == saved } }
             ?: options.first().first
         if (current != GrokApiSettings.textReasoning()) GrokApiSettings.setTextReasoning(current)
-        populateReasoningGroup(reasoningGroup, config.modelName, current) { value ->
+        populateReasoningGroup(controls.reasoningGroup, config.modelName, current) { value ->
             GrokApiSettings.setTextReasoning(value)
         }
-        textReasoningControls.visibility = View.VISIBLE
+        controls.reasoningControls.visibility = View.VISIBLE
     }
 
     private fun populateParts() {
@@ -311,10 +284,26 @@ class ModelSettingsActivity : AppCompatActivity() {
     }
 
     private fun refreshVisibility() {
-        refreshTextControls()
+        refreshTextControls(TextModelPurpose.HISTORY, historyControls)
+        refreshTextControls(TextModelPurpose.STATEMENT, statementControls)
         val partsVisible = PartsExtractionSettings.selectedMethod(this) == PartsExtractionSettings.Method.AI
         partsModelControls.visibility = if (partsVisible) View.VISIBLE else View.GONE
         refreshPartsModelControls()
+        disablePartsSection()
+    }
+
+    private fun disablePartsSection() {
+        setEnabledRecursively(partsSection, false)
+        partsSection.alpha = 0.45f
+    }
+
+    private fun setEnabledRecursively(view: View, enabled: Boolean) {
+        view.isEnabled = enabled
+        if (view is ViewGroup) {
+            for (index in 0 until view.childCount) {
+                setEnabledRecursively(view.getChildAt(index), enabled)
+            }
+        }
     }
 
     private fun radio(label: String, checked: Boolean, onSelected: () -> Unit): RadioButton = RadioButton(this).apply {

@@ -153,7 +153,8 @@ object PromptTemplateStore {
 
         oitiva_system.txt / oitiva_user.txt
         Prompt de sistema e prompt do usuário usados pelo botão Oitiva.
-        O arquivo do usuário usa {{NOME_SELECIONADO}} e {{{conteudo_caixa_historico}}}.
+        O arquivo do usuário usa {{{conteudo_caixa_historico}}}. O marcador
+        {{NOME_SELECIONADO}} continua aceito por compatibilidade.
 
         qualificacao_system.txt / qualificacao_user.txt
         Prompts da qualificação. O arquivo do usuário aceita os marcadores
