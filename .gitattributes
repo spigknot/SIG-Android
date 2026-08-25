@@ -2,7 +2,3 @@
 *.sh text eol=lf
 gradlew text eol=lf
 *.bat text eol=crlf
-.githooks/pre-commit text eol=lf
-AGENTS.md text eol=lf
-docs/agents/** text eol=lf
-docs/validation/** text eol=lf

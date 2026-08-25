@@ -1,8 +1,6 @@
 param(
     [string]$Version = "1",
-    [string]$OutputDirectory = "",
-    [switch]$Quiet,
-    [switch]$Json
+    [string]$OutputDirectory = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -135,8 +133,4 @@ foreach ($abi in @("arm64-v8a", "x86_64")) {
 
 $index = [ordered]@{ format = 1; componentVersion = $Version; packages = $packageRecords }
 $index | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 (Join-Path $output "packages.json")
-if ($Json) {
-    $packageRecords | ConvertTo-Json -Depth 5 -Compress
-} elseif (-not $Quiet) {
-    $packageRecords | ForEach-Object { [pscustomobject]$_ } | Format-Table abi, file, size, sha256 -AutoSize
-}
+$packageRecords | ForEach-Object { [pscustomobject]$_ } | Format-Table abi, file, size, sha256 -AutoSize
