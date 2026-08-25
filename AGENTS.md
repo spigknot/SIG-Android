@@ -53,3 +53,16 @@ build rápido (`assembleDebug`) NÃO compila nativos por desenho.
 
 APK e pacote nativo só podem ser promovidos JUNTOS depois de `verify-native-dependencies`
 aceitar. Nunca publicar/assinar artefatos sem aprovação explícita do usuário.
+
+## Harness e validação de mudanças
+
+O gate central está em scripts/validate-agent-harness.ps1; a suíte contratual
+está em scripts/tests/validate-agent-harness.tests.ps1 e deve permanecer
+silenciosa com -Quiet. A suíte testa bootstrap, EvidencePath, snapshot staged,
+instalação idempotente dos hooks e execução do pre-commit em repositório
+temporário. O workflow .github/workflows/validation.yml executa essa suíte
+antes dos gates Android.
+
+Validação local do harness:
+
+    & .\scripts\tests\validate-agent-harness.tests.ps1 -Quiet

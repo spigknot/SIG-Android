@@ -1,0 +1,45 @@
+name: SIG validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Validate harness contracts
+        shell: pwsh
+        run: |
+          & .\scripts\tests\validate-agent-harness.tests.ps1 -Quiet
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run Android gates
+        shell: pwsh
+        run: |
+          & .\scripts\validate-agent-harness.ps1 -RunAndroidGates -Quiet -Json -EvidencePath build\harness-validation.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload bounded validation evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sig-validation-evidence
+          path: build/harness-validation.json
+          if-no-files-found: warn

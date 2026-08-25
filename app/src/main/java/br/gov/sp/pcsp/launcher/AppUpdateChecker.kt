@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.util.Log
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ProgressBar
@@ -20,13 +21,9 @@ import kotlin.math.roundToInt
 /**
  * Verificação silenciosa de atualização do APK no GitHub.
  *
- * Ao abrir o app (MainActivity), consulta a última release de
- * `spigknot/SIG-Android`. Se houver versão nova, mostra um diálogo com
- * "Atualizar" / "Agora não". Sem conexão, sem release ou sem versão nova:
- * nada acontece.
- *
- * Numeração igual ao SIG Windows: `YYYYMMDD_NNN` (comparação normalizada
- * ignora `_`/`-`, então tags antigas como `20260817-002` continuam válidas).
+ * A API pública check(Activity) mantém o fluxo original da MainActivity. A
+ * consulta e a decisão de atualização ficam separadas em funções internas
+ * para que HTTP, JSON, versão e download tenham aceitação determinística.
  */
 object AppUpdateChecker {
 
@@ -35,44 +32,164 @@ object AppUpdateChecker {
 
     private const val RELEASES_URL = "https://api.github.com/repos/spigknot/SIG-Android/releases/latest"
     private const val APK_ASSET_NAME = "sig.apk"
+    private const val LOG_TAG = "AppUpdateChecker"
+
+    sealed class ReleaseCheckResult {
+        data class NoUpdate(val tag: String, val reason: String) : ReleaseCheckResult()
+        data class Available(val tag: String, val apkUrl: String, val apkSize: Long) : ReleaseCheckResult()
+        data class Failure(val code: String) : ReleaseCheckResult()
+    }
 
     fun check(activity: Activity) {
         Thread {
-            try {
-                val client = OkHttpClient.Builder()
-                    .connectTimeout(8, TimeUnit.SECONDS)
-                    .readTimeout(8, TimeUnit.SECONDS)
-                    .build()
-                val request = Request.Builder()
-                    .url(RELEASES_URL)
-                    .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "SIG-Android")
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) return@use
-                    val payload = response.body?.string() ?: return@use
-                    val json = JSONObject(payload)
-                    val tag = json.optString("tag_name", "")
-                    if (normalize(tag).isEmpty() || normalize(tag) <= normalize(APP_VERSION)) return@use
-                    val assets = json.optJSONArray("assets") ?: return@use
-                    var apkUrl: String? = null
-                    var apkSize = 0L
-                    for (index in 0 until assets.length()) {
-                        val asset = assets.optJSONObject(index) ?: continue
-                        if (asset.optString("name") == APK_ASSET_NAME) {
-                            apkUrl = asset.optString("browser_download_url")
-                            apkSize = asset.optLong("size")
-                            break
-                        }
-                    }
-                    val url = apkUrl ?: return@use
-                    activity.runOnUiThread { showUpdateDialog(activity, tag, url, apkSize) }
+            val startedAt = System.nanoTime()
+            val result = checkRelease(createReleaseClient())
+            emitDiagnostic(result, elapsedMillis(startedAt))
+            if (result is ReleaseCheckResult.Available) {
+                activity.runOnUiThread {
+                    showUpdateDialog(activity, result.tag, result.apkUrl, result.apkSize)
                 }
-            } catch (_: Exception) {
-                // Sem conexão ou erro transitório: silencioso.
             }
         }.start()
     }
+
+    internal fun checkRelease(
+        client: OkHttpClient,
+        endpoint: String = RELEASES_URL,
+        installedVersion: String = APP_VERSION
+    ): ReleaseCheckResult {
+        return try {
+            val request = Request.Builder()
+                .url(endpoint)
+                .header("Accept", "application/vnd.github+json")
+                .header("User-Agent", "SIG-Android")
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@use ReleaseCheckResult.Failure("http_" + response.code)
+                }
+                val payload = response.body?.string()
+                    ?: return@use ReleaseCheckResult.Failure("empty_body")
+                parseRelease(payload, installedVersion)
+            }
+        } catch (_: Exception) {
+            ReleaseCheckResult.Failure("network_error")
+        }
+    }
+
+    internal fun parseRelease(payload: String, installedVersion: String = APP_VERSION): ReleaseCheckResult {
+        return try {
+            val json = JSONObject(payload)
+            val tag = json.optString("tag_name", "").trim()
+            val normalizedTag = normalize(tag)
+            val normalizedInstalled = normalize(installedVersion)
+            if (normalizedTag.isEmpty()) {
+                return ReleaseCheckResult.Failure("missing_tag")
+            }
+            if (normalizedInstalled.isEmpty()) {
+                return ReleaseCheckResult.Failure("invalid_installed_version")
+            }
+            if (normalizedTag <= normalizedInstalled) {
+                return ReleaseCheckResult.NoUpdate(tag, "not_newer")
+            }
+
+            val assets = json.optJSONArray("assets")
+                ?: return ReleaseCheckResult.Failure("assets_missing")
+            var apkUrl: String? = null
+            var apkSize = 0L
+            for (index in 0 until assets.length()) {
+                val asset = assets.optJSONObject(index) ?: continue
+                if (asset.optString("name") == APK_ASSET_NAME) {
+                    apkUrl = asset.optString("browser_download_url", "").trim()
+                    apkSize = asset.optLong("size")
+                    break
+                }
+            }
+            if (apkUrl.isNullOrEmpty()) {
+                return ReleaseCheckResult.Failure("asset_missing")
+            }
+            ReleaseCheckResult.Available(tag, apkUrl, apkSize)
+        } catch (_: Exception) {
+            ReleaseCheckResult.Failure("invalid_json")
+        }
+    }
+
+    internal fun downloadApkToFile(
+        client: OkHttpClient,
+        url: String,
+        destination: File,
+        onProgress: (Long, Long) -> Unit = { _, _ -> }
+    ): File {
+        val parent = destination.parentFile
+            ?: throw IllegalArgumentException("download_destination_missing")
+        if (!parent.exists() && !parent.mkdirs()) {
+            throw IllegalStateException("download_destination_unavailable")
+        }
+        val partial = File(parent, destination.name + ".part")
+        partial.delete()
+        try {
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "SIG-Android")
+                .build()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("download_http_" + response.code)
+                }
+                val body = response.body ?: throw IllegalStateException("download_empty_body")
+                val total = body.contentLength()
+                var downloaded = 0L
+                body.byteStream().use { input ->
+                    partial.outputStream().use { output ->
+                        val buffer = ByteArray(8192)
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read == -1) break
+                            output.write(buffer, 0, read)
+                            downloaded += read
+                            onProgress(downloaded, total)
+                        }
+                        output.flush()
+                    }
+                }
+            }
+            if (destination.exists() && !destination.delete()) {
+                throw IllegalStateException("download_destination_replace_failed")
+            }
+            if (!partial.renameTo(destination)) {
+                throw IllegalStateException("download_move_failed")
+            }
+            return destination
+        } catch (error: Exception) {
+            partial.delete()
+            throw error
+        }
+    }
+
+    private fun createReleaseClient(): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .build()
+
+    private fun createDownloadClient(): OkHttpClient =
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build()
+
+    private fun emitDiagnostic(result: ReleaseCheckResult, elapsedMillis: Long) {
+        val outcome = when (result) {
+            is ReleaseCheckResult.NoUpdate -> "no_update_" + result.reason
+            is ReleaseCheckResult.Available -> "update_available"
+            is ReleaseCheckResult.Failure -> "failure_" + result.code
+        }
+        val level = if (result is ReleaseCheckResult.Failure) Log.WARN else Log.INFO
+        Log.println(level, LOG_TAG, "release_check outcome=" + outcome + " elapsed_ms=" + elapsedMillis)
+    }
+
+    private fun elapsedMillis(startedAt: Long): Long =
+        (System.nanoTime() - startedAt) / 1_000_000L
 
     private fun normalize(version: String): String =
         version.replace("-", "").replace("_", "").trim()
@@ -85,7 +202,7 @@ object AppUpdateChecker {
             setPadding(padding, 0, padding, 0)
         }
         val status = TextView(activity).apply {
-            text = "Uma nova versão do SIG está disponível (${tag}).\n\nBaixar e instalar agora?"
+            text = "Uma nova versão do SIG está disponível (" + tag + ").\n\nBaixar e instalar agora?"
             setTextColor(Color.WHITE)
             textSize = 15f
         }
@@ -135,12 +252,15 @@ object AppUpdateChecker {
                         }
                     } catch (error: Exception) {
                         activity.runOnUiThread {
-                            status.text = "Não foi possível baixar a atualização:\n${error.message ?: error.javaClass.simpleName}"
+                            status.text = "Não foi possível baixar a atualização:\n" + (error.message ?: error.javaClass.simpleName)
                             dialog.setCancelable(true)
                             dialog.getButton(AlertDialog.BUTTON_POSITIVE).apply {
                                 text = "Tentar novamente"
                                 isEnabled = true
-                                setOnClickListener { dialog.dismiss(); showUpdateDialog(activity, tag, apkUrl, apkSize) }
+                                setOnClickListener {
+                                    dialog.dismiss()
+                                    showUpdateDialog(activity, tag, apkUrl, apkSize)
+                                }
                             }
                             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
                         }
@@ -151,42 +271,18 @@ object AppUpdateChecker {
         dialog.show()
     }
 
-    private fun downloadApk(activity: Activity, url: String, onProgress: (Long, Long) -> Unit): File {
-        val client = OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .build()
-        val request = Request.Builder().url(url).header("User-Agent", "SIG-Android").build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IllegalStateException("HTTP ${response.code}")
-            val body = response.body ?: throw IllegalStateException("Resposta vazia")
-            val file = File(activity.cacheDir, "sig-update.apk")
-            val total = body.contentLength()
-            var downloaded = 0L
-            val input = body.byteStream()
-            val output = file.outputStream()
-            try {
-                val buffer = ByteArray(8192)
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read == -1) break
-                    output.write(buffer, 0, read)
-                    downloaded += read
-                    onProgress(downloaded, total)
-                }
-                output.flush()
-            } finally {
-                input.close()
-                output.close()
-            }
-            return file
-        }
-    }
+    private fun downloadApk(activity: Activity, url: String, onProgress: (Long, Long) -> Unit): File =
+        downloadApkToFile(
+            client = createDownloadClient(),
+            url = url,
+            destination = File(activity.cacheDir, "sig-update.apk"),
+            onProgress = onProgress
+        )
 
     private fun installApk(activity: Activity, file: File) {
         val uri: Uri = FileProvider.getUriForFile(
             activity,
-            "${activity.packageName}.fileprovider",
+            activity.packageName + ".fileprovider",
             file
         )
         val intent = Intent(Intent.ACTION_VIEW).apply {
