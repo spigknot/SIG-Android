@@ -821,9 +821,8 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun loadServersAndActivateDefault() {
-        serverEntries = loadServerEntries()
-        val defaultIndex = serverEntries.indexOfFirst { it.ip == DEFAULT_SERVER_IP }.takeIf { it >= 0 } ?: 0
-        activateServerEntry(serverEntries[defaultIndex])
+        serverEntries = listOf(ServerEntry(DEFAULT_SERVER_IP, DEFAULT_SERVER_NAME))
+        activateServerEntry(serverEntries.first())
     }
 
     private fun activateServerEntry(entry: ServerEntry) {
@@ -833,34 +832,6 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun serverNameForIp(ip: String): String {
         return serverEntries.firstOrNull { it.ip == ip }?.name ?: ip
-    }
-
-    private fun loadServerEntries(): List<ServerEntry> {
-        val entries = mutableListOf<ServerEntry>()
-        val serverFile = File(getExternalFilesDir(null), "server.txt")
-        if (serverFile.exists()) {
-            try {
-                serverFile.readLines(Charsets.UTF_8)
-                    .mapNotNull { parseServerLine(it) }
-                    .forEach { entries += it }
-            } catch (_: Throwable) {
-            }
-        }
-        entries += ServerEntry(DEFAULT_SERVER_IP, DEFAULT_SERVER_NAME)
-        return entries.distinctBy { it.ip }
-    }
-
-    private fun parseServerLine(line: String): ServerEntry? {
-        val clean = line.substringBefore("#").replace("\uFEFF", "").trim()
-        if (clean.isBlank() || clean.startsWith("#")) return null
-        val match = SERVER_LINE_IP.find(clean) ?: return null
-        val ip = match.groupValues[1].takeIf { isValidIpv4(it) } ?: return null
-        val name = clean
-            .removeRange(match.range)
-            .replace(Regex("""^[\s,;|:\-]+|[\s,;|:\-]+$"""), "")
-            .trim()
-            .ifBlank { ip }
-        return ServerEntry(ip, name)
     }
 
     private fun testManualServerIp() {
@@ -889,13 +860,6 @@ class RemoteSttActivity : AppCompatActivity() {
             input.text.toString().toIntOrNull()?.takeIf { it in 0..255 } ?: return null
         }
         return octets.joinToString(".")
-    }
-
-    private fun isValidIpv4(value: String): Boolean {
-        val parts = value.split(".")
-        return parts.size == 4 && parts.all { part ->
-            part.isNotBlank() && part.all { it.isDigit() } && part.toIntOrNull()?.let { it in 0..255 } == true
-        }
     }
 
     private fun pingIp(ip: String): Boolean {
@@ -6697,9 +6661,9 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 7204
         private const val REQUEST_SAVE_RECORDING_DIR = 7205
         private const val REQUEST_RECORD_AUDIO_PERMISSION = 7206
-        private const val DEFAULT_SERVER_IP = "servidor"
-        private const val DEFAULT_SERVER_NAME = "Servidor"
-        private const val SERVER_PORT = 8100
+        private const val DEFAULT_SERVER_IP = ServiceEndpoints.GRANITE_HOST
+        private const val DEFAULT_SERVER_NAME = "servidor (granite-speech-4.1-2b-nar)"
+        private const val SERVER_PORT = ServiceEndpoints.GRANITE_STT_PORT
         private const val LIVE_UPLOAD_WORKERS = 1
         private const val LIVE_SAMPLE_RATE = 16_000
         private const val DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS = 1000
@@ -6731,7 +6695,6 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val TRANSCRIPTION_END = "\uE000TE\uE000"
         private const val AUDIO_INFO_START = "\uE000AI\uE000"
         private const val AUDIO_INFO_END = "\uE000AE\uE000"
-        private val SERVER_LINE_IP = Regex("""(?:https?://)?(\d{1,3}(?:\.\d{1,3}){3})(?::\d{1,5})?(?:/\S*)?""")
         private val VIDEO_EXTENSIONS = setOf(".mp4", ".mkv", ".mov", ".avi", ".webm", ".3gp", ".m4v")
         private val AUDIO_EXTENSIONS = setOf(".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".wma")
     }

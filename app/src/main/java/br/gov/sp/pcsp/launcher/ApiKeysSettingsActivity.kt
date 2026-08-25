@@ -11,7 +11,6 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     private lateinit var xaiKey: EditText
     private lateinit var deepseekKey: EditText
     private lateinit var deepgramKey: EditText
-    private lateinit var deepgramKeyterms: EditText
     private lateinit var assemblyaiKey: EditText
     private lateinit var elevenlabsKey: EditText
     private lateinit var imeiCheckKey: EditText
@@ -23,7 +22,6 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         xaiKey = findViewById(R.id.edit_xai_key)
         deepseekKey = findViewById(R.id.edit_deepseek_key)
         deepgramKey = findViewById(R.id.edit_deepgram_key)
-        deepgramKeyterms = findViewById(R.id.edit_deepgram_keyterms)
         assemblyaiKey = findViewById(R.id.edit_assemblyai_key)
         elevenlabsKey = findViewById(R.id.edit_elevenlabs_key)
         imeiCheckKey = findViewById(R.id.edit_imei_check_key)
@@ -36,7 +34,6 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         xaiKey.setText(GrokApiSettings.xaiApiKey())
         deepseekKey.setText(GrokApiSettings.deepseekApiKey())
         deepgramKey.setText(GrokApiSettings.deepgramApiKey())
-        deepgramKeyterms.setText(GrokApiSettings.deepgramKeyterms())
         assemblyaiKey.setText(GrokApiSettings.assemblyaiApiKey())
         elevenlabsKey.setText(GrokApiSettings.elevenlabsApiKey())
         imeiCheckKey.setText(ImeiApiSettings.apiKey())
@@ -46,7 +43,6 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         GrokApiSettings.setXaiApiKey(xaiKey.text.toString())
         GrokApiSettings.setDeepseekApiKey(deepseekKey.text.toString())
         GrokApiSettings.setDeepgramApiKey(deepgramKey.text.toString())
-        GrokApiSettings.setDeepgramKeyterms(deepgramKeyterms.text.toString())
         GrokApiSettings.setAssemblyaiApiKey(assemblyaiKey.text.toString())
         GrokApiSettings.setElevenlabsApiKey(elevenlabsKey.text.toString())
         ImeiApiSettings.setApiKey(imeiCheckKey.text.toString())

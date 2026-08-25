@@ -1,4 +1,7 @@
-# Porta de aceitação do pacote nativo (F3 do Better Harness)
+# Porta de aceitação do pacote nativo (F3 do Better Harness).
+# Usar somente quando o pacote nativo ou seu manifesto mudou; uma release
+# somente do APK reutiliza os ZIPs já publicados no R2 e não precisa destes
+# artefatos locais.
 #
 # Compara os ZIPs por arquitetura gerados pelo build-android-native-dependencies.ps1
 # com o manifesto publicado em app/src/main/java/.../NativeDependencyManager.kt

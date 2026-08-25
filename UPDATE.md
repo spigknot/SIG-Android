@@ -14,7 +14,7 @@ bump da versão (3 lugares) → build (test+lint+assemble) → APK no O:\ → co
 ```
 
 - **Distribuição do APK**: GitHub Releases (`spigknot/SIG-Android`), asset `sig.apk` — SEMPRE a versão atual (release anterior é deletada).
-- **Dependências nativas** (ffmpeg/whisper/silero, baixadas na 1ª execução): Cloudflare R2, SEMPRE no bucket `sig-android` (`https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-<abi>.zip`). O Google Drive está APOSENTADO para o app novo (APKs antigos ainda usam o Drive — não mexer nos arquivos de lá enquanto houver APKs antigos em campo).
+- **Dependências nativas** (ffmpeg/whisper/silero, baixadas na 1ª execução): Cloudflare R2, SEMPRE no bucket `sig-android` (`https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-<abi>.zip`). Os ZIPs são versionados separadamente e NÃO são regenerados a cada release somente do APK. O Google Drive está APOSENTADO para o app novo (APKs antigos ainda usam o Drive — não mexer nos arquivos de lá enquanto houver APKs antigos em campo).
 - **Credenciais R2**: usar um `release/r2_config.json` local e ignorado pelo Git (modelo em `release/r2_config.example.json`), com apenas `endpoint`, `access_key_id` e `secret_access_key` da chave dedicada ao bucket `sig-android`. Não gravar tokens `cfat...` no projeto.
 - **Verificação de atualização**: o app consulta `releases/latest` do GitHub na abertura (silencioso) e compara com o `APP_VERSION` embutido — por isso o bump do `APP_VERSION` é OBRIGATÓRIO a cada versão.
 
@@ -40,16 +40,17 @@ bump da versão (3 lugares) → build (test+lint+assemble) → APK no O:\ → co
 6. **Commit + push na main ANTES de criar a release** do GitHub.
 7. **NUNCA embutir chaves de API** no código/APK (campos nascem vazios; o usuário digita nas configurações). Não commitar `local.properties`, `release/r2_config.json` nem `app/src/main/assets` com segredos.
 8. **NUNCA `System.load` manual** das libs do pacote nativo (SIGSEGV) — o FFmpegKit carrega via `sig.native.library.dir`. `smart-exception-java 0.2.1` é OBRIGATÓRIO no build.gradle (vacina `FfmpegKitClasspathTest`).
-9. Não inventar resultados nem números: tudo que for reportado deve vir da saída real dos comandos.
-10. Se QUALQUER etapa falhar: PARE imediatamente e reporte o erro exato (mensagem + o comando que falhou), sem tentar contornar por conta própria fora deste documento.
-11. Ao terminar, revise e atualize este documento se algo divergiu (seção 9 — Manutenção do documento).
+9. **Pacote nativo é condicional**: em release somente do APK, quando `NativeDependencyManager.kt` e o contrato dos ZIPs não mudaram, NÃO gerar, verificar localmente ou republicar ZIPs. Se houver mudança nativa, executar o fluxo de geração/aceitação antes de promover APK ou pacote.
+10. Não inventar resultados nem números: tudo que for reportado deve vir da saída real dos comandos.
+11. Se QUALQUER etapa executada falhar: PARE imediatamente e reporte o erro exato (mensagem + o comando que falhou), sem tentar contornar por conta própria fora deste documento.
+12. Ao terminar, revise e atualize este documento se algo divergiu (seção 9 — Manutenção do documento).
 
 ## 1. Pré-requisitos (antes de começar)
 
 1. **`gh` autenticado** como `spigknot`: `gh auth status` (se falhar: `gh auth login`).
 2. **Java/Gradle OK**: o build usa o wrapper `./gradlew` (nada a instalar).
 3. **Repositório limpo para começar**: `git status --short` — se houver mudanças não commitadas legítimas, editar em cima delas; nunca `git reset`/`checkout --`/limpeza ampla.
-4. **Credenciais R2**: manter `release/r2_config.json` local com a chave dedicada ao bucket `sig-android`. Copiar somente `endpoint`, `access_key_id` e `secret_access_key`; o upload deve forçar `bucket = sig-android` e nunca reutilizar `bucket`/`public_base` de outro projeto.
+4. **Credenciais R2 quando houver publicação nativa**: manter `release/r2_config.json` local com a chave dedicada ao bucket `sig-android`. Copiar somente `endpoint`, `access_key_id` e `secret_access_key`; o upload deve forçar `bucket = sig-android` e nunca reutilizar `bucket`/`public_base` de outro projeto. Uma release somente do APK não exige upload R2.
 
 ## 2. Bump da versão (3 lugares, SEMPRE juntos)
 
@@ -64,6 +65,10 @@ Calcular a próxima versão: mesma data de hoje, número sequencial seguinte (ex
 
 Confirmar que a versão NOVA é a MESMA nos 3 lugares.
 
+Se esta for uma release somente do APK, confirmar que `NativeDependencyManager.kt`
+e o contrato dos ZIPs não foram alterados. Nesse caso, os pacotes existentes no
+R2 serão reutilizados; não gerar ZIPs locais.
+
 ## 3. Build (gate completo)
 
 ```bash
@@ -74,6 +79,9 @@ cd "D:/Projetos/SIG"
 - **Critério de sucesso**: `BUILD SUCCESSFUL` no final. NÃO é sucesso se houver qualquer `FAIL`/`e:` (erro de compilação Kotlin aparece como `e: file:///...kt:NNN`).
 - ⚠️ **Nunca encadear** `cp`/`commit` com um pipeline que engole o exit code (`... | grep | head` retorna 0 mesmo com build quebrado). Checar `BUILD SUCCESSFUL` na saída ANTES de prosseguir.
 - APK gerado: `app/build/outputs/apk/debug/app-debug.apk`.
+- Este fluxo é de release somente do APK. A geração e a aceitação dos ZIPs
+  nativos só entram se a etapa 2 detectar mudança em `NativeDependencyManager.kt`
+  ou no contrato do pacote nativo.
 
 ## 4. APK no O:\ (opcional — falha pode ser ignorada)
 
@@ -173,7 +181,7 @@ a fonte da verdade e deve evoluir com a prática.
 | `AccessDenied` no bucket R2 `sig-android` | credencial de outro projeto ou escopo incorreto | usar a chave dedicada ao bucket `sig-android`; as credenciais do SIG Windows e do SIG Android são diferentes |
 | Upload aparece no bucket errado | configuração compartilhada trouxe `bucket`/`public_base` de outro projeto | usar somente as credenciais S3 e forçar `bucket = sig-android` e a URL `pub-6476622beda24c82875cb84f11f660ea.r2.dev` |
 | `RequestTimeTooSkewed` no R2 | relógio do Windows dessincronizado (w32time parado; >15 min de diferença) | `powershell -c "Start-Service w32time; w32tm /resync"` (elevação); conferir `date -u` vs `curl -sI https://api.cloudflare.com \| grep -i ^date:` |
-| ZIPs de dependências locais com SHA diferente do código | `build/native-dependencies/` tem reconstruções locais; a fonte validada é o que está publicado | subir SEMPRE os arquivos que batem com os SHA-256 do `NativeDependencyManager.kt` (baixar do Drive/R2 atual e conferir antes de subir) |
+| ZIPs de dependências locais ausentes ou com SHA diferente | a release é somente do APK, ou há reconstruções locais; os ZIPs nativos são versionados separadamente | em release somente do APK, reutilizar os ZIPs já publicados no R2; se o pacote nativo mudou, gerar e aceitar os arquivos que batem com `NativeDependencyManager.kt` antes de publicar |
 | `O:\` desmontada no cp | unidade de rede indisponível | ignorar (destino menos importante); seguir com commit/GitHub |
 | Dependência nativa baixando do Drive | `NativeDependencyManager.kt` com URL antiga | usar `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-<abi>.zip` |
 

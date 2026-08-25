@@ -41,7 +41,7 @@ object SttRequestBuilders {
 
     fun grokRest(apiKey: String, language: String?, diarize: Boolean): SttRequestSpec =
         SttRequestSpec(
-            url = "https://api.x.ai/v1/stt",
+            url = ServiceEndpoints.GROK_STT_REST,
             headers = listOf(SttRequestHeader("Authorization", "Bearer $apiKey")),
             multipartFields = buildList {
                 language?.let { add(SttMultipartField("language", it)) }
@@ -59,7 +59,7 @@ object SttRequestBuilders {
         keyterms: List<String>,
     ): SttRequestSpec = SttRequestSpec(
         url = queryUrl(
-            base = "https://api.deepgram.com/v1/listen",
+            base = ServiceEndpoints.DEEPGRAM_STT_REST,
             params = buildList {
                 add("model" to "nova-3")
                 add("language" to language)
@@ -81,7 +81,7 @@ object SttRequestBuilders {
         speakerLabels: Boolean,
         punctuate: Boolean,
     ): SttRequestSpec = SttRequestSpec(
-        url = "https://sync.assemblyai.com/transcribe",
+        url = ServiceEndpoints.ASSEMBLYAI_STT_REST,
         headers = listOf(
             SttRequestHeader("Authorization", apiKey),
             SttRequestHeader("X-AAI-Model", "u3-sync-pro"),
@@ -100,7 +100,7 @@ object SttRequestBuilders {
         languageCode: String?,
         diarize: Boolean,
     ): SttRequestSpec = SttRequestSpec(
-        url = "https://api.elevenlabs.io/v1/speech-to-text",
+        url = ServiceEndpoints.ELEVENLABS_STT_REST,
         headers = listOf(SttRequestHeader("xi-api-key", apiKey)),
         multipartFields = buildList {
             add(SttMultipartField("model_id", "scribe_v2"))
@@ -116,7 +116,7 @@ object SttRequestBuilders {
         diarize: Boolean,
     ): SttWebSocketSpec = SttWebSocketSpec(
         url = queryUrl(
-            base = "wss://api.x.ai/v1/stt",
+            base = ServiceEndpoints.GROK_STT_WEBSOCKET,
             params = buildList {
                 add("sample_rate" to "16000")
                 add("encoding" to "pcm")
@@ -139,7 +139,7 @@ object SttRequestBuilders {
         keyterms: List<String>,
     ): SttWebSocketSpec = SttWebSocketSpec(
         url = queryUrl(
-            base = "wss://api.deepgram.com/v1/listen",
+            base = ServiceEndpoints.DEEPGRAM_STT_WEBSOCKET,
             params = buildList {
                 add("model" to "nova-3")
                 add("language" to language)
@@ -165,7 +165,7 @@ object SttRequestBuilders {
         diarize: Boolean,
     ): SttWebSocketSpec = SttWebSocketSpec(
         url = queryUrl(
-            base = "wss://streaming.assemblyai.com/v3/ws",
+            base = ServiceEndpoints.ASSEMBLYAI_STT_WEBSOCKET,
             params = buildList {
                 add("speech_model" to "universal-3-5-pro")
                 add("encoding" to "pcm_s16le")
@@ -184,7 +184,7 @@ object SttRequestBuilders {
         secondaryLanguages: List<String>,
     ): SttWebSocketSpec = SttWebSocketSpec(
         url = queryUrl(
-            base = "wss://api.elevenlabs.io/v1/speech-to-text/realtime",
+            base = ServiceEndpoints.ELEVENLABS_STT_WEBSOCKET,
             params = buildList {
                 add("model_id" to "scribe_v2_realtime")
                 add("audio_format" to "pcm_16000")

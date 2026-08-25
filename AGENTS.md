@@ -46,13 +46,21 @@ não usam dados de produção e não promovem APK ou pacote nativo sem aprovaç�
 `NativeDependencyManager.kt` publica versão/URLs/tamanhos/SHA-256 por ABI. O
 build rápido (`assembleDebug`) NÃO compila nativos por desenho.
 
+Uma release somente do APK não precisa regenerar nem manter cópias locais dos
+ZIPs nativos quando `NativeDependencyManager.kt` e o contrato dos pacotes não
+mudaram. Os ZIPs já publicados no R2 continuam sendo reutilizados, e o app
+valida o SHA-256 do arquivo baixado antes de instalar os componentes.
+
 | Rota | Verificador |
 |---|---|
-| Gerar os ZIPs por ABI | `.\scripts\build-android-native-dependencies.ps1 -Version <N>` (ver `native-dependencies/README.md`) |
-| Porta de aceitação (version/tamanho/SHA-256 vs manifesto) | `.\scripts\verify-native-dependencies.ps1 -Version <N> -OutputDir native-dependencies\build` |
+| Release somente do APK | confirmar que não há mudança em `NativeDependencyManager.kt` nem no contrato dos pacotes |
+| Release do pacote nativo | `.\scripts\build-android-native-dependencies.ps1 -Version <N>` (ver `native-dependencies/README.md`) |
+| Aceitação do pacote nativo | `.\scripts\verify-native-dependencies.ps1 -Version <N> -OutputDir native-dependencies\build` |
 
-APK e pacote nativo só podem ser promovidos JUNTOS depois de `verify-native-dependencies`
-aceitar. Nunca publicar/assinar artefatos sem aprovação explícita do usuário.
+Quando houver mudança nativa, os ZIPs e o APK só podem ser promovidos juntos
+depois de `verify-native-dependencies` aceitar. Em release somente do APK,
+não executar a geração/aceitação dos ZIPs e não republicar os pacotes existentes.
+Nunca publicar/assinar artefatos sem aprovação explícita do usuário.
 
 ## Harness e validação de mudanças
 

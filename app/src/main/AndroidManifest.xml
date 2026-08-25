@@ -153,6 +153,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".AdvancedSettingsActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
+        <activity
             android:name=".FfmpegActivity"
             android:screenOrientation="portrait"
             android:exported="false" />

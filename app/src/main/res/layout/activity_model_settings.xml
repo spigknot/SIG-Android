@@ -10,7 +10,10 @@
             </FrameLayout>
 
             <TextView style="@style/SettingsHeader" android:text="Acesso rápido" />
-            <Button android:id="@+id/button_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="5dp" android:paddingBottom="5dp" android:text="API KEYS" android:textAllCaps="false" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
+                <Button android:id="@+id/button_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="5dp" android:paddingBottom="5dp" android:text="API KEYS" android:textAllCaps="false" />
+                <Button android:id="@+id/button_advanced" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="5dp" android:paddingBottom="5dp" android:text="AVANÇADO" android:textAllCaps="false" />
+            </LinearLayout>
 
             <TextView style="@style/SettingsHeader" android:text="Transcrição" />
             <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#88101418" android:paddingStart="8dp" android:paddingTop="8dp" android:paddingEnd="0dp" android:paddingBottom="8dp">
@@ -61,17 +64,6 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView style="@style/SettingsHeader" android:text="Paralelismo" />
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#88101418" android:orientation="vertical" android:padding="8dp">
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Conversões paralelas" android:textColor="#FFFFFFFF" />
-                    <EditText android:id="@+id/edit_conversion_parallelism" android:layout_width="74dp" android:layout_height="wrap_content" android:gravity="center" android:inputType="number" android:textColor="#FFFFFFFF" />
-                </LinearLayout>
-                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="Requisições paralelas" android:textColor="#FFFFFFFF" />
-                    <EditText android:id="@+id/edit_request_parallelism" android:layout_width="74dp" android:layout_height="wrap_content" android:gravity="center" android:inputType="number" android:textColor="#FFFFFFFF" />
-                </LinearLayout>
-            </LinearLayout>
         </LinearLayout>
     </ScrollView>
     <include layout="@layout/view_sig_echo_footer" />

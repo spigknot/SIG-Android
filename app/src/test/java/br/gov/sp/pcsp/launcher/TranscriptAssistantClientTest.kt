@@ -98,7 +98,7 @@ class TranscriptAssistantClientTest {
     }
 
     @Test
-    fun proxyGrokUsesChatMessagesPayload() {
+    fun proxyGrokUsesResponsesInputPayloadWithoutClientKey() {
         MockWebServer().use { server ->
             server.enqueue(
                 MockResponse().setBody(
@@ -132,10 +132,56 @@ class TranscriptAssistantClientTest {
 
             assertTrue(completed.await(5, TimeUnit.SECONDS))
             assertEquals("Histórico do proxy", result.get().getOrThrow())
-            val body = JSONObject(server.takeRequest().body.readUtf8())
+            val request = server.takeRequest()
+            val body = JSONObject(request.body.readUtf8())
+            assertTrue(body.has("input"))
+            assertTrue(!body.has("messages"))
+            assertEquals("grok-4.6", body.optString("model"))
+            assertTrue(request.getHeader("Authorization") == null)
+        }
+    }
+
+    @Test
+    fun proxyDeepseekUsesChatMessagesPayloadWithoutClientKey() {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"choices":[{"message":{"content":"Histórico DeepSeek proxy"}}]}"""
+                )
+            )
+            val result = AtomicReference<Result<String>>()
+            val completed = CountDownLatch(1)
+            val config = ModelServerStore.Config(
+                name = GrokApiSettings.IA_PROXY_NAME,
+                url = server.url("/chat/completions").toString(),
+                parameters = JSONObject()
+                    .put("model", GrokApiSettings.DEEPSEEK_TEXT_NAME)
+                    .put("temperature", 0.0)
+                    .put("max_tokens", 10000)
+                    .put("reasoning_effort", "none"),
+                isProxy = true,
+                provider = "deepseek",
+            )
+
+            TranscriptAssistantClient.requestHistory(
+                client = OkHttpClient(),
+                serverConfig = config,
+                transcript = "material do proxy DeepSeek",
+                historySystemPrompt = "sistema",
+                historyUserPrompt = "usuário",
+            ) {
+                result.set(it)
+                completed.countDown()
+            }
+
+            assertTrue(completed.await(5, TimeUnit.SECONDS))
+            assertEquals("Histórico DeepSeek proxy", result.get().getOrThrow())
+            val request = server.takeRequest()
+            val body = JSONObject(request.body.readUtf8())
             assertTrue(body.has("messages"))
             assertTrue(!body.has("input"))
-            assertEquals("grok-4.6", body.optString("model"))
+            assertEquals("deepseek-v4-flash", body.optString("model"))
+            assertTrue(request.getHeader("Authorization") == null)
         }
     }
 

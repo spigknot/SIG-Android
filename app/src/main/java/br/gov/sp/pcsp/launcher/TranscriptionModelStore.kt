@@ -20,12 +20,12 @@ object TranscriptionModelStore {
 
     fun readConfigs(): List<Config> {
         val available = mutableListOf(
-            Config(SERVER_NAME, "http://servidor:8100", JSONObject().put("model", "granite-speech-4.1-2b-nar"))
+            Config(SERVER_NAME, ServiceEndpoints.GRANITE_STT_REST, JSONObject().put("model", "granite-speech-4.1-2b-nar"))
         )
         if (GrokApiSettings.isPlausibleXaiKey()) {
             available += Config(
                 GrokApiSettings.TRANSCRIPTION_NAME,
-                "https://api.x.ai/v1/stt",
+                ServiceEndpoints.GROK_STT_REST,
                 JSONObject().put("model", "grok-2-audio"),
                 isGrokApi = true
             )
@@ -33,7 +33,7 @@ object TranscriptionModelStore {
         if (GrokApiSettings.hasDeepgramApiKey()) {
             available += Config(
                 GrokApiSettings.DEEPGRAM_TRANSCRIPTION_NAME,
-                "https://api.deepgram.com/v1/listen",
+                ServiceEndpoints.DEEPGRAM_STT_REST,
                 JSONObject().put("model", "nova-3"),
                 isDeepgramApi = true
             )
@@ -41,7 +41,7 @@ object TranscriptionModelStore {
         if (GrokApiSettings.hasAssemblyaiApiKey()) {
             available += Config(
                 GrokApiSettings.ASSEMBLYAI_TRANSCRIPTION_NAME,
-                "https://sync.assemblyai.com/transcribe",
+                ServiceEndpoints.ASSEMBLYAI_STT_REST,
                 JSONObject().put("model", "universal-3-5-pro"),
                 isAssemblyaiApi = true
             )
@@ -49,7 +49,7 @@ object TranscriptionModelStore {
         if (GrokApiSettings.hasElevenlabsApiKey()) {
             available += Config(
                 GrokApiSettings.ELEVENLABS_TRANSCRIPTION_NAME,
-                "https://api.elevenlabs.io/v1/speech-to-text",
+                ServiceEndpoints.ELEVENLABS_STT_REST,
                 JSONObject().put("model", "scribe_v2"),
                 isElevenlabsApi = true
             )

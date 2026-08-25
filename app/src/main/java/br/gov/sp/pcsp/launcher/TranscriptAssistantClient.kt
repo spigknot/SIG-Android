@@ -245,8 +245,7 @@ object TranscriptAssistantClient {
             if (!payload.has("stream")) payload.put("stream", false)
         } else if (
             serverConfig.provider == "deepseek" ||
-            serverConfig.isDeepseekApi ||
-            serverConfig.isProxy
+            serverConfig.isDeepseekApi
         ) {
             payload.put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put("content", systemPrompt))

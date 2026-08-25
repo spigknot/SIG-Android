@@ -29,7 +29,7 @@ object ModelServerStore {
     fun defaultConfig() = selectedConfig(TextModelPurpose.HISTORY)
 
     fun readConfigs(purpose: TextModelPurpose = TextModelPurpose.HISTORY): List<Config> {
-        val available = mutableListOf(proxyConfig(), serverGemma())
+        val available = mutableListOf(serverGemma(), proxyConfig())
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrok()
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrokNonReasoning()
         if (GrokApiSettings.isPlausibleDeepseekKey()) available += directDeepseek()
@@ -77,7 +77,7 @@ object ModelServerStore {
         val normalized = if (model == GrokApiSettings.DEEPSEEK_TEXT_NAME) "deepseek" else "grok"
         return Config(
             GrokApiSettings.IA_PROXY_NAME,
-            "http://servidor:8500",
+            ServiceEndpoints.IA_PROXY,
             parameters(normalized, defaultReasoning(normalized), model),
             isProxy = true,
             provider = normalized,
@@ -86,7 +86,7 @@ object ModelServerStore {
 
     private fun serverGemma() = Config(
         SERVER_GEMMA_NAME,
-        "http://servidor:8400/v1/chat/completions",
+        ServiceEndpoints.SERVER_GEMMA,
         JSONObject()
             .put("model", SERVER_GEMMA_MODEL)
             .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
@@ -99,7 +99,7 @@ object ModelServerStore {
 
     private fun directGrok(reasoning: String = GrokApiSettings.textReasoning()) = Config(
         GrokApiSettings.TEXT_NAME,
-        "https://api.x.ai/v1/responses",
+        ServiceEndpoints.XAI_RESPONSES,
         parameters("grok", reasoning, GrokApiSettings.TEXT_NAME),
         isGrokApi = true,
         provider = "grok"
@@ -107,7 +107,7 @@ object ModelServerStore {
 
     private fun directGrokNonReasoning() = Config(
         GrokApiSettings.GROK_NON_REASONING_TEXT_NAME,
-        "https://api.x.ai/v1/responses",
+        ServiceEndpoints.XAI_RESPONSES,
         JSONObject()
             .put("model", GrokApiSettings.GROK_NON_REASONING_TEXT_NAME)
             .put("temperature", 0.0)
@@ -118,7 +118,7 @@ object ModelServerStore {
 
     private fun directDeepseek(reasoning: String = GrokApiSettings.textReasoning()) = Config(
         GrokApiSettings.DEEPSEEK_TEXT_NAME,
-        "https://api.deepseek.com/chat/completions",
+        ServiceEndpoints.DEEPSEEK_CHAT_COMPLETIONS,
         parameters("deepseek", reasoning, GrokApiSettings.DEEPSEEK_TEXT_NAME),
         isDeepseekApi = true,
         provider = "deepseek"

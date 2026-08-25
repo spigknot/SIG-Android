@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -33,8 +32,6 @@ class ModelSettingsActivity : AppCompatActivity() {
     private lateinit var partsProxyModelGroup: RadioGroup
     private lateinit var partsReasoningLabel: View
     private lateinit var partsReasoningGroup: RadioGroup
-    private lateinit var conversionParallelism: EditText
-    private lateinit var requestParallelism: EditText
     private var populating = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,11 +61,12 @@ class ModelSettingsActivity : AppCompatActivity() {
         partsProxyModelGroup = findViewById(R.id.radio_parts_proxy_model)
         partsReasoningLabel = findViewById(R.id.label_parts_reasoning)
         partsReasoningGroup = findViewById(R.id.radio_parts_reasoning)
-        conversionParallelism = findViewById(R.id.edit_conversion_parallelism)
-        requestParallelism = findViewById(R.id.edit_request_parallelism)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.button_api_keys).setOnClickListener {
             startActivity(Intent(this, ApiKeysSettingsActivity::class.java))
+        }
+        findViewById<Button>(R.id.button_advanced).setOnClickListener {
+            startActivity(Intent(this, AdvancedSettingsActivity::class.java))
         }
     }
 
@@ -77,18 +75,12 @@ class ModelSettingsActivity : AppCompatActivity() {
         populateAll()
     }
 
-    override fun onPause() {
-        super.onPause()
-        saveParallelismFields()
-    }
-
     private fun populateAll() {
         populating = true
         populateTranscription()
         populateText(TextModelPurpose.HISTORY, historyControls)
         populateText(TextModelPurpose.STATEMENT, statementControls)
         populateParts()
-        populateParallelism()
         populating = false
         refreshVisibility()
     }
@@ -262,25 +254,6 @@ class ModelSettingsActivity : AppCompatActivity() {
         populateReasoningGroup(partsReasoningGroup, config.modelName, current) { value ->
             PartsExtractionSettings.selectReasoning(this, value)
         }
-    }
-
-    private fun populateParallelism() {
-        conversionParallelism.setText(ConversionParallelismSettings.selected(this).toString())
-        requestParallelism.setText(GraniteParallelismSettings.selectedRequests(this).toString())
-        conversionParallelism.setOnFocusChangeListener { _, focused -> if (!focused) saveParallelismFields() }
-        requestParallelism.setOnFocusChangeListener { _, focused -> if (!focused) saveParallelismFields() }
-    }
-
-    private fun saveParallelismFields() {
-        val maxConversions = Runtime.getRuntime().availableProcessors().coerceAtLeast(1) * 4
-        val conversions = conversionParallelism.text.toString().toIntOrNull()
-            ?.coerceIn(1, maxConversions) ?: ConversionParallelismSettings.selected(this)
-        val requests = requestParallelism.text.toString().toIntOrNull()
-            ?.coerceIn(1, 32) ?: GraniteParallelismSettings.selectedRequests(this)
-        ConversionParallelismSettings.select(this, conversions)
-        GraniteParallelismSettings.select(this, requests)
-        conversionParallelism.setText(conversions.toString())
-        requestParallelism.setText(requests.toString())
     }
 
     private fun refreshVisibility() {
