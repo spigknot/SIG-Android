@@ -3138,6 +3138,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     status.text = ""
                     serverScroll.post { serverScroll.smoothScrollTo(0, livePostActions.bottom) }
                 } catch (e: Throwable) {
+                    Log.e(TAG, "Could not create live transcription output", e)
                     status.text = "Não consegui gerar o arquivo de transcrição."
                 }
             }
@@ -3587,8 +3588,10 @@ class RemoteSttActivity : AppCompatActivity() {
                 sessionDir = createSessionDir()
                 val transcriptionDir = File(sessionDir, "Transcricoes").apply { mkdirs() }
                 val tempDir = File(cacheDir, "granite_speech_temp_${System.currentTimeMillis()}").apply { mkdirs() }
+                appendTerminal(terminalLines, "output: ${sessionDir.absolutePath}")
                 appendTerminal(terminalLines, "temporários: ${tempDir.absolutePath}")
                 appendLog(logLines, "Servidor: ${TranscriptionModelStore.selectedConfig().url}")
+                appendLog(logLines, "Pasta de saída: ${sessionDir.absolutePath}")
                 appendLog(logLines, "Pasta temporária: ${tempDir.absolutePath}")
                 appendLog(logLines, "Arquivos: ${items.size}")
                 appendLog(logLines, "Preparo: ${prepareMode.label}")
@@ -5265,6 +5268,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = mime
             putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri(file.name, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, "Compartilhar"))
@@ -5276,16 +5280,37 @@ class RemoteSttActivity : AppCompatActivity() {
             Toast.makeText(this, "Ainda não há texto para compartilhar.", Toast.LENGTH_SHORT).show()
             return
         }
+        shareTextAsFile(text, "transcricao")
+    }
+
+    private fun shareTextAsFile(text: String, label: String) {
+        val safeLabel = label.lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9]+"), "_")
+            .trim('_')
+            .ifBlank { "texto" }
+        val file = File(cacheDir, "sig_${safeLabel}_${System.currentTimeMillis()}.txt")
+        try {
+            file.writeText(text.trimEnd() + "\n", Charsets.UTF_8)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Could not prepare text file for sharing", e)
+            Toast.makeText(this, "Não consegui preparar o arquivo de texto.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_TITLE, file.name)
+            clipData = ClipData.newRawUri(file.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, "Compartilhar transcrição"))
     }
 
     private fun shareTranscriptAsTextOrFile() {
         val session = lastSession
-        if (lastTranscriptionResults.size > 1 && session?.txtFile?.exists() == true) {
+        if (session?.txtFile?.exists() == true) {
             shareFile(session.txtFile, "text/plain")
             return
         }
@@ -5319,10 +5344,7 @@ class RemoteSttActivity : AppCompatActivity() {
             Toast.makeText(this, "Ainda não há texto para compartilhar.", Toast.LENGTH_SHORT).show()
             return
         }
-        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, text)
-        }, "Compartilhar $label"))
+        shareTextAsFile(text, label)
     }
 
     private fun clearTextWithConfirmation(target: EditText, label: String) {
@@ -6223,7 +6245,20 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun createSessionDir(): File {
-        val root = File(File(Environment.getExternalStorageDirectory(), "SIG"), "Granite Speech").apply { mkdirs() }
+        val publicRoot = File(File(Environment.getExternalStorageDirectory(), "SIG"), "Granite Speech")
+        val appSpecificRoot = File(getExternalFilesDir(null) ?: filesDir, "Granite Speech")
+        val preferredRoot = SttOutputStorage.chooseRoot(
+            publicRoot = publicRoot,
+            appSpecificRoot = appSpecificRoot,
+            publicStorageAvailable = hasPublicStorageAccess()
+        )
+        val candidates = if (preferredRoot == publicRoot) {
+            listOf(publicRoot, appSpecificRoot)
+        } else {
+            listOf(appSpecificRoot)
+        }
+        val root = candidates.firstOrNull { SttOutputStorage.ensureDirectory(it) }
+            ?: throw IllegalStateException("não consegui preparar o armazenamento da sessão")
         val stamp = SimpleDateFormat("yyyy-MM-dd 'as' HH'h'mm", Locale.US).format(Date())
         var candidate = File(root, stamp)
         var suffix = 2
@@ -6233,6 +6268,15 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         if (!candidate.mkdirs()) throw IllegalStateException("não consegui criar a pasta da sessão")
         return candidate
+    }
+
+    private fun hasPublicStorageAccess(): Boolean {
+        return when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> Environment.isExternalStorageManager()
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ->
+                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            else -> true
+        }
     }
 
     private fun copyUriToCache(uri: Uri, displayName: String): File {

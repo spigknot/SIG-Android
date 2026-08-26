@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -621,10 +622,12 @@ class WhisperActivity : AppCompatActivity() {
                 val perFileDir = File(sessionDir, "Transcricoes").apply { mkdirs() }
                 tempWavDir = File(cacheDir, "whisper_wavs_${System.currentTimeMillis()}").apply { mkdirs() }
                 appendTerminal(terminalLines, "$ whisper --model ${model.fileName} --language ${selectedLanguage.code} --input ${items.size} arquivo(s)")
+                appendTerminal(terminalLines, "output: ${sessionDir.absolutePath}")
                 appendTerminal(terminalLines, "backend: ${backend.reportLabel}")
                 appendTerminal(terminalLines, "decode: ${settings.describe()}")
                 appendTerminal(terminalLines, WhisperNative.buildInfo())
                 appendLog(logLines, "Sessão: ${sessionDir.name}")
+                appendLog(logLines, "Pasta de saída: ${sessionDir.absolutePath}")
                 appendLog(logLines, "Modelo: ${model.label}")
                 appendLog(logLines, "Backend: ${backend.reportLabel}")
                 appendLog(logLines, "Idioma: ${selectedLanguage.label}")
@@ -1137,7 +1140,7 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun createSessionDir(): File {
-        val root = File(File(Environment.getExternalStorageDirectory(), SIG_OUTPUT_FOLDER), WHISPER_OUTPUT_FOLDER).apply { mkdirs() }
+        val root = whisperOutputRoot()
         val stamp = SimpleDateFormat("yyyy-MM-dd 'as' HH'h'mm", Locale.US).format(Date())
         var candidate = File(root, stamp)
         var suffix = 2
@@ -1147,6 +1150,38 @@ class WhisperActivity : AppCompatActivity() {
         }
         if (!candidate.mkdirs()) throw IllegalStateException("não consegui criar a pasta da sessão")
         return candidate
+    }
+
+    private fun whisperOutputRoot(): File {
+        val publicRoot = File(
+            File(Environment.getExternalStorageDirectory(), SIG_OUTPUT_FOLDER),
+            WHISPER_OUTPUT_FOLDER
+        )
+        val appSpecificRoot = File(
+            getExternalFilesDir(null) ?: filesDir,
+            WHISPER_OUTPUT_FOLDER
+        )
+        val preferredRoot = SttOutputStorage.chooseRoot(
+            publicRoot = publicRoot,
+            appSpecificRoot = appSpecificRoot,
+            publicStorageAvailable = hasPublicStorageAccess()
+        )
+        val candidates = if (preferredRoot == publicRoot) {
+            listOf(publicRoot, appSpecificRoot)
+        } else {
+            listOf(appSpecificRoot)
+        }
+        return candidates.firstOrNull { SttOutputStorage.ensureDirectory(it) }
+            ?: throw IllegalStateException("não consegui preparar o armazenamento da sessão")
+    }
+
+    private fun hasPublicStorageAccess(): Boolean {
+        return when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> Environment.isExternalStorageManager()
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ->
+                checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            else -> true
+        }
     }
 
     private fun appendGlobalLog(text: String) {
@@ -1163,9 +1198,9 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun readGlobalLog(): String {
+        val file = runCatching { globalLogFile() }.getOrNull()
         val body = runCatching {
-            val file = globalLogFile()
-            if (file.exists() && file.length() > 0L) {
+            if (file != null && file.exists() && file.length() > 0L) {
                 file.readText(Charsets.UTF_8)
             } else {
                 "Sem log geral ainda."
@@ -1175,13 +1210,12 @@ class WhisperActivity : AppCompatActivity() {
             "Sem log geral ainda."
         }
         val sessionCount = "SESSÃO WHISPER -".toRegex().findAll(body).count()
-        return "LOG GLOBAL - SIG/Whisper/$GLOBAL_LOG_NAME\nSessões registradas: $sessionCount\nMais recentes primeiro; role para ver sessões anteriores.\n\n$body"
+        val location = file?.absolutePath ?: "SIG/Whisper/$GLOBAL_LOG_NAME"
+        return "LOG GLOBAL - $location\nSessões registradas: $sessionCount\nMais recentes primeiro; role para ver sessões anteriores.\n\n$body"
     }
 
     private fun globalLogFile(): File {
-        val root = File(File(Environment.getExternalStorageDirectory(), SIG_OUTPUT_FOLDER), WHISPER_OUTPUT_FOLDER)
-        if (!root.exists()) root.mkdirs()
-        return File(root, GLOBAL_LOG_NAME)
+        return File(whisperOutputRoot(), GLOBAL_LOG_NAME)
     }
 
     private fun buildReport(
@@ -1486,6 +1520,7 @@ class WhisperActivity : AppCompatActivity() {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = mimeType
             putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri(file.name, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         startActivity(Intent.createChooser(intent, title))

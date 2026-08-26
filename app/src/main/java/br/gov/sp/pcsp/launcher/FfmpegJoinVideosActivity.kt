@@ -26,10 +26,12 @@ import android.util.Log
 import android.view.View
 import android.view.Surface
 import android.view.TextureView
+import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.HorizontalScrollView
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -902,13 +904,60 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
 
         val show: () -> Unit = {
-            AlertDialog.Builder(this)
+            lateinit var dialog: AlertDialog
+            val dp: (Int) -> Int = { value ->
+                (value * resources.displayMetrics.density + 0.5f).toInt()
+            }
+            val body = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(20), dp(4), dp(20), dp(4))
+            }
+            body.addView(
+                TextView(this).apply {
+                    text = message
+                    setTextColor(Color.WHITE)
+                    textSize = 16f
+                    setPadding(0, dp(4), 0, dp(8))
+                },
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                )
+            )
+            choices.forEachIndexed { index, decision ->
+                body.addView(
+                    Button(this).apply {
+                        text = labels[index]
+                        isAllCaps = false
+                        setTextColor(Color.WHITE)
+                        minHeight = dp(48)
+                        setOnClickListener {
+                            dialog.dismiss()
+                            finish(decision)
+                        }
+                    },
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply {
+                        topMargin = dp(4)
+                    }
+                )
+            }
+            val scroll = ScrollView(this).apply {
+                addView(body)
+            }
+            dialog = AlertDialog.Builder(this)
                 .setTitle("Smart Join precisa de uma decisão")
-                .setMessage(message)
-                .setItems(labels.toTypedArray()) { _, which -> finish(choices[which]) }
-                .setNegativeButton("Cancelar") { _, _ -> finish(SmartJoinDecision(SmartJoinDecisionType.CANCEL)) }
-                .setOnCancelListener { finish(SmartJoinDecision(SmartJoinDecisionType.CANCEL)) }
-                .show()
+                .setView(scroll)
+                .setNegativeButton("Cancelar") { _, _ ->
+                    finish(SmartJoinDecision(SmartJoinDecisionType.CANCEL))
+                }
+                .setOnCancelListener {
+                    finish(SmartJoinDecision(SmartJoinDecisionType.CANCEL))
+                }
+                .create()
+            dialog.show()
         }
         if (Looper.myLooper() == Looper.getMainLooper()) show() else runOnUiThread(show)
         latch.await()

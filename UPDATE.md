@@ -184,6 +184,7 @@ a fonte da verdade e deve evoluir com a prática.
 | ZIPs de dependências locais ausentes ou com SHA diferente | a release é somente do APK, ou há reconstruções locais; os ZIPs nativos são versionados separadamente | em release somente do APK, reutilizar os ZIPs já publicados no R2; se o pacote nativo mudou, gerar e aceitar os arquivos que batem com `NativeDependencyManager.kt` antes de publicar |
 | `O:\` desmontada no cp | unidade de rede indisponível | ignorar (destino menos importante); seguir com commit/GitHub |
 | Dependência nativa baixando do Drive | `NativeDependencyManager.kt` com URL antiga | usar `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-<abi>.zip` |
+| `EPERM` ao salvar TXT do Whisper/Ocorrência ou ao enviar texto para gerenciador de arquivos | Android com armazenamento segmentado: a pasta pública `SIG` não está autorizada e `ACTION_SEND` recebeu somente `EXTRA_TEXT` | usar o diretório externo privado como fallback e compartilhar um `.txt` real por `FileProvider`/`EXTRA_STREAM`; exportar para a pasta escolhida via SAF |
 
 ---
 
