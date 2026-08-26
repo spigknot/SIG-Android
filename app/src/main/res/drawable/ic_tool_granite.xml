@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Traços amarelos (padrão dos demais ícones de ferramenta, cor #FFFFC928). -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,14 L10,34 M10,14 L24,14 L24,24 M10,24 L24,24 M10,34 L24,34 M24,24 L24,34 M28,14 L28,34 M32,14 L32,34 M36,14 L36,34"
+        android:strokeColor="#FFFFC928"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.6" />
+</vector>

@@ -111,6 +111,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".GraniteActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
+        <activity
             android:name=".experimental.npu.NpuTestActivity"
             android:screenOrientation="portrait"
             android:exported="false" />

@@ -515,16 +515,20 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun showModelMenu() {
+        val models = officialModels()
         PopupMenu(this, buttonModel).apply {
-            officialModels().forEach { model -> menu.add(model.label) }
-            menu.add("Outro...")
+            models.forEachIndexed { index, model ->
+                val display = if (model.file.exists()) "✓ ${model.label}" else model.label
+                menu.add(0, index + 1, 0, display)
+            }
+            menu.add(0, models.size + 1, 0, "Selecionar arquivo de modelo...")
             setOnMenuItemClickListener { item ->
-                val label = item.title.toString()
-                if (label == "Outro...") {
+                val itemId = item.itemId
+                if (itemId == models.size + 1) {
                     openModelPicker()
                     return@setOnMenuItemClickListener true
                 }
-                val model = officialModels().first { it.label == label }
+                val model = models.getOrNull(itemId - 1) ?: return@setOnMenuItemClickListener true
                 if (model.file.exists()) {
                     selectModel(model)
                 } else {
@@ -547,10 +551,10 @@ class WhisperActivity : AppCompatActivity() {
         val url = model.downloadUrl ?: return
         AlertDialog.Builder(this)
             .setTitle("Baixar modelo")
-            .setMessage("Baixar ${model.label} para ${modelsDir().absolutePath}?")
-            .setNegativeButton("Não", null)
-            .setPositiveButton("Sim") { _, _ ->
-                downloadFile(
+            .setMessage("Ainda não temos o modelo ${model.label} no aparelho. Baixar agora?")
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Baixar") { _, _ ->
+                downloadModelWithProgress(
                     label = model.label,
                     url = url,
                     destination = model.file
@@ -1388,25 +1392,25 @@ class WhisperActivity : AppCompatActivity() {
                 "tiny",
                 "ggml-tiny.bin",
                 File(dir, "ggml-tiny.bin"),
-                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin"
+                "$MODEL_BASE_URL/ggml-tiny.bin"
             ),
             WhisperModel(
                 "base",
                 "ggml-base.bin",
                 File(dir, "ggml-base.bin"),
-                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
+                "$MODEL_BASE_URL/ggml-base.bin"
             ),
             WhisperModel(
                 "small",
                 "ggml-small.bin",
                 File(dir, "ggml-small.bin"),
-                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+                "$MODEL_BASE_URL/ggml-small.bin"
             ),
             WhisperModel(
-                "large-v3-turbo",
+                "v3Turbo",
                 "ggml-large-v3-turbo.bin",
                 File(dir, "ggml-large-v3-turbo.bin"),
-                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin"
+                "$MODEL_BASE_URL/ggml-large-v3-turbo.bin"
             )
         )
     }
@@ -1482,6 +1486,73 @@ class WhisperActivity : AppCompatActivity() {
             } catch (e: Throwable) {
                 Log.e(TAG, "Download failed", e)
                 runOnUiThread { status.text = "Erro ao baixar $label: ${e.message ?: "falha inesperada"}" }
+            }
+        }.start()
+    }
+
+    private fun downloadModelWithProgress(label: String, url: String, destination: File, onSuccess: () -> Unit) {
+        val progressView = layoutInflater.inflate(R.layout.dialog_model_download, null)
+        val statusText = progressView.findViewById<TextView>(R.id.modelDownloadStatusText)
+        val progressBar = progressView.findViewById<ProgressBar>(R.id.modelDownloadProgressBar)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Baixando modelo $label")
+            .setView(progressView)
+            .setCancelable(false)
+            .create()
+        dialog.show()
+        Thread {
+            try {
+                destination.parentFile?.mkdirs()
+                val temp = File(destination.parentFile, "${destination.name}.download")
+                URL(url).openConnection().apply {
+                    connectTimeout = 15000
+                    readTimeout = 30000
+                }.let { connection ->
+                    val total = connection.contentLengthLong
+                    connection.getInputStream().use { input ->
+                        FileOutputStream(temp).use { output ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var copied = 0L
+                            var lastUi = 0L
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read < 0) break
+                                output.write(buffer, 0, read)
+                                copied += read
+                                val now = SystemClock.elapsedRealtime()
+                                if (now - lastUi > 300L) {
+                                    lastUi = now
+                                    val percent = if (total > 0L) (copied * 100L / total).coerceIn(0L, 100L) else -1L
+                                    val mb = copied / 1048576L
+                                    runOnUiThread {
+                                        if (percent >= 0L) {
+                                            progressBar.progress = percent.toInt()
+                                            statusText.text = "$percent% ($mb MB de ${total / 1048576L} MB)"
+                                        } else {
+                                            statusText.text = "Baixando... $mb MB"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                if (destination.exists()) destination.delete()
+                if (!temp.renameTo(destination)) {
+                    temp.copyTo(destination, overwrite = true)
+                    temp.delete()
+                }
+                runOnUiThread {
+                    dialog.dismiss()
+                    status.text = "$label pronto."
+                    onSuccess()
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Download failed", e)
+                runOnUiThread {
+                    dialog.dismiss()
+                    status.text = "Erro ao baixar $label: ${e.message ?: "falha inesperada"}"
+                }
             }
         }.start()
     }
@@ -1830,6 +1901,7 @@ class WhisperActivity : AppCompatActivity() {
         private const val GLOBAL_LOG_NAME = "whisper_log.txt"
         private const val VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
         private const val VAD_MODEL_URL = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
+        private const val MODEL_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models"
         private const val DEFAULT_BEAM_SIZE = 5
         private const val DEFAULT_BEST_OF = 5
         private const val TAG = "WhisperActivity"

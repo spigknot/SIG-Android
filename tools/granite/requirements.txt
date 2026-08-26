@@ -1,0 +1,9 @@
+# Export/validação do Granite Speech 5.0 TurboCTC (uso em tools/granite)
+# torch/torchaudio: instalar com --index-url https://download.pytorch.org/whl/cpu
+# transformers: instalar da branch main (git+https://github.com/huggingface/transformers.git)
+huggingface_hub
+onnx
+onnxscript
+onnxruntime
+datasets
+soundfile

@@ -1,0 +1,54 @@
+LINKS PARA DOWNLOAD - PACOTE GRANITE SPEECH 5.0 TURBOCTC (F32 FINAL)
+=====================================================================
+Data: 2026-08-26
+Destino: bucket sig-android (Cloudflare R2), RAIZ do bucket
+Total: ~2,1 GB
+
+Este pacote é o que o APP VAI BAIXAR (F32 puro, "sem quantização").
+Suba TODOS os arquivos abaixo na RAIZ do bucket, com os nomes EXATOS.
+
+--------------------------------------------------------------------------------
+1) MODELO ONNX F32 (exportado do model.safetensors - o arquivo principal)
+   Arquivo LOCAL: D:\Projetos\SIG\tools\granite\package\
+--------------------------------------------------------------------------------
+# granite-5.0-turboctc-f32-ext.onnx (0,9 MB) - GRAFO (referencia o .data por nome)
+URL de download (HF - se preferir, o arquivo é gerado no PC, não está no HF):
+   (local) D:\Projetos\SIG\tools\granite\package\granite-5.0-turboctc-f32-ext.onnx
+SHA256: b2954cd8b547d8f3a0e8f6ad22cbd1570248d6f701417343ba0587313e937cfd
+
+# granite-5.0-turboctc-f32-ext.onnx.data (1,89 GB) - PESOS (par inseparavel)
+   (local) D:\Projetos\SIG\tools\granite\package\granite-5.0-turboctc-f32-ext.onnx.data
+SHA256: 443cc7092c711104ecb8a79a37c2677592fd71c94624aefb65242d620590c0d5
+
+IMPORTANTE: .onnx e .onnx.data sao um PAR. Subir os dois com esses nomes EXATOS
+na RAIZ do bucket (o .onnx referencia o .data por nome).
+
+--------------------------------------------------------------------------------
+2) ARQUIVOS DE APOIO (ja tem os links da IBM - subir na raiz)
+--------------------------------------------------------------------------------
+frontend_config.json   (303 B)  https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/main/onnx-ctc/frontend_config.json
+mel_filters.bin        (82 KB)  https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/main/onnx-ctc/mel_filters.bin
+stft_window.bin        (2 KB)   https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/main/onnx-ctc/stft_window.bin
+vocab.json             (177 KB) https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/main/onnx-ctc/vocab.json
+pcs_vocab.json         (640 KB) https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/main/pcs_vocab.json
+punct_cap_seg_en.onnx  (209 MB) https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/main/punct_cap_seg_en.onnx
+
+SHAs (para conferencia):
+frontend_config.json 34b6d5aace683c15c8d74f6c1be6194bcd61347540ed3a0e45bbd171ba8df2a3
+mel_filters.bin      3e5145f681dd30339bb9ea60b366d78ff971de6aa0d210b45b4adcf859bb177d
+stft_window.bin      b318e8ace5febc3997eb190be755063577693ed06da87629172c9b6913448e41
+vocab.json           738b24db3fb10d903b969273f206600917222001f3f161dbe2bbe7eb7dce1268
+pcs_vocab.json       89fde219dc3ca05955d69bd47cb7b7616032a21c2b770b02cdb882969576d830
+punct_cap_seg_en.onnx dd922d459da618cd324280889740608b76fb3e9e61d3f402291be1251f91421b
+
+--------------------------------------------------------------------------------
+RESUMO DOS ARQUIVOS NA RAIZ DO BUCKET (8 arquivos)
+--------------------------------------------------------------------------------
+granite-5.0-turboctc-f32-ext.onnx        (0,9 MB)
+granite-5.0-turboctc-f32-ext.onnx.data   (1,89 GB)
+frontend_config.json                     (303 B)
+mel_filters.bin                          (82 KB)
+stft_window.bin                          (2 KB)
+vocab.json                               (177 KB)
+pcs_vocab.json                           (640 KB)
+punct_cap_seg_en.onnx                    (209 MB)

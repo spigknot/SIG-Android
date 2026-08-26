@@ -26,3 +26,9 @@ __pycache__/
 *.pyc
 *.hprof
 release/r2_config.json
+# Export do Granite TurboCTC: artefatos grandes ficam fora do Git
+tools/granite/venv/
+tools/granite/models/
+tools/granite/out/
+tools/granite/package/
+tools/granite/*.wav

@@ -35,6 +35,9 @@ class ToolsActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_remote_stt).setOnClickListener {
             startActivity(Intent(this, RemoteSttActivity::class.java).putExtra(RemoteSttActivity.EXTRA_MODE, "occurrence"))
         }
+        findViewById<View>(R.id.button_granite).setOnClickListener {
+            startActivity(Intent(this, GraniteActivity::class.java))
+        }
         findViewById<View>(R.id.button_transcription).setOnClickListener {
             startActivity(Intent(this, RemoteSttActivity::class.java).putExtra(RemoteSttActivity.EXTRA_MODE, "transcription"))
         }

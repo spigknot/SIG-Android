@@ -77,8 +77,8 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 34
-        versionName "1.471"
+        versionCode 35
+        versionName "1.472"
 
         buildConfigField "boolean", "ENABLE_NPU_TESTS", "true"
 
@@ -136,6 +136,8 @@ dependencies {
     implementation 'androidx.browser:browser:1.8.0'  // ← Custom Tabs
     implementation 'androidx.documentfile:documentfile:1.0.1'
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
+    // ONNX Runtime (engine do Granite Speech 5.0 TurboCTC local).
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
     implementation files('libs/ffmpeg-kit-api.jar')
     // O FFmpegKitConfig.<clinit> referencia com.arthenica.smartexception.java.Exceptions —
     // obrigatória (já removida uma vez como "redundante" e quebrou TODAS as ferramentas ffmpeg).
