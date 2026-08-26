@@ -9,7 +9,6 @@
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="center" android:text="Configurações" android:textColor="#FFFFFFFF" android:textSize="18sp" android:textStyle="bold" />
             </FrameLayout>
 
-            <TextView style="@style/SettingsHeader" android:text="Acesso rápido" />
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
                 <Button android:id="@+id/button_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="5dp" android:paddingBottom="5dp" android:text="API KEYS" android:textAllCaps="false" />
                 <Button android:id="@+id/button_advanced" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginStart="8dp" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="12dp" android:paddingEnd="12dp" android:paddingTop="5dp" android:paddingBottom="5dp" android:text="AVANÇADO" android:textAllCaps="false" />
@@ -30,7 +29,7 @@
                 </LinearLayout>
                 <LinearLayout android:id="@+id/history_reasoning_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
                     <TextView android:layout_width="96dp" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" />
-                    <RadioGroup android:id="@+id/radio_history_reasoning" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" />
+                    <RadioGroup android:id="@+id/radio_history_reasoning" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" />
                 </LinearLayout>
             </LinearLayout>
             <TextView android:id="@+id/history_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
@@ -44,7 +43,7 @@
                 </LinearLayout>
                 <LinearLayout android:id="@+id/statement_reasoning_controls" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:visibility="gone">
                     <TextView android:layout_width="96dp" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" />
-                    <RadioGroup android:id="@+id/radio_statement_reasoning" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="horizontal" />
+                    <RadioGroup android:id="@+id/radio_statement_reasoning" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical" />
                 </LinearLayout>
             </LinearLayout>
             <TextView android:id="@+id/statement_models_empty" style="@style/SettingsError" android:text="Nenhum modelo disponível." />
@@ -59,7 +58,7 @@
                         <TextView android:id="@+id/label_parts_proxy_model" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Modelo do IA-Proxy" android:textColor="#FFFFFFFF" android:visibility="gone" />
                         <RadioGroup android:id="@+id/radio_parts_proxy_model" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" />
                         <TextView android:id="@+id/label_parts_reasoning" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Raciocínio:" android:textColor="#FFFFFFFF" android:visibility="gone" />
-                        <RadioGroup android:id="@+id/radio_parts_reasoning" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:visibility="gone" />
+                        <RadioGroup android:id="@+id/radio_parts_reasoning" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone" />
                     </LinearLayout>
                 </LinearLayout>
             </LinearLayout>

@@ -33,7 +33,10 @@
                 <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Imei Check:" android:textColor="#FFFFFFFF" />
                 <EditText android:id="@+id/edit_imei_check_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Imei Check" android:inputType="textPassword" />
             </LinearLayout>
-            <Button android:id="@+id/button_save_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="4dp" android:paddingBottom="4dp" android:text="Salvar chaves" android:textAllCaps="false" />
+            <FrameLayout android:layout_width="match_parent" android:layout_height="wrap_content">
+                <Button android:id="@+id/button_import_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="4dp" android:paddingBottom="4dp" android:text="IMPORTAR" android:textAllCaps="false" />
+                <Button android:id="@+id/button_save_api_keys" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_gravity="end" android:minWidth="0dp" android:minHeight="0dp" android:paddingStart="10dp" android:paddingEnd="10dp" android:paddingTop="4dp" android:paddingBottom="4dp" android:text="SALVAR" android:textAllCaps="false" />
+            </FrameLayout>
         </LinearLayout>
     </ScrollView>
     <include layout="@layout/view_sig_echo_footer" />
