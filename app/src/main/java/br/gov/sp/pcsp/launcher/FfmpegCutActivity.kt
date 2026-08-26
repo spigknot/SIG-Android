@@ -504,6 +504,8 @@ class FfmpegCutActivity : AppCompatActivity() {
                 } else {
                     tracker.appendTasks(listOf("Preparando intervalo de áudio", "Recodificando áudio selecionado"))
                     tracker.completeCurrentTask()
+                    tracker.setTaskEncoder(1, preciseAudioEncoderName(selectedName))
+                    tracker.startCurrentTask()
                     val session = executeFfmpegWithProgress(
                         buildPreciseFfmpegArguments(currentInputFile, currentTempOutput, startMs, endMs),
                         endMs - startMs,
@@ -639,11 +641,19 @@ class FfmpegCutActivity : AppCompatActivity() {
         val pieces = mutableListOf<File>()
         try {
             val tasks = mutableListOf<String>()
-            if (startKeyframe > startMs) tasks += "Recodificando borda inicial (${encoder.ffmpegName})"
+            if (startKeyframe > startMs) tasks += "Recodificando borda inicial"
             tasks += "Copiando trecho central sem reencodar"
-            if (endKeyframe < endMs) tasks += "Recodificando borda final (${encoder.ffmpegName})"
+            if (endKeyframe < endMs) tasks += "Recodificando borda final"
             tasks += "Juntando trechos e preservando orientação"
+            val taskOffset = tracker.taskCount()
             tracker.appendTasks(tasks)
+            tasks.forEachIndexed { index, task ->
+                if (task.startsWith("Recodificando")) {
+                    tracker.setTaskEncoder(taskOffset + index, encoder.shortName)
+                } else if (task == "Copiando trecho central sem reencodar" && bitrates.audio != null) {
+                    tracker.setTaskEncoder(taskOffset + index, "aac")
+                }
+            }
 
             fun runPiece(arguments: Array<String>, expectedMs: Long, output: File): CutExecutionResult? {
                 var lastFailure = ""
@@ -652,6 +662,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                         output.delete()
                         Thread.sleep(180L)
                     }
+                    tracker.startCurrentTask()
                     val session = executeFfmpegWithProgress(arguments, expectedMs, tracker)
                     if (ReturnCode.isCancel(session.returnCode)) {
                         return CutExecutionResult(false, true, "")
@@ -730,7 +741,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         rotationDegrees: Int,
         tracker: FfmpegTaskTracker
     ): CutExecutionResult {
-        val encoderName = selectedVideoEncoder?.ffmpegName ?: "encoder de vídeo"
+        val encoder = selectedVideoEncoder
+        val encoderName = encoder?.shortName ?: "encoder de vídeo"
         val orientationTask = if (rotationDegrees == 0) {
             "Mantendo orientação original"
         } else {
@@ -739,11 +751,13 @@ class FfmpegCutActivity : AppCompatActivity() {
         tracker.appendTasks(
             listOf(
                 "Preparando intervalo sem aplicar a rotação",
-                "Recodificando somente o intervalo solicitado ($encoderName)",
+                "Recodificando somente o intervalo solicitado",
                 orientationTask
             )
         )
+        tracker.setTaskEncoder(tracker.taskCount() - 2, encoderName)
         tracker.completeCurrentTask()
+        tracker.startCurrentTask()
         val session = executeFfmpegWithProgress(
             buildPreciseFfmpegArguments(inputFile, outputFile, startMs, endMs),
             endMs - startMs,
@@ -879,6 +893,18 @@ class FfmpegCutActivity : AppCompatActivity() {
             "opus" -> listOf("-c:a", "libopus", "-b:a", bitrate)
             "flac" -> listOf("-c:a", "flac")
             else -> listOf("-c:a", "aac", "-b:a", bitrate)
+        }
+    }
+
+    private fun preciseAudioEncoderName(name: String): String {
+        return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+            "wav" -> "pcm_s16le"
+            "mp3" -> "libmp3lame"
+            "m4a", "aac" -> "aac"
+            "ogg" -> "libvorbis"
+            "opus" -> "libopus"
+            "flac" -> "flac"
+            else -> "aac"
         }
     }
 

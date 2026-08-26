@@ -508,6 +508,15 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 val outputExtension = if (fullReencode) "m4a" else main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
                 val safeExtension = outputExtension.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
                 val resultFile = File(cacheDir, "insert_${System.currentTimeMillis()}_${sanitizeBase(main.name)}.$safeExtension")
+                val encoderName = when {
+                    fullReencode -> "aac"
+                    smartInsert.isChecked -> encoderForExtension(safeExtension)
+                    else -> null
+                }
+                encoderName?.let {
+                    tracker.setTaskEncoder(1, it)
+                    tracker.startTask(1)
+                }
 
                 val session = when {
                     fullReencode -> executeWithProgress(

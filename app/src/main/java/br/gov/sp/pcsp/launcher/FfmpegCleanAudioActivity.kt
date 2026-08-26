@@ -190,6 +190,8 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
                 
                 val tracker = FfmpegTaskTracker(status, listOf("Preparando áudio", "Limpando áudio"))
                 tracker.completeCurrentTask()
+                tracker.setTaskEncoder(1, "pcm_s16le")
+                tracker.startTask(1)
                 
                 val session = executeFfmpegWithProgress(args, duration, tracker)
                 val success = ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L

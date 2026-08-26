@@ -722,6 +722,9 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     val trimEndMs = if (trimSingleVideo) endMs else null
                     val expectedDuration = trimEndMs?.let { it - trimStartMs } ?: readDuration(video.uri)
                     totalDurationMs += expectedDuration
+                    val audioSettings = currentAudioSettings()
+                    tracker.setTaskEncoder(index, audioEncoderForExtension(audioSettings.extension))
+                    tracker.startTask(index)
                     val session = executeFfmpegWithProgress(
                         buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs),
                         expectedDuration,
@@ -950,6 +953,17 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             AudioPreset.LOCAL -> AudioSettings(AudioExtension.WAV, 16000, 1, "256k")
             AudioPreset.COMPACT -> AudioSettings(AudioExtension.OGG, 16000, 1, "32k")
             AudioPreset.NONE -> AudioSettings(outputExtension, sampleRate, channels, bitrate)
+        }
+    }
+
+    private fun audioEncoderForExtension(extension: AudioExtension): String {
+        return when (extension) {
+            AudioExtension.WAV -> "pcm_s16le"
+            AudioExtension.MP3 -> "libmp3lame"
+            AudioExtension.M4A, AudioExtension.AAC -> "aac"
+            AudioExtension.OGG -> "libvorbis"
+            AudioExtension.OPUS -> "libopus"
+            AudioExtension.FLAC -> "flac"
         }
     }
 

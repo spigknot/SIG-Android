@@ -12,22 +12,48 @@
         android:layout_gravity="bottom"
         android:background="#FF000000" />
 
-    <TextView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:fontFamily="monospace"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
         android:paddingStart="24dp"
         android:paddingEnd="24dp"
         android:paddingBottom="22dp"
-        android:includeFontPadding="false"
-        android:maxLines="1"
-        android:shadowColor="#781EFFFF"
-        android:shadowDx="1"
-        android:shadowDy="1"
-        android:shadowRadius="3"
-        android:text="$ echo &quot;Setor de Investigações Gerais - Taguaí&quot;"
-        android:textColor="#E6F9FFFF"
-        android:textSize="11sp"
-        android:textStyle="bold" />
+        >
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="monospace"
+            android:gravity="start|center_vertical"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:shadowColor="#781EFFFF"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:text="$ echo &quot;Setor de Investigações Gerais - Taguaí&quot;"
+            android:textColor="#E6F9FFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <br.gov.sp.pcsp.launcher.AppVersionTextView
+            android:id="@+id/text_app_version"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:gravity="end|center_vertical"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:shadowColor="#781EFFFF"
+            android:shadowDx="1"
+            android:shadowDy="1"
+            android:shadowRadius="3"
+            android:textColor="#E6F9FFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </LinearLayout>
 </FrameLayout>

@@ -1163,10 +1163,15 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun readGlobalLog(): String {
-        val file = globalLogFile()
-        val body = if (file.exists() && file.length() > 0L) {
-            file.readText(Charsets.UTF_8)
-        } else {
+        val body = runCatching {
+            val file = globalLogFile()
+            if (file.exists() && file.length() > 0L) {
+                file.readText(Charsets.UTF_8)
+            } else {
+                "Sem log geral ainda."
+            }
+        }.getOrElse { error ->
+            Log.w(TAG, "Não foi possível ler o log global do Whisper", error)
             "Sem log geral ainda."
         }
         val sessionCount = "SESSÃO WHISPER -".toRegex().findAll(body).count()

@@ -5,6 +5,7 @@ import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
 import android.widget.TextView
+import android.os.SystemClock
 
 class FfmpegTaskTracker(
     private val textView: TextView,
@@ -14,6 +15,9 @@ class FfmpegTaskTracker(
     private val taskProgresses = mutableListOf<Int>()
     private val taskDetails = mutableListOf<String>()
     private val taskStates = mutableListOf<TaskState>()
+    private val taskEncoders = mutableListOf<String?>()
+    private val taskStartedAtMs = mutableListOf<Long?>()
+    private val taskElapsedMs = mutableListOf<Long?>()
     private var isFailed = false
     private var failureMessage = ""
     private var isSuccess = false
@@ -35,14 +39,36 @@ class FfmpegTaskTracker(
         appendTasks(initialTasks)
     }
 
-    fun appendTasks(newTasks: List<String>) {
+    fun appendTasks(newTasks: List<String>, encoderName: String? = null) {
         tasks.addAll(newTasks)
         for (i in newTasks.indices) {
             taskProgresses.add(0)
             taskDetails.add("")
             taskStates.add(TaskState.PENDING)
+            taskEncoders.add(encoderName)
+            taskStartedAtMs.add(null)
+            taskElapsedMs.add(null)
         }
         render()
+    }
+
+    fun taskCount(): Int = tasks.size
+
+    fun setTaskEncoder(index: Int, encoderName: String?) {
+        if (index !in tasks.indices) return
+        taskEncoders[index] = encoderName
+        render()
+    }
+
+    fun startTask(index: Int) {
+        if (index !in tasks.indices) return
+        if (taskStartedAtMs[index] == null) taskStartedAtMs[index] = SystemClock.elapsedRealtime()
+        taskStates[index] = TaskState.RUNNING
+        render()
+    }
+
+    fun startCurrentTask() {
+        if (currentLinearIndex < tasks.size) startTask(currentLinearIndex)
     }
 
     // Para uso sequencial legado:
@@ -68,6 +94,7 @@ class FfmpegTaskTracker(
 
     fun setTaskProgress(index: Int, progress: Int, detail: String) {
         if (isFailed || index >= tasks.size) return
+        if (taskStartedAtMs[index] == null) taskStartedAtMs[index] = SystemClock.elapsedRealtime()
         // FFmpeg pode entregar uma estatistica atrasada apos o callback de conclusao.
         // Uma etapa concluida nao deve voltar visualmente para 99%.
         if (taskStates[index] == TaskState.COMPLETED) return
@@ -77,8 +104,13 @@ class FfmpegTaskTracker(
         render()
     }
 
-    fun completeTask(index: Int) {
+    fun completeTask(index: Int, encoderName: String? = null) {
         if (isFailed || index >= tasks.size) return
+        encoderName?.let { taskEncoders[index] = it }
+        val startedAt = taskStartedAtMs[index]
+        if (startedAt != null) {
+            taskElapsedMs[index] = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+        }
         taskStates[index] = TaskState.COMPLETED
         taskProgresses[index] = 100
         render()
@@ -87,6 +119,10 @@ class FfmpegTaskTracker(
     fun finishAll() {
         if (isFailed) return
         for (i in tasks.indices) {
+            val startedAt = taskStartedAtMs[i]
+            if (startedAt != null && taskElapsedMs[i] == null) {
+                taskElapsedMs[i] = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
+            }
             taskStates[i] = TaskState.COMPLETED
             taskProgresses[i] = 100
         }
@@ -132,6 +168,9 @@ class FfmpegTaskTracker(
             taskStates[i] = TaskState.PENDING
             taskProgresses[i] = 0
             taskDetails[i] = ""
+            taskEncoders[i] = null
+            taskStartedAtMs[i] = null
+            taskElapsedMs[i] = null
         }
         render()
     }
@@ -144,12 +183,22 @@ class FfmpegTaskTracker(
                 val taskName = tasks[i]
                 val state = taskStates[i]
                 val progress = taskProgresses[i]
-                val detail = taskDetails[i].takeIf { it.isNotBlank() }?.let { " ($it)" }.orEmpty()
+                val detail = when (state) {
+                    TaskState.COMPLETED -> FfmpegProgressText.suffix(
+                        encoderName = taskEncoders[i],
+                        elapsedMs = taskElapsedMs[i]
+                    )
+                    TaskState.RUNNING -> FfmpegProgressText.suffix(
+                        encoderName = taskEncoders[i],
+                        detail = taskDetails[i]
+                    )
+                    else -> ""
+                }
                 val lineStart = builder.length
                 
                 when (state) {
                     TaskState.COMPLETED -> {
-                        builder.append("$taskName 100%\n")
+                        builder.append("$taskName 100%$detail\n")
                         builder.setSpan(ForegroundColorSpan(colorCompleted), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                     }
                     TaskState.FAILED -> {

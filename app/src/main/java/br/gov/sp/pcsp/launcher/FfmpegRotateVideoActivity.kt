@@ -498,6 +498,11 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 }
 
                 val encoder = selectedCodec ?: FfmpegVideoEncoder("h264_mediacodec", "h264")
+                val usesEncoder = (!metadataOnly && buildOrderedFilters().isNotBlank()) || (metadataOnly && hasTrim)
+                if (!canUseParallel && usesEncoder) {
+                    tracker.setTaskEncoder(1, encoder.shortName)
+                    tracker.startTask(1)
+                }
                 val result = if (canUseParallel) {
                     executeParallelKeyframeRotation(currentInputFile, currentTempOutput, encoder, tracker)
                 } else {
@@ -517,6 +522,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                             else -> ""
                         }
                     )
+                }
+                if (!canUseParallel && usesEncoder && result.success) {
+                    tracker.completeTask(1, encoder.shortName)
                 }
                 val success = result.success
                 if (success) keepOutput = true
@@ -723,6 +731,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             tracker.appendTasks(listOf("Juntando vídeo final"))
             val segmentTaskOffset = splitTaskIndex + 1
             val finalJoinTaskIndex = segmentTaskOffset + segments.size
+            segmentTasks.indices.forEach { index ->
+                tracker.setTaskEncoder(segmentTaskOffset + index, encoder.shortName)
+            }
             
             val filters = buildOrderedFilters()
             // Um valor manual controla tanto a divisao quanto o total de trechos codificados juntos.

@@ -101,6 +101,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private var availableVideoEncoders: List<FfmpegVideoEncoder> = emptyList()
     private var selectedVideoEncoder: FfmpegVideoEncoder? = null
     private var selectedVideoQuality = FfmpegVideoQuality.default
+    private var updatingJoinModeChecks = false
     private var resultPreviewPlayer: MediaPlayer? = null
     private var resultPreviewSurface: Surface? = null
     private var pendingResultPreviewFile: File? = null
@@ -234,12 +235,22 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
         }
 
-        checkReencode.setOnCheckedChangeListener { _, _ -> updateReencodeControls() }
-        checkSmartJoin.setOnCheckedChangeListener { _, isChecked ->
-            if (isChecked && !currentJoinIsAudio() && selectedTransition == TRANSITION_FADE_IN_OUT) {
-                selectedTransition = "fade"
-                buttonTransition.text = "Transição: $selectedTransition"
+        checkReencode.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !updatingJoinModeChecks) {
+                updatingJoinModeChecks = true
+                checkSmartJoin.isChecked = false
+                updatingJoinModeChecks = false
             }
+            normalizeVideoTransitionForCurrentMode()
+            updateReencodeControls()
+        }
+        checkSmartJoin.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !updatingJoinModeChecks) {
+                updatingJoinModeChecks = true
+                checkReencode.isChecked = false
+                updatingJoinModeChecks = false
+            }
+            normalizeVideoTransitionForCurrentMode()
             updateReencodeControls()
         }
         timeline.onOrderChanged = { ids ->
@@ -352,10 +363,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val allowedTransitions = if (currentJoinIsAudio()) {
             AUDIO_TRANSITIONS.keys
         } else {
-            TRANSITIONS
+            TRANSITIONS.filter { it != TRANSITION_FADE_IN_OUT || checkSmartJoin.isChecked }
         }
         if (selectedTransition !in allowedTransitions) {
-            selectedTransition = TRANSITION_FADE_IN_OUT
+            selectedTransition = if (currentJoinIsAudio() || checkSmartJoin.isChecked) {
+                TRANSITION_FADE_IN_OUT
+            } else {
+                TRANSITION_DEFAULT_VIDEO
+            }
             buttonTransition.text = "Transição: $selectedTransition"
         }
         controls.visibility = if (clips.isNotEmpty()) View.VISIBLE else View.GONE
@@ -377,7 +392,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun updateReencodeControls() {
-        val enabled = checkReencode.isChecked && !isProcessing
+        val transitionEnabled = (checkReencode.isChecked || checkSmartJoin.isChecked) && !isProcessing
+        val enabled = transitionEnabled
         buttonTransition.isEnabled = enabled
         inputTransitionTime.isEnabled = enabled
         val alpha = if (enabled) 1f else 0.42f
@@ -417,6 +433,12 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         updateReencodeControls()
     }
 
+    private fun normalizeVideoTransitionForCurrentMode() {
+        if (currentJoinIsAudio() || checkSmartJoin.isChecked || selectedTransition != TRANSITION_FADE_IN_OUT) return
+        selectedTransition = TRANSITION_DEFAULT_VIDEO
+        buttonTransition.text = "Transição: $selectedTransition"
+    }
+
     private fun showVideoQualityMenu() {
         if (selectedVideoEncoder == null || isProcessing) return
         PopupMenu(this, buttonVideoQuality).apply {
@@ -438,11 +460,12 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private fun showTransitionMenu() {
         PopupMenu(this, buttonTransition).apply {
-            val transitions = if (currentJoinIsAudio()) AUDIO_TRANSITIONS.keys else TRANSITIONS
+            val transitions = if (currentJoinIsAudio()) {
+                AUDIO_TRANSITIONS.keys
+            } else {
+                TRANSITIONS.filter { it != TRANSITION_FADE_IN_OUT || checkSmartJoin.isChecked }
+            }
             transitions.forEach { transition ->
-                if (!currentJoinIsAudio() && checkSmartJoin.isChecked && transition == TRANSITION_FADE_IN_OUT) {
-                    return@forEach
-                }
                 menu.add(transition)
             }
             setOnMenuItemClickListener { item ->
@@ -458,7 +481,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val message = if (currentJoinIsAudio()) {
             "Sem reencodar, a junção usa -c copy e é rápida e sem perda, mas exige áudios compatíveis.\n\nCom reencode, o app normaliza taxa de amostragem, canais e bitrate, permitindo aplicar fade ou crossfade."
         } else {
-            "Sem reencodar, a junção usa -c copy e tende a ser rápida e sem perda, mas só funciona bem quando os vídeos têm formatos compatíveis.\n\nCom reencode, o app normaliza os vídeos e aplica a transição reencodando a saída, mantendo bitrate, resolução e fps sempre que conseguir detectar."
+            "Reencode Completo reencoda todos os vídeos usando o encoder e a qualidade escolhidos. É mais previsível para arquivos incompatíveis, mas pode demorar bastante e consumir mais bateria.\n\nA opção Fade in/out fica disponível no Smart Join, que tenta preservar os trechos longos e reencoda apenas as regiões necessárias."
         }
         AlertDialog.Builder(this)
             .setMessage(message)
@@ -480,7 +503,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private fun showSmartJoinHelp() {
         AlertDialog.Builder(this)
-            .setMessage("Tenta copiar a maior parte dos videos e reencodar apenas os trechos próximos à transição.\nVantagem: Acelera muito o processo.\nDesvantagem: Pode gerar pequenos bugs no vídeo.")
+            .setMessage("Tenta copiar a maior parte dos vídeos e reencodar apenas os trechos próximos à transição.\n\nAntes de começar, o app faz um teste curto com o encoder escolhido. Se ele falhar, testa alternativas compatíveis e oferece as opções de continuar com outro encoder, fazer Reencode Completo ou cancelar.\n\nVantagem: acelera muito o processo. Desvantagem: pode gerar pequenos bugs no vídeo.")
             .setPositiveButton("OK", null)
             .show()
     }
@@ -510,22 +533,136 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     !checkReencode.isChecked && !checkSmartJoin.isChecked
                 val outputName = buildJoinedOutputName(forceAudioStandardization = audioWillStandardizeToWav)
                 val tempOutput = File(cacheDir, "join_${System.currentTimeMillis()}_$outputName")
-                val useOrientationSafeReencode = !audioOnly && shouldUseOrientationSafeReencode()
                 val sourceProfile = detectOutputProfile(copiedInputs.firstOrNull(), clips.firstOrNull())
-                val encoder = selectedVideoEncoder
-                val fastEncoderCompatible = encoder != null && encoder.codecFamily == sourceProfile.videoCodec
+                val originalEncoder = selectedVideoEncoder
+                val fastEncoderCompatible = originalEncoder != null &&
+                    SmartJoinPlanner.normalizeCodecFamily(originalEncoder.codecFamily) ==
+                    SmartJoinPlanner.normalizeCodecFamily(sourceProfile.videoCodec)
+                val orientationMismatch = !audioOnly && shouldUseOrientationSafeReencode()
+                val smartJoinProfiles = if (!audioOnly && checkSmartJoin.isChecked) {
+                    copiedInputs.mapIndexed { index, input ->
+                        val profile = detectOutputProfile(input, clips.getOrNull(index))
+                        SmartJoinMediaProfile(
+                            codecFamily = profile.videoCodec,
+                            width = profile.width,
+                            height = profile.height,
+                            fps = profile.fps.toDoubleOrNull() ?: 30.0,
+                            rotationDegrees = profile.rotationDegrees,
+                            audioSampleRate = profile.audioSampleRate,
+                            audioChannels = profile.audioChannels,
+                            hasAudio = clips.getOrNull(index)?.hasAudio == true
+                        )
+                    }
+                } else {
+                    emptyList()
+                }
+                val smartJoinInputsCompatible = smartJoinProfiles.firstOrNull()?.let { base ->
+                    smartJoinProfiles.drop(1).all { candidate ->
+                        SmartJoinPlanner.profilesCompatible(base, candidate)
+                    }
+                } ?: true
+                val smartJoinPlan = if (!audioOnly && checkSmartJoin.isChecked) {
+                    SmartJoinPlanner.plan(
+                        sourceCodecFamily = sourceProfile.videoCodec,
+                        selectedEncoder = originalEncoder?.toSmartJoinOption(),
+                        availableEncoders = availableVideoEncoders.map { it.toSmartJoinOption() },
+                        inputsCompatible = smartJoinInputsCompatible,
+                        orientationMismatch = orientationMismatch
+                    )
+                } else {
+                    null
+                }
+                var effectiveSmartJoinEncoder: FfmpegVideoEncoder? = null
+                var forceSmartJoinFullReencode = false
 
-                val result = if (audioOnly) {
+                if (!audioOnly) {
+                    if (checkSmartJoin.isChecked) {
+                        configureVideoProcessingPlan(listOf(SMART_JOIN_VALIDATION_LABEL))
+                        if (smartJoinPlan?.mode == SmartJoinMode.SMART_JOIN) {
+                            val preflight = runSmartJoinPreflight(
+                                copiedInputs,
+                                smartJoinPlan,
+                                originalEncoder
+                            )
+                            val selectedPassed = originalEncoder != null &&
+                                preflight.approvedEncoders.any { it.ffmpegName == originalEncoder.ffmpegName }
+                            if (selectedPassed) {
+                                effectiveSmartJoinEncoder = originalEncoder
+                            } else {
+                                val decision = awaitSmartJoinDecision(
+                                    selectedEncoder = originalEncoder,
+                                    approvedEncoders = preflight.approvedEncoders,
+                                    failureMessages = preflight.failureMessages,
+                                    reason = smartJoinPlan.reason
+                                )
+                                when (decision.type) {
+                                    SmartJoinDecisionType.USE_ENCODER -> {
+                                        val chosenEncoder = requireNotNull(decision.encoder)
+                                        effectiveSmartJoinEncoder = chosenEncoder
+                                        adoptVideoEncoder(chosenEncoder)
+                                    }
+                                    SmartJoinDecisionType.FULL_REENCODE -> {
+                                        forceSmartJoinFullReencode = true
+                                    }
+                                    SmartJoinDecisionType.CANCEL -> {
+                                        runOnUiThread {
+                                            setProcessing(false)
+                                            failActiveStep("Operação cancelada pelo usuário.")
+                                        }
+                                        return@Thread
+                                    }
+                                }
+                            }
+                        } else {
+                            updateStep(SMART_JOIN_VALIDATION_LABEL, 100, StepState.DONE)
+                            val decision = awaitSmartJoinDecision(
+                                selectedEncoder = originalEncoder,
+                                approvedEncoders = emptyList(),
+                                failureMessages = emptyList(),
+                                reason = smartJoinPlan?.reason
+                            )
+                            when (decision.type) {
+                                SmartJoinDecisionType.USE_ENCODER -> {
+                                    val chosenEncoder = requireNotNull(decision.encoder)
+                                    effectiveSmartJoinEncoder = chosenEncoder
+                                    adoptVideoEncoder(chosenEncoder)
+                                }
+                                SmartJoinDecisionType.FULL_REENCODE -> {
+                                    forceSmartJoinFullReencode = true
+                                }
+                                SmartJoinDecisionType.CANCEL -> {
+                                    runOnUiThread {
+                                        setProcessing(false)
+                                        failActiveStep("Operação cancelada pelo usuário.")
+                                    }
+                                    return@Thread
+                                }
+                            }
+                        }
+                    } else {
+                        configureVideoProcessingPlan(regularVideoProcessingLabels())
+                    }
+
+                    configureVideoProcessingPlan(
+                        when {
+                            checkSmartJoin.isChecked && !forceSmartJoinFullReencode -> smartJoinProcessingLabels()
+                            checkSmartJoin.isChecked -> listOf(SMART_JOIN_VALIDATION_LABEL, "Reencodando vídeo completo")
+                            else -> regularVideoProcessingLabels()
+                        }
+                    )
+                }
+
+                var result = if (audioOnly) {
                     executeAudioJoin(copiedInputs, tempOutput, sourceProfile, forceNormalization = audioNeedsNormalization)
                 } else if (checkSmartJoin.isChecked) {
-                    if (useOrientationSafeReencode || !fastEncoderCompatible) {
+                    if (forceSmartJoinFullReencode || effectiveSmartJoinEncoder == null) {
                         executeFullReencodeJoin(
                             copiedInputs,
                             tempOutput,
-                            "Normalizando vídeos (${encoder?.ffmpegName ?: "encoder indisponível"} + aac)"
+                            "Reencodando vídeo completo"
                         )
                     } else {
-                        executeSmartJoinExperiment(copiedInputs, tempOutput)
+                        executeSmartJoinExperiment(copiedInputs, tempOutput, effectiveSmartJoinEncoder)
                     }
                 } else if (checkReencode.isChecked) {
                     if (isFadeInOutTransition() && fastEncoderCompatible) {
@@ -534,7 +671,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         executeFullReencodeJoin(
                             copiedInputs,
                             tempOutput,
-                            "Aplicando transições (${encoder?.ffmpegName ?: "encoder indisponível"} + aac)"
+                            "Aplicando transições"
                         )
                     }
                 } else {
@@ -548,6 +685,53 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         cancelled = ReturnCode.isCancel(session.returnCode),
                         failureMessage = ffmpegFailureMessage("Juntando sem reencodar", session)
                     )
+                }
+
+                if (!audioOnly && checkSmartJoin.isChecked && !forceSmartJoinFullReencode &&
+                    !result.success && !result.cancelled && smartJoinPlan?.mode == SmartJoinMode.SMART_JOIN &&
+                    effectiveSmartJoinEncoder != null
+                ) {
+                    val retryPreflight = runSmartJoinPreflight(
+                        copiedInputs,
+                        smartJoinPlan,
+                        selectedEncoder = effectiveSmartJoinEncoder,
+                        excludedEncoderName = effectiveSmartJoinEncoder.ffmpegName,
+                        testAllCandidates = true
+                    )
+                    val decision = awaitSmartJoinDecision(
+                        selectedEncoder = effectiveSmartJoinEncoder,
+                        approvedEncoders = retryPreflight.approvedEncoders,
+                        failureMessages = retryPreflight.failureMessages +
+                            "Falha na tentativa principal: ${result.failureMessage.take(180)}",
+                        reason = "O teste curto passou, mas a execução real falhou."
+                    )
+                    when (decision.type) {
+                        SmartJoinDecisionType.USE_ENCODER -> {
+                            val chosenEncoder = requireNotNull(decision.encoder)
+                            adoptVideoEncoder(chosenEncoder)
+                            configureVideoProcessingPlan(
+                                smartJoinProcessingLabels(),
+                                preserveExistingTaskState = false
+                            )
+                            tempOutput.delete()
+                            result = executeSmartJoinExperiment(copiedInputs, tempOutput, chosenEncoder)
+                        }
+                        SmartJoinDecisionType.FULL_REENCODE -> {
+                            configureVideoProcessingPlan(
+                                listOf(SMART_JOIN_VALIDATION_LABEL, "Reencodando vídeo completo"),
+                                preserveExistingTaskState = false
+                            )
+                            tempOutput.delete()
+                            result = executeFullReencodeJoin(
+                                copiedInputs,
+                                tempOutput,
+                                "Reencodando vídeo completo"
+                            )
+                        }
+                        SmartJoinDecisionType.CANCEL -> {
+                            result = JoinExecutionResult(false, true, "")
+                        }
+                    }
                 }
 
                 runOnUiThread {
@@ -592,11 +776,156 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }.start()
     }
 
+    private fun runSmartJoinPreflight(
+        inputs: List<File>,
+        plan: SmartJoinPlan,
+        selectedEncoder: FfmpegVideoEncoder?,
+        excludedEncoderName: String? = null,
+        testAllCandidates: Boolean = false
+    ): SmartJoinPreflightResult {
+        val options = plan.compatibleEncoders
+            .mapNotNull { option -> availableVideoEncoders.firstOrNull { it.ffmpegName == option.ffmpegName } }
+            .filter { it.ffmpegName != excludedEncoderName }
+        if (options.isEmpty()) {
+            updateStep(SMART_JOIN_VALIDATION_LABEL, 100, StepState.DONE)
+            return SmartJoinPreflightResult(emptyList(), emptyList(), emptyList())
+        }
+
+        restartProcessingStep(SMART_JOIN_VALIDATION_LABEL)
+        val approved = mutableListOf<FfmpegVideoEncoder>()
+        val failures = mutableListOf<String>()
+        for ((index, candidate) in options.withIndex()) {
+            updateStep(
+                SMART_JOIN_VALIDATION_LABEL,
+                ((index.toDouble() / options.size.toDouble()) * 100.0).toInt(),
+                StepState.RUNNING,
+                "teste curto",
+                encoderName = candidate.shortName
+            )
+            val probe = probeSmartJoinEncoder(inputs, candidate)
+            if (probe.success) {
+                approved += candidate
+                // Se o encoder escolhido passou no preflight, não há motivo para
+                // fazer testes extras antes de iniciar o trabalho real.
+                if (!testAllCandidates && candidate.ffmpegName == selectedEncoder?.ffmpegName) break
+            } else {
+                failures += "${candidate.displayName}: ${probe.detail}"
+            }
+        }
+        updateStep(SMART_JOIN_VALIDATION_LABEL, 100, StepState.DONE)
+        return SmartJoinPreflightResult(
+            approvedEncoders = approved,
+            failedEncoders = options.filter { candidate -> approved.none { it.ffmpegName == candidate.ffmpegName } },
+            failureMessages = failures
+        )
+    }
+
+    private fun probeSmartJoinEncoder(inputs: List<File>, encoder: FfmpegVideoEncoder): SmartJoinEncoderProbe {
+        if (inputs.size < 2 || clips.size < 2) {
+            return SmartJoinEncoderProbe(false, "Não há dois arquivos para testar.")
+        }
+        val transitionSeconds = safeTransitionSeconds()
+            .coerceAtMost(SMART_JOIN_PREFLIGHT_MAX_SECONDS)
+        if (transitionSeconds <= 0.0) {
+            return SmartJoinEncoderProbe(false, "A duração da transição precisa ser maior que zero.")
+        }
+
+        val outputFile = File(cacheDir, "smartjoin_preflight_${System.nanoTime()}.ts")
+        return try {
+            val profile = detectOutputProfile(inputs.first(), clips.first(), encoder)
+            val arguments = buildTransitionArgumentsMkv(
+                firstInput = inputs[0],
+                secondInput = inputs[1],
+                firstClip = clips[0],
+                secondClip = clips[1],
+                outputFile = outputFile,
+                transitionSeconds = transitionSeconds,
+                profile = profile,
+                encoder = encoder
+            )
+            val probeArguments = arrayOf("-hide_banner", "-loglevel", "error") + arguments
+            val session = FFmpegKit.executeWithArguments(probeArguments)
+            val success = ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L
+            if (success) {
+                SmartJoinEncoderProbe(true, "teste curto aprovado")
+            } else {
+                SmartJoinEncoderProbe(false, ffmpegFailureMessage("preflight", session).take(180))
+            }
+        } catch (error: Throwable) {
+            Log.w(TAG, "Smart Join preflight failed for ${encoder.ffmpegName}", error)
+            SmartJoinEncoderProbe(false, error.message?.take(180) ?: "falha ao testar encoder")
+        } finally {
+            outputFile.delete()
+        }
+    }
+
+    private fun awaitSmartJoinDecision(
+        selectedEncoder: FfmpegVideoEncoder?,
+        approvedEncoders: List<FfmpegVideoEncoder>,
+        failureMessages: List<String>,
+        reason: String?
+    ): SmartJoinDecision {
+        val choices = mutableListOf<SmartJoinDecision>()
+        val labels = mutableListOf<String>()
+        approvedEncoders
+            .filter { it.ffmpegName != selectedEncoder?.ffmpegName }
+            .forEach { encoder ->
+                choices += SmartJoinDecision(SmartJoinDecisionType.USE_ENCODER, encoder)
+                labels += "Usar ${encoder.displayName} no Smart Join"
+            }
+        selectedEncoder?.let { encoder ->
+            choices += SmartJoinDecision(SmartJoinDecisionType.FULL_REENCODE, encoder)
+            labels += "Reencode completo com ${encoder.displayName}"
+        }
+
+        val result = AtomicReference(SmartJoinDecision(SmartJoinDecisionType.CANCEL))
+        val finished = java.util.concurrent.atomic.AtomicBoolean(false)
+        val latch = CountDownLatch(1)
+        fun finish(decision: SmartJoinDecision) {
+            if (finished.compareAndSet(false, true)) {
+                result.set(decision)
+                latch.countDown()
+            }
+        }
+        val message = buildString {
+            append("O Smart Join não conseguiu usar o encoder escolhido.")
+            reason?.takeIf { it.isNotBlank() }?.let { append("\n\n$it") }
+            if (approvedEncoders.isNotEmpty()) {
+                append("\n\nEncoders aprovados no teste curto:")
+                approvedEncoders.forEach { append("\n• ${it.displayName}") }
+            }
+            if (failureMessages.isNotEmpty()) {
+                append("\n\nFalhas detectadas:")
+                failureMessages.take(3).forEach { append("\n• $it") }
+            }
+            append("\n\nEscolha como deseja continuar.")
+        }
+
+        val show: () -> Unit = {
+            AlertDialog.Builder(this)
+                .setTitle("Smart Join precisa de uma decisão")
+                .setMessage(message)
+                .setItems(labels.toTypedArray()) { _, which -> finish(choices[which]) }
+                .setNegativeButton("Cancelar") { _, _ -> finish(SmartJoinDecision(SmartJoinDecisionType.CANCEL)) }
+                .setOnCancelListener { finish(SmartJoinDecision(SmartJoinDecisionType.CANCEL)) }
+                .show()
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) show() else runOnUiThread(show)
+        latch.await()
+        return result.get()
+    }
+
+    private fun adoptVideoEncoder(encoder: FfmpegVideoEncoder) {
+        selectedVideoEncoder = encoder
+        runOnUiThread { updateVideoEncoderButton() }
+    }
+
     private fun executeFullReencodeJoin(inputs: List<File>, outputFile: File, taskLabel: String): JoinExecutionResult {
         val session = executeFfmpegWithProgress(
             buildReencodeArguments(inputs, outputFile, withTransition = true),
             totalDurationMs(),
-            taskLabel
+            taskLabel,
+            selectedVideoEncoder?.shortName
         )
         return JoinExecutionResult(
             success = ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L,
@@ -615,7 +944,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val normalize = requestedReencode || forceNormalization
         val label = when {
             requestedReencode -> "Aplicando transição de áudio"
-            forceNormalization -> "Normalizando pelo primeiro áudio (WAV)"
+            forceNormalization -> "Normalizando pelo primeiro áudio"
             else -> "Juntando áudios sem reencodar"
         }
         if (forceNormalization && !requestedReencode) {
@@ -632,7 +961,12 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         } else {
             buildDirectConcatArguments(inputs, outputFile)
         }
-        val session = executeFfmpegWithProgress(arguments, totalDurationMs(), label)
+        val encoderName = when {
+            !normalize -> null
+            forceNormalization && !requestedReencode -> "pcm_s16le"
+            else -> "aac"
+        }
+        val session = executeFfmpegWithProgress(arguments, totalDurationMs(), label, encoderName)
         return JoinExecutionResult(
             success = ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L,
             cancelled = ReturnCode.isCancel(session.returnCode),
@@ -717,7 +1051,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val session = executeFfmpegWithProgress(
             buildFadeInOutReencodeArguments(inputs, outputFile),
             totalDurationMs(),
-            taskLabel
+            taskLabel,
+            selectedVideoEncoder?.shortName
         )
         return JoinExecutionResult(
             success = ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L,
@@ -742,12 +1077,16 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return args.toTypedArray()
     }
 
-    private fun executeSmartJoinExperiment(inputs: List<File>, outputFile: File): JoinExecutionResult {
-        Log.d(TAG, "Executing SmartJoin Experiment branch")
+    private fun executeSmartJoinExperiment(
+        inputs: List<File>,
+        outputFile: File,
+        encoder: FfmpegVideoEncoder
+    ): JoinExecutionResult {
+        Log.d(TAG, "Executing SmartJoin Experiment branch with ${encoder.ffmpegName}")
         val workDir = File(cacheDir, "smartjoin_mkv_${System.currentTimeMillis()}").apply { mkdirs() }
         val pieces = mutableListOf<SmartJoinPiece>()
         val transitionSeconds = safeTransitionSeconds()
-        val profile = detectOutputProfile(inputs.firstOrNull(), clips.firstOrNull())
+        val profile = detectOutputProfile(inputs.firstOrNull(), clips.firstOrNull(), encoder)
 
         return try {
             if (inputs.size != clips.size) {
@@ -788,7 +1127,12 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         bodyFile.absolutePath
                     ))
 
-                    val bodySession = executeFfmpegWithProgress(args.toTypedArray(), (bodyDuration * 1000.0).toLong().coerceAtLeast(1L), bodyLabel)
+                    val bodySession = executeFfmpegWithProgress(
+                        args.toTypedArray(),
+                        (bodyDuration * 1000.0).toLong().coerceAtLeast(1L),
+                        bodyLabel,
+                        encoderName = if (clip.hasAudio) "aac" else null
+                    )
                     if (ReturnCode.isCancel(bodySession.returnCode)) return JoinExecutionResult(false, true, "")
                     if (!ReturnCode.isSuccess(bodySession.returnCode) || !bodyFile.exists() || bodyFile.length() == 0L) {
                         return JoinExecutionResult(false, false, ffmpegFailureMessage(bodyLabel, bodySession))
@@ -799,7 +1143,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 // 2. Gerar Transição xfade (TS)
                 if (index < inputs.lastIndex) {
                     val transitionFileTs = File(workDir, "transition_${index.toString().padStart(3, '0')}.ts")
-                    val transitionLabel = "Gerando xfade ${index + 1}/${clips.size - 1} (TS)"
+                    val transitionLabel = "Gerando ${if (isFadeInOutTransition()) "fade" else "xfade"} ${index + 1}/${clips.size - 1} (TS)"
                     
                     val args = buildTransitionArgumentsMkv(
                         firstInput = inputs[index],
@@ -808,14 +1152,16 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         secondClip = clips[index + 1],
                         outputFile = transitionFileTs,
                         transitionSeconds = transitionSeconds,
-                        profile = profile
+                        profile = profile,
+                        encoder = encoder
                     )
 
                     val transitionSession = executeFfmpegWithRetry(
                         arguments = args,
                         expectedDurationMs = (transitionSeconds * 1000.0).toLong().coerceAtLeast(1L),
                         taskLabel = transitionLabel,
-                        outputFile = transitionFileTs
+                        outputFile = transitionFileTs,
+                        encoderName = encoder.shortName
                     )
                     if (ReturnCode.isCancel(transitionSession.returnCode)) return JoinExecutionResult(false, true, "")
                     if (!ReturnCode.isSuccess(transitionSession.returnCode) || !transitionFileTs.exists() || transitionFileTs.length() == 0L) {
@@ -871,7 +1217,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         secondClip: JoinClip,
         outputFile: File,
         transitionSeconds: Double,
-        profile: OutputProfile
+        profile: OutputProfile,
+        encoder: FfmpegVideoEncoder
     ): Array<String> {
         val windowSeconds = transitionWindowSeconds(firstClip, secondClip, transitionSeconds)
         val firstStart = ((firstClip.durationMs / 1000.0) - windowSeconds).coerceAtLeast(0.0)
@@ -892,7 +1239,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             "-map", "[aout]"
         )
         
-        args.addAll(videoEncodingArguments(profile, constrained = true))
+        args.addAll(videoEncodingArguments(profile, constrained = true, encoderOverride = encoder))
 
         args.addAll(
             listOf(
@@ -994,11 +1341,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
             val planLabels = mutableListOf<String>()
             clips.forEachIndexed { index, clip ->
-                planLabels += if (clip.hasAudio) {
-                    "Copiando trecho ${index + 1}/${clips.size} (aac áudio)"
-                } else {
-                    "Copiando trecho ${index + 1}/${clips.size}"
-                }
+                planLabels += "Copiando trecho ${index + 1}/${clips.size}"
                 if (index < clips.lastIndex) {
                     planLabels += "Gerando fade-out ${index + 1}/${clips.size - 1}"
                     planLabels += "Gerando fade-in ${index + 1}/${clips.size - 1}"
@@ -1016,17 +1359,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
                 if (bodyDuration > 0.12) {
                     val bodyFile = File(workDir, "body_${index.toString().padStart(3, '0')}.ts")
-                    val bodyLabel = if (clip.hasAudio) {
-                        "Copiando trecho ${index + 1}/${clips.size} (aac áudio)"
-                    } else {
-                        "Copiando trecho ${index + 1}/${clips.size}"
-                    }
+                    val bodyLabel = "Copiando trecho ${index + 1}/${clips.size}"
                     val bodySession = executeFfmpegWithRetry(
                         buildBodyCopyArguments(inputs[index], bodyFile, bodyStart, bodyDuration, clip, profile),
                         (bodyDuration * 1000.0).toLong().coerceAtLeast(1L),
                         bodyLabel,
                         bodyFile,
-                        maxAttempts = 2
+                        maxAttempts = 2,
+                        encoderName = if (clip.hasAudio) "aac" else null
                     )
                     if (ReturnCode.isCancel(bodySession.returnCode)) {
                         return JoinExecutionResult(false, true, "")
@@ -1043,7 +1383,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
                 if (index < inputs.lastIndex) {
                     val fadeOutFile = File(workDir, "fade_out_${index.toString().padStart(3, '0')}.ts")
-                    val fadeOutLabel = "Gerando fade-out ${index + 1}/${clips.size - 1} (${profile.videoEncoder} + aac)"
+                    val fadeOutLabel = "Gerando fade-out ${index + 1}/${clips.size - 1}"
                     val fadeOutStart = fadeOutStarts[index]
                     val fadeOutDuration = (clipSeconds - fadeOutStart).coerceAtLeast(0.001)
                     val fadeOutOffset = ((clipSeconds - transitionSeconds) - fadeOutStart).coerceAtLeast(0.0)
@@ -1061,7 +1401,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         ),
                         (fadeOutDuration * 1000.0).toLong().coerceAtLeast(1L),
                         fadeOutLabel,
-                        fadeOutFile
+                        fadeOutFile,
+                        encoderName = selectedVideoEncoder?.shortName
                     )
                     if (ReturnCode.isCancel(fadeOutSession.returnCode)) {
                         return JoinExecutionResult(false, true, "")
@@ -1076,7 +1417,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     pieces += SmartJoinPiece(fadeOutFile, fadeOutDuration)
 
                     val fadeInFile = File(workDir, "fade_in_${index.toString().padStart(3, '0')}.ts")
-                    val fadeInLabel = "Gerando fade-in ${index + 1}/${clips.size - 1} (${profile.videoEncoder} + aac)"
+                    val fadeInLabel = "Gerando fade-in ${index + 1}/${clips.size - 1}"
                     val fadeInDuration = fadeInEnds[index + 1].coerceAtLeast(0.001)
                     val fadeInSession = executeFfmpegWithRetry(
                         buildFadeEdgeArguments(
@@ -1092,7 +1433,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         ),
                         (fadeInDuration * 1000.0).toLong().coerceAtLeast(1L),
                         fadeInLabel,
-                        fadeInFile
+                        fadeInFile,
+                        encoderName = selectedVideoEncoder?.shortName
                     )
                     if (ReturnCode.isCancel(fadeInSession.returnCode)) {
                         return JoinExecutionResult(false, true, "")
@@ -1541,12 +1883,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return (transitionSeconds * 2.0).coerceAtMost(maxWindow).coerceAtLeast(transitionSeconds)
     }
 
-    private fun executeFfmpegWithProgress(arguments: Array<String>, expectedDurationMs: Long, taskLabel: String): FFmpegSession {
+    private fun executeFfmpegWithProgress(
+        arguments: Array<String>,
+        expectedDurationMs: Long,
+        taskLabel: String,
+        encoderName: String? = null
+    ): FFmpegSession {
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
         val startedAt = SystemClock.elapsedRealtime()
-        updateStep(taskLabel, 0, StepState.RUNNING)
+        updateStep(taskLabel, 0, StepState.RUNNING, encoderName = encoderName)
         val session = FFmpegKit.executeWithArgumentsAsync(
             arguments,
             { session ->
@@ -1560,7 +1907,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     .coerceIn(0, 99)
                 runOnUiThread {
                     if (progress.visibility == View.VISIBLE) {
-                        updateStep(taskLabel, percent, StepState.RUNNING, formatEfficiency(statistics.time, startedAt))
+                        updateStep(
+                            taskLabel,
+                            percent,
+                            StepState.RUNNING,
+                            formatEfficiency(statistics.time, startedAt),
+                            encoderName = encoderName
+                        )
                     }
                 }
             }
@@ -1570,7 +1923,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         currentSessionId = null
         val completedSession = sessionRef.get() ?: session
         when {
-            ReturnCode.isSuccess(completedSession.returnCode) -> updateStep(taskLabel, 100, StepState.DONE)
+            ReturnCode.isSuccess(completedSession.returnCode) -> updateStep(
+                taskLabel,
+                100,
+                StepState.DONE,
+                encoderName = encoderName,
+                elapsedMs = SystemClock.elapsedRealtime() - startedAt
+            )
             ReturnCode.isCancel(completedSession.returnCode) -> updateStep(taskLabel, null, StepState.ERROR, "cancelado")
             else -> updateStep(taskLabel, null, StepState.ERROR)
         }
@@ -1582,23 +1941,30 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         expectedDurationMs: Long,
         taskLabel: String,
         outputFile: File,
-        maxAttempts: Int = 3
+        maxAttempts: Int = 3,
+        encoderName: String? = null
     ): FFmpegSession {
         var lastSession: FFmpegSession? = null
         repeat(maxAttempts.coerceAtLeast(1)) { attempt ->
             if (attempt > 0) {
                 outputFile.delete()
-                updateStep(taskLabel, 0, StepState.RUNNING, "tentativa ${attempt + 1}/$maxAttempts")
+                updateStep(
+                    taskLabel,
+                    0,
+                    StepState.RUNNING,
+                    "tentativa ${attempt + 1}/$maxAttempts",
+                    encoderName = encoderName
+                )
                 Thread.sleep(180L)
             }
-            val session = executeFfmpegWithProgress(arguments, expectedDurationMs, taskLabel)
+            val session = executeFfmpegWithProgress(arguments, expectedDurationMs, taskLabel, encoderName)
             lastSession = session
             if (ReturnCode.isCancel(session.returnCode)) return session
             if (ReturnCode.isSuccess(session.returnCode) && outputFile.exists() && outputFile.length() > 0L) {
                 return session
             }
         }
-        return lastSession ?: executeFfmpegWithProgress(arguments, expectedDurationMs, taskLabel)
+        return lastSession ?: executeFfmpegWithProgress(arguments, expectedDurationMs, taskLabel, encoderName)
     }
 
     private fun formatEfficiency(processedMs: Double, startedAtMs: Long): String {
@@ -2106,6 +2472,42 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return String.format(Locale.US, "%02d:%02d", m, s)
     }
 
+    private fun FfmpegVideoEncoder.toSmartJoinOption(): SmartJoinEncoderOption {
+        return SmartJoinEncoderOption(ffmpegName = ffmpegName, codecFamily = codecFamily)
+    }
+
+    private fun smartJoinProcessingLabels(): List<String> {
+        val labels = mutableListOf("Validando encoders do Smart Join")
+        val transitionSeconds = safeTransitionSeconds()
+        val transitionName = if (isFadeInOutTransition()) "fade" else "xfade"
+        clips.forEachIndexed { index, clip ->
+            val clipSeconds = (clip.durationMs / 1000.0).coerceAtLeast(0.001)
+            val bodyStart = if (index == 0) 0.0 else transitionSeconds
+            val bodyEnd = if (index == clips.lastIndex) clipSeconds else (clipSeconds - transitionSeconds)
+            if (bodyEnd - bodyStart > 0.12) {
+                labels += "Copiando corpo ${index + 1}/${clips.size} (TS)"
+            }
+            if (index < clips.lastIndex) {
+                labels += "Gerando $transitionName ${index + 1}/${clips.size - 1} (TS)"
+            }
+        }
+        labels += "Juntando experimento (TS -> MP4)"
+        return labels
+    }
+
+    private fun regularVideoProcessingLabels(): List<String> {
+        if (!checkReencode.isChecked) return listOf("Juntando sem reencodar")
+        return if (isFadeInOutTransition()) {
+            listOf(
+                "Lendo keyframes dos vídeos",
+                "Calculando limites da transição",
+                "Verificando trechos preserváveis"
+            )
+        } else {
+            listOf("Aplicando transições")
+        }
+    }
+
     private fun initProcessingSteps() {
         processingSteps.clear()
         processingSteps += ProcessingStep("Preparar arquivos de entrada")
@@ -2122,28 +2524,53 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
         val useOrientationSafeReencode = shouldUseOrientationSafeReencode()
         if (useOrientationSafeReencode) {
-            processingSteps += ProcessingStep("Normalizando orientações (${selectedVideoEncoder?.ffmpegName ?: "encoder"} + aac)")
+            processingSteps += ProcessingStep("Normalizando vídeos")
         } else if (usesFastPieceJoin()) {
-            clips.forEachIndexed { index, _ ->
-                processingSteps += ProcessingStep("Copiando corpo ${index + 1}/${clips.size} (TS)")
-                if (index < clips.lastIndex) {
-                    processingSteps += ProcessingStep("Gerando xfade ${index + 1}/${clips.size - 1} (TS)")
-                }
-            }
-            processingSteps += ProcessingStep("Juntando experimento (TS -> MP4)")
-        } else if (checkReencode.isChecked) {
-            if (isFadeInOutTransition()) {
-                processingSteps += ProcessingStep("Lendo keyframes dos vídeos")
-                processingSteps += ProcessingStep("Calculando limites da transição")
-                processingSteps += ProcessingStep("Verificando trechos preserváveis")
-            } else {
-                processingSteps += ProcessingStep("Aplicando transições (${selectedVideoEncoder?.ffmpegName ?: "encoder"} + aac)")
-            }
+            smartJoinProcessingLabels().forEach { processingSteps += ProcessingStep(it) }
         } else {
-            processingSteps += ProcessingStep("Juntando sem reencodar")
+            regularVideoProcessingLabels().forEach { processingSteps += ProcessingStep(it) }
         }
         processingSteps += ProcessingStep("Preparar arquivo para salvar")
         renderProcessingSteps()
+    }
+
+    private fun configureVideoProcessingPlan(
+        taskLabels: List<String>,
+        preserveExistingTaskState: Boolean = true
+    ) {
+        val applyPlan = {
+            val preparation = processingSteps.firstOrNull { it.label == "Preparar arquivos de entrada" }
+                ?: ProcessingStep("Preparar arquivos de entrada")
+            preparation.percent = 100
+            preparation.state = StepState.DONE
+            preparation.detail = null
+            val save = processingSteps.firstOrNull { it.label == "Preparar arquivo para salvar" }
+                ?: ProcessingStep("Preparar arquivo para salvar")
+            val existingByLabel = if (preserveExistingTaskState) {
+                processingSteps.associateBy { it.label }
+            } else {
+                listOfNotNull(
+                    processingSteps.firstOrNull { it.label == SMART_JOIN_VALIDATION_LABEL }?.let {
+                        SMART_JOIN_VALIDATION_LABEL to it
+                    }
+                ).toMap()
+            }
+            processingSteps.clear()
+            processingSteps += preparation
+            taskLabels.forEach { processingSteps += existingByLabel[it] ?: ProcessingStep(it) }
+            processingSteps += save
+            renderProcessingSteps()
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            applyPlan()
+        } else {
+            val latch = CountDownLatch(1)
+            runOnUiThread {
+                applyPlan()
+                latch.countDown()
+            }
+            latch.await()
+        }
     }
 
     private fun configureFadeProcessingPlan(taskLabels: List<String>) {
@@ -2210,11 +2637,36 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
     }
 
+    private fun restartProcessingStep(label: String) {
+        val action = {
+            processingSteps.firstOrNull { it.label == label }?.let { step ->
+                step.percent = 0
+                step.state = StepState.RUNNING
+                step.detail = null
+                step.startedAtMs = SystemClock.elapsedRealtime()
+                step.elapsedMs = null
+                renderProcessingSteps()
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action()
+        } else {
+            handler.post { action() }
+        }
+    }
+
     private fun rotationComparisonKey(value: Int): Int {
         return ((value % 360) + 360) % 360
     }
 
-    private fun updateStep(label: String, percent: Int?, state: StepState, detail: String? = null) {
+    private fun updateStep(
+        label: String,
+        percent: Int?,
+        state: StepState,
+        detail: String? = null,
+        encoderName: String? = null,
+        elapsedMs: Long? = null
+    ) {
         val action = {
             val step = processingSteps.firstOrNull { it.label == label }
                 ?: processingSteps.firstOrNull { label.startsWith("${it.label} (") }
@@ -2222,6 +2674,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 if (!(step.state == StepState.DONE && state == StepState.RUNNING)) {
                     if (step.label != label) step.label = label
                     percent?.let { step.percent = it.coerceIn(0, 100) }
+                    encoderName?.let { step.encoderName = it }
+                    if (state == StepState.RUNNING && step.startedAtMs == null) {
+                        step.startedAtMs = SystemClock.elapsedRealtime()
+                    }
+                    if (state == StepState.DONE) {
+                        step.elapsedMs = elapsedMs
+                            ?: step.startedAtMs?.let { (SystemClock.elapsedRealtime() - it).coerceAtLeast(0L) }
+                    }
                     step.state = state
                     step.detail = detail
                     renderProcessingSteps()
@@ -2258,6 +2718,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun successStep(stats: String) {
         val action = {
             processingSteps.forEach { 
+                if (it.startedAtMs != null && it.elapsedMs == null) {
+                    it.elapsedMs = (SystemClock.elapsedRealtime() - it.startedAtMs!!).coerceAtLeast(0L)
+                }
                 it.state = StepState.DONE 
                 it.percent = 100
             }
@@ -2282,13 +2745,25 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val builder = SpannableStringBuilder()
         processingSteps.forEachIndexed { index, step ->
             val start = builder.length
-            val prefix = when (step.state) {
-                StepState.PENDING -> "    "
-                else -> "${step.percent}% "
+            val suffix = when (step.state) {
+                StepState.RUNNING -> FfmpegProgressText.suffix(
+                    encoderName = step.encoderName,
+                    detail = step.detail
+                )
+                StepState.DONE -> FfmpegProgressText.suffix(
+                    encoderName = step.encoderName,
+                    elapsedMs = step.elapsedMs
+                )
+                else -> ""
             }
-            builder.append(prefix)
-            builder.append(step.label)
-            step.detail?.let { builder.append(" | ").append(it) }
+            if (step.state == StepState.PENDING) {
+                builder.append("    ")
+                builder.append(step.label)
+            } else if (step.state == StepState.ERROR) {
+                builder.append(step.label).append(": FALHOU")
+            } else {
+                builder.append(step.label).append(' ').append(step.percent.toString()).append('%').append(suffix)
+            }
             if (index < processingSteps.lastIndex) builder.append('\n')
             val color = when (step.state) {
                 StepState.PENDING -> Color.parseColor("#88FFFFFF")
@@ -2404,7 +2879,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return kbps.toInt().coerceAtLeast(1)
     }
 
-    private fun detectOutputProfile(inputFile: File?, firstClip: JoinClip?): OutputProfile {
+    private fun detectOutputProfile(
+        inputFile: File?,
+        firstClip: JoinClip?,
+        encoderOverride: FfmpegVideoEncoder? = null
+    ): OutputProfile {
         val fallbackWidth = makeEven(firstClip?.width ?: 1280).coerceAtLeast(2)
         val fallbackHeight = makeEven(firstClip?.height ?: 720).coerceAtLeast(2)
         if (inputFile == null) {
@@ -2414,7 +2893,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 fps = "30",
                 rotationDegrees = normalizeRotationForMetadata(firstClip?.rotationDegrees ?: 0),
                 videoCodec = DEFAULT_VIDEO_CODEC,
-                videoEncoder = videoEncoderFor(DEFAULT_VIDEO_CODEC),
+                videoEncoder = videoEncoderFor(DEFAULT_VIDEO_CODEC, encoderOverride),
                 videoBitstreamFilter = videoBitstreamFilterFor(DEFAULT_VIDEO_CODEC),
                 videoBitrate = FALLBACK_VIDEO_BITRATE,
                 videoBufferSize = bufferSizeFor(FALLBACK_VIDEO_BITRATE),
@@ -2446,7 +2925,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 fps = parseFrameRate(videoLine) ?: "30",
                 rotationDegrees = rotationDegrees,
                 videoCodec = videoCodec,
-                videoEncoder = videoEncoderFor(videoCodec),
+                videoEncoder = videoEncoderFor(videoCodec, encoderOverride),
                 videoBitstreamFilter = videoBitstreamFilterFor(videoCodec),
                 videoBitrate = videoBitrate,
                 videoBufferSize = bufferSizeFor(videoBitrate),
@@ -2463,7 +2942,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 fps = "30",
                 rotationDegrees = normalizeRotationForMetadata(firstClip?.rotationDegrees ?: 0),
                 videoCodec = DEFAULT_VIDEO_CODEC,
-                videoEncoder = videoEncoderFor(DEFAULT_VIDEO_CODEC),
+                videoEncoder = videoEncoderFor(DEFAULT_VIDEO_CODEC, encoderOverride),
                 videoBitstreamFilter = videoBitstreamFilterFor(DEFAULT_VIDEO_CODEC),
                 videoBitrate = FALLBACK_VIDEO_BITRATE,
                 videoBufferSize = bufferSizeFor(FALLBACK_VIDEO_BITRATE),
@@ -2564,15 +3043,20 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         )
     }
 
-    private fun videoEncoderFor(codec: String): String {
-        return selectedVideoEncoder?.ffmpegName ?: when (codec) {
+    private fun videoEncoderFor(codec: String, encoderOverride: FfmpegVideoEncoder? = null): String {
+        return encoderOverride?.ffmpegName ?: selectedVideoEncoder?.ffmpegName ?: when (codec) {
             "hevc" -> "hevc_mediacodec"
             else -> "h264_mediacodec"
         }
     }
 
-    private fun videoEncodingArguments(profile: OutputProfile, constrained: Boolean): List<String> {
-        val settings = requireVideoEncoder().encodingFor(selectedVideoQuality, profile.videoBitrate)
+    private fun videoEncodingArguments(
+        profile: OutputProfile,
+        constrained: Boolean,
+        encoderOverride: FfmpegVideoEncoder? = null
+    ): List<String> {
+        val encoder = encoderOverride ?: requireVideoEncoder()
+        val settings = encoder.encodingFor(selectedVideoQuality, profile.videoBitrate)
         val targetBitrate = settings.targetBitrate ?: return settings.arguments
         return buildList {
             addAll(settings.arguments)
@@ -2690,11 +3174,36 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val durationSeconds: Double
     )
 
+    private data class SmartJoinEncoderProbe(
+        val success: Boolean,
+        val detail: String
+    )
+
+    private data class SmartJoinPreflightResult(
+        val approvedEncoders: List<FfmpegVideoEncoder>,
+        val failedEncoders: List<FfmpegVideoEncoder>,
+        val failureMessages: List<String>
+    )
+
+    private enum class SmartJoinDecisionType {
+        USE_ENCODER,
+        FULL_REENCODE,
+        CANCEL
+    }
+
+    private data class SmartJoinDecision(
+        val type: SmartJoinDecisionType,
+        val encoder: FfmpegVideoEncoder? = null
+    )
+
     private data class ProcessingStep(
         var label: String,
         var percent: Int = 0,
         var state: StepState = StepState.PENDING,
-        var detail: String? = null
+        var detail: String? = null,
+        var encoderName: String? = null,
+        var startedAtMs: Long? = null,
+        var elapsedMs: Long? = null
     )
 
     private enum class StepState {
@@ -2719,6 +3228,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         private const val FAST_FADE_MIN_CLIP_SECONDS = 6.0
         private const val DEFAULT_VIDEO_CODEC = "h264"
         private const val TRANSITION_FADE_IN_OUT = "Fade in/out"
+        private const val TRANSITION_DEFAULT_VIDEO = "fade"
+        private const val SMART_JOIN_VALIDATION_LABEL = "Validando encoders do Smart Join"
+        private const val SMART_JOIN_PREFLIGHT_MAX_SECONDS = 1.0
         private const val TAG = "FfmpegJoinVideos"
         private val TRANSITIONS = listOf(
             TRANSITION_FADE_IN_OUT,

@@ -340,7 +340,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:buttonTint="#FFFFFFFF"
-                        android:text="Reencodar"
+                        android:text="Reencode Completo"
                         android:textColor="#FFFFFFFF"
                         android:textSize="13sp" />
 
