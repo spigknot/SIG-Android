@@ -20,6 +20,7 @@ import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -61,17 +62,12 @@ class GraniteActivity : AppCompatActivity() {
     private lateinit var buttonTranscribe: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
-    private lateinit var logToggle: TextView
-    private lateinit var logText: TextView
-    private lateinit var terminalText: TextView
-    private lateinit var outputFileName: TextView
-    private lateinit var outputActions: View
-    private lateinit var buttonOutputExport: ImageButton
-    private lateinit var buttonOutputFolder: ImageButton
+    private lateinit var outputText: EditText
 
     private val selectedItems = mutableListOf<MediaItem>()
     private var selectedBackend = GraniteExecutionBackend.CPU
     private var lastSession: OutputSession? = null
+    private var currentTranscriptionText: String = ""
     private var tempSessionDir: File? = null
     private var sourcePopup: PopupWindow? = null
     private var isBusy = false
@@ -104,34 +100,9 @@ class GraniteActivity : AppCompatActivity() {
         buttonTranscribe = findViewById(R.id.button_transcribe)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
-        logToggle = findViewById(R.id.log_toggle)
-        logText = findViewById(R.id.log_text)
-        terminalText = findViewById(R.id.terminal_text)
-        outputFileName = findViewById(R.id.output_file_name)
-        outputActions = findViewById(R.id.output_actions)
-        buttonOutputExport = findViewById(R.id.button_output_export)
-        buttonOutputFolder = findViewById(R.id.button_output_folder)
+        outputText = findViewById(R.id.output_text)
 
-        terminalText.movementMethod = ScrollingMovementMethod.getInstance()
-        logText.movementMethod = ScrollingMovementMethod.getInstance()
-        terminalText.setOnTouchListener { view, event ->
-            view.parent.requestDisallowInterceptTouchEvent(true)
-            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-                view.parent.requestDisallowInterceptTouchEvent(false)
-            }
-            if (event.action == MotionEvent.ACTION_UP) view.performClick()
-            false
-        }
-        logText.setOnTouchListener { view, event ->
-            view.parent.requestDisallowInterceptTouchEvent(true)
-            if (event.action == MotionEvent.ACTION_UP || event.action == MotionEvent.ACTION_CANCEL) {
-                view.parent.requestDisallowInterceptTouchEvent(false)
-            }
-            if (event.action == MotionEvent.ACTION_UP) view.performClick()
-            false
-        }
         buttonBackend.text = selectedBackend.shortLabel
-        logToggle.visibility = View.VISIBLE
 
         val exitHandler = installCancelAndExitGuard(
             isTaskRunning = { isTranscribing || isBusy },
@@ -142,12 +113,9 @@ class GraniteActivity : AppCompatActivity() {
         buttonTranscribe.setOnClickListener {
             if (isTranscribing) cancelTranscription() else transcribeSelectedMedia()
         }
-        outputFileName.setOnClickListener { openOutputFile(lastSession?.txtFile, "text/plain") }
-        buttonOutputExport.setOnClickListener { showExportMenu() }
-        buttonOutputFolder.setOnClickListener { openOutputFolder() }
         buttonModel.setOnClickListener { showModelMenu() }
         buttonBackend.setOnClickListener { showBackendMenu() }
-        logText.text = "Sem log geral ainda."
+        outputText.setText(currentTranscriptionText)
         updateTranscribeEnabled()
     }
 
@@ -474,11 +442,7 @@ class GraniteActivity : AppCompatActivity() {
                 appendLog(logLines, "Sessão: ${sessionDir.name}")
                 appendLog(logLines, "Modelo: ${graniteModel().label}")
                 appendLog(logLines, "Backend: ${backend.reportLabel}")
-                runOnUiThread {
-                    logToggle.visibility = View.VISIBLE
-                    updateGlobalLogText()
-                    updateTerminalText(terminalLines)
-                }
+                // UI atualizada apenas em status + progresso; logs vão para o arquivo.
 
                 appendLog(logLines, "Convertendo arquivos para WAV temporário...")
                 val convertedItems = prepareWavFiles(items, tempWavDir, terminalLines, logLines)
@@ -531,7 +495,6 @@ class GraniteActivity : AppCompatActivity() {
                     throw IllegalStateException(engineError)
                 }
                 appendLog(logLines, "Modelo carregado em ${formatElapsedCompact(modelLoadMs)}")
-                runOnUiThread { updateTerminalText(terminalLines) }
 
                 convertedItems.forEachIndexed { index, converted ->
                     checkNotCancelled()
@@ -566,10 +529,6 @@ class GraniteActivity : AppCompatActivity() {
                     individual.writeText(text, Charsets.UTF_8)
                     results += TranscriptionResult(item.name, text, individual, converted.durationSeconds)
                     appendLog(logLines, "Concluído: ${item.name}")
-                    runOnUiThread {
-                        updateGlobalLogText()
-                        updateTerminalText(terminalLines)
-                    }
                 }
 
                 GraniteEngine.release()
@@ -594,14 +553,10 @@ class GraniteActivity : AppCompatActivity() {
                     cancelRequested = false
                     stopTranscriptionTimer()
                     setBusy(false)
-                    outputFileName.visibility = View.GONE
-                    outputActions.visibility = View.VISIBLE
-                    buttonOutputExport.visibility = View.VISIBLE
-                    buttonOutputFolder.visibility = View.VISIBLE
+                    outputText.visibility = View.VISIBLE
                     status.text = "Transcrição concluída com sucesso!"
-                    updateGlobalLogText()
-                    updateTerminalText(terminalLines)
-                    graniteScroll.post { graniteScroll.smoothScrollTo(0, outputActions.bottom) }
+                    updateOutputText()
+                    graniteScroll.post { graniteScroll.smoothScrollTo(0, outputText.bottom) }
                     updateTranscribeEnabled()
                 }
             } catch (e: CancellationException) {
@@ -621,15 +576,23 @@ class GraniteActivity : AppCompatActivity() {
                 try { GraniteEngine.release() } catch (_: Throwable) {}
                 tempWavDir?.deleteRecursively()
                 val errorMessage = e.message ?: "falha inesperada"
-                appendLog(logLines, "Erro: $errorMessage")
+                val detail = GraniteEngine.lastError().ifBlank { errorMessage }
+                appendLog(logLines, "Erro: $detail")
+                appendTerminal(terminalLines, "ERROR: $detail")
+                // Grava o log mesmo em falha, para diagnóstico.
+                try {
+                    sessionDir?.let { dir ->
+                        File(dir, "log.txt").writeText(logLines.toString(), Charsets.UTF_8)
+                        File(dir, "terminal.txt").writeText(snapshotText(terminalLines), Charsets.UTF_8)
+                    }
+                } catch (_: Throwable) {}
                 runOnUiThread {
                     isTranscribing = false
                     cancelRequested = false
                     stopTranscriptionTimer()
                     setBusy(false)
                     status.text = "Erro: $errorMessage"
-                    updateGlobalLogText()
-                    updateTerminalText(terminalLines)
+                    updateOutputText()
                     updateTranscribeEnabled()
                 }
             }
@@ -644,7 +607,6 @@ class GraniteActivity : AppCompatActivity() {
         )
         appendTerminal(terminalLines, "# original: $originalName")
         appendTerminal(terminalLines, "ffmpeg ${arguments.joinToString(" ")}")
-        runOnUiThread { updateTerminalText(terminalLines) }
         val convertSession = executeFfmpegWithTerminal(arguments, terminalLines)
         if (!ReturnCode.isSuccess(convertSession.returnCode) || !wavFile.exists() || wavFile.length() == 0L) {
             val logTail = convertSession.allLogsAsString.orEmpty().lines().takeLast(2).joinToString(" ")
@@ -751,22 +713,6 @@ class GraniteActivity : AppCompatActivity() {
         }
     }
 
-    private fun showExportMenu() {
-        val session = lastSession ?: return
-        PopupMenu(this, buttonOutputExport).apply {
-            menu.add("txt")
-            menu.add("html")
-            setOnMenuItemClickListener { item ->
-                when (item.title.toString()) {
-                    "txt" -> shareFile(session.txtFile, "text/plain", "Compartilhar TXT")
-                    "html" -> shareFile(session.htmlFile, "text/html", "Compartilhar HTML")
-                }
-                true
-            }
-            show()
-        }
-    }
-
     private fun shareFile(file: File, mimeType: String, title: String) {
         val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -777,21 +723,6 @@ class GraniteActivity : AppCompatActivity() {
         }
         startActivity(Intent.createChooser(intent, title))
     }
-
-    private fun openOutputFolder() {
-        val dir = lastSession?.dir ?: return
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", dir)
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "resource/folder")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            })
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(this, "Não encontrei um app para abrir a pasta.", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // ---- helpers ----
 
     private fun checkNotCancelled() {
         if (cancelRequested) throw CancellationException("cancelado pelo usuário")
@@ -850,8 +781,7 @@ class GraniteActivity : AppCompatActivity() {
     private fun clearOutput() {
         lastSession = null
         tempSessionDir = null
-        outputActions.visibility = View.GONE
-        outputFileName.visibility = View.GONE
+        outputText.visibility = View.GONE
         progress.visibility = View.GONE
         progress.progress = 0
     }
@@ -872,18 +802,14 @@ class GraniteActivity : AppCompatActivity() {
         liveText.append('\n')
     }
 
-    private fun updateTerminalText(terminalLines: StringBuilder) {
-        terminalText.text = snapshotText(terminalLines)
-    }
-
-    private fun updateGlobalLogText() {
-        logText.text = logText.text
+    private fun updateOutputText() {
+        outputText.setText(currentTranscriptionText)
+        outputText.visibility = View.VISIBLE
     }
 
     private fun snapshotText(sb: StringBuilder): String {
         val s = sb.toString()
-        val max = 20000
-        return if (s.length > max) s.takeLast(max) else s
+        return s.takeLast(20000)
     }
 
     private fun createSessionDir(): File {

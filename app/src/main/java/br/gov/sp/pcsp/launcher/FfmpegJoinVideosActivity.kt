@@ -541,7 +541,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     SmartJoinPlanner.normalizeCodecFamily(originalEncoder.codecFamily) ==
                     SmartJoinPlanner.normalizeCodecFamily(sourceProfile.videoCodec)
                 val orientationMismatch = !audioOnly && shouldUseOrientationSafeReencode()
-                val smartJoinProfiles = if (!audioOnly && checkSmartJoin.isChecked) {
+                val directConcatOrientationMismatch = !audioOnly && clips.size >= 2 && clips.map { rotationComparisonKey(it.rotationDegrees) }.distinct().size > 1
+                val smartJoinProfiles = if (!audioOnly) {
                     copiedInputs.mapIndexed { index, input ->
                         val profile = detectOutputProfile(input, clips.getOrNull(index))
                         SmartJoinMediaProfile(
@@ -669,6 +670,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 } else if (checkReencode.isChecked) {
                     if (isFadeInOutTransition() && fastEncoderCompatible) {
                         executeMinimalTransitionJoin(copiedInputs, tempOutput)
+                    } else if (isFadeInOutTransition()) {
+                        executeFadeInOutReencodeJoin(copiedInputs, tempOutput)
                     } else {
                         executeFullReencodeJoin(
                             copiedInputs,
@@ -677,16 +680,24 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         )
                     }
                 } else {
-                    val session = executeFfmpegWithProgress(
-                        buildDirectConcatArguments(copiedInputs, tempOutput),
-                        totalDurationMs(),
-                        "Juntando sem reencodar"
-                    )
-                    JoinExecutionResult(
-                        success = ReturnCode.isSuccess(session.returnCode) && tempOutput.exists() && tempOutput.length() > 0L,
-                        cancelled = ReturnCode.isCancel(session.returnCode),
-                        failureMessage = ffmpegFailureMessage("Juntando sem reencodar", session)
-                    )
+                    if (!audioOnly && (!smartJoinInputsCompatible || directConcatOrientationMismatch)) {
+                        JoinExecutionResult(
+                            success = false,
+                            cancelled = false,
+                            failureMessage = "Vídeos com resoluções, codecs ou orientações diferentes não podem ser unidos diretamente sem reencodar. Ative 'Recodificar' ou 'Smart Join'."
+                        )
+                    } else {
+                        val session = executeFfmpegWithProgress(
+                            buildDirectConcatArguments(copiedInputs, tempOutput),
+                            totalDurationMs(),
+                            "Juntando sem reencodar"
+                        )
+                        JoinExecutionResult(
+                            success = ReturnCode.isSuccess(session.returnCode) && tempOutput.exists() && tempOutput.length() > 0L,
+                            cancelled = ReturnCode.isCancel(session.returnCode),
+                            failureMessage = ffmpegFailureMessage("Juntando sem reencodar", session)
+                        )
+                    }
                 }
 
                 if (!audioOnly && checkSmartJoin.isChecked && !forceSmartJoinFullReencode &&

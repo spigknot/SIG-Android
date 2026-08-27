@@ -162,6 +162,46 @@ class GraniteEngineTest {
     }
 
     @Test
+    fun `frontend config from real json parses deltas boolean`() {
+        // Vacina do bug "frontend_config sem deltas": o frontend_config.json real
+        // tem "deltas": true (booleano), e o parser antigo só aceitava número —
+        // o load falhava com "frontend_config sem deltas" logo após a conversão.
+        val realJson = """
+            {
+              "sample_rate": 16000,
+              "n_fft": 512,
+              "win_length": 400,
+              "hop_length": 160,
+              "n_mels": 80,
+              "stack_factor": 2,
+              "deltas": true,
+              "delta_win_length": 3,
+              "logmel_floor_db": 8.0,
+              "num_special_tokens": 1,
+              "input_dim": 320,
+              "blank_id": 0,
+              "pad_multiple": 512,
+              "subsample_factor": 4
+            }
+        """.trimIndent()
+        val cfg = GraniteFrontendConfig.fromJson(realJson)
+        assertEquals(16000, cfg.sampleRate)
+        assertEquals(512, cfg.nFft)
+        assertEquals(400, cfg.winLength)
+        assertEquals(160, cfg.hopLength)
+        assertEquals(80, cfg.nMels)
+        assertEquals(2, cfg.stackFactor)
+        assertTrue(cfg.deltas)
+        assertEquals(3, cfg.deltaWinLength)
+        assertEquals(8.0, cfg.logmelFloorDb, 1e-9)
+        assertEquals(1, cfg.numSpecialTokens)
+        assertEquals(320, cfg.inputDim)
+        assertEquals(0, cfg.blankId)
+        assertEquals(512, cfg.padMultiple)
+        assertEquals(4, cfg.subsampleFactor)
+    }
+
+    @Test
     fun `package complete requires all files non empty`() {
         // O pacote só está "baixado" quando TODOS os arquivos existem e têm
         // tamanho > 0 — não basta o .onnx (o .data de 1,89GB pode faltar).

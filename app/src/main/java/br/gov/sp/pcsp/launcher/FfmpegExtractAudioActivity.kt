@@ -633,7 +633,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             val previewVideo = isVideo(selected.mime, selected.name)
             videoPreview.visibility = if (previewVideo) View.VISIBLE else View.GONE
             audioWaveform.visibility = if (previewVideo) View.GONE else View.VISIBLE
-            showSingleMediaControls(true, showTimeFields = previewVideo)
+            showSingleMediaControls(true, showTimeFields = true)
             durationMs = 0L
             playbackSpeed = 1f
             updateSpeedButton()
@@ -682,10 +682,10 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             status.text = "Libere o acesso a todos os arquivos para salvar na pasta SIG."
             return
         }
-        val trimSingleVideo = selectedVideos.size == 1 && isVideo(selectedVideos.first().mime, selectedVideos.first().name)
-        val startMs = if (trimSingleVideo) parseTime(inputFrom.text.toString()) else 0L
-        val endMs = if (trimSingleVideo) parseTime(inputTo.text.toString()) else null
-        if (trimSingleVideo && (startMs == null || endMs == null || endMs <= startMs)) {
+        val trimSingleMedia = selectedVideos.size == 1
+        val startMs = if (trimSingleMedia) parseTime(inputFrom.text.toString()) else 0L
+        val endMs = if (trimSingleMedia) parseTime(inputTo.text.toString()) else null
+        if (trimSingleMedia && (startMs == null || endMs == null || endMs <= startMs)) {
             status.text = "Confira os tempos de início e fim."
             return
         }
@@ -718,8 +718,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     appendTerminalAudioInfo("original: ${describeAudioFile(inputFile)}")
                     val outputName = buildOutputName(video.name, usedNames)
                     val tempOutput = File(cacheDir, "audio_${System.currentTimeMillis()}_$outputName")
-                    val trimStartMs = if (trimSingleVideo) startMs ?: 0L else 0L
-                    val trimEndMs = if (trimSingleVideo) endMs else null
+                    val trimStartMs = if (trimSingleMedia) startMs ?: 0L else 0L
+                    val trimEndMs = if (trimSingleMedia) endMs else null
                     val expectedDuration = trimEndMs?.let { it - trimStartMs } ?: readDuration(video.uri)
                     totalDurationMs += expectedDuration
                     val audioSettings = currentAudioSettings()
@@ -797,7 +797,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         args.addAll(
             listOf(
                 "-vn",
-                "-map", "0:a:0",
+                "-map", "0:a:0?",
                 "-ar", settings.sampleRate.toString(),
                 "-ac", settings.channels.toString()
             )

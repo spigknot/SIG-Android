@@ -504,15 +504,12 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 tracker.completeTask(0)
 
                 val profile = detectAudioProfile(mainFile)
-                val fullReencode = reencode.isChecked && (!smartInsert.isChecked || selectedTransition != TRANSITION_NONE)
-                val outputExtension = if (fullReencode) "m4a" else main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
-                val safeExtension = outputExtension.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
+                val rawExtension = main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
+                val safeExtension = rawExtension.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
+                val isWav = safeExtension == "wav"
+                val fullReencode = (reencode.isChecked && (!smartInsert.isChecked || selectedTransition != TRANSITION_NONE)) || isWav
                 val resultFile = File(cacheDir, "insert_${System.currentTimeMillis()}_${sanitizeBase(main.name)}.$safeExtension")
-                val encoderName = when {
-                    fullReencode -> "aac"
-                    smartInsert.isChecked -> encoderForExtension(safeExtension)
-                    else -> null
-                }
+                val encoderName = if (fullReencode || smartInsert.isChecked) encoderForExtension(safeExtension) else null
                 encoderName?.let {
                     tracker.setTaskEncoder(1, it)
                     tracker.startTask(1)
@@ -619,12 +616,22 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         } else {
             filters += labels.joinToString("") { "[$it]" } + "concat=n=${labels.size}:v=0:a=1[aout]"
         }
-        return arrayOf(
+        val extension = output.extension.lowercase(Locale.ROOT)
+        val encoder = encoderForExtension(extension)
+        val args = mutableListOf(
             "-y", "-i", main.absolutePath, "-i", inserted.absolutePath,
             "-filter_complex", filters.joinToString(";"), "-map", "[aout]",
-            "-vn", "-c:a", "aac", "-b:a", profile.bitrate, "-ar", profile.sampleRate.toString(),
-            "-ac", profile.channels.toString(), "-movflags", "+faststart", output.absolutePath
+            "-vn", "-c:a", encoder
         )
+        if (encoder !in setOf("flac", "pcm_s16le")) {
+            args.addAll(listOf("-b:a", profile.bitrate))
+        }
+        args.addAll(listOf("-ar", profile.sampleRate.toString(), "-ac", profile.channels.toString()))
+        if (extension in setOf("m4a", "mp4")) {
+            args.addAll(listOf("-movflags", "+faststart"))
+        }
+        args.add(output.absolutePath)
+        return args.toTypedArray()
     }
 
     private fun audioCrossfadeCurve(): String {

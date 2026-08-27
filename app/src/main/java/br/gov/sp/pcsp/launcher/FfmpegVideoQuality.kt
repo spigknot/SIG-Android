@@ -65,7 +65,7 @@ fun FfmpegVideoEncoder.encodingFor(
 }
 
 fun scaleVideoBitrate(bitrate: String, multiplier: Double): String {
-    val match = Regex("""(\\d+(?:\\.\\d+)?)\\s*([kKmM])""").find(bitrate.trim())
+    val match = Regex("""(\d+(?:\.\d+)?)\s*([kKmM])""").find(bitrate.trim())
         ?: return bitrate
     val value = match.groupValues[1].toDoubleOrNull() ?: return bitrate
     val unit = match.groupValues[2].uppercase()

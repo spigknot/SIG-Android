@@ -74,11 +74,92 @@ object NativeDependencyManager {
         val libDir = File(installedRoot(context, abi), "lib")
         System.setProperty(LIBRARY_PROPERTY, libDir.absolutePath)
         // O ONNX Runtime (engine do Granite) carrega libonnxruntime.so e
-        // libonnxruntime4j_jni.so deste diretório via System.load — é o que
-        // permite manter o APK sem essas libs nativas.
+        // libonnxruntime4j_jni.so deste diretório. O onnxruntime-java no Android
+        // usa System.loadLibrary("onnxruntime4j_jni") — que busca SÓ no caminho
+        // do classloader do APK (a property "onnxruntime.native.path" é ignorada
+        // no Android). Por isso registramos este diretório no classloader.
+        registerNativeLibraryDir(libDir)
         System.setProperty(ONNX_NATIVE_PATH_PROPERTY, libDir.absolutePath)
         debugLog(context, "activateIfInstalled: dir=$libDir")
         return true
+    }
+
+    /**
+     * Registra [libDir] no caminho de busca de libs nativas do classloader da app,
+     * para que System.loadLibrary() encontre as libs baixadas do R2 (o
+     * onnxruntime-java só usa System.loadLibrary no Android e não lê
+     * onnxruntime.native.path). É o padrão suportado para libs externas no ART.
+     */
+    fun registerNativeLibraryDir(libDir: File) {
+        if (!libDir.isDirectory) return
+        try {
+            val classLoader = NativeDependencyManager::class.java.classLoader ?: return
+            val pathListField = findFieldUpward(classLoader.javaClass, "pathList")
+            pathListField.isAccessible = true
+            val pathList = pathListField.get(classLoader) ?: return
+
+            // API 23-25: lista de diretórios usada diretamente na busca.
+            runCatching {
+                val dirsField = findFieldUpward(pathList.javaClass, "nativeLibraryDirectories")
+                dirsField.isAccessible = true
+                @Suppress("UNCHECKED_CAST")
+                val dirs = dirsField.get(pathList) as MutableList<File>
+                if (!dirs.contains(libDir)) dirs.add(0, libDir)
+            }.onFailure { android.util.Log.e("SigNative", "nativeLibraryDirectories falhou: ${it.message}") }
+
+            // API 26+: NativeLibraryElement[] construído com o construtor público
+            // NativeLibraryElement(File) — evita depender do makePathElement.
+            //
+            // PREPEND (posição 0), NÃO append: alguns aparelhos (OnePlus 15 e outros
+            // com OEM que embute onnxruntime no /system/lib64) têm libonnxruntime.so e
+            // libonnxruntime4j_jni.so NO SISTEMA. O findLibrary do DexPathList percorre
+            // nativeLibraryPathElements EM ORDEM e devolve a PRIMEIRA ocorrência; como
+            // /system/lib64 vem do java.library.path e aparece ANTES, um append deixaria
+            // a lib OEM "vencer" a busca. Aí o System.loadLibrary resolve para
+            // /system/lib64/libonnxruntime4j_jni.so, que o namespace clns-9 do app NÃO
+            // permite carregar -> dlopen failed -> NoClassDefFoundError: OrtEnvironment.
+            runCatching {
+                val elementsField = findFieldUpward(pathList.javaClass, "nativeLibraryPathElements")
+                elementsField.isAccessible = true
+                val elements = elementsField.get(pathList) as Array<*>
+                val componentType: Class<*> = elements.javaClass.componentType!!
+                // Construtor público NativeLibraryElement(File).
+                val ctor = componentType.getConstructor(File::class.java)
+                ctor.isAccessible = true
+                val newElement = ctor.newInstance(libDir)
+                // Dedup: se o primeiro elemento já aponta para o nosso dir, não re-insere
+                // (o activateIfInstalled roda a cada subida/uso, e o toString() do
+                // NativeLibraryElement vira `directory "<path>"`).
+                val alreadyFirst = elements.isNotEmpty() &&
+                    elements[0] != null &&
+                    elements[0].toString().contains(libDir.absolutePath)
+                if (!alreadyFirst) {
+                    val newElements = java.lang.reflect.Array.newInstance(componentType, elements.size + 1)
+                    System.arraycopy(elements, 0, newElements, 1, elements.size)
+                    java.lang.reflect.Array.set(newElements, 0, newElement)
+                    elementsField.set(pathList, newElements)
+                    android.util.Log.i("SigNative", "nativeLibraryPathElements atualizado (${elements.size} -> ${elements.size + 1}, prepend)")
+                } else {
+                    android.util.Log.i("SigNative", "nativeLibraryPathElements já registrado no topo")
+                }
+            }.onFailure { android.util.Log.e("SigNative", "nativeLibraryPathElements falhou: ${it.message}") }
+
+            android.util.Log.i("SigNative", "registerNativeLibraryDir: $libDir")
+        } catch (e: Throwable) {
+            android.util.Log.e("SigNative", "registerNativeLibraryDir falhou", e)
+        }
+    }
+
+    private fun findFieldUpward(cls: Class<*>, name: String): java.lang.reflect.Field {
+        var current: Class<*>? = cls
+        while (current != null) {
+            try {
+                return current.getDeclaredField(name)
+            } catch (_: NoSuchFieldException) {
+            }
+            current = current.superclass
+        }
+        throw NoSuchFieldException(name)
     }
 
     /** Pré-carrega as libs nativas do pacote NA ORDEM DE DEPENDÊNCIA antes do

@@ -1,0 +1,58 @@
+# GRANITE STT — Resumo para nova sessão
+
+## Objetivo
+Ferramenta nova "Granite" no SIG Android (card amarelo na tela Ferramentas), rodando o modelo
+**Granite Speech 5.0 TurboCTC** (ibm-granite/granite-speech-5.0-470m-turboctc) localmente via ONNX.
+Seguir o padrão do Whisper. Modelo F32 puro (~1,9 GB), backends CPU / GPU(NNAPI) / NPU(NNAPI).
+Modelo é EN-only (4.1 multilíngue fica para depois).
+
+## Decisões do usuário
+- NÃO aumentar o APK (APK < 10 MB) — libs nativas ficam no R2, como FFmpeg/Whisper.
+- NÃO fazer commit/push/versão nova (nas últimas rodadas). Só APK no O:\ quando pedir.
+- Baixar do Cloudflare R2 (bucket sig-android). Upload feito na subpasta `models/`.
+- Diálogo com barra de progresso igual ao Whisper.
+
+## Arquivos do modelo (já no R2, subpasta models/)
+granite-5.0-turboctc-f32-ext.onnx (865 KB) + .onnx.data (1,89 GB)
+frontend_config.json, mel_filters.bin, stft_window.bin, vocab.json, pcs_vocab.json, punct_cap_seg_en.onnx (209 MB)
+(ONNX exportado no PC via TorchScript F32; validado PyTorch == ONNX. Scripts em tools/granite/)
+
+## Arquivos de código criados/alterados (D:\Projetos\SIG)
+- GraniteEngine.kt (novo) — pipeline: AGC + frontend log-mel + sessão ORT + CTC + decoder ByteLevel
+- GraniteEngineTest.kt (novo) — 15 testes JVM verdes
+- GraniteActivity.kt + activity_granite.xml (novo) — tela da ferramenta (quadro texto editável, sem logs)
+- ic_tool_granite.xml + view_tool_granite.xml — card amarelo #FFFFC928
+- ToolsActivity.kt + activity_tools.xml — botão Granite na linha 3
+- AndroidManifest.xml — GraniteActivity registrada (largeHeap)
+- app/build.gradle — onnxruntime-android:1.29.0 + EXCLUDES das libs ONNX no APK
+- SigApplication.kt — activateIfInstalled movido p/ attachBaseContext
+- NativeDependencyManager.kt — registerNativeLibraryDir() (reflexão DexPathList)
+- docs/granite-turboctc-design.md, release/granite_links_download.txt, tools/granite/*
+
+## Erros já corrigidos (causa → fix)
+1. "frontend_config sem deltas" → parser lia número; JSON tem `"deltas": true` (bool). Fix: parser bool.
+2. Loop "pede download de novo" → Activity procurava nome errado (sem `-ext`). Fix: GRANITE_MODEL_FILE alinhado + packageComplete(8 arquivos).
+3. "nada acontece" após transcrever → status invisível (gone) + ALL_OPT lento. Fix: status visível + NO_OPT.
+4. Fallback GPU/NPU silencioso → agora pergunta se quer CPU (diálogo).
+5. **Principal**: `UnsatisfiedLinkError: libonnxruntime4j_jni.so not found` → onnxruntime-java no Android ignora onnxruntime.native.path e usa System.loadLibrary (só namespace do APK). Fix em 2 partes:
+   a) NativeDependencyManager.registerNativeLibraryDir() registra dir R2 no DexPathList.nativeLibraryPathElements via reflexão (construtor NativeLibraryElement(File)).
+   b) SigApplication.attachBaseContext() chama activateIfInstalled ANTES dos ContentProviders (o ORTTelemetry rodava antes e falhava).
+   VALIDADO: libs carregam OK no logcat.
+
+## Estado atual (ONDE PAROU)
+- Emulador Pixel_9 (AVD), x86_64, agora com 8 GB RAM (-memory 8192). Modelo já baixado no emulador.
+- Após correção das libs, a transcrição RODA o modelo, mas retorna "Erro: transcrição vazia"
+  — esperado, porque o áudio de teste é PORTUGUÊS e o modelo é EN-only.
+- PRÓXIMO: testar com áudio em INGLÊS (gerar WAV EN via TTS no emulador) para provar o pipeline completo.
+
+## Pendências
+- Confirmar transcrição real com áudio em inglês (emulador e/ou OnePlus 15 do usuário).
+- Punctuator (punct_cap_seg_en.onnx) ainda NÃO integrado na engine — texto sai sem pontuação.
+- Quando concluir: gate (testDebugUnitTest + lintDebug + assembleDebug), APK no O:\, e só então commit/push/versão SE o usuário pedir.
+- NÃO embutir chaves/APIs; campos nascem vazios.
+
+## Comandos úteis
+- Build/testes: cd D:/Projetos/SIG && ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+- Emulador: "C:/Users/Gustavo/AppData/Local/Android/Sdk/emulator/emulator.exe" -avd Pixel_9 -no-snapshot -no-boot-anim -gpu swiftshader_indirect -no-audio -memory 8192
+- adb: /c/adb/adb (pacote br.gov.sp.pcsp.launcher)
+- Logcat do app: adb logcat -d --pid=$(adb shell pidof br.gov.sp.pcsp.launcher) | grep -iE "GraniteEngine|SigNative"

@@ -60,6 +60,10 @@ data class GraniteFrontendConfig(
                 val m = Regex("\"$key\"\\s*:\\s*(-?[\\d.]+)").find(json) ?: error("frontend_config sem $key")
                 return m.groupValues[1].toDouble()
             }
+            fun bool(key: String): Boolean {
+                val m = Regex("\"$key\"\\s*:\\s*(true|false)").find(json) ?: error("frontend_config sem $key")
+                return m.groupValues[1] == "true"
+            }
             return GraniteFrontendConfig(
                 sampleRate = num("sample_rate"),
                 nFft = num("n_fft"),
@@ -67,7 +71,7 @@ data class GraniteFrontendConfig(
                 hopLength = num("hop_length"),
                 nMels = num("n_mels"),
                 stackFactor = num("stack_factor"),
-                deltas = num("deltas") == 1,
+                deltas = bool("deltas"),
                 deltaWinLength = num("delta_win_length"),
                 logmelFloorDb = flt("logmel_floor_db"),
                 numSpecialTokens = num("num_special_tokens"),
@@ -400,8 +404,29 @@ object GraniteEngine {
     @Volatile private var frontend: GraniteFrontend? = null
     @Volatile private var decoder: GraniteDecoder? = null
     @Volatile private var lastErrorMessage: String = ""
+    @Volatile private var onnxNativesLoaded: Boolean = false
 
     fun lastError(): String = lastErrorMessage
+
+    /** Captura a causa raiz completa (mensagem + stack trace) de uma exceção. */
+    private fun describeError(e: Throwable): String {
+        val sb = StringBuilder()
+        var cause: Throwable = e
+        val seen = mutableSetOf<String>()
+        while (true) {
+            val msg = cause.message ?: cause::class.java.simpleName
+            if (seen.add(msg)) {
+                if (sb.isNotEmpty()) sb.append(" -> ")
+                sb.append(msg)
+            }
+            val c = cause.cause ?: break
+            cause = c
+            if (cause === e) break
+        }
+        sb.append("\n")
+        sb.append(e.stackTraceToString())
+        return sb.toString()
+    }
 
     /** Tamanho total do download do pacote (para o diálogo). */
     fun packageDownloadBytes(): Long = 2_100_000_000L
@@ -523,6 +548,13 @@ object GraniteEngine {
                 lastErrorMessage = "Componentes nativos do SIG não instalados. Baixe-os na abertura do app e tente novamente."
                 return false
             }
+            // O onnxruntime-java NÃO lê a property "onnxruntime.native.path": ele
+            // chama System.loadLibrary("onnxruntime4j_jni") (busca em java.library.path).
+            // As libs estão no pacote R2 (sig.native.library.dir), então carregamos
+            // explicitamente AQUI, na ordem de dependência, antes de tocar em
+            // OrtEnvironment (a classe falha de forma definitiva no processo se a
+            // lib estiver ausente na 1ª referência).
+            loadOnnxRuntimeNatives(onLog)
             release()
             val dir = packageDir(context)
             val modelPath = modelFile(context)
@@ -586,7 +618,7 @@ object GraniteEngine {
             onLog("ONNX session criada (CPU, fallback)")
             true
         } catch (e: Throwable) {
-            lastErrorMessage = e.message ?: "falha ao carregar modelo"
+            lastErrorMessage = describeError(e)
             Log.e(TAG, "load failed", e)
             false
         }
@@ -594,6 +626,16 @@ object GraniteEngine {
 
     /** Transcreve um WAV 16 kHz mono (processa em janelas fixas de 512 frames / 10,24s). */
     fun transcribeFile(wavFile: File, onProgress: (Int) -> Unit = {}): String {
+        try {
+            return transcribeFileInner(wavFile, onProgress)
+        } catch (e: Throwable) {
+            lastErrorMessage = describeError(e)
+            Log.e(TAG, "transcribeFile failed", e)
+            throw e
+        }
+    }
+
+    private fun transcribeFileInner(wavFile: File, onProgress: (Int) -> Unit): String {
         val sess = session ?: throw IllegalStateException("modelo não carregado")
         val fe = frontend ?: throw IllegalStateException("front-end não carregado")
         val dec = decoder ?: throw IllegalStateException("decoder não carregado")
@@ -660,6 +702,39 @@ object GraniteEngine {
     }
 
     private fun env(): OrtEnvironment = OrtEnvironment.getEnvironment()
+
+    /** Carrega as libs nativas do ONNX Runtime do pacote R2 (sig.native.library.dir).
+     *  Deve ser chamado ANTES de qualquer referência a OrtEnvironment. */
+    private fun loadOnnxRuntimeNatives(onLog: (String) -> Unit) {
+        if (onnxNativesLoaded) return
+        val libDir = System.getProperty("sig.native.library.dir")
+            ?: throw IllegalStateException("diretório de libs nativas não configurado")
+        val dir = File(libDir)
+        Log.i(TAG, "loadOnnxRuntimeNatives: dir=$libDir")
+        // Ordem de dependência: libonnxruntime.so é dependência da libonnxruntime4j_jni.so.
+        for (name in listOf("libonnxruntime.so", "libonnxruntime4j_jni.so")) {
+            val lib = File(dir, name)
+            Log.i(TAG, "loadOnnxRuntimeNatives: tentando $name exists=${lib.isFile} size=${lib.length()}")
+            check(lib.isFile) { "lib nativa ausente: ${lib.absolutePath}" }
+            try {
+                System.load(lib.absolutePath)
+                Log.i(TAG, "loadOnnxRuntimeNatives: OK $name")
+                onLog("nativo carregado: $name")
+            } catch (e: Throwable) {
+                Log.e(TAG, "loadOnnxRuntimeNatives: ERRO $name -> ${e.javaClass.simpleName}: ${e.message}", e)
+                // Se já estiver carregada (UnsatisfiedLinkError "already loaded"), ignora.
+                if (e.message?.contains("already loaded", ignoreCase = true) != true) throw e
+            }
+        }
+        // As libs já foram carregadas via System.load acima. O problema restante é
+        // que o OnnxRuntime.init() (disparado por OrtEnvironment.getEnvironment)
+        // ainda chama System.loadLibrary("onnxruntime4j_jni") e falha no namespace
+        // do APK. O registro no classloader (registerNativeLibraryDir) é feito em
+        // NativeDependencyManager.activateIfInstalled — se ainda falhar, a saída é
+        // uma ponte JNI própria (libsig_onnx.so) no lugar do onnxruntime-java.
+        onnxNativesLoaded = true
+        Log.i(TAG, "loadOnnxRuntimeNatives: concluído")
+    }
 
     private fun readFloatBinary(file: File): FloatArray {
         val bytes = file.readBytes()

@@ -439,7 +439,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             return
         }
         val hasTrim = startMs > 0L || endMs < durationMs
-        if ((!metadataOnly || hasTrim) && selectedCodec == null) {
+        if (!metadataOnly && selectedCodec == null) {
             status.text = "Nenhum encoder de vídeo compatível está disponível."
             return
         }
@@ -488,9 +488,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     tracker = FfmpegTaskTracker(status, listOf("Dividindo vídeo em trechos"))
                 } else {
                     val taskLabel = when {
-                        hasTrim && metadataOnly -> "Cortando e aplicando metadados"
-                        hasTrim -> "Girando e cortando vídeo"
                         metadataOnly -> "Aplicando metadados"
+                        hasTrim -> "Girando e cortando vídeo"
                         else -> "Girando vídeo"
                     }
                     tracker = FfmpegTaskTracker(status, listOf("Preparando rotação", taskLabel))
@@ -498,7 +497,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 }
 
                 val encoder = selectedCodec ?: FfmpegVideoEncoder("h264_mediacodec", "h264")
-                val usesEncoder = (!metadataOnly && buildOrderedFilters().isNotBlank()) || (metadataOnly && hasTrim)
+                val usesEncoder = !metadataOnly && buildOrderedFilters().isNotBlank()
                 if (!canUseParallel && usesEncoder) {
                     tracker.setTaskEncoder(1, encoder.shortName)
                     tracker.startTask(1)
@@ -1145,25 +1144,24 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         val trimDurationMs = (endMs - startMs).coerceAtLeast(1L)
         if (metadataOnly) {
             val currentMetadataDegrees = detectCurrentMetadataRotation(inputFile)
-            val metadataDegrees = normalizeMetadataDegrees(currentMetadataDegrees - degrees)
-            val args = mutableListOf("-y", "-i", inputFile.absolutePath)
-            if (hasTrim) args.addAll(listOf("-ss", formatFfmpegTime(startMs), "-t", formatFfmpegTime(trimDurationMs)))
-            args.addAll(listOf("-map", "0"))
-            if (hasTrim) {
-                args.addAll(videoEncodingArguments(encoder, detectVideoBitrate(inputFile)))
-                args.addAll(listOf("-c:a", "aac"))
-            } else {
-                args.addAll(listOf("-c", "copy"))
-            }
-            args.addAll(listOf("-metadata:s:v:0", "rotate=$metadataDegrees", outputFile.absolutePath))
+            val metadataDegrees = normalizeMetadataDegrees(currentMetadataDegrees + degrees)
+            val args = mutableListOf(
+                "-y", "-i", inputFile.absolutePath,
+                "-map", "0",
+                "-c", "copy",
+                "-metadata:s:v:0", "rotate=$metadataDegrees",
+                outputFile.absolutePath
+            )
             return args.toTypedArray()
         }
 
         val filters = buildOrderedFilters()
         val videoBitrate = detectVideoBitrate(inputFile)
 
-        val args = mutableListOf("-y", "-i", inputFile.absolutePath)
-        if (hasTrim) args.addAll(listOf("-ss", formatFfmpegTime(startMs), "-t", formatFfmpegTime(trimDurationMs)))
+        val args = mutableListOf("-y")
+        if (hasTrim) args.addAll(listOf("-ss", formatFfmpegTime(startMs)))
+        args.addAll(listOf("-i", inputFile.absolutePath))
+        if (hasTrim) args.addAll(listOf("-t", formatFfmpegTime(trimDurationMs)))
         if (filters.isNotEmpty()) {
             args.addAll(listOf("-vf", filters))
             args.addAll(videoEncodingArguments(encoder, videoBitrate))
@@ -1290,6 +1288,18 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         inputParallelSegments.isEnabled = !metadataOnly && parallelKeyframes.isChecked
         inputParallelSegments.alpha = if (inputParallelSegments.isEnabled) 1f else 0.42f
         updateVideoEncoderButton()
+
+        timeline.setRangeMarkersVisible(!metadataOnly)
+        if (metadataOnly && durationMs > 0L) {
+            timeline.setStart(0L)
+            timeline.setEnd(durationMs)
+            updateTimeFields(0L, durationMs)
+        }
+        val trimEnabled = !metadataOnly
+        listOf(inputFrom, inputTo, buttonFromPrev, buttonFromNext, buttonToPrev, buttonToNext).forEach {
+            it.isEnabled = trimEnabled
+            it.alpha = if (trimEnabled) 1f else 0.42f
+        }
 
     }
 

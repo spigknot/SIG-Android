@@ -1,12 +1,18 @@
 package br.gov.sp.pcsp.launcher
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioFormat
+import android.media.AudioRecord
+import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -33,11 +39,13 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.RandomAccessFile
@@ -50,6 +58,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToLong
+import kotlin.math.sqrt
 
 class WhisperActivity : AppCompatActivity() {
 
@@ -77,6 +86,19 @@ class WhisperActivity : AppCompatActivity() {
     private lateinit var inputBestOf: TextView
     private lateinit var resetAdvanced: TextView
 
+    // Controles de gravação de microfone (branco) e transcrição ao vivo (vermelho)
+    private lateinit var buttonRecordingAction: ImageButton
+    private lateinit var buttonLiveMicStop: ImageButton
+    private lateinit var recordingPanel: View
+    private lateinit var recordingTimer: TextView
+    private lateinit var liveTranscriptContainer: View
+    private lateinit var liveTranscriptText: EditText
+    private lateinit var liveTranscriptClipboardActions: View
+    private lateinit var buttonClearTranscript: View
+    private lateinit var buttonShareLiveTranscript: ImageButton
+    private lateinit var buttonCopyLiveTranscript: ImageButton
+    private lateinit var buttonPasteTranscript: ImageButton
+
     private val selectedItems = mutableListOf<MediaItem>()
     private var selectedModel: WhisperModel? = null
     private var selectedLanguage = WhisperLanguage.PT
@@ -100,11 +122,44 @@ class WhisperActivity : AppCompatActivity() {
     private var currentEstimatedMs: Long? = null
     private var currentTotalAudioSeconds = 0.0
     private var currentEstimatedEfficiency: Double? = null
+
+    // Estados de gravação
+    @Volatile private var whiteRecordingActive = false
+    private var whiteRecordingThread: Thread? = null
+    private var whiteRecordingPcmFile: File? = null
+    private var whiteRecordingWavFile: File? = null
+    private var whiteRecordingAudioRecord: AudioRecord? = null
+    private var whiteRecordingStartedAt = 0L
+
+    @Volatile private var liveMicActive = false
+    private var liveMicThread: Thread? = null
+    private var liveMicAudioRecord: AudioRecord? = null
+    private var liveMicStartedAt = 0L
+
+    private val modelLoadLock = Any()
+    @Volatile private var currentlyLoadedModelKey: String? = null
+    private var pendingAudioAction: (() -> Unit)? = null
+
     private val transcriptionTimer = object : Runnable {
         override fun run() {
             if (!isTranscribing || transcriptionStartedAt <= 0L) return
             refreshTranscriptionStatus()
             timerHandler.postDelayed(this, 1000L)
+        }
+    }
+
+    private val recordingTicker = object : Runnable {
+        override fun run() {
+            if (!whiteRecordingActive && !liveMicActive) return
+            val startedAt = if (whiteRecordingActive) whiteRecordingStartedAt else liveMicStartedAt
+            if (startedAt > 0L) {
+                val elapsed = SystemClock.elapsedRealtime() - startedAt
+                val mins = (elapsed / 1000) / 60
+                val secs = (elapsed / 1000) % 60
+                val millis = elapsed % 1000
+                recordingTimer.text = String.format(Locale.US, "%02d:%02d.%03d", mins, secs, millis)
+            }
+            timerHandler.postDelayed(this, 50)
         }
     }
 
@@ -134,6 +189,19 @@ class WhisperActivity : AppCompatActivity() {
         buttonSaveToFolder = findViewById(R.id.button_save_to_folder)
         buttonSelectOutputFolder.visibility = View.GONE
         arrowInputOutput.visibility = View.GONE
+
+        buttonRecordingAction = findViewById(R.id.button_recording_action)
+        buttonLiveMicStop = findViewById(R.id.button_live_mic_stop)
+        recordingPanel = findViewById(R.id.recording_panel)
+        recordingTimer = findViewById(R.id.recording_timer)
+        liveTranscriptContainer = findViewById(R.id.live_transcript_container)
+        liveTranscriptText = findViewById(R.id.live_transcript_text)
+        liveTranscriptClipboardActions = findViewById(R.id.live_transcript_clipboard_actions)
+        buttonClearTranscript = findViewById(R.id.button_clear_transcript)
+        buttonShareLiveTranscript = findViewById(R.id.button_share_live_transcript)
+        buttonCopyLiveTranscript = findViewById(R.id.button_copy_live_transcript)
+        buttonPasteTranscript = findViewById(R.id.button_paste_transcript)
+
         advancedToggle = findViewById(R.id.advanced_toggle)
         advancedPanel = findViewById(R.id.advanced_panel)
         checkboxVad = findViewById(R.id.checkbox_vad)
@@ -201,11 +269,39 @@ class WhisperActivity : AppCompatActivity() {
             if (event.action == MotionEvent.ACTION_UP) view.performClick()
             false
         }
+        buttonRecordingAction.setOnClickListener {
+            if (whiteRecordingActive) stopWhiteRecording() else startWhiteRecording()
+        }
+        buttonLiveMicStop.setOnClickListener {
+            if (liveMicActive) stopLiveMicTranscription() else startLiveMicTranscription()
+        }
+        buttonClearTranscript.setOnClickListener {
+            liveTranscriptText.setText("")
+        }
+        buttonCopyLiveTranscript.setOnClickListener {
+            copyTranscriptToClipboard()
+        }
+        buttonShareLiveTranscript.setOnClickListener {
+            shareTranscript()
+        }
+        buttonPasteTranscript.setOnClickListener {
+            pasteTranscript()
+        }
+
+        if (selectedModel == null) {
+            val available = officialModels()
+            selectedModel = available.firstOrNull { it.file.exists() } ?: available.first()
+            buttonModel.text = selectedModel?.label ?: "Modelo"
+        }
+        buttonModel.visibility = View.VISIBLE
+        buttonLanguage.visibility = View.VISIBLE
+        buttonBackend.visibility = View.VISIBLE
+
         buttonLanguage.text = selectedLanguage.shortLabel
         buttonBackend.text = selectedBackend.shortLabel
         logToggle.visibility = View.VISIBLE
         val exitHandler = installCancelAndExitGuard(
-            isTaskRunning = { isTranscribing || isBusy },
+            isTaskRunning = { isTranscribing || isBusy || whiteRecordingActive || liveMicActive },
             cancelTask = { cancelRunningTaskForExit() }
         )
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
@@ -241,11 +337,36 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (whiteRecordingActive) {
+            whiteRecordingActive = false
+            try { whiteRecordingAudioRecord?.stop() } catch (_: Throwable) {}
+            try { whiteRecordingAudioRecord?.release() } catch (_: Throwable) {}
+        }
+        if (liveMicActive) {
+            liveMicActive = false
+            try { liveMicAudioRecord?.stop() } catch (_: Throwable) {}
+            try { liveMicAudioRecord?.release() } catch (_: Throwable) {}
+        }
         try {
             WhisperNative.releaseModel()
         } catch (_: Throwable) {
         }
+        currentlyLoadedModelKey = null
         super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_RECORD_AUDIO_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                pendingAudioAction?.invoke()
+                pendingAudioAction = null
+            } else {
+                status.text = "Permissão do microfone necessária para gravação."
+                Toast.makeText(this, "Permissão do microfone negada.", Toast.LENGTH_SHORT).show()
+                pendingAudioAction = null
+            }
+        }
     }
 
     @Deprecated("Deprecated Android callback kept for this legacy XML activity.")
@@ -657,10 +778,9 @@ class WhisperActivity : AppCompatActivity() {
                 runOnUiThread {
                     setTranscriptionStatus("Carregando modelo...")
                     updateGlobalLogText()
-                    updateTerminalText(terminalLines)
                 }
                 val modelStartedAt = SystemClock.elapsedRealtime()
-                val loaded = WhisperNative.loadModel(modelFile(model).absolutePath, backend.nativeKind, settings.flashAttention)
+                val loaded = synchronized(modelLoadLock) { ensureModelLoaded(model, backend, settings.flashAttention) }
                 modelLoadMs = SystemClock.elapsedRealtime() - modelStartedAt
                 checkNotCancelled()
                 if (!loaded) {
@@ -679,8 +799,9 @@ class WhisperActivity : AppCompatActivity() {
                 WhisperNative.lastLoadLog().trimEnd().takeIf { it.isNotBlank() }?.let {
                     appendLog(logLines, "Log de carregamento do modelo:\n$it")
                 }
-                appendLog(logLines, "Native backends:\n${WhisperNative.backendInfo()}")
-                runOnUiThread { updateTerminalText(terminalLines) }
+                updateGlobalLogText()
+                appendLog(logLines, "Transcrevendo...")
+                updateGlobalLogText()
 
                 convertedItems.forEachIndexed { index, converted ->
                     checkNotCancelled()
@@ -711,36 +832,46 @@ class WhisperActivity : AppCompatActivity() {
                             }
                         }
                         return object : WhisperNative.Callback {
-                        override fun onSegment(text: String, startMs: Long, endMs: Long) {
-                            val segment = text.trim()
-                            if (segment.isBlank()) return
-                            synchronized(liveText) {
-                                fileText.append(segment).append('\n')
-                                liveText.append(segment).append('\n')
+                            override fun onSegment(text: String, startMs: Long, endMs: Long) {
+                                val segment = text.trim()
+                                if (segment.isBlank()) return
+                                synchronized(liveText) {
+                                    fileText.append(segment).append('\n')
+                                    liveText.append(segment).append('\n')
+                                }
+                                runOnUiThread {
+                                    if (liveTranscriptContainer.visibility != View.VISIBLE) {
+                                        liveTranscriptContainer.visibility = View.VISIBLE
+                                        liveTranscriptClipboardActions.visibility = View.VISIBLE
+                                    }
+                                    val cur = liveTranscriptText.text.toString()
+                                    val sep = if (cur.isEmpty() || cur.endsWith("\n") || cur.endsWith(" ")) "" else " "
+                                    liveTranscriptText.append(sep + segment)
+                                    liveTranscriptText.setSelection(liveTranscriptText.text.length)
+                                }
+                                appendTerminal(terminalLines, "${formatTime(startMs)} --> ${formatTime(endMs)}  $segment")
+                                updateTerminalThrottled()
                             }
-                            appendTerminal(terminalLines, "${formatTime(startMs)} --> ${formatTime(endMs)}  $segment")
-                            updateTerminalThrottled()
-                        }
 
-                        override fun onProgress(progress: Int) {
-                            val safeProgress = progress.coerceIn(0, 100)
-                            appendTerminal(terminalLines, "whisper.cpp: progress $safeProgress%")
-                            runOnUiThread {
-                                setTranscriptionStatus(
-                                    "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name} ($languageLabel)... $safeProgress%",
-                                    safeProgress
-                                )
+                            override fun onProgress(progress: Int) {
+                                val safeProgress = progress.coerceIn(0, 100)
+                                appendTerminal(terminalLines, "whisper.cpp: progress $safeProgress%")
+                                runOnUiThread {
+                                    setTranscriptionStatus(
+                                        "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name} ($languageLabel)... $safeProgress%",
+                                        safeProgress
+                                    )
+                                }
+                                updateTerminalThrottled()
                             }
-                            updateTerminalThrottled()
-                        }
 
-                        override fun onNativeLog(line: String) {
-                            line.trimEnd().lineSequence()
-                                .filter { it.isNotBlank() }
-                                .forEach { appendTerminal(terminalLines, it) }
-                            updateTerminalThrottled(force = true)
+                            override fun onNativeLog(line: String) {
+                                line.trimEnd().lineSequence()
+                                    .filter { it.isNotBlank() }
+                                    .forEach { appendTerminal(terminalLines, it) }
+                                updateTerminalThrottled(force = true)
+                            }
                         }
-                    }
                     }
 
                     appendTerminal(terminalLines, "whisper.cpp: language=${selectedLanguage.code}")
@@ -788,7 +919,7 @@ class WhisperActivity : AppCompatActivity() {
                     }
                 }
 
-                WhisperNative.releaseModel()
+                releaseLoadedModel()
                 appendTerminal(terminalLines, "model released")
                 tempWavDir?.deleteRecursively()
                 appendTerminal(terminalLines, "temporary wav files removed")
@@ -821,6 +952,13 @@ class WhisperActivity : AppCompatActivity() {
                     buttonSaveToFolder.visibility = View.VISIBLE
                     buttonOutputExport.visibility = View.GONE
                     buttonOutputFolder.visibility = View.GONE
+
+                    val fullText = liveText.toString().trim()
+                    if (fullText.isNotBlank()) {
+                        liveTranscriptText.setText(fullText)
+                        liveTranscriptContainer.visibility = View.VISIBLE
+                        liveTranscriptClipboardActions.visibility = View.VISIBLE
+                    }
                     
                     status.text = "Transcrição concluída com sucesso! Clique no disquete para salvar."
                     updateGlobalLogText()
@@ -830,10 +968,7 @@ class WhisperActivity : AppCompatActivity() {
                 }
             } catch (e: CancellationException) {
                 Log.i(TAG, "Transcription cancelled", e)
-                try {
-                    WhisperNative.releaseModel()
-                } catch (_: Throwable) {
-                }
+                releaseLoadedModel()
                 tempWavDir?.deleteRecursively()
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
                 val cancelReport = buildErrorReport(
@@ -866,10 +1001,7 @@ class WhisperActivity : AppCompatActivity() {
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Transcription failed", e)
-                try {
-                    WhisperNative.releaseModel()
-                } catch (_: Throwable) {
-                }
+                releaseLoadedModel()
                 tempWavDir?.deleteRecursively()
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
                 val errorMessage = e.message ?: "falha inesperada"
@@ -1714,7 +1846,9 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun updateTranscribeEnabled() {
-        val enabled = !isBusy && selectedItems.isNotEmpty() && selectedModel?.let { modelFile(it).exists() } == true
+        val hasMedia = selectedItems.isNotEmpty()
+        buttonTranscribe.visibility = if (hasMedia) View.VISIBLE else View.GONE
+        val enabled = !isBusy && hasMedia && selectedModel?.let { modelFile(it).exists() } == true && !whiteRecordingActive && !liveMicActive
         buttonTranscribe.alpha = if (enabled) 1f else 0.45f
         buttonTranscribe.isClickable = enabled
         buttonTranscribe.isFocusable = enabled
@@ -1732,6 +1866,10 @@ class WhisperActivity : AppCompatActivity() {
         advancedToggle.isEnabled = !busy
         advancedToggle.alpha = if (busy) 0.45f else 1f
         setAdvancedEnabled(!busy)
+        buttonRecordingAction.isEnabled = !busy && !liveMicActive
+        buttonRecordingAction.alpha = if (busy || liveMicActive) 0.45f else 1f
+        buttonLiveMicStop.isEnabled = !busy && !whiteRecordingActive
+        buttonLiveMicStop.alpha = if (busy || whiteRecordingActive) 0.45f else 1f
         if (busy && isTranscribing) {
             buttonTranscribe.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
             buttonTranscribe.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
@@ -1833,6 +1971,14 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun cancelRunningTaskForExit() {
         cancelRequested = true
+        if (whiteRecordingActive) {
+            whiteRecordingActive = false
+            try { whiteRecordingAudioRecord?.stop() } catch (_: Throwable) {}
+        }
+        if (liveMicActive) {
+            liveMicActive = false
+            try { liveMicAudioRecord?.stop() } catch (_: Throwable) {}
+        }
         if (isTranscribing) {
             cancelTranscription()
         } else {
@@ -1842,6 +1988,552 @@ class WhisperActivity : AppCompatActivity() {
         try {
             WhisperNative.cancelTranscription()
         } catch (_: Throwable) {
+        }
+    }
+
+    private fun checkAudioPermission(onGranted: () -> Unit) {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            onGranted()
+        } else {
+            pendingAudioAction = onGranted
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.RECORD_AUDIO),
+                REQUEST_RECORD_AUDIO_PERMISSION
+            )
+        }
+    }
+
+    private fun copyTranscriptToClipboard() {
+        val text = liveTranscriptText.text.toString().trim()
+        if (text.isNotEmpty()) {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Transcrição Whisper", text))
+            Toast.makeText(this, "Transcrição copiada!", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Nenhum texto para copiar.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun shareTranscript() {
+        val text = liveTranscriptText.text.toString().trim()
+        if (text.isNotEmpty()) {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            startActivity(Intent.createChooser(intent, "Compartilhar transcrição"))
+        } else {
+            Toast.makeText(this, "Nenhum texto para compartilhar.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun pasteTranscript() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+        if (!clip.isNullOrBlank()) {
+            val cur = liveTranscriptText.text.toString()
+            val sep = if (cur.isEmpty() || cur.endsWith(" ") || cur.endsWith("\n")) "" else " "
+            liveTranscriptText.append(sep + clip)
+        }
+    }
+
+    private fun ensureModelLoaded(model: WhisperModel, backend: WhisperBackend, flashAttention: Boolean): Boolean {
+        val key = "${model.file.absolutePath}|${backend.nativeKind}|$flashAttention"
+        if (currentlyLoadedModelKey == key) return true
+        if (currentlyLoadedModelKey != null) {
+            try { WhisperNative.releaseModel() } catch (_: Throwable) {}
+            currentlyLoadedModelKey = null
+        }
+        val ok = WhisperNative.loadModel(modelFile(model).absolutePath, backend.nativeKind, flashAttention)
+        if (ok) {
+            currentlyLoadedModelKey = key
+        }
+        return ok
+    }
+
+    private fun releaseLoadedModel() {
+        try { WhisperNative.releaseModel() } catch (_: Throwable) {}
+        currentlyLoadedModelKey = null
+    }
+
+    private fun writeWavFile(file: File, pcm: ByteArray, sampleRate: Int) {
+        FileOutputStream(file).use { output ->
+            val byteRate = sampleRate * 2
+            output.write("RIFF".toByteArray(Charsets.US_ASCII))
+            writeIntLe(output, 36 + pcm.size)
+            output.write("WAVE".toByteArray(Charsets.US_ASCII))
+            output.write("fmt ".toByteArray(Charsets.US_ASCII))
+            writeIntLe(output, 16)
+            writeShortLe(output, 1)
+            writeShortLe(output, 1)
+            writeIntLe(output, sampleRate)
+            writeIntLe(output, byteRate)
+            writeShortLe(output, 2)
+            writeShortLe(output, 16)
+            output.write("data".toByteArray(Charsets.US_ASCII))
+            writeIntLe(output, pcm.size)
+            output.write(pcm)
+        }
+    }
+
+    private fun writeWavFile(file: File, pcmFile: File, sampleRate: Int) {
+        val pcmSize = pcmFile.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        FileOutputStream(file).use { output ->
+            val byteRate = sampleRate * 2
+            output.write("RIFF".toByteArray(Charsets.US_ASCII))
+            writeIntLe(output, 36 + pcmSize)
+            output.write("WAVE".toByteArray(Charsets.US_ASCII))
+            output.write("fmt ".toByteArray(Charsets.US_ASCII))
+            writeIntLe(output, 16)
+            writeShortLe(output, 1)
+            writeShortLe(output, 1)
+            writeIntLe(output, sampleRate)
+            writeIntLe(output, byteRate)
+            writeShortLe(output, 2)
+            writeShortLe(output, 16)
+            output.write("data".toByteArray(Charsets.US_ASCII))
+            writeIntLe(output, pcmSize)
+            pcmFile.inputStream().use { input -> input.copyTo(output) }
+        }
+    }
+
+    private fun writeIntLe(output: FileOutputStream, value: Int) {
+        output.write(byteArrayOf(
+            (value and 0xff).toByte(),
+            ((value shr 8) and 0xff).toByte(),
+            ((value shr 16) and 0xff).toByte(),
+            ((value shr 24) and 0xff).toByte()
+        ))
+    }
+
+    private fun writeShortLe(output: FileOutputStream, value: Int) {
+        output.write(byteArrayOf(
+            (value and 0xff).toByte(),
+            ((value shr 8) and 0xff).toByte()
+        ))
+    }
+
+    private fun startWhiteRecording() {
+        if (liveMicActive || isBusy || isTranscribing) return
+        checkAudioPermission {
+            val model = selectedModel ?: run {
+                status.text = "Selecione um modelo."
+                return@checkAudioPermission
+            }
+            if (!modelFile(model).exists()) {
+                confirmModelDownload(model)
+                return@checkAudioPermission
+            }
+
+            whiteRecordingActive = true
+            whiteRecordingStartedAt = SystemClock.elapsedRealtime()
+            buttonRecordingAction.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
+            buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+            buttonRecordingAction.contentDescription = "Parar gravação"
+
+            buttonLiveMicStop.isEnabled = false
+            buttonLiveMicStop.alpha = 0.4f
+            findViewById<View>(R.id.button_select_media).isEnabled = false
+            buttonTranscribe.isEnabled = false
+            buttonModel.isEnabled = false
+            buttonBackend.isEnabled = false
+
+            recordingPanel.visibility = View.VISIBLE
+            recordingTimer.text = "00:00.000"
+            timerHandler.post(recordingTicker)
+            status.text = "Gravando áudio do microfone..."
+
+            val stamp = System.currentTimeMillis()
+            whiteRecordingPcmFile = File(cacheDir, "whisper_mic_$stamp.pcm")
+            whiteRecordingWavFile = File(cacheDir, "whisper_mic_$stamp.wav")
+
+            whiteRecordingThread = Thread {
+                recordWhitePcm()
+            }.also { it.start() }
+        }
+    }
+
+    private fun stopWhiteRecording() {
+        if (!whiteRecordingActive) return
+        whiteRecordingActive = false
+        timerHandler.removeCallbacks(recordingTicker)
+
+        buttonRecordingAction.setImageResource(R.drawable.ic_mic_outline)
+        buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
+        buttonRecordingAction.contentDescription = "Gravar e transcrever"
+        recordingPanel.visibility = View.GONE
+
+        buttonLiveMicStop.isEnabled = true
+        buttonLiveMicStop.alpha = 1.0f
+        findViewById<View>(R.id.button_select_media).isEnabled = true
+        buttonModel.isEnabled = true
+        buttonBackend.isEnabled = true
+        updateTranscribeEnabled()
+
+        val pcm = whiteRecordingPcmFile
+        val wav = whiteRecordingWavFile
+
+        Thread {
+            try {
+                whiteRecordingThread?.join(3000)
+            } catch (_: Throwable) {}
+            whiteRecordingThread = null
+
+            if (pcm != null && pcm.exists() && pcm.length() > 0 && wav != null) {
+                writeWavFile(wav, pcm, 16000)
+                pcm.delete()
+                whiteRecordingPcmFile = null
+
+                runOnUiThread {
+                    transcribeRecordedWav(wav)
+                }
+            } else {
+                runOnUiThread {
+                    status.text = "Gravação vazia ou cancelada."
+                }
+                pcm?.delete()
+                wav?.delete()
+            }
+        }.start()
+    }
+
+    private fun recordWhitePcm() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            runOnUiThread {
+                whiteRecordingActive = false
+                status.text = "Permissão do microfone removida."
+                buttonRecordingAction.setImageResource(R.drawable.ic_mic_outline)
+                buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
+            }
+            return
+        }
+        val sampleRate = 16000
+        val channelConfig = AudioFormat.CHANNEL_IN_MONO
+        val encoding = AudioFormat.ENCODING_PCM_16BIT
+        val minBuffer = AudioRecord.getMinBufferSize(sampleRate, channelConfig, encoding)
+        if (minBuffer <= 0) {
+            runOnUiThread {
+                whiteRecordingActive = false
+                status.text = "Microfone indisponível."
+                buttonRecordingAction.setImageResource(R.drawable.ic_mic_outline)
+                buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
+            }
+            return
+        }
+        val recorder = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            sampleRate,
+            channelConfig,
+            encoding,
+            minBuffer * 2
+        )
+        whiteRecordingAudioRecord = recorder
+        try {
+            val pcmFile = whiteRecordingPcmFile ?: return
+            FileOutputStream(pcmFile).use { output ->
+                val buffer = ByteArray(minBuffer)
+                recorder.startRecording()
+                try {
+                    while (whiteRecordingActive) {
+                        val read = recorder.read(buffer, 0, buffer.size)
+                        if (read > 0) output.write(buffer, 0, read)
+                    }
+                } finally {
+                    runCatching { recorder.stop() }
+                    output.flush()
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "White microphone recording failed", e)
+        } finally {
+            runCatching { recorder.stop() }
+            recorder.release()
+            if (whiteRecordingAudioRecord == recorder) whiteRecordingAudioRecord = null
+        }
+    }
+
+    private fun transcribeRecordedWav(wavFile: File) {
+        val model = selectedModel ?: return
+        val backend = selectedBackend
+        val settings = readAdvancedSettings()
+
+        liveTranscriptContainer.visibility = View.VISIBLE
+        liveTranscriptClipboardActions.visibility = View.VISIBLE
+        status.text = "Carregando modelo e transcrevendo..."
+        progress.visibility = View.VISIBLE
+
+        Thread {
+            try {
+                val modelLoaded = synchronized(modelLoadLock) {
+                    ensureModelLoaded(model, backend, settings.flashAttention)
+                }
+                if (!modelLoaded) {
+                    val err = WhisperNative.lastError().ifBlank { "Falha ao carregar modelo." }
+                    runOnUiThread {
+                        status.text = "Erro: $err"
+                        progress.visibility = View.GONE
+                    }
+                    return@Thread
+                }
+
+                val cb = object : WhisperNative.Callback {
+                    override fun onSegment(text: String, startMs: Long, endMs: Long) {
+                        val segment = text.trim()
+                        if (segment.isNotBlank()) {
+                            runOnUiThread {
+                                val cur = liveTranscriptText.text.toString()
+                                val sep = if (cur.isEmpty() || cur.endsWith("\n") || cur.endsWith(" ")) "" else " "
+                                liveTranscriptText.append(sep + segment)
+                                liveTranscriptText.setSelection(liveTranscriptText.text.length)
+                            }
+                        }
+                    }
+                    override fun onProgress(progress: Int) {
+                        runOnUiThread {
+                            status.text = "Transcrevendo gravação... $progress%"
+                        }
+                    }
+                    override fun onNativeLog(line: String) {}
+                }
+
+                val returnedText = synchronized(modelLoadLock) {
+                    WhisperNative.transcribe(
+                        wavFile.absolutePath,
+                        selectedLanguage.code,
+                        settings.beamSize,
+                        settings.bestOf,
+                        settings.wordTimestamps,
+                        settings.vadFilter,
+                        if (settings.vadFilter) vadModelFile().absolutePath else "",
+                        cb
+                    ).trim()
+                }
+
+                runOnUiThread {
+                    progress.visibility = View.GONE
+                    if (returnedText.startsWith("Cancelado:")) {
+                        status.text = "Transcrição cancelada."
+                    } else if (returnedText.startsWith("Erro:")) {
+                        status.text = returnedText
+                    } else {
+                        status.text = "Transcrição concluída com sucesso!"
+                        if (liveTranscriptText.text.isEmpty() && returnedText.isNotBlank()) {
+                            liveTranscriptText.setText(returnedText)
+                        }
+                    }
+                }
+            } catch (e: Throwable) {
+                Log.e(TAG, "Error transcribing recorded wav", e)
+                runOnUiThread {
+                    progress.visibility = View.GONE
+                    status.text = "Erro: ${e.message}"
+                }
+            } finally {
+                wavFile.delete()
+            }
+        }.start()
+    }
+
+    private fun startLiveMicTranscription() {
+        if (whiteRecordingActive || isBusy || isTranscribing) return
+        checkAudioPermission {
+            val model = selectedModel ?: run {
+                status.text = "Selecione um modelo."
+                return@checkAudioPermission
+            }
+            if (!modelFile(model).exists()) {
+                confirmModelDownload(model)
+                return@checkAudioPermission
+            }
+
+            liveMicActive = true
+            liveMicStartedAt = SystemClock.elapsedRealtime()
+            buttonLiveMicStop.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
+            buttonLiveMicStop.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+            buttonLiveMicStop.contentDescription = "Parar transcrição ao vivo"
+
+            buttonRecordingAction.isEnabled = false
+            buttonRecordingAction.alpha = 0.4f
+            findViewById<View>(R.id.button_select_media).isEnabled = false
+            buttonTranscribe.isEnabled = false
+            buttonModel.isEnabled = false
+            buttonBackend.isEnabled = false
+
+            recordingPanel.visibility = View.VISIBLE
+            recordingTimer.text = "00:00.000"
+            liveTranscriptContainer.visibility = View.VISIBLE
+            liveTranscriptClipboardActions.visibility = View.VISIBLE
+            status.text = "Carregando modelo para tempo real..."
+            timerHandler.post(recordingTicker)
+
+            val backend = selectedBackend
+            val settings = readAdvancedSettings()
+
+            liveMicThread = Thread {
+                runLiveMicLoop(model, backend, settings)
+            }.also { it.start() }
+        }
+    }
+
+    private fun stopLiveMicTranscription() {
+        if (!liveMicActive) return
+        liveMicActive = false
+        timerHandler.removeCallbacks(recordingTicker)
+
+        Thread {
+            try {
+                liveMicThread?.join(3000)
+            } catch (_: Throwable) {}
+            liveMicThread = null
+
+            runOnUiThread {
+                buttonLiveMicStop.setImageResource(R.drawable.ic_mic_outline_red)
+                buttonLiveMicStop.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
+                buttonLiveMicStop.contentDescription = "Transcrição ao vivo"
+                recordingPanel.visibility = View.GONE
+
+                buttonRecordingAction.isEnabled = true
+                buttonRecordingAction.alpha = 1.0f
+                findViewById<View>(R.id.button_select_media).isEnabled = true
+                buttonModel.isEnabled = true
+                buttonBackend.isEnabled = true
+                updateTranscribeEnabled()
+
+                status.text = "Transcrição ao vivo finalizada."
+            }
+        }.start()
+    }
+
+    private fun runLiveMicLoop(model: WhisperModel, backend: WhisperBackend, settings: WhisperAdvancedSettings) {
+        val sampleRate = 16000
+        val channelConfig = AudioFormat.CHANNEL_IN_MONO
+        val encoding = AudioFormat.ENCODING_PCM_16BIT
+        val minBuffer = AudioRecord.getMinBufferSize(sampleRate, channelConfig, encoding)
+        if (minBuffer <= 0) {
+            runOnUiThread {
+                status.text = "Microfone indisponível."
+                stopLiveMicTranscription()
+            }
+            return
+        }
+
+        val modelLoaded = synchronized(modelLoadLock) {
+            ensureModelLoaded(model, backend, settings.flashAttention)
+        }
+        if (!modelLoaded) {
+            runOnUiThread {
+                val err = WhisperNative.lastError().ifBlank { "Falha ao carregar modelo para tempo real." }
+                status.text = "Erro no modelo: $err"
+                stopLiveMicTranscription()
+            }
+            return
+        }
+
+        runOnUiThread {
+            status.text = "Ouvindo e transcrevendo ao vivo..."
+        }
+
+        var recorder: AudioRecord? = null
+        val chunkIntervalMillis = 2000L
+        val chunkBytes = (sampleRate * 2 * chunkIntervalMillis / 1000).toInt()
+        val readBuffer = ByteArray(minBuffer.coerceAtLeast(4096))
+        val audioWindow = ByteArrayOutputStream(chunkBytes * 2)
+        var chunkIndex = 0
+
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            runOnUiThread {
+                status.text = "Permissão do microfone não concedida."
+                stopLiveMicTranscription()
+            }
+            return
+        }
+
+        try {
+            val recordBufferSize = maxOf(minBuffer * 2, sampleRate * 2)
+            recorder = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig, encoding, recordBufferSize)
+            liveMicAudioRecord = recorder
+            recorder.startRecording()
+
+            while (liveMicActive) {
+                val read = recorder.read(readBuffer, 0, readBuffer.size)
+                if (read <= 0) continue
+                audioWindow.write(readBuffer, 0, read)
+
+                if (audioWindow.size() >= chunkBytes) {
+                    val pcmBytes = audioWindow.toByteArray()
+                    audioWindow.reset()
+                    processLiveChunk(pcmBytes, chunkIndex++, selectedLanguage.code)
+                }
+            }
+
+            // Processar áudio restante ao parar
+            if (audioWindow.size() >= (sampleRate * 2 * 0.5)) {
+                val remainingPcm = audioWindow.toByteArray()
+                audioWindow.reset()
+                processLiveChunk(remainingPcm, chunkIndex++, selectedLanguage.code)
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Error in live mic loop", e)
+            if (liveMicActive) {
+                runOnUiThread {
+                    status.text = "Erro na gravação ao vivo: ${e.message}"
+                }
+            }
+        } finally {
+            try { recorder?.stop() } catch (_: Throwable) {}
+            recorder?.release()
+            liveMicAudioRecord = null
+        }
+    }
+
+    private fun processLiveChunk(pcm: ByteArray, index: Int, langCode: String) {
+        var sumSquares = 0.0
+        val numSamples = pcm.size / 2
+        for (i in 0 until numSamples) {
+            val sample = (pcm[i * 2].toInt() and 0xFF) or (pcm[i * 2 + 1].toInt() shl 8)
+            val sampleShort = sample.toShort()
+            sumSquares += sampleShort * sampleShort
+        }
+        val rms = sqrt(sumSquares / numSamples)
+        if (rms < 250) {
+            return
+        }
+
+        val chunkWav = File(cacheDir, "live_chunk_${System.currentTimeMillis()}_$index.wav")
+        try {
+            writeWavFile(chunkWav, pcm, 16000)
+            val dummyCallback = object : WhisperNative.Callback {
+                override fun onSegment(text: String, startMs: Long, endMs: Long) {}
+                override fun onProgress(progress: Int) {}
+                override fun onNativeLog(line: String) {}
+            }
+
+            val text = synchronized(modelLoadLock) {
+                WhisperNative.transcribe(
+                    chunkWav.absolutePath,
+                    langCode,
+                    1,
+                    1,
+                    false,
+                    false,
+                    "",
+                    dummyCallback
+                ).trim()
+            }
+
+            if (text.isNotBlank() && !text.startsWith("Cancelado:") && !text.startsWith("Erro:")) {
+                runOnUiThread {
+                    val current = liveTranscriptText.text.toString()
+                    val separator = if (current.isEmpty() || current.endsWith("\n") || current.endsWith(" ")) "" else " "
+                    liveTranscriptText.append(separator + text)
+                    liveTranscriptText.setSelection(liveTranscriptText.text.length)
+                }
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "Failed to transcribe live chunk $index", e)
+        } finally {
+            chunkWav.delete()
         }
     }
 
@@ -1896,6 +2588,7 @@ class WhisperActivity : AppCompatActivity() {
         private const val REQUEST_PICK_MODEL = 6103
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 6104
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 6105
+        private const val REQUEST_RECORD_AUDIO_PERMISSION = 6106
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val WHISPER_OUTPUT_FOLDER = "Whisper"
         private const val GLOBAL_LOG_NAME = "whisper_log.txt"

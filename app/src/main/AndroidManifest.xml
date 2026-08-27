@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -25,6 +26,16 @@
         <uses-native-library
             android:name="libOpenCL.so"
             android:required="false" />
+
+        <!-- O onnxruntime-android registra um ContentProvider (TelemetryInitializer) que roda
+             ANTES do Application.onCreate() e faz System.loadLibrary("onnxruntime"). Além de
+             telemetria indesejada, isso carregaria os ~32MB da lib ONNX a CADA abertura do app
+             (mesmo sem usar o Granite) e, em aparelhos com onnxruntime OEM no /system/lib64,
+             forçaria o fallback que estoura o namespace clns-9. Removemos o provider. -->
+        <provider
+            android:name="ai.onnxruntime.TelemetryInitializer"
+            android:authorities="${applicationId}.onnxruntime_telemetry_initializer"
+            tools:node="remove" />
 
         <activity
             android:name=".RgCalculatorActivity"
@@ -113,7 +124,8 @@
         <activity
             android:name=".GraniteActivity"
             android:screenOrientation="portrait"
-            android:exported="false" />
+            android:exported="false"
+            android:largeHeap="true" />
 
         <activity
             android:name=".experimental.npu.NpuTestActivity"
