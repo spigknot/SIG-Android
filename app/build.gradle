@@ -77,8 +77,8 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 35
-        versionName "1.472"
+        versionCode 36
+        versionName "1.473"
 
         buildConfigField "boolean", "ENABLE_NPU_TESTS", "true"
 

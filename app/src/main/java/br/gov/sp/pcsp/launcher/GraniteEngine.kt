@@ -459,6 +459,8 @@ object GraniteEngine {
                         if (total > 0L) {
                             val percent = ((copiedBytes * 100L) / totalBytes.coerceAtLeast(1L)).coerceIn(0L, 100L).toInt()
                             onProgress(percent, copiedBytes / 1048576L)
+                        } else {
+                            onProgress(-1, copiedBytes / 1048576L)
                         }
                     }
                 }

@@ -388,17 +388,34 @@ class GraniteActivity : AppCompatActivity() {
     }
 
     private fun downloadPackage(onSuccess: () -> Unit) {
-        status.text = "Preparando download..."
+        val progressView = layoutInflater.inflate(R.layout.dialog_model_download, null)
+        val statusText = progressView.findViewById<TextView>(R.id.modelDownloadStatusText)
+        val progressBar = progressView.findViewById<ProgressBar>(R.id.modelDownloadProgressBar)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Baixando modelo Granite 5.0 Turbo")
+            .setView(progressView)
+            .setCancelable(false)
+            .create()
+        dialog.show()
         setBusy(true)
         Thread {
             try {
                 GraniteEngine.downloadPackage(
                     context = this,
                     onProgress = { percent, mb ->
-                        runOnUiThread { status.text = "Baixando modelo: $percent% ($mb MB)" }
+                        runOnUiThread {
+                            val totalMb = GraniteEngine.packageDownloadBytes() / 1048576L
+                            if (percent >= 0) {
+                                progressBar.progress = percent.coerceIn(0, 100)
+                                statusText.text = "$percent% ($mb MB de $totalMb MB)"
+                            } else {
+                                statusText.text = "Baixando... $mb MB"
+                            }
+                        }
                     }
                 )
                 runOnUiThread {
+                    dialog.dismiss()
                     setBusy(false)
                     status.text = "Modelo pronto."
                     onSuccess()
@@ -406,6 +423,7 @@ class GraniteActivity : AppCompatActivity() {
             } catch (e: Throwable) {
                 Log.e(TAG, "Granite download failed", e)
                 runOnUiThread {
+                    dialog.dismiss()
                     setBusy(false)
                     status.text = "Erro ao baixar modelo: ${e.message ?: "falha inesperada"}"
                 }
