@@ -7,11 +7,11 @@ object ImeiApiSettings {
     private const val KEY_API = "imei_check_api_key"
 
     fun apiKey(): String {
-        return EncryptedApiKeyStore.get(preferences(), KEY_API)
+        return ApiKeyStore.get(preferences(), KEY_API)
     }
 
     fun setApiKey(value: String) {
-        EncryptedApiKeyStore.put(preferences(), KEY_API, value)
+        ApiKeyStore.put(preferences(), KEY_API, value)
     }
 
     private fun preferences() = SigApplication.appInstance.getSharedPreferences(

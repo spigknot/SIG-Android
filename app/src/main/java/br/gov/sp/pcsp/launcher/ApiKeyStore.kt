@@ -13,57 +13,39 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Stores API keys encrypted with a key held by Android Keystore.
- * Existing plaintext values are migrated the first time they are read.
+ * Armazena chaves de API em texto simples no SharedPreferences do app.
+ *
+ * As chaves não são criptografadas: ficam no armazenamento privado do app
+ * (SharedPreferences MODE_PRIVATE) e são mascaradas na tela pela UI.
+ * Valores legados criptografados (prefixo "enc:v1:") são migrados para texto
+ * simples na primeira leitura.
  */
-internal object EncryptedApiKeyStore {
-    private const val TAG = "EncryptedApiKeyStore"
+internal object ApiKeyStore {
+    private const val TAG = "ApiKeyStore"
     private const val KEYSTORE = "AndroidKeyStore"
     private const val KEY_ALIAS = "sig_api_keys_v1"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
     private const val PREFIX = "enc:v1:"
 
-    @Synchronized
     fun get(preferences: SharedPreferences, key: String): String {
         val stored = preferences.getString(key, null) ?: return ""
-        if (!stored.startsWith(PREFIX)) {
-            val legacy = stored.trim()
-            if (legacy.isNotBlank()) {
-                encrypt(legacy)?.let { encrypted ->
-                    preferences.edit().putString(key, encrypted).apply()
-                }
-            }
-            return legacy
-        }
-        return decrypt(stored).orEmpty()
+        if (!stored.startsWith(PREFIX)) return stored
+        // Migração one-time de valor legado criptografado para texto simples.
+        val plain = decrypt(stored).orEmpty()
+        preferences.edit().putString(key, plain).apply()
+        return plain
     }
 
-    @Synchronized
     fun put(preferences: SharedPreferences, key: String, value: String) {
         val clean = value.trim()
         if (clean.isBlank()) {
             preferences.edit().remove(key).apply()
             return
         }
-        val encrypted = encrypt(clean)
-        if (encrypted == null) {
-            Log.e(TAG, "Não foi possível proteger a chave $key; valor não persistido")
-            return
-        }
-        preferences.edit().putString(key, encrypted).apply()
+        preferences.edit().putString(key, clean).apply()
     }
 
-    private fun encrypt(value: String): String? = runCatching {
-        val cipher = Cipher.getInstance(TRANSFORMATION).apply {
-            init(Cipher.ENCRYPT_MODE, getOrCreateKey())
-        }
-        val iv = Base64.encodeToString(cipher.iv, Base64.NO_WRAP)
-        val payload = Base64.encodeToString(
-            cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8)),
-            Base64.NO_WRAP
-        )
-        "$PREFIX$iv.$payload"
-    }.onFailure { Log.e(TAG, "Falha ao criptografar chave", it) }.getOrNull()
+    // --- apenas migração de valores legados criptografados ---
 
     private fun decrypt(value: String): String? = runCatching {
         val encoded = value.removePrefix(PREFIX).split('.', limit = 2)
@@ -74,7 +56,7 @@ internal object EncryptedApiKeyStore {
             init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, iv))
         }
         String(cipher.doFinal(payload), StandardCharsets.UTF_8).trim()
-    }.onFailure { Log.e(TAG, "Falha ao descriptografar chave", it) }.getOrNull()
+    }.onFailure { Log.e(TAG, "Falha ao migrar chave", it) }.getOrNull()
 
     private fun getOrCreateKey(): SecretKey {
         val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }

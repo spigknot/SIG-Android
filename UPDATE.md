@@ -14,7 +14,7 @@ bump da versão (3 lugares) → build (test+lint+assemble) → APK no O:\ → co
 ```
 
 - **Distribuição do APK**: GitHub Releases (`spigknot/SIG-Android`), asset `sig.apk` — SEMPRE a versão atual (release anterior é deletada).
-- **Dependências nativas** (ffmpeg/whisper/silero, baixadas na 1ª execução): Cloudflare R2, SEMPRE no bucket `sig-android` (`https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-<abi>.zip`). Os ZIPs são versionados separadamente e NÃO são regenerados a cada release somente do APK. O Google Drive está APOSENTADO para o app novo (APKs antigos ainda usam o Drive — não mexer nos arquivos de lá enquanto houver APKs antigos em campo).
+- **Dependências nativas** (ffmpeg/whisper/silero/**onnxruntime do Granite**, baixadas na 1ª execução): Cloudflare R2, SEMPRE no bucket `sig-android` (`https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-<abi>.zip`). Os ZIPs são versionados separadamente e NÃO são regenerados a cada release somente do APK. **O APK NÃO embute o ONNX Runtime** (o `app/build.gradle` exclui `libonnxruntime*.so` via `packaging.jniLibs.excludes`) — o `NativeDependencyManager.activateIfInstalled` seta `onnxruntime.native.path` para o `libDir` do pacote, e o loader do ONNX carrega as duas libs de lá. O Google Drive está APOSENTADO para o app novo (APKs antigos ainda usam o Drive — não mexer nos arquivos de lá enquanto houver APKs antigos em campo).
 - **Credenciais R2**: usar um `release/r2_config.json` local e ignorado pelo Git (modelo em `release/r2_config.example.json`), com apenas `endpoint`, `access_key_id` e `secret_access_key` da chave dedicada ao bucket `sig-android`. Não gravar tokens `cfat...` no projeto.
 - **Verificação de atualização**: o app consulta `releases/latest` do GitHub na abertura (silencioso) e compara com o `APP_VERSION` embutido — por isso o bump do `APP_VERSION` é OBRIGATÓRIO a cada versão.
 
@@ -183,7 +183,7 @@ a fonte da verdade e deve evoluir com a prática.
 | `RequestTimeTooSkewed` no R2 | relógio do Windows dessincronizado (w32time parado; >15 min de diferença) | `powershell -c "Start-Service w32time; w32tm /resync"` (elevação); conferir `date -u` vs `curl -sI https://api.cloudflare.com \| grep -i ^date:` |
 | ZIPs de dependências locais ausentes ou com SHA diferente | a release é somente do APK, ou há reconstruções locais; os ZIPs nativos são versionados separadamente | em release somente do APK, reutilizar os ZIPs já publicados no R2; se o pacote nativo mudou, gerar e aceitar os arquivos que batem com `NativeDependencyManager.kt` antes de publicar |
 | `O:\` desmontada no cp | unidade de rede indisponível | ignorar (destino menos importante); seguir com commit/GitHub |
-| Dependência nativa baixando do Drive | `NativeDependencyManager.kt` com URL antiga | usar `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-<abi>.zip` |
+| Dependência nativa baixando do Drive | `NativeDependencyManager.kt` com URL antiga | usar `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-<abi>.zip` |
 | `EPERM` ao salvar TXT do Whisper/Ocorrência ou ao enviar texto para gerenciador de arquivos | Android com armazenamento segmentado: a pasta pública `SIG` não está autorizada e `ACTION_SEND` recebeu somente `EXTRA_TEXT` | usar o diretório externo privado como fallback e compartilhar um `.txt` real por `FileProvider`/`EXTRA_STREAM`; exportar para a pasta escolhida via SAF |
 
 ---

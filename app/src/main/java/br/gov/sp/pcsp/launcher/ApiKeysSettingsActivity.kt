@@ -3,6 +3,7 @@ package br.gov.sp.pcsp.launcher
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.text.method.PasswordTransformationMethod
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
@@ -17,6 +18,8 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     private lateinit var assemblyaiKey: EditText
     private lateinit var elevenlabsKey: EditText
     private lateinit var imeiCheckKey: EditText
+    private lateinit var buttonToggleKeys: Button
+    private var keysRevealed = false
     private var importPickerOpen = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -29,9 +32,11 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         assemblyaiKey = findViewById(R.id.edit_assemblyai_key)
         elevenlabsKey = findViewById(R.id.edit_elevenlabs_key)
         imeiCheckKey = findViewById(R.id.edit_imei_check_key)
+        buttonToggleKeys = findViewById(R.id.button_toggle_keys)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
         findViewById<Button>(R.id.button_import_api_keys).setOnClickListener { openImportPicker() }
         findViewById<Button>(R.id.button_save_api_keys).setOnClickListener { saveKeys() }
+        buttonToggleKeys.setOnClickListener { toggleKeysVisibility() }
     }
 
     @Deprecated("Deprecated Android callback kept for this legacy XML activity.")
@@ -60,6 +65,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         assemblyaiKey.setText(GrokApiSettings.assemblyaiApiKey())
         elevenlabsKey.setText(GrokApiSettings.elevenlabsApiKey())
         imeiCheckKey.setText(ImeiApiSettings.apiKey())
+        applyKeysMask()
     }
 
     private fun saveKeys() {
@@ -77,6 +83,20 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
             "Chaves salvas. xAI: $xaiStatus; Deepseek: $deepseekStatus; Deepgram: $deepgramStatus.",
             Toast.LENGTH_LONG
         ).show()
+    }
+
+    private fun toggleKeysVisibility() {
+        keysRevealed = !keysRevealed
+        applyKeysMask()
+    }
+
+    private fun applyKeysMask() {
+        val method: android.text.method.TransformationMethod? =
+            if (keysRevealed) null else PasswordTransformationMethod.getInstance()
+        listOf(xaiKey, deepseekKey, deepgramKey, assemblyaiKey, elevenlabsKey, imeiCheckKey).forEach {
+            it.transformationMethod = method
+        }
+        buttonToggleKeys.text = if (keysRevealed) "Ocultar" else "Revelar"
     }
 
     private fun openImportPicker() {

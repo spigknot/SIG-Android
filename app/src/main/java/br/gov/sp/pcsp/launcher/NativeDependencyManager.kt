@@ -13,22 +13,23 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipInputStream
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "1"
+    const val COMPONENT_VERSION = "2"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
+    private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
     private const val MARKER_NAME = ".installed"
     private const val SILERO_MODEL = "ggml-silero-v6.2.0.bin"
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-arm64-v8a.zip",
-            "b777ae0dfe90ae73fe91a2c72286a75d36d49a40bcf14fb49de3aed05f8f2533",
-            41_353_214L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-arm64-v8a.zip",
+            "402255cd51a4a31ba337bb8fe240b566b616507b3c09ae7eae98365df0cce958",
+            42_633_501L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v1-x86_64.zip",
-            "0d8b5b948b7b6a50a3dd3e3533374d837a0ec78d937d28addcee7ff2eaf9fb8f",
-            43_186_016L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-x86_64.zip",
+            "3a148ed2dea71f12e6eab8bbf2e76bd1df4fabccfc5d3e0d6001e0352788b9cf",
+            45_918_603L
         )
     )
 
@@ -45,7 +46,9 @@ object NativeDependencyManager {
         "libffmpegkit.so",
         "libomp.so",
         "libsig_whisper.so",
-        "libsig_npu_probe.so"
+        "libsig_npu_probe.so",
+        "libonnxruntime.so",
+        "libonnxruntime4j_jni.so"
     )
     private val loadedLibraries = ConcurrentHashMap.newKeySet<String>()
 
@@ -70,6 +73,10 @@ object NativeDependencyManager {
         val abi = supportedAbi() ?: return false
         val libDir = File(installedRoot(context, abi), "lib")
         System.setProperty(LIBRARY_PROPERTY, libDir.absolutePath)
+        // O ONNX Runtime (engine do Granite) carrega libonnxruntime.so e
+        // libonnxruntime4j_jni.so deste diretório via System.load — é o que
+        // permite manter o APK sem essas libs nativas.
+        System.setProperty(ONNX_NATIVE_PATH_PROPERTY, libDir.absolutePath)
         debugLog(context, "activateIfInstalled: dir=$libDir")
         return true
     }

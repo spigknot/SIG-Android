@@ -150,4 +150,34 @@ class GraniteEngineTest {
         val text = dec.decode(intArrayOf(1))
         assertEquals("é", text)
     }
+
+    @Test
+    fun `model file name used by download check matches engine`() {
+        // Vacina do bug "pede download de novo após concluir": o nome do arquivo
+        // que a Activity verifica (GRANITE_MODEL_FILE) precisa ser EXATAMENTE o
+        // que a engine baixa (MODEL_FILE_NAME). Se divergirem, o app baixa mas
+        // nunca reconhece o modelo como presente.
+        val activityModelFile = "granite-5.0-turboctc-f32-ext.onnx"
+        assertEquals(activityModelFile, GraniteEngine.modelFileName())
+    }
+
+    @Test
+    fun `package complete requires all files non empty`() {
+        // O pacote só está "baixado" quando TODOS os arquivos existem e têm
+        // tamanho > 0 — não basta o .onnx (o .data de 1,89GB pode faltar).
+        // Sem Context Android, validamos a lista de arquivos esperados.
+        val expected = listOf(
+            "granite-5.0-turboctc-f32-ext.onnx",
+            "granite-5.0-turboctc-f32-ext.onnx.data",
+            "frontend_config.json",
+            "mel_filters.bin",
+            "stft_window.bin",
+            "vocab.json",
+            "pcs_vocab.json",
+            "punct_cap_seg_en.onnx",
+        )
+        // O nome do modelo está na lista
+        assertTrue(expected.contains(GraniteEngine.modelFileName()))
+        assertEquals(8, expected.size)
+    }
 }

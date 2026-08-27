@@ -99,91 +99,91 @@ import kotlin.random.Random
 class RemoteSttActivity : AppCompatActivity() {
 
     private lateinit var serverScroll: ScrollView
-    private lateinit var previewFrame: View
-    private lateinit var videoPreview: TextureView
-    private lateinit var audioWaveform: FfmpegWaveformView
-    private lateinit var playbackControls: View
-    private lateinit var timelineFrame: View
-    private lateinit var timeline: FfmpegRangeSlider
-    private lateinit var playbackSpeedLabel: TextView
-    private lateinit var currentTime: TextView
-    private lateinit var timeFields: View
-    private lateinit var inputFrom: EditText
-    private lateinit var inputTo: EditText
-    private lateinit var prepareModeButtons: View
-    private lateinit var vadModeRow: View
-    private lateinit var buttonVadMode: TextView
-    private lateinit var buttonVadLevel: TextView
-    private lateinit var batchOptionsRow: View
-    private lateinit var checkboxOnlyConvert: CheckBox
-    private lateinit var checkboxOnlyVad: CheckBox
-    private lateinit var checkboxSendZip: CheckBox
-    private lateinit var buttonZipLevel: TextView
-    private lateinit var videoPrepareWarning: TextView
-    private lateinit var buttonCompactFiles: TextView
-    private lateinit var buttonPrepareHelp: TextView
-    private lateinit var buttonReadyFiles: TextView
-    private lateinit var buttonOriginalFiles: TextView
+    private var previewFrame: View? = null
+    private var videoPreview: TextureView? = null
+    private var audioWaveform: FfmpegWaveformView? = null
+    private var playbackControls: View? = null
+    private var timelineFrame: View? = null
+    private var timeline: FfmpegRangeSlider? = null
+    private var playbackSpeedLabel: TextView? = null
+    private var currentTime: TextView? = null
+    private var timeFields: View? = null
+    private var inputFrom: EditText? = null
+    private var inputTo: EditText? = null
+    private var prepareModeButtons: View? = null
+    private var vadModeRow: View? = null
+    private var buttonVadMode: TextView? = null
+    private var buttonVadLevel: TextView? = null
+    private var batchOptionsRow: View? = null
+    private var checkboxOnlyConvert: CheckBox? = null
+    private var checkboxOnlyVad: CheckBox? = null
+    private var checkboxSendZip: CheckBox? = null
+    private var buttonZipLevel: TextView? = null
+    private var videoPrepareWarning: TextView? = null
+    private var buttonCompactFiles: TextView? = null
+    private var buttonPrepareHelp: TextView? = null
+    private var buttonReadyFiles: TextView? = null
+    private var buttonOriginalFiles: TextView? = null
     private lateinit var advancedModel: TextView
-    private lateinit var selectedFile: TextView
-    private lateinit var selectedListBox: View
-    private lateinit var selectedList: TextView
-    private lateinit var terminalText: TextView
-    private lateinit var buttonSelectOutputFolder: ImageButton
-    private lateinit var arrowInputOutput: View
-    private lateinit var buttonPlayPause: ImageButton
-    private lateinit var buttonSpeedDown: ImageButton
-    private lateinit var buttonSpeedUp: ImageButton
-    private lateinit var buttonTranscribe: ImageButton
-    private lateinit var progress: ProgressBar
+    private var selectedFile: TextView? = null
+    private var selectedListBox: View? = null
+    private var selectedList: TextView? = null
+    private var terminalText: TextView? = null
+    private var buttonSelectOutputFolder: ImageButton? = null
+    private var arrowInputOutput: View? = null
+    private var buttonPlayPause: ImageButton? = null
+    private var buttonSpeedDown: ImageButton? = null
+    private var buttonSpeedUp: ImageButton? = null
+    private var buttonTranscribe: ImageButton? = null
+    private var progress: ProgressBar? = null
     private lateinit var status: TextView
-    private lateinit var outputFileName: TextView
-    private lateinit var outputActions: View
-    private lateinit var buttonSaveToFolder: ImageButton
-    private lateinit var buttonOutputExport: ImageButton
-    private lateinit var buttonOutputFolder: ImageButton
-    private lateinit var buttonCopyTranscript: ImageButton
+    private var outputFileName: TextView? = null
+    private var outputActions: View? = null
+    private var buttonSaveToFolder: ImageButton? = null
+    private var buttonOutputExport: ImageButton? = null
+    private var buttonOutputFolder: ImageButton? = null
+    private var buttonCopyTranscript: ImageButton? = null
     private lateinit var liveTranscriptTextView: EditText
-    private lateinit var historyTextView: EditText
-    private lateinit var statementTextView: EditText
+    private var historyTextView: EditText? = null
+    private var statementTextView: EditText? = null
     private lateinit var liveAiProgress: TextView
-    private lateinit var livePostActions: View
-    private lateinit var historyOutputContainer: View
-    private lateinit var historyClipboardActions: View
-    private lateinit var historyPostActions: View
-    private lateinit var statementOutputContainer: View
-    private lateinit var statementClipboardActions: View
-    private lateinit var buttonHistory: TextView
-    private lateinit var buttonPersonSelector: TextView
-    private lateinit var buttonStatement: TextView
-    private lateinit var buttonPasteTranscript: View
-    private lateinit var buttonCopyLiveTranscript: View
-    private lateinit var buttonPasteHistory: View
-    private lateinit var buttonCopyHistory: View
-    private lateinit var buttonPasteStatement: View
-    private lateinit var buttonCopyStatement: View
-    private lateinit var buttonRecoverTranscript: ImageButton
-    private lateinit var buttonClearTranscript: TextView
-    private lateinit var buttonClearHistory: TextView
-    private lateinit var buttonClearStatement: TextView
-    private lateinit var buttonShareLiveTranscript: ImageButton
-    private lateinit var buttonShareHistory: ImageButton
-    private lateinit var buttonShareStatement: ImageButton
-    private lateinit var liveTranscriptClipboardActions: View
+    private var livePostActions: View? = null
+    private var historyOutputContainer: View? = null
+    private var historyClipboardActions: View? = null
+    private var historyPostActions: View? = null
+    private var statementOutputContainer: View? = null
+    private var statementClipboardActions: View? = null
+    private var buttonHistory: TextView? = null
+    private var buttonPersonSelector: TextView? = null
+    private var buttonStatement: TextView? = null
+    private var buttonPasteTranscript: View? = null
+    private var buttonCopyLiveTranscript: View? = null
+    private var buttonPasteHistory: View? = null
+    private var buttonCopyHistory: View? = null
+    private var buttonPasteStatement: View? = null
+    private var buttonCopyStatement: View? = null
+    private var buttonRecoverTranscript: ImageButton? = null
+    private var buttonClearTranscript: TextView? = null
+    private var buttonClearHistory: TextView? = null
+    private var buttonClearStatement: TextView? = null
+    private var buttonShareLiveTranscript: ImageButton? = null
+    private var buttonShareHistory: ImageButton? = null
+    private var buttonShareStatement: ImageButton? = null
+    private var liveTranscriptClipboardActions: View? = null
     private lateinit var serverGate: View
     private lateinit var sourceBar: View
     private lateinit var serverGateStatus: TextView
     private lateinit var buttonPingServer: ImageButton
     private lateinit var ipInputs: List<EditText>
     private lateinit var recordingPanel: View
-    private lateinit var buttonRecordingAction: ImageButton
-    private lateinit var buttonLiveMicTest: ImageButton
-    private lateinit var buttonLiveMicStop: ImageButton
-    private lateinit var recordingTimer: TextView
-    private lateinit var buttonSaveRecording: ImageButton
-    private lateinit var inputLiveInterval: TextView
-    private lateinit var buttonLiveIntervalMinus: TextView
-    private lateinit var buttonLiveIntervalPlus: TextView
+    private var buttonRecordingAction: ImageButton? = null
+    private var buttonLiveMicTest: ImageButton? = null
+    private var buttonLiveMicStop: ImageButton? = null
+    private var recordingTimer: TextView? = null
+    private var buttonSaveRecording: ImageButton? = null
+    private var inputLiveInterval: TextView? = null
+    private var buttonLiveIntervalMinus: TextView? = null
+    private var buttonLiveIntervalPlus: TextView? = null
     private lateinit var buttonLiveLanguage: TextView
     private lateinit var grokDiarizeRow: View
     private lateinit var checkboxLiveDiarize: CheckBox
@@ -259,8 +259,8 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var liveDiagnosticContext: LiveDiagnosticContext? = null
     private val liveDiagnosticLock = Any()
     private var liveDiagnosticDir: File? = null
-    private lateinit var batchProgressBox: View
-    private lateinit var batchProgressRows: LinearLayout
+    private var batchProgressBox: View? = null
+    private var batchProgressRows: LinearLayout? = null
     private val batchRowCells = mutableListOf<Triple<TextView, TextView, TextView>>()
     @Volatile private var liveUsesGrokWebSocket = false
     @Volatile private var sttIsDeepgram = false
@@ -321,19 +321,19 @@ class RemoteSttActivity : AppCompatActivity() {
     private val progressTicker = object : Runnable {
         override fun run() {
             val player = currentPlayer()
-            if (playbackControls.visibility == View.VISIBLE && player?.isPlaying == true) {
-                val end = timeline.getEndMs()
+            if (playbackControls?.visibility == View.VISIBLE && player?.isPlaying == true) {
+                val end = timeline?.getEndMs() ?: return
                 val position = player.currentPosition.toLong().coerceIn(0L, durationMs)
                 if (position >= end) {
                     pausePreview()
-                    timeline.setCurrent(end)
-                    audioWaveform.setCurrent(end)
-                    currentTime.text = formatTime(end)
+                    timeline?.setCurrent(end)
+                    audioWaveform?.setCurrent(end)
+                    currentTime?.text = formatTime(end)
                     setPlaybackButtonPlaying(false)
                 } else {
-                    timeline.setCurrent(position)
-                    audioWaveform.setCurrent(position)
-                    currentTime.text = formatTime(position)
+                    timeline?.setCurrent(position)
+                    audioWaveform?.setCurrent(position)
+                    currentTime?.text = formatTime(position)
                 }
             }
             handler.postDelayed(this, 80L)
@@ -346,7 +346,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 val now = SystemClock.elapsedRealtime()
                 val pausedNow = if ((livePaused || recordingPaused) && livePausedAt > 0L) now - livePausedAt else 0L
                 val elapsed = now - recordingStartedAt - livePausedAccumulatedMs - pausedNow
-                recordingTimer.text = formatElapsedCompact(elapsed.coerceAtLeast(0L))
+                recordingTimer?.text = formatElapsedCompact(elapsed.coerceAtLeast(0L))
                 handler.postDelayed(this, 80L)
             }
         }
@@ -376,8 +376,11 @@ class RemoteSttActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
-        setContentView(R.layout.activity_remote_stt)
         transcriptionMode = intent.getStringExtra(EXTRA_MODE) == MODE_TRANSCRIPTION
+        setContentView(
+            if (transcriptionMode) R.layout.activity_remote_stt_transcription
+            else R.layout.activity_remote_stt_occurrence
+        )
 
         serverScroll = findViewById(R.id.server_scroll)
         serverGate = findViewById(R.id.server_gate)
@@ -478,9 +481,9 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonShareStatement = findViewById(R.id.button_share_statement)
         liveTranscriptClipboardActions = findViewById(R.id.live_transcript_clipboard_actions)
 
-        videoPreview.surfaceTextureListener = surfaceListener
-        terminalText.movementMethod = ScrollingMovementMethod.getInstance()
-        terminalText.setOnTouchListener { view, event ->
+        videoPreview?.surfaceTextureListener = surfaceListener
+        terminalText?.movementMethod = ScrollingMovementMethod.getInstance()
+        terminalText?.setOnTouchListener { view, event ->
             view.parent.requestDisallowInterceptTouchEvent(true)
             if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
                 view.parent.requestDisallowInterceptTouchEvent(false)
@@ -489,8 +492,8 @@ class RemoteSttActivity : AppCompatActivity() {
             false
         }
         liveTranscriptTextView.movementMethod = ScrollingMovementMethod.getInstance()
-        historyTextView.movementMethod = ScrollingMovementMethod.getInstance()
-        statementTextView.movementMethod = ScrollingMovementMethod.getInstance()
+        historyTextView?.movementMethod = ScrollingMovementMethod.getInstance()
+        statementTextView?.movementMethod = ScrollingMovementMethod.getInstance()
         liveTranscriptTextView.setOnTouchListener { view, event ->
             view.parent.requestDisallowInterceptTouchEvent(true)
             if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
@@ -499,7 +502,7 @@ class RemoteSttActivity : AppCompatActivity() {
             if (event.actionMasked == android.view.MotionEvent.ACTION_UP) view.performClick()
             false
         }
-        listOf(historyTextView, statementTextView).forEach { textView ->
+        listOfNotNull(historyTextView, statementTextView).forEach { textView ->
             textView.setOnTouchListener { view, event ->
                 view.parent.requestDisallowInterceptTouchEvent(true)
                 if (event.actionMasked == android.view.MotionEvent.ACTION_UP || event.actionMasked == android.view.MotionEvent.ACTION_CANCEL) {
@@ -518,13 +521,13 @@ class RemoteSttActivity : AppCompatActivity() {
         findViewById<ImageButton>(R.id.button_model_settings).setOnClickListener {
             startActivity(Intent(this, ModelSettingsActivity::class.java))
         }
-        findViewById<View>(R.id.button_select_media).setOnClickListener { showSourceMenu(it) }
+        findViewById<View>(R.id.button_select_media)?.setOnClickListener { showSourceMenu(it) }
         buttonPingServer.setOnClickListener { testManualServerIp() }
-        buttonRecordingAction.setOnClickListener {
+        buttonRecordingAction?.setOnClickListener {
             if (!recordingActive) startMicrophoneRecording() else stopMicrophoneRecording()
         }
-        buttonLiveMicTest.setOnClickListener { toggleMicPause() }
-        buttonLiveMicStop.setOnClickListener {
+        buttonLiveMicTest?.setOnClickListener { toggleMicPause() }
+        buttonLiveMicStop?.setOnClickListener {
             if (liveTranscribing) stopLiveMicTranscription() else startLiveMicWithOverwriteCheck()
         }
         buttonLiveLanguage.setOnClickListener { showLiveLanguageMenu() }
@@ -553,62 +556,64 @@ class RemoteSttActivity : AppCompatActivity() {
                 ).show()
             }
         }
-        buttonSaveRecording.setOnClickListener { openOutputFolderPicker(REQUEST_SAVE_RECORDING_DIR) }
-        buttonSelectOutputFolder.setOnClickListener { openOutputFolderPicker(REQUEST_CHOOSE_PRE_OUTPUT_DIR) }
-        buttonPlayPause.setOnClickListener { togglePlayback() }
-        buttonSpeedDown.setOnClickListener { changePlaybackSpeed(-1) }
-        buttonSpeedUp.setOnClickListener { changePlaybackSpeed(1) }
-        buttonTranscribe.setOnClickListener {
+        buttonSaveRecording?.setOnClickListener { openOutputFolderPicker(REQUEST_SAVE_RECORDING_DIR) }
+        buttonSelectOutputFolder?.setOnClickListener { openOutputFolderPicker(REQUEST_CHOOSE_PRE_OUTPUT_DIR) }
+        buttonPlayPause?.setOnClickListener { togglePlayback() }
+        buttonSpeedDown?.setOnClickListener { changePlaybackSpeed(-1) }
+        buttonSpeedUp?.setOnClickListener { changePlaybackSpeed(1) }
+        buttonTranscribe?.setOnClickListener {
             if (isProcessing) cancelTranscription() else startServerTranscription()
         }
-        buttonSaveToFolder.setOnClickListener {
+        buttonSaveToFolder?.setOnClickListener {
             val preUri = preSelectedOutputDirUri
             if (preUri != null) saveTempOutputsToUri(preUri) else openOutputFolderPicker(REQUEST_CHOOSE_OUTPUT_DIR)
         }
-        buttonOutputExport.setOnClickListener { showTranscriptShareMenu(it) }
-        buttonOutputFolder.setOnClickListener { openOutputFolder() }
-        buttonCopyTranscript.setOnClickListener { copyTranscriptToClipboard() }
-        buttonHistory.setOnClickListener { requestHistory() }
-        buttonPersonSelector.setOnClickListener { showPersonMenu() }
-        buttonStatement.setOnClickListener { requestStatement() }
-        buttonPasteTranscript.setOnClickListener { pasteTranscriptFromClipboard() }
-        buttonCopyLiveTranscript.setOnClickListener { copyTranscriptToClipboard() }
-        buttonPasteHistory.setOnClickListener {
-            pasteTextFromClipboard(historyTextView, "Histórico") { showHistoryText(it) }
+        buttonOutputExport?.setOnClickListener { showTranscriptShareMenu(it) }
+        buttonOutputFolder?.setOnClickListener { openOutputFolder() }
+        buttonCopyTranscript?.setOnClickListener { copyTranscriptToClipboard() }
+        buttonHistory?.setOnClickListener { requestHistory() }
+        buttonPersonSelector?.setOnClickListener { showPersonMenu() }
+        buttonStatement?.setOnClickListener { requestStatement() }
+        buttonPasteTranscript?.setOnClickListener { pasteTranscriptFromClipboard() }
+        buttonCopyLiveTranscript?.setOnClickListener { copyTranscriptToClipboard() }
+        buttonPasteHistory?.setOnClickListener {
+            historyTextView?.let { tv -> pasteTextFromClipboard(tv, "Histórico") { showHistoryText(it) } }
         }
-        buttonCopyHistory.setOnClickListener { copyTextToClipboard(historyTextView, "Histórico") }
-        buttonPasteStatement.setOnClickListener {
-            pasteTextFromClipboard(statementTextView, "Oitiva") { showStatementText(it) }
+        buttonCopyHistory?.setOnClickListener { historyTextView?.let { copyTextToClipboard(it, "Histórico") } }
+        buttonPasteStatement?.setOnClickListener {
+            statementTextView?.let { tv -> pasteTextFromClipboard(tv, "Oitiva") { showStatementText(it) } }
         }
-        buttonCopyStatement.setOnClickListener { copyTextToClipboard(statementTextView, "Oitiva") }
-        buttonRecoverTranscript.setOnClickListener { recoverLastTranscription() }
-        buttonClearTranscript.setOnClickListener { clearTextWithConfirmation(liveTranscriptTextView, "Transcrição") }
-        buttonClearHistory.setOnClickListener { clearTextWithConfirmation(historyTextView, "Histórico") }
-        buttonClearStatement.setOnClickListener { clearTextWithConfirmation(statementTextView, "Oitiva") }
-        buttonShareLiveTranscript.setOnClickListener { shareEditorText(liveTranscriptTextView, "Transcrição") }
-        buttonShareHistory.setOnClickListener { shareEditorText(historyTextView, "Histórico") }
-        buttonShareStatement.setOnClickListener { shareEditorText(statementTextView, "Oitiva") }
-        outputFileName.setOnClickListener { openOutputFile(lastSession?.txtFile, "text/plain") }
+        buttonCopyStatement?.setOnClickListener { statementTextView?.let { copyTextToClipboard(it, "Oitiva") } }
+        buttonRecoverTranscript?.setOnClickListener { recoverLastTranscription() }
+        buttonClearTranscript?.setOnClickListener { clearTextWithConfirmation(liveTranscriptTextView, "Transcrição") }
+        buttonClearHistory?.setOnClickListener { historyTextView?.let { clearTextWithConfirmation(it, "Histórico") } }
+        buttonClearStatement?.setOnClickListener { statementTextView?.let { clearTextWithConfirmation(it, "Oitiva") } }
+        buttonShareLiveTranscript?.setOnClickListener { shareEditorText(liveTranscriptTextView, "Transcrição") }
+        buttonShareHistory?.setOnClickListener { historyTextView?.let { shareEditorText(it, "Histórico") } }
+        buttonShareStatement?.setOnClickListener { statementTextView?.let { shareEditorText(it, "Oitiva") } }
+        outputFileName?.setOnClickListener { openOutputFile(lastSession?.txtFile, "text/plain") }
 
-        timeline.onRangeChanged = { startMs, endMs, fromUser, _ ->
-            updateTimeFields(startMs, endMs)
-            if (fromUser) {
-                val current = timeline.getCurrentMs().coerceIn(startMs, endMs)
-                timeline.setCurrent(current)
-                seekPreview(current)
+        timeline?.let { tl ->
+            tl.onRangeChanged = { startMs, endMs, fromUser, _ ->
+                updateTimeFields(startMs, endMs)
+                if (fromUser) {
+                    val current = tl.getCurrentMs().coerceIn(startMs, endMs)
+                    tl.setCurrent(current)
+                    seekPreview(current)
+                }
+            }
+            tl.onPositionChanged = { positionMs, fromUser ->
+                currentTime?.text = formatTime(positionMs)
+                audioWaveform?.setCurrent(positionMs)
+                if (fromUser) seekPreview(positionMs)
             }
         }
-        timeline.onPositionChanged = { positionMs, fromUser ->
-            currentTime.text = formatTime(positionMs)
-            audioWaveform.setCurrent(positionMs)
-            if (fromUser) seekPreview(positionMs)
-        }
-        inputFrom.addTextChangedListener(timeFieldWatcher { timeline.setStart(it, true) })
-        inputTo.addTextChangedListener(timeFieldWatcher { timeline.setEnd(it, true) })
-        buttonCompactFiles.setOnClickListener { selectPrepareMode(PrepareMode.COMPACT) }
-        buttonPrepareHelp.setOnClickListener { showPrepareModeHelp() }
-        buttonReadyFiles.setOnClickListener { selectPrepareMode(PrepareMode.READY) }
-        buttonOriginalFiles.setOnClickListener { selectPrepareMode(PrepareMode.ORIGINAL) }
+        inputFrom?.addTextChangedListener(timeFieldWatcher { timeline?.setStart(it, true) })
+        inputTo?.addTextChangedListener(timeFieldWatcher { timeline?.setEnd(it, true) })
+        buttonCompactFiles?.setOnClickListener { selectPrepareMode(PrepareMode.COMPACT) }
+        buttonPrepareHelp?.setOnClickListener { showPrepareModeHelp() }
+        buttonReadyFiles?.setOnClickListener { selectPrepareMode(PrepareMode.READY) }
+        buttonOriginalFiles?.setOnClickListener { selectPrepareMode(PrepareMode.ORIGINAL) }
         selectedVadMode = VadMode.fromPreference(
             getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE).getString(VAD_MODE_KEY, VadMode.NONE.preferenceKey)
         )
@@ -616,33 +621,33 @@ class RemoteSttActivity : AppCompatActivity() {
             .getInt(VAD_LEVEL_KEY, 1)
             .coerceIn(0, 3)
         updateVadModeButton()
-        buttonVadMode.setOnClickListener { showVadModeMenu() }
-        buttonVadLevel.setOnClickListener { showVadLevelMenu() }
-        checkboxOnlyConvert.setOnCheckedChangeListener { _, checked ->
+        buttonVadMode?.setOnClickListener { showVadModeMenu() }
+        buttonVadLevel?.setOnClickListener { showVadLevelMenu() }
+        checkboxOnlyConvert?.setOnCheckedChangeListener { _, checked ->
             if (checked) {
-                checkboxOnlyVad.isChecked = false
-                checkboxSendZip.isChecked = false
+                checkboxOnlyVad?.isChecked = false
+                checkboxSendZip?.isChecked = false
                 if (selectedPrepareMode == PrepareMode.ORIGINAL) selectedPrepareMode = PrepareMode.READY
             }
             updatePrepareModeButtons()
             updateTranscribeEnabled()
         }
-        checkboxOnlyVad.setOnCheckedChangeListener { _, checked ->
+        checkboxOnlyVad?.setOnCheckedChangeListener { _, checked ->
             if (checked) {
-                checkboxOnlyConvert.isChecked = false
-                checkboxSendZip.isChecked = false
+                checkboxOnlyConvert?.isChecked = false
+                checkboxSendZip?.isChecked = false
             }
             updateBatchOptionVisibility()
             updateTranscribeEnabled()
         }
-        checkboxSendZip.setOnCheckedChangeListener { _, checked ->
+        checkboxSendZip?.setOnCheckedChangeListener { _, checked ->
             if (checked) {
-                checkboxOnlyConvert.isChecked = false
-                checkboxOnlyVad.isChecked = false
+                checkboxOnlyConvert?.isChecked = false
+                checkboxOnlyVad?.isChecked = false
             }
             updateBatchOptionVisibility()
         }
-        buttonZipLevel.setOnClickListener { showZipLevelMenu() }
+        buttonZipLevel?.setOnClickListener { showZipLevelMenu() }
         setupLiveIntervalControls()
         updateSpeedButton()
         refreshGrokApiControls()
@@ -662,7 +667,7 @@ class RemoteSttActivity : AppCompatActivity() {
         if (NativeDependencyManager.isInstalled(this)) return
         AlertDialog.Builder(this)
             .setTitle("Componentes nativos")
-            .setMessage("Para usar as ferramentas de vídeo/áudio e o transcritor offline, o SIG precisa baixar os componentes nativos (~39 MB, somente na primeira vez). Deseja baixar agora?")
+            .setMessage("Para usar as ferramentas de vídeo/áudio e o transcritor offline, o SIG precisa baixar os componentes nativos (~41 MB, somente na primeira vez). Deseja baixar agora?")
             .setPositiveButton("Baixar") { _, _ -> downloadNativeDependencies() }
             .setNegativeButton("Agora não", null)
             .setCancelable(false)
@@ -786,22 +791,22 @@ class RemoteSttActivity : AppCompatActivity() {
         serverGate.visibility = View.GONE
         sourceBar.visibility = View.VISIBLE
         recordingPanel.visibility = View.VISIBLE
-        buttonTranscribe.visibility = View.VISIBLE
+        buttonTranscribe?.visibility = View.VISIBLE
         status.visibility = View.VISIBLE
-        terminalText.visibility = View.GONE
-        terminalText.text = ""
+        terminalText?.visibility = View.GONE
+        terminalText?.text = ""
         status.text = ModelSelectionSummary.current()
         liveTranscriptTextView.visibility = View.VISIBLE
-        liveTranscriptClipboardActions.visibility = View.VISIBLE
-        livePostActions.visibility = View.VISIBLE
+        liveTranscriptClipboardActions?.visibility = View.VISIBLE
+        livePostActions?.visibility = View.VISIBLE
         clearAssistantOutputViews()
         applyToolModeVisibility()
-        buttonHistory.isEnabled = true
-        buttonHistory.alpha = 1f
-        buttonPersonSelector.isEnabled = true
-        buttonPersonSelector.alpha = 1f
-        buttonStatement.isEnabled = true
-        buttonStatement.alpha = 1f
+        buttonHistory?.isEnabled = true
+        buttonHistory?.alpha = 1f
+        buttonPersonSelector?.isEnabled = true
+        buttonPersonSelector?.alpha = 1f
+        buttonStatement?.isEnabled = true
+        buttonStatement?.alpha = 1f
         resetTranscriptionProgress()
         liveAiProgress.visibility = View.GONE
         updateAdvancedInfo()
@@ -903,7 +908,7 @@ class RemoteSttActivity : AppCompatActivity() {
             REQUEST_CHOOSE_PRE_OUTPUT_DIR -> data?.data?.let {
                 takeTreePermission(it)
                 preSelectedOutputDirUri = it
-                buttonSelectOutputFolder.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
+                buttonSelectOutputFolder?.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
                 Toast.makeText(this, "Pasta de saída selecionada.", Toast.LENGTH_SHORT).show()
             }
             REQUEST_CHOOSE_OUTPUT_DIR -> data?.data?.let {
@@ -950,10 +955,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun setupLiveIntervalControls() {
         refreshLiveIntervalInput()
-        buttonLiveIntervalMinus.setOnClickListener {
+        buttonLiveIntervalMinus?.setOnClickListener {
             moveLiveDraftInterval(-1)
         }
-        buttonLiveIntervalPlus.setOnClickListener {
+        buttonLiveIntervalPlus?.setOnClickListener {
             moveLiveDraftInterval(1)
         }
     }
@@ -969,7 +974,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun refreshLiveIntervalInput() {
         val value = String.format(Locale.US, "%.1f", liveDraftIntervalMillis / 1000.0)
-        inputLiveInterval.text = "t = $value"
+        inputLiveInterval?.text = "t = $value"
     }
 
     private fun startMicrophoneRecording() {
@@ -987,16 +992,16 @@ class RemoteSttActivity : AppCompatActivity() {
         clearOutputResult()
         selectedItems.clear()
         whiteMicSelection = false
-        checkboxOnlyConvert.isChecked = false
-        checkboxOnlyVad.isChecked = false
-        checkboxSendZip.isChecked = false
+        checkboxOnlyConvert?.isChecked = false
+        checkboxOnlyVad?.isChecked = false
+        checkboxSendZip?.isChecked = false
         selectedPrepareMode = PrepareMode.READY
         updatePrepareModeButtons()
         showSinglePreview(null)
         prepareWhiteRecordingUi()
         recordingPanel.visibility = View.VISIBLE
-        buttonSaveRecording.visibility = View.GONE
-        recordingTimer.text = "00:00.000"
+        buttonSaveRecording?.visibility = View.GONE
+        recordingTimer?.text = "00:00.000"
         val stamp = System.currentTimeMillis()
         recordingFile = File(cacheDir, "granite_speech_gravacao_$stamp.wav")
         recordingPcmFile = File(cacheDir, "granite_speech_gravacao_$stamp.pcm")
@@ -1006,12 +1011,12 @@ class RemoteSttActivity : AppCompatActivity() {
         recordingStartedAt = SystemClock.elapsedRealtime()
         livePausedAt = 0L
         livePausedAccumulatedMs = 0L
-        buttonRecordingAction.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
-        buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
-        buttonRecordingAction.contentDescription = "Parar gravação"
-        buttonLiveMicTest.visibility = View.VISIBLE
-        buttonLiveMicTest.alpha = 1f
-        buttonLiveMicTest.contentDescription = "Pausar gravação"
+        buttonRecordingAction?.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
+        buttonRecordingAction?.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+        buttonRecordingAction?.contentDescription = "Parar gravação"
+        buttonLiveMicTest?.visibility = View.VISIBLE
+        buttonLiveMicTest?.alpha = 1f
+        buttonLiveMicTest?.contentDescription = "Pausar gravação"
         status.text = ""
         handler.post(recordingTicker)
         recordingThread = Thread { recordWhiteMicrophonePcm() }.also { it.start() }
@@ -1030,8 +1035,8 @@ class RemoteSttActivity : AppCompatActivity() {
         recordingThread = null
         recordingAudioRecord = null
         recordingPaused = false
-        buttonLiveMicTest.visibility = View.INVISIBLE
-        buttonLiveMicTest.alpha = 1f
+        buttonLiveMicTest?.visibility = View.INVISIBLE
+        buttonLiveMicTest?.alpha = 1f
         val file = recordingFile
         val pcmFile = recordingPcmFile
         if (file != null && pcmFile?.exists() == true && pcmFile.length() > 0L) {
@@ -1046,7 +1051,7 @@ class RemoteSttActivity : AppCompatActivity() {
             status.text = "Gravação vazia."
             return
         }
-        buttonSaveRecording.visibility = View.VISIBLE
+        buttonSaveRecording?.visibility = View.VISIBLE
         val item = MediaItem(Uri.fromFile(file), file.name, "audio/wav", readDurationFromFile(file))
         selectedItems.clear()
         selectedItems += item
@@ -1054,16 +1059,16 @@ class RemoteSttActivity : AppCompatActivity() {
         selectedPrepareMode = PrepareMode.ORIGINAL
         transcriptionTaskState = AssistantTaskState.DONE
         renderLiveProgress()
-        recordingTimer.text = formatElapsedCompact(item.durationMs)
+        recordingTimer?.text = formatElapsedCompact(item.durationMs)
         status.text = ""
         startServerTranscription()
     }
 
     private fun resetRecordingButton() {
         handler.removeCallbacks(recordingTicker)
-        buttonRecordingAction.setImageResource(R.drawable.ic_mic_outline)
-        buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
-        buttonRecordingAction.contentDescription = "Iniciar gravação"
+        buttonRecordingAction?.setImageResource(R.drawable.ic_mic_outline)
+        buttonRecordingAction?.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
+        buttonRecordingAction?.contentDescription = "Iniciar gravação"
     }
 
     private fun releaseRecorder() {
@@ -1268,16 +1273,16 @@ class RemoteSttActivity : AppCompatActivity() {
         status.text = "Ouvindo e transcrevendo ao vivo..."
         recordingPanel.visibility = View.VISIBLE
         recordingStartedAt = SystemClock.elapsedRealtime()
-        recordingTimer.text = "00:00.000"
+        recordingTimer?.text = "00:00.000"
         handler.removeCallbacks(recordingTicker)
         handler.post(recordingTicker)
-        buttonLiveMicTest.visibility = View.VISIBLE
-        buttonLiveMicTest.alpha = 1f
-        buttonLiveMicTest.contentDescription = "Pausar transcrição ao vivo"
-        buttonLiveMicStop.visibility = View.VISIBLE
-        buttonLiveMicStop.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
-        buttonLiveMicStop.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
-        buttonLiveMicStop.contentDescription = "Finalizar transcrição ao vivo"
+        buttonLiveMicTest?.visibility = View.VISIBLE
+        buttonLiveMicTest?.alpha = 1f
+        buttonLiveMicTest?.contentDescription = "Pausar transcrição ao vivo"
+        buttonLiveMicStop?.visibility = View.VISIBLE
+        buttonLiveMicStop?.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
+        buttonLiveMicStop?.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+        buttonLiveMicStop?.contentDescription = "Finalizar transcrição ao vivo"
         if (useWebSocket) {
             emitGrokConnectionEvent(GrokConnectionEvent.CONNECTING)
             connectGrokLiveWebSocket()
@@ -1914,8 +1919,8 @@ class RemoteSttActivity : AppCompatActivity() {
                 if (livePausedAt > 0L) livePausedAccumulatedMs += now - livePausedAt
                 livePausedAt = 0L
             }
-            buttonLiveMicTest.alpha = if (recordingPaused) 0.55f else 1f
-            buttonLiveMicTest.contentDescription =
+            buttonLiveMicTest?.alpha = if (recordingPaused) 0.55f else 1f
+            buttonLiveMicTest?.contentDescription =
                 if (recordingPaused) "Retomar gravação" else "Pausar gravação"
             return
         }
@@ -1935,16 +1940,16 @@ class RemoteSttActivity : AppCompatActivity() {
                     grokAudioLossReported = false
                 }
             }
-            buttonLiveMicTest.alpha = 0.55f
-            buttonLiveMicTest.contentDescription = "Retomar transcrição ao vivo"
+            buttonLiveMicTest?.alpha = 0.55f
+            buttonLiveMicTest?.contentDescription = "Retomar transcrição ao vivo"
             status.text = "Transcrição ao vivo pausada."
         } else {
             if (livePausedAt > 0L) {
                 livePausedAccumulatedMs += now - livePausedAt
             }
             livePausedAt = 0L
-            buttonLiveMicTest.alpha = 1f
-            buttonLiveMicTest.contentDescription = "Pausar transcrição ao vivo"
+            buttonLiveMicTest?.alpha = 1f
+            buttonLiveMicTest?.contentDescription = "Pausar transcrição ao vivo"
             if (liveUsesGrokWebSocket && grokLiveWebSocket == null && grokReconnectRunnable == null) {
                 grokReconnectAttempts = 0
                 scheduleGrokReconnect("retomando após pausa")
@@ -2046,12 +2051,12 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun resetLiveMicButtons() {
-        buttonLiveMicTest.visibility = View.INVISIBLE
-        buttonLiveMicTest.alpha = 1f
-        buttonLiveMicStop.visibility = View.VISIBLE
-        buttonLiveMicStop.setImageResource(R.drawable.ic_mic_outline_red)
-        buttonLiveMicStop.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
-        buttonLiveMicStop.contentDescription = "Transcrição ao vivo"
+        buttonLiveMicTest?.visibility = View.INVISIBLE
+        buttonLiveMicTest?.alpha = 1f
+        buttonLiveMicStop?.visibility = View.VISIBLE
+        buttonLiveMicStop?.setImageResource(R.drawable.ic_mic_outline_red)
+        buttonLiveMicStop?.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
+        buttonLiveMicStop?.contentDescription = "Transcrição ao vivo"
     }
 
     private fun stopMicrophonePreview() {
@@ -2734,17 +2739,17 @@ class RemoteSttActivity : AppCompatActivity() {
             batchSessionFinished = false
         }
         if (!transcriptionMode || selectedItems.size < 2 || batchSessionFinished) {
-            batchProgressBox.visibility = View.GONE
+            batchProgressBox?.visibility = View.GONE
             if (transcriptionMode) liveTranscriptTextView.visibility = View.VISIBLE
             batchRowCells.clear()
-            if (::batchProgressRows.isInitialized) batchProgressRows.removeAllViews()
+            batchProgressRows?.removeAllViews()
             return
         }
-        batchProgressBox.visibility = View.VISIBLE
+        batchProgressBox?.visibility = View.VISIBLE
         liveTranscriptTextView.visibility = View.GONE
         if (batchRowCells.size != selectedItems.size) {
             batchRowCells.clear()
-            batchProgressRows.removeAllViews()
+            batchProgressRows?.removeAllViews()
             // Larguras medidas: cada coluna tem 20% a mais que o conteúdo máximo.
             val measurePaint = Paint().apply {
                 textSize = 12f * resources.displayMetrics.scaledDensity
@@ -2790,7 +2795,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     addView(sizeView, LinearLayout.LayoutParams(sizeCellWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
                     addView(stateView, LinearLayout.LayoutParams(stateCellWidth, LinearLayout.LayoutParams.WRAP_CONTENT))
                 }
-                batchProgressRows.addView(row)
+                batchProgressRows?.addView(row)
                 batchRowCells += Triple(nameView, sizeView, stateView)
             }
         }
@@ -2822,48 +2827,48 @@ class RemoteSttActivity : AppCompatActivity() {
             // Ferramenta Transcrição: somente arquivos (sem microfones, sem
             // controles de live, sem Histórico/Oitiva, sem timestamps e sem os
             // conjuntos de botões das caixas de texto).
-            buttonRecordingAction.visibility = View.GONE
-            buttonLiveMicTest.visibility = View.GONE
-            buttonLiveMicStop.visibility = View.GONE
-            buttonLiveIntervalMinus.visibility = View.GONE
-            inputLiveInterval.visibility = View.GONE
-            buttonLiveIntervalPlus.visibility = View.GONE
-            recordingTimer.visibility = View.GONE
-            buttonSaveRecording.visibility = View.GONE
-            historyOutputContainer.visibility = View.GONE
-            statementOutputContainer.visibility = View.GONE
-            buttonHistory.visibility = View.GONE
-            buttonStatement.visibility = View.GONE
-            buttonPersonSelector.visibility = View.GONE
-            liveTranscriptClipboardActions.visibility = View.GONE
-            livePostActions.visibility = View.GONE
-            historyClipboardActions.visibility = View.GONE
-            historyPostActions.visibility = View.GONE
-            statementClipboardActions.visibility = View.GONE
+            buttonRecordingAction?.visibility = View.GONE
+            buttonLiveMicTest?.visibility = View.GONE
+            buttonLiveMicStop?.visibility = View.GONE
+            buttonLiveIntervalMinus?.visibility = View.GONE
+            inputLiveInterval?.visibility = View.GONE
+            buttonLiveIntervalPlus?.visibility = View.GONE
+            recordingTimer?.visibility = View.GONE
+            buttonSaveRecording?.visibility = View.GONE
+            historyOutputContainer?.visibility = View.GONE
+            statementOutputContainer?.visibility = View.GONE
+            buttonHistory?.visibility = View.GONE
+            buttonStatement?.visibility = View.GONE
+            buttonPersonSelector?.visibility = View.GONE
+            liveTranscriptClipboardActions?.visibility = View.GONE
+            livePostActions?.visibility = View.GONE
+            historyClipboardActions?.visibility = View.GONE
+            historyPostActions?.visibility = View.GONE
+            statementClipboardActions?.visibility = View.GONE
             // Sem o quadro de log (fonte azul) na ferramenta Transcrição.
-            terminalText.visibility = View.GONE
+            terminalText?.visibility = View.GONE
             // O painel de gravação permanece para o seletor de idioma e a diarização.
             recordingPanel.visibility = View.VISIBLE
         } else {
             // Ferramenta Ocorrência: sem seleção de arquivos, preview, timeline,
             // conversão, VAD e opções de lote.
-            findViewById<View>(R.id.button_select_media).visibility = View.GONE
-            previewFrame.visibility = View.GONE
-            timelineFrame.visibility = View.GONE
-            prepareModeButtons.visibility = View.GONE
-            vadModeRow.visibility = View.GONE
-            batchOptionsRow.visibility = View.GONE
-            selectedListBox.visibility = View.GONE
-            buttonHistory.visibility = View.VISIBLE
-            buttonStatement.visibility = View.VISIBLE
-            buttonPersonSelector.visibility = View.GONE
-            historyOutputContainer.visibility = View.VISIBLE
-            statementOutputContainer.visibility = View.VISIBLE
-            buttonRecordingAction.visibility = View.VISIBLE
-            buttonLiveMicTest.visibility = View.INVISIBLE
-            buttonLiveMicStop.visibility = View.VISIBLE
+            findViewById<View>(R.id.button_select_media)?.visibility = View.GONE
+            previewFrame?.visibility = View.GONE
+            timelineFrame?.visibility = View.GONE
+            prepareModeButtons?.visibility = View.GONE
+            vadModeRow?.visibility = View.GONE
+            batchOptionsRow?.visibility = View.GONE
+            selectedListBox?.visibility = View.GONE
+            buttonHistory?.visibility = View.VISIBLE
+            buttonStatement?.visibility = View.VISIBLE
+            buttonPersonSelector?.visibility = View.GONE
+            historyOutputContainer?.visibility = View.VISIBLE
+            statementOutputContainer?.visibility = View.VISIBLE
+            buttonRecordingAction?.visibility = View.VISIBLE
+            buttonLiveMicTest?.visibility = View.INVISIBLE
+            buttonLiveMicStop?.visibility = View.VISIBLE
             // O botão verde Executar só existe na ferramenta Transcrição.
-            buttonTranscribe.visibility = View.GONE
+            buttonTranscribe?.visibility = View.GONE
         }
         refreshBatchProgressUi()
     }
@@ -2914,9 +2919,9 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         // O seletor t= e seus botões existem apenas para o Granite NAR.
         val narModel = config.name == TranscriptionModelStore.SERVER_NAME
-        buttonLiveIntervalMinus.visibility = if (narModel) View.VISIBLE else View.GONE
-        inputLiveInterval.visibility = if (narModel) View.VISIBLE else View.GONE
-        buttonLiveIntervalPlus.visibility = if (narModel) View.VISIBLE else View.GONE
+        buttonLiveIntervalMinus?.visibility = if (narModel) View.VISIBLE else View.GONE
+        inputLiveInterval?.visibility = if (narModel) View.VISIBLE else View.GONE
+        buttonLiveIntervalPlus?.visibility = if (narModel) View.VISIBLE else View.GONE
         if (apiTranscription) {
             liveDraftIntervalMillis = grokWebSocketChunkMillis()
         } else if (liveDraftIntervalMillis == grokWebSocketChunkMillis()) {
@@ -3128,15 +3133,15 @@ class RemoteSttActivity : AppCompatActivity() {
                     }
                     File(sessionDir, "Transcricoes").mkdirs()
                     lastSession = OutputSession(sessionDir, txtFile, htmlFile, logFile, terminalFile)
-                    outputFileName.visibility = View.GONE
-                    outputActions.visibility = View.GONE
-                    buttonOutputFolder.visibility = View.GONE
+                    outputFileName?.visibility = View.GONE
+                    outputActions?.visibility = View.GONE
+                    buttonOutputFolder?.visibility = View.GONE
                     liveTranscriptTextView.setMinLines(0)
-                    livePostActions.visibility = View.VISIBLE
+                    livePostActions?.visibility = View.VISIBLE
                     renderLiveProgress()
                     liveAiProgress.visibility = View.VISIBLE
                     status.text = ""
-                    serverScroll.post { serverScroll.smoothScrollTo(0, livePostActions.bottom) }
+                    serverScroll.post { serverScroll.smoothScrollTo(0, livePostActions?.bottom ?: 0) }
                 } catch (e: Throwable) {
                     Log.e(TAG, "Could not create live transcription output", e)
                     status.text = "Não consegui gerar o arquivo de transcrição."
@@ -3215,18 +3220,18 @@ class RemoteSttActivity : AppCompatActivity() {
             items = selectedItems.toList(),
             prepareMode = selectedPrepareMode,
             transcript = liveTranscriptTextView.text?.toString().orEmpty(),
-            history = historyTextView.text?.toString().orEmpty(),
-            statement = statementTextView.text?.toString().orEmpty(),
-            terminal = terminalText.text?.toString().orEmpty(),
+            history = historyTextView?.text?.toString().orEmpty(),
+            statement = statementTextView?.text?.toString().orEmpty(),
+            terminal = terminalText?.text?.toString().orEmpty(),
             status = status.text?.toString().orEmpty(),
             lastTranscription = lastReceivedTranscription,
             personNames = assistantNames.toList(),
-            selectedPerson = buttonPersonSelector.text?.toString().orEmpty(),
-            interval = inputLiveInterval.text?.toString().orEmpty(),
+            selectedPerson = buttonPersonSelector?.text?.toString().orEmpty(),
+            interval = inputLiveInterval?.text?.toString().orEmpty(),
             liveLanguage = selectedLiveLanguage,
             diarize = checkboxLiveDiarize.isChecked,
-            fromTime = inputFrom.text?.toString().orEmpty(),
-            toTime = inputTo.text?.toString().orEmpty(),
+            fromTime = inputFrom?.text?.toString().orEmpty(),
+            toTime = inputTo?.text?.toString().orEmpty(),
             outputFolderUri = preSelectedOutputDirUri,
         )
     }
@@ -3241,26 +3246,26 @@ class RemoteSttActivity : AppCompatActivity() {
         }
 
         liveTranscriptTextView.setText(draft.transcript)
-        historyTextView.setText(draft.history)
-        statementTextView.setText(draft.statement)
+        historyTextView?.setText(draft.history)
+        statementTextView?.setText(draft.statement)
         liveTranscriptTextView.setMinLines(if (draft.transcript.isBlank()) 5 else 0)
-        historyTextView.setMinLines(if (draft.history.isBlank()) 5 else 0)
-        statementTextView.setMinLines(if (draft.statement.isBlank()) 5 else 0)
+        historyTextView?.setMinLines(if (draft.history.isBlank()) 5 else 0)
+        statementTextView?.setMinLines(if (draft.statement.isBlank()) 5 else 0)
         lastReceivedTranscription = draft.lastTranscription
         timestampPlainTranscript = draft.lastTranscription.ifBlank { draft.transcript }
         timestampedTranscript = ""
         assistantNames = draft.personNames
-        buttonPersonSelector.text = draft.selectedPerson.ifBlank { "Partes" }
-        terminalText.text = draft.terminal
-        terminalText.visibility = if (draft.terminal.isBlank()) View.GONE else View.VISIBLE
+        buttonPersonSelector?.text = draft.selectedPerson.ifBlank { "Partes" }
+        terminalText?.text = draft.terminal
+        terminalText?.visibility = if (draft.terminal.isBlank()) View.GONE else View.VISIBLE
         status.text = draft.status.ifBlank { ModelSelectionSummary.current() }
         selectedLiveLanguage = draft.liveLanguage
         checkboxLiveDiarize.isChecked = draft.diarize
         refreshLiveLanguageButton()
-        inputLiveInterval.setText(draft.interval)
+        inputLiveInterval?.setText(draft.interval)
         preSelectedOutputDirUri = draft.outputFolderUri
-        inputFrom.setText(draft.fromTime)
-        inputTo.setText(draft.toTime)
+        inputFrom?.setText(draft.fromTime)
+        inputTo?.setText(draft.toTime)
         updateTranscribeEnabled()
         updateTextEditorsLock()
     }
@@ -3316,27 +3321,27 @@ class RemoteSttActivity : AppCompatActivity() {
         updatePrepareModeButtons()
         clearOutputResult()
         status.text = ""
-        terminalText.text = "$ granite-speech --${items.size} arquivo(s) selecionado(s)"
-        buttonSelectOutputFolder.visibility = if (items.isNotEmpty()) View.VISIBLE else View.GONE
-        arrowInputOutput.visibility = if (items.isNotEmpty()) View.VISIBLE else View.GONE
-        buttonSelectOutputFolder.setBackgroundResource(
+        terminalText?.text = "$ granite-speech --${items.size} arquivo(s) selecionado(s)"
+        buttonSelectOutputFolder?.visibility = if (items.isNotEmpty()) View.VISIBLE else View.GONE
+        arrowInputOutput?.visibility = if (items.isNotEmpty()) View.VISIBLE else View.GONE
+        buttonSelectOutputFolder?.setBackgroundResource(
             if (preSelectedOutputDirUri != null) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
         )
 
         if (items.isEmpty()) {
-            selectedFile.visibility = View.GONE
-            selectedListBox.visibility = View.GONE
+            selectedFile?.visibility = View.GONE
+            selectedListBox?.visibility = View.GONE
             showSinglePreview(null)
         } else if (items.size == 1) {
-            selectedFile.text = "1 arquivo selecionado"
-            selectedFile.visibility = View.VISIBLE
-            selectedListBox.visibility = View.GONE
+            selectedFile?.text = "1 arquivo selecionado"
+            selectedFile?.visibility = View.VISIBLE
+            selectedListBox?.visibility = View.GONE
             showSinglePreview(items.first())
         } else {
-            selectedFile.text = "${items.size} arquivos selecionados"
-            selectedFile.visibility = View.VISIBLE
-            selectedList.text = ""
-            selectedListBox.visibility = View.GONE
+            selectedFile?.text = "${items.size} arquivos selecionados"
+            selectedFile?.visibility = View.VISIBLE
+            selectedList?.text = ""
+            selectedListBox?.visibility = View.GONE
             showSinglePreview(null)
         }
         updateTranscribeEnabled()
@@ -3361,44 +3366,45 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun updatePrepareModeButtons() {
-        prepareModeButtons.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
-        vadModeRow.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
+        prepareModeButtons?.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
+        vadModeRow?.visibility = if (selectedItems.isNotEmpty()) View.VISIBLE else View.GONE
         updateBatchOptionVisibility()
-        videoPrepareWarning.visibility = View.GONE
+        videoPrepareWarning?.visibility = View.GONE
 
         val selected = selectedPrepareMode
-        buttonCompactFiles.setBackgroundResource(
+        buttonCompactFiles?.setBackgroundResource(
             if (selected == PrepareMode.COMPACT) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
         )
-        buttonReadyFiles.setBackgroundResource(
+        buttonReadyFiles?.setBackgroundResource(
             if (selected == PrepareMode.READY) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
         )
-        buttonOriginalFiles.setBackgroundResource(
+        buttonOriginalFiles?.setBackgroundResource(
             if (selected == PrepareMode.ORIGINAL) R.drawable.ffmpeg_outline_green_button_bg else R.drawable.ffmpeg_outline_button_bg
         )
-        buttonOriginalFiles.isEnabled = !checkboxOnlyConvert.isChecked
-        buttonOriginalFiles.alpha = if (buttonOriginalFiles.isEnabled) 1f else 0.38f
+        buttonOriginalFiles?.isEnabled = checkboxOnlyConvert?.isChecked != true
+        buttonOriginalFiles?.alpha = if (buttonOriginalFiles?.isEnabled == true) 1f else 0.38f
     }
 
     private fun updateBatchOptionVisibility() {
-        if (!::batchOptionsRow.isInitialized) return
+        if (batchOptionsRow == null) return
         val hasFiles = selectedItems.isNotEmpty()
         val zipAllowed = selectedItems.size > 1 && !TranscriptionModelStore.selectedConfig().isGrokApi
-        batchOptionsRow.visibility = if (hasFiles) View.VISIBLE else View.GONE
-        checkboxSendZip.visibility = if (zipAllowed) View.VISIBLE else View.GONE
-        if (!zipAllowed && checkboxSendZip.isChecked) checkboxSendZip.isChecked = false
-        buttonZipLevel.visibility = if (zipAllowed && checkboxSendZip.isChecked) View.VISIBLE else View.GONE
-        checkboxOnlyVad.isEnabled = selectedVadMode != VadMode.NONE
-        checkboxOnlyVad.alpha = if (checkboxOnlyVad.isEnabled) 1f else 0.38f
-        if (!checkboxOnlyVad.isEnabled && checkboxOnlyVad.isChecked) checkboxOnlyVad.isChecked = false
+        batchOptionsRow?.visibility = if (hasFiles) View.VISIBLE else View.GONE
+        checkboxSendZip?.visibility = if (zipAllowed) View.VISIBLE else View.GONE
+        if (!zipAllowed && checkboxSendZip?.isChecked == true) checkboxSendZip?.isChecked = false
+        buttonZipLevel?.visibility = if (zipAllowed && checkboxSendZip?.isChecked == true) View.VISIBLE else View.GONE
+        checkboxOnlyVad?.isEnabled = selectedVadMode != VadMode.NONE
+        checkboxOnlyVad?.alpha = if (checkboxOnlyVad?.isEnabled == true) 1f else 0.38f
+        if (checkboxOnlyVad?.isEnabled != true && checkboxOnlyVad?.isChecked == true) checkboxOnlyVad?.isChecked = false
     }
 
     private fun showZipLevelMenu() {
-        PopupMenu(this, buttonZipLevel).apply {
+        val anchor = buttonZipLevel ?: return
+        PopupMenu(this, anchor).apply {
             (0..9).forEach { level ->
                 menu.add(level.toString()).setOnMenuItemClickListener {
                     selectedZipLevel = level
-                    buttonZipLevel.text = "Nível ZIP: $level"
+                    buttonZipLevel?.text = "Nível ZIP: $level"
                     true
                 }
             }
@@ -3407,7 +3413,8 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun showVadModeMenu() {
-        PopupMenu(this, buttonVadMode).apply {
+        val anchor = buttonVadMode ?: return
+        PopupMenu(this, anchor).apply {
             VadMode.entries.forEach { mode ->
                 menu.add(mode.label).setOnMenuItemClickListener {
                     selectedVadMode = mode
@@ -3426,16 +3433,15 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun updateVadModeButton() {
-        if (::buttonVadMode.isInitialized) buttonVadMode.text = selectedVadMode.label
-        if (::buttonVadLevel.isInitialized) {
-            buttonVadLevel.text = "Nível: $selectedVadLevel"
-            buttonVadLevel.isEnabled = selectedVadMode != VadMode.NONE
-            buttonVadLevel.alpha = if (buttonVadLevel.isEnabled) 1f else 0.38f
-        }
+        buttonVadMode?.text = selectedVadMode.label
+        buttonVadLevel?.text = "Nível: $selectedVadLevel"
+        buttonVadLevel?.isEnabled = selectedVadMode != VadMode.NONE
+        buttonVadLevel?.alpha = if (buttonVadLevel?.isEnabled == true) 1f else 0.38f
     }
 
     private fun showVadLevelMenu() {
-        PopupMenu(this, buttonVadLevel).apply {
+        val anchor = buttonVadLevel ?: return
+        PopupMenu(this, anchor).apply {
             (0..3).forEach { level ->
                 menu.add(level.toString()).setOnMenuItemClickListener {
                     selectedVadLevel = level
@@ -3458,35 +3464,35 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun showSinglePreview(item: MediaItem?) {
         val visible = item != null
-        playbackControls.visibility = if (visible) View.VISIBLE else View.GONE
-        timelineFrame.visibility = if (visible) View.VISIBLE else View.GONE
-        currentTime.visibility = if (visible) View.VISIBLE else View.GONE
-        timeFields.visibility = if (visible) View.VISIBLE else View.GONE
-        audioWaveform.visibility = View.GONE
-        previewFrame.visibility = View.GONE
-        videoPreview.visibility = View.GONE
+        playbackControls?.visibility = if (visible) View.VISIBLE else View.GONE
+        timelineFrame?.visibility = if (visible) View.VISIBLE else View.GONE
+        currentTime?.visibility = if (visible) View.VISIBLE else View.GONE
+        timeFields?.visibility = if (visible) View.VISIBLE else View.GONE
+        audioWaveform?.visibility = View.GONE
+        previewFrame?.visibility = View.GONE
+        videoPreview?.visibility = View.GONE
         if (item == null) return
 
         durationMs = item.durationMs.coerceAtLeast(1L)
-        timeline.isEnabled = true
-        timeline.setRange(durationMs, 0L, durationMs)
-        timeline.setCurrent(0L)
+        timeline?.isEnabled = true
+        timeline?.setRange(durationMs, 0L, durationMs)
+        timeline?.setCurrent(0L)
         updateTimeFields(0L, durationMs)
-        currentTime.text = formatTime(0L)
+        currentTime?.text = formatTime(0L)
         playbackSpeed = 1f
         updateSpeedButton()
 
         if (isVideo(item.mime, item.name)) {
-            previewFrame.visibility = View.VISIBLE
-            videoPreview.visibility = View.VISIBLE
-            if (videoPreview.isAvailable) {
-                previewSurface = Surface(videoPreview.surfaceTexture)
+            previewFrame?.visibility = View.VISIBLE
+            videoPreview?.visibility = View.VISIBLE
+            if (videoPreview?.isAvailable == true) {
+                videoPreview?.surfaceTexture?.let { st -> previewSurface = Surface(st) }
                 prepareVideoPreview(item.uri)
             }
         } else {
-            audioWaveform.visibility = View.VISIBLE
-            audioWaveform.configure(item.name, durationMs)
-            audioWaveform.setRange(0L, durationMs)
+            audioWaveform?.visibility = View.VISIBLE
+            audioWaveform?.configure(item.name, durationMs)
+            audioWaveform?.setRange(0L, durationMs)
             prepareAudioPreview(item.uri)
         }
     }
@@ -3501,13 +3507,13 @@ class RemoteSttActivity : AppCompatActivity() {
                 this@RemoteSttActivity.durationMs = player.duration.toLong().coerceAtLeast(durationMs)
                 this@RemoteSttActivity.videoWidth = player.videoWidth
                 this@RemoteSttActivity.videoHeight = player.videoHeight
-                timeline.setRange(durationMs, timeline.getStartMs(), timeline.getEndMs().coerceAtMost(durationMs))
+                timeline?.setRange(durationMs, timeline?.getStartMs() ?: 0L, timeline?.getEndMs()?.coerceAtMost(durationMs) ?: durationMs)
                 applyPreviewTransform()
                 seekPreview(0L)
             }
             setOnCompletionListener {
                 setPlaybackButtonPlaying(false)
-                timeline.setCurrent(timeline.getEndMs())
+                timeline?.setCurrent(timeline?.getEndMs() ?: 0L)
             }
             prepareAsync()
         }
@@ -3519,13 +3525,13 @@ class RemoteSttActivity : AppCompatActivity() {
             setDataSource(this@RemoteSttActivity, uri)
             setOnPreparedListener { player ->
                 durationMs = player.duration.toLong().coerceAtLeast(durationMs)
-                timeline.setRange(durationMs, timeline.getStartMs(), timeline.getEndMs().coerceAtMost(durationMs))
-                audioWaveform.configure(selectedItems.firstOrNull()?.name ?: "áudio", durationMs)
-                audioWaveform.setRange(timeline.getStartMs(), timeline.getEndMs())
+                timeline?.setRange(durationMs, timeline?.getStartMs() ?: 0L, timeline?.getEndMs()?.coerceAtMost(durationMs) ?: durationMs)
+                audioWaveform?.configure(selectedItems.firstOrNull()?.name ?: "áudio", durationMs)
+                audioWaveform?.setRange(timeline?.getStartMs() ?: 0L, timeline?.getEndMs() ?: durationMs)
             }
             setOnCompletionListener {
                 setPlaybackButtonPlaying(false)
-                timeline.setCurrent(timeline.getEndMs())
+                timeline?.setCurrent(timeline?.getEndMs() ?: 0L)
             }
             prepareAsync()
         }
@@ -3539,19 +3545,19 @@ class RemoteSttActivity : AppCompatActivity() {
             transcriptionTaskState = AssistantTaskState.RUNNING
             liveAiProgress.visibility = View.VISIBLE
             liveTranscriptTextView.visibility = View.VISIBLE
-            liveTranscriptClipboardActions.visibility = View.VISIBLE
+            liveTranscriptClipboardActions?.visibility = View.VISIBLE
             liveTranscriptTextView.setText("")
-            livePostActions.visibility = View.GONE
-            outputActions.visibility = View.GONE
+            livePostActions?.visibility = View.GONE
+            outputActions?.visibility = View.GONE
             renderLiveProgress()
         } else {
             hideLiveTranscriptUi()
         }
         val items = selectedItems.toList()
         if (items.isEmpty()) return
-        val onlyConvert = checkboxOnlyConvert.isChecked
-        val onlyVad = checkboxOnlyVad.isChecked
-        val sendZip = checkboxSendZip.isChecked && items.size > 1
+        val onlyConvert = checkboxOnlyConvert?.isChecked ?: false
+        val onlyVad = checkboxOnlyVad?.isChecked ?: false
+        val sendZip = checkboxSendZip?.isChecked == true && items.size > 1
         if (onlyVad && selectedVadMode == VadMode.NONE) {
             status.text = "Escolha um VAD antes de usar Apenas VAD."
             return
@@ -3682,9 +3688,9 @@ class RemoteSttActivity : AppCompatActivity() {
                     lastSession = OutputSession(sessionDir, txtFile, htmlFile, logFile, terminalFile)
                     lastTranscriptionResults = orderedResults
                     status.text = report
-                    outputFileName.visibility = View.GONE
-                    outputActions.visibility = View.GONE
-                    buttonOutputFolder.visibility = View.GONE
+                    outputFileName?.visibility = View.GONE
+                    outputActions?.visibility = View.GONE
+                    buttonOutputFolder?.visibility = View.GONE
                     if (whiteRecording) {
                         val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
                         storeReceivedTranscription(
@@ -3693,8 +3699,8 @@ class RemoteSttActivity : AppCompatActivity() {
                         )
                         transcriptionTaskState = AssistantTaskState.DONE
                         renderLiveProgress()
-                        livePostActions.visibility = View.VISIBLE
-                        terminalText.visibility = View.GONE
+                        livePostActions?.visibility = View.VISIBLE
+                        terminalText?.visibility = View.GONE
                     } else if (transcriptionMode) {
                         // Ferramenta Transcrição: a saída é a tabela HTML/TXT e os
                         // botões de compartilhar/salvar. A caixa de texto com a
@@ -3708,9 +3714,9 @@ class RemoteSttActivity : AppCompatActivity() {
                             )
                             liveTranscriptTextView.visibility = View.VISIBLE
                         }
-                        outputFileName.visibility = View.GONE
-                        outputActions.visibility = View.VISIBLE
-                        buttonOutputFolder.visibility = View.GONE
+                        outputFileName?.visibility = View.GONE
+                        outputActions?.visibility = View.VISIBLE
+                        buttonOutputFolder?.visibility = View.GONE
                         updateTerminalText(terminalLines)
                         applyToolModeVisibility()
                     } else {
@@ -3722,8 +3728,8 @@ class RemoteSttActivity : AppCompatActivity() {
                         renderTranscriptAccordingToTimestampSelection()
                         liveTranscriptTextView.setMinLines(0)
                         liveTranscriptTextView.visibility = View.VISIBLE
-                        liveTranscriptClipboardActions.visibility = View.VISIBLE
-                        livePostActions.visibility = View.VISIBLE
+                        liveTranscriptClipboardActions?.visibility = View.VISIBLE
+                        livePostActions?.visibility = View.VISIBLE
                         updateTerminalText(terminalLines)
                     }
                     setProcessing(false)
@@ -3789,8 +3795,8 @@ class RemoteSttActivity : AppCompatActivity() {
             val originalAudioInfo = describeAudioFile(inputFile)
             // A timeline do editor só se aplica a arquivos selecionados; a
             // gravação do microfone branco envia SEMPRE o áudio inteiro.
-            val startMs = if (items.size == 1 && useTimeline) timeline.getStartMs() else 0L
-            val endMs = if (items.size == 1 && useTimeline) timeline.getEndMs() else item.durationMs.coerceAtLeast(1L)
+            val startMs = if (items.size == 1 && useTimeline) timeline?.getStartMs() ?: 0L else 0L
+            val endMs = if (items.size == 1 && useTimeline) timeline?.getEndMs() ?: item.durationMs.coerceAtLeast(1L) else item.durationMs.coerceAtLeast(1L)
             val durationToSend = (endMs - startMs).coerceAtLeast(1L)
             val preparedUploadFile = prepareUploadFile(
                 mode = mode,
@@ -3897,8 +3903,8 @@ class RemoteSttActivity : AppCompatActivity() {
         runOnUiThread {
             lastSession = OutputSession(sessionDir, txtFile, htmlFile, logFile, terminalFile)
             status.text = summary
-            outputActions.visibility = View.VISIBLE
-            buttonOutputFolder.visibility = View.GONE
+            outputActions?.visibility = View.VISIBLE
+            buttonOutputFolder?.visibility = View.GONE
             setProcessing(false)
             updateTerminalText(terminalLines)
         }
@@ -3938,7 +3944,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 appendTerminal(terminalLines, "Criando ZIP nível $level: ${index + 1}/${preparedUploads.size}")
                 runOnUiThread {
                     status.text = "Criando ZIP: ${index + 1}/${preparedUploads.size}"
-                    progress.progress = ((index + 1) * 35 / preparedUploads.size.coerceAtLeast(1))
+                    progress?.progress = ((index + 1) * 35 / preparedUploads.size.coerceAtLeast(1))
                     updateTerminalText(terminalLines)
                 }
             }
@@ -3996,7 +4002,7 @@ class RemoteSttActivity : AppCompatActivity() {
             appendTerminal(terminalLines, "Resposta ZIP: ${index + 1}/${preparedUploads.size}")
             runOnUiThread {
                 status.text = "Processando resposta ZIP: ${index + 1}/${preparedUploads.size}"
-                progress.progress = 70 + ((index + 1) * 30 / preparedUploads.size.coerceAtLeast(1))
+                progress?.progress = 70 + ((index + 1) * 30 / preparedUploads.size.coerceAtLeast(1))
                 updateTerminalText(terminalLines)
             }
             TranscriptionResult(prepared.index, prepared.item.name, text)
@@ -4985,22 +4991,22 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun setProcessing(processing: Boolean) {
         isProcessing = processing
         updateTextEditorsLock()
-        progress.visibility = if (processing) View.VISIBLE else View.GONE
-        buttonTranscribe.isEnabled = true
-        buttonTranscribe.isClickable = true
-        buttonTranscribe.isFocusable = true
-        buttonTranscribe.alpha = 1f
+        progress?.visibility = if (processing) View.VISIBLE else View.GONE
+        buttonTranscribe?.isEnabled = true
+        buttonTranscribe?.isClickable = true
+        buttonTranscribe?.isFocusable = true
+        buttonTranscribe?.alpha = 1f
         if (processing) {
             cancelRequested = false
-            buttonTranscribe.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
-            buttonTranscribe.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
-            buttonTranscribe.contentDescription = "Cancelar"
+            buttonTranscribe?.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
+            buttonTranscribe?.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+            buttonTranscribe?.contentDescription = "Cancelar"
         } else {
             currentCalls.clear()
             currentFfmpegSessionId = null
-            buttonTranscribe.setImageResource(R.drawable.ic_whisper_transcribe)
-            buttonTranscribe.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
-            buttonTranscribe.contentDescription = "Transcrever no servidor"
+            buttonTranscribe?.setImageResource(R.drawable.ic_whisper_transcribe)
+            buttonTranscribe?.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
+            buttonTranscribe?.contentDescription = "Transcrever no servidor"
             updateTranscribeEnabled()
         }
     }
@@ -5008,21 +5014,21 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun updateTranscribeEnabled() {
         if (isProcessing) return
         if (!transcriptionMode) {
-            buttonTranscribe.visibility = View.GONE
+            buttonTranscribe?.visibility = View.GONE
             return
         }
         val enabled = selectedItems.isNotEmpty() &&
             selectedItems.all { isSupportedMedia(it.mime, it.name) } &&
             selectedPrepareMode != null &&
-            (!checkboxOnlyVad.isChecked || selectedVadMode != VadMode.NONE)
-        buttonTranscribe.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { isSupportedMedia(it.mime, it.name) }) {
+            (checkboxOnlyVad?.isChecked != true || selectedVadMode != VadMode.NONE)
+        buttonTranscribe?.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { isSupportedMedia(it.mime, it.name) }) {
             View.VISIBLE
         } else {
             View.GONE
         }
-        buttonTranscribe.alpha = if (enabled) 1f else 0.45f
-        buttonTranscribe.isClickable = enabled
-        buttonTranscribe.isFocusable = enabled
+        buttonTranscribe?.alpha = if (enabled) 1f else 0.45f
+        buttonTranscribe?.isClickable = enabled
+        buttonTranscribe?.isFocusable = enabled
         refreshBatchProgressUi()
     }
 
@@ -5033,8 +5039,9 @@ class RemoteSttActivity : AppCompatActivity() {
             setPlaybackButtonPlaying(false)
             return
         }
-        val start = timeline.getStartMs()
-        val end = timeline.getEndMs()
+        val tl = timeline ?: return
+        val start = tl.getStartMs()
+        val end = tl.getEndMs() ?: return
         val current = player.currentPosition.toLong()
         val playFrom = if (current < start || current >= end) start else current
         if (current != playFrom) {
@@ -5066,12 +5073,12 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun currentPlayer(): MediaPlayer? {
-        return if (videoPreview.visibility == View.VISIBLE) previewPlayer else audioPlayer
+        return if (videoPreview?.visibility == View.VISIBLE) previewPlayer else audioPlayer
     }
 
     private fun setPlaybackButtonPlaying(isPlaying: Boolean) {
-        buttonPlayPause.setImageResource(if (isPlaying) R.drawable.ic_ffmpeg_pause else R.drawable.ic_ffmpeg_play)
-        buttonPlayPause.contentDescription = if (isPlaying) "Pausar" else "Reproduzir"
+        buttonPlayPause?.setImageResource(if (isPlaying) R.drawable.ic_ffmpeg_pause else R.drawable.ic_ffmpeg_play)
+        buttonPlayPause?.contentDescription = if (isPlaying) "Pausar" else "Reproduzir"
     }
 
     private fun syncPlaybackButtonSoon() {
@@ -5082,9 +5089,9 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun seekPreview(positionMs: Long) {
         val safePosition = positionMs.coerceIn(0L, durationMs).coerceAtMost(Int.MAX_VALUE.toLong())
-        timeline.setCurrent(safePosition)
-        audioWaveform.setCurrent(safePosition)
-        currentTime.text = formatTime(safePosition)
+        timeline?.setCurrent(safePosition)
+        audioWaveform?.setCurrent(safePosition)
+        currentTime?.text = formatTime(safePosition)
         val player = currentPlayer() ?: return
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -5124,15 +5131,15 @@ class RemoteSttActivity : AppCompatActivity() {
             2f -> "2x"
             else -> String.format(Locale("pt", "BR"), "%.2fx", playbackSpeed)
         }
-        playbackSpeedLabel.text = label
-        buttonSpeedDown.alpha = if (playbackSpeed <= speedSteps.first()) 0.35f else 1f
-        buttonSpeedUp.alpha = if (playbackSpeed >= speedSteps.last()) 0.35f else 1f
+        playbackSpeedLabel?.text = label
+        buttonSpeedDown?.alpha = if (playbackSpeed <= speedSteps.first()) 0.35f else 1f
+        buttonSpeedUp?.alpha = if (playbackSpeed >= speedSteps.last()) 0.35f else 1f
     }
 
     private fun applyPreviewTransform() {
-        if (videoPreview.width == 0 || videoPreview.height == 0 || videoWidth <= 0 || videoHeight <= 0) return
-        val frameWidth = videoPreview.width.toFloat()
-        val frameHeight = videoPreview.height.toFloat()
+        if (videoPreview?.width == 0 || videoPreview?.height == 0 || videoWidth <= 0 || videoHeight <= 0) return
+        val frameWidth = videoPreview?.width?.toFloat() ?: 0f
+        val frameHeight = videoPreview?.height?.toFloat() ?: 0f
         val centerX = frameWidth / 2f
         val centerY = frameHeight / 2f
         val fitScale = minOf(frameWidth / videoWidth.toFloat(), frameHeight / videoHeight.toFloat())
@@ -5140,8 +5147,8 @@ class RemoteSttActivity : AppCompatActivity() {
         val fittedHeight = videoHeight * fitScale
         val matrix = Matrix()
         matrix.postScale(fittedWidth / frameWidth, fittedHeight / frameHeight, centerX, centerY)
-        videoPreview.setTransform(matrix)
-        videoPreview.invalidate()
+        videoPreview?.setTransform(matrix)
+        videoPreview?.invalidate()
     }
 
     private fun timeFieldWatcher(update: (Long) -> Unit): TextWatcher {
@@ -5158,9 +5165,9 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun updateTimeFields(startMs: Long, endMs: Long) {
         syncingFields = true
-        inputFrom.setText(formatTime(startMs))
-        inputTo.setText(formatTime(endMs))
-        audioWaveform.setRange(startMs, endMs)
+        inputFrom?.setText(formatTime(startMs))
+        inputTo?.setText(formatTime(endMs))
+        audioWaveform?.setRange(startMs, endMs)
         syncingFields = false
     }
 
@@ -5191,7 +5198,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 }
             }
             finalOutputDirUri = sessionDoc.uri
-            buttonOutputFolder.visibility = View.VISIBLE
+            buttonOutputFolder?.visibility = View.VISIBLE
             status.text = "Arquivos salvos em ${sessionDoc.name ?: "pasta selecionada"}"
         } catch (e: Throwable) {
             Log.e(TAG, "Save failed", e)
@@ -5425,7 +5432,7 @@ class RemoteSttActivity : AppCompatActivity() {
             historyTaskState == AssistantTaskState.RUNNING ||
             namesTaskState == AssistantTaskState.RUNNING ||
             statementTaskState == AssistantTaskState.RUNNING
-        listOf(liveTranscriptTextView, historyTextView, statementTextView).forEach { editor ->
+        listOfNotNull(liveTranscriptTextView, historyTextView, statementTextView).forEach { editor ->
             editor.isEnabled = !locked
             editor.isFocusableInTouchMode = !locked
             editor.isCursorVisible = !locked
@@ -5463,34 +5470,34 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun showHistoryText(text: String) {
-        historyTextView.setText(text.trim())
-        historyTextView.setMinLines(0)
-        historyTextView.visibility = View.VISIBLE
-        historyOutputContainer.visibility = View.VISIBLE
-        historyClipboardActions.visibility = View.VISIBLE
-        historyPostActions.visibility = View.VISIBLE
+        historyTextView?.setText(text.trim())
+        historyTextView?.setMinLines(0)
+        historyTextView?.visibility = View.VISIBLE
+        historyOutputContainer?.visibility = View.VISIBLE
+        historyClipboardActions?.visibility = View.VISIBLE
+        historyPostActions?.visibility = View.VISIBLE
     }
 
     private fun showStatementText(text: String) {
-        statementTextView.setText(text.trim())
-        statementTextView.setMinLines(0)
-        statementTextView.visibility = View.VISIBLE
-        statementOutputContainer.visibility = View.VISIBLE
-        statementClipboardActions.visibility = View.VISIBLE
+        statementTextView?.setText(text.trim())
+        statementTextView?.setMinLines(0)
+        statementTextView?.visibility = View.VISIBLE
+        statementOutputContainer?.visibility = View.VISIBLE
+        statementClipboardActions?.visibility = View.VISIBLE
     }
 
     private fun clearAssistantOutputViews(showEditors: Boolean = true) {
-        historyTextView.setText("")
-        historyTextView.setMinLines(5)
-        historyTextView.visibility = if (showEditors) View.VISIBLE else View.GONE
-        historyOutputContainer.visibility = if (showEditors) View.VISIBLE else View.GONE
-        historyClipboardActions.visibility = if (showEditors) View.VISIBLE else View.GONE
-        historyPostActions.visibility = if (showEditors) View.VISIBLE else View.GONE
-        statementTextView.setText("")
-        statementTextView.setMinLines(5)
-        statementTextView.visibility = if (showEditors) View.VISIBLE else View.GONE
-        statementOutputContainer.visibility = if (showEditors) View.VISIBLE else View.GONE
-        statementClipboardActions.visibility = if (showEditors) View.VISIBLE else View.GONE
+        historyTextView?.setText("")
+        historyTextView?.setMinLines(5)
+        historyTextView?.visibility = if (showEditors) View.VISIBLE else View.GONE
+        historyOutputContainer?.visibility = if (showEditors) View.VISIBLE else View.GONE
+        historyClipboardActions?.visibility = if (showEditors) View.VISIBLE else View.GONE
+        historyPostActions?.visibility = if (showEditors) View.VISIBLE else View.GONE
+        statementTextView?.setText("")
+        statementTextView?.setMinLines(5)
+        statementTextView?.visibility = if (showEditors) View.VISIBLE else View.GONE
+        statementOutputContainer?.visibility = if (showEditors) View.VISIBLE else View.GONE
+        statementClipboardActions?.visibility = if (showEditors) View.VISIBLE else View.GONE
     }
 
     private fun prepareLiveTranscriptUi() {
@@ -5512,22 +5519,22 @@ class RemoteSttActivity : AppCompatActivity() {
         progressPhase = ProgressPhase.TRANSCRIPTION
         transcriptionTaskState = AssistantTaskState.IDLE
         refiningTaskState = AssistantTaskState.IDLE
-        buttonPersonSelector.text = "Partes"
-        buttonHistory.isEnabled = true
-        buttonHistory.alpha = 1f
+        buttonPersonSelector?.text = "Partes"
+        buttonHistory?.isEnabled = true
+        buttonHistory?.alpha = 1f
         liveAiProgress.visibility = View.VISIBLE
         renderLiveProgress()
-        livePostActions.visibility = View.GONE
+        livePostActions?.visibility = View.GONE
         clearAssistantOutputViews()
         liveTranscriptTextView.setText("")
         timestampPlainTranscript = ""
         timestampedTranscript = ""
         liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
-        liveTranscriptClipboardActions.visibility = View.VISIBLE
-        outputFileName.visibility = View.GONE
-        outputActions.visibility = View.GONE
-        terminalText.visibility = View.GONE
+        liveTranscriptClipboardActions?.visibility = View.VISIBLE
+        outputFileName?.visibility = View.GONE
+        outputActions?.visibility = View.GONE
+        terminalText?.visibility = View.GONE
     }
 
     private fun prepareWhiteRecordingUi() {
@@ -5537,7 +5544,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         assistantRequestGeneration += 1
         assistantNames = emptyList()
-        buttonPersonSelector.text = "Partes"
+        buttonPersonSelector?.text = "Partes"
         historyTaskState = AssistantTaskState.IDLE
         namesTaskState = AssistantTaskState.IDLE
         statementTaskState = AssistantTaskState.IDLE
@@ -5555,23 +5562,23 @@ class RemoteSttActivity : AppCompatActivity() {
         timestampedTranscript = ""
         liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
-        liveTranscriptClipboardActions.visibility = View.VISIBLE
+        liveTranscriptClipboardActions?.visibility = View.VISIBLE
         batchSnapshotKey = ""
         applyToolModeVisibility()
-        livePostActions.visibility = View.GONE
+        livePostActions?.visibility = View.GONE
         clearAssistantOutputViews()
         liveAiProgress.visibility = View.VISIBLE
-        outputFileName.visibility = View.GONE
-        outputActions.visibility = View.GONE
-        terminalText.visibility = View.GONE
+        outputFileName?.visibility = View.GONE
+        outputActions?.visibility = View.GONE
+        terminalText?.visibility = View.GONE
         renderLiveProgress()
     }
 
     private fun hideLiveTranscriptUi() {
         liveTranscriptTextView.visibility = View.GONE
-        liveTranscriptClipboardActions.visibility = View.GONE
+        liveTranscriptClipboardActions?.visibility = View.GONE
         liveAiProgress.visibility = View.GONE
-        livePostActions.visibility = View.GONE
+        livePostActions?.visibility = View.GONE
         clearAssistantOutputViews()
     }
 
@@ -5600,8 +5607,8 @@ class RemoteSttActivity : AppCompatActivity() {
         historyRequestModel = RequestModelLabel.from(historyConfig)
         assistantNames = emptyList()
         clearAssistantOutputViews()
-        buttonHistory.isEnabled = false
-        buttonHistory.alpha = 0.55f
+        buttonHistory?.isEnabled = false
+        buttonHistory?.alpha = 0.55f
         liveAiProgress.visibility = View.VISIBLE
         renderLiveProgress()
         updateTextEditorsLock()
@@ -5640,7 +5647,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun requestStatement() {
-        val material = historyTextView.text?.toString()?.trim()
+        val material = historyTextView?.text?.toString()?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: plainTranscriptForRequests()
         if (material.isBlank()) {
@@ -5658,8 +5665,8 @@ class RemoteSttActivity : AppCompatActivity() {
         statementElapsedMs = null
         val statementConfig = ModelServerStore.selectedConfig(TextModelPurpose.STATEMENT)
         statementRequestModel = RequestModelLabel.from(statementConfig)
-        buttonStatement.isEnabled = false
-        buttonStatement.alpha = 0.55f
+        buttonStatement?.isEnabled = false
+        buttonStatement?.alpha = 0.55f
         liveAiProgress.visibility = View.VISIBLE
         renderLiveProgress()
         updateTextEditorsLock()
@@ -5692,8 +5699,8 @@ class RemoteSttActivity : AppCompatActivity() {
                     }
                 )
                 renderLiveProgress()
-                buttonStatement.isEnabled = true
-                buttonStatement.alpha = 1f
+                buttonStatement?.isEnabled = true
+                buttonStatement?.alpha = 1f
                 synchronized(assistantCalls) { assistantCalls.clear() }
             }
         }
@@ -5726,8 +5733,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun finishAssistantTaskIfReady() {
         renderLiveProgress()
         if (historyTaskState != AssistantTaskState.RUNNING) {
-            buttonHistory.isEnabled = true
-            buttonHistory.alpha = 1f
+            buttonHistory?.isEnabled = true
+            buttonHistory?.alpha = 1f
             synchronized(assistantCalls) { assistantCalls.clear() }
         }
     }
@@ -5805,14 +5812,15 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun showPersonMenu() {
-        PopupMenu(this, buttonPersonSelector).apply {
+        val anchor = buttonPersonSelector ?: return
+        PopupMenu(this, anchor).apply {
             assistantNames.forEach { menu.add(it) }
             menu.add("Detectar")
             setOnMenuItemClickListener {
                 if (it.title.toString() == "Detectar") {
                     detectPartsFromCurrentHistory()
                 } else {
-                    buttonPersonSelector.text = it.title
+                    buttonPersonSelector?.text = it.title
                 }
                 true
             }
@@ -5821,7 +5829,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun detectPartsFromCurrentHistory() {
-        val history = historyTextView.text?.toString()?.trim().orEmpty()
+        val history = historyTextView?.text?.toString()?.trim().orEmpty()
         if (history.isBlank()) {
             Toast.makeText(this, "Escreva ou gere um histórico antes de detectar as partes.", Toast.LENGTH_SHORT).show()
             return
@@ -5834,7 +5842,7 @@ class RemoteSttActivity : AppCompatActivity() {
             .takeIf { it == PartsExtractionSettings.Method.AI }
             ?.let { RequestModelLabel.from(partsConfig) }
         assistantNames = emptyList()
-        buttonPersonSelector.text = "Partes"
+        buttonPersonSelector?.text = "Partes"
         liveAiProgress.visibility = View.VISIBLE
         progressPhase = ProgressPhase.ASSISTANT
         renderLiveProgress()
@@ -5855,7 +5863,7 @@ class RemoteSttActivity : AppCompatActivity() {
                         assistantNames = names
                         namesTaskState = AssistantTaskState.DONE
                         namesElapsedMs = elapsed
-                        buttonPersonSelector.text = names.firstOrNull() ?: "Partes"
+                        buttonPersonSelector?.text = names.firstOrNull() ?: "Partes"
                     },
                     onFailure = {
                         namesTaskState = AssistantTaskState.ERROR
@@ -5877,9 +5885,9 @@ class RemoteSttActivity : AppCompatActivity() {
         lastSession = null
         lastTranscriptionResults = emptyList()
         finalOutputDirUri = null
-        outputFileName.visibility = View.GONE
-        outputActions.visibility = View.GONE
-        buttonOutputFolder.visibility = View.GONE
+        outputFileName?.visibility = View.GONE
+        outputActions?.visibility = View.GONE
+        buttonOutputFolder?.visibility = View.GONE
     }
 
     private fun writeFailureFiles(sessionDir: File, terminalLines: StringBuilder, logLines: StringBuilder, message: String) {
@@ -5940,7 +5948,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun newTerminalSession(header: String): StringBuilder {
-        val existing = terminalText.text?.toString()?.trimEnd().orEmpty()
+        val existing = terminalText?.text?.toString()?.trimEnd().orEmpty()
         return StringBuilder().apply {
             if (existing.isNotBlank()) {
                 append(existing).append("\n\n")
@@ -5975,11 +5983,12 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun updateTerminalText(builder: StringBuilder) {
         val rawText = synchronized(builder) { builder.toString() }
-        terminalText.text = renderTerminalText(rawText.ifBlank { "$ granite-speech --aguardando arquivo" })
-        terminalText.post {
-            val layout = terminalText.layout ?: return@post
-            val scrollAmount = layout.getLineTop(terminalText.lineCount) - terminalText.height + terminalText.totalPaddingTop + terminalText.totalPaddingBottom
-            terminalText.scrollTo(0, scrollAmount.coerceAtLeast(0))
+        terminalText?.text = renderTerminalText(rawText.ifBlank { "$ granite-speech --aguardando arquivo" })
+        terminalText?.post {
+            val tt = terminalText ?: return@post
+            val layout = tt.layout ?: return@post
+            val scrollAmount = layout.getLineTop(tt.lineCount) - tt.height + tt.totalPaddingTop + tt.totalPaddingBottom
+            tt.scrollTo(0, scrollAmount.coerceAtLeast(0))
         }
     }
 
@@ -5996,7 +6005,7 @@ class RemoteSttActivity : AppCompatActivity() {
             }.trim()
         }
         liveTranscriptTextView.visibility = View.VISIBLE
-        liveTranscriptClipboardActions.visibility = View.VISIBLE
+        liveTranscriptClipboardActions?.visibility = View.VISIBLE
         liveTranscriptTextView.setText(text)
         liveTranscriptTextView.post {
             val layout = liveTranscriptTextView.layout ?: return@post

@@ -411,41 +411,68 @@ object GraniteEngine {
 
     fun modelFile(context: Context): File = File(packageDir(context), MODEL_FILE_NAME)
 
+    /** Nome do arquivo do modelo ONNX (usado pela Activity para conferência). */
+    fun modelFileName(): String = MODEL_FILE_NAME
+
     fun modelDataFile(context: Context): File = File(packageDir(context), MODEL_DATA_FILE_NAME)
 
-    fun isDownloaded(context: Context): Boolean = modelFile(context).exists()
+    fun isDownloaded(context: Context): Boolean = packageComplete(context)
+
+    /** True quando TODOS os 8 arquivos do pacote existem e não estão vazios. */
+    fun packageComplete(context: Context): Boolean {
+        val dir = packageDir(context)
+        return packageFiles().all { (name, _) ->
+            val f = File(dir, name)
+            f.exists() && f.length() > 0L
+        }
+    }
+
+    private fun packageFiles(): List<Pair<String, String>> = listOf(
+        MODEL_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_FILE_NAME",
+        MODEL_DATA_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_DATA_FILE_NAME",
+        FRONTEND_FILE_NAME to "$PACKAGE_BASE_URL/$FRONTEND_FILE_NAME",
+        MEL_FILTERS_FILE_NAME to "$PACKAGE_BASE_URL/$MEL_FILTERS_FILE_NAME",
+        STFT_WINDOW_FILE_NAME to "$PACKAGE_BASE_URL/$STFT_WINDOW_FILE_NAME",
+        VOCAB_FILE_NAME to "$PACKAGE_BASE_URL/$VOCAB_FILE_NAME",
+        PCS_VOCAB_FILE_NAME to "$PACKAGE_BASE_URL/$PCS_VOCAB_FILE_NAME",
+        PUNCT_FILE_NAME to "$PACKAGE_BASE_URL/$PUNCT_FILE_NAME",
+    )
 
     /** Baixa o pacote completo do R2 (modelo + external data + front-end + vocab + punctuator). */
     fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit) {
         val dir = packageDir(context).apply { mkdirs() }
-        val files = listOf(
-            MODEL_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_FILE_NAME",
-            MODEL_DATA_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_DATA_FILE_NAME",
-            FRONTEND_FILE_NAME to "$PACKAGE_BASE_URL/$FRONTEND_FILE_NAME",
-            MEL_FILTERS_FILE_NAME to "$PACKAGE_BASE_URL/$MEL_FILTERS_FILE_NAME",
-            STFT_WINDOW_FILE_NAME to "$PACKAGE_BASE_URL/$STFT_WINDOW_FILE_NAME",
-            VOCAB_FILE_NAME to "$PACKAGE_BASE_URL/$VOCAB_FILE_NAME",
-            PCS_VOCAB_FILE_NAME to "$PACKAGE_BASE_URL/$PCS_VOCAB_FILE_NAME",
-            PUNCT_FILE_NAME to "$PACKAGE_BASE_URL/$PUNCT_FILE_NAME",
-        )
+        // Limpa downloads residuais de tentativas anteriores.
+        dir.listFiles()?.forEach { if (it.name.endsWith(".download")) it.delete() }
+        val files = packageFiles()
         var totalBytes = 0L
         var copiedBytes = 0L
-        val sizes = files.map { (name, _) ->
-            val size = File(dir, name).takeIf { it.exists() }?.length() ?: 0L
-            totalBytes += size
-            name to size
-        }.toMap()
+        // Soma apenas o que falta baixar.
+        val missing = files.filter { (name, _) ->
+            val f = File(dir, name)
+            !(f.exists() && f.length() > 0L)
+        }
+        totalBytes = missing.sumOf { (_, url) ->
+            runCatching {
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    requestMethod = "HEAD"
+                }
+                val len = conn.contentLengthLong.coerceAtLeast(0L)
+                conn.disconnect()
+                len
+            }.getOrDefault(0L)
+        }
+        if (totalBytes <= 0L) totalBytes = packageDownloadBytes()
         // Baixa cada arquivo que falta.
-        for ((name, url) in files) {
+        for ((name, url) in missing) {
             val dest = File(dir, name)
-            if (dest.exists() && dest.length() > 0L) continue
             val temp = File(dir, "$name.download")
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15000
-                readTimeout = 60000
+                readTimeout = 120000
             }
             val total = connection.contentLengthLong.coerceAtLeast(0L)
-            totalBytes += total
             connection.inputStream.use { input ->
                 FileOutputStream(temp).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -465,6 +492,7 @@ object GraniteEngine {
                     }
                 }
             }
+            if (dest.exists()) dest.delete()
             if (!temp.renameTo(dest)) {
                 temp.copyTo(dest, overwrite = true)
                 temp.delete()
@@ -472,9 +500,29 @@ object GraniteEngine {
         }
     }
 
-    /** Carrega a sessão ONNX (modelo + front-end + decoder) para o backend escolhido. */
-    fun load(context: Context, backend: GraniteExecutionBackend, onLog: (String) -> Unit = {}): Boolean {
+    /**
+     * Carrega a sessão ONNX (modelo + front-end + decoder) para o backend escolhido.
+     *
+     * Quando o backend é GPU/NPU e a sessão NNAPI falha, NÃO cai para CPU
+     * automaticamente: chama [onFallbackPrompt] com o motivo e só usa CPU se o
+     * callback devolver true (o usuário aceitou). Se devolver false, o load
+     * falha com mensagem clara.
+     */
+    fun load(
+        context: Context,
+        backend: GraniteExecutionBackend,
+        onLog: (String) -> Unit = {},
+        onFallbackPrompt: (String) -> Boolean = { true },
+    ): Boolean {
         return try {
+            // As libs nativas do ONNX Runtime vêm do pacote R2 (baixado na 1ª
+            // execução), não do APK. Precisa estar instalado + ativado ANTES de
+            // tocar no OrtEnvironment — o loader estático do ONNX falha de forma
+            // definitiva no processo se a lib estiver ausente.
+            if (!NativeDependencyManager.activateIfInstalled(context)) {
+                lastErrorMessage = "Componentes nativos do SIG não instalados. Baixe-os na abertura do app e tente novamente."
+                return false
+            }
             release()
             val dir = packageDir(context)
             val modelPath = modelFile(context)
@@ -492,19 +540,50 @@ object GraniteEngine {
             val pieces = parseVocabJson(vocabJson)
             decoder = GraniteDecoder(pieces, config.numSpecialTokens)
 
-            val options = OrtSession.SessionOptions()
-            options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-            if (backend != GraniteExecutionBackend.CPU) {
+            val env = OrtEnvironment.getEnvironment()
+            if (backend == GraniteExecutionBackend.CPU) {
+                val cpuOptions = OrtSession.SessionOptions()
+                cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+                session = env.createSession(modelPath.absolutePath, cpuOptions)
+                onLog("ONNX session criada (CPU)")
+                return true
+            }
+
+            // GPU/NPU: tenta NNAPI. O NNAPI escolhe o melhor dispositivo
+            // disponível (no OnePlus 15, o NPU/GPU conforme o driver suportar).
+            val nnapiOptions = OrtSession.SessionOptions()
+            nnapiOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            var nnapiConfigured = false
+            try {
+                nnapiOptions.addNnapi()
+                nnapiConfigured = true
+                onLog("NNAPI provider configurado (${backend.label})")
+            } catch (e: Throwable) {
+                onLog("NNAPI indisponível: ${e.message}")
+            }
+
+            if (nnapiConfigured) {
                 try {
-                    options.addNnapi()
-                    onLog("NNAPI provider configurado (${backend.label})")
+                    session = env.createSession(modelPath.absolutePath, nnapiOptions)
+                    onLog("ONNX session criada (${backend.label})")
+                    return true
                 } catch (e: Throwable) {
-                    onLog("NNAPI indisponível, usando CPU: ${e.message}")
+                    val reason = e.message ?: "falha desconhecida"
+                    onLog("Sessão ${backend.label} falhou: $reason")
+                    // Pergunta ao usuário se quer cair para CPU.
+                    val accepted = onFallbackPrompt(reason)
+                    if (!accepted) {
+                        lastErrorMessage = "O acelerador ${backend.label} não conseguiu carregar o modelo e o fallback para CPU foi recusado: $reason"
+                        return false
+                    }
                 }
             }
-            val env = OrtEnvironment.getEnvironment()
-            session = env.createSession(modelPath.absolutePath, options)
-            onLog("ONNX session criada (${backend.label})")
+
+            // Fallback para CPU (aceito pelo usuário ou NNAPI indisponível).
+            val cpuOptions = OrtSession.SessionOptions()
+            cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            session = env.createSession(modelPath.absolutePath, cpuOptions)
+            onLog("ONNX session criada (CPU, fallback)")
             true
         } catch (e: Throwable) {
             lastErrorMessage = e.message ?: "falha ao carregar modelo"

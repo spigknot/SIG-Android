@@ -77,8 +77,8 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 36
-        versionName "1.473"
+        versionCode 37
+        versionName "1.474"
 
         buildConfigField "boolean", "ENABLE_NPU_TESTS", "true"
 
@@ -96,6 +96,18 @@ android {
 
     buildFeatures {
         buildConfig true
+    }
+
+    packaging {
+        jniLibs {
+            // As libs nativas do ONNX Runtime (engine do Granite) NÃO vão no APK:
+            // são baixadas do R2 no pacote v2 de dependências nativas (1ª execução).
+            // Manter o APK < 10 MB.
+            excludes += [
+                "**/libonnxruntime.so",
+                "**/libonnxruntime4j_jni.so",
+            ]
+        }
     }
 
     if (buildNativeComponents) {

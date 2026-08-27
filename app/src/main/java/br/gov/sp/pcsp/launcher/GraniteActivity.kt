@@ -42,6 +42,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.CancellationException
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToLong
 
@@ -335,7 +336,7 @@ class GraniteActivity : AppCompatActivity() {
             menu.add("Granite 5.0 Turbo")
             setOnMenuItemClickListener { item ->
                 val model = graniteModel()
-                if (model.file.exists()) {
+                if (GraniteEngine.packageComplete(this@GraniteActivity)) {
                     selectModel(model)
                 } else {
                     confirmModelDownload(model)
@@ -437,7 +438,13 @@ class GraniteActivity : AppCompatActivity() {
         val items = selectedItems.toList()
         val backend = selectedBackend
         if (items.isEmpty()) return
-        if (!graniteModelFile().exists()) {
+        // As libs nativas do ONNX Runtime vêm do pacote R2 (1ª execução). Sem ele,
+        // oferece o download antes de tentar carregar o modelo.
+        if (!NativeDependencyManager.isInstalled(this)) {
+            NativeDependencyPrompt.showIfNeeded(this)
+            return
+        }
+        if (!GraniteEngine.packageComplete(this)) {
             confirmModelDownload(graniteModel())
             return
         }
@@ -480,12 +487,40 @@ class GraniteActivity : AppCompatActivity() {
                 currentTotalAudioSeconds = totalAudioSeconds
 
                 appendLog(logLines, "Carregando modelo...")
-                runOnUiThread { setTranscriptionStatus("Carregando modelo...") }
+                runOnUiThread { setTranscriptionStatus("Carregando modelo (pode levar 1-2 min na primeira vez)...") }
                 val modelStartedAt = SystemClock.elapsedRealtime()
                 val loaded = GraniteEngine.load(
                     context = this,
                     backend = backend,
-                    onLog = { line -> appendTerminal(terminalLines, line) }
+                    onLog = { line -> appendTerminal(terminalLines, line) },
+                    onFallbackPrompt = { reason ->
+                        // Pergunta ao usuário (na UI thread) se quer cair para CPU.
+                        val latch = CountDownLatch(1)
+                        val decision = AtomicReference(false)
+                        runOnUiThread {
+                            AlertDialog.Builder(this)
+                                .setTitle("Acelerador indisponível")
+                                .setMessage(
+                                    "O ${backend.label} falhou ao carregar o modelo:\n\n$reason\n\n" +
+                                        "Deseja continuar com CPU? (mais lento, mas funciona em qualquer aparelho)"
+                                )
+                                .setPositiveButton("Sim, usar CPU") { _, _ ->
+                                    decision.set(true)
+                                    latch.countDown()
+                                }
+                                .setNegativeButton("Não, cancelar") { _, _ ->
+                                    decision.set(false)
+                                    latch.countDown()
+                                }
+                                .setOnCancelListener {
+                                    decision.set(false)
+                                    latch.countDown()
+                                }
+                                .show()
+                        }
+                        latch.await()
+                        decision.get()
+                    }
                 )
                 modelLoadMs = SystemClock.elapsedRealtime() - modelStartedAt
                 checkNotCancelled()
@@ -803,6 +838,7 @@ class GraniteActivity : AppCompatActivity() {
 
     private fun setTranscriptionStatus(text: String, progressValue: Int? = null) {
         currentTranscriptionStatus = text
+        status.visibility = View.VISIBLE
         if (progressValue != null) {
             currentTranscriptionProgress = progressValue
             progress.visibility = View.VISIBLE
@@ -996,7 +1032,7 @@ pre{white-space:pre-wrap;background:#161b22;padding:12px;border-radius:8px}</sty
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val GRANITE_OUTPUT_FOLDER = "Granite"
         private const val GRANITE_MODELS_FOLDER = "granite_models"
-        private const val GRANITE_MODEL_FILE = "granite-5.0-turboctc-f32.onnx"
+        private const val GRANITE_MODEL_FILE = "granite-5.0-turboctc-f32-ext.onnx"
         private const val GRANITE_MODEL_BYTES = 1_880_000_000L
     }
 }

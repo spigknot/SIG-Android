@@ -21,7 +21,7 @@ object NativeDependencyPrompt {
             setPadding(padding, 0, padding, 0)
         }
         val status = TextView(activity).apply {
-            text = "O SIG precisa baixar seus componentes de áudio, vídeo, Whisper e NPU ($size).\n\n" +
+            text = "O SIG precisa baixar seus componentes de áudio, vídeo, Whisper, NPU e transcrição local (Granite) ($size).\n\n" +
                 "Isso será feito apenas uma vez. Os arquivos continuarão instalados nas próximas atualizações do APK. " +
                 "Sem o download, várias ferramentas não funcionarão."
             setTextColor(Color.WHITE)

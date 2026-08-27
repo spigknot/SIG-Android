@@ -12,6 +12,13 @@ $nativeRoot = Join-Path $app "build\intermediates\merged_native_libs\debug\merge
 $silero = Join-Path $root "native-dependencies\silero\ggml-silero-v6.2.0.bin"
 $output = if ($OutputDirectory) { $OutputDirectory } else { Join-Path $root "build\native-dependencies" }
 
+# ONNX Runtime (engine do Granite) — as libs nativas TAMBÉM vão no pacote
+# (o APK as exclui via packaging.jniLibs.excludes). O AAR fica no cache do Gradle
+# depois do 1º assembleDebug; o nome do arquivo é estável por versão.
+$onnxVersion = "1.29.0"
+$onnxAarDir = Join-Path $env:USERPROFILE ".gradle\caches\modules-2\files-2.1\com.microsoft.onnxruntime\onnxruntime-android\$onnxVersion"
+$onnxAar = Get-ChildItem -Path $onnxAarDir -Recurse -Filter "onnxruntime-android-$onnxVersion.aar" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 
@@ -56,6 +63,10 @@ $projectLibraries = @(
     "libsig_whisper.so",
     "libsig_npu_probe.so"
 )
+$onnxLibraries = @(
+    "libonnxruntime.so",
+    "libonnxruntime4j_jni.so"
+)
 
 $packageRecords = @()
 foreach ($abi in @("arm64-v8a", "x86_64")) {
@@ -93,6 +104,25 @@ foreach ($abi in @("arm64-v8a", "x86_64")) {
                 size = (Get-Item -LiteralPath $target).Length
                 sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash.ToLowerInvariant()
             }
+        }
+        # ONNX Runtime: extraído do AAR onnxruntime-android (o APK exclui essas libs
+        # via packaging.jniLibs.excludes; aqui entram no pacote R2).
+        if ($null -eq $onnxAar -or $onnxAar -eq "") { throw "AAR do ONNX Runtime não encontrado em $onnxAarDir" }
+        $onnxAarForLibraries = [IO.Compression.ZipFile]::OpenRead($onnxAar)
+        try {
+            foreach ($library in $onnxLibraries) {
+                $entry = $onnxAarForLibraries.GetEntry("jni/$abi/$library")
+                if ($null -eq $entry) { throw "$library ausente no AAR do ONNX Runtime para $abi." }
+                $target = Join-Path $libTarget $library
+                [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+                $fileRecords += [ordered]@{
+                    path = "lib/$library"
+                    size = (Get-Item -LiteralPath $target).Length
+                    sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $target).Hash.ToLowerInvariant()
+                }
+            }
+        } finally {
+            $onnxAarForLibraries.Dispose()
         }
         $sileroTarget = Join-Path $modelTarget (Split-Path -Leaf $silero)
         Copy-Item -LiteralPath $silero -Destination $sileroTarget
