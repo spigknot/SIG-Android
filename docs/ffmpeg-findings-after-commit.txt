@@ -1,0 +1,80 @@
+RELATÓRIO — FINDINGS FFmpeg APÓS O COMMIT 300b6c4
+
+Verificação realizada após o commit 300b6c4.
+
+1. P1 — Permanece: Join não reencoda todo o vídeo
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+Linhas: 670 e 1641
+Explicação: Com Reencodar + Fade in/out, os trechos longos continuam usando -c:v copy; apenas as regiões da transição são reencodadas.
+
+2. P1 — Permanece: codec desconhecido tratado como H.264
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+Linhas: 3052 e 3137
+Explicação: VP9, AV1 e outros codecs podem receber h264_mp4toannexb, causando falha ou comando incorreto.
+
+3. P1/P2 — Permanece: Smart Insert OGG mistura codecs
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt
+Linhas: 665 e 677
+Explicação: O trecho inserido usa libopus, enquanto as partes original e final são copiadas com -c copy.
+
+4. P1/P2 — Permanece: Sem reencodar não valida compatibilidade
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt
+Linhas: 641 e 694
+Explicação: Arquivos com codecs ou parâmetros diferentes ainda podem ser concatenados diretamente.
+
+5. P1/P2 — Permanece: opções podem mudar durante o processamento
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt
+Linhas: 719, 725, 729, 788 e 1336
+Explicação: O nome/extensão pode ser calculado com uma configuração e o comando executado com outra. O mesmo padrão continua em Join, Insert, Rotate e Clean Audio.
+
+6. P2 — Parcialmente corrigido: validação do Join
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+Linhas: 562 e 683
+Explicação: O commit passou a validar compatibilidade básica também na concatenação direta. Porém, a validação ainda não cobre pixel format, SAR, perfil/nível, extradata, time base etc., e não é aplicada ao caminho de reencodificação mínima.
+
+7. P2 — Permanece: Smart Join de áudio não é Smart Join real
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+Linhas: 658 e 997
+Explicação: Para áudio, a opção apenas força reencodificação/transição; não copia seletivamente os trechos longos.
+
+8. P2 — Permanece: duração da transição é alterada silenciosamente
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+Linha: 1897
+Explicação: O tempo informado continua sendo reduzido automaticamente conforme a duração dos clipes.
+
+9. P2 — Permanece: reencodificação pode terminar com -c copy
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+Linhas: 1325 e 1340
+Explicação: Se a transição efetiva for zero, a rota de reencodificação chama concatenação direta por cópia.
+
+10. P2 — Permanece: Rotate ignora encoder/qualidade em operações sem filtro
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt
+Linha: 1134
+Explicação: Trim-only ou rotação sem transformação continua usando -c copy.
+
+11. P2 — Permanece: Rotate pode ignorar processamento paralelo
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt
+Linha: 483
+Explicação: Com trim ativo, a opção paralela continua sendo desconsiderada silenciosamente.
+
+12. P2 — Permanece: Extract aceita vídeo sem áudio
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt
+Linhas: 475 e 800
+Explicação: O mapa agora é opcional (0:a:0?), mas não há validação prévia de faixa de áudio.
+
+13. P2 — Permanece: WAV força reencodificação no Insert Audio
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt
+Linha: 510
+Explicação: A opção não reencodar continua sendo ignorada para WAV.
+
+14. P3 — Permanece: ajuda de encoders está inconsistente com o registry
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegVideoEncoderRegistry.kt
+Linhas: 46 e 101
+Explicação: A ajuda menciona mpeg4 como fallback, mas o detector não adiciona esse encoder; também informa que libx264 pode não aparecer, embora ele seja adicionado sempre.
+
+VALIDAÇÃO
+
+- :app:testDebugUnitTest: aprovado.
+- :app:lintDebug: aprovado.
+- :app:assembleDebug: aprovado.
+- O commit corrigiu parcialmente apenas a validação básica da concatenação direta e o fallback para reencodificação quando o encoder é incompatível.
