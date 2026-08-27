@@ -469,6 +469,22 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private fun executeRotation(uri: Uri, degrees: Int, metadataOnly: Boolean) {
         val processingStartMs = SystemClock.elapsedRealtime()
         clearOutputResult()
+        val startMs = timeline.getStartMs()
+        val endMs = timeline.getEndMs()
+        val hasTrim = startMs > 0L || endMs < durationMs
+        val requestedParallel = parallelKeyframes.isChecked
+        val orderedFilters = buildOrderedFilters()
+        val canUseParallel = !hasTrim && !metadataOnly && requestedParallel && orderedFilters.isNotBlank()
+        val encoder = selectedCodec ?: FfmpegVideoEncoder("h264_mediacodec", "h264")
+
+        if (requestedParallel && hasTrim) {
+            Toast.makeText(
+                this,
+                "Processamento paralelo ignorado: corte (trim) requer processamento sequencial.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
         setProcessing(true)
         Thread {
             var inputFile: File? = null
@@ -480,8 +496,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 val outputName = buildOutputName(selectedName)
                 val currentTempOutput = File(cacheDir, "rotate_${System.currentTimeMillis()}_$outputName")
                 tempOutput = currentTempOutput
-                val hasTrim = timeline.getStartMs() > 0L || timeline.getEndMs() < durationMs
-                val canUseParallel = !hasTrim && !metadataOnly && parallelKeyframes.isChecked && buildOrderedFilters().isNotBlank()
                 
                 val tracker: FfmpegTaskTracker
                 if (canUseParallel) {
@@ -496,8 +510,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     tracker.completeCurrentTask()
                 }
 
-                val encoder = selectedCodec ?: FfmpegVideoEncoder("h264_mediacodec", "h264")
-                val usesEncoder = !metadataOnly && buildOrderedFilters().isNotBlank()
+                val usesEncoder = !metadataOnly
                 if (!canUseParallel && usesEncoder) {
                     tracker.setTaskEncoder(1, encoder.shortName)
                     tracker.startTask(1)
@@ -506,8 +519,12 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     executeParallelKeyframeRotation(currentInputFile, currentTempOutput, encoder, tracker)
                 } else {
                     val session = executeFfmpegWithProgress(
-                        buildFfmpegArguments(currentInputFile, currentTempOutput, degrees, encoder = encoder, metadataOnly = metadataOnly,
-                            startMs = timeline.getStartMs(), endMs = timeline.getEndMs()),
+                        buildFfmpegArguments(
+                            currentInputFile, currentTempOutput, degrees,
+                            encoder = encoder, metadataOnly = metadataOnly,
+                            startMs = startMs, endMs = endMs,
+                            filters = orderedFilters
+                        ),
                         tracker
                     )
                     RotationExecutionResult(
@@ -1138,7 +1155,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         encoder: FfmpegVideoEncoder,
         metadataOnly: Boolean,
         startMs: Long = 0L,
-        endMs: Long = durationMs
+        endMs: Long = durationMs,
+        filters: String = buildOrderedFilters()
     ): Array<String> {
         val hasTrim = startMs > 0L || endMs < durationMs
         val trimDurationMs = (endMs - startMs).coerceAtLeast(1L)
@@ -1155,7 +1173,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             return args.toTypedArray()
         }
 
-        val filters = buildOrderedFilters()
         val videoBitrate = detectVideoBitrate(inputFile)
 
         val args = mutableListOf("-y")
@@ -1164,17 +1181,15 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         if (hasTrim) args.addAll(listOf("-t", formatFfmpegTime(trimDurationMs)))
         if (filters.isNotEmpty()) {
             args.addAll(listOf("-vf", filters))
-            args.addAll(videoEncodingArguments(encoder, videoBitrate))
-            args.addAll(
-                listOf(
-                    "-c:a", if (hasTrim) "aac" else "copy",
-                    "-map_metadata", "-1",
-                    "-metadata:s:v:0", "rotate=0"
-                )
-            )
-        } else {
-            args.addAll(listOf("-c", "copy"))
         }
+        args.addAll(videoEncodingArguments(encoder, videoBitrate))
+        args.addAll(
+            listOf(
+                "-c:a", if (hasTrim) "aac" else "copy",
+                "-map_metadata", "-1",
+                "-metadata:s:v:0", "rotate=0"
+            )
+        )
         args.add(outputFile.absolutePath)
         return args.toTypedArray()
     }
@@ -1384,6 +1399,28 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             buttonRotate.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
             buttonRotate.contentDescription = "Girar vídeo"
             setRotateEnabled(selectedUri != null)
+        }
+        metadataRotation.isEnabled = !processing
+        flipHorizontal.isEnabled = !processing
+        flipVertical.isEnabled = !processing
+        parallelKeyframes.isEnabled = !processing
+        inputParallelSegments.isEnabled = !processing
+        buttonVideoEncoder.isEnabled = !processing
+        buttonVideoQuality.isEnabled = !processing
+        timeline.isEnabled = !processing
+        buttonPlayPause.isEnabled = !processing
+        buttonSpeedDown.isEnabled = !processing
+        buttonSpeedUp.isEnabled = !processing
+        buttonSelectOutputFolder.isEnabled = !processing
+        findViewById<View>(R.id.button_select_video).isEnabled = !processing
+        inputFrom.isEnabled = !processing
+        inputTo.isEnabled = !processing
+        buttonFromPrev.isEnabled = !processing
+        buttonFromNext.isEnabled = !processing
+        buttonToPrev.isEnabled = !processing
+        buttonToNext.isEnabled = !processing
+        for (i in 0 until rotationOptions.childCount) {
+            rotationOptions.getChildAt(i).isEnabled = !processing
         }
         updateVideoEncoderButton()
     }

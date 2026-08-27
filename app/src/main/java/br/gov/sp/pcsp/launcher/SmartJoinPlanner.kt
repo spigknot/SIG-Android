@@ -23,7 +23,9 @@ data class SmartJoinMediaProfile(
     val rotationDegrees: Int,
     val audioSampleRate: Int,
     val audioChannels: Int,
-    val hasAudio: Boolean
+    val hasAudio: Boolean,
+    val pixFmt: String? = null,
+    val sar: String? = null
 )
 
 enum class SmartJoinMode {
@@ -65,6 +67,14 @@ object SmartJoinPlanner {
         }
 
         val sourceCodec = normalizeCodecFamily(sourceCodecFamily)
+        if (sourceCodec !in setOf("h264", "hevc")) {
+            return SmartJoinPlan(
+                mode = SmartJoinMode.FULL_REENCODE,
+                encoder = selectedEncoder,
+                reason = "Não há encoder compatível com ${sourceCodecFamily.uppercase()} para Smart Join."
+            )
+        }
+
         val compatibleEncoders = compatibleEncoderCandidates(sourceCodec, selectedEncoder, availableEncoders)
         val compatibleEncoder = compatibleEncoders.firstOrNull()
         val selectedEncoderReason = selectedEncoder
@@ -116,6 +126,14 @@ object SmartJoinPlanner {
         if (base.width != candidate.width || base.height != candidate.height) return false
         if (normalizeRotation(base.rotationDegrees) != normalizeRotation(candidate.rotationDegrees)) return false
         if (abs(base.fps - candidate.fps) > MAX_FPS_DELTA) return false
+        if (!base.pixFmt.isNullOrBlank() && !candidate.pixFmt.isNullOrBlank() &&
+            !base.pixFmt.equals(candidate.pixFmt, ignoreCase = true)) {
+            return false
+        }
+        if (!base.sar.isNullOrBlank() && !candidate.sar.isNullOrBlank() &&
+            !base.sar.equals(candidate.sar, ignoreCase = true)) {
+            return false
+        }
         if (base.hasAudio != candidate.hasAudio) return false
         if (base.hasAudio && (
                 base.audioSampleRate != candidate.audioSampleRate ||
@@ -131,6 +149,9 @@ object SmartJoinPlanner {
         return when (value.trim().lowercase()) {
             "avc", "h.264", "h264" -> "h264"
             "hevc", "h.265", "h265" -> "hevc"
+            "vp9", "vp09" -> "vp9"
+            "av1", "av01" -> "av1"
+            "mpeg4", "mp4v", "mp4v-es" -> "mpeg4"
             else -> value.trim().lowercase()
         }
     }

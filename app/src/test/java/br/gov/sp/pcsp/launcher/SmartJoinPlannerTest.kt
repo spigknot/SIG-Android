@@ -110,4 +110,28 @@ class SmartJoinPlannerTest {
         assertFalse(SmartJoinPlanner.profilesCompatible(base, base.copy(rotationDegrees = 0)))
         assertFalse(SmartJoinPlanner.profilesCompatible(base, base.copy(codecFamily = "h264")))
     }
+
+    @Test
+    fun differentPixFmtOrSar_isNotCompatible() {
+        val base = SmartJoinMediaProfile("h264", 1920, 1080, 30.0, 0, 48000, 2, true, pixFmt = "yuv420p", sar = "1:1")
+
+        assertFalse(SmartJoinPlanner.profilesCompatible(base, base.copy(pixFmt = "yuv420p10le")))
+        assertFalse(SmartJoinPlanner.profilesCompatible(base, base.copy(sar = "4:3")))
+        assertTrue(SmartJoinPlanner.profilesCompatible(base, base.copy(pixFmt = "YUV420P", sar = "1:1")))
+    }
+
+    @Test
+    fun modernCodecsWithoutAnnexB_forceFullReencode() {
+        listOf("vp9", "av1", "mpeg4").forEach { codec ->
+            val plan = SmartJoinPlanner.plan(
+                sourceCodecFamily = codec,
+                selectedEncoder = h264,
+                availableEncoders = listOf(h264, hevc, cpuH264),
+                inputsCompatible = true,
+                orientationMismatch = false
+            )
+            assertEquals("Codec $codec should force full reencode", SmartJoinMode.FULL_REENCODE, plan.mode)
+            assertTrue(plan.reason.orEmpty().contains("Não há encoder compatível"))
+        }
+    }
 }

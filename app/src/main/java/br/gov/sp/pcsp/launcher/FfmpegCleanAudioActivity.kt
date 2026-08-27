@@ -174,6 +174,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         }
         clearOutputResult()
         clearTerminal()
+        val jobFilterMode = selectedMode
         setProcessing(true)
         Thread {
             var inputFile: File? = null
@@ -185,7 +186,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
                 outputFile = File(cacheDir, "clean_${System.currentTimeMillis()}_$outputName")
                 val duration = readDuration(inputFile).coerceAtLeast(1L)
                 val startedAt = SystemClock.elapsedRealtime()
-                val args = buildFfmpegArguments(inputFile, outputFile)
+                val args = buildFfmpegArguments(inputFile, outputFile, jobFilterMode)
                 appendTerminal("ffmpeg ${args.joinToString(" ")}")
                 
                 val tracker = FfmpegTaskTracker(status, listOf("Preparando áudio", "Limpando áudio"))
@@ -234,13 +235,17 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun buildFfmpegArguments(inputFile: File, outputFile: File): Array<String> {
+    private fun buildFfmpegArguments(
+        inputFile: File,
+        outputFile: File,
+        mode: CleanMode = selectedMode
+    ): Array<String> {
         return arrayOf(
             "-y",
             "-i", inputFile.absolutePath,
             "-vn",
             "-map", "0:a:0",
-            "-af", selectedMode.filter,
+            "-af", mode.filter,
             "-c:a", "pcm_s16le",
             "-ar", "16000",
             "-ac", "1",
@@ -355,6 +360,9 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
             currentSessionId = null
             setCleanEnabled(selectedUri != null)
         }
+        buttonFilterMode.isEnabled = !processing
+        buttonSelectOutputFolder.isEnabled = !processing
+        findViewById<View>(R.id.button_select_file).isEnabled = !processing
     }
 
     private fun setCleanEnabled(enabled: Boolean) {

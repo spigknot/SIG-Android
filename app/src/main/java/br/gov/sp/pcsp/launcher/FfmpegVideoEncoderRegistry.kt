@@ -95,13 +95,11 @@ object FfmpegVideoEncoderRegistry {
             .setTitle("Encoders de vídeo")
             .setMessage(
                 "h264_mediacodec (recomendado)\n" +
-                    "Usa aceleração de hardware, costuma ser mais rápido, consome menos CPU e tem ampla compatibilidade. É a escolha ideal quando estiver disponível.\n\n" +
+                    "Usa aceleração de hardware do aparelho, sendo mais rápido, econômico no uso de bateria e amplamente compatível. É a escolha padrão quando disponível.\n\n" +
                     "hevc_mediacodec\n" +
-                    "Também usa hardware e pode gerar arquivos menores com qualidade semelhante. A compatibilidade com aparelhos e players antigos é menor e alguns fluxos rápidos podem exigir reencode completo.\n\n" +
-                    "libx264 (último recurso)\n" +
-                    "Encoder H.264 por CPU, muito compatível e previsível, mas normalmente bem mais lento e com maior consumo de bateria. Só aparece quando estiver incluído na biblioteca FFmpeg.\n\n" +
-                    "mpeg4 (CPU)\n" +
-                    "Fallback por CPU usado quando esta compilação do FFmpeg não possui libx264. É mais lento e comprime pior que H.264, mas permite processar sem depender dos MediaCodec."
+                    "Também utiliza aceleração por hardware (H.265), gerando arquivos menores com qualidade visual equivalente. A compatibilidade com players antigos pode ser menor.\n\n" +
+                    "libx264 (CPU)\n" +
+                    "Encoder H.264 por software via CPU. Garante alta previsibilidade e qualidade consistente, porém com maior tempo de processamento e consumo de bateria."
             )
             .setPositiveButton("OK", null)
             .show()

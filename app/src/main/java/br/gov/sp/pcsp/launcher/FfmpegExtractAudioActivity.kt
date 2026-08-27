@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
@@ -497,22 +499,46 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private fun handleIncomingShareIntent(intent: Intent?) {
         val action = intent?.action ?: return
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
+        var skippedSilentVideos = 0
         val videos = sharedUrisFrom(intent).mapNotNull { uri ->
             tryTakeReadPermission(uri, intent.flags)
             val name = queryDisplayName(uri) ?: "midia"
             val mime = contentResolver.getType(uri).orEmpty().ifBlank { mimeFromName(name) }
             if (!isSupportedMedia(mime, name)) return@mapNotNull null
+            if (!hasAudioTrack(uri)) {
+                skippedSilentVideos++
+                return@mapNotNull null
+            }
             SelectedVideo(uri, name, mime)
         }
         selectedOutputFolder = null
         if (videos.isEmpty()) {
-            clearSelection("Compartilhe um arquivo de áudio ou vídeo.")
+            clearSelection(if (skippedSilentVideos > 0) "O vídeo selecionado não possui trilha de áudio." else "Compartilhe um arquivo de áudio ou vídeo.")
             return
         }
         selectedVideos.clear()
         selectedVideos.addAll(videos.distinctBy { it.uri })
         showSelection()
-        status.text = "Arquivo recebido pelo compartilhamento."
+        status.text = if (skippedSilentVideos > 0) {
+            "$skippedSilentVideos vídeo(s) sem áudio ignorado(s)."
+        } else {
+            "Arquivo recebido pelo compartilhamento."
+        }
+    }
+
+    private fun hasAudioTrack(uri: Uri): Boolean {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(applicationContext, uri, null)
+            (0 until extractor.trackCount).any { index ->
+                val trackMime = extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME).orEmpty()
+                trackMime.startsWith("audio/")
+            }
+        } catch (_: Throwable) {
+            true
+        } finally {
+            try { extractor.release() } catch (_: Throwable) {}
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -548,6 +574,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
         data.data?.let { uris.add(it) }
 
+        var skippedSilentVideos = 0
         val videos = uris.distinct().mapNotNull { uri ->
             val mime = contentResolver.getType(uri).orEmpty()
             val name = queryDisplayName(uri) ?: "midia"
@@ -556,18 +583,25 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (_: SecurityException) {
             }
+            if (!hasAudioTrack(uri)) {
+                skippedSilentVideos++
+                return@mapNotNull null
+            }
             SelectedVideo(uri, name, mime.ifBlank { mimeFromName(name) })
         }
 
         selectedOutputFolder = null
         if (videos.isEmpty()) {
-            clearSelection("Escolha arquivos de áudio ou vídeo.")
+            clearSelection(if (skippedSilentVideos > 0) "Os vídeos selecionados não possuem trilha de áudio." else "Escolha arquivos de áudio ou vídeo.")
             return
         }
 
         selectedVideos.clear()
         selectedVideos.addAll(videos)
         showSelection()
+        if (skippedSilentVideos > 0) {
+            status.text = "$skippedSilentVideos vídeo(s) sem trilha de áudio ignorado(s)."
+        }
     }
 
     private fun loadPickedFolder(data: Intent) {
@@ -690,7 +724,10 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             return
         }
 
+        val jobVideos = selectedVideos.toList()
         val processingStartMs = SystemClock.elapsedRealtime()
+        val jobSettings = currentAudioSettings()
+        val jobOutputMime = jobSettings.extension.mime
         clearOutputResult()
         clearTerminal()
         setProcessing(true)
@@ -699,14 +736,14 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             val results = mutableListOf<OutputItem>()
             val failures = mutableListOf<String>()
             val usedNames = mutableSetOf<String>()
-            val taskList = selectedVideos.mapIndexed { index, _ -> 
-                if (selectedVideos.size > 1) "Extraindo áudio ${index + 1}/${selectedVideos.size}" else "Extraindo áudio" 
+            val taskList = jobVideos.mapIndexed { index, _ ->
+                if (jobVideos.size > 1) "Extraindo áudio ${index + 1}/${jobVideos.size}" else "Extraindo áudio"
             }
             val tracker = FfmpegTaskTracker(status, taskList)
             var totalDurationMs = 0L
             var cancelled = false
 
-            for ((index, video) in selectedVideos.withIndex()) {
+            for ((index, video) in jobVideos.withIndex()) {
                 if (Thread.interrupted()) {
                     cancelled = true
                     tracker.fail("Cancelado")
@@ -716,17 +753,16 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 try {
                     val inputFile = copyUriToCache(video.uri, video.name)
                     appendTerminalAudioInfo("original: ${describeAudioFile(inputFile)}")
-                    val outputName = buildOutputName(video.name, usedNames)
+                    val outputName = buildOutputName(video.name, usedNames, jobSettings.extension)
                     val tempOutput = File(cacheDir, "audio_${System.currentTimeMillis()}_$outputName")
                     val trimStartMs = if (trimSingleMedia) startMs ?: 0L else 0L
                     val trimEndMs = if (trimSingleMedia) endMs else null
                     val expectedDuration = trimEndMs?.let { it - trimStartMs } ?: readDuration(video.uri)
                     totalDurationMs += expectedDuration
-                    val audioSettings = currentAudioSettings()
-                    tracker.setTaskEncoder(index, audioEncoderForExtension(audioSettings.extension))
+                    tracker.setTaskEncoder(index, audioEncoderForExtension(jobSettings.extension))
                     tracker.startTask(index)
                     val session = executeFfmpegWithProgress(
-                        buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs),
+                        buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs, jobSettings),
                         expectedDuration,
                         tracker
                     )
@@ -746,7 +782,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     tracker.completeCurrentTask()
                     appendTerminalAudioInfo("gerado: ${describeAudioFile(tempOutput)}")
                     tempOutputFiles.add(tempOutput)
-                    results.add(OutputItem(Uri.fromFile(tempOutput), outputName, currentOutputMime()))
+                    results.add(OutputItem(Uri.fromFile(tempOutput), outputName, jobOutputMime))
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to extract audio from ${video.name}", e)
                     failures.add("${video.name}: ${e.message ?: "falha inesperada"}")
@@ -784,8 +820,13 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun buildFfmpegArguments(inputFile: File, outputFile: File, startMs: Long, endMs: Long?): Array<String> {
-        val settings = currentAudioSettings()
+    private fun buildFfmpegArguments(
+        inputFile: File,
+        outputFile: File,
+        startMs: Long,
+        endMs: Long?,
+        settings: AudioSettings = currentAudioSettings()
+    ): Array<String> {
         val args = mutableListOf("-y")
         if (endMs != null) {
             args.addAll(listOf("-ss", formatSeconds(startMs)))
@@ -913,10 +954,14 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         return inputFile
     }
 
-    private fun buildOutputName(name: String, usedNames: MutableSet<String>): String {
+    private fun buildOutputName(
+        name: String,
+        usedNames: MutableSet<String>,
+        audioExt: AudioExtension = currentAudioSettings().extension
+    ): String {
         val rawBase = name.substringBeforeLast('.', name).ifBlank { "audio" }
         val base = rawBase.replace(Regex("""[\\/:*?"<>|]"""), "_")
-        val extension = currentAudioSettings().extension.ext
+        val extension = audioExt.ext
         var candidate = "$base.$extension"
         var suffix = 2
         while (!usedNames.add(candidate.lowercase(Locale.ROOT))) {
@@ -1354,6 +1399,19 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             buttonExtract.contentDescription = "Extrair áudio"
             setExtractEnabled(selectedVideos.isNotEmpty())
         }
+        checkboxTranscriptionStandard.isEnabled = !processing
+        checkboxCompactStandard.isEnabled = !processing
+        buttonOutputExtension.isEnabled = !processing
+        buttonSampleRate.isEnabled = !processing
+        buttonChannels.isEnabled = !processing
+        buttonBitrate.isEnabled = !processing
+        buttonSelectOutputFolder.isEnabled = !processing
+        findViewById<View>(R.id.button_select_video).isEnabled = !processing
+        buttonPlayPause.isEnabled = !processing
+        buttonSpeedDown.isEnabled = !processing
+        buttonSpeedUp.isEnabled = !processing
+        inputFrom.isEnabled = !processing
+        inputTo.isEnabled = !processing
     }
 
     private fun cancelExtraction() {
