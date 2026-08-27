@@ -3576,6 +3576,12 @@ class RemoteSttActivity : AppCompatActivity() {
             return
         }
 
+        val snapshotTimelineStartMs = if (items.size == 1 && !whiteRecording) timeline?.getStartMs() ?: 0L else 0L
+        val snapshotTimelineEndMs = if (items.size == 1 && !whiteRecording) timeline?.getEndMs() ?: items.firstOrNull()?.durationMs?.coerceAtLeast(1L) ?: 0L else 0L
+        val snapshotVadMode = selectedVadMode
+        val snapshotVadLevel = selectedVadLevel
+        val snapshotPrepareMode = prepareMode
+
         clearOutputResult()
         setProcessing(true)
         val startedAt = SystemClock.elapsedRealtime()
@@ -3620,9 +3626,13 @@ class RemoteSttActivity : AppCompatActivity() {
                 items.forEachIndexed { index, item ->
                     prepareCompletion.submit(
                         prepareUploadTask(
-                            items, prepareMode, tempDir, terminalLines, index, item, vadStats,
+                            items, snapshotPrepareMode, tempDir, terminalLines, index, item, vadStats,
                             applyVad = !onlyConvert && !whiteRecording,
-                            useTimeline = !whiteRecording
+                            useTimeline = !whiteRecording,
+                            timelineStartMs = snapshotTimelineStartMs,
+                            timelineEndMs = snapshotTimelineEndMs,
+                            vadMode = snapshotVadMode,
+                            vadLevel = snapshotVadLevel
                         )
                     )
                 }
@@ -3778,7 +3788,11 @@ class RemoteSttActivity : AppCompatActivity() {
         item: MediaItem,
         vadStats: VadRunStats,
         applyVad: Boolean = true,
-        useTimeline: Boolean = true
+        useTimeline: Boolean = true,
+        timelineStartMs: Long = 0L,
+        timelineEndMs: Long = 0L,
+        vadMode: VadMode = selectedVadMode,
+        vadLevel: Int = selectedVadLevel
     ): Callable<PreparedUpload> {
         return Callable {
             ensureNotCancelled()
@@ -3795,8 +3809,12 @@ class RemoteSttActivity : AppCompatActivity() {
             val originalAudioInfo = describeAudioFile(inputFile)
             // A timeline do editor só se aplica a arquivos selecionados; a
             // gravação do microfone branco envia SEMPRE o áudio inteiro.
-            val startMs = if (items.size == 1 && useTimeline) timeline?.getStartMs() ?: 0L else 0L
-            val endMs = if (items.size == 1 && useTimeline) timeline?.getEndMs() ?: item.durationMs.coerceAtLeast(1L) else item.durationMs.coerceAtLeast(1L)
+            val startMs = if (items.size == 1 && useTimeline) timelineStartMs else 0L
+            val endMs = if (items.size == 1 && useTimeline) {
+                if (timelineEndMs > 0L) timelineEndMs else item.durationMs.coerceAtLeast(1L)
+            } else {
+                item.durationMs.coerceAtLeast(1L)
+            }
             val durationToSend = (endMs - startMs).coerceAtLeast(1L)
             val preparedUploadFile = prepareUploadFile(
                 mode = mode,
@@ -3818,7 +3836,9 @@ class RemoteSttActivity : AppCompatActivity() {
                     startMs = startMs,
                     durationMs = durationToSend,
                     terminalLines = terminalLines,
-                    vadStats = vadStats
+                    vadStats = vadStats,
+                    vadMode = vadMode,
+                    vadLevel = vadLevel
                 )
             } else {
                 preparedUploadFile
@@ -4574,16 +4594,18 @@ class RemoteSttActivity : AppCompatActivity() {
         startMs: Long,
         durationMs: Long,
         terminalLines: StringBuilder,
-        vadStats: VadRunStats
+        vadStats: VadRunStats,
+        vadMode: VadMode = selectedVadMode,
+        vadLevel: Int = selectedVadLevel
     ): UploadFile {
-        val mode = selectedVadMode
+        val mode = vadMode
         if (mode == VadMode.NONE) return preparedUploadFile
 
         ensureNotCancelled()
         val startedAt = SystemClock.elapsedRealtime()
         runOnUiThread { status.text = "Filtrando voz com VAD..." }
         appendTerminal(terminalLines, "[${item.name}] VAD selecionado: ${mode.label}")
-        appendTerminal(terminalLines, "[${item.name}] Agressividade VAD: $selectedVadLevel")
+        appendTerminal(terminalLines, "[${item.name}] Agressividade VAD: $vadLevel")
         runOnUiThread { updateTerminalText(terminalLines) }
 
         val readyWav = if (preparedUploadFile.mime == "audio/wav" &&
@@ -4603,7 +4625,7 @@ class RemoteSttActivity : AppCompatActivity() {
             filteredWav.absolutePath,
             modelPath,
             mode.nativeMode,
-            selectedVadLevel
+            vadLevel
         )
         ensureNotCancelled()
         val fields = nativeResult.split("|")
@@ -5009,6 +5031,24 @@ class RemoteSttActivity : AppCompatActivity() {
             buttonTranscribe?.contentDescription = "Transcrever no servidor"
             updateTranscribeEnabled()
         }
+        val notProcessing = !processing
+        timeline?.isEnabled = notProcessing
+        buttonVadMode?.isEnabled = notProcessing
+        buttonVadLevel?.isEnabled = notProcessing
+        checkboxOnlyConvert?.isEnabled = notProcessing
+        checkboxOnlyVad?.isEnabled = notProcessing
+        checkboxSendZip?.isEnabled = notProcessing
+        buttonZipLevel?.isEnabled = notProcessing
+        buttonCompactFiles?.isEnabled = notProcessing
+        buttonReadyFiles?.isEnabled = notProcessing
+        buttonOriginalFiles?.isEnabled = notProcessing
+        buttonSelectOutputFolder?.isEnabled = notProcessing
+        findViewById<View>(R.id.button_select_media)?.isEnabled = notProcessing
+        buttonPlayPause?.isEnabled = notProcessing
+        buttonSpeedDown?.isEnabled = notProcessing
+        buttonSpeedUp?.isEnabled = notProcessing
+        inputFrom?.isEnabled = notProcessing
+        inputTo?.isEnabled = notProcessing
     }
 
     private fun updateTranscribeEnabled() {

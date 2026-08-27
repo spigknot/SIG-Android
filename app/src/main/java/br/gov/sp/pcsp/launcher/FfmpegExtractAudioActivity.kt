@@ -626,19 +626,32 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             return
         }
 
+        var skippedSilentVideos = 0
         val videos = folder.listFiles()
-            .filter { it.isFile && isSupportedMedia(it.type.orEmpty(), it.name.orEmpty()) }
-            .map { SelectedVideo(it.uri, it.name ?: "midia", it.type.orEmpty().ifBlank { mimeFromName(it.name.orEmpty()) }) }
+            .filter { it.isFile }
+            .mapNotNull { file ->
+                val name = file.name ?: "midia"
+                val mime = file.type.orEmpty().ifBlank { mimeFromName(name) }
+                if (!isSupportedMedia(mime, name)) return@mapNotNull null
+                if (!hasAudioTrack(file.uri)) {
+                    skippedSilentVideos++
+                    return@mapNotNull null
+                }
+                SelectedVideo(file.uri, name, mime)
+            }
 
         selectedOutputFolder = null
         if (videos.isEmpty()) {
-            clearSelection("A pasta escolhida não tem áudio ou vídeo reconhecido.")
+            clearSelection(if (skippedSilentVideos > 0) "Os vídeos da pasta não possuem trilha de áudio." else "A pasta escolhida não tem áudio ou vídeo reconhecido.")
             return
         }
 
         selectedVideos.clear()
         selectedVideos.addAll(videos)
         showSelection()
+        if (skippedSilentVideos > 0) {
+            status.text = "$skippedSilentVideos vídeo(s) sem trilha de áudio ignorado(s)."
+        }
     }
 
     private fun showSelection() {
@@ -838,7 +851,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         args.addAll(
             listOf(
                 "-vn",
-                "-map", "0:a:0?",
+                "-map", "0:a:0",
                 "-ar", settings.sampleRate.toString(),
                 "-ac", settings.channels.toString()
             )
@@ -888,8 +901,9 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         for (tempFile in tempOutputFiles) {
             if (!tempFile.exists()) continue
             val outputName = tempFile.name.substringAfter('_')
+            val fileMime = mimeForOutputFile(tempFile)
             try {
-                val document = destDir.createFile(currentOutputMime(), outputName)
+                val document = destDir.createFile(fileMime, outputName)
                 if (document != null) {
                     contentResolver.openOutputStream(document.uri)?.use { output ->
                         tempFile.inputStream().use { input ->
@@ -897,7 +911,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                         }
                     }
                     savedCount++
-                    savedItems.add(OutputItem(document.uri, outputName, currentOutputMime()))
+                    savedItems.add(OutputItem(document.uri, outputName, fileMime))
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to save file $outputName to selected folder", e)
@@ -1014,6 +1028,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     private fun currentOutputMime(): String {
         return currentAudioSettings().extension.mime
+    }
+
+    private fun mimeForOutputFile(file: File): String {
+        val ext = file.extension.lowercase(Locale.ROOT)
+        return AudioExtension.values().firstOrNull { it.ext == ext }?.mime
+            ?: currentOutputMime()
     }
 
     private fun showOutputSettings(visible: Boolean) {

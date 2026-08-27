@@ -564,7 +564,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                             audioChannels = profile.audioChannels,
                             hasAudio = clips.getOrNull(index)?.hasAudio == true,
                             pixFmt = profile.pixFmt,
-                            sar = profile.sar
+                            sar = profile.sar,
+                            videoProfile = profile.videoProfile,
+                            audioCodec = profile.audioCodec
                         )
                     }
                 } else {
@@ -1056,15 +1058,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         withTransition: Boolean = true,
         standardizeToWav: Boolean = false
     ): Array<String> {
-        val transitionSeconds = safeTransitionSeconds()
-            .coerceAtMost((clips.minOfOrNull { it.durationMs } ?: 1L) / 2000.0)
-            .coerceAtLeast(0.01)
+        val transitionSeconds = if (withTransition) {
+            safeTransitionSeconds()
+                .coerceAtMost((clips.minOfOrNull { it.durationMs } ?: 1L) / 2000.0)
+                .coerceAtLeast(0.0)
+        } else 0.0
         val normalizeFilter = audioJoinNormalizeFilter(profile)
         val parts = mutableListOf<String>()
         clips.forEachIndexed { index, clip ->
             val clipSeconds = (clip.durationMs / 1000.0).coerceAtLeast(0.01)
             val fades = mutableListOf<String>()
-            if (withTransition && isFadeInOutTransition()) {
+            if (withTransition && isFadeInOutTransition() && transitionSeconds > 0.0) {
                 if (index > 0) fades += "afade=t=in:st=0:d=${formatDecimal(transitionSeconds)}"
                 if (index < clips.lastIndex) {
                     fades += "afade=t=out:st=${formatDecimal((clipSeconds - transitionSeconds).coerceAtLeast(0.0))}:d=${formatDecimal(transitionSeconds)}"
@@ -1079,7 +1083,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
         if (withTransition && isFadeInOutTransition()) {
             parts += clips.indices.joinToString("") { "[a$it]" } + "concat=n=${clips.size}:v=0:a=1[aout]"
-        } else if (withTransition) {
+        } else if (withTransition && transitionSeconds > 0.0) {
             var previous = "a0"
             for (index in 1 until clips.size) {
                 val output = "ax$index"
@@ -2229,11 +2233,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun regularVideoProcessingLabels(): List<String> {
         if (!checkReencode.isChecked) return listOf("Juntando sem reencodar")
         return if (isFadeInOutTransition()) {
-            listOf(
-                "Lendo keyframes dos vídeos",
-                "Calculando limites da transição",
-                "Verificando trechos preserváveis"
-            )
+            listOf("Aplicando Fade in/out")
         } else {
             listOf("Aplicando transições")
         }
@@ -2654,6 +2654,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
             val pixFmt = parsePixFmt(videoLine)
             val sar = parseSar(videoLine)
+            val videoProfile = parseVideoProfile(videoLine)
+            val audioCodec = detectAudioCodec(audioLine)
 
             OutputProfile(
                 width = resolution?.first ?: fallbackWidth,
@@ -2670,7 +2672,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 audioLayout = audioLayout,
                 audioBitrate = parseBitrateFromText(audioLine) ?: "192k",
                 pixFmt = pixFmt,
-                sar = sar
+                sar = sar,
+                videoProfile = videoProfile,
+                audioCodec = audioCodec
             )
         } catch (e: Throwable) {
             Log.w(TAG, "Could not detect output media profile", e)
@@ -2838,6 +2842,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return Regex("""SAR\s+(\d+:\d+)""", RegexOption.IGNORE_CASE).find(videoLine)?.groupValues?.get(1)
     }
 
+    private fun parseVideoProfile(videoLine: String): String? {
+        return Regex("""Video:\s*[a-zA-Z0-9_-]+\s*\(([^)]+)\)""").find(videoLine)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun detectAudioCodec(audioLine: String): String? {
+        return Regex("""Audio:\s*([a-zA-Z0-9_-]+)""").find(audioLine)?.groupValues?.get(1)?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotBlank() }
+    }
+
     private fun parseFrameRate(videoLine: String): String? {
         val value = Regex("""(\d+(?:\.\d+)?)\s*fps""", RegexOption.IGNORE_CASE)
             .find(videoLine)
@@ -2928,7 +2940,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val audioLayout: String,
         val audioBitrate: String,
         val pixFmt: String? = null,
-        val sar: String? = null
+        val sar: String? = null,
+        val videoProfile: String? = null,
+        val audioCodec: String? = null
     )
 
     private data class SmartJoinPiece(

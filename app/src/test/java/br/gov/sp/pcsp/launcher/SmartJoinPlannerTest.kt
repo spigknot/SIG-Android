@@ -134,4 +134,21 @@ class SmartJoinPlannerTest {
             assertTrue(plan.reason.orEmpty().contains("Não há encoder compatível"))
         }
     }
+
+    @Test
+    fun differentVideoProfile_isNotCompatible() {
+        val base = SmartJoinMediaProfile("h264", 1920, 1080, 30.0, 0, 48000, 2, true, videoProfile = "High")
+
+        assertFalse(SmartJoinPlanner.profilesCompatible(base, base.copy(videoProfile = "Baseline")))
+        assertTrue(SmartJoinPlanner.profilesCompatible(base, base.copy(videoProfile = "high")))
+    }
+
+    @Test
+    fun differentAudioCodec_isNotCompatible() {
+        val base = SmartJoinMediaProfile("h264", 1920, 1080, 30.0, 0, 48000, 2, true, audioCodec = "aac")
+
+        assertFalse(SmartJoinPlanner.profilesCompatible(base, base.copy(audioCodec = "mp3")))
+        assertFalse(SmartJoinPlanner.profilesCompatible(base, base.copy(audioCodec = "opus")))
+        assertTrue(SmartJoinPlanner.profilesCompatible(base, base.copy(audioCodec = "AAC")))
+    }
 }

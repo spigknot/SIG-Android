@@ -516,8 +516,10 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 val rawExtension = main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
                 val safeExtension = rawExtension.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
                 val isWav = safeExtension == "wav"
+                val smartInsertViable = jobConfig.smartInsertChecked && isSmartInsertCodecSupported(profile)
                 val fullReencode = (jobConfig.reencodeChecked && (!jobConfig.smartInsertChecked || jobConfig.selectedTransition != TRANSITION_NONE)) ||
-                    (isWav && !canCopyDirectly)
+                    (isWav && !canCopyDirectly) ||
+                    (jobConfig.smartInsertChecked && !smartInsertViable)
                 val resultFile = File(cacheDir, "insert_${System.currentTimeMillis()}_${sanitizeBase(main.name)}.$safeExtension")
                 val encoderName = if (fullReencode || jobConfig.smartInsertChecked) encoderForProfile(safeExtension, profile) else null
                 encoderName?.let {
@@ -692,7 +694,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         val middle = File(work, "001.$extension")
         val encoder = encoderForProfile(extension, profile)
         val encodeArgs = mutableListOf("-y", "-i", inserted.absolutePath, "-map", "0:a:0", "-c:a", encoder)
-        if (encoder !in setOf("flac", "pcm_s16le")) encodeArgs += listOf("-b:a", profile.bitrate)
+        if (encoder !in setOf("flac", "pcm_s16le", "alac")) encodeArgs += listOf("-b:a", profile.bitrate)
         encodeArgs += listOf("-ar", profile.sampleRate.toString(), "-ac", profile.channels.toString(), middle.absolutePath)
         val middleSession = executeBlocking(encodeArgs.toTypedArray())
         if (!ReturnCode.isSuccess(middleSession.returnCode)) return middleSession
@@ -975,12 +977,32 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         else -> "aac"
     }
 
+    private fun isSmartInsertCodecSupported(profile: AudioProfile): Boolean {
+        val codec = profile.codec.lowercase(Locale.ROOT)
+        return codec.contains("alac") ||
+            codec.contains("flac") ||
+            codec.contains("pcm") ||
+            codec.contains("wav") ||
+            codec.contains("vorbis") ||
+            codec.contains("opus") ||
+            codec.contains("mp3") ||
+            codec.contains("aac")
+    }
+
     private fun encoderForProfile(extension: String, profile: AudioProfile): String {
         val ext = extension.lowercase(Locale.ROOT)
-        if (ext == "ogg" || ext == "opus") {
-            return if (profile.codec.contains("vorbis", ignoreCase = true)) "libvorbis" else "libopus"
+        val codec = profile.codec.lowercase(Locale.ROOT)
+        return when {
+            codec.contains("alac") -> "alac"
+            codec.contains("flac") -> "flac"
+            codec.contains("pcm") || codec.contains("wav") -> "pcm_s16le"
+            codec.contains("vorbis") -> "libvorbis"
+            codec.contains("opus") -> "libopus"
+            codec.contains("mp3") -> "libmp3lame"
+            codec.contains("aac") -> "aac"
+            ext == "ogg" || ext == "opus" -> if (codec.contains("vorbis")) "libvorbis" else "libopus"
+            else -> encoderForExtension(ext)
         }
-        return encoderForExtension(ext)
     }
 
     private fun audioInputsAreCopyCompatible(mainProfile: AudioProfile, insertedProfile: AudioProfile): Boolean {

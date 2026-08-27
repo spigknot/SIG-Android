@@ -25,7 +25,9 @@ data class SmartJoinMediaProfile(
     val audioChannels: Int,
     val hasAudio: Boolean,
     val pixFmt: String? = null,
-    val sar: String? = null
+    val sar: String? = null,
+    val videoProfile: String? = null,
+    val audioCodec: String? = null
 )
 
 enum class SmartJoinMode {
@@ -44,6 +46,8 @@ object SmartJoinPlanner {
 
     private const val MAX_FPS_DELTA = 0.25
 
+    private val supportedSmartJoinCodecs = setOf("h264", "hevc")
+
     fun plan(
         sourceCodecFamily: String,
         selectedEncoder: SmartJoinEncoderOption?,
@@ -51,50 +55,53 @@ object SmartJoinPlanner {
         inputsCompatible: Boolean,
         orientationMismatch: Boolean
     ): SmartJoinPlan {
-        if (orientationMismatch) {
+        val normalizedSource = normalizeCodecFamily(sourceCodecFamily)
+        if (normalizedSource !in supportedSmartJoinCodecs) {
             return SmartJoinPlan(
                 mode = SmartJoinMode.FULL_REENCODE,
                 encoder = selectedEncoder,
-                reason = "As orientações dos vídeos são diferentes."
+                reason = "Não há encoder compatível para stream copy de $sourceCodecFamily em Smart Join."
             )
         }
+
         if (!inputsCompatible) {
             return SmartJoinPlan(
                 mode = SmartJoinMode.FULL_REENCODE,
                 encoder = selectedEncoder,
-                reason = "Os arquivos têm contratos de mídia incompatíveis."
+                reason = "Os arquivos de entrada possuem resoluções, taxas de quadros ou perfis incompatíveis para concatenação direta."
             )
         }
 
-        val sourceCodec = normalizeCodecFamily(sourceCodecFamily)
-        if (sourceCodec !in setOf("h264", "hevc")) {
+        if (orientationMismatch) {
             return SmartJoinPlan(
                 mode = SmartJoinMode.FULL_REENCODE,
                 encoder = selectedEncoder,
-                reason = "Não há encoder compatível com ${sourceCodecFamily.uppercase()} para Smart Join."
+                reason = "Os vídeos possuem orientações diferentes; a união direta geraria cortes ou faixas pretas incorretas."
             )
         }
 
-        val compatibleEncoders = compatibleEncoderCandidates(sourceCodec, selectedEncoder, availableEncoders)
-        val compatibleEncoder = compatibleEncoders.firstOrNull()
-        val selectedEncoderReason = selectedEncoder
-            ?.takeIf { normalizeCodecFamily(it.codecFamily) != sourceCodec }
-            ?.let { "O encoder selecionado (${it.ffmpegName}) não é compatível com o codec ${sourceCodec.uppercase()}." }
-
-        return if (compatibleEncoder != null) {
-            SmartJoinPlan(
-                mode = SmartJoinMode.SMART_JOIN,
-                encoder = compatibleEncoder,
-                reason = selectedEncoderReason,
-                compatibleEncoders = compatibleEncoders
-            )
-        } else {
-            SmartJoinPlan(
+        val candidates = compatibleEncoderCandidates(normalizedSource, selectedEncoder, availableEncoders)
+        if (candidates.isEmpty()) {
+            return SmartJoinPlan(
                 mode = SmartJoinMode.FULL_REENCODE,
                 encoder = selectedEncoder,
-                reason = "Não há encoder compatível com ${sourceCodecFamily.uppercase()}."
+                reason = "Nenhum encoder da família $normalizedSource está disponível neste dispositivo."
             )
         }
+
+        val preferred = candidates.first()
+        val reason = if (selectedEncoder != null && normalizeCodecFamily(selectedEncoder.codecFamily) != normalizedSource) {
+            "O encoder selecionado (${selectedEncoder.ffmpegName}) não é compatível com o codec dos vídeos ($sourceCodecFamily). Usando ${preferred.ffmpegName}."
+        } else {
+            null
+        }
+
+        return SmartJoinPlan(
+            mode = SmartJoinMode.SMART_JOIN,
+            encoder = preferred,
+            reason = reason,
+            compatibleEncoders = candidates
+        )
     }
 
     /**
@@ -134,13 +141,21 @@ object SmartJoinPlanner {
             !base.sar.equals(candidate.sar, ignoreCase = true)) {
             return false
         }
-        if (base.hasAudio != candidate.hasAudio) return false
-        if (base.hasAudio && (
-                base.audioSampleRate != candidate.audioSampleRate ||
-                    base.audioChannels != candidate.audioChannels
-                )
-        ) {
+        if (!base.videoProfile.isNullOrBlank() && !candidate.videoProfile.isNullOrBlank() &&
+            !base.videoProfile.equals(candidate.videoProfile, ignoreCase = true)) {
             return false
+        }
+        if (base.hasAudio != candidate.hasAudio) return false
+        if (base.hasAudio) {
+            if (base.audioSampleRate != candidate.audioSampleRate ||
+                base.audioChannels != candidate.audioChannels
+            ) {
+                return false
+            }
+            if (!base.audioCodec.isNullOrBlank() && !candidate.audioCodec.isNullOrBlank() &&
+                !normalizeAudioCodec(base.audioCodec).equals(normalizeAudioCodec(candidate.audioCodec), ignoreCase = true)) {
+                return false
+            }
         }
         return true
     }
@@ -158,5 +173,19 @@ object SmartJoinPlanner {
 
     fun normalizeRotation(value: Int): Int {
         return ((value % 360) + 360) % 360
+    }
+
+    fun normalizeAudioCodec(value: String): String {
+        val trimmed = value.trim().lowercase()
+        return when {
+            trimmed.contains("aac") -> "aac"
+            trimmed.contains("mp3") -> "mp3"
+            trimmed.contains("opus") -> "opus"
+            trimmed.contains("vorbis") -> "vorbis"
+            trimmed.contains("flac") -> "flac"
+            trimmed.contains("alac") -> "alac"
+            trimmed.contains("pcm") -> "pcm"
+            else -> trimmed
+        }
     }
 }

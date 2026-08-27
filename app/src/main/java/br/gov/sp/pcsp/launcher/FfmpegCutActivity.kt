@@ -478,7 +478,13 @@ class FfmpegCutActivity : AppCompatActivity() {
             status.text = "Confira os tempos de início e fim."
             return
         }
-        if (selectedMime.startsWith("video/") && selectedVideoEncoder == null) {
+        val jobMime = selectedMime
+        val jobEncoder = selectedVideoEncoder
+        val jobQuality = selectedVideoQuality
+        val jobStartMs = startMs
+        val jobEndMs = endMs
+
+        if (jobMime.startsWith("video/") && jobEncoder == null) {
             status.text = "Nenhum encoder de vídeo compatível está disponível."
             return
         }
@@ -499,16 +505,16 @@ class FfmpegCutActivity : AppCompatActivity() {
                 tempOutput = currentTempOutput
                 val tracker = FfmpegTaskTracker(status, listOf("Preparando arquivo"))
                 tracker.completeCurrentTask()
-                val execution = if (selectedMime.startsWith("video/")) {
-                    executeHybridVideoCut(currentInputFile, currentTempOutput, startMs, endMs, tracker)
+                val execution = if (jobMime.startsWith("video/")) {
+                    executeHybridVideoCut(currentInputFile, currentTempOutput, jobStartMs, jobEndMs, tracker, jobEncoder!!, jobQuality)
                 } else {
                     tracker.appendTasks(listOf("Preparando intervalo de áudio", "Recodificando áudio selecionado"))
                     tracker.completeCurrentTask()
                     tracker.setTaskEncoder(1, preciseAudioEncoderName(selectedName))
                     tracker.startCurrentTask()
                     val session = executeFfmpegWithProgress(
-                        buildPreciseFfmpegArguments(currentInputFile, currentTempOutput, startMs, endMs),
-                        endMs - startMs,
+                        buildPreciseFfmpegArguments(currentInputFile, currentTempOutput, jobStartMs, jobEndMs, jobMime, jobEncoder, jobQuality),
+                        jobEndMs - jobStartMs,
                         tracker
                     )
                     if (ReturnCode.isSuccess(session.returnCode)) tracker.completeCurrentTask()
@@ -583,12 +589,15 @@ class FfmpegCutActivity : AppCompatActivity() {
         inputFile: File,
         outputFile: File,
         startMs: Long,
-        endMs: Long
+        endMs: Long,
+        mime: String = selectedMime,
+        encoder: FfmpegVideoEncoder? = selectedVideoEncoder,
+        quality: FfmpegVideoQuality = selectedVideoQuality
     ): Array<String> {
         val duration = (endMs - startMs) / 1000.0
-        val rotationDegrees = if (selectedMime.startsWith("video/")) detectMetadataRotation(inputFile) else 0
+        val rotationDegrees = if (mime.startsWith("video/")) detectMetadataRotation(inputFile) else 0
         val args = mutableListOf("-y")
-        if (selectedMime.startsWith("video/")) {
+        if (mime.startsWith("video/")) {
             args += "-noautorotate"
             args.addAll(rotationInputArguments(rotationDegrees))
         }
@@ -598,10 +607,10 @@ class FfmpegCutActivity : AppCompatActivity() {
             "-t", String.format(Locale.US, "%.3f", duration)
         )
         val streamBitrates = detectStreamBitrates(inputFile)
-        if (selectedMime.startsWith("video/")) {
-            val encoder = selectedVideoEncoder ?: error("Encoder de vídeo indisponível")
+        if (mime.startsWith("video/")) {
+            val enc = encoder ?: error("Encoder de vídeo indisponível")
             args.addAll(listOf("-map", "0:v:0?", "-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0"))
-            args.addAll(videoEncodingArguments(encoder, streamBitrates.video ?: FALLBACK_VIDEO_BITRATE))
+            args.addAll(videoEncodingArguments(enc, streamBitrates.video ?: FALLBACK_VIDEO_BITRATE, quality))
             args.addAll(listOf("-c:a", "aac", "-b:a", streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE, "-movflags", "+faststart", "-avoid_negative_ts", "make_zero"))
         } else {
             args.addAll(listOf("-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0", "-vn"))
@@ -616,15 +625,17 @@ class FfmpegCutActivity : AppCompatActivity() {
         outputFile: File,
         startMs: Long,
         endMs: Long,
-        tracker: FfmpegTaskTracker
+        tracker: FfmpegTaskTracker,
+        encoder: FfmpegVideoEncoder? = selectedVideoEncoder,
+        quality: FfmpegVideoQuality = selectedVideoQuality
     ): CutExecutionResult {
-        val encoder = selectedVideoEncoder ?: return CutExecutionResult(false, false, "Encoder de vídeo indisponível")
+        val actualEncoder = encoder ?: return CutExecutionResult(false, false, "Encoder de vídeo indisponível")
         tracker.appendTasks(listOf("Analisando codec e orientação"))
         val isH264 = isH264Video(inputFile)
         val rotationDegrees = detectMetadataRotation(inputFile)
         tracker.completeCurrentTask()
-        if (!isH264 || encoder.codecFamily != "h264") {
-            return executeFullPrecisionFallback(inputFile, outputFile, startMs, endMs, rotationDegrees, tracker)
+        if (!isH264 || actualEncoder.codecFamily != "h264") {
+            return executeFullPrecisionFallback(inputFile, outputFile, startMs, endMs, rotationDegrees, tracker, actualEncoder, quality)
         }
 
         tracker.appendTasks(listOf("Localizando keyframes no intervalo"))
@@ -633,7 +644,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         val endKeyframe = keyframes.lastOrNull { it <= endMs }
         tracker.completeCurrentTask()
         if (startKeyframe == null || endKeyframe == null || startKeyframe >= endKeyframe) {
-            return executeFullPrecisionFallback(inputFile, outputFile, startMs, endMs, rotationDegrees, tracker)
+            return executeFullPrecisionFallback(inputFile, outputFile, startMs, endMs, rotationDegrees, tracker, actualEncoder, quality)
         }
 
         val bitrates = detectStreamBitrates(inputFile)
@@ -649,7 +660,7 @@ class FfmpegCutActivity : AppCompatActivity() {
             tracker.appendTasks(tasks)
             tasks.forEachIndexed { index, task ->
                 if (task.startsWith("Recodificando")) {
-                    tracker.setTaskEncoder(taskOffset + index, encoder.shortName)
+                    tracker.setTaskEncoder(taskOffset + index, actualEncoder.shortName)
                 } else if (task == "Copiando trecho central sem reencodar" && bitrates.audio != null) {
                     tracker.setTaskEncoder(taskOffset + index, "aac")
                 }
@@ -680,7 +691,7 @@ class FfmpegCutActivity : AppCompatActivity() {
             if (startKeyframe > startMs) {
                 val startPiece = File(workDir, "start.ts")
                 runPiece(
-                    buildHybridEdgeArguments(inputFile, startPiece, startMs, startKeyframe, bitrates, seekAccurately = true),
+                    buildHybridEdgeArguments(inputFile, startPiece, startMs, startKeyframe, bitrates, seekAccurately = true, encoder = actualEncoder, quality = quality),
                     startKeyframe - startMs,
                     startPiece
                 )?.let { return it }
@@ -696,7 +707,7 @@ class FfmpegCutActivity : AppCompatActivity() {
             if (endKeyframe < endMs) {
                 val endPiece = File(workDir, "end.ts")
                 runPiece(
-                    buildHybridEdgeArguments(inputFile, endPiece, endKeyframe, endMs, bitrates, seekAccurately = false),
+                    buildHybridEdgeArguments(inputFile, endPiece, endKeyframe, endMs, bitrates, seekAccurately = false, encoder = actualEncoder, quality = quality),
                     endMs - endKeyframe,
                     endPiece
                 )?.let { return it }
@@ -739,10 +750,11 @@ class FfmpegCutActivity : AppCompatActivity() {
         startMs: Long,
         endMs: Long,
         rotationDegrees: Int,
-        tracker: FfmpegTaskTracker
+        tracker: FfmpegTaskTracker,
+        encoder: FfmpegVideoEncoder = selectedVideoEncoder ?: error("Encoder de vídeo indisponível"),
+        quality: FfmpegVideoQuality = selectedVideoQuality
     ): CutExecutionResult {
-        val encoder = selectedVideoEncoder
-        val encoderName = encoder?.shortName ?: "encoder de vídeo"
+        val encoderName = encoder.shortName
         val orientationTask = if (rotationDegrees == 0) {
             "Mantendo orientação original"
         } else {
@@ -759,7 +771,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         tracker.completeCurrentTask()
         tracker.startCurrentTask()
         val session = executeFfmpegWithProgress(
-            buildPreciseFfmpegArguments(inputFile, outputFile, startMs, endMs),
+            buildPreciseFfmpegArguments(inputFile, outputFile, startMs, endMs, selectedMime, encoder, quality),
             endMs - startMs,
             tracker
         )
@@ -780,19 +792,20 @@ class FfmpegCutActivity : AppCompatActivity() {
         startMs: Long,
         endMs: Long,
         bitrates: StreamBitrates,
-        seekAccurately: Boolean
+        seekAccurately: Boolean,
+        encoder: FfmpegVideoEncoder = selectedVideoEncoder ?: error("Encoder de vídeo indisponível"),
+        quality: FfmpegVideoQuality = selectedVideoQuality
     ): Array<String> {
         val duration = (endMs - startMs) / 1000.0
         val args = mutableListOf("-y")
         if (!seekAccurately) args += listOf("-ss", formatSeconds(startMs))
         args += listOf("-noautorotate", "-i", inputFile.absolutePath)
         if (seekAccurately) args += listOf("-ss", formatSeconds(startMs))
-        val encoder = selectedVideoEncoder ?: error("Encoder de vídeo indisponível")
         args += listOf(
             "-t", String.format(Locale.US, "%.3f", duration),
             "-map", "0:v:0?", "-map", "0:a:0?"
         )
-        args += videoEncodingArguments(encoder, bitrates.video ?: FALLBACK_VIDEO_BITRATE)
+        args += videoEncodingArguments(encoder, bitrates.video ?: FALLBACK_VIDEO_BITRATE, quality)
         args += listOf(
             "-c:a", "aac", "-b:a", bitrates.audio ?: FALLBACK_AUDIO_BITRATE,
             "-avoid_negative_ts", "make_zero", "-mpegts_flags", "+resend_headers",
@@ -1137,6 +1150,20 @@ class FfmpegCutActivity : AppCompatActivity() {
             buttonCut.contentDescription = "Cortar"
             setCutEnabled(selectedUri != null)
         }
+        buttonVideoEncoder.isEnabled = !processing
+        buttonVideoQuality.isEnabled = !processing
+        timeline.isEnabled = !processing
+        buttonPlayPause.isEnabled = !processing
+        buttonSpeedDown.isEnabled = !processing
+        buttonSpeedUp.isEnabled = !processing
+        inputFrom.isEnabled = !processing
+        inputTo.isEnabled = !processing
+        buttonFromPrev.isEnabled = !processing
+        buttonFromNext.isEnabled = !processing
+        buttonToPrev.isEnabled = !processing
+        buttonToNext.isEnabled = !processing
+        buttonSelectOutputFolder.isEnabled = !processing
+        findViewById<View>(R.id.button_select_file).isEnabled = !processing
         updateVideoEncoderButton()
     }
 
@@ -1233,8 +1260,12 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
-    private fun videoEncodingArguments(encoder: FfmpegVideoEncoder, sourceBitrate: String): List<String> {
-        val settings = encoder.encodingFor(selectedVideoQuality, sourceBitrate)
+    private fun videoEncodingArguments(
+        encoder: FfmpegVideoEncoder,
+        sourceBitrate: String,
+        quality: FfmpegVideoQuality = selectedVideoQuality
+    ): List<String> {
+        val settings = encoder.encodingFor(quality, sourceBitrate)
         return settings.arguments + settings.targetBitrate.orEmpty().takeIf { it.isNotBlank() }
             ?.let { listOf("-b:v", it) }
             .orEmpty()
