@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,6 +23,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -49,27 +51,35 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToLong
 
 /**
- * STT local com Granite Speech 5.0 TurboCTC (ONNX).
+ * STT local com Granite Speech 5.0 TurboCTC e Granite 4.1 NAR (ONNX).
  *
- * Fluxo copiado do WhisperActivity, simplificado: modelo único (5.0 Turbo),
- * backend CPU / GPU (NNAPI) / NPU (NNAPI), sem VAD/idioma/timestamps.
+ * Tela limpa (2026-08-28): + arquivo, seletor de modelo, CPU/GPU/NPU,
+ * botão verde de transcrever, caixa de transcrição e botões de clipboard
+ * copiados da ferramenta Ocorrência.
  */
 class GraniteActivity : AppCompatActivity() {
 
     private lateinit var graniteScroll: ScrollView
-    private lateinit var selectedFileView: TextView
     private lateinit var buttonModel: TextView
     private lateinit var buttonBackend: TextView
     private lateinit var buttonTranscribe: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
     private lateinit var outputText: EditText
+    private lateinit var outputClipboardActions: FrameLayout
+
+    private var buttonRecoverTranscript: ImageButton? = null
+    private var buttonClearTranscript: TextView? = null
+    private var buttonShareLiveTranscript: ImageButton? = null
+    private var buttonCopyLiveTranscript: ImageButton? = null
+    private var buttonPasteTranscript: View? = null
 
     private val selectedItems = mutableListOf<MediaItem>()
     private var selectedBackend = GraniteExecutionBackend.CPU
     private var selectedModel = MODEL_TURBO
     private var lastSession: OutputSession? = null
     private var currentTranscriptionText: String = ""
+    private var lastReceivedTranscription: String = ""
     private var tempSessionDir: File? = null
     private var sourcePopup: PopupWindow? = null
     private var isBusy = false
@@ -96,16 +106,34 @@ class GraniteActivity : AppCompatActivity() {
         setContentView(R.layout.activity_granite)
 
         graniteScroll = findViewById(R.id.granite_scroll)
-        selectedFileView = findViewById(R.id.selected_file)
         buttonModel = findViewById(R.id.button_model)
         buttonBackend = findViewById(R.id.button_backend)
         buttonTranscribe = findViewById(R.id.button_transcribe)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
         outputText = findViewById(R.id.output_text)
+        outputClipboardActions = findViewById(R.id.live_transcript_clipboard_actions)
+
+        // botões de clipboard (IDs copiados do layout de Ocorrência)
+        buttonRecoverTranscript = findViewById(R.id.button_recover_transcript)
+        buttonClearTranscript = findViewById(R.id.button_clear_transcript)
+        buttonShareLiveTranscript = findViewById(R.id.button_share_live_transcript)
+        buttonCopyLiveTranscript = findViewById(R.id.button_copy_live_transcript)
+        buttonPasteTranscript = findViewById(R.id.button_paste_transcript)
 
         buttonBackend.text = selectedBackend.shortLabel
         buttonModel.text = modelLabel(selectedModel)
+
+        // Scrolling interno da caixa de texto + proteção contra roubo de touch pelo ScrollView
+        outputText.movementMethod = ScrollingMovementMethod.getInstance()
+        outputText.setOnTouchListener { view, event ->
+            view.parent.requestDisallowInterceptTouchEvent(true)
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                view.parent.requestDisallowInterceptTouchEvent(false)
+            }
+            if (event.actionMasked == MotionEvent.ACTION_UP) view.performClick()
+            false
+        }
 
         val exitHandler = installCancelAndExitGuard(
             isTaskRunning = { isTranscribing || isBusy },
@@ -118,7 +146,14 @@ class GraniteActivity : AppCompatActivity() {
         }
         buttonModel.setOnClickListener { showModelMenu() }
         buttonBackend.setOnClickListener { showBackendMenu() }
-        outputText.setText(currentTranscriptionText)
+
+        // clipboard handlers
+        buttonRecoverTranscript?.setOnClickListener { recoverLastTranscription() }
+        buttonClearTranscript?.setOnClickListener { clearTextWithConfirmation() }
+        buttonShareLiveTranscript?.setOnClickListener { shareTranscriptText() }
+        buttonCopyLiveTranscript?.setOnClickListener { copyTranscriptToClipboard() }
+        buttonPasteTranscript?.setOnClickListener { pasteTranscriptFromClipboard() }
+
         updateTranscribeEnabled()
     }
 
@@ -201,12 +236,10 @@ class GraniteActivity : AppCompatActivity() {
             }
         } ?: data.data?.let { addSelectedUri(it, data.flags) }
         if (selectedItems.isEmpty()) return
-        selectedFileView.text = selectedSummary()
-        selectedFileView.visibility = View.VISIBLE
         buttonModel.visibility = View.VISIBLE
         buttonBackend.visibility = View.VISIBLE
         buttonTranscribe.visibility = View.VISIBLE
-        status.text = "Escolha um modelo."
+        status.text = "Selecionado: ${selectedSummary()} — escolha um modelo."
         clearOutput()
         updateTranscribeEnabled()
     }
@@ -235,12 +268,10 @@ class GraniteActivity : AppCompatActivity() {
             Toast.makeText(this, "A pasta escolhida não tem áudio ou vídeo reconhecido.", Toast.LENGTH_SHORT).show()
             return
         }
-        selectedFileView.text = selectedSummary()
-        selectedFileView.visibility = View.VISIBLE
         buttonModel.visibility = View.VISIBLE
         buttonBackend.visibility = View.VISIBLE
         buttonTranscribe.visibility = View.VISIBLE
-        status.text = "Escolha um modelo."
+        status.text = "${selectedSummary()} — escolha um modelo."
         clearOutput()
         updateTranscribeEnabled()
     }
@@ -586,7 +617,10 @@ class GraniteActivity : AppCompatActivity() {
                 val htmlFile = File(sessionDir, "transcricoes.html")
                 val sessionLogFile = File(sessionDir, "log.txt")
                 val sessionTerminalFile = File(sessionDir, "terminal.txt")
-                txtFile.writeText(liveText.toString(), Charsets.UTF_8)
+
+                // fonte única: caixa de texto e arquivo TXT vêm do MESMO string
+                val fullText = synchronized(liveText) { liveText.toString() }
+                txtFile.writeText(fullText, Charsets.UTF_8)
                 htmlFile.writeText(buildHtml(results), Charsets.UTF_8)
                 val report = buildReport(backend, items.size, totalAudioSeconds, elapsedMs, modelLoadMs)
                 appendLog(logLines, report)
@@ -601,9 +635,8 @@ class GraniteActivity : AppCompatActivity() {
                     cancelRequested = false
                     stopTranscriptionTimer()
                     setBusy(false)
-                    outputText.visibility = View.VISIBLE
                     status.text = "Transcrição concluída com sucesso!"
-                    updateOutputText()
+                    showTranscriptionText(fullText)
                     graniteScroll.post { graniteScroll.smoothScrollTo(0, outputText.bottom) }
                     updateTranscribeEnabled()
                 }
@@ -644,7 +677,6 @@ class GraniteActivity : AppCompatActivity() {
                     stopTranscriptionTimer()
                     setBusy(false)
                     status.text = "Erro: $errorMessage"
-                    updateOutputText()
                     updateTranscribeEnabled()
                 }
             }
@@ -833,10 +865,124 @@ class GraniteActivity : AppCompatActivity() {
     private fun clearOutput() {
         lastSession = null
         tempSessionDir = null
+        currentTranscriptionText = ""
+        outputText.setText("")
+        outputText.setMinLines(5)
         outputText.visibility = View.GONE
+        outputClipboardActions.visibility = View.GONE
         progress.visibility = View.GONE
         progress.progress = 0
     }
+
+    // ---- caixa de transcrição e clipboard (espelhado da Ocorrência) ----
+
+    private fun showTranscriptionText(text: String) {
+        currentTranscriptionText = text
+        lastReceivedTranscription = text
+        outputText.setText(text)
+        outputText.setMinLines(if (text.isBlank()) 5 else 0)
+        outputText.visibility = View.VISIBLE
+        outputClipboardActions.visibility = if (text.isBlank()) View.GONE else View.VISIBLE
+    }
+
+    private fun recoverLastTranscription() {
+        if (lastReceivedTranscription.isBlank()) return
+        val restore = { showTranscriptionText(lastReceivedTranscription) }
+        if (outputText.text?.toString()?.trim().isNullOrBlank()) {
+            restore()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setMessage("Deseja sobrescrever?")
+            .setPositiveButton("Sim") { _, _ -> restore() }
+            .setNegativeButton("Não", null)
+            .show()
+    }
+
+    private fun clearTextWithConfirmation() {
+        val clear = {
+            outputText.setText("")
+            outputText.setMinLines(5)
+            outputClipboardActions.visibility = View.GONE
+            currentTranscriptionText = ""
+        }
+        if (outputText.text?.toString()?.trim().isNullOrBlank()) {
+            clear()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setMessage("Deseja sobrescrever?")
+            .setPositiveButton("Sim") { _, _ -> clear() }
+            .setNegativeButton("Não", null)
+            .show()
+    }
+
+    private fun copyTranscriptToClipboard() {
+        val text = outputText.text?.toString()?.trim().orEmpty()
+        if (text.isBlank()) {
+            Toast.makeText(this, "Ainda não há texto para copiar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Transcrição Granite", text))
+        Toast.makeText(this, "Texto copiado.", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun shareTranscriptText() {
+        val text = outputText.text?.toString()?.trim().orEmpty()
+        if (text.isBlank()) {
+            Toast.makeText(this, "Ainda não há texto para compartilhar.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        shareTextAsFile(text, "Transcrição Granite")
+    }
+
+    private fun shareTextAsFile(text: String, label: String) {
+        val safeLabel = label.lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9]+"), "_")
+            .trim('_')
+            .ifBlank { "texto" }
+        val file = File(cacheDir, "sig_${safeLabel}_${System.currentTimeMillis()}.txt")
+        try {
+            file.writeText(text.trimEnd() + "\n", Charsets.UTF_8)
+        } catch (e: Throwable) {
+            Log.e(TAG, "Could not prepare text file for sharing", e)
+            Toast.makeText(this, "Não consegui preparar o arquivo de texto.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_TITLE, file.name)
+            clipData = ClipData.newRawUri(file.name, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(intent, "Compartilhar transcrição Granite"))
+    }
+
+    private fun pasteTranscriptFromClipboard() {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip ?: return
+        if (clip.itemCount == 0) return
+        val pasted = clip.getItemAt(0).coerceToText(this)?.toString()?.trim().orEmpty()
+        if (pasted.isBlank()) return
+        val apply = {
+            showTranscriptionText(pasted)
+        }
+        if (outputText.text?.toString()?.isBlank() != false) {
+            apply()
+        } else {
+            AlertDialog.Builder(this)
+                .setMessage("Deseja sobrescrever?")
+                .setPositiveButton("Sim") { _, _ -> apply() }
+                .setNegativeButton("Não", null)
+                .show()
+        }
+    }
+
+    // ---- helpers ----
 
     private fun appendLog(logLines: StringBuilder, line: String) {
         logLines.append(line).append('\n')
@@ -852,11 +998,6 @@ class GraniteActivity : AppCompatActivity() {
 
     private fun appendTranscriptionSeparator(liveText: StringBuilder) {
         liveText.append('\n')
-    }
-
-    private fun updateOutputText() {
-        outputText.setText(currentTranscriptionText)
-        outputText.visibility = View.VISIBLE
     }
 
     private fun snapshotText(sb: StringBuilder): String {
