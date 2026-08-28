@@ -87,6 +87,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var buttonOutputShare: ImageButton
     private lateinit var buttonSelectOutputFolder: ImageButton
     private lateinit var arrowInputOutput: View
+    private lateinit var buttonSelectVideos: View
 
     private val handler = Handler(Looper.getMainLooper())
     private val clips = mutableListOf<JoinClip>()
@@ -185,7 +186,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             cancelTask = { cancelJoin() }
         )
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
-        findViewById<View>(R.id.button_select_videos).setOnClickListener { openMediaPicker() }
+        buttonSelectVideos = findViewById<View>(R.id.button_select_videos)
+        buttonSelectVideos.setOnClickListener { openMediaPicker() }
         buttonSelectOutputFolder.setOnClickListener { openOutputFolderPicker(REQUEST_CHOOSE_PRE_OUTPUT_DIR) }
         buttonTransition.setOnClickListener { showTransitionMenu() }
         buttonVideoEncoder.setOnClickListener { showVideoEncoderMenu() }
@@ -1742,7 +1744,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         checkSmartJoin.isEnabled = !processing
         timeline.isEnabled = !processing
         buttonSelectOutputFolder.isEnabled = !processing
-        findViewById<View>(R.id.button_select_video).isEnabled = !processing
+        buttonSelectVideos.isEnabled = !processing
         joinPlayPause.isEnabled = !processing
         joinSpeedDown.isEnabled = !processing
         joinSpeedUp.isEnabled = !processing

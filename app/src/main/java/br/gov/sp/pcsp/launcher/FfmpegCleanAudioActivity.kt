@@ -52,6 +52,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     private lateinit var buttonSaveToFolder: ImageButton
     private lateinit var buttonOutputFolder: ImageButton
     private lateinit var buttonOutputShare: ImageButton
+    private lateinit var buttonSelectAudio: View
 
     private var selectedUri: Uri? = null
     private var selectedName = ""
@@ -92,7 +93,8 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
             cancelTask = { cancelCleaning() }
         )
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
-        findViewById<View>(R.id.button_select_audio).setOnClickListener { openAudioPicker() }
+        buttonSelectAudio = findViewById<View>(R.id.button_select_audio)
+        buttonSelectAudio.setOnClickListener { openAudioPicker() }
         buttonSelectOutputFolder.setOnClickListener {
             startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQUEST_CHOOSE_PRE_OUTPUT_DIR)
         }
@@ -362,7 +364,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         }
         buttonFilterMode.isEnabled = !processing
         buttonSelectOutputFolder.isEnabled = !processing
-        findViewById<View>(R.id.button_select_file).isEnabled = !processing
+        buttonSelectAudio.isEnabled = !processing
     }
 
     private fun setCleanEnabled(enabled: Boolean) {

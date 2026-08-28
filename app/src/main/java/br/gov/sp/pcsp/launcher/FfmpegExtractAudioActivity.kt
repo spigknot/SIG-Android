@@ -153,6 +153,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     @Volatile private var currentSessionId: Long? = null
  
     private lateinit var buttonSelectOutputFolder: ImageButton
+    private lateinit var buttonSelectSource: View
     private lateinit var arrowInputOutput: View
     private lateinit var buttonSaveToFolder: ImageButton
     private var preSelectedOutputDirUri: Uri? = null
@@ -242,7 +243,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             cancelTask = { cancelExtraction() }
         )
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
-        findViewById<View>(R.id.button_select_source).setOnClickListener { showSourceMenu(it) }
+        buttonSelectSource = findViewById<View>(R.id.button_select_source)
+        buttonSelectSource.setOnClickListener { showSourceMenu(it) }
         buttonSpeedDown.setOnClickListener { changePlaybackSpeed(-1) }
         buttonPlayPause.setOnClickListener { togglePreviewPlayback() }
         buttonSpeedUp.setOnClickListener { changePlaybackSpeed(1) }
@@ -1426,7 +1428,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         buttonChannels.isEnabled = !processing
         buttonBitrate.isEnabled = !processing
         buttonSelectOutputFolder.isEnabled = !processing
-        findViewById<View>(R.id.button_select_video).isEnabled = !processing
+        buttonSelectSource.isEnabled = !processing
         buttonPlayPause.isEnabled = !processing
         buttonSpeedDown.isEnabled = !processing
         buttonSpeedUp.isEnabled = !processing
