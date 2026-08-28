@@ -74,6 +74,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var inputTransitionTime: EditText
     private lateinit var checkReencode: CheckBox
     private lateinit var checkSmartJoin: CheckBox
+    private lateinit var smartJoinRow: View
     private lateinit var buttonVideoEncoder: TextView
     private lateinit var buttonVideoQuality: TextView
     private lateinit var videoEncodingControls: View
@@ -167,6 +168,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         inputTransitionTime = findViewById(R.id.input_transition_time)
         checkReencode = findViewById(R.id.check_reencode)
         checkSmartJoin = findViewById(R.id.check_smart_join)
+        smartJoinRow = findViewById(R.id.smart_join_row)
         buttonVideoEncoder = findViewById(R.id.button_video_encoder)
         buttonVideoQuality = findViewById(R.id.button_video_quality)
         videoEncodingControls = findViewById(R.id.video_encoding_controls)
@@ -393,7 +395,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         joinCurrentTime.text = formatTime(currentJoinPlaybackPosition())
         val isAudio = currentJoinIsAudio()
         videoEncodingControls.visibility = if (isAudio) View.GONE else View.VISIBLE
-        checkSmartJoin.visibility = if (isAudio) View.GONE else View.VISIBLE
+        smartJoinRow.visibility = if (isAudio) View.GONE else View.VISIBLE
         if (isAudio && checkSmartJoin.isChecked) {
             checkSmartJoin.isChecked = false
         }
@@ -1085,7 +1087,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
         if (withTransition && isFadeInOutTransition()) {
             parts += clips.indices.joinToString("") { "[a$it]" } + "concat=n=${clips.size}:v=0:a=1[aout]"
-        } else if (withTransition && transitionSeconds > 0.0) {
+        } else if (withTransition && transitionSeconds > 0.0 && selectedTransition != TRANSITION_NONE) {
             var previous = "a0"
             for (index in 1 until clips.size) {
                 val output = "ax$index"
@@ -3005,6 +3007,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         private const val FALLBACK_VIDEO_BITRATE = "15M"
         private const val DEFAULT_VIDEO_CODEC = "h264"
         private const val TRANSITION_FADE_IN_OUT = "Fade in/out"
+        private const val TRANSITION_NONE = "none"
         private const val TRANSITION_DEFAULT_VIDEO = "fade"
         private const val SMART_JOIN_VALIDATION_LABEL = "Validando encoders do Smart Join"
         private const val SMART_JOIN_PREFLIGHT_MAX_SECONDS = 1.0
@@ -3025,29 +3028,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         private val AUDIO_TRANSITIONS = linkedMapOf(
             TRANSITION_FADE_IN_OUT to null,
             "Linear slope (tri)" to "tri",
-            "Quarter sine wave (qsin)" to "qsin",
-            "Exponential sine wave (esin)" to "esin",
-            "Half sine wave (hsin)" to "hsin",
-            "Logarithmic (log)" to "log",
-            "Inverted parabola (ipar)" to "ipar",
-            "Quadratic (qua)" to "qua",
-            "Cubic (cub)" to "cub",
-            "Square root (squ)" to "squ",
-            "Cubic root (cbr)" to "cbr",
-            "Parabola (par)" to "par",
             "Exponential (exp)" to "exp",
-            "Inverted quarter sine wave (iqsin)" to "iqsin",
-            "Inverted half sine wave (ihsin)" to "ihsin",
-            "Double-exponential seat (dese)" to "dese",
-            "Double-exponential sigmoid (desi)" to "desi",
-            "Logistic sigmoid (losi)" to "losi",
-            "Sine cardinal function (sinc)" to "sinc",
-            "Inverted sine cardinal function (isinc)" to "isinc",
-            "Quartic (quat)" to "quat",
-            "Quartic root (quatr)" to "quatr",
-            "Squared quarter sine wave (qsin2)" to "qsin2",
-            "Squared half sine wave (hsin2)" to "hsin2",
-            "No fade (nofade)" to "nofade"
+            "Logarithmic (log)" to "log",
+            "Sem transição" to TRANSITION_NONE
         )
     }
 }
