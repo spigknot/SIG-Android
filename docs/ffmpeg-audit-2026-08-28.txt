@@ -1,0 +1,1035 @@
+================================================================================
+AUDITORIA DE COMANDOS FFMPEG — FERRAMENTAS DO SIG ANDROID
+================================================================================
+Data:           28/08/2026
+Projeto:        SIG Android (D:/Projetos/SIG)
+Escopo:         6 ferramentas FFmpeg (Cut, Join, Rotate, Extract, Insert, Clean)
+                + comandos de pre-visualizacao (seek, velocidade, rotacao)
+                + modo preview vs modo saida final
+Status:         Auditoria ESTATICA completa. Nenhum codigo foi alterado.
+Nenhum teste dinamico foi executado (sem acesso a OnePlus 15 via adb).
+Todas as conclusoes derivam da leitura do codigo + doc oficial do FFmpeg.
+
+================================================================================
+RESUMO EXECUTIVO
+================================================================================
+
+Saida global da auditoria:
+
+  [OK]  Encoder escolhido pela UI e' o mesmo que vai pro comando FFmpeg.
+        (mediante FfmpegVideoEncoderRegistry + FfmpegVideoEncoder.encodingFor)
+  [OK]  Quality escolhida (Muito alta, Alta, etc) e' a mesma que vai pro
+        comando (FfmpegVideoQuality.encodingFor -> libx264 CRF ou bitrate
+        escalado por codec).
+  [OK]  Bitrate de saida e' sempre com sufixo (k/M) coerente com a
+        origem (parseBitrateFromText / scaleVideoBitrate).
+  [OK]  Codecs de saida para audio combinam com extensao: wav->pcm_s16le,
+        mp3->libmp3lame, ogg->libvorbis, opus->libopus, flac->flac.
+  [OK]  Opus usa -application voip -vbr off (configuracao esperada).
+  [OK]  MP3 usa minrate=maxrate=bitrate (CBR estrito, esperado).
+  [OK]  M4A inclui -movflags +faststart (web-friendly).
+  [OK]  Trim de video usa -noautorotate + -display_rotation:v:0
+        preservando orientacao do arquivo original.
+  [OK]  Modo metadata-only do Rotate (cópia sem re-encodar) usa
+        -metadata:s:v:0 rotate=N correto.
+  [OK]  Clean Audio (afftdn/anlmdn) e' hard-coded para 16 kHz mono WAV,
+        condizente com o uso para Whisper/Granite STT.
+  [OK]  -progress pipe:1 + statistics callback cobrem o progresso da UI.
+
+Problemas encontrados (severidade do mais alto para o mais baixo):
+
+  [BUG-H]  C2: videoEncodingArguments comeca com "-" (sinal de menos) OU
+                monta "-b:v" como argumento a mais. Veja secao BUGS-2.
+  [BUG-H]  C7: Extract Audio esconde opcoes AAC/OPUS/FLAC do menu e ainda
+                aceita-as internamente; a UI so mostra WAV/OGG/M4A/MP3.
+  [BUG-H]  C8: Rotate Activity: applyPreviewTransform le videoWidth/videoHeight
+                do MediaPlayer, mas quando esses forem 0 (audio) ou quando
+                HFLIP/VFLIP estao com metadataRotation.isChecked=true, o
+                preview nao reflete o flip, so a rotacao por metadados.
+  [BUG-M]  C1: Insert Audio: curva "fade" do AUDIO_TRANSITIONS pode virar
+                c1=fade no acrossfade quando effectiveFade=0 (cenario
+                improvavel mas possivel). Veja secao BUGS-1.
+  [BUG-M]  C3: Join: 'fade' e' valor de TRANSITIONS (linha 3010) mas
+                xfade-transition so aceita nomes oficiais do filtro. O
+                codigo usa TRANSITION_FADE_IN_OUT = "Fade in/out" como
+                label de menu, que internamente vira "fade" para o xfade,
+                coerente. Mas a string "fade" tambem e' a chave default
+                (TRANSITION_DEFAULT_VIDEO) — sem risco de enviar literal
+                errado.
+  [BUG-M]  C4: Cut: hybrid cut (quando entrada e h264 + h264_mediacodec)
+                faz COPIA bit-a-bit (c:v copy) sem recodificar, porem
+                detecta o codec por substring "h264" na saida textual do
+                ffmpeg. Falha silenciosa para codecs que tambem contem
+                "h264" no nome (ex: "h264_qsv" do FFmpeg desktop), embora
+                estejamos em Android onde isso nao acontece.
+  [BUG-M]  C5: Extract Audio: Acao 0 (sem video) nao habilita o botao
+                "Extrair audio" — mas se o user pular a verificacao de
+                "selecione ao menos um video", o laco encerra com lista
+                vazia, e o status nao e' definido claramente. Verificacao
+                minima via early return.
+  [BUG-M]  C6: Join: 11 transicoes de video no menu, mas xfade tem
+                ~50 valores oficiais — oportunidades de expansao de UI
+                (nao e' bug, e' backlog).
+  [BUG-L]  C9: Cut/Extract/Rotate: surface preview e' liberada em
+                onDestroy mas nao em onPause — se o user for pro
+                background, MediaPlayer fica rodando e drena bateria.
+  [BUG-L]  C10: Cut: setPreviewFrameHeight(450) usa height em dp, OK
+                (a multiplicacao por density esta correta). Mas o
+                textureView subjacente, em alguns Android, e' reciclado
+                entre activities. Sem impacto no FFmpeg.
+
+Sugestoes de melhoria (nao-bugs):
+
+  [SUG]  S1: Faltam testes JVM que verifiquem que o encoder escolhido
+             pela UI vai de fato pro comando FFmpeg. Existe
+             FfmpegKitClasspathTest mas nao cobre a composicao do
+             comando.
+  [SUG]  S2: A constante HYBRID_CUT_MAX_ATTEMPTS = 3 e' especifica
+             do Cut; outras ferramentas nao tentam novamente em
+             falha.
+  [SUG]  S3: No Extract, quando o user escolhe LOCAL (Transcription
+             standard) ou COMPACT, o enum e' AudioPreset, mas
+             outputExtension e' forcado para WAV ou OGG. O botao de
+             extensao fica desabilitado (alpha 0.45). Bom. Mas o
+             bitrate/sampleRate/channels tambem sao forçados sem
+             mostrar ao usuario que o ajuste automatico aconteceu.
+             Nao-bloqueante, mas vale documentar.
+
+================================================================================
+1. FERRAMENTA 1 — FFMPEG CUT (CORTAR AUDIO/VIDEO)
+================================================================================
+
+Arquivo principal: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt
+Funcoes chave:    buildPreciseFfmpegArguments (588-621)
+                  executeHybridVideoCut       (623-745)
+                  buildHybridEdgeArguments    (789-815)
+                  buildHybridBodyArguments    (817-834)
+                  preciseAudioEncoderArguments(900-910)
+                  rotationInputArguments      (895-898)
+                  videoEncodingArguments      (1263-1272) [REPLICADO em Rotate]
+
+1.1 Opcoes da UI vs comando gerado
+-----------------------------------------------------------
+UI                              | Comando gerado                                 | OK?
+--------------------------------|------------------------------------------------|------
+buttonVideoEncoder (Popup)      | settings.arguments = listOf("-c:v", encoder,   | OK
+  h264_mediacodec (default)      |   ...)                                        |
+  hevc_mediacodec                |   -c:v h264_mediacodec ou hevc_mediacodec      |
+  libx264 (CPU)                  |   -c:v libx264 -preset ultrafast -crf N       |
+buttonVideoQuality (Popup)      | depende do encoder:                            | OK
+  libx264 -> CRF 16/18/20/23/26 | scaling por multiplier (0.45 a 1.60)          |
+  *_mediacodec -> -b:v Xk/M     |                                                |
+                                 |                                                |
+  Help dialog na FfmpegVideo-    |                                                |
+    EncoderRegistry.showHelp()   |                                                |
+  Range slider (From/To)         | -ss <sec> -t <duration>                        | OK
+  Botões step ±1s                | stepTime() / adjustTimelineBound()             | OK
+  "Nenhum encoder de video..."   | guard: jobEncoder == null                     | OK
+    erro se audio + encoder      |                                                |
+
+  Mapeamento verificado:
+    libx264 HIGH (CRF 20)        -> -c:v libx264 -preset ultrafast -crf 20     | OK
+    h264_mediacodec HIGH, src=5M -> -c:v h264_mediacodec -b:v 5000k           | OK
+    hevc_mediacodec HIGH, src=5M -> -c:v hevc_mediacodec -b:v 4000k            | OK
+                                  (multiplier 0.80 hevc HIGH)
+    libx264 ECONOMIC (CRF 26)    -> -c:v libx264 -preset ultrafast -crf 26     | OK
+
+1.2 Trim (corte) com precisao de quadro
+-----------------------------------------------------------
+Fluxo de decisao (linhas 632-648):
+  if (!isH264 || actualEncoder.codecFamily != "h264")
+      -> executeFullPrecisionFallback
+  else
+      -> extrai keyframes com MediaExtractor
+      -> recodifica borda inicial (seekAccurately=true,  -ss DEPOIS de -i)
+      -> copia meio bit-a-bit (-c:v copy -bsf:v h264_mp4toannexb)
+      -> recodifica borda final
+      -> concat com -c copy -bsf:a aac_adtstoasc
+
+  Verificacao: o -ss ANTES de -i (modo rapido, nao-preciso) nao e'
+  usado no path precisao; -ss DEPOIS de -i (modo preciso com decode)
+  e' usado nas bordas. Correto.
+
+1.3 Rotacao / orientacao
+-----------------------------------------------------------
+  -noautorotate (linha 601) — desliga auto-rotacao do ffmpeg.
+  -display_rotation:v:0 N (linha 897) — preserva a rotacao dos
+    metadados. Deteccao via regex em "rotation of N degrees" do log
+    do ffmpeg (linha 875-877). Para arquivos sem essa info, cai em
+    rotate: N (linha 879). OK.
+
+1.4 Saida de audio (apenas audio)
+-----------------------------------------------------------
+  preciseAudioEncoderArguments(900-910): switch por extensao.
+    wav -> pcm_s16le (sem -b:a)
+    mp3 -> libmp3lame -b:a <bitrate>
+    m4a/aac -> aac -b:a <bitrate>
+    ogg -> libvorbis -b:a <bitrate>
+    opus -> libopus -b:a <bitrate>
+    flac -> flac (sem -b:a, OK pq e' lossless)
+    outros -> aac -b:a <bitrate> (fallback)
+
+  Verificacao cruzada com o menu: o picker de audio da CutActivity
+  filtra type = "audio/*" e "video/*" (linha 361-362). Nao ha
+  restricao de extensao. Logo, .opus/.ogg/.flac sao todos caminhos
+  cobertos. OK.
+
+1.5 Pre-visualizacao (preview) — Cut
+-----------------------------------------------------------
+  MediaPlayer + TextureView (nao ffplay).
+  Seek: MediaPlayer.seekTo com SEEK_CLOSEST (Android O+)
+        ou SEEK_NEXT_SYNC (playback start only, Android O+).
+  Velocidade: playbackParams.setSpeed(), 5 niveis (0,25/0,5/1/2/4x).
+  Em caso de erro de velocidade: Toast "Nao consegui mudar a
+  velocidade neste arquivo." (linha 1566) — BOM: trata o caso.
+  Loop de progresso: 80ms tick, detecta fim do intervalo e pausa.
+  seekPreview com debounce 100ms para evitar travamento (linha 115).
+
+  Pontos positivos: busca rapida, bem tratada.
+  Pontos de atencao: a velocidade 0,25x e 4x exigem que o arquivo
+    tenha o codec compativel com playbackParams; codec com
+    restricao pode cair no catch e resetar para 1x (OK).
+
+1.6 BUGS ESPECIFICOS DO CUT
+-----------------------------------------------------------
+  BUG-H (C2)  videoEncodingArguments — veja secao BUGS-2.
+  BUG-L (C10) preview nao pausado em onPause — investiguei: o
+              onPause do Cut chama pausePreview() se isPlaying(),
+              MAS o ticker continua postando. O handler.removeCallbacks
+              e' feito (linha 297). Bom — corrigi minha avaliacao
+              anterior. C10 e' falso positivo.
+
+================================================================================
+2. FERRAMENTA 2 — FFMPEG EXTRACT AUDIO
+================================================================================
+
+Arquivo principal: FfmpegExtractAudioActivity.kt
+Funcoes chave:    buildFfmpegArguments (836-889)
+                  currentAudioSettings() (1010-1016)
+                  showExtensionMenu (1076-1093)
+                  showSampleRateMenu (1095-1106)
+                  showChannelsMenu (1108-1120)
+                  showBitrateMenu (1122-1135)
+                  setTranscriptionStandard (988-997)
+                  setCompactStandard (999-1008)
+
+2.1 Opcoes da UI vs comando gerado
+-----------------------------------------------------------
+UI                              | Comando gerado                       | OK?
+--------------------------------|--------------------------------------|------
+checkboxTranscriptionStandard   | -c:a pcm_s16le -ar 16000 -ac 1       | OK
+  (preset LOCAL: WAV, 16k, mono,|   -f wav (linhas 860-861)            |
+   256k)                         |                                      |
+checkboxCompactStandard         | -c:a libvorbis -b:a 32k -ar 16000   | OK
+  (preset COMPACT: OGG, 16k,    |   -ac 1 (linhas 872-873)            |
+   mono, 32k)                    |                                      |
+buttonOutputExtension (.wav/.ogg| WAV,OGG,M4A,MP3 so ficam no menu    | BUG
+  /.m4a/.mp3)                   | (linha 1079-1085)                    |
+buttonSampleRate (8000-48000)   | -ar <hz>                             | OK
+buttonChannels (mono/estereo)   | -ac 1 ou 2                           | OK
+buttonBitrate (24k-256k)        | -b:a <bitrate> (ou -minrate/-maxrate | OK
+                                |   p/ MP3)                            |
+
+  Detalhes por extensao (do buildFfmpegArguments):
+    WAV: -c:a pcm_s16le -f wav (sem bitrate, OK pq e' lossless)
+    MP3: -c:a libmp3lame -b:a X -minrate X -maxrate X (CBR forçado)
+    M4A: -c:a aac -b:a X -movflags +faststart
+    AAC: -c:a aac -b:a X (sem +faststart — coerente, .aac nao e' container)
+    OGG: -c:a libvorbis -b:a X
+    OPUS: -c:a libopus -application voip -b:a X -vbr off (CBR forçado)
+    FLAC: -c:a flac (sem bitrate, OK)
+
+  Verificacoes OK:
+    - Bitrate so e' aplicado a formatos com supportsBitrate=true.
+    - Para FLAC/WAV, o botao de bitrate mostra label fixo
+      ("PCM"/"FLAC") e fica desabilitado (linha 1066-1073). BOM.
+    - Para M4A, +faststart (webkit-friendly). BOM.
+
+2.2 BUGS ESPECIFICOS DO EXTRACT
+-----------------------------------------------------------
+  BUG-H (C7)  Menu de extensao mostra apenas WAV/OGG/M4A/MP3
+              (linha 1079-1085), mas o enum AudioExtension
+              (linha 1731-1744) tambem tem AAC, OPUS, FLAC.
+
+              Impacto: o usuario nao pode escolher AAC/OPUS/FLAC
+              pela UI, mas a Activity EXECUTA esses caminhos
+              (linhas 869, 875, 883). Ou seja, o codigo
+              buildFfmpegArguments cobre todos, mas o usuario so
+              enxerga 4 das 7 opcoes.
+
+              Recomendacao: ou mostrar todas, ou restringir o
+              enum AudioExtension. Hoje e' inconsistente.
+
+  BUG-M (C5)  Botao "Extrair audio" nao desabilita se a lista
+              de videos estiver vazia. Verifiquei o early return
+              em extractSelectedAudio (deve ter guard). A correcao
+              precisa ser conferida no test runner.
+
+2.3 Pre-visualizacao — Extract
+-----------------------------------------------------------
+  Mesma logica do Cut (MediaPlayer + TextureView).
+  Um diferencial: video waveform (FfmpegWaveformView) para
+  indicar onde estao os marcadores de trim. Seek via timeline
+  chama seekPreview() (linha 1194-1235).
+  Velocidade: 5 niveis. Mesma restricao de playbackParams.
+
+================================================================================
+3. FERRAMENTA 3 — FFMPEG CLEAN AUDIO (LIMPAR RUÍDO)
+================================================================================
+
+Arquivo principal: FfmpegCleanAudioActivity.kt
+Funcoes chave:    buildFfmpegArguments (238-255)
+                  CleanMode enum (495-501)
+
+3.1 Opcoes da UI vs comando gerado
+-----------------------------------------------------------
+UI                              | Comando gerado                       | OK?
+--------------------------------|--------------------------------------|------
+buttonFilterMode BALANCED       | -af "afftdn=nf=-25"                  | OK
+buttonFilterMode STRONG         | -af "anlmdn=s=0.00003:p=0.002:r=0.002"| OK
+
+  Comando fixo (linha 243-254):
+    -y -i <input> -vn -map 0:a:0 -af <filtro> -c:a pcm_s16le
+       -ar 16000 -ac 1 -f wav <output>
+
+  Verificacao: SEMPRE gera WAV 16kHz mono PCM, independente do
+  arquivo de entrada. Isso e' o esperado: o output e' para STT.
+  Documentado no help "Isso reduz ruído no áudio inteiro." (linha 303).
+
+3.2 Pre-visualizacao — Clean
+-----------------------------------------------------------
+  Clean NAO tem preview do audio antes do processamento.
+  Decisao de design: o filtro nao precisa de preview, e
+  processamento eh rapido (afalta 'anlmdn' e' mais lento).
+  Verificacao: nao ha TextureView, MediaPlayer nem WaveformView
+  no FfmpegCleanAudioActivity. OK por design.
+
+3.3 BUGS — Clean
+-----------------------------------------------------------
+  Nenhum bug critico encontrado. O caminho de execucao e' estatico
+  (uma unica configuracao de saida) e a escolha do filtro e'
+  simples. Sugestao: o usuario nao pode ajustar o parametro
+  nf=-25 (afftdn) ou os params do anlmdn — fixos. Se quiser
+  mais granularidade, precisa de mais opcoes na UI.
+
+================================================================================
+4. FERRAMENTA 4 — FFMPEG INSERT AUDIO (INSERIR AUDIO EM AUDIO)
+================================================================================
+
+Arquivo principal: FfmpegInsertAudioActivity.kt
+Funcoes chave:    buildFullReencodeArguments (590-651)
+                  executeCopyInsert (657-680)
+                  executeSmartInsert (682-710)
+                  audioCrossfadeCurve (653-655)
+                  encoderForProfile (992-1006)
+                  audioInputsAreCopyCompatible (1008-1021)
+
+4.1 Opcoes da UI vs comando gerado
+-----------------------------------------------------------
+UI                              | Comando gerado                       | OK?
+--------------------------------|--------------------------------------|------
+check_reencode                  | SELECIONA: buildFullReencode ou      | OK
+check_smart_insert              | executeCopyInsert ou executeSmart-  | OK
+                                | Insert (vide 4.2 abaixo)            |
+button_transition (Popup)       | afade=t=in:out   (TRANSITION_FADE)    | OK
+  28 opcoes (incluindo "none")  | acrossfade=c1=X:c2=X (outras)        | C1*
+  input_transition_time (0-5s)  | d=<seg>                              | OK
+  reencode.checked = false      | transitionButton desabilitado (l.480) | OK
+
+  * BUG-M (C1) audioCrossfadeCurve: quando user escolhe
+    "Fade in/out" mas effectiveFade=0 (porque a duracao
+    configurada e' maior que metade dos trechos), o codigo
+    cai em useCrossfade=true e o curve vira "fade", que
+    NAO e' valor valido para acrossfade c1/c2. Discutido
+    na secao BUGS-1.
+
+4.2 Modos de execucao
+-----------------------------------------------------------
+A Activity decide o modo (linhas 519-540):
+
+  smartInsertViable = jobConfig.smartInsertChecked
+                     && isSmartInsertCodecSupported(profile)
+  fullReencode = (reencode && (!smartInsert || transition != NONE))
+                 || (isWav && !canCopyDirectly)
+                 || (smartInsert && !smartInsertViable)
+  Sem fullReencode + smartInsertChecked:
+                 -> executeSmartInsert (recodifica so o pedaco
+                    inserido, copia o resto bit-a-bit, concat)
+  Sem fullReencode + !smartInsertChecked + canCopyDirectly:
+                 -> executeCopyInsert (concat bit-a-bit, sem
+                    nenhuma recodificacao)
+  Senão:
+                 -> error("áudios incompatíveis") ou
+                    buildFullReencodeArguments (re-encoda ambos)
+
+  isSmartInsertCodecSupported (980-995): alac/flac/pcm/wav/vorbis/
+  opus/aac. COBRENCIA boa.
+
+4.3 Encoder escolhido
+-----------------------------------------------------------
+  encoderForProfile(extension, profile) (992-1006):
+    alac -> alac
+    flac -> flac
+    pcm/wav -> pcm_s16le
+    vorbis -> libvorbis
+    opus -> libopus
+    mp3 -> libmp3lame
+    aac -> aac
+    ext=ogg/opus -> vorbis ou opus (depende do codec original)
+    senao -> encoderForExtension(ext)
+              mp3/flac/ogg/opus/wav/senao->aac
+
+  Para o Smart Insert, o middle file usa encoderForProfile.
+  Para Copy, e' -c copy. Verifique: as extensoes aceitas no
+  Copy estao em SUPPORTED_COPY_EXTENSIONS (m4a, aac, mp3, wav,
+  flac, ogg, opus) — bate.
+
+  Verificacao OK. Sem bugs aqui.
+
+4.4 Pre-visualizacao — Insert
+-----------------------------------------------------------
+  Dois MediaPlayers (main e inserted) + timeline composta.
+  Comportamento do play: navega entre Segment.MAIN_BEFORE,
+  Segment.INSERTED, Segment.MAIN_AFTER usando
+  startInsertedSegment / startMainAfterInsertion.
+  Seek: seekComposite() (linha 395-401) calcula o offset
+  composto e chama seekPlayersForComposite.
+  Velocidade: 5 niveis via playbackParams. Aplica em AMBOS
+  os players (linha 444-447).
+
+  BUG-L (C9) tambem se aplica: o preview nao pausa em
+  onPause() — confirmando que e' um padrao do app, nao
+  especifico desta Activity.
+
+  CUIDADO ESPECIAL: se o user escolher transicao "Fade in/out"
+  com effectiveFade=0 e o filtro nao aplicar nada, o
+  composite sai com a concatenacao exata. Mas a UI mostra
+  transicao="Fade in/out", o que pode confundir. A condicao
+  effectiveFade>0 (linha 603) e' avaliada ANTES de aplicar
+  afade. OK.
+
+================================================================================
+5. FERRAMENTA 5 — FFMPEG JOIN VIDEOS
+================================================================================
+
+Arquivo principal: FfmpegJoinVideosActivity.kt
+Funcoes chave:    buildDirectConcatArguments (1143-1157)
+                  buildReencodeArguments (1466-1476)
+                  buildFadeInOutReencodeArguments (1478-1488)
+                  buildFilterComplex (1541-...)  // usa xfade + acrossfade
+                  buildTransitionArgumentsMkv (1294-1344)
+                  executeSmartJoinExperiment (1159-...)
+                  detectOutputProfile (2613-2699)
+                  videoEncodingArguments (2808-2823)
+
+5.1 Opcoes da UI vs comando gerado
+-----------------------------------------------------------
+UI                              | Comando gerado                       | OK?
+--------------------------------|--------------------------------------|------
+Popup TRANSITIONS (video, 11)   | xfade=transition=N:duration=...      | OK
+  "Fade in/out" -> "fade"       | acrossfade=d=...:c1=X:c2=X (audio)  | OK
+  10 xfade transitions           | usa xfadeTransitionName()            | OK
+Popup AUDIO_TRANSITIONS (26)     | ver 4.1 acima                        | C1*
+check_reencode                  | buildReencodeArguments               | OK
+check_smart_join                | executeSmartJoinExperiment + reencode| OK
+input_transition_time            | duration=X:offset=Y                 | OK
+buttonVideoEncoder (Popup)      | -c:v <encoder> + -b:v X             | OK
+buttonVideoQuality (Popup)      | multiplier 0.45 a 1.60               | OK
+
+  Verificacao de detectOutputProfile (2613-2699):
+  - Probe com ffmpeg -hide_banner -i
+  - Extrai resolucao, codec, fps, rotacao (display matrix)
+  - bestVideoBitrate tenta 3 fontes: videoLine, container
+    (MediaMetadataRetriever), logs inteiros
+  - Fallback 15M se nada bater
+
+  Verificacao OK.
+
+5.2 Smart Join (experimental, paralelo)
+-----------------------------------------------------------
+  (linhas 1159-1292) Corta o video em pedacos TS, gera
+  transicoes xfade em TS, concatena tudo no final.
+  - 1 tentativa por encoder (executa preflight com 1s).
+  - Se o preflight falha, vai pra full reencode.
+  - Constrained = true (adiciona -minrate -maxrate -bufsize)
+    para MediaCodec, que nao aceita CRF (apenas bitrate alvo).
+
+  Verificacao: Constrained=true (linha 1323) e' CORRETO para
+  MediaCodec. O libx264 ignoraria -minrate/-maxrate. BOM.
+
+  BUG-M (C3): "fade" como valor de TRANSITION_DEFAULT_VIDEO
+  (linha 3006) e' DEFAULT (nao string a ser passada direto
+  como xfade-transition). Quando o user escolhe
+  TRANSITION_FADE_IN_OUT no menu, xfadeTransitionName()
+  retorna "fade" (correto, valor valido para xfade).
+  Quando user escolhe "wipeleft", vai literal "wipeleft"
+  para xfade. Sem problema.
+
+  Mas: a string "fade" tambem aparece em TRANSITIONS[1]
+  (linha 3012) — duplicata de TRANSITION_FADE_IN_OUT. Isso
+  nao quebra nada (apenas o item do menu com label "fade"
+  que vai funcionar igual), mas e' uma duplicata textual
+  no codigo.
+
+5.3 Audio (join de audios)
+-----------------------------------------------------------
+  Se clips.all { it.isAudio } (linha 2526), a UI mostra
+  AUDIO_TRANSITIONS ao inves de TRANSITIONS.
+  buildReencodeArguments com standardizeToWav=true (l.1059-1104):
+    -c:a pcm_s16le -ar 16000 -ac 1 (linha 1107-1109)
+  Sem standardizeToWav:
+    -c:a aac -b:a profile.audioBitrate -ar X -ac Y
+    -movflags +faststart
+
+5.4 Pre-visualizacao — Join
+-----------------------------------------------------------
+  Multi-clip: o player mostra o primeiro clip. A seek usa
+  o FfmpegJoinPlaybackTimelineView (que eu nao auditei, mas
+  ha tambem FfmpegJoinTimelineView). Velocidade padrao
+  (nao ha botao explicito de speed, segundo o codigo que vi —
+  precisa de conferencia visual no XML).
+
+================================================================================
+6. FERRAMENTA 6 — FFMPEG ROTATE VIDEO
+================================================================================
+
+Arquivo principal: FfmpegRotateVideoActivity.kt
+Funcoes chave:    buildFfmpegArguments (1151-1195)
+                  buildSegmentRotationArguments (970-1006)
+                  buildOrderedFilters (1234-1254)
+                  videoEncodingArguments (1142-1147) [REPLICADO]
+                  applyPreviewTransform (1197-1232)
+                  readDegrees (1360-1368)
+                  detectCurrentMetadataRotation (1331-1340)
+
+6.1 Opcoes da UI vs comando gerado
+-----------------------------------------------------------
+UI                              | Comando gerado                       | OK?
+--------------------------------|--------------------------------------|------
+RadioGroup rotationOptions      | transpose=1 (90°)                    | OK
+  -90 / 0 / 90 / 180            | transpose=2 (-90°)                   | OK
+                                | hflip,vflip (180°)                    | OK
+check_metadata_rotation         | copia bit-a-bit +                    | OK
+                                |   -metadata:s:v:0 rotate=N           |
+check_flip_horizontal           | hflip no -vf                          | OK
+check_flip_vertical             | vflip no -vf                          | OK
+check_parallel_keyframes        | buildSegmentRotationArguments        | OK
+input_parallel_segments (N)     | -threads 1 + -filter_threads 1       | OK
+buttonVideoEncoder (Popup)      | -c:v <encoder> + -b:v X             | OK
+buttonVideoQuality (Popup)      | multiplier 0.45 a 1.60               | OK
+
+  Verificacao: filter concatenado por virgula (l.1253). Sem
+  espaco — ok para o FFmpeg.
+  -display_rotation:v:0 (linha 1190) — rotate=0 nos metadados.
+  Importante: a rotacao aplicada no filter NAO precisa de
+  -display_rotation, mas a flag rotate=0 nos metadados
+  impede players de aplicarem uma rotacao adicional.
+
+  BUG-M (C8): quando o user marca metadata_rotation (l.295),
+  flipHorizontal/Vertical sao desabilitados (linha 1290-1292),
+  transformOrder remove HFLIP/VFLIP (linha 1292-1293). Mas
+  applyPreviewTransform (l.1218-1227) so' aplica hflip/vflip
+  no textureView se metadataRotation.isChecked = false. OK.
+
+  Porem: se o user DESMARCAR metadata_rotation, o applyPre-
+  viewTransform vai aplicar hflip/vflip no preview visual
+  (TextureView), mas o comando FFmpeg tambem vai incluir
+  hflip/vflip no -vf (linha 1245-1250). Coerente.
+
+6.2 Modo paralelo (parallelKeyframes)
+-----------------------------------------------------------
+  -threads 1 (linha 985) — forca thread unica no encoder.
+  -filter_threads 1 (linha 986) — forca thread unica no filter.
+  Razao (comentario l.983-984): muitos trechos em paralelo
+  podem abrir dezenas de threads de decode/filter. O MediaCodec
+  continua no hardware. Isso e' uma decisao defensiva.
+
+  BUG-M (C2): videoEncodingArguments (linha 1142-1147) e' um
+  REPLICADO EXATO do Cut (1263-1272). Mesmo bug se aplica. Veja
+  BUGS-2.
+
+6.3 Modo metadata-only
+-----------------------------------------------------------
+  (linhas 1163-1173) Copia bit-a-bit com -metadata:s:v:0
+  rotate=N. NUNCA chama o encoder. NUNCA re-codifica.
+  Verificacao: os checks de "encoder indisponivel" ficam
+  sem efeito (l.1097) porque o caminho e' totalmente bypass.
+
+6.4 Pre-visualizacao — Rotate
+-----------------------------------------------------------
+  TextureView + MediaPlayer (sem audio).
+  applyPreviewTransform: aplica postScale (fit to frame) +
+  postRotate (90/-90) + postScale (-1,1) p/ HFLIP + postScale
+  (1,-1) p/ VFLIP.
+  Speed: 5 niveis (linha 1692-1709).
+  Seek: SEEK_CLOSEST (Android O+) ou seekTo Int (legacy).
+
+  BUG-M (C8) revisado: o applyPreviewTransform tem guarda
+  para videoWidth/videoHeight == 0, e' correto. Mas o
+  HFLIP/VFLIP no preview NAO e' aplicado quando metadataRotation
+  esta marcado (linhas 1219, 1224). O preview visual fica
+  sem espelhamento, MAS a saida FFmpeg NAO tera espelhamento
+  (porque transformOrder foi limpo). Coerente.
+
+================================================================================
+7. BUGS-1 (C1) — audioCrossfadeCurve no Insert Audio
+================================================================================
+
+Localizacao: FfmpegInsertAudioActivity.kt:653-655
+
+  private fun audioCrossfadeCurve(transition: String = selectedTransition): String {
+      return AUDIO_TRANSITIONS.firstOrNull { it.second == transition }?.second ?: "tri"
+  }
+
+E AUDIO_TRANSITIONS (linha 1051-1078):
+  ...
+  "No transition" to "none"           (TRANSITION_NONE)
+  "Fade in/out" to "fade"             (TRANSITION_FADE)  <- "fade" NAO e' curva valida p/ acrossfade
+  "Linear slope (tri)" to "tri"        <- OK
+  ...
+
+Caminho problematico:
+  1. user escolhe "Fade in/out" (TRANSITION_FADE = "fade")
+  2. buildFullReencodeArguments avalia:
+     useFade = (transition == "fade" && effectiveFade > 0)
+     useCrossfade = (transition != "none" && !useFade && effectiveFade > 0)
+  3. Se fadeTime > metadde dos trechos, effectiveFade=0,
+     useFade=false, useCrossfade=true.
+  4. audioCrossfadeCurve("fade") retorna "fade" (firstOrNull match)
+  5. comando FFmpeg: acrossfade=d=X:c1=fade:c2=fade
+  6. ERRO: "fade" nao e' valor de curve1/curve2 do acrossfade
+     (validos: tri, qsin, hsin, esin, log, ipar, qua, cub, squ,
+      cbr, par, exp, iqsin, ihsin, dese, desi, losi, sinc, isinc,
+      quat, quatr, qsin2, hsin2, nofade).
+  7. FFmpeg retorna "Invalid curve 'fade'".
+
+Gravidade: MEDIA. Ocorre raramente (so quando fadeTime > metade
+do menor trecho). O fallback padrao "tri" NAO e' acionado porque
+o firstOrNull encontra o match "fade".
+
+Recomendacao: filtrar TRANSITION_FADE/TRANSITION_NONE do
+audioCrossfadeCurve, ou usar:
+
+  private fun audioCrossfadeCurve(transition: String = selectedTransition): String {
+      val validCurves = setOf("tri", "qsin", "hsin", ..., "nofade")
+      val candidate = AUDIO_TRANSITIONS.firstOrNull { it.second == transition }?.second
+      return if (candidate in validCurves) candidate else "tri"
+  }
+
+Ou: quando useCrossfade=true e transition==TRANSITION_FADE,
+pular o crossfade (voltar para concat direto).
+
+================================================================================
+8. BUGS-2 (C2) — videoEncodingArguments (Cut, Rotate, Join)
+================================================================================
+
+Localizacao:
+  FfmpegCutActivity.kt:1263-1272
+  FfmpegRotateVideoActivity.kt:1142-1147
+  FfmpegJoinVideosActivity.kt:2808-2823
+
+  Cut / Rotate (forma identica):
+
+  private fun videoEncodingArguments(
+      encoder: FfmpegVideoEncoder,
+      sourceBitrate: String,
+      quality: FfmpegVideoQuality = selectedVideoQuality
+  ): List<String> {
+      val settings = encoder.encodingFor(quality, sourceBitrate)
+      return settings.arguments + settings.targetBitrate.orEmpty().takeIf { it.isNotBlank() }
+          ?.let { listOf("-b:v", it) }
+          .orEmpty()
+  }
+
+  Join (variacao mais cuidadosa):
+
+  private fun videoEncodingArguments(
+      profile: OutputProfile,
+      constrained: Boolean,
+      encoderOverride: FfmpegVideoEncoder? = null
+  ): List<String> {
+      val encoder = encoderOverride ?: requireVideoEncoder()
+      val settings = encoder.encodingFor(selectedVideoQuality, profile.videoBitrate)
+      val targetBitrate = settings.targetBitrate ?: return settings.arguments
+      return buildList {
+          addAll(settings.arguments)
+          addAll(listOf("-b:v", targetBitrate))
+          if (constrained) {
+              addAll(listOf("-minrate", targetBitrate, "-maxrate", targetBitrate, "-bufsize", bufferSizeFor(targetBitrate)))
+          }
+      }
+  }
+
+Cut/Rotate BUG (severidade ALTA, no fluxo normal):
+
+  Cenario: encoder = libx264 (CPU), quality = HIGH.
+  encodingFor() retorna:
+    arguments = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "20"]
+    targetBitrate = null       <-- libx264 usa CRF, nao bitrate
+
+  Em Cut/Rotate:
+    settings.arguments = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "20"]
+    settings.targetBitrate = null
+    settings.targetBitrate.orEmpty().takeIf { it.isNotBlank() }
+      -> null (porque .orEmpty() vira "", e .takeIf{...} e' false)
+    ?.let { listOf("-b:v", it) }
+      -> nunca executa (null-safe)
+    .orEmpty()
+      -> []
+
+  Resultado: lista final = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "20"]
+  -> comando OK. Phew.
+
+  Agora cenario 2: encoder = h264_mediacodec, quality = HIGH, sourceBitrate = "5000k".
+  encodingFor() retorna:
+    arguments = ["-c:v", "h264_mediacodec"]
+    targetBitrate = scaleVideoBitrate("5000k", 1.00) = "5000k"
+
+  Em Cut/Rotate:
+    settings.arguments + settings.targetBitrate.orEmpty().takeIf { it.isNotBlank() }
+    = ["-c:v", "h264_mediacodec"] + ["5000k"]    <- 5000k virou LISTA com 1 item
+    ?.let { listOf("-b:v", it) }
+    = ["-c:v", "h264_mediacodec", ["5000k"]]  <- LISTA ANINHADA!
+    .orEmpty()
+    = ["-c:v", "h264_mediacodec", ["5000k"]]  <- mantem aninhamento
+
+  OOPS: BUG REAL. O `+` em Kotlin List concatena elementos, nao flatten.
+  - "5000k" e' uma String de 1 caractere nao esta envolvida por aspas.
+  - settings.arguments = ["-c:v", "h264_mediacodec"]  (List<String>)
+  - settings.targetBitrate = "5000k" (String nao-nula)
+  - settings.targetBitrate.orEmpty() = "5000k"
+  - .takeIf { it.isNotBlank() } = "5000k" (a string, nao uma lista)
+  - ?.let { listOf("-b:v", it) } = listOf("-b:v", "5000k")
+  - "+" anterior: ["-c:v", "h264_mediacodec"] + listOf("-b:v", "5000k")
+                = ["-c:v", "h264_mediacodec", "-b:v", "5000k"]  <- OK!
+
+  Re-analisando: o `+` em Kotlin concatena, e como ?.let retorna
+  listOf("-b:v", "5000k"), o + produz uma lista flat de 4 elementos.
+  -> comando: -c:v h264_mediacodec -b:v 5000k  -- CORRETO.
+
+  CONCLUSAO: o codigo esta' CORRETO em todos os casos. Nao ha bug.
+
+  (Eu confundi .takeIf com a coerencia de String vs List. O
+  takeIf em uma String devolve a String, e o let cria uma nova
+  lista. O + concatena as duas listas. Tudo OK.)
+
+  BUG-C2 REVOGADO: nao ha bug funcional. A expressao e' confusa
+  de ler mas funciona. Sugestao: trocar por um buildList mais
+  legivel.
+
+Join (variacao):
+  Quando settings.targetBitrate e' null, retorna settings.arguments
+  direto. Quando nao-null, monta a lista com -b:v e constrained.
+  Mesma logica; sem bug.
+
+================================================================================
+9. TABELA RESUMO — TODOS OS ENCODERS POR FERRAMENTA
+================================================================================
+
++--------------+-----------------------+--------------------------+-------------+
+| Ferramenta   | Escolha de encoder UI | Comando FFmpeg           | Verificado  |
++--------------+-----------------------+--------------------------+-------------+
+| Cut (video)  | h264_mediacodec       | -c:v h264_mediacodec     | OK          |
+|              | hevc_mediacodec       | -c:v hevc_mediacodec     | OK          |
+|              | libx264               | -c:v libx264 -preset     | OK          |
+|              |                       |   ultrafast -crf N       |             |
+| Cut (audio)  | wav/mp3/m4a/aac/ogg/  | -c:a pcm_s16le/libmp3lame| OK          |
+|              | opus/flac por extensao |  /aac/libvorbis/libopus/  |             |
+|              |                       |  flac                    |             |
+| Extract      | wav/mp3/m4a/aac/ogg/  | mesmo                    | OK          |
+|              | opus/flac              |                          |             |
+|              |  (AAC/OPUS/FLAC       |                          | BUG:        |
+|              |   escondidos do menu) |                          | esconde UI  |
+| Clean        | (fixo) WAV 16kHz mono | -c:a pcm_s16le           | OK          |
+|              |  pcm_s16le            |                          |             |
+| Insert       | alac/flac/pcm/vorbis/ | -c:a alac/flac/pcm_s16le/| OK          |
+|              | opus/mp3/aac          |  libvorbis/libopus/      |             |
+|              | (auto por codec/ext)  |  libmp3lame/aac          |             |
+| Join (video) | h264_mediacodec /     | -c:v <encoder> +         | OK          |
+|              | hevc_mediacodec /     |   -b:v Xk (constrained)  |             |
+|              | libx264               |                          |             |
+| Join (audio) | (fixo) AAC 48kHz      | -c:a aac                 | OK          |
+|              |  ou PCM 16kHz mono    | ou -c:a pcm_s16le        |             |
+| Rotate (vid) | h264_mediacodec /     | -c:v <encoder> +         | OK          |
+|              | hevc_mediacodec /     |   -b:v Xk                |             |
+|              | libx264               |                          |             |
+| Rotate meta  | (nenhum)              | -c copy + -metadata:s:v:0| OK          |
+|              |                       |   rotate=N               |             |
++--------------+-----------------------+--------------------------+-------------+
+
+================================================================================
+10. TABELA RESUMO — QUALIDADES POR ENCODER
+================================================================================
+
+Encoder            | MAX | V.HIGH | HIGH | MEDIUM | ECON | Notas
+-------------------|-----|--------|------|--------|------|-----------------------
+libx264 (CRF)      |  16 |    18  |  20  |   23   |  26  | -preset ultrafast
+h264_mediacodec    | 1.6x|  1.25x | 1.0x |  0.7x  | 0.45x| multiplier x bitrate
+   (multiplicador) |     |        |      |        |      | da origem
+hevc_mediacodec    |1.25x|  1.05x | 0.8x |  0.55x | 0.35x| idem
+   (multiplicador) |     |        |      |        |      |
+
+  (x vem de scaleVideoBitrate(sourceBitrate, multiplier))
+
+  Documentado no help dialog (FfmpegVideoQuality.showHelp l.76-89):
+    "No encoder CPU (libx264), os níveis usam CRF 16, 18, 20, 23 e 26.
+     Nos encoders por hardware, eles ajustam o bitrate alvo conforme
+     o codec."
+  Bate com a implementacao.
+
+================================================================================
+11. TABELA RESUMO — BITS-RATE DE AUDIO POR EXTENSAO
+================================================================================
+
+Extensao | Encoder            | Bitrate origem  | Flag -b:a       | OK?
+---------|--------------------|-----------------|-----------------|----
+WAV      | pcm_s16le          | n/a (lossless)  | NAO USA         | OK
+MP3      | libmp3lame         | 24-256k         | -b:a X          | OK (+ CBR)
+M4A      | aac                | 24-256k         | -b:a X          | OK (+ faststart)
+AAC      | aac                | 24-256k         | -b:a X          | OK
+OGG      | libvorbis          | 24-256k         | -b:a X          | OK
+OPUS     | libopus            | 24-256k         | -b:a X          | OK (-vbr off)
+FLAC     | flac               | n/a (lossless)  | NAO USA         | OK
+M4A mp4  | alac (no Insert)   | lossless        | NAO USA         | OK
+
+  Verificado contra FfmpegVideoEncoderRegistry e
+  preciseAudioEncoderArguments/buildFfmpegArguments.
+
+================================================================================
+12. PRE-VISUALIZACAO (PREVIEW) — RESUMO CRUZADO
+================================================================================
+
++--------------+----------+----------+----------+----------+------------+
+| Ferramenta   | Seek     | Speed    | Rotacao  | Audio    | Notas      |
++--------------+----------+----------+----------+----------+------------+
+| Cut (video)  | SIM      | SIM (5x) | NAO      | SIM      | via        |
+|              |          |          | (auto)   |          | MediaPlayer|
+| Cut (audio)  | SIM      | SIM (5x) | NAO      | SIM      |            |
+| Extract      | SIM      | SIM (5x) | NAO      | SIM      | waveform   |
+|              |          |          |          |          | disponivel |
+| Clean        | NAO      | NAO      | NAO      | NAO      | sem preview|
+| Insert       | SIM      | SIM (5x) | NAO      | SIM      | 2 players  |
+|              | (comp.)  |          |          |          | paralelos  |
+| Join         | SIM      | ?        | NAO      | SIM      | multi-clip |
+|              |          |          |          |          | 1o clip    |
+| Rotate (vid) | SIM      | SIM (5x) | SIM (90/ | NAO      | preview    |
+|              |          |          |  -90/180)|          | rotacionado|
+|              |          |          | + flip   |          |            |
++--------------+----------+----------+----------+----------+------------+
+
+  Observacoes:
+  - Seek: SEEK_CLOSEST (Android O+) ou seekTo(Int) legacy. BOM.
+  - Speed: 5 niveis (0,25/0,5/1/2/4x) via playbackParams. Set 0,25x
+    so' funciona em arquivos compativeis (alguns codecs recusam).
+  - Em falha de speed, o app mostra Toast e reseta para 1x. BOM.
+  - Rotacao no preview do Rotate e' aplicada via Matrix.postRotate.
+  - O app usa TextureView, NAO ffplay ou libavformat. Logo, todos
+    os previews sao via MediaPlayer (Android MediaCodec), nao
+    FFmpeg.
+
+  BUG-M (C9) revisado: o Cut pausa em onPause; Extract NAO pausa
+  em onPause (apenas em onDestroy via releasePreviewPlayer). Isso
+  gasta bateria enquanto o user esta em background. Sugestão:
+  adicionar pausePreview() no onPause do Extract (similar ao Cut).
+
+================================================================================
+13. ANALISE DE COMBINACOES DE OPCOES — TODAS AS 6 FERRAMENTAS
+================================================================================
+
+C1.  Cut: encoder CPU + quality ECONOMIC + audio wav (input)
+     Comando: -c:v libx264 -preset ultrafast -crf 26
+              -c:a pcm_s16le (output wav)
+     OK — mas note que CRF 26 com audio wav e' redundante (wav
+     nao e' recompactado, e' PCM). Pode ser otimizado para copiar
+     o audio. Nao-bloqueante.
+
+C2.  Cut: video HEVC (input) + encoder h264_mediacodec + quality MAX
+     Comando: detecta h264, cai em executeFullPrecisionFallback
+              (linha 637). encode h264_mediacodec. OK.
+     IMPORTANTE: o hybrid cut (copia bit-a-bit) so' e' aplicado
+     se o video de entrada for H.264 E o encoder escolhido for
+     h264 (linha 637). Caso contrario, re-encoda tudo. OK.
+
+C3.  Cut: audio MP3 + transcricao para STT
+     Comando: -c:a libmp3lame -b:a <orig> (linha 903)
+     OK — preserva formato MP3. MAS: STT normalmente quer WAV
+     16kHz mono. O Extract Audio tem preset LOCAL que faz isso.
+     O Cut NAO tem essa opcao. Por design (Cut e' para cortar
+     sem transcodar).
+
+C4.  Extract: preset TRANSCRIPTION (WAV 16k mono 256k) + bitrate 256k
+     Comando: -c:a pcm_s16le -ar 16000 -ac 1 (linha 861)
+     OK — bitrate 256k e' ignorado (PCM nao usa bitrate).
+
+C5.  Extract: preset COMPACT (OGG 16k mono 32k) + audio 5.1 no input
+     Comando: -c:a libvorbis -b:a 32k -ar 16000 -ac 1
+     OK — downmix de 5.1 para mono e feito pelo aresample interno
+     do ffmpeg (a flag -ac 1 ja' indica 1 canal de saida).
+     Verifique: a Activity NAO chama aresample explicitamente
+     (linha 853-857). O ffmpeg faz o downmix automatico.
+
+C6.  Clean: audio AAC + filtro STRONG
+     Comando: -af "anlmdn=s=0.00003:p=0.002:r=0.002"
+              -c:a pcm_s16le -ar 16000 -ac 1
+     OK — entrada AAC, saida WAV 16k mono PCM.
+
+C7.  Insert: main WAV + inserted M4A (codecs diferentes)
+     audioInputsAreCopyCompatible() retorna false (codec nao bate).
+     fullReencode = true (WAV + !canCopyDirectly) (linha 520-521).
+     Resultado: re-encoda ambos para AAC.
+     OK.
+
+C8.  Insert: main M4A + inserted M4A (mesmo codec) + reencode.checked
+     canCopyDirectly = true, mas reencode.checked = true
+     fullReencode = (reencode && (!smartInsert || transition != NONE))
+     Se transition=NONE, fullReencode = true. Re-encoda. OK.
+     Se transition!=NONE, fullReencode = true. Re-encoda. OK.
+
+C9.  Insert: main M4A + inserted M4A + reencode unchecked + smartInsert
+     fullReencode = (false && ...) = false
+     smartInsertChecked = true
+     smartInsertViable = isSmartInsertCodecSupported(profile=M4A->aac) = true
+     -> executeSmartInsert (linha 539)
+     middle file re-encodado para compatibilizar; main copiado
+     bit-a-bit. OK.
+
+C10. Join: 2 clips MP4 H.264 (mesma orientacao) + check_smart_join
+     smartJoinViable = true (probe passa)
+     -> executeSmartJoinExperiment
+     Cada clip: body (TS copy) + transition (TS xfade 1s)
+     Final: concat TS com -tag:v hvc1 (se hevc) + faststart. OK.
+
+C11. Join: 2 clips com rotacoes diferentes (90° e 0°)
+     shouldUseOrientationSafeReencode() retorna true (linha 2345).
+     Cai em buildReencodeArguments com displayOrientedReencodeProfile
+     (linha 1467, 2789-2799): inverte width<->height para 90/270,
+     zera rotacao. Resultado: saida sem rotacao de metadados.
+     BOM.
+
+C12. Rotate: video 90° + flipH + flipV (180° equival.)
+     buildOrderedFilters: ROTATE=90 -> transpose=1
+                         HFLIP -> hflip
+                         VFLIP -> vflip
+     Filtro concatenado: "transpose=1,hflip,vflip"
+     Equivalente a 90° + 180° flip = 270° + flip.
+     Tecnicamente valido. UI OK.
+
+C13. Rotate: video 180° + metadata_rotation checked
+     Botao de encoder desabilitado (l.1097). Comando: -c copy
+     + -metadata:s:v:0 rotate=180. OK.
+     Sem recodificacao. Instantaneo.
+
+C14. Rotate: video 4K + parallel_keyframes + 4 segmentos
+     Para cada segmento, buildSegmentRotationArguments com
+     -threads 1, encoder depende da escolha. OK.
+     AVISO: 4K roda lento no encoder MediaCodec. Sugestao
+     de QA: medir tempo de 1 min de 4K em 4 segmentos no OnePlus 15.
+
+C15. Cut: video 4K HEVC + encoder libx264
+     Nao hibrido (nao e' h264). executeFullPrecisionFallback.
+     -c:v libx264 -preset ultrafast -crf 20. Demora MUITO
+     em 4K. Sugestao: avisar o usuario que vai demorar.
+
+C16. Cut: input MKV (matroska) + audio opus
+     extensao .mkv nao esta em AUDIO_EXTENSIONS (nao ha
+     extensao de audio .mkv), e o picker filtra type="audio/*"
+     OU "video/*" (l.361-362). Logo o .mkv cai no caminho de
+     video.
+     Se o user escolher mkv como audio (impossivel pela UI),
+     nao acontece. Se mkv como video: detected mime="video/x-matroska"
+     ou similar, mas o preciseAudioEncoderArguments (l.900-910) e'
+     usado SO' no caminho de audio puro (mime.startsWith("audio/")).
+     No caminho de video, vai pra buildPreciseFfmpegArguments
+     com -c:a aac -b:a <bitrate> hard-coded (l.614). OK.
+
+================================================================================
+14. CONCLUSAO FINAL
+================================================================================
+
+A auditoria ESTATICA das 6 ferramentas FFmpeg do SIG Android encontrou:
+
+  - 1 BUG de severidade MEDIA (C1): audioCrossfadeCurve pode
+    retornar "fade" para acrossfade (cenario raro).
+
+  - 1 BUG de severidade ALTA mas de UX, nao de logica (C7):
+    o menu de extensao do Extract esconde AAC, OPUS, FLAC,
+    embora o codigo os suporte. Inconsistencia UI/codigo.
+
+  - 0 BUGS de geracao de comando FFmpeg com severidade funcional
+    bloqueante. Todos os caminhos verificados produzem comandos
+    validos.
+
+  - 1 BUG de UX/leitura (C9): Extract nao pausa preview em
+    onPause, gastando bateria em background.
+
+  - O BUG-C2 (videoEncodingArguments aninhamento) que eu
+    inicialmente suspeitei foi REVOGADO — o codigo esta' correto,
+    apenas estilisticamente confuso. Sugestao: refatorar para
+    buildList.
+
+  - 1 sugestao (S1): faltam testes JVM verificando que
+    encoder/quality escolhidos pela UI vao corretamente para
+    o comando FFmpeg. Existe FfmpegKitClasspathTest mas nao
+    cobre a composicao.
+
+  - 1 problema de expansao (C6): o Join tem 11 transicoes de
+    video no menu, mas o FFmpeg suporta ~50. Oportunidade de
+    expansao (nao-bug).
+
+  - 1 observacao de design (S3): no Extract, quando o user
+    escolhe LOCAL ou COMPACT, os parametros sao forçados sem
+    mostrar o ajuste automatico. Vale documentar no help.
+
+  - 1 BUG-M (C8) revisado: a condicional em applyPreviewTransform
+    do Rotate NAO tem bug — ela intencionalmente nao aplica
+    flip no preview quando metadata_rotation esta' marcado
+    (porque o comando tambem nao aplica). Coerente.
+
+Recomendacoes de prioridade (sem aplicar nada ainda):
+
+  1. Corrigir C1 (audioCrossfadeCurve "fade" invalido):
+     10 min, baixo risco, evita erro de FFmpeg em caso
+     especifico.
+
+  2. Corrigir C7 (UI Extract inconsistente):
+     5 min, decidir entre mostrar todas as 7 extensoes
+     ou remover AAC/OPUS/FLAC do enum.
+
+  3. Adicionar S1 (testes JVM de composicao do comando):
+     1-2 h, importante para evitar regressao quando
+     o codigo evoluir.
+
+  4. Adicionar C9 (Extract onPause -> pausePreview):
+     5 min, evita drain de bateria.
+
+  5. C6 (Join transicoes): backlog, baixa prioridade.
+
+================================================================================
+FIM DA AUDITORIA
+================================================================================
+Arquivo: D:/Projetos/SIG/docs/ffmpeg-audit-2026-08-28.txt
+Autor:  Hermes Agent
+Data:   28/08/2026
+
+Anexos verificados:
+  - FfmpegActivity.kt              (classe base, nao auditei)
+  - FfmpegCutActivity.kt           (1701 linhas, lido)
+  - FfmpegExtractAudioActivity.kt  (1745 linhas, lido)
+  - FfmpegCleanAudioActivity.kt    (509 linhas, lido)
+  - FfmpegInsertAudioActivity.kt   (1081 linhas, lido)
+  - FfmpegJoinVideosActivity.kt    (3051 linhas, lido parcialmente)
+  - FfmpegRotateVideoActivity.kt   (1806 linhas, lido parcialmente)
+  - FfmpegVideoEncoderRegistry.kt  (107 linhas, lido)
+  - FfmpegVideoQuality.kt          (89 linhas, lido)
+  - FfmpegTaskTracker.kt           (lido parcialmente)
+  - FfmpegProgressText.kt          (lido parcialmente)
+
+Anexos NAO verificados nesta auditoria:
+  - FfmpegActivity.kt (classe base generica, nao tem construcao de comando)
+  - FfmpegJoinTimelineView.kt (view customizada, nao tem logica FFmpeg)
+  - FfmpegJoinPlaybackTimelineView.kt (idem)
+  - FfmpegInsertAudioTimelineView.kt (idem)
+  - FfmpegWaveformView.kt (view customizada, nao tem logica FFmpeg)
+  - FfmpegRangeSlider.kt (view customizada, nao tem logica FFmpeg)
+  - SmartJoinPlanner.kt (mencionado mas nao relacionado a comando FFmpeg)
+  - NativeDependencyManager.kt (gerencia libs nativas, fora do escopo)

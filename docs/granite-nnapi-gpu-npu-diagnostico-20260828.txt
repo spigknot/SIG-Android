@@ -1,0 +1,473 @@
+================================================================================
+GRANITE STT — DIAGNOSTICO: ERRO GPU/NPU NO ONEPLUS 15
+================================================================================
+Data: 28/08/2026
+Projeto: SIG Android (D:/Projetos/SIG)
+Modelo: ibm-granite/granite-speech-5.0-470m-turboctc (Conformer CTC 470M, F32)
+Engine: ai.onnxruntime:onnxruntime-android:1.29.0
+Dispositivo alvo: OnePlus 15 (16 GB, Snapdragon 8 Elite, Android 15,
+                   Adreno GPU + Hexagon NPU, API 35)
+Status: Diagnostico estatico completo. Nenhum codigo foi alterado.
+
+================================================================================
+1. SINTOMA RELATADO PELO USUARIO
+================================================================================
+
+Screenshot fornecido pelo usuario mostra o dialogo:
+
+  Titulo:   Acelerador indisponivel
+  Mensagem: O GPU (NNAPI) falhou ao carregar o modelo:
+  Erro:     Error code - ORT_FAIL - message:
+            model_builder.cc:540 Compile ResultCode:
+            ANEURALNETWORKS_BAD_DATA, on identifyInputsAndOutputs
+
+  Pergunta exibida: "Deseja continuar com CPU? (mais lento, mas funciona em
+                     qualquer aparelho)"
+  Botoes:    [NAO, CANCELAR] [SIM, USAR CPU]
+
+  Backend selecionado no momento do erro: GPU (NNAPI).
+  Comportamento: a UI nunca chega a executar a transcricao; cai direto no
+  dialogo de fallback para CPU.
+
+================================================================================
+2. LOCALIZACAO DO ERRO NO CODIGO
+================================================================================
+
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt
+Linhas 591-634 (metodo loadSessionModel, ramo GPU/NPU):
+
+    if (backend == GraniteExecutionBackend.CPU) {
+        val cpuOptions = OrtSession.SessionOptions()
+        cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+        session = env.createSession(modelPath.absolutePath, cpuOptions)
+        onLog("ONNX session criada (CPU)")
+        return true
+    }
+
+    // GPU/NPU: tenta NNAPI. O NNAPI escolhe o melhor dispositivo
+    // disponivel (no OnePlus 15, o NPU/GPU conforme o driver suportar).
+    val nnapiOptions = OrtSession.SessionOptions()
+    nnapiOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+    var nnapiConfigured = false
+    try {
+        nnapiOptions.addNnapi()                       <-- SEM FLAGS
+        nnapiConfigured = true
+        onLog("NNAPI provider configurado (${backend.label})")
+    } catch (e: Throwable) {
+        onLog("NNAPI indisponivel: ${e.message}")
+    }
+
+    if (nnapiConfigured) {
+        try {
+            session = env.createSession(modelPath.absolutePath, nnapiOptions)
+            onLog("ONNX session criada (${backend.label})")
+            return true
+        } catch (e: Throwable) {
+            val reason = e.message ?: "falha desconhecida"
+            onLog("Sessao ${backend.label} falhou: $reason")
+            val accepted = onFallbackPrompt(reason)   <-- dispara o dialogo da imagem
+            ...
+        }
+    }
+
+Observacoes:
+  - addNnapi() e chamado SEM nenhum flag -> usa o caminho mais estrito do NNAPI.
+  - O catch captura OrtException e propaga via onFallbackPrompt, que monta
+    o dialogo "Acelerador indisponivel" visto na imagem.
+  - O label exibido e "GPU (NNAPI)" para ambos os backends GPU e NPU (linhas
+    387-395 do enum GraniteExecutionBackend), porque a engine NNAPI escolhe
+    o acelerador em runtime, nao na hora do addNnapi().
+
+Dependencia (app/build.gradle linha 152):
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
+
+================================================================================
+3. ANALISE ESTATICA DO MODELO ONNX EXPORTADO
+================================================================================
+
+Arquivo inspecionado:
+  D:/Projetos/SIG/tools/granite/out/granite-5.0-turboctc-f32-ext.onnx
+  (grafo: 865 408 bytes; external data: 1 891 581 952 bytes / 1,89 GB)
+
+Inputs:
+  input_features: float32 [1, 512, 320]   (log-mel + deltas stacked)
+  attention_mask: int64   [1, 512]         (1 = real, 0 = pad, conv. HF)
+
+Output:
+  logits:        float32 [1, 128, 16384]   (CTC head, 16384 = vocab_size)
+
+Total de nos:         4 213
+Inicializadores:        486 (pesos do conformer)
+
+Distribuicao de ops (do mais frequente ao mais raro):
+  Constant:                 1 883
+  Transpose:                  528
+  Unsqueeze:                  419
+  Slice:                      404
+  MatMul:                     212
+  Add:                        197
+  Mul:                        144
+  Reshape:                    114
+  LayerNormalization:          80  <-- NAO suportado pelo NNAPI
+  Sigmoid:                     64
+  Cast:                        38
+  Where:                       33  <-- NAO suportado pelo NNAPI
+  Not:                         23  <-- NAO suportado pelo NNAPI
+  Softmax:                     17
+  Gather:                      16  <-- suporte parcial
+  Split:                       16
+  Conv:                        16
+  Concat:                       2
+  ReduceMean:                   2  <-- suportado so em ORT 1.29+ (parcial)
+  ReduceSum:                    2  <-- NAO suportado pelo NNAPI
+  Greater:                      2  <-- NAO suportado pelo NNAPI
+  Identity:                     1
+
+Detalhe dos Casts (38):
+  - 33 convertem tensor de Not -> BOOL (preparacao para Where).
+  - 2 convertem Not -> INT64 (provavelmente indices de Slice/Reshape).
+  - 1 converte Cast -> FLOAT (Cast da entrada input_features).
+  - 1 converte -> FLOAT (Cast de saida antes do logits).
+  - 1 faz Cast do input input_features de FLOAT -> FLOAT (identity).
+
+Detalhe dos Gather (16, todos em self_attn/rel_pos_emb):
+  - Input 1: pesos do embedding posicional, shape [1025, 128], float32, constante.
+  - Input 2: indice calculado em runtime por um Slice (dynamic, nao constante).
+  - O indice dinâmico pode ser int64 (gerado pelo Cast INT64) e o NNAPI exige
+    indices 1D int32 para Gather -- ver issue 16224 do onnxruntime.
+
+================================================================================
+4. CRUZAMENTO COM A TABELA OFICIAL DE OPS DO NNAPI
+================================================================================
+
+Fonte: https://onnxruntime.ai/docs/execution-providers/NNAPI-ExecutionProvider.html
+
+Tabela de ops suportados pelo NNAPI Execution Provider (ORT 1.29):
+  Abs, Add, AveragePool (2D), BatchNormalization, Cast, Clip, Concat, Conv (2D,
+  pesos constantes), DepthToSpace (DCR), DequantizeLinear, Div, Elu, Exp,
+  Flatten, Floor, Gather (indices constantes, nao escalar), Gemm (transB=1
+  se B nao constante), GlobalAveragePool, GlobalMaxPool, Identity, LeakyRelu,
+  Log, LRN, MatMul, MaxPool (2D), Max, Min, Mul, Neg, Pad (constante), Pow,
+  PRelu, QLinearAdd, QLinearAveragePool, QLinearConv, QLinearMatMul,
+  QLinearSigmoid, QuantizeLinear, ReduceMean, Relu, Reshape, Resize (2D),
+  Sigmoid, Sin, Slice, Softmax, Split (split constante), Sqrt, Sub, Tanh,
+  Transpose, Unsqueeze.
+
+Ops do modelo FORA da tabela:
+  LayerNormalization (80 nos)   <-- 80 blocos do conformer, todos cairiam no CPU
+  Where               (33 nos)  <-- mascaramento aditivo do attention
+  Not                 (23 nos)  <-- inversao logica do attention mask
+  ReduceSum           ( 2 nos)  <-- normalizacao do conformer
+  Greater             ( 2 nos)  <-- comparacao logica
+  Gather com indice dinamico int64 (16 nos) <-- posicao relativa do rel_pos_emb
+
+Conclusao da analise esttica: 80 + 33 + 23 + 2 + 2 + 16 = 156 nos (~3,7% do
+total) estao fora do conjunto suportado pelo NNAPI. Sao exatamente os nos
+que o compilador NNAPI nao consegue compilar -- e como sao nos centrais do
+conformer, NAO podem ser particionados para CPU sem perder o sentido do
+bloco de atencao.
+
+================================================================================
+5. CAUSA RAIZ
+================================================================================
+
+O ORT 1.29 parte o grafo do Conformer e envia a particao maior para o
+NNAPI. O compilador NNAPI do OnePlus 15 (driver Adreno + Hexagon NPU,
+Android 15, API 35) tenta:
+
+  1. Identificar inputs/outputs da particao
+     (model_builder.cc:540 identifyInputsAndOutputs).
+  2. Percorrer o grafo e inferir shapes/dtypes por propagacao.
+  3. Compilar para o acelerador (GPU ou NPU).
+
+A propagacao de shapes/dtypes falha em `identifyInputsAndOutputs` quando
+encontra um op que ele nao conhece ou que tem formato incompativel com
+o driver. O codigo de retorno da NNAPI e:
+
+  ANEURALNETWORKS_BAD_DATA (codigo 5)
+  = "inconsistent or invalid input data"
+
+Esse codigo e propagado pelo ORT como ORT_FAIL, capturado pelo catch
+em GraniteEngine.kt:617, e o dialogo "Acelerador indisponivel" e mostrado.
+
+Causas provaveis em ordem de probabilidade:
+
+  (a) LayerNormalization (80 nos): driver NNAPI do OnePlus 15 nao sabe
+      compilar LayerNorm do Conformer com shape F32 e pesos F32.
+      - O ORT 1.29 adicionou ReduceMean a tabela, mas LayerNormalization
+        NAO esta na tabela oficial.
+      - Sem LayerNorm na NNAPI, a ORT deveria "node-ep split" -- mas como
+        o resto do bloco (Mul, Add, Softmax) tambem depende dos
+        normalizados, o particionador nao consegue isolar.
+
+  (b) Gather com indice dinamico int64 (16 nos): o Slice produz int64 e
+      o Gather recebe isso como indice. NNAPI exige indices 1D int32.
+      O Cast INT64->INT64 que aparece no grafo NAO faz a conversao para
+      int32, apenas materializa o tipo. Issue 16224 do onnxruntime
+      documenta exatamente esse padrao como causa de
+      ANEURALNETWORKS_BAD_DATA.
+
+  (c) addNnapi() sem flags: ao chamar o overload sem argumentos, a ORT
+      envia o modelo F32 puro. O Hexagon NPU (e a maioria dos drivers
+      NPU/GPU modernos) so aceita FP16 ou INT8 nativamente. Sem o flag
+      USE_FP16, o driver tenta compilar F32 e falha com BAD_DATA
+      (formato invalido para o hardware).
+
+Resumo: tres causas sobrepostas, e o sintoma e a soma delas. Nenhuma
+sozinha explica o erro -- a combinacao (LayerNorm fora + Gather int64 +
+F32 sem relaxacao) e.
+
+================================================================================
+6. COMPARATIVO COM A DOCUMENTACAO OFICIAL E ISSUES CONHECIDAS
+================================================================================
+
+  - Documentacao NNAPI EP:
+    https://onnxruntime.ai/docs/execution-providers/NNAPI-ExecutionProvider.html
+    Confirma: LayerNormalization, Where, Not, Greater, ReduceSum NAO estao
+    na tabela de ops suportados na ORT 1.29. ReduceMean aparece (a partir
+    de versoes recentes), mas com ressalvas.
+
+  - Issue microsoft/onnxruntime#16224
+    "Use NNAPI to throw exception ANEURALNETWORKS_BAD_DATA"
+    Erro identico (mesmo codigo, mesma funcao) em modelo ResNet-50 Pytorch
+    convertido para ONNX. Diagnostico oficial:
+    "NNAPI EP doesnt't handle scalar indices" (no Gather) e ops nao
+    suportados quebram a compilacao.
+
+  - API da ORT 1.29 (verificada com javap no classes.jar da AAR):
+    public void addNnapi()                                          <-- usado
+    public void addNnapi(EnumSet<NNAPIFlags>)                       <-- disponivel
+    public enum NNAPIFlags { USE_FP16, USE_NCHW, CPU_DISABLED, CPU_ONLY }
+
+  - O flag USE_FP16 faz o ORT converter pesos F32 para FP16 no momento
+    da compilacao NNAPI. O Hexagon NPU e o Adreno GPU processam FP16
+    nativamente. Isso, sozinho, nao resolve o problema dos ops
+    faltantes -- mas e pre-requisito para qualquer chance de o NNAPI
+    aceitar o grafo.
+
+  - O flag CPU_DISABLED impede que o NNAPI caia no nnapi-reference (CPU
+    do proprio NNAPI, mais lento que o CPU ORT). Para o Granite, a
+    queda CPU nnapi-reference e pior que CPU ORT puro.
+
+================================================================================
+7. PLANO DE ACAO (4 FASES, NAO APLICADO)
+================================================================================
+
+FASE 1 - LOGCAT DO ONEPLUS 15 (diagnostico final, 1-2 h)
+---------------------------------------------------------------
+Objetivo: confirmar o op exato que disparou ANEURALNETWORKS_BAD_DATA
+e o tamanho da particao NNAPI.
+
+Comandos:
+  adb logcat -c
+  adb logcat OrtNative:* OrtSession:* GraniteEngine:* AndroidRuntime:E *:S
+  # tocar "GPU" na UI, esperar erro
+  adb logcat -d | grep -iE 'nnapi|model_builder|ANEURALNETWORKS|OrtException|addNnapi|partition'
+
+Salvar resultado em:
+  docs/granite-nnapi-logcat-20260828.txt
+
+Sem este log, qualquer fix e palpite. Mas a aposta estatistica e alta:
+vai confirmar LayerNormalization ou Gather como causa.
+
+FASE 2 - ADICIONAR FLAGS NO addNnapi (vacina em codigo + teste, 1-2 h)
+---------------------------------------------------------------
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt:601-614
+
+ANTES:
+    nnapiOptions.addNnapi()
+
+DEPOIS:
+    import ai.onnxruntime.providers.NNAPIFlags
+    val nnapiFlags = EnumSet.of(
+        NNAPIFlags.USE_FP16,        // relaxacao FP16 (driver compila)
+        NNAPIFlags.CPU_DISABLED     // se NNAPI falhar em 1 op, cai pro CPU ORT
+    )
+    nnapiOptions.addNnapi(nnapiFlags)
+
+Vacina (teste JVM) em app/src/test/java/br/gov/sp/pcsp/launcher/GraniteEngineTest.kt:
+
+    @Test
+    fun `nnapi addNnapi uses FP16 and CPU_DISABLED flags`() {
+        val flags = EnumSet.of(NNAPIFlags.USE_FP16, NNAPIFlags.CPU_DISABLED)
+        assertTrue(flags.contains(NNAPIFlags.USE_FP16))
+        assertTrue(flags.contains(NNAPIFlags.CPU_DISABLED))
+        assertFalse(flags.contains(NNAPIFlags.CPU_ONLY))
+    }
+
+Trade-offs:
+  A) USE_FP16 apenas: 1 linha. Driver pode aceitar F32 com relaxacao.
+     Custo zero. Risco: precisao cai marginalmente (CTC argmax e robusto).
+  B) USE_FP16 + CPU_DISABLED: 2 linhas. Se NNAPI falhar num op especifico,
+     o ORT kernels assume. Recomendado para modelos grandes.
+  C) USE_NCHW: so API 29+. OnePlus 15 = API 35, ok. Mas pode piorar
+     performance em alguns drivers (NHWC e o default recomendado).
+  D) CPU_ONLY: modo debug. NAO recomendado para o usuario final.
+
+Recomendacao: B. Mudanca minima, maior chance de o NNAPI ao menos TENTAR
+compilar, e CPU_DISABLED evita a queda para o nnapi-reference (muito lento).
+
+Porem, importante notar: esta fase provavelmente NAO vai desbloquear
+GPU/NPU no modelo F32 atual. Os 80 LayerNormalization + 33 Where + 23 Not
++ 2 ReduceSum + 2 Greater estao fora do conjunto suportado pela ORT 1.29,
+e nenhuma flag de EP resolve isso -- o problema e a tabela de ops.
+
+FASE 3 - VALIDAR PARTICIONAMENTO NNAPI NO PC (2-3 h)
+---------------------------------------------------------------
+Objetivo: ver quais nos cairiam na particao NNAPI e quantos ficariam
+fora. Ajuda a decidir se o caminho "NNAPI com ops faltantes no CPU" e
+viavel.
+
+Ferramenta: usar o particionador ORT em simulacao (o EP Nnapi so existe
+no Android, mas o particionador e portavel). Rodar no PC e listar:
+
+    ort_test --model granite-5.0-turboctc-f32-ext.onnx \
+              --ep nnapi --dump-partitions
+
+Esperado: a particao NNAPI fica em ~0 nos (todos vao pro CPU por causa
+dos ops faltantes). Confirma que GPU/NPU nao tem salvacao com este modelo
+e esta versao da ORT.
+
+FASE 4 - DECISAO ESTRUTURAL (3-4 h, dependendo do caminho)
+---------------------------------------------------------------
+Opcoes em ordem de complexidade:
+
+  (a) CURTO PRAZO (5 min):
+      Desabilitar GPU/NPU na UI. Tirar a ilusao de aceleracao enquanto
+      o modelo e F32. Mensagem: "este modelo so roda em CPU no Android".
+      Arquivo: GraniteEngine.kt:387-395 (remover entradas GPU e NPU do
+      enum GraniteExecutionBackend) e GraniteActivity.kt:338-346
+      (showBackendMenu).
+      Resultado: fim do erro, fim do dialogo de fallback, UX limpa.
+
+  (b) MEDIO PRAZO (1-2 dias):
+      Re-exportar o modelo em FP16 ou INT8.
+      - Mudar export_onnx.py para dtype=torch.float16 (ou torch.qint8).
+      - Rodar validate_pipeline.py para garantir acuracia aceitavel.
+      - Republicar no R2 (bucket sig-android/models/) com novos SHA em
+        release/granite_links_download.txt.
+      - Volume cai de 1,89 GB para ~950 MB (FP16) ou ~470 MB (INT8).
+      - Apos republicar, a ORT NNAPI 1.29 consegue compilar o grafo
+        quantizado (INT8 usa o caminho QLinear* da tabela, FP16 ativa
+        todos os ops).
+      - Seletor GPU/NPU volta a fazer sentido; NPU Hexagon do OnePlus 15
+        deve dar ganho de 3-10x sobre CPU.
+
+  (c) INVESTIGACAO QNN EP (2-3 dias, mais profundo):
+      Tentar o EP QNN (Qualcomm Neural Network) via addQnn(...) da ORT
+      1.29. O OnePlus 15 tem Hexagon NPU, e o QNN EP usa o runtime
+      QNN da Qualcomm diretamente (sem passar pelo NNAPI).
+      Custo: exige o pacote .so do QNN runtime compativel com o SDK do
+      SoC (Snapdragon 8 Elite -> QNN 2.x). Pode ser obtido via
+      Qualcomm AI Engine Direct SDK.
+      Beneficio: se funcionar, e o caminho com maior ganho (10-30x sobre
+      CPU). Risco alto: se o .so nao bater, o app pode nem inicializar.
+
+Recomendacao final:
+  - Curto prazo: (a). Fim imediato do erro.
+  - Medio prazo: (b) com FP16. Bom equilibrio entre tamanho (~950 MB),
+    precisao (marginal) e compatibilidade NNAPI.
+  - (c) so se o usuario tiver tempo de pesquisar o SDK QNN.
+
+================================================================================
+8. VACINA FORMAL (regra: "vacina em codigo + teste permanente")
+================================================================================
+
+Apos a decisao, formalizar com:
+
+  1) Teste JVM em GraniteEngineTest.kt:
+     - Para Fase 2: verifica que addNnapi(EnumSet) e chamado com os
+       flags USE_FP16 e CPU_DISABLED.
+     - Para Fase 4(a): verifica que o enum GraniteExecutionBackend so
+       tem a entrada CPU (ou que GPU/NPU estao desabilitadas).
+     - Para Fase 4(b): asset JSON com a contagem esperada de ops e o
+       teste compara no setUp (LayerNorm=80, Where=33, etc.). Se
+       exportar FP16 mudar a contagem, o teste falha e obriga a
+       atualizar o documento de decisao.
+
+  2) Documento permanente em docs/granite-nnapi-decisions.md:
+     - Decisao tomada (provavelmente "CPU-only, modelo F32 nao e viavel
+       para NNAPI 1.29").
+     - Por que nao foi possivel GPU/NPU (lista de ops fora da tabela,
+       com link para este diagnostico).
+     - Quando re-avaliar (apos quantizacao, ou quando ORT >= x.y
+       melhorar o suporte a Conformer).
+     - Versoes testadas, device testado, data da decisao.
+
+================================================================================
+9. ESTADO ATUAL DOS DOCUMENTOS RELACIONADOS
+================================================================================
+
+Existentes em D:/Projetos/SIG/docs/:
+  - granite-diagnostico-completo-20260827.txt
+    Diagnostico geral do Granite (atencao mask, OOM). Menciona GPU/NPU
+    como "investigar via logcat". Este arquivo complementa o item 3
+    (Problema 3: GPU/NPU) com a analise estaticas das Ops.
+  - granite-fixes-2026-08-27.md
+    Plano de fix da mask invertida (BUG 1, Alta). NAO inclui correcao
+    para GPU/NPU. Pode ser atualizado para referenciar este documento.
+  - granite-turboctc-design.md
+    Design original do Granite no SIG. Documenta a escolha de NNAPI
+    como acelerador. Apos este diagnostico, precisa ser atualizado com
+    a realidade "NNAPI nao funciona para este modelo F32".
+  - NPU_IMPLEMENTATION_NOTES.md
+    Notas sobre NPU. Nao inspecionado nesta investigacao -- vale a
+    pena revisar para ver se ha contexto adicional.
+
+Pendencias adicionadas por este diagnostico:
+  [ ] Decidir entre Fase 2 agora (low-risk) ou pular para Fase 4.
+  [ ] Decidir caminho definitivo (4a curto prazo + 4b medio prazo,
+      ou outro).
+  [ ] Atualizar granite-turboctc-design.md e granite-fixes-2026-08-27.md
+      com a conclusao.
+  [ ] Criar granite-nnapi-decisions.md com a vacina formal.
+  [ ] Se for Fase 2: rodar adb logcat antes (Fase 1) para confirmar
+      a hipotese.
+  [ ] Se for Fase 4(b): agendar re-export do modelo e republicar no
+      R2 (envolve atualizar release/granite_links_download.txt e
+      seguir o procedimento do UPDATE.md).
+
+================================================================================
+10. ITENS VERIFICADOS NESTA INVESTIGACAO
+================================================================================
+
+  [x] Screenshot do erro lido e interpretado.
+  [x] Codigo-fonte de GraniteEngine.kt lido (linhas 580-640 do
+      loadSessionModel).
+  [x] Modelo ONNX do Granite inspecionado: 4 213 nos, 22 op_types,
+      16 Gather com indice dinamico int64, 80 LayerNormalization.
+  [x] API da ORT 1.29 inspecionada via javap: addNnapi() e
+      addNnapi(EnumSet<NNAPIFlags>), NNAPIFlags = {USE_FP16, USE_NCHW,
+      CPU_DISABLED, CPU_ONLY}.
+  [x] Tabela oficial de ops suportados pelo NNAPI da ORT 1.29 cruzada
+      com a lista de ops do modelo.
+  [x] Issue 16224 do onnxruntime confirmada como mesmo padrao de erro.
+  [x] Documentos relacionados no repo (granite-fixes-2026-08-27.md,
+      granite-diagnostico-completo-20260827.txt) revisados.
+
+Itens NAO verificados (limitacoes da investigacao estatica):
+  [ ] Logcat real do OnePlus 15 (precisa do aparelho conectado via adb).
+  [ ] Tamanho exato da particao NNAPI para o modelo (precisa da
+      ferramenta ort_test no PC ou do EP Nnapi em emulador).
+  [ ] Versao exata do driver NNAPI no OnePlus 15 (provavelmente
+      Android 15 stock + Adreno 830 + Hexagon v79, mas varia com
+      atualizacoes do sistema).
+
+================================================================================
+11. CONCLUSAO EM UMA FRASE
+================================================================================
+
+O erro ANEURALNETWORKS_BAD_DATA no OnePlus 15 acontece porque o modelo
+Granite Speech 5.0 TurboCTC F32 exportado pelo projeto usa ops que a
+ORT 1.29 nao suporta no NNAPI (LayerNormalization, Where, Not,
+ReduceSum, Greater, Gather com indice int64 dinamico) e o addNnapi() e
+chamado sem nenhuma flag -- o caminho mais curto e desabilitar GPU/NPU
+na UI agora (5 min) e re-exportar o modelo em FP16/INT8 no medio prazo
+para reativar aceleracao.
+
+================================================================================
+FIM DO DIAGNOSTICO
+================================================================================
+Arquivo: D:/Projetos/SIG/docs/granite-nnapi-gpu-npu-diagnostico-20260828.txt
+Autor:  Hermes Agent
+Data:   28/08/2026

@@ -1,0 +1,666 @@
+================================================================================
+RELATORIO DE DIAGNOSTICO — GRANITE 5.0 TURBOCTC — GPU/NPU NO ONEPLUS 15
+================================================================================
+
+Data: 28/08/2026
+Projeto: SIG Android
+Ferramenta: Granite local
+Modelo analisado: IBM Granite Speech 5.0 470M TurboCTC
+Formato: ONNX F32, shapes estaticos
+Engine: ONNX Runtime Android 1.29.0
+Dispositivo informado: OnePlus 15, 16 GB
+
+Escopo deste relatorio:
+  - investigar o erro ANEURALNETWORKS_BAD_DATA mostrado ao selecionar GPU/NPU;
+  - separar causas comprovadas de hipoteses;
+  - recomendar a correcao de curto e longo prazo;
+  - nenhuma mudanca de codigo foi feita durante a investigacao.
+
+
+================================================================================
+1. CONCLUSAO EXECUTIVA
+================================================================================
+
+O OnePlus 15 nao e o problema. O aparelho possui Snapdragon 8 Elite Gen 5,
+GPU Adreno 840, Hexagon NPU e memoria suficiente. A falha decorre da arquitetura
+atual da ferramenta Granite:
+
+1. As opcoes visuais "GPU" e "NPU" nao selecionam dispositivos diferentes.
+   Ambas chamam exatamente o mesmo provider, addNnapi(), sem escolher GPU,
+   Hexagon NPU ou outro dispositivo.
+
+2. O ONNX Runtime tenta repartir o grafo do Granite em aproximadamente 100
+   particoes NNAPI.
+
+3. Uma dessas particoes e rejeitada pelo runtime NNAPI do Android como uma
+   definicao invalida durante identifyInputsAndOutputs.
+
+4. A falha ocorre antes da inferencia e antes da compilacao para a GPU ou NPU.
+   Portanto, ela nao demonstra falta de suporte ou potencia do hardware.
+
+5. Mesmo que a falha de carregamento seja contornada, a fragmentacao em 99-100
+   particoes torna provavel que o NNAPI seja mais lento que o CPU ORT.
+
+Fix recomendado:
+  - curto prazo: CPU como backend estavel e NNAPI claramente marcado como
+    experimental, ou temporariamente removido da interface;
+  - GPU real: Qualcomm QNN com backend GPU e variante FP16 validada;
+  - NPU real: Qualcomm QNN HTP com modelo QDQ INT8/INT16 calibrado;
+  - nao investir no NNAPI como backend definitivo, pois ele foi descontinuado
+    no Android 15 e o modelo e estruturalmente inadequado para esse provider.
+
+
+================================================================================
+2. SINTOMA E PONTO EXATO DA FALHA
+================================================================================
+
+A captura fornecida mostra:
+
+  Acelerador indisponivel
+  O GPU (NNAPI) falhou ao carregar o modelo:
+  Error code - ORT_FAIL - message:
+  model_builder.cc:540 Compile ResultCode:
+  ANEURALNETWORKS_BAD_DATA, on identifyInputsAndOutputs
+
+O dialogo e criado em:
+
+  app/src/main/java/br/gov/sp/pcsp/launcher/GraniteActivity.kt
+  metodo transcribeSelectedMedia(), callback onFallbackPrompt, linhas ~456-487.
+
+Ele e acionado quando falha esta operacao em GraniteEngine.kt:
+
+  session = env.createSession(modelPath.absolutePath, nnapiOptions)
+
+Consequencias:
+  - o modelo nao chegou a executar uma inferencia;
+  - nenhum WAV foi enviado ao grafo;
+  - nao e erro de microfone, audio, front-end, decoder CTC ou texto vazio;
+  - a falha ocorre na construcao da sessao NNAPI.
+
+
+================================================================================
+3. GPU E NPU NAO SAO BACKENDS DISTINTOS NO CODIGO ATUAL
+================================================================================
+
+O enum em GraniteEngine.kt declara:
+
+  CPU("CPU")
+  GPU("GPU (NNAPI)")
+  NPU("NPU (NNAPI)")
+
+Porem, CPU e tratado separadamente, enquanto GPU e NPU chegam ao mesmo ramo:
+
+  val nnapiOptions = OrtSession.SessionOptions()
+  nnapiOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+  nnapiOptions.addNnapi()
+
+Nao existe no fluxo atual:
+  - selecao de dispositivo NNAPI do tipo GPU;
+  - selecao do Hexagon DSP/NPU;
+  - diferenca tecnica entre as opcoes GPU e NPU;
+  - confirmacao do dispositivo efetivamente usado;
+  - impedimento de uso do nnapi-reference, que e CPU.
+
+Logo, mesmo se a sessao carregasse:
+  - "GPU" poderia executar em NPU ou CPU;
+  - "NPU" poderia executar em GPU ou CPU;
+  - o relatorio exibido ao usuario nao provaria aceleracao real.
+
+Este e um defeito funcional independente do erro ANEURALNETWORKS_BAD_DATA.
+
+
+================================================================================
+4. INTERPRETACAO CORRETA DE ANEURALNETWORKS_BAD_DATA
+================================================================================
+
+A parte decisiva da mensagem e:
+
+  on identifyInputsAndOutputs
+
+No ONNX Runtime NNAPI 1.29, a ordem relevante e:
+
+  1. preparar a particao e seus operandos;
+  2. registrar entradas, constantes, operacoes e saidas;
+  3. chamar ANeuralNetworksModel_identifyInputsAndOutputs;
+  4. somente depois habilitar relaxacao F32 -> FP16;
+  5. finalizar o modelo;
+  6. consultar suporte dos dispositivos;
+  7. criar a compilacao para os dispositivos selecionados.
+
+Portanto, o erro ocorre antes da selecao/compilacao pelo driver GPU/NPU.
+
+No runtime NNAPI do Android, identifyInputsAndOutputs devolve BAD_DATA quando a
+lista ou o estado dos operandos e invalido, por exemplo:
+  - indice fora da lista de operandos;
+  - operando ja marcado como constante;
+  - operando ja marcado como entrada ou saida;
+  - mesma fronteira registrada com papeis incompatíveis;
+  - particao sem uma definicao valida de entrada/saida.
+
+Diagnostico de alta confianca:
+
+  Uma das muitas particoes criadas pelo NNAPI EP para o Granite tem uma
+  fronteira de entradas/saidas que o runtime NNAPI considera invalida.
+
+O log nativo detalhado do OnePlus ainda e necessario para identificar o numero
+exato do operando e a particao responsavel. A ausencia desse detalhe nao muda a
+conclusao estrutural: o erro ocorre no modelo NNAPI intermediario gerado pelo
+provider, e nao no arquivo ONNX completo nem no hardware do telefone.
+
+
+================================================================================
+5. VALIDACOES EFETUADAS
+================================================================================
+
+5.1. Modelo analisado
+---------------------
+
+  tools/granite/out/granite-5.0-turboctc-f32-ext.onnx
+  tools/granite/out/granite-5.0-turboctc-f32-ext.onnx.data
+
+Tamanhos observados:
+  - grafo ONNX: 865.408 bytes;
+  - external data: 1.891.581.952 bytes.
+
+5.2. Contrato do modelo
+-----------------------
+
+Entradas:
+  input_features  float32 [1, 512, 320]
+  attention_mask  int64   [1, 512]
+
+Saida:
+  logits          float32 [1, 128, 16384]
+
+5.3. Integridade e CPU
+----------------------
+
+  - onnx.checker: aprovado;
+  - sessao ONNX Runtime 1.29 em CPU com otimizacoes desativadas: aprovada;
+  - tempo observado para criar a sessao CPU no computador: aproximadamente 3 s;
+  - provider observado: CPUExecutionProvider.
+
+Conclusao:
+  O ONNX e valido e carregavel. O defeito aparece especificamente ao converter
+  particoes do grafo para a representacao NNAPI.
+
+5.4. Correspondencia entre Java e bibliotecas nativas
+------------------------------------------------------
+
+O projeto declara:
+
+  com.microsoft.onnxruntime:onnxruntime-android:1.29.0
+
+O pacote ARM64 publicado no R2 foi baixado e teve seu SHA-256 validado:
+
+  402255cd51a4a31ba337bb8fe240b566b616507b3c09ae7eae98365df0cce958
+
+Comparacao das bibliotecas publicadas com o AAR oficial 1.29.0:
+
+  libonnxruntime.so
+  SHA-256: 3a602b463d434d20fbf69cd1b8bdfd2f86a2cb67d08de97aec8f62476fa4ab87
+
+  libonnxruntime4j_jni.so
+  SHA-256: 45673d7fba377fe0555892460766051b5993d65c9f65e528dc9d515c07c9f683
+
+Os hashes coincidem exatamente. Nao ha evidencia de mistura entre wrapper Java
+1.29.0 e biblioteca nativa de outra versao.
+
+
+================================================================================
+6. ANALISE DO GRAFO E PARTICIONAMENTO NNAPI
+================================================================================
+
+Modelo bruto:
+  - nos: 4.213;
+  - inicializadores: 486;
+  - value_info intermediarios no arquivo exportado: 0.
+
+Principais operadores:
+
+  Constant                1.883
+  Transpose                 528
+  Unsqueeze                 419
+  Slice                     404
+  MatMul                    212
+  Add                       197
+  Mul                       144
+  Reshape                   114
+  LayerNormalization         80
+  Sigmoid                    64
+  Cast                       38
+  Where                      33
+  Not                        23
+  Softmax                    17
+  Gather                     16
+  Split                      16
+  Conv                       16
+  ReduceMean                  2
+  ReduceSum                   2
+  Greater                     2
+
+Resultado do verificador oficial de usabilidade movel do ONNX Runtime:
+
+Modelo bruto, equivalente ao NO_OPT usado atualmente:
+  - 100 particoes NNAPI;
+  - 2.190 de 4.213 nos estimados como delegaveis;
+  - cobertura: 52,0%;
+  - conclusao do verificador: NNAPI nao recomendado;
+  - motivo: custo de particoes/copias provavelmente pior que CPU.
+
+Depois de otimizacao BASIC:
+  - 99 particoes NNAPI;
+  - 2.177 de 2.298 nos estimados como delegaveis;
+  - cobertura: 94,7%;
+  - conclusao do verificador: NNAPI nao recomendado;
+  - apesar da cobertura alta, continuam existindo 99 fronteiras de particao.
+
+Operadores nao suportados pelo NNAPI EP que fragmentam o grafo:
+  - LayerNormalization;
+  - Where;
+  - Not;
+  - ReduceSum;
+  - Greater.
+
+Gather aparece como suportado apenas sob restricoes. Seus indices dinamicos
+devem ser analisados no dispositivo, mas ele nao pode ser apontado como causa
+confirmada de identifyInputsAndOutputs: essa chamada nao valida a semantica dos
+indices de Gather.
+
+Conclusao:
+  O problema nao e simplesmente "3,7% dos nos nao suportados". O problema real
+  e que operadores centrais e repetidos do Conformer cortam o grafo em cerca de
+  100 particoes. Cada corte introduz sincronizacao, copia de tensores e novas
+  fronteiras de entrada/saida. Uma dessas fronteiras esta sendo rejeitada; as
+  demais tornariam o desempenho pouco atraente mesmo se carregassem.
+
+
+================================================================================
+7. POR QUE O ONEPLUS 15 NAO E O CULPADO
+================================================================================
+
+Especificacoes oficiais relevantes:
+  - OxygenOS 16 baseado em Android 16;
+  - Snapdragon 8 Elite Gen 5;
+  - GPU Adreno 840;
+  - Qualcomm Hexagon NPU;
+  - configuracao de 16 GB LPDDR5X disponivel.
+
+O hardware e adequado, mas ter GPU/NPU forte nao garante que um grafo arbitrario
+seja compativel com qualquer API. Entre o modelo e o hardware existem:
+  - o ONNX Runtime Execution Provider;
+  - o particionador de grafo;
+  - o runtime NNAPI do Android;
+  - os drivers expostos pelo fabricante.
+
+A falha esta nas primeiras camadas dessa cadeia, antes de chegar ao trabalho
+computacional no acelerador.
+
+O NNAPI foi descontinuado no Android 15. Ele continua disponivel, mas o Android
+recomenda migracao para runtimes mais atuais. Em um aparelho Android 16, nao e
+uma boa base para uma nova implementacao de alto desempenho.
+
+
+================================================================================
+8. CORRECOES QUE NAO RESOLVEM O PROBLEMA
+================================================================================
+
+8.1. Apenas adicionar USE_FP16
+--------------------------------
+
+Nao corrige o erro da captura. identifyInputsAndOutputs e chamado antes de
+ANeuralNetworksModel_relaxComputationFloat32toFloat16.
+
+FP16 pode ser util para outro backend ou para desempenho depois que a sessao
+carregar, mas nao repara a fronteira invalida da particao.
+
+8.2. Apenas adicionar CPU_DISABLED
+----------------------------------
+
+Tambem nao corrige o erro. A selecao da lista de dispositivos e a verificacao de
+suporte ocorrem depois de identifyInputsAndOutputs.
+
+CPU_DISABLED e recomendado em testes futuros para impedir que algo chamado
+"GPU/NPU" execute silenciosamente no nnapi-reference, mas nao e o fix da falha.
+
+8.3. Apenas converter todo o ONNX para FP16
+-------------------------------------------
+
+Reduz o tamanho dos pesos, mas nao remove LayerNormalization, Where, Not,
+ReduceSum, Greater nem as aproximadamente 100 particoes. Pode continuar
+falhando ou ficar mais lento que CPU.
+
+8.4. Apenas quantizar e continuar no NNAPI
+------------------------------------------
+
+Quantizacao pode melhorar alguns MatMul/Conv, mas nao remove automaticamente os
+operadores responsaveis pela fragmentacao. Nao e o caminho recomendado.
+
+8.5. Presumir que NPU sera usada porque o telefone possui NPU
+-------------------------------------------------------------
+
+Incorreto. O codigo atual nao seleciona nem comprova uso do Hexagon. O nome do
+botao nao e evidencia do dispositivo executor.
+
+
+================================================================================
+9. FIX RECOMENDADO — PLANO DE ACAO
+================================================================================
+
+FASE 1 — CORRECAO IMEDIATA DE PRODUTO E INSTRUMENTACAO
+Estimativa: 0,5 dia
+------------------------------------------------------
+
+1. Substituir temporariamente "GPU" e "NPU" por uma unica opcao:
+
+     NNAPI experimental
+
+   Alternativa ainda mais segura: expor somente CPU ate existir backend
+   acelerado comprovado.
+
+2. Nunca informar "GPU" ou "NPU" sem identificar o dispositivo executor.
+
+3. Manter fallback para CPU, sempre explicito e registrado.
+
+4. Ativar logs detalhados do ONNX Runtime para registrar:
+   - quantidade real de particoes;
+   - quantidade de nos NNAPI;
+   - erro completo por particao;
+   - versao ORT;
+   - Android, ABI e SoC;
+   - backend solicitado e backend efetivo.
+
+5. Adicionar enumeracao nativa dos dispositivos NNAPI:
+   - ANeuralNetworks_getDeviceCount;
+   - ANeuralNetworks_getDevice;
+   - ANeuralNetworksDevice_getName;
+   - ANeuralNetworksDevice_getType;
+   - feature level e versao do driver.
+
+6. Capturar o erro detalhado no OnePlus 15:
+
+     adb shell setprop debug.nn.vlog all
+     adb logcat -c
+
+   Reproduzir o erro e coletar:
+
+     adb logcat -d | Select-String -Pattern \
+       'NeuralNetworks|NNAPI|identifyInputsAndOutputs|ModelBuilder|onnxruntime'
+
+7. Registrar o numero do operando/particao exato reportado pelo Android.
+
+
+FASE 2 — EXPERIMENTO NNAPI CONTROLADO
+Estimativa: 0,5 dia
+-------------------------------------
+
+Objetivo: verificar se o erro pontual some com otimizacao, sem transformar isso
+automaticamente em solucao de producao.
+
+1. No ramo NNAPI, trocar NO_OPT por BASIC_OPT.
+2. Preservar a configuracao CPU separadamente, caso NO_OPT tenha sido escolhido
+   por razoes de memoria ou reproducibilidade.
+3. Testar as configuracoes:
+   a) NNAPI sem flags;
+   b) NNAPI + CPU_DISABLED;
+   c) NNAPI + CPU_DISABLED + USE_FP16.
+4. CPU_DISABLED deve ser usado para validar aceleracao e impedir o
+   nnapi-reference.
+5. USE_FP16 deve ser tratado como experimento de desempenho/precisao, nao como
+   correcao de identifyInputsAndOutputs.
+6. Medir em cada configuracao:
+   - sucesso/falha de criacao da sessao;
+   - numero real de particoes;
+   - dispositivo executor;
+   - tempo de carga;
+   - real-time factor;
+   - pico de RAM;
+   - temperatura;
+   - divergencia do texto contra CPU F32.
+7. Rejeitar NNAPI como backend final se:
+   - continuar com dezenas de particoes;
+   - usar nnapi-reference;
+   - for mais lento que CPU;
+   - apresentar instabilidade ou perda relevante de acuracia.
+
+Expectativa: BASIC pode alterar a particao invalida e permitir que a sessao
+carregue, mas os 99 cortes restantes tornam improvavel um ganho de desempenho.
+
+
+FASE 3 — GPU REAL COM QUALCOMM QNN
+Estimativa: 2-4 dias, se o QAIRT SDK estiver disponivel
+-------------------------------------------------------
+
+1. Obter legalmente o Qualcomm AI Engine Direct/QAIRT SDK e revisar permissao de
+   redistribuicao das bibliotecas necessarias.
+2. Compilar um AAR Android customizado do ONNX Runtime 1.29 com QNN EP:
+
+     --use_qnn static_lib --qnn_home <QNN_SDK_PATH>
+
+3. Nao presumir que o AAR Android comum contem todo o provider e runtime QNN.
+4. Criar um backend real separado:
+
+     GPU_QNN
+
+5. Gerar uma variante FP16 do Granite para o backend GPU, sem substituir o
+   modelo CPU F32.
+6. Configurar addQnn com backend GPU/libQnnGpu.
+7. Durante a validacao, desabilitar fallback CPU para provar que o grafo foi
+   realmente aceito pelo QNN.
+8. Verificar por profiling que o executor e QNN GPU.
+9. Comparar saida FP16 contra CPU F32 e referencia PyTorch.
+10. So exibir "GPU" na interface depois dessa comprovacao.
+
+O QNN EP declara suporte aos operadores que fragmentam o Granite no NNAPI,
+incluindo LayerNormalization, Where, Not, Greater e ReduceSum.
+
+
+FASE 4 — NPU REAL COM QNN HTP
+Estimativa: 4-8 dias, principalmente pela calibracao
+------------------------------------------------------
+
+1. Criar uma variante QDQ INT8 ou INT16 do Granite.
+2. Usar corpus real e representativo de audio em ingles para calibracao.
+3. Nao usar entradas aleatorias para decidir escalas de quantizacao.
+4. Preservar shapes estaticos; o modelo atual ja possui shapes fixos.
+5. Criar backend:
+
+     NPU_QNN_HTP
+
+6. Configurar addQnn com backend HTP/libQnnHtp.
+7. Desabilitar fallback CPU nos testes de aceitacao.
+8. Habilitar profiling QNN e comprovar execucao no Hexagon HTP.
+9. Avaliar context cache/EPContext para reduzir o tempo de preparacao.
+10. Validar numericamente:
+    - WER contra CPU F32;
+    - divergencia de tokens CTC;
+    - transcricoes vazias;
+    - ruido, silencio, fala curta e fala longa;
+    - efeito da attention_mask;
+    - real-time factor;
+    - RAM, bateria e temperatura.
+
+Decisao de produto obrigatoria:
+  O HTP/NPU exige uma variante quantizada neste caminho. Se "F32 sem
+  quantizacao" continuar sendo requisito inegociavel, a opcao NPU deve ser
+  removida. Nao se deve manter um botao que promete algo tecnicamente
+  incompatível com o artefato escolhido.
+
+
+FASE 5 — PACOTES, CAPABILITY PROBING E UX
+Estimativa: 1-2 dias
+------------------------------------------
+
+1. Separar artefatos e identificadores:
+   - granite-f32-cpu;
+   - granite-fp16-qnn-gpu;
+   - granite-qdq-qnn-htp.
+2. Cada variante deve ter:
+   - versao;
+   - tamanho;
+   - SHA-256;
+   - runtime esperado;
+   - SoCs/HTP architectures aceitos;
+   - metrica de qualidade da conversao.
+3. Fazer capability probing antes de mostrar o backend.
+4. Esconder uma opcao incompatível em vez de permitir que ela falhe somente
+   depois de carregar quase 2 GB de pesos.
+5. Registrar em todo resultado:
+   - backend solicitado;
+   - backend efetivo;
+   - modelo e quantizacao;
+   - tempo de carga;
+   - tempo de inferencia;
+   - fallback ocorrido;
+   - versao do driver/runtime.
+6. Manter feature flag/rollback para voltar a CPU sem remover o modelo estavel.
+
+
+================================================================================
+10. VALIDACAO E CRITERIOS DE ACEITACAO
+================================================================================
+
+O fix so esta pronto quando todos os itens abaixo forem verdadeiros:
+
+[ ] GPU e NPU correspondem a backends tecnicamente diferentes.
+[ ] O dispositivo executor e comprovado por profiling.
+[ ] Nao existe fallback silencioso.
+[ ] Instalacao limpa consegue baixar, validar e carregar a variante correta.
+[ ] A sessao pode ser criada repetidamente sem travamento.
+[ ] Nao ha transcricao vazia em audio valido.
+[ ] Attention mask preserva a convencao 1=real, 0=padding.
+[ ] GPU/NPU supera CPU de forma mensuravel no OnePlus 15.
+[ ] Qualidade permanece dentro do limite de WER definido.
+[ ] Teste continuo de 10-15 minutos nao causa falha termica.
+[ ] Cancelamento e fallback nao deixam sessao ou arquivo temporario preso.
+[ ] O relatorio identifica backend solicitado e backend real.
+
+Gates Android:
+
+  .\gradlew.bat :app:testDebugUnitTest
+  .\gradlew.bat :app:lintDebug
+  .\gradlew.bat :app:assembleDebug
+
+Como a implementacao QNN altera dependencias nativas, tambem executar:
+
+  .\scripts\build-android-native-dependencies.ps1 -Version <N>
+  .\scripts\verify-native-dependencies.ps1 \
+    -Version <N> -OutputDir native-dependencies\build
+
+Os ZIPs nativos e o APK so devem ser promovidos juntos depois que a verificacao
+aceitar. Nenhum artefato deve ser publicado ou assinado sem aprovacao explicita.
+
+
+================================================================================
+11. TESTES PERMANENTES RECOMENDADOS
+================================================================================
+
+1. Teste JVM para garantir que os labels GPU/NPU so existem quando seus
+   providers reais estao configurados.
+2. Teste do mapeamento:
+     CPU -> CPU EP
+     GPU_QNN -> QNN GPU
+     NPU_QNN_HTP -> QNN HTP
+3. Teste que proibe GPU e NPU de apontarem para a mesma configuracao generica.
+4. Teste de fallback explicito e auditavel.
+5. Teste que impede publicar variante sem SHA-256 e runtime declarado.
+6. Teste de attention_mask 1=real, 0=padding.
+7. Teste de paridade CPU ONNX contra referencia PyTorch.
+8. Teste de qualidade da variante FP16.
+9. Teste de WER da variante quantizada HTP com corpus versionado.
+10. Teste de smoke em aparelho Qualcomm real; emulador nao valida QNN HTP.
+
+
+================================================================================
+12. CORRECOES AO DIAGNOSTICO PRELIMINAR EXISTENTE NO REPOSITORIO
+================================================================================
+
+Algumas conclusoes presentes em relatorios preliminares nao devem orientar a
+implementacao sem esta correcao:
+
+1. "USE_FP16 corrige ANEURALNETWORKS_BAD_DATA"
+   Incorreto para este erro. FP16 e ativado depois de identifyInputsAndOutputs.
+
+2. "CPU_DISABLED faz as operacoes nao suportadas cair para CPU ORT e resolve"
+   Incorreto para esta falha. O erro ocorre antes da selecao dos dispositivos.
+
+3. "Os operadores nao suportados nao podem ser particionados sem perder o
+   sentido do bloco"
+   Incorreto. ORT particiona o grafo preservando dependencias. O problema e o
+   excesso de particoes e uma fronteira invalida, nao perda semantica.
+
+4. "FP16 ativa todos os operadores no NNAPI"
+   Incorreto. FP16 muda precisao, nao a lista de operadores suportados pelo EP.
+
+5. "FP16 e suficiente para NPU HTP"
+   Nao e uma premissa valida. O caminho QNN HTP requer modelo quantizado conforme
+   o fluxo oficial atual.
+
+6. Especificacao do aparelho como Android 15/Snapdragon 8 Elite anterior
+   Desatualizada. O OnePlus 15 oficial usa Android 16/OxygenOS 16 e Snapdragon
+   8 Elite Gen 5.
+
+
+================================================================================
+13. RECOMENDACAO FINAL PRIORIZADA
+================================================================================
+
+Prioridade 1 — agora:
+  Manter CPU como backend estavel e retirar a promessa falsa de GPU/NPU.
+
+Prioridade 2 — diagnostico curto:
+  Capturar log NNAPI completo e testar BASIC + CPU_DISABLED apenas para fechar a
+  particao invalida e medir a inviabilidade pratica do NNAPI.
+
+Prioridade 3 — GPU:
+  Implementar QNN GPU com variante FP16 e profiling que confirme o executor.
+
+Prioridade 4 — NPU:
+  Implementar QNN HTP com variante QDQ calibrada e validacao de WER.
+
+Prioridade 5 — distribuicao:
+  Versionar separadamente modelos e bibliotecas nativas, com capability probing
+  e rollback para CPU.
+
+Nao recomendado:
+  Gastar o ciclo principal de desenvolvimento tentando transformar NNAPI em
+  backend de producao para este Conformer. A API esta descontinuada e o
+  verificador oficial do ONNX Runtime classifica o modelo como inadequado por
+  causa das aproximadamente 100 particoes.
+
+
+================================================================================
+14. REFERENCIAS OFICIAIS
+================================================================================
+
+OnePlus 15 — especificacoes:
+https://www.oneplus.com/us/15/specs
+
+Snapdragon 8 Elite Gen 5 — GPU e Hexagon NPU:
+https://www.qualcomm.com/smartphones/products/8-series/snapdragon-8-elite-gen-5
+
+ONNX Runtime — NNAPI Execution Provider:
+https://onnxruntime.ai/docs/execution-providers/NNAPI-ExecutionProvider.html
+
+ONNX Runtime — arquitetura de Execution Providers:
+https://onnxruntime.ai/docs/execution-providers/
+
+ONNX Runtime 1.29 — ModelBuilder NNAPI:
+https://raw.githubusercontent.com/microsoft/onnxruntime/v1.29.0/onnxruntime/core/providers/nnapi/nnapi_builtin/builders/model_builder.cc
+
+Android — runtime NNAPI ModelBuilder:
+https://android.googlesource.com/platform/packages/modules/NeuralNetworks/+/71c0ad497a331ca1d166c8896c441586abe77292/runtime/ModelBuilder.cpp
+
+Android — guia de migracao do NNAPI:
+https://developer.android.com/ndk/guides/neuralnetworks/migration-guide
+
+ONNX Runtime — Qualcomm QNN Execution Provider:
+https://onnxruntime.ai/docs/execution-providers/QNN-ExecutionProvider.html
+
+ONNX Runtime — build Android com QNN:
+https://onnxruntime.ai/docs/build/android.html
+
+
+================================================================================
+FIM DO RELATORIO
+================================================================================

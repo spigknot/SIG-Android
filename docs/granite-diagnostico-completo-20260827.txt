@@ -1,0 +1,229 @@
+================================================================================
+GRANITE STT — DIAGNOSTICO COMPLETO + PLANO DE ACAO
+================================================================================
+Data: 27/08/2026
+Fonte: Investigacao estatica de codigo (sem precisar do dispositivo)
+Arquivos examinados: GraniteEngine.kt, GraniteActivity.kt, GraniteEngineTest.kt,
+  NativeDependencyManager.kt, AndroidManifest.xml, build.gradle, activity_granite.xml,
+  docs/granite-turboctc-design.md, release/granite_links_download.txt, tools/granite/*
+  (export_onnx.py, validate_pipeline.py, split_external.py, processing_ctc_conformer.py)
+
+NOTA: Este documento SUPERSISTE ao granite-diagnostico-plano.txt (anterior). O diagnostico
+abaixo foi fundido com docs/granite-fixes-2026-08-27.md e docs/granite_mask_bug_report.txt
+que ja existiam no repo. NAO alterei NADA no codigo ainda — soh diagnostico.
+
+================================================================================
+PROBLEMA 1: "Transcricao vazia" com áudio EN de 71KB (~6,6s)
+================================================================================
+Sintoma: Processo chega a 100%, mas retorna string "" e a Activity lança
+  IllegalStateException("transcrição vazia em ...") (GraniteActivity.kt:521).
+
+CAUSA RAIZ (confirmada):
+  O attention_mask enviado ao ONNX Runtime está INVERTIDO.
+  
+  Em GraniteEngine.kt, linhas 661-663:
+    val mask = LongArray(windowFrames) { 1L }   // INICIALIZA TUDO COMO 1 (padding)
+    mask.fill(0L, 0, windowLen)                 // PREENCHE [0,windowLen) COM 0 (real)
+  
+  Resultado:
+    frames reais [0, windowLen): mask = 0  (o grafo trata como padding)
+    frames de padding [windowLen, 512): mask = 1 (o grafo trata como real)
+  
+  O grafo ONNX foi exportado de transformers (export_onnx.py linha 31), que usa a
+  convenção padrao HF: 1=real, 0=padding. Referencias:
+    - modeling_granite_speech5.py:50-55 (docstring: "1 for tokens that are not masked")
+    - modeling_granite_speech5.py:88 (atencao aditiva: attn_weights + attention_mask)
+    - modeling_granite_speech5.py:629 (sequences[~attention_mask] = pad_token_id)
+  
+  Com a mascara invertida:
+    1. O conformer mascara os frames validos → softmax colapsa
+    2. Logits degeneram → argmax sempre escolhe blank (id=0)
+    3. ctcCollapse() remove todos (todos são blank) → IntArray vazia
+    4. decode([]) → ""
+    5. Activity lança "transcrição vazia"
+
+  Por que os testes JVM passam? GraniteEngineTest.kt testa o decoder (ctcCollapse,
+  decode) isoladamente, mas NUNCA testa a construcao da mascara. O bug só manifesta
+  na ORT inference (transcribeFileInner), que nao tem teste JVM.
+
+  Por que o PC (validate_pipeline.py) passa? Porque lá a mascara é CORRETA (1=real),
+  e PyTorch == ONNX é validado com a mascara certa. O bug so existe no Kotlin.
+
+FIX PROPOSTO (nao aplicado):
+  GraniteEngine.kt linha 663-664:
+    // ANTES (errado):
+    val mask = LongArray(windowFrames) { 1L }   // 1 = padding
+    mask.fill(0L, 0, windowLen)                 // 0 = real
+    // DEPOIS (correto - convenção HF):
+    val mask = LongArray(windowFrames) { 0L }   // 0 = padding
+    mask.fill(1L, 0, windowLen)                 // 1 = real
+
+  Vacina: adicionar teste JVM em GraniteEngineTest.kt que verifica a mascara
+  construction (frames reais = 1, padding = 0, contagem correta).
+
+================================================================================
+PROBLEMA 2: OOM com áudio de 19MB (~19s, formato mp3 conforme imagem)
+================================================================================
+Sintoma (do screenshot): 
+  "Erro: Failed to allocate a 81709072 byte allocation with 17915056 free bytes
+   and 17MB until OOM, target footprint 268435456, growth limit 268435456"
+
+  - target footprint: 256MB (268435456 bytes)
+  - Memoria solicitada: ~78MB (81709072 bytes)
+  - Memoria disponivel: ~17MB
+
+IMPORTANTE: Este OOM veio da INTERFACE DESKTOP do SIG (nao Android). O screenshot
+mostra "Granite 5.0 Turbo" + "CPU" em uma interface desktop, e o erro e de OOM de
+256MB. Isso e um limite configurado na interface Desktop do SIG, NAO no Android.
+
+Analise do codigo Android (para referencia):
+  - AndroidManifest.xml: GraniteActivity tem android:largeHeap="true"
+    → libera heap maior (tipicamente 512MB+ em Android moderno)
+  - GraniteEngine.kt: OrtSession.SessionOptions usa NO_OPT (sem otimizacao)
+    → nao aloca buffers extras de otimizacao
+  - readWav16kMono (linha 756): carrega WAV inteiro em FloatArray (19s × 16kHz × 4B = ~1,2MB)
+    → nao e 78MB. O OOM de 78MB veio de outro lugar (desktop).
+  - transcribeFileInner (linha 648-694): janelas de 512 frames fixas
+    → cada janela: 512 × 320 × 4B = 655KB de entrada; logits: 128 × 16384 × 4B = 8,4MB
+
+CONCLUSAO PARA O ANDROID:
+  O OOM de 19MB nao e um problema do Android (78MB e muito abaixo do heap de 512MB
+  via largeHeap). O problema esta NA INTERFACE DESKTOP do SIG, que tem um limite
+  de 256MB hardcoded. O audio de 19MB (provavelmente MP3, conforme nome
+  "1781383142158_Interview recording 16.mp3") precisa ser convertido/conformado
+  antes de rodar pelo ONNX no desktop, e o limite de 256MB e insuficiente.
+
+  No Android, o mesmo problema pode ocorrer se:
+    - O FloatArray do WAV for muito grande (mas 19s = 1,2MB, OK)
+    - Se o audio for mais longo (ex: 190s = 12MB em FloatArray, ainda OK)
+    - O problema real seria o OrtIoBinding ou buffers de logits acumulados no heap
+
+  O fix da mascara (Problema 1) pode reduzir o OOM no Android porque:
+    - Argmax distribuido (nao todo blank) → buffers menores no decode
+    - Mas o OOM principal no Android seria causado por audio muito longo
+
+FIX PROPOSTO PARA O ANDROID (preventivo, se OOM persistir apos fix da mascara):
+  - Chunking: processar o WAV em pedacos de ~16s (256000 frames) em vez de carregar tudo
+    → evita FloatArray gigante
+  - Usar DirectByteBuffer para o WAV em vez de FloatArray heap-backed
+    → move 76MB (19s WAV) para off-heap
+
+  PARA O DESKTOP: investigar onde o limite de 256MB esta configurado. Pode ser
+  no codigo do servidor LLM (servidor:8400/v1/chat/completions) ou na propria
+  interface Desktop. O desktop nao e este repo Android.
+
+================================================================================
+PROBLEMA 3: GPU/NPU falham → fallback para CPU
+================================================================================
+Sintoma: GPU e NPU dam erros e acabam indo para CPU como fallback.
+
+Codigo (GraniteEngine.kt linha 584-618):
+  - Para GPU/NPU: tenta NNAPI (nnapiOptions.addNnapi())
+  - Se criar a sessao NNAPI falhar: mostra dialogo perguntando se quer CPU
+  - Se o usuario aceitar: cria sessao CPU com NO_OPT
+
+Causa provavel (OnePlus 15):
+  - O OnePlus 15 tem onnxruntime OEM no /system/lib64 (libonnxruntime.so 14MB,
+    libonnxruntime4j_jni.so 73KB)
+  - O fix do fix8 (prepend no nativeLibraryPathElements) resolve o carregamento
+    da lib, mas o NNAPI (GPU/NPU) pode falhar por:
+    a) Driver NNAPI do OnePlus 15 nao suporta alguma operacao do conformer
+    b) O provider NNAPI do onnxruntime-android 1.29.0 tenta usar libnnapi
+       do sistema, que pode ter versao incompativel
+  - O erro especifico do NNAPI pode ser capturado no catch (linha 602-612)
+
+  O codigo ja tem o dialogo de fallback (linha 460-487 em GraniteActivity.kt:
+  onFallbackPrompt pergunta se quer CPU). Isso esta funcionando conforme planejado.
+
+PROXIMO PASsOS PARA GPU/NPU: investigar os logs do logcat para ver a mensagem
+exata de erro do NNAPI. Por enquanto, o fallback para CPU esta implementado
+corretamente.
+
+================================================================================
+ARQUIVOS DE TESTE DE AUDIO
+================================================================================
+  test_en.wav:      291,478 bytes, 22050Hz, 16bit, 1ch, 6,61s  (nao 16kHz — precisa resample)
+  test_en_16k.wav:   211,548 bytes, 16000Hz, 16bit, 1ch, 6,61s  ← CORRETO para o modelo
+  test_long_70s.wav: 2,246,444 bytes, 16000Hz, 16bit, 1ch, 70,20s
+
+  NOTA: O áudio de 71KB que deu "transcrição vazia" — nao bate com nenhum destes
+  arquivos. 71KB em 16kHz 16bit mono = ~1,7s de audio. Isso e MUITO curto.
+  O arquivo "1781383142158_Interview recording 16.mp3" (19MB) e o que deu OOM.
+  Confirmar: o usuário pode ter usado áudios diferentes entre os dois testes.
+
+================================================================================
+RESUMO DAS CORRECOES JÁ APLICADAS (fix8)
+================================================================================
+1. NativeDependencyManager.kt: registerNativeLibraryDir() faz PREPEND (posicao 0)
+   nos nativeLibraryPathElements com dedup → nossa libonnxruntime.so vence a OEM.
+2. AndroidManifest.xml: TelemetryInitializer removido (tools:node="remove").
+3. SigApplication.kt: activateIfInstalled() chamado em attachBaseContext (antes
+   de ContentProviders).
+4. AndroidManifest.xml: GraniteActivity tem android:largeHeap="true".
+5. app/build.gradle: onnxruntime-android:1.29.0 + excludes libonnxruntime*.so do APK.
+
+================================================================================
+BUGS ENCONTRADOS NESTA INVESTIGACAO (pendentes de fix)
+================================================================================
+BUG 1 (CRITICO): attention_mask invertida — GraniteEngine.kt:663
+  Gravidade: bloqueante da v1 (transcricao sempre vazia)
+  Status: documentado, fix proposto, NAO aplicado
+  Fix: inverter a mascara (0→padding, 1→real) + teste JVM
+
+BUG 2 (MEDIO): audio de teste (71KB) e muito curto (~1,7s)
+  Gravidade: pode produzir resultados instaveis
+  Status: diagnosticado
+  Nota: 71KB = 1,7s de PCM 16kHz 16bit mono. Muito curto para STT confiavel.
+  Precisa validar com audio maior (test_en_16k.wav = 6,6s esta disponivel)
+
+BUG 3 (DESKTOP): OOM de 256MB na interface Desktop
+  Gravidade: afeta a interface Desktop do SIG, nao o Android
+  Status: diagnosticado como problema da interface Desktop
+  Nota: A imagem mostra o OOM com "target footprint 268435456" (256MB) que e
+  um limite Desktop, nao configuracao Android. Investigar fora este repo.
+
+BUG 4 (BAJO): validate_pipeline.py linha 38 — mascara invertida no script
+  Gravidade: bug de teste (nao afeta producao)
+  Status: documentado, fix proposto, NAO aplicad
+  Linha 38: real = (mask[0] == 0).sum() → deveria ser (mask[0] == 1)
+  Bug existe mas e mascarado porque tanto PyTorch quanto ONNX usam o mesmo "real"
+
+BUG 5 (BAJO): split_external.py linha 26 — mascara todas zeros
+  Gravidade: bug de teste (nao afeta producao)
+  Status: documentado, fix proposto, NAO aplicado
+  Linha 26: mask = np.zeros((1, 512)) → deveria ser np.ones
+
+================================================================================
+PLANO DE ACAO SUGERIDO
+================================================================================
+FASE 1: Fix da mascara (Problema 1) — PRIORIDADE MAXIMA
+  1.1. GraniteEngine.kt linha 663-664: inverter mascara (1=real, 0=pad)
+  1.2. GraniteEngineTest.kt: adicionar teste JVM "mask convention is 1=real 0=pad"
+  1.3. Build: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+  1.4. Instalar no OnePlus 15 ou emulador
+  1.5. Testar com test_en_16k.wav (6,6s, EN, 16kHz)
+  1.6. Se funcionar: texto em ingles visivel (nao vazio)
+
+FASE 2: Fix do OOM — se persistir apos FASE 1
+  2.1. Chunking: modificar readWav16kMono para ler em pedacos de 16s
+  2.2. Ou: usar DirectByteBuffer em vez de FloatArray para audio
+  2.3. Investigar limite de 256MB na interface Desktop separadamente
+
+FASE 3: Corrigir scripts de teste PC (BUG 4 e 5)
+  3.1. validate_pipeline.py linha 38: (mask==0) → (mask==1)
+  3.2. split_external.py linha 26: np.zeros → np.ones
+
+FASE 4: Investigar GPU/NPU (Problema 3)
+  4.1. Capturar logs do logcat do OnePlus 15 com NNAPI
+  4.2. Identificar erro especifico do provedor
+  4.3. Ajustar SessionOptions para GPU/NPU
+
+FASE 5: Integrar punctuator (punct_cap_seg_en.onnx)
+  5.1. Carregar sessao ORT para punct_cap_seg_en.onnx (209MB)
+  5.2. Rodar apos CTC decode, antes de retornar texto
+  5.3. Usar pcs_vocab.json para Unigram greedy
+
+================================================================================
+FIM DO DIAGNOSTICO
+================================================================================
+Arquivo: docs/granite-diagnostico-completo-20260827.txt

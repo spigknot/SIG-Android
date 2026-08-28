@@ -1,0 +1,147 @@
+Você vai baixar, exportar para ONNX FP16 e publicar no Cloudflare R2 o modelo
+de transcrição Granite Speech 4.1 2B NAR, para uso no app SIG Android.
+
+================================================================
+CONTEXTO
+================================================================
+- Modelo: ibm-granite/granite-speech-4.1-2b-nar (arquitetura NLE /
+  non-autoregressive LLM-based editing). Apache 2.0.
+- É um modelo de ~2,25B parâmetros (encoder conformer 440M + Q-Former
+  projector 160M + LLM editor bidirecional 1B).
+- Ele NÃO tem ONNX oficial publicado. O único artefato é o
+  model.safetensors em BF16 (4,51 GB). Você vai exportar ONNX FP16 a
+  partir dele.
+- O destino final é o bucket Cloudflare R2 "sig-android", PASTA "models/".
+  O app Android (ONNX Runtime) baixa os arquivos de lá.
+
+================================================================
+PASSO 1 — AMBIENTE (Python 3.10+)
+================================================================
+O modelo usa trust_remote_code e exige transformers>=5.5.3 e torch>=2.9.1.
+Com GPU (CUDA 12.8) recomendado para acelerar a exportação; CPU funciona
+mas é lento.
+
+pip install torch==2.9.1 torchaudio==2.9.1 --index-url https://download.pytorch.org/whl/cu128
+pip install "transformers>=5.5.3" accelerate safetensors huggingface-hub tokenizers soundfile onnx onnxruntime numpy
+
+# NÃO precisa instalar flash-attn: só é exigido para o caminho de
+# inferência oficial. Para exportar, use attn_implementation="sdpa"
+# (ou "eager"). O código do modelo já cai no scaled_dot_product_attention.
+
+Espaço em disco: ~10 GB livres (4,51 GB do safetensors + ~4,5 GB do ONNX
+FP16 exportado + arquivos temporários).
+
+================================================================
+PASSO 2 — BAIXAR O MODELO
+================================================================
+Link direto (único arquivo de pesos, BF16, 4.509.382.472 bytes):
+
+  https://huggingface.co/ibm-granite/granite-speech-4.1-2b-nar/resolve/main/model.safetensors
+
+Baixe também os arquivos de apoio do mesmo repo (todos em resolve/main/):
+  config.json, preprocessor_config.json, processor_config.json,
+  generation_config.json, special_tokens_map.json,
+  tokenizer_config.json, tokenizer.json, vocab.json,
+  configuration_granite_speech_nar.py, modeling_granite_speech_nar.py,
+  processing_granite_speech_nar.py, feature_extraction_granite_speech_nar.py,
+  10226_10111_000000.wav   (áudio de teste, ~16s)
+
+================================================================
+PASSO 3 — EXPORTAR ONNX FP16 (a parte difícil)
+================================================================
+CARREGUE com:
+  model = AutoModel.from_pretrained("<pasta_local>", trust_remote_code=True,
+      attn_implementation="sdpa", dtype=torch.float16).eval()
+  model = model.to(torch.float16)   # BF16 -> FP16 (o ORT Android não lê BF16)
+
+POR QUE SUB-GRAFOS: o forward() tem fluxo de controle Python (concat de
+"pooled[i, :length]" por amostra, intercalação de slots de tamanho
+variável) que o torch.onnx.export NÃO traça. Exporte em 3 sub-grafos
+separados, cada um um nn.Module wrapper simples com batch=1 e formas
+ESTÁTICAS (fixe T, o número de frames de áudio, e pad até ele).
+
+--- Grafo 1: ENCODER ---
+Wrapper que chama self.encoder(input_features, attention_mask,
+output_hidden_states=True) e retorna:
+  - "encoder_bpe_logits": self.encoder.out_bpe do posterior-weighted
+    pooling (a cabeça BPE, com a janela de pool 4 e importance =
+    1 - blank_prob da camada de self-conditioning 8) -> [1, T', 100352]
+  - "multilayer_features": concatenação dos hidden states das camadas
+    [4, 8, 12, -1] (índices de config.encoder_layer_indices) -> [1, T, 4096]
+  Entradas: input_features [1, T, 160] float32; attention_mask [1, T] int64
+  (1 = frame real, 0 = padding).
+  ATENÇÃO: o encoder usa block attention com context_size=200 e
+  self-conditioning na camada 8 — exporte o bloco INTEIRO (não tente
+  fatiar as camadas). Escolha T múltiplo de 200 (ex.: 2000) e documente.
+
+--- Grafo 2: PROJECTOR (Q-Former) ---
+Wrapper que chama self.projector(multilayer_features) -> audio_embeds
+[1, T/5, 2048] (downsample_rate=5). Entrada [1, T, 4096] float32.
+
+--- Grafo 3: LLM EDITOR (bidirecional) ---
+Wrapper que chama self.language_model(inputs_embeds=..., position_ids=...)
+-> logits [1, S, 100352]. É um granite-4.0-1b-base com causal removido
+(is_causal=False) + RoPE. Entradas: inputs_embeds [1, S, 2048] float32,
+position_ids [1, S] int64. S = áudio_embeds_len + texto_com_slots_len.
+  NOTA: o embedding (embed_tokens, vocab 100352, tied com lm_head) e a
+  intercalação de slots podem ser exportados como um 4º grafo pequeno
+  "embed+interleave", ou feitos fora do ONNX. Documente a sua escolha no
+  README (o engine Android vai seguir exatamente o que você definir).
+
+Para cada grafo: torch.onnx.export(..., opset_version=17,
+do_constant_folding=True, dynamo=False, external_data=True,
+input_names/output_names explícitos). dtype de saída float32 (logits) e
+pesos float16.
+
+================================================================
+PASSO 4 — ARQUIVOS DE APOIO (front-end + tokenizer)
+================================================================
+O front-end NAR (feature_extraction_granite_speech_nar.py) usa
+torchaudio MelSpectrogram(sample_rate=16000, n_fft=512, win_length=400,
+hop_length=160, n_mels=80), log10 + floor (mx-8.0)/4+1, e stacking 2x
+-> 160 dim. SEM deltas, SEM AGC. Extraia e salve em binário (float32
+little-endian, row-major):
+  - nar_mel_filters.bin : matriz mel [80 x 257] (mel_scale.fb)
+  - nar_stft_window.bin : janela [512] (torch.hann_window, com center=True)
+Salve também preprocessor_config.json (já tem sample_rate/n_fft/win_length/
+hop_length/n_mels) — é o "frontend_config" do NAR.
+Tokenizer: subir vocab.json (100352 peças), tokenizer.json, tokenizer_config.json,
+special_tokens_map.json. (blank_token_id = 100257 = <|end_of_text|>.)
+
+================================================================
+PASSO 5 — VALIDAR (obrigatório, não pular)
+================================================================
+Rode o pipeline completo em PyTorch FP16 e o ONNX FP16 no mesmo áudio
+10226_10111_000000.wav (16kHz mono) e compare:
+  1. argmax dos logits ONNX vs PyTorch FP16: acordo > 99,9% frame a frame.
+  2. Texto final decodificado idêntico (depois do CTC collapse do encoder
+     + intercalação de slots + collapse do LLM com blank 100257 + decode
+     com o tokenizer BPE).
+Se divergir, ajuste a exportação (não publique nada que não bata).
+
+================================================================
+PASSO 6 — PUBLICAR NO R2 (bucket sig-android, pasta models/)
+================================================================
+Suba APENAS os arquivos finais, com estes nomes EXATOS:
+  granite-4.1-nar-encoder-fp16.onnx          (+ .onnx.data, se houver)
+  granite-4.1-nar-projector-fp16.onnx        (+ .onnx.data, se houver)
+  granite-4.1-nar-llm-fp16.onnx              (+ .onnx.data, se houver)
+  nar_mel_filters.bin
+  nar_stft_window.bin
+  preprocessor_config.json
+  vocab.json
+  tokenizer.json
+  tokenizer_config.json
+  special_tokens_map.json
+  config.json
+
+Os .onnx/.onnx.data são um PAR inseparável: subir com o mesmo nome base.
+Grave um README.txt junto listando: os T/S fixos usados na exportação,
+a divisão exata dos sub-grafos (o que cada input/output significa e como
+o embedding/interleave foi tratado), e o SHA-256 de cada arquivo.
+
+CRITÉRIOS DE SUCESSO:
+  - 3 sub-grafos ONNX FP16 validados (argmax + texto == PyTorch FP16).
+  - Arquivos de apoio (mel/window/tokenizer) no formato binário pedido.
+  - Tudo publicado na pasta models/ do bucket sig-android com os nomes
+    exatos acima, + README.txt com o contrato de shapes e SHAs.

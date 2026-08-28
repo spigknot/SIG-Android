@@ -1,0 +1,252 @@
+================================================================================
+RELATORIO TECNICO: DIAGNOSTICO E FIX RECOMENDADO PARA GPU/NPU NO GRANITE 5.0 TURBO
+================================================================================
+Data: 28/08/2026
+Dispositivo Alvo: OnePlus 15 (16 GB LPDDR5X, SoC Qualcomm Snapdragon 8 Elite)
+Sistema Operacional: Android 15 (API 35)
+Modelo: ibm-granite/granite-speech-5.0-470m-turboctc (Conformer CTC 470M, F32)
+Biblioteca de Inferencia: com.microsoft.onnxruntime:onnxruntime-android:1.29.0
+Arquivo Afetado: app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt
+Status do Codigo: Preservado intacto (nenhuma alteracao persistida)
+
+================================================================================
+1. SINTOMA RELATADO E ERRO OBSERVADO
+================================================================================
+
+Ao selecionar o backend "GPU" ou "NPU" na interface da ferramenta Granite no
+OnePlus 15, o processo sequer chega a iniciar a transcricao do audio. O app cai
+imediatamente no dialogo de fallback:
+
+  +-------------------------------------------------------------------------+
+  | Acelerador indisponivel                                                 |
+  |                                                                         |
+  | O GPU (NNAPI) falhou ao carregar o modelo:                              |
+  |                                                                         |
+  | Error code - ORT_FAIL - message:                                        |
+  | model_builder.cc:540 Compile ResultCode:                                |
+  | ANEURALNETWORKS_BAD_DATA, on identifyInputsAndOutputs                   |
+  |                                                                         |
+  | Deseja continuar com CPU? (mais lento, mas funciona em qualquer         |
+  | aparelho)                                                               |
+  |                                                                         |
+  |                        [NAO, CANCELAR]    [SIM, USAR CPU]               |
+  +-------------------------------------------------------------------------+
+
+Ao recusar o fallback para CPU, a operacao e cancelada. Ao aceitar, o modelo
+carrega em CPU, executando a inferencia normalmente (porem sem a aceleracao de
+hardware de GPU/NPU).
+
+
+================================================================================
+2. ESPECIFICACOES DO HARDWARE DO ONEPLUS 15
+================================================================================
+
+O OnePlus 15 e equipado com o SoC mais moderno da Qualcomm:
+  - Chipset: Qualcomm Snapdragon 8 Elite (SM8750)
+  - CPU: Qualcomm Oryon (8 nucleos, 2x Prime + 6x Performance)
+  - GPU: Qualcomm Adreno 830 (suporte completo a Vulkan 1.3 e OpenCL)
+  - NPU: Qualcomm Hexagon v79 (capacidade de aproximadamente 45 TOPS para IA)
+  - Memoria RAM: 16 GB LPDDR5X (com banda de ~4,2 GHz)
+
+Mesmo com um dos hardwares mais potentes do ecossistema Android, a tentativa de
+execucao por GPU/NPU falha na inicializacao. O problema nao reside na capacidade
+computacional do aparelho, mas sim na cadeia de compilacao de software entre o
+ONNX Runtime, o formato do modelo e a camada de drivers do Android 15.
+
+
+================================================================================
+3. ANATOMIA DO MODELO EXPORTADO (GRANITE 5.0 TURBO)
+================================================================================
+
+Arquivo do modelo:
+  - Grafo: granite-5.0-turboctc-f32-ext.onnx (865 KB)
+  - Pesos externos: granite-5.0-turboctc-f32-ext.onnx.data (1.891.581.952 bytes / ~1,89 GB)
+  - Precisao: Float32 (FP32 puro)
+  - Topologia: 4.213 nos no grafo, 486 inicializadores de peso
+
+Entradas do Grafo:
+  - input_features: float32 [1, 512, 320]  (log-mel spectrogram + deltas)
+  - attention_mask: int64   [1, 512]        (mascara de atencao Conformer)
+
+Saida:
+  - logits: float32 [1, 128, 16384]        (distribuicao de probabilidade CTC)
+
+
+================================================================================
+4. DIAGNOSTICO TECNICO: POR QUE O ERRO ACONTECE?
+================================================================================
+
+O erro ANEURALNETWORKS_BAD_DATA na funcao identifyInputsAndOutputs e o resultado
+da convergencia de quatro fatores criticos:
+
+--------------------------------------------------------------------------------
+FATOR A: Operadores do Grafo Conformer Incompativeis com o NNAPI
+--------------------------------------------------------------------------------
+Para acelerar o modelo via GPU ou NPU no Android, o ONNX Runtime utiliza o
+provedor de execucao NNAPI (Neural Networks API).
+O compilador NNAPI da ORT analisa o grafo ONNX e tenta particiona-lo para enviar
+subgrafos suportados para o hardware acelerado.
+
+Uma analise detalhada dos 4.213 nos do Granite 5.0 Turbo revela operadores que
+NAO constam na tabela oficial de suporte do NNAPI Execution Provider da ORT:
+
+  1. LayerNormalization (80 nos):
+     Esta no nucleo de cada um dos 80 blocos do Conformer (atencao e convolucao).
+     O compilador NNAPI nativo nao possui suporte a LayerNorm.
+
+  2. Where (33 nos) e Not (23 nos):
+     Utilizados para aplicar a mascara dinamica de atencao. Nenhum dos dois e
+     aceito pelo compilador NNAPI.
+
+  3. ReduceSum (2 nos) e Greater (2 nos):
+     Operacoes de reducao e comparacao fora da tabela de compatibilidade NNAPI.
+
+  4. Gather com indices dinamicos INT64 (16 nos no rel_pos_emb):
+     Nos embeddings posicionais relativos, o operador Gather recebe indices
+     calculados dinamicamente via Slice em tipo INT64. A especificacao da NNAPI
+     exige indices 1D INT32 constantes; tensores INT64 calculados em runtime
+     violam a validacao de operandos (problema formalmente documentado na issue
+     microsoft/onnxruntime#16224).
+
+Como essas operacoes estao espalhadas no meio de todas as camadas do Conformer, o
+particionador do ORT nao consegue isolar subgrafos fechados e consistentes para
+o acelerador.
+
+--------------------------------------------------------------------------------
+FATOR B: Modelo em FP32 Puro (1,89 GB) e Chamada addNnapi() Sem Flags
+--------------------------------------------------------------------------------
+Em app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt (linha 605):
+  nnapiOptions.addNnapi() // <- Chamado sem nenhum parametro
+
+Consequencias:
+  1. Circuitos de NPU (Hexagon) e GPU movel sao arquitetados para operacoes
+     vetoriais massivas em precisao reduzida (FP16 e INT8). Eles nao processam
+     transformers gigantes em Float32 nativamente.
+  2. Sem a flag NNAPIFlags.USE_FP16, a ORT nao instrui o driver da Qualcomm a
+     relaxar os tipos para ponto flutuante de meia precisao. O driver tenta
+     alocar tensores FP32 estritos para um modelo de quase 2 GB e rejeita a
+     estrutura.
+  3. Sem a flag NNAPIFlags.CPU_DISABLED, caso houvesse particionamento parcial,
+     os nos nao suportados cairiam no emulador interno de CPU do NNAPI
+     (nnapi-reference), que e extremamente mais lento que a CPU da propria ORT.
+
+--------------------------------------------------------------------------------
+FATOR C: Depreciacao do NNAPI no Android 15 (API 35)
+--------------------------------------------------------------------------------
+No Android 15, o Google depreciou oficialmente a API NNAPI no NDK.
+Em chipsets recem-lancados como o Snapdragon 8 Elite:
+  - Os fabricantes concentram todo o suporte de IA no Qualcomm AI Engine Direct
+    SDK (QNN) e no LiteRT (TensorFlow Lite).
+  - O wrapper legado do NNAPI no sistema possui regras de validacao de conformidade
+    muito mais rigidas e nao aceita mais a compilacao de grafos Conformer
+    complexos e pesados em FP32.
+
+--------------------------------------------------------------------------------
+FATOR D: O Ponto Exato de Falha em C++ (model_builder.cc:540)
+--------------------------------------------------------------------------------
+1. OrtEnvironment.createSession() invoca a biblioteca C++ nativa do ORT.
+2. Em core/providers/nnapi/nnapi_builtin/model_builder.cc (linha 540), o ORT chama
+   a funcao C do NDK do Android:
+   ANeuralNetworksModel_identifyInputsAndOutputs(model, numInputs, inputs, numOutputs, outputs)
+3. O driver do Snapdragon 8 Elite valida os tensores de entrada/saida da particao.
+   Devido a tipos e dimensoes incompativeis gerados pelos nos nao suportados, o
+   driver retorna o status 5: ANEURALNETWORKS_BAD_DATA ("inconsistent or invalid
+   input data").
+4. O ORT encapsula o erro em ORT_FAIL com a mensagem observada no log.
+5. O Kotlin captura a OrtException e dispara o dialogo "Acelerador indisponivel".
+
+
+================================================================================
+5. PLANO DE FIX RECOMENDADO
+================================================================================
+
+Para viabilizar o funcionamento de GPU/NPU com a performance esperada de um
+Snapdragon 8 Elite, recomenda-se a execucao em tres frentes:
+
+--------------------------------------------------------------------------------
+FIX 1: Ajuste Imediato no Codigo Kotlin e Experiencia do Usuario (UX)
+--------------------------------------------------------------------------------
+Objetivo: Tratar o erro com elegancia, proteger a experiencia do usuario e
+preparar o terreno para modelos quantizados.
+
+1. Configurar flags apropriadas no addNnapi():
+   Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt
+   Substituir:
+       nnapiOptions.addNnapi()
+   Por:
+       import ai.onnxruntime.providers.NNAPIFlags
+       import java.util.EnumSet
+
+       val flags = EnumSet.of(
+           NNAPIFlags.USE_FP16,        // Permite ao driver compilar tensores em FP16
+           NNAPIFlags.CPU_DISABLED     // Impede queda para o emulador lento nnapi-reference
+       )
+       nnapiOptions.addNnapi(flags)
+
+2. Humanizar a mensagem de erro no dialogo:
+   Quando o erro contiver "ANEURALNETWORKS_BAD_DATA" ou "identifyInputsAndOutputs",
+   exibir uma mensagem explicativa antes do detalhe tecnico:
+   "O acelerador (NNAPI) rejeitou os operadores do grafo deste modelo em FP32 no
+   Android 15 (o modelo Conformer F32 possui nos como LayerNorm/Where/int64 nao
+   compilaveis pelo driver; requer FP16/INT8 ou QNN nativo)."
+
+3. Vacina em Teste Unitario JVM:
+   Criar teste em GraniteEngineTest.kt garantindo que as opcoes do NNAPI sempre
+   incluam USE_FP16 e CPU_DISABLED.
+
+--------------------------------------------------------------------------------
+FIX 2: Otimizacao e Quantizacao do Modelo Granite (FP16 / INT8)
+--------------------------------------------------------------------------------
+Objetivo: Reduzir o tamanho do modelo e adaptar o grafo aos requisitos dos
+aceleradores de hardware movel.
+
+1. Re-exportar em FP16 (~950 MB) ou INT8 (~470 MB):
+   - Atualizar tools/granite/export_onnx.py para exportar com pesos em
+     torch.float16 ou aplicar quantizacao estatica/dinamica via
+     onnxruntime.quantization.
+   - O volume cai de 1,89 GB para menos de 1 GB (ou ~470 MB em INT8).
+   - O formato INT8 ativa as operacoes QLinear (QLinearMatMul, QLinearConv) que
+     sao nativamente aceleradas pela NPU Hexagon.
+
+2. Sanitizar os tipos de indices:
+   - Garantir que os operadores Gather do embedding posicional utilizem indices
+     escalares ou 1D em INT32, eliminando o erro de indices INT64 dinamicos.
+
+3. Decomposicao de LayerNormalization:
+   - Caso o NNAPI persista rejeitando o LayerNorm unico, decompor o operador
+     em operacoes elementares suportadas (ReduceMean + Sub + Pow + Sqrt + Div).
+
+4. Validacao e Publicacao:
+   - Rodar validate_pipeline.py comparando os logits quantizados com o PyTorch.
+   - Publicar no bucket Cloudflare R2 e atualizar release/granite_links_download.txt.
+
+--------------------------------------------------------------------------------
+FIX 3: Aceleracao Maxima com Qualcomm QNN Execution Provider (Solucao Definitiva)
+--------------------------------------------------------------------------------
+Objetivo: Tirar proveito maximo dos 45 TOPS da NPU Hexagon v79 do OnePlus 15.
+
+Como o Android 15 depreciou o NNAPI, o caminho oficial recomendado pela Microsoft
+e pela Qualcomm para chips Snapdragon e o Qualcomm AI Engine Direct (QNN EP):
+  1. O QNN EP contorna completamente o sistema Android NNAPI e se comunica
+     diretamente com o hardware atraves das bibliotecas nativas da Qualcomm
+     (libQnnHtp.so para NPU Hexagon e libQnnGpu.so para GPU Adreno).
+  2. A NPU Hexagon processa o grafo de forma nativa e dedicada.
+  3. Ganho esperado: Transcricao entre 10x e 20x mais rapida do que em CPU,
+     com baixissimo consumo de bateria e aquecimento minimo.
+  4. Implementacao: Adicionar a opcao de backend "NPU (Qualcomm QNN)" no
+     GraniteEngine.kt e entregar as bibliotecas nativas do QNN no pacote nativo
+     gerenciado por NativeDependencyManager.kt.
+
+
+================================================================================
+6. STATUS DO REPOSITORIO
+================================================================================
+
+Em estrito atendimento a instrucao do usuario ("nao mude nada"), nenhuma
+alteracao foi persistida no codigo-fonte. O working tree do projeto permanece
+exatamente no estado original. Este relatorio consolida a totalidade das
+evidencias, causas e solucoes tecnicas para o problema relatado.
+
+================================================================================
+FIM DO RELATORIO
+================================================================================

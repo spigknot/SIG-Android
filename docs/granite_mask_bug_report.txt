@@ -1,0 +1,138 @@
+===============================================================================
+GRANITE STT — BUG REPORT: Máscara attention_mask invertida no GraniteEngine.kt
+===============================================================================
+Data: 2026-08-27
+Projeto: SIG Android (Granite STT integration)
+Arquivo afetado: app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt
+Linhas: 661-663 (método transcribeFileInner)
+Severidade: Crítica (transcrição retorna sempre vazia)
+
+-------------------------------------------------------------------------------
+1. SINTOMA
+-------------------------------------------------------------------------------
+- Áudio EN de 71 KB (16 kHz mono) processado a 100% sem erros.
+- Resultado: "transcrição vazia" — string "" retornada em vez do texto esperado.
+- Todos os arquivos do modelo baixados corretamente do R2.
+- Sessão ONNX carregada sem exceções.
+- 100% de frames processados (progress bar chega a 100%).
+
+-------------------------------------------------------------------------------
+2. DIAGNÓSTICO
+-------------------------------------------------------------------------------
+O ONNX model `granite-5.0-turboctc-f32-ext.onnx` foi exportado via `export_onnx.py`
+usando o HuggingFace `transformers` AutoModelForCTC. A convenção padrão do
+transformers para `attention_mask` é:
+
+    1 = frame real (não-padding)
+    0 = frame de padding
+
+Referências no código de exportação:
+    tools/granite/export_onnx.py, linha 31:
+        mask = torch.ones(1, T, dtype=torch.long)   # 1 = real, 0 = pad
+    tools/granite/validate_pipeline.py, linha 31:
+        mask = torch.ones(1, T, dtype=torch.long)   # 1 = real, 0 = pad
+
+No entanto, o código Kotlin no `GraniteEngine.kt` (linhas 661-663) INVERTEU
+essa convenção:
+
+    // CÓDIGO ATUAL (BUGADO):
+    val mask = LongArray(windowFrames) { 1L }       // 1 = padding (ERRADO!)
+    mask.fill(0L, 0, windowLen)                     // 0 = real (ERRADO!)
+
+Isso faz com que o conformer do modelo trate os frames REAIS como padding.
+O resultado: os logits produzidos são praticamente nulos (o modelo não
+processa nenhum frame real), o argmax sempre seleciona o token blank (id=0),
+e o CTC collapse retorna uma lista vazia → texto de saída é "".
+
+Por que a validação no PC passava? Porque `validate_pipeline.py` e
+`export_onnx.py` usam a máscara CORRETA (1=real) em Python, e validam
+PyTorch-vs-ONNX — nunca testaram o pipeline Android completo. O bug só
+manifesta no código Kotlin.
+
+-------------------------------------------------------------------------------
+3. BUG EM tools/granite/validate_pipeline.py (linha 38)
+-------------------------------------------------------------------------------
+Além do bug do Kotlin, há um segundo bug no script de validação:
+
+    Linha 38:
+        real = (mask[0] == 0).sum().item() // 4
+
+    O mask usa 1=real (linha 31), então (mask[0] == 0) conta PADDING, não
+    frames reais. O correto seria:
+        real = (mask[0] == 1).sum().item() // 4
+
+    Este bug faz com que `real` conte frames de padding em vez de reais,
+    cortando o número errado de IDs. Como tudo (PyTorch e ONNX) usa o mesmo
+    `real` errado, os textos podem coincidir por acaso — mas a validação
+    não testa a conversão correta de máscara.
+
+-------------------------------------------------------------------------------
+4. BUG EM tools/granite/split_external.py (linha 26)
+-------------------------------------------------------------------------------
+    Linha 26:
+        mask = np.zeros((1, 512), dtype=np.int64)
+
+    Usa 0 para todos os frames, ou seja, TODO mundo como padding. Isso não
+    causa transcrição errada (o script só verifica se os logits são finitos),
+    mas é semanticamente incorreto e pode mascarar problemas. Deveria ser:
+        mask = np.ones((1, 512), dtype=np.int64)  # todos os frames são reais
+
+-------------------------------------------------------------------------------
+5. FIX RECOMENDADO
+-------------------------------------------------------------------------------
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt
+Linhas: 661-663
+
+    // ANTES (BUGADO):
+    // mask: 1 = padding (frames além do real dentro da janela); ONNX espera int64.
+    val mask = LongArray(windowFrames) { 1L }
+    mask.fill(0L, 0, windowLen)
+
+    // DEPOIS (CORRETO — HuggingFace convention: 1=real, 0=padding):
+    // mask: 1 = real frame, 0 = padding (convenção HuggingFace / transformers).
+    val mask = LongArray(windowFrames) { 0L }
+    mask.fill(1L, 0, windowLen)
+
+Arquivo: tools/granite/validate_pipeline.py
+Linha: 37-38
+
+    // ANTES (BUGADO):
+    # remove frames de padding (mask==1)
+    real = (mask[0] == 0).sum().item() // 4
+
+    // DEPOIS (CORRETO):
+    # remove frames de padding (mask==1 = real, mask==0 = padding)
+    real = (mask[0] == 1).sum().item() // 4
+
+Arquivo: tools/granite/split_external.py
+Linha: 26
+
+    // ANTES (BUGADO):
+    mask = np.zeros((1, 512), dtype=np.int64)
+
+    // DEPOIS (CORRETO):
+    mask = np.ones((1, 512), dtype=np.int64)
+
+-------------------------------------------------------------------------------
+6. VACINA RECOMENDADA
+-------------------------------------------------------------------------------
+Adicionar um teste JVM em GraniteEngineTest.kt que simule a construção da
+máscara e verifique:
+  - Frames reais (índices 0..windowLen-1) têm valor 1
+  - Frames de padding (índices windowLen..windowFrames-1) têm valor 0
+  - A contagem de frames reais (mask==1) iguala windowLen
+
+Isso previne regressão: se alguém inverter a máscara novamente, o teste falha.
+
+-------------------------------------------------------------------------------
+7. REFERÊNCIAS
+-------------------------------------------------------------------------------
+- HuggingFace transformers attention_mask convention:
+  https://huggingface.co/docs/transformers/main_classes/model#transformers.model_outputs
+- IBM Granite Speech 5.0 TurboCTC ONNX export:
+  tools/granite/export_onnx.py
+- Validação PC (passa com máscara correta):
+  tools/granite/validate_pipeline.py
+- Engine Android (contém o bug):
+  app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt
+===============================================================================
