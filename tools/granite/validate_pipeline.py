@@ -34,8 +34,8 @@ if pad:
 with torch.no_grad():
     logits = model(input_features=feat, attention_mask=mask).logits
 ids = logits.argmax(dim=-1).squeeze(0).tolist()
-# remove frames de padding (mask==1)
-real = (mask[0] == 0).sum().item() // 4
+# remove frames de padding (mask==0)
+real = (mask[0] == 1).sum().item() // 4
 ids = ids[:real]
 # CTC collapse
 prev = -1

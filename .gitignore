@@ -31,4 +31,5 @@ tools/granite/venv/
 tools/granite/models/
 tools/granite/out/
 tools/granite/package/
+tools/granite/jni/
 tools/granite/*.wav

@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -66,6 +67,7 @@ class GraniteActivity : AppCompatActivity() {
 
     private val selectedItems = mutableListOf<MediaItem>()
     private var selectedBackend = GraniteExecutionBackend.CPU
+    private var selectedModel = MODEL_TURBO
     private var lastSession: OutputSession? = null
     private var currentTranscriptionText: String = ""
     private var tempSessionDir: File? = null
@@ -103,6 +105,7 @@ class GraniteActivity : AppCompatActivity() {
         outputText = findViewById(R.id.output_text)
 
         buttonBackend.text = selectedBackend.shortLabel
+        buttonModel.text = modelLabel(selectedModel)
 
         val exitHandler = installCancelAndExitGuard(
             isTaskRunning = { isTranscribing || isBusy },
@@ -122,6 +125,10 @@ class GraniteActivity : AppCompatActivity() {
     override fun onDestroy() {
         try {
             GraniteEngine.release()
+        } catch (_: Throwable) {
+        }
+        try {
+            GraniteNarEngine.release()
         } catch (_: Throwable) {
         }
         super.onDestroy()
@@ -301,10 +308,19 @@ class GraniteActivity : AppCompatActivity() {
 
     private fun showModelMenu() {
         PopupMenu(this, buttonModel).apply {
-            menu.add("Granite 5.0 Turbo")
+            menu.add(MODEL_TURBO_LABEL)
+            menu.add(MODEL_NAR_LABEL)
             setOnMenuItemClickListener { item ->
-                val model = graniteModel()
-                if (GraniteEngine.packageComplete(this@GraniteActivity)) {
+                val label = item.title.toString()
+                val model = when (label) {
+                    MODEL_NAR_LABEL -> MODEL_NAR
+                    else -> MODEL_TURBO
+                }
+                val complete = when (model) {
+                    MODEL_NAR -> GraniteNarEngine.packageComplete(this@GraniteActivity)
+                    else -> GraniteEngine.packageComplete(this@GraniteActivity)
+                }
+                if (complete) {
                     selectModel(model)
                 } else {
                     confirmModelDownload(model)
@@ -315,22 +331,27 @@ class GraniteActivity : AppCompatActivity() {
         }
     }
 
-    private fun selectModel(model: GraniteModel) {
-        buttonModel.text = model.label
-        status.text = "${model.label} pronto."
+    private fun selectModel(model: String) {
+        selectedModel = model
+        buttonModel.text = modelLabel(model)
+        status.text = "${modelLabel(model)} pronto."
         updateTranscribeEnabled()
     }
 
-    private fun confirmModelDownload(model: GraniteModel) {
+    private fun confirmModelDownload(model: String) {
+        val size = when (model) {
+            MODEL_NAR -> formatBytes(GraniteNarEngine.packageDownloadBytes())
+            else -> formatBytes(GraniteEngine.packageDownloadBytes())
+        }
         AlertDialog.Builder(this)
             .setTitle("Baixar modelo")
             .setMessage(
-                "Baixar ${model.label} (${granitePackageSizeLabel()}) para ${modelsDir().absolutePath}?\n\n" +
-                    "Inclui o modelo (${model.sizeLabel}) e o pós-processador de pontuação."
+                "Baixar ${modelLabel(model)} ($size)?\n\n" +
+                    "O Granite 4.1 NAR é multilíngue (EN/ES/FR/DE/PT); o 5.0 Turbo é só inglês."
             )
             .setNegativeButton("Não", null)
             .setPositiveButton("Sim") { _, _ ->
-                downloadPackage(onSuccess = { selectModel(model) })
+                downloadPackage(model, onSuccess = { selectModel(model) })
             }
             .show()
     }
@@ -351,17 +372,13 @@ class GraniteActivity : AppCompatActivity() {
 
     // ---- download do pacote ----
 
-    private fun granitePackageSizeLabel(): String {
-        val bytes = GraniteEngine.packageDownloadBytes()
-        return if (bytes > 0L) formatBytes(bytes) else "~2,1 GB"
-    }
-
-    private fun downloadPackage(onSuccess: () -> Unit) {
+    private fun downloadPackage(model: String, onSuccess: () -> Unit) {
         val progressView = layoutInflater.inflate(R.layout.dialog_model_download, null)
         val statusText = progressView.findViewById<TextView>(R.id.modelDownloadStatusText)
         val progressBar = progressView.findViewById<ProgressBar>(R.id.modelDownloadProgressBar)
+        val isNar = model == MODEL_NAR
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Baixando modelo Granite 5.0 Turbo")
+            .setTitle("Baixando modelo ${modelLabel(model)}")
             .setView(progressView)
             .setCancelable(false)
             .create()
@@ -369,11 +386,15 @@ class GraniteActivity : AppCompatActivity() {
         setBusy(true)
         Thread {
             try {
-                GraniteEngine.downloadPackage(
-                    context = this,
-                    onProgress = { percent, mb ->
+                val totalBytes = if (isNar) GraniteNarEngine.packageDownloadBytes() else GraniteEngine.packageDownloadBytes()
+                val download: (Context, (Int, Long) -> Unit) -> Unit =
+                    if (isNar) { c, cb -> GraniteNarEngine.downloadPackage(c, cb) }
+                    else { c, cb -> GraniteEngine.downloadPackage(c, cb) }
+                download(
+                    this,
+                    { percent, mb ->
                         runOnUiThread {
-                            val totalMb = GraniteEngine.packageDownloadBytes() / 1048576L
+                            val totalMb = totalBytes / 1048576L
                             if (percent >= 0) {
                                 progressBar.progress = percent.coerceIn(0, 100)
                                 statusText.text = "$percent% ($mb MB de $totalMb MB)"
@@ -412,8 +433,12 @@ class GraniteActivity : AppCompatActivity() {
             NativeDependencyPrompt.showIfNeeded(this)
             return
         }
-        if (!GraniteEngine.packageComplete(this)) {
-            confirmModelDownload(graniteModel())
+        val modelComplete = when (selectedModel) {
+            MODEL_NAR -> GraniteNarEngine.packageComplete(this)
+            else -> GraniteEngine.packageComplete(this)
+        }
+        if (!modelComplete) {
+            confirmModelDownload(selectedModel)
             return
         }
 
@@ -436,11 +461,11 @@ class GraniteActivity : AppCompatActivity() {
                 sessionDir = createSessionDir()
                 val perFileDir = File(sessionDir, "Transcricoes").apply { mkdirs() }
                 tempWavDir = File(cacheDir, "granite_wavs_${System.currentTimeMillis()}").apply { mkdirs() }
-                appendTerminal(terminalLines, "$ granite --model ${graniteModel().fileName} --input ${items.size} arquivo(s)")
+                appendTerminal(terminalLines, "$ granite --model ${modelLabel(selectedModel)} --input ${items.size} arquivo(s)")
                 appendTerminal(terminalLines, "output: ${sessionDir.absolutePath}")
                 appendTerminal(terminalLines, "backend: ${backend.reportLabel}")
                 appendLog(logLines, "Sessão: ${sessionDir.name}")
-                appendLog(logLines, "Modelo: ${graniteModel().label}")
+                appendLog(logLines, "Modelo: ${modelLabel(selectedModel)}")
                 appendLog(logLines, "Backend: ${backend.reportLabel}")
                 // UI atualizada apenas em status + progresso; logs vão para o arquivo.
 
@@ -453,44 +478,53 @@ class GraniteActivity : AppCompatActivity() {
                 appendLog(logLines, "Carregando modelo...")
                 runOnUiThread { setTranscriptionStatus("Carregando modelo (pode levar 1-2 min na primeira vez)...") }
                 val modelStartedAt = SystemClock.elapsedRealtime()
-                val loaded = GraniteEngine.load(
-                    context = this,
-                    backend = backend,
-                    onLog = { line -> appendTerminal(terminalLines, line) },
-                    onFallbackPrompt = { reason ->
-                        // Pergunta ao usuário (na UI thread) se quer cair para CPU.
-                        val latch = CountDownLatch(1)
-                        val decision = AtomicReference(false)
-                        runOnUiThread {
-                            AlertDialog.Builder(this)
-                                .setTitle("Acelerador indisponível")
-                                .setMessage(
-                                    "O ${backend.label} falhou ao carregar o modelo:\n\n$reason\n\n" +
-                                        "Deseja continuar com CPU? (mais lento, mas funciona em qualquer aparelho)"
-                                )
-                                .setPositiveButton("Sim, usar CPU") { _, _ ->
-                                    decision.set(true)
-                                    latch.countDown()
-                                }
-                                .setNegativeButton("Não, cancelar") { _, _ ->
-                                    decision.set(false)
-                                    latch.countDown()
-                                }
-                                .setOnCancelListener {
-                                    decision.set(false)
-                                    latch.countDown()
-                                }
-                                .show()
+                val loaded = if (selectedModel == MODEL_NAR) {
+                    GraniteNarEngine.load(
+                        context = this,
+                        onLog = { line -> appendTerminal(terminalLines, line) },
+                    )
+                } else {
+                    GraniteEngine.load(
+                        context = this,
+                        backend = backend,
+                        onLog = { line -> appendTerminal(terminalLines, line) },
+                        onFallbackPrompt = { reason ->
+                            // Pergunta ao usuário (na UI thread) se quer cair para CPU.
+                            val latch = CountDownLatch(1)
+                            val decision = AtomicReference(false)
+                            runOnUiThread {
+                                AlertDialog.Builder(this)
+                                    .setTitle("Acelerador indisponível")
+                                    .setMessage(
+                                        "O ${backend.label} falhou ao carregar o modelo:\n\n$reason\n\n" +
+                                            "Deseja continuar com CPU? (mais lento, mas funciona em qualquer aparelho)"
+                                    )
+                                    .setPositiveButton("Sim, usar CPU") { _, _ ->
+                                        decision.set(true)
+                                        latch.countDown()
+                                    }
+                                    .setNegativeButton("Não, cancelar") { _, _ ->
+                                        decision.set(false)
+                                        latch.countDown()
+                                    }
+                                    .setOnCancelListener {
+                                        decision.set(false)
+                                        latch.countDown()
+                                    }
+                                    .show()
+                            }
+                            latch.await()
+                            decision.get()
                         }
-                        latch.await()
-                        decision.get()
-                    }
-                )
+                    )
+                }
                 modelLoadMs = SystemClock.elapsedRealtime() - modelStartedAt
                 checkNotCancelled()
                 if (!loaded) {
-                    val engineError = GraniteEngine.lastError().ifBlank {
-                        "não consegui carregar o modelo com ${backend.reportLabel}"
+                    val engineError = if (selectedModel == MODEL_NAR) {
+                        GraniteNarEngine.lastError().ifBlank { "não consegui carregar o modelo Granite 4.1 NAR" }
+                    } else {
+                        GraniteEngine.lastError().ifBlank { "não consegui carregar o modelo com ${backend.reportLabel}" }
                     }
                     throw IllegalStateException(engineError)
                 }
@@ -506,17 +540,31 @@ class GraniteActivity : AppCompatActivity() {
                     }
                     appendTranscriptionHeader(liveText, item.name)
                     val fileText = StringBuilder()
-                    val text = GraniteEngine.transcribeFile(
-                        wavFile = converted.wavFile,
-                        onProgress = { percent ->
-                            runOnUiThread {
-                                setTranscriptionStatus(
-                                    "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name}... $percent%",
-                                    percent
-                                )
+                    val text = if (selectedModel == MODEL_NAR) {
+                        GraniteNarEngine.transcribeFile(
+                            wavFile = converted.wavFile,
+                            onProgress = { percent ->
+                                runOnUiThread {
+                                    setTranscriptionStatus(
+                                        "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name}... $percent%",
+                                        percent
+                                    )
+                                }
                             }
-                        }
-                    )
+                        )
+                    } else {
+                        GraniteEngine.transcribeFile(
+                            wavFile = converted.wavFile,
+                            onProgress = { percent ->
+                                runOnUiThread {
+                                    setTranscriptionStatus(
+                                        "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name}... $percent%",
+                                        percent
+                                    )
+                                }
+                            }
+                        )
+                    }
                     checkNotCancelled()
                     if (text.isBlank()) throw IllegalStateException("transcrição vazia em ${item.name}")
                     fileText.append(text).append('\n')
@@ -531,7 +579,7 @@ class GraniteActivity : AppCompatActivity() {
                     appendLog(logLines, "Concluído: ${item.name}")
                 }
 
-                GraniteEngine.release()
+                releaseModel()
                 tempWavDir?.deleteRecursively()
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
                 val txtFile = File(sessionDir, "transcricoes.txt")
@@ -561,7 +609,7 @@ class GraniteActivity : AppCompatActivity() {
                 }
             } catch (e: CancellationException) {
                 Log.i(TAG, "Granite transcription cancelled", e)
-                try { GraniteEngine.release() } catch (_: Throwable) {}
+                try { releaseModel() } catch (_: Throwable) {}
                 tempWavDir?.deleteRecursively()
                 runOnUiThread {
                     isTranscribing = false
@@ -573,10 +621,14 @@ class GraniteActivity : AppCompatActivity() {
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Granite transcription failed", e)
-                try { GraniteEngine.release() } catch (_: Throwable) {}
+                try { releaseModel() } catch (_: Throwable) {}
                 tempWavDir?.deleteRecursively()
                 val errorMessage = e.message ?: "falha inesperada"
-                val detail = GraniteEngine.lastError().ifBlank { errorMessage }
+                val detail = if (selectedModel == MODEL_NAR) {
+                    GraniteNarEngine.lastError().ifBlank { errorMessage }
+                } else {
+                    GraniteEngine.lastError().ifBlank { errorMessage }
+                }
                 appendLog(logLines, "Erro: $detail")
                 appendTerminal(terminalLines, "ERROR: $detail")
                 // Grava o log mesmo em falha, para diagnóstico.
@@ -857,17 +909,6 @@ class GraniteActivity : AppCompatActivity() {
         }
     }
 
-    private fun modelsDir(): File = File(getExternalFilesDir(null) ?: filesDir, GRANITE_MODELS_FOLDER)
-
-    private fun graniteModelFile(): File = File(modelsDir(), GRANITE_MODEL_FILE)
-
-    private fun graniteModel(): GraniteModel = GraniteModel(
-        label = "Granite 5.0 Turbo",
-        fileName = GRANITE_MODEL_FILE,
-        file = graniteModelFile(),
-        sizeLabel = formatBytes(GRANITE_MODEL_BYTES)
-    )
-
     private fun uniqueOutputFile(outputDir: File, outputName: String): File {
         var candidate = File(outputDir, outputName)
         var suffix = 2
@@ -957,22 +998,25 @@ pre{white-space:pre-wrap;background:#161b22;padding:12px;border-radius:8px}</sty
         private const val REQUEST_PICK_FOLDER = 1002
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val GRANITE_OUTPUT_FOLDER = "Granite"
-        private const val GRANITE_MODELS_FOLDER = "granite_models"
-        private const val GRANITE_MODEL_FILE = "granite-5.0-turboctc-f32-ext.onnx"
-        private const val GRANITE_MODEL_BYTES = 1_880_000_000L
+        private const val MODEL_TURBO = "turbo"
+        private const val MODEL_NAR = "nar"
+        private const val MODEL_TURBO_LABEL = "Granite 5.0 Turbo"
+        private const val MODEL_NAR_LABEL = "Granite 4.1 NAR"
+    }
+
+    private fun modelLabel(model: String): String = when (model) {
+        MODEL_NAR -> MODEL_NAR_LABEL
+        else -> MODEL_TURBO_LABEL
+    }
+
+    private fun releaseModel() {
+        if (selectedModel == MODEL_NAR) GraniteNarEngine.release() else GraniteEngine.release()
     }
 }
 
 private data class MediaItem(
     val uri: Uri,
     val name: String
-)
-
-private data class GraniteModel(
-    val label: String,
-    val fileName: String,
-    val file: File,
-    val sizeLabel: String
 )
 
 private data class ConvertedMediaItem(

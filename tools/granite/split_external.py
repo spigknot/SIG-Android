@@ -23,7 +23,7 @@ print(f"data: {data.stat().st_size/1e9:.2f}GB", flush=True)
 print("validando com onnxruntime...", flush=True)
 sess = ort.InferenceSession(str(OUT), providers=["CPUExecutionProvider"])
 feat = np.random.randn(1, 512, 320).astype(np.float32)
-mask = np.zeros((1, 512), dtype=np.int64)
+mask = np.ones((1, 512), dtype=np.int64)
 out = sess.run(["logits"], {"input_features": feat, "attention_mask": mask})[0]
 print("logits:", out.shape, "finito:", np.isfinite(out).all(), flush=True)
 # Valida contra o ONNX embutido (mesma saída esperada).

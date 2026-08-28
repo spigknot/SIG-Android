@@ -116,6 +116,32 @@ class GraniteEngineTest {
     // ---- CTC collapse / decoder ----
 
     @Test
+    fun `attention mask is 1 for real frames and 0 for padding`() {
+        // Vacina do bug "transcrição vazia": a attention_mask estava INVERTIDA
+        // (0=real/1=pad) e o conformer mascarava os frames válidos como -inf.
+        // Convenção HF: 1=real, 0=pad.
+        val mask = GraniteMask.build(windowFrames = 512, windowLen = 148)
+        assertEquals(1L, mask[0])
+        assertEquals(1L, mask[147])
+        assertEquals(0L, mask[148])
+        assertEquals(0L, mask[511])
+        assertEquals(148, mask.count { it == 1L })
+        assertEquals(512 - 148, mask.count { it == 0L })
+    }
+
+    @Test
+    fun `attention mask full window has no padding`() {
+        val mask = GraniteMask.build(windowFrames = 512, windowLen = 512)
+        assertTrue(mask.all { it == 1L })
+    }
+
+    @Test
+    fun `attention mask empty window is all padding`() {
+        val mask = GraniteMask.build(windowFrames = 512, windowLen = 0)
+        assertTrue(mask.all { it == 0L })
+    }
+
+    @Test
     fun `ctc collapse removes repeats and blanks`() {
         val dec = GraniteDecoder(listOf("a", "b", "c"), numSpecialTokens = 1)
         // ids: blank(0), a, a, blank, b, b, c, blank -> a, b, c (repetidos removidos, blank removido)

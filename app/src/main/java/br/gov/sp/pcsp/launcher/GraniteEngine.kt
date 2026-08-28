@@ -235,6 +235,21 @@ class GraniteFrontend(
 
 data class GraniteFeatures(val data: FloatArray, val frames: Int, val dim: Int)
 
+/**
+ * Construção da attention_mask do CTC (função PURA, testável na JVM).
+ *
+ * Convenção HuggingFace/transformers (conferida no fonte do modelo
+ * `modeling_granite_speech5.py`): 1 = frame REAL (atendido), 0 = padding
+ * (mascarado com -inf no bloco de atenção). A máscara é int64 (o grafo
+ * espera `attention_mask` [1, frames] int64).
+ */
+object GraniteMask {
+    fun build(windowFrames: Int, windowLen: Int): LongArray {
+        require(windowLen in 0..windowFrames) { "windowLen $windowLen fora de [0, $windowFrames]" }
+        return LongArray(windowFrames) { if (it < windowLen) 1L else 0L }
+    }
+}
+
 /** FFT radix-2 iterativa (Cooley-Tukey, DIT) — port do JS da IBM. */
 class Radix2Fft(private val size: Int) {
     private val rev = IntArray(size)
@@ -658,9 +673,9 @@ object GraniteEngine {
                 val src = (windowStart + r) * features.dim
                 System.arraycopy(features.data, src, input, r * features.dim, features.dim)
             }
-            // mask: 1 = padding (frames além do real dentro da janela); ONNX espera int64.
-            val mask = LongArray(windowFrames) { 1L }
-            mask.fill(0L, 0, windowLen)
+            // mask: 1 = frame real, 0 = padding (convenção HF/transformers).
+            // O grafo espera attention_mask [1, frames] int64.
+            val mask = GraniteMask.build(windowFrames, windowLen)
 
             val inputTensor = OnnxTensor.createTensor(env(), java.nio.FloatBuffer.wrap(input), longArrayOf(1L, windowFrames.toLong(), features.dim.toLong()))
             val maskTensor = OnnxTensor.createTensor(env(), java.nio.LongBuffer.wrap(mask), longArrayOf(1L, windowFrames.toLong()))

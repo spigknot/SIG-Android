@@ -92,7 +92,7 @@ def main():
         ["logits"],
         {
             "input_features": feats["input_features"].numpy(),
-            "attention_mask": feats["attention_mask"].numpy().astype(np.float32),
+            "attention_mask": feats["attention_mask"].numpy().astype(np.int64),
         },
     )[0]
     ids_onnx = logits_onnx.argmax(axis=-1)[0].tolist()
