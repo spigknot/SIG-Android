@@ -191,7 +191,7 @@ object GraniteNarInterleave {
 object GraniteNarEngine {
     private const val TAG = "GraniteNarEngine"
 
-    private const val PACKAGE_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models"
+    private const val PACKAGE_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/4.1-nar"
 
     private const val ENCODER_FILE = "granite-4.1-nar-encoder-fp16.onnx"
     private const val PROJECTOR_FILE = "granite-4.1-nar-projector-fp16.onnx"

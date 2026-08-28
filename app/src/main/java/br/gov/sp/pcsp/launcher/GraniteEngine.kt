@@ -404,8 +404,8 @@ enum class GraniteExecutionBackend(
 object GraniteEngine {
     private const val TAG = "GraniteEngine"
 
-    // URLs do pacote no Cloudflare R2 (bucket sig-android, subpasta models/).
-    private const val PACKAGE_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models"
+    // URLs do pacote no Cloudflare R2 (bucket sig-android, subpasta models/granite/5.0-turbo/).
+    private const val PACKAGE_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/5.0-turbo"
     private const val MODEL_FILE_NAME = "granite-5.0-turboctc-f32-ext.onnx"
     private const val MODEL_DATA_FILE_NAME = "granite-5.0-turboctc-f32-ext.onnx.data"
     private const val FRONTEND_FILE_NAME = "frontend_config.json"

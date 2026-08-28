@@ -2594,7 +2594,7 @@ class WhisperActivity : AppCompatActivity() {
         private const val GLOBAL_LOG_NAME = "whisper_log.txt"
         private const val VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
         private const val VAD_MODEL_URL = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
-        private const val MODEL_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models"
+        private const val MODEL_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/whisper"
         private const val DEFAULT_BEAM_SIZE = 5
         private const val DEFAULT_BEST_OF = 5
         private const val TAG = "WhisperActivity"
