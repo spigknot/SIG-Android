@@ -201,6 +201,15 @@ class RemoteSttActivity : AppCompatActivity() {
         .writeTimeout(0, TimeUnit.MILLISECONDS)
         .callTimeout(0, TimeUnit.MILLISECONDS)
         .build()
+    // Client da transcrição DEFINITIVA (áudio integral no fim do live): com
+    // timeout finito — sem isso, um servidor que não responde trava a
+    // finalização para sempre e deixa o microfone inutilizável.
+    private val finalizationClient = client.newBuilder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .callTimeout(45, TimeUnit.SECONDS)
+        .build()
     private val grokWebSocketClient = client.newBuilder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .pingInterval(15, TimeUnit.SECONDS)
@@ -2331,7 +2340,9 @@ class RemoteSttActivity : AppCompatActivity() {
             .addHeader("accept", "application/json")
             .post(requestBody)
             .build()
-        val call = client.newCall(request)
+        // A requisição FINAL (áudio integral) usa client com timeout: um servidor
+        // que não responde não pode travar a finalização para sempre.
+        val call = (if (isFinal) finalizationClient else client).newCall(request)
         currentCalls.add(call)
         synchronized(liveRequestLock) {
             liveCurrentCall = call
@@ -3109,47 +3120,60 @@ class RemoteSttActivity : AppCompatActivity() {
         Thread {
             try {
                 recordingThread?.join(5_000)
-                if (pcmFile == null || !pcmFile.exists() || pcmFile.length() < 1024) {
+                // Finalização LOCAL pura: o texto acumulado dos chunks já é a
+                // transcrição completa. NÃO re-transcreve via REST integral —
+                // WebSocket (e o fluxo por chunks) só usa as respostas do
+                // próprio streaming.
+                val accumulated = synchronized(liveTranscriptText) {
+                    buildString {
+                        val committed = liveTranscriptText.toString().trim()
+                        val draft = liveDraftText.trim()
+                        if (committed.isNotBlank()) append(committed)
+                        if (draft.isNotBlank()) {
+                            if (isNotEmpty()) append('\n')
+                            append(draft)
+                        }
+                    }.trim()
+                }
+                if (accumulated.isBlank()) {
                     liveDiagnosticContext?.recordState("FAILED")
                     writeLiveFailureDiagnostics("missing_audio")
                     runOnUiThread { status.text = "Nenhum áudio foi gravado." }
                     finishLiveTranscriptOutput(null)
                     return@Thread
                 }
-                val wavFile = File(cacheDir, "live_definitive_${System.currentTimeMillis()}.wav")
-                try {
-                    writeWavFile(wavFile, pcmFile, 16000)
-                    val definitiveText = sendLiveChunkToServer(
-                        UploadFile(wavFile, "audio/wav", "transcricao_ao_vivo_integral.wav"),
-                        isFinal = true
-                    ).trim()
-                    if (definitiveText.isBlank()) {
-                        throw IllegalStateException("A transcrição definitiva voltou vazia.")
-                    }
-                    synchronized(liveTranscriptText) {
-                        liveTranscriptText.clear()
-                        liveTranscriptText.append(definitiveText)
-                        liveDraftText = ""
-                        rebuildLiveTranscriptDisplayLocked()
-                    }
-                    runOnUiThread {
-                        updateLiveTerminalText()
-                        refiningTaskState = AssistantTaskState.DONE
-                        renderLiveProgress()
-                    }
-                    liveDiagnosticContext?.recordState("DONE")
-                    finishLiveTranscriptOutput(null)
-                } finally {
-                    wavFile.delete()
+                liveDiagnosticContext?.recordState("DONE")
+                runOnUiThread {
+                    refiningTaskState = AssistantTaskState.DONE
+                    renderLiveProgress()
+                    status.text = ""
                 }
+                finishLiveTranscriptOutput(null)
             } catch (e: Throwable) {
                 Log.e(TAG, "Definitive live transcription failed", e)
                 liveDiagnosticContext?.recordState("FAILED")
                 writeLiveFailureDiagnostics("rest_finalization_failure")
+                val accumulated = synchronized(liveTranscriptText) {
+                    buildString {
+                        val committed = liveTranscriptText.toString().trim()
+                        val draft = liveDraftText.trim()
+                        if (committed.isNotBlank()) append(committed)
+                        if (draft.isNotBlank()) {
+                            if (isNotEmpty()) append('\n')
+                            append(draft)
+                        }
+                    }.trim()
+                }
                 runOnUiThread {
-                    refiningTaskState = AssistantTaskState.ERROR
-                    renderLiveProgress()
-                    status.text = e.message ?: "Não consegui gerar a transcrição definitiva."
+                    if (accumulated.isNotBlank()) {
+                        refiningTaskState = AssistantTaskState.DONE
+                        renderLiveProgress()
+                        status.text = ""
+                    } else {
+                        refiningTaskState = AssistantTaskState.ERROR
+                        renderLiveProgress()
+                        status.text = e.message ?: "Não consegui gerar a transcrição definitiva."
+                    }
                 }
                 finishLiveTranscriptOutput(null)
             } finally {
