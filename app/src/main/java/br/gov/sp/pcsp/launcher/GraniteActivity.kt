@@ -984,36 +984,41 @@ class GraniteActivity : AppCompatActivity() {
         dialog.show()
         setProcessing(true)
         Thread {
-            try {
-                QairtDependencyManager.install(this) { progress ->
-                    runOnUiThread {
-                        val pct = if (progress.total > 0L) (progress.downloaded * 100L / progress.total).toInt() else -1
-                        if (pct >= 0) {
-                            progressBar.progress = pct.coerceIn(0, 100)
-                            val dlMb = progress.downloaded / 1_048_576L
-                            val totMb = progress.total / 1_048_576L
-                            statusText.text = "$pct% ($dlMb MB de $totMb MB)"
-                        } else {
-                            statusText.text = progress.stage
-                        }
+            val result = QairtDependencyManager.install(this) { progress ->
+                runOnUiThread {
+                    val pct = if (progress.total > 0L) (progress.downloaded * 100L / progress.total).toInt() else -1
+                    if (pct >= 0) {
+                        progressBar.progress = pct.coerceIn(0, 100)
+                        val dlMb = progress.downloaded / 1_048_576L
+                        val totMb = progress.total / 1_048_576L
+                        statusText.text = "$pct% ($dlMb MB de $totMb MB)"
+                    } else {
+                        statusText.text = progress.stage
                     }
                 }
-                runOnUiThread {
-                    dialog.dismiss()
-                    setProcessing(false)
-                    selectedBackend = backend
-                    buttonBackend.text = backend.shortLabel
-                }
-            } catch (e: Throwable) {
-                runOnUiThread {
-                    dialog.dismiss()
-                    setProcessing(false)
-                    AlertDialog.Builder(this)
-                        .setTitle("Falha no download")
-                        .setMessage(e.message ?: "Erro desconhecido ao baixar o pacote QAIRT.")
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
+            }
+            runOnUiThread {
+                dialog.dismiss()
+                setProcessing(false)
+                result.fold(
+                    onSuccess = {
+                        // Instalação confirmada: só agora marca o chip como selecionado.
+                        selectedBackend = backend
+                        buttonBackend.text = backend.shortLabel
+                        status.text = "${backend.label} pronto."
+                    },
+                    onFailure = { error ->
+                        // O Result<Unit> do install captura falhas internas (rename,
+                        // SHA, pacote incompleto). NÃO seleciona o backend e mostra o erro.
+                        val message = error.message ?: "Erro desconhecido ao baixar o pacote QAIRT."
+                        status.text = "Falha ao instalar QAIRT: $message"
+                        AlertDialog.Builder(this)
+                            .setTitle("Falha no download")
+                            .setMessage(message)
+                            .setPositiveButton("OK", null)
+                            .show()
+                    }
+                )
             }
         }.start()
     }
@@ -1881,7 +1886,8 @@ class GraniteActivity : AppCompatActivity() {
         timestampedTranscript = timestampedText.trim()
         // Botões de clipboard SEMPRE visíveis (bug fix): estáticos como na Ocorrência.
         liveTranscriptTextView.setText(clean)
-        liveTranscriptTextView.setMinLines(0)
+        // Altura FIXA: nunca alternar minLines (0/5) — isso redimensiona a caixa.
+        liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
         liveTranscriptClipboardActions?.visibility = View.VISIBLE
     }

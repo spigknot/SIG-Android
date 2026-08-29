@@ -284,6 +284,10 @@ class RemoteSttActivity : AppCompatActivity() {
     private var grokStableResetRunnable: Runnable? = null
     private var deepgramFinishRunnable: Runnable? = null
     private var finishingSocket: WebSocket? = null
+    // Deadline ABSOLUTO da finalização: mesmo que o provedor continue mandando
+    // finais (ruído de fundo, etc.), a transcrição é completada até este instante.
+    // Evita ficar preso em "Esperando transcrição final" para sempre.
+    @Volatile private var finishDeadlineMillis = 0L
     private val assemblyaiSpeakerNumbers = mutableMapOf<String, Int>()
     private var grokEverConnected = false
     private var grokDisconnectedAudioBytes = 0L
@@ -1478,16 +1482,64 @@ class RemoteSttActivity : AppCompatActivity() {
                 val text = event.optString("text").trim()
                 if (text.isEmpty()) return
                 synchronized(grokLiveFinalSegments) {
-                    if (grokLiveFinalSegments.lastOrNull() != text) grokLiveFinalSegments += text
+                    // Refinamento: se o texto novo contém o último segmento (ou
+                    // vice-versa), substitui em vez de duplicar (o Scribe pode
+                    // mandar final_transcript com a frase ainda sendo refinada).
+                    val last = grokLiveFinalSegments.lastOrNull().orEmpty()
+                    if (last == text) {
+                        // já commitado; nada a fazer
+                    } else if (last.contains(text) || text.contains(last)) {
+                        grokLiveFinalSegments[grokLiveFinalSegments.lastIndex] = text
+                    } else {
+                        grokLiveFinalSegments += text
+                    }
                     grokLivePartialSegment = ""
                     updateGrokLiveTranscriptLocked()
                 }
                 runOnUiThread { updateLiveTerminalText() }
             }
             "committed_transcript" -> if (sttIsElevenlabs) {
+                // O Scribe v2 commita a frase após silêncio. ACUMULA o texto
+                // commitado (não substitui): cada committed_transcript é uma
+                // frase nova que entra na transcrição acumulada.
+                // Se o último segmento já contém este texto (refinamento do
+                // final_transcript), substitui em vez de duplicar.
+                val text = event.optString("text").trim()
+                if (text.isNotEmpty()) {
+                    synchronized(grokLiveFinalSegments) {
+                        val last = grokLiveFinalSegments.lastOrNull().orEmpty()
+                        if (last == text) {
+                            // já commitado; nada a fazer
+                        } else if (last.contains(text) || text.contains(last)) {
+                            grokLiveFinalSegments[grokLiveFinalSegments.lastIndex] = text
+                        } else {
+                            grokLiveFinalSegments += text
+                        }
+                        grokLivePartialSegment = ""
+                        updateGrokLiveTranscriptLocked()
+                    }
+                    runOnUiThread { updateLiveTerminalText() }
+                }
                 if (grokFinishRequested) completeGrokLiveTranscription(webSocket, "")
             }
             "committed_transcript_with_timestamps" -> if (sttIsElevenlabs) {
+                // Mesma regra do committed_transcript: acumula o texto.
+                val text = event.optString("text").trim()
+                if (text.isNotEmpty()) {
+                    synchronized(grokLiveFinalSegments) {
+                        val last = grokLiveFinalSegments.lastOrNull().orEmpty()
+                        if (last == text) {
+                            // já commitado; nada a fazer
+                        } else if (last.contains(text) || text.contains(last)) {
+                            grokLiveFinalSegments[grokLiveFinalSegments.lastIndex] = text
+                        } else {
+                            grokLiveFinalSegments += text
+                        }
+                        grokLivePartialSegment = ""
+                        updateGrokLiveTranscriptLocked()
+                    }
+                    runOnUiThread { updateLiveTerminalText() }
+                }
                 if (grokFinishRequested) completeGrokLiveTranscription(webSocket, "")
             }
             "transcript.partial" -> {
@@ -1518,12 +1570,17 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun rescheduleDeepgramFastFinish() {
         deepgramFinishRunnable?.let(handler::removeCallbacks)
+        // Nunca adia além do deadline absoluto: se o provedor continua mandando
+        // finais (ruído), o timeout rápido é reagendado mas o deadline final
+        // (DEEPGRAM_FINISH_TIMEOUT_MILLIS após o pedido) é mantido.
+        val remaining = finishDeadlineMillis - SystemClock.elapsedRealtime()
+        val delay = minOf(DEEPGRAM_FINISH_FAST_MILLIS, remaining.coerceAtLeast(50L))
         val timeout = Runnable {
             deepgramFinishRunnable = null
             completeGrokLiveTranscription(finishingSocket ?: grokLiveWebSocket, "")
         }
         deepgramFinishRunnable = timeout
-        handler.postDelayed(timeout, DEEPGRAM_FINISH_FAST_MILLIS)
+        handler.postDelayed(timeout, delay)
     }
 
     private fun sendAudioChunk(webSocket: WebSocket, bytes: ByteArray, offset: Int, length: Int): Boolean {
@@ -1708,6 +1765,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
 
         grokCompletionHandled = true
+        finishDeadlineMillis = 0L
         deepgramFinishRunnable?.let(handler::removeCallbacks)
         deepgramFinishRunnable = null
         synchronized(liveTranscriptText) {
@@ -1847,6 +1905,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun finishGrokWebSocketPermanently(message: String) {
         grokIntentionalClose = true
+        finishDeadlineMillis = 0L
         cancelGrokReconnectCallbacks()
         deepgramFinishRunnable?.let(handler::removeCallbacks)
         deepgramFinishRunnable = null
@@ -1998,6 +2057,9 @@ class RemoteSttActivity : AppCompatActivity() {
                 liveAiProgress.visibility = View.VISIBLE
                 renderLiveProgress()
                 status.text = "Recebendo a transcrição final do ${sttProviderName()}..."
+                // Deadline absoluto: completa até 10s após o pedido, mesmo que o
+                // provedor continue mandando finais (evita travar para sempre).
+                finishDeadlineMillis = SystemClock.elapsedRealtime() + DEEPGRAM_FINISH_TIMEOUT_MILLIS
                 val socket = grokLiveWebSocket
                 finishingSocket = socket
                 if (socket != null) {
@@ -3136,7 +3198,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     outputFileName?.visibility = View.GONE
                     outputActions?.visibility = View.GONE
                     buttonOutputFolder?.visibility = View.GONE
-                    liveTranscriptTextView.setMinLines(0)
+                    liveTranscriptTextView.setMinLines(5)
                     livePostActions?.visibility = View.VISIBLE
                     renderLiveProgress()
                     liveAiProgress.visibility = View.VISIBLE
@@ -3742,7 +3804,7 @@ class RemoteSttActivity : AppCompatActivity() {
                             buildTimestampedDisplayText(orderedResults)
                         )
                         renderTranscriptAccordingToTimestampSelection()
-                        liveTranscriptTextView.setMinLines(0)
+                        liveTranscriptTextView.setMinLines(5)
                         liveTranscriptTextView.visibility = View.VISIBLE
                         liveTranscriptClipboardActions?.visibility = View.VISIBLE
                         livePostActions?.visibility = View.VISIBLE
@@ -5455,7 +5517,9 @@ class RemoteSttActivity : AppCompatActivity() {
             plain
         }
         liveTranscriptTextView.setText(text)
-        liveTranscriptTextView.setMinLines(if (text.isBlank()) 5 else 0)
+        // Altura FIXA: nunca alternar minLines (0/5) — isso redimensiona a caixa
+        // quando o texto chega. minLines fixo mantém a caixa estável sempre.
+        liveTranscriptTextView.setMinLines(5)
         liveTranscriptTextView.visibility = View.VISIBLE
     }
 
@@ -5501,7 +5565,7 @@ class RemoteSttActivity : AppCompatActivity() {
         if (pasted.isBlank()) return
         val apply = {
             target.setText(pasted)
-            target.setMinLines(0)
+            target.setMinLines(5)
             onReplaced?.invoke(pasted)
         }
         if (target.text?.toString()?.isBlank() != false) {
@@ -5760,7 +5824,7 @@ class RemoteSttActivity : AppCompatActivity() {
             timestampedTranscript = ""
         }
         liveTranscriptTextView.setText(clean)
-        liveTranscriptTextView.setMinLines(0)
+        liveTranscriptTextView.setMinLines(5)
         synchronized(liveTranscriptText) {
             liveTranscriptText.clear()
             liveTranscriptText.append(clean)

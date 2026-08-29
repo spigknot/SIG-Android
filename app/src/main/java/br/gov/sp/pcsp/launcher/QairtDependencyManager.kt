@@ -142,7 +142,18 @@ object QairtDependencyManager {
             if (destination.exists() && !destination.renameTo(previous)) {
                 destination.deleteRecursively()
             }
-            check(staging.renameTo(destination)) { "Falha ao ativar componentes QAIRT." }
+            // renameTo pode falhar para diretórios em alguns devices/ROMs; usa cópia
+            // recursiva como fallback para garantir que a instalação sempre ative.
+            val activated = staging.renameTo(destination) || runCatching {
+                staging.copyRecursively(destination, overwrite = true)
+                staging.deleteRecursively()
+                destination.exists()
+            }.getOrDefault(false)
+            check(activated) { "Falha ao ativar componentes QAIRT." }
+            // Garantia pós-ativação: o isInstalled() depende do marker + libs.
+            check(isInstalled(context)) {
+                "Instalação QAIRT não ficou ativa (verifique o armazenamento interno)."
+            }
             previous.deleteRecursively()
         } finally {
             staging.deleteRecursively()
