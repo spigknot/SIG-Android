@@ -1112,6 +1112,12 @@ class GraniteActivity : AppCompatActivity() {
 
         val snapshotTimelineStartMs = if (items.size == 1) timeline?.getStartMs() ?: 0L else 0L
         val snapshotTimelineEndMs = if (items.size == 1) timeline?.getEndMs() ?: items.firstOrNull()?.durationMs?.coerceAtLeast(1L) ?: 0L else 0L
+        // Total de áudio processado (para o relatório de eficiência, como na tela Transcrição).
+        val totalAudioMs: Long = if (items.size == 1 && snapshotTimelineEndMs > snapshotTimelineStartMs) {
+            snapshotTimelineEndMs - snapshotTimelineStartMs
+        } else {
+            items.sumOf { it.durationMs.coerceAtLeast(1L) }
+        }
         val snapshotVadMode = selectedVadMode
         val snapshotVadLevel = selectedVadLevel
         val snapshotPrepareMode = prepareMode
@@ -1152,7 +1158,7 @@ class GraniteActivity : AppCompatActivity() {
                         prepareCompletion.submit(
                             prepareUploadTask(
                                 items, snapshotPrepareMode, tempDir, terminalLines, index, item, vadStats,
-                                applyVad = !onlyConvert,
+                                applyVad = !onlyConvert && snapshotVadMode != VadMode.NONE,
                                 useTimeline = true,
                                 timelineStartMs = snapshotTimelineStartMs,
                                 timelineEndMs = snapshotTimelineEndMs,
@@ -1288,7 +1294,7 @@ class GraniteActivity : AppCompatActivity() {
                 val terminalFile = File(sessionDir, "terminal.txt")
                 txtFile.writeText(finalText, Charsets.UTF_8)
                 htmlFile.writeText(buildHtml(orderedResults), Charsets.UTF_8)
-                val report = buildGraniteReport(effectiveBackend, items.size, elapsedMs, modelLoadMs.get(), selectedModel)
+                val report = buildGraniteReport(effectiveBackend, items.size, totalAudioMs, elapsedMs, modelLoadMs.get(), selectedModel)
                 appendLog(logLines, report)
                 logFile.writeText(logLines.toString(), Charsets.UTF_8)
                 terminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
@@ -1300,7 +1306,9 @@ class GraniteActivity : AppCompatActivity() {
                     cancelRequested = false
                     stopTranscriptionTimer()
                     setProcessing(false)
-                    status.text = "Transcrição concluída com sucesso!"
+                    // Exibe o relatório de estatísticas (mesmo padrão da tela Transcrição),
+                    // com a linha de conclusão no topo.
+                    status.text = "Transcrição concluída com sucesso!\n\n$report"
                     if (orderedResults.size <= 1) {
                         val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
                         storeReceivedTranscription(transcriptDisplay, transcriptDisplay)
@@ -1899,12 +1907,13 @@ class GraniteActivity : AppCompatActivity() {
         lastReceivedTranscription = if (timestampedText.isNotBlank()) timestampedText.trim() else clean
         timestampPlainTranscript = clean
         timestampedTranscript = timestampedText.trim()
-        // Botões de clipboard SEMPRE visíveis (bug fix): estáticos como na Ocorrência.
+        // Caixa e botões de clipboard só aparecem com UM arquivo (como na Transcrição).
+        val singleFile = selectedItems.size <= 1
         liveTranscriptTextView.setText(clean)
         // Altura FIXA: nunca alternar minLines (0/5) — isso redimensiona a caixa.
         liveTranscriptTextView.setMinLines(5)
-        liveTranscriptTextView.visibility = View.VISIBLE
-        liveTranscriptClipboardActions?.visibility = View.VISIBLE
+        liveTranscriptTextView.visibility = if (singleFile) View.VISIBLE else View.GONE
+        liveTranscriptClipboardActions?.visibility = if (singleFile) View.VISIBLE else View.GONE
     }
 
     private fun currentShareableTranscriptText(): String {
@@ -1963,12 +1972,15 @@ class GraniteActivity : AppCompatActivity() {
         if (selectedItems.size < 2 || batchSessionFinished) {
             batchProgressBox?.visibility = View.GONE
             if (selectedItems.size <= 1) liveTranscriptTextView.visibility = View.VISIBLE
+            if (selectedItems.size <= 1) liveTranscriptClipboardActions?.visibility = View.VISIBLE
             batchRowCells.clear()
             batchProgressRows?.removeAllViews()
             return
         }
         batchProgressBox?.visibility = View.VISIBLE
         liveTranscriptTextView.visibility = View.GONE
+        // Múltiplos arquivos: esconde também os botões de clipboard (só valem p/ 1 arquivo).
+        liveTranscriptClipboardActions?.visibility = View.GONE
         if (batchRowCells.size != selectedItems.size) {
             batchRowCells.clear()
             batchProgressRows?.removeAllViews()
@@ -2461,15 +2473,23 @@ class GraniteActivity : AppCompatActivity() {
             .replace("'", "&#39;")
     }
 
-    private fun buildGraniteReport(backend: GraniteExecutionBackend, fileCount: Int, elapsedMs: Long, modelLoadMs: Long, model: String): String {
+    private fun buildGraniteReport(backend: GraniteExecutionBackend, fileCount: Int, totalAudioMs: Long, elapsedMs: Long, modelLoadMs: Long, model: String): String {
         val elapsedSeconds = (elapsedMs / 1000.0).coerceAtLeast(0.001)
+        val audioSeconds = (totalAudioMs / 1000.0).coerceAtLeast(0.001)
+        val transcribeMs = (elapsedMs - modelLoadMs).coerceAtLeast(1L)
+        // Velocidade relativa calculada sobre o TEMPO TOTAL (carga + inferência),
+        // como pedido pelo usuário.
+        val efficiency = audioSeconds / elapsedSeconds
         val modelLabel = modelLabel(model)
         return listOf(
             "Modelo: $modelLabel",
             "Backend: ${backend.reportLabel}",
             "Arquivos: $fileCount",
+            "Total de áudio: ${formatSeconds(totalAudioMs)}s",
             "Tempo de carga do modelo: ${formatElapsedCompact(modelLoadMs)}",
-            "Tempo total: ${String.format(Locale.US, "%.1f", elapsedSeconds)}s"
+            "Tempo de inferência: ${formatSeconds(transcribeMs)}s",
+            "Tempo total: ${String.format(Locale.US, "%.1f", elapsedSeconds)}s",
+            "Velocidade (x tempo real): ${String.format(Locale.US, "%.2fx", efficiency)}"
         ).joinToString("\n")
     }
 

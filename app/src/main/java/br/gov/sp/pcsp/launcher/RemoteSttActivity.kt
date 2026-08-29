@@ -808,7 +808,8 @@ class RemoteSttActivity : AppCompatActivity() {
         status.visibility = View.VISIBLE
         terminalText?.visibility = View.GONE
         terminalText?.text = ""
-        status.text = ModelSelectionSummary.current()
+        // Informativo de modelos removido definitivamente (pedido do usuário).
+        status.text = ""
         liveTranscriptTextView.visibility = View.VISIBLE
         liveTranscriptClipboardActions?.visibility = View.VISIBLE
         livePostActions?.visibility = View.VISIBLE
@@ -831,10 +832,10 @@ class RemoteSttActivity : AppCompatActivity() {
         val current = status.text?.toString().orEmpty()
         if (
             current.isBlank() ||
-            current.startsWith("Servidor conectado:") ||
-            current.startsWith("Modelo de transcrição:")
+            current.startsWith("Servidor conectado:")
         ) {
-            status.text = ModelSelectionSummary.current()
+            // Informativo de modelos removido definitivamente (pedido do usuário).
+            status.text = ""
         }
     }
 
@@ -3350,7 +3351,8 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonPersonSelector?.text = draft.selectedPerson.ifBlank { "Partes" }
         terminalText?.text = draft.terminal
         terminalText?.visibility = if (draft.terminal.isBlank()) View.GONE else View.VISIBLE
-        status.text = draft.status.ifBlank { ModelSelectionSummary.current() }
+        // Informativo de modelos removido definitivamente (pedido do usuário).
+        status.text = draft.status.ifBlank { "" }
         selectedLiveLanguage = draft.liveLanguage
         checkboxLiveDiarize.isChecked = draft.diarize
         refreshLiveLanguageButton()
@@ -3719,7 +3721,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     prepareCompletion.submit(
                         prepareUploadTask(
                             items, snapshotPrepareMode, tempDir, terminalLines, index, item, vadStats,
-                            applyVad = !onlyConvert && !whiteRecording,
+                            applyVad = !onlyConvert && !whiteRecording && snapshotVadMode != VadMode.NONE,
                             useTimeline = !whiteRecording,
                             timelineStartMs = snapshotTimelineStartMs,
                             timelineEndMs = snapshotTimelineEndMs,
@@ -5041,7 +5043,8 @@ class RemoteSttActivity : AppCompatActivity() {
                     serverIpIndex = index
                     serverBaseUrl = "http://$ip:$SERVER_PORT"
                     runOnUiThread {
-                        status.text = ModelSelectionSummary.current()
+                        // Informativo de modelos removido definitivamente (pedido do usuário).
+                        status.text = ""
                         updateAdvancedInfo()
                     }
                     return serverBaseUrl
