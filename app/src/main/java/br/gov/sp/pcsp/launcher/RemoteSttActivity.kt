@@ -3216,7 +3216,7 @@ class RemoteSttActivity : AppCompatActivity() {
     /** Keeps the current work while this app process is alive, without creating a permanent draft. */
     private fun saveInMemoryDraft() {
         if (!::liveTranscriptTextView.isInitialized) return
-        inMemoryDraft = RemoteSttDraft(
+        val draft = RemoteSttDraft(
             items = selectedItems.toList(),
             prepareMode = selectedPrepareMode,
             transcript = liveTranscriptTextView.text?.toString().orEmpty(),
@@ -3234,10 +3234,16 @@ class RemoteSttActivity : AppCompatActivity() {
             toTime = inputTo?.text?.toString().orEmpty(),
             outputFolderUri = preSelectedOutputDirUri,
         )
+        synchronized(inMemoryDrafts) {
+            inMemoryDrafts[draftKey()] = draft
+        }
     }
 
+    /** Chave do draft por modo: cada ferramenta (Transcrição/Ocorrência) tem a sua caixa. */
+    private fun draftKey(): String = if (transcriptionMode) MODE_TRANSCRIPTION else MODE_OCCURRENCE
+
     private fun restoreInMemoryDraft() {
-        val draft = inMemoryDraft ?: return
+        val draft = synchronized(inMemoryDrafts) { inMemoryDrafts[draftKey()] } ?: return
 
         if (draft.items.isNotEmpty()) {
             applySelection(draft.items)
@@ -6745,8 +6751,10 @@ class RemoteSttActivity : AppCompatActivity() {
         const val MODE_TRANSCRIPTION = "transcription"
         const val MODE_OCCURRENCE = "occurrence"
 
-        @Volatile
-        private var inMemoryDraft: RemoteSttDraft? = null
+        // Draft separado POR MODO: a caixa de texto da Transcrição e da
+        // Ocorrência são independentes (o texto digitado numa não vaza para a outra).
+        // Acesso protegido por synchronized (o mapa é estático e compartilhado).
+        private val inMemoryDrafts = mutableMapOf<String, RemoteSttDraft>()
 
         private const val REQUEST_PICK_MEDIA = 7201
         private const val REQUEST_PICK_FOLDER = 7202
