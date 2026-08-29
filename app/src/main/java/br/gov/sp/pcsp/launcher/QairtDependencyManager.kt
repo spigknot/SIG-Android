@@ -80,18 +80,27 @@ object QairtDependencyManager {
      * arquitetura (da mais recente para a mais antiga). A primeira que carregar
      * define a arch. Resultado é cacheado.
      *
+     * ⚠️ USA System.load(com caminho completo) — as libs QAIRT ficam no
+     * no_backup/qairt/v1/lib (baixadas sob demanda), NÃO no diretório nativo do
+     * APK. System.loadLibrary("QnnHtpV81Stub") procura no diretório padrão e
+     * falha com "library not found" (bug real encontrado em 29/08 no NPU).
+     *
      * Retorna null se nenhuma arquitetura HTP estiver disponível (ex.: aparelho
      * Qualcomm sem Hexagon, ou skels não carregáveis sem root).
      */
-    fun htpArchitecture(): String? {
+    fun htpArchitecture(context: Context): String? {
         cachedHtpArch?.let { return it }
+        val libDir = File(installedRoot(context), "lib")
         val archs = listOf("81", "79", "75", "73")
         for (arch in archs) {
+            val stub = File(libDir, "libQnnHtpV${arch}Stub.so")
+            if (!stub.isFile) continue
             try {
-                System.loadLibrary("QnnHtpV${arch}Stub")
+                System.load(stub.absolutePath)
                 cachedHtpArch = arch
                 return arch
-            } catch (_: UnsatisfiedLinkError) {
+            } catch (e: UnsatisfiedLinkError) {
+                android.util.Log.w(TAG, "htpArchitecture: stub v$arch falhou: ${e.message}")
                 // Tenta a próxima
             }
         }
@@ -245,6 +254,13 @@ object QairtDependencyManager {
     fun loadQnnNatives(context: Context, backend: String, htpArch: String? = null) {
         val libDir = File(installedRoot(context), "lib")
         check(libDir.isDirectory) { "QAIRT não instalado em ${libDir.absolutePath}" }
+
+        // Registra o dir QAIRT no path de busca de libs do classloader (mesmo
+        // mecanismo do NativeDependencyManager): sem isso, o dlopen do
+        // libQnnHtpV81Stub.so procura libcdsprpc.so (e suas dependências
+        // libhidlbase/libhwbinder/...) só nos paths do namespace clns-9 e NÃO
+        // no dir QAIRT -> "library not found" (bug real encontrado no NPU 29/08).
+        NativeDependencyManager.registerNativeLibraryDir(libDir)
 
         // Ordem: System primeiro (dependência de todos), depois backend, depois Prepare + stub
         val loadOrder = mutableListOf("libQnnSystem.so")

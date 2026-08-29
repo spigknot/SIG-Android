@@ -416,7 +416,13 @@ object GraniteEngine {
     /** Modelo F32 (CPU e acelerado via QNN — o QNN EP converte FP32→FP16 internamente). */
     private const val MODEL_F32_FILE_NAME = "granite-5.0-turboctc-f32-ext.onnx"
     private const val MODEL_F32_DATA_FILE_NAME = "granite-5.0-turboctc-f32-ext.onnx.data"
-    private const val MODEL_FP16_FILE_NAME = "granite-5.0-turboctc-fp16-ext.onnx"
+    /**
+     * Modelo FP16 para GPU/NPU via QNN. Os Slice (StridedSlice) foram convertidos
+     * em Gather porque o QNN GPU EP do ORT 1.29 rejeita StridedSlice (error 3110,
+     * "Failed to finalize QNN graph" 6020) mesmo com params constantes e steps=1.
+     * Conversão validada: saída IDÊNTICA ao modelo original (diff 0.0).
+     */
+    private const val MODEL_FP16_FILE_NAME = "granite-5.0-turboctc-fp16-gather.onnx"
     private const val MODEL_FP16_DATA_FILE_NAME = "granite-5.0-turboctc-fp16-ext.onnx.data"
     private const val FRONTEND_FILE_NAME = "frontend_config.json"
     private const val MEL_FILTERS_FILE_NAME = "mel_filters.bin"
@@ -485,7 +491,7 @@ object GraniteEngine {
 
     /** Fallback quando os HEAD requests não respondem (tamanho real do pacote, soma verificada no R2 em 2026-08-29). */
     internal const val FALLBACK_PACKAGE_BYTES =
-        865_408L + 1_891_581_952L + 946_697_596L + 945_790_976L + 303L +
+        865_408L + 1_891_581_952L + 946_740_875L + 945_790_976L + 303L +
             82_240L + 2_048L + 177_439L + 640_793L + 209_532_928L
 
     fun packageDir(context: Context): File =
@@ -657,7 +663,7 @@ object GraniteEngine {
 
             // Carrega libs QNN na ordem correta ANTES de tocar na sessão.
             val htpArch = if (qnnBackend == "htp") {
-                val arch = QairtDependencyManager.htpArchitecture()
+                val arch = QairtDependencyManager.htpArchitecture(context)
                 if (arch == null) {
                     lastErrorMessage = "Arquitetura HTP não detectada neste aparelho."
                     return false

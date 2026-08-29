@@ -265,8 +265,9 @@ class GraniteEngineTest {
     @Test
     fun `download size fallback matches R2 file sum`() {
         // A soma dos tamanhos reais publicados no R2 (verificados via HEAD).
+        // O modelo FP16 agora é o granite-5.0-turboctc-fp16-gather.onnx (Slice→Gather).
         val realSum =
-            865_408L + 1_891_581_952L + 946_697_596L + 945_790_976L + 303L +
+            865_408L + 1_891_581_952L + 946_740_875L + 945_790_976L + 303L +
                 82_240L + 2_048L + 177_439L + 640_793L + 209_532_928L
         assertEquals(realSum, GraniteEngine.FALLBACK_PACKAGE_BYTES)
     }
