@@ -1,0 +1,222 @@
+================================================================================
+RELATÓRIO — DO BECO SEM SAÍDA À VITÓRIA: GPU/NPU NO GRANITE (29/08/2026)
+SIG Android — OnePlus 15 (SM8850, Snapdragon 8 Elite Gen 5, Android 16)
+================================================================================
+
+Este relatório narra, em detalhe, a jornada a partir do momento em que
+acreditávamos estar num beco sem saída para NPU/GPU no Granite — e como cada
+bloqueio foi quebrado até o funcionamento completo em CPU, GPU e NPU.
+
+--------------------------------------------------------------------------------
+1. O CENÁRIO DE PARTIDA (o "beco sem saída")
+--------------------------------------------------------------------------------
+
+Contexto: o Granite Speech 5.0 Turbo (e o 4.1 NAR) rodavam só em CPU. O objetivo
+era usar GPU (Adreno) e NPU (Hexagon) via QNN EP do ONNX Runtime. O NNAPI
+(deprecado) dava ANEURALNETWORKS_BAD_DATA.
+
+Dois becos sem saída pareciam definitivos:
+
+BECO 1 — GPU (Adreno): "Failed to finalize QNN graph. Error code: 6020"
+  - Mesmo após converter Slice→Gather (fix do 3110), o 6020 persistia em
+    FP16-int64, FP16-int32 e F32. Conclusão provisória: o QNN GPU EP do ORT
+    1.29 não compila modelos grandes de atenção.
+
+BECO 2 — NPU (Hexagon): "library libhidlbase.so not found" / namespace isolation
+  - O stub HTP precisava de libcdsprpc.so (FastRPC) + libhidlbase.so etc., todas
+    do /vendor. O namespace do app (clns-9) não as encontrava, mesmo copiadas.
+  - Tentamos copiar libs do vendor, registerNativeLibraryDir, System.load com
+    caminho... e nada resolvia o libhidlbase.
+  - O qnn-platform-validator (shell/root) passava; o app não. Veredito provisório:
+    "Android 16 sem root bloqueia HTP" (risco R1 do plano).
+
+--------------------------------------------------------------------------------
+2. A VIRADA — COMO O "BECO" FOI QUEBRADO
+--------------------------------------------------------------------------------
+
+2.1 A pista que mudou tudo: QairtSmokeTestActivity (build debug)
+
+Durante a investigação do OOM do NAR, o logcat revelou uma Activity de smoke
+test que NÃO estava no fluxo normal da UI (app/src/debug/):
+
+  QairtSmoke: HTP_STUB_OK arch=v81
+  QairtSmoke: HTP_LIBS_OK arch=v81
+  QairtSmoke: ONNX session criada (NPU (QNN HTP))
+  QairtSmoke: HTP_SESSION_OK
+  QairtSmoke: HTP_INFERENCE_PROGRESS 100
+  QairtSmoke: HTP_INFERENCE_OK chars=90
+    text=the quick brown fox jumps over the lazy dog welcome to the granite speech recognition test
+
+O HTP FUNCIONAVA. A sessão ONNX com NPU (QNN HTP) era criada e a inferência
+rodava no DSP com texto correto. Isso provou que o "beco do NPU" era, na
+verdade, uma integração incompleta — não um bloqueio do Android.
+
+2.2 A causa raiz real do NPU (documentada no qairt-status.md)
+
+- O OnePlus publica libcdsprpc.so e libadsprpc.so em
+  /vendor/etc/public.libraries.txt.
+- Com targetSdk 31+, o Android 12+ só coloca essas libs públicas do fabricante
+  no namespace do app quando declaradas via <uses-native-library>.
+- O AndroidManifest.xml JÁ tinha:
+      <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+      <uses-native-library android:name="libadsprpc.so" android:required="false" />
+  (adicionado numa sessão anterior, era a chave que faltava).
+- Copiar libs do /vendor para o diretório privado do app era a abordagem ERRADA:
+  a cópia passava a resolver libhidlbase.so no namespace do app e gerava a
+  falha interpretada como dead end.
+
+Correções definitivas do QNN (commit 86c1dda + 75f7cd8):
+1. QairtDependencyManager: System.loadLibrary("cdsprpc") ANTES do stub HTP,
+   usando a lib pública do vendor (em vez de cópia privada).
+2. htpArchitecture(context): System.loadLibrary → System.load(caminho completo)
+   das libs QAIRT baixadas no R2 (o loadLibrary procurava no dir do APK).
+3. ADSP_LIBRARY_PATH: System.setProperty → android.system.Os.setenv (FastRPC
+   lê via getenv(), não via propriedade Java).
+4. registerNativeLibraryDir(libDir) no loadQnnNatives (dependências por nome).
+
+--------------------------------------------------------------------------------
+3. OS ERROS DO NAR E COMO FORAM CORRIGIDOS (um a um)
+--------------------------------------------------------------------------------
+
+O Granite 4.1 NAR (3 modelos: encoder + projector + LLM) tinha uma cadeia de
+erros de memória e de API. Cada fix revelou o próximo:
+
+3.1 Erro: java.lang.OutOfMemoryError no load (GraniteNarEngine.kt:405)
+    "Failed to allocate a 4110408 byte allocation..."
+    Causa: File(dir, EMBED_FILE).readBytes() tentava ler nar_embed_tokens.bin
+    (411 MB) inteiro num ByteArray Java — heap limit 256 MB.
+    Fix: mmap via RandomAccessFile.channel.map(READ_ONLY) + ByteBuffer
+    LITTLE_ENDIAN; embedToken() lê com getShort(pos). Páginas sob demanda,
+    fora do heap Java.
+
+3.2 Erro: java.util.Optional cannot be cast to ai.onnxruntime.OnnxTensor
+    Causa: no ORT Java 1.29, Result.get(String) retorna Optional<OnnxValue>;
+    o NAR usava (encOut["encoder_bpe_logits"] as OnnxTensor) → ClassCast.
+    (O Turbo não quebrava porque usava outputs[0] posicional, que retorna
+    OnnxValue direto.)
+    Fix: .get() antes do cast, nos 5 pontos (encoder_bpe_logits,
+    multilayer_features, audio_embeds, logits — leitura + close).
+
+3.3 Erro: OutOfMemoryError com alocação de 200704016 bytes (~191 MB)
+    (GraniteNarEngine.kt:483)
+    Causa: val bpeLogitsArr = FloatArray(bpeLogits.remaining()) copiava os
+    logits do encoder ([~500 frames, 100352 vocab] × 4 = ~200 MB) para o heap.
+    Fix: GraniteNarCtc.collapseLogits(FloatBuffer, frames, vocab) lê direto do
+    buffer do ORT, sem copiar (com overload FloatArray para testes).
+    ⚠️ Detalhe crítico: o collapse precisa rodar ANTES do close() do tensor
+    (o buffer fica inválido depois).
+
+3.4 Erro: OOM persistente (alocação de 32768016 bytes ≈ 32,7 MB) com growth
+    limit 268435456 (256 MB)
+    Causa: o heap Java continuava limitado a 256 MB — o android:largeHeap="true"
+    estava só na GraniteActivity, mas o atributo é avaliado no processo; na
+    prática o NAR estourava no pico (~230 MB+ com as cópias restantes).
+    Fix: mover android:largeHeap="true" para o <application> (processo inteiro)
+    → heap Java sobe para 512 MB (dalvik.vm.heapsize=512m no device).
+    ESTE foi o destravador final do NAR.
+
+3.5 Resultado: Granite 4.1 NAR transcreve com sucesso em CPU, GPU E NPU
+    (teste.wav 2,2s → "the book is on the table" + "Transcrição concluída!").
+
+--------------------------------------------------------------------------------
+4. O QUE FOI MUDADO NO CÓDIGO (resumo por arquivo)
+--------------------------------------------------------------------------------
+
+app/src/main/java/br/gov/sp/pcsp/launcher/GraniteNarEngine.kt:
+  - embed: ByteArray → java.nio.ByteBuffer (mmap do nar_embed_tokens.bin)
+  - load(): RandomAccessFile.channel.map(READ_ONLY) + order(LITTLE_ENDIAN)
+  - embedToken(): getShort(pos) em vez de ler bytes manualmente
+  - collapseLogits(FloatBuffer,...): lê direto do buffer do ORT (sem cópia)
+  - .get() nos outputs nomeados do ORT (5 pontos)
+
+app/src/main/java/br/gov/sp/pcsp/launcher/QairtDependencyManager.kt:
+  - htpArchitecture(context): System.load(caminho completo) das libs QAIRT
+  - loadQnnNatives: registerNativeLibraryDir(libDir) ANTES do load
+  - System.loadLibrary("cdsprpc") (lib pública do vendor) antes do stub HTP
+  - ADSP_LIBRARY_PATH via android.system.Os.setenv (getenv nativo)
+
+app/src/main/AndroidManifest.xml:
+  - <application android:largeHeap="true"> (heap 512 MB)
+  - <uses-native-library> libcdsprpc.so / libadsprpc.so (já existia, mantido)
+
+app/src/main/java/br/gov/sp/pcsp/launcher/GraniteActivity.kt:
+  - Fluxo de transcrição com status "Carregando modelo", backend efetivo,
+    fallback com diálogo (integração com os fixes do engine)
+
+app/src/debug/ (novo):
+  - QairtSmokeTestActivity.kt: entrypoint de aceitação QNN via adb
+    (carga das libs, sessão NPU, inferência) sem depender da UI.
+  - AndroidManifest.xml (debug): registra a activity.
+
+app/src/test/java/br/gov/sp/pcsp/launcher/QairtDependencyManagerTest.kt:
+  - Testes novos para os caminhos de carga/detecção.
+
+docs/qairt-status.md:
+  - Status completo do device + validação NAR + lições aprendidas.
+
+docs/relatorio-qnn-gpu-npu-20260829.txt:
+  - Relatório anterior (objetivo, histórico, becos, arquivos).
+
+--------------------------------------------------------------------------------
+5. PROGRESSO MEDIDO
+--------------------------------------------------------------------------------
+
+| Etapa | Antes | Depois |
+|---|---|---|
+| Granite 5.0 Turbo CPU | ✅ funcionava | ✅ |
+| Granite 5.0 Turbo GPU | ❌ 6020 | ❌ 6020 (backend GPU do ORT 1.29 não compila o grafo grande; NÃO é o modelo — F32 também falha) |
+| Granite 5.0 Turbo NPU | ❌ "libhidlbase not found" | ✅ FUNCIONA (sessão HTP + inferência correta) |
+| Granite 4.1 NAR CPU | ❌ OOM 411 MB | ✅ FUNCIONA |
+| Granite 4.1 NAR GPU | ❌ OOM | ✅ FUNCIONA |
+| Granite 4.1 NAR NPU | ❌ OOM | ✅ FUNCIONA (mais lento que CPU — ver abaixo) |
+
+NPU mais lento que CPU no NAR (observado):
+- Modelo FP16 (não INT8) — HTP é otimizado para INT8 (D2: QDQ INT8 é fase 2)
+- 3 grafos HTP compilados por sessão
+- Áudio de teste curto (2,2s): overhead FastRPC por janela domina
+- CPU do Snapdragon 8 Elite é muito rápida (núcleos Oryon)
+- Recomendação: medir com áudio 30s+ para ver ganho real
+
+--------------------------------------------------------------------------------
+6. LIÇÕES APRENDIDAS (vacinas formais)
+--------------------------------------------------------------------------------
+
+1. "Beco sem saída" muitas vezes é integração incompleta: o HTP sempre foi
+   viável; faltava declarar as libs públicas do vendor (<uses-native-library>)
+   e carregar na ordem certa. SEMPRE esgotar a hipótese de integração antes de
+   concluir bloqueio de plataforma.
+2. Libs públicas do vendor (targetSdk 31+): declarar com <uses-native-library>.
+   Copiar libs de /vendor para o app QUEBRA a resolução transitiva e não
+   substitui a declaração.
+3. Variáveis de ambiente para código nativo: System.setProperty não altera
+   getenv(); usar android.system.Os.setenv.
+4. ORT Java: Result.get(String) retorna Optional; get(int) retorna direto.
+   Sempre .get() antes do cast em outputs nomeados.
+5. Arquivos grandes (411 MB): readBytes() estoura o heap Java; usar mmap
+   (MappedByteBuffer) — páginas sob demanda, fora do heap.
+6. Tensores enormes do ORT (200 MB): processar direto do FloatBuffer, não
+   copiar para FloatArray; fechar o tensor SÓ depois de consumir o buffer.
+7. android:largeHeap: colocar no <application> (processo), não só na activity,
+   para garantir o heap maior em qualquer entry point.
+8. QNN GPU do ORT 1.29: não confiar para modelos grandes de atenção
+   (6020 na finalização); o NPU (HTP) é o caminho viável no Snapdragon.
+9. Bucket R2 do SIG Android é "sig-android" (não "sig" do Windows).
+10. APK debug com smoke test (QairtSmokeTestActivity) permite aceitar o
+    hardware via adb sem depender da UI — ferramenta valiosa de diagnóstico.
+
+--------------------------------------------------------------------------------
+7. COMMITS E ENTREGAS
+--------------------------------------------------------------------------------
+
+- 0eb4a69 — UI: check de modelo baixado, STT (Granite), remoção Teste NPU
+- 86c1dda — Slice→Gather, htpArchitecture com caminho, vacina bucket R2,
+            docs com veredito inicial
+- 75f7cd8 — Fixes de memória do NAR (mmap, CTC FloatBuffer, largeHeap app),
+            FastRPC público via uses-native-library, QairtSmokeTestActivity,
+            docs qairt-status + relatório
+- APK final: O:\SIG-Android-Granite-20260829.apk
+  (MD5 5b743e40a0db84b49e7d77861f88604b, 8,87 MB, gates verdes)
+
+================================================================================
+FIM DO RELATÓRIO
+================================================================================
