@@ -15,6 +15,7 @@
     <application
         android:label="SIG"
         android:name=".SigApplication"
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
@@ -25,6 +26,17 @@
 
         <uses-native-library
             android:name="libOpenCL.so"
+            android:required="false" />
+
+        <!-- FastRPC exposto pelo vendor em /vendor/etc/public.libraries.txt.
+             Desde targetSdk 31, libs nativas públicas do fabricante só entram no
+             namespace do app quando declaradas aqui. Mantemos opcionais porque o
+             SIG também precisa instalar e funcionar em aparelhos não-Qualcomm. -->
+        <uses-native-library
+            android:name="libcdsprpc.so"
+            android:required="false" />
+        <uses-native-library
+            android:name="libadsprpc.so"
             android:required="false" />
 
         <!-- O onnxruntime-android registra um ContentProvider (TelemetryInitializer) que roda

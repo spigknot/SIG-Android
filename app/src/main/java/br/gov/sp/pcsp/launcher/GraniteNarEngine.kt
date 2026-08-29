@@ -149,15 +149,20 @@ class GraniteNarFrontend(
 object GraniteNarCtc {
     const val BLANK = 100257
 
-    /** argmax + unique_consecutive + remove blank, sobre logits [frames, vocab] row-major. */
-    fun collapseLogits(logits: FloatArray, frames: Int, vocab: Int): IntArray {
+    /**
+     * argmax + unique_consecutive + remove blank, sobre logits [frames, vocab]
+     * row-major, lendo DIRETO de um FloatBuffer (output do ORT) — evita
+     * materializar os ~200 MB (frames × vocab × 4) no heap Java, que estourava
+     * com OutOfMemoryError (growth limit 256 MB) no NAR (fix 29/08).
+     */
+    fun collapseLogits(logits: java.nio.FloatBuffer, frames: Int, vocab: Int): IntArray {
         val out = ArrayList<Int>(frames)
         var prev = -1
         for (t in 0 until frames) {
             var best = 0
-            var bestVal = logits[t * vocab]
+            var bestVal = logits.get(t * vocab)
             for (v in 1 until vocab) {
-                val valv = logits[t * vocab + v]
+                val valv = logits.get(t * vocab + v)
                 if (valv > bestVal) { bestVal = valv; best = v }
             }
             if (best != prev && best != BLANK) out.add(best)
@@ -165,6 +170,10 @@ object GraniteNarCtc {
         }
         return out.toIntArray()
     }
+
+    /** Overload de conveniência para FloatArray (usado em testes/outros fluxos). */
+    fun collapseLogits(logits: FloatArray, frames: Int, vocab: Int): IntArray =
+        collapseLogits(java.nio.FloatBuffer.wrap(logits), frames, vocab)
 }
 
 /** Intercalação de slots de inserção: [blank, tok0, blank, tok1, ...]. */
@@ -215,7 +224,7 @@ object GraniteNarEngine {
     @Volatile private var llmSession: OrtSession? = null
     @Volatile private var frontend: GraniteNarFrontend? = null
     @Volatile private var vocab: List<String>? = null
-    @Volatile private var embed: ByteArray? = null
+    @Volatile private var embed: java.nio.ByteBuffer? = null
     @Volatile private var lastErrorMessage: String = ""
     @Volatile private var onnxNativesLoaded: Boolean = false
 
@@ -402,7 +411,14 @@ object GraniteNarEngine {
                 readFloatBinary(File(dir, WINDOW_FILE)),
             )
             vocab = parseVocabJson(File(dir, VOCAB_FILE).readText())
-            embed = File(dir, EMBED_FILE).readBytes()
+            // nar_embed_tokens.bin tem ~411 MB (tabela de embeddings fp16). readBytes()
+            // carregava tudo no heap Java (growth limit 256 MB) -> OutOfMemoryError.
+            // mmap (MappedByteBuffer) usa memória nativa/arquivo mapeado, fora do
+            // heap, com páginas carregadas sob demanda (fix do OOM do NAR, 29/08).
+            java.io.RandomAccessFile(File(dir, EMBED_FILE), "r").use { raf ->
+                embed = raf.channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, raf.length())
+                    .order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            }
 
             val env = OrtEnvironment.getEnvironment()
             val cpuOptions = OrtSession.SessionOptions()
@@ -426,9 +442,10 @@ object GraniteNarEngine {
     private fun embedToken(token: Int): FloatArray {
         val buf = embed ?: throw IllegalStateException("embedding não carregado")
         val out = FloatArray(HIDDEN)
-        val base = token * HIDDEN * 2
+        val base = token * HIDDEN * 2L
         for (i in 0 until HIDDEN) {
-            val h = ((buf[base + 2 * i].toInt() and 0xFF) or ((buf[base + 2 * i + 1].toInt() and 0xFF) shl 8)).toShort()
+            // MappedByteBuffer LITTLE_ENDIAN: getShort(pos) lê os 2 bytes fp16.
+            val h = buf.getShort((base + 2L * i).toInt())
             out[i] = HalfFloat.toFloat(h)
         }
         return out
@@ -470,26 +487,28 @@ object GraniteNarEngine {
         val encOut = enc.run(mapOf("input_features" to inputTensor), setOf("encoder_bpe_logits", "multilayer_features"))
         inputTensor.close()
 
-        val bpeLogits = (encOut["encoder_bpe_logits"] as OnnxTensor).floatBuffer
-        val multilayer = (encOut["multilayer_features"] as OnnxTensor).floatBuffer
-        val bpeLogitsArr = FloatArray(bpeLogits.remaining()).also { bpeLogits.get(it) }
+        val bpeLogits = (encOut["encoder_bpe_logits"].get() as OnnxTensor).floatBuffer
+        val multilayer = (encOut["multilayer_features"].get() as OnnxTensor).floatBuffer
+        // NÃO copiar bpeLogits para FloatArray (~200 MB) — o collapse lê direto do
+        // FloatBuffer (evita OOM no heap Java de 256 MB, fix 29/08).
+        // ⚠️ O collapse PRECISA rodar ANTES do close() do tensor (o buffer fica inválido).
         val multilayerArr = FloatArray(multilayer.remaining()).also { multilayer.get(it) }
-        (encOut["encoder_bpe_logits"] as OnnxTensor).close()
-        (encOut["multilayer_features"] as OnnxTensor).close()
         onProgress(25)
 
         // CTC collapse no encoder (valid frames = ceil(realFrames/4)).
         val validBpe = (realFrames + 3) / 4
-        val ctcTokens = GraniteNarCtc.collapseLogits(bpeLogitsArr, validBpe, VOCAB_SIZE)
+        val ctcTokens = GraniteNarCtc.collapseLogits(bpeLogits, validBpe, VOCAB_SIZE)
+        (encOut["encoder_bpe_logits"].get() as OnnxTensor).close()
+        (encOut["multilayer_features"].get() as OnnxTensor).close()
         onProgress(40)
 
         // Projector -> audio_embeds [402, 2048]; válidos = realFrames//5; /12 (scale).
         val projTensor = OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(multilayerArr), longArrayOf(1L, T_FIXED.toLong(), 4096L))
         val projOut = proj.run(mapOf("multilayer_features" to projTensor), setOf("audio_embeds"))
         projTensor.close()
-        val audioEmbeds = (projOut["audio_embeds"] as OnnxTensor).floatBuffer
+        val audioEmbeds = (projOut["audio_embeds"].get() as OnnxTensor).floatBuffer
         val audioEmbedsArr = FloatArray(audioEmbeds.remaining()).also { audioEmbeds.get(it) }
-        (projOut["audio_embeds"] as OnnxTensor).close()
+        (projOut["audio_embeds"].get() as OnnxTensor).close()
         onProgress(55)
 
         val validAudio = realFrames / 5
@@ -517,9 +536,9 @@ object GraniteNarEngine {
         val llmOut = llm.run(mapOf("inputs_embeds" to embedsTensor, "position_ids" to posTensor), setOf("logits"))
         embedsTensor.close()
         posTensor.close()
-        val logits = (llmOut["logits"] as OnnxTensor).floatBuffer
+        val logits = (llmOut["logits"].get() as OnnxTensor).floatBuffer
         val logitsArr = FloatArray(logits.remaining()).also { logits.get(it) }
-        (llmOut["logits"] as OnnxTensor).close()
+        (llmOut["logits"].get() as OnnxTensor).close()
         onProgress(90)
 
         // Fatia do texto + collapse + decode.

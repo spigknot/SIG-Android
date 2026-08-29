@@ -34,36 +34,78 @@
   - **F32-gather** (isolar FP16) → **6020 também** ❌
 - Conclusão: o **QNN GPU EP do ORT 1.29 não consegue compilar o modelo Granite** (4000+ nodes, atenção multi-head). Não é FP16 — é tamanho/complexidade ou limitação do backend GPU.
 
-## Fase 6 — Validação NPU (RESULTADO FINAL: ❌ BLOQUEADO pelo Android 16)
+## Fase 6 — Validação NPU (RESULTADO FINAL: ✅ FUNCIONA sem root)
 
-### Cadeia de bugs encontrados e corrigidos:
-1. **`htpArchitecture()` usava `System.loadLibrary`** (procura no dir nativo do APK) em vez de `System.load(caminho)` do dir QAIRT → "library not found"
-   - ✅ Corrigido (agora usa `System.load` com caminho completo + context)
-2. **`libcdsprpc.so` não encontrado** (FastRPC do DSP): o stub HTP precisa dela, mas o app não vê `/vendor/lib64`
-   - Copiada manualmente para o dir QAIRT → resolveu o erro
-3. **`libhidlbase.so` não encontrado** (dependência do libcdsprpc): copiada + `registerNativeLibraryDir` → **AINDA falha**
+### Causa raiz real e correção
 
-### Veredito NPU: **namespace isolation do Android 16 bloqueia** ❌
-- O app (`namespace clns-9`) **não pode carregar libs do vendor** (`/vendor/lib64`) mesmo copiadas para o app
-- `libcdsprpc.so` (do vendor) depende de `libhidlbase.so` etc. (também vendor) que o namespace não expõe
-- **Risco R1 do plano CONFIRMADO**: HTP em app sem root não carrega no Android 16
-- O `qnn-platform-validator` funcionava porque roda como **root/shell** (sem namespace isolation)
+O veredito anterior confundiu uma integração incompleta com bloqueio do Android.
+O próprio OnePlus publica `libcdsprpc.so` e `libadsprpc.so` em
+`/vendor/etc/public.libraries.txt`. Como o app usa `targetSdk 35`, o Android 12+
+só coloca essas bibliotecas nativas públicas do fabricante no namespace do app
+quando elas são declaradas por `<uses-native-library>`.
+
+Correções aplicadas:
+
+1. `AndroidManifest.xml`: `libcdsprpc.so` e `libadsprpc.so` declaradas com
+   `android:required="false"` (o app continua instalável em não-Qualcomm).
+2. `QairtDependencyManager`: `System.loadLibrary("cdsprpc")` executado antes do
+   stub HTP, usando a biblioteca pública do vendor em vez de uma cópia privada.
+3. `ADSP_LIBRARY_PATH`: trocado `System.setProperty` por
+   `android.system.Os.setenv`; FastRPC lê a variável nativa via `getenv()`.
+4. Mantido `System.load(caminho completo)` para as libs QAIRT baixadas no R2.
+
+Copiar `/vendor/lib64/libcdsprpc.so` para o diretório privado era a abordagem
+errada: a cópia passava a resolver `libhidlbase.so` no namespace do app e gerava
+a falha que foi interpretada como dead end.
+
+### Prova funcional no app normal
+
+Executada no OnePlus 15, Android 16, app UID normal, sem root, após mover para
+quarentena todas as cópias privadas de `libcdsprpc`, `libadsprpc`,
+`libhidlbase`, `libhidltransport` e `libhwbinder`:
+
+| Etapa | Resultado |
+|---|---|
+| FastRPC público | `load: OK libcdsprpc.so (vendor public native library)` |
+| Stub/arquitetura | `HTP_STUB_OK arch=v81` |
+| Runtime HTP | `HTP_LIBS_OK arch=v81` |
+| Compilação do Granite FP16 Gather | `ONNX session criada (NPU (QNN HTP))` |
+| Inferência real | `HTP_INFERENCE_PROGRESS 100` |
+| Transcrição | `the quick brown fox jumps over the lazy dog welcome to the granite speech recognition test` |
+
+A sessão levou aproximadamente 25 s para ser preparada; a inferência do áudio
+curto terminou em menos de 1 s. O entrypoint reproduzível existe apenas no build
+debug: `QairtSmokeTestActivity`.
+
+## VALIDAÇÃO DO 4.1 NAR (29/08 18:30) — ✅ FUNCIONA em CPU/GPU/NPU
+
+Após os fixes de memória do NAR, o Granite 4.1 NAR transcreve com sucesso nos 3
+backends (teste.wav → "the book is on the table" + "Transcrição concluída").
+
+Fixes do NAR (OOM Java, heap limit 256 MB):
+1. **mmap do `nar_embed_tokens.bin`** (411 MB): `readBytes()` → `RandomAccessFile.channel.map(READ_ONLY)` + `ByteBuffer` LITTLE_ENDIAN; `embedToken()` lê com `getShort()`. (OOM no load, linha 405.)
+2. **`.get()` nos outputs nomeados do ORT**: `Result.get(String)` retorna `Optional<OnnxValue>`; o NAR usava `(encOut["x"] as OnnxTensor)` → ClassCastException. Corrigido nos 5 pontos (encoder/projector/LLM).
+3. **CTC collapse direto do FloatBuffer**: `bpeLogits` do encoder é `[~500, 100352]` ≈ **200 MB**; `FloatArray(...)` estourava o heap. `GraniteNarCtc.collapseLogits(FloatBuffer,...)` lê direto, sem copiar. ⚠️ collapse ANTES do `close()` do tensor (buffer inválido depois).
+4. **`android:largeHeap="true"` no `<application>`** (estava só na activity): heap Java sobe para 512 MB — foi o que destravou o NAR (precisava de ~230 MB+ no pico com as cópias restantes).
+
+Observação: NPU foi o MAIS LENTO dos 3 no NAR — provável causa: modelo FP16 (não INT8, D2 fase 2), 3 grafos HTP compilados por sessão, e áudio curto (2,2s) onde o overhead FastRPC domina. Medir com áudio maior (30s+) para ver ganho real.
 
 ## LIÇÕES APRENDIDAS (vacinas)
 1. **QNN GPU do ORT 1.29**: não confiar para modelos grandes de atenção (testar com modelo pequeno antes)
-2. **HTP em app sem root no Android 11+**: bloqueado por namespace isolation (libs vendor). O validator funciona mas o app NÃO — não prometer NPU sem root
-3. **`System.load(caminho)` não adiciona o dir ao path de dependências** — usar `registerNativeLibraryDir` (NativeDependencyManager) para libs com dependências
+2. **Libs públicas do vendor em targetSdk 31+**: declarar com `<uses-native-library>`; copiar libs de `/vendor` para o app quebra a resolução transitiva e não substitui a declaração
+3. **Variáveis para código nativo**: `System.setProperty` não altera `getenv()`; usar `Os.setenv` para `ADSP_LIBRARY_PATH`
 4. **Bucket R2 do SIG Android é `sig-android`** (não `sig` do Windows) — o `r2_config.json` do repo agora tem bucket/public_base completos (UPDATE.md linha 18)
 
 ## ESTADO ATUAL DO CÓDIGO (29/08 14:15)
 - `GraniteEngine.kt`: revertido ao estado limpo (GPU/NPU usam FP16-gather; sem logs temporários)
-- `QairtDependencyManager.kt`: `htpArchitecture(context)` corrigido (System.load com caminho) + `registerNativeLibraryDir` no loadQnnNatives (KEEP — correto mesmo que NPU esteja bloqueado no device)
+- `QairtDependencyManager.kt`: FastRPC público + `htpArchitecture(context)` + `Os.setenv(ADSP_LIBRARY_PATH)` validados no app
+- `AndroidManifest.xml`: `libcdsprpc.so`/`libadsprpc.so` opcionais
+- Build debug: `QairtSmokeTestActivity` permite repetir carga, sessão e inferência via adb
 - Gates verdes: testDebugUnitTest + lintDebug + assembleDebug ✅
 - Modelos: FP16-gather publicado no R2; F32-gather existe local (diagnóstico, não publicado)
 - APK em `O:` NÃO re-publicado ainda (aguarda decisão do usuário)
 
 ## PRÓXIMOS PASSOS POSSÍVEIS (decisão do usuário)
-1. **Aceitar CPU-only** para o Granite 5.0 (remover/desabilitar GPU/NPU com mensagem honesta)
-2. **Investigar alternativa**: NNAPI (deprecado), GPU via outra rota (ex.: QNN CPU backend — não acelera), ou ORT mais novo
-3. **Root no OnePlus 15** (destrava HTP) — decisão do usuário
-4. Manter GPU/NPU como estão (fallback honesto com diálogo) — código já faz isso
+1. Manter NPU (QNN HTP) habilitado: sessão e inferência reais estão aprovadas sem root
+2. Para GPU, testar um QNN EP mais novo ou particionar o grafo em subgrafos menores; o erro 6020 permanece específico do backend GPU atual
+3. Manter o fallback GPU→CPU com confirmação e registrar no relatório o backend efetivamente usado

@@ -436,8 +436,12 @@ object GraniteEngine {
     @Volatile private var decoder: GraniteDecoder? = null
     @Volatile private var lastErrorMessage: String = ""
     @Volatile private var onnxNativesLoaded: Boolean = false
+    @Volatile private var lastLoadedBackend: GraniteExecutionBackend? = null
 
     fun lastError(): String = lastErrorMessage
+
+    /** Backend da sessão criada com sucesso, incluindo eventual fallback. */
+    fun loadedBackend(): GraniteExecutionBackend? = lastLoadedBackend
 
     /** Captura a causa raiz completa (mensagem + stack trace) de uma exceção. */
     private fun describeError(e: Throwable): String {
@@ -617,6 +621,7 @@ object GraniteEngine {
         onFallbackPrompt: (String) -> Boolean = { true },
     ): Boolean {
         return try {
+            lastLoadedBackend = null
             // As libs nativas do ONNX Runtime vêm do pacote R2 (baixado na 1ª
             // execução), não do APK.
             if (!NativeDependencyManager.activateIfInstalled(context)) {
@@ -649,6 +654,7 @@ object GraniteEngine {
                 val cpuOptions = OrtSession.SessionOptions()
                 cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
                 session = env.createSession(modelPath.absolutePath, cpuOptions)
+                lastLoadedBackend = GraniteExecutionBackend.CPU
                 onLog("ONNX session criada (CPU)")
                 return true
             }
@@ -687,6 +693,7 @@ object GraniteEngine {
                 val cpuOptions = OrtSession.SessionOptions()
                 cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
                 session = env.createSession(modelFile(context).absolutePath, cpuOptions)
+                lastLoadedBackend = GraniteExecutionBackend.CPU
                 onLog("ONNX session criada (CPU, fallback QNN)")
                 return true
             }
@@ -715,12 +722,14 @@ object GraniteEngine {
                 val cpuOptions = OrtSession.SessionOptions()
                 cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
                 session = env.createSession(modelFile(context).absolutePath, cpuOptions)
+                lastLoadedBackend = GraniteExecutionBackend.CPU
                 onLog("ONNX session criada (CPU, fallback QNN indisponível)")
                 return true
             }
 
             try {
                 session = env.createSession(modelPath.absolutePath, qnnOptions)
+                lastLoadedBackend = backend
                 onLog("ONNX session criada (${backend.reportLabel})")
                 return true
             } catch (e: Throwable) {
@@ -738,6 +747,7 @@ object GraniteEngine {
             val cpuOptions = OrtSession.SessionOptions()
             cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
             session = env.createSession(modelFile(context).absolutePath, cpuOptions)
+            lastLoadedBackend = GraniteExecutionBackend.CPU
             onLog("ONNX session criada (CPU, fallback)")
             true
     } catch (e: Throwable) {

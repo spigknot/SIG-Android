@@ -1,0 +1,387 @@
+================================================================================
+RELATÓRIO DETALHADO — ACELERAÇÃO GPU/NPU VIA QNN (QAIRT) NO GRANITE SPEECH 5.0
+SIG ANDROID — OnePlus 15 (SM8850)
+Data do relatório: 29/08/2026
+================================================================================
+
+--------------------------------------------------------------------------------
+CORREÇÃO PÓS-RELATÓRIO — 29/08/2026
+--------------------------------------------------------------------------------
+
+O veredito de dead end do NPU nas seções 5 e 8 está INCORRETO. O OnePlus 15
+publica libcdsprpc.so/libadsprpc.so em /vendor/etc/public.libraries.txt. Como o
+app mira targetSdk 35, faltava declará-las com <uses-native-library> no manifesto.
+
+Após declarar as libs como opcionais, carregar libcdsprpc pelo namespace público
+do vendor e trocar System.setProperty por Os.setenv para ADSP_LIBRARY_PATH:
+- stub HTP v81 carregou no app sem root;
+- todas as libs QNN HTP carregaram;
+- a sessão Granite FP16 Gather foi compilada no NPU;
+- test_en_16k.wav foi inferido e transcrito corretamente.
+
+A prova foi repetida depois de retirar do diretório ativo todas as cópias manuais
+de libcdsprpc/libadsprpc/libhidlbase/libhidltransport/libhwbinder. Portanto, o
+resultado usa as libs públicas do sistema e NÃO depende de root nem de cópias.
+
+Veredito corrigido: o projeto NÃO está num dead end. NPU (QNN HTP) funciona.
+O erro 6020 do GPU permanece como limitação independente do QNN GPU/ORT atual.
+Evidência e comandos reproduzíveis: docs/qairt-status.md.
+
+--------------------------------------------------------------------------------
+1. OBJETIVO DO TRABALHO
+--------------------------------------------------------------------------------
+
+Fazer "GPU (Adreno)" e "NPU (Hexagon)" virarem backends REAIS e distintos no
+Granite Speech 5.0 TurboCTC local (GraniteActivity/GraniteEngine.kt) do app SIG
+Android, usando o QNN Execution Provider (EP) do ONNX Runtime.
+
+Motivação:
+- O NNAPI (antigo caminho de aceleração) está deprecado e dava o erro
+  ANEURALNETWORKS_BAD_DATA no device.
+- A transcrição local do Granite 5.0 (modelo ~470M, ~1,9 GB FP32) roda só em CPU,
+  que é lenta. A ideia era usar o Adreno (GPU) e o Hexagon (NPU) do Snapdragon
+  8 Elite Gen 5 para acelerar.
+
+Aparelho alvo: OnePlus 15 (CPH2747), Snapdragon 8 Elite Gen 5 (SM8850),
+platform "canoe", Android 16 (SDK 36).
+
+Restrições do projeto:
+- APK < 10 MB: as libs QNN (QAIRT) e os modelos NÃO podem ir embutidos no APK;
+  são baixados sob demanda do Cloudflare R2.
+- Não usar NNAPI.
+- Fallback para CPU SEMPRE com diálogo de confirmação (nunca silencioso).
+- Regra de release: NUNCA gerar release sem pedido explícito do usuário.
+
+--------------------------------------------------------------------------------
+2. O QUE JÁ ESTAVA FEITO (28/08, commit ab868fc..f0cd68a na main)
+--------------------------------------------------------------------------------
+
+Fase 1 — Pacote QAIRT no R2:
+- Script tools/qairt/build-qairt-r2-package.ps1 empacota as libs QNN (GPU+HTP+
+  stubs+skels v73/75/79/81).
+- Publicado: packages/qairt/sig-qairt-arm64-v8a-v1.zip (53,1 MB, SHA-256
+  df879cd7...), com libQnnSystem/Gpu/Htp/HtpPrepare + stubs/skels.
+
+Fase 2 — Modelo FP16 exportado do PyTorch:
+- tools/granite/export_fp16_torch.py: wrapper com cast nas bordas (I/O fp32,
+  pesos fp16), 0,00% divergência vs F32.
+- Publicado: models/granite/5.0-turbo/granite-5.0-turboctc-fp16-ext.onnx + .data
+  (~947 MB). NÃO usar onnxconverter_common (falha com MatMul type mismatch).
+
+Fase 3 — Dependência QNN:
+- onnxruntime-android-qnn:1.29.0 no app/build.gradle (QNN EP já embutido no
+  libonnxruntime.so oficial do Maven).
+- Pacote nativo v3 publicado no R2 (sig-android-dependencies-v3-<abi>.zip).
+  NativeDependencyManager.kt: COMPONENT_VERSION="3". Porta verify-native-
+  dependencies.ps1 -Version 3 → ACEITO.
+
+Fase 4 — QairtDependencyManager.kt (novo):
+- isQualcommDevice(), htpArchitecture() (tenta stub v81→v79→v75→v73),
+  install() com SHA-256, loadQnnNatives() na ordem:
+  libQnnSystem.so → libQnnGpu.so (GPU) OU libQnnHtp.so + libQnnHtpPrepare.so +
+  stub (HTP); seta ADSP_LIBRARY_PATH para o dir dos skels.
+
+Fase 5 — GraniteEngine.kt:
+- Enum: CPU / GPU_QNN("GPU (Adreno)") / NPU_QNN_HTP("NPU (Hexagon)") — NNAPI
+  REMOVIDO.
+- load() usa modelo FP16 quando accelerated, addQnn() com backend_path +
+  offload_graph_io_quantization + enable_htp_fp16_precision (este último SÓ no
+  HTP), fallback SEMPRE com diálogo de confirmação.
+- GraniteActivity: em não-Qualcomm, GPU/NPU desabilitados com "?" (D5);
+  primeiro uso baixa QAIRT com progresso.
+- Testes JVM: QairtDependencyManagerTest (10) + GraniteBackendMappingTest (9).
+- Gates verdes: testDebugUnitTest + lintDebug + assembleDebug.
+- APK 8,5 MB em O:.
+
+Decisões do usuário confirmadas (D1-D5):
+- D1: todos os skels v73-81 no pacote (~53 MB)
+- D2: NPU começa com FP16; QDQ INT8 como fase 2
+- D3: "GPU (Adreno)" e "NPU (Hexagon)" como opções separadas
+- D4: manter diálogo "Deseja continuar com CPU?"
+- D5: não-Qualcomm: opções desabilitadas + "?" com explicação
+
+--------------------------------------------------------------------------------
+3. O QUE FOI FEITO EM 29/08 (esta sessão)
+--------------------------------------------------------------------------------
+
+3.1 Fase 0 — Diagnóstico no aparelho (concluído com sucesso)
+- adb devices: OK (3B15BD00FVE00000).
+- getprop: SM8850 / QTI / canoe / Android 16 / SDK 36. (Nota: o plano previa
+  SM8750; o aparelho real é o SM8850 — Snapdragon 8 Elite Gen 5, mais novo.)
+- qnn-platform-validator --backend gpu: Hardware Supported, Libraries Found.
+- qnn-platform-validator --backend dsp: Hardware Supported, Libraries Found.
+- SMOKE TEST HTP SEM ROOT (risco R1, o mais crítico): push das libs para
+  /data/local/tmp e execução do unit test da calculadora (CalculatorStub v81):
+  PASSED — "Success in executing the sum function". Conclusão parcial: o skel
+  unsigned carrega via FastRPC quando executado como shell/root.
+- Verificados downloads R2 (HTTP 200): QAIRT 55.682.231 bytes (bate com o
+  PACKAGE_BYTES do código), FP16 946.697.596 bytes.
+
+3.2 Fase 6 — Validação no aparelho (resultado: NÃO FUNCIONOU, ver becos)
+- APK instalado (8,87 MB), libs nativas v3 ativadas (log SigNative OK).
+- QAIRT já instalado no device (no_backup/qairt/v1) com as 12 libs corretas.
+- Modelo FP16 + F32 completos em granite_models/ (~4,9 GB) — nada a baixar.
+- Navegação no app via adb (uiautomator) + seleção manual do teste.wav pelo
+  usuário (o MediaStore do OnePlus não indexa arquivos adicionados via adb).
+
+3.3 Melhorias de UI entregues (pedidos do usuário no meio da sessão)
+- Menu de modelos do Granite agora prefixa "✓ " nos modelos já baixados
+  (mesmo padrão do Whisper) e resolve o clique por itemId (não por label, que
+  quebraria com o "✓ ").
+- Menu Ferramentas: botão "Granite" renomeado para "STT (Granite)".
+- Menu Ferramentas: "STT (Granite)" e "Ocorrência" trocados de lugar.
+- Botão "Teste NPU" removido completamente (XML + handler + import).
+- Commit 0eb4a69 (antes da investigação QNN).
+
+3.4 Investigação QNN GPU (detalhada na seção 4)
+3.5 Investigação QNN NPU/HTP (detalhada na seção 5)
+3.6 Vacinas / correções permanentes (seção 6)
+
+--------------------------------------------------------------------------------
+4. INVESTIGAÇÃO GPU (ADRENO) — BECO SEM SAÍDA
+--------------------------------------------------------------------------------
+
+4.1 Bloqueio 1: StridedSlice rejeitado (RESOLVIDO)
+Sintoma (logcat):
+  [W:onnxruntime:, qnn_model_wrapper.cc:468 CreateQnnNode] QNN.backendValidateOpConfig()
+  failed for node `/model/encoder/Slice` of type `StridedSlice` with error code 3110
+  ... (4 nodes por tentativa; depois aborta)
+  [E:onnxruntime:, qnn_model.cc:387 FinalizeGraphs] Failed to finalize QNN graph. Error code: 6020
+
+Diagnóstico:
+- 3110 = QNN_OP_CONFIG_ERROR — o backend GPU rejeita a config do op.
+- O modelo tem 404 nodes Slice. Acontece MESMO com params constantes e steps=1
+  (slices simples [0:2], [2:4]... da atenção multi-head; e no-ops [0:512]).
+
+Solução aplicada:
+- Script tools/granite/convert_slice_to_gather.py converte TODOS os 404 Slice
+  em Gather (400) + Identity (21 no-ops), com índices constantes.
+- Primeira versão gerou índices int64; corrigido para int32 (QNN pode exigir).
+- Validação numérica (onnxruntime CPU, input aleatório 1×512×320):
+  * int64: max abs diff 0.000000 (idêntico)
+  * int32: max abs diff 0.000000 (idêntico)
+- Modelo publicado no R2 (bucket sig-android):
+  granite-5.0-turboctc-fp16-gather.onnx (~947 MB) — HTTP 200 OK.
+- Resultado: warnings 3110 SUMIRAM do logcat (todos os ops passam na validação
+  de config).
+
+4.2 Bloqueio 2: 6020 persiste na finalização (NÃO RESOLVIDO)
+Após remover os StridedSlice, FinalizeGraphs ainda falha com 6020, agora SEM
+nenhum warning de op (falha silenciosa na compilação do grafo).
+
+Testes realizados (todos falham com 6020):
+1. FP16-gather com índices int64  → 6020
+2. FP16-gather com índices int32  → 6020
+3. F32-gather (para isolar se o problema era o FP16) → 6020 TAMBÉM
+
+Diagnósticos tentados sem sucesso:
+- setSessionLogVerbosityLevel(0) (log VERBOSE do ORT): só mostrou a limpeza de
+  initializers não usados; nenhum detalhe do op que falha.
+- qnnConfig["log_level"]="2" (log nativo do QNN): não apareceu no logcat.
+- enable_framework_op_trace=1 + framework_op_trace_dir: o dir foi criado, mas o
+  trace ficou vazio (a falha acontece antes da escrita do trace).
+
+Conclusão (beco sem saída):
+- O QNN GPU EP do ORT 1.29 (onnxruntime-android-qnn:1.29.0) NÃO consegue
+  compilar/finalizar o grafo do Granite 5.0, seja FP16 ou F32. Não é um op
+  específico (todos validam), não é o FP16 (F32 falha igual), não é o Slice
+  (removido). É limitação do backend GPU do ORT 1.29 com modelo grande de
+  atenção (4000+ nodes, 470M params) — provavelmente memória de grafo/contexto
+  ou operação interna que falha silenciosamente.
+- Não encontramos flag/config do QNN GPU EP que resolva (backend_path,
+  offload_graph_io_quantization, log_level, framework_op_trace — todas testadas).
+- Sem root e sem outra versão do ORT testável hoje, o GPU fica como beco.
+
+--------------------------------------------------------------------------------
+5. INVESTIGAÇÃO NPU (HEXAGON/HTP) — RESULTADO: FUNCIONA (Turbo), NAR morre por memória
+--------------------------------------------------------------------------------
+
+5.1 Bug 1 (RESOLVIDO): htpArchitecture() usava System.loadLibrary
+Sintoma: ao selecionar NPU, logcat:
+  Load libQnnHtpV81Stub.so ... dlopen failed: library "libQnnHtpV81Stub.so" not found
+  (idem v79/v75/v73) → "Arquitetura HTP não detectada neste aparelho."
+
+Causa: System.loadLibrary("QnnHtpV81Stub") procura no diretório nativo padrão
+do APK; mas as libs QAIRT ficam em no_backup/qairt/v1/lib (baixadas sob
+demanda). O GPU não precisava do HTP arch, por isso só o NPU quebrava.
+
+Fix: htpArchitecture(context) agora usa System.load(caminho completo) do
+arquivo no dir QAIRT (QairtDependencyManager.kt). Teste JVM existente
+("htpArchitecture order is newest first") não chama a função, então não quebrou.
+
+5.2 Bug 2 (RESOLVIDO): libcdsprpc.so não encontrado
+Sintoma: dlopen failed: library "libcdsprpc.so" not found: needed by
+.../libQnnHtpV81Stub.so in namespace clns-9.
+
+Causa: o stub HTP precisa da lib FastRPC do sistema (libcdsprpc.so, do
+/vendor/lib64) para falar com o DSP. O app não vê /vendor/lib64.
+
+Teste: copiada manualmente libcdsprpc.so + libadsprpc.so do /vendor/lib64 para
+o dir QAIRT com permissões corretas (chown u0_a591, chmod 755) → o erro de
+libcdsprpc sumiu.
+
+5.3 Bug 3 (NÃO RESOLVIDO): libhidlbase.so e a cadeia de libs VENDOR
+Sintoma: dlopen failed: library "libhidlbase.so" not found: needed by
+.../libcdsprpc.so in namespace clns-9.
+
+Tentativas:
+- Copiadas libhidlbase.so, libhidltransport.so, libhwbinder.so do /system/lib64
+  para o dir QAIRT (chown/chmod) → AINDA falha com "libhidlbase.so not found".
+- Adicionado NativeDependencyManager.registerNativeLibraryDir(libDir) no
+  loadQnnNatives (mesmo mecanismo que registra o dir no nativeLibraryPathElements
+  do classloader, que resolve as libs do ONNX Runtime) → AINDA falha.
+
+Causa raiz (beco sem saída):
+- O namespace do app (clns-9) no Android 16 NÃO permite dlopen de libs do
+  vendor (/vendor/lib64), mesmo quando o arquivo é copiado para o diretório do
+  app. O dlopen do libcdsprpc.so procura libhidlbase.so APENAS nos paths
+  permitidos do namespace, não no mesmo diretório.
+- O qnn-platform-validator funcionava porque roda como root/shell (fora do
+  isolamento de namespace de apps) — por isso o smoke test R1 deu PASSED, mas o
+  app NÃO consegue.
+- Risco R1 do plano ("skel HTP em app sem root pode não carregar") CONFIRMADO:
+  em Android 16 sem root, o HTP é inacessível de um app normal. As libs vendor
+  (FastRPC/HIDL) são necessárias e bloqueadas.
+
+--------------------------------------------------------------------------------
+6. VACINAS / CORREÇÕES PERMANENTES APLICADAS
+--------------------------------------------------------------------------------
+
+6.1 Bucket R2 correto (sig-android):
+- Durante o upload do modelo Gather, o script usou o r2_config.json do SIG
+  Windows (bucket "sig") e o modelo foi parar no bucket ERRADO (404 na URL do
+  app). O UPDATE.md já documentava a regra ("forçar bucket = sig-android") mas o
+  config do SIG Android estava incompleto.
+- Correções:
+  * release/r2_config.json do SIG Android completado com "bucket": "sig-android"
+    e "public_base": "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev"
+    (arquivo ignorado pelo git — sem vazar credenciais).
+  * release/r2_config.example.json atualizado com os campos novos.
+  * UPDATE.md linha 18 reforçado: o SIG Android usa SOMENTE o bucket sig-android;
+    NUNCA usar o config do SIG Windows.
+  * tools/granite/upload_gather_model.py lê só o config do SIG Android.
+  * Objeto errado no bucket "sig" foi removido (delete_object).
+
+6.2 Converter Slice→Gather:
+- tools/granite/convert_slice_to_gather.py (404 Slice → Gather/Identity, validação
+  numérica diff 0.0). Ferramenta reutilizável se o modelo mudar.
+
+6.3 htpArchitecture com caminho completo + registerNativeLibraryDir:
+- QairtDependencyManager.kt: htpArchitecture(context) usa System.load(caminho);
+  loadQnnNatives registra o dir no nativeLibraryPathElements (mantido — correto
+  mesmo que o NPU esteja bloqueado no device).
+
+--------------------------------------------------------------------------------
+7. ESTADO ATUAL DO CÓDIGO / ARTEFATOS (29/08 14:20)
+--------------------------------------------------------------------------------
+
+- GraniteEngine.kt: revertido ao estado limpo (GPU/NPU usam FP16-gather; sem
+  logs/traces temporários). O enum e o fallback com diálogo continuam.
+- QairtDependencyManager.kt: com os dois fixes (htpArchitecture + register).
+- GraniteEngineTest.kt: fallback size atualizado para o tamanho do novo modelo.
+- docs/qairt-status.md: criado com todo o diagnóstico (este relatório resume).
+- Modelos:
+  * granite-5.0-turboctc-fp16-gather.onnx PUBLICADO no R2 (sig-android, 200 OK).
+  * granite-5.0-turboctc-f32-gather.onnx gerado localmente para diagnóstico,
+    NÃO publicado (e removido do package/).
+- Commits na main: 0eb4a69 (UI: check modelo, STT (Granite), remoção Teste NPU)
+  e 86c1dda (Slice→Gather + fixes QNN + vacina bucket + docs).
+- APK final: O:\SIG-Android-Granite-20260829.apk (MD5 2adfa71f3a9f5be14836bf99529b53a4),
+  gates verdes (testDebugUnitTest + lintDebug + assembleDebug).
+
+--------------------------------------------------------------------------------
+8. BECOS SEM SAÍDA (resumo para decisão)
+--------------------------------------------------------------------------------
+
+BECO 1 — GPU (Adreno) com ORT 1.29:
+  O QNN GPU EP não finaliza o grafo do Granite (6020) em FP16 nem F32, com
+  todos os ops validando. Limitação do backend GPU do ORT 1.29 com modelo
+  grande de atenção. Sem solução encontrada sem trocar de versão do ORT.
+
+BECO 2 — NPU (Hexagon) sem root no Android 16:
+  O app não consegue carregar as libs vendor (libcdsprpc/libhidlbase) por causa
+  do namespace isolation. O smoke test via shell passava, mas o app falha.
+  Só root (ou ROM modificada) destravaria.
+
+--------------------------------------------------------------------------------
+9. PRÓXIMOS PASSOS POSSÍVEIS (decisão do usuário)
+--------------------------------------------------------------------------------
+
+1. Aceitar CPU-only para o Granite 5.0 (o fallback com diálogo já existe; pode
+   desabilitar/rotular GPU/NPU com mensagem honesta).
+2. Root no OnePlus 15 (destrava HTP — única rota real para NPU).
+3. Testar outra versão do ONNX Runtime (ex.: 1.30+/2.x com QNN EP mais novo)
+   ou outra via de aceleração (ex.: QNN CPU backend — sem aceleração real;
+   Vulkan/OpenCL via outra lib).
+4. Manter GPU/NPU como estão (fallback honesto) e documentar a limitação para o
+   usuário final.
+
+--------------------------------------------------------------------------------
+ANEXO A — ARQUIVOS DO PROJETO COM CÓDIGO DE INTERESSE
+--------------------------------------------------------------------------------
+
+Código-fonte principal (app/src/main/java/br/gov/sp/pcsp/launcher/):
+- GraniteEngine.kt          — engine ONNX do Granite 5.0: enum de backends
+                             (CPU/GPU_QNN/NPU_QNN_HTP), load() com QNN EP
+                             (addQnn/backend_path/offload_graph_io_quantization/
+                             enable_htp_fp16_precision), downloadPackage() do R2,
+                             packageFiles()/modelFileForBackend(), transcrição.
+- GraniteActivity.kt        — Activity do Granite: UI (menu de modelos com "✓ ",
+                             menu de backend GPU/NPU com "?" em não-Qualcomm),
+                             fluxo de download com progresso, startGraniteTranscription().
+- GraniteNarEngine.kt       — engine do modelo Granite 4.1 NAR (multilíngue).
+- GraniteParallelismSettings.kt — ajustes de paralelismo do engine.
+- QairtDependencyManager.kt — download/instalação do pacote QAIRT do R2 (SHA-256),
+                             isQualcommDevice(), htpArchitecture(context),
+                             loadQnnNatives() (ordem das libs, registerNativeLibraryDir).
+- NativeDependencyManager.kt— libs nativas do ONNX Runtime/ffmpeg (pacote v3),
+                             registerNativeLibraryDir() (nativeLibraryPathElements).
+- NativeDependencyPrompt.kt — diálogo de download dos componentes nativos.
+- ToolsActivity.kt          — hub "Ferramentas" (botões, roteamento das activities).
+- WhisperActivity.kt        — referência do padrão Whisper (menu com "✓ ", download
+                             com progresso) que o Granite passou a seguir.
+
+Layouts e config (app/src/main/):
+- res/layout/activity_tools.xml      — grade do menu Ferramentas (ordem dos botões).
+- res/layout/view_tool_granite.xml   — botão "STT (Granite)" do menu Ferramentas.
+- res/layout/activity_granite.xml    — tela do Granite.
+- res/layout/dialog_model_download.xml — diálogo de progresso de download.
+- build.gradle                       — dependência onnxruntime-android-qnn:1.29.0,
+                             packaging.jniLibs.excludes das libs onnxruntime.
+- AndroidManifest.xml                — activities (GraniteActivity, NpuTestActivity).
+
+Testes (app/src/test/java/br/gov/sp/pcsp/launcher/):
+- QairtDependencyManagerTest.kt — 10 testes JVM (detecção Qualcomm, ordem HTP...).
+- GraniteBackendMappingTest.kt  — 9 testes JVM (mapeamento de backends).
+- GraniteEngineTest.kt          — fallback size vs soma real do R2.
+- GraniteNarEngineTest.kt       — testes do engine NAR.
+
+Ferramentas/scripts (tools/ e scripts/):
+- tools/granite/convert_slice_to_gather.py — converte Slice→Gather do modelo ONNX
+                             (fix do 3110 do QNN GPU); índices int32.
+- tools/granite/upload_gather_model.py     — publica o modelo no R2 (bucket
+                             sig-android, lê release/r2_config.json).
+- tools/granite/export_fp16_torch.py       — exporta o FP16 do PyTorch (cast nas bordas).
+- tools/granite/export_fp16.py             — versão antiga (keep_io_types=False, bloqueada).
+- tools/granite/export_onnx.py             — exportação ONNX base.
+- tools/granite/map_slice_noop.py          — mapeia Slice no-op/reais (diagnóstico).
+- tools/granite/debug_slice.py             — debug dos parâmetros dos Slice.
+- tools/granite/split_external.py          — split de external data.
+- tools/granite/validate_pipeline.py       — validação do pipeline.
+- tools/qairt/build-qairt-r2-package.ps1   — empacota libs QAIRT para o R2.
+- scripts/build-android-native-dependencies.ps1 — monta o pacote nativo v3 (AAR -qnn).
+- scripts/verify-native-dependencies.ps1   — porta de aceitação do pacote nativo.
+
+Docs e release:
+- docs/qairt-status.md                — status/diagnóstico no device (este trabalho).
+- docs/relatorio-qnn-gpu-npu-20260829.txt — ESTE relatório.
+- docs/handoff-qnn-gpu-npu-20260828.md — handoff do dia anterior (comandos, planos B).
+- UPDATE.md                          — procedimento de release + regra do bucket R2.
+- release/r2_config.json             — credenciais R2 (ignorado pelo git; bucket
+                             sig-android + public_base).
+- release/r2_config.example.json     — modelo do config (com bucket/public_base).
+- release/granite_links_download.txt — links/SHAs dos arquivos do pacote Granite.
+
+================================================================================
+FIM DO RELATÓRIO
+================================================================================

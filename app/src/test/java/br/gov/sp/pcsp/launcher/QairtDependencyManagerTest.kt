@@ -130,6 +130,29 @@ class QairtDependencyManagerTest {
     }
 
     @Test
+    fun `FastRPC vendor libraries are optional in Android manifest`() {
+        assertEquals(
+            listOf("libcdsprpc.so", "libadsprpc.so"),
+            QairtDependencyManager.fastRpcManifestLibraries,
+        )
+
+        val candidates = listOf(
+            File("src/main/AndroidManifest.xml"),
+            File("app/src/main/AndroidManifest.xml"),
+        )
+        val manifest = candidates.firstOrNull(File::isFile)
+            ?: error("AndroidManifest.xml não encontrado a partir de ${File(".").absolutePath}")
+        val xml = manifest.readText()
+        QairtDependencyManager.fastRpcManifestLibraries.forEach { library ->
+            val declaration = Regex(
+                """<uses-native-library\s+android:name=[\"']${Regex.escape(library)}[\"']\s+android:required=[\"']false[\"']\s*/>""",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE),
+            )
+            assertTrue("$library deve estar declarada como opcional no manifesto", declaration.containsMatchIn(xml))
+        }
+    }
+
+    @Test
     fun `normalizeZipEntryName converts backslash to forward slash`() {
         // Pacote gerado no Windows (.NET ZipFile.CreateFromDirectory) grava '\'
         // como separador. No Android isso quebra a extração (File no Linux não

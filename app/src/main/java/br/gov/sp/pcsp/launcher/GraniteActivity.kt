@@ -1138,10 +1138,10 @@ class GraniteActivity : AppCompatActivity() {
                 tempDir = File(cacheDir, "granite_wavs_${System.currentTimeMillis()}").apply { mkdirs() }
                 appendTerminal(terminalLines, "$ granite --model ${modelLabel(selectedModel)} --input ${items.size} arquivo(s)")
                 appendTerminal(terminalLines, "output: ${sessionDir.absolutePath}")
-                appendTerminal(terminalLines, "backend: ${backend.reportLabel}")
+                appendTerminal(terminalLines, "backend solicitado: ${backend.reportLabel}")
                 appendLog(logLines, "Sessão: ${sessionDir.name}")
                 appendLog(logLines, "Modelo: ${modelLabel(selectedModel)}")
-                appendLog(logLines, "Backend: ${backend.reportLabel}")
+                appendLog(logLines, "Backend solicitado: ${backend.reportLabel}")
 
                 val parallelism = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
                 val conversionExecutor = Executors.newFixedThreadPool(parallelism)
@@ -1232,6 +1232,13 @@ class GraniteActivity : AppCompatActivity() {
                     }
                     throw IllegalStateException(engineError)
                 }
+                val effectiveBackend = if (selectedModel == MODEL_NAR) {
+                    GraniteExecutionBackend.CPU
+                } else {
+                    GraniteEngine.loadedBackend() ?: backend
+                }
+                appendTerminal(terminalLines, "backend efetivo: ${effectiveBackend.reportLabel}")
+                appendLog(logLines, "Backend efetivo: ${effectiveBackend.reportLabel}")
 
                 // Transcreve cada arquivo preparado (on-device).
                 preparedUploads.sortedBy { it.index }.forEachIndexed { idx, prepared ->
@@ -1281,7 +1288,7 @@ class GraniteActivity : AppCompatActivity() {
                 val terminalFile = File(sessionDir, "terminal.txt")
                 txtFile.writeText(finalText, Charsets.UTF_8)
                 htmlFile.writeText(buildHtml(orderedResults), Charsets.UTF_8)
-                val report = buildGraniteReport(backend, items.size, elapsedMs, modelLoadMs.get(), selectedModel)
+                val report = buildGraniteReport(effectiveBackend, items.size, elapsedMs, modelLoadMs.get(), selectedModel)
                 appendLog(logLines, report)
                 logFile.writeText(logLines.toString(), Charsets.UTF_8)
                 terminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)

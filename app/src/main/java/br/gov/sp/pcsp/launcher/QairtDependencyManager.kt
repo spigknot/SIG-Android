@@ -28,7 +28,8 @@ import java.io.FileOutputStream
  *   5. libQnnHtpV{arch}Skel.so    — skeleton (DSP, carregado pelo stub)
  *
  * Os skels ficam em lib/ (mesmo dir); o stub usa ADSP_LIBRARY_PATH para
- * localizá-los (validar no device — risco R1 do plano).
+ * localizá-los. O transporte FastRPC vem da libcdsprpc.so pública do vendor,
+ * declarada como opcional no AndroidManifest e carregada pelo namespace do app.
  */
 object QairtDependencyManager {
     private const val TAG = "QairtManager"
@@ -65,6 +66,12 @@ object QairtDependencyManager {
     // Cache da arquitetura HTP detectada (null = não detectada ainda).
     @Volatile private var cachedHtpArch: String? = null
 
+    // Bibliotecas FastRPC públicas esperadas no manifesto. libcdsprpc é a
+    // dependência direta dos stubs HTP; libadsprpc cobre aparelhos QAIRT antigos.
+    internal val fastRpcManifestLibraries = listOf("libcdsprpc.so", "libadsprpc.so")
+
+    @Volatile private var fastRpcLoaded = false
+
     // ---- detecção de hardware ----
 
     fun isQualcommDevice(): Boolean {
@@ -85,11 +92,22 @@ object QairtDependencyManager {
      * APK. System.loadLibrary("QnnHtpV81Stub") procura no diretório padrão e
      * falha com "library not found" (bug real encontrado em 29/08 no NPU).
      *
+     * Antes do stub, carrega libcdsprpc pelo nome. Em apps com targetSdk >= 31,
+     * isso só funciona quando a biblioteca pública do vendor está declarada via
+     * <uses-native-library>; copiar libcdsprpc para o diretório privado está
+     * errado porque desloca suas dependências para o namespace do app.
+     *
      * Retorna null se nenhuma arquitetura HTP estiver disponível (ex.: aparelho
-     * Qualcomm sem Hexagon, ou skels não carregáveis sem root).
+     * Qualcomm sem Hexagon ou FastRPC não publicado pelo fabricante).
      */
     fun htpArchitecture(context: Context): String? {
         cachedHtpArch?.let { return it }
+        try {
+            ensureFastRpcLoaded()
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w(TAG, "htpArchitecture: FastRPC indisponível: ${e.message}")
+            return null
+        }
         val libDir = File(installedRoot(context), "lib")
         val archs = listOf("81", "79", "75", "73")
         for (arch in archs) {
@@ -269,6 +287,7 @@ object QairtDependencyManager {
             "gpu" -> loadOrder.add("libQnnGpu.so")
             "htp" -> {
                 checkNotNull(htpArch) { "Arquitetura HTP não detectada." }
+                ensureFastRpcLoaded()
                 loadOrder.add("libQnnHtp.so")
                 loadOrder.add("libQnnHtpPrepare.so")
                 loadOrder.add("libQnnHtpV${htpArch}Stub.so")
@@ -278,10 +297,9 @@ object QairtDependencyManager {
             else -> error("Backend QNN desconhecido: $backend")
         }
 
-        // ADSP_LIBRARY_PATH: o stub procura o skel neste diretório.
-        // Risco: em app sem root, o DSP pode não conseguir carregar o skel unsigned.
-        // Validar no device (Fase 0/6).
-        System.setProperty("ADSP_LIBRARY_PATH", libDir.absolutePath)
+        // ADSP_LIBRARY_PATH é variável de ambiente nativa lida pelo FastRPC.
+        // System.setProperty não altera getenv() e, portanto, não serve aqui.
+        android.system.Os.setenv("ADSP_LIBRARY_PATH", libDir.absolutePath, true)
 
         for (lib in loadOrder) {
             if (loadedLibs.contains(lib)) continue
@@ -299,6 +317,15 @@ object QairtDependencyManager {
                 loadedLibs.add(lib)
             }
         }
+    }
+
+    /** Carrega FastRPC do namespace público do vendor, nunca de uma cópia privada. */
+    @Synchronized
+    private fun ensureFastRpcLoaded() {
+        if (fastRpcLoaded) return
+        System.loadLibrary("cdsprpc")
+        fastRpcLoaded = true
+        android.util.Log.i(TAG, "load: OK libcdsprpc.so (vendor public native library)")
     }
 
     // ---- utilitários ----
