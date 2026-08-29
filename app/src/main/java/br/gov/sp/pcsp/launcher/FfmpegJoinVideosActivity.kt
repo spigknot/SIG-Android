@@ -1264,6 +1264,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
             val concatArgs = mutableListOf(
                 "-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0",
+            )
+            concatArgs.addAll(rotationMetadataArguments(profile.rotationDegrees))
+            concatArgs.addAll(listOf(
                 "-i", listFile.absolutePath,
                 "-c", "copy",
                 "-bsf:a", "aac_adtstoasc",
@@ -1272,11 +1275,10 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 "-use_editlist", "0",
                 "-video_track_timescale", "90000",
                 "-movflags", "+faststart"
-            )
+            ))
             if (profile.videoCodec == "hevc") {
                 concatArgs.addAll(listOf("-tag:v", "hvc1"))
             }
-            concatArgs.addAll(rotationMetadataArguments(profile.rotationDegrees))
             concatArgs.add(outputFile.absolutePath)
 
             val concatSession = executeFfmpegWithProgress(concatArgs.toTypedArray(), totalDurationMs(), "Juntando experimento (TS -> MP4)")
@@ -1329,7 +1331,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         args.addAll(
             listOf(
                 "-r", profile.fps,
-                "-vsync", "cfr",
+                "-fps_mode", "cfr",
                 "-g", fadeGopSize(profile.fps),
                 "-bf", "0",
                 "-c:a", "aac",
@@ -1508,7 +1510,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             }
             val videoFilter = buildString {
                 append("[$index:v]")
-                append(videoFillFrameFilter(targetWidth, targetHeight, profile.fps))
+                append(videoFillFrameFilter(targetWidth, targetHeight, profile.fps, hasMixedOrientations()))
                 videoFades.forEach { append(',').append(it) }
                 append(",setpts=PTS-STARTPTS[v$index]")
             }
@@ -1547,7 +1549,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val targetHeight = profile.height
         val parts = mutableListOf<String>()
         clips.forEachIndexed { index, clip ->
-            parts += "[$index:v]${videoFillFrameFilter(targetWidth, targetHeight, profile.fps)}[v$index]"
+            parts += "[$index:v]${videoFillFrameFilter(targetWidth, targetHeight, profile.fps, hasMixedOrientations())}[v$index]"
             parts += if (clip.hasAudio) {
                 "[$index:a]aresample=${profile.audioSampleRate},aformat=sample_fmts=fltp:sample_rates=${profile.audioSampleRate}:channel_layouts=${profile.audioLayout}[a$index]"
             } else {
@@ -1578,9 +1580,19 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return parts.joinToString(";")
     }
 
-    private fun videoFillFrameFilter(width: Int, height: Int, fps: String): String {
-        return "scale=$width:$height:force_original_aspect_ratio=increase," +
-            "crop=$width:$height,setsar=1,fps=$fps,format=yuv420p"
+    private fun videoFillFrameFilter(width: Int, height: Int, fps: String, letterbox: Boolean = false): String {
+        return if (letterbox) {
+            // Orientacoes mistas: preserva o frame inteiro com barras (nao corta conteudo).
+            "scale=$width:$height:force_original_aspect_ratio=decrease," +
+                "pad=$width:$height:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=$fps,format=yuv420p"
+        } else {
+            "scale=$width:$height:force_original_aspect_ratio=increase," +
+                "crop=$width:$height,setsar=1,fps=$fps,format=yuv420p"
+        }
+    }
+
+    private fun hasMixedOrientations(): Boolean {
+        return clips.size >= 2 && clips.map { rotationComparisonKey(it.rotationDegrees) }.distinct().size > 1
     }
 
     private fun safeTransitionSeconds(): Double {
@@ -2205,10 +2217,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun totalDurationMs(): Long = clips.sumOf { it.durationMs }.coerceAtLeast(1L)
 
     private fun formatTime(milliseconds: Long): String {
-        val totalSeconds = milliseconds / 1000
-        val m = totalSeconds / 60
+        val safeMilliseconds = milliseconds.coerceAtLeast(0L)
+        val totalSeconds = safeMilliseconds / 1000
+        val hours = totalSeconds / 3600
+        val m = (totalSeconds / 60) % 60
         val s = totalSeconds % 60
-        return String.format(Locale.US, "%02d:%02d", m, s)
+        val millis = safeMilliseconds % 1000
+        return String.format(Locale.US, "%02d:%02d:%02d.%03d", hours, m, s, millis)
     }
 
     private fun FfmpegVideoEncoder.toSmartJoinOption(): SmartJoinEncoderOption {
@@ -2787,7 +2802,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private fun rotationMetadataArguments(rotationDegrees: Int): List<String> {
         if (rotationDegrees == 0) return emptyList()
-        return listOf("-metadata:s:v:0", "rotate=$rotationDegrees")
+        return listOf("-display_rotation:v:0", rotationDegrees.toString())
     }
 
     private fun displayOrientedReencodeProfile(profile: OutputProfile): OutputProfile {

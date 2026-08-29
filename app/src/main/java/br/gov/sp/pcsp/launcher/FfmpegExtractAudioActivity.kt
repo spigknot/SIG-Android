@@ -1078,12 +1078,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private fun showExtensionMenu() {
         if (outputPreset != AudioPreset.NONE) return
         PopupMenu(this, buttonOutputExtension).apply {
-            val extensions = listOf(
-                AudioExtension.WAV,
-                AudioExtension.OGG,
-                AudioExtension.M4A,
-                AudioExtension.MP3
-            )
+            val extensions = AudioExtension.entries
             extensions.forEach { menu.add(it.ext) }
             setOnMenuItemClickListener { item ->
                 outputExtension = extensions.first { it.ext == item.title.toString() }

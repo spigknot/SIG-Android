@@ -654,6 +654,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         val segmentDir = File(workDir, "segments").apply { mkdirs() }
         val rotatedDir = File(workDir, "rotated").apply { mkdirs() }
         val videoBitrate = detectVideoBitrate(inputFile)
+        val audioBitrate = detectAudioBitrate(inputFile)
         val videoGopSize = recommendedGopSize(inputFile)
         var previousSessionHistorySize: Int? = null
         try {
@@ -804,7 +805,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                         }
 
                         FFmpegKit.executeWithArgumentsAsync(
-                            buildSegmentRotationArguments(segment, chunkOutput, filters, encoder, videoBitrate, videoGopSize).toTypedArray(),
+                            buildSegmentRotationArguments(segment, chunkOutput, filters, encoder, videoBitrate, audioBitrate, videoGopSize).toTypedArray(),
                             { s ->
                                 finalSession = s
                                 latch.countDown()
@@ -973,6 +974,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         filters: String,
         encoder: FfmpegVideoEncoder,
         videoBitrate: String,
+        audioBitrate: String,
         gopSize: Int
     ): List<String> {
         return mutableListOf(
@@ -995,9 +997,11 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             }
             addAll(
                 listOf(
-                    "-c:a", "copy",
+                    // Reencoda o audio para AAC em todos os segmentos para que o concat
+                    // final com -c copy seja valido em MP4 (codec de audio consistente).
+                    "-c:a", "aac", "-b:a", audioBitrate,
+                    "-ar", "48000", "-ac", "2",
                     "-map_metadata", "-1",
-                    "-metadata:s:v:0", "rotate=0",
                     "-movflags", "+faststart",
                     outputFile.absolutePath
                 )
@@ -1163,12 +1167,17 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         if (metadataOnly) {
             val currentMetadataDegrees = detectCurrentMetadataRotation(inputFile)
             val metadataDegrees = normalizeMetadataDegrees(currentMetadataDegrees + degrees)
-            val args = mutableListOf(
-                "-y", "-i", inputFile.absolutePath,
-                "-map", "0",
-                "-c", "copy",
-                "-metadata:s:v:0", "rotate=$metadataDegrees",
-                outputFile.absolutePath
+            val args = mutableListOf("-y")
+            if (metadataDegrees != 0) {
+                args.addAll(listOf("-display_rotation:v:0", metadataDegrees.toString()))
+            }
+            args.addAll(
+                listOf(
+                    "-i", inputFile.absolutePath,
+                    "-map", "0",
+                    "-c", "copy",
+                    outputFile.absolutePath
+                )
             )
             return args.toTypedArray()
         }
@@ -1263,6 +1272,18 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             Log.w(TAG, "Could not detect video bitrate", e)
             FALLBACK_VIDEO_BITRATE
+        }
+    }
+
+    private fun detectAudioBitrate(inputFile: File): String {
+        return try {
+            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", inputFile.absolutePath))
+            val logs = session.allLogsAsString.orEmpty()
+            parseBitrateFromText(logs.lines().firstOrNull { it.contains("Audio:", ignoreCase = true) }.orEmpty())
+                ?: FALLBACK_AUDIO_BITRATE
+        } catch (e: Throwable) {
+            Log.w(TAG, "Could not detect audio bitrate", e)
+            FALLBACK_AUDIO_BITRATE
         }
     }
 
@@ -1792,6 +1813,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 4303
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val FALLBACK_VIDEO_BITRATE = "15M"
+        private const val FALLBACK_AUDIO_BITRATE = "128k"
         private const val TAG = "FfmpegRotateVideo"
         private val PROGRESS_OUT_TIME_REGEX = Regex("out_time=([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?)")
     }

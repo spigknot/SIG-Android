@@ -512,14 +512,19 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
 
                 val profile = detectAudioProfile(mainFile)
                 val insertedProfile = detectAudioProfile(insertedFile)
-                val canCopyDirectly = audioInputsAreCopyCompatible(profile, insertedProfile)
                 val rawExtension = main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
                 val safeExtension = rawExtension.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
                 val isWav = safeExtension == "wav"
+                val canCopyDirectly = audioInputsAreCopyCompatible(profile, insertedProfile) &&
+                    audioCodecCopySafe(profile, safeExtension) &&
+                    audioCodecCopySafe(insertedProfile, safeExtension)
                 val smartInsertViable = jobConfig.smartInsertChecked && isSmartInsertCodecSupported(profile)
                 val fullReencode = (jobConfig.reencodeChecked && (!jobConfig.smartInsertChecked || jobConfig.selectedTransition != TRANSITION_NONE)) ||
                     (isWav && !canCopyDirectly) ||
-                    (jobConfig.smartInsertChecked && !smartInsertViable)
+                    (jobConfig.smartInsertChecked && !smartInsertViable) ||
+                    // Codec sem tag no container de saida (ex.: wmav2/amr em .m4a) nao pode ser
+                    // copiado bit-a-bit; precisa reencodar para o formato do container.
+                    (!jobConfig.smartInsertChecked && !audioCodecCopySafe(profile, safeExtension))
                 val resultFile = File(cacheDir, "insert_${System.currentTimeMillis()}_${sanitizeBase(main.name)}.$safeExtension")
                 val encoderName = if (fullReencode || jobConfig.smartInsertChecked) encoderForProfile(safeExtension, profile) else null
                 encoderName?.let {
@@ -639,7 +644,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             "-filter_complex", filters.joinToString(";"), "-map", "[aout]",
             "-vn", "-c:a", encoder
         )
-        if (encoder !in setOf("flac", "pcm_s16le")) {
+        if (encoder !in setOf("flac", "pcm_s16le", "alac")) {
             args.addAll(listOf("-b:a", profile.bitrate))
         }
         args.addAll(listOf("-ar", profile.sampleRate.toString(), "-ac", profile.channels.toString()))
@@ -1018,6 +1023,24 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         if (mainProfile.sampleRate != insertedProfile.sampleRate) return false
         if (mainProfile.channels != insertedProfile.channels) return false
         return true
+    }
+
+    /**
+     * Verifica se o codec do audio tem mapeamento (tag) no container de saida.
+     * Evita o modo copy quando o codec nao pode ser embutido (ex.: wmav2/amr em .m4a),
+     * que falharia com "Could not find tag for codec" no meio do processamento.
+     */
+    private fun audioCodecCopySafe(profile: AudioProfile, extension: String): Boolean {
+        val codec = profile.codec.lowercase(Locale.ROOT)
+        return when (extension) {
+            "m4a", "aac" -> codec.contains("aac") || codec.contains("alac") || codec.contains("mp3") || codec.contains("ac3")
+            "mp3" -> codec.contains("mp3")
+            "wav" -> codec.contains("pcm")
+            "flac" -> codec.contains("flac")
+            "ogg" -> codec.contains("vorbis") || codec.contains("opus")
+            "opus" -> codec.contains("opus")
+            else -> false
+        }
     }
 
     private fun audioMime(name: String): String = when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
