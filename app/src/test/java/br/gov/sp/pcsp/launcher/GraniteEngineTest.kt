@@ -246,4 +246,28 @@ class GraniteEngineTest {
         assertTrue(expected.contains(GraniteEngine.modelFileName()))
         assertEquals(8, expected.size)
     }
+
+    @Test
+    fun `download size fallback matches real package on R2`() {
+        // Vacina do bug "85% (771 MB de 2002 MB)": o total declarado era o
+        // hardcoded 2_100_000_000 (2002 MB) mas o pacote real tem ~3.995 MB.
+        // O fallback (usado quando os HEAD requests falham) precisa refletir
+        // o total REAL, senão a UI mostra "de X MB" errado e o percentual não
+        // bate com o texto.
+        val total = GraniteEngine.FALLBACK_PACKAGE_BYTES
+        // Total real = 3.995.371.683 bytes (~3810 MB) — deve ser > 3.9 GB
+        assertTrue("total $total deveria ser >= 3.9 GB", total >= 3_900_000_000L)
+        assertTrue("total $total deveria ser < 4.2 GB", total < 4_200_000_000L)
+        // Consistência: a UI mostra MB. 3.995.371.683 bytes -> 3810 MB (não 2002!)
+        assertEquals(3810L, total / 1_048_576L)
+    }
+
+    @Test
+    fun `download size fallback matches R2 file sum`() {
+        // A soma dos tamanhos reais publicados no R2 (verificados via HEAD).
+        val realSum =
+            865_408L + 1_891_581_952L + 946_697_596L + 945_790_976L + 303L +
+                82_240L + 2_048L + 177_439L + 640_793L + 209_532_928L
+        assertEquals(realSum, GraniteEngine.FALLBACK_PACKAGE_BYTES)
+    }
 }

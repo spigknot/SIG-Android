@@ -15,10 +15,16 @@
   - SHA-256: `df879cd794ae0a2339a039d90ced937e08f4094a536d16bc571cf68c5a61a9f0`
   - URL pública: `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/packages/qairt/sig-qairt-arm64-v8a-v1.zip`
 
-### ✅ Fase 3 — Dependência onnxruntime-android-qnn
-- `app/build.gradle`: trocado `onnxruntime-android:1.29.0` → `onnxruntime-android-qnn:1.29.0`
-- QNN EP já vem embutido no AAR oficial do Maven Central — **não precisa compilar nada**
-- Build confirmado com `assembleDebug` — SUCCESSO
+### ✅ Fase 3 — Pacote nativo v3 (QNN EP) — COMPLETO
+- `app/build.gradle`: `onnxruntime-android-qnn:1.29.0` (QNN EP embutido)
+- **Zips v3 gerados e PUBLICADOS no R2**:
+  - `sig-android-dependencies-v3-arm64-v8a.zip` (39.3 MB, sha `cbe13624...0de8`)
+  - `sig-android-dependencies-v3-x86_64.zip` (45.6 MB, sha `34173e2c...47b`)
+  - Ambos HTTP 200 ✓
+- `NativeDependencyManager.kt`: COMPONENT_VERSION="3" + URLs/SHAs/tamanhos atualizados
+- `scripts/build-android-native-dependencies.ps1`: busca AAR `onnxruntime-android-qnn`
+- **Porta `verify-native-dependencies.ps1 -Version 3` — ACEITO** ✓
+- ⚠️ x86_64 usa AAR comum (sem QNN — emulador); arm64 usa AAR -qnn
 
 ### ✅ Fase 4 — QairtDependencyManager
 - `app/src/main/java/.../QairtDependencyManager.kt`:
@@ -54,10 +60,11 @@
 
 ### ✅ Gates e build — TUDO VERDE
 - `:app:testDebugUnitTest` — **BUILD SUCCESSFUL** (todos os testes passam)
-- `:app:lintDebug` — **BUILD SUCCESSFUL** (zero warnings novos)
+- `:app:lintDebug` — **BUILD SUCCESSFUL** (zero erros)
 - `:app:assembleDebug` — **BUILD SUCCESSFUL**
-- APK: **7.4 MB** (zero .so dentro — QNN libs excluídas via packaging.jniLibs.excludes)
-- APK está em: `app/build/outputs/apk/debug/app-debug.apk`
+- APK: **8.5 MB** (zero .so dentro — QNN libs excluídas via packaging.jniLibs.excludes)
+- **Commit + push**: `ab868fc..f0cd68a` na main (QNN + Ffmpeg)
+- **APK em O:**: `O:\SIG-Android-Granite-20260828_008-model-reorg.apk` (8.5 MB, MD5 `b9aa77de...`)
 
 ---
 

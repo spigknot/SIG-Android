@@ -453,8 +453,40 @@ object GraniteEngine {
         return sb.toString()
     }
 
-    /** Tamanho total do download do pacote (para o diálogo). */
-    fun packageDownloadBytes(): Long = 2_100_000_000L
+    /**
+     * Tamanho total do download do pacote (para o diálogo).
+     *
+     * Consulta os tamanhos reais no R2 via HEAD (fonte de verdade) e soma apenas
+     * os arquivos que ainda faltam baixar — o mesmo cálculo usado em
+     * [downloadPackage]. O valor fixo é apenas fallback quando a rede falha.
+     */
+    fun packageDownloadBytes(context: Context? = null): Long {
+        val dir = context?.let { packageDir(it) }
+        val missing = dir?.let { d ->
+            packageFiles().filter { (name, _) ->
+                val f = File(d, name)
+                !(f.exists() && f.length() > 0L)
+            }
+        } ?: packageFiles()
+        val remote = missing.sumOf { (_, url) ->
+            runCatching {
+                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 8000
+                    readTimeout = 8000
+                    requestMethod = "HEAD"
+                }
+                val len = conn.contentLengthLong.coerceAtLeast(0L)
+                conn.disconnect()
+                len
+            }.getOrDefault(0L)
+        }
+        return if (remote > 0L) remote else FALLBACK_PACKAGE_BYTES
+    }
+
+    /** Fallback quando os HEAD requests não respondem (tamanho real do pacote, soma verificada no R2 em 2026-08-29). */
+    internal const val FALLBACK_PACKAGE_BYTES =
+        865_408L + 1_891_581_952L + 946_697_596L + 945_790_976L + 303L +
+            82_240L + 2_048L + 177_439L + 640_793L + 209_532_928L
 
     fun packageDir(context: Context): File =
         File(context.getExternalFilesDir(null) ?: context.filesDir, "granite_models")
@@ -523,7 +555,7 @@ object GraniteEngine {
                 len
             }.getOrDefault(0L)
         }
-        if (totalBytes <= 0L) totalBytes = packageDownloadBytes()
+        if (totalBytes <= 0L) totalBytes = FALLBACK_PACKAGE_BYTES
         // Baixa cada arquivo que falta.
         for ((name, url) in missing) {
             val dest = File(dir, name)
