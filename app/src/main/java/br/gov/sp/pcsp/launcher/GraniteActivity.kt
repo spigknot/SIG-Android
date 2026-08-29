@@ -388,17 +388,102 @@ class GraniteActivity : AppCompatActivity() {
     }
 
     private fun showBackendMenu() {
+        val isQcom = QairtDependencyManager.isQualcommDevice()
         PopupMenu(this, buttonBackend).apply {
-            GraniteExecutionBackend.entries
-                .forEach { backend -> menu.add(backend.label) }
+            GraniteExecutionBackend.entries.forEach { backend ->
+                val item = menu.add(backend.label)
+                if (backend.accelerated && !isQcom) {
+                    item.isEnabled = false
+                    item.title = "${backend.label} ?"
+                }
+            }
             setOnMenuItemClickListener { item ->
-                val backend = GraniteExecutionBackend.entries.first { it.label == item.title.toString() }
+                val clickedLabel = item.title.toString().replace(" ?", "")
+                val backend = GraniteExecutionBackend.entries.first { it.label == clickedLabel }
+                if (backend.accelerated && !isQcom) {
+                    AlertDialog.Builder(this@GraniteActivity)
+                        .setTitle("Aceleração Qualcomm indisponível")
+                        .setMessage(
+                            "GPU (Adreno) e NPU (Hexagon) exigem um processador Qualcomm " +
+                            "Snapdragon com suporte ao QAIRT (AI Engine Direct)." +
+                            "Este aparelho não tem processador Qualcomm compatível."
+                        )
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setOnMenuItemClickListener true
+                }
+                if (backend.accelerated && !QairtDependencyManager.isInstalled(this@GraniteActivity)) {
+                    showQairtDownloadDialog(backend)
+                    return@setOnMenuItemClickListener true
+                }
                 selectedBackend = backend
                 buttonBackend.text = backend.shortLabel
                 true
             }
             show()
         }
+    }
+
+    private fun showQairtDownloadDialog(backend: GraniteExecutionBackend) {
+        val sizeMb = QairtDependencyManager.downloadSize() / 1_048_576L
+        AlertDialog.Builder(this)
+            .setTitle("Componentes de aceleração Qualcomm")
+            .setMessage(
+                "O backend ${backend.label} precisa das bibliotecas do " +
+                "Qualcomm AI Runtime (QAIRT)." +
+                "Download: ~$sizeMb MB (uma única vez)."
+            )
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Baixar") { _, _ ->
+                downloadQairtPackage(backend)
+            }
+            .show()
+    }
+
+    private fun downloadQairtPackage(backend: GraniteExecutionBackend) {
+        val progressView = layoutInflater.inflate(R.layout.dialog_model_download, null)
+        val statusText = progressView.findViewById<TextView>(R.id.modelDownloadStatusText)
+        val progressBar = progressView.findViewById<ProgressBar>(R.id.modelDownloadProgressBar)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Baixando QAIRT")
+            .setView(progressView)
+            .setCancelable(false)
+            .create()
+        dialog.show()
+        setBusy(true)
+        Thread {
+            try {
+                QairtDependencyManager.install(this) { progress ->
+                    runOnUiThread {
+                        val pct = if (progress.total > 0L) (progress.downloaded * 100L / progress.total).toInt() else -1
+                        if (pct >= 0) {
+                            progressBar.progress = pct.coerceIn(0, 100)
+                            val dlMb = progress.downloaded / 1_048_576L
+                            val totMb = progress.total / 1_048_576L
+                            statusText.text = "$pct% ($dlMb MB de $totMb MB)"
+                        } else {
+                            statusText.text = progress.stage
+                        }
+                    }
+                }
+                runOnUiThread {
+                    dialog.dismiss()
+                    setBusy(false)
+                    selectedBackend = backend
+                    buttonBackend.text = backend.shortLabel
+                }
+            } catch (e: Throwable) {
+                runOnUiThread {
+                    dialog.dismiss()
+                    setBusy(false)
+                    AlertDialog.Builder(this)
+                        .setTitle("Falha no download")
+                        .setMessage(e.message ?: "Erro desconhecido ao baixar o pacote QAIRT.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                }
+            }
+        }.start()
     }
 
     // ---- download do pacote ----

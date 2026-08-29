@@ -388,10 +388,17 @@ enum class GraniteExecutionBackend(
     val label: String,
     val shortLabel: String = label,
     val reportLabel: String = label,
+    val qnnBackend: String? = null,
+    val accelerated: Boolean = false,
 ) {
     CPU("CPU", "CPU", "CPU"),
-    GPU("GPU (NNAPI)", "GPU", "GPU (NNAPI)"),
-    NPU("NPU (NNAPI)", "NPU", "NPU (NNAPI)");
+    GPU_QNN("GPU (Adreno)", "GPU", "GPU (QNN)", qnnBackend = "gpu", accelerated = true),
+    NPU_QNN_HTP("NPU (Hexagon)", "NPU", "NPU (QNN HTP)", qnnBackend = "htp", accelerated = true);
+
+    companion object {
+        /** Backends acelerados (exigem pacote QAIRT + aparelho Qualcomm). */
+        val acceleratedEntries: List<GraniteExecutionBackend> = entries.filter { it.accelerated }
+    }
 }
 
 /**
@@ -406,8 +413,11 @@ object GraniteEngine {
 
     // URLs do pacote no Cloudflare R2 (bucket sig-android, subpasta models/granite/5.0-turbo/).
     private const val PACKAGE_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/5.0-turbo"
-    private const val MODEL_FILE_NAME = "granite-5.0-turboctc-f32-ext.onnx"
-    private const val MODEL_DATA_FILE_NAME = "granite-5.0-turboctc-f32-ext.onnx.data"
+    /** Modelo F32 (CPU e acelerado via QNN — o QNN EP converte FP32→FP16 internamente). */
+    private const val MODEL_F32_FILE_NAME = "granite-5.0-turboctc-f32-ext.onnx"
+    private const val MODEL_F32_DATA_FILE_NAME = "granite-5.0-turboctc-f32-ext.onnx.data"
+    private const val MODEL_FP16_FILE_NAME = "granite-5.0-turboctc-fp16-ext.onnx"
+    private const val MODEL_FP16_DATA_FILE_NAME = "granite-5.0-turboctc-fp16-ext.onnx.data"
     private const val FRONTEND_FILE_NAME = "frontend_config.json"
     private const val MEL_FILTERS_FILE_NAME = "mel_filters.bin"
     private const val STFT_WINDOW_FILE_NAME = "stft_window.bin"
@@ -449,34 +459,44 @@ object GraniteEngine {
     fun packageDir(context: Context): File =
         File(context.getExternalFilesDir(null) ?: context.filesDir, "granite_models")
 
-    fun modelFile(context: Context): File = File(packageDir(context), MODEL_FILE_NAME)
+    fun modelFile(context: Context): File = File(packageDir(context), MODEL_F32_FILE_NAME)
 
-    /** Nome do arquivo do modelo ONNX (usado pela Activity para conferência). */
-    fun modelFileName(): String = MODEL_FILE_NAME
+    /** Nome do arquivo do modelo ONNX F32 (CPU). Usado pela Activity para conferência. */
+        fun modelFileName(): String = MODEL_F32_FILE_NAME
 
-    fun modelDataFile(context: Context): File = File(packageDir(context), MODEL_DATA_FILE_NAME)
+        fun modelDataFile(context: Context): File = File(packageDir(context), MODEL_F32_DATA_FILE_NAME)
 
-    fun isDownloaded(context: Context): Boolean = packageComplete(context)
+        /** Modelo FP16 para backends acelerados (GPU/NPU via QNN). */
+        fun modelFileFp16(context: Context): File = File(packageDir(context), MODEL_FP16_FILE_NAME)
+        fun modelDataFileFp16(context: Context): File = File(packageDir(context), MODEL_FP16_DATA_FILE_NAME)
 
-    /** True quando TODOS os 8 arquivos do pacote existem e não estão vazios. */
-    fun packageComplete(context: Context): Boolean {
-        val dir = packageDir(context)
-        return packageFiles().all { (name, _) ->
-            val f = File(dir, name)
-            f.exists() && f.length() > 0L
+        /** Seleciona o arquivo .onnx conforme o backend. */
+        fun modelFileForBackend(context: Context, backend: GraniteExecutionBackend): File =
+            if (backend.accelerated) modelFileFp16(context) else modelFile(context)
+
+        fun isDownloaded(context: Context): Boolean = packageComplete(context)
+
+        /** True quando todos os arquivos do pacote existem e não estão vazios. */
+        fun packageComplete(context: Context): Boolean {
+            val dir = packageDir(context)
+            return packageFiles().all { (name, _) ->
+                val f = File(dir, name)
+                f.exists() && f.length() > 0L
+            }
         }
-    }
 
-    private fun packageFiles(): List<Pair<String, String>> = listOf(
-        MODEL_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_FILE_NAME",
-        MODEL_DATA_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_DATA_FILE_NAME",
-        FRONTEND_FILE_NAME to "$PACKAGE_BASE_URL/$FRONTEND_FILE_NAME",
-        MEL_FILTERS_FILE_NAME to "$PACKAGE_BASE_URL/$MEL_FILTERS_FILE_NAME",
-        STFT_WINDOW_FILE_NAME to "$PACKAGE_BASE_URL/$STFT_WINDOW_FILE_NAME",
-        VOCAB_FILE_NAME to "$PACKAGE_BASE_URL/$VOCAB_FILE_NAME",
-        PCS_VOCAB_FILE_NAME to "$PACKAGE_BASE_URL/$PCS_VOCAB_FILE_NAME",
-        PUNCT_FILE_NAME to "$PACKAGE_BASE_URL/$PUNCT_FILE_NAME",
-    )
+        private fun packageFiles(): List<Pair<String, String>> = listOf(
+            MODEL_F32_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_F32_FILE_NAME",
+            MODEL_F32_DATA_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_F32_DATA_FILE_NAME",
+            MODEL_FP16_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_FP16_FILE_NAME",
+            MODEL_FP16_DATA_FILE_NAME to "$PACKAGE_BASE_URL/$MODEL_FP16_DATA_FILE_NAME",
+            FRONTEND_FILE_NAME to "$PACKAGE_BASE_URL/$FRONTEND_FILE_NAME",
+            MEL_FILTERS_FILE_NAME to "$PACKAGE_BASE_URL/$MEL_FILTERS_FILE_NAME",
+            STFT_WINDOW_FILE_NAME to "$PACKAGE_BASE_URL/$STFT_WINDOW_FILE_NAME",
+            VOCAB_FILE_NAME to "$PACKAGE_BASE_URL/$VOCAB_FILE_NAME",
+            PCS_VOCAB_FILE_NAME to "$PACKAGE_BASE_URL/$PCS_VOCAB_FILE_NAME",
+            PUNCT_FILE_NAME to "$PACKAGE_BASE_URL/$PUNCT_FILE_NAME",
+        )
 
     /** Baixa o pacote completo do R2 (modelo + external data + front-end + vocab + punctuator). */
     fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit) {
@@ -541,13 +561,17 @@ object GraniteEngine {
     }
 
     /**
-     * Carrega a sessão ONNX (modelo + front-end + decoder) para o backend escolhido.
-     *
-     * Quando o backend é GPU/NPU e a sessão NNAPI falha, NÃO cai para CPU
-     * automaticamente: chama [onFallbackPrompt] com o motivo e só usa CPU se o
-     * callback devolver true (o usuário aceitou). Se devolver false, o load
-     * falha com mensagem clara.
-     */
+        * Carrega a sessão ONNX (modelo + front-end + decoder) para o backend escolhido.
+        *
+        * CPU: modelo F32, ONNX Runtime CPU EP.
+        * GPU_QNN: modelo FP16, QNN GPU EP (Adreno, via libQnnGpu.so).
+        * NPU_QNN_HTP: modelo FP16, QNN HTP EP (Hexagon, via libQnnHtp.so + skel).
+        *
+        * Quando o backend é acelerado e a sessão QNN falha, NÃO cai para CPU
+        * automaticamente: chama [onFallbackPrompt] com o motivo e só usa CPU se o
+        * callback devolver true (o usuário aceitou). Se devolver false, o load
+        * falha com mensagem clara.
+        */
     fun load(
         context: Context,
         backend: GraniteExecutionBackend,
@@ -556,23 +580,18 @@ object GraniteEngine {
     ): Boolean {
         return try {
             // As libs nativas do ONNX Runtime vêm do pacote R2 (baixado na 1ª
-            // execução), não do APK. Precisa estar instalado + ativado ANTES de
-            // tocar no OrtEnvironment — o loader estático do ONNX falha de forma
-            // definitiva no processo se a lib estiver ausente.
+            // execução), não do APK.
             if (!NativeDependencyManager.activateIfInstalled(context)) {
                 lastErrorMessage = "Componentes nativos do SIG não instalados. Baixe-os na abertura do app e tente novamente."
                 return false
             }
-            // O onnxruntime-java NÃO lê a property "onnxruntime.native.path": ele
-            // chama System.loadLibrary("onnxruntime4j_jni") (busca em java.library.path).
-            // As libs estão no pacote R2 (sig.native.library.dir), então carregamos
-            // explicitamente AQUI, na ordem de dependência, antes de tocar em
-            // OrtEnvironment (a classe falha de forma definitiva no processo se a
-            // lib estiver ausente na 1ª referência).
             loadOnnxRuntimeNatives(onLog)
             release()
             val dir = packageDir(context)
-            val modelPath = modelFile(context)
+
+            // Modelo correto: F32 para CPU; FP16 para GPU/NPU (exportado do PyTorch
+            // com cast nas bordas — I/O fp32, pesos fp16; QNN GPU usa FP16 nativo).
+            val modelPath = modelFileForBackend(context, backend)
             if (!modelPath.exists()) {
                 lastErrorMessage = "modelo não encontrado: ${modelPath.absolutePath}"
                 return false
@@ -596,47 +615,98 @@ object GraniteEngine {
                 return true
             }
 
-            // GPU/NPU: tenta NNAPI. O NNAPI escolhe o melhor dispositivo
-            // disponível (no OnePlus 15, o NPU/GPU conforme o driver suportar).
-            val nnapiOptions = OrtSession.SessionOptions()
-            nnapiOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
-            var nnapiConfigured = false
-            try {
-                nnapiOptions.addNnapi()
-                nnapiConfigured = true
-                onLog("NNAPI provider configurado (${backend.label})")
-            } catch (e: Throwable) {
-                onLog("NNAPI indisponível: ${e.message}")
+            // Backend acelerado (GPU_QNN ou NPU_QNN_HTP): carrega libs QNN e
+            // configura o QNN Execution Provider do ONNX Runtime.
+            val qnnBackend = requireNotNull(backend.qnnBackend) { "Backend não acelerado." }
+            if (!QairtDependencyManager.isInstalled(context)) {
+                lastErrorMessage = "Componentes QAIRT/QNN não instalados. Selecione GPU ou NPU para baixá-los."
+                return false
             }
 
-            if (nnapiConfigured) {
-                try {
-                    session = env.createSession(modelPath.absolutePath, nnapiOptions)
-                    onLog("ONNX session criada (${backend.label})")
-                    return true
-                } catch (e: Throwable) {
-                    val reason = e.message ?: "falha desconhecida"
-                    onLog("Sessão ${backend.label} falhou: $reason")
-                    // Pergunta ao usuário se quer cair para CPU.
-                    val accepted = onFallbackPrompt(reason)
-                    if (!accepted) {
-                        lastErrorMessage = "O acelerador ${backend.label} não conseguiu carregar o modelo e o fallback para CPU foi recusado: $reason"
-                        return false
-                    }
+            // Carrega libs QNN na ordem correta ANTES de tocar na sessão.
+            val htpArch = if (qnnBackend == "htp") {
+                val arch = QairtDependencyManager.htpArchitecture()
+                if (arch == null) {
+                    lastErrorMessage = "Arquitetura HTP não detectada neste aparelho."
+                    return false
+                }
+                onLog("HTP arch detectada: v$arch")
+                arch
+            } else null
+
+            try {
+                QairtDependencyManager.loadQnnNatives(context, qnnBackend, htpArch)
+                onLog("libs QNN carregadas: backend=$qnnBackend ${if (htpArch != null) "arch=v$htpArch" else ""}")
+            } catch (e: Throwable) {
+                val reason = e.message ?: "falha ao carregar libs QNN"
+                onLog("QNN load falhou: $reason")
+                val accepted = onFallbackPrompt(reason)
+                if (!accepted) {
+                    lastErrorMessage = "O acelerador ${backend.label} não conseguiu carregar as libs QNN e o fallback para CPU foi recusado: $reason"
+                    return false
+                }
+                // Fallback para CPU (modelo F32).
+                val cpuOptions = OrtSession.SessionOptions()
+                cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+                session = env.createSession(modelFile(context).absolutePath, cpuOptions)
+                onLog("ONNX session criada (CPU, fallback QNN)")
+                return true
+            }
+
+            val qnnOptions = OrtSession.SessionOptions()
+            qnnOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            val qnnConfig = mutableMapOf<String, String>()
+            qnnConfig["backend_path"] = if (qnnBackend == "gpu") "libQnnGpu.so" else "libQnnHtp.so"
+            // offload_graph_io_quantization: delega quantização/dequant de I/O ao CPU EP
+            // (default '1'; relevante para modelos QDQ; para FP16 é ignorado).
+            qnnConfig["offload_graph_io_quantization"] = "1"
+            if (qnnBackend == "htp") {
+                // enable_htp_fp16_precision: faz o HTP inferir FP32 com precisão FP16 (default '1').
+                qnnConfig["enable_htp_fp16_precision"] = "1"
+            }
+            try {
+                qnnOptions.addQnn(qnnConfig)
+                onLog("QNN EP configurado: ${qnnConfig}")
+            } catch (e: Throwable) {
+                onLog("QNN EP indisponível: ${e.message}")
+                val accepted = onFallbackPrompt(e.message ?: "QNN indisponível")
+                if (!accepted) {
+                    lastErrorMessage = "O acelerador ${backend.label} não tem suporte a QNN e o fallback para CPU foi recusado: ${e.message}"
+                    return false
+                }
+                val cpuOptions = OrtSession.SessionOptions()
+                cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+                session = env.createSession(modelFile(context).absolutePath, cpuOptions)
+                onLog("ONNX session criada (CPU, fallback QNN indisponível)")
+                return true
+            }
+
+            try {
+                session = env.createSession(modelPath.absolutePath, qnnOptions)
+                onLog("ONNX session criada (${backend.reportLabel})")
+                return true
+            } catch (e: Throwable) {
+                val reason = e.message ?: "falha desconhecida"
+                onLog("Sessão ${backend.label} falhou: $reason")
+                // Pergunta ao usuário se quer cair para CPU.
+                val accepted = onFallbackPrompt(reason)
+                if (!accepted) {
+                    lastErrorMessage = "O acelerador ${backend.label} não conseguiu carregar o modelo e o fallback para CPU foi recusado: $reason"
+                    return false
                 }
             }
 
-            // Fallback para CPU (aceito pelo usuário ou NNAPI indisponível).
+            // Fallback para CPU (aceito pelo usuário ou QNN indisponível).
             val cpuOptions = OrtSession.SessionOptions()
             cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
-            session = env.createSession(modelPath.absolutePath, cpuOptions)
+            session = env.createSession(modelFile(context).absolutePath, cpuOptions)
             onLog("ONNX session criada (CPU, fallback)")
             true
-        } catch (e: Throwable) {
-            lastErrorMessage = describeError(e)
-            Log.e(TAG, "load failed", e)
-            false
-        }
+    } catch (e: Throwable) {
+        lastErrorMessage = describeError(e)
+        Log.e(TAG, "load failed", e)
+        false
+    }
     }
 
     /** Transcreve um WAV 16 kHz mono (processa em janelas fixas de 512 frames / 10,24s). */

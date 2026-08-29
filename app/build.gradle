@@ -99,16 +99,23 @@ android {
     }
 
     packaging {
-        jniLibs {
-            // As libs nativas do ONNX Runtime (engine do Granite) NÃO vão no APK:
-            // são baixadas do R2 no pacote v2 de dependências nativas (1ª execução).
-            // Manter o APK < 10 MB.
-            excludes += [
-                "**/libonnxruntime.so",
-                "**/libonnxruntime4j_jni.so",
-            ]
+            jniLibs {
+                // As libs nativas do ONNX Runtime (engine do Granite) e do QAIRT/QNN
+                // NÃO vão no APK: são baixadas do R2 no pacote de dependências nativas
+                // (1ª execução). Manter o APK < 10 MB.
+                excludes += [
+                    "**/libonnxruntime.so",
+                    "**/libonnxruntime4j_jni.so",
+                    "**/libQnn*.so",
+                    "**/libQairt*.so",
+                    "**/libcalculator.so",
+                    "**/libGenie.so",
+                    "**/libhta_hexagon_runtime*.so",
+                    "**/libPlatformValidatorShared.so",
+                    "**/libsig_npu_probe.so",
+                ]
+            }
         }
-    }
 
     if (buildNativeComponents) {
         externalNativeBuild {
@@ -149,7 +156,9 @@ dependencies {
     implementation 'androidx.documentfile:documentfile:1.0.1'
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
     // ONNX Runtime (engine do Granite Speech 5.0 TurboCTC local).
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.29.0")
+        // O artefato -qnn já inclui o QNN Execution Provider (Qualcomm GPU/NPU)
+        // embutido no libonnxruntime.so — não precisa compilar AAR customizado.
+        implementation("com.microsoft.onnxruntime:onnxruntime-android-qnn:1.29.0")
     implementation files('libs/ffmpeg-kit-api.jar')
     // O FFmpegKitConfig.<clinit> referencia com.arthenica.smartexception.java.Exceptions —
     // obrigatória (já removida uma vez como "redundante" e quebrou TODAS as ferramentas ffmpeg).

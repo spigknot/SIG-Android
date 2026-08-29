@@ -15,9 +15,11 @@ $output = if ($OutputDirectory) { $OutputDirectory } else { Join-Path $root "bui
 # ONNX Runtime (engine do Granite) — as libs nativas TAMBÉM vão no pacote
 # (o APK as exclui via packaging.jniLibs.excludes). O AAR fica no cache do Gradle
 # depois do 1º assembleDebug; o nome do arquivo é estável por versão.
+# ⚠️ v3+: usamos o AAR onnxruntime-android-qnn (QNN EP embutido no .so).
 $onnxVersion = "1.29.0"
-$onnxAarDir = Join-Path $env:USERPROFILE ".gradle\caches\modules-2\files-2.1\com.microsoft.onnxruntime\onnxruntime-android\$onnxVersion"
-$onnxAar = Get-ChildItem -Path $onnxAarDir -Recurse -Filter "onnxruntime-android-$onnxVersion.aar" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+$onnxGroup = "onnxruntime-android-qnn"
+$onnxAarDir = Join-Path $env:USERPROFILE ".gradle\caches\modules-2\files-2.1\com.microsoft.onnxruntime\$onnxGroup\$onnxVersion"
+$onnxAar = Get-ChildItem -Path $onnxAarDir -Recurse -Filter "onnxruntime-android-qnn-$onnxVersion.aar" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 New-Item -ItemType Directory -Force -Path $output | Out-Null
