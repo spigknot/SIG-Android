@@ -111,11 +111,33 @@ $manifestPath = Join-Path $staging "manifest.json"
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $manifestPath
 
 # --- zip final ---
+# ⚠️ NUNCA usar [IO.Compression.ZipFile]::CreateFromDirectory: no Windows ele grava
+# os nomes das entradas com '\' (0x5c). No Android/Linux o ZipInputStream entrega
+# esse '\' literal, File() não o trata como separador, e a pasta lib/ nunca é
+# criada -> "Pacote QAIRT incompleto." O zip precisa de entradas com '/' (0x2f).
 $zipName = "sig-qairt-arm64-v8a-v1.zip"
 $zipPath = Join-Path $output $zipName
 if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-[IO.Compression.ZipFile]::CreateFromDirectory($staging, $zipPath, [IO.Compression.CompressionLevel]::Optimal, $false)
+$fs = [System.IO.File]::Open($zipPath, [System.IO.FileMode]::Create)
+$zip = New-Object System.IO.Compression.ZipArchive($fs, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    Get-ChildItem -LiteralPath $staging -Recurse -File | ForEach-Object {
+        # Caminho relativo com separador '/' SEMPRE (não usar [IO.Path]::GetRelativePath
+        # nem Replace('\','/') sobre caminho absoluto — monta da raiz do staging).
+        $rel = $_.FullName.Substring($staging.Length + 1).Replace('\', '/')
+        $entry = $zip.CreateEntry($rel, [System.IO.Compression.CompressionLevel]::Optimal)
+        $es = $entry.Open()
+        try {
+            $in = [System.IO.File]::OpenRead($_.FullName)
+            try { $in.CopyTo($es) } finally { $in.Dispose() }
+        } finally { $es.Dispose() }
+    }
+} finally {
+    $zip.Dispose()
+    $fs.Dispose()
+}
 
 $zipSize = (Get-Item $zipPath).Length
 $zipSha = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()

@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Testes JVM puros do QairtDependencyManager (sem Android, sem Robolectric).
@@ -126,6 +127,64 @@ class QairtDependencyManagerTest {
         // Htp vem antes de Prepare (Prepare depende de Htp)
         assertTrue(htpOrder.indexOfFirst { it.contains("Htp") && !it.contains("Prepare") } <
             htpOrder.indexOfFirst { it.contains("Prepare") })
+    }
+
+    @Test
+    fun `normalizeZipEntryName converts backslash to forward slash`() {
+        // Pacote gerado no Windows (.NET ZipFile.CreateFromDirectory) grava '\'
+        // como separador. No Android isso quebra a extração (File no Linux não
+        // trata '\' como separador) -> era o bug "Pacote QAIRT incompleto."
+        assertEquals("lib/libQnnGpu.so", QairtDependencyManager.normalizeZipEntryName("lib\\libQnnGpu.so"))
+        assertEquals("lib/libQnnSystem.so", QairtDependencyManager.normalizeZipEntryName("lib/libQnnSystem.so"))
+        assertEquals("manifest.json", QairtDependencyManager.normalizeZipEntryName("manifest.json"))
+        // Nomes com barra dupla também são normalizados
+        assertEquals("a/b/c.so", QairtDependencyManager.normalizeZipEntryName("a\\b\\c.so"))
+        // Não altera nomes que já usam '/'
+        val original = "lib/libQnnHtp.so"
+        assertEquals(original, QairtDependencyManager.normalizeZipEntryName(original))
+    }
+
+    @Test
+    fun `backslash zip entry extracts to real subdirectory`() {
+        // Reproduz o bug real: um zip gravado com 'lib\libX.so' (Windows/.NET).
+        // Com a sanitização, o arquivo precisa cair em <dest>/lib/libX.so e o
+        // check requiredLibraries.all { File(libDir, it).isFile } passa.
+        val dest = createTempDir("qairt_staging_")
+        try {
+            val zip = File(dest, "pkg.zip")
+            java.util.zip.ZipOutputStream(java.io.FileOutputStream(zip)).use { zos ->
+                val rawName = "lib\\libQnnSystem.so" // separador INVERTIDO, como o .NET grava
+                zos.putNextEntry(java.util.zip.ZipEntry(rawName))
+                zos.write(byteArrayOf(1, 2, 3, 4))
+                zos.closeEntry()
+                zos.putNextEntry(java.util.zip.ZipEntry("manifest.json"))
+                zos.write("{}".toByteArray())
+                zos.closeEntry()
+            }
+            // Extrai com a MESMA lógica do QairtDependencyManager.extractZip
+            val extracted = File(dest, "out")
+            extracted.mkdirs()
+            java.util.zip.ZipInputStream(java.io.BufferedInputStream(java.io.FileInputStream(zip))).use { zis ->
+                while (true) {
+                    val entry = zis.nextEntry ?: break
+                    val normalized = QairtDependencyManager.normalizeZipEntryName(entry.name)
+                    val out = File(extracted, normalized)
+                    out.parentFile?.mkdirs()
+                    java.io.FileOutputStream(out).use { zis.copyTo(it) }
+                    zis.closeEntry()
+                }
+            }
+            val libFile = File(File(extracted, "lib"), "libQnnSystem.so")
+            assertTrue("lib/libQnnSystem.so deveria existir após extração normalizada (era o bug)", libFile.isFile)
+            // No Android/Linux, SEM a sanitização, o arquivo ficaria na raiz com '\'
+            // literal no nome (File não trata '\' como separador no Linux). Aqui no
+            // JVM/Windows o '\' é separador, então File(extracted, "lib\libX.so")
+            // resolve para o MESMO caminho — a assertiva de "arquivo com \ no nome"
+            // só é válida em Linux. O essencial (lib/ criada + lib presente) já foi
+            // verificado acima.
+        } finally {
+            dest.deleteRecursively()
+        }
     }
 
     // ---- helpers de teste (espelham a lógica do manager) ----

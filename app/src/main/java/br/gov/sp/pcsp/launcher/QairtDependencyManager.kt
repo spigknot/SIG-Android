@@ -133,7 +133,10 @@ object QairtDependencyManager {
             onProgress(Progress(archive.length(), archive.length(), "Instalando"))
             extractZip(archive, staging)
             val libDir = File(staging, "lib")
-            check(requiredLibraries.all { File(libDir, it).isFile }) { "Pacote QAIRT incompleto." }
+            val missing = requiredLibraries.filterNot { File(libDir, it).isFile }
+            check(missing.isEmpty()) {
+                "Pacote QAIRT incompleto: faltam ${missing.size} lib(s): ${missing.joinToString(", ")}"
+            }
             File(staging, MARKER_NAME).writeText(PACKAGE_VERSION)
 
             val destination = installedRoot(context)
@@ -193,10 +196,16 @@ object QairtDependencyManager {
 
     private fun extractZip(archive: File, dest: File) {
         val canonical = dest.canonicalFile
+        var extracted = 0
         ZipInputStream(BufferedInputStream(FileInputStream(archive))).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                val out = File(dest, entry.name).canonicalFile
+                // ⚠️ Pacotes gerados no Windows (.NET ZipFile.CreateFromDirectory) gravam
+                // os nomes com '\' (0x5c) em vez de '/'. No Android/Linux, '\' NÃO é
+                // separador: File(dest, "lib\libX.so") criaria um arquivo com '\' no
+                // nome na raiz e a pasta lib/ nunca existiria -> "Pacote incompleto".
+                val normalizedName = normalizeZipEntryName(entry.name)
+                val out = File(dest, normalizedName).canonicalFile
                 check(out.path.startsWith(canonical.path + File.separator)) { "Entrada ZIP inválida." }
                 if (entry.isDirectory) {
                     out.mkdirs()
@@ -205,10 +214,26 @@ object QairtDependencyManager {
                     FileOutputStream(out).use { zip.copyTo(it, 256 * 1024) }
                     out.setReadable(true, true)
                 }
+                extracted++
+                android.util.Log.i(TAG, "extraiu: $normalizedName -> ${out.absolutePath} (dir=${entry.isDirectory})")
                 zip.closeEntry()
             }
         }
+        android.util.Log.i(TAG, "extração concluída: $extracted entrada(s) em ${dest.absolutePath}")
+        val lib = File(dest, "lib")
+        if (lib.isDirectory) {
+            android.util.Log.i(TAG, "lib/ contém: ${lib.listFiles()?.map { it.name }?.joinToString(", ") ?: "(vazio)"}")
+        } else {
+            android.util.Log.w(TAG, "lib/ NÃO existe em ${dest.absolutePath}")
+        }
     }
+
+    /**
+     * Normaliza o nome de uma entrada ZIP para usar separador '/'.
+     * Pacotes gerados no Windows (.NET) gravam '\' (0x5c); no Android isso
+     * quebraria a extração (File não trata '\' como separador no Linux).
+     */
+    internal fun normalizeZipEntryName(name: String): String = name.replace('\\', '/')
 
     // ---- carregamento de libs nativas ----
 
