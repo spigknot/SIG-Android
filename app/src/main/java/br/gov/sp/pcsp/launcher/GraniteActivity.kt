@@ -874,11 +874,19 @@ class GraniteActivity : AppCompatActivity() {
 
     private fun showModelMenu() {
         PopupMenu(this, buttonModel).apply {
-            menu.add("Granite 5.0 Turbo (en)")
-            menu.add("Granite 4.1 NAR")
+            // Mesmo padrão do Whisper: "✓ " quando o modelo já está baixado
+            // (packageComplete). Resolver por itemId, NUNCA por item.title —
+            // o "✓ " prefixado quebraria o match por label.
+            val turboComplete = GraniteEngine.packageComplete(this@GraniteActivity)
+            val narComplete = GraniteNarEngine.packageComplete(this@GraniteActivity)
+            menu.add(0, 1, 0, if (turboComplete) "✓ Granite 5.0 Turbo (en)" else "Granite 5.0 Turbo (en)")
+            menu.add(0, 2, 0, if (narComplete) "✓ Granite 4.1 NAR" else "Granite 4.1 NAR")
             setOnMenuItemClickListener { item ->
-                val label = item.title.toString()
-                val model = if (label.contains("4.1")) MODEL_NAR else MODEL_TURBO
+                val model = when (item.itemId) {
+                    1 -> MODEL_TURBO
+                    2 -> MODEL_NAR
+                    else -> return@setOnMenuItemClickListener true
+                }
                 val complete = when (model) {
                     MODEL_NAR -> GraniteNarEngine.packageComplete(this@GraniteActivity)
                     else -> GraniteEngine.packageComplete(this@GraniteActivity)

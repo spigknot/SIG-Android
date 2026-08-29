@@ -7,7 +7,6 @@ import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import br.gov.sp.pcsp.launcher.experimental.npu.NpuTestActivity
 import java.util.Locale
 
 class ToolsActivity : AppCompatActivity() {
@@ -40,10 +39,6 @@ class ToolsActivity : AppCompatActivity() {
         }
         findViewById<View>(R.id.button_transcription).setOnClickListener {
             startActivity(Intent(this, RemoteSttActivity::class.java).putExtra(RemoteSttActivity.EXTRA_MODE, "transcription"))
-        }
-        findViewById<View>(R.id.button_npu_tests).apply {
-            visibility = if (BuildConfig.ENABLE_NPU_TESTS) View.VISIBLE else View.GONE
-            setOnClickListener { startActivity(Intent(this@ToolsActivity, NpuTestActivity::class.java)) }
         }
     }
 
