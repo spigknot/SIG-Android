@@ -18,10 +18,7 @@ import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.Editable
-import android.text.SpannableString
-import android.text.Spanned
 import android.text.TextWatcher
-import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.Gravity
 import android.view.View
@@ -36,7 +33,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import android.graphics.Matrix
-import android.graphics.Color
 import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
@@ -99,7 +95,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     private val selectedVideos = mutableListOf<SelectedVideo>()
     private val outputItems = mutableListOf<OutputItem>()
-    private val terminalLines = StringBuilder()
     private val selectedAudioTracks = mutableMapOf<String, Int>()
     private var selectedOutputFolder: DocumentFile? = null
     private var zipFile: File? = null
@@ -858,53 +853,29 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         copyAudio: Boolean = false,
         audioTrack: Int = 0
     ): Array<String> {
-        val args = mutableListOf("-y")
         val inputDuration = readDuration(inputFile)
         val hasStartTrim = startMs > 0L
         val hasEndTrim = endMs != null && inputDuration > 0L && endMs < inputDuration - 250L
-        if (hasStartTrim) {
-            args.addAll(listOf("-ss", formatSeconds(startMs)))
+        val encoderArguments = if (copyAudio) {
+            emptyList()
+        } else {
+            FfmpegMediaPolicies.extractAudioEncoderArguments(
+                settings.extension.ext,
+                settings.bitrate,
+                detectPcmEncoder(inputFile, audioTrack)
+            )
         }
-        args.addAll(listOf("-i", inputFile.absolutePath))
-        if (hasEndTrim) {
-            args.addAll(listOf("-t", formatSeconds(requireNotNull(endMs) - startMs)))
-        }
-        args.addAll(listOf("-vn", "-map", "0:a:$audioTrack", "-map_metadata", "0"))
-        if (copyAudio) {
-            args.addAll(listOf("-c:a", "copy", "-avoid_negative_ts", "make_zero", outputFile.absolutePath))
-            return args.toTypedArray()
-        }
-        args.addAll(listOf("-ar", settings.sampleRate.toString(), "-ac", settings.channels.toString()))
-        when (settings.extension) {
-            AudioExtension.WAV -> {
-                args.addAll(listOf("-c:a", "pcm_s16le", "-f", "wav"))
-            }
-            AudioExtension.MP3 -> {
-                args.addAll(listOf("-c:a", "libmp3lame", "-b:a", settings.bitrate, "-minrate", settings.bitrate, "-maxrate", settings.bitrate))
-            }
-            AudioExtension.M4A -> {
-                args.addAll(listOf("-c:a", "aac", "-b:a", settings.bitrate, "-movflags", "+faststart"))
-            }
-            AudioExtension.AAC -> {
-                args.addAll(listOf("-c:a", "aac", "-b:a", settings.bitrate))
-            }
-            AudioExtension.OGG -> {
-                args.addAll(listOf("-c:a", "libvorbis", "-b:a", settings.bitrate))
-            }
-            AudioExtension.OPUS -> {
-                args.addAll(listOf(
-                    "-c:a", "libopus",
-                    "-application", "audio",
-                    "-b:a", settings.bitrate,
-                    "-vbr", "on"
-                ))
-            }
-            AudioExtension.FLAC -> {
-                args.addAll(listOf("-c:a", "flac"))
-            }
-        }
-        args.addAll(listOf("-avoid_negative_ts", "make_zero", outputFile.absolutePath))
-        return args.toTypedArray()
+        return FfmpegMediaPolicies.extractAudioCommandArguments(
+            inputPath = inputFile.absolutePath,
+            outputPath = outputFile.absolutePath,
+            start = if (hasStartTrim) formatSeconds(startMs) else null,
+            duration = if (hasEndTrim) formatSeconds(requireNotNull(endMs) - startMs) else null,
+            audioMap = FfmpegMediaPolicies.audioStreamSpecifier(0, audioTrack),
+            copyAudio = copyAudio,
+            sampleRate = settings.sampleRate,
+            channels = settings.channels,
+            encoderArguments = encoderArguments
+        )
     }
 
     private fun audioTrackCount(uri: Uri): Int {
@@ -987,12 +958,33 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 "audio/opus" -> settings.extension == AudioExtension.OPUS
                 "audio/vorbis" -> settings.extension == AudioExtension.OGG
                 "audio/flac" -> settings.extension == AudioExtension.FLAC
-                "audio/raw" -> settings.extension == AudioExtension.WAV
+                "audio/raw", "audio/x-raw", "audio/wav", "audio/x-wav" -> settings.extension == AudioExtension.WAV
                 else -> false
             }
             compatibleExtension && sourceRate == settings.sampleRate && sourceChannels == settings.channels
         } catch (_: Throwable) {
             false
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun detectPcmEncoder(inputFile: File, audioTrack: Int): String {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(inputFile.absolutePath)
+            val format = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }.filter {
+                it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            }.getOrNull(audioTrack) ?: return "pcm_s16le"
+            when (runCatching { format.getInteger(MediaFormat.KEY_PCM_ENCODING) }.getOrNull()) {
+                android.media.AudioFormat.ENCODING_PCM_8BIT -> "pcm_u8"
+                android.media.AudioFormat.ENCODING_PCM_FLOAT -> "pcm_f32le"
+                android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> "pcm_s24le"
+                android.media.AudioFormat.ENCODING_PCM_32BIT -> "pcm_s32le"
+                else -> "pcm_s16le"
+            }
+        } catch (_: Throwable) {
+            "pcm_s16le"
         } finally {
             extractor.release()
         }
@@ -1590,122 +1582,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun clearTerminal() {
-        synchronized(terminalLines) { terminalLines.clear() }
         terminalBox.visibility = View.GONE
         terminalText.text = ""
-    }
-
-    private fun appendTerminalAudioInfo(line: String) {
-        synchronized(terminalLines) {
-            terminalLines.append(AUDIO_INFO_START).append(line).append(AUDIO_INFO_END).append('\n')
-        }
-        runOnUiThread { updateTerminalText() }
-    }
-
-    private fun updateTerminalText() {
-        val rawText = synchronized(terminalLines) { terminalLines.toString() }
-        terminalBox.visibility = if (rawText.isBlank()) View.GONE else View.VISIBLE
-        terminalText.text = renderTerminalText(rawText)
-        terminalText.post {
-            val layout = terminalText.layout ?: return@post
-            val scrollAmount = layout.getLineTop(terminalText.lineCount) - terminalText.height + terminalText.totalPaddingTop + terminalText.totalPaddingBottom
-            terminalText.scrollTo(0, scrollAmount.coerceAtLeast(0))
-        }
-    }
-
-    private fun renderTerminalText(rawText: String): SpannableString {
-        val clean = StringBuilder()
-        val ranges = mutableListOf<IntRange>()
-        var index = 0
-        while (index < rawText.length) {
-            val start = rawText.indexOf(AUDIO_INFO_START, index)
-            if (start < 0) {
-                clean.append(rawText.substring(index))
-                break
-            }
-            clean.append(rawText.substring(index, start))
-            val textStart = clean.length
-            val contentStart = start + AUDIO_INFO_START.length
-            val end = rawText.indexOf(AUDIO_INFO_END, contentStart)
-            if (end < 0) {
-                clean.append(rawText.substring(contentStart))
-                ranges += textStart until clean.length
-                break
-            }
-            clean.append(rawText.substring(contentStart, end))
-            ranges += textStart until clean.length
-            index = end + AUDIO_INFO_END.length
-        }
-        val spannable = SpannableString(clean.toString())
-        ranges.forEach { range ->
-            if (!range.isEmpty()) {
-                spannable.setSpan(
-                    ForegroundColorSpan(Color.rgb(255, 216, 86)),
-                    range.first,
-                    range.last + 1,
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            }
-        }
-        return spannable
-    }
-
-    private fun describeAudioFile(file: File): String {
-        val info = probeAudioFile(file)
-        val sampleRate = if (
-            file.extension.equals(AudioExtension.OPUS.ext, ignoreCase = true) &&
-            info.sampleRate == "48000hz"
-        ) {
-            "48000hz (Opus)"
-        } else {
-            info.sampleRate.ifBlank { "hz ?" }
-        }
-        return listOf(
-            ".${file.extension.lowercase(Locale.ROOT).ifBlank { "sem extensão" }}",
-            sampleRate,
-            info.channels.ifBlank { "canal ?" },
-            info.bitrate.ifBlank { "bitrate ?" }
-        ).joinToString(", ")
-    }
-
-    private fun probeAudioFile(file: File): AudioProbe {
-        return try {
-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", file.absolutePath))
-            val logs = session.allLogsAsString.orEmpty()
-            val audioLine = logs.lines().firstOrNull { it.contains("Audio:", ignoreCase = true) }.orEmpty()
-            val sampleRate = Regex("""(\d+)\s*Hz""", RegexOption.IGNORE_CASE)
-                .find(audioLine)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.let { "${it}hz" }
-                .orEmpty()
-            val channels = when {
-                audioLine.contains("mono", ignoreCase = true) -> "mono"
-                audioLine.contains("stereo", ignoreCase = true) -> "stereo"
-                else -> Regex("""(\d+)\s*channels""", RegexOption.IGNORE_CASE)
-                    .find(audioLine)
-                    ?.groupValues
-                    ?.getOrNull(1)
-                    ?.let { "${it}ch" }
-                    .orEmpty()
-            }
-            val bitrate = Regex("""(\d+(?:\.\d+)?)\s*kb/s""", RegexOption.IGNORE_CASE)
-                .find(audioLine)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.let { "${it.removeSuffix(".0")}k" }
-                ?: estimateBitrate(file)
-            AudioProbe(sampleRate, channels, bitrate)
-        } catch (_: Throwable) {
-            AudioProbe("", "", "")
-        }
-    }
-
-    private fun estimateBitrate(file: File): String {
-        val durationMs = readDuration(file)
-        if (durationMs <= 0L) return ""
-        val kbps = ((file.length().toDouble() * 8.0) / durationMs.toDouble()).toInt().coerceAtLeast(1)
-        return "${kbps}k"
     }
 
     private fun readDuration(uri: Uri): Long {
@@ -1807,8 +1685,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 5104
         private const val OUTPUT_FOLDER_NAME = "SIG"
         private const val TAG = "FfmpegExtractAudio"
-        private const val AUDIO_INFO_START = "\uE000AI\uE000"
-        private const val AUDIO_INFO_END = "\uE000AE\uE000"
         private val VIDEO_EXTENSIONS = setOf(".mp4", ".mkv", ".mov", ".avi", ".webm", ".3gp", ".m4v")
         private val AUDIO_EXTENSIONS = setOf(".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".wma", ".amr")
     }
@@ -1835,12 +1711,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private data class SaveResult(
         val uri: Uri?,
         val error: String?
-    )
-
-    private data class AudioProbe(
-        val sampleRate: String,
-        val channels: String,
-        val bitrate: String
     )
 
     private enum class AudioPreset {

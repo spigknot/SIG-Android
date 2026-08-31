@@ -264,18 +264,14 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         sourceProfile: AudioSourceProfile = inspectAudioSource(inputFile)
             ?: AudioSourceProfile(1, 48000, 2, "pcm_s16le")
     ): Array<String> {
-        return arrayOf(
-            "-y",
-            "-i", inputFile.absolutePath,
-            "-vn",
-            "-map", "0:a:0",
-            "-af", mode.filter,
-            "-c:a", sourceProfile.pcmEncoder,
-            "-ar", sourceProfile.sampleRate.toString(),
-            "-ac", sourceProfile.channels.toString(),
-            "-avoid_negative_ts", "make_zero",
-            "-f", "wav",
-            outputFile.absolutePath
+        return FfmpegMediaPolicies.cleanAudioCommandArguments(
+            inputPath = inputFile.absolutePath,
+            outputPath = outputFile.absolutePath,
+            audioMap = FfmpegMediaPolicies.audioStreamSpecifier(0, 0),
+            filter = mode.filter,
+            pcmEncoder = sourceProfile.pcmEncoder,
+            sampleRate = sourceProfile.sampleRate,
+            channels = sourceProfile.channels
         )
     }
 

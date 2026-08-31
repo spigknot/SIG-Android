@@ -287,6 +287,13 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         metadataRotation.isChecked = getSharedPreferences(ROTATE_PREFS, MODE_PRIVATE)
             .getBoolean(PREF_METADATA_ROTATION, false)
         metadataRotation.setOnCheckedChangeListener { _, checked ->
+            if (checked && durationMs > 0L && (timeline.getStartMs() > 0L || timeline.getEndMs() < durationMs)) {
+                Toast.makeText(
+                    this,
+                    "O intervalo de corte será preservado, mas não será aplicado no modo por metadados.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
             getSharedPreferences(ROTATE_PREFS, MODE_PRIVATE)
                 .edit()
                 .putBoolean(PREF_METADATA_ROTATION, checked)
@@ -440,8 +447,21 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private fun rotateSelectedVideo() {
         val uri = selectedUri ?: return
 
+        val videoTracks = videoTrackCount(uri)
+        if (videoTracks != 1) {
+            status.text = if (videoTracks == 0) {
+                "O arquivo não possui uma faixa de vídeo."
+            } else {
+                "O arquivo possui $videoTracks faixas de vídeo. Esta ferramenta aceita exatamente uma para não descartar conteúdo."
+            }
+            return
+        }
+
         val degrees = readDegrees()
         val metadataOnly = metadataRotation.isChecked
+        if (metadataOnly && FfmpegMediaPolicies.safeContainerExtension(selectedName) != selectedName.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+            Toast.makeText(this, "Container não reconhecido: a cópia será salva em MKV.", Toast.LENGTH_LONG).show()
+        }
         val startMs = timeline.getStartMs()
         val endMs = timeline.getEndMs()
         if (endMs <= startMs) {
@@ -474,6 +494,20 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
 
         executeRotation(uri, degrees, metadataOnly)
+    }
+
+    private fun videoTrackCount(uri: Uri): Int {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            (0 until extractor.trackCount).count { index ->
+                extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("video/") == true
+            }
+        } catch (_: Throwable) {
+            0
+        } finally {
+            extractor.release()
+        }
     }
 
     private fun executeRotation(uri: Uri, degrees: Int, metadataOnly: Boolean) {
@@ -523,7 +557,12 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                         hasTrim -> "Girando e cortando vídeo"
                         else -> "Girando vídeo"
                     }
-                    tracker = FfmpegTaskTracker(status, listOf("Preparando rotação", taskLabel))
+                    val tasks = if (metadataOnly) {
+                        listOf("Preparando rotação", "Validando container e faixas", taskLabel)
+                    } else {
+                        listOf("Preparando rotação", taskLabel)
+                    }
+                    tracker = FfmpegTaskTracker(status, tasks)
                     tracker.completeCurrentTask()
                 }
 
@@ -532,7 +571,49 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     tracker.setTaskEncoder(1, encoder.shortName)
                     tracker.startTask(1)
                 }
-                val result = if (canUseParallel) {
+                val metadataPreflightFailure = if (metadataOnly) {
+                    tracker.startCurrentTask()
+                    val preflightOutput = File(
+                        cacheDir,
+                        "rotate_preflight_${System.currentTimeMillis()}.${currentTempOutput.extension}"
+                    )
+                    try {
+                        val preflight = FFmpegKit.executeWithArguments(
+                            FfmpegMediaPolicies.metadataCopyPreflightArguments(
+                                currentInputFile.absolutePath,
+                                preflightOutput.absolutePath,
+                                detectCurrentMetadataRotation(currentInputFile),
+                                degrees
+                            )
+                        )
+                        if (ReturnCode.isSuccess(preflight.returnCode)) {
+                            tracker.completeCurrentTask()
+                            tracker.startCurrentTask()
+                            null
+                        } else {
+                            preflight.allLogsAsString.orEmpty().lines()
+                                .map(String::trim)
+                                .filter(String::isNotBlank)
+                                .takeLast(3)
+                                .joinToString(" ")
+                                .take(180)
+                                .ifBlank { "O container de saída não aceita todas as faixas do arquivo." }
+                        }
+                    } finally {
+                        preflightOutput.delete()
+                    }
+                } else {
+                    null
+                }
+
+                val result = if (metadataPreflightFailure != null) {
+                    RotationExecutionResult(
+                        success = false,
+                        cancelled = false,
+                        failureMessage = "Compatibilidade recusada antes da cópia: $metadataPreflightFailure",
+                        encoderInfo = ""
+                    )
+                } else if (canUseParallel) {
                     val parallelResult = executeParallelKeyframeRotation(currentInputFile, currentTempOutput, encoder, quality, tracker)
                     if (!parallelResult.success && !parallelResult.cancelled) {
                         currentTempOutput.delete()
@@ -1333,18 +1414,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
     }
 
-    private fun detectAudioBitrate(inputFile: File): String {
-        return try {
-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", inputFile.absolutePath))
-            val logs = session.allLogsAsString.orEmpty()
-            parseBitrateFromText(logs.lines().firstOrNull { it.contains("Audio:", ignoreCase = true) }.orEmpty())
-                ?: FALLBACK_AUDIO_BITRATE
-        } catch (e: Throwable) {
-            Log.w(TAG, "Could not detect audio bitrate", e)
-            FALLBACK_AUDIO_BITRATE
-        }
-    }
-
     private fun parseBitrateFromText(text: String): String? {
         val match = Regex("""(\d+(?:\.\d+)?)\s*kb/s""", RegexOption.IGNORE_CASE).find(text) ?: return null
         val kbps = match.groupValues[1].toDoubleOrNull()?.takeIf { it > 0.0 } ?: return null
@@ -1881,7 +1950,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 4303
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val FALLBACK_VIDEO_BITRATE = "15M"
-        private const val FALLBACK_AUDIO_BITRATE = "128k"
         private const val TAG = "FfmpegRotateVideo"
         private const val ROTATE_PREFS = "ffmpeg_rotate_preferences"
         private const val PREF_METADATA_ROTATION = "metadata_rotation"

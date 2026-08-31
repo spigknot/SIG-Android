@@ -2,6 +2,31 @@ package br.gov.sp.pcsp.launcher
 
 import java.util.Locale
 
+internal data class FfmpegStreamCopySignature(
+    val containerFamily: String,
+    val ffmpegDescriptor: String,
+    val mime: String,
+    val profile: Int?,
+    val level: Int?,
+    val sampleRate: Int?,
+    val channels: Int?,
+    val channelMask: Int?,
+    val pcmEncoding: Int?,
+    val width: Int?,
+    val height: Int?,
+    val frameRate: Double?,
+    val colorStandard: Int?,
+    val colorTransfer: Int?,
+    val colorRange: Int?,
+    val codecTag: String?,
+    val sampleFormat: String?,
+    val channelLayout: String?,
+    val timeBase: String?,
+    val csd0: Int?,
+    val csd1: Int?,
+    val csd2: Int?
+)
+
 internal object FfmpegMediaPolicies {
     fun usesMetadataCopyCommand(metadataOnly: Boolean): Boolean = metadataOnly
 
@@ -20,8 +45,171 @@ internal object FfmpegMediaPolicies {
         outputPath
     )
 
+    fun metadataCopyPreflightArguments(
+        inputPath: String,
+        outputPath: String,
+        currentCounterClockwise: Int,
+        requestedClockwise: Int
+    ): Array<String> = arrayOf(
+        "-y", "-hide_banner", "-loglevel", "error",
+        "-display_rotation:v:0",
+        metadataRotationAfterClockwiseRequest(currentCounterClockwise, requestedClockwise).toString(),
+        "-i", inputPath,
+        "-map", "0", "-c", "copy", "-t", "0.001",
+        outputPath
+    )
+
     fun audioStreamSpecifier(inputIndex: Int, audioTrackIndex: Int): String =
         "$inputIndex:a:${audioTrackIndex.coerceAtLeast(0)}"
+
+    fun cutAudioEncoderArguments(extension: String, bitrate: String, pcmEncoder: String): List<String> =
+        when (extension.lowercase(Locale.ROOT)) {
+            "wav" -> listOf("-c:a", pcmEncoder)
+            "flac" -> listOf("-c:a", "flac")
+            "mp3" -> listOf("-c:a", "libmp3lame", "-b:a", bitrate)
+            "ogg" -> listOf("-c:a", "libvorbis", "-b:a", bitrate)
+            "opus" -> listOf("-c:a", "libopus", "-b:a", bitrate, "-vbr", "on", "-application", "audio")
+            "m4a", "aac" -> listOf("-c:a", "aac", "-b:a", bitrate)
+            else -> listOf("-c:a", "aac", "-b:a", bitrate)
+        }
+
+    fun cutAudioCommandArguments(
+        inputPath: String,
+        outputPath: String,
+        start: String,
+        duration: String,
+        encoderArguments: List<String>,
+        audioMap: String = "0:a?"
+    ): Array<String> = buildList {
+        addAll(listOf("-y", "-ss", start, "-i", inputPath, "-t", duration))
+        addAll(listOf("-map", audioMap, "-map_metadata", "0", "-map_chapters", "0", "-vn"))
+        addAll(encoderArguments)
+        addAll(listOf("-avoid_negative_ts", "make_zero", outputPath))
+    }.toTypedArray()
+
+    fun extractAudioEncoderArguments(extension: String, bitrate: String, pcmEncoder: String): List<String> =
+        when (extension.lowercase(Locale.ROOT)) {
+            "wav" -> listOf("-c:a", pcmEncoder, "-f", "wav")
+            "mp3" -> listOf("-c:a", "libmp3lame", "-b:a", bitrate)
+            "m4a" -> listOf("-c:a", "aac", "-b:a", bitrate, "-movflags", "+faststart")
+            "aac" -> listOf("-c:a", "aac", "-b:a", bitrate)
+            "ogg" -> listOf("-c:a", "libvorbis", "-b:a", bitrate)
+            "opus" -> listOf("-c:a", "libopus", "-application", "audio", "-b:a", bitrate, "-vbr", "on")
+            "flac" -> listOf("-c:a", "flac")
+            else -> listOf("-c:a", "aac", "-b:a", bitrate)
+        }
+
+    fun extractAudioCommandArguments(
+        inputPath: String,
+        outputPath: String,
+        start: String?,
+        duration: String?,
+        audioMap: String,
+        copyAudio: Boolean,
+        sampleRate: Int,
+        channels: Int,
+        encoderArguments: List<String>
+    ): Array<String> = buildList {
+        add("-y")
+        if (start != null) addAll(listOf("-ss", start))
+        addAll(listOf("-i", inputPath))
+        if (duration != null) addAll(listOf("-t", duration))
+        addAll(listOf("-vn", "-map", audioMap, "-map_metadata", "0"))
+        if (copyAudio) {
+            addAll(listOf("-c:a", "copy"))
+        } else {
+            addAll(listOf("-ar", sampleRate.toString(), "-ac", channels.toString()))
+            addAll(encoderArguments)
+        }
+        addAll(listOf("-avoid_negative_ts", "make_zero", outputPath))
+    }.toTypedArray()
+
+    fun directConcatCommandArguments(listPath: String, outputPath: String): Array<String> = arrayOf(
+        "-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0",
+        "-i", listPath,
+        "-map", "0", "-map_metadata", "0", "-map_chapters", "0",
+        "-c", "copy", "-avoid_negative_ts", "make_zero", outputPath
+    )
+
+    fun joinAudioCommandArguments(
+        inputPaths: List<String>,
+        outputPath: String,
+        filterComplex: String,
+        encoder: String,
+        sampleRate: Int,
+        channels: Int,
+        bitrate: String?
+    ): Array<String> = buildList {
+        add("-y")
+        inputPaths.forEach { addAll(listOf("-i", it)) }
+        addAll(listOf("-filter_complex", filterComplex, "-map", "[aout]", "-vn"))
+        addAll(listOf("-c:a", encoder, "-ar", sampleRate.toString(), "-ac", channels.toString()))
+        if (bitrate != null) addAll(listOf("-b:a", bitrate))
+        addAll(listOf("-avoid_negative_ts", "make_zero", outputPath))
+    }.toTypedArray()
+
+    fun insertAudioCommandArguments(
+        mainInputPath: String,
+        insertedInputPath: String,
+        outputPath: String,
+        filterComplex: String,
+        encoder: String,
+        sampleRate: Int,
+        channels: Int,
+        bitrate: String?,
+        fastStart: Boolean
+    ): Array<String> = buildList {
+        addAll(listOf(
+            "-y", "-i", mainInputPath, "-i", insertedInputPath,
+            "-filter_complex", filterComplex, "-map", "[aout]", "-vn", "-c:a", encoder
+        ))
+        if (bitrate != null) addAll(listOf("-b:a", bitrate))
+        addAll(listOf("-ar", sampleRate.toString(), "-ac", channels.toString()))
+        if (fastStart) addAll(listOf("-movflags", "+faststart"))
+        addAll(listOf("-avoid_negative_ts", "make_zero", outputPath))
+    }.toTypedArray()
+
+    fun cleanAudioCommandArguments(
+        inputPath: String,
+        outputPath: String,
+        audioMap: String,
+        filter: String,
+        pcmEncoder: String,
+        sampleRate: Int,
+        channels: Int
+    ): Array<String> = arrayOf(
+        "-y", "-i", inputPath, "-vn", "-map", audioMap,
+        "-af", filter, "-c:a", pcmEncoder,
+        "-ar", sampleRate.toString(), "-ac", channels.toString(),
+        "-avoid_negative_ts", "make_zero", "-f", "wav", outputPath
+    )
+
+    fun hybridCopyBodyArguments(inputPath: String, outputPath: String, startUs: Long, endUs: Long): Array<String> {
+        val safeStart = startUs.coerceAtLeast(0L)
+        val safeEnd = endUs.coerceAtLeast(safeStart + 1L)
+        val start = String.format(Locale.US, "%.6f", safeStart / 1_000_000.0)
+        val duration = String.format(Locale.US, "%.6f", (safeEnd - safeStart) / 1_000_000.0)
+        return arrayOf(
+            "-y", "-ss", start, "-noautorotate", "-i", inputPath,
+            "-t", duration,
+            "-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?",
+            "-map_metadata", "0", "-map_chapters", "0", "-c", "copy",
+            "-avoid_negative_ts", "make_zero", "-f", "matroska", outputPath
+        )
+    }
+
+    fun normalizedAudioFilter(
+        inputSpecifier: String,
+        normalizeFilter: String,
+        postTimestampFilters: List<String>,
+        outputLabel: String
+    ): String = buildString {
+        append('[').append(inputSpecifier).append(']')
+        append(normalizeFilter)
+        append(",asetpts=PTS-STARTPTS")
+        postTimestampFilters.forEach { append(',').append(it) }
+        append('[').append(outputLabel).append(']')
+    }
 
     fun normalizeRightAngle(degrees: Int): Int {
         val normalized = ((degrees % 360) + 360) % 360
@@ -107,6 +295,30 @@ internal object FfmpegMediaPolicies {
         name.substringAfterLast('.', "").lowercase(Locale.ROOT)
             .takeIf { it in setOf("mp4", "m4v", "mov", "mkv", "webm", "avi") }
             ?: "mkv"
+
+    fun containerFamily(name: String): String = when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+        "mp4", "m4v", "mov" -> "mov"
+        "mkv" -> "matroska"
+        "webm" -> "webm"
+        "avi" -> "avi"
+        "wav" -> "wav"
+        "m4a" -> "mov"
+        "aac" -> "adts"
+        "mp3" -> "mp3"
+        "flac" -> "flac"
+        "ogg", "opus" -> "ogg"
+        else -> "unknown"
+    }
+
+    fun directConcatSignaturesCompatible(signatures: List<List<FfmpegStreamCopySignature>?>): Boolean {
+        if (signatures.size < 2 || signatures.any { it.isNullOrEmpty() }) return false
+        if (signatures.filterNotNull().flatten().any {
+                it.containerFamily == "unknown" || it.ffmpegDescriptor.isBlank() || it.mime.isBlank()
+            }
+        ) return false
+        val first = signatures.first()
+        return signatures.drop(1).all { it == first }
+    }
 
     fun formatCommand(arguments: Iterable<String>): String = buildString {
         append("ffmpeg")

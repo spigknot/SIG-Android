@@ -19,7 +19,6 @@ import android.provider.OpenableColumns
 import android.util.Log
 import android.view.View
 import android.view.inputmethod.EditorInfo
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.PopupMenu
@@ -53,8 +52,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     private lateinit var options: View
     private lateinit var transitionButton: TextView
     private lateinit var transitionTime: EditText
-    private lateinit var reencode: CheckBox
-    private lateinit var smartInsert: CheckBox
     private lateinit var executeButton: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
@@ -112,8 +109,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         options = findViewById(R.id.insert_options)
         transitionButton = findViewById(R.id.button_transition)
         transitionTime = findViewById(R.id.input_transition_time)
-        reencode = findViewById(R.id.check_reencode)
-        smartInsert = findViewById(R.id.check_smart_insert)
         executeButton = findViewById(R.id.button_insert)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
@@ -154,14 +149,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             } else false
         }
         inputTime.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) applyTypedInsertionTime() }
-        reencode.setOnCheckedChangeListener { _, checked ->
-            if (!checked && smartInsert.isChecked) smartInsert.isChecked = false
-            updateOptionState()
-        }
-        smartInsert.setOnCheckedChangeListener { _, checked ->
-            if (checked && !reencode.isChecked) reencode.isChecked = true
-            updateOptionState()
-        }
         updateOptionState()
         updateSpeedButtons()
     }
@@ -502,8 +489,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         clearOutputResult()
         val jobConfig = InsertAudioJobConfig(
             insertionMs = insertionMs,
-            reencodeChecked = reencode.isChecked,
-            smartInsertChecked = smartInsert.isChecked,
             selectedTransition = selectedTransition,
             transitionSeconds = transitionTime.text.toString().replace(',', '.').toDoubleOrNull()?.coerceIn(0.0, 5.0) ?: 0.5,
             mainAudioTrack = selectedAudioTracks[main.uri.toString()] ?: 0,
@@ -524,24 +509,12 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 tracker.completeTask(0)
 
                 val profile = detectAudioProfile(mainFile, jobConfig.mainAudioTrack)
-                val insertedProfile = detectAudioProfile(insertedFile, jobConfig.insertedAudioTrack)
                 val rawExtension = main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
                 val safeExtension = rawExtension.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
-                val isWav = safeExtension == "wav"
-                val canCopyDirectly = audioInputsAreCopyCompatible(profile, insertedProfile) &&
-                    audioCodecCopySafe(profile, safeExtension) &&
-                    audioCodecCopySafe(insertedProfile, safeExtension)
-                val smartInsertViable = jobConfig.smartInsertChecked && isSmartInsertCodecSupported(profile)
-                // Insertion at an arbitrary timestamp is sample-accurate only when the
-                // three parts are decoded and rebuilt. Copy/Smart Insert used packet
-                // boundaries and could shift or drop audio, so every mode uses this path.
-                val fullReencode = true
                 val resultFile = File(cacheDir, "insert_${System.currentTimeMillis()}_${sanitizeBase(main.name)}.$safeExtension")
-                val encoderName = if (fullReencode || jobConfig.smartInsertChecked) encoderForProfile(safeExtension, profile) else null
-                encoderName?.let {
-                    tracker.setTaskEncoder(1, it)
-                    tracker.startTask(1)
-                }
+                val encoderName = encoderForProfile(safeExtension, profile)
+                tracker.setTaskEncoder(1, encoderName)
+                tracker.startTask(1)
 
                 val session = executeWithProgress(
                     buildFullReencodeArguments(mainFile, insertedFile, resultFile, profile, jobConfig),
@@ -610,18 +583,18 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         val normalize = "aresample=${profile.sampleRate},aformat=sample_fmts=fltp:sample_rates=${profile.sampleRate}:channel_layouts=$audioLayout"
         if (hasLeft) {
             val fadeOut = if (useFade) ",afade=t=out:st=${decimal((at - effectiveFade).coerceAtLeast(0.0))}:d=${decimal(effectiveFade)}" else ""
-            filters += "[0:a:${jobConfig.mainAudioTrack}]atrim=start=0:end=${decimal(at)},$normalize,asetpts=PTS-STARTPTS$fadeOut[a0]"
+            filters += "[${FfmpegMediaPolicies.audioStreamSpecifier(0, jobConfig.mainAudioTrack)}]atrim=start=0:end=${decimal(at)},$normalize,asetpts=PTS-STARTPTS$fadeOut[a0]"
             labels += "a0"
         }
         val insertedFades = buildString {
             if (useFade && hasLeft) append(",afade=t=in:st=0:d=${decimal(effectiveFade)}")
             if (useFade && hasRight) append(",afade=t=out:st=${decimal((insertedEnd - effectiveFade).coerceAtLeast(0.0))}:d=${decimal(effectiveFade)}")
         }
-        filters += "[1:a:${jobConfig.insertedAudioTrack}]atrim=start=0:end=${decimal(insertedEnd)},$normalize,asetpts=PTS-STARTPTS$insertedFades[a1]"
+        filters += "[${FfmpegMediaPolicies.audioStreamSpecifier(1, jobConfig.insertedAudioTrack)}]atrim=start=0:end=${decimal(insertedEnd)},$normalize,asetpts=PTS-STARTPTS$insertedFades[a1]"
         labels += "a1"
         if (hasRight) {
             val fadeIn = if (useFade) ",afade=t=in:st=0:d=${decimal(effectiveFade)}" else ""
-            filters += "[0:a:${jobConfig.mainAudioTrack}]atrim=start=${decimal(at)}:end=${decimal(mainEnd)},$normalize,asetpts=PTS-STARTPTS$fadeIn[a2]"
+            filters += "[${FfmpegMediaPolicies.audioStreamSpecifier(0, jobConfig.mainAudioTrack)}]atrim=start=${decimal(at)}:end=${decimal(mainEnd)},$normalize,asetpts=PTS-STARTPTS$fadeIn[a2]"
             labels += "a2"
         }
         if (useCrossfade && labels.size > 1) {
@@ -638,20 +611,17 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
         val extension = output.extension.lowercase(Locale.ROOT)
         val encoder = encoderForProfile(extension, profile)
-        val args = mutableListOf(
-            "-y", "-i", main.absolutePath, "-i", inserted.absolutePath,
-            "-filter_complex", filters.joinToString(";"), "-map", "[aout]",
-            "-vn", "-c:a", encoder
+        return FfmpegMediaPolicies.insertAudioCommandArguments(
+            mainInputPath = main.absolutePath,
+            insertedInputPath = inserted.absolutePath,
+            outputPath = output.absolutePath,
+            filterComplex = filters.joinToString(";"),
+            encoder = encoder,
+            sampleRate = profile.sampleRate,
+            channels = profile.channels,
+            bitrate = profile.bitrate.takeIf { encoder !in setOf("flac", "pcm_s16le", "alac") },
+            fastStart = extension in setOf("m4a", "mp4")
         )
-        if (encoder !in setOf("flac", "pcm_s16le", "alac")) {
-            args.addAll(listOf("-b:a", profile.bitrate))
-        }
-        args.addAll(listOf("-ar", profile.sampleRate.toString(), "-ac", profile.channels.toString()))
-        if (extension in setOf("m4a", "mp4")) {
-            args.addAll(listOf("-movflags", "+faststart"))
-        }
-        args.addAll(listOf("-avoid_negative_ts", "make_zero", output.absolutePath))
-        return args.toTypedArray()
     }
 
     private fun audioTrackCount(uri: Uri): Int {
@@ -704,70 +674,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         return AUDIO_TRANSITIONS.firstOrNull { it.second == transition }?.second ?: "tri"
     }
 
-    private fun executeCopyInsert(main: File, inserted: File, output: File, tracker: FfmpegTaskTracker, jobConfig: InsertAudioJobConfig): FFmpegSession {
-        val work = File(cacheDir, "insert_copy_${System.currentTimeMillis()}").apply { mkdirs() }
-        val extension = output.extension.ifBlank { "m4a" }
-        val pieces = mutableListOf<File>()
-        val at = jobConfig.insertionMs
-        if (at > 0L) {
-            val left = File(work, "000.$extension")
-            val s = executeBlocking(arrayOf("-y", "-i", main.absolutePath, "-t", seconds(at), "-map", "0:a:0", "-c", "copy", left.absolutePath))
-            if (!ReturnCode.isSuccess(s.returnCode)) return s
-            pieces += left
-        }
-        val middle = File(work, "001.$extension")
-        val middleSession = executeBlocking(arrayOf("-y", "-i", inserted.absolutePath, "-map", "0:a:0", "-c", "copy", middle.absolutePath))
-        if (!ReturnCode.isSuccess(middleSession.returnCode)) return middleSession
-        pieces += middle
-        if (at < (mainAudio?.durationMs ?: 0L)) {
-            val right = File(work, "002.$extension")
-            val s = executeBlocking(arrayOf("-y", "-ss", seconds(at), "-i", main.absolutePath, "-map", "0:a:0", "-c", "copy", right.absolutePath))
-            if (!ReturnCode.isSuccess(s.returnCode)) return s
-            pieces += right
-        }
-        tracker.setTaskProgress(1, 35, "concatenando")
-        return concatPieces(pieces, output, tracker)
-    }
-
-    private fun executeSmartInsert(main: File, inserted: File, output: File, profile: AudioProfile, tracker: FfmpegTaskTracker, jobConfig: InsertAudioJobConfig): FFmpegSession {
-        val work = File(cacheDir, "smart_insert_${System.currentTimeMillis()}").apply { mkdirs() }
-        val extension = output.extension.ifBlank { "m4a" }
-        val pieces = mutableListOf<File>()
-        val at = jobConfig.insertionMs
-        if (at > 0L) {
-            val left = File(work, "000.$extension")
-            val s = executeBlocking(arrayOf("-y", "-i", main.absolutePath, "-t", seconds(at), "-map", "0:a:0", "-c", "copy", left.absolutePath))
-            if (!ReturnCode.isSuccess(s.returnCode)) return s
-            pieces += left
-        }
-        tracker.setTaskProgress(1, 20, "compatibilizando áudio inserido")
-        val middle = File(work, "001.$extension")
-        val encoder = encoderForProfile(extension, profile)
-        val encodeArgs = mutableListOf("-y", "-i", inserted.absolutePath, "-map", "0:a:0", "-c:a", encoder)
-        if (encoder !in setOf("flac", "pcm_s16le", "alac")) encodeArgs += listOf("-b:a", profile.bitrate)
-        encodeArgs += listOf("-ar", profile.sampleRate.toString(), "-ac", profile.channels.toString(), middle.absolutePath)
-        val middleSession = executeBlocking(encodeArgs.toTypedArray())
-        if (!ReturnCode.isSuccess(middleSession.returnCode)) return middleSession
-        pieces += middle
-        if (at < (mainAudio?.durationMs ?: 0L)) {
-            val right = File(work, "002.$extension")
-            val s = executeBlocking(arrayOf("-y", "-ss", seconds(at), "-i", main.absolutePath, "-map", "0:a:0", "-c", "copy", right.absolutePath))
-            if (!ReturnCode.isSuccess(s.returnCode)) return s
-            pieces += right
-        }
-        tracker.setTaskProgress(1, 55, "juntando trechos")
-        return concatPieces(pieces, output, tracker)
-    }
-
-    private fun concatPieces(pieces: List<File>, output: File, tracker: FfmpegTaskTracker): FFmpegSession {
-        val list = File(output.parentFile, "${output.nameWithoutExtension}_concat.txt")
-        list.writeText(pieces.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/").replace("'", "'\\''")}'" })
-        return executeWithProgress(
-            arrayOf("-y", "-f", "concat", "-safe", "0", "-i", list.absolutePath, "-c", "copy", output.absolutePath),
-            compositeDurationMs(), tracker, 1
-        )
-    }
-
     private fun executeWithProgress(args: Array<String>, durationMs: Long, tracker: FfmpegTaskTracker, taskIndex: Int): FFmpegSession {
         FfmpegCommandPresenter.show(status, args.asIterable())
         Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(args.asIterable())}")
@@ -789,21 +695,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         return result.get() ?: session
     }
 
-    private fun executeBlocking(args: Array<String>): FFmpegSession {
-        FfmpegCommandPresenter.show(status, args.asIterable())
-        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(args.asIterable())}")
-        val latch = CountDownLatch(1)
-        val result = AtomicReference<FFmpegSession>()
-        val session = FFmpegKit.executeWithArgumentsAsync(args, { completed ->
-            result.set(completed)
-            latch.countDown()
-        }, { }, { })
-        currentSessionId = session.sessionId
-        latch.await()
-        currentSessionId = null
-        return result.get() ?: session
-    }
-
     private fun detectAudioProfile(file: File, audioTrack: Int = 0): AudioProfile {
         val extractor = MediaExtractor()
         return try {
@@ -816,7 +707,14 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             val bitrate = runCatching { format.getInteger(MediaFormat.KEY_BIT_RATE) }.getOrNull()
                 ?.let { "${(it / 1000).coerceAtLeast(1)}k" } ?: "192k"
             val codec = format.getString(MediaFormat.KEY_MIME)?.substringAfter('/')?.lowercase(Locale.ROOT) ?: "aac"
-            AudioProfile(sampleRate, channels, bitrate, codec)
+            val pcmEncoder = when (runCatching { format.getInteger(MediaFormat.KEY_PCM_ENCODING) }.getOrNull()) {
+                android.media.AudioFormat.ENCODING_PCM_8BIT -> "pcm_u8"
+                android.media.AudioFormat.ENCODING_PCM_FLOAT -> "pcm_f32le"
+                android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> "pcm_s24le"
+                android.media.AudioFormat.ENCODING_PCM_32BIT -> "pcm_s32le"
+                else -> "pcm_s16le"
+            }
+            AudioProfile(sampleRate, channels, bitrate, codec, pcmEncoder)
         } catch (_: Throwable) {
             AudioProfile(48000, 2, "192k", "aac")
         } finally {
@@ -844,8 +742,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             executeButton.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
             executeButton.contentDescription = "Inserir áudio"
         }
-        reencode.isEnabled = false
-        smartInsert.isEnabled = false
         selectInsert.isEnabled = !processing && mainAudio != null
         selectOutputFolder.isEnabled = !processing
         findViewById<View>(R.id.button_select_main_audio).isEnabled = !processing
@@ -1037,20 +933,9 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         else -> "aac"
     }
 
-    private fun isSmartInsertCodecSupported(profile: AudioProfile): Boolean {
-        val codec = profile.codec.lowercase(Locale.ROOT)
-        return codec.contains("alac") ||
-            codec.contains("flac") ||
-            codec.contains("pcm") ||
-            codec.contains("wav") ||
-            codec.contains("vorbis") ||
-            codec.contains("opus") ||
-            codec.contains("mp3") ||
-            codec.contains("aac")
-    }
-
     private fun encoderForProfile(extension: String, profile: AudioProfile): String {
         val ext = extension.lowercase(Locale.ROOT)
+        if (ext == "wav") return profile.pcmEncoder
         val codec = profile.codec.lowercase(Locale.ROOT)
         return when {
             codec.contains("alac") -> "alac"
@@ -1065,39 +950,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun audioInputsAreCopyCompatible(mainProfile: AudioProfile, insertedProfile: AudioProfile): Boolean {
-        val mainCodec = mainProfile.codec.lowercase(Locale.ROOT)
-        val insCodec = insertedProfile.codec.lowercase(Locale.ROOT)
-        val codecsMatch = mainCodec == insCodec ||
-            (mainCodec.contains("vorbis") && insCodec.contains("vorbis")) ||
-            (mainCodec.contains("opus") && insCodec.contains("opus")) ||
-            (mainCodec.contains("aac") && insCodec.contains("aac")) ||
-            (mainCodec.contains("mp3") && insCodec.contains("mp3")) ||
-            (mainCodec.contains("pcm") && insCodec.contains("pcm"))
-        if (!codecsMatch) return false
-        if (mainProfile.sampleRate != insertedProfile.sampleRate) return false
-        if (mainProfile.channels != insertedProfile.channels) return false
-        return true
-    }
-
-    /**
-     * Verifica se o codec do audio tem mapeamento (tag) no container de saida.
-     * Evita o modo copy quando o codec nao pode ser embutido (ex.: wmav2/amr em .m4a),
-     * que falharia com "Could not find tag for codec" no meio do processamento.
-     */
-    private fun audioCodecCopySafe(profile: AudioProfile, extension: String): Boolean {
-        val codec = profile.codec.lowercase(Locale.ROOT)
-        return when (extension) {
-            "m4a", "aac" -> codec.contains("aac") || codec.contains("alac") || codec.contains("mp3") || codec.contains("ac3")
-            "mp3" -> codec.contains("mp3")
-            "wav" -> codec.contains("pcm")
-            "flac" -> codec.contains("flac")
-            "ogg" -> codec.contains("vorbis") || codec.contains("opus")
-            "opus" -> codec.contains("opus")
-            else -> false
-        }
-    }
-
     private fun audioMime(name: String): String = when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
         "mp3" -> "audio/mpeg"
         "wav" -> "audio/wav"
@@ -1107,11 +959,15 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private data class AudioSource(val uri: Uri, val name: String, val durationMs: Long)
-    private data class AudioProfile(val sampleRate: Int, val channels: Int, val bitrate: String, val codec: String = "aac")
+    private data class AudioProfile(
+        val sampleRate: Int,
+        val channels: Int,
+        val bitrate: String,
+        val codec: String = "aac",
+        val pcmEncoder: String = "pcm_s16le"
+    )
     private data class InsertAudioJobConfig(
         val insertionMs: Long,
-        val reencodeChecked: Boolean,
-        val smartInsertChecked: Boolean,
         val selectedTransition: String,
         val transitionSeconds: Double,
         val mainAudioTrack: Int = 0,
