@@ -41,6 +41,7 @@ import android.graphics.SurfaceTexture
 import android.view.Surface
 import android.view.TextureView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import com.arthenica.ffmpegkit.FFmpegKit
@@ -99,6 +100,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private val selectedVideos = mutableListOf<SelectedVideo>()
     private val outputItems = mutableListOf<OutputItem>()
     private val terminalLines = StringBuilder()
+    private val selectedAudioTracks = mutableMapOf<String, Int>()
     private var selectedOutputFolder: DocumentFile? = null
     private var zipFile: File? = null
     private var sourcePopup: PopupWindow? = null
@@ -145,9 +147,10 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
     private var outputPreset = AudioPreset.NONE
     private var outputExtension = AudioExtension.WAV
-    private var sampleRate = 16000
-    private var channels = 1
+    private var sampleRate = 48000
+    private var channels = 2
     private var bitrate = "128k"
+    private var savedCustomSettings = AudioSettings(AudioExtension.WAV, 48000, 2, "128k")
     private var refreshingOutputSettings = false
     private var isProcessing = false
     @Volatile private var currentSessionId: Long? = null
@@ -738,8 +741,19 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             status.text = "Confira os tempos de início e fim."
             return
         }
+        selectedVideos.firstOrNull { audioTrackCount(it.uri) == 0 }?.let { media ->
+            status.text = "${media.name} não possui faixa de áudio."
+            return
+        }
+        selectedVideos.firstOrNull {
+            audioTrackCount(it.uri) > 1 && selectedAudioTracks[it.uri.toString()] == null
+        }?.let { media ->
+            requestAudioTrack(media.uri, media.name) { extractSelectedAudio() }
+            return
+        }
 
         val jobVideos = selectedVideos.toList()
+        val jobAudioTracks = jobVideos.associate { it.uri.toString() to (selectedAudioTracks[it.uri.toString()] ?: 0) }
         val processingStartMs = SystemClock.elapsedRealtime()
         val jobSettings = currentAudioSettings()
         val jobOutputMime = jobSettings.extension.mime
@@ -767,17 +781,18 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
                 try {
                     val inputFile = copyUriToCache(video.uri, video.name)
-                    appendTerminalAudioInfo("original: ${describeAudioFile(inputFile)}")
                     val outputName = buildOutputName(video.name, usedNames, jobSettings.extension)
                     val tempOutput = File(cacheDir, "audio_${System.currentTimeMillis()}_$outputName")
                     val trimStartMs = if (trimSingleMedia) startMs ?: 0L else 0L
                     val trimEndMs = if (trimSingleMedia) endMs else null
                     val expectedDuration = trimEndMs?.let { it - trimStartMs } ?: readDuration(video.uri)
                     totalDurationMs += expectedDuration
-                    tracker.setTaskEncoder(index, audioEncoderForExtension(jobSettings.extension))
+                    val audioTrack = jobAudioTracks[video.uri.toString()] ?: 0
+                    val copyAudio = canCopyAudioWithoutConversion(inputFile, trimStartMs, trimEndMs, jobSettings, audioTrack)
+                    tracker.setTaskEncoder(index, if (copyAudio) "cópia sem perdas" else audioEncoderForExtension(jobSettings.extension))
                     tracker.startTask(index)
                     val session = executeFfmpegWithProgress(
-                        buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs, jobSettings),
+                        buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs, jobSettings, copyAudio, audioTrack),
                         expectedDuration,
                         tracker
                     )
@@ -795,7 +810,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                         continue
                     }
                     tracker.completeCurrentTask()
-                    appendTerminalAudioInfo("gerado: ${describeAudioFile(tempOutput)}")
                     tempOutputFiles.add(tempOutput)
                     results.add(OutputItem(Uri.fromFile(tempOutput), outputName, jobOutputMime))
                 } catch (e: Exception) {
@@ -840,24 +854,27 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         outputFile: File,
         startMs: Long,
         endMs: Long?,
-        settings: AudioSettings = currentAudioSettings()
+        settings: AudioSettings = currentAudioSettings(),
+        copyAudio: Boolean = false,
+        audioTrack: Int = 0
     ): Array<String> {
         val args = mutableListOf("-y")
-        if (endMs != null) {
+        val inputDuration = readDuration(inputFile)
+        val hasStartTrim = startMs > 0L
+        val hasEndTrim = endMs != null && inputDuration > 0L && endMs < inputDuration - 250L
+        if (hasStartTrim) {
             args.addAll(listOf("-ss", formatSeconds(startMs)))
         }
         args.addAll(listOf("-i", inputFile.absolutePath))
-        if (endMs != null) {
-            args.addAll(listOf("-t", formatSeconds(endMs - startMs)))
+        if (hasEndTrim) {
+            args.addAll(listOf("-t", formatSeconds(requireNotNull(endMs) - startMs)))
         }
-        args.addAll(
-            listOf(
-                "-vn",
-                "-map", "0:a:0",
-                "-ar", settings.sampleRate.toString(),
-                "-ac", settings.channels.toString()
-            )
-        )
+        args.addAll(listOf("-vn", "-map", "0:a:$audioTrack", "-map_metadata", "0"))
+        if (copyAudio) {
+            args.addAll(listOf("-c:a", "copy", "-avoid_negative_ts", "make_zero", outputFile.absolutePath))
+            return args.toTypedArray()
+        }
+        args.addAll(listOf("-ar", settings.sampleRate.toString(), "-ac", settings.channels.toString()))
         when (settings.extension) {
             AudioExtension.WAV -> {
                 args.addAll(listOf("-c:a", "pcm_s16le", "-f", "wav"))
@@ -877,17 +894,108 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             AudioExtension.OPUS -> {
                 args.addAll(listOf(
                     "-c:a", "libopus",
-                    "-application", "voip",
+                    "-application", "audio",
                     "-b:a", settings.bitrate,
-                    "-vbr", "off"
+                    "-vbr", "on"
                 ))
             }
             AudioExtension.FLAC -> {
                 args.addAll(listOf("-c:a", "flac"))
             }
         }
-        args.add(outputFile.absolutePath)
+        args.addAll(listOf("-avoid_negative_ts", "make_zero", outputFile.absolutePath))
         return args.toTypedArray()
+    }
+
+    private fun audioTrackCount(uri: Uri): Int {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            (0 until extractor.trackCount).count { index ->
+                extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            }
+        } catch (_: Throwable) {
+            0
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun requestAudioTrack(uri: Uri, name: String, onSelected: () -> Unit) {
+        val labels = audioTrackLabels(uri)
+        if (labels.isEmpty()) {
+            status.text = "$name não possui faixa de áudio."
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Escolha a faixa de áudio de $name")
+            .setSingleChoiceItems(labels.toTypedArray(), 0) { dialog, which ->
+                selectedAudioTracks[uri.toString()] = which
+                dialog.dismiss()
+                onSelected()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    private fun audioTrackLabels(uri: Uri): List<String> {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            var audioOrdinal = 0
+            (0 until extractor.trackCount).mapNotNull { index ->
+                val format = extractor.getTrackFormat(index)
+                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
+                if (!mime.startsWith("audio/")) return@mapNotNull null
+                audioOrdinal += 1
+                val language = format.getString(MediaFormat.KEY_LANGUAGE)?.takeIf { it.isNotBlank() }
+                val channels = runCatching { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }.getOrNull()
+                buildString {
+                    append("Faixa ").append(audioOrdinal).append(" — ").append(mime.substringAfter('/').uppercase(Locale.ROOT))
+                    language?.let { append(" · ").append(it) }
+                    channels?.let { append(" · ").append(it).append(" canal(is)") }
+                }
+            }
+        } catch (_: Throwable) {
+            emptyList()
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun canCopyAudioWithoutConversion(
+        inputFile: File,
+        startMs: Long,
+        endMs: Long?,
+        settings: AudioSettings,
+        audioTrack: Int = 0
+    ): Boolean {
+        val duration = readDuration(inputFile)
+        if (startMs > 0L || (endMs != null && duration > 0L && endMs < duration - 250L)) return false
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(inputFile.absolutePath)
+            val format = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }.filter {
+                it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            }.getOrNull(audioTrack) ?: return false
+            val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
+            val sourceRate = runCatching { format.getInteger(MediaFormat.KEY_SAMPLE_RATE) }.getOrNull()
+            val sourceChannels = runCatching { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }.getOrNull()
+            val compatibleExtension = when (mime) {
+                "audio/mpeg" -> settings.extension == AudioExtension.MP3
+                "audio/mp4a-latm", "audio/aac" -> settings.extension in setOf(AudioExtension.M4A, AudioExtension.AAC)
+                "audio/opus" -> settings.extension == AudioExtension.OPUS
+                "audio/vorbis" -> settings.extension == AudioExtension.OGG
+                "audio/flac" -> settings.extension == AudioExtension.FLAC
+                "audio/raw" -> settings.extension == AudioExtension.WAV
+                else -> false
+            }
+            compatibleExtension && sourceRate == settings.sampleRate && sourceChannels == settings.channels
+        } catch (_: Throwable) {
+            false
+        } finally {
+            extractor.release()
+        }
     }
 
     private fun saveTempOutputsToUri(treeUri: Uri) {
@@ -988,23 +1096,37 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun setTranscriptionStandard(enabled: Boolean) {
-        outputPreset = if (enabled) AudioPreset.LOCAL else AudioPreset.NONE
         if (enabled) {
+            if (outputPreset == AudioPreset.NONE) savedCustomSettings = AudioSettings(outputExtension, sampleRate, channels, bitrate)
+            outputPreset = AudioPreset.LOCAL
             outputExtension = AudioExtension.WAV
             sampleRate = 16000
             channels = 1
             bitrate = "256k"
+        } else if (outputPreset == AudioPreset.LOCAL) {
+            outputPreset = AudioPreset.NONE
+            outputExtension = savedCustomSettings.extension
+            sampleRate = savedCustomSettings.sampleRate
+            channels = savedCustomSettings.channels
+            bitrate = savedCustomSettings.bitrate
         }
         refreshOutputSettingsUi()
     }
 
     private fun setCompactStandard(enabled: Boolean) {
-        outputPreset = if (enabled) AudioPreset.COMPACT else AudioPreset.NONE
         if (enabled) {
+            if (outputPreset == AudioPreset.NONE) savedCustomSettings = AudioSettings(outputExtension, sampleRate, channels, bitrate)
+            outputPreset = AudioPreset.COMPACT
             outputExtension = AudioExtension.OGG
             sampleRate = 16000
             channels = 1
             bitrate = "32k"
+        } else if (outputPreset == AudioPreset.COMPACT) {
+            outputPreset = AudioPreset.NONE
+            outputExtension = savedCustomSettings.extension
+            sampleRate = savedCustomSettings.sampleRate
+            channels = savedCustomSettings.channels
+            bitrate = savedCustomSettings.bitrate
         }
         refreshOutputSettingsUi()
     }
@@ -1123,7 +1245,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             return
         }
         PopupMenu(this, buttonBitrate).apply {
-            listOf("24k", "32k", "48k", "64k", "96k", "128k", "192k", "256k").forEach { menu.add(it) }
+            listOf("32k", "48k", "64k", "96k", "128k", "192k", "256k").forEach { menu.add(it) }
             setOnMenuItemClickListener { item ->
                 bitrate = item.title.toString()
                 refreshOutputSettingsUi()
@@ -1441,6 +1563,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         expectedDurationMs: Long,
         tracker: FfmpegTaskTracker
     ): FFmpegSession {
+        FfmpegCommandPresenter.show(status, arguments.asIterable())
+        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
@@ -1566,7 +1690,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     .orEmpty()
             }
             val bitrate = Regex("""(\d+(?:\.\d+)?)\s*kb/s""", RegexOption.IGNORE_CASE)
-                .find(logs)
+                .find(audioLine)
                 ?.groupValues
                 ?.getOrNull(1)
                 ?.let { "${it.removeSuffix(".0")}k" }

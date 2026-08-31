@@ -167,11 +167,29 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         status.text = ""
     }
 
-    private fun cleanSelectedAudio() {
+    private fun cleanSelectedAudio(strongConfirmed: Boolean = false) {
         val uri = selectedUri ?: return
         if (!hasSigStorageAccess()) {
             requestSigStorageAccess()
             status.text = "Libere o acesso a todos os arquivos para salvar na pasta SIG."
+            return
+        }
+        val audioTracks = inspectAudioSource(uri)?.trackCount ?: 0
+        if (audioTracks != 1) {
+            status.text = "O arquivo precisa ter exatamente uma faixa de áudio."
+            return
+        }
+        if (selectedMode == CleanMode.STRONG && !strongConfirmed) {
+            val mediaDuration = readDuration(uri)
+            val estimate = if (mediaDuration > 0L) {
+                " Estimativa conservadora: ${formatTime(mediaDuration * 2)} a ${formatTime(mediaDuration * 6)}."
+            } else ""
+            AlertDialog.Builder(this)
+                .setTitle("Limpeza forte")
+                .setMessage("Este modo é bem mais lento e pode alterar um pouco a voz.$estimate Deseja continuar?")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Continuar") { _, _ -> cleanSelectedAudio(strongConfirmed = true) }
+                .show()
             return
         }
         clearOutputResult()
@@ -187,13 +205,15 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
                 val outputName = buildOutputName(selectedName)
                 outputFile = File(cacheDir, "clean_${System.currentTimeMillis()}_$outputName")
                 val duration = readDuration(inputFile).coerceAtLeast(1L)
+                val sourceProfile = inspectAudioSource(inputFile)
+                    ?: error("Não foi possível identificar os parâmetros do áudio.")
                 val startedAt = SystemClock.elapsedRealtime()
-                val args = buildFfmpegArguments(inputFile, outputFile, jobFilterMode)
-                appendTerminal("ffmpeg ${args.joinToString(" ")}")
+                val args = buildFfmpegArguments(inputFile, outputFile, jobFilterMode, sourceProfile)
+                appendTerminal(FfmpegMediaPolicies.formatCommand(args.asIterable()))
                 
                 val tracker = FfmpegTaskTracker(status, listOf("Preparando áudio", "Limpando áudio"))
                 tracker.completeCurrentTask()
-                tracker.setTaskEncoder(1, "pcm_s16le")
+                tracker.setTaskEncoder(1, sourceProfile.pcmEncoder)
                 tracker.startTask(1)
                 
                 val session = executeFfmpegWithProgress(args, duration, tracker)
@@ -240,7 +260,9 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     private fun buildFfmpegArguments(
         inputFile: File,
         outputFile: File,
-        mode: CleanMode = selectedMode
+        mode: CleanMode = selectedMode,
+        sourceProfile: AudioSourceProfile = inspectAudioSource(inputFile)
+            ?: AudioSourceProfile(1, 48000, 2, "pcm_s16le")
     ): Array<String> {
         return arrayOf(
             "-y",
@@ -248,12 +270,56 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
             "-vn",
             "-map", "0:a:0",
             "-af", mode.filter,
-            "-c:a", "pcm_s16le",
-            "-ar", "16000",
-            "-ac", "1",
+            "-c:a", sourceProfile.pcmEncoder,
+            "-ar", sourceProfile.sampleRate.toString(),
+            "-ac", sourceProfile.channels.toString(),
+            "-avoid_negative_ts", "make_zero",
             "-f", "wav",
             outputFile.absolutePath
         )
+    }
+
+    private fun inspectAudioSource(uri: Uri): AudioSourceProfile? {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            audioSourceProfile(extractor)
+        } catch (_: Throwable) {
+            null
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun inspectAudioSource(file: File): AudioSourceProfile? {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            audioSourceProfile(extractor)
+        } catch (_: Throwable) {
+            null
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun audioSourceProfile(extractor: android.media.MediaExtractor): AudioSourceProfile? {
+        val formats = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }
+        val audioFormats = formats.filter {
+            it.getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+        }
+        val format = audioFormats.singleOrNull() ?: return AudioSourceProfile(audioFormats.size, 48000, 2, "pcm_s16le")
+        val sampleRate = runCatching { format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE) }.getOrDefault(48000)
+        val channels = runCatching { format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT) }.getOrDefault(2)
+        val pcmEncoding = runCatching { format.getInteger(android.media.MediaFormat.KEY_PCM_ENCODING) }.getOrNull()
+        val encoder = when (pcmEncoding) {
+            3 -> "pcm_u8"
+            4 -> "pcm_f32le"
+            21 -> "pcm_s24le"
+            22 -> "pcm_s32le"
+            else -> "pcm_s16le"
+        }
+        return AudioSourceProfile(1, sampleRate, channels, encoder)
     }
 
     private fun saveTempOutputToUri(treeUri: Uri) {
@@ -309,6 +375,8 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     }
 
     private fun executeFfmpegWithProgress(arguments: Array<String>, durationMs: Long, tracker: FfmpegTaskTracker): FFmpegSession {
+        FfmpegCommandPresenter.show(status, arguments.asIterable())
+        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val startedAt = SystemClock.elapsedRealtime()
@@ -464,6 +532,18 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         }
     }
 
+    private fun readDuration(uri: Uri): Long {
+        val retriever = android.media.MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(this, uri)
+            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } catch (_: Exception) {
+            0L
+        } finally {
+            retriever.release()
+        }
+    }
+
     private fun formatTime(ms: Long): String {
         val totalSeconds = ms / 1000
         val milliseconds = ms % 1000
@@ -501,6 +581,13 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         BALANCED("equilibrado", "afftdn=nf=-25"),
         STRONG("forte", "anlmdn=s=0.00003:p=0.002:r=0.002")
     }
+
+    private data class AudioSourceProfile(
+        val trackCount: Int,
+        val sampleRate: Int,
+        val channels: Int,
+        val pcmEncoder: String
+    )
 
     companion object {
         private const val TAG = "FfmpegCleanAudio"

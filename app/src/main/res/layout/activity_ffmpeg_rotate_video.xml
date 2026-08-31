@@ -418,7 +418,7 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:buttonTint="#FFFFFFFF"
-                            android:checked="true"
+                            android:checked="false"
                             android:text="Girar pelos metadados"
                             android:textColor="#FFFFFFFF"
                             android:textSize="13sp" />

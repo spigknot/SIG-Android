@@ -398,13 +398,13 @@ class FfmpegCutActivity : AppCompatActivity() {
     private fun loadSelectedMedia(uri: Uri) {
         selectedUri = uri
         selectedName = queryDisplayName(uri) ?: "arquivo"
-        var mime = contentResolver.getType(uri).orEmpty()
+        var mime = detectMediaMime(uri)
         if (mime.isEmpty()) {
             val extension = selectedName.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
             mime = when (extension) {
                 "mp4", "mkv", "mov", "avi", "webm", "3gp", "m4v" -> "video/$extension"
                 "mp3", "wav", "m4a", "aac", "ogg", "opus", "flac" -> "audio/$extension"
-                else -> "video/mp4"
+                else -> "application/octet-stream"
             }
         }
         selectedMime = mime
@@ -469,7 +469,24 @@ class FfmpegCutActivity : AppCompatActivity() {
         
     }
 
-    private fun cutSelectedMedia() {
+    private fun detectMediaMime(uri: Uri): String {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            val trackMimes = (0 until extractor.trackCount).mapNotNull { index ->
+                extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
+            }
+            trackMimes.firstOrNull { it.startsWith("video/") }
+                ?: trackMimes.firstOrNull { it.startsWith("audio/") }
+                ?: contentResolver.getType(uri).orEmpty()
+        } catch (_: Throwable) {
+            contentResolver.getType(uri).orEmpty()
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun cutSelectedMedia(codecChoiceConfirmed: Boolean = false) {
         val uri = selectedUri ?: return
         var startMs = parseTime(inputFrom.text.toString())
         var endMs = parseTime(inputTo.text.toString())
@@ -487,6 +504,26 @@ class FfmpegCutActivity : AppCompatActivity() {
         if (jobMime.startsWith("video/") && jobEncoder == null) {
             status.text = "Nenhum encoder de vídeo compatível está disponível."
             return
+        }
+        if (jobMime.startsWith("video/") && !codecChoiceConfirmed && jobEncoder != null) {
+            val sourceCodec = detectVideoCodecFamily(uri)
+            if (sourceCodec in setOf("h264", "hevc") && jobEncoder.codecFamily != sourceCodec) {
+                val compatible = availableVideoEncoders.firstOrNull { it.codecFamily == sourceCodec }
+                val dialog = AlertDialog.Builder(this)
+                    .setTitle("O encoder escolhido exige recodificação completa")
+                    .setMessage("A origem usa ${sourceCodec.orEmpty().uppercase(Locale.ROOT)}, mas o encoder selecionado é ${jobEncoder.shortName}. Você pode manter sua escolha ou usar um encoder compatível para copiar o trecho central sem perdas.")
+                    .setPositiveButton("Manter ${jobEncoder.shortName}") { _, _ -> cutSelectedMedia(true) }
+                    .setNegativeButton("Cancelar", null)
+                if (compatible != null) {
+                    dialog.setNeutralButton("Usar ${compatible.shortName}") { _, _ ->
+                        selectedVideoEncoder = compatible
+                        updateVideoEncoderButton()
+                        cutSelectedMedia(true)
+                    }
+                }
+                dialog.show()
+                return
+            }
         }
 
         val producedMime = currentOutputMime()
@@ -602,19 +639,23 @@ class FfmpegCutActivity : AppCompatActivity() {
             args.addAll(rotationInputArguments(rotationDegrees))
         }
         args += listOf(
-            "-i", inputFile.absolutePath,
             "-ss", formatSeconds(startMs),
+            "-i", inputFile.absolutePath,
             "-t", String.format(Locale.US, "%.3f", duration)
         )
         val streamBitrates = detectStreamBitrates(inputFile)
         if (mime.startsWith("video/")) {
             val enc = encoder ?: error("Encoder de vídeo indisponível")
-            args.addAll(listOf("-map", "0:v:0?", "-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0"))
+            args.addAll(listOf(
+                "-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?",
+                "-map_metadata", "0", "-map_chapters", "0", "-c", "copy"
+            ))
             args.addAll(videoEncodingArguments(enc, streamBitrates.video ?: FALLBACK_VIDEO_BITRATE, quality))
-            args.addAll(listOf("-c:a", "aac", "-b:a", streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE, "-movflags", "+faststart", "-avoid_negative_ts", "make_zero"))
+            args.addAll(listOf("-avoid_negative_ts", "make_zero"))
         } else {
-            args.addAll(listOf("-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0", "-vn"))
+            args.addAll(listOf("-map", "0:a?", "-map_metadata", "0", "-map_chapters", "0", "-vn"))
             args.addAll(preciseAudioEncoderArguments(selectedName, streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE))
+            args.addAll(listOf("-avoid_negative_ts", "make_zero"))
         }
         args.add(outputFile.absolutePath)
         return args.toTypedArray()
@@ -631,10 +672,10 @@ class FfmpegCutActivity : AppCompatActivity() {
     ): CutExecutionResult {
         val actualEncoder = encoder ?: return CutExecutionResult(false, false, "Encoder de vídeo indisponível")
         tracker.appendTasks(listOf("Analisando codec e orientação"))
-        val isH264 = isH264Video(inputFile)
+        val sourceCodec = detectVideoCodecFamily(inputFile)
         val rotationDegrees = detectMetadataRotation(inputFile)
         tracker.completeCurrentTask()
-        if (!isH264 || actualEncoder.codecFamily != "h264") {
+        if (sourceCodec !in setOf("h264", "hevc") || actualEncoder.codecFamily != sourceCodec) {
             return executeFullPrecisionFallback(inputFile, outputFile, startMs, endMs, rotationDegrees, tracker, actualEncoder, quality)
         }
 
@@ -653,7 +694,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         try {
             val tasks = mutableListOf<String>()
             if (startKeyframe > startMs) tasks += "Recodificando borda inicial"
-            tasks += "Copiando trecho central sem reencodar"
+            tasks += "Copiando vídeo do trecho central sem reencodar"
             if (endKeyframe < endMs) tasks += "Recodificando borda final"
             tasks += "Juntando trechos e preservando orientação"
             val taskOffset = tracker.taskCount()
@@ -661,8 +702,6 @@ class FfmpegCutActivity : AppCompatActivity() {
             tasks.forEachIndexed { index, task ->
                 if (task.startsWith("Recodificando")) {
                     tracker.setTaskEncoder(taskOffset + index, actualEncoder.shortName)
-                } else if (task == "Copiando trecho central sem reencodar" && bitrates.audio != null) {
-                    tracker.setTaskEncoder(taskOffset + index, "aac")
                 }
             }
 
@@ -689,7 +728,7 @@ class FfmpegCutActivity : AppCompatActivity() {
             }
 
             if (startKeyframe > startMs) {
-                val startPiece = File(workDir, "start.ts")
+                val startPiece = File(workDir, "start.mkv")
                 runPiece(
                     buildHybridEdgeArguments(inputFile, startPiece, startMs, startKeyframe, bitrates, seekAccurately = true, encoder = actualEncoder, quality = quality),
                     startKeyframe - startMs,
@@ -697,7 +736,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                 )?.let { return it }
             }
 
-            val bodyPiece = File(workDir, "body.ts")
+            val bodyPiece = File(workDir, "body.mkv")
             runPiece(
                 buildHybridBodyArguments(inputFile, bodyPiece, startKeyframe, endKeyframe, bitrates),
                 endKeyframe - startKeyframe,
@@ -705,9 +744,9 @@ class FfmpegCutActivity : AppCompatActivity() {
             )?.let { return it }
 
             if (endKeyframe < endMs) {
-                val endPiece = File(workDir, "end.ts")
+                val endPiece = File(workDir, "end.mkv")
                 runPiece(
-                    buildHybridEdgeArguments(inputFile, endPiece, endKeyframe, endMs, bitrates, seekAccurately = false, encoder = actualEncoder, quality = quality),
+                    buildHybridEdgeArguments(inputFile, endPiece, endKeyframe, endMs, bitrates, seekAccurately = true, encoder = actualEncoder, quality = quality),
                     endMs - endKeyframe,
                     endPiece
                 )?.let { return it }
@@ -716,13 +755,12 @@ class FfmpegCutActivity : AppCompatActivity() {
             val concatList = File(workDir, "parts.txt")
             concatList.writeText(pieces.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" }, Charsets.UTF_8)
             val concatArguments = mutableListOf(
-                    "-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0",
-                )
-            concatArguments.addAll(rotationInputArguments(rotationDegrees))
+                "-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0"
+            )
             concatArguments += listOf(
-                "-i", concatList.absolutePath,
-                "-c", "copy", "-bsf:a", "aac_adtstoasc",
-                "-avoid_negative_ts", "make_zero", "-movflags", "+faststart"
+                "-display_rotation:v:0", rotationDegrees.toString(), "-i", concatList.absolutePath,
+                "-map", "0", "-map_metadata", "0", "-map_chapters", "0", "-c", "copy",
+                "-avoid_negative_ts", "make_zero"
             )
             concatArguments += outputFile.absolutePath
             val concatSession = executeFfmpegWithProgress(
@@ -803,13 +841,12 @@ class FfmpegCutActivity : AppCompatActivity() {
         if (seekAccurately) args += listOf("-ss", formatSeconds(startMs))
         args += listOf(
             "-t", String.format(Locale.US, "%.3f", duration),
-            "-map", "0:v:0?", "-map", "0:a:0?"
+            "-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?",
+            "-map_metadata", "0", "-map_chapters", "0", "-c", "copy"
         )
         args += videoEncodingArguments(encoder, bitrates.video ?: FALLBACK_VIDEO_BITRATE, quality)
         args += listOf(
-            "-c:a", "aac", "-b:a", bitrates.audio ?: FALLBACK_AUDIO_BITRATE,
-            "-avoid_negative_ts", "make_zero", "-mpegts_flags", "+resend_headers",
-            "-f", "mpegts", outputFile.absolutePath
+            "-avoid_negative_ts", "make_zero", "-f", "matroska", outputFile.absolutePath
         )
         return args.toTypedArray()
     }
@@ -823,13 +860,11 @@ class FfmpegCutActivity : AppCompatActivity() {
     ): Array<String> {
         val duration = (endMs - startMs) / 1000.0
         return arrayOf(
-            "-y", "-ss", formatSeconds(startMs), "-noautorotate", "-i", inputFile.absolutePath,
+            "-y", "-noautorotate", "-i", inputFile.absolutePath, "-ss", formatSeconds(startMs),
             "-t", String.format(Locale.US, "%.3f", duration),
-            "-map", "0:v:0?", "-map", "0:a:0?",
-            "-c:v", "copy", "-bsf:v", "h264_mp4toannexb",
-            "-c:a", "aac", "-b:a", bitrates.audio ?: FALLBACK_AUDIO_BITRATE,
-            "-avoid_negative_ts", "make_zero", "-mpegts_flags", "+resend_headers",
-            "-f", "mpegts", outputFile.absolutePath
+            "-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?",
+            "-map_metadata", "0", "-map_chapters", "0", "-c", "copy",
+            "-avoid_negative_ts", "make_zero", "-f", "matroska", outputFile.absolutePath
         )
     }
 
@@ -856,15 +891,41 @@ class FfmpegCutActivity : AppCompatActivity() {
         return keyframes.distinct().sorted()
     }
 
-    private fun isH264Video(inputFile: File): Boolean {
+    private fun detectVideoCodecFamily(inputFile: File): String? {
+        val extractor = android.media.MediaExtractor()
         return try {
-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", inputFile.absolutePath))
-            session.allLogsAsString.orEmpty()
-                .lineSequence()
-                .firstOrNull { it.contains("Video:", ignoreCase = true) }
-                ?.contains("h264", ignoreCase = true) == true
+            extractor.setDataSource(inputFile.absolutePath)
+            val mime = (0 until extractor.trackCount).asSequence().mapNotNull { index ->
+                extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
+            }.firstOrNull { it.startsWith("video/") }
+            when (mime) {
+                "video/avc" -> "h264"
+                "video/hevc" -> "hevc"
+                else -> mime?.substringAfter('/')
+            }
         } catch (_: Throwable) {
-            false
+            null
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun detectVideoCodecFamily(uri: Uri): String? {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            val mime = (0 until extractor.trackCount).asSequence().mapNotNull { index ->
+                extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
+            }.firstOrNull { it.startsWith("video/") }
+            when (mime) {
+                "video/avc" -> "h264"
+                "video/hevc" -> "hevc"
+                else -> mime?.substringAfter('/')
+            }
+        } catch (_: Throwable) {
+            null
+        } finally {
+            extractor.release()
         }
     }
 
@@ -900,25 +961,16 @@ class FfmpegCutActivity : AppCompatActivity() {
     private fun preciseAudioEncoderArguments(name: String, bitrate: String): List<String> {
         return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
             "wav" -> listOf("-c:a", "pcm_s16le")
-            "mp3" -> listOf("-c:a", "libmp3lame", "-b:a", bitrate)
-            "m4a", "aac" -> listOf("-c:a", "aac", "-b:a", bitrate)
-            "ogg" -> listOf("-c:a", "libvorbis", "-b:a", bitrate)
-            "opus" -> listOf("-c:a", "libopus", "-b:a", bitrate)
             "flac" -> listOf("-c:a", "flac")
+            "mp3" -> listOf("-c:a", "libmp3lame", "-b:a", bitrate)
+            "ogg" -> listOf("-c:a", "libvorbis", "-b:a", bitrate)
+            "opus" -> listOf("-c:a", "libopus", "-b:a", bitrate, "-vbr", "on", "-application", "audio")
             else -> listOf("-c:a", "aac", "-b:a", bitrate)
         }
     }
 
     private fun preciseAudioEncoderName(name: String): String {
-        return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
-            "wav" -> "pcm_s16le"
-            "mp3" -> "libmp3lame"
-            "m4a", "aac" -> "aac"
-            "ogg" -> "libvorbis"
-            "opus" -> "libopus"
-            "flac" -> "flac"
-            else -> "aac"
-        }
+        return preciseAudioEncoderArguments(name, FALLBACK_AUDIO_BITRATE).getOrNull(1) ?: "áudio"
     }
 
     private fun detectStreamBitrates(inputFile: File): StreamBitrates {
@@ -1116,14 +1168,14 @@ class FfmpegCutActivity : AppCompatActivity() {
 
     private fun buildOutputName(name: String): String {
         val dotIndex = name.lastIndexOf('.')
-        if (dotIndex <= 0) return "${name}_cortado"
-        val extension = if (selectedMime.startsWith("video/")) ".mp4" else name.substring(dotIndex)
+        if (dotIndex <= 0) return if (selectedMime.startsWith("video/")) "${name}_cortado.mkv" else "${name}_cortado"
+        val extension = if (selectedMime.startsWith("video/")) ".mkv" else name.substring(dotIndex)
         return "${name.substring(0, dotIndex)}_cortado$extension"
     }
 
     private fun currentOutputMime(): String {
         return if (selectedMime.startsWith("video/")) {
-            "video/mp4"
+            "video/x-matroska"
         } else {
             selectedMime.ifBlank { "application/octet-stream" }
         }
@@ -1180,6 +1232,8 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun executeFfmpegWithProgress(arguments: Array<String>, expectedDurationMs: Long, tracker: FfmpegTaskTracker): FFmpegSession {
+        FfmpegCommandPresenter.show(status, arguments.asIterable())
+        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         val safeDuration = expectedDurationMs.coerceAtLeast(1L)

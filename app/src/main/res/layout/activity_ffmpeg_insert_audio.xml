@@ -252,7 +252,9 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:buttonTint="#FFFFFFFF"
-                        android:text="Reencodar"
+                        android:checked="true"
+                        android:enabled="false"
+                        android:text="Reencodar (preciso)"
                         android:textColor="#FFFFFFFF"
                         android:textSize="13sp" />
 
@@ -264,7 +266,8 @@
                         android:buttonTint="#FFFFFFFF"
                         android:text="Smart Insert"
                         android:textColor="#FFFFFFFF"
-                        android:textSize="13sp" />
+                        android:textSize="13sp"
+                        android:visibility="gone" />
                 </LinearLayout>
 
                 <ImageButton
