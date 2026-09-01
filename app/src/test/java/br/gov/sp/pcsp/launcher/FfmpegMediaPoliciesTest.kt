@@ -37,6 +37,56 @@ class FfmpegMediaPoliciesTest {
     )
 
     @Test
+    fun realEndTrimIsNeverDiscardedByTolerance() {
+        assertEquals(9_900L, FfmpegMediaPolicies.requestedTrimDurationMs(0L, 9_900L))
+        assertFalse(FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(0L, 9_900L, 10_000L))
+        assertTrue(FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(0L, 10_000L, 10_000L))
+        assertFalse(FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(0L, 9_900L, 0L))
+    }
+
+    @Test
+    fun hybridFallbackAndAudioJoinDecisionsAreExplicit() {
+        assertEquals(
+            "Não há keyframes internos suficientes para copiar o trecho central sem perdas.",
+            FfmpegMediaPolicies.hybridCutFallbackReason("h264", "h264", hasInternalKeyframes = false)
+        )
+        assertEquals(
+            "O encoder escolhido não corresponde ao codec da origem.",
+            FfmpegMediaPolicies.hybridCutFallbackReason("hevc", "h264")
+        )
+        assertNull(FfmpegMediaPolicies.hybridCutFallbackReason("h264", "h264", hasInternalKeyframes = true))
+
+        assertEquals(
+            FfmpegAudioJoinPlan(requiresReencode = false, standardizeLosslessly = false),
+            FfmpegMediaPolicies.audioJoinPlan(false, directCopyCompatible = true, selectedTrackReduction = false)
+        )
+        assertEquals(
+            FfmpegAudioJoinPlan(requiresReencode = true, standardizeLosslessly = true),
+            FfmpegMediaPolicies.audioJoinPlan(false, directCopyCompatible = false, selectedTrackReduction = false)
+        )
+        assertEquals(
+            FfmpegAudioJoinPlan(requiresReencode = true, standardizeLosslessly = false),
+            FfmpegMediaPolicies.audioJoinPlan(true, directCopyCompatible = true, selectedTrackReduction = false)
+        )
+    }
+
+    @Test
+    fun losslessNormalizationPreservesEqualMultitrackTopology() {
+        val automatic = FfmpegMediaPolicies.audioJoinPlan(
+            requestedReencode = false,
+            directCopyCompatible = false,
+            selectedTrackReduction = false
+        )
+        assertEquals(2, FfmpegMediaPolicies.normalizedAudioTrackCount(listOf(2, 2), automatic, false))
+        assertEquals("mka", FfmpegMediaPolicies.losslessAudioStandardizationExtension(2))
+        assertEquals("flac", FfmpegMediaPolicies.losslessAudioStandardizationEncoder("mka"))
+
+        assertEquals(1, FfmpegMediaPolicies.normalizedAudioTrackCount(listOf(2, 1), automatic, true))
+        assertEquals("wav", FfmpegMediaPolicies.losslessAudioStandardizationExtension(1))
+        assertEquals("pcm_s24le", FfmpegMediaPolicies.losslessAudioStandardizationEncoder("wav", "pcm_s24le"))
+    }
+
+    @Test
     fun metadataModeAlwaysUsesCopyCommandRegardlessOfPreviousUiState() {
         assertTrue(FfmpegMediaPolicies.usesMetadataCopyCommand(true))
         assertFalse(FfmpegMediaPolicies.usesMetadataCopyCommand(false))
@@ -51,16 +101,18 @@ class FfmpegMediaPoliciesTest {
         assertEquals(
             listOf(
                 "-y", "-hide_banner", "-loglevel", "error", "-display_rotation:v:0", "0", "-i", "in.mov",
-                "-map", "0", "-c", "copy", "-t", "0.001", "probe.mov"
+                "-map", "0", "-map_metadata", "0", "-map_chapters", "0",
+                "-c", "copy", "-t", "1.000", "probe.mov"
             ),
             FfmpegMediaPolicies.metadataCopyPreflightArguments("in.mov", "probe.mov", 90, 90).toList()
         )
     }
 
     @Test
-    fun selectedAudioTrackProducesExplicitFfmpegSpecifier() {
-        assertEquals("0:a:0", FfmpegMediaPolicies.audioStreamSpecifier(0, 0))
-        assertEquals("2:a:3", FfmpegMediaPolicies.audioStreamSpecifier(2, 3))
+    fun audioSpecifiersSeparateOptionalMapsFromStrictFilterInputs() {
+        assertEquals("0:a:0?", FfmpegMediaPolicies.audioMapSpecifier(0, 0))
+        assertEquals("2:a:3", FfmpegMediaPolicies.audioMapSpecifier(2, 3, optional = false))
+        assertEquals("2:a:3", FfmpegMediaPolicies.audioFilterInputSpecifier(2, 3))
     }
 
     @Test
@@ -96,12 +148,12 @@ class FfmpegMediaPoliciesTest {
         assertEquals(
             listOf(
                 "-y", "-ss", "2.000", "-i", "in.mkv", "-t", "3.000",
-                "-vn", "-map", "0:a:1", "-map_metadata", "0",
+                "-vn", "-map", "0:a:1?", "-map_metadata", "0",
                 "-ar", "48000", "-ac", "2", "-c:a", "libmp3lame", "-b:a", "160k",
                 "-avoid_negative_ts", "make_zero", "out.mp3"
             ),
             FfmpegMediaPolicies.extractAudioCommandArguments(
-                "in.mkv", "out.mp3", "2.000", "3.000", "0:a:1", false,
+                "in.mkv", "out.mp3", "2.000", "3.000", "0:a:1?", false,
                 48000, 2, mp3
             ).toList()
         )
@@ -124,6 +176,19 @@ class FfmpegMediaPoliciesTest {
         assertTrue(filtered.windowed(2).contains(listOf("-filter_complex", "[0:a][1:a]concat=n=2:v=0:a=1[aout]")))
         assertTrue(filtered.windowed(2).contains(listOf("-c:a", "pcm_s24le")))
         assertFalse("-b:a" in filtered)
+
+        val multitrack = FfmpegMediaPolicies.joinAudioCommandArguments(
+            listOf("a.mkv", "b.mkv"),
+            "out.mkv",
+            "[0:a:0][1:a:0]concat=n=2:v=0:a=1[aout0];[0:a:1][1:a:1]concat=n=2:v=0:a=1[aout1]",
+            "aac",
+            48000,
+            2,
+            "192k",
+            outputLabels = listOf("aout0", "aout1")
+        ).toList()
+        assertTrue(multitrack.windowed(2).contains(listOf("-map", "[aout0]")))
+        assertTrue(multitrack.windowed(2).contains(listOf("-map", "[aout1]")))
     }
 
     @Test
@@ -142,14 +207,113 @@ class FfmpegMediaPoliciesTest {
     fun cleanCommandPreservesRequestedPcmProfile() {
         assertEquals(
             listOf(
-                "-y", "-i", "in.wav", "-vn", "-map", "0:a:0", "-af", "highpass=f=80",
+                "-y", "-i", "in.wav", "-vn", "-map", "0:a:0?", "-af", "highpass=f=80",
                 "-c:a", "pcm_s32le", "-ar", "96000", "-ac", "6",
                 "-avoid_negative_ts", "make_zero", "-f", "wav", "out.wav"
             ),
             FfmpegMediaPolicies.cleanAudioCommandArguments(
-                "in.wav", "out.wav", "0:a:0", "highpass=f=80", "pcm_s32le", 96000, 6
+                "in.wav", "out.wav", "0:a:0?", "highpass=f=80", "pcm_s32le", 96000, 6
             ).toList()
         )
+    }
+
+    @Test
+    fun filterGraphFragmentsKeepArityLabelsAndOrder() {
+        assertEquals(
+            "[a0][a1][a2]concat=n=3:v=0:a=1[aout]",
+            FfmpegMediaPolicies.audioConcatFilter(listOf("a0", "a1", "a2"))
+        )
+        assertEquals(
+            "[v0][a0][v1][a1]concat=n=2:v=1:a=1[vout][aout]",
+            FfmpegMediaPolicies.videoAudioConcatFilter(2)
+        )
+        assertEquals(
+            "[v0][v1][v2]concat=n=3:v=1:a=0[vout]",
+            FfmpegMediaPolicies.videoConcatFilter(listOf("v0", "v1", "v2"))
+        )
+        assertEquals(
+            listOf(
+                "[a0][a1]acrossfade=d=0.500:c1=tri:c2=tri[ax1]",
+                "[ax1][a2]acrossfade=d=0.500:c1=tri:c2=tri[aout]"
+            ),
+            FfmpegMediaPolicies.audioCrossfadeChain(listOf("a0", "a1", "a2"), "0.500", "tri")
+        )
+    }
+
+    @Test
+    fun completeAudioJoinGraphPreservesEveryTrack() {
+        val graph = FfmpegMediaPolicies.audioJoinFilterComplex(
+            inputs = listOf(
+                FfmpegAudioJoinFilterInput(2.0, listOf("0:a:0", "0:a:1")),
+                FfmpegAudioJoinFilterInput(3.0, listOf("1:a:0", "1:a:1"))
+            ),
+            normalizeFilter = "aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo",
+            outputLabels = listOf("aout0", "aout1"),
+            transitionSeconds = 0.0,
+            fadeInOut = false,
+            crossfadeCurve = null
+        )
+        assertTrue(graph.contains("[0:a:0]"))
+        assertTrue(graph.contains("[0:a:1]"))
+        assertTrue(graph.contains("[1:a:0]"))
+        assertTrue(graph.contains("[1:a:1]"))
+        assertTrue(graph.contains("[a0_0][a0_1]concat=n=2:v=0:a=1[aout0]"))
+        assertTrue(graph.contains("[a1_0][a1_1]concat=n=2:v=0:a=1[aout1]"))
+    }
+
+    @Test
+    fun completeVideoJoinGraphCoversTransitionSilenceAndOutputs() {
+        val graph = FfmpegMediaPolicies.videoJoinFilterComplex(
+            inputs = listOf(
+                FfmpegVideoJoinFilterInput(2.0, true, listOf("0:a:0")),
+                FfmpegVideoJoinFilterInput(3.0, false, emptyList())
+            ),
+            videoFilter = "scale=320:240,setsar=1,fps=25,format=yuv420p",
+            sampleRate = 48000,
+            audioLayout = "stereo",
+            outputAudioLabels = listOf("aout"),
+            transitionSeconds = 0.5,
+            fadeInOut = false,
+            xfadeTransition = "wipeleft"
+        )
+        assertTrue(graph.contains("anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:3.000"))
+        assertTrue(graph.contains("[v0][v1]xfade=transition=wipeleft:duration=0.500:offset=1.500[vx1]"))
+        assertTrue(graph.contains("[vx1]copy[vout]"))
+        assertTrue(graph.contains("[a0][a1]acrossfade=d=0.500:c1=tri:c2=tri[aout]"))
+    }
+
+    @Test
+    fun completeInsertGraphHandlesMiddleAndBoundaryInsertion() {
+        val normalize = "aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
+        val middle = FfmpegMediaPolicies.insertAudioFilterComplex(
+            "0:a:1", "1:a:0", 10.0, 2.0, 4.0, normalize, 0.5,
+            fadeInOut = true, crossfadeCurve = null
+        )
+        assertTrue(middle.contains("[0:a:1]atrim=start=0:end=4.000"))
+        assertTrue(middle.contains("[1:a:0]atrim=start=0:end=2.000"))
+        assertTrue(middle.contains("[0:a:1]atrim=start=4.000:end=10.000"))
+        assertTrue(middle.endsWith("[a0][a1][a2]concat=n=3:v=0:a=1[aout]"))
+
+        val atStart = FfmpegMediaPolicies.insertAudioFilterComplex(
+            "0:a:0", "1:a:0", 10.0, 2.0, 0.0, normalize, 0.5,
+            fadeInOut = false, crossfadeCurve = "tri"
+        )
+        assertFalse(atStart.contains("atrim=start=0:end=0.000"))
+        assertTrue(atStart.contains("[a1][a2]acrossfade=d=0.500:c1=tri:c2=tri[aout]"))
+
+        val atEnd = FfmpegMediaPolicies.insertAudioFilterComplex(
+            "0:a:0", "1:a:0", 10.0, 2.0, 10.0, normalize, 0.0,
+            fadeInOut = false, crossfadeCurve = null
+        )
+        assertFalse(atEnd.contains("atrim=start=10.000:end=10.000"))
+        assertTrue(atEnd.endsWith("[a0][a1]concat=n=2:v=0:a=1[aout]"))
+    }
+
+    @Test
+    fun probedContainerDoesNotDependOnFilenameExtension() {
+        assertEquals("matroska", FfmpegMediaPolicies.containerFamilyFromProbe("matroska,webm"))
+        assertEquals("mov", FfmpegMediaPolicies.containerFamilyFromProbe("mov,mp4,m4a,3gp,3g2,mj2"))
+        assertEquals("unknown", FfmpegMediaPolicies.containerFamilyFromProbe("mystery"))
     }
 
     @Test
@@ -181,6 +345,8 @@ class FfmpegMediaPoliciesTest {
         assertTrue(args.indexOf("-ss") < args.indexOf("-i"))
         assertEquals("1.666666", args[args.indexOf("-t") + 1])
         assertTrue(args.windowed(2).contains(listOf("-c", "copy")))
+        assertTrue(args.windowed(2).contains(listOf("-map", "0:t?")))
+        assertTrue(args.windowed(2).contains(listOf("-c:t", "copy")))
     }
 
     @Test

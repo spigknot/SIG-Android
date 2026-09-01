@@ -6,6 +6,14 @@ import org.junit.Test
 class FfmpegVideoQualityTest {
 
     @Test
+    fun missingSourceBitrateIsEstimatedFromVideoShape() {
+        assertEquals("6221k", estimateVideoBitrate(1920, 1080, 30.0, "h264"))
+        assertEquals("4044k", estimateVideoBitrate(1920, 1080, 30.0, "hevc"))
+        assertEquals("24883k", estimateVideoBitrate(3840, 2160, 30.0, "h264"))
+        assertEquals("691k", estimateVideoBitrate(640, 360, 30.0, "h264"))
+    }
+
+    @Test
     fun scaleVideoBitrate_scalesKbpsCorrectly() {
         assertEquals("2000K", scaleVideoBitrate("2000k", 1.00))
         assertEquals("900K", scaleVideoBitrate("2000k", 0.45))

@@ -568,54 +568,28 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         val at = jobConfig.insertionMs / 1000.0
         val mainEnd = (mainAudio?.durationMs ?: 1L) / 1000.0
         val insertedEnd = (insertedAudio?.durationMs ?: 1L) / 1000.0
-        val fade = jobConfig.transitionSeconds
-        val neighboringDurations = mutableListOf(insertedEnd)
-        if (at > 0.0) neighboringDurations += at
-        if (mainEnd - at > 0.0) neighboringDurations += mainEnd - at
-        val effectiveFade = fade.coerceAtMost((neighboringDurations.minOrNull() ?: 0.0) / 2.0).coerceAtLeast(0.0)
-        val filters = mutableListOf<String>()
-        val labels = mutableListOf<String>()
-        val hasLeft = at > 0.0
-        val hasRight = mainEnd - at > 0.0
-        val useFade = jobConfig.selectedTransition == TRANSITION_FADE && effectiveFade > 0.0
-        val useCrossfade = jobConfig.selectedTransition != TRANSITION_NONE && !useFade && effectiveFade > 0.0
         val audioLayout = FfmpegMediaPolicies.channelLayout(profile.channels)
         val normalize = "aresample=${profile.sampleRate},aformat=sample_fmts=fltp:sample_rates=${profile.sampleRate}:channel_layouts=$audioLayout"
-        if (hasLeft) {
-            val fadeOut = if (useFade) ",afade=t=out:st=${decimal((at - effectiveFade).coerceAtLeast(0.0))}:d=${decimal(effectiveFade)}" else ""
-            filters += "[${FfmpegMediaPolicies.audioStreamSpecifier(0, jobConfig.mainAudioTrack)}]atrim=start=0:end=${decimal(at)},$normalize,asetpts=PTS-STARTPTS$fadeOut[a0]"
-            labels += "a0"
-        }
-        val insertedFades = buildString {
-            if (useFade && hasLeft) append(",afade=t=in:st=0:d=${decimal(effectiveFade)}")
-            if (useFade && hasRight) append(",afade=t=out:st=${decimal((insertedEnd - effectiveFade).coerceAtLeast(0.0))}:d=${decimal(effectiveFade)}")
-        }
-        filters += "[${FfmpegMediaPolicies.audioStreamSpecifier(1, jobConfig.insertedAudioTrack)}]atrim=start=0:end=${decimal(insertedEnd)},$normalize,asetpts=PTS-STARTPTS$insertedFades[a1]"
-        labels += "a1"
-        if (hasRight) {
-            val fadeIn = if (useFade) ",afade=t=in:st=0:d=${decimal(effectiveFade)}" else ""
-            filters += "[${FfmpegMediaPolicies.audioStreamSpecifier(0, jobConfig.mainAudioTrack)}]atrim=start=${decimal(at)}:end=${decimal(mainEnd)},$normalize,asetpts=PTS-STARTPTS$fadeIn[a2]"
-            labels += "a2"
-        }
-        if (useCrossfade && labels.size > 1) {
-            var previous = labels.first()
-            val curve = audioCrossfadeCurve(jobConfig.selectedTransition)
-            for (index in 1 until labels.size) {
-                val outputLabel = "ax$index"
-                filters += "[$previous][${labels[index]}]acrossfade=d=${decimal(effectiveFade)}:c1=$curve:c2=$curve[$outputLabel]"
-                previous = outputLabel
+        val filter = FfmpegMediaPolicies.insertAudioFilterComplex(
+            mainInputSpecifier = FfmpegMediaPolicies.audioFilterInputSpecifier(0, jobConfig.mainAudioTrack),
+            insertedInputSpecifier = FfmpegMediaPolicies.audioFilterInputSpecifier(1, jobConfig.insertedAudioTrack),
+            mainDurationSeconds = mainEnd,
+            insertedDurationSeconds = insertedEnd,
+            insertionSeconds = at,
+            normalizeFilter = normalize,
+            requestedTransitionSeconds = jobConfig.transitionSeconds,
+            fadeInOut = jobConfig.selectedTransition == TRANSITION_FADE,
+            crossfadeCurve = audioCrossfadeCurve(jobConfig.selectedTransition).takeIf {
+                jobConfig.selectedTransition !in setOf(TRANSITION_NONE, TRANSITION_FADE)
             }
-            filters += "[$previous]anull[aout]"
-        } else {
-            filters += labels.joinToString("") { "[$it]" } + "concat=n=${labels.size}:v=0:a=1[aout]"
-        }
+        )
         val extension = output.extension.lowercase(Locale.ROOT)
         val encoder = encoderForProfile(extension, profile)
         return FfmpegMediaPolicies.insertAudioCommandArguments(
             mainInputPath = main.absolutePath,
             insertedInputPath = inserted.absolutePath,
             outputPath = output.absolutePath,
-            filterComplex = filters.joinToString(";"),
+            filterComplex = filter,
             encoder = encoder,
             sampleRate = profile.sampleRate,
             channels = profile.channels,

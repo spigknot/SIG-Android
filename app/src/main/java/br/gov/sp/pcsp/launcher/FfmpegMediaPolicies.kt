@@ -27,8 +27,81 @@ internal data class FfmpegStreamCopySignature(
     val csd2: Int?
 )
 
+internal sealed interface FfmpegTrackProbeResult {
+    data class Count(val value: Int) : FfmpegTrackProbeResult
+    data class Failed(val message: String) : FfmpegTrackProbeResult
+}
+
+internal data class FfmpegAudioJoinPlan(
+    val requiresReencode: Boolean,
+    val standardizeLosslessly: Boolean
+)
+
+internal data class FfmpegAudioJoinFilterInput(
+    val durationSeconds: Double,
+    val audioInputSpecifiers: List<String>
+)
+
+internal data class FfmpegVideoJoinFilterInput(
+    val durationSeconds: Double,
+    val hasAudio: Boolean,
+    val audioInputSpecifiers: List<String>
+)
+
 internal object FfmpegMediaPolicies {
     fun usesMetadataCopyCommand(metadataOnly: Boolean): Boolean = metadataOnly
+
+    fun requestedTrimDurationMs(startMs: Long, endMs: Long?): Long? =
+        endMs?.minus(startMs)?.takeIf { it > 0L }
+
+    fun audioSelectionCanUseStreamCopy(startMs: Long, endMs: Long?, inputDurationMs: Long): Boolean {
+        if (startMs > 0L) return false
+        if (endMs == null) return true
+        if (inputDurationMs <= 0L) return false
+        return endMs >= inputDurationMs
+    }
+
+    fun hybridCutFallbackReason(
+        sourceCodec: String?,
+        encoderCodec: String,
+        hasInternalKeyframes: Boolean? = null
+    ): String? = when {
+        sourceCodec !in setOf("h264", "hevc") ->
+            "Codec ${sourceCodec ?: "desconhecido"} não permite cópia híbrida."
+        encoderCodec != sourceCodec ->
+            "O encoder escolhido não corresponde ao codec da origem."
+        hasInternalKeyframes == false ->
+            "Não há keyframes internos suficientes para copiar o trecho central sem perdas."
+        else -> null
+    }
+
+    fun audioJoinPlan(
+        requestedReencode: Boolean,
+        directCopyCompatible: Boolean,
+        selectedTrackReduction: Boolean
+    ): FfmpegAudioJoinPlan {
+        val requiresReencode = requestedReencode || !directCopyCompatible || selectedTrackReduction
+        return FfmpegAudioJoinPlan(
+            requiresReencode = requiresReencode,
+            standardizeLosslessly = requiresReencode && !requestedReencode
+        )
+    }
+
+    fun normalizedAudioTrackCount(
+        audioTrackCounts: List<Int>,
+        plan: FfmpegAudioJoinPlan,
+        selectedTrackReduction: Boolean
+    ): Int {
+        if (!plan.requiresReencode || selectedTrackReduction || audioTrackCounts.isEmpty()) return 1
+        val first = audioTrackCounts.first()
+        return first.takeIf { it > 1 && audioTrackCounts.all { count -> count == first } } ?: 1
+    }
+
+    fun losslessAudioStandardizationExtension(audioTrackCount: Int): String =
+        if (audioTrackCount > 1) "mka" else "wav"
+
+    fun losslessAudioStandardizationEncoder(outputExtension: String, pcmEncoder: String = "pcm_s16le"): String =
+        if (outputExtension.equals("mka", ignoreCase = true)) "flac" else pcmEncoder
 
     fun metadataRotationCopyArguments(
         inputPath: String,
@@ -55,12 +128,28 @@ internal object FfmpegMediaPolicies {
         "-display_rotation:v:0",
         metadataRotationAfterClockwiseRequest(currentCounterClockwise, requestedClockwise).toString(),
         "-i", inputPath,
-        "-map", "0", "-c", "copy", "-t", "0.001",
+        "-map", "0", "-map_metadata", "0", "-map_chapters", "0",
+        "-c", "copy", "-t", "1.000",
         outputPath
     )
 
-    fun audioStreamSpecifier(inputIndex: Int, audioTrackIndex: Int): String =
+    fun audioMapSpecifier(inputIndex: Int, audioTrackIndex: Int, optional: Boolean = true): String =
+        "$inputIndex:a:${audioTrackIndex.coerceAtLeast(0)}${if (optional) "?" else ""}"
+
+    fun audioFilterInputSpecifier(inputIndex: Int, audioTrackIndex: Int): String =
         "$inputIndex:a:${audioTrackIndex.coerceAtLeast(0)}"
+
+    fun cutMappedCopyArguments(): List<String> = listOf(
+        "-map", "0:v:0?",
+        "-map", "0:a?",
+        "-map", "0:s?",
+        "-map", "0:d?",
+        "-map", "0:t?",
+        "-map_metadata", "0",
+        "-map_chapters", "0",
+        "-c", "copy",
+        "-c:t", "copy"
+    )
 
     fun cutAudioEncoderArguments(extension: String, bitrate: String, pcmEncoder: String): List<String> =
         when (extension.lowercase(Locale.ROOT)) {
@@ -138,11 +227,15 @@ internal object FfmpegMediaPolicies {
         encoder: String,
         sampleRate: Int,
         channels: Int,
-        bitrate: String?
+        bitrate: String?,
+        outputLabels: List<String> = listOf("aout")
     ): Array<String> = buildList {
+        require(outputLabels.isNotEmpty()) { "At least one filtered audio output is required" }
         add("-y")
         inputPaths.forEach { addAll(listOf("-i", it)) }
-        addAll(listOf("-filter_complex", filterComplex, "-map", "[aout]", "-vn"))
+        addAll(listOf("-filter_complex", filterComplex))
+        outputLabels.forEach { addAll(listOf("-map", "[$it]")) }
+        add("-vn")
         addAll(listOf("-c:a", encoder, "-ar", sampleRate.toString(), "-ac", channels.toString()))
         if (bitrate != null) addAll(listOf("-b:a", bitrate))
         addAll(listOf("-avoid_negative_ts", "make_zero", outputPath))
@@ -189,13 +282,11 @@ internal object FfmpegMediaPolicies {
         val safeEnd = endUs.coerceAtLeast(safeStart + 1L)
         val start = String.format(Locale.US, "%.6f", safeStart / 1_000_000.0)
         val duration = String.format(Locale.US, "%.6f", (safeEnd - safeStart) / 1_000_000.0)
-        return arrayOf(
-            "-y", "-ss", start, "-noautorotate", "-i", inputPath,
-            "-t", duration,
-            "-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?",
-            "-map_metadata", "0", "-map_chapters", "0", "-c", "copy",
-            "-avoid_negative_ts", "make_zero", "-f", "matroska", outputPath
-        )
+        return buildList {
+            addAll(listOf("-y", "-ss", start, "-noautorotate", "-i", inputPath, "-t", duration))
+            addAll(cutMappedCopyArguments())
+            addAll(listOf("-avoid_negative_ts", "make_zero", "-f", "matroska", outputPath))
+        }.toTypedArray()
     }
 
     fun normalizedAudioFilter(
@@ -210,6 +301,248 @@ internal object FfmpegMediaPolicies {
         postTimestampFilters.forEach { append(',').append(it) }
         append('[').append(outputLabel).append(']')
     }
+
+    fun audioJoinFilterComplex(
+        inputs: List<FfmpegAudioJoinFilterInput>,
+        normalizeFilter: String,
+        outputLabels: List<String>,
+        transitionSeconds: Double,
+        fadeInOut: Boolean,
+        crossfadeCurve: String?
+    ): String {
+        require(inputs.isNotEmpty()) { "At least one audio input is required" }
+        require(outputLabels.isNotEmpty()) { "At least one audio output is required" }
+        require(inputs.all { it.audioInputSpecifiers.size == outputLabels.size }) {
+            "Every input must provide one audio stream per output"
+        }
+        val transition = transitionSeconds.coerceAtLeast(0.0)
+        val transitionText = filterDecimal(transition)
+        val parts = mutableListOf<String>()
+        outputLabels.indices.forEach { track ->
+            val preparedLabels = mutableListOf<String>()
+            inputs.forEachIndexed { index, input ->
+                val fades = mutableListOf<String>()
+                if (fadeInOut && transition > 0.0) {
+                    if (index > 0) fades += "afade=t=in:st=0:d=$transitionText"
+                    if (index < inputs.lastIndex) {
+                        val fadeStart = (input.durationSeconds - transition).coerceAtLeast(0.0)
+                        fades += "afade=t=out:st=${filterDecimal(fadeStart)}:d=$transitionText"
+                    }
+                }
+                val prepared = preparedAudioLabel(index, track, outputLabels.size)
+                parts += normalizedAudioFilter(
+                    input.audioInputSpecifiers[track], normalizeFilter, fades, prepared
+                )
+                preparedLabels += prepared
+            }
+            val outputLabel = outputLabels[track]
+            if (!fadeInOut && transition > 0.0 && crossfadeCurve != null) {
+                parts += audioCrossfadeChain(
+                    preparedLabels,
+                    transitionText,
+                    crossfadeCurve,
+                    outputLabel,
+                    intermediatePrefix = "ax${track}_"
+                )
+            } else {
+                parts += audioConcatFilter(preparedLabels, outputLabel)
+            }
+        }
+        return parts.joinToString(";")
+    }
+
+    fun videoJoinFilterComplex(
+        inputs: List<FfmpegVideoJoinFilterInput>,
+        videoFilter: String,
+        sampleRate: Int,
+        audioLayout: String,
+        outputAudioLabels: List<String>,
+        transitionSeconds: Double,
+        fadeInOut: Boolean,
+        xfadeTransition: String,
+        audioCrossfadeCurve: String = "tri"
+    ): String {
+        require(inputs.isNotEmpty()) { "At least one video input is required" }
+        require(outputAudioLabels.isNotEmpty()) { "At least one audio output is required" }
+        require(inputs.filter { it.hasAudio }.all { it.audioInputSpecifiers.size == outputAudioLabels.size }) {
+            "Every audio-bearing input must provide one stream per output"
+        }
+        val transition = transitionSeconds.coerceAtLeast(0.0)
+        val transitionText = filterDecimal(transition)
+        val parts = mutableListOf<String>()
+        inputs.forEachIndexed { index, input ->
+            val clipSeconds = input.durationSeconds.coerceAtLeast(0.001)
+            val fadeDuration = if (fadeInOut && transition > 0.0) {
+                transition.coerceAtMost((clipSeconds / 2.0).coerceAtLeast(0.1))
+            } else 0.0
+            val videoFades = mutableListOf<String>()
+            if (fadeDuration > 0.0) {
+                if (index > 0) videoFades += "fade=t=in:st=0:d=${filterDecimal(fadeDuration)}"
+                if (index < inputs.lastIndex) {
+                    videoFades += "fade=t=out:st=${filterDecimal((clipSeconds - fadeDuration).coerceAtLeast(0.0))}:d=${filterDecimal(fadeDuration)}"
+                }
+            }
+            parts += buildString {
+                append('[').append(index).append(":v]").append(videoFilter)
+                if (fadeInOut) append(",setpts=PTS-STARTPTS")
+                videoFades.forEach { append(',').append(it) }
+                append("[v").append(index).append(']')
+            }
+            outputAudioLabels.indices.forEach { track ->
+                val prepared = preparedAudioLabel(index, track, outputAudioLabels.size)
+                val audioFades = mutableListOf<String>()
+                if (fadeDuration > 0.0) {
+                    if (index > 0) audioFades += "afade=t=in:st=0:d=${filterDecimal(fadeDuration)}"
+                    if (index < inputs.lastIndex) {
+                        audioFades += "afade=t=out:st=${filterDecimal((clipSeconds - fadeDuration).coerceAtLeast(0.0))}:d=${filterDecimal(fadeDuration)}"
+                    }
+                }
+                parts += if (input.hasAudio) {
+                    buildString {
+                        append('[').append(input.audioInputSpecifiers[track]).append(']')
+                        append("aresample=").append(sampleRate).append(',')
+                        append("aformat=sample_fmts=fltp:sample_rates=").append(sampleRate)
+                        append(":channel_layouts=").append(audioLayout)
+                        if (fadeInOut) append(",asetpts=PTS-STARTPTS")
+                        audioFades.forEach { append(',').append(it) }
+                        append('[').append(prepared).append(']')
+                    }
+                } else {
+                    buildString {
+                        append("anullsrc=channel_layout=").append(audioLayout)
+                        append(":sample_rate=").append(sampleRate)
+                        append(",atrim=0:").append(filterDecimal(clipSeconds)).append(",asetpts=N/SR/TB")
+                        audioFades.forEach { append(',').append(it) }
+                        append('[').append(prepared).append(']')
+                    }
+                }
+            }
+        }
+
+        if (!fadeInOut && transition > 0.0 && inputs.size > 1) {
+            var lastVideo = "v0"
+            var accumulatedSeconds = inputs.first().durationSeconds
+            inputs.indices.drop(1).forEach { index ->
+                val output = "vx$index"
+                val offset = (accumulatedSeconds - transition).coerceAtLeast(0.0)
+                parts += "[$lastVideo][v$index]xfade=transition=$xfadeTransition:duration=$transitionText:offset=${filterDecimal(offset)}[$output]"
+                lastVideo = output
+                accumulatedSeconds += inputs[index].durationSeconds - transition
+            }
+            parts += "[$lastVideo]copy[vout]"
+            outputAudioLabels.indices.forEach { track ->
+                parts += audioCrossfadeChain(
+                    inputs.indices.map { preparedAudioLabel(it, track, outputAudioLabels.size) },
+                    transitionText,
+                    audioCrossfadeCurve,
+                    outputAudioLabels[track],
+                    intermediatePrefix = "vx_audio_${track}_"
+                )
+            }
+        } else {
+            parts += videoConcatFilter(inputs.indices.map { "v$it" })
+            outputAudioLabels.indices.forEach { track ->
+                parts += audioConcatFilter(
+                    inputs.indices.map { preparedAudioLabel(it, track, outputAudioLabels.size) },
+                    outputAudioLabels[track]
+                )
+            }
+        }
+        return parts.joinToString(";")
+    }
+
+    fun insertAudioFilterComplex(
+        mainInputSpecifier: String,
+        insertedInputSpecifier: String,
+        mainDurationSeconds: Double,
+        insertedDurationSeconds: Double,
+        insertionSeconds: Double,
+        normalizeFilter: String,
+        requestedTransitionSeconds: Double,
+        fadeInOut: Boolean,
+        crossfadeCurve: String?
+    ): String {
+        val mainEnd = mainDurationSeconds.coerceAtLeast(0.001)
+        val insertedEnd = insertedDurationSeconds.coerceAtLeast(0.001)
+        val at = insertionSeconds.coerceIn(0.0, mainEnd)
+        val neighboringDurations = mutableListOf(insertedEnd)
+        if (at > 0.0) neighboringDurations += at
+        if (mainEnd - at > 0.0) neighboringDurations += mainEnd - at
+        val effectiveFade = requestedTransitionSeconds.coerceAtLeast(0.0)
+            .coerceAtMost((neighboringDurations.minOrNull() ?: 0.0) / 2.0)
+        val hasLeft = at > 0.0
+        val hasRight = mainEnd - at > 0.0
+        val useFade = fadeInOut && effectiveFade > 0.0
+        val useCrossfade = crossfadeCurve != null && !useFade && effectiveFade > 0.0
+        val fadeText = filterDecimal(effectiveFade)
+        val filters = mutableListOf<String>()
+        val labels = mutableListOf<String>()
+        if (hasLeft) {
+            val fade = if (useFade) ",afade=t=out:st=${filterDecimal((at - effectiveFade).coerceAtLeast(0.0))}:d=$fadeText" else ""
+            filters += "[$mainInputSpecifier]atrim=start=0:end=${filterDecimal(at)},$normalizeFilter,asetpts=PTS-STARTPTS$fade[a0]"
+            labels += "a0"
+        }
+        val insertedFades = buildString {
+            if (useFade && hasLeft) append(",afade=t=in:st=0:d=$fadeText")
+            if (useFade && hasRight) append(",afade=t=out:st=${filterDecimal((insertedEnd - effectiveFade).coerceAtLeast(0.0))}:d=$fadeText")
+        }
+        filters += "[$insertedInputSpecifier]atrim=start=0:end=${filterDecimal(insertedEnd)},$normalizeFilter,asetpts=PTS-STARTPTS$insertedFades[a1]"
+        labels += "a1"
+        if (hasRight) {
+            val fade = if (useFade) ",afade=t=in:st=0:d=$fadeText" else ""
+            filters += "[$mainInputSpecifier]atrim=start=${filterDecimal(at)}:end=${filterDecimal(mainEnd)},$normalizeFilter,asetpts=PTS-STARTPTS$fade[a2]"
+            labels += "a2"
+        }
+        if (useCrossfade && labels.size > 1) {
+            filters += audioCrossfadeChain(labels, fadeText, checkNotNull(crossfadeCurve))
+        } else {
+            filters += audioConcatFilter(labels)
+        }
+        return filters.joinToString(";")
+    }
+
+    fun audioConcatFilter(inputLabels: List<String>, outputLabel: String = "aout"): String {
+        require(inputLabels.isNotEmpty()) { "At least one audio input is required" }
+        return inputLabels.joinToString("") { "[$it]" } +
+            "concat=n=${inputLabels.size}:v=0:a=1[$outputLabel]"
+    }
+
+    fun videoAudioConcatFilter(inputCount: Int, outputVideo: String = "vout", outputAudio: String = "aout"): String {
+        require(inputCount > 0) { "At least one input is required" }
+        val inputs = (0 until inputCount).joinToString("") { "[v$it][a$it]" }
+        return "${inputs}concat=n=$inputCount:v=1:a=1[$outputVideo][$outputAudio]"
+    }
+
+    fun videoConcatFilter(inputLabels: List<String>, outputLabel: String = "vout"): String {
+        require(inputLabels.isNotEmpty()) { "At least one video input is required" }
+        return inputLabels.joinToString("") { "[$it]" } +
+            "concat=n=${inputLabels.size}:v=1:a=0[$outputLabel]"
+    }
+
+    fun audioCrossfadeChain(
+        inputLabels: List<String>,
+        duration: String,
+        curve: String,
+        outputLabel: String = "aout",
+        intermediatePrefix: String = "ax"
+    ): List<String> {
+        require(inputLabels.isNotEmpty()) { "At least one audio input is required" }
+        if (inputLabels.size == 1) return listOf("[${inputLabels.first()}]anull[$outputLabel]")
+        val filters = mutableListOf<String>()
+        var previous = inputLabels.first()
+        inputLabels.drop(1).forEachIndexed { zeroBasedIndex, input ->
+            val index = zeroBasedIndex + 1
+            val output = if (index == inputLabels.lastIndex) outputLabel else "$intermediatePrefix$index"
+            filters += "[$previous][$input]acrossfade=d=$duration:c1=$curve:c2=$curve[$output]"
+            previous = output
+        }
+        return filters
+    }
+
+    private fun preparedAudioLabel(inputIndex: Int, trackIndex: Int, trackCount: Int): String =
+        if (trackCount == 1) "a$inputIndex" else "a${trackIndex}_$inputIndex"
+
+    private fun filterDecimal(value: Double): String = String.format(Locale.US, "%.3f", value)
 
     fun normalizeRightAngle(degrees: Int): Int {
         val normalized = ((degrees % 360) + 360) % 360
@@ -308,6 +641,22 @@ internal object FfmpegMediaPolicies {
         "flac" -> "flac"
         "ogg", "opus" -> "ogg"
         else -> "unknown"
+    }
+
+    fun containerFamilyFromProbe(formatNames: String): String {
+        val formats = formatNames.lowercase(Locale.ROOT).split(',').map(String::trim)
+        return when {
+            formats.any { it in setOf("matroska", "matroska,webm") } -> "matroska"
+            "webm" in formats -> "webm"
+            formats.any { it in setOf("mov", "mp4", "m4a", "3gp", "3g2", "mj2") } -> "mov"
+            "avi" in formats -> "avi"
+            "wav" in formats -> "wav"
+            "mp3" in formats -> "mp3"
+            "flac" in formats -> "flac"
+            formats.any { it in setOf("ogg", "opus") } -> "ogg"
+            formats.any { it in setOf("aac", "adts") } -> "adts"
+            else -> "unknown"
+        }
     }
 
     fun directConcatSignaturesCompatible(signatures: List<List<FfmpegStreamCopySignature>?>): Boolean {

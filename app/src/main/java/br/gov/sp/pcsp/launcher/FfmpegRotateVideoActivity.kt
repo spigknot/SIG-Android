@@ -444,23 +444,36 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         previewPlayer = null
     }
 
-    private fun rotateSelectedVideo() {
+    private fun rotateSelectedVideo(containerRemapConfirmed: Boolean = false) {
         val uri = selectedUri ?: return
 
-        val videoTracks = videoTrackCount(uri)
-        if (videoTracks != 1) {
-            status.text = if (videoTracks == 0) {
-                "O arquivo não possui uma faixa de vídeo."
-            } else {
-                "O arquivo possui $videoTracks faixas de vídeo. Esta ferramenta aceita exatamente uma para não descartar conteúdo."
+        when (val probe = videoTrackProbe(uri)) {
+            is FfmpegTrackProbeResult.Failed -> {
+                status.text = "Não foi possível analisar as faixas de vídeo: ${probe.message}"
+                return
             }
-            return
+            is FfmpegTrackProbeResult.Count -> if (probe.value != 1) {
+                status.text = if (probe.value == 0) {
+                    "O arquivo não possui uma faixa de vídeo."
+                } else {
+                    "O arquivo possui ${probe.value} faixas de vídeo. Esta ferramenta aceita exatamente uma para não descartar conteúdo."
+                }
+                return
+            }
         }
 
         val degrees = readDegrees()
         val metadataOnly = metadataRotation.isChecked
-        if (metadataOnly && FfmpegMediaPolicies.safeContainerExtension(selectedName) != selectedName.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
-            Toast.makeText(this, "Container não reconhecido: a cópia será salva em MKV.", Toast.LENGTH_LONG).show()
+        if (metadataOnly && !containerRemapConfirmed &&
+            FfmpegMediaPolicies.safeContainerExtension(selectedName) != selectedName.substringAfterLast('.', "").lowercase(Locale.ROOT)
+        ) {
+            AlertDialog.Builder(this)
+                .setTitle("A saída precisa usar MKV")
+                .setMessage("O container informado pelo arquivo não é reconhecido para cópia de metadados. O app fará um preflight real e, se compatível, salvará a saída em MKV. Deseja continuar?")
+                .setPositiveButton("Usar MKV") { _, _ -> rotateSelectedVideo(containerRemapConfirmed = true) }
+                .setNegativeButton("Cancelar", null)
+                .show()
+            return
         }
         val startMs = timeline.getStartMs()
         val endMs = timeline.getEndMs()
@@ -496,15 +509,15 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         executeRotation(uri, degrees, metadataOnly)
     }
 
-    private fun videoTrackCount(uri: Uri): Int {
+    private fun videoTrackProbe(uri: Uri): FfmpegTrackProbeResult {
         val extractor = android.media.MediaExtractor()
         return try {
             extractor.setDataSource(this, uri, null)
-            (0 until extractor.trackCount).count { index ->
+            FfmpegTrackProbeResult.Count((0 until extractor.trackCount).count { index ->
                 extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("video/") == true
-            }
-        } catch (_: Throwable) {
-            0
+            })
+        } catch (error: Throwable) {
+            FfmpegTrackProbeResult.Failed(error.message ?: "falha do MediaExtractor")
         } finally {
             extractor.release()
         }
@@ -1580,6 +1593,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             rotationOptions.getChildAt(i).isEnabled = !processing
         }
         updateVideoEncoderButton()
+        if (!processing) updateMetadataModeState()
     }
 
     private fun cancelRotation() {

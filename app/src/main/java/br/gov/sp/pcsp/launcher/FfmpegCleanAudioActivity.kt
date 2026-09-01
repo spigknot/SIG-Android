@@ -267,7 +267,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         return FfmpegMediaPolicies.cleanAudioCommandArguments(
             inputPath = inputFile.absolutePath,
             outputPath = outputFile.absolutePath,
-            audioMap = FfmpegMediaPolicies.audioStreamSpecifier(0, 0),
+            audioMap = FfmpegMediaPolicies.audioMapSpecifier(0, 0),
             filter = mode.filter,
             pcmEncoder = sourceProfile.pcmEncoder,
             sampleRate = sourceProfile.sampleRate,

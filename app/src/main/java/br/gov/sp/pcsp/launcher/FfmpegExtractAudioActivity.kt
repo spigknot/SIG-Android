@@ -853,9 +853,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         copyAudio: Boolean = false,
         audioTrack: Int = 0
     ): Array<String> {
-        val inputDuration = readDuration(inputFile)
         val hasStartTrim = startMs > 0L
-        val hasEndTrim = endMs != null && inputDuration > 0L && endMs < inputDuration - 250L
+        val requestedDurationMs = FfmpegMediaPolicies.requestedTrimDurationMs(startMs, endMs)
         val encoderArguments = if (copyAudio) {
             emptyList()
         } else {
@@ -869,8 +868,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             inputPath = inputFile.absolutePath,
             outputPath = outputFile.absolutePath,
             start = if (hasStartTrim) formatSeconds(startMs) else null,
-            duration = if (hasEndTrim) formatSeconds(requireNotNull(endMs) - startMs) else null,
-            audioMap = FfmpegMediaPolicies.audioStreamSpecifier(0, audioTrack),
+            duration = requestedDurationMs?.let(::formatSeconds),
+            audioMap = FfmpegMediaPolicies.audioMapSpecifier(0, audioTrack),
             copyAudio = copyAudio,
             sampleRate = settings.sampleRate,
             channels = settings.channels,
@@ -942,7 +941,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         audioTrack: Int = 0
     ): Boolean {
         val duration = readDuration(inputFile)
-        if (startMs > 0L || (endMs != null && duration > 0L && endMs < duration - 250L)) return false
+        if (!FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(startMs, endMs, duration)) return false
         val extractor = MediaExtractor()
         return try {
             extractor.setDataSource(inputFile.absolutePath)
