@@ -389,7 +389,12 @@ class RemoteSttActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
-        transcriptionMode = intent.getStringExtra(EXTRA_MODE) == MODE_TRANSCRIPTION
+        // Um intent-filter do manifest nao carrega extras, entao o alvo de
+        // compartilhamento "Transcrever" nao consegue pedir o modo por EXTRA_MODE.
+        // Compartilhamento sempre abre a transcricao; a ocorrencia segue sendo
+        // escolhida explicitamente pelo menu de ferramentas.
+        transcriptionMode = intent.getStringExtra(EXTRA_MODE) == MODE_TRANSCRIPTION ||
+            SharedMediaIntents.isShareAction(intent)
         setContentView(
             if (transcriptionMode) R.layout.activity_remote_stt_transcription
             else R.layout.activity_remote_stt_occurrence

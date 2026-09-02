@@ -68,7 +68,7 @@
             android:name=".FfmpegCutActivity"
             android:screenOrientation="portrait"
             android:exported="true"
-            android:label="SIG - Cortar">
+            android:label="Cortar">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -85,7 +85,7 @@
             android:name=".FfmpegExtractAudioActivity"
             android:screenOrientation="portrait"
             android:exported="true"
-            android:label="SIG - Extrair áudio">
+            android:label="Extrair áudio">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -111,22 +111,65 @@
         <activity
             android:name=".FfmpegRotateVideoActivity"
             android:screenOrientation="portrait"
-            android:exported="false" />
+            android:exported="true"
+            android:label="Girar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".FfmpegJoinVideosActivity"
             android:screenOrientation="portrait"
-            android:exported="false" />
+            android:exported="true"
+            android:label="Juntar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".FfmpegCleanAudioActivity"
             android:screenOrientation="portrait"
-            android:exported="false" />
+            android:exported="true"
+            android:label="Limpar áudio">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".FfmpegInsertAudioActivity"
             android:screenOrientation="portrait"
-            android:exported="false" />
+            android:exported="true"
+            android:label="Inserir áudio">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".WhisperActivity"
@@ -148,7 +191,9 @@
             android:name=".RemoteSttActivity"
             android:screenOrientation="portrait"
             android:exported="true"
-            android:label="SIG - Transcrever Granite">
+            android:label="Transcrever">
+            <!-- O intent-filter nao permite extras: o modo transcricao e
+                 definido em RemoteSttActivity.onCreate para compartilhamentos. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

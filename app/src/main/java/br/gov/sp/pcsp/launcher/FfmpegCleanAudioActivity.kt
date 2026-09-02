@@ -113,6 +113,26 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         buttonOutputFolder.setOnClickListener { openOutputFolder() }
         buttonOutputShare.setOnClickListener { shareOutputFile() }
         refreshModeUi()
+        handleIncomingShareIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingShareIntent(intent)
+    }
+
+    /** Limpar audio aceita somente audio, e apenas um por compartilhamento. */
+    private fun handleIncomingShareIntent(intent: Intent?) {
+        if (!SharedMediaIntents.isShareAction(intent)) return
+        val audio = SharedMediaIntents.mediaFrom(this, intent).firstOrNull { it.isAudio }
+        if (audio == null) {
+            Toast.makeText(this, "A ferramenta Limpar áudio aceita apenas áudio.", Toast.LENGTH_LONG).show()
+            status.text = "Compartilhe um arquivo de áudio."
+            return
+        }
+        handlePickedAudio(audio.uri)
+        status.text = "Áudio recebido pelo compartilhamento."
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

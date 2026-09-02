@@ -1,0 +1,93 @@
+Relatório de verificação — pendências não corrigidas nas ferramentas FFmpeg
+Data: 31/08/2026
+
+Foram verificados 57 findings de bugs. Destes, 52 foram corrigidos e 5
+permanecem total ou parcialmente abertos.
+
+═══════════════════════════════════════════════════════════════════
+PENDÊNCIAS — FINDINGS NÃO CORRIGIDOS (3)
+═══════════════════════════════════════════════════════════════════
+
+Ferramenta de cortar áudio/vídeo
+Arquivo: [FfmpegCutActivity.kt](D:\Projetos\SIG\app\src\main\java\br\gov\sp\pcsp\launcher\FfmpegCutActivity.kt)
+
+7. Finding: cortar áudio sempre reencoda. WAV vira PCM 16-bit e MP3 usa
+   bitrate fixo, mesmo que a origem pudesse ser copiada.
+   Fix: oferecer stream copy quando codec e container forem compatíveis e
+   expor a qualidade de saída.
+   Linhas: 961–970 (preciseAudioEncoderArguments).
+   STATUS: ❌ NÃO CORRIGIDO
+   Motivo: preciseAudioEncoderArguments sempre reencoda para qualquer
+   formato (WAV→pcm_s16le, MP3→libmp3lame, etc.). Não existe caminho de
+   -c:a copy para áudio no Cut, ao contrário da ferramenta Extrair áudio
+   que tem canCopyAudioWithoutConversion.
+   Gravidade: MÉDIA.
+
+Ferramenta de juntar vídeo/áudio
+Arquivo: [FfmpegJoinVideosActivity.kt](D:\Projetos\SIG\app\src\main\java\br\gov\sp\pcsp\launcher\FfmpegJoinVideosActivity.kt)
+
+12. Finding: arquivos join_list_*.txt criados no cache nunca são apagados.
+   Fix: apagar a lista após o concat, inclusive em falha/cancelamento.
+   Linhas: 1191–1192 (buildDirectConcatArguments).
+   STATUS: ❌ NÃO CORRIGIDO
+   Motivo: buildDirectConcatArguments cria o arquivo mas nunca o deleta —
+   nem em sucesso, nem em falha. Diferente do Smart Join que tem
+   workDir.deleteRecursively() no finally, o direct concat não faz nenhuma
+   limpeza.
+   Gravidade: BAIXA.
+
+Ferramenta de extrair áudio
+Arquivo: [FfmpegExtractAudioActivity.kt](D:\Projetos\SIG\app\src\main\java\br\gov\sp\pcsp\launcher\FfmpegExtractAudioActivity.kt)
+
+7. Finding: cada arquivo gera dois processos FFmpeg adicionais apenas para
+   descrever entrada e saída no terminal.
+   Fix: reutilizar os logs da extração ou desabilitar as sondagens em lote.
+   Linhas: 1671–1698 (probeAudioFile), 1653–1669 (describeAudioFile).
+   STATUS: ❌ NÃO CORRIGIDO
+   Motivo: probeAudioFile ainda executa FFmpegKit.executeWithArguments(
+   arrayOf("-hide_banner", "-i", file)) para cada arquivo, gerando um
+   processo extra só para exibir informações no terminal. Os logs da
+   extração principal não são reaproveitados.
+   Gravidade: BAIXA.
+
+═══════════════════════════════════════════════════════════════════
+PENDÊNCIAS — CORREÇÕES PARCIAIS (2)
+═══════════════════════════════════════════════════════════════════
+
+Ferramenta de extrair áudio
+Arquivo: [FfmpegExtractAudioActivity.kt](D:\Projetos\SIG\app\src\main\java\br\gov\sp\pcsp\launcher\FfmpegExtractAudioActivity.kt)
+
+2. Finding: não existe caminho de cópia. WAV sempre vira PCM 16-bit e MP3
+   é codificado com bitrate fixo.
+   Fix: oferecer -c:a copy quando codec e formato forem compatíveis e
+   permitir escolha entre CBR/VBR.
+   Linhas: 873–876 (cópia implementada), 980–999 (canCopyAudioWithoutConversion).
+   STATUS: ⚠️ PARCIAL
+   Motivo: o caminho de cópia (-c:a copy) foi implementado via
+   canCopyAudioWithoutConversion + branch em buildFfmpegArguments. Mas não
+   há na UI a opção de escolha entre CBR e VBR para codecs que suportam
+   ambos.
+   Gravidade: MÉDIA.
+
+Ferramenta de limpar áudio
+Arquivo: [FfmpegCleanAudioActivity.kt](D:\Projetos\SIG\app\src\main\java\br\gov\sp\pcsp\launcher\FfmpegCleanAudioActivity.kt)
+
+1. Finding: os dois modos sempre produzem WAV PCM 16-bit, 16 kHz e mono.
+   A ajuda explica os filtros, mas não informa claramente essa redução.
+   Fix: preservar taxa/canais ou oferecer opções de saída; no mínimo,
+   avisar a conversão.
+   Linhas: 273–275 (buildFfmpegArguments usa sourceProfile).
+   STATUS: ⚠️ PARCIAL
+   Motivo: agora preserva a taxa de amostragem e canais originais do source
+   (-ar sourceProfile.sampleRate, -ac sourceProfile.channels). Mas a saída
+   ainda é sempre WAV (-f wav, linha 277), sem opções de formato alternativo,
+   e a ajuda (linhas 366–375) não informa que o formato de saída é sempre WAV.
+   Gravidade: ALTA.
+
+═══════════════════════════════════════════════════════════════════
+RESUMO
+═══════════════════════════════════════════════════════════════════
+Total de findings verificados: 57
+Corrigidos:                   52
+Não corrigidos:                3
+Correções parciais:            2

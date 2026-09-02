@@ -323,6 +323,27 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         inputParallelSegments.doAfterTextChanged { refreshCommandPreview() }
         updateMetadataModeState()
         refreshCommandPreview()
+        handleIncomingShareIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingShareIntent(intent)
+    }
+
+    /** Girar aceita somente video, e apenas um por compartilhamento. */
+    private fun handleIncomingShareIntent(intent: Intent?) {
+        if (!SharedMediaIntents.isShareAction(intent)) return
+        val media = SharedMediaIntents.mediaFrom(this, intent)
+        val video = media.firstOrNull { it.isVideo }
+        if (video == null) {
+            Toast.makeText(this, "A ferramenta Girar aceita apenas vídeo.", Toast.LENGTH_LONG).show()
+            status.text = "Compartilhe um vídeo para girar."
+            return
+        }
+        loadSelectedVideo(video.uri)
+        status.text = "Vídeo recebido pelo compartilhamento."
     }
 
     override fun onResume() {

@@ -33,3 +33,7 @@ tools/granite/out/
 tools/granite/package/
 tools/granite/jni/
 tools/granite/*.wav
+
+# Diretorios de agentes/ferramentas (scratch local)
+.workbuddy-ai/
+.pytest_cache/

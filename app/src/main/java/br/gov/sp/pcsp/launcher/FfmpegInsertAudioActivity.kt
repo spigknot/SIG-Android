@@ -155,6 +155,29 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         updateOptionState()
         updateSpeedButtons()
         refreshCommandPreview()
+        handleIncomingShareIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingShareIntent(intent)
+    }
+
+    /**
+     * Inserir audio aceita somente audio, apenas um, e ele entra como audio
+     * base (o mesmo papel do primeiro arquivo escolhido pelo botao +).
+     */
+    private fun handleIncomingShareIntent(intent: Intent?) {
+        if (!SharedMediaIntents.isShareAction(intent)) return
+        val audio = SharedMediaIntents.mediaFrom(this, intent).firstOrNull { it.isAudio }
+        if (audio == null) {
+            Toast.makeText(this, "A ferramenta Inserir áudio aceita apenas um áudio.", Toast.LENGTH_LONG).show()
+            status.text = "Compartilhe um arquivo de áudio para usar como base."
+            return
+        }
+        loadAudio(audio.uri, primary = true, flags = intent?.flags ?: 0)
+        status.text = "Áudio base recebido pelo compartilhamento."
     }
 
     @Deprecated("Legacy XML activity callback")

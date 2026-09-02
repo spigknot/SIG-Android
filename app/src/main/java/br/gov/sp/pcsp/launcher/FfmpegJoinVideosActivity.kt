@@ -278,6 +278,30 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         updateSelectionUi()
         updateJoinSpeedButtons()
         refreshCommandPreview()
+        handleIncomingShareIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingShareIntent(intent)
+    }
+
+    /** Juntar aceita varios audios ou varios videos, sem misturar os dois. */
+    private fun handleIncomingShareIntent(intent: Intent?) {
+        if (!SharedMediaIntents.isShareAction(intent)) return
+        val received = SharedMediaIntents.mediaFrom(this, intent)
+        val media = received.filter { it.isAudio || it.isVideo }
+        if (media.isEmpty()) {
+            Toast.makeText(this, "Compartilhe arquivos de áudio ou vídeo.", Toast.LENGTH_LONG).show()
+            status.text = "Nenhum arquivo de áudio ou vídeo recebido."
+            return
+        }
+        val rejected = received.size - media.size
+        addPickedUris(media.map { it.uri }, intent?.flags ?: 0)
+        if (rejected > 0) {
+            status.text = "$rejected arquivo(s) ignorado(s): envie apenas áudio ou vídeo."
+        }
     }
 
     @Deprecated("Deprecated Android callback kept for this legacy XML activity.")
@@ -313,7 +337,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun handlePickedMedia(data: Intent?) {
-        val flags = data?.flags ?: 0
         val uris = mutableListOf<Uri>()
         data?.clipData?.let { clipData ->
             for (index in 0 until clipData.itemCount) {
@@ -321,16 +344,20 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             }
         }
         data?.data?.let { uris += it }
+        addPickedUris(uris, data?.flags ?: 0)
+    }
+
+    /** Caminho comum entre o seletor de arquivos e o compartilhamento. */
+    private fun addPickedUris(uris: List<Uri>, flags: Int) {
         if (uris.isEmpty()) return
 
         val loaded = uris.distinct().mapNotNull { uri ->
-            try {
-                if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) {
-                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-            } catch (_: SecurityException) {
-            }
+            SharedMediaIntents.takeReadPermission(contentResolver, uri, flags)
             loadClip(uri)
+        }
+        if (loaded.isEmpty()) {
+            Toast.makeText(this, "Nenhum arquivo de áudio ou vídeo foi reconhecido.", Toast.LENGTH_LONG).show()
+            return
         }
         val combinedKinds = (clips + loaded).map { it.isAudio }.distinct()
         if (combinedKinds.size > 1) {
