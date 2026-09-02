@@ -357,6 +357,34 @@
                 </LinearLayout>
 
                 <LinearLayout
+                    android:id="@+id/smart_join_row"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <CheckBox
+                        android:id="@+id/check_smart_join"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:buttonTint="#FFFFFFFF"
+                        android:text="SmartJoin"
+                        android:textColor="#FFFFFFFF"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/help_smart_join"
+                        android:layout_width="26dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:minHeight="40dp"
+                        android:text="?"
+                        android:textColor="#99FFFFFF"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
                     android:id="@+id/video_encoding_controls"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

@@ -73,9 +73,41 @@ fun FfmpegVideoEncoder.encodingFor(
         }
     }
     return FfmpegVideoEncoding(
-        arguments = listOf("-c:v", ffmpegName),
+        // MediaCodec varia bastante entre fabricantes. Declarar o formato de
+        // entrada e desabilitar B-frames evita que o wrapper tente negociar
+        // uma configuração implícita que muitos encoders Android rejeitam no
+        // configure(). O GOP continua sendo escolhido pelo chamador, que
+        // conhece a taxa de quadros da mídia.
+        arguments = listOf(
+            "-c:v", ffmpegName,
+            "-pix_fmt", "yuv420p",
+            "-bf", "0"
+        ),
         targetBitrate = scaleVideoBitrate(sourceBitrate, multiplier)
     )
+}
+
+fun mediaCodecGopSize(frameRate: Double?): Int =
+    frameRate
+        ?.takeIf { it in 1.0..240.0 }
+        ?.roundToLong()
+        ?.toInt()
+        ?: 30
+
+fun ffmpegFailureDetails(logs: String, fallback: String = "O FFmpeg não concluiu o processamento."): String {
+    val lines = logs.lines().map { it.trim() }.filter { it.isNotBlank() }
+    val important = lines.filter { line ->
+        line.contains("error", ignoreCase = true) ||
+            line.contains("failed", ignoreCase = true) ||
+            line.contains("invalid", ignoreCase = true) ||
+            line.contains("not supported", ignoreCase = true) ||
+            line.contains("exception", ignoreCase = true)
+    }
+    return (important.takeLast(8) + lines.takeLast(10))
+        .distinct()
+        .joinToString("\n")
+        .take(1_500)
+        .ifBlank { fallback }
 }
 
 fun scaleVideoBitrate(bitrate: String, multiplier: Double): String {

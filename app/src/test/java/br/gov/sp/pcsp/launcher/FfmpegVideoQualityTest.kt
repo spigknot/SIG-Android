@@ -1,6 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FfmpegVideoQualityTest {
@@ -42,11 +43,17 @@ class FfmpegVideoQualityTest {
         val h264Hardware = FfmpegVideoEncoder("h264_mediacodec", "h264")
         val economic = h264Hardware.encodingFor(FfmpegVideoQuality.ECONOMIC, "10000k")
         assertEquals("4500K", economic.targetBitrate)
-        assertEquals(listOf("-c:v", "h264_mediacodec"), economic.arguments)
+        assertEquals(
+            listOf("-c:v", "h264_mediacodec", "-pix_fmt", "yuv420p", "-bf", "0"),
+            economic.arguments
+        )
 
         val maximum = h264Hardware.encodingFor(FfmpegVideoQuality.MAXIMUM, "10000k")
         assertEquals("16000K", maximum.targetBitrate)
-        assertEquals(listOf("-c:v", "h264_mediacodec"), maximum.arguments)
+        assertEquals(
+            listOf("-c:v", "h264_mediacodec", "-pix_fmt", "yuv420p", "-bf", "0"),
+            maximum.arguments
+        )
     }
 
     @Test
@@ -59,5 +66,28 @@ class FfmpegVideoQualityTest {
         val high = cpuEncoder.encodingFor(FfmpegVideoQuality.HIGH, "10000k")
         assertEquals(null, high.targetBitrate)
         assertEquals(listOf("-c:v", "libx264", "-preset", "ultrafast", "-crf", "20"), high.arguments)
+    }
+
+    @Test
+    fun mediaCodecGopSize_usesRoundedSourceFrameRateWithSafeFallback() {
+        assertEquals(24, mediaCodecGopSize(23.976))
+        assertEquals(30, mediaCodecGopSize(29.97))
+        assertEquals(60, mediaCodecGopSize(59.94))
+        assertEquals(30, mediaCodecGopSize(null))
+        assertEquals(30, mediaCodecGopSize(0.0))
+    }
+
+    @Test
+    fun ffmpegFailureDetails_keepsRelevantLinesBeyondLogTail() {
+        val logs = buildString {
+            appendLine("MediaCodec.configure failed with status -22")
+            repeat(20) { appendLine("cleanup line $it") }
+            appendLine("Conversion failed!")
+        }
+
+        val details = ffmpegFailureDetails(logs)
+
+        assertTrue(details.contains("MediaCodec.configure failed with status -22"))
+        assertTrue(details.contains("Conversion failed!"))
     }
 }
