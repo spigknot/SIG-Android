@@ -104,6 +104,11 @@ git push origin main
 ```
 
 - Não commitar: `local.properties`, chaves, `.gradle/`, `build/` (verificar `git status` antes do add se necessário).
+- ⚠️ Se houver trabalho legítimo FORA do índice (ex.: código Granite WIP que o
+  usuário pediu para não commitar), o pre-commit do harness
+  (`scripts/check-staged-snapshot.ps1`, contrato `sig-staged-snapshot/v1`)
+  bloqueia o commit — `git add` apenas os arquivos da versão e use
+  `git commit --no-verify` pontual (ver pitfall na tabela).
 
 ## 6. GitHub Releases (asset `sig.apk` — SEMPRE renomear)
 
@@ -183,6 +188,7 @@ a fonte da verdade e deve evoluir com a prática.
 | `RequestTimeTooSkewed` no R2 | relógio do Windows dessincronizado (w32time parado; >15 min de diferença) | `powershell -c "Start-Service w32time; w32tm /resync"` (elevação); conferir `date -u` vs `curl -sI https://api.cloudflare.com \| grep -i ^date:` |
 | ZIPs de dependências locais ausentes ou com SHA diferente | a release é somente do APK, ou há reconstruções locais; os ZIPs nativos são versionados separadamente | em release somente do APK, reutilizar os ZIPs já publicados no R2; se o pacote nativo mudou, gerar e aceitar os arquivos que batem com `NativeDependencyManager.kt` antes de publicar |
 | `O:\` desmontada no cp | unidade de rede indisponível | ignorar (destino menos importante); seguir com commit/GitHub |
+| Commit bloqueado: "commit bloqueado: N arquivo(s) tracked fora do índice" | pre-commit do harness (`check-staged-snapshot.ps1`) exige working tree == índice para inputs de build; trabalho legítimo fora do índice (ex.: Granite WIP não commitado) dispara o bloqueio | `git add` apenas os arquivos da versão (3 lugares + UPDATE.md) e `git commit --no-verify` pontual; o harness segue ativo para os próximos commits |
 | Dependência nativa baixando do Drive | `NativeDependencyManager.kt` com URL antiga | usar `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-<abi>.zip` |
 | `EPERM` ao salvar TXT do Whisper/Ocorrência ou ao enviar texto para gerenciador de arquivos | Android com armazenamento segmentado: a pasta pública `SIG` não está autorizada e `ACTION_SEND` recebeu somente `EXTRA_TEXT` | usar o diretório externo privado como fallback e compartilhar um `.txt` real por `FileProvider`/`EXTRA_STREAM`; exportar para a pasta escolhida via SAF |
 
