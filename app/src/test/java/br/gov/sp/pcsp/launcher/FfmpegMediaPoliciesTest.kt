@@ -37,6 +37,21 @@ class FfmpegMediaPoliciesTest {
     )
 
     @Test
+    fun uniqueOutputNameInsertsSuffixBeforeExtension() {
+        assertEquals("audio.wav", FfmpegMediaPolicies.uniqueOutputName("audio.wav") { false })
+        val existing = mutableSetOf("audio.wav")
+        assertEquals("audio (1).wav", FfmpegMediaPolicies.uniqueOutputName("audio.wav") { it in existing })
+        existing += "audio (1).wav"
+        assertEquals("audio (2).wav", FfmpegMediaPolicies.uniqueOutputName("audio.wav") { it in existing })
+    }
+
+    @Test
+    fun uniqueOutputNameHandlesNameWithoutExtension() {
+        assertEquals("audio (1)", FfmpegMediaPolicies.uniqueOutputName("audio") { it == "audio" })
+        assertEquals("meu.video.2026 (1).mp4", FfmpegMediaPolicies.uniqueOutputName("meu.video.2026.mp4") { it == "meu.video.2026.mp4" })
+    }
+
+    @Test
     fun realEndTrimIsNeverDiscardedByTolerance() {
         assertEquals(9_900L, FfmpegMediaPolicies.requestedTrimDurationMs(0L, 9_900L))
         assertFalse(FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(0L, 9_900L, 10_000L))
@@ -347,6 +362,7 @@ class FfmpegMediaPoliciesTest {
         assertTrue(args.windowed(2).contains(listOf("-c", "copy")))
         assertTrue(args.windowed(2).contains(listOf("-map", "0:t?")))
         assertTrue(args.windowed(2).contains(listOf("-c:t", "copy")))
+        assertTrue(args.windowed(2).contains(listOf("-f", "mpegts")))
     }
 
     @Test
@@ -400,6 +416,95 @@ class FfmpegMediaPoliciesTest {
 
     @Test
     fun commandFormatterQuotesArgumentsWithSpaces() {
-        assertEquals("ffmpeg -i \"a b.mp4\" -c copy", FfmpegMediaPolicies.formatCommand(listOf("-i", "a b.mp4", "-c", "copy")))
+        assertEquals(
+            "ffmpeg -filter_complex \"a b\" -c copy",
+            FfmpegMediaPolicies.formatCommand(listOf("-filter_complex", "a b", "-c", "copy"))
+        )
+    }
+
+    @Test
+    fun commandFormatterHidesDirectoriesAndKeepsExtensions() {
+        assertEquals(
+            "ffmpeg -y -i input.mp4 -map 0:v -i input2.wav -c copy output.mkv",
+            FfmpegMediaPolicies.formatCommand(
+                listOf(
+                    "-y",
+                    "-i", "/data/user/0/br.gov.sp.pcsp.launcher/cache/source video.MP4",
+                    "-map", "0:v",
+                    "-i", "C:\\temp\\audio.wav",
+                    "-c", "copy",
+                    "/data/user/0/br.gov.sp.pcsp.launcher/cache/result final.MKV"
+                )
+            )
+        )
+    }
+
+    @Test
+    fun commandFormatterNumbersMultipleInputsInOrder() {
+        assertEquals(
+            "ffmpeg -y -i input.mp4 -i input2.mkv -i input3.mov -map 0:v output.mp4",
+            FfmpegMediaPolicies.formatCommand(
+                listOf(
+                    "-y",
+                    "-i", "/cache/first.MP4",
+                    "-i", "/cache/second.MKV",
+                    "-i", "C:\\temp\\third.MOV",
+                    "-map", "0:v",
+                    "/cache/joined.MP4"
+                )
+            )
+        )
+    }
+
+    @Test
+    fun commandFormatterNumbersMultipleOutputsInOrder() {
+        assertEquals(
+            "ffmpeg -i input.mp4 -map 0:v output.mp4 -map 0:a output2.m4a",
+            FfmpegMediaPolicies.formatCommand(
+                listOf(
+                    "-i", "/cache/source.mp4",
+                    "-map", "0:v", "/cache/video.mp4",
+                    "-map", "0:a", "/cache/audio.m4a"
+                )
+            )
+        )
+    }
+
+    @Test
+    fun commandFormatterDoesNotInventOutputForProbeWithOnlyInput() {
+        assertEquals(
+            "ffmpeg -hide_banner -i input.mp4",
+            FfmpegMediaPolicies.formatCommand(
+                listOf("-hide_banner", "-i", "/cache/probe.mp4")
+            )
+        )
+    }
+
+    @Test
+    fun commandPreviewSeparatesCommandsWithBlankLine() {
+        assertEquals(
+            "ffmpeg -i input.mp4 output.mkv\n\nffmpeg -i input.wav output.m4a",
+            FfmpegCommandPresenter.formatPreview(
+                listOf(
+                    FfmpegCommandPresenter.PreviewCommand(listOf("-i", "/cache/a.mp4", "/cache/a.mkv")),
+                    FfmpegCommandPresenter.PreviewCommand(listOf("-i", "/cache/b.wav", "/cache/b.m4a"))
+                )
+            )
+        )
+    }
+
+    @Test
+    fun commandPreviewShowsParallelRepetitionOnlyOnce() {
+        assertEquals(
+            "Repetições: 6×\nffmpeg -i input.mkv -vf transpose=1 output.mp4",
+            FfmpegCommandPresenter.formatPreview(
+                listOf(
+                    FfmpegCommandPresenter.PreviewCommand(
+                        listOf("-i", "/cache/part.mkv", "-vf", "transpose=1", "/cache/rotated.mp4"),
+                        repetitions = 6
+                    )
+                )
+            )
+        )
     }
 }

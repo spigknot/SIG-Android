@@ -165,6 +165,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         clearOutputResult()
         setCleanEnabled(true)
         status.text = ""
+        refreshCommandPreview()
     }
 
     private fun cleanSelectedAudio(strongConfirmed: Boolean = false) {
@@ -326,7 +327,10 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
             return
         }
         try {
-            val document = destDir.createFile("audio/wav", lastOutputName)
+            val targetName = FfmpegMediaPolicies.uniqueOutputName(lastOutputName) { candidate ->
+                destDir.findFile(candidate) != null
+            }
+            val document = destDir.createFile("audio/wav", targetName)
                 ?: throw IllegalStateException("não consegui criar o arquivo de destino")
             contentResolver.openOutputStream(document.uri, "w")?.use { output ->
                 source.inputStream().use { input -> input.copyTo(output, 1024 * 1024) }
@@ -568,6 +572,21 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
 
     private fun refreshModeUi() {
         buttonFilterMode.text = "Filtro: ${selectedMode.label}"
+        refreshCommandPreview()
+    }
+
+    private fun refreshCommandPreview() {
+        if (isProcessing || !::status.isInitialized) return
+        val sourceProfile = selectedUri?.let(::inspectAudioSource)
+            ?: AudioSourceProfile(1, 48000, 2, "pcm_s16le")
+        val inputName = selectedName.takeIf(String::isNotBlank) ?: "input.ext"
+        val arguments = buildFfmpegArguments(
+            File(inputName),
+            File("output.wav"),
+            selectedMode,
+            sourceProfile
+        )
+        FfmpegCommandPresenter.preview(status, arguments.asIterable())
     }
 
     private enum class CleanMode(

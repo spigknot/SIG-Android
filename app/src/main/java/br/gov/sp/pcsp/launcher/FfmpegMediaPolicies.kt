@@ -285,7 +285,7 @@ internal object FfmpegMediaPolicies {
         return buildList {
             addAll(listOf("-y", "-ss", start, "-noautorotate", "-i", inputPath, "-t", duration))
             addAll(cutMappedCopyArguments())
-            addAll(listOf("-avoid_negative_ts", "make_zero", "-f", "matroska", outputPath))
+            addAll(listOf("-avoid_negative_ts", "make_zero", "-f", "mpegts", outputPath))
         }.toTypedArray()
     }
 
@@ -629,6 +629,23 @@ internal object FfmpegMediaPolicies {
             .takeIf { it in setOf("mp4", "m4v", "mov", "mkv", "webm", "avi") }
             ?: "mkv"
 
+    /** Gera um nome de arquivo sem colisao, inserindo o sufixo numerico ANTES
+     * da extensao (ex.: "audio (1).wav"), seguindo a convencao do Android.
+     * [nameExists] decide se um candidato ja esta em uso (ex.: consulta o
+     * DocumentFile da pasta de destino). */
+    fun uniqueOutputName(desiredName: String, nameExists: (String) -> Boolean): String {
+        if (!nameExists(desiredName)) return desiredName
+        val dot = desiredName.lastIndexOf('.')
+        val base = if (dot > 0) desiredName.substring(0, dot) else desiredName
+        val extension = if (dot > 0) desiredName.substring(dot) else ""
+        var suffix = 0
+        while (true) {
+            suffix++
+            val candidate = "$base ($suffix)$extension"
+            if (!nameExists(candidate)) return candidate
+        }
+    }
+
     fun containerFamily(name: String): String = when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
         "mp4", "m4v", "mov" -> "mov"
         "mkv" -> "matroska"
@@ -669,15 +686,82 @@ internal object FfmpegMediaPolicies {
         return signatures.drop(1).all { it == first }
     }
 
-    fun formatCommand(arguments: Iterable<String>): String = buildString {
-        append("ffmpeg")
-        arguments.forEach { argument ->
-            append(' ')
-            if (argument.isNotEmpty() && argument.none(Char::isWhitespace) && '"' !in argument) {
-                append(argument)
-            } else {
-                append('"').append(argument.replace("\\", "\\\\").replace("\"", "\\\"")).append('"')
+    /**
+     * Formata o comando exibido no log e na tela sem vazar o caminho interno
+     * do cache. Os argumentos reais usados pelo FFmpeg não são alterados;
+     * apenas a representação textual troca os valores de -i por
+     * input.ext/input2.ext/... e os arquivos de saída por
+     * output.ext/output2.ext/....
+     */
+    fun formatCommand(arguments: Iterable<String>): String {
+        val values = arguments.toList()
+        val inputIndexes = values.indices
+            .filter { index -> index > 0 && values[index - 1] == "-i" }
+        val inputIndexSet = inputIndexes.toSet()
+        val outputIndexes = findOutputIndexes(values, inputIndexSet)
+        val inputOrdinalByIndex = inputIndexes.withIndex().associate { (ordinal, index) -> index to ordinal }
+        val outputOrdinalByIndex = outputIndexes.withIndex().associate { (ordinal, index) -> index to ordinal }
+        val displayValues = values.mapIndexed { index, argument ->
+            when {
+                index in inputOrdinalByIndex ->
+                    compactCommandFileName(argument, "input", inputOrdinalByIndex.getValue(index))
+                index in outputOrdinalByIndex ->
+                    compactCommandFileName(argument, "output", outputOrdinalByIndex.getValue(index))
+                else -> argument
             }
         }
+
+        return buildString {
+            append("ffmpeg")
+            displayValues.forEach { argument ->
+                append(' ')
+                if (argument.isNotEmpty() && argument.none(Char::isWhitespace) && '"' !in argument) {
+                    append(argument)
+                } else {
+                    append('"').append(argument.replace("\\", "\\\\").replace("\"", "\\\"")).append('"')
+                }
+            }
+        }
+    }
+
+    private fun findOutputIndexes(values: List<String>, inputIndexes: Set<Int>): List<Int> {
+        // Os seis builders FFmpeg do app colocam as saídas depois de todas as
+        // entradas. Só consideramos argumentos com aparência de arquivo e
+        // ignoramos valores imediatamente posteriores a uma opção (por
+        // exemplo, o texto de -filter_complex), evitando renomear parâmetros.
+        val lastInputIndex = inputIndexes.maxOrNull() ?: -1
+        return values.indices.filter { index ->
+            index > lastInputIndex &&
+                index !in inputIndexes &&
+                looksLikeFileArgument(values[index]) &&
+                (index == 0 || !values[index - 1].startsWith("-"))
+        }
+    }
+
+    private fun compactCommandFileName(argument: String, role: String, ordinal: Int): String {
+        val displayRole = if (ordinal == 0) role else role + (ordinal + 1)
+        val leaf = argument
+            .trim()
+            .trim('"')
+            .replace('\\', '/')
+            .substringAfterLast('/')
+        val extension = leaf.substringAfterLast('.', "")
+            .takeIf { value ->
+                value.isNotBlank() && value.length <= 12 && value.all(Char::isLetterOrDigit)
+            }
+            ?.lowercase(Locale.ROOT)
+        return extension?.let { "$displayRole.$it" } ?: displayRole
+    }
+
+    private fun looksLikeFileArgument(argument: String): Boolean {
+        if (argument.isBlank() || argument.startsWith("-")) return false
+        val leaf = argument.trim().trim('"').replace('\\', '/').substringAfterLast('/')
+        return '/' in argument || '\\' in argument ||
+            leaf.substringAfterLast('.', "").let { extension ->
+                extension.isNotBlank() &&
+                    extension.length <= 12 &&
+                    extension.all(Char::isLetterOrDigit) &&
+                    extension.any(Char::isLetter)
+            }
     }
 }

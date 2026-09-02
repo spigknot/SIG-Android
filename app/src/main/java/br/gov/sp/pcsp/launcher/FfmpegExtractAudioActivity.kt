@@ -290,6 +290,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 audioWaveform.setCurrent(target)
                 seekPreview(target)
             }
+            refreshCommandPreview()
         }
         timeline.onPositionChanged = { positionMs, fromUser ->
             currentTime.text = formatTime(positionMs)
@@ -303,6 +304,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             timeline.setEnd(value.coerceIn(timeline.getStartMs(), durationMs))
         })
         handleIncomingShareIntent(intent)
+        refreshCommandPreview()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -339,6 +341,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         playbackSpeed = 1f
         updateSpeedButton()
         status.text = ""
+        refreshCommandPreview()
         previewPlayer = MediaPlayer().apply {
             setDataSource(this@FfmpegExtractAudioActivity, uri)
             previewSurface?.takeIf { videoPreview.visibility == View.VISIBLE }?.let { setSurface(it) }
@@ -851,7 +854,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         endMs: Long?,
         settings: AudioSettings = currentAudioSettings(),
         copyAudio: Boolean = false,
-        audioTrack: Int = 0
+        audioTrack: Int = 0,
+        pcmEncoder: String = detectPcmEncoder(inputFile, audioTrack)
     ): Array<String> {
         val hasStartTrim = startMs > 0L
         val requestedDurationMs = FfmpegMediaPolicies.requestedTrimDurationMs(startMs, endMs)
@@ -861,7 +865,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             FfmpegMediaPolicies.extractAudioEncoderArguments(
                 settings.extension.ext,
                 settings.bitrate,
-                detectPcmEncoder(inputFile, audioTrack)
+                pcmEncoder
             )
         }
         return FfmpegMediaPolicies.extractAudioCommandArguments(
@@ -902,6 +906,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             .setSingleChoiceItems(labels.toTypedArray(), 0) { dialog, which ->
                 selectedAudioTracks[uri.toString()] = which
                 dialog.dismiss()
+                refreshCommandPreview()
                 onSelected()
             }
             .setNegativeButton("Cancelar", null)
@@ -1186,6 +1191,85 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         val bitrateEnabled = customEnabled && settings.extension.supportsBitrate
         buttonBitrate.isEnabled = bitrateEnabled
         buttonBitrate.alpha = if (bitrateEnabled) 1f else 0.45f
+        refreshCommandPreview()
+    }
+
+    private fun refreshCommandPreview() {
+        if (isProcessing || !::status.isInitialized) return
+        val settings = currentAudioSettings()
+        val sources = selectedVideos.ifEmpty {
+            listOf(SelectedVideo(Uri.EMPTY, "input.ext", "application/octet-stream"))
+        }
+        val trimSingle = selectedVideos.size == 1
+        val startMs = if (trimSingle) parseTime(inputFrom.text?.toString().orEmpty()) ?: 0L else 0L
+        val endMs = if (trimSingle) parseTime(inputTo.text?.toString().orEmpty()) else null
+        val commands = sources.map { media ->
+            val track = selectedAudioTracks[media.uri.toString()] ?: 0
+            val realSource = media.uri != Uri.EMPTY
+            val copyAudio = realSource && canCopyAudioWithoutConversion(media.uri, startMs, endMs, settings, track)
+            val pcmEncoder = if (realSource) detectPcmEncoder(media.uri, track) else "pcm_s16le"
+            val args = buildFfmpegArguments(
+                File(media.name),
+                File("output.${settings.extension.ext}"),
+                startMs,
+                endMs,
+                settings,
+                copyAudio,
+                track,
+                pcmEncoder
+            )
+            FfmpegCommandPresenter.PreviewCommand(args.asIterable())
+        }
+        FfmpegCommandPresenter.preview(status, commands)
+    }
+
+    private fun canCopyAudioWithoutConversion(
+        uri: Uri,
+        startMs: Long,
+        endMs: Long?,
+        settings: AudioSettings,
+        audioTrack: Int
+    ): Boolean {
+        if (!FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(startMs, endMs, readDuration(uri))) return false
+        val format = audioFormat(uri, audioTrack) ?: return false
+        val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
+        val sourceRate = runCatching { format.getInteger(MediaFormat.KEY_SAMPLE_RATE) }.getOrNull()
+        val sourceChannels = runCatching { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }.getOrNull()
+        val compatibleExtension = when (mime) {
+            "audio/mpeg" -> settings.extension == AudioExtension.MP3
+            "audio/mp4a-latm", "audio/aac" -> settings.extension in setOf(AudioExtension.M4A, AudioExtension.AAC)
+            "audio/opus" -> settings.extension == AudioExtension.OPUS
+            "audio/vorbis" -> settings.extension == AudioExtension.OGG
+            "audio/flac" -> settings.extension == AudioExtension.FLAC
+            "audio/raw", "audio/x-raw", "audio/wav", "audio/x-wav" -> settings.extension == AudioExtension.WAV
+            else -> false
+        }
+        return compatibleExtension && sourceRate == settings.sampleRate && sourceChannels == settings.channels
+    }
+
+    private fun detectPcmEncoder(uri: Uri, audioTrack: Int): String {
+        val format = audioFormat(uri, audioTrack) ?: return "pcm_s16le"
+        return when (runCatching { format.getInteger(MediaFormat.KEY_PCM_ENCODING) }.getOrNull()) {
+            android.media.AudioFormat.ENCODING_PCM_8BIT -> "pcm_u8"
+            android.media.AudioFormat.ENCODING_PCM_FLOAT -> "pcm_f32le"
+            android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> "pcm_s24le"
+            android.media.AudioFormat.ENCODING_PCM_32BIT -> "pcm_s32le"
+            else -> "pcm_s16le"
+        }
+    }
+
+    private fun audioFormat(uri: Uri, audioTrack: Int): MediaFormat? {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }.filter {
+                it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            }.getOrNull(audioTrack)
+        } catch (_: Throwable) {
+            null
+        } finally {
+            extractor.release()
+        }
     }
 
     private fun showExtensionMenu() {

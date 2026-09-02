@@ -40,7 +40,11 @@ object FfmpegOutputRemuxer {
         }
     }
 
-    fun remuxToOriginalContainer(inputFile: File, originalExtension: String): RemuxResult {
+    fun remuxToOriginalContainer(
+        inputFile: File,
+        originalExtension: String,
+        onCommand: ((Array<String>) -> Unit)? = null
+    ): RemuxResult {
         val extension = originalExtension.lowercase(Locale.ROOT)
         if (extension.isEmpty() || extension !in REMUXABLE_EXTENSIONS) {
             return RemuxResult(inputFile, false)
@@ -83,6 +87,7 @@ object FfmpegOutputRemuxer {
             add(output.absolutePath)
         }.toTypedArray()
 
+        onCommand?.invoke(args)
         val session = FFmpegKit.executeWithArguments(args)
         return if (ReturnCode.isSuccess(session.returnCode) && output.exists() && output.length() > 0L) {
             inputFile.delete()

@@ -28,6 +28,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
+import androidx.core.widget.doAfterTextChanged
 import androidx.documentfile.provider.DocumentFile
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegSession
@@ -149,8 +150,11 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             } else false
         }
         inputTime.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) applyTypedInsertionTime() }
+        inputTime.doAfterTextChanged { refreshCommandPreview() }
+        transitionTime.doAfterTextChanged { refreshCommandPreview() }
         updateOptionState()
         updateSpeedButtons()
+        refreshCommandPreview()
     }
 
     @Deprecated("Legacy XML activity callback")
@@ -217,6 +221,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
         configureTimeline()
         preparePlayers()
+        refreshCommandPreview()
     }
 
     private fun readAudioSource(uri: Uri): AudioSource? {
@@ -458,6 +463,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 selectedTransition = AUDIO_TRANSITIONS.firstOrNull { option -> option.first == label }?.second
                     ?: TRANSITION_NONE
                 transitionButton.text = "Transição: $label"
+                refreshCommandPreview()
                 true
             }
             show()
@@ -696,6 +702,66 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
     }
 
+    private fun detectAudioProfile(uri: Uri, audioTrack: Int = 0): AudioProfile {
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            audioProfile(extractor, audioTrack)
+        } catch (_: Throwable) {
+            AudioProfile(48000, 2, "192k", "aac")
+        } finally {
+            extractor.release()
+        }
+    }
+
+    private fun audioProfile(extractor: MediaExtractor, audioTrack: Int): AudioProfile {
+        val format = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }
+            .filter { it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
+            .getOrNull(audioTrack) ?: return AudioProfile(48000, 2, "192k", "aac")
+        val sampleRate = runCatching { format.getInteger(MediaFormat.KEY_SAMPLE_RATE) }.getOrDefault(48000)
+        val channels = runCatching { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }.getOrDefault(2)
+        val bitrate = runCatching { format.getInteger(MediaFormat.KEY_BIT_RATE) }.getOrNull()
+            ?.let { "${(it / 1000).coerceAtLeast(1)}k" } ?: "192k"
+        val codec = format.getString(MediaFormat.KEY_MIME)?.substringAfter('/')?.lowercase(Locale.ROOT) ?: "aac"
+        val pcmEncoder = when (runCatching { format.getInteger(MediaFormat.KEY_PCM_ENCODING) }.getOrNull()) {
+            android.media.AudioFormat.ENCODING_PCM_8BIT -> "pcm_u8"
+            android.media.AudioFormat.ENCODING_PCM_FLOAT -> "pcm_f32le"
+            android.media.AudioFormat.ENCODING_PCM_24BIT_PACKED -> "pcm_s24le"
+            android.media.AudioFormat.ENCODING_PCM_32BIT -> "pcm_s32le"
+            else -> "pcm_s16le"
+        }
+        return AudioProfile(sampleRate, channels, bitrate, codec, pcmEncoder)
+    }
+
+    private fun refreshCommandPreview() {
+        if (isProcessing || !::status.isInitialized) return
+        val main = mainAudio
+        val inserted = insertedAudio
+        val mainTrack = main?.let { selectedAudioTracks[it.uri.toString()] } ?: 0
+        val insertedTrack = inserted?.let { selectedAudioTracks[it.uri.toString()] } ?: 0
+        val profile = main?.let { detectAudioProfile(it.uri, mainTrack) }
+            ?: AudioProfile(48000, 2, "192k", "aac")
+        val mainExtension = main?.name?.substringAfterLast('.', "m4a")
+            ?.lowercase(Locale.ROOT)?.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
+        val jobConfig = InsertAudioJobConfig(
+            insertionMs = parseTime(inputTime.text?.toString().orEmpty())
+                ?.coerceIn(0L, main?.durationMs ?: Long.MAX_VALUE) ?: insertionMs,
+            selectedTransition = selectedTransition,
+            transitionSeconds = transitionTime.text?.toString().orEmpty().replace(',', '.')
+                .toDoubleOrNull()?.coerceIn(0.0, 5.0) ?: 0.5,
+            mainAudioTrack = mainTrack,
+            insertedAudioTrack = insertedTrack
+        )
+        val arguments = buildFullReencodeArguments(
+            File(main?.name ?: "input.ext"),
+            File(inserted?.name ?: "input2.ext"),
+            File("output.$mainExtension"),
+            profile,
+            jobConfig
+        )
+        FfmpegCommandPresenter.preview(status, arguments.asIterable())
+    }
+
     private fun ffmpegFailureMessage(session: FFmpegSession): String {
         val lines = session.allLogsAsString.orEmpty().lines().map { it.trim() }.filter { it.isNotBlank() }
         val important = lines.filter {
@@ -735,7 +801,10 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     private fun saveOutputToUri(treeUri: Uri) {
         val source = lastOutputFile?.takeIf { it.exists() } ?: return
         val directory = DocumentFile.fromTreeUri(this, treeUri) ?: return
-        val document = directory.createFile(audioMime(lastOutputName), lastOutputName) ?: return
+        val targetName = FfmpegMediaPolicies.uniqueOutputName(lastOutputName) { candidate ->
+            directory.findFile(candidate) != null
+        }
+        val document = directory.createFile(audioMime(targetName), targetName) ?: return
         try {
             contentResolver.openOutputStream(document.uri)?.use { output -> source.inputStream().use { it.copyTo(output) } }
             finalOutputDirUri = treeUri
