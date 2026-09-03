@@ -417,7 +417,9 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         )
         currentSessionId = session.sessionId
         latch.await()
-        return sessionRef.get() ?: session
+        val completed = sessionRef.get() ?: session
+        FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        return completed
     }
 
     private fun appendTerminal(line: String) {

@@ -976,15 +976,20 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         renderProcessingSteps()
                     }
                     val originalExtension = FfmpegOutputRemuxer.originalVideoExtension(clips.firstOrNull()?.name.orEmpty())
+                    var remuxRan = false
                     val remux = FfmpegOutputRemuxer.remuxToOriginalContainer(
                         tempOutput,
                         originalExtension
                     ) { arguments ->
+                        remuxRan = true
                         FfmpegCommandPresenter.show(status, arguments.asIterable())
                         Log.i(TAG, FfmpegMediaPolicies.formatCommand(arguments.asIterable()))
                     }
                     if (remux.converted) {
+                        FfmpegCommandPresenter.completeLastShown(status, true)
                         finalOutput = remux.file
+                    } else if (remuxRan) {
+                        FfmpegCommandPresenter.completeLastShown(status, false)
                     }
                     val finalExtension = remux.file.extension.ifBlank { tempOutput.extension }
                     finalName = outputNameWithExtension(outputName, finalExtension)
@@ -2106,15 +2111,24 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             File(argument).name.startsWith("join_list_")
         }?.let { listPath -> runCatching { File(listPath).delete() } }
         when {
-            ReturnCode.isSuccess(completedSession.returnCode) -> updateStep(
-                taskLabel,
-                100,
-                StepState.DONE,
-                encoderName = encoderName,
-                elapsedMs = SystemClock.elapsedRealtime() - startedAt
-            )
-            ReturnCode.isCancel(completedSession.returnCode) -> updateStep(taskLabel, null, StepState.ERROR, "cancelado")
-            else -> updateStep(taskLabel, null, StepState.ERROR)
+            ReturnCode.isSuccess(completedSession.returnCode) -> {
+                updateStep(
+                    taskLabel,
+                    100,
+                    StepState.DONE,
+                    encoderName = encoderName,
+                    elapsedMs = SystemClock.elapsedRealtime() - startedAt
+                )
+                FfmpegCommandPresenter.completeLastShown(status, true)
+            }
+            ReturnCode.isCancel(completedSession.returnCode) -> {
+                updateStep(taskLabel, null, StepState.ERROR, "cancelado")
+                FfmpegCommandPresenter.completeLastShown(status, false)
+            }
+            else -> {
+                updateStep(taskLabel, null, StepState.ERROR)
+                FfmpegCommandPresenter.completeLastShown(status, false)
+            }
         }
         return completedSession
     }

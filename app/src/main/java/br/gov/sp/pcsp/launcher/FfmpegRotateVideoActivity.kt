@@ -743,17 +743,22 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     tracker.appendTasks(listOf("Convertendo para o formato original"))
                     val convertIndex = tracker.taskCount() - 1
                     tracker.startTask(convertIndex)
+                    var remuxRan = false
                     val remux = FfmpegOutputRemuxer.remuxToOriginalContainer(
                         currentTempOutput,
                         FfmpegOutputRemuxer.originalVideoExtension(selectedName)
                     ) { arguments ->
+                        remuxRan = true
                         FfmpegCommandPresenter.show(status, arguments.asIterable())
                         Log.i(TAG, FfmpegMediaPolicies.formatCommand(arguments.asIterable()))
                     }
                     if (remux.converted) {
+                        FfmpegCommandPresenter.completeLastShown(status, true)
                         finalOutputFile = remux.file
                         finalOutputName = remux.file.name
                         tempOutput = finalOutputFile
+                    } else if (remuxRan) {
+                        FfmpegCommandPresenter.completeLastShown(status, false)
                     }
                     tracker.completeTask(convertIndex)
                 }
@@ -831,7 +836,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         currentSessionId = session.sessionId
         latch.await()
         currentSessionId = null
-        return sessionRef.get() ?: session
+        val completed = sessionRef.get() ?: session
+        FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        return completed
     }
 
     private fun executeFfmpegWithIndexedProgress(
@@ -862,7 +869,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         currentSessionId = session.sessionId
         latch.await()
         currentSessionId = null
-        return sessionRef.get() ?: session
+        val completed = sessionRef.get() ?: session
+        FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        return completed
     }
 
     private fun executeParallelKeyframeRotation(
@@ -1100,11 +1109,16 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             tracker.clearLiveStatus()
 
             if (cancelCount.get() > 0) {
+                FfmpegCommandPresenter.completeLastShown(status, false)
                 return RotationExecutionResult(false, true, "", encoder.ffmpegName)
             }
             if (failures.isNotEmpty()) {
+                FfmpegCommandPresenter.completeLastShown(status, false)
                 return RotationExecutionResult(false, false, failures.firstOrNull().orEmpty(), encoder.ffmpegName)
             }
+            // Todas as N execucoes paralelas terminaram com sucesso: o comando
+            // unico com "Repeticoes: Nx" so agora fica verde.
+            FfmpegCommandPresenter.completeLastShown(status, true)
 
             val rotatedExtension = if (isMediaCodecEncoder(encoder)) "mp4" else "mkv"
             val rotatedSegments = rotatedDir.listFiles { file -> file.extension.equals(rotatedExtension, ignoreCase = true) }

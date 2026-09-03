@@ -695,7 +695,9 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         currentSessionId = session.sessionId
         latch.await()
         currentSessionId = null
-        return result.get() ?: session
+        val completed = result.get() ?: session
+        FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        return completed
     }
 
     private fun detectAudioProfile(file: File, audioTrack: Int = 0): AudioProfile {

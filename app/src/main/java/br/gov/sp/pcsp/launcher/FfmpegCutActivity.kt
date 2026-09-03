@@ -649,17 +649,22 @@ class FfmpegCutActivity : AppCompatActivity() {
                     tracker.appendTasks(listOf("Convertendo para o formato original"))
                     val convertIndex = tracker.taskCount() - 1
                     tracker.startTask(convertIndex)
+                    var remuxRan = false
                     val remux = FfmpegOutputRemuxer.remuxToOriginalContainer(
                         currentTempOutput,
                         FfmpegOutputRemuxer.originalVideoExtension(selectedName)
                     ) { arguments ->
+                        remuxRan = true
                         FfmpegCommandPresenter.show(status, arguments.asIterable())
                         Log.i(TAG, FfmpegMediaPolicies.formatCommand(arguments.asIterable()))
                     }
                     if (remux.converted) {
+                        FfmpegCommandPresenter.completeLastShown(status, true)
                         finalOutputFile = remux.file
                         finalOutputName = remux.file.name
                         tempOutput = finalOutputFile
+                    } else if (remuxRan) {
+                        FfmpegCommandPresenter.completeLastShown(status, false)
                     }
                     tracker.completeTask(convertIndex)
                 }
@@ -1528,7 +1533,9 @@ class FfmpegCutActivity : AppCompatActivity() {
         currentSessionId = session.sessionId
         latch.await()
         currentSessionId = null
-        return sessionRef.get() ?: session
+        val completed = sessionRef.get() ?: session
+        FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        return completed
     }
 
     private fun showEditingControls(visible: Boolean) {
