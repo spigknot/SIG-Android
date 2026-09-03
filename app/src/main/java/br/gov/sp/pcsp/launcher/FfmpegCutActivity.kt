@@ -1494,7 +1494,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonToNext.isEnabled = !processing
         buttonSelectOutputFolder.isEnabled = !processing
         findViewById<View>(R.id.button_select_file).isEnabled = !processing
-        updateVideoEncoderButton()
+        updateVideoEncoderButton(refreshPreview = false)
     }
 
     private fun setCutEnabled(enabled: Boolean) {
@@ -1578,7 +1578,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateVideoEncoderButton() {
+    private fun updateVideoEncoderButton(refreshPreview: Boolean = true) {
         val encoder = selectedVideoEncoder
         buttonVideoEncoder.text = if (encoder == null) "Encoder indisponível" else encoder.shortName
         buttonVideoEncoder.isEnabled = encoder != null && !isProcessing
@@ -1587,7 +1587,9 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonVideoQuality.text = if (audioMode) selectedAudioQuality.label else selectedVideoQuality.label
         buttonVideoQuality.isEnabled = !isProcessing && (audioMode || encoder != null)
         buttonVideoQuality.alpha = if (buttonVideoQuality.isEnabled) 1f else 0.42f
-        refreshCommandPreview()
+        // A restauracao automatica de UI apos o processamento nao deve
+        // substituir o historico verde dos comandos executados pelo preview.
+        if (refreshPreview) refreshCommandPreview()
     }
 
     private fun refreshCommandPreview() {

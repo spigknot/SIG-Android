@@ -6,6 +6,7 @@ import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import java.util.WeakHashMap
 
@@ -119,8 +120,30 @@ internal object FfmpegCommandPresenter {
             setTextColor(Color.parseColor(COLOR_DEFAULT))
             textSize = 11f
             setTextIsSelectable(true)
-            setPadding(anchor.paddingLeft, 8, anchor.paddingRight, 12)
-            parent.addView(this, parent.indexOfChild(anchor) + 1)
+            // Mesma caixa de texto usada nas telas de Ocorrência/Transcrição:
+            // fundo escuro + contorno azul. A caixa cresce com o conteúdo
+            // (altura wrap_content) conforme os comandos são anexados.
+            setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
+            val density = resources.displayMetrics.density
+            val padH = (10 * density).toInt()
+            val padV = (8 * density).toInt()
+            setPadding(padH, padV, padH, padV)
+            val params = if (parent is LinearLayout) {
+                LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            } else {
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            }
+            if (params is ViewGroup.MarginLayoutParams) {
+                params.topMargin = (6 * density).toInt()
+                params.bottomMargin = (6 * density).toInt()
+            }
+            parent.addView(this, parent.indexOfChild(anchor) + 1, params)
         }
     }
 }

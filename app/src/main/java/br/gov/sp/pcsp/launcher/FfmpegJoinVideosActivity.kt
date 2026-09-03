@@ -437,7 +437,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         refreshCommandPreview()
     }
 
-    private fun updateReencodeControls() {
+    private fun updateReencodeControls(refreshPreview: Boolean = true) {
         val transitionEnabled = (checkReencode.isChecked || checkSmartJoin.isChecked) && !isProcessing
         val enabled = transitionEnabled
         buttonTransition.isEnabled = enabled
@@ -451,7 +451,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         buttonVideoEncoder.alpha = if (encoderEnabled) 1f else 0.42f
         buttonVideoQuality.isEnabled = encoderEnabled
         buttonVideoQuality.alpha = if (encoderEnabled) 1f else 0.42f
-        refreshCommandPreview()
+        // A restauracao automatica de UI apos o processamento nao deve
+        // substituir o historico verde dos comandos executados pelo preview.
+        if (refreshPreview) refreshCommandPreview()
     }
 
     private fun detectVideoEncoders() {
@@ -2185,7 +2187,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         joinPlayPause.isEnabled = !processing
         joinSpeedDown.isEnabled = !processing
         joinSpeedUp.isEnabled = !processing
-        updateReencodeControls()
+        updateReencodeControls(refreshPreview = false)
     }
 
     private fun cancelJoin() {

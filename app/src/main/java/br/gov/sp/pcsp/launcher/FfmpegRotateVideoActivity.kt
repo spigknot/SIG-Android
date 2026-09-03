@@ -1367,7 +1367,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateVideoEncoderButton() {
+    private fun updateVideoEncoderButton(refreshPreview: Boolean = true) {
         val encoder = selectedCodec
         buttonVideoEncoder.text = if (encoder == null) "Encoder indisponível" else encoder.shortName
         val enabled = encoder != null && !metadataRotation.isChecked && !isProcessing
@@ -1376,7 +1376,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         buttonVideoQuality.text = selectedVideoQuality.label
         buttonVideoQuality.isEnabled = enabled
         buttonVideoQuality.alpha = if (enabled) 1f else 0.42f
-        refreshCommandPreview()
+        // A restauracao automatica de UI apos o processamento nao deve
+        // substituir o historico verde dos comandos executados pelo preview.
+        if (refreshPreview) refreshCommandPreview()
     }
 
     private fun scheduleRotatePreviewAnalysis(uri: Uri) {
@@ -1779,7 +1781,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
     }
 
-    private fun updateMetadataModeState() {
+    private fun updateMetadataModeState(refreshPreview: Boolean = true) {
         val metadataOnly = metadataRotation.isChecked
         if (metadataOnly && !metadataModeWasActive) {
             savedFlipHorizontal = flipHorizontal.isChecked
@@ -1814,7 +1816,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         parallelSegmentsContainer.visibility = if (!metadataOnly && parallelKeyframes.isChecked) View.VISIBLE else View.GONE
         inputParallelSegments.isEnabled = !metadataOnly && parallelKeyframes.isChecked
         inputParallelSegments.alpha = if (inputParallelSegments.isEnabled) 1f else 0.42f
-        updateVideoEncoderButton()
+        updateVideoEncoderButton(refreshPreview)
 
         timeline.setRangeMarkersVisible(!metadataOnly)
         if (metadataOnly && durationMs > 0L) {
@@ -1893,6 +1895,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         buttonRotate.isFocusable = true
         buttonRotate.alpha = 1f
         if (processing) {
+            // Invalida a analise assincrona de preview em voo: ela nao deve
+            // substituir o historico da execucao quando terminar depois do run.
+            previewAnalysisGeneration++
             buttonRotate.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
             buttonRotate.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
             buttonRotate.contentDescription = "Cancelar"
@@ -1926,8 +1931,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         for (i in 0 until rotationOptions.childCount) {
             rotationOptions.getChildAt(i).isEnabled = !processing
         }
-        updateVideoEncoderButton()
-        if (!processing) updateMetadataModeState()
+        updateVideoEncoderButton(refreshPreview = false)
+        if (!processing) updateMetadataModeState(refreshPreview = false)
     }
 
     private fun cancelRotation() {
