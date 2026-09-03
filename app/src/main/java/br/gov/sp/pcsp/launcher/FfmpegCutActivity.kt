@@ -1585,23 +1585,48 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonVideoEncoder.alpha = if (buttonVideoEncoder.isEnabled) 1f else 0.42f
         val audioMode = selectedMime.startsWith("audio/")
         buttonVideoQuality.text = if (audioMode) selectedAudioQuality.label else selectedVideoQuality.label
-        buttonVideoQuality.isEnabled = !isProcessing && (audioMode || encoder != null)
-        buttonVideoQuality.alpha = if (buttonVideoQuality.isEnabled) 1f else 0.42f
+        updateVideoQualityButtonState()
         // A restauracao automatica de UI apos o processamento nao deve
         // substituir o historico verde dos comandos executados pelo preview.
         if (refreshPreview) refreshCommandPreview()
     }
 
+    /**
+     * Estado do botao de qualidade. No modo audio a qualidade so entra no
+     * comando quando o corte recodifica; com a selecao inteira o corte usa
+     * -c:a copy e a escolha seria ignorada — desabilitar (e nao mostrar um
+     * preview que minta), como o Girar faz no modo por metadados.
+     */
+    private fun updateVideoQualityButtonState() {
+        val audioMode = selectedMime.startsWith("audio/")
+        val qualityEnabled = if (audioMode) {
+            !isProcessing && !audioSelectionCanStreamCopy()
+        } else {
+            !isProcessing && selectedVideoEncoder != null
+        }
+        buttonVideoQuality.isEnabled = qualityEnabled
+        buttonVideoQuality.alpha = if (qualityEnabled) 1f else 0.42f
+    }
+
+    private fun audioSelectionCanStreamCopy(): Boolean {
+        if (selectedUri == null) return false
+        val startMs = parseTime(inputFrom.text?.toString().orEmpty()) ?: 0L
+        val endMs = parseTime(inputTo.text?.toString().orEmpty())
+        return FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(startMs, endMs, durationMs)
+    }
+
     private fun refreshCommandPreview() {
         if (isProcessing || !::status.isInitialized) return
+        // O botao de qualidade acompanha o modo de copia (so recodifica com
+        // selecao parcial no audio); qualquer mudanca de trim reavalia aqui.
+        updateVideoQualityButtonState()
         val inputName = selectedName.takeIf(String::isNotBlank) ?: "input.ext"
         val startMs = parseTime(inputFrom.text?.toString().orEmpty()) ?: 0L
         val endMs = (parseTime(inputTo.text?.toString().orEmpty()) ?: durationMs.takeIf { it > startMs } ?: 1_000L)
             .coerceAtLeast(startMs + 1L)
         val input = File(inputName)
         if (selectedMime.startsWith("audio/")) {
-            val canCopy = selectedUri != null &&
-                FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(startMs, endMs, durationMs)
+            val canCopy = audioSelectionCanStreamCopy()
             val extension = inputName.substringAfterLast('.', "ext")
             val encoderArguments = if (canCopy) {
                 listOf("-c:a", "copy")

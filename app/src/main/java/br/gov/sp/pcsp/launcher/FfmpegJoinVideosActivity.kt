@@ -560,7 +560,20 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     add(FfmpegCommandPresenter.PreviewCommand(it))
                 }
             }
-            checkSmartJoin.isChecked -> buildSmartJoinPreview(inputs, profiles, aggregate)
+            checkSmartJoin.isChecked -> {
+                val outcome = buildSmartJoinPreview(inputs, profiles, aggregate)
+                if (outcome.reason != null && outcome.commands.isEmpty()) {
+                    // Plano indisponivel: nunca deixar o comando anterior
+                    // (de outro modo) na tela como se fosse o planejado.
+                    FfmpegCommandPresenter.placeholder(
+                        status,
+                        "${outcome.reason} Desative o SmartJoin para ver o comando desta junção."
+                    )
+                }
+                // reason == null com commands vazio = analise de keyframes
+                // ainda em voo; o refresh ao final da analise mostra o plano.
+                outcome.commands
+            }
             else -> {
                 val encoder = selectedVideoEncoder
                 if (encoder == null) emptyList() else {
@@ -583,12 +596,20 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         if (commands.isNotEmpty()) FfmpegCommandPresenter.preview(status, commands)
     }
 
+    private data class SmartJoinPreviewOutcome(
+        val commands: List<FfmpegCommandPresenter.PreviewCommand>,
+        val reason: String? = null
+    )
+
     private fun buildSmartJoinPreview(
         inputs: List<File>,
         sourceProfiles: List<OutputProfile>,
         aggregate: OutputProfile
-    ): List<FfmpegCommandPresenter.PreviewCommand> {
-        if (clips.any { previewKeyframes[it.uri.toString()] == null }) return emptyList()
+    ): SmartJoinPreviewOutcome {
+        // Analise de keyframes ainda em voo: sem comando por enquanto; o
+        // refresh ao final da analise (scheduleJoinPreviewAnalysis) refaz o
+        // preview. reason == null sinaliza exatamente esse caso pendente.
+        if (clips.any { previewKeyframes[it.uri.toString()] == null }) return SmartJoinPreviewOutcome(emptyList())
         val plannerSources = clips.mapIndexed { index, clip ->
             SmartJoinPlanner.Source(
                 durationSeconds = clip.durationMs / 1000.0,
@@ -598,13 +619,29 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
         val transitionSeconds = if (selectedTransition == TRANSITION_NONE) 0.0 else safeTransitionSeconds()
         val plan = SmartJoinPlanner.plan(plannerSources, transitionSeconds, isFadeInOutTransition())
-        if (!plan.canSmartJoin || plan.clips.none { it.copyVideo }) return emptyList()
+        if (!plan.canSmartJoin) {
+            return SmartJoinPreviewOutcome(
+                emptyList(),
+                plan.ineligibilityReason ?: "O SmartJoin não é aplicável a estes arquivos."
+            )
+        }
+        if (plan.clips.none { it.copyVideo }) {
+            return SmartJoinPreviewOutcome(
+                emptyList(),
+                "Nenhum corpo de vídeo pôde ser preservado por stream copy: o SmartJoin recodificaria tudo e não traria ganho."
+            )
+        }
         val encoderName = SmartJoinPlanner.compatibleEncoderNames(
             plan.targetProfile.codecFamily,
             selectedVideoEncoder?.ffmpegName,
             availableVideoEncoders.map { it.ffmpegName to it.codecFamily }
-        ).firstOrNull() ?: return emptyList()
-        val encoder = availableVideoEncoders.firstOrNull { it.ffmpegName == encoderName } ?: return emptyList()
+        ).firstOrNull()
+            ?: return SmartJoinPreviewOutcome(
+                emptyList(),
+                "Nenhum encoder compatível com o perfil de destino do SmartJoin está disponível."
+            )
+        val encoder = availableVideoEncoders.firstOrNull { it.ffmpegName == encoderName }
+            ?: return SmartJoinPreviewOutcome(emptyList(), "Encoder do SmartJoin indisponível.")
         val targetProfile = sourceProfiles[plan.targetIndex].copy(
             videoEncoder = encoder.ffmpegName,
             audioSampleRate = aggregate.audioSampleRate,
@@ -656,7 +693,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         previewVideoRemux("mp4", targetProfile.videoCodec.equals("hevc", true))?.let {
             commands += FfmpegCommandPresenter.PreviewCommand(it)
         }
-        return commands
+        return SmartJoinPreviewOutcome(commands)
     }
 
     private fun smartJoinConcatPreviewArguments(profile: OutputProfile, outputAudioTracks: Int): Array<String> = buildList {
@@ -3420,7 +3457,19 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 audioChannels = channels,
                 audioLayout = FfmpegMediaPolicies.channelLayout(channels),
                 audioBitrate = audioBitrate,
-                audioCodec = audio?.getString(MediaFormat.KEY_MIME)?.substringAfter('/')
+                audioCodec = audio?.getString(MediaFormat.KEY_MIME)?.substringAfter('/'),
+                // O MediaExtractor quase nunca expõe o pixel format do
+                // arquivo (KEY_PIXEL_FORMAT descreve a superfície do codec).
+                // O probe real do FFmpeg (usado na execucao com o arquivo
+                // copiado) sempre loga o pix_fmt; no preview, sem o arquivo,
+                // h264/hevc de aparelhos/celulares sao yuv420p 8-bit na
+                // pratica total — assumir esse valor evita o SmartJoin
+                // recusar todo plano so porque o formato e "desconhecido"
+                // aqui, divergindo do runtime que aceitaria o mesmo arquivo.
+                pixFmt = fallback.pixFmt ?: when (videoCodec) {
+                    "h264", "hevc" -> "yuv420p"
+                    else -> null
+                }
             )
         } catch (_: Throwable) {
             fallback

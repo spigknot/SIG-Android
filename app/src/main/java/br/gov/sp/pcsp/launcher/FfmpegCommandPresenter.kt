@@ -58,6 +58,22 @@ internal object FfmpegCommandPresenter {
         }
     }
 
+    /**
+     * Mostra um aviso no lugar do comando quando nenhum comando pode ser
+     * planejado no modo atual (ex.: SmartJoin inaplicavel aos arquivos).
+     * Mantem a mesma semantica do preview: o proximo show() da execucao
+     * substitui o aviso, e um novo planejamento descarta o historico.
+     */
+    fun placeholder(anchor: TextView, text: String) {
+        anchor.post {
+            val commandView = commandView(anchor) ?: return@post
+            commandView.text = text
+            commandView.visibility = View.VISIBLE
+            showingPreview[commandView] = true
+            commandLogs[commandView]?.clear()
+        }
+    }
+
     fun show(anchor: TextView, arguments: Iterable<String>, repetitions: Int = 1) {
         val formatted = FfmpegMediaPolicies.formatCommand(arguments)
         val command = if (repetitions > 1) "Repetições: ${repetitions}×\n$formatted" else formatted
