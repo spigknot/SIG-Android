@@ -155,24 +155,6 @@
                 android:textColor="#CCFFFFFF"
                 android:textSize="12sp" />
 
-            <ScrollView
-                android:id="@+id/terminal_box"
-                android:layout_width="match_parent"
-                android:layout_height="150dp"
-                android:layout_marginTop="12dp"
-                android:background="#AA111111"
-                android:padding="10dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:id="@+id/terminal_text"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="monospace"
-                    android:textColor="#DDFFFFFF"
-                    android:textSize="11sp" />
-            </ScrollView>
-
             <TextView
                 android:id="@+id/output_file_name"
                 android:layout_width="wrap_content"
@@ -225,6 +207,34 @@
                     android:padding="10dp"
                     android:src="@drawable/ic_ffmpeg_share" />
             </LinearLayout>
+
+            <ScrollView
+                android:id="@+id/terminal_box"
+                android:layout_width="match_parent"
+                android:layout_height="150dp"
+                android:layout_marginTop="12dp"
+                android:background="#AA111111"
+                android:padding="10dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/terminal_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textColor="#DDFFFFFF"
+                    android:textSize="11sp" />
+            </ScrollView>
+
+            <TextView
+                android:id="@+id/output_stats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="monospace"
+                android:textColor="#FF2ECC71"
+                android:textSize="12sp"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 

@@ -144,6 +144,13 @@ class FfmpegTaskTracker(
         render()
     }
 
+    /**
+     * Texto de estatisticas do sucesso (tempo/eficiencia). A Activity decide
+     * onde exibir — fora do [status] — para que os botoes de saida fiquem
+     * logo apos o passo-a-passo e antes das estatisticas.
+     */
+    fun successMessageOrEmpty(): String = if (isSuccess) successMessage else ""
+
     /** Informacao transitória, exibida abaixo das etapas sem se tornar uma tarefa. */
     fun setLiveStatus(message: String) {
         if (isFailed) return
@@ -226,10 +233,6 @@ class FfmpegTaskTracker(
                 val lineStart = builder.length
                 builder.append("\nErro: $failureMessage\n")
                 builder.setSpan(ForegroundColorSpan(colorError), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            } else if (isSuccess && successMessage.isNotBlank()) {
-                val lineStart = builder.length
-                builder.append("\n\nEstatísticas:\n$successMessage\n")
-                builder.setSpan(ForegroundColorSpan(colorCompleted), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
 
             textView.text = builder.trimEnd()

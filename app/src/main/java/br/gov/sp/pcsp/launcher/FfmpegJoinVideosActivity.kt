@@ -83,6 +83,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
     private lateinit var outputFileName: TextView
+    private lateinit var outputStats: TextView
     private lateinit var outputActions: View
     private lateinit var buttonSaveToFolder: ImageButton
     private lateinit var buttonOutputFolder: ImageButton
@@ -182,6 +183,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
         outputFileName = findViewById(R.id.output_file_name)
+        outputStats = findViewById(R.id.output_stats)
         outputActions = findViewById(R.id.output_actions)
         buttonSaveToFolder = findViewById(R.id.button_save_to_folder)
         buttonOutputFolder = findViewById(R.id.button_output_folder)
@@ -2649,6 +2651,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         outputFileName.text = ""
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
+        outputStats.visibility = View.GONE
     }
 
     private fun copyUriToCache(uri: Uri, displayName: String): File {
@@ -2842,12 +2845,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             }
             renderProcessingSteps()
             
-            val builder = SpannableStringBuilder(status.text)
-            builder.append("\n\n")
-            val startStats = builder.length
-            builder.append(stats)
-            builder.setSpan(android.text.style.ForegroundColorSpan(android.graphics.Color.parseColor("#FF5EDAF2")), startStats, builder.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            status.text = builder
+            // Estatisticas nao sao coladas no status (que tem so os passos);
+            // elas aparecem no output_stats, apos os botoes de saida. Assim o
+            // usuario ve Salvar/Compartilhar logo apos o passo-a-passo.
+            if (stats.isNotBlank()) {
+                outputStats.text = "Estatísticas:\n$stats"
+                outputStats.visibility = View.VISIBLE
+            }
         }
         if (Looper.myLooper() == Looper.getMainLooper()) {
             action()

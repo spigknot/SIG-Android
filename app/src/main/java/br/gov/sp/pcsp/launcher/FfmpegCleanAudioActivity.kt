@@ -46,6 +46,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     private lateinit var terminalBox: ScrollView
     private lateinit var terminalText: TextView
     private lateinit var outputFileName: TextView
+    private lateinit var outputStats: TextView
     private lateinit var outputActions: View
     private lateinit var buttonSelectOutputFolder: ImageButton
     private lateinit var arrowInputOutput: View
@@ -81,6 +82,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         terminalBox = findViewById(R.id.terminal_box)
         terminalText = findViewById(R.id.terminal_text)
         outputFileName = findViewById(R.id.output_file_name)
+        outputStats = findViewById(R.id.output_stats)
         outputActions = findViewById(R.id.output_actions)
         buttonSelectOutputFolder = findViewById(R.id.button_select_output_folder)
         arrowInputOutput = findViewById(R.id.arrow_input_output)
@@ -250,7 +252,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
                         val mediaSeconds = duration / 1000.0
                         val efficiency = String.format(Locale.US, "%.2fx", mediaSeconds / elapsedSeconds)
                         tracker.success("Tempo de processamento: ${formatTime(elapsedMs)}\nMídia processada: ${formatTime(duration)}\nEficiência: $efficiency")
-                        
+
                         tempOutputFile = outputFile
                         lastOutputName = outputName
                         outputFileName.text = outputName
@@ -259,6 +261,13 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
                         buttonSaveToFolder.visibility = View.VISIBLE
                         buttonOutputFolder.visibility = View.GONE
                         buttonOutputShare.visibility = View.GONE
+                        // Estatisticas fora do status (apos os botoes), para o
+                        // usuario ver Salvar/Compartilhar logo apos os passos.
+                        val statsText = tracker.successMessageOrEmpty()
+                        if (statsText.isNotBlank()) {
+                            outputStats.text = "Estatísticas:\n$statsText"
+                            outputStats.visibility = View.VISIBLE
+                        }
                         cleanScroll.post { cleanScroll.smoothScrollTo(0, outputActions.bottom) }
                     } else {
                         val tail = session.allLogsAsString.orEmpty().lines().takeLast(3).joinToString(" ")
@@ -474,6 +483,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         tempOutputFile = null
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
+        outputStats.visibility = View.GONE
     }
 
     private fun openOutputFile() {

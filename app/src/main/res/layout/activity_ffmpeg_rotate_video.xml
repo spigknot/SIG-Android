@@ -678,6 +678,16 @@
                     android:scaleType="fitCenter"
                     android:src="@drawable/ic_ffmpeg_share" />
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/output_stats"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:fontFamily="monospace"
+                android:textColor="#FF2ECC71"
+                android:textSize="12sp"
+                android:visibility="gone" />
         </LinearLayout>
     </ScrollView>
 

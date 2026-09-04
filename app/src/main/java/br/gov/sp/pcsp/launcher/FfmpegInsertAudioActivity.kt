@@ -57,6 +57,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
     private lateinit var outputName: TextView
+    private lateinit var outputStats: TextView
     private lateinit var outputActions: View
     private lateinit var saveButton: ImageButton
     private lateinit var openFolderButton: ImageButton
@@ -114,6 +115,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
         outputName = findViewById(R.id.output_file_name)
+        outputStats = findViewById(R.id.output_stats)
         outputActions = findViewById(R.id.output_actions)
         saveButton = findViewById(R.id.button_save_to_folder)
         openFolderButton = findViewById(R.id.button_output_folder)
@@ -574,6 +576,13 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                     saveButton.visibility = View.VISIBLE
                     openFolderButton.visibility = View.GONE
                     shareButton.visibility = View.GONE
+                    // Estatisticas fora do status (apos os botoes), para o
+                    // usuario ver Salvar/Compartilhar logo apos os passos.
+                    val statsText = tracker.successMessageOrEmpty()
+                    if (statsText.isNotBlank()) {
+                        outputStats.text = "Estatísticas:\n$statsText"
+                        outputStats.visibility = View.VISIBLE
+                    }
                     scroll.post { scroll.smoothScrollTo(0, outputActions.bottom) }
                 }
             } catch (_: ProcessingCancelled) {
@@ -911,6 +920,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         lastOutputName = ""
         outputName.visibility = View.GONE
         outputActions.visibility = View.GONE
+        outputStats.visibility = View.GONE
         status.text = ""
     }
 

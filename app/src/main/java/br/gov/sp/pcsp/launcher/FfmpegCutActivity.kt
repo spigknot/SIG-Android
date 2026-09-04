@@ -79,6 +79,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
     private lateinit var outputFileName: TextView
+    private lateinit var outputStats: TextView
     private lateinit var outputActions: View
     private lateinit var buttonOutputFolder: ImageButton
     private lateinit var buttonOutputShare: ImageButton
@@ -209,6 +210,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
         outputFileName = findViewById(R.id.output_file_name)
+        outputStats = findViewById(R.id.output_stats)
         outputActions = findViewById(R.id.output_actions)
         buttonOutputFolder = findViewById(R.id.button_output_folder)
         buttonOutputShare = findViewById(R.id.button_output_share)
@@ -703,11 +705,19 @@ class FfmpegCutActivity : AppCompatActivity() {
 
                     outputFileName.text = finalOutputName
                     outputFileName.visibility = View.VISIBLE
- 
+
                     outputActions.visibility = View.VISIBLE
                     buttonSaveToFolder.visibility = View.VISIBLE
                     buttonOutputFolder.visibility = View.GONE
                     buttonOutputShare.visibility = View.GONE
+
+                    // Estatisticas fora do status (apos os botoes), para o
+                    // usuario ver Salvar/Compartilhar logo apos os passos.
+                    val statsText = tracker.successMessageOrEmpty()
+                    if (statsText.isNotBlank()) {
+                        outputStats.text = "Estatísticas:\n$statsText"
+                        outputStats.visibility = View.VISIBLE
+                    }
  
                     cutScroll.post {
                         cutScroll.smoothScrollTo(0, outputActions.bottom)
@@ -2111,6 +2121,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         hasSaved = false
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
+        outputStats.visibility = View.GONE
     }
 
     private fun timeFieldWatcher(update: (Long) -> Unit): TextWatcher {

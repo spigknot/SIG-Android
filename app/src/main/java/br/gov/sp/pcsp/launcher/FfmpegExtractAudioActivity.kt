@@ -89,6 +89,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
     private lateinit var outputFileName: TextView
+    private lateinit var outputStats: TextView
     private lateinit var outputActions: View
     private lateinit var buttonOutputFolder: ImageButton
     private lateinit var buttonOutputShare: ImageButton
@@ -227,6 +228,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
         outputFileName = findViewById(R.id.output_file_name)
+        outputStats = findViewById(R.id.output_stats)
         outputActions = findViewById(R.id.output_actions)
         buttonOutputFolder = findViewById(R.id.button_output_folder)
         buttonOutputShare = findViewById(R.id.button_output_share)
@@ -840,6 +842,13 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                     val mediaSeconds = totalDurationMs / 1000.0
                     val efficiency = String.format(Locale.US, "%.2fx", mediaSeconds / elapsedSeconds)
                     tracker.success("Tempo de processamento: ${formatTime(elapsedMs)}\nMídia processada: ${formatTime(totalDurationMs)}\nEficiência: $efficiency")
+                    // Estatisticas fora do status (apos os botoes), para o
+                    // usuario ver Salvar/Compartilhar logo apos os passos.
+                    val statsText = tracker.successMessageOrEmpty()
+                    if (statsText.isNotBlank()) {
+                        outputStats.text = "Estatísticas:\n$statsText"
+                        outputStats.visibility = View.VISIBLE
+                    }
                 } else {
                     tracker.fail("Não consegui extrair áudio.\n${failures.take(3).joinToString("\n")}".trim())
                 }
@@ -1731,6 +1740,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         hasSaved = false
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
+        outputStats.visibility = View.GONE
     }
 
     private fun queryDisplayName(uri: Uri): String? {

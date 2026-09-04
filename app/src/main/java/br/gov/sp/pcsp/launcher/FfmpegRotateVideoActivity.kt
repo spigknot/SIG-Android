@@ -86,6 +86,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
     private lateinit var outputFileName: TextView
+    private lateinit var outputStats: TextView
 
     private val handler = Handler(Looper.getMainLooper())
     private var selectedUri: Uri? = null
@@ -208,6 +209,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
         outputFileName = findViewById(R.id.output_file_name)
+        outputStats = findViewById(R.id.output_stats)
         buttonOutputFolder = findViewById(R.id.button_output_folder)
         buttonOutputShare = findViewById(R.id.button_output_share)
         buttonSelectOutputFolder = findViewById(R.id.button_select_output_folder)
@@ -789,6 +791,14 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     buttonSaveToFolder.visibility = View.VISIBLE
                     buttonOutputFolder.visibility = View.GONE
                     buttonOutputShare.visibility = View.GONE
+
+                    // Estatisticas fora do status (apos os botoes), para o
+                    // usuario ver Salvar/Compartilhar logo apos os passos.
+                    val statsText = tracker.successMessageOrEmpty()
+                    if (statsText.isNotBlank()) {
+                        outputStats.text = "Estatísticas:\n$statsText"
+                        outputStats.visibility = View.VISIBLE
+                    }
 
                     rotateScroll.post { rotateScroll.smoothScrollTo(0, outputActions.bottom) }
                 }
@@ -1951,6 +1961,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         outputFileName.text = ""
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
+        outputStats.visibility = View.GONE
     }
 
     private fun saveTempOutputsToUri(treeUri: Uri) {

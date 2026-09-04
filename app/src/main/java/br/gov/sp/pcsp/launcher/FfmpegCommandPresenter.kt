@@ -159,7 +159,36 @@ internal object FfmpegCommandPresenter {
                 params.topMargin = (6 * density).toInt()
                 params.bottomMargin = (6 * density).toInt()
             }
-            parent.addView(this, parent.indexOfChild(anchor) + 1, params)
+            // Insere a caixa de comando DEPOIS dos botoes de saida
+            // (output_actions), que ficam logo apos o passo-a-passo — nao
+            // imediatamente apos o status. Assim o usuario ve Salvar/
+            // Compartilhar sem rolar alem do passo-a-passo; o comando
+            // executado e as estatisticas ficam abaixo.
+            val insertionIndex = insertionIndexAfterOutputActions(parent, anchor)
+            parent.addView(this, insertionIndex, params)
         }
+    }
+
+    /**
+     * Indice no qual inserir a caixa de comando: logo apos o bloco
+     * output_actions quando ele existir (as telas de resultado), senao logo
+     * apos o anchor (status). output_actions esta sempre GONE durante o
+     * preview, mas o indice do layout ja considera a ordem do XML.
+     */
+    private fun insertionIndexAfterOutputActions(parent: ViewGroup, anchor: TextView): Int {
+        val anchorIndex = parent.indexOfChild(anchor)
+        if (anchorIndex < 0) return parent.childCount
+        val root = parent
+        // Busca pelo id output_actions entre os filhos diretos.
+        for (i in 0 until root.childCount) {
+            val child = root.getChildAt(i)
+            if (child.id != View.NO_ID) {
+                val resName = child.resources.getResourceEntryName(child.id)
+                if (resName == "output_actions" || resName == "output_file_name" || resName == "output_stats") {
+                    return i + 1
+                }
+            }
+        }
+        return anchorIndex + 1
     }
 }
