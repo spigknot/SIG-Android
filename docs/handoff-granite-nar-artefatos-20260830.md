@@ -72,3 +72,20 @@
 - Estado: `E:\...\state\run-state.json` (todas as etapas locais `passed`; `text_gate` local `interrupted` — superado pelo remoto).
 - Comando geral: cada tool aceita `--work-dir E:\SIG-granite-nar-lab\nar-qnn-20260829-223957 --resume`.
 - Documentação: `docs/plano-acao-granite-4.1-nar-qnn-20260829.md` §9–§16; ferramentas em `tools/granite/nar/`.
+
+## Verificação 06/09 — tarefa curta do remoto (text smoke + sensibilidade)
+- Arquivos confirmados no R2 (HEAD 200 + GET íntegro, conteúdo == relatado):
+  `diagnostics/qdq-text-equality-s0064.json` (`text_equal_all=false`, 5/5 divergentes)
+  e `diagnostics/llm-sensitivity-s0064.json` (baseline cos 0,6331; melhor bloco
+  fp32 L04–L07 cos 0,7089 ganho +0,0757; pior L36–L39 cos 0,5517 ganho −0,0815).
+- **Veredito piloto §13: NÃO PASSA** (`text_equal=false` 5/5) → batch QDQ segue
+  **não-candidato** (`needs-precision-review`); §17 mantém o bloqueio de lote.
+- **Causa B confirmada como específica da chain do remoto**: nosso export local
+  usa `model.config.encoder_layer_indices` ([4,8,12,-1], verificado em
+  `tools/granite/nar/export_static.py:46`, `run_reference.py:115`,
+  `text_gate.py:198`) — nossos artefatos float seguem íntegros. O viés
+  `hs[-4:]` mora na re-exportação do remoto, não na nossa.
+- Proposta do remoto (re-export [4,8,12,-1] + pools + re-quant + smoke, ~1 dia)
+  é o caminho correto; anomalia L36–L39 deve ser esclarecida antes de qualquer
+  fp32 parcial no fim da rede. Evidência:
+  `E:\SIG-granite-nar-lab\nar-qnn-20260829-223957\reports\verify-remote-20260906.json`.
