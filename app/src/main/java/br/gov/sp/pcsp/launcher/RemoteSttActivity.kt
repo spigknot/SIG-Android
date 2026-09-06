@@ -4284,20 +4284,6 @@ class RemoteSttActivity : AppCompatActivity() {
         throw IllegalStateException("AssemblyAI async terminou sem estado.")
     }
 
-    private fun describeUploadFile(file: File): String {
-        val extension = file.name.substringAfterLast('.', "").ifBlank { "sem extensão" }
-        val size = humanFileSize(file.length())
-        val probe = probeAudioFile(file)
-        return buildString {
-            append("tamanho=$size")
-            append(", extensão=.$extension")
-            if (probe.codec.isNotBlank()) append(", codec=${probe.codec}")
-            if (probe.sampleRate.isNotBlank()) append(", hz=${probe.sampleRate}")
-            if (probe.channels.isNotBlank()) append(", canais=${probe.channels}")
-            if (probe.bitrate.isNotBlank()) append(", bitrate=${probe.bitrate}")
-        }
-    }
-
     private fun describeAudioFile(file: File): String {
         val info = probeAudioFile(file)
         return listOf(
@@ -4397,17 +4383,6 @@ class RemoteSttActivity : AppCompatActivity() {
         } else {
             "${value.toInt()}k"
         }
-    }
-
-    private fun sendBatchToServerWithFallback(
-        preparedUploads: List<PreparedUpload>,
-        terminalLines: StringBuilder
-    ): List<TranscriptionResult> {
-        return sendBatchToServerOnce(
-            preparedUploads = preparedUploads,
-            terminalLines = terminalLines,
-            config = TranscriptionModelStore.selectedConfig()
-        )
     }
 
     private fun sendBatchToServerOnce(
@@ -4969,94 +4944,6 @@ class RemoteSttActivity : AppCompatActivity() {
         currentFfmpegSessionId = null
         ensureNotCancelled()
         return sessionRef.get() ?: session
-    }
-
-    private fun sendToServerOnce(
-        uploadFile: UploadFile,
-        originalName: String,
-        itemIndex: Int,
-        itemCount: Int,
-        terminalLines: StringBuilder,
-        baseUrl: String
-    ): String {
-        appendTerminal(terminalLines, "upload[$itemIndex/$itemCount]: ${uploadFile.file.name} (${uploadFile.file.length() / 1024} KB, ${uploadFile.label})")
-        runOnUiThread {
-            status.text = "Enviando $itemIndex/$itemCount: $originalName"
-            updateTerminalText(terminalLines)
-        }
-
-        val textBuilder = StringBuilder()
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("model", TranscriptionModelStore.selectedConfig().modelName)
-            .addFormDataPart("stream", "true")
-            .addFormDataPart("file", uploadFile.file.name, uploadFile.file.asRequestBody(uploadFile.mime.toMediaType()))
-            .build()
-        val request = Request.Builder()
-            .url("$baseUrl/v1/audio/transcriptions")
-            .post(requestBody)
-            .build()
-
-        val call = client.newCall(request)
-        currentCalls.add(call)
-        try {
-            call.execute().use { response ->
-            appendTerminal(terminalLines, "http ${response.code} ${response.message}")
-            if (!response.isSuccessful) {
-                if (response.code == 500) {
-                    throw ServerUnavailableException()
-                }
-                val body = response.body?.string().orEmpty().take(240)
-                throw IllegalStateException("servidor respondeu ${response.code}. $body")
-            }
-            val body = response.body ?: throw IllegalStateException("resposta sem corpo")
-            val source = body.source()
-            while (!source.exhausted()) {
-                ensureNotCancelled()
-                val line = source.readUtf8Line() ?: break
-                if (line.isBlank()) continue
-                val delta = extractTextDelta(line)
-                if (delta.isNotBlank()) {
-                    appendTerminalTranscription(terminalLines, delta)
-                    textBuilder.append(delta)
-                } else if (!isServerEnvelopeLine(line)) {
-                    appendTerminal(terminalLines, line)
-                }
-                runOnUiThread {
-                    status.text = "Transcrevendo $itemIndex/$itemCount: $originalName"
-                    updateTerminalText(terminalLines)
-                }
-            }
-            }
-        } finally {
-            currentCalls.remove(call)
-        }
-        return textBuilder.toString()
-    }
-
-    private fun activateNextServerAfterFailure(terminalLines: StringBuilder, failedBaseUrl: String): String? {
-        synchronized(this) {
-            if (serverBaseUrl.isNotBlank() && serverBaseUrl != failedBaseUrl) {
-                return serverBaseUrl
-            }
-            val nextIndex = serverIpIndex + 1
-            if (nextIndex !in serverFallbackIps.indices) return null
-            for (index in nextIndex until serverFallbackIps.size) {
-                val ip = serverFallbackIps[index]
-                appendTerminal(terminalLines, "servidor indisponível; testando fallback ${index + 1}/${serverFallbackIps.size}: ${serverNameForIp(ip)} ($ip)")
-                if (pingIp(ip)) {
-                    serverIpIndex = index
-                    serverBaseUrl = "http://$ip:$SERVER_PORT"
-                    runOnUiThread {
-                        // Informativo de modelos removido definitivamente (pedido do usuário).
-                        status.text = ""
-                        updateAdvancedInfo()
-                    }
-                    return serverBaseUrl
-                }
-            }
-            return null
-        }
     }
 
     private fun extractTextDelta(rawLine: String): String {

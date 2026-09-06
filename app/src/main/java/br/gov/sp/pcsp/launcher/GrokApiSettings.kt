@@ -85,10 +85,6 @@ object GrokApiSettings {
 
     fun deepgramKeyterms(): String = preferences().getString(KEY_DEEPGRAM_KEYTERMS, "").orEmpty().trim()
 
-    fun setDeepgramKeyterms(value: String) {
-        preferences().edit().putString(KEY_DEEPGRAM_KEYTERMS, value.trim()).apply()
-    }
-
     fun assemblyaiApiKey(): String = ApiKeyStore.get(preferences(), KEY_ASSEMBLYAI_API)
 
     fun setAssemblyaiApiKey(value: String) {
@@ -125,8 +121,6 @@ object GrokApiSettings {
     fun selectTranscription(name: String) {
         preferences().edit().putString(KEY_TRANSCRIPTION, name).apply()
     }
-
-    fun isTranscriptionSelected(): Boolean = selectedTranscription() == TRANSCRIPTION_NAME
 
     fun selectTranscription(selected: Boolean) {
         selectTranscription(if (selected) TRANSCRIPTION_NAME else TranscriptionModelStore.SERVER_NAME)
@@ -181,8 +175,6 @@ object GrokApiSettings {
         preferences().edit().putString(KEY_TEXT, name).apply()
     }
 
-    fun isTextSelected(): Boolean = selectedText() == TEXT_NAME
-
     fun selectText(selected: Boolean) {
         selectText(if (selected) TEXT_NAME else IA_PROXY_NAME)
     }
@@ -212,10 +204,6 @@ object GrokApiSettings {
     }
 
     fun grokChunkMillis(): Int = preferences().getInt(KEY_GROK_CHUNK_MS, 100).coerceIn(20, 2000)
-
-    fun setGrokChunkMillis(value: Int) {
-        preferences().edit().putInt(KEY_GROK_CHUNK_MS, value.coerceIn(20, 2000)).apply()
-    }
 
     // --- Seleção de idioma por provedor (independente e persistente) ---
     fun deepgramLanguageMode(): String =

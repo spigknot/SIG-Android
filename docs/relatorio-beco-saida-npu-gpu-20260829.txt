@@ -3,6 +3,24 @@ RELATÓRIO — DO BECO SEM SAÍDA À VITÓRIA: GPU/NPU NO GRANITE (29/08/2026)
 SIG Android — OnePlus 15 (SM8850, Snapdragon 8 Elite Gen 5, Android 16)
 ================================================================================
 
+CORREÇÃO POSTERIOR — GRANITE 4.1 NAR
+------------------------------------
+A validação CPU/GPU/NPU do NAR descrita abaixo não comprovava aceleração:
+GraniteNarEngine criava as três sessões apenas com CPU, independentemente da
+opção selecionada. A transcrição estava correta, mas os rótulos GPU/NPU eram
+uma conclusão inválida.
+
+Após encaminhar o backend ao engine e proibir fallback silencioso:
+- NPU integral foi rejeitada por nós atribuídos ao CPU EP;
+- NPU híbrida levou mais de 2 min preparando o projector e consumiu ~3,3 GB de
+  heap nativo, sem chegar à inferência;
+- GPU integral falhou no encoder com nós não suportados e erro QNN 6022;
+- CPU com BASIC_OPT reduziu o mesmo teste de 41,48 s para 36,41 s (-12,2%).
+
+Veredito corrigido: Granite 4.1 NAR funciona em CPU. GPU/NPU exigem novos
+modelos/exports compatíveis (para HTP, QDQ quantizado e formas estáticas).
+As opções aceleradas ficam desabilitadas na UI para o NAR atual.
+
 Este relatório narra, em detalhe, a jornada a partir do momento em que
 acreditávamos estar num beco sem saída para NPU/GPU no Granite — e como cada
 bloqueio foi quebrado até o funcionamento completo em CPU, GPU e NPU.

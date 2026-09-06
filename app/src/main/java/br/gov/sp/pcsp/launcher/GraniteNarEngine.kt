@@ -155,14 +155,26 @@ object GraniteNarCtc {
      * materializar os ~200 MB (frames × vocab × 4) no heap Java, que estourava
      * com OutOfMemoryError (growth limit 256 MB) no NAR (fix 29/08).
      */
-    fun collapseLogits(logits: java.nio.FloatBuffer, frames: Int, vocab: Int): IntArray {
+    fun collapseLogits(
+        logits: java.nio.FloatBuffer,
+        frames: Int,
+        vocab: Int,
+        frameOffset: Int = 0,
+    ): IntArray {
+        require(frames >= 0) { "frames negativo: $frames" }
+        require(vocab > 0) { "vocab inválido: $vocab" }
+        require(frameOffset >= 0) { "frameOffset negativo: $frameOffset" }
+        require((frameOffset.toLong() + frames) * vocab <= logits.limit().toLong()) {
+            "logits insuficientes: limit=${logits.limit()}, offset=$frameOffset, frames=$frames, vocab=$vocab"
+        }
         val out = ArrayList<Int>(frames)
         var prev = -1
         for (t in 0 until frames) {
+            val row = (frameOffset + t) * vocab
             var best = 0
-            var bestVal = logits.get(t * vocab)
+            var bestVal = logits.get(row)
             for (v in 1 until vocab) {
-                val valv = logits.get(t * vocab + v)
+                val valv = logits.get(row + v)
                 if (valv > bestVal) { bestVal = valv; best = v }
             }
             if (best != prev && best != BLANK) out.add(best)
@@ -227,8 +239,10 @@ object GraniteNarEngine {
     @Volatile private var embed: java.nio.ByteBuffer? = null
     @Volatile private var lastErrorMessage: String = ""
     @Volatile private var onnxNativesLoaded: Boolean = false
+    @Volatile private var lastLoadedBackend: GraniteExecutionBackend? = null
 
     fun lastError(): String = lastErrorMessage
+    fun loadedBackend(): GraniteExecutionBackend? = lastLoadedBackend
 
     fun packageDir(context: Context): File =
         File(context.getExternalFilesDir(null) ?: context.filesDir, "granite_nar_models")
@@ -385,12 +399,91 @@ object GraniteNarEngine {
         onnxNativesLoaded = true
     }
 
+    private fun createSessionOptions(
+        backend: GraniteExecutionBackend,
+        requireFullAcceleration: Boolean,
+    ): OrtSession.SessionOptions {
+        val options = OrtSession.SessionOptions()
+        options.setOptimizationLevel(
+            if (backend == GraniteExecutionBackend.CPU) {
+                OrtSession.SessionOptions.OptLevel.BASIC_OPT
+            } else {
+                // O QNN EP faz a própria conversão/partição; transformações ORT
+                // agressivas podem criar padrões que o backend não reconhece.
+                OrtSession.SessionOptions.OptLevel.NO_OPT
+            }
+        )
+        if (!backend.accelerated) return options
+
+        val qnnBackend = requireNotNull(backend.qnnBackend)
+        val qnnConfig = mutableMapOf(
+            "backend_path" to if (qnnBackend == "gpu") "libQnnGpu.so" else "libQnnHtp.so",
+            "offload_graph_io_quantization" to "1",
+        )
+        if (qnnBackend == "htp") {
+            qnnConfig["enable_htp_fp16_precision"] = "1"
+            // O NAR abre três grafos por execução. Mode 1 privilegia preparação
+            // mais curta; burst reduz latência durante a inferência interativa.
+            qnnConfig["htp_graph_finalization_optimization_mode"] = "1"
+            qnnConfig["htp_performance_mode"] = "burst"
+        }
+        options.addQnn(qnnConfig)
+        // Sem isto, uma sessão rotulada NPU/GPU pode executar silenciosamente
+        // operadores (ou o grafo inteiro) no CPU EP, invalidando a comparação.
+        if (requireFullAcceleration) {
+            options.addConfigEntry("session.disable_cpu_ep_fallback", "1")
+        }
+        return options
+    }
+
+    private fun prepareAcceleratedBackend(
+        context: Context,
+        backend: GraniteExecutionBackend,
+        onLog: (String) -> Unit,
+    ) {
+        val qnnBackend = requireNotNull(backend.qnnBackend)
+        check(QairtDependencyManager.isInstalled(context)) {
+            "Componentes QAIRT/QNN não instalados. Selecione GPU ou NPU para baixá-los."
+        }
+        val htpArch = if (qnnBackend == "htp") {
+            checkNotNull(QairtDependencyManager.htpArchitecture(context)) {
+                "Arquitetura HTP não detectada neste aparelho."
+            }.also { onLog("HTP arch detectada: v$it") }
+        } else null
+        QairtDependencyManager.loadQnnNatives(context, qnnBackend, htpArch)
+        onLog("libs QNN carregadas: backend=$qnnBackend ${if (htpArch != null) "arch=v$htpArch" else ""}")
+    }
+
+    private fun createSessions(
+        dir: File,
+        backend: GraniteExecutionBackend,
+        requireFullAcceleration: Boolean,
+        onLog: (String) -> Unit,
+    ) {
+        val env = OrtEnvironment.getEnvironment()
+        fun create(name: String, fileName: String): OrtSession {
+            val startedAt = android.os.SystemClock.elapsedRealtime()
+            val created = createSessionOptions(backend, requireFullAcceleration).use { options ->
+                env.createSession(File(dir, fileName).absolutePath, options)
+            }
+            val elapsed = android.os.SystemClock.elapsedRealtime() - startedAt
+            onLog("ONNX $name criado (${backend.reportLabel}) em ${elapsed}ms")
+            return created
+        }
+        encoderSession = create("encoder", ENCODER_FILE)
+        projectorSession = create("projector", PROJECTOR_FILE)
+        llmSession = create("llm editor", LLM_FILE)
+    }
+
     fun load(
         context: Context,
+        backend: GraniteExecutionBackend = GraniteExecutionBackend.CPU,
+        requireFullAcceleration: Boolean = true,
         onLog: (String) -> Unit = {},
         onFallbackPrompt: (String) -> Boolean = { true },
     ): Boolean {
         return try {
+            lastLoadedBackend = null
             if (!NativeDependencyManager.activateIfInstalled(context)) {
                 lastErrorMessage = "Componentes nativos do SIG não instalados. Baixe-os na abertura do app e tente novamente."
                 return false
@@ -420,41 +513,62 @@ object GraniteNarEngine {
                     .order(java.nio.ByteOrder.LITTLE_ENDIAN)
             }
 
-            val env = OrtEnvironment.getEnvironment()
-            val cpuOptions = OrtSession.SessionOptions()
-            cpuOptions.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            if (backend.accelerated) {
+                try {
+                    prepareAcceleratedBackend(context, backend, onLog)
+                    createSessions(dir, backend, requireFullAcceleration, onLog)
+                    lastLoadedBackend = backend
+                    return true
+                } catch (acceleratedError: Throwable) {
+                    closeSessions()
+                    val reason = describeError(acceleratedError)
+                    onLog("Sessões ${backend.reportLabel} rejeitadas: $reason")
+                    if (!onFallbackPrompt(reason)) {
+                        lastErrorMessage =
+                            "O acelerador ${backend.label} não executa integralmente o Granite 4.1 NAR " +
+                                "e o fallback para CPU foi recusado: $reason"
+                        return false
+                    }
+                    onLog("Fallback explícito para CPU aceito")
+                }
+            }
 
-            encoderSession = env.createSession(File(dir, ENCODER_FILE).absolutePath, cpuOptions)
-            onLog("ONNX encoder criado")
-            projectorSession = env.createSession(File(dir, PROJECTOR_FILE).absolutePath, cpuOptions)
-            onLog("ONNX projector criado")
-            llmSession = env.createSession(File(dir, LLM_FILE).absolutePath, cpuOptions)
-            onLog("ONNX llm editor criado")
+            createSessions(
+                dir,
+                GraniteExecutionBackend.CPU,
+                requireFullAcceleration = false,
+                onLog = onLog,
+            )
+            lastLoadedBackend = GraniteExecutionBackend.CPU
             true
         } catch (e: Throwable) {
+            closeSessions()
+            lastLoadedBackend = null
             lastErrorMessage = describeError(e)
             Log.e(TAG, "load failed", e)
             false
         }
     }
 
-    /** Embedding lookup: embed_tokens[token] = [HIDDEN] float32, do nar_embed_tokens.bin (fp16). */
-    private fun embedToken(token: Int): FloatArray {
+    /** Escreve embed_tokens[token] diretamente no buffer final, sem FloatArray temporário. */
+    private fun copyEmbedding(token: Int, destination: FloatArray, destinationOffset: Int) {
         val buf = embed ?: throw IllegalStateException("embedding não carregado")
-        val out = FloatArray(HIDDEN)
         val base = token * HIDDEN * 2L
         for (i in 0 until HIDDEN) {
             // MappedByteBuffer LITTLE_ENDIAN: getShort(pos) lê os 2 bytes fp16.
             val h = buf.getShort((base + 2L * i).toInt())
-            out[i] = HalfFloat.toFloat(h)
+            destination[destinationOffset + i] = HalfFloat.toFloat(h)
         }
-        return out
     }
 
     /** Transcreve um WAV 16 kHz mono (single shot até T_FIXED frames ~37,5s). */
-    fun transcribeFile(wavFile: File, onProgress: (Int) -> Unit = {}): String {
+    fun transcribeFile(
+        wavFile: File,
+        onProgress: (Int) -> Unit = {},
+        onLog: (String) -> Unit = {},
+    ): String {
         try {
-            return transcribeFileInner(wavFile, onProgress)
+            return transcribeFileInner(wavFile, onProgress, onLog)
         } catch (e: Throwable) {
             lastErrorMessage = describeError(e)
             Log.e(TAG, "transcribeFile failed", e)
@@ -462,17 +576,31 @@ object GraniteNarEngine {
         }
     }
 
-    private fun transcribeFileInner(wavFile: File, onProgress: (Int) -> Unit): String {
+    private fun transcribeFileInner(
+        wavFile: File,
+        onProgress: (Int) -> Unit,
+        onLog: (String) -> Unit,
+    ): String {
         val enc = encoderSession ?: throw IllegalStateException("encoder não carregado")
         val proj = projectorSession ?: throw IllegalStateException("projector não carregado")
         val llm = llmSession ?: throw IllegalStateException("llm não carregado")
         val fe = frontend ?: throw IllegalStateException("front-end não carregado")
         val pieces = vocab ?: throw IllegalStateException("vocab não carregado")
 
+        val totalStartedAt = android.os.SystemClock.elapsedRealtime()
+        var stageStartedAt = totalStartedAt
+        fun markStage(name: String) {
+            val now = android.os.SystemClock.elapsedRealtime()
+            onLog("NAR etapa $name: ${now - stageStartedAt}ms")
+            stageStartedAt = now
+        }
+
         val wav = readWav16kMono(wavFile) ?: throw IllegalStateException("WAV inválido")
         val features = fe.compute(wav)
+        markStage("frontend")
         if (features.frames == 0) return ""
         val realFrames = min(features.frames, T_FIXED)
+        onLog("NAR entrada: samples=${wav.size} frames=${features.frames} effective_frames=$realFrames")
         if (features.frames > T_FIXED) {
             throw IllegalStateException("áudio muito longo para o Granite 4.1 NAR nesta versão (máx ~${T_FIXED * 160 / 16000}s)")
         }
@@ -486,6 +614,7 @@ object GraniteNarEngine {
         val inputTensor = OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(input), longArrayOf(1L, T_FIXED.toLong(), GraniteNarFrontend.INPUT_DIM.toLong()))
         val encOut = enc.run(mapOf("input_features" to inputTensor), setOf("encoder_bpe_logits", "multilayer_features"))
         inputTensor.close()
+        markStage("encoder")
 
         val bpeLogits = (encOut["encoder_bpe_logits"].get() as OnnxTensor).floatBuffer
         val multilayer = (encOut["multilayer_features"].get() as OnnxTensor).floatBuffer
@@ -498,8 +627,8 @@ object GraniteNarEngine {
         // CTC collapse no encoder (valid frames = ceil(realFrames/4)).
         val validBpe = (realFrames + 3) / 4
         val ctcTokens = GraniteNarCtc.collapseLogits(bpeLogits, validBpe, VOCAB_SIZE)
-        (encOut["encoder_bpe_logits"].get() as OnnxTensor).close()
-        (encOut["multilayer_features"].get() as OnnxTensor).close()
+        encOut.close()
+        markStage("ctc encoder + cópia projector")
         onProgress(40)
 
         // Projector -> audio_embeds [402, 2048]; válidos = realFrames//5; /12 (scale).
@@ -507,26 +636,30 @@ object GraniteNarEngine {
         val projOut = proj.run(mapOf("multilayer_features" to projTensor), setOf("audio_embeds"))
         projTensor.close()
         val audioEmbeds = (projOut["audio_embeds"].get() as OnnxTensor).floatBuffer
-        val audioEmbedsArr = FloatArray(audioEmbeds.remaining()).also { audioEmbeds.get(it) }
-        (projOut["audio_embeds"].get() as OnnxTensor).close()
+        markStage("projector")
         onProgress(55)
 
         val validAudio = realFrames / 5
         // Interleave + embedding lookup.
         val slots = GraniteNarInterleave.buildSlots(ctcTokens, BLANK)
         val S = validAudio + slots.size
+        onLog(
+            "NAR sequência: ctc_tokens=${ctcTokens.size} valid_audio=$validAudio " +
+                "slots=${slots.size} llm_tokens=$S",
+        )
         val inputsEmbeds = FloatArray(S * HIDDEN)
         // audio_embeds (validAudio vetores de 2048), divididos por 12.
         for (i in 0 until validAudio) {
             val base = i * HIDDEN
-            for (d in 0 until HIDDEN) inputsEmbeds[base + d] = audioEmbedsArr[base + d] / EMBEDDING_MULTIPLIER
+            for (d in 0 until HIDDEN) inputsEmbeds[base + d] = audioEmbeds.get(base + d) / EMBEDDING_MULTIPLIER
         }
+        projOut.close()
         // text embeds (slots) no offset validAudio.
         for (t in slots.indices) {
-            val emb = embedToken(slots[t])
             val base = (validAudio + t) * HIDDEN
-            System.arraycopy(emb, 0, inputsEmbeds, base, HIDDEN)
+            copyEmbedding(slots[t], inputsEmbeds, base)
         }
+        markStage("montagem de embeddings")
         onProgress(70)
 
         // LLM editor.
@@ -537,18 +670,19 @@ object GraniteNarEngine {
         embedsTensor.close()
         posTensor.close()
         val logits = (llmOut["logits"].get() as OnnxTensor).floatBuffer
-        val logitsArr = FloatArray(logits.remaining()).also { logits.get(it) }
-        (llmOut["logits"].get() as OnnxTensor).close()
+        markStage("llm editor")
         onProgress(90)
 
-        // Fatia do texto + collapse + decode.
+        // Collapse direto da fatia textual do tensor do ORT: evita copiar todos
+        // os logits e depois criar uma segunda FloatArray para o mesmo conteúdo.
         val textStart = validAudio
         val textFrames = S - validAudio
-        val textLogits = FloatArray(textFrames * VOCAB_SIZE)
-        System.arraycopy(logitsArr, textStart * VOCAB_SIZE, textLogits, 0, textFrames * VOCAB_SIZE)
-        val pred = GraniteNarCtc.collapseLogits(textLogits, textFrames, VOCAB_SIZE)
+        val pred = GraniteNarCtc.collapseLogits(logits, textFrames, VOCAB_SIZE, frameOffset = textStart)
+        llmOut.close()
 
         val decoded = decodeByteLevel(pred, pieces)
+        markStage("ctc final + decode")
+        onLog("NAR inferência total: ${android.os.SystemClock.elapsedRealtime() - totalStartedAt}ms")
         onProgress(100)
         return decoded.trim()
     }
@@ -588,16 +722,21 @@ object GraniteNarEngine {
         return map
     }
 
-    fun release() {
+    private fun closeSessions() {
         try { encoderSession?.close() } catch (_: Throwable) {}
         try { projectorSession?.close() } catch (_: Throwable) {}
         try { llmSession?.close() } catch (_: Throwable) {}
         encoderSession = null
         projectorSession = null
         llmSession = null
+    }
+
+    fun release() {
+        closeSessions()
         frontend = null
         vocab = null
         embed = null
+        lastLoadedBackend = null
     }
 
     private fun readFloatBinary(file: File): FloatArray {

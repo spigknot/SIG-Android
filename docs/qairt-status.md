@@ -77,10 +77,27 @@ A sessão levou aproximadamente 25 s para ser preparada; a inferência do áudio
 curto terminou em menos de 1 s. O entrypoint reproduzível existe apenas no build
 debug: `QairtSmokeTestActivity`.
 
-## VALIDAÇÃO DO 4.1 NAR (29/08 18:30) — ✅ FUNCIONA em CPU/GPU/NPU
+## VALIDAÇÃO CORRIGIDA DO 4.1 NAR (29/08) — CPU ✅; GPU/NPU QNN ❌
 
-Após os fixes de memória do NAR, o Granite 4.1 NAR transcreve com sucesso nos 3
-backends (teste.wav → "the book is on the table" + "Transcrição concluída").
+A afirmação anterior de que o NAR funcionava nos três backends estava errada.
+`GraniteNarEngine.load()` criava encoder, projector e LLM somente com
+`SessionOptions` de CPU; a seleção GPU/NPU não chegava ao engine. A transcrição
+estava correta, mas não comprovava aceleração.
+
+O smoke test `GraniteNarSmokeTestActivity` passou então a recusar fallback CPU e
+confirmar o backend efetivo. Resultado no OnePlus 15:
+
+- NPU estrita: encoder rejeitado porque há nós atribuídos ao CPU EP.
+- NPU híbrida: encoder QNN criado em 4,4 s; projector não terminou a preparação
+  em mais de 2 min e o processo chegou a ~3,3 GB de heap nativo. Teste abortado.
+- GPU estrita: encoder contém vários nós não suportados e `FinalizeGraphs`
+  termina com erro 6022.
+- CPU: caminho aprovado. `BASIC_OPT` reduziu a inferência do mesmo WAV de
+  41,48 s para 36,41 s (-12,2%), preservando exatamente a transcrição.
+
+GPU/NPU ficam desabilitadas na UI quando o modelo selecionado é o NAR. Uma rota
+HTP real exige novos artefatos QDQ quantizados e formas estáticas (o LLM atual
+tem comprimento `S` dinâmico), não apenas flags no app.
 
 Fixes do NAR (OOM Java, heap limit 256 MB):
 1. **mmap do `nar_embed_tokens.bin`** (411 MB): `readBytes()` → `RandomAccessFile.channel.map(READ_ONLY)` + `ByteBuffer` LITTLE_ENDIAN; `embedToken()` lê com `getShort()`. (OOM no load, linha 405.)
@@ -88,7 +105,8 @@ Fixes do NAR (OOM Java, heap limit 256 MB):
 3. **CTC collapse direto do FloatBuffer**: `bpeLogits` do encoder é `[~500, 100352]` ≈ **200 MB**; `FloatArray(...)` estourava o heap. `GraniteNarCtc.collapseLogits(FloatBuffer,...)` lê direto, sem copiar. ⚠️ collapse ANTES do `close()` do tensor (buffer inválido depois).
 4. **`android:largeHeap="true"` no `<application>`** (estava só na activity): heap Java sobe para 512 MB — foi o que destravou o NAR (precisava de ~230 MB+ no pico com as cópias restantes).
 
-Observação: NPU foi o MAIS LENTO dos 3 no NAR — provável causa: modelo FP16 (não INT8, D2 fase 2), 3 grafos HTP compilados por sessão, e áudio curto (2,2s) onde o overhead FastRPC domina. Medir com áudio maior (30s+) para ver ganho real.
+O engine agora também registra tempos separados de frontend, encoder, CTC,
+projector, embeddings e LLM, e evita as cópias integrais dos logits finais.
 
 ## LIÇÕES APRENDIDAS (vacinas)
 1. **QNN GPU do ORT 1.29**: não confiar para modelos grandes de atenção (testar com modelo pequeno antes)

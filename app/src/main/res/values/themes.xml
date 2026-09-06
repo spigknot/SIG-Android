@@ -6,22 +6,4 @@
         <item name="android:windowLightStatusBar">false</item>
     </style>
     <style name="Theme.SIG" parent="Theme.SIG.Base" />
-    <style name="NpuSectionTitle">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:layout_marginTop">18dp</item>
-        <item name="android:layout_marginBottom">7dp</item>
-        <item name="android:textColor">#FFFFFFFF</item>
-        <item name="android:textSize">14sp</item>
-        <item name="android:textStyle">bold</item>
-    </style>
-    <style name="NpuOutputBox">
-        <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">wrap_content</item>
-        <item name="android:background">#99070D10</item>
-        <item name="android:padding">10dp</item>
-        <item name="android:textColor">#FFE4F4F4</item>
-        <item name="android:textIsSelectable">true</item>
-        <item name="android:textSize">11sp</item>
-    </style>
 </resources>

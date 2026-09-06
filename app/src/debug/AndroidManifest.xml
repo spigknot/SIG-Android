@@ -4,5 +4,8 @@
         <activity
             android:name=".QairtSmokeTestActivity"
             android:exported="true" />
+        <activity
+            android:name=".GraniteNarSmokeTestActivity"
+            android:exported="true" />
     </application>
 </manifest>

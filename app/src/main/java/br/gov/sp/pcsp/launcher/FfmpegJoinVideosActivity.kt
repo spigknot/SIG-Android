@@ -3065,9 +3065,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         return FfmpegMediaPolicies.audioFilterInputSpecifier(inputIndex, track)
     }
 
-    private fun preparedAudioLabel(inputIndex: Int, trackIndex: Int): String =
-        if (processingAudioTrackCount == 1) "a$inputIndex" else "a${trackIndex}_$inputIndex"
-
     private fun audioOutputLabel(trackIndex: Int): String =
         if (processingAudioTrackCount == 1) "aout" else "aout$trackIndex"
 

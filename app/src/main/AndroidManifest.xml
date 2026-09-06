@@ -183,11 +183,6 @@
             android:largeHeap="true" />
 
         <activity
-            android:name=".experimental.npu.NpuTestActivity"
-            android:screenOrientation="portrait"
-            android:exported="false" />
-
-        <activity
             android:name=".RemoteSttActivity"
             android:screenOrientation="portrait"
             android:exported="true"

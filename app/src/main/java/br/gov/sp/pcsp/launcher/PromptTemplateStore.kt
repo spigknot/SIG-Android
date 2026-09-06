@@ -67,36 +67,6 @@ object PromptTemplateStore {
             .replace(LEGACY_HISTORY_MARKER, material.trim())
             .trim()
 
-    fun qualificationSystemPrompt(): String = readPrompt("qualificacao_system.txt")
-
-    fun qualificationUserPrompt(fieldIds: List<String>, rawText: String): String {
-        val knownFields = setOf(
-            "nome", "nascimento", "rg", "cpf", "naturalidade", "sexo",
-            "estado_civil", "profissao", "altura", "pele", "olhos", "cabelo",
-            "pai", "mae", "instrucao", "endereco", "bairro", "cidade", "telefone"
-        )
-        val extras = fieldIds
-            .map(String::trim)
-            .filter { it.isNotBlank() && it !in knownFields }
-            .distinct()
-        val extraSuffix = if (extras.isEmpty()) "" else ", ${extras.joinToString(", ")}"
-        val raw = rawText.trim()
-        return readPrompt("qualificacao_user.txt")
-            .replace(
-                "{{{INSERIR_AQUI_OUTROS_DADOS_FORNECIDOS_PELO_USUARIO_SEPARANDO_POR_VIRGULA+ESPAÇO}}}",
-                extraSuffix
-            )
-            .replace("{{{TEXTO_DA_CAIXA_AQUI}}}", raw)
-            .replace("{{FIELD_IDS}}", fieldIds.joinToString(", "))
-            .replace("{{RAW_TEXT}}", raw)
-            .trim()
-    }
-
-    // Compatibility helpers for callers that still use the old API.
-    fun historyPrompt(): String = historySystemPrompt()
-    fun partsPrompt(): String = partsSystemPrompt()
-    fun statementPrompt(selectedName: String?): String = statementSystemPrompt()
-
     fun promptDirectory(): File {
         return File(File(Environment.getExternalStorageDirectory(), "SIG"), "Prompts")
     }

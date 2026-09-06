@@ -905,6 +905,10 @@ class GraniteActivity : AppCompatActivity() {
     private fun selectModel(model: String) {
         selectedModel = model
         buttonModel.text = if (model == MODEL_NAR) "4.1 NAR" else "5.0 Turbo"
+        if (model == MODEL_NAR && selectedBackend.accelerated) {
+            selectedBackend = GraniteExecutionBackend.CPU
+            buttonBackend.text = GraniteExecutionBackend.CPU.shortLabel
+        }
         status.text = "${modelLabel(model)} pronto."
         updateTranscribeEnabled()
     }
@@ -932,14 +936,22 @@ class GraniteActivity : AppCompatActivity() {
         PopupMenu(this, buttonBackend).apply {
             GraniteExecutionBackend.entries.forEach { backend ->
                 val item = menu.add(backend.label)
-                if (backend.accelerated && !isQcom) {
+                if (backend.accelerated && selectedModel == MODEL_NAR) {
+                    item.isEnabled = false
+                    item.title = "${backend.label} — indisponível no NAR"
+                } else if (backend.accelerated && !isQcom) {
                     item.isEnabled = false
                     item.title = "${backend.label} ?"
                 }
             }
             setOnMenuItemClickListener { item ->
-                val clickedLabel = item.title.toString().replace(" ?", "")
+                val clickedLabel = item.title.toString()
+                    .replace(" — indisponível no NAR", "")
+                    .replace(" ?", "")
                 val backend = GraniteExecutionBackend.entries.first { it.label == clickedLabel }
+                if (backend.accelerated && selectedModel == MODEL_NAR) {
+                    return@setOnMenuItemClickListener true
+                }
                 if (backend.accelerated && !isQcom) {
                     AlertDialog.Builder(this@GraniteActivity)
                         .setTitle("Aceleração Qualcomm indisponível")
@@ -1192,40 +1204,46 @@ class GraniteActivity : AppCompatActivity() {
                 // Carrega o modelo UMA vez (depois de preparar os arquivos).
                 runOnUiThread { setTranscriptionStatus("Carregando modelo (pode levar 1-2 min na primeira vez)...") }
                 val modelStartedAt = SystemClock.elapsedRealtime()
+                val requestCpuFallback: (String) -> Boolean = { reason ->
+                    val latch = CountDownLatch(1)
+                    val decision = AtomicReference(false)
+                    runOnUiThread {
+                        AlertDialog.Builder(this)
+                            .setTitle("Acelerador indisponível")
+                            .setMessage(
+                                "O ${backend.label} falhou ao carregar o modelo:\n\n$reason\n\n" +
+                                    "Deseja continuar com CPU? (mais lento, mas funciona em qualquer aparelho)"
+                            )
+                            .setPositiveButton("Sim, usar CPU") { _, _ ->
+                                decision.set(true)
+                                latch.countDown()
+                            }
+                            .setNegativeButton("Não, cancelar") { _, _ ->
+                                decision.set(false)
+                                latch.countDown()
+                            }
+                            .setOnCancelListener {
+                                decision.set(false)
+                                latch.countDown()
+                            }
+                            .show()
+                    }
+                    latch.await()
+                    decision.get()
+                }
                 val loaded = if (selectedModel == MODEL_NAR) {
-                    GraniteNarEngine.load(context = this, onLog = { line -> appendTerminal(terminalLines, line) })
+                    GraniteNarEngine.load(
+                        context = this,
+                        backend = backend,
+                        onLog = { line -> appendTerminal(terminalLines, line) },
+                        onFallbackPrompt = requestCpuFallback,
+                    )
                 } else {
                     GraniteEngine.load(
                         context = this,
                         backend = backend,
                         onLog = { line -> appendTerminal(terminalLines, line) },
-                        onFallbackPrompt = { reason ->
-                            val latch = CountDownLatch(1)
-                            val decision = AtomicReference(false)
-                            runOnUiThread {
-                                AlertDialog.Builder(this)
-                                    .setTitle("Acelerador indisponível")
-                                    .setMessage(
-                                        "O ${backend.label} falhou ao carregar o modelo:\n\n$reason\n\n" +
-                                            "Deseja continuar com CPU? (mais lento, mas funciona em qualquer aparelho)"
-                                    )
-                                    .setPositiveButton("Sim, usar CPU") { _, _ ->
-                                        decision.set(true)
-                                        latch.countDown()
-                                    }
-                                    .setNegativeButton("Não, cancelar") { _, _ ->
-                                        decision.set(false)
-                                        latch.countDown()
-                                    }
-                                    .setOnCancelListener {
-                                        decision.set(false)
-                                        latch.countDown()
-                                    }
-                                    .show()
-                            }
-                            latch.await()
-                            decision.get()
-                        }
+                        onFallbackPrompt = requestCpuFallback,
                     )
                 }
                 modelLoadMs.set(SystemClock.elapsedRealtime() - modelStartedAt)
@@ -1239,7 +1257,7 @@ class GraniteActivity : AppCompatActivity() {
                     throw IllegalStateException(engineError)
                 }
                 val effectiveBackend = if (selectedModel == MODEL_NAR) {
-                    GraniteExecutionBackend.CPU
+                    GraniteNarEngine.loadedBackend() ?: backend
                 } else {
                     GraniteEngine.loadedBackend() ?: backend
                 }
@@ -1263,7 +1281,8 @@ class GraniteActivity : AppCompatActivity() {
                                 runOnUiThread {
                                     setTranscriptionStatus("Transcrevendo ${number}/${items.size}: ${item.name}... $percent%", percent)
                                 }
-                            }
+                            },
+                            onLog = { line -> appendTerminal(terminalLines, line) },
                         )
                     } else {
                         GraniteEngine.transcribeFile(
@@ -2291,19 +2310,6 @@ class GraniteActivity : AppCompatActivity() {
         ).joinToString(", ")
     }
 
-    private fun probeDurationMs(file: File): Long? {
-        return try {
-            val session = FFmpegKit.executeWithArguments(
-                arrayOf("-hide_banner", "-i", file.absolutePath)
-            )
-            parseDurationSeconds(session.allLogsAsString.orEmpty())
-                ?.takeIf { it > 0.0 }
-                ?.let { (it * 1000.0).toLong() }
-        } catch (_: Throwable) {
-            null
-        }
-    }
-
     private fun probeAudioFile(file: File): AudioProbe {
         return try {
             val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", file.absolutePath))
@@ -2563,10 +2569,6 @@ class GraniteActivity : AppCompatActivity() {
         val kb = bytes / 1024.0
         if (kb < 1024.0) return String.format(Locale.US, "%.1f KB", kb)
         return String.format(Locale.US, "%.2f MB", kb / 1024.0)
-    }
-
-    private fun humanFileSize(bytes: Long): String {
-        return formatBytes(bytes)
     }
 
     private fun dp(value: Int): Int =

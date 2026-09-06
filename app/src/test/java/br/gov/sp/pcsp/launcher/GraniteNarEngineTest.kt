@@ -2,6 +2,7 @@ package br.gov.sp.pcsp.launcher
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.json.JSONObject
 import org.junit.Test
 import kotlin.math.sin
 
@@ -10,6 +11,48 @@ import kotlin.math.sin
  * Sem Android — roda na JVM (testDebugUnitTest).
  */
 class GraniteNarEngineTest {
+
+    @Test
+    fun `benchmark protocol emits valid escaped json`() {
+        val encoded = GraniteNarBenchmarkProtocol.json(
+            linkedMapOf(
+                "event" to "inference",
+                "text" to "linha 1\n\"ação\"",
+                "stage_ms" to linkedMapOf("encoder" to 123L),
+                "ok" to true,
+            ),
+        )
+
+        val parsed = JSONObject(encoded)
+        assertEquals("linha 1\n\"ação\"", parsed.getString("text"))
+        assertEquals(123L, parsed.getJSONObject("stage_ms").getLong("encoder"))
+        assertTrue(parsed.getBoolean("ok"))
+    }
+
+    @Test
+    fun `benchmark collector parses stages dimensions and session loads`() {
+        val collector = GraniteNarBenchmarkProtocol.Collector()
+        collector.accept("ONNX encoder criado (CPU) em 4321ms")
+        collector.accept("NAR entrada: samples=16000 frames=50 effective_frames=50")
+        collector.accept("NAR etapa encoder: 987ms")
+        collector.accept("NAR sequência: ctc_tokens=7 valid_audio=10 slots=15 llm_tokens=25")
+        collector.accept("NAR inferência total: 1234ms")
+
+        assertEquals(4321L, collector.sessionLoadMs["encoder"])
+        assertEquals(987L, collector.stageMs["encoder"])
+        assertEquals(50L, collector.dimensions["effective_frames"])
+        assertEquals(25L, collector.dimensions["llm_tokens"])
+        assertEquals(1234L, collector.engineTotalMs)
+    }
+
+    @Test
+    fun `benchmark run id is safe and transcript hash is stable`() {
+        assertEquals("cpu_pt_01", GraniteNarBenchmarkProtocol.safeRunId("cpu pt/01"))
+        assertEquals(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            GraniteNarBenchmarkProtocol.sha256("abc"),
+        )
+    }
 
     // ---- HalfFloat ----
 
@@ -55,6 +98,23 @@ class GraniteNarEngineTest {
         for (t in 0 until frames) logits[t * vocab + ids[t].toInt()] = 10f
         val out = GraniteNarCtc.collapseLogits(logits, frames, vocab)
         assertTrue(out.contentEquals(intArrayOf(7, 7)))
+    }
+
+    @Test
+    fun `ctc collapse reads frame slice without copying logits`() {
+        val vocab = 100352
+        val logits = FloatArray(4 * vocab)
+        val ids = intArrayOf(11, 12, 13, 14)
+        for (frame in ids.indices) logits[frame * vocab + ids[frame]] = 10f
+
+        val out = GraniteNarCtc.collapseLogits(
+            java.nio.FloatBuffer.wrap(logits),
+            frames = 2,
+            vocab = vocab,
+            frameOffset = 1,
+        )
+
+        assertTrue(out.contentEquals(intArrayOf(12, 13)))
     }
 
     // ---- Interleave ----
