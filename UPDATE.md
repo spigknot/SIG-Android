@@ -10,10 +10,10 @@
 ## 0. Visão geral do fluxo
 
 ```
-bump da versão (3 lugares) → build (test+lint+assemble) → APK no O:\ → commit+push → GitHub (sig.apk, só a atual) → verificação SHA-256
+bump da versão (3 lugares) → build (test+lint+assemble) → APK no O:\ → commit+push → GitHub (sig.apk, histórico preservado) → verificação SHA-256
 ```
 
-- **Distribuição do APK**: GitHub Releases (`spigknot/SIG-Android`), asset `sig.apk` — SEMPRE a versão atual (release anterior é deletada).
+- **Distribuição do APK**: GitHub Releases (`spigknot/SIG-Android`), asset `sig.apk` — cada versão vira uma release nova e o histórico é preservado (NUNCA deletar releases anteriores). A mais recente fica marcada `Latest` e é a que o update checker oferece.
 - **Dependências nativas** (ffmpeg/whisper/silero/**onnxruntime do Granite**, baixadas na 1ª execução): Cloudflare R2, SEMPRE no bucket `sig-android` (`https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-<abi>.zip`). Os ZIPs são versionados separadamente e NÃO são regenerados a cada release somente do APK. **O APK NÃO embute o ONNX Runtime** (o `app/build.gradle` exclui `libonnxruntime*.so` via `packaging.jniLibs.excludes`) — o `NativeDependencyManager.activateIfInstalled` seta `onnxruntime.native.path` para o `libDir` do pacote, e o loader do ONNX carrega as duas libs de lá. O Google Drive está APOSENTADO para o app novo (APKs antigos ainda usam o Drive — não mexer nos arquivos de lá enquanto houver APKs antigos em campo).
 - **Credenciais R2**: usar um `release/r2_config.json` local e ignorado pelo Git (modelo em `release/r2_config.example.json`), com `endpoint`, `access_key_id`, `secret_access_key` da chave dedicada ao bucket `sig-android` E TAMBÉM `bucket: "sig-android"` + `public_base: "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev"` (completar com esses campos — o SIG Android usa SOMENTE o bucket `sig-android`; NUNCA usar o `r2_config.json` do SIG Windows, que aponta para o bucket `sig` de outro projeto). Não gravar tokens `cfat...` no projeto.
 - **Verificação de atualização**: o app consulta `releases/latest` do GitHub na abertura (silencioso) e compara com o `APP_VERSION` embutido — por isso o bump do `APP_VERSION` é OBRIGATÓRIO a cada versão.
@@ -34,7 +34,7 @@ bump da versão (3 lugares) → build (test+lint+assemble) → APK no O:\ → co
 
 1. **Build com o gate completo**: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` — os TRÊS juntos (assembleDebug sozinho prova só compilação). Critério: `BUILD SUCCESSFUL`. NUNCA publicar com FAIL.
 2. **Bump em 3 lugares** (seção 2) — esquecer o `APP_VERSION` quebra o update checker (o app novo se ofereceria a própria versão como atualização).
-3. **APK no GitHub SEMPRE**: asset com o nome exato `sig.apk`, tag = `YYYYMMDD_NNN` (a release anterior é deletada — regra "só a versão atual").
+3. **APK no GitHub SEMPRE**: asset com o nome exato `sig.apk`, tag = `YYYYMMDD_NNN`. Histórico preservado — NUNCA deletar releases anteriores; a nova vira `Latest` automaticamente (não usar `--latest=false` nem marcar como pre-release, senão o update checker não a oferece).
 4. **APK no O:\** com o nome fixo `sig.apk`; falha de envio para O:\ → ignorar e seguir (menos importante).
 5. **Verificar o SHA-256 do asset publicado** contra o build local (lição: o GitHub já serviu APK velho — nunca confiar em data/aparência).
 6. **Commit + push na main ANTES de criar a release** do GitHub.
@@ -121,17 +121,13 @@ gh release create YYYYMMDD_NNN sig.apk \
 
 - **O nome do asset é o nome do arquivo local**: subir `app-debug.apk` cria um asset `app-debug.apk` (errado). SEMPRE renomear para `sig.apk` antes.
 - Se a release ficar em draft (upload interrompido): `gh release edit YYYYMMDD_NNN --repo spigknot/SIG-Android --draft=false`.
-- **Regra "só a versão atual"**: deletar a release anterior:
+- **Histórico preservado (desde 2026-09-07)**: NUNCA deletar releases anteriores — cada `gh release create` adiciona uma release nova e a mais recente vira `Latest` automaticamente. Não usar `gh release delete` no fluxo normal (só em caso excepcional, ex.: vazamento de chave, com aprovação explícita).
 
-```bash
-gh release delete <VERSAO_ANTERIOR> --repo spigknot/SIG-Android --yes
-```
-
-- ⚠️ Cadeias com `&&` cortam no primeiro passo que falha (ex.: `gh release delete` de tag inexistente impede o `create`). Separar os passos ou usar `;`.
+- ⚠️ Não encadear `create`/`upload` com `&&` após um passo que pode falhar — a cadeia corta no primeiro erro. Separar os passos ou usar `;`.
 
 ## 7. Verificação final (antes de declarar pronto)
 
-1. `gh release list --repo spigknot/SIG-Android` → só a versão nova, marcada Latest.
+1. `gh release list --repo spigknot/SIG-Android` → versão nova no topo, marcada `Latest`, com as anteriores preservadas abaixo.
 2. `gh release view YYYYMMDD_NNN --repo spigknot/SIG-Android --json assets` → asset `sig.apk` presente.
 3. **SHA-256 do asset publicado == build local** (obrigatório):
 
@@ -179,7 +175,7 @@ a fonte da verdade e deve evoluir com a prática.
 | `Thread { }` não executa | faltou o `.start()` (build passa, bloco nunca roda) | `Thread { ... }.start()` sempre |
 | Asset na release com nome errado (`app-debug.apk`) | `gh release upload` usa o NOME DO ARQUIVO LOCAL | renomear para `sig.apk` antes do upload |
 | APK da release "antigo" (usuário baixou versão velha) | upload substituiu? não — criou asset novo; ou subiu build velho | verificar SEMPRE o SHA-256 do asset vs build local (seção 7.3) |
-| `gh release delete` impede o `create` seguinte | cadeia com `&&` corta no primeiro erro (tag inexistente) | separar passos ou usar `;` |
+| Passo com `&&` não executa o seguinte | cadeia corta no primeiro erro | separar passos ou usar `;` |
 | Build "passou" mas commit saiu quebrado | pipeline `... | grep | head` engole o exit code | checar `BUILD SUCCESSFUL` na saída ANTES do cp/commit (seção 3) |
 | App se oferece a própria versão como atualização | `APP_VERSION` do `AppUpdateChecker.kt` não foi bumpado | bump nos 3 lugares (seção 2) |
 | Ferramentas ffmpeg falham no aparelho | pacote nativo ausente/corrompido; ou `smart-exception-java` removido do build.gradle (NoClassDefFoundError em runtime, build passa) | manter `com.arthenica:smart-exception-java:0.2.1`; ver logcat `SigNative`; o download nativo vem do R2 na 1ª exec |
@@ -201,3 +197,4 @@ a fonte da verdade e deve evoluir com a prática.
 - `20260823_001`: primeira com a numeração do Windows (`YYYYMMDD_NNN`), dependências nativas no Cloudflare R2 (bucket `sig-android`), verificação de atualização via GitHub (`AppUpdateChecker`), e publicação "commit + push + APK no GitHub + O:\" como regra permanente.
 - O Drive mantém os ZIPs de dependências por um tempo (APKs antigos ainda apontam para lá); quando não houver mais APKs antigos em campo, os arquivos do Drive podem ser removidos.
 - Um APK antigo (sem o update checker) só atualiza manualmente; um APK novo (com o checker) avisa na abertura quando `releases/latest` for maior que o `APP_VERSION` dele.
+- `20260907`: fim da regra "só a versão atual" — releases passam a ser cumulativas (histórico preservado, nunca deletar a anterior; a nova vira `Latest` automaticamente).
