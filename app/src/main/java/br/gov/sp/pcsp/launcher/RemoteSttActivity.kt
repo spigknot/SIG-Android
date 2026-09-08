@@ -1033,8 +1033,8 @@ class RemoteSttActivity : AppCompatActivity() {
         recordingStartedAt = SystemClock.elapsedRealtime()
         livePausedAt = 0L
         livePausedAccumulatedMs = 0L
-        buttonRecordingAction?.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
-        buttonRecordingAction?.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+        buttonRecordingAction?.setImageResource(R.drawable.ic_check_green)
+        buttonRecordingAction?.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
         buttonRecordingAction?.contentDescription = "Parar gravação"
         buttonLiveMicTest?.visibility = View.VISIBLE
         buttonLiveMicTest?.alpha = 1f
