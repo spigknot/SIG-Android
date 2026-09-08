@@ -1,6 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -239,5 +240,41 @@ class SttRequestBuildersTest {
         assertEquals("muse-voice-transcribe-1.0", requestJson.getString("model"))
         assertEquals("WAV", requestJson.getString("audioEncoding"))
         assertEquals("Portuguese", requestJson.getJSONArray("languageBias").getString(0))
+    }
+
+    @Test
+    fun museRestBody_matchesStrictMultipartContract() {
+        val wav = java.io.File.createTempFile("muse-test", ".wav")
+        try {
+            wav.writeBytes("RIFF....fake-wav-bytes".toByteArray(Charsets.UTF_8))
+            val body = SttRequestBuilders.museRestBody(
+                requestJson = SttRequestBuilders.museRestRequestJson(
+                    mode = "DIARIZATION",
+                    languageBias = listOf("Portuguese"),
+                ),
+                fileName = "gravacao.wav",
+                audioFile = wav,
+            )
+
+            val buffer = okio.Buffer()
+            body.writeTo(buffer)
+            val wireSize = buffer.size
+            val raw = buffer.readUtf8()
+
+            // Ordem: request antes de audio; filenames e content-types exatos.
+            assertTrue(raw.indexOf("name=\"request\"") in 0 until raw.indexOf("name=\"audio\""))
+            assertTrue(raw.contains("Content-Type: application/json"))
+            assertTrue(raw.contains("filename=\"gravacao.wav\""))
+            assertTrue(raw.contains("Content-Type: audio/wav"))
+            assertTrue(raw.contains("\"mode\":\"DIARIZATION\""))
+            assertTrue(raw.contains("RIFF....fake-wav-bytes"))
+            // O parser do Muse é estrito: nenhum header extra por parte.
+            assertFalse(raw.contains("Content-Length"))
+            assertTrue(raw.trimEnd().endsWith("--"))
+            // Content-Length total conhecido (sem chunked).
+            assertEquals(wireSize, body.contentLength())
+        } finally {
+            wav.delete()
+        }
     }
 }

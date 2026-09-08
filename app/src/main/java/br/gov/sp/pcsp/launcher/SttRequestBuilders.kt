@@ -1,6 +1,11 @@
 package br.gov.sp.pcsp.launcher
 
+import java.io.File
 import java.net.URLEncoder
+import java.util.UUID
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody
+import okio.BufferedSink
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -274,6 +279,50 @@ object SttRequestBuilders {
             put("keywords", JSONArray().apply { keywords.forEach { put(it) } })
         }
     }.toString()
+
+    /** Corpo multipart do REST: parte JSON "request" + parte "audio", byte a
+     *  byte no formato do cliente de referência (o app Windows monta o corpo
+     *  na mão pelo mesmo motivo). O parser do Muse é estrito: os helpers de
+     *  multipart do OkHttp injetam Content-Length por parte e o servidor
+     *  responde 400 "Malformed multipart body". Aqui só existem os headers
+     *  Content-Disposition/Content-Type por parte, com Content-Length total
+     *  conhecido (sem chunked) e o arquivo em streaming. */
+    fun museRestBody(
+        requestJson: String,
+        fileName: String,
+        audioFile: File,
+    ): RequestBody {
+        val boundary = "----sigmuse-${UUID.randomUUID().toString().replace("-", "")}"
+        val safeName = fileName.replace("\"", "")
+        val crlf = String(byteArrayOf(13, 10), Charsets.UTF_8)
+        val preamble = (
+            "--$boundary$crlf" +
+                "Content-Disposition: form-data; name=\"request\"$crlf" +
+                "Content-Type: application/json$crlf$crlf" +
+                "$requestJson$crlf" +
+                "--$boundary$crlf" +
+                "Content-Disposition: form-data; name=\"audio\"; filename=\"$safeName\"$crlf" +
+                "Content-Type: audio/wav$crlf$crlf"
+            ).toByteArray(Charsets.UTF_8)
+        val ending = "$crlf--$boundary--$crlf".toByteArray(Charsets.UTF_8)
+        val totalLength = preamble.size.toLong() + audioFile.length() + ending.size
+        return object : RequestBody() {
+            override fun contentType() = "multipart/form-data; boundary=$boundary".toMediaType()
+            override fun contentLength() = totalLength
+            override fun writeTo(sink: BufferedSink) {
+                sink.write(preamble)
+                audioFile.inputStream().use { input ->
+                    val chunk = ByteArray(128 * 1024)
+                    while (true) {
+                        val read = input.read(chunk)
+                        if (read <= 0) break
+                        sink.write(chunk, 0, read)
+                    }
+                }
+                sink.write(ending)
+            }
+        }
+    }
 
     private fun queryUrl(base: String, params: List<Pair<String, String>>): String =
         base + params.joinToString(prefix = "?", separator = "&") { (name, value) ->

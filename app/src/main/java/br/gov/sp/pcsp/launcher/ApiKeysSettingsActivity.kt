@@ -79,16 +79,27 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         GrokApiSettings.setElevenlabsApiKey(elevenlabsKey.text.toString())
         GrokApiSettings.setMetamuseApiKey(metamuseKey.text.toString())
         ImeiApiSettings.setApiKey(imeiCheckKey.text.toString())
-        val xaiStatus = keyStatus(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)
-        val deepseekStatus = keyStatus(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)
-        val deepgramStatus = keyStatus(GrokApiSettings.deepgramApiKey(), GrokApiSettings::isPlausibleDeepgramKey)
-        val metamuseStatus = keyStatus(GrokApiSettings.metamuseApiKey(), GrokApiSettings::isPlausibleMetamuseKey)
-        Toast.makeText(
-            this,
-            "Chaves salvas. xAI: $xaiStatus; Deepseek: $deepseekStatus; Deepgram: $deepgramStatus; Muse Voice: $metamuseStatus.",
-            Toast.LENGTH_LONG
-        ).show()
+        // Só avisa quando há chave preenchida mas inválida; em branco
+        // (não informada) ou válida, o salvamento é silencioso.
+        val invalid = buildList {
+            if (isFilledButInvalid(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)) add("xAI")
+            if (isFilledButInvalid(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)) add("Deepseek")
+            if (isFilledButInvalid(GrokApiSettings.deepgramApiKey(), GrokApiSettings::isPlausibleDeepgramKey)) add("Deepgram")
+            if (isFilledButInvalid(GrokApiSettings.assemblyaiApiKey(), GrokApiSettings::isPlausibleAssemblyaiKey)) add("AssemblyAI")
+            if (isFilledButInvalid(GrokApiSettings.elevenlabsApiKey(), GrokApiSettings::isPlausibleElevenlabsKey)) add("ElevenLabs")
+            if (isFilledButInvalid(GrokApiSettings.metamuseApiKey(), GrokApiSettings::isPlausibleMetamuseKey)) add("Muse Voice")
+        }
+        if (invalid.isNotEmpty()) {
+            Toast.makeText(
+                this,
+                "Chave inválida: ${invalid.joinToString(", ")}.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
+
+    private fun isFilledButInvalid(value: String, validator: (String) -> Boolean): Boolean =
+        value.isNotBlank() && !validator(value)
 
     private fun toggleKeysVisibility() {
         keysRevealed = !keysRevealed
@@ -155,12 +166,6 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
             "${result.keys.size} chave(s) importada(s). Confira e toque em Salvar chaves.$suffix",
             Toast.LENGTH_LONG
         ).show()
-    }
-
-    private fun keyStatus(value: String, validator: (String) -> Boolean): String = when {
-        value.isBlank() -> "não informada"
-        validator(value) -> "válida"
-        else -> "inválida"
     }
 
     companion object {

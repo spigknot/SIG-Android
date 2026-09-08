@@ -1622,7 +1622,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     }
                 } else {
                     synchronized(grokLiveFinalSegments) {
-                        grokLivePartialSegment = rawText
+                        grokLivePartialSegment = prefixMetamuseSpeaker(rawText)
                         updateGrokLiveTranscriptLocked()
                     }
                     runOnUiThread { updateLiveTerminalText() }
@@ -1639,6 +1639,13 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             "speechComplete" -> if (sttIsMetamuse) {
                 val rawText = event.optString("transcript").trim()
+                // O turno pode trazer o próprio "speaker"; senão vale o
+                // rótulo corrente (evento "speaker" do trecho anterior).
+                val directLabel = event.optString("speaker").trim()
+                if (directLabel.isNotEmpty()) {
+                    metamuseSpeakerNumbers.getOrPut(directLabel) { metamuseSpeakerNumbers.size + 1 }
+                    metamuseCurrentSpeaker = directLabel
+                }
                 if (rawText.isNotEmpty()) {
                     val text = prefixMetamuseSpeaker(rawText)
                     synchronized(grokLiveFinalSegments) {
@@ -1894,8 +1901,6 @@ class RemoteSttActivity : AppCompatActivity() {
             liveDraftText = ""
             rebuildLiveTranscriptDisplayLocked()
         }
-        // Guarda o par plano/diarizado para a alternância instantânea da checkbox.
-        storeReceivedTranscription(stripDiarizationLabels(mergedFinal), mergedFinal)
         grokIntentionalClose = true
         grokFinishRequested = false
         grokSocketReady = false
@@ -1907,7 +1912,11 @@ class RemoteSttActivity : AppCompatActivity() {
         liveDiagnosticContext?.recordState("DONE")
         emitGrokConnectionEvent(GrokConnectionEvent.DISCONNECTED)
         runOnUiThread {
-            storeReceivedTranscription(mergedFinal)
+            // Guarda o par plano/diarizado para a alternância instantânea da
+            // checkbox (DENTRO da UI thread: o store toca nas Views e este
+            // complete pode vir da thread do socket — fora dela, o setText
+            // derruba a Activity com CalledFromWrongThreadException).
+            storeReceivedTranscription(stripDiarizationLabels(mergedFinal), mergedFinal)
             transcriptionTaskState = AssistantTaskState.DONE
             refiningTaskState = AssistantTaskState.IDLE
             renderLiveProgress()
@@ -2687,19 +2696,12 @@ class RemoteSttActivity : AppCompatActivity() {
         )
         // O one-shot do Muse recebe os parâmetros como parte JSON "request"
         // (application/json) + o áudio como parte "audio" (não são form fields).
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart(
-                "request",
-                null,
-                requestJson.toRequestBody("application/json".toMediaType())
-            )
-            .addFormDataPart(
-                "audio",
-                uploadFile.file.name,
-                uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
-            )
-            .build()
+        // O corpo sai do museRestBody com headers mínimos (ver o kdoc lá).
+        val requestBody = SttRequestBuilders.museRestBody(
+            requestJson = requestJson,
+            fileName = uploadFile.file.name,
+            audioFile = uploadFile.file
+        )
         val call = client.newCall(buildPostRequest(requestSpec, requestBody))
         currentCalls.add(call)
         if (isLiveFinal != null) {
