@@ -118,12 +118,23 @@ object GrokApiSettings {
     fun metamuseApiKey(): String = ApiKeyStore.get(preferences(), KEY_MUSE_API)
 
     fun setMetamuseApiKey(value: String) {
-        ApiKeyStore.put(preferences(), KEY_MUSE_API, value)
+        ApiKeyStore.put(preferences(), KEY_MUSE_API, normalizeMetamuseKey(value))
+    }
+
+    /** Normaliza a chave colada: remove espaços e um eventual prefixo
+     *  "Bearer " (o handshake do WS exige a chave CRUA "LLM|..."). */
+    fun normalizeMetamuseKey(value: String): String {
+        val clean = value.trim()
+        return if (clean.startsWith("Bearer ", ignoreCase = true)) {
+            clean.substringAfter(' ').trim()
+        } else {
+            clean
+        }
     }
 
     /** Chave da Meta Model API (formato "LLM|<id>|<segredo>"). */
     fun isPlausibleMetamuseKey(value: String = metamuseApiKey()): Boolean {
-        val key = value.trim()
+        val key = normalizeMetamuseKey(value)
         if (key.length !in 10..300) return false
         if (!key.startsWith("LLM|")) return false
         return key.count { it == '|' } == 2 &&

@@ -82,9 +82,10 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         val xaiStatus = keyStatus(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)
         val deepseekStatus = keyStatus(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)
         val deepgramStatus = keyStatus(GrokApiSettings.deepgramApiKey(), GrokApiSettings::isPlausibleDeepgramKey)
+        val metamuseStatus = keyStatus(GrokApiSettings.metamuseApiKey(), GrokApiSettings::isPlausibleMetamuseKey)
         Toast.makeText(
             this,
-            "Chaves salvas. xAI: $xaiStatus; Deepseek: $deepseekStatus; Deepgram: $deepgramStatus.",
+            "Chaves salvas. xAI: $xaiStatus; Deepseek: $deepseekStatus; Deepgram: $deepgramStatus; Muse Voice: $metamuseStatus.",
             Toast.LENGTH_LONG
         ).show()
     }
