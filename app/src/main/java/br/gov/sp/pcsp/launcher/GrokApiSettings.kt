@@ -132,14 +132,10 @@ object GrokApiSettings {
         }
     }
 
-    /** Chave da Meta Model API (formato "LLM|<id>|<segredo>"). */
-    fun isPlausibleMetamuseKey(value: String = metamuseApiKey()): Boolean {
-        val key = normalizeMetamuseKey(value)
-        if (key.length !in 10..300) return false
-        if (!key.startsWith("LLM|")) return false
-        return key.count { it == '|' } == 2 &&
-            key.split('|').all { it.isNotBlank() }
-    }
+    /** Chave do Muse Voice: verificação única — 48 caracteres
+     *  (letras, números e símbolos, após normalização). */
+    fun isPlausibleMetamuseKey(value: String = metamuseApiKey()): Boolean =
+        normalizeMetamuseKey(value).length == 48
 
     fun hasMetamuseApiKey(): Boolean = isPlausibleMetamuseKey()
 
