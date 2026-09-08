@@ -252,6 +252,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var recordingPcmFile: File? = null
     private var whiteMicSelection = false
     private var recordingStartedAt = 0L
+    @Volatile private var liveTimerStarted = false
     @Volatile private var liveTranscribing = false
     @Volatile private var liveFinalizing = false
     @Volatile private var livePaused = false
@@ -1310,10 +1311,15 @@ class RemoteSttActivity : AppCompatActivity() {
         status.visibility = View.VISIBLE
         status.text = "Ouvindo e transcrevendo ao vivo..."
         recordingPanel.visibility = View.VISIBLE
-        recordingStartedAt = SystemClock.elapsedRealtime()
         recordingTimer?.text = "00:00.000"
         handler.removeCallbacks(recordingTicker)
-        handler.post(recordingTicker)
+        // No WebSocket, o cronômetro só dispara no CONNECTED
+        // (onGrokWebSocketReady): antes disso não há captura nem transcrição.
+        liveTimerStarted = !useWebSocket
+        if (!useWebSocket) {
+            recordingStartedAt = SystemClock.elapsedRealtime()
+            handler.post(recordingTicker)
+        }
         buttonLiveMicTest?.visibility = View.VISIBLE
         buttonLiveMicTest?.alpha = 1f
         buttonLiveMicTest?.contentDescription = "Pausar transcrição ao vivo"
@@ -1814,6 +1820,17 @@ class RemoteSttActivity : AppCompatActivity() {
             if (reconnectSucceeded) GrokConnectionEvent.RECONNECTED else GrokConnectionEvent.CONNECTED
         )
         scheduleGrokReconnectCounterReset(webSocket)
+        if (!liveTimerStarted) {
+            // O cronômetro do ao vivo nasce junto da captura, no CONNECTED —
+            // descontando eventual pausa acionada ainda durante a conexão.
+            liveTimerStarted = true
+            val now = SystemClock.elapsedRealtime()
+            val pausedNow =
+                if ((livePaused || recordingPaused) && livePausedAt > 0L) now - livePausedAt else 0L
+            recordingStartedAt = now - livePausedAccumulatedMs - pausedNow
+            handler.removeCallbacks(recordingTicker)
+            handler.post(recordingTicker)
+        }
         if (liveTranscribing) startGrokAudioCaptureIfNeeded()
         if (grokFinishRequested) sendGrokAudioDone(webSocket)
     }
