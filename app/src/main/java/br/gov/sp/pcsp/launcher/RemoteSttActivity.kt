@@ -1310,8 +1310,8 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonLiveMicTest?.alpha = 1f
         buttonLiveMicTest?.contentDescription = "Pausar transcrição ao vivo"
         buttonLiveMicStop?.visibility = View.VISIBLE
-        buttonLiveMicStop?.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
-        buttonLiveMicStop?.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+        buttonLiveMicStop?.setImageResource(R.drawable.ic_check_green)
+        buttonLiveMicStop?.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
         buttonLiveMicStop?.contentDescription = "Finalizar transcrição ao vivo"
         if (useWebSocket) {
             emitGrokConnectionEvent(GrokConnectionEvent.CONNECTING)
