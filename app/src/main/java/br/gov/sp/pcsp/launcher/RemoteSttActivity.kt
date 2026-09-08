@@ -275,6 +275,7 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var sttIsDeepgram = false
     @Volatile private var sttIsAssemblyai = false
     @Volatile private var sttIsElevenlabs = false
+    @Volatile private var sttIsMetamuse = false
     @Volatile private var liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
     private var liveThread: Thread? = null
     private var liveUploadExecutor: ExecutorService? = null
@@ -298,6 +299,8 @@ class RemoteSttActivity : AppCompatActivity() {
     // Evita ficar preso em "Esperando transcrição final" para sempre.
     @Volatile private var finishDeadlineMillis = 0L
     private val assemblyaiSpeakerNumbers = mutableMapOf<String, Int>()
+    private val metamuseSpeakerNumbers = mutableMapOf<String, Int>()
+    private var metamuseCurrentSpeaker: String? = null
     private var grokEverConnected = false
     private var grokDisconnectedAudioBytes = 0L
     private var grokAudioLossReported = false
@@ -1195,10 +1198,12 @@ class RemoteSttActivity : AppCompatActivity() {
         val transcriptionConfig = TranscriptionModelStore.selectedConfig()
         wasDiarizationRequested = checkboxLiveDiarize.isChecked && checkboxLiveDiarize.isEnabled
         val useWebSocket = transcriptionConfig.isGrokApi || transcriptionConfig.isDeepgramApi ||
-            transcriptionConfig.isAssemblyaiApi || transcriptionConfig.isElevenlabsApi
+            transcriptionConfig.isAssemblyaiApi || transcriptionConfig.isElevenlabsApi ||
+            transcriptionConfig.isMetamuseApi
         sttIsDeepgram = transcriptionConfig.isDeepgramApi
         sttIsAssemblyai = transcriptionConfig.isAssemblyaiApi
         sttIsElevenlabs = transcriptionConfig.isElevenlabsApi
+        sttIsMetamuse = transcriptionConfig.isMetamuseApi
         if (serverBaseUrl.isBlank() && !useWebSocket) {
             status.text = "Informe e teste o IP do servidor."
             return
@@ -1217,6 +1222,10 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         if (useWebSocket && transcriptionConfig.isElevenlabsApi && !GrokApiSettings.hasElevenlabsApiKey()) {
             status.text = "Insira a chave API da ElevenLabs nas configurações."
+            return
+        }
+        if (useWebSocket && transcriptionConfig.isMetamuseApi && !GrokApiSettings.hasMetamuseApiKey()) {
+            status.text = "Insira a chave API do Muse Voice nas configurações."
             return
         }
         if (isProcessing) return
@@ -1267,6 +1276,8 @@ class RemoteSttActivity : AppCompatActivity() {
             grokAudioLossReported = false
         }
         assemblyaiSpeakerNumbers.clear()
+        metamuseSpeakerNumbers.clear()
+        metamuseCurrentSpeaker = null
         cancelGrokReconnectCallbacks()
         deepgramFinishRunnable?.let(handler::removeCallbacks)
         deepgramFinishRunnable = null
@@ -1359,6 +1370,9 @@ class RemoteSttActivity : AppCompatActivity() {
                     secondaryLanguages = secondary,
                 )
             }
+            sttIsMetamuse -> SttRequestBuilders.museWebSocket(
+                apiKey = GrokApiSettings.metamuseApiKey(),
+            )
             else -> SttRequestBuilders.grokWebSocket(
                 apiKey = GrokApiSettings.apiKey(),
                 language = SttLanguageSettings.grokLanguageParam(),
@@ -1373,7 +1387,25 @@ class RemoteSttActivity : AppCompatActivity() {
         grokLiveWebSocket = grokWebSocketClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (grokLiveWebSocket !== webSocket) return
-                if (sttIsDeepgram || sttIsAssemblyai || sttIsElevenlabs) {
+                if (sttIsMetamuse) {
+                    // O Muse autentica DENTRO do 1º frame JSON (o header é
+                    // ignorado): envia o handshake e aguarda o "session" antes
+                    // de liberar o áudio (onGrokWebSocketReady).
+                    val handshake = SttRequestBuilders.museHandshake(
+                        apiKey = GrokApiSettings.metamuseApiKey(),
+                        mode = SttDiarization.museMode(checkboxLiveDiarize.isChecked),
+                        audioEncoding = SttRequestBuilders.MUSE_AUDIO_ENCODING_LIVE_16K,
+                        languageBias = SttLanguageSettings.museLanguageBias(),
+                    )
+                    if (!webSocket.send(handshake)) {
+                        handleGrokWebSocketDisconnect(webSocket, "não consegui enviar o handshake do Muse")
+                        return
+                    }
+                    emitGrokConnectionEvent(
+                        if (isReconnectAttempt) GrokConnectionEvent.RECONNECTING else GrokConnectionEvent.CONNECTING,
+                        "handshake do Muse enviado; aguardando sessão"
+                    )
+                } else if (sttIsDeepgram || sttIsAssemblyai || sttIsElevenlabs) {
                     // Deepgram (Metadata ~12s), AssemblyAI e Scribe aceitam áudio
                     // assim que o socket abre (onOpen).
                     onGrokWebSocketReady(webSocket)
@@ -1424,7 +1456,10 @@ class RemoteSttActivity : AppCompatActivity() {
             return
         }
         // O Scribe v2 usa "message_type"; os demais provedores usam "type".
-        val eventType = event.optString("type").ifBlank { event.optString("message_type") }
+        // O Muse responde o handshake como {"sessionId":"..."} puro, sem "type".
+        val eventType = event.optString("type")
+            .ifBlank { event.optString("message_type") }
+            .ifBlank { if (event.has("sessionId")) "session" else "" }
         when (eventType) {
             "transcript.created" -> onGrokWebSocketReady(webSocket)
             "Metadata" -> if (sttIsDeepgram) onGrokWebSocketReady(webSocket)
@@ -1556,6 +1591,76 @@ class RemoteSttActivity : AppCompatActivity() {
                     runOnUiThread { updateLiveTerminalText() }
                 }
                 if (grokFinishRequested) completeGrokLiveTranscription(webSocket, "")
+            }
+            // ---------------- Muse Voice (Meta) ----------------
+            // Partials CUMULATIVAS (cada uma substitui a anterior, render em
+            // place); "final":true é o sinal de conclusão do turno. O evento
+            // "speaker" rotula o trecho ANTERIOR (A, B, ...); "speechComplete"
+            // traz o turno inteiro (correlacionar por turnId, que chega junto).
+            "session" -> if (sttIsMetamuse) onGrokWebSocketReady(webSocket)
+            "transcript" -> if (sttIsMetamuse) {
+                val rawText = event.optString("transcript").trim()
+                if (rawText.isEmpty()) return
+                val isFinal = event.optBoolean("final", false)
+                if (isFinal) {
+                    val text = prefixMetamuseSpeaker(rawText)
+                    synchronized(grokLiveFinalSegments) {
+                        val last = grokLiveFinalSegments.lastOrNull().orEmpty()
+                        if (last == text) {
+                            // já commitado; nada a fazer
+                        } else if (last.contains(text) || text.contains(last)) {
+                            grokLiveFinalSegments[grokLiveFinalSegments.lastIndex] = text
+                        } else {
+                            grokLiveFinalSegments += text
+                        }
+                        grokLivePartialSegment = ""
+                        updateGrokLiveTranscriptLocked()
+                    }
+                    runOnUiThread { updateLiveTerminalText() }
+                    if (isFinal && grokFinishRequested && !grokCompletionHandled) {
+                        rescheduleDeepgramFastFinish()
+                    }
+                } else {
+                    synchronized(grokLiveFinalSegments) {
+                        grokLivePartialSegment = rawText
+                        updateGrokLiveTranscriptLocked()
+                    }
+                    runOnUiThread { updateLiveTerminalText() }
+                }
+            }
+            "speaker" -> if (sttIsMetamuse) {
+                // Rótulo do trecho que ACABOU de ser falado (letras A, B...).
+                val label = event.optString("label").trim()
+                if (label.isNotEmpty()) {
+                    metamuseSpeakerNumbers.getOrPut(label) { metamuseSpeakerNumbers.size + 1 }
+                    metamuseCurrentSpeaker = label
+                    runOnUiThread { updateLiveTerminalText() }
+                }
+            }
+            "speechComplete" -> if (sttIsMetamuse) {
+                val rawText = event.optString("transcript").trim()
+                if (rawText.isNotEmpty()) {
+                    val text = prefixMetamuseSpeaker(rawText)
+                    synchronized(grokLiveFinalSegments) {
+                        val last = grokLiveFinalSegments.lastOrNull().orEmpty()
+                        if (last == text) {
+                            // já commitado; nada a fazer
+                        } else if (last.contains(text) || text.contains(last)) {
+                            grokLiveFinalSegments[grokLiveFinalSegments.lastIndex] = text
+                        } else {
+                            grokLiveFinalSegments += text
+                        }
+                        grokLivePartialSegment = ""
+                        updateGrokLiveTranscriptLocked()
+                    }
+                    runOnUiThread { updateLiveTerminalText() }
+                }
+                if (grokFinishRequested && !grokCompletionHandled) {
+                    rescheduleDeepgramFastFinish()
+                }
+            }
+            "speechStart", "speechEnd" -> if (sttIsMetamuse) {
+                runOnUiThread { updateLiveTerminalText() }
             }
             "transcript.partial" -> {
                 val text = formatGrokDiarizedTranscript(event, event.optString("text").trim())
@@ -1900,6 +2005,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val payload = when {
             sttIsDeepgram -> "{\"type\":\"CloseStream\"}"
             sttIsAssemblyai -> "{\"type\":\"Terminate\"}"
+            sttIsMetamuse -> SttRequestBuilders.museEndStream()
             sttIsElevenlabs -> {
                 // Força a finalização com um chunk de silêncio commitado (a VAD
                 // fecharia sozinha, mas o commit garante o último segmento).
@@ -1958,6 +2064,7 @@ class RemoteSttActivity : AppCompatActivity() {
         sttIsDeepgram -> "Deepgram"
         sttIsAssemblyai -> "AssemblyAI"
         sttIsElevenlabs -> "Scribe"
+        sttIsMetamuse -> "Muse"
         else -> "Grok"
     }
 
@@ -2336,6 +2443,7 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isDeepgramApi) return sendDeepgramApiTranscription(uploadFile, isFinal)
         if (config.isAssemblyaiApi) return sendAssemblyaiApiTranscription(uploadFile, isFinal)
         if (config.isElevenlabsApi) return sendElevenlabsApiTranscription(uploadFile, isFinal)
+        if (config.isMetamuseApi) return sendMetamuseApiTranscription(uploadFile, isFinal)
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addTranscriptionParameters(config)
@@ -2568,6 +2676,65 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun sendMetamuseApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
+        val apiKey = GrokApiSettings.metamuseApiKey()
+        require(GrokApiSettings.isPlausibleMetamuseKey(apiKey)) { "A chave API do Muse Voice salva nas configurações é inválida." }
+        val mode = SttDiarization.museMode(checkboxLiveDiarize.isChecked)
+        val requestSpec = SttRequestBuilders.museRest(apiKey = apiKey)
+        val requestJson = SttRequestBuilders.museRestRequestJson(
+            mode = mode,
+            languageBias = SttLanguageSettings.museLanguageBias(),
+        )
+        // O one-shot do Muse recebe os parâmetros como parte JSON "request"
+        // (application/json) + o áudio como parte "audio" (não são form fields).
+        val requestBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "request",
+                null,
+                requestJson.toRequestBody("application/json".toMediaType())
+            )
+            .addFormDataPart(
+                "audio",
+                uploadFile.file.name,
+                uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
+            )
+            .build()
+        val call = client.newCall(buildPostRequest(requestSpec, requestBody))
+        currentCalls.add(call)
+        if (isLiveFinal != null) {
+            synchronized(liveRequestLock) {
+                liveCurrentCall = call
+                liveCurrentCallIsFinal = isLiveFinal
+            }
+        }
+        try {
+            call.execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw IllegalStateException("Muse respondeu ${response.code}: ${body.take(240)}")
+                val payload = JSONObject(body)
+                val turns = payload.optJSONArray("turns")
+                if (turns != null && turns.length() > 0) {
+                    val diarized = formatMetamuseDiarizedTurns(turns)
+                    if (diarized.isNotBlank()) return diarized
+                }
+                val rawText = payload.optString("transcript").trim()
+                if (rawText.isEmpty()) throw IllegalStateException("O Muse retornou uma transcrição vazia.")
+                return rawText
+            }
+        } finally {
+            currentCalls.remove(call)
+            if (isLiveFinal != null) {
+                synchronized(liveRequestLock) {
+                    if (liveCurrentCall == call) {
+                        liveCurrentCall = null
+                        liveCurrentCallIsFinal = false
+                    }
+                }
+            }
+        }
+    }
+
     private fun formatGrokDiarizedTranscript(payload: JSONObject, fallback: String): String {
         if (!checkboxLiveDiarize.isChecked) return fallback
         val words = payload.optJSONArray("words") ?: return fallback
@@ -2590,6 +2757,41 @@ class RemoteSttActivity : AppCompatActivity() {
         return output.toString().trim().ifBlank { fallback }
     }
 
+    /** Prefixa o texto ao vivo do Muse com "Interlocutor N:" quando a
+     *  diarização está marcada e já há um falante corrente (letras A, B...).
+     *  Fora da diarização, devolve o texto intacto. */
+    private fun prefixMetamuseSpeaker(rawText: String): String {
+        if (!checkboxLiveDiarize.isChecked) return rawText
+        val label = metamuseCurrentSpeaker ?: return rawText
+        val number = metamuseSpeakerNumbers.getOrPut(label) { metamuseSpeakerNumbers.size + 1 }
+        if (rawText.matches(Regex("^\\s*Interlocutor\\s+\\d+\\s*:.*", RegexOption.DOT_MATCHES_ALL))) {
+            return rawText
+        }
+        return "Interlocutor $number: $rawText"
+    }
+
+    /** Formata os turns do REST do Muse (DIARIZATION): cada turno com
+     *  "speaker" (A, B, ...) vira "Interlocutor N: <texto>". */
+    private fun formatMetamuseDiarizedTurns(turns: org.json.JSONArray): String {
+        val speakerNumbers = linkedMapOf<String, Int>()
+        val output = StringBuilder()
+        for (index in 0 until turns.length()) {
+            val turn = turns.optJSONObject(index) ?: continue
+            val text = turn.optString("transcript").trim()
+            if (text.isBlank()) continue
+            val speaker = turn.optString("speaker").trim()
+            val line = if (speaker.isNotEmpty()) {
+                val number = speakerNumbers.getOrPut(speaker) { speakerNumbers.size + 1 }
+                "Interlocutor $number: $text"
+            } else {
+                text
+            }
+            if (output.isNotEmpty()) output.append('\n')
+            output.append(line)
+        }
+        return output.toString().trim()
+    }
+
     // Labels de exibição do idioma (SOMENTE cosmético): o usuário vê "auto",
     // mas o valor salvo/enviado continua sendo "multi". Nunca mude os valores.
     private fun languageLabel(value: String): String = if (value == "multi") "auto" else value
@@ -2601,6 +2803,7 @@ class RemoteSttActivity : AppCompatActivity() {
             config.isDeepgramApi -> "deepgram"
             config.isAssemblyaiApi -> "assemblyai"
             config.isElevenlabsApi -> "elevenlabs"
+            config.isMetamuseApi -> "metamuse"
             config.isGrokApi -> "grok"
             else -> null
         }
@@ -2641,6 +2844,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "deepgram" -> GrokApiSettings.setDeepgramLanguageMode(mode)
             "assemblyai" -> GrokApiSettings.setAssemblyaiLanguageMode(mode)
             "elevenlabs" -> GrokApiSettings.setElevenlabsLanguageMode(mode)
+            "metamuse" -> GrokApiSettings.setMetamuseLanguageMode(mode)
             "grok" -> GrokApiSettings.setGrokLanguageMode(mode)
         }
     }
@@ -2650,6 +2854,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "deepgram" -> GrokApiSettings.deepgramLanguageMode() to GrokApiSettings.deepgramCustomLanguage()
             "assemblyai" -> GrokApiSettings.assemblyaiLanguageMode() to GrokApiSettings.assemblyaiCustomLanguage()
             "elevenlabs" -> GrokApiSettings.elevenlabsLanguageMode() to GrokApiSettings.elevenlabsCustomLanguage()
+            "metamuse" -> GrokApiSettings.metamuseLanguageMode() to GrokApiSettings.metamuseCustomLanguage()
             "grok" -> GrokApiSettings.grokLanguageMode() to GrokApiSettings.grokCustomLanguage()
             else -> return selectedLiveLanguage.shortLabel
         }
@@ -2705,6 +2910,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     val providerName = when (provider) {
                         "deepgram" -> "Deepgram"
                         "assemblyai" -> "Universal-3.5 Pro"
+                        "metamuse", "muse" -> "Muse Voice"
                         "grok" -> "Grok"
                         else -> "Scribe v2"
                     }
@@ -2727,6 +2933,10 @@ class RemoteSttActivity : AppCompatActivity() {
                             GrokApiSettings.setElevenlabsCustomLanguage(normalized)
                             GrokApiSettings.setElevenlabsLanguageMode("custom")
                         }
+                        "metamuse" -> {
+                            GrokApiSettings.setMetamuseCustomLanguage(normalized)
+                            GrokApiSettings.setMetamuseLanguageMode("custom")
+                        }
                         "grok" -> {
                             GrokApiSettings.setGrokCustomLanguage(normalized)
                             GrokApiSettings.setGrokLanguageMode("custom")
@@ -2744,6 +2954,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val codes = when (provider) {
             "deepgram" -> SttLanguageSettings.DEEPGRAM_CODES.sorted().joinToString(", ")
             "assemblyai" -> SttLanguageSettings.ASSEMBLYAI_CODES.sorted().joinToString(", ")
+            "metamuse", "muse" -> SttLanguageSettings.MUSE_CODE_TO_LANGUAGE.keys.sorted().joinToString(", ")
             "grok" -> SttLanguageSettings.GROK_CODES.sorted().joinToString(", ")
             // ElevenLabs: a tela "?" mostra APENAS os códigos de 2 letras.
             else -> SttLanguageSettings.ELEVENLABS_CODES_2.sorted().joinToString(", ")
@@ -2763,6 +2974,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 when (provider) {
                     "deepgram" -> "Códigos aceitos pelo Deepgram"
                     "assemblyai" -> "Códigos aceitos pelo Universal-3.5 Pro"
+                    "metamuse", "muse" -> "Códigos aceitos pelo Muse Voice"
                     "grok" -> "Códigos aceitos pelo Grok (xAI)"
                     else -> "Códigos de idioma do Scribe v2"
                 }
@@ -2955,17 +3167,18 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun refreshGrokApiControls() {
         val config = TranscriptionModelStore.selectedConfig()
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
-            config.isAssemblyaiApi || config.isElevenlabsApi
+            config.isAssemblyaiApi || config.isElevenlabsApi || config.isMetamuseApi
         // Granite (servidor/NAR) não oferece seleção de idioma nem
         // diarização; todos os demais modelos exibem ambos.
         val graniteModel = config.name == TranscriptionModelStore.SERVER_NAME
-        // Regra de diarização por provedor: Deepgram e AssemblyAI sempre;
-        // Scribe v2 só em REST (a Ocorrência usa WebSocket/Realtime);
-        // Grok nunca; granite não exibe a checkbox.
+        // Regra de diarização por provedor: Deepgram, AssemblyAI, Grok e Muse
+        // sempre; Scribe v2 só em REST (a Ocorrência usa WebSocket/Realtime);
+        // granite não exibe a checkbox.
         val apiProvider = when {
             config.isDeepgramApi -> "deepgram"
             config.isAssemblyaiApi -> "assemblyai"
             config.isElevenlabsApi -> "elevenlabs"
+            config.isMetamuseApi -> "metamuse"
             config.isGrokApi -> "grok"
             else -> null
         }
@@ -3024,6 +3237,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 config.isDeepgramApi -> providerLanguageLabel("deepgram")
                 config.isAssemblyaiApi -> providerLanguageLabel("assemblyai")
                 config.isElevenlabsApi -> providerLanguageLabel("elevenlabs")
+                config.isMetamuseApi -> providerLanguageLabel("metamuse")
                 config.isGrokApi -> providerLanguageLabel("grok")
                 else -> selectedLiveLanguage.shortLabel
             }
@@ -3487,7 +3701,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun updateBatchOptionVisibility() {
         if (batchOptionsRow == null) return
         val hasFiles = selectedItems.isNotEmpty()
-        val zipAllowed = selectedItems.size > 1 && !TranscriptionModelStore.selectedConfig().isGrokApi
+        val zipAllowed = selectedItems.size > 1 && !TranscriptionModelStore.selectedConfig().isGrokApi &&
+            !TranscriptionModelStore.selectedConfig().isMetamuseApi
         batchOptionsRow?.visibility = if (hasFiles) View.VISIBLE else View.GONE
         checkboxSendZip?.visibility = if (zipAllowed) View.VISIBLE else View.GONE
         if (!zipAllowed && checkboxSendZip?.isChecked == true) checkboxSendZip?.isChecked = false
@@ -3661,12 +3876,17 @@ class RemoteSttActivity : AppCompatActivity() {
             status.text = "Escolha um VAD antes de usar Apenas VAD."
             return
         }
-        if (!onlyConvert && !onlyVad && serverBaseUrl.isBlank() && !TranscriptionModelStore.selectedConfig().isGrokApi) {
+        if (!onlyConvert && !onlyVad && serverBaseUrl.isBlank() && !TranscriptionModelStore.selectedConfig().isGrokApi &&
+            !TranscriptionModelStore.selectedConfig().isMetamuseApi) {
             status.text = "Informe e teste o IP do servidor."
             return
         }
         if (!onlyConvert && !onlyVad && TranscriptionModelStore.selectedConfig().isGrokApi && !GrokApiSettings.hasApiKey()) {
             status.text = "Insira a chave API do Grok nas configurações."
+            return
+        }
+        if (!onlyConvert && !onlyVad && TranscriptionModelStore.selectedConfig().isMetamuseApi && !GrokApiSettings.hasMetamuseApiKey()) {
+            status.text = "Insira a chave API do Muse Voice nas configurações."
             return
         }
         val prepareMode = (if (whiteRecording) PrepareMode.ORIGINAL else selectedPrepareMode) ?: run {
@@ -4040,6 +4260,7 @@ class RemoteSttActivity : AppCompatActivity() {
     ): List<TranscriptionResult> {
         val config = TranscriptionModelStore.selectedConfig()
         if (config.isGrokApi) throw IllegalStateException("Envio ZIP não está disponível para o Grok STT.")
+        if (config.isMetamuseApi) throw IllegalStateException("Envio ZIP não está disponível para o Muse Voice.")
         val level = compressionLevel.coerceIn(0, 9)
         val requestZip = File(tempDir, "lote_nivel_$level.zip")
         val usedNames = mutableSetOf<String>()
@@ -4414,6 +4635,12 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isElevenlabsApi) {
             return preparedUploads.sortedBy { it.index }.map { prepared ->
                 val text = sendElevenlabsApiTranscription(prepared.uploadFile)
+                TranscriptionResult(prepared.index, prepared.item.name, text)
+            }
+        }
+        if (config.isMetamuseApi) {
+            return preparedUploads.sortedBy { it.index }.map { prepared ->
+                val text = sendMetamuseApiTranscription(prepared.uploadFile)
                 TranscriptionResult(prepared.index, prepared.item.name, text)
             }
         }

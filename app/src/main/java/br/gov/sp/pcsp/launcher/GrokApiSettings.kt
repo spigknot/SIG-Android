@@ -9,6 +9,7 @@ object GrokApiSettings {
     const val DEEPGRAM_TRANSCRIPTION_NAME = "Deepgram Nova 3"
     const val ASSEMBLYAI_TRANSCRIPTION_NAME = "AssemblyAI Universal-3.5 Pro"
     const val ELEVENLABS_TRANSCRIPTION_NAME = "ElevenLabs Scribe v2 Realtime"
+    const val MUSE_TRANSCRIPTION_NAME = "Muse Voice"
     const val TEXT_NAME = "grok-4.6"
     const val GROK_NON_REASONING_TEXT_NAME = "grok-4.20-0309-non-reasoning"
     const val DEEPSEEK_TEXT_NAME = "deepseek-v4-flash"
@@ -28,6 +29,7 @@ object GrokApiSettings {
     private const val KEY_DEEPGRAM_KEYTERMS = "deepgram_keyterms"
     private const val KEY_ASSEMBLYAI_API = "assemblyai_api_key"
     private const val KEY_ELEVENLABS_API = "elevenlabs_api_key"
+    private const val KEY_MUSE_API = "metamuse_api_key"
     private const val KEY_DEEPGRAM_LANGUAGE = "deepgram_language_mode"
     private const val KEY_DEEPGRAM_CUSTOM = "deepgram_language_custom"
     private const val KEY_ASSEMBLYAI_LANGUAGE = "assemblyai_language_mode"
@@ -36,6 +38,8 @@ object GrokApiSettings {
     private const val KEY_ELEVENLABS_CUSTOM = "elevenlabs_language_custom"
     private const val KEY_GROK_LANGUAGE = "grok_language_mode"
     private const val KEY_GROK_CUSTOM = "grok_language_custom"
+    private const val KEY_MUSE_LANGUAGE = "metamuse_language_mode"
+    private const val KEY_MUSE_CUSTOM = "metamuse_language_custom"
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
     private const val KEY_HISTORY_TEXT = "history_text_model"
@@ -110,6 +114,23 @@ object GrokApiSettings {
     }
 
     fun hasElevenlabsApiKey(): Boolean = isPlausibleElevenlabsKey()
+
+    fun metamuseApiKey(): String = ApiKeyStore.get(preferences(), KEY_MUSE_API)
+
+    fun setMetamuseApiKey(value: String) {
+        ApiKeyStore.put(preferences(), KEY_MUSE_API, value)
+    }
+
+    /** Chave da Meta Model API (formato "LLM|<id>|<segredo>"). */
+    fun isPlausibleMetamuseKey(value: String = metamuseApiKey()): Boolean {
+        val key = value.trim()
+        if (key.length !in 10..300) return false
+        if (!key.startsWith("LLM|")) return false
+        return key.count { it == '|' } == 2 &&
+            key.split('|').all { it.isNotBlank() }
+    }
+
+    fun hasMetamuseApiKey(): Boolean = isPlausibleMetamuseKey()
 
     fun hasApiKey(): Boolean = isPlausibleXaiKey()
 
@@ -260,6 +281,20 @@ object GrokApiSettings {
 
     fun setGrokCustomLanguage(value: String) {
         preferences().edit().putString(KEY_GROK_CUSTOM, value.trim()).apply()
+    }
+
+    fun metamuseLanguageMode(): String =
+        preferences().getString(KEY_MUSE_LANGUAGE, "pt").orEmpty()
+
+    fun setMetamuseLanguageMode(value: String) {
+        preferences().edit().putString(KEY_MUSE_LANGUAGE, value).apply()
+    }
+
+    fun metamuseCustomLanguage(): String =
+        preferences().getString(KEY_MUSE_CUSTOM, "").orEmpty().trim()
+
+    fun setMetamuseCustomLanguage(value: String) {
+        preferences().edit().putString(KEY_MUSE_CUSTOM, value.trim()).apply()
     }
 
     private fun preferences() = SigApplication.appInstance.getSharedPreferences(

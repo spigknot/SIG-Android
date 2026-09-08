@@ -18,6 +18,9 @@ object ServiceEndpoints {
     const val ELEVENLABS_STT_REST = "https://api.elevenlabs.io/v1/speech-to-text"
     const val ELEVENLABS_STT_WEBSOCKET = "wss://api.elevenlabs.io/v1/speech-to-text/realtime"
 
+    const val MUSE_STT_REST = "https://api.meta.ai/v1/asr/transcribe"
+    const val MUSE_STT_WEBSOCKET = "wss://api.meta.ai/v1/asr/realtime"
+
     const val IA_PROXY = "http://servidor:8500"
     const val SERVER_GEMMA = "http://servidor:8400/v1/chat/completions"
     const val XAI_RESPONSES = "https://api.x.ai/v1/responses"

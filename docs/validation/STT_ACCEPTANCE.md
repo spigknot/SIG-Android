@@ -75,7 +75,9 @@ de outros provedores sem reutilizar parâmetros indevidos.
 ### Escopo
 
 Validar os handlers `handleGrokLiveEvent` e o ciclo de conexão dos provedores
-Deepgram, AssemblyAI, Scribe e Grok quando aplicável à configuração testada.
+Deepgram, AssemblyAI, Scribe, Grok e Muse quando aplicável à configuração testada.
+Para o Muse, validar também o handshake (`session`) antes do áudio e o
+`endStream` na finalização.
 
 ### Procedimento
 

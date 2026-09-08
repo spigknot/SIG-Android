@@ -10,6 +10,7 @@ internal object ApiKeysImportParser {
         DEEPGRAM,
         ASSEMBLYAI,
         ELEVENLABS,
+        METAMUSE,
         IMEI_CHECK,
     }
 
@@ -62,6 +63,7 @@ internal object ApiKeysImportParser {
             "deepgram" -> Service.DEEPGRAM
             "assemblyai" -> Service.ASSEMBLYAI
             "elevenlabs" -> Service.ELEVENLABS
+            "muse", "metamuse", "musevoice", "metamusevoice" -> Service.METAMUSE
             "imeicheck" -> Service.IMEI_CHECK
             else -> null
         }

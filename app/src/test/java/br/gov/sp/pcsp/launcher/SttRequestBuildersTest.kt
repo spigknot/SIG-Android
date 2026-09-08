@@ -166,4 +166,78 @@ class SttRequestBuildersTest {
         assertEquals("language", spec.multipartFields.single().name)
         assertEquals("files", spec.fileField)
     }
+
+    @Test
+    fun museWebSocket_hasNoQueryParamsAndBearerHeader() {
+        val spec = SttRequestBuilders.museWebSocket(apiKey = "LLM|1|secret")
+
+        assertEquals("wss://api.meta.ai/v1/asr/realtime", spec.url)
+        assertEquals(
+            SttRequestHeader("Authorization", "Bearer LLM|1|secret"),
+            spec.header,
+        )
+    }
+
+    @Test
+    fun museHandshake_carriesRawKeyAndSessionConfig() {
+        val json = org.json.JSONObject(
+            SttRequestBuilders.museHandshake(
+                apiKey = "LLM|1|secret",
+                mode = "ENDPOINTING",
+                audioEncoding = "PCM_16KHZ",
+                languageBias = listOf("Portuguese"),
+            )
+        )
+
+        // A credencial vai CRUA dentro do JSON (sem prefixo "Bearer").
+        assertEquals("LLM|1|secret", json.getJSONObject("authorization").getString("accessToken"))
+        assertEquals("PCM_16KHZ", json.getString("audioEncoding"))
+        assertEquals("muse-voice-transcribe-1.0", json.getString("model"))
+        assertEquals("ENDPOINTING", json.getString("mode"))
+        assertEquals("CUMULATIVE", json.getString("partialMode"))
+        assertEquals(false, json.getBoolean("emitAudioProgress"))
+        assertEquals("Portuguese", json.getJSONArray("languageBias").getString(0))
+    }
+
+    @Test
+    fun museHandshake_omitsLanguageBiasWhenEmpty() {
+        val json = org.json.JSONObject(
+            SttRequestBuilders.museHandshake(
+                apiKey = "LLM|1|secret",
+                mode = "DIARIZATION",
+            )
+        )
+
+        assertEquals("DIARIZATION", json.getString("mode"))
+        assertTrue(!json.has("languageBias"))
+    }
+
+    @Test
+    fun museEndStream_sendsTypedFrame() {
+        val json = org.json.JSONObject(SttRequestBuilders.museEndStream())
+
+        assertEquals("endStream", json.getString("type"))
+    }
+
+    @Test
+    fun museRest_usesBearerHeaderAndWavRequestJson() {
+        val spec = SttRequestBuilders.museRest(apiKey = "LLM|1|secret")
+        val requestJson = org.json.JSONObject(
+            SttRequestBuilders.museRestRequestJson(
+                mode = "DIARIZATION",
+                languageBias = listOf("Portuguese"),
+            )
+        )
+
+        assertEquals("https://api.meta.ai/v1/asr/transcribe", spec.url)
+        assertEquals(
+            SttRequestHeader("Authorization", "Bearer LLM|1|secret"),
+            spec.headers.single(),
+        )
+        assertEquals("audio", spec.fileField)
+        assertEquals("DIARIZATION", requestJson.getString("mode"))
+        assertEquals("muse-voice-transcribe-1.0", requestJson.getString("model"))
+        assertEquals("WAV", requestJson.getString("audioEncoding"))
+        assertEquals("Portuguese", requestJson.getJSONArray("languageBias").getString(0))
+    }
 }

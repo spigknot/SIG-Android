@@ -57,6 +57,36 @@ object SttLanguageSettings {
         "uk", "ur", "vi", "zh", "zu"
     )
 
+    /** Muse Voice: sigla digitada na UI -> nome por extenso do languageBias.
+     *  Lista validada da Meta (25 idiomas recomendados). */
+    val MUSE_CODE_TO_LANGUAGE: Map<String, String> = mapOf(
+        "ar" to "Arabic",
+        "bn" to "Bengali",
+        "nl" to "Dutch",
+        "en" to "English",
+        "fr" to "French",
+        "de" to "German",
+        "he" to "Hebrew",
+        "hi" to "Hindi",
+        "id" to "Indonesian",
+        "it" to "Italian",
+        "ja" to "Japanese",
+        "kn" to "Kannada",
+        "ko" to "Korean",
+        "ms" to "Malay",
+        "zh" to "Mandarin Chinese",
+        "mr" to "Marathi",
+        "pl" to "Polish",
+        "pt" to "Portuguese",
+        "es" to "Spanish",
+        "tl" to "Tagalog",
+        "ta" to "Tamil",
+        "te" to "Telugu",
+        "th" to "Thai",
+        "tr" to "Turkish",
+        "vi" to "Vietnamese"
+    )
+
     /** Normaliza a entrada do usuário: " en ,  es , pt " -> listOf("en", "es", "pt"). */
     fun parseCodes(raw: String): List<String> =
         raw.split(',', '\n')
@@ -72,6 +102,8 @@ object SttLanguageSettings {
 
     fun isValidGrok(code: String): Boolean = code in GROK_CODES
 
+    fun isValidMuse(code: String): Boolean = code in MUSE_CODE_TO_LANGUAGE
+
     /** Códigos inválidos para o provedor (lista vazia = tudo válido). */
     fun invalidCodes(provider: String, codes: List<String>): List<String> = codes.filter { code ->
         when (provider) {
@@ -79,6 +111,7 @@ object SttLanguageSettings {
             "assemblyai" -> !isValidAssemblyai(code)
             "elevenlabs" -> !isValidElevenlabs(code)
             "grok" -> !isValidGrok(code)
+            "metamuse", "muse" -> !isValidMuse(code)
             else -> false
         }
     }
@@ -183,5 +216,25 @@ object SttLanguageSettings {
         grokLanguageParam(
             mode = GrokApiSettings.grokLanguageMode(),
             custom = GrokApiSettings.grokCustomLanguage()
+        )
+
+    // ---------------- Muse Voice: languageBias=[<nome por extenso>] ----------------
+
+    /** Lista do languageBias do Muse (REST e WS usam o mesmo valor).
+     *  pt->[Portuguese], en->[English], es->[Spanish], multi->[] (omitir),
+     *  custom-> siglas mapeadas para o nome por extenso (códigos inválidos
+     *  são descartados aqui; a validação é feita em invalidCodes). */
+    fun museLanguageBias(mode: String, custom: String): List<String> {
+        return when {
+            mode == "multi" -> emptyList()
+            mode == "custom" -> parseCodes(custom).mapNotNull { MUSE_CODE_TO_LANGUAGE[it] }
+            else -> MUSE_CODE_TO_LANGUAGE[mode]?.let { listOf(it) } ?: emptyList()
+        }
+    }
+
+    fun museLanguageBias(): List<String> =
+        museLanguageBias(
+            mode = GrokApiSettings.metamuseLanguageMode(),
+            custom = GrokApiSettings.metamuseCustomLanguage()
         )
 }

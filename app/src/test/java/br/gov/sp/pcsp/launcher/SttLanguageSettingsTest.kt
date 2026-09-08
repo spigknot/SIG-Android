@@ -83,4 +83,27 @@ class SttLanguageSettingsTest {
         assertFalse(SttLanguageSettings.isValidAssemblyai("pt-BR"))
         assertTrue(SttLanguageSettings.isValidDeepgram("pt-BR"))
     }
+
+    @Test
+    fun muse_mapsSiglaToFullNameAndOmitsMulti() {
+        assertEquals(listOf("Portuguese"), SttLanguageSettings.museLanguageBias("pt", ""))
+        assertEquals(listOf("English"), SttLanguageSettings.museLanguageBias("en", ""))
+        assertEquals(listOf("Spanish"), SttLanguageSettings.museLanguageBias("es", ""))
+        assertTrue(SttLanguageSettings.museLanguageBias("multi", "pt").isEmpty())
+    }
+
+    @Test
+    fun muse_customMapsEachSiglaToFullName() {
+        assertEquals(
+            listOf("Portuguese", "English"),
+            SttLanguageSettings.museLanguageBias("custom", "pt, en")
+        )
+        assertEquals(
+            listOf("Mandarin Chinese"),
+            SttLanguageSettings.museLanguageBias("custom", "zh")
+        )
+        assertTrue(SttLanguageSettings.isValidMuse("pt"))
+        assertTrue(SttLanguageSettings.isValidMuse("tl"))
+        assertEquals(listOf("xx"), SttLanguageSettings.invalidCodes("metamuse", listOf("pt", "xx")))
+    }
 }

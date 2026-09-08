@@ -100,4 +100,13 @@ class SttDiarizationTest {
         assertTrue(SttDiarization.supportsDiarize("assemblyai", isLive = true))
         assertTrue(SttDiarization.supportsDiarize("assemblyai", isLive = false))
     }
+
+    // 12. Muse: diarização via mode (sem booleano); checkbox habilitada.
+    @Test
+    fun muse_usesModeNotBooleanFlag() {
+        assertEquals("DIARIZATION", SttDiarization.museMode(true))
+        assertEquals("ENDPOINTING", SttDiarization.museMode(false))
+        assertTrue(SttDiarization.supportsDiarize("metamuse", isLive = true))
+        assertTrue(SttDiarization.supportsDiarize("metamuse", isLive = false))
+    }
 }

@@ -88,4 +88,16 @@
 - Proposta do remoto (re-export [4,8,12,-1] + pools + re-quant + smoke, ~1 dia)
   é o caminho correto; anomalia L36–L39 deve ser esclarecida antes de qualquer
   fp32 parcial no fim da rede. Evidência:
-  `E:\SIG-granite-nar-lab\nar-qnn-20260829-223957\reports\verify-remote-20260906.json`.
+  `E:\SIG-granite-nar-lab\nar-qnn-20260829-223957\\reports\verify-remote-20260906.json`.
+
+## Verificação 08/09 — re-export fiel do remoto (`nar-qnn-remote-20260906-194608`)
+- Manifest verificado no R2 (51 entries, toolchain ORT 1.29.0, source_revision
+  hash, HEAD 200): re-export fiel dos 6 encoders, GATE ZERO 6/6, text-gate
+  float 5/5 multilíngue, projectors 6/6 mantidos (cos 0,9995–0,9999), pools
+  fiéis (74 áudios únicos, dedup por caminho).
+- **Piloto QDQ s0064: FALHA** — 0/6 texto idêntico (float real, QDQ vazio/"000";
+  cos 0,40–0,52, top1 0,74–0,79); smoke E2E QDQ 0/5 (CER 1,0); sensibilidade
+  10 blocos 0/16 (L04–L07 melhora cos mas não recupera texto; L36–L39 piora).
+- **Veredito §13: NÃO PASSA** → `needs-precision-review`; batch segue
+  não-candidato (§17 mantém o bloqueio). Causa B confirmada como específica
+  da chain do remoto; float local íntegro.

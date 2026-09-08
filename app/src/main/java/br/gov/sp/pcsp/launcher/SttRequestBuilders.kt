@@ -1,6 +1,8 @@
 package br.gov.sp.pcsp.launcher
 
 import java.net.URLEncoder
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * Contratos puros das requisições STT.
@@ -197,6 +199,81 @@ object SttRequestBuilders {
         ),
         header = SttRequestHeader("xi-api-key", apiKey),
     )
+
+    // ---------------- Muse Voice (Meta Model API) ----------------
+    //
+    // Diferenças para os demais provedores (cookbook oficial meta-models):
+    // - WS sem query params; a credencial vai DENTRO do 1º frame JSON em
+    //   authorization.accessToken como a chave CRUA (sem prefixo "Bearer").
+    //   Um header Authorization no handshake é ignorado pelo servidor.
+    // - O áudio do WS é PCM cru binário (16 kHz do app -> PCM_16KHZ).
+    // - Fim do áudio: frame textual {"type":"endStream"}.
+    // - A diarização é o `mode` (ENDPOINTING vs DIARIZATION), sem booleano.
+    // - REST: multipart com parte JSON "request" (application/json) + parte
+    //   "audio", header Authorization: Bearer <chave>, audioEncoding WAV.
+
+    const val MUSE_MODEL = "muse-voice-transcribe-1.0"
+    const val MUSE_AUDIO_ENCODING_LIVE_16K = "PCM_16KHZ"
+    const val MUSE_AUDIO_ENCODING_LIVE_24K = "PCM_24KHZ"
+    const val MUSE_AUDIO_ENCODING_REST = "WAV"
+
+    /** URL do WS (sem parâmetros — tudo vai no handshake JSON). O header é
+     *  incluído por simetria com os demais provedores, mas o servidor o
+     *  ignora: a credencial válida é a do handshake. */
+    fun museWebSocket(apiKey: String): SttWebSocketSpec = SttWebSocketSpec(
+        url = ServiceEndpoints.MUSE_STT_WEBSOCKET,
+        header = SttRequestHeader("Authorization", "Bearer $apiKey"),
+    )
+
+    /** 1º frame textual do WS: JSON de configuração da sessão. */
+    fun museHandshake(
+        apiKey: String,
+        mode: String,
+        audioEncoding: String = MUSE_AUDIO_ENCODING_LIVE_16K,
+        languageBias: List<String> = emptyList(),
+        keywords: List<String> = emptyList(),
+    ): String = JSONObject().apply {
+        put("authorization", JSONObject().put("accessToken", apiKey))
+        put("audioEncoding", audioEncoding)
+        put("model", MUSE_MODEL)
+        put("mode", mode)
+        put("partialMode", "CUMULATIVE")
+        put("emitAudioProgress", false)
+        if (languageBias.isNotEmpty()) {
+            put("languageBias", JSONArray().apply { languageBias.forEach { put(it) } })
+        }
+        if (keywords.isNotEmpty()) {
+            put("keywords", JSONArray().apply { keywords.forEach { put(it) } })
+        }
+    }.toString()
+
+    /** Frame textual de fim de áudio do WS. */
+    fun museEndStream(): String = JSONObject().put("type", "endStream").toString()
+
+    /** Contrato REST: URL + header (a parte JSON "request" vai em
+     *  museRestRequestJson, enviada como multipart ao lado do "audio"). */
+    fun museRest(apiKey: String): SttRequestSpec = SttRequestSpec(
+        url = ServiceEndpoints.MUSE_STT_REST,
+        headers = listOf(SttRequestHeader("Authorization", "Bearer $apiKey")),
+        fileField = "audio",
+    )
+
+    /** Corpo JSON da parte "request" do multipart REST. */
+    fun museRestRequestJson(
+        mode: String,
+        languageBias: List<String> = emptyList(),
+        keywords: List<String> = emptyList(),
+    ): String = JSONObject().apply {
+        put("mode", mode)
+        put("model", MUSE_MODEL)
+        put("audioEncoding", MUSE_AUDIO_ENCODING_REST)
+        if (languageBias.isNotEmpty()) {
+            put("languageBias", JSONArray().apply { languageBias.forEach { put(it) } })
+        }
+        if (keywords.isNotEmpty()) {
+            put("keywords", JSONArray().apply { keywords.forEach { put(it) } })
+        }
+    }.toString()
 
     private fun queryUrl(base: String, params: List<Pair<String, String>>): String =
         base + params.joinToString(prefix = "?", separator = "&") { (name, value) ->

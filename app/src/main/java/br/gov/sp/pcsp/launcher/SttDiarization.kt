@@ -1,9 +1,10 @@
 package br.gov.sp.pcsp.launcher
 
-/** Regras de diarização por provedor (Deepgram, AssemblyAI, ElevenLabs, Grok).
+/** Regras de diarização por provedor (Deepgram, AssemblyAI, ElevenLabs, Grok, Muse).
  *
  * Cada provedor tem parâmetros e suporte próprios, e o modo (REST vs
- * WebSocket) também importa: o Scribe v2 Realtime não suporta diarização.
+ * WebSocket) também importa: o Scribe v2 Realtime não suporta diarização,
+ * e o Muse controla via `mode` (ENDPOINTING vs DIARIZATION), sem booleano.
  * Este objeto concentra a construção dos parâmetros e a regra de
  * habilitação da checkbox, mantendo os fluxos isolados por provedor.
  */
@@ -19,6 +20,8 @@ object SttDiarization {
         // Grok (xAI): a documentação confirma o suporte à diarização
         // acústica (campo numérico speaker nas palavras).
         "grok" -> true
+        // Muse Voice: diarização via mode (DIARIZATION vs ENDPOINTING).
+        "metamuse", "muse" -> true
         else -> false
     }
 
@@ -46,4 +49,10 @@ object SttDiarization {
 
     /** Grok REST: diarize=true no form (o campo file deve ser o último). */
     fun grokRestDiarize(checked: Boolean): Boolean = checked
+
+    /** Muse Voice: a diarização é o `mode` da sessão (REST e WS usam o mesmo).
+     *  OFF -> ENDPOINTING (o modelo detecta as fronteiras); ON -> DIARIZATION
+     *  (endpointing + rótulos de falante A, B, ...). Não há campo booleano. */
+    fun museMode(checked: Boolean): String =
+        if (checked) "DIARIZATION" else "ENDPOINTING"
 }

@@ -15,6 +15,8 @@ class ServiceEndpointsTest {
         assertEquals("wss://streaming.assemblyai.com/v3/ws", ServiceEndpoints.ASSEMBLYAI_STT_WEBSOCKET)
         assertEquals("https://api.elevenlabs.io/v1/speech-to-text", ServiceEndpoints.ELEVENLABS_STT_REST)
         assertEquals("wss://api.elevenlabs.io/v1/speech-to-text/realtime", ServiceEndpoints.ELEVENLABS_STT_WEBSOCKET)
+        assertEquals("https://api.meta.ai/v1/asr/transcribe", ServiceEndpoints.MUSE_STT_REST)
+        assertEquals("wss://api.meta.ai/v1/asr/realtime", ServiceEndpoints.MUSE_STT_WEBSOCKET)
         assertEquals("http://servidor:8500", ServiceEndpoints.IA_PROXY)
         assertEquals("http://servidor:8400/v1/chat/completions", ServiceEndpoints.SERVER_GEMMA)
         assertEquals("https://api.x.ai/v1/responses", ServiceEndpoints.XAI_RESPONSES)

@@ -13,7 +13,8 @@ object TranscriptionModelStore {
         val isGrokApi: Boolean = false,
         val isDeepgramApi: Boolean = false,
         val isAssemblyaiApi: Boolean = false,
-        val isElevenlabsApi: Boolean = false
+        val isElevenlabsApi: Boolean = false,
+        val isMetamuseApi: Boolean = false
     ) {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
     }
@@ -52,6 +53,14 @@ object TranscriptionModelStore {
                 ServiceEndpoints.ELEVENLABS_STT_REST,
                 JSONObject().put("model", "scribe_v2"),
                 isElevenlabsApi = true
+            )
+        }
+        if (GrokApiSettings.hasMetamuseApiKey()) {
+            available += Config(
+                GrokApiSettings.MUSE_TRANSCRIPTION_NAME,
+                ServiceEndpoints.MUSE_STT_REST,
+                JSONObject().put("model", "muse-voice-transcribe-1.0"),
+                isMetamuseApi = true
             )
         }
         val selected = GrokApiSettings.selectedTranscription()

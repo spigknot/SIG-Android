@@ -52,4 +52,16 @@ class ApiKeysImportParserTest {
         assertEquals(listOf(2, 3), result.ignoredLineNumbers)
         assertTrue(result.unknownServices.none { it.contains("secret-key") })
     }
+
+    @Test
+    fun `mapeia muse voice com e sem prefixo meta`() {
+        val result = ApiKeysImportParser.parse(
+            """
+            Muse LLM|1|secret-a
+            MetaMuse LLM|2|secret-b
+            """.trimIndent()
+        )
+
+        assertEquals("LLM|2|secret-b", result.keys[ApiKeysImportParser.Service.METAMUSE])
+    }
 }

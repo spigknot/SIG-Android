@@ -93,6 +93,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                 config.isDeepgramApi -> "Deepgram Nova 3"
                 config.isAssemblyaiApi -> "AssemblyAI Universal-3.5 Pro"
                 config.isElevenlabsApi -> "ElevenLabs Scribe v2 Realtime"
+                config.isMetamuseApi -> "Muse Voice"
                 else -> "${config.name} (${config.modelName})"
             }
             transcriptionGroup.addView(radio(label, config.selected) {

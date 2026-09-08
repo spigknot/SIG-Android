@@ -17,6 +17,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     private lateinit var deepgramKey: EditText
     private lateinit var assemblyaiKey: EditText
     private lateinit var elevenlabsKey: EditText
+    private lateinit var metamuseKey: EditText
     private lateinit var imeiCheckKey: EditText
     private lateinit var buttonToggleKeys: Button
     private var keysRevealed = false
@@ -31,6 +32,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         deepgramKey = findViewById(R.id.edit_deepgram_key)
         assemblyaiKey = findViewById(R.id.edit_assemblyai_key)
         elevenlabsKey = findViewById(R.id.edit_elevenlabs_key)
+        metamuseKey = findViewById(R.id.edit_metamuse_key)
         imeiCheckKey = findViewById(R.id.edit_imei_check_key)
         buttonToggleKeys = findViewById(R.id.button_toggle_keys)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
@@ -64,6 +66,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         deepgramKey.setText(GrokApiSettings.deepgramApiKey())
         assemblyaiKey.setText(GrokApiSettings.assemblyaiApiKey())
         elevenlabsKey.setText(GrokApiSettings.elevenlabsApiKey())
+        metamuseKey.setText(GrokApiSettings.metamuseApiKey())
         imeiCheckKey.setText(ImeiApiSettings.apiKey())
         applyKeysMask()
     }
@@ -74,6 +77,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         GrokApiSettings.setDeepgramApiKey(deepgramKey.text.toString())
         GrokApiSettings.setAssemblyaiApiKey(assemblyaiKey.text.toString())
         GrokApiSettings.setElevenlabsApiKey(elevenlabsKey.text.toString())
+        GrokApiSettings.setMetamuseApiKey(metamuseKey.text.toString())
         ImeiApiSettings.setApiKey(imeiCheckKey.text.toString())
         val xaiStatus = keyStatus(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)
         val deepseekStatus = keyStatus(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)
@@ -93,7 +97,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     private fun applyKeysMask() {
         val method: android.text.method.TransformationMethod? =
             if (keysRevealed) null else PasswordTransformationMethod.getInstance()
-        listOf(xaiKey, deepseekKey, deepgramKey, assemblyaiKey, elevenlabsKey, imeiCheckKey).forEach {
+        listOf(xaiKey, deepseekKey, deepgramKey, assemblyaiKey, elevenlabsKey, metamuseKey, imeiCheckKey).forEach {
             it.transformationMethod = method
         }
         buttonToggleKeys.text = if (keysRevealed) "Ocultar" else "Revelar"
@@ -135,6 +139,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         result.keys[ApiKeysImportParser.Service.DEEPGRAM]?.let { value -> deepgramKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.ASSEMBLYAI]?.let { value -> assemblyaiKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.ELEVENLABS]?.let { value -> elevenlabsKey.setText(value) }
+        result.keys[ApiKeysImportParser.Service.METAMUSE]?.let { value -> metamuseKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.IMEI_CHECK]?.let { value -> imeiCheckKey.setText(value) }
 
         if (result.keys.isEmpty()) {
