@@ -11,6 +11,7 @@ internal object ApiKeysImportParser {
         ASSEMBLYAI,
         ELEVENLABS,
         METAMUSE,
+        ALIBABA,
         IMEI_CHECK,
     }
 
@@ -64,6 +65,7 @@ internal object ApiKeysImportParser {
             "assemblyai" -> Service.ASSEMBLYAI
             "elevenlabs" -> Service.ELEVENLABS
             "muse", "metamuse", "musevoice", "metamusevoice" -> Service.METAMUSE
+            "alibaba", "alibabafunasr/qwen" -> Service.ALIBABA
             "imeicheck" -> Service.IMEI_CHECK
             else -> null
         }

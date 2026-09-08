@@ -324,6 +324,131 @@ object SttRequestBuilders {
         }
     }
 
+    // ---------------- Alibaba Fun ASR/Qwen (DashScope nativa, Singapore) ----------------
+    //
+    // Roteamento interno pelo modo do app (o usuário vê um nome só):
+    // - REST (arquivo) -> fun-asr-flash-2026-06-15 (POST JSON com o áudio em
+    //   data URI base64, NÃO multipart, NÃO OpenAI-compatible).
+    // - WS (ao vivo) -> qwen-audio-3.0-asr-flash-streaming (run-task ->
+    //   task-started -> áudio binário -> result-generated -> finish-task ->
+    //   task-finished). Eventos chegam em header.event.
+    // - Idioma centralizado em language_hints (omitido = automático).
+    // - Sem diarização em nenhum modo.
+
+    const val ALIBABA_REST_MODEL = "fun-asr-flash-2026-06-15"
+    const val ALIBABA_WS_MODEL = "qwen-audio-3.0-asr-flash-streaming"
+    const val ALIBABA_AUTH_ERROR =
+        "API Key do Alibaba Cloud inválida ou incompatível com a região Singapore."
+    const val ALIBABA_RATE_LIMIT_ERROR =
+        "Alibaba Cloud: rate limit / limite de uso excedido. Aguarde e tente novamente."
+
+    fun alibabaRest(apiKey: String): SttRequestSpec = SttRequestSpec(
+        url = ServiceEndpoints.ALIBABA_STT_REST,
+        headers = listOf(
+            SttRequestHeader("accept", "application/json"),
+            SttRequestHeader("Content-Type", "application/json"),
+            SttRequestHeader("Authorization", "Bearer $apiKey"),
+            SttRequestHeader("X-DashScope-SSE", "disable"),
+        ),
+    )
+
+    /** Corpo JSON do REST DashScope nativo (áudio como data URI base64). */
+    fun alibabaRestBody(
+        audioDataUri: String,
+        languageHints: List<String>? = null,
+    ): String = JSONObject().apply {
+        put("model", ALIBABA_REST_MODEL)
+        put(
+            "input", JSONObject().put(
+                "messages", JSONArray().put(
+                    JSONObject()
+                        .put("role", "user")
+                        .put(
+                            "content", JSONArray().put(
+                                JSONObject()
+                                    .put("type", "input_audio")
+                                    .put(
+                                        "input_audio",
+                                        JSONObject().put("data", audioDataUri)
+                                    )
+                            )
+                        )
+                )
+            )
+        )
+        put(
+            "parameters", JSONObject()
+                .put("format", "wav")
+                .put("sample_rate", 16000)
+                .apply {
+                    if (!languageHints.isNullOrEmpty()) {
+                        put("language_hints", JSONArray().apply { languageHints.forEach { put(it) } })
+                    }
+                }
+        )
+    }.toString()
+
+    /** Evento run-task do WS DashScope (novo task_id por sessão). */
+    fun alibabaRunTask(
+        taskId: String,
+        languageHints: List<String>? = null,
+    ): String = JSONObject().apply {
+        put(
+            "header", JSONObject()
+                .put("action", "run-task")
+                .put("task_id", taskId)
+                .put("streaming", "duplex")
+        )
+        put(
+            "payload", JSONObject()
+                .put("task_group", "audio")
+                .put("task", "asr")
+                .put("function", "recognition")
+                .put("model", ALIBABA_WS_MODEL)
+                .put(
+                    "parameters", JSONObject()
+                        .put("format", "pcm")
+                        .put("sample_rate", 16000)
+                        .put("heartbeat", true)
+                        .apply {
+                            if (!languageHints.isNullOrEmpty()) {
+                                put("language_hints", JSONArray().apply { languageHints.forEach { put(it) } })
+                            }
+                        }
+                )
+                .put("input", JSONObject())
+        )
+    }.toString()
+
+    /** Evento finish-task do WS (mesmo task_id do run-task). */
+    fun alibabaFinishTask(taskId: String): String = JSONObject().apply {
+        put(
+            "header", JSONObject()
+                .put("action", "finish-task")
+                .put("task_id", taskId)
+                .put("streaming", "duplex")
+        )
+        put("payload", JSONObject().put("input", JSONObject()))
+    }.toString()
+
+    /** (texto, é_final) de um evento result-generated: frase com
+     *  sentence_end=true é segmento fechado; end_time presente também fecha;
+     *  o resto é parcial. */
+    fun alibabaSentenceText(event: JSONObject): Pair<String, Boolean> {
+        val sentence = event.optJSONObject("payload")
+            ?.optJSONObject("output")
+            ?.optJSONObject("sentence") ?: return "" to false
+        val text = sentence.optString("text").trim()
+        if (sentence.optBoolean("sentence_end", false)) return text to true
+        val closedByEndTime = sentence.has("end_time") && !sentence.isNull("end_time")
+        return text to closedByEndTime
+    }
+
+    fun alibabaWebSocket(apiKey: String): SttWebSocketSpec = SttWebSocketSpec(
+        url = ServiceEndpoints.ALIBABA_STT_WEBSOCKET,
+        header = SttRequestHeader("Authorization", "Bearer $apiKey"),
+    )
+
     private fun queryUrl(base: String, params: List<Pair<String, String>>): String =
         base + params.joinToString(prefix = "?", separator = "&") { (name, value) ->
             "${encode(name)}=${encode(value)}"

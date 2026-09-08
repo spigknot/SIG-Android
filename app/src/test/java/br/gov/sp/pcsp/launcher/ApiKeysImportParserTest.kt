@@ -64,4 +64,16 @@ class ApiKeysImportParserTest {
 
         assertEquals("LLM|2|secret-b", result.keys[ApiKeysImportParser.Service.METAMUSE])
     }
+
+    @Test
+    fun `mapeia alibaba fun asr qwen`() {
+        val result = ApiKeysImportParser.parse(
+            """
+            Alibaba Fun ASR/Qwen alibaba-key-1
+            alibaba alibaba-key-2
+            """.trimIndent()
+        )
+
+        assertEquals("alibaba-key-2", result.keys[ApiKeysImportParser.Service.ALIBABA])
+    }
 }

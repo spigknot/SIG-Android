@@ -17,6 +17,8 @@ class ServiceEndpointsTest {
         assertEquals("wss://api.elevenlabs.io/v1/speech-to-text/realtime", ServiceEndpoints.ELEVENLABS_STT_WEBSOCKET)
         assertEquals("https://api.meta.ai/v1/asr/transcribe", ServiceEndpoints.MUSE_STT_REST)
         assertEquals("wss://api.meta.ai/v1/asr/realtime", ServiceEndpoints.MUSE_STT_WEBSOCKET)
+        assertEquals("https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation", ServiceEndpoints.ALIBABA_STT_REST)
+        assertEquals("wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference", ServiceEndpoints.ALIBABA_STT_WEBSOCKET)
         assertEquals("http://servidor:8500", ServiceEndpoints.IA_PROXY)
         assertEquals("http://servidor:8400/v1/chat/completions", ServiceEndpoints.SERVER_GEMMA)
         assertEquals("https://api.x.ai/v1/responses", ServiceEndpoints.XAI_RESPONSES)

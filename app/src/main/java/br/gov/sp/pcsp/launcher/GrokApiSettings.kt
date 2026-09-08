@@ -10,6 +10,7 @@ object GrokApiSettings {
     const val ASSEMBLYAI_TRANSCRIPTION_NAME = "AssemblyAI Universal-3.5 Pro"
     const val ELEVENLABS_TRANSCRIPTION_NAME = "ElevenLabs Scribe v2 Realtime"
     const val MUSE_TRANSCRIPTION_NAME = "Muse Voice"
+    const val ALIBABA_TRANSCRIPTION_NAME = "Alibaba Fun ASR/Qwen"
     const val TEXT_NAME = "grok-4.6"
     const val GROK_NON_REASONING_TEXT_NAME = "grok-4.20-0309-non-reasoning"
     const val DEEPSEEK_TEXT_NAME = "deepseek-v4-flash"
@@ -30,6 +31,7 @@ object GrokApiSettings {
     private const val KEY_ASSEMBLYAI_API = "assemblyai_api_key"
     private const val KEY_ELEVENLABS_API = "elevenlabs_api_key"
     private const val KEY_MUSE_API = "metamuse_api_key"
+    private const val KEY_ALIBABA_API = "alibaba_api_key"
     private const val KEY_DEEPGRAM_LANGUAGE = "deepgram_language_mode"
     private const val KEY_DEEPGRAM_CUSTOM = "deepgram_language_custom"
     private const val KEY_ASSEMBLYAI_LANGUAGE = "assemblyai_language_mode"
@@ -40,6 +42,8 @@ object GrokApiSettings {
     private const val KEY_GROK_CUSTOM = "grok_language_custom"
     private const val KEY_MUSE_LANGUAGE = "metamuse_language_mode"
     private const val KEY_MUSE_CUSTOM = "metamuse_language_custom"
+    private const val KEY_ALIBABA_LANGUAGE = "alibaba_language_mode"
+    private const val KEY_ALIBABA_CUSTOM = "alibaba_language_custom"
     private const val KEY_TRANSCRIPTION = "transcription_model"
     private const val KEY_TEXT = "text_model"
     private const val KEY_HISTORY_TEXT = "history_text_model"
@@ -138,6 +142,19 @@ object GrokApiSettings {
         normalizeMetamuseKey(value).length == 48
 
     fun hasMetamuseApiKey(): Boolean = isPlausibleMetamuseKey()
+
+    fun alibabaApiKey(): String = ApiKeyStore.get(preferences(), KEY_ALIBABA_API)
+
+    fun setAlibabaApiKey(value: String) {
+        ApiKeyStore.put(preferences(), KEY_ALIBABA_API, value)
+    }
+
+    /** Chave do Alibaba Cloud Model Studio (PAYG Singapore): basta estar
+     *  preenchida — o servidor valida (401/403 mapeados na requisição). */
+    fun isPlausibleAlibabaKey(value: String = alibabaApiKey()): Boolean =
+        value.trim().isNotEmpty()
+
+    fun hasAlibabaApiKey(): Boolean = isPlausibleAlibabaKey()
 
     fun hasApiKey(): Boolean = isPlausibleXaiKey()
 
@@ -302,6 +319,20 @@ object GrokApiSettings {
 
     fun setMetamuseCustomLanguage(value: String) {
         preferences().edit().putString(KEY_MUSE_CUSTOM, value.trim()).apply()
+    }
+
+    fun alibabaLanguageMode(): String =
+        preferences().getString(KEY_ALIBABA_LANGUAGE, "pt").orEmpty()
+
+    fun setAlibabaLanguageMode(value: String) {
+        preferences().edit().putString(KEY_ALIBABA_LANGUAGE, value).apply()
+    }
+
+    fun alibabaCustomLanguage(): String =
+        preferences().getString(KEY_ALIBABA_CUSTOM, "").orEmpty().trim()
+
+    fun setAlibabaCustomLanguage(value: String) {
+        preferences().edit().putString(KEY_ALIBABA_CUSTOM, value.trim()).apply()
     }
 
     private fun preferences() = SigApplication.appInstance.getSharedPreferences(

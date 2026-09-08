@@ -106,4 +106,27 @@ class SttLanguageSettingsTest {
         assertTrue(SttLanguageSettings.isValidMuse("tl"))
         assertEquals(listOf("xx"), SttLanguageSettings.invalidCodes("metamuse", listOf("pt", "xx")))
     }
+
+    @Test
+    fun alibaba_directModesReturnSingleHint() {
+        assertEquals(listOf("pt"), SttLanguageSettings.alibabaLanguageHints("pt", ""))
+        assertEquals(listOf("en"), SttLanguageSettings.alibabaLanguageHints("en", ""))
+        assertEquals(listOf("es"), SttLanguageSettings.alibabaLanguageHints("es", ""))
+    }
+
+    @Test
+    fun alibaba_multiOmitsHints() {
+        assertNull(SttLanguageSettings.alibabaLanguageHints("multi", "pt"))
+    }
+
+    @Test
+    fun alibaba_customFiltersUnknownAndOmitsWhenEmpty() {
+        assertEquals(
+            listOf("pt", "en"),
+            SttLanguageSettings.alibabaLanguageHints("custom", "pt, en, xx")
+        )
+        assertNull(SttLanguageSettings.alibabaLanguageHints("custom", "xx, yy"))
+        assertEquals(listOf("xx"), SttLanguageSettings.invalidCodes("alibaba", listOf("pt", "xx")))
+        assertTrue(SttLanguageSettings.isValidAlibaba("zh"))
+    }
 }

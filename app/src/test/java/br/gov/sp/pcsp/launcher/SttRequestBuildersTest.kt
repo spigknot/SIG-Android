@@ -277,4 +277,102 @@ class SttRequestBuildersTest {
             wav.delete()
         }
     }
+
+    @Test
+    fun alibabaRest_usesNativeDashScopeContract() {
+        val spec = SttRequestBuilders.alibabaRest(apiKey = "sk-ws-test")
+
+        assertEquals(
+            "https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+            spec.url
+        )
+        assertEquals("Bearer sk-ws-test", spec.headers.first { it.name == "Authorization" }.value)
+        assertEquals("disable", spec.headers.first { it.name == "X-DashScope-SSE" }.value)
+        assertEquals("application/json", spec.headers.first { it.name == "Content-Type" }.value)
+
+        val json = org.json.JSONObject(
+            SttRequestBuilders.alibabaRestBody(
+                audioDataUri = "data:audio/wav;base64,AAA",
+                languageHints = listOf("pt"),
+            )
+        )
+        assertEquals("fun-asr-flash-2026-06-15", json.getString("model"))
+        val params = json.getJSONObject("parameters")
+        assertEquals("wav", params.getString("format"))
+        assertEquals(16000, params.getInt("sample_rate"))
+        assertEquals("pt", params.getJSONArray("language_hints").getString(0))
+        val audio = json.getJSONObject("input")
+            .getJSONArray("messages").getJSONObject(0)
+            .getJSONArray("content").getJSONObject(0)
+            .getJSONObject("input_audio").getString("data")
+        assertEquals("data:audio/wav;base64,AAA", audio)
+    }
+
+    @Test
+    fun alibabaRestBody_autoOmitsHints() {
+        val json = org.json.JSONObject(
+            SttRequestBuilders.alibabaRestBody(audioDataUri = "x", languageHints = null)
+        )
+
+        assertTrue(!json.getJSONObject("parameters").has("language_hints"))
+        assertEquals("wav", json.getJSONObject("parameters").getString("format"))
+    }
+
+    @Test
+    fun alibabaRunTask_shapeAndHeartbeat() {
+        val json = org.json.JSONObject(
+            SttRequestBuilders.alibabaRunTask(taskId = "tid-123", languageHints = listOf("pt"))
+        )
+
+        assertEquals("run-task", json.getJSONObject("header").getString("action"))
+        assertEquals("tid-123", json.getJSONObject("header").getString("task_id"))
+        assertEquals("duplex", json.getJSONObject("header").getString("streaming"))
+        val payload = json.getJSONObject("payload")
+        assertEquals("audio", payload.getString("task_group"))
+        assertEquals("asr", payload.getString("task"))
+        assertEquals("recognition", payload.getString("function"))
+        assertEquals(
+            "qwen-audio-3.0-asr-flash-streaming",
+            payload.getString("model")
+        )
+        val params = payload.getJSONObject("parameters")
+        assertEquals("pcm", params.getString("format"))
+        assertEquals(16000, params.getInt("sample_rate"))
+        assertEquals(true, params.getBoolean("heartbeat"))
+        assertEquals("pt", params.getJSONArray("language_hints").getString(0))
+    }
+
+    @Test
+    fun alibabaFinishTask_reusesTaskId() {
+        val json = org.json.JSONObject(SttRequestBuilders.alibabaFinishTask("tid-123"))
+
+        assertEquals("finish-task", json.getJSONObject("header").getString("action"))
+        assertEquals("tid-123", json.getJSONObject("header").getString("task_id"))
+        assertEquals("duplex", json.getJSONObject("header").getString("streaming"))
+    }
+
+    @Test
+    fun alibabaSentenceText_distinguishesFinalAndPartial() {
+        val final = org.json.JSONObject(
+            "{\"payload\":{\"output\":{\"sentence\":{\"text\":\"Olá\",\"sentence_end\":true}}}}"
+        )
+        assertEquals("Olá" to true, SttRequestBuilders.alibabaSentenceText(final))
+
+        val partial = org.json.JSONObject(
+            "{\"payload\":{\"output\":{\"sentence\":{\"text\":\"Olá\"}}}}"
+        )
+        assertEquals("Olá" to false, SttRequestBuilders.alibabaSentenceText(partial))
+        assertEquals("" to false, SttRequestBuilders.alibabaSentenceText(org.json.JSONObject("{}")))
+    }
+
+    @Test
+    fun alibabaWebSocket_usesSharedSingaporeEndpoint() {
+        val spec = SttRequestBuilders.alibabaWebSocket(apiKey = "sk-ws-test")
+
+        assertEquals("wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference", spec.url)
+        assertEquals(
+            SttRequestHeader("Authorization", "Bearer sk-ws-test"),
+            spec.header,
+        )
+    }
 }

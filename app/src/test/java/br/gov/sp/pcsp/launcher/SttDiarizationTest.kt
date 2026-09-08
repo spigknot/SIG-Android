@@ -109,4 +109,11 @@ class SttDiarizationTest {
         assertTrue(SttDiarization.supportsDiarize("metamuse", isLive = true))
         assertTrue(SttDiarization.supportsDiarize("metamuse", isLive = false))
     }
+
+    // 13. Alibaba: sem diarização em nenhum modo.
+    @Test
+    fun alibaba_neverSupportsDiarize() {
+        assertFalse(SttDiarization.supportsDiarize("alibaba", isLive = true))
+        assertFalse(SttDiarization.supportsDiarize("alibaba", isLive = false))
+    }
 }

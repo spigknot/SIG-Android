@@ -1,10 +1,11 @@
 package br.gov.sp.pcsp.launcher
 
-/** Regras de diarização por provedor (Deepgram, AssemblyAI, ElevenLabs, Grok, Muse).
+/** Regras de diarização por provedor (Deepgram, AssemblyAI, ElevenLabs, Grok, Muse, Alibaba).
  *
  * Cada provedor tem parâmetros e suporte próprios, e o modo (REST vs
  * WebSocket) também importa: o Scribe v2 Realtime não suporta diarização,
- * e o Muse controla via `mode` (ENDPOINTING vs DIARIZATION), sem booleano.
+ * o Muse controla via `mode` (ENDPOINTING vs DIARIZATION, sem booleano) e
+ * o Alibaba não tem diarização em nenhum modo.
  * Este objeto concentra a construção dos parâmetros e a regra de
  * habilitação da checkbox, mantendo os fluxos isolados por provedor.
  */
@@ -22,6 +23,8 @@ object SttDiarization {
         "grok" -> true
         // Muse Voice: diarização via mode (DIARIZATION vs ENDPOINTING).
         "metamuse", "muse" -> true
+        // Alibaba Fun ASR/Qwen: sem diarização em nenhum modo.
+        "alibaba" -> false
         else -> false
     }
 

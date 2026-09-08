@@ -104,6 +104,16 @@ object SttLanguageSettings {
 
     fun isValidMuse(code: String): Boolean = code in MUSE_CODE_TO_LANGUAGE
 
+    /** Alibaba Fun ASR/Qwen: siglas cobertas pelo fun-asr-flash (REST) e
+     *  pelo qwen-audio-3.0-asr-flash-streaming (WS). */
+    val ALIBABA_CODES: Set<String> = setOf(
+        "zh", "en", "ja", "ko", "vi", "th", "id", "ms", "tl", "hi", "ar", "fr",
+        "de", "es", "pt", "ru", "it", "nl", "sv", "da", "fi", "no", "el", "pl",
+        "cs", "hu", "ro", "bg", "hr", "sk"
+    )
+
+    fun isValidAlibaba(code: String): Boolean = code in ALIBABA_CODES
+
     /** Códigos inválidos para o provedor (lista vazia = tudo válido). */
     fun invalidCodes(provider: String, codes: List<String>): List<String> = codes.filter { code ->
         when (provider) {
@@ -112,6 +122,7 @@ object SttLanguageSettings {
             "elevenlabs" -> !isValidElevenlabs(code)
             "grok" -> !isValidGrok(code)
             "metamuse", "muse" -> !isValidMuse(code)
+            "alibaba" -> !isValidAlibaba(code)
             else -> false
         }
     }
@@ -236,5 +247,26 @@ object SttLanguageSettings {
         museLanguageBias(
             mode = GrokApiSettings.metamuseLanguageMode(),
             custom = GrokApiSettings.metamuseCustomLanguage()
+        )
+
+    // ---------------- Alibaba: language_hints centralizado (REST e WS) ----------------
+
+    /** Função CENTRALIZADA de idioma do Alibaba (REST e WS usam esta).
+     *  Retorna a lista para `language_hints` ou null para OMITIR a
+     *  propriedade (detecção automática: nunca lista vazia/"auto").
+     *  Códigos fora da tabela são ignorados; se nenhum restar, null. */
+    fun alibabaLanguageHints(mode: String, custom: String): List<String>? {
+        val codes = when {
+            mode == "multi" -> return null
+            mode == "custom" -> parseCodes(custom)
+            else -> listOf(mode)
+        }
+        return codes.filter { it in ALIBABA_CODES }.takeIf { it.isNotEmpty() }
+    }
+
+    fun alibabaLanguageHints(): List<String>? =
+        alibabaLanguageHints(
+            mode = GrokApiSettings.alibabaLanguageMode(),
+            custom = GrokApiSettings.alibabaCustomLanguage()
         )
 }

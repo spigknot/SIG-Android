@@ -18,6 +18,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     private lateinit var assemblyaiKey: EditText
     private lateinit var elevenlabsKey: EditText
     private lateinit var metamuseKey: EditText
+    private lateinit var alibabaKey: EditText
     private lateinit var imeiCheckKey: EditText
     private lateinit var buttonToggleKeys: Button
     private var keysRevealed = false
@@ -33,6 +34,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         assemblyaiKey = findViewById(R.id.edit_assemblyai_key)
         elevenlabsKey = findViewById(R.id.edit_elevenlabs_key)
         metamuseKey = findViewById(R.id.edit_metamuse_key)
+        alibabaKey = findViewById(R.id.edit_alibaba_key)
         imeiCheckKey = findViewById(R.id.edit_imei_check_key)
         buttonToggleKeys = findViewById(R.id.button_toggle_keys)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
@@ -67,6 +69,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         assemblyaiKey.setText(GrokApiSettings.assemblyaiApiKey())
         elevenlabsKey.setText(GrokApiSettings.elevenlabsApiKey())
         metamuseKey.setText(GrokApiSettings.metamuseApiKey())
+        alibabaKey.setText(GrokApiSettings.alibabaApiKey())
         imeiCheckKey.setText(ImeiApiSettings.apiKey())
         applyKeysMask()
     }
@@ -78,6 +81,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         GrokApiSettings.setAssemblyaiApiKey(assemblyaiKey.text.toString())
         GrokApiSettings.setElevenlabsApiKey(elevenlabsKey.text.toString())
         GrokApiSettings.setMetamuseApiKey(metamuseKey.text.toString())
+        GrokApiSettings.setAlibabaApiKey(alibabaKey.text.toString())
         ImeiApiSettings.setApiKey(imeiCheckKey.text.toString())
         // Só avisa quando há chave preenchida mas inválida; em branco
         // (não informada) ou válida, o salvamento é silencioso.
@@ -109,7 +113,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     private fun applyKeysMask() {
         val method: android.text.method.TransformationMethod? =
             if (keysRevealed) null else PasswordTransformationMethod.getInstance()
-        listOf(xaiKey, deepseekKey, deepgramKey, assemblyaiKey, elevenlabsKey, metamuseKey, imeiCheckKey).forEach {
+        listOf(xaiKey, deepseekKey, deepgramKey, assemblyaiKey, elevenlabsKey, metamuseKey, alibabaKey, imeiCheckKey).forEach {
             it.transformationMethod = method
         }
         buttonToggleKeys.text = if (keysRevealed) "Ocultar" else "Revelar"
@@ -152,6 +156,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         result.keys[ApiKeysImportParser.Service.ASSEMBLYAI]?.let { value -> assemblyaiKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.ELEVENLABS]?.let { value -> elevenlabsKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.METAMUSE]?.let { value -> metamuseKey.setText(value) }
+        result.keys[ApiKeysImportParser.Service.ALIBABA]?.let { value -> alibabaKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.IMEI_CHECK]?.let { value -> imeiCheckKey.setText(value) }
 
         if (result.keys.isEmpty()) {

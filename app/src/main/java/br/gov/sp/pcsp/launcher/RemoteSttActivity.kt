@@ -276,6 +276,8 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var sttIsAssemblyai = false
     @Volatile private var sttIsElevenlabs = false
     @Volatile private var sttIsMetamuse = false
+    @Volatile private var sttIsAlibaba = false
+    @Volatile private var alibabaTaskId: String? = null
     @Volatile private var liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
     private var liveThread: Thread? = null
     private var liveUploadExecutor: ExecutorService? = null
@@ -1199,11 +1201,12 @@ class RemoteSttActivity : AppCompatActivity() {
         wasDiarizationRequested = checkboxLiveDiarize.isChecked && checkboxLiveDiarize.isEnabled
         val useWebSocket = transcriptionConfig.isGrokApi || transcriptionConfig.isDeepgramApi ||
             transcriptionConfig.isAssemblyaiApi || transcriptionConfig.isElevenlabsApi ||
-            transcriptionConfig.isMetamuseApi
+            transcriptionConfig.isMetamuseApi || transcriptionConfig.isAlibabaApi
         sttIsDeepgram = transcriptionConfig.isDeepgramApi
         sttIsAssemblyai = transcriptionConfig.isAssemblyaiApi
         sttIsElevenlabs = transcriptionConfig.isElevenlabsApi
         sttIsMetamuse = transcriptionConfig.isMetamuseApi
+        sttIsAlibaba = transcriptionConfig.isAlibabaApi
         if (serverBaseUrl.isBlank() && !useWebSocket) {
             status.text = "Informe e teste o IP do servidor."
             return
@@ -1226,6 +1229,10 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         if (useWebSocket && transcriptionConfig.isMetamuseApi && !GrokApiSettings.hasMetamuseApiKey()) {
             status.text = "Insira a chave API do Muse Voice nas configurações."
+            return
+        }
+        if (useWebSocket && transcriptionConfig.isAlibabaApi && !GrokApiSettings.hasAlibabaApiKey()) {
+            status.text = "Insira a chave API do Alibaba Cloud nas configurações."
             return
         }
         if (isProcessing) return
@@ -1278,6 +1285,7 @@ class RemoteSttActivity : AppCompatActivity() {
         assemblyaiSpeakerNumbers.clear()
         metamuseSpeakerNumbers.clear()
         metamuseCurrentSpeaker = null
+        alibabaTaskId = null
         cancelGrokReconnectCallbacks()
         deepgramFinishRunnable?.let(handler::removeCallbacks)
         deepgramFinishRunnable = null
@@ -1373,6 +1381,9 @@ class RemoteSttActivity : AppCompatActivity() {
             sttIsMetamuse -> SttRequestBuilders.museWebSocket(
                 apiKey = GrokApiSettings.metamuseApiKey(),
             )
+            sttIsAlibaba -> SttRequestBuilders.alibabaWebSocket(
+                apiKey = GrokApiSettings.alibabaApiKey(),
+            )
             else -> SttRequestBuilders.grokWebSocket(
                 apiKey = GrokApiSettings.apiKey(),
                 language = SttLanguageSettings.grokLanguageParam(),
@@ -1409,6 +1420,24 @@ class RemoteSttActivity : AppCompatActivity() {
                     // Deepgram (Metadata ~12s), AssemblyAI e Scribe aceitam áudio
                     // assim que o socket abre (onOpen).
                     onGrokWebSocketReady(webSocket)
+                } else if (sttIsAlibaba) {
+                    // DashScope: a credencial vai no header do handshake; aqui
+                    // envia o run-task (UUID novo por sessão) e aguarda o
+                    // task-started antes de liberar o áudio.
+                    val taskId = java.util.UUID.randomUUID().toString().replace("-", "")
+                    alibabaTaskId = taskId
+                    val runTask = SttRequestBuilders.alibabaRunTask(
+                        taskId = taskId,
+                        languageHints = SttLanguageSettings.alibabaLanguageHints(),
+                    )
+                    if (!webSocket.send(runTask)) {
+                        handleGrokWebSocketDisconnect(webSocket, "não consegui enviar o run-task do Alibaba")
+                        return
+                    }
+                    emitGrokConnectionEvent(
+                        if (isReconnectAttempt) GrokConnectionEvent.RECONNECTING else GrokConnectionEvent.CONNECTING,
+                        "run-task enviado; aguardando task-started"
+                    )
                 } else {
                     emitGrokConnectionEvent(
                         if (isReconnectAttempt) GrokConnectionEvent.RECONNECTING else GrokConnectionEvent.CONNECTING,
@@ -1457,9 +1486,11 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         // O Scribe v2 usa "message_type"; os demais provedores usam "type".
         // O Muse responde o handshake como {"sessionId":"..."} puro, sem "type".
+        // O Alibaba (DashScope) tipa os eventos em header.event.
         val eventType = event.optString("type")
             .ifBlank { event.optString("message_type") }
             .ifBlank { if (event.has("sessionId")) "session" else "" }
+            .ifBlank { event.optJSONObject("header")?.optString("event").orEmpty() }
         when (eventType) {
             "transcript.created" -> onGrokWebSocketReady(webSocket)
             "Metadata" -> if (sttIsDeepgram) onGrokWebSocketReady(webSocket)
@@ -1668,6 +1699,31 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             "speechStart", "speechEnd" -> if (sttIsMetamuse) {
                 runOnUiThread { updateLiveTerminalText() }
+            }
+            // ---------------- Alibaba (DashScope) ----------------
+            // run-task -> task-started -> áudio binário -> result-generated
+            // (sentence_end fecha o segmento) -> finish-task -> task-finished.
+            "task-started" -> if (sttIsAlibaba) onGrokWebSocketReady(webSocket)
+            "result-generated" -> if (sttIsAlibaba) {
+                val (rawText, isFinal) = SttRequestBuilders.alibabaSentenceText(event)
+                if (rawText.isEmpty()) return
+                synchronized(grokLiveFinalSegments) {
+                    if (isFinal) {
+                        if (grokLiveFinalSegments.lastOrNull() != rawText) grokLiveFinalSegments += rawText
+                        grokLivePartialSegment = ""
+                    } else {
+                        grokLivePartialSegment = rawText
+                    }
+                    updateGrokLiveTranscriptLocked()
+                }
+                runOnUiThread { updateLiveTerminalText() }
+                if (isFinal && grokFinishRequested && !grokCompletionHandled) {
+                    rescheduleDeepgramFastFinish()
+                }
+            }
+            "task-finished" -> if (sttIsAlibaba) completeGrokLiveTranscription(webSocket, "")
+            "task-failed" -> if (sttIsAlibaba) {
+                handleGrokWebSocketDisconnect(webSocket, alibabaWsErrorMessage(event))
             }
             "transcript.partial" -> {
                 val text = formatGrokDiarizedTranscript(event, event.optString("text").trim())
@@ -2015,6 +2071,7 @@ class RemoteSttActivity : AppCompatActivity() {
             sttIsDeepgram -> "{\"type\":\"CloseStream\"}"
             sttIsAssemblyai -> "{\"type\":\"Terminate\"}"
             sttIsMetamuse -> SttRequestBuilders.museEndStream()
+            sttIsAlibaba -> SttRequestBuilders.alibabaFinishTask(alibabaTaskId.orEmpty())
             sttIsElevenlabs -> {
                 // Força a finalização com um chunk de silêncio commitado (a VAD
                 // fecharia sozinha, mas o commit garante o último segmento).
@@ -2074,7 +2131,26 @@ class RemoteSttActivity : AppCompatActivity() {
         sttIsAssemblyai -> "AssemblyAI"
         sttIsElevenlabs -> "Scribe"
         sttIsMetamuse -> "Muse"
+        sttIsAlibaba -> "Alibaba"
         else -> "Grok"
+    }
+
+    /** Mensagem de erro de um evento task-failed do Alibaba (header com
+     *  error_code/error_message), com os mapeamentos de auth e rate limit. */
+    private fun alibabaWsErrorMessage(event: JSONObject): String {
+        val header = event.optJSONObject("header")
+        val code = header?.optString("error_code").orEmpty()
+        val message = header?.optString("error_message")
+            ?.ifBlank { header.optString("message") }.orEmpty().trim()
+        if (code in listOf("InvalidApiKey", "Unauthorized", "Forbidden", "AccessDenied") ||
+            "401" in code || "403" in code
+        ) {
+            return SttRequestBuilders.ALIBABA_AUTH_ERROR
+        }
+        if (code == "Throttling" || "429" in code || "limit" in message.lowercase()) {
+            return SttRequestBuilders.ALIBABA_RATE_LIMIT_ERROR
+        }
+        return message.ifBlank { "erro ${code.ifBlank { "desconhecido" }} do Alibaba" }
     }
 
     private fun emitGrokConnectionEvent(event: GrokConnectionEvent, detail: String? = null) {
@@ -2453,6 +2529,7 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isAssemblyaiApi) return sendAssemblyaiApiTranscription(uploadFile, isFinal)
         if (config.isElevenlabsApi) return sendElevenlabsApiTranscription(uploadFile, isFinal)
         if (config.isMetamuseApi) return sendMetamuseApiTranscription(uploadFile, isFinal)
+        if (config.isAlibabaApi) return sendAlibabaApiTranscription(uploadFile, isFinal)
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addTranscriptionParameters(config)
@@ -2737,6 +2814,90 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun sendAlibabaApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
+        val apiKey = GrokApiSettings.alibabaApiKey()
+        require(GrokApiSettings.isPlausibleAlibabaKey(apiKey)) { "Insira a chave API do Alibaba Cloud nas configurações." }
+        val requestSpec = SttRequestBuilders.alibabaRest(apiKey = apiKey)
+        val wavBytes = uploadFile.file.readBytes()
+        val dataUri = "data:audio/wav;base64," +
+            android.util.Base64.encodeToString(wavBytes, android.util.Base64.NO_WRAP)
+        val requestJson = SttRequestBuilders.alibabaRestBody(
+            audioDataUri = dataUri,
+            languageHints = SttLanguageSettings.alibabaLanguageHints(),
+        )
+        val call = client.newCall(
+            Request.Builder()
+                .url(requestSpec.url)
+                .apply {
+                    requestSpec.headers.forEach { header(it.name, it.value) }
+                }
+                .post(requestJson.toRequestBody("application/json".toMediaType()))
+                .build()
+        )
+        currentCalls.add(call)
+        if (isLiveFinal != null) {
+            synchronized(liveRequestLock) {
+                liveCurrentCall = call
+                liveCurrentCallIsFinal = isLiveFinal
+            }
+        }
+        try {
+            call.execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                val code = response.code
+                if (code == 401 || code == 403) {
+                    throw IllegalStateException("${SttRequestBuilders.ALIBABA_AUTH_ERROR} (HTTP $code)")
+                }
+                if (code == 429) {
+                    throw IllegalStateException("${SttRequestBuilders.ALIBABA_RATE_LIMIT_ERROR} (HTTP 429)")
+                }
+                val payload = runCatching { JSONObject(body) }.getOrNull()
+                val errorCode = payload?.optString("code").orEmpty()
+                val errorMessage = payload?.optString("message").orEmpty()
+                if (errorCode in listOf("InvalidApiKey", "Unauthorized", "Forbidden", "AccessDenied")) {
+                    throw IllegalStateException(SttRequestBuilders.ALIBABA_AUTH_ERROR)
+                }
+                if (errorCode == "CLIENT_ERROR" && "NO_WORDS" in errorMessage) {
+                    return ""
+                }
+                if (!response.isSuccessful) {
+                    throw IllegalStateException("Alibaba respondeu $code: ${body.take(240)}")
+                }
+                if (errorCode.isNotBlank()) {
+                    throw IllegalStateException("$errorCode: ${errorMessage.ifBlank { "erro desconhecido" }}")
+                }
+                return formatAlibabaRestResponse(payload ?: JSONObject())
+            }
+        } finally {
+            currentCalls.remove(call)
+            if (isLiveFinal != null) {
+                synchronized(liveRequestLock) {
+                    if (liveCurrentCall == call) {
+                        liveCurrentCall = null
+                        liveCurrentCallIsFinal = false
+                    }
+                }
+            }
+        }
+    }
+
+    /** Texto do REST DashScope: output.text, choices ou "" (sem fala). */
+    private fun formatAlibabaRestResponse(payload: JSONObject): String {
+        val output = payload.optJSONObject("output") ?: return ""
+        output.optString("text").trim().takeIf { it.isNotBlank() }?.let { return it }
+        val choices = output.optJSONArray("choices") ?: return ""
+        for (index in 0 until choices.length()) {
+            val message = choices.optJSONObject(index)?.optJSONObject("message") ?: continue
+            message.optString("content").trim().takeIf { it.isNotBlank() }?.let { return it }
+            val parts = message.optJSONArray("content") ?: continue
+            for (part in 0 until parts.length()) {
+                parts.optJSONObject(part)?.optString("text")?.trim()
+                    ?.takeIf { it.isNotBlank() }?.let { return it }
+            }
+        }
+        return ""
+    }
+
     private fun formatGrokDiarizedTranscript(payload: JSONObject, fallback: String): String {
         if (!checkboxLiveDiarize.isChecked) return fallback
         val words = payload.optJSONArray("words") ?: return fallback
@@ -2806,6 +2967,7 @@ class RemoteSttActivity : AppCompatActivity() {
             config.isAssemblyaiApi -> "assemblyai"
             config.isElevenlabsApi -> "elevenlabs"
             config.isMetamuseApi -> "metamuse"
+            config.isAlibabaApi -> "alibaba"
             config.isGrokApi -> "grok"
             else -> null
         }
@@ -2847,6 +3009,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "assemblyai" -> GrokApiSettings.setAssemblyaiLanguageMode(mode)
             "elevenlabs" -> GrokApiSettings.setElevenlabsLanguageMode(mode)
             "metamuse" -> GrokApiSettings.setMetamuseLanguageMode(mode)
+            "alibaba" -> GrokApiSettings.setAlibabaLanguageMode(mode)
             "grok" -> GrokApiSettings.setGrokLanguageMode(mode)
         }
     }
@@ -2857,6 +3020,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "assemblyai" -> GrokApiSettings.assemblyaiLanguageMode() to GrokApiSettings.assemblyaiCustomLanguage()
             "elevenlabs" -> GrokApiSettings.elevenlabsLanguageMode() to GrokApiSettings.elevenlabsCustomLanguage()
             "metamuse" -> GrokApiSettings.metamuseLanguageMode() to GrokApiSettings.metamuseCustomLanguage()
+            "alibaba" -> GrokApiSettings.alibabaLanguageMode() to GrokApiSettings.alibabaCustomLanguage()
             "grok" -> GrokApiSettings.grokLanguageMode() to GrokApiSettings.grokCustomLanguage()
             else -> return selectedLiveLanguage.shortLabel
         }
@@ -2913,6 +3077,7 @@ class RemoteSttActivity : AppCompatActivity() {
                         "deepgram" -> "Deepgram"
                         "assemblyai" -> "Universal-3.5 Pro"
                         "metamuse", "muse" -> "Muse Voice"
+                        "alibaba" -> "Alibaba Fun ASR/Qwen"
                         "grok" -> "Grok"
                         else -> "Scribe v2"
                     }
@@ -2939,6 +3104,10 @@ class RemoteSttActivity : AppCompatActivity() {
                             GrokApiSettings.setMetamuseCustomLanguage(normalized)
                             GrokApiSettings.setMetamuseLanguageMode("custom")
                         }
+                        "alibaba" -> {
+                            GrokApiSettings.setAlibabaCustomLanguage(normalized)
+                            GrokApiSettings.setAlibabaLanguageMode("custom")
+                        }
                         "grok" -> {
                             GrokApiSettings.setGrokCustomLanguage(normalized)
                             GrokApiSettings.setGrokLanguageMode("custom")
@@ -2957,6 +3126,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "deepgram" -> SttLanguageSettings.DEEPGRAM_CODES.sorted().joinToString(", ")
             "assemblyai" -> SttLanguageSettings.ASSEMBLYAI_CODES.sorted().joinToString(", ")
             "metamuse", "muse" -> SttLanguageSettings.MUSE_CODE_TO_LANGUAGE.keys.sorted().joinToString(", ")
+            "alibaba" -> SttLanguageSettings.ALIBABA_CODES.sorted().joinToString(", ")
             "grok" -> SttLanguageSettings.GROK_CODES.sorted().joinToString(", ")
             // ElevenLabs: a tela "?" mostra APENAS os códigos de 2 letras.
             else -> SttLanguageSettings.ELEVENLABS_CODES_2.sorted().joinToString(", ")
@@ -2977,6 +3147,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     "deepgram" -> "Códigos aceitos pelo Deepgram"
                     "assemblyai" -> "Códigos aceitos pelo Universal-3.5 Pro"
                     "metamuse", "muse" -> "Códigos aceitos pelo Muse Voice"
+                    "alibaba" -> "Códigos aceitos pelo Alibaba Fun ASR/Qwen"
                     "grok" -> "Códigos aceitos pelo Grok (xAI)"
                     else -> "Códigos de idioma do Scribe v2"
                 }
@@ -3169,7 +3340,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun refreshGrokApiControls() {
         val config = TranscriptionModelStore.selectedConfig()
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
-            config.isAssemblyaiApi || config.isElevenlabsApi || config.isMetamuseApi
+            config.isAssemblyaiApi || config.isElevenlabsApi || config.isMetamuseApi ||
+            config.isAlibabaApi
         // Granite (servidor/NAR) não oferece seleção de idioma nem
         // diarização; todos os demais modelos exibem ambos.
         val graniteModel = config.name == TranscriptionModelStore.SERVER_NAME
@@ -3181,6 +3353,7 @@ class RemoteSttActivity : AppCompatActivity() {
             config.isAssemblyaiApi -> "assemblyai"
             config.isElevenlabsApi -> "elevenlabs"
             config.isMetamuseApi -> "metamuse"
+            config.isAlibabaApi -> "alibaba"
             config.isGrokApi -> "grok"
             else -> null
         }
@@ -3226,8 +3399,12 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun showDiarizationHelp() {
+        val config = TranscriptionModelStore.selectedConfig()
         AlertDialog.Builder(this)
-            .setMessage("A diarização identifica interlocutores diferentes na transcrição. As falas de cada pessoa recebem rótulos como Interlocutor 1 e Interlocutor 2.")
+            .setMessage(
+                if (config.isAlibabaApi) "Diarização não disponível para Alibaba Fun ASR/Qwen."
+                else "A diarização identifica interlocutores diferentes na transcrição. As falas de cada pessoa recebem rótulos como Interlocutor 1 e Interlocutor 2."
+            )
             .setPositiveButton("OK", null)
             .show()
     }
@@ -3240,6 +3417,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 config.isAssemblyaiApi -> providerLanguageLabel("assemblyai")
                 config.isElevenlabsApi -> providerLanguageLabel("elevenlabs")
                 config.isMetamuseApi -> providerLanguageLabel("metamuse")
+                config.isAlibabaApi -> providerLanguageLabel("alibaba")
                 config.isGrokApi -> providerLanguageLabel("grok")
                 else -> selectedLiveLanguage.shortLabel
             }
@@ -3704,7 +3882,8 @@ class RemoteSttActivity : AppCompatActivity() {
         if (batchOptionsRow == null) return
         val hasFiles = selectedItems.isNotEmpty()
         val zipAllowed = selectedItems.size > 1 && !TranscriptionModelStore.selectedConfig().isGrokApi &&
-            !TranscriptionModelStore.selectedConfig().isMetamuseApi
+            !TranscriptionModelStore.selectedConfig().isMetamuseApi &&
+            !TranscriptionModelStore.selectedConfig().isAlibabaApi
         batchOptionsRow?.visibility = if (hasFiles) View.VISIBLE else View.GONE
         checkboxSendZip?.visibility = if (zipAllowed) View.VISIBLE else View.GONE
         if (!zipAllowed && checkboxSendZip?.isChecked == true) checkboxSendZip?.isChecked = false
@@ -3879,12 +4058,17 @@ class RemoteSttActivity : AppCompatActivity() {
             return
         }
         if (!onlyConvert && !onlyVad && serverBaseUrl.isBlank() && !TranscriptionModelStore.selectedConfig().isGrokApi &&
-            !TranscriptionModelStore.selectedConfig().isMetamuseApi) {
+            !TranscriptionModelStore.selectedConfig().isMetamuseApi &&
+            !TranscriptionModelStore.selectedConfig().isAlibabaApi) {
             status.text = "Informe e teste o IP do servidor."
             return
         }
         if (!onlyConvert && !onlyVad && TranscriptionModelStore.selectedConfig().isGrokApi && !GrokApiSettings.hasApiKey()) {
             status.text = "Insira a chave API do Grok nas configurações."
+            return
+        }
+        if (!onlyConvert && !onlyVad && TranscriptionModelStore.selectedConfig().isAlibabaApi && !GrokApiSettings.hasAlibabaApiKey()) {
+            status.text = "Insira a chave API do Alibaba Cloud nas configurações."
             return
         }
         if (!onlyConvert && !onlyVad && TranscriptionModelStore.selectedConfig().isMetamuseApi && !GrokApiSettings.hasMetamuseApiKey()) {
@@ -4263,6 +4447,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val config = TranscriptionModelStore.selectedConfig()
         if (config.isGrokApi) throw IllegalStateException("Envio ZIP não está disponível para o Grok STT.")
         if (config.isMetamuseApi) throw IllegalStateException("Envio ZIP não está disponível para o Muse Voice.")
+        if (config.isAlibabaApi) throw IllegalStateException("Envio ZIP não está disponível para o Alibaba Fun ASR/Qwen.")
         val level = compressionLevel.coerceIn(0, 9)
         val requestZip = File(tempDir, "lote_nivel_$level.zip")
         val usedNames = mutableSetOf<String>()
@@ -4643,6 +4828,12 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isMetamuseApi) {
             return preparedUploads.sortedBy { it.index }.map { prepared ->
                 val text = sendMetamuseApiTranscription(prepared.uploadFile)
+                TranscriptionResult(prepared.index, prepared.item.name, text)
+            }
+        }
+        if (config.isAlibabaApi) {
+            return preparedUploads.sortedBy { it.index }.map { prepared ->
+                val text = sendAlibabaApiTranscription(prepared.uploadFile)
                 TranscriptionResult(prepared.index, prepared.item.name, text)
             }
         }

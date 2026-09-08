@@ -94,6 +94,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                 config.isAssemblyaiApi -> "AssemblyAI Universal-3.5 Pro"
                 config.isElevenlabsApi -> "ElevenLabs Scribe v2 Realtime"
                 config.isMetamuseApi -> "Muse Voice"
+                config.isAlibabaApi -> "Alibaba Fun ASR/Qwen"
                 else -> "${config.name} (${config.modelName})"
             }
             transcriptionGroup.addView(radio(label, config.selected) {
