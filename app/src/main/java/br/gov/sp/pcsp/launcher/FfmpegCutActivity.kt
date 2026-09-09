@@ -50,6 +50,12 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 
+/** Tela de corte de video (UI + orquestracao FFmpeg).
+ *
+ * Politica de stream-copy e qualidade ficam em FfmpegMediaPolicies e
+ * FfmpegVideoQuality; aqui nao mora regra de conversao.
+ */
+
 class FfmpegCutActivity : AppCompatActivity() {
 
     private lateinit var selectedFile: TextView

@@ -2,6 +2,8 @@ package br.gov.sp.pcsp.launcher
 
 import android.content.Context
 
+/** Preferencia de paralelismo do motor Granite (somente prefs). */
+
 object GraniteParallelismSettings {
     private const val PREFERENCES_NAME = "granite_parallelism_settings"
     private const val KEY_REQUESTS = "parallel_requests"

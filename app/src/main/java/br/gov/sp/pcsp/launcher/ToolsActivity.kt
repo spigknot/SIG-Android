@@ -9,6 +9,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import java.util.Locale
 
+/** Lista de ferramentas do aplicativo. */
+
 class ToolsActivity : AppCompatActivity() {
     private lateinit var buttonClearCache: TextView
 

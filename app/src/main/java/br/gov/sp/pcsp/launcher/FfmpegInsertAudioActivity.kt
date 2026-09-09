@@ -39,6 +39,8 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 
+/** Tela de insercao de audio em video (UI + orquestracao FFmpeg). */
+
 class FfmpegInsertAudioActivity : AppCompatActivity() {
 
     private lateinit var scroll: ScrollView

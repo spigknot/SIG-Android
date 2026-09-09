@@ -11,7 +11,9 @@ transversais dizem o que **não** pode entrar. Antes de criar arquivo novo, veja
 **Fonte da verdade:** o índice do Git (`git ls-files`). **Verificador:**
 `scripts/check-module-map.ps1`, executado pelo gate
 (`scripts/validate-agent-harness.ps1`) e pelo pre-commit. Arquivo de produção
-fora deste mapa **bloqueia o commit**.
+fora deste mapa **bloqueia o commit**, e todo fonte listado precisa de um bloco
+KDoc (`/** ... */`) acima da primeira declaração de topo — sem ele, o commit
+também é bloqueado.
 
 ## Regras transversais (valem para todo arquivo)
 

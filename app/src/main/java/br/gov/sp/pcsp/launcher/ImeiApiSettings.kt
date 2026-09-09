@@ -2,6 +2,8 @@ package br.gov.sp.pcsp.launcher
 
 import android.content.Context
 
+/** Preferencias da consulta de IMEI (chave em prefs; nunca no codigo). */
+
 object ImeiApiSettings {
     private const val PREFERENCES = "imei_api_settings"
     private const val KEY_API = "imei_check_api_key"

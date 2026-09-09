@@ -4,6 +4,8 @@ import android.content.Context
 import android.util.AttributeSet
 import androidx.appcompat.widget.AppCompatTextView
 
+/** TextView que exibe a versao do aplicativo. */
+
 class AppVersionTextView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,

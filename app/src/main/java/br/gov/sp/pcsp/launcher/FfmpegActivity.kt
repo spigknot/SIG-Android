@@ -6,6 +6,8 @@ import android.view.View
 import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
 
+/** Hub das ferramentas FFmpeg; so navegacao. */
+
 class FfmpegActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {

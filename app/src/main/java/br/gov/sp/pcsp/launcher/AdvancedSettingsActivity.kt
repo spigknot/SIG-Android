@@ -5,6 +5,8 @@ import android.widget.EditText
 import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
 
+/** Tela de configuracoes avancadas: atalhos para chaves, modelos e NPU. */
+
 class AdvancedSettingsActivity : AppCompatActivity() {
     private lateinit var conversionParallelism: EditText
     private lateinit var requestParallelism: EditText

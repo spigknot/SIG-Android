@@ -27,6 +27,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Tela da calculadora/consulta de IMEI (UI + chamada a API de consulta). */
+
 class ImeiCalculatorActivity : AppCompatActivity() {
 
     companion object {

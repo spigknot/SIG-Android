@@ -9,6 +9,12 @@ import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import kotlin.math.roundToInt
 
+/** Dialogo de download do pacote nativo (somente UI).
+ *
+ * Download, verificacao de SHA-256 e instalacao sao do
+ * NativeDependencyManager.
+ */
+
 object NativeDependencyPrompt {
     fun showIfNeeded(activity: Activity) {
         if (NativeDependencyManager.activateIfInstalled(activity) || activity.isFinishing) return

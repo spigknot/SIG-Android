@@ -24,6 +24,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.io.File
 
+/** Tela inicial: menu de ferramentas e atalhos. */
+
 class MainActivity : AppCompatActivity() {
 
     private val locationPreferences by lazy { getSharedPreferences("location_share", Context.MODE_PRIVATE) }

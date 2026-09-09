@@ -7,6 +7,8 @@ import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
+/** Tela de configuracao da consulta de IMEI (UI sobre ImeiApiSettings). */
+
 class ImeiSettingsActivity : AppCompatActivity() {
     private lateinit var apiKeyInput: EditText
 

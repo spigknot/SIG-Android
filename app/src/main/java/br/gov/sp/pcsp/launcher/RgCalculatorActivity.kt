@@ -18,6 +18,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Tela da calculadora de RG/CPF. */
+
 class RgCalculatorActivity : AppCompatActivity() {
 
     companion object {

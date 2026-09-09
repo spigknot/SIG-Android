@@ -9,6 +9,8 @@ import android.view.View
 import kotlin.math.abs
 import kotlin.math.max
 
+/** Desenho da forma de onda com selecao de trecho. */
+
 class FfmpegWaveformView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,

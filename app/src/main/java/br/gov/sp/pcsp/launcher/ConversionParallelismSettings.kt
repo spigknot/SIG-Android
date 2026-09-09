@@ -2,6 +2,8 @@ package br.gov.sp.pcsp.launcher
 
 import android.content.Context
 
+/** Preferencia de paralelismo das conversoes de midia (somente prefs). */
+
 object ConversionParallelismSettings {
     private const val PREFS = "conversion_parallelism_settings"
     private const val KEY = "parallel_conversions"

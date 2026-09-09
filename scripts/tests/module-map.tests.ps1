@@ -1,4 +1,5 @@
-# Contrato do MODULE-MAP: fonte sem etiqueta e etiqueta sem fonte bloqueiam.
+# Contrato do MODULE-MAP: fonte sem linha no mapa, etiqueta órfã e fonte sem
+# KDoc de cabeçalho bloqueiam.
 param([switch]$Quiet)
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +24,14 @@ function New-MapFile {
     Set-Content -LiteralPath (Join-Path $Fixture "MODULE-MAP.md") -Value $lines -Encoding ascii
 }
 
+function Set-Source {
+    param([string]$Dir, [string]$Name, [switch]$SemKdoc)
+    $lines = @()
+    if (-not $SemKdoc) { $lines += ('/** ' + $Name + ' de teste. */') }
+    $lines += ("class " + [IO.Path]::GetFileNameWithoutExtension($Name))
+    Set-Content -LiteralPath (Join-Path $Dir $Name) -Value $lines -Encoding ascii
+}
+
 $fixture = Join-Path ([IO.Path]::GetTempPath()) ("sig-map-test-" + [Guid]::NewGuid().ToString("N"))
 $sourceDir = Join-Path $fixture "app\src\main\java\br\gov\sp\pcsp\launcher"
 
@@ -39,8 +48,8 @@ try {
 
 try {
     New-Item -ItemType Directory -Force -Path $sourceDir | Out-Null
-    Set-Content -LiteralPath (Join-Path $sourceDir "Alpha.kt") -Value "class Alpha" -Encoding ascii
-    Set-Content -LiteralPath (Join-Path $sourceDir "Beta.kt") -Value "class Beta" -Encoding ascii
+    Set-Source -Dir $sourceDir -Name "Alpha.kt"
+    Set-Source -Dir $sourceDir -Name "Beta.kt"
     & git -C $fixture init -q *> $null
     & git -C $fixture add --all *> $null
 
@@ -52,13 +61,24 @@ try {
 
     $complete = Invoke-Checker -RepositoryRoot $fixture -Json
     $completeResult = $complete.Output | ConvertFrom-Json
-    if ($completeResult.status -ne "pass" -or $completeResult.sourceCount -ne 2 -or $completeResult.mappedCount -ne 2) { throw "envelope de mapa completo inválido" }
+    if ($completeResult.status -ne "pass" -or $completeResult.sourceCount -ne 2 -or $completeResult.mappedCount -ne 2 -or $completeResult.noKdocCount -ne 0) { throw "envelope de mapa completo inválido" }
 
-    Set-Content -LiteralPath (Join-Path $sourceDir "Gamma.kt") -Value "class Gamma" -Encoding ascii
+    Set-Source -Dir $sourceDir -Name "Gamma.kt" -SemKdoc
     & git -C $fixture add --all *> $null
     $missing = Invoke-Checker -RepositoryRoot $fixture -Json
     $missingResult = $missing.Output | ConvertFrom-Json
     if ($missing.ExitCode -ne 2 -or $missingResult.missingCount -ne 1 -or $missingResult.missing[0] -ne "Gamma.kt") { throw "fonte fora do mapa não foi bloqueada" }
+
+    New-MapFile -Fixture $fixture -Names @("Alpha.kt", "Beta.kt", "Gamma.kt")
+    & git -C $fixture add --all *> $null
+    $noKdoc = Invoke-Checker -RepositoryRoot $fixture -Json
+    $noKdocResult = $noKdoc.Output | ConvertFrom-Json
+    if ($noKdoc.ExitCode -ne 2 -or $noKdocResult.noKdocCount -ne 1 -or $noKdocResult.noKdoc[0] -ne "Gamma.kt") { throw "fonte sem KDoc não foi bloqueada" }
+
+    Set-Source -Dir $sourceDir -Name "Gamma.kt"
+    & git -C $fixture add --all *> $null
+    $recovered = Invoke-Checker -RepositoryRoot $fixture -Json
+    if ($recovered.ExitCode -ne 0) { throw "fonte com KDoc adicionado deveria passar" }
 
     New-MapFile -Fixture $fixture -Names @("Alpha.kt", "Beta.kt", "Gamma.kt", "Zeta.kt")
     & git -C $fixture add --all *> $null
@@ -74,5 +94,5 @@ try {
     Remove-Item -LiteralPath $fixture -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-if (-not $Quiet) { Write-Output "OK: MODULE-MAP cobre fontes, bloqueia órfãos e tolera repositório sem fontes" }
+if (-not $Quiet) { Write-Output "OK: MODULE-MAP cobre fontes, exige KDoc e bloqueia órfãos" }
 exit 0

@@ -6,6 +6,8 @@ import android.view.View
 import android.widget.ImageButton
 import androidx.appcompat.app.AppCompatActivity
 
+/** Hub das calculadoras (RG, IMEI); so navegacao. */
+
 class CalculatorToolsActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

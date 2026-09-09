@@ -34,6 +34,8 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 
+/** Tela de limpeza/melhoria de audio (UI + orquestracao FFmpeg). */
+
 class FfmpegCleanAudioActivity : AppCompatActivity() {
 
     private lateinit var cleanScroll: ScrollView

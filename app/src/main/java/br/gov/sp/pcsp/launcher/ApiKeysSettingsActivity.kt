@@ -11,6 +11,12 @@ import android.widget.ImageButton
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
+/** Tela de chaves de API: digitacao, mascara e importacao.
+ *
+ * A gravacao cifrada e do ApiKeyStore; nenhuma chave aparece em log
+ * ou relatorio.
+ */
+
 class ApiKeysSettingsActivity : AppCompatActivity() {
     private lateinit var xaiKey: EditText
     private lateinit var deepseekKey: EditText

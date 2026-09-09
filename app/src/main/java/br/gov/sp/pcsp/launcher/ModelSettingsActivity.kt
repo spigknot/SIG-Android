@@ -12,6 +12,12 @@ import android.widget.RadioButton
 import android.widget.RadioGroup
 import androidx.appcompat.app.AppCompatActivity
 
+/** Tela de configuracao de modelos e servidores.
+ *
+ * Persistencia em ModelServerStore/TranscriptionModelStore; a chamada
+ * externa e das telas de transcricao.
+ */
+
 class ModelSettingsActivity : AppCompatActivity() {
     private data class TextModelControls(
         val modelGroup: RadioGroup,

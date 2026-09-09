@@ -51,6 +51,11 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 
+/** Tela de juncao de videos (UI + orquestracao FFmpeg).
+ *
+ * O plano da juncao (compatibilidade, ordem, alvo) e do SmartJoinPlanner.
+ */
+
 class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private lateinit var joinScroll: ScrollView

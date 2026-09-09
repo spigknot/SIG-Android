@@ -5,8 +5,9 @@ para os comandos que já existem.
 
 **Inventário de arquivos:** `MODULE-MAP.md` (raiz) lista os 72 fontes por área
 (telas, regra pura, estado, sistema) e as regras transversais do que não entra em
-cada uma. Fonte de produção sem linha no mapa bloqueia o commit: a etapa
-`module-map-consistency` do gate roda `scripts/check-module-map.ps1`.
+cada uma. Fonte de produção sem linha no mapa ou sem KDoc acima da primeira
+declaração bloqueia o commit: a etapa `module-map-consistency` do gate roda
+`scripts/check-module-map.ps1`.
 
 ## Hotspot principal: STT (`RemoteSttActivity.kt`)
 

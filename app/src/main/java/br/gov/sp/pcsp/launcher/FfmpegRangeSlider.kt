@@ -11,6 +11,8 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
+/** Slider de intervalo (inicio/fim) usado no corte de video. */
+
 class FfmpegRangeSlider @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,

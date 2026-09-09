@@ -54,6 +54,12 @@ import java.util.zip.Deflater
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
+/** Tela de extracao de audio (UI + orquestracao FFmpeg).
+ *
+ * Aceita .amr alem dos formatos de MediaTypeRules (divergencia
+ * deliberada; ver AGENTS.md).
+ */
+
 class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     private lateinit var extractScroll: ScrollView

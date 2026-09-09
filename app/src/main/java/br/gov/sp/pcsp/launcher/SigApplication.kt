@@ -3,6 +3,8 @@ package br.gov.sp.pcsp.launcher
 import android.app.Application
 import android.content.Context
 
+/** Application: bootstrap do aplicativo (contexto e inicializacao). */
+
 class SigApplication : Application() {
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(base)

@@ -11,6 +11,8 @@ import android.view.View
 import kotlin.math.abs
 import kotlin.math.max
 
+/** Timeline da insercao de audio (desenho e gestos). */
+
 class FfmpegInsertAudioTimelineView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,

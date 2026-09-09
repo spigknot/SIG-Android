@@ -6,6 +6,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
+/** Extensao: mantem o conteudo dentro das system bars (edge-to-edge). */
+
 fun AppCompatActivity.keepContentInsideSystemBars() {
     WindowCompat.setDecorFitsSystemWindows(window, true)
     window.statusBarColor = Color.BLACK

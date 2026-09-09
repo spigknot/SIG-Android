@@ -55,6 +55,8 @@ import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
+/** Tela de rotacao de video (UI + orquestracao FFmpeg). */
+
 class FfmpegRotateVideoActivity : AppCompatActivity() {
 
     private lateinit var rotateScroll: ScrollView

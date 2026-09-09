@@ -4,6 +4,8 @@ import androidx.activity.addCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 
+/** Extensao: intercepta o voltar para confirmar a saida durante uma tarefa. */
+
 fun AppCompatActivity.installCancelAndExitGuard(
     isTaskRunning: () -> Boolean,
     cancelTask: () -> Unit
