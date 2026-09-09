@@ -25,6 +25,25 @@ Antes de aceitar QUALQUER mudança no hotspot: `.\gradlew.bat :app:testDebugUnit
 `.\gradlew.bat :app:lintDebug` e `.\gradlew.bat :app:assembleDebug`. Uma mudança
 no fluxo assíncrono sem teste novo no `AssemblyAiAsyncFlowTest` não está pronta.
 
+## Seams puros (regra de negócio fora da Activity)
+
+A regra do STT/mídia mora em arquivos com nome explícito; a Activity mantém UI,
+estado e chamada externa. Quem abre uma funcionalidade deve começar pelo seam.
+
+| Seam | O que contém | Verificador |
+|---|---|---|
+| `SttResponseParsers.kt` | leitura das respostas REST/SSE/WS (Granite/Grok/Metamuse/Alibaba, timestamps, diarização) | `SttResponseParsersTest` |
+| `TranscriptionReport.kt` | relatório HTML, log, nomes de arquivo, tamanhos | `TranscriptionReportTest` |
+| `SttAudioProbe.kt` | sondagem FFmpeg + parse da saída | `SttAudioProbeTest` |
+| `LittleEndianIo.kt` | leitura/escrita little-endian (WAV/pacotes) | `LittleEndianIoTest` |
+| `GraniteBinarySupport.kt` | byte↔codepoint, cadeia de erro, WAV 16k mono, floats | `GraniteBinarySupportTest` |
+| `MediaUriSupport.kt` | nome de arquivo de URI, permissão de pasta | usada por 8 Activities |
+| `MediaTypeRules.kt` | isVideo/isAudio/isSupportedMedia/guessMime/contentMimeForUpload | `MediaTypeRulesTest` |
+
+Divergências deliberadas (não unificar sem decisão): `.amr` só é aceito em
+`FfmpegExtractAudioActivity`; `formatTime`/`readDuration` seguem duplicados.
+Detalhes em `docs/refatoracao-legibilidade-20260908.md`.
+
 ## Aceitação REST e WebSocket
 
 O roteiro executável e os limites de credencial estão em
