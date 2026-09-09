@@ -89,13 +89,16 @@ function Invoke-Step {
     }
 }
 
+$scriptHostPath = $null
+$pwshCandidate = Get-Command pwsh.exe -ErrorAction SilentlyContinue
+if ($pwshCandidate) { $scriptHostPath = $pwshCandidate.Source }
+if (-not $scriptHostPath) { $scriptHostPath = (Get-Command powershell.exe -ErrorAction Stop).Source }
+
 if ($Staged -and $failures.Count -eq 0) {
     $checker = Join-Path $PSScriptRoot "check-staged-snapshot.ps1"
     if (-not (Test-Path -LiteralPath $checker -PathType Leaf)) {
         Register-Failure -Name "staged-snapshot-consistency" -ExitCode 2 -Diagnostic "verificador staged ausente"
     } else {
-        $scriptHostPath = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
-        if (-not $scriptHostPath) { $scriptHostPath = (Get-Command powershell.exe -ErrorAction Stop).Source }
         Invoke-Step -Name "staged-snapshot-consistency" -Action { & $scriptHostPath -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $checker -RepositoryRoot $root -Quiet -Json }
     }
 }
@@ -103,6 +106,15 @@ if ($Staged -and $failures.Count -eq 0) {
 if ($failures.Count -eq 0) {
     Push-Location $root
     try { Invoke-Step -Name "git-diff-check" -Action { & git -c core.safecrlf=false -c core.whitespace=cr-at-eol diff --check -- } } finally { Pop-Location }
+}
+
+if ($failures.Count -eq 0) {
+    $moduleMapChecker = Join-Path $PSScriptRoot "check-module-map.ps1"
+    if (-not (Test-Path -LiteralPath $moduleMapChecker -PathType Leaf)) {
+        Register-Failure -Name "module-map-consistency" -ExitCode 2 -Diagnostic "verificador do MODULE-MAP ausente"
+    } else {
+        Invoke-Step -Name "module-map-consistency" -Action { & $scriptHostPath -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $moduleMapChecker -RepositoryRoot $root -Quiet -Json }
+    }
 }
 
 if ($RunAndroidGates -and $failures.Count -eq 0) {

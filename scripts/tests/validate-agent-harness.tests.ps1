@@ -26,6 +26,10 @@ $stagedTests = Join-Path $root "scripts\tests\staged-snapshot.tests.ps1"
 $stagedOutput = (& $scriptHost -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $stagedTests -Quiet 2>&1 | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $stagedOutput) { throw "teste de snapshot staged falhou" }
 
+$mapTests = Join-Path $root "scripts\tests\module-map.tests.ps1"
+$mapOutput = (& $scriptHost -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $mapTests -Quiet 2>&1 | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $mapOutput) { throw "teste do MODULE-MAP falhou" }
+
 $bootstrapRoot = Join-Path ([IO.Path]::GetTempPath()) ("sig-bootstrap-test-" + [Guid]::NewGuid().ToString("N"))
 $bootstrapEvidenceRelative = "build\bootstrap-failure.json"
 $bootstrapEvidencePath = Join-Path $bootstrapRoot $bootstrapEvidenceRelative

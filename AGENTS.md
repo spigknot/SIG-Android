@@ -3,6 +3,11 @@
 Mapa curto de ownership, riscos e verificadores. Não duplica o README; aponta
 para os comandos que já existem.
 
+**Inventário de arquivos:** `MODULE-MAP.md` (raiz) lista os 72 fontes por área
+(telas, regra pura, estado, sistema) e as regras transversais do que não entra em
+cada uma. Fonte de produção sem linha no mapa bloqueia o commit: a etapa
+`module-map-consistency` do gate roda `scripts/check-module-map.ps1`.
+
 ## Hotspot principal: STT (`RemoteSttActivity.kt`)
 
 `app/src/main/java/br/gov/sp/pcsp/launcher/RemoteSttActivity.kt` é o arquivo
@@ -86,9 +91,9 @@ Nunca publicar/assinar artefatos sem aprovação explícita do usuário.
 O gate central está em scripts/validate-agent-harness.ps1; a suíte contratual
 está em scripts/tests/validate-agent-harness.tests.ps1 e deve permanecer
 silenciosa com -Quiet. A suíte testa bootstrap, EvidencePath, snapshot staged,
-instalação idempotente dos hooks e execução do pre-commit em repositório
-temporário. O workflow .github/workflows/validation.yml executa essa suíte
-antes dos gates Android.
+contrato do MODULE-MAP, instalação idempotente dos hooks e execução do
+pre-commit em repositório temporário. O workflow .github/workflows/validation.yml
+executa essa suíte antes dos gates Android.
 
 Validação local do harness:
 

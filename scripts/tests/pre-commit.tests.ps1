@@ -10,6 +10,7 @@ $copyPaths = @(
     ".gitattributes",
     "scripts\validate-agent-harness.ps1",
     "scripts\check-staged-snapshot.ps1",
+    "scripts\check-module-map.ps1",
     "scripts\lib\diagnostics.ps1"
 )
 New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
