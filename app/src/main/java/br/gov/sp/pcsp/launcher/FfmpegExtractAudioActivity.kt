@@ -506,8 +506,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
         var skippedSilentVideos = 0
         val videos = sharedUrisFrom(intent).mapNotNull { uri ->
-            tryTakeReadPermission(uri, intent.flags)
-            val name = queryDisplayName(uri) ?: "midia"
+            MediaUriSupport.tryTakeReadPermission(contentResolver, uri, intent.flags)
+            val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia"
             val mime = contentResolver.getType(uri).orEmpty().ifBlank { mimeFromName(name) }
             if (!isSupportedMedia(mime, name)) return@mapNotNull null
             if (!hasAudioTrack(uri)) {
@@ -563,13 +563,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         return uris.distinct()
     }
 
-    private fun tryTakeReadPermission(uri: Uri, flags: Int) {
-        try {
-            contentResolver.takePersistableUriPermission(uri, flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (_: Throwable) {
-        }
-    }
-
     private fun loadPickedVideos(data: Intent) {
         val uris = mutableListOf<Uri>()
         data.clipData?.let { clip ->
@@ -582,7 +575,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         var skippedSilentVideos = 0
         val videos = uris.distinct().mapNotNull { uri ->
             val mime = contentResolver.getType(uri).orEmpty()
-            val name = queryDisplayName(uri) ?: "midia"
+            val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia"
             if (!isSupportedMedia(mime, name)) return@mapNotNull null
             try {
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -729,7 +722,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     private fun extractSelectedAudio() {
         if (selectedVideos.isEmpty()) return
-        if (!hasSigStorageAccess()) {
+        if (!MediaUriSupport.hasSigStorageAccess()) {
             requestSigStorageAccess()
             status.text = "Libere o acesso a todos os arquivos para salvar na pasta SIG."
             return
@@ -1050,10 +1043,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         } else {
             status.text = "Erro ao salvar os arquivos na pasta selecionada."
         }
-    }
-
-    private fun hasSigStorageAccess(): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
     }
 
     private fun requestSigStorageAccess() {
@@ -1741,16 +1730,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
         outputStats.visibility = View.GONE
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
-            }
-        }
-        return uri.lastPathSegment
     }
 
     private fun isVideo(mime: String, name: String): Boolean {

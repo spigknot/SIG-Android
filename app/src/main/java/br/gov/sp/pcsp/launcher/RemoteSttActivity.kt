@@ -374,7 +374,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private val surfaceListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
             previewSurface = Surface(surfaceTexture)
-            selectedItems.firstOrNull()?.takeIf { isVideo(it.mime, it.name) }?.let { prepareVideoPreview(it.uri) }
+            selectedItems.firstOrNull()?.takeIf { MediaTypeRules.isVideo(it.mime, it.name) }?.let { prepareVideoPreview(it.uri) }
         }
 
         override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
@@ -1640,7 +1640,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 if (rawText.isEmpty()) return
                 val isFinal = event.optBoolean("final", false)
                 if (isFinal) {
-                    val text = prefixMetamuseSpeaker(rawText)
+                    val text = SttResponseParsers.prefixMetamuseSpeaker(rawText, checkboxLiveDiarize.isChecked, metamuseCurrentSpeaker, metamuseSpeakerNumbers)
                     synchronized(grokLiveFinalSegments) {
                         val last = grokLiveFinalSegments.lastOrNull().orEmpty()
                         if (last == text) {
@@ -1659,7 +1659,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     }
                 } else {
                     synchronized(grokLiveFinalSegments) {
-                        grokLivePartialSegment = prefixMetamuseSpeaker(rawText)
+                        grokLivePartialSegment = SttResponseParsers.prefixMetamuseSpeaker(rawText, checkboxLiveDiarize.isChecked, metamuseCurrentSpeaker, metamuseSpeakerNumbers)
                         updateGrokLiveTranscriptLocked()
                     }
                     runOnUiThread { updateLiveTerminalText() }
@@ -1684,7 +1684,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     metamuseCurrentSpeaker = directLabel
                 }
                 if (rawText.isNotEmpty()) {
-                    val text = prefixMetamuseSpeaker(rawText)
+                    val text = SttResponseParsers.prefixMetamuseSpeaker(rawText, checkboxLiveDiarize.isChecked, metamuseCurrentSpeaker, metamuseSpeakerNumbers)
                     synchronized(grokLiveFinalSegments) {
                         val last = grokLiveFinalSegments.lastOrNull().orEmpty()
                         if (last == text) {
@@ -1729,10 +1729,10 @@ class RemoteSttActivity : AppCompatActivity() {
             }
             "task-finished" -> if (sttIsAlibaba) completeGrokLiveTranscription(webSocket, "")
             "task-failed" -> if (sttIsAlibaba) {
-                handleGrokWebSocketDisconnect(webSocket, alibabaWsErrorMessage(event))
+                handleGrokWebSocketDisconnect(webSocket, SttResponseParsers.alibabaWsErrorMessage(event))
             }
             "transcript.partial" -> {
-                val text = formatGrokDiarizedTranscript(event, event.optString("text").trim())
+                val text = SttResponseParsers.formatGrokDiarizedTranscript(event, event.optString("text").trim(), checkboxLiveDiarize.isChecked)
                 if (text.isBlank()) return
                 val isFinal = event.optBoolean("is_final", false)
                 synchronized(grokLiveFinalSegments) {
@@ -1747,7 +1747,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 runOnUiThread { updateLiveTerminalText() }
             }
             "transcript.done" -> {
-                val finalText = formatGrokDiarizedTranscript(event, event.optString("text").trim())
+                val finalText = SttResponseParsers.formatGrokDiarizedTranscript(event, event.optString("text").trim(), checkboxLiveDiarize.isChecked)
                 completeGrokLiveTranscription(webSocket, finalText)
             }
             "error" -> handleGrokWebSocketDisconnect(
@@ -1989,7 +1989,7 @@ class RemoteSttActivity : AppCompatActivity() {
             // checkbox (DENTRO da UI thread: o store toca nas Views e este
             // complete pode vir da thread do socket — fora dela, o setText
             // derruba a Activity com CalledFromWrongThreadException).
-            storeReceivedTranscription(stripDiarizationLabels(mergedFinal), mergedFinal)
+            storeReceivedTranscription(SttResponseParsers.stripDiarizationLabels(mergedFinal), mergedFinal)
             transcriptionTaskState = AssistantTaskState.DONE
             refiningTaskState = AssistantTaskState.IDLE
             renderLiveProgress()
@@ -2150,24 +2150,6 @@ class RemoteSttActivity : AppCompatActivity() {
         sttIsMetamuse -> "Muse"
         sttIsAlibaba -> "Alibaba"
         else -> "Grok"
-    }
-
-    /** Mensagem de erro de um evento task-failed do Alibaba (header com
-     *  error_code/error_message), com os mapeamentos de auth e rate limit. */
-    private fun alibabaWsErrorMessage(event: JSONObject): String {
-        val header = event.optJSONObject("header")
-        val code = header?.optString("error_code").orEmpty()
-        val message = header?.optString("error_message")
-            ?.ifBlank { header.optString("message") }.orEmpty().trim()
-        if (code in listOf("InvalidApiKey", "Unauthorized", "Forbidden", "AccessDenied") ||
-            "401" in code || "403" in code
-        ) {
-            return SttRequestBuilders.ALIBABA_AUTH_ERROR
-        }
-        if (code == "Throttling" || "429" in code || "limit" in message.lowercase()) {
-            return SttRequestBuilders.ALIBABA_RATE_LIMIT_ERROR
-        }
-        return message.ifBlank { "erro ${code.ifBlank { "desconhecido" }} do Alibaba" }
     }
 
     private fun emitGrokConnectionEvent(event: GrokConnectionEvent, detail: String? = null) {
@@ -2572,7 +2554,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     throw IllegalStateException("servidor respondeu ${response.code}")
                 }
                 val bodyText = response.body?.string().orEmpty()
-                return parseGraniteResponseItems(bodyText).joinToString("\n") { it.text.trim() }
+                return SttResponseParsers.parseResponseItems(bodyText).joinToString("\n") { it.text.trim() }
             }
         } finally {
             currentCalls.remove(call)
@@ -2612,7 +2594,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 val payload = JSONObject(body)
                 val rawText = payload.optString("text").trim()
                 if (rawText.isBlank()) throw IllegalStateException("O Grok retornou uma transcrição vazia.")
-                return formatGrokDiarizedTranscript(payload, rawText)
+                return SttResponseParsers.formatGrokDiarizedTranscript(payload, rawText, checkboxLiveDiarize.isChecked)
             }
         } finally {
             currentCalls.remove(call)
@@ -2811,7 +2793,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 val payload = JSONObject(body)
                 val turns = payload.optJSONArray("turns")
                 if (turns != null && turns.length() > 0) {
-                    val diarized = formatMetamuseDiarizedTurns(turns)
+                    val diarized = SttResponseParsers.formatMetamuseDiarizedTurns(turns)
                     if (diarized.isNotBlank()) return diarized
                 }
                 val rawText = payload.optString("transcript").trim()
@@ -2883,7 +2865,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 if (errorCode.isNotBlank()) {
                     throw IllegalStateException("$errorCode: ${errorMessage.ifBlank { "erro desconhecido" }}")
                 }
-                return formatAlibabaRestResponse(payload ?: JSONObject())
+                return SttResponseParsers.formatAlibabaRestResponse(payload ?: JSONObject())
             }
         } finally {
             currentCalls.remove(call)
@@ -2896,80 +2878,6 @@ class RemoteSttActivity : AppCompatActivity() {
                 }
             }
         }
-    }
-
-    /** Texto do REST DashScope: output.text, choices ou "" (sem fala). */
-    private fun formatAlibabaRestResponse(payload: JSONObject): String {
-        val output = payload.optJSONObject("output") ?: return ""
-        output.optString("text").trim().takeIf { it.isNotBlank() }?.let { return it }
-        val choices = output.optJSONArray("choices") ?: return ""
-        for (index in 0 until choices.length()) {
-            val message = choices.optJSONObject(index)?.optJSONObject("message") ?: continue
-            message.optString("content").trim().takeIf { it.isNotBlank() }?.let { return it }
-            val parts = message.optJSONArray("content") ?: continue
-            for (part in 0 until parts.length()) {
-                parts.optJSONObject(part)?.optString("text")?.trim()
-                    ?.takeIf { it.isNotBlank() }?.let { return it }
-            }
-        }
-        return ""
-    }
-
-    private fun formatGrokDiarizedTranscript(payload: JSONObject, fallback: String): String {
-        if (!checkboxLiveDiarize.isChecked) return fallback
-        val words = payload.optJSONArray("words") ?: return fallback
-        val output = StringBuilder()
-        var speaker: Int? = null
-        for (index in 0 until words.length()) {
-            val word = words.optJSONObject(index) ?: continue
-            val text = word.optString("text").trim()
-            if (text.isBlank()) continue
-            val nextSpeaker = word.optInt("speaker", Int.MIN_VALUE).takeIf { it != Int.MIN_VALUE }
-            if (nextSpeaker != speaker) {
-                if (output.isNotEmpty()) output.append('\n')
-                speaker = nextSpeaker
-                output.append("Interlocutor ").append((speaker ?: 0) + 1).append(": ")
-            } else if (output.isNotEmpty() && !output.endsWith(" ") && !text.matches(Regex("^[,.;:!?]$"))) {
-                output.append(' ')
-            }
-            output.append(text)
-        }
-        return output.toString().trim().ifBlank { fallback }
-    }
-
-    /** Prefixa o texto ao vivo do Muse com "Interlocutor N:" quando a
-     *  diarização está marcada e já há um falante corrente (letras A, B...).
-     *  Fora da diarização, devolve o texto intacto. */
-    private fun prefixMetamuseSpeaker(rawText: String): String {
-        if (!checkboxLiveDiarize.isChecked) return rawText
-        val label = metamuseCurrentSpeaker ?: return rawText
-        val number = metamuseSpeakerNumbers.getOrPut(label) { metamuseSpeakerNumbers.size + 1 }
-        if (rawText.matches(Regex("^\\s*Interlocutor\\s+\\d+\\s*:.*", RegexOption.DOT_MATCHES_ALL))) {
-            return rawText
-        }
-        return "Interlocutor $number: $rawText"
-    }
-
-    /** Formata os turns do REST do Muse (DIARIZATION): cada turno com
-     *  "speaker" (A, B, ...) vira "Interlocutor N: <texto>". */
-    private fun formatMetamuseDiarizedTurns(turns: org.json.JSONArray): String {
-        val speakerNumbers = linkedMapOf<String, Int>()
-        val output = StringBuilder()
-        for (index in 0 until turns.length()) {
-            val turn = turns.optJSONObject(index) ?: continue
-            val text = turn.optString("transcript").trim()
-            if (text.isBlank()) continue
-            val speaker = turn.optString("speaker").trim()
-            val line = if (speaker.isNotEmpty()) {
-                val number = speakerNumbers.getOrPut(speaker) { speakerNumbers.size + 1 }
-                "Interlocutor $number: $text"
-            } else {
-                text
-            }
-            if (output.isNotEmpty()) output.append('\n')
-            output.append(line)
-        }
-        return output.toString().trim()
     }
 
     // Labels de exibição do idioma (SOMENTE cosmético): o usuário vê "auto",
@@ -3197,20 +3105,9 @@ class RemoteSttActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             -1L
         }
-        val formatted = if (size >= 0L) formatMediaSize(size) else "?"
+        val formatted = if (size >= 0L) TranscriptionReport.formatMediaSize(size) else "?"
         batchSizeCache[item.uri] = formatted
         return formatted
-    }
-
-    private fun formatMediaSize(bytes: Long): String {
-        val units = arrayOf("b", "kb", "mb", "gb")
-        var value = bytes.coerceAtLeast(0L).toDouble()
-        var unit = 0
-        while (value >= 1024.0 && unit < units.lastIndex) {
-            value /= 1024.0
-            unit++
-        }
-        return String.format(Locale.US, "%.1f %s", value, units[unit])
     }
 
     private fun refreshBatchProgressUi() {
@@ -3480,18 +3377,18 @@ class RemoteSttActivity : AppCompatActivity() {
         FileOutputStream(file).use { output ->
             val byteRate = sampleRate * 2
             output.write("RIFF".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, 36 + pcm.size)
+            LittleEndianIo.writeIntLe(output, 36 + pcm.size)
             output.write("WAVE".toByteArray(Charsets.US_ASCII))
             output.write("fmt ".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, 16)
-            writeShortLe(output, 1)
-            writeShortLe(output, 1)
-            writeIntLe(output, sampleRate)
-            writeIntLe(output, byteRate)
-            writeShortLe(output, 2)
-            writeShortLe(output, 16)
+            LittleEndianIo.writeIntLe(output, 16)
+            LittleEndianIo.writeShortLe(output, 1)
+            LittleEndianIo.writeShortLe(output, 1)
+            LittleEndianIo.writeIntLe(output, sampleRate)
+            LittleEndianIo.writeIntLe(output, byteRate)
+            LittleEndianIo.writeShortLe(output, 2)
+            LittleEndianIo.writeShortLe(output, 16)
             output.write("data".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, pcm.size)
+            LittleEndianIo.writeIntLe(output, pcm.size)
             output.write(pcm)
         }
     }
@@ -3501,36 +3398,20 @@ class RemoteSttActivity : AppCompatActivity() {
         FileOutputStream(file).use { output ->
             val byteRate = sampleRate * 2
             output.write("RIFF".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, 36 + pcmSize)
+            LittleEndianIo.writeIntLe(output, 36 + pcmSize)
             output.write("WAVE".toByteArray(Charsets.US_ASCII))
             output.write("fmt ".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, 16)
-            writeShortLe(output, 1)
-            writeShortLe(output, 1)
-            writeIntLe(output, sampleRate)
-            writeIntLe(output, byteRate)
-            writeShortLe(output, 2)
-            writeShortLe(output, 16)
+            LittleEndianIo.writeIntLe(output, 16)
+            LittleEndianIo.writeShortLe(output, 1)
+            LittleEndianIo.writeShortLe(output, 1)
+            LittleEndianIo.writeIntLe(output, sampleRate)
+            LittleEndianIo.writeIntLe(output, byteRate)
+            LittleEndianIo.writeShortLe(output, 2)
+            LittleEndianIo.writeShortLe(output, 16)
             output.write("data".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, pcmSize)
+            LittleEndianIo.writeIntLe(output, pcmSize)
             pcmFile.inputStream().use { input -> input.copyTo(output) }
         }
-    }
-
-    private fun writeIntLe(output: FileOutputStream, value: Int) {
-        output.write(byteArrayOf(
-            (value and 0xff).toByte(),
-            ((value shr 8) and 0xff).toByte(),
-            ((value shr 16) and 0xff).toByte(),
-            ((value shr 24) and 0xff).toByte()
-        ))
-    }
-
-    private fun writeShortLe(output: FileOutputStream, value: Int) {
-        output.write(byteArrayOf(
-            (value and 0xff).toByte(),
-            ((value shr 8) and 0xff).toByte()
-        ))
     }
 
     private fun finishDefinitiveLiveTranscript(recordingThread: Thread?, pcmFile: File?) {
@@ -3804,8 +3685,8 @@ class RemoteSttActivity : AppCompatActivity() {
         folder?.listFiles()?.forEach { file ->
             if (file.isFile) {
                 val name = file.name ?: "midia_${nextItems.size + 1}"
-                val mime = file.type ?: guessMime(name)
-                if (isSupportedMedia(mime, name)) {
+                val mime = file.type ?: MediaTypeRules.guessMime(name)
+                if (MediaTypeRules.isSupportedMedia(mime, name)) {
                     nextItems += MediaItem(file.uri, name, mime, readDuration(file.uri))
                 }
             }
@@ -3815,9 +3696,9 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun addMediaItem(uri: Uri, target: MutableList<MediaItem>) {
-        val name = queryDisplayName(uri) ?: "midia_${target.size + 1}"
-        val mime = contentResolver.getType(uri) ?: guessMime(name)
-        if (isSupportedMedia(mime, name)) {
+        val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia_${target.size + 1}"
+        val mime = contentResolver.getType(uri) ?: MediaTypeRules.guessMime(name)
+        if (MediaTypeRules.isSupportedMedia(mime, name)) {
             target += MediaItem(uri, name, mime, readDuration(uri))
         }
     }
@@ -3994,7 +3875,7 @@ class RemoteSttActivity : AppCompatActivity() {
         playbackSpeed = 1f
         updateSpeedButton()
 
-        if (isVideo(item.mime, item.name)) {
+        if (MediaTypeRules.isVideo(item.mime, item.name)) {
             previewFrame?.visibility = View.VISIBLE
             videoPreview?.visibility = View.VISIBLE
             if (videoPreview?.isAvailable == true) {
@@ -4124,20 +4005,20 @@ class RemoteSttActivity : AppCompatActivity() {
                 val tempDir = File(cacheDir, "granite_speech_temp_${System.currentTimeMillis()}").apply { mkdirs() }
                 appendTerminal(terminalLines, "output: ${sessionDir.absolutePath}")
                 appendTerminal(terminalLines, "temporários: ${tempDir.absolutePath}")
-                appendLog(logLines, "Servidor: ${TranscriptionModelStore.selectedConfig().url}")
-                appendLog(logLines, "Pasta de saída: ${sessionDir.absolutePath}")
-                appendLog(logLines, "Pasta temporária: ${tempDir.absolutePath}")
-                appendLog(logLines, "Arquivos: ${items.size}")
-                appendLog(logLines, "Preparo: ${prepareMode.label}")
-                appendLog(logLines, "Modo: ${when { onlyConvert -> "Apenas converter"; onlyVad -> "Apenas VAD"; sendZip -> "ZIP nível $selectedZipLevel"; else -> "Transcrição normal" }}")
+                TranscriptionReport.appendLog(logLines, "Servidor: ${TranscriptionModelStore.selectedConfig().url}")
+                TranscriptionReport.appendLog(logLines, "Pasta de saída: ${sessionDir.absolutePath}")
+                TranscriptionReport.appendLog(logLines, "Pasta temporária: ${tempDir.absolutePath}")
+                TranscriptionReport.appendLog(logLines, "Arquivos: ${items.size}")
+                TranscriptionReport.appendLog(logLines, "Preparo: ${prepareMode.label}")
+                TranscriptionReport.appendLog(logLines, "Modo: ${when { onlyConvert -> "Apenas converter"; onlyVad -> "Apenas VAD"; sendZip -> "ZIP nível $selectedZipLevel"; else -> "Transcrição normal" }}")
                 val cores = Runtime.getRuntime().availableProcessors()
                 val parallelism = conversionParallelism()
                 val uploadParallelism = uploadParallelism(items.size)
                 appendTerminal(terminalLines, "CPU: $cores núcleo(s); preparação paralela: $parallelism conversão(ões) por vez")
                 appendTerminal(terminalLines, "envio em esteira Granite: até $uploadParallelism requisição(ões) simultânea(s)")
-                appendLog(logLines, "Núcleos detectados: $cores")
-                appendLog(logLines, "Conversões paralelas: $parallelism")
-                appendLog(logLines, "Requisições Granite paralelas: $uploadParallelism")
+                TranscriptionReport.appendLog(logLines, "Núcleos detectados: $cores")
+                TranscriptionReport.appendLog(logLines, "Conversões paralelas: $parallelism")
+                TranscriptionReport.appendLog(logLines, "Requisições Granite paralelas: $uploadParallelism")
                 runOnUiThread { updateTerminalText(terminalLines) }
 
                 val conversionExecutor = Executors.newFixedThreadPool(parallelism)
@@ -4207,10 +4088,10 @@ class RemoteSttActivity : AppCompatActivity() {
                 val logFile = File(sessionDir, "log.txt")
                 val terminalFile = File(sessionDir, "terminal.txt")
                 txtFile.writeText(finalText, Charsets.UTF_8)
-                htmlFile.writeText(buildHtml(orderedResults), Charsets.UTF_8)
+                htmlFile.writeText(TranscriptionReport.buildHtml(orderedResults.map { TranscriptionReport.Row(it.fileName, it.text) }), Charsets.UTF_8)
                 val serverElapsedMs = calculateServerElapsedMs(serverStartedAt, serverFinishedAt)
                 val report = buildReport(items.size, totalSentSeconds, elapsedMs, serverElapsedMs, prepareMode, vadStats)
-                appendLog(logLines, report)
+                TranscriptionReport.appendLog(logLines, report)
                 logFile.writeText(logLines.toString(), Charsets.UTF_8)
                 terminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
                 appendTerminal(terminalLines, "")
@@ -4226,7 +4107,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     if (whiteRecording) {
                         val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
                         storeReceivedTranscription(
-                            stripDiarizationLabels(transcriptDisplay),
+                            SttResponseParsers.stripDiarizationLabels(transcriptDisplay),
                             transcriptDisplay
                         )
                         transcriptionTaskState = AssistantTaskState.DONE
@@ -4241,7 +4122,7 @@ class RemoteSttActivity : AppCompatActivity() {
                         if (orderedResults.size <= 1) {
                             val transcriptDisplay = buildTranscriptDisplayText(orderedResults)
                             storeReceivedTranscription(
-                                stripDiarizationLabels(transcriptDisplay),
+                                SttResponseParsers.stripDiarizationLabels(transcriptDisplay),
                                 transcriptDisplay
                             )
                             liveTranscriptTextView.visibility = View.VISIBLE
@@ -4328,7 +4209,7 @@ class RemoteSttActivity : AppCompatActivity() {
             }
 
             val inputFile = copyUriToCache(item.uri, item.name)
-            val originalAudioInfo = describeAudioFile(inputFile)
+            val originalAudioInfo = SttAudioProbe.describe(inputFile)
             // A timeline do editor só se aplica a arquivos selecionados; a
             // gravação do microfone branco envia SEMPRE o áudio inteiro.
             val startMs = if (items.size == 1 && useTimeline) timelineStartMs else 0L
@@ -4365,7 +4246,7 @@ class RemoteSttActivity : AppCompatActivity() {
             } else {
                 preparedUploadFile
             }
-            val sentAudioInfo = describeAudioFile(uploadFile.file)
+            val sentAudioInfo = SttAudioProbe.describe(uploadFile.file)
             appendTerminal(terminalLines, "prepare done[$number/${items.size}]: ${item.name}")
             runOnUiThread { updateTerminalText(terminalLines) }
             PreparedUpload(number, item, uploadFile, durationToSend, originalAudioInfo, sentAudioInfo)
@@ -4407,7 +4288,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 appendTerminal(terminalLines, "transcrição vazia em ${result.fileName}")
                 throw IllegalStateException("transcrição vazia em ${result.fileName}")
             }
-            val individual = uniqueFile(transcriptionDir, "${safeBaseName(result.fileName)}.txt")
+            val individual = TranscriptionReport.uniqueFile(transcriptionDir, "${TranscriptionReport.safeBaseName(result.fileName)}.txt")
             individual.writeText(result.text.trim() + "\n", Charsets.UTF_8)
             updateBatchProgressLine(number, "OK")
             runOnUiThread { updateTerminalText(terminalLines) }
@@ -4428,17 +4309,17 @@ class RemoteSttActivity : AppCompatActivity() {
             ensureNotCancelled()
             val suffix = prepared.uploadFile.file.extension.takeIf { it.isNotBlank() }?.let { ".$it" } ?: ".wav"
             val marker = if (onlyVad) "_vad" else "_convertido"
-            val target = uniqueFile(outputDir, "${safeBaseName(prepared.item.name)}$marker$suffix")
+            val target = TranscriptionReport.uniqueFile(outputDir, "${TranscriptionReport.safeBaseName(prepared.item.name)}$marker$suffix")
             prepared.uploadFile.file.copyTo(target, overwrite = true)
             appendTerminal(terminalLines, "salvo ${index + 1}/${preparedUploads.size}: ${target.name}")
         }
         val elapsed = SystemClock.elapsedRealtime() - startedAt
         val summary = "${if (onlyVad) "VAD" else "Conversão"} concluído: ${preparedUploads.size} arquivo(s) em ${formatElapsedCompact(elapsed)}"
         appendTerminal(terminalLines, summary)
-        appendLog(logLines, summary)
+        TranscriptionReport.appendLog(logLines, summary)
         val txtFile = File(sessionDir, "resultado.txt").apply { writeText(summary + "\n", Charsets.UTF_8) }
         val htmlFile = File(sessionDir, "resultado.html").apply {
-            writeText("<meta charset=\"utf-8\"><p>${escapeHtml(summary)}</p>", Charsets.UTF_8)
+            writeText("<meta charset=\"utf-8\"><p>${TranscriptionReport.escapeHtml(summary)}</p>", Charsets.UTF_8)
         }
         val logFile = File(sessionDir, "log.txt").apply { writeText(logLines.toString(), Charsets.UTF_8) }
         val terminalFile = File(sessionDir, "terminal.txt").apply { writeText(snapshotText(terminalLines), Charsets.UTF_8) }
@@ -4475,13 +4356,13 @@ class RemoteSttActivity : AppCompatActivity() {
             preparedUploads.forEachIndexed { index, prepared ->
                 ensureNotCancelled()
                 val extension = prepared.uploadFile.file.extension.takeIf { it.isNotBlank() }?.let { ".$it" } ?: ".wav"
-                var entryName = "${safeBaseName(prepared.item.name)}$extension"
+                var entryName = "${TranscriptionReport.safeBaseName(prepared.item.name)}$extension"
                 var suffix = 2
                 while (!usedNames.add(entryName.lowercase(Locale.ROOT))) {
-                    entryName = "${safeBaseName(prepared.item.name)}_$suffix$extension"
+                    entryName = "${TranscriptionReport.safeBaseName(prepared.item.name)}_$suffix$extension"
                     suffix++
                 }
-                entryStemByIndex[prepared.index] = safeBaseName(entryName).lowercase(Locale.ROOT)
+                entryStemByIndex[prepared.index] = TranscriptionReport.safeBaseName(entryName).lowercase(Locale.ROOT)
                 zip.putNextEntry(ZipEntry(entryName))
                 prepared.uploadFile.file.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
@@ -4532,7 +4413,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 val entry = zip.nextEntry ?: break
                 val leafName = entry.name.replace('\\', '/').substringAfterLast('/')
                 if (!entry.isDirectory && leafName.lowercase(Locale.ROOT).endsWith(".txt")) {
-                    texts[safeBaseName(leafName).lowercase(Locale.ROOT)] =
+                    texts[TranscriptionReport.safeBaseName(leafName).lowercase(Locale.ROOT)] =
                         ByteArrayOutputStream().use { output -> zip.copyTo(output); output.toString(Charsets.UTF_8.name()) }
                 }
                 zip.closeEntry()
@@ -4540,9 +4421,9 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         if (texts.isEmpty()) throw IllegalStateException("o servidor não retornou arquivos TXT no ZIP")
         return preparedUploads.sortedBy { it.index }.mapIndexed { index, prepared ->
-            val key = entryStemByIndex[prepared.index] ?: safeBaseName(prepared.item.name).lowercase(Locale.ROOT)
+            val key = entryStemByIndex[prepared.index] ?: TranscriptionReport.safeBaseName(prepared.item.name).lowercase(Locale.ROOT)
             val text = texts[key]?.trim() ?: throw IllegalStateException("TXT não retornado para ${prepared.item.name}")
-            uniqueFile(transcriptionDir, "${safeBaseName(prepared.item.name)}.txt").writeText(text + "\n", Charsets.UTF_8)
+            TranscriptionReport.uniqueFile(transcriptionDir, "${TranscriptionReport.safeBaseName(prepared.item.name)}.txt").writeText(text + "\n", Charsets.UTF_8)
             appendTerminal(terminalLines, "Resposta ZIP: ${index + 1}/${preparedUploads.size}")
             runOnUiThread {
                 status.text = "Processando resposta ZIP: ${index + 1}/${preparedUploads.size}"
@@ -4709,17 +4590,6 @@ class RemoteSttActivity : AppCompatActivity() {
         throw IllegalStateException("AssemblyAI async terminou sem estado.")
     }
 
-    private fun describeAudioFile(file: File): String {
-        val info = probeAudioFile(file)
-        return listOf(
-            ".${file.extension.lowercase(Locale.ROOT).ifBlank { "sem extensão" }}",
-            info.codec.ifBlank { "codec ?" },
-            info.sampleRate.ifBlank { "hz ?" },
-            info.channels.ifBlank { "canal ?" },
-            info.bitrate.ifBlank { "bitrate ?" }
-        ).joinToString(", ")
-    }
-
     private fun humanFileSize(bytes: Long): String {
         if (bytes < 1024L) return "$bytes B"
         val kb = bytes / 1024.0
@@ -4732,81 +4602,11 @@ class RemoteSttActivity : AppCompatActivity() {
             val session = FFmpegKit.executeWithArguments(
                 arrayOf("-hide_banner", "-i", file.absolutePath)
             )
-            parseDurationSeconds(session.allLogsAsString.orEmpty())
+            TranscriptionReport.parseDurationSeconds(session.allLogsAsString.orEmpty())
                 ?.takeIf { it > 0.0 }
                 ?.let { (it * 1000.0).toLong() }
         } catch (_: Throwable) {
             null
-        }
-    }
-
-    private fun probeAudioFile(file: File): AudioProbe {
-        return try {
-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", file.absolutePath))
-            val logs = session.allLogsAsString.orEmpty()
-            val audioLine = logs.lines().firstOrNull { it.contains("Audio:", ignoreCase = true) }.orEmpty()
-            val codec = Regex("""Audio:\s*([^,\s]+)""", RegexOption.IGNORE_CASE)
-                .find(audioLine)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.lowercase(Locale.ROOT)
-                .orEmpty()
-            val sampleRateHz = Regex("""(\d+)\s*Hz""", RegexOption.IGNORE_CASE)
-                .find(audioLine)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.toIntOrNull()
-            val channelCount = when {
-                audioLine.contains("mono", ignoreCase = true) -> 1
-                audioLine.contains("stereo", ignoreCase = true) -> 2
-                else -> Regex("""(\d+)\s*channels""", RegexOption.IGNORE_CASE)
-                    .find(audioLine)
-                    ?.groupValues
-                    ?.getOrNull(1)
-                    ?.toIntOrNull()
-            }
-            val durationSeconds = parseDurationSeconds(logs)
-            val parsedBitrateKbps = Regex("""(\d+(?:\.\d+)?)\s*kb/s""", RegexOption.IGNORE_CASE)
-                .find(audioLine.ifBlank { logs })
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.toDoubleOrNull()
-            val bitrateKbps = parsedBitrateKbps
-                ?: durationSeconds?.takeIf { it > 0.0 }?.let { (file.length() * 8.0) / it / 1000.0 }
-            AudioProbe(
-                codec = codec,
-                sampleRate = sampleRateHz?.let { "${it}hz" }.orEmpty(),
-                channels = when (channelCount) {
-                    1 -> "mono"
-                    2 -> "stereo"
-                    null -> ""
-                    else -> "${channelCount}ch"
-                },
-                bitrate = bitrateKbps?.let { formatKbps(it) }.orEmpty(),
-                sampleRateHz = sampleRateHz,
-                channelCount = channelCount,
-                bitrateKbps = bitrateKbps,
-                hasVideo = logs.lines().any { it.contains("Video:", ignoreCase = true) }
-            )
-        } catch (_: Throwable) {
-            AudioProbe("", "", "", "", null, null, null, false)
-        }
-    }
-
-    private fun parseDurationSeconds(logs: String): Double? {
-        val match = Regex("""Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)""", RegexOption.IGNORE_CASE).find(logs)
-            ?: return null
-        val hours = match.groupValues.getOrNull(1)?.toDoubleOrNull() ?: return null
-        val minutes = match.groupValues.getOrNull(2)?.toDoubleOrNull() ?: return null
-        val seconds = match.groupValues.getOrNull(3)?.toDoubleOrNull() ?: return null
-        return hours * 3600.0 + minutes * 60.0 + seconds
-    }
-
-    private fun formatKbps(value: Double): String {
-        return if (value < 10.0) {
-            String.format(Locale.US, "%.1fk", value)
-        } else {
-            "${value.toInt()}k"
         }
     }
 
@@ -4898,171 +4698,18 @@ class RemoteSttActivity : AppCompatActivity() {
         preparedUploads: List<PreparedUpload>,
         terminalLines: StringBuilder
     ): List<TranscriptionResult> {
-        val parsed = parseGraniteResponseItems(responseText)
+        val parsed = SttResponseParsers.parseResponseItems(responseText)
         if (parsed.isEmpty()) {
             appendTerminal(terminalLines, responseText.take(600))
             throw IllegalStateException("resposta sem transcrição")
         }
-
-        val unused = parsed.toMutableList()
-        return preparedUploads.sortedBy { it.index }.mapIndexed { orderIndex, prepared ->
-            val matchedIndex = unused.indexOfFirst { candidate ->
-                val key = candidate.name?.lowercase(Locale.ROOT) ?: return@indexOfFirst false
-                key == prepared.item.name.lowercase(Locale.ROOT) ||
-                    key == prepared.uploadFile.file.name.lowercase(Locale.ROOT) ||
-                    key.substringAfterLast('/') == prepared.item.name.lowercase(Locale.ROOT) ||
-                    key.substringAfterLast('/') == prepared.uploadFile.file.name.lowercase(Locale.ROOT)
-            }
-            val item = when {
-                matchedIndex >= 0 -> unused.removeAt(matchedIndex)
-                unused.size == preparedUploads.size - orderIndex -> unused.removeAt(0)
-                preparedUploads.size == 1 && unused.isNotEmpty() -> unused.removeAt(0)
-                else -> ParsedText(null, "")
-            }
-            val clean = item.text.trim()
-            if (clean.isNotBlank()) appendTerminalTranscription(terminalLines, clean)
-            TranscriptionResult(prepared.index, prepared.item.name, clean, item.timestampedText)
+        val uploadKeys = preparedUploads.map {
+            SttResponseParsers.UploadKey(it.index, it.item.name, it.uploadFile.file.name)
         }
-    }
-
-    private fun parseGraniteResponseItems(responseText: String): List<ParsedText> {
-        val trimmed = responseText.trim()
-        if (trimmed.isBlank()) return emptyList()
-        return try {
-            when {
-                trimmed.startsWith("{") -> parsedTextsFromObject(JSONObject(trimmed), null)
-                trimmed.startsWith("[") -> parsedTextsFromArray(JSONArray(trimmed), null)
-                else -> listOf(ParsedText(null, trimmed))
-            }
-        } catch (_: Throwable) {
-            listOf(ParsedText(null, trimmed))
-        }.filter { it.text.isNotBlank() }
-    }
-
-    private fun parsedTextsFromObject(json: JSONObject, fallbackName: String?): List<ParsedText> {
-        val name = listOf("filename", "file", "name", "path")
-            .firstNotNullOfOrNull { key -> json.optString(key).takeIf { it.isNotBlank() } }
-            ?: fallbackName
-        val directText = listOf("text", "transcription", "transcript", "result", "output")
-            .firstNotNullOfOrNull { key -> json.optString(key).takeIf { it.isNotBlank() } }
-        if (directText != null) {
-            return listOf(ParsedText(name, directText, extractTimestampedText(json)))
+        return SttResponseParsers.matchTranscriptions(parsed, uploadKeys).map { matched ->
+            if (matched.text.isNotBlank()) appendTerminalTranscription(terminalLines, matched.text)
+            TranscriptionResult(matched.index, matched.itemName, matched.text, matched.timestampedText)
         }
-
-        listOf("results", "files", "items", "data", "transcriptions", "segments").forEach { key ->
-            if (!json.has(key) || json.isNull(key)) return@forEach
-            val value = json.get(key)
-            val nested = parsedTextsFromAny(value, name)
-            if (nested.isNotEmpty()) {
-                if (key == "segments") {
-                    return listOf(
-                        ParsedText(
-                            name,
-                            nested.joinToString("") { it.text },
-                            nested.mapNotNull { it.timestampedText.takeIf(String::isNotBlank) }.joinToString("\n")
-                        )
-                    )
-                }
-                return nested
-            }
-        }
-
-        val mapped = mutableListOf<ParsedText>()
-        json.keys().forEach { key ->
-            val value = json.opt(key)
-            if (value != null && value != JSONObject.NULL) {
-                mapped += parsedTextsFromAny(value, key)
-            }
-        }
-        return mapped
-    }
-
-    private fun parsedTextsFromArray(array: JSONArray, fallbackName: String?): List<ParsedText> {
-        val result = mutableListOf<ParsedText>()
-        for (i in 0 until array.length()) {
-            val value = array.opt(i)
-            if (value != null && value != JSONObject.NULL) {
-                result += parsedTextsFromAny(value, fallbackName)
-            }
-        }
-        return result
-    }
-
-    private fun parsedTextsFromAny(value: Any, fallbackName: String?): List<ParsedText> {
-        return when (value) {
-            is JSONObject -> parsedTextsFromObject(value, fallbackName)
-            is JSONArray -> parsedTextsFromArray(value, fallbackName)
-            is String -> listOf(ParsedText(fallbackName, value))
-            else -> emptyList()
-        }
-    }
-
-    private fun extractTimestampedText(json: JSONObject): String {
-        val segments = json.optJSONArray("segments")
-        if (segments != null) {
-            return timedEntriesFromArray(segments, groupWords = false)
-        }
-        val words = json.optJSONArray("words")
-        if (words != null) {
-            return timedEntriesFromArray(words, groupWords = true)
-        }
-        val direct = timedEntryFromObject(json)
-        return direct?.let { formatTimedEntry(it) }.orEmpty()
-    }
-
-    private fun timedEntriesFromArray(array: JSONArray, groupWords: Boolean): String {
-        val entries = buildList {
-            for (index in 0 until array.length()) {
-                array.optJSONObject(index)?.let(::timedEntryFromObject)?.let(::add)
-            }
-        }
-        if (entries.isEmpty()) return ""
-        if (!groupWords) return entries.joinToString("\n", transform = ::formatTimedEntry)
-
-        val phrases = mutableListOf<TimedEntry>()
-        var currentText = StringBuilder()
-        var currentStart = entries.first().startSeconds
-        var currentEnd = entries.first().endSeconds
-        entries.forEachIndexed { index, entry ->
-            if (currentText.isNotEmpty() && !entry.text.matches(Regex("""^[,.;:!?]$"""))) {
-                currentText.append(' ')
-            }
-            currentText.append(entry.text)
-            currentEnd = entry.endSeconds
-            if (entry.text.matches(Regex(""".*[.!?]$""")) || index == entries.lastIndex) {
-                phrases += TimedEntry(currentText.toString().trim(), currentStart, currentEnd)
-                currentText = StringBuilder()
-                if (index < entries.lastIndex) currentStart = entries[index + 1].startSeconds
-            }
-        }
-        return phrases.joinToString("\n", transform = ::formatTimedEntry)
-    }
-
-    private fun timedEntryFromObject(json: JSONObject): TimedEntry? {
-        val text = listOf("text", "word", "transcript")
-            .firstNotNullOfOrNull { key -> json.optString(key).trim().takeIf(String::isNotBlank) }
-            ?: return null
-        val start = json.optFiniteDouble("start")
-            ?: json.optFiniteDouble("start_time")
-            ?: json.optJSONArray("timestamp")?.optDouble(0)?.takeIf(Double::isFinite)
-            ?: return null
-        val end = json.optFiniteDouble("end")
-            ?: json.optFiniteDouble("end_time")
-            ?: json.optJSONArray("timestamp")?.optDouble(1)?.takeIf(Double::isFinite)
-            ?: json.optFiniteDouble("duration")?.let { start + it }
-            ?: return null
-        if (start < 0.0 || end < start) return null
-        return TimedEntry(text, start, end)
-    }
-
-    private fun JSONObject.optFiniteDouble(key: String): Double? {
-        if (!has(key) || isNull(key)) return null
-        return optDouble(key, Double.NaN).takeIf(Double::isFinite)
-    }
-
-    private fun formatTimedEntry(entry: TimedEntry): String {
-        return "[${formatTimestamp((entry.startSeconds * 1000).toLong())} -> " +
-            "${formatTimestamp((entry.endSeconds * 1000).toLong())}] ${entry.text}"
     }
 
     private fun prepareUploadFile(
@@ -5080,11 +4727,11 @@ class RemoteSttActivity : AppCompatActivity() {
             PrepareMode.ORIGINAL -> prepareOriginalUpload(inputFile, tempDir, index, item, startMs, durationMs, terminalLines)
             PrepareMode.READY -> {
                 val fullFile = startMs <= 0L && durationMs >= item.durationMs - 10L
-                if (fullFile && isAlreadyReadyWav(inputFile, item.name, terminalLines)) {
+                if (fullFile && SttAudioProbe.isAlreadyReadyWav(inputFile, item.name) { appendTerminal(terminalLines, it) }) {
                     appendTerminal(terminalLines, "[${item.name}] conversão ignorada: WAV já está pronto para envio")
                     return UploadFile(inputFile, "audio/wav", "wav original 16 kHz mono PCM s16le")
                 }
-                val wavFile = File(tempDir, "${index}_${safeBaseName(item.name)}.wav")
+                val wavFile = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}.wav")
                 convertToReadyWav(inputFile, wavFile, item.name, startMs, durationMs, terminalLines)
                 UploadFile(wavFile, "audio/wav", "wav 16 kHz mono PCM s16le")
             }
@@ -5121,15 +4768,15 @@ class RemoteSttActivity : AppCompatActivity() {
 
         val readyWav = if (preparedUploadFile.mime == "audio/wav" &&
             preparedUploadFile.file.name.lowercase(Locale.ROOT).endsWith(".wav") &&
-            isAlreadyReadyWav(preparedUploadFile.file, preparedUploadFile.file.name, terminalLines)
+            SttAudioProbe.isAlreadyReadyWav(preparedUploadFile.file, preparedUploadFile.file.name) { appendTerminal(terminalLines, it) }
         ) {
             preparedUploadFile.file
         } else {
-            File(tempDir, "${index}_${safeBaseName(item.name)}_vad_input.wav").also { wav ->
+            File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_vad_input.wav").also { wav ->
                 convertToReadyWav(sourceFile, wav, item.name, startMs, durationMs, terminalLines)
             }
         }
-        val filteredWav = File(tempDir, "${index}_${safeBaseName(item.name)}_vad.wav")
+        val filteredWav = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_vad.wav")
         val modelPath = if (mode.usesSilero) ensureBundledSileroVadModel().absolutePath else ""
         val nativeResult = WhisperNative.filterVad(
             readyWav.absolutePath,
@@ -5177,15 +4824,15 @@ class RemoteSttActivity : AppCompatActivity() {
         terminalLines: StringBuilder
     ): UploadFile {
         val fullFile = startMs <= 0L && durationMs >= item.durationMs - 10L
-        val probe = probeAudioFile(inputFile)
+        val probe = SttAudioProbe.probe(inputFile)
 
-        if (fullFile && !probe.hasVideo && !isVideo(item.mime, item.name)) {
+        if (fullFile && !probe.hasVideo && !MediaTypeRules.isVideo(item.mime, item.name)) {
             appendTerminal(terminalLines, "[${item.name}] envio direto: áudio original sem conversão")
-            return UploadFile(inputFile, contentMimeForUpload(item), "arquivo original")
+            return UploadFile(inputFile, MediaTypeRules.contentMimeForUpload(item.mime, item.name), "arquivo original")
         }
 
         val ext = "m4a"
-        val extractedFile = File(tempDir, "${index}_${safeBaseName(item.name)}_extracted.$ext")
+        val extractedFile = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_extracted.$ext")
 
         appendTerminal(terminalLines, "[${item.name}] extraindo áudio original (m4a)...")
         val arguments = mutableListOf("-y")
@@ -5203,7 +4850,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val session = FFmpegKit.executeWithArguments(arguments.toTypedArray())
         if (!ReturnCode.isSuccess(session.returnCode)) {
             appendTerminal(terminalLines, "[${item.name}] falha ao extrair áudio, usando conversão de segurança (FLAC)...")
-            val flacFile = File(tempDir, "${index}_${safeBaseName(item.name)}_extracted.flac")
+            val flacFile = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_extracted.flac")
             val fallbackArgs = mutableListOf("-y")
             if (startMs > 0L) fallbackArgs.addAll(listOf("-ss", formatSeconds(startMs)))
             fallbackArgs.addAll(listOf("-i", inputFile.absolutePath))
@@ -5231,61 +4878,14 @@ class RemoteSttActivity : AppCompatActivity() {
         terminalLines: StringBuilder
     ): UploadFile {
         val fullFile = startMs <= 0L && durationMs >= item.durationMs - 10L
-        if (fullFile && isAlreadyCompact(inputFile, item.name, terminalLines)) {
+        if (fullFile && SttAudioProbe.isAlreadyCompact(inputFile, item.name) { appendTerminal(terminalLines, it) }) {
             val mime = "audio/ogg"
             appendTerminal(terminalLines, "[${item.name}] conversão ignorada: arquivo já está compacto")
             return UploadFile(inputFile, mime, "arquivo compacto original")
         }
-        val oggFile = File(tempDir, "${index}_${safeBaseName(item.name)}.ogg")
+        val oggFile = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}.ogg")
         convertToCompactOgg(inputFile, oggFile, item.name, startMs, durationMs, terminalLines)
         return UploadFile(oggFile, "audio/ogg", "ogg opus 16 kHz mono 32k")
-    }
-
-    private fun contentMimeForUpload(item: MediaItem): String {
-        if (item.mime.isNotBlank() && item.mime != "application/octet-stream") return item.mime
-        return when {
-            isVideo("", item.name) -> "video/mp4"
-            item.name.lowercase(Locale.ROOT).endsWith(".mp3") -> "audio/mpeg"
-            item.name.lowercase(Locale.ROOT).endsWith(".wav") -> "audio/wav"
-            item.name.lowercase(Locale.ROOT).endsWith(".ogg") -> "audio/ogg"
-            item.name.lowercase(Locale.ROOT).endsWith(".opus") -> "audio/opus"
-            item.name.lowercase(Locale.ROOT).endsWith(".m4a") -> "audio/mp4"
-            else -> "application/octet-stream"
-        }
-    }
-
-    private fun isAlreadyCompact(inputFile: File, originalName: String, terminalLines: StringBuilder): Boolean {
-        val lower = originalName.lowercase(Locale.ROOT)
-        if (!lower.endsWith(".ogg")) return false
-        appendTerminal(terminalLines, "[${originalName}] analisando metadados para envio compactado")
-        val probe = probeAudioFile(inputFile)
-        appendTerminal(terminalLines, "[${originalName}] metadados: ${metadataSummary(probe)}")
-        return !probe.hasVideo &&
-            probe.codec == "opus" &&
-            probe.sampleRateHz == 16000 &&
-            probe.channelCount == 1 &&
-            probe.bitrateKbps?.let { it <= 40.0 } == true
-    }
-
-    private fun isAlreadyReadyWav(inputFile: File, originalName: String, terminalLines: StringBuilder): Boolean {
-        if (!originalName.lowercase(Locale.ROOT).endsWith(".wav")) return false
-        appendTerminal(terminalLines, "[${originalName}] analisando metadados para envio pronto")
-        val probe = probeAudioFile(inputFile)
-        appendTerminal(terminalLines, "[${originalName}] metadados: ${metadataSummary(probe)}")
-        return !probe.hasVideo &&
-            probe.codec == "pcm_s16le" &&
-            probe.sampleRateHz == 16000 &&
-            probe.channelCount == 1
-    }
-
-    private fun metadataSummary(probe: AudioProbe): String {
-        return listOf(
-            "codec=${probe.codec.ifBlank { "?" }}",
-            "hz=${probe.sampleRate.ifBlank { "?" }}",
-            "canais=${probe.channels.ifBlank { "?" }}",
-            "bitrate=${probe.bitrate.ifBlank { "?" }}",
-            "video=${if (probe.hasVideo) "sim" else "não"}"
-        ).joinToString(", ")
     }
 
     private fun convertToCompactOgg(
@@ -5383,48 +4983,6 @@ class RemoteSttActivity : AppCompatActivity() {
         return sessionRef.get() ?: session
     }
 
-    private fun extractTextDelta(rawLine: String): String {
-        var line = rawLine.trim()
-        if (line.startsWith("event:") || line.startsWith("id:") || line.startsWith("retry:")) return ""
-        if (line.startsWith("data:")) line = line.removePrefix("data:").trim()
-        if (line == "[DONE]") return ""
-        if (line.isBlank()) return ""
-        return if (line.startsWith("{")) {
-            try {
-                val json = JSONObject(line)
-                json.optString("text")
-                    .ifBlank { json.optString("delta") }
-                    .ifBlank {
-                        val choices = json.optJSONArray("choices")
-                        val choice = choices?.optJSONObject(0)
-                        val delta = choice?.optJSONObject("delta")
-                        delta?.optString("content").orEmpty().ifBlank { choice?.optString("text").orEmpty() }
-                    }
-                    .ifBlank {
-                        val segments = json.optJSONArray("segments") ?: return@ifBlank ""
-                        buildString {
-                            for (i in 0 until segments.length()) {
-                                append(segments.optJSONObject(i)?.optString("text").orEmpty())
-                            }
-                        }
-                    }
-            } catch (_: Throwable) {
-                ""
-            }
-        } else {
-            line
-        }
-    }
-
-    private fun isServerEnvelopeLine(rawLine: String): Boolean {
-        val line = rawLine.trim()
-        return line.startsWith("data:") ||
-            line.startsWith("event:") ||
-            line.startsWith("id:") ||
-            line.startsWith("retry:") ||
-            line == "[DONE]"
-    }
-
     private fun cancelTranscription() {
         cancelRequested = true
         status.text = "Cancelando..."
@@ -5482,10 +5040,10 @@ class RemoteSttActivity : AppCompatActivity() {
             return
         }
         val enabled = selectedItems.isNotEmpty() &&
-            selectedItems.all { isSupportedMedia(it.mime, it.name) } &&
+            selectedItems.all { MediaTypeRules.isSupportedMedia(it.mime, it.name) } &&
             selectedPrepareMode != null &&
             (checkboxOnlyVad?.isChecked != true || selectedVadMode != VadMode.NONE)
-        buttonTranscribe?.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { isSupportedMedia(it.mime, it.name) }) {
+        buttonTranscribe?.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { MediaTypeRules.isSupportedMedia(it.mime, it.name) }) {
             View.VISIBLE
         } else {
             View.GONE
@@ -5881,15 +5439,6 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun plainTranscriptForRequests(): String {
         return liveTranscriptTextView.text?.toString()?.trim().orEmpty()
-    }
-
-    private fun formatTimestamp(timeMs: Long): String {
-        val safe = timeMs.coerceAtLeast(0L)
-        val hours = safe / 3_600_000L
-        val minutes = (safe / 60_000L) % 60L
-        val seconds = (safe / 1_000L) % 60L
-        val millis = safe % 1_000L
-        return String.format(Locale.US, "%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
     }
 
     private fun updateTextEditorsLock() {
@@ -6559,25 +6108,6 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
-    private fun appendLog(builder: StringBuilder, line: String) {
-        val stamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
-        synchronized(builder) { builder.append("[$stamp] ").append(line).append('\n') }
-    }
-
-    private fun appendTranscriptionHeader(builder: StringBuilder, fileName: String) {
-        synchronized(builder) {
-            if (builder.isNotEmpty() && !builder.endsWith("\n")) builder.append('\n')
-            builder.append(fileName).append("\n\n")
-        }
-    }
-
-    private fun appendTranscriptionSeparator(builder: StringBuilder) {
-        synchronized(builder) {
-            if (!builder.endsWith("\n")) builder.append('\n')
-            builder.append("-------------------------------\n")
-        }
-    }
-
     private fun buildReport(
         fileCount: Int,
         totalAudioSeconds: Double,
@@ -6609,37 +6139,6 @@ class RemoteSttActivity : AppCompatActivity() {
         return lines.joinToString("\n")
     }
 
-    private fun buildHtml(results: List<TranscriptionResult>): String {
-        val rows = results.joinToString("\n") { result ->
-            "<tr><td>${escapeHtml(result.fileName)}</td><td>${escapeHtml(result.text).replace("\n", "<br>")}</td></tr>"
-        }
-        return """
-            <!doctype html>
-            <html lang="pt-BR">
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>Transcrições</title>
-              <style>
-                body { font-family: sans-serif; margin: 24px; color: #111; }
-                table { border-collapse: collapse; width: 100%; }
-                th, td { border: 1px solid #bbb; padding: 8px; vertical-align: top; }
-                th { background: #eee; text-align: left; }
-              </style>
-            </head>
-            <body>
-              <h1>Transcrições</h1>
-              <table>
-                <thead><tr><th>Arquivo</th><th>Transcrição</th></tr></thead>
-                <tbody>
-                $rows
-                </tbody>
-              </table>
-            </body>
-            </html>
-        """.trimIndent()
-    }
-
     private fun buildLiveHtml(text: String): String {
         return """
             <!doctype html>
@@ -6663,7 +6162,7 @@ class RemoteSttActivity : AppCompatActivity() {
             </head>
             <body>
               <h1>Transcrição ao vivo</h1>
-              <div class="box">${escapeHtml(text)}</div>
+              <div class="box">${TranscriptionReport.escapeHtml(text)}</div>
             </body>
             </html>
         """.trimIndent()
@@ -6672,20 +6171,12 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun buildTranscriptionsText(results: List<TranscriptionResult>): String {
         val builder = StringBuilder()
         results.forEach { result ->
-            appendTranscriptionHeader(builder, result.fileName)
+            TranscriptionReport.appendTranscriptionHeader(builder, result.fileName)
             builder.append(result.text.trim()).append('\n')
-            appendTranscriptionSeparator(builder)
+            TranscriptionReport.appendTranscriptionSeparator(builder)
         }
         return builder.toString()
     }
-
-    /** Texto plano: remove os rótulos "Interlocutor N:" do texto diarizado. */
-    private fun stripDiarizationLabels(text: String): String =
-        text.lineSequence()
-            .joinToString("\n") { line ->
-                line.replaceFirst(Regex("^\\s*Interlocutor\\s+\\d+\\s*:\\s*"), "").trim()
-            }
-            .trim()
 
     private fun buildTranscriptDisplayText(results: List<TranscriptionResult>): String {
         return if (results.size == 1) {
@@ -6702,21 +6193,12 @@ class RemoteSttActivity : AppCompatActivity() {
         } else {
             buildString {
                 results.forEach { result ->
-                    appendTranscriptionHeader(this, result.fileName)
+                    TranscriptionReport.appendTranscriptionHeader(this, result.fileName)
                     append(result.timestampedText.trim()).append('\n')
-                    appendTranscriptionSeparator(this)
+                    TranscriptionReport.appendTranscriptionSeparator(this)
                 }
             }.trim()
         }
-    }
-
-    private fun escapeHtml(value: String): String {
-        return value
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&#39;")
     }
 
     private fun createSessionDir(): File {
@@ -6783,16 +6265,6 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun releaseAudioPlayer() {
         audioPlayer?.release()
         audioPlayer = null
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
-            }
-        }
-        return uri.lastPathSegment
     }
 
     private fun takeReadPermission(uri: Uri, flags: Int) {
@@ -6871,47 +6343,6 @@ class RemoteSttActivity : AppCompatActivity() {
         return String.format(Locale.US, "%02d:%02d.%03d", minutes, seconds, milliseconds)
     }
 
-    private fun safeBaseName(name: String): String {
-        return name.substringBeforeLast('.', name).ifBlank { "transcricao" }
-            .replace(Regex("""[\\/:*?"<>|]"""), "_")
-    }
-
-    private fun uniqueFile(outputDir: File, outputName: String): File {
-        val base = outputName.substringBeforeLast('.', outputName)
-        val extension = outputName.substringAfterLast('.', "")
-        var candidate = File(outputDir, outputName)
-        var suffix = 2
-        while (candidate.exists()) {
-            candidate = File(outputDir, "${base}_$suffix.$extension")
-            suffix++
-        }
-        return candidate
-    }
-
-    private fun isSupportedMedia(mime: String, name: String): Boolean {
-        return isVideo(mime, name) || isAudio(mime, name)
-    }
-
-    private fun isVideo(mime: String, name: String): Boolean {
-        if (mime.startsWith("video/")) return true
-        val lower = name.lowercase(Locale.ROOT)
-        return VIDEO_EXTENSIONS.any { lower.endsWith(it) }
-    }
-
-    private fun isAudio(mime: String, name: String): Boolean {
-        if (mime.startsWith("audio/")) return true
-        val lower = name.lowercase(Locale.ROOT)
-        return AUDIO_EXTENSIONS.any { lower.endsWith(it) }
-    }
-
-    private fun guessMime(name: String): String {
-        return when {
-            isVideo("", name) -> "video/*"
-            isAudio("", name) -> "audio/*"
-            else -> "application/octet-stream"
-        }
-    }
-
     private fun ensureNotCancelled() {
         if (cancelRequested) throw CancellationException()
     }
@@ -6966,29 +6397,6 @@ class RemoteSttActivity : AppCompatActivity() {
         val durationMs: Long,
         val originalAudioInfo: String,
         val sentAudioInfo: String
-    )
-
-    private data class ParsedText(
-        val name: String?,
-        val text: String,
-        val timestampedText: String = ""
-    )
-
-    private data class TimedEntry(
-        val text: String,
-        val startSeconds: Double,
-        val endSeconds: Double
-    )
-
-    private data class AudioProbe(
-        val codec: String,
-        val sampleRate: String,
-        val channels: String,
-        val bitrate: String,
-        val sampleRateHz: Int?,
-        val channelCount: Int?,
-        val bitrateKbps: Double?,
-        val hasVideo: Boolean
     )
 
     private data class VadRunSnapshot(
@@ -7216,7 +6624,5 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val TRANSCRIPTION_END = "\uE000TE\uE000"
         private const val AUDIO_INFO_START = "\uE000AI\uE000"
         private const val AUDIO_INFO_END = "\uE000AE\uE000"
-        private val VIDEO_EXTENSIONS = setOf(".mp4", ".mkv", ".mov", ".avi", ".webm", ".3gp", ".m4v")
-        private val AUDIO_EXTENSIONS = setOf(".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".wma")
     }
 }

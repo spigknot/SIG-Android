@@ -372,7 +372,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun loadClip(uri: Uri): JoinClip? {
-        val name = queryDisplayName(uri) ?: "midia_${clips.size + 1}"
+        val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia_${clips.size + 1}"
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(this, uri)
@@ -2661,16 +2661,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             FileOutputStream(file).use { output -> input.copyTo(output) }
         }
         return file
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
-            }
-        }
-        return uri.lastPathSegment
     }
 
     private fun totalDurationMs(): Long = clips.sumOf { it.durationMs }.coerceAtLeast(1L)

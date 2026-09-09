@@ -419,7 +419,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
 
     private fun loadSelectedVideo(uri: Uri) {
         selectedUri = uri
-        selectedName = queryDisplayName(uri) ?: "video.mp4"
+        selectedName = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "video.mp4"
         status.text = ""
         clearOutputResult()
         controls.visibility = View.VISIBLE
@@ -1326,7 +1326,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private fun saveParallelFailureDiagnostic(segmentNumber: Int, logs: String): String? {
         if (logs.isBlank()) return null
         return try {
-            val root = if (hasSigStorageAccess()) {
+            val root = if (MediaUriSupport.hasSigStorageAccess()) {
                 File(sigOutputDir(), "diagnosticos")
             } else {
                 File(getExternalFilesDir(null), "diagnosticos")
@@ -2269,10 +2269,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
     }
 
-    private fun hasSigStorageAccess(): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
-    }
-
     private fun openOutputFile() {
         val uri = lastOutputUri ?: return
         try {
@@ -2283,16 +2279,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         } catch (_: ActivityNotFoundException) {
             Toast.makeText(this, "Não encontrei um app para abrir o vídeo.", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
-            }
-        }
-        return uri.lastPathSegment
     }
 
     private fun formatTime(ms: Long): String {

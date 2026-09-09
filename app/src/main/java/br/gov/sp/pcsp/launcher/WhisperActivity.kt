@@ -530,7 +530,7 @@ class WhisperActivity : AppCompatActivity() {
             contentResolver.takePersistableUriPermission(uri, flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (_: SecurityException) {
         }
-        val name = queryDisplayName(uri) ?: "audio_${selectedItems.size + 1}"
+        val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "audio_${selectedItems.size + 1}"
         selectedItems += MediaItem(uri, name)
     }
 
@@ -584,7 +584,7 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun loadPickedModel(data: Intent) {
         val uri = data.data ?: return
-        val name = queryDisplayName(uri)?.takeIf { it.lowercase(Locale.US).endsWith(".bin") }
+        val name = MediaUriSupport.queryDisplayName(contentResolver, uri)?.takeIf { it.lowercase(Locale.US).endsWith(".bin") }
             ?: "modelo_${System.currentTimeMillis()}.bin"
         val destination = File(modelsDir(), name)
         Thread {
@@ -751,14 +751,14 @@ class WhisperActivity : AppCompatActivity() {
                 appendTerminal(terminalLines, "backend: ${backend.reportLabel}")
                 appendTerminal(terminalLines, "decode: ${settings.describe()}")
                 appendTerminal(terminalLines, WhisperNative.buildInfo())
-                appendLog(logLines, "Sessão: ${sessionDir.name}")
-                appendLog(logLines, "Pasta de saída: ${sessionDir.absolutePath}")
-                appendLog(logLines, "Modelo: ${model.label}")
-                appendLog(logLines, "Backend: ${backend.reportLabel}")
-                appendLog(logLines, "Idioma: ${selectedLanguage.label}")
-                appendLog(logLines, "Decode: ${settings.describe()}")
-                appendLog(logLines, WhisperNative.buildInfo())
-                appendLog(logLines, "CPU: ${cpuName()}")
+                TranscriptionReport.appendLog(logLines, "Sessão: ${sessionDir.name}")
+                TranscriptionReport.appendLog(logLines, "Pasta de saída: ${sessionDir.absolutePath}")
+                TranscriptionReport.appendLog(logLines, "Modelo: ${model.label}")
+                TranscriptionReport.appendLog(logLines, "Backend: ${backend.reportLabel}")
+                TranscriptionReport.appendLog(logLines, "Idioma: ${selectedLanguage.label}")
+                TranscriptionReport.appendLog(logLines, "Decode: ${settings.describe()}")
+                TranscriptionReport.appendLog(logLines, WhisperNative.buildInfo())
+                TranscriptionReport.appendLog(logLines, "CPU: ${cpuName()}")
 
                 runOnUiThread {
                     logToggle.visibility = View.VISIBLE
@@ -766,7 +766,7 @@ class WhisperActivity : AppCompatActivity() {
                     updateTerminalText(terminalLines)
                 }
 
-                appendLog(logLines, "Convertendo arquivos para WAV temporário...")
+                TranscriptionReport.appendLog(logLines, "Convertendo arquivos para WAV temporário...")
                 val convertedItems = prepareWavFiles(items, tempWavDir, terminalLines, logLines)
                 checkNotCancelled()
                 val totalAudioSeconds = convertedItems.sumOf { it.durationSeconds }
@@ -774,7 +774,7 @@ class WhisperActivity : AppCompatActivity() {
 
                 appendTerminal(terminalLines, "")
                 appendTerminal(terminalLines, "loading model: ${modelFile(model).absolutePath}")
-                appendLog(logLines, "Carregando modelo...")
+                TranscriptionReport.appendLog(logLines, "Carregando modelo...")
                 runOnUiThread {
                     setTranscriptionStatus("Carregando modelo...")
                     updateGlobalLogText()
@@ -795,26 +795,26 @@ class WhisperActivity : AppCompatActivity() {
                     .filter { it.isNotBlank() }
                     .forEach { appendTerminal(terminalLines, it) }
                 appendTerminal(terminalLines, "native backends:\n${WhisperNative.backendInfo()}")
-                appendLog(logLines, "Modelo carregado em ${formatElapsedCompact(modelLoadMs)}")
+                TranscriptionReport.appendLog(logLines, "Modelo carregado em ${formatElapsedCompact(modelLoadMs)}")
                 WhisperNative.lastLoadLog().trimEnd().takeIf { it.isNotBlank() }?.let {
-                    appendLog(logLines, "Log de carregamento do modelo:\n$it")
+                    TranscriptionReport.appendLog(logLines, "Log de carregamento do modelo:\n$it")
                 }
                 updateGlobalLogText()
-                appendLog(logLines, "Transcrevendo...")
+                TranscriptionReport.appendLog(logLines, "Transcrevendo...")
                 updateGlobalLogText()
 
                 convertedItems.forEachIndexed { index, converted ->
                     checkNotCancelled()
                     val item = converted.item
                     val fileNumber = index + 1
-                    appendTranscriptionHeader(liveText, item.name)
+                    TranscriptionReport.appendTranscriptionHeader(liveText, item.name)
                     val fileText = StringBuilder()
                     appendTerminal(terminalLines, "whisper.cpp: begin ${item.name}")
                     runOnUiThread {
                         updateTerminalText(terminalLines)
                     }
 
-                    appendLog(logLines, "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name}")
+                    TranscriptionReport.appendLog(logLines, "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name}")
                     runOnUiThread {
                         setTranscriptionStatus("Transcrevendo $fileNumber/${convertedItems.size}: ${item.name}")
                         updateGlobalLogText()
@@ -905,14 +905,14 @@ class WhisperActivity : AppCompatActivity() {
                     }
                     if (fileText.isBlank()) throw IllegalStateException("transcrição vazia em ${item.name}")
 
-                    appendTranscriptionSeparator(liveText)
+                    TranscriptionReport.appendTranscriptionSeparator(liveText)
                     appendTerminal(terminalLines, "whisper.cpp: end ${item.name}")
                     val text = fileText.toString().trim()
-                    val individual = uniqueOutputFile(perFileDir, "${safeBaseName(item.name)}.txt")
+                    val individual = uniqueOutputFile(perFileDir, "${TranscriptionReport.safeBaseName(item.name)}.txt")
                     individual.writeText(text, Charsets.UTF_8)
                     results += TranscriptionResult(item.name, text, individual, converted.durationSeconds)
 
-                    appendLog(logLines, "Concluído: ${item.name}")
+                    TranscriptionReport.appendLog(logLines, "Concluído: ${item.name}")
                     runOnUiThread {
                         updateGlobalLogText()
                         updateTerminalText(terminalLines)
@@ -929,10 +929,10 @@ class WhisperActivity : AppCompatActivity() {
                 val sessionLogFile = File(sessionDir, "log.txt")
                 val sessionTerminalFile = File(sessionDir, "terminal.txt")
                 txtFile.writeText(liveText.toString(), Charsets.UTF_8)
-                htmlFile.writeText(buildHtml(results), Charsets.UTF_8)
+                htmlFile.writeText(TranscriptionReport.buildHtml(results.map { TranscriptionReport.Row(it.fileName, it.text) }), Charsets.UTF_8)
 
                 val report = buildReport(model, backend, items.size, totalAudioSeconds, elapsedMs, modelLoadMs)
-                appendLog(logLines, report)
+                TranscriptionReport.appendLog(logLines, report)
                 sessionLogFile.writeText(logLines.toString(), Charsets.UTF_8)
                 sessionTerminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
                 appendGlobalLog(logLines.toString())
@@ -979,7 +979,7 @@ class WhisperActivity : AppCompatActivity() {
                 )
                 appendTerminal(terminalLines, "CANCELADO: transcrição cancelada pelo usuário")
                 appendTerminal(terminalLines, cancelReport)
-                appendLog(logLines, cancelReport)
+                TranscriptionReport.appendLog(logLines, cancelReport)
                 sessionDir?.let {
                     try {
                         File(it, "log.txt").writeText(logLines.toString(), Charsets.UTF_8)
@@ -1013,7 +1013,7 @@ class WhisperActivity : AppCompatActivity() {
                 )
                 appendTerminal(terminalLines, "ERROR: $errorMessage")
                 appendTerminal(terminalLines, errorReport)
-                appendLog(logLines, errorReport)
+                TranscriptionReport.appendLog(logLines, errorReport)
                 sessionDir?.let {
                     try {
                         File(it, "log.txt").writeText(logLines.toString(), Charsets.UTF_8)
@@ -1090,7 +1090,7 @@ class WhisperActivity : AppCompatActivity() {
             val fileNumber = index + 1
             appendTerminal(terminalLines, "")
             appendTerminal(terminalLines, "prepare input[$fileNumber/${items.size}]: ${item.name}")
-            appendLog(logLines, "Preparando $fileNumber/${items.size}: ${item.name}")
+            TranscriptionReport.appendLog(logLines, "Preparando $fileNumber/${items.size}: ${item.name}")
             runOnUiThread {
                 status.text = "Preparando $fileNumber/${items.size}: ${item.name}"
                 updateGlobalLogText()
@@ -1099,7 +1099,7 @@ class WhisperActivity : AppCompatActivity() {
 
             val copyStartedAt = SystemClock.elapsedRealtime()
             val inputFile = copyUriToCache(item.uri, item.name)
-            val wavFile = File(tempWavDir, "${index + 1}_${safeBaseName(item.name)}.wav")
+            val wavFile = File(tempWavDir, "${index + 1}_${TranscriptionReport.safeBaseName(item.name)}.wav")
             val inputWavInfo = readWavInfo(inputFile)
             appendTerminal(terminalLines, "copy input done in ${formatElapsedCompact(SystemClock.elapsedRealtime() - copyStartedAt)}")
             runOnUiThread { updateTerminalText(terminalLines) }
@@ -1120,7 +1120,7 @@ class WhisperActivity : AppCompatActivity() {
                 "ffmpeg parallel conversions: not needed"
             }
         )
-        appendLog(logLines, "Conversões FFmpeg necessárias: $needsFfmpeg; paralelismo: $parallelism")
+        TranscriptionReport.appendLog(logLines, "Conversões FFmpeg necessárias: $needsFfmpeg; paralelismo: $parallelism")
         runOnUiThread {
             status.text = if (needsFfmpeg > 1) {
                 "Convertendo $needsFfmpeg arquivos em paralelo..."
@@ -1154,7 +1154,7 @@ class WhisperActivity : AppCompatActivity() {
             if (prepared.wavInfo?.isWhisperReady == true) {
                 appendTerminal(terminalLines, "[${prepared.item.name}] ffmpeg skipped: input already WAV PCM s16le mono 16000 Hz")
                 prepared.inputFile.copyTo(prepared.wavFile, overwrite = true)
-                appendLog(logLines, "FFmpeg dispensado: ${prepared.item.name} já está em WAV 16 kHz mono.")
+                TranscriptionReport.appendLog(logLines, "FFmpeg dispensado: ${prepared.item.name} já está em WAV 16 kHz mono.")
             } else {
                 convertToWav(prepared.inputFile, prepared.wavFile, prepared.item.name, terminalLines)
             }
@@ -1162,7 +1162,7 @@ class WhisperActivity : AppCompatActivity() {
             val durationStartedAt = SystemClock.elapsedRealtime()
             val duration = wavDurationSeconds(prepared.wavFile)
             appendTerminal(terminalLines, "[${prepared.item.name}] wav duration read in ${formatElapsedCompact(SystemClock.elapsedRealtime() - durationStartedAt)} (${formatSeconds(duration)})")
-            appendLog(logLines, "WAV temporário pronto: ${prepared.item.name}")
+            TranscriptionReport.appendLog(logLines, "WAV temporário pronto: ${prepared.item.name}")
             runOnUiThread {
                 updateGlobalLogText()
                 updateTerminalText(terminalLines)
@@ -1180,27 +1180,6 @@ class WhisperActivity : AppCompatActivity() {
             FileOutputStream(inputFile).use { output -> input.copyTo(output) }
         } ?: throw IllegalStateException("não consegui abrir o arquivo selecionado")
         return inputFile
-    }
-
-    private fun appendTranscriptionHeader(builder: StringBuilder, fileName: String) {
-        synchronized(builder) {
-            if (builder.isNotEmpty() && !builder.endsWith("\n")) builder.append('\n')
-            builder.append(fileName).append("\n\n")
-        }
-    }
-
-    private fun appendTranscriptionSeparator(builder: StringBuilder) {
-        synchronized(builder) {
-            if (!builder.endsWith("\n")) builder.append('\n')
-            builder.append("-------------------------------\n")
-        }
-    }
-
-    private fun appendLog(builder: StringBuilder, line: String) {
-        val stamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
-        synchronized(builder) {
-            builder.append("[$stamp] ").append(line).append('\n')
-        }
     }
 
     private fun updateGlobalLogText() {
@@ -1391,46 +1370,6 @@ class WhisperActivity : AppCompatActivity() {
         return lines.joinToString("\n")
     }
 
-    private fun buildHtml(results: List<TranscriptionResult>): String {
-        val rows = results.joinToString("\n") { result ->
-            "<tr><td>${escapeHtml(result.fileName)}</td><td>${escapeHtml(result.text).replace("\n", "<br>")}</td></tr>"
-        }
-        return """
-            <!doctype html>
-            <html lang="pt-BR">
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>Transcrições</title>
-              <style>
-                body { font-family: sans-serif; margin: 24px; color: #111; }
-                table { border-collapse: collapse; width: 100%; }
-                th, td { border: 1px solid #bbb; padding: 8px; vertical-align: top; }
-                th { background: #eee; text-align: left; }
-              </style>
-            </head>
-            <body>
-              <h1>Transcrições</h1>
-              <table>
-                <thead><tr><th>Arquivo</th><th>Transcrição</th></tr></thead>
-                <tbody>
-                $rows
-                </tbody>
-              </table>
-            </body>
-            </html>
-        """.trimIndent()
-    }
-
-    private fun escapeHtml(value: String): String {
-        return value
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&#39;")
-    }
-
     private fun wavDurationSeconds(wavFile: File): Double {
         return readWavInfo(wavFile)?.durationSeconds ?: 0.0
     }
@@ -1489,11 +1428,6 @@ class WhisperActivity : AppCompatActivity() {
         val b4 = read()
         if (b4 < 0) return 0
         return (b1 and 0xff) or ((b2 and 0xff) shl 8) or ((b3 and 0xff) shl 16) or ((b4 and 0xff) shl 24)
-    }
-
-    private fun safeBaseName(name: String): String {
-        return name.substringBeforeLast('.', name).ifBlank { "transcricao" }
-            .replace(Regex("""[\\/:*?"<>|]"""), "_")
     }
 
     private fun uniqueOutputFile(outputDir: File, outputName: String): File {
@@ -2061,18 +1995,18 @@ class WhisperActivity : AppCompatActivity() {
         FileOutputStream(file).use { output ->
             val byteRate = sampleRate * 2
             output.write("RIFF".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, 36 + pcm.size)
+            LittleEndianIo.writeIntLe(output, 36 + pcm.size)
             output.write("WAVE".toByteArray(Charsets.US_ASCII))
             output.write("fmt ".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, 16)
-            writeShortLe(output, 1)
-            writeShortLe(output, 1)
-            writeIntLe(output, sampleRate)
-            writeIntLe(output, byteRate)
-            writeShortLe(output, 2)
-            writeShortLe(output, 16)
+            LittleEndianIo.writeIntLe(output, 16)
+            LittleEndianIo.writeShortLe(output, 1)
+            LittleEndianIo.writeShortLe(output, 1)
+            LittleEndianIo.writeIntLe(output, sampleRate)
+            LittleEndianIo.writeIntLe(output, byteRate)
+            LittleEndianIo.writeShortLe(output, 2)
+            LittleEndianIo.writeShortLe(output, 16)
             output.write("data".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, pcm.size)
+            LittleEndianIo.writeIntLe(output, pcm.size)
             output.write(pcm)
         }
     }
@@ -2082,36 +2016,20 @@ class WhisperActivity : AppCompatActivity() {
         FileOutputStream(file).use { output ->
             val byteRate = sampleRate * 2
             output.write("RIFF".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, 36 + pcmSize)
+            LittleEndianIo.writeIntLe(output, 36 + pcmSize)
             output.write("WAVE".toByteArray(Charsets.US_ASCII))
             output.write("fmt ".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, 16)
-            writeShortLe(output, 1)
-            writeShortLe(output, 1)
-            writeIntLe(output, sampleRate)
-            writeIntLe(output, byteRate)
-            writeShortLe(output, 2)
-            writeShortLe(output, 16)
+            LittleEndianIo.writeIntLe(output, 16)
+            LittleEndianIo.writeShortLe(output, 1)
+            LittleEndianIo.writeShortLe(output, 1)
+            LittleEndianIo.writeIntLe(output, sampleRate)
+            LittleEndianIo.writeIntLe(output, byteRate)
+            LittleEndianIo.writeShortLe(output, 2)
+            LittleEndianIo.writeShortLe(output, 16)
             output.write("data".toByteArray(Charsets.US_ASCII))
-            writeIntLe(output, pcmSize)
+            LittleEndianIo.writeIntLe(output, pcmSize)
             pcmFile.inputStream().use { input -> input.copyTo(output) }
         }
-    }
-
-    private fun writeIntLe(output: FileOutputStream, value: Int) {
-        output.write(byteArrayOf(
-            (value and 0xff).toByte(),
-            ((value shr 8) and 0xff).toByte(),
-            ((value shr 16) and 0xff).toByte(),
-            ((value shr 24) and 0xff).toByte()
-        ))
-    }
-
-    private fun writeShortLe(output: FileOutputStream, value: Int) {
-        output.write(byteArrayOf(
-            (value and 0xff).toByte(),
-            ((value shr 8) and 0xff).toByte()
-        ))
     }
 
     private fun startWhiteRecording() {
@@ -2539,16 +2457,6 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun checkNotCancelled() {
         if (cancelRequested) throw CancellationException("transcrição cancelada")
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
-            }
-        }
-        return uri.lastPathSegment
     }
 
     private fun formatSeconds(seconds: Double): String {

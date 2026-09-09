@@ -210,7 +210,7 @@ class GraniteActivity : AppCompatActivity() {
     private val surfaceListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
             previewSurface = Surface(surfaceTexture)
-            selectedItems.firstOrNull()?.takeIf { isVideo(it.mime, it.name) }?.let { prepareVideoPreview(it.uri) }
+            selectedItems.firstOrNull()?.takeIf { MediaTypeRules.isVideo(it.mime, it.name) }?.let { prepareVideoPreview(it.uri) }
         }
 
         override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
@@ -488,12 +488,12 @@ class GraniteActivity : AppCompatActivity() {
         }
         val nextItems = mutableListOf<MediaItem>()
         folder.listFiles()
-            .filter { it.isFile && isSupportedMedia(it.type.orEmpty(), it.name.orEmpty()) }
+            .filter { it.isFile && MediaTypeRules.isSupportedMedia(it.type.orEmpty(), it.name.orEmpty()) }
             .sortedBy { it.name.orEmpty().lowercase(Locale.US) }
             .forEach { file ->
                 val uri = file.uri
                 val name = file.name ?: "midia_${nextItems.size + 1}"
-                val mime = file.type ?: guessMime(name)
+                val mime = file.type ?: MediaTypeRules.guessMime(name)
                 nextItems += MediaItem(uri, name, mime, readDuration(uri))
             }
         if (nextItems.isEmpty()) {
@@ -537,9 +537,9 @@ class GraniteActivity : AppCompatActivity() {
     }
 
     private fun addMediaItem(uri: Uri, target: MutableList<MediaItem>) {
-        val name = queryDisplayName(uri) ?: "midia_${target.size + 1}"
-        val mime = contentResolver.getType(uri) ?: guessMime(name)
-        if (isSupportedMedia(mime, name)) {
+        val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia_${target.size + 1}"
+        val mime = contentResolver.getType(uri) ?: MediaTypeRules.guessMime(name)
+        if (MediaTypeRules.isSupportedMedia(mime, name)) {
             target += MediaItem(uri, name, mime, readDuration(uri))
         }
     }
@@ -573,7 +573,7 @@ class GraniteActivity : AppCompatActivity() {
         playbackSpeed = 1f
         updateSpeedButton()
 
-        if (isVideo(item.mime, item.name)) {
+        if (MediaTypeRules.isVideo(item.mime, item.name)) {
             previewFrame?.visibility = View.VISIBLE
             videoPreview?.visibility = View.VISIBLE
             if (videoPreview?.isAvailable == true) {
@@ -1157,9 +1157,9 @@ class GraniteActivity : AppCompatActivity() {
                 appendTerminal(terminalLines, "$ granite --model ${modelLabel(selectedModel)} --input ${items.size} arquivo(s)")
                 appendTerminal(terminalLines, "output: ${sessionDir.absolutePath}")
                 appendTerminal(terminalLines, "backend solicitado: ${backend.reportLabel}")
-                appendLog(logLines, "Sessão: ${sessionDir.name}")
-                appendLog(logLines, "Modelo: ${modelLabel(selectedModel)}")
-                appendLog(logLines, "Backend solicitado: ${backend.reportLabel}")
+                TranscriptionReport.appendLog(logLines, "Sessão: ${sessionDir.name}")
+                TranscriptionReport.appendLog(logLines, "Modelo: ${modelLabel(selectedModel)}")
+                TranscriptionReport.appendLog(logLines, "Backend solicitado: ${backend.reportLabel}")
 
                 val parallelism = Runtime.getRuntime().availableProcessors().coerceAtLeast(2)
                 val conversionExecutor = Executors.newFixedThreadPool(parallelism)
@@ -1262,7 +1262,7 @@ class GraniteActivity : AppCompatActivity() {
                     GraniteEngine.loadedBackend() ?: backend
                 }
                 appendTerminal(terminalLines, "backend efetivo: ${effectiveBackend.reportLabel}")
-                appendLog(logLines, "Backend efetivo: ${effectiveBackend.reportLabel}")
+                TranscriptionReport.appendLog(logLines, "Backend efetivo: ${effectiveBackend.reportLabel}")
 
                 // Transcreve cada arquivo preparado (on-device).
                 preparedUploads.sortedBy { it.index }.forEachIndexed { idx, prepared ->
@@ -1296,7 +1296,7 @@ class GraniteActivity : AppCompatActivity() {
                     }
                     checkNotCancelled()
                     if (text.isBlank()) throw IllegalStateException("transcrição vazia em ${item.name}")
-                    val individual = uniqueFile(transcriptionDir, "${safeBaseName(item.name)}.txt")
+                    val individual = TranscriptionReport.uniqueFile(transcriptionDir, "${TranscriptionReport.safeBaseName(item.name)}.txt")
                     individual.writeText(text.trim() + "\n", Charsets.UTF_8)
                     results += TranscriptionResult(number, item.name, text.trim())
                     updateBatchProgressLine(number, "OK")
@@ -1312,9 +1312,9 @@ class GraniteActivity : AppCompatActivity() {
                 val logFile = File(sessionDir, "log.txt")
                 val terminalFile = File(sessionDir, "terminal.txt")
                 txtFile.writeText(finalText, Charsets.UTF_8)
-                htmlFile.writeText(buildHtml(orderedResults), Charsets.UTF_8)
+                htmlFile.writeText(TranscriptionReport.buildHtml(orderedResults.map { TranscriptionReport.Row(it.fileName, it.text) }), Charsets.UTF_8)
                 val report = buildGraniteReport(effectiveBackend, items.size, totalAudioMs, elapsedMs, modelLoadMs.get(), selectedModel)
-                appendLog(logLines, report)
+                TranscriptionReport.appendLog(logLines, report)
                 logFile.writeText(logLines.toString(), Charsets.UTF_8)
                 terminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
 
@@ -1364,7 +1364,7 @@ class GraniteActivity : AppCompatActivity() {
                 } else {
                     GraniteEngine.lastError().ifBlank { errorMessage }
                 }
-                appendLog(logLines, "Erro: $detail")
+                TranscriptionReport.appendLog(logLines, "Erro: $detail")
                 appendTerminal(terminalLines, "ERROR: $detail")
                 try {
                     sessionDir?.let { dir ->
@@ -1410,7 +1410,7 @@ class GraniteActivity : AppCompatActivity() {
             }
 
             val inputFile = copyUriToCache(item.uri, item.name)
-            val originalAudioInfo = describeAudioFile(inputFile)
+            val originalAudioInfo = SttAudioProbe.describe(inputFile)
             val startMs = if (items.size == 1 && useTimeline) timelineStartMs else 0L
             val endMs = if (items.size == 1 && useTimeline) {
                 if (timelineEndMs > 0L) timelineEndMs else item.durationMs.coerceAtLeast(1L)
@@ -1445,7 +1445,7 @@ class GraniteActivity : AppCompatActivity() {
             } else {
                 preparedUploadFile
             }
-            val sentAudioInfo = describeAudioFile(uploadFile.file)
+            val sentAudioInfo = SttAudioProbe.describe(uploadFile.file)
             appendTerminal(terminalLines, "prepare done[$number/${items.size}]: ${item.name}")
             PreparedUpload(number, item, uploadFile, durationToSend, originalAudioInfo, sentAudioInfo)
         }
@@ -1466,11 +1466,11 @@ class GraniteActivity : AppCompatActivity() {
             PrepareMode.ORIGINAL -> prepareOriginalUpload(inputFile, tempDir, index, item, startMs, durationMs, terminalLines)
             PrepareMode.READY -> {
                 val fullFile = startMs <= 0L && durationMs >= item.durationMs - 10L
-                if (fullFile && isAlreadyReadyWav(inputFile, item.name, terminalLines)) {
+                if (fullFile && SttAudioProbe.isAlreadyReadyWav(inputFile, item.name) { appendTerminal(terminalLines, it) }) {
                     appendTerminal(terminalLines, "[${item.name}] conversão ignorada: WAV já está pronto para envio")
                     return UploadFile(inputFile, "audio/wav", "wav original 16 kHz mono PCM s16le")
                 }
-                val wavFile = File(tempDir, "${index}_${safeBaseName(item.name)}.wav")
+                val wavFile = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}.wav")
                 convertToReadyWav(inputFile, wavFile, item.name, startMs, durationMs, terminalLines)
                 UploadFile(wavFile, "audio/wav", "wav 16 kHz mono PCM s16le")
             }
@@ -1487,12 +1487,12 @@ class GraniteActivity : AppCompatActivity() {
         terminalLines: StringBuilder
     ): UploadFile {
         val fullFile = startMs <= 0L && durationMs >= item.durationMs - 10L
-        if (fullFile && isAlreadyCompact(inputFile, item.name, terminalLines)) {
+        if (fullFile && SttAudioProbe.isAlreadyCompact(inputFile, item.name) { appendTerminal(terminalLines, it) }) {
             val mime = "audio/ogg"
             appendTerminal(terminalLines, "[${item.name}] conversão ignorada: arquivo já está compacto")
             return UploadFile(inputFile, mime, "arquivo compacto original")
         }
-        val oggFile = File(tempDir, "${index}_${safeBaseName(item.name)}.ogg")
+        val oggFile = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}.ogg")
         convertToCompactOgg(inputFile, oggFile, item.name, startMs, durationMs, terminalLines)
         return UploadFile(oggFile, "audio/ogg", "ogg opus 16 kHz mono 32k")
     }
@@ -1507,15 +1507,15 @@ class GraniteActivity : AppCompatActivity() {
         terminalLines: StringBuilder
     ): UploadFile {
         val fullFile = startMs <= 0L && durationMs >= item.durationMs - 10L
-        val probe = probeAudioFile(inputFile)
+        val probe = SttAudioProbe.probe(inputFile)
 
-        if (fullFile && !probe.hasVideo && !isVideo(item.mime, item.name)) {
+        if (fullFile && !probe.hasVideo && !MediaTypeRules.isVideo(item.mime, item.name)) {
             appendTerminal(terminalLines, "[${item.name}] envio direto: áudio original sem conversão")
-            return UploadFile(inputFile, contentMimeForUpload(item), "arquivo original")
+            return UploadFile(inputFile, MediaTypeRules.contentMimeForUpload(item.mime, item.name), "arquivo original")
         }
 
         val ext = "m4a"
-        val extractedFile = File(tempDir, "${index}_${safeBaseName(item.name)}_extracted.$ext")
+        val extractedFile = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_extracted.$ext")
 
         appendTerminal(terminalLines, "[${item.name}] extraindo áudio original (m4a)...")
         val arguments = mutableListOf("-y")
@@ -1533,7 +1533,7 @@ class GraniteActivity : AppCompatActivity() {
         val session = FFmpegKit.executeWithArguments(arguments.toTypedArray())
         if (!ReturnCode.isSuccess(session.returnCode)) {
             appendTerminal(terminalLines, "[${item.name}] falha ao extrair áudio, usando conversão de segurança (FLAC)...")
-            val flacFile = File(tempDir, "${index}_${safeBaseName(item.name)}_extracted.flac")
+            val flacFile = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_extracted.flac")
             val fallbackArgs = mutableListOf("-y")
             if (startMs > 0L) fallbackArgs.addAll(listOf("-ss", formatSeconds(startMs)))
             fallbackArgs.addAll(listOf("-i", inputFile.absolutePath))
@@ -1549,30 +1549,6 @@ class GraniteActivity : AppCompatActivity() {
         }
 
         return UploadFile(extractedFile, "audio/mp4", "áudio extraído original")
-    }
-
-    private fun isAlreadyReadyWav(inputFile: File, originalName: String, terminalLines: StringBuilder): Boolean {
-        if (!originalName.lowercase(Locale.ROOT).endsWith(".wav")) return false
-        appendTerminal(terminalLines, "[${originalName}] analisando metadados para envio pronto")
-        val probe = probeAudioFile(inputFile)
-        appendTerminal(terminalLines, "[${originalName}] metadados: ${metadataSummary(probe)}")
-        return !probe.hasVideo &&
-            probe.codec == "pcm_s16le" &&
-            probe.sampleRateHz == 16000 &&
-            probe.channelCount == 1
-    }
-
-    private fun isAlreadyCompact(inputFile: File, originalName: String, terminalLines: StringBuilder): Boolean {
-        val lower = originalName.lowercase(Locale.ROOT)
-        if (!lower.endsWith(".ogg")) return false
-        appendTerminal(terminalLines, "[${originalName}] analisando metadados para envio compactado")
-        val probe = probeAudioFile(inputFile)
-        appendTerminal(terminalLines, "[${originalName}] metadados: ${metadataSummary(probe)}")
-        return !probe.hasVideo &&
-            probe.codec == "opus" &&
-            probe.sampleRateHz == 16000 &&
-            probe.channelCount == 1 &&
-            probe.bitrateKbps?.let { it <= 40.0 } == true
     }
 
     private fun convertToReadyWav(
@@ -1664,15 +1640,15 @@ class GraniteActivity : AppCompatActivity() {
 
         val readyWav = if (preparedUploadFile.mime == "audio/wav" &&
             preparedUploadFile.file.name.lowercase(Locale.ROOT).endsWith(".wav") &&
-            isAlreadyReadyWav(preparedUploadFile.file, preparedUploadFile.file.name, terminalLines)
+            SttAudioProbe.isAlreadyReadyWav(preparedUploadFile.file, preparedUploadFile.file.name) { appendTerminal(terminalLines, it) }
         ) {
             preparedUploadFile.file
         } else {
-            File(tempDir, "${index}_${safeBaseName(item.name)}_vad_input.wav").also { wav ->
+            File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_vad_input.wav").also { wav ->
                 convertToReadyWav(sourceFile, wav, item.name, startMs, durationMs, terminalLines)
             }
         }
-        val filteredWav = File(tempDir, "${index}_${safeBaseName(item.name)}_vad.wav")
+        val filteredWav = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_vad.wav")
         val modelPath = if (mode.usesSilero) ensureBundledSileroVadModel().absolutePath else ""
         val nativeResult = WhisperNative.filterVad(
             readyWav.absolutePath,
@@ -1716,17 +1692,17 @@ class GraniteActivity : AppCompatActivity() {
             ensureNotCancelled()
             val suffix = prepared.uploadFile.file.extension.takeIf { it.isNotBlank() }?.let { ".$it" } ?: ".wav"
             val marker = if (onlyVad) "_vad" else "_convertido"
-            val target = uniqueFile(outputDir, "${safeBaseName(prepared.item.name)}$marker$suffix")
+            val target = TranscriptionReport.uniqueFile(outputDir, "${TranscriptionReport.safeBaseName(prepared.item.name)}$marker$suffix")
             prepared.uploadFile.file.copyTo(target, overwrite = true)
             appendTerminal(terminalLines, "salvo ${index + 1}/${preparedUploads.size}: ${target.name}")
         }
         val elapsed = SystemClock.elapsedRealtime() - startedAt
         val summary = "${if (onlyVad) "VAD" else "Conversão"} concluído: ${preparedUploads.size} arquivo(s) em ${formatElapsedCompact(elapsed)}"
         appendTerminal(terminalLines, summary)
-        appendLog(logLines, summary)
+        TranscriptionReport.appendLog(logLines, summary)
         val txtFile = File(sessionDir, "resultado.txt").apply { writeText(summary + "\n", Charsets.UTF_8) }
         val htmlFile = File(sessionDir, "resultado.html").apply {
-            writeText("<meta charset=\"utf-8\"><p>${escapeHtml(summary)}</p>", Charsets.UTF_8)
+            writeText("<meta charset=\"utf-8\"><p>${TranscriptionReport.escapeHtml(summary)}</p>", Charsets.UTF_8)
         }
         val logFile = File(sessionDir, "log.txt").apply { writeText(logLines.toString(), Charsets.UTF_8) }
         val terminalFile = File(sessionDir, "terminal.txt").apply { writeText(snapshotText(terminalLines), Charsets.UTF_8) }
@@ -2082,7 +2058,7 @@ class GraniteActivity : AppCompatActivity() {
         } catch (e: Throwable) {
             -1L
         }
-        return if (size >= 0L) formatMediaSize(size) else "?"
+        return if (size >= 0L) TranscriptionReport.formatMediaSize(size) else "?"
     }
 
     private fun clearOutputResult() {
@@ -2136,10 +2112,10 @@ class GraniteActivity : AppCompatActivity() {
     private fun updateTranscribeEnabled() {
         if (isProcessing) return
         val enabled = selectedItems.isNotEmpty() &&
-            selectedItems.all { isSupportedMedia(it.mime, it.name) } &&
+            selectedItems.all { MediaTypeRules.isSupportedMedia(it.mime, it.name) } &&
             selectedPrepareMode != null &&
             (checkboxOnlyVad?.isChecked != true || selectedVadMode != VadMode.NONE)
-        buttonTranscribe?.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { isSupportedMedia(it.mime, it.name) }) {
+        buttonTranscribe?.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { MediaTypeRules.isSupportedMedia(it.mime, it.name) }) {
             View.VISIBLE
         } else {
             View.GONE
@@ -2224,53 +2200,6 @@ class GraniteActivity : AppCompatActivity() {
         return String.format(Locale.US, "%02d:%02d.%03d", minutes, seconds, milliseconds)
     }
 
-    private fun isVideo(mime: String, name: String): Boolean {
-        if (mime.startsWith("video/")) return true
-        val lower = name.lowercase(Locale.ROOT)
-        return VIDEO_EXTENSIONS.any { lower.endsWith(it) }
-    }
-
-    private fun isAudio(mime: String, name: String): Boolean {
-        if (mime.startsWith("audio/")) return true
-        val lower = name.lowercase(Locale.ROOT)
-        return AUDIO_EXTENSIONS.any { lower.endsWith(it) }
-    }
-
-    private fun isSupportedMedia(mime: String, name: String): Boolean {
-        return isVideo(mime, name) || isAudio(mime, name)
-    }
-
-    private fun guessMime(name: String): String {
-        return when {
-            isVideo("", name) -> "video/*"
-            isAudio("", name) -> "audio/*"
-            else -> "application/octet-stream"
-        }
-    }
-
-    private fun contentMimeForUpload(item: MediaItem): String {
-        if (item.mime.isNotBlank() && item.mime != "application/octet-stream") return item.mime
-        return when {
-            isVideo("", item.name) -> "video/mp4"
-            item.name.lowercase(Locale.ROOT).endsWith(".mp3") -> "audio/mpeg"
-            item.name.lowercase(Locale.ROOT).endsWith(".wav") -> "audio/wav"
-            item.name.lowercase(Locale.ROOT).endsWith(".ogg") -> "audio/ogg"
-            item.name.lowercase(Locale.ROOT).endsWith(".opus") -> "audio/opus"
-            item.name.lowercase(Locale.ROOT).endsWith(".m4a") -> "audio/mp4"
-            else -> "application/octet-stream"
-        }
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
-            }
-        }
-        return uri.lastPathSegment
-    }
-
     private fun readDuration(uri: Uri): Long {
         val retriever = MediaMetadataRetriever()
         return try {
@@ -2297,97 +2226,6 @@ class GraniteActivity : AppCompatActivity() {
             FileOutputStream(inputFile).use { output -> input.copyTo(output) }
         } ?: throw IllegalStateException("não consegui ler $displayName")
         return inputFile
-    }
-
-    private fun describeAudioFile(file: File): String {
-        val info = probeAudioFile(file)
-        return listOf(
-            ".${file.extension.lowercase(Locale.ROOT).ifBlank { "sem extensão" }}",
-            info.codec.ifBlank { "codec ?" },
-            info.sampleRate.ifBlank { "hz ?" },
-            info.channels.ifBlank { "canal ?" },
-            info.bitrate.ifBlank { "bitrate ?" }
-        ).joinToString(", ")
-    }
-
-    private fun probeAudioFile(file: File): AudioProbe {
-        return try {
-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", file.absolutePath))
-            val logs = session.allLogsAsString.orEmpty()
-            val audioLine = logs.lines().firstOrNull { it.contains("Audio:", ignoreCase = true) }.orEmpty()
-            val codec = Regex("""Audio:\s*([^,\s]+)""", RegexOption.IGNORE_CASE)
-                .find(audioLine)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.lowercase(Locale.ROOT)
-                .orEmpty()
-            val sampleRateHz = Regex("""(\d+)\s*Hz""", RegexOption.IGNORE_CASE)
-                .find(audioLine)
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.toIntOrNull()
-            val channelCount = when {
-                audioLine.contains("mono", ignoreCase = true) -> 1
-                audioLine.contains("stereo", ignoreCase = true) -> 2
-                else -> Regex("""(\d+)\s*channels""", RegexOption.IGNORE_CASE)
-                    .find(audioLine)
-                    ?.groupValues
-                    ?.getOrNull(1)
-                    ?.toIntOrNull()
-            }
-            val durationSeconds = parseDurationSeconds(logs)
-            val parsedBitrateKbps = Regex("""(\d+(?:\.\d+)?)\s*kb/s""", RegexOption.IGNORE_CASE)
-                .find(audioLine.ifBlank { logs })
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.toDoubleOrNull()
-            val bitrateKbps = parsedBitrateKbps
-                ?: durationSeconds?.takeIf { it > 0.0 }?.let { (file.length() * 8.0) / it / 1000.0 }
-            AudioProbe(
-                codec = codec,
-                sampleRate = sampleRateHz?.let { "${it}hz" }.orEmpty(),
-                channels = when (channelCount) {
-                    1 -> "mono"
-                    2 -> "stereo"
-                    null -> ""
-                    else -> "${channelCount}ch"
-                },
-                bitrate = bitrateKbps?.let { formatKbps(it) }.orEmpty(),
-                sampleRateHz = sampleRateHz,
-                channelCount = channelCount,
-                bitrateKbps = bitrateKbps,
-                hasVideo = logs.lines().any { it.contains("Video:", ignoreCase = true) }
-            )
-        } catch (_: Throwable) {
-            AudioProbe("", "", "", "", null, null, null, false)
-        }
-    }
-
-    private fun parseDurationSeconds(logs: String): Double? {
-        val match = Regex("""Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)""", RegexOption.IGNORE_CASE).find(logs)
-            ?: return null
-        val hours = match.groupValues.getOrNull(1)?.toDoubleOrNull() ?: return null
-        val minutes = match.groupValues.getOrNull(2)?.toDoubleOrNull() ?: return null
-        val seconds = match.groupValues.getOrNull(3)?.toDoubleOrNull() ?: return null
-        return hours * 3600.0 + minutes * 60.0 + seconds
-    }
-
-    private fun formatKbps(value: Double): String {
-        return if (value < 10.0) {
-            String.format(Locale.US, "%.1fk", value)
-        } else {
-            "${value.toInt()}k"
-        }
-    }
-
-    private fun metadataSummary(probe: AudioProbe): String {
-        return listOf(
-            "codec=${probe.codec.ifBlank { "?" }}",
-            "hz=${probe.sampleRate.ifBlank { "?" }}",
-            "canais=${probe.channels.ifBlank { "?" }}",
-            "bitrate=${probe.bitrate.ifBlank { "?" }}",
-            "video=${if (probe.hasVideo) "sim" else "não"}"
-        ).joinToString(", ")
     }
 
     private fun executeFfmpegWithTerminal(arguments: Array<String>, terminalLines: StringBuilder): FFmpegSession {
@@ -2437,46 +2275,6 @@ class GraniteActivity : AppCompatActivity() {
             builder.append('\n')
         }
         return builder.toString()
-    }
-
-    private fun buildHtml(results: List<TranscriptionResult>): String {
-        val rows = results.joinToString("\n") { result ->
-            "<tr><td>${escapeHtml(result.fileName)}</td><td>${escapeHtml(result.text).replace("\n", "<br>")}</td></tr>"
-        }
-        return """
-            <!doctype html>
-            <html lang="pt-BR">
-            <head>
-              <meta charset="utf-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>Transcrições</title>
-              <style>
-                body { font-family: sans-serif; margin: 24px; color: #111; }
-                table { border-collapse: collapse; width: 100%; }
-                th, td { border: 1px solid #bbb; padding: 8px; vertical-align: top; }
-                th { background: #eee; text-align: left; }
-              </style>
-            </head>
-            <body>
-              <h1>Transcrições</h1>
-              <table>
-                <thead><tr><th>Arquivo</th><th>Transcrição</th></tr></thead>
-                <tbody>
-                $rows
-                </tbody>
-              </table>
-            </body>
-            </html>
-        """.trimIndent()
-    }
-
-    private fun escapeHtml(value: String): String {
-        return value
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-            .replace("'", "&#39;")
     }
 
     private fun buildGraniteReport(backend: GraniteExecutionBackend, fileCount: Int, totalAudioMs: Long, elapsedMs: Long, modelLoadMs: Long, model: String): String {
@@ -2536,34 +2334,6 @@ class GraniteActivity : AppCompatActivity() {
             Environment.isExternalStorageManager()
     }
 
-    private fun uniqueFile(outputDir: File, outputName: String): File {
-        val base = outputName.substringBeforeLast('.', outputName)
-        val extension = outputName.substringAfterLast('.', "")
-        var candidate = File(outputDir, outputName)
-        var suffix = 2
-        while (candidate.exists()) {
-            candidate = File(outputDir, "${base}_$suffix.$extension")
-            suffix++
-        }
-        return candidate
-    }
-
-    private fun safeBaseName(name: String): String {
-        return name.substringBeforeLast('.', name).ifBlank { "transcricao" }
-            .replace(Regex("""[\\/:*?"<>|]"""), "_")
-    }
-
-    private fun formatMediaSize(bytes: Long): String {
-        val units = arrayOf("b", "kb", "mb", "gb")
-        var value = bytes.coerceAtLeast(0L).toDouble()
-        var unit = 0
-        while (value >= 1024.0 && unit < units.lastIndex) {
-            value /= 1024.0
-            unit++
-        }
-        return String.format(Locale.US, "%.1f %s", value, units[unit])
-    }
-
     private fun formatBytes(bytes: Long): String {
         if (bytes < 1024L) return "$bytes B"
         val kb = bytes / 1024.0
@@ -2583,11 +2353,6 @@ class GraniteActivity : AppCompatActivity() {
                 builder.append(lines.takeLast(1000).joinToString("\n")).append('\n')
             }
         }
-    }
-
-    private fun appendLog(builder: StringBuilder, line: String) {
-        val stamp = SimpleDateFormat("HH:mm:ss", Locale.US).format(Date())
-        synchronized(builder) { builder.append("[$stamp] ").append(line).append('\n') }
     }
 
     private fun snapshotText(builder: StringBuilder): String {
@@ -2611,8 +2376,6 @@ class GraniteActivity : AppCompatActivity() {
         private const val MODEL_NAR_LABEL = "Granite 4.1 NAR"
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val GRANITE_OUTPUT_FOLDER = "Granite"
-        private val VIDEO_EXTENSIONS = setOf(".mp4", ".mkv", ".mov", ".avi", ".webm", ".3gp", ".m4v")
-        private val AUDIO_EXTENSIONS = setOf(".wav", ".mp3", ".m4a", ".aac", ".ogg", ".opus", ".flac", ".wma")
     }
 }
 
@@ -2656,17 +2419,6 @@ private data class PreparedUpload(
     val durationMs: Long,
     val originalAudioInfo: String,
     val sentAudioInfo: String
-)
-
-private data class AudioProbe(
-    val codec: String,
-    val sampleRate: String,
-    val channels: String,
-    val bitrate: String,
-    val sampleRateHz: Int?,
-    val channelCount: Int?,
-    val bitrateKbps: Double?,
-    val hasVideo: Boolean
 )
 
 private class VadRunStats {

@@ -250,7 +250,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun readAudioSource(uri: Uri): AudioSource? {
-        val name = queryDisplayName(uri) ?: "audio"
+        val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "audio"
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(this, uri)
@@ -902,16 +902,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(file).use { input.copyTo(it) } }
                 ?: error("Não consegui abrir $displayName")
         }
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
-            }
-        }
-        return uri.lastPathSegment
     }
 
     private fun clearOutputResult() {

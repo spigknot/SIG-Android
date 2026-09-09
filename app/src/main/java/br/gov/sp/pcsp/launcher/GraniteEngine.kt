@@ -313,7 +313,7 @@ class GraniteDecoder(
     private val charToByte: IntArray
 
     init {
-        charToByte = byteLevelCharToByte()
+        charToByte = GraniteBinarySupport.byteLevelCharToByte()
         encoded = Array(pieces.size) { i ->
             val piece = pieces[i]
             val bytes = ByteArray(piece.length)
@@ -355,27 +355,6 @@ class GraniteDecoder(
     }
 
     companion object {
-        /** Tabela GPT-2 byte <-> codepoint (invertida: codepoint -> byte). Port fiel do JS. */
-        private fun byteLevelCharToByte(): IntArray {
-            val bytes = mutableListOf<Int>()
-            for (b in 0x21..0x7e) bytes.add(b)
-            for (b in 0xa1..0xac) bytes.add(b)
-            for (b in 0xae..0xff) bytes.add(b)
-            val codepoints = bytes.toMutableList()
-            val printable = bytes.toHashSet()
-            var next = 0
-            for (b in 0 until 256) {
-                if (b !in printable) {
-                    bytes.add(b)
-                    codepoints.add(256 + next)
-                    next++
-                }
-            }
-            // map[codepoint] = byte (codepoint até 256+next-1)
-            val map = IntArray(256 + next) { -1 }
-            for (i in bytes.indices) map[codepoints[i]] = bytes[i]
-            return map
-        }
     }
 }
 
@@ -442,26 +421,6 @@ object GraniteEngine {
 
     /** Backend da sessão criada com sucesso, incluindo eventual fallback. */
     fun loadedBackend(): GraniteExecutionBackend? = lastLoadedBackend
-
-    /** Captura a causa raiz completa (mensagem + stack trace) de uma exceção. */
-    private fun describeError(e: Throwable): String {
-        val sb = StringBuilder()
-        var cause: Throwable = e
-        val seen = mutableSetOf<String>()
-        while (true) {
-            val msg = cause.message ?: cause::class.java.simpleName
-            if (seen.add(msg)) {
-                if (sb.isNotEmpty()) sb.append(" -> ")
-                sb.append(msg)
-            }
-            val c = cause.cause ?: break
-            cause = c
-            if (cause === e) break
-        }
-        sb.append("\n")
-        sb.append(e.stackTraceToString())
-        return sb.toString()
-    }
 
     /**
      * Tamanho total do download do pacote (para o diálogo).
@@ -641,8 +600,8 @@ object GraniteEngine {
             }
 
             val config = GraniteFrontendConfig.fromJson(File(dir, FRONTEND_FILE_NAME).readText())
-            val melFilters = readFloatBinary(File(dir, MEL_FILTERS_FILE_NAME))
-            val window = readFloatBinary(File(dir, STFT_WINDOW_FILE_NAME))
+            val melFilters = GraniteBinarySupport.readFloatBinary(File(dir, MEL_FILTERS_FILE_NAME))
+            val window = GraniteBinarySupport.readFloatBinary(File(dir, STFT_WINDOW_FILE_NAME))
             frontend = GraniteFrontend(config, melFilters, window)
 
             val vocabJson = File(dir, VOCAB_FILE_NAME).readText()
@@ -751,7 +710,7 @@ object GraniteEngine {
             onLog("ONNX session criada (CPU, fallback)")
             true
     } catch (e: Throwable) {
-        lastErrorMessage = describeError(e)
+        lastErrorMessage = GraniteBinarySupport.describeError(e)
         Log.e(TAG, "load failed", e)
         false
     }
@@ -762,7 +721,7 @@ object GraniteEngine {
         try {
             return transcribeFileInner(wavFile, onProgress)
         } catch (e: Throwable) {
-            lastErrorMessage = describeError(e)
+            lastErrorMessage = GraniteBinarySupport.describeError(e)
             Log.e(TAG, "transcribeFile failed", e)
             throw e
         }
@@ -772,7 +731,7 @@ object GraniteEngine {
         val sess = session ?: throw IllegalStateException("modelo não carregado")
         val fe = frontend ?: throw IllegalStateException("front-end não carregado")
         val dec = decoder ?: throw IllegalStateException("decoder não carregado")
-        val wav = readWav16kMono(wavFile) ?: throw IllegalStateException("WAV inválido")
+        val wav = GraniteBinarySupport.readWav16kMono(wavFile, TAG) ?: throw IllegalStateException("WAV inválido")
 
         val agc = GraniteAgc.apply(wav)
         val features = fe.compute(agc)
@@ -867,89 +826,6 @@ object GraniteEngine {
         // uma ponte JNI própria (libsig_onnx.so) no lugar do onnxruntime-java.
         onnxNativesLoaded = true
         Log.i(TAG, "loadOnnxRuntimeNatives: concluído")
-    }
-
-    private fun readFloatBinary(file: File): FloatArray {
-        val bytes = file.readBytes()
-        val floats = FloatArray(bytes.size / 4)
-        var i = 0
-        var j = 0
-        while (i + 3 < bytes.size) {
-            val bits = (bytes[i].toLong() and 0xFF) or
-                ((bytes[i + 1].toLong() and 0xFF) shl 8) or
-                ((bytes[i + 2].toLong() and 0xFF) shl 16) or
-                ((bytes[i + 3].toLong() and 0xFF) shl 24)
-            floats[j++] = Float.fromBits(bits.toInt())
-            i += 4
-        }
-        return floats.copyOf(j)
-    }
-
-    /** Lê um WAV 16 kHz mono PCM s16le (o que o FFmpeg gera) e retorna FloatArray [-1,1]. */
-    private fun readWav16kMono(file: File): FloatArray? {
-        return try {
-            RandomAccessFile(file, "r").use { raf ->
-                val riff = ByteArray(4)
-                raf.readFully(riff)
-                if (String(riff) != "RIFF") return null
-                raf.skipBytes(4)
-                raf.readFully(riff)
-                if (String(riff) != "WAVE") return null
-                var sampleRate = 0
-                var channels = 0
-                var bits = 0
-                var dataSize = 0L
-                var dataOffset = -1L
-                while (raf.filePointer < raf.length()) {
-                    val id = ByteArray(4)
-                    raf.readFully(id)
-                    val size = leInt(raf)
-                    when (String(id)) {
-                        "fmt " -> {
-                            raf.skipBytes(2) // audioFormat
-                            channels = leShort(raf)
-                            sampleRate = leInt(raf)
-                            raf.skipBytes(6)
-                            bits = leShort(raf)
-                            raf.skipBytes((size - 16).coerceAtLeast(0))
-                        }
-                        "data" -> { dataSize = size.toLong(); dataOffset = raf.filePointer }
-                        else -> raf.skipBytes(size.coerceAtLeast(0))
-                    }
-                    if (dataOffset >= 0) break
-                }
-                if (dataOffset < 0 || sampleRate != 16000 || channels != 1) return null
-                raf.seek(dataOffset)
-                val sampleCount = (dataSize / (bits / 8)).toInt()
-                val out = FloatArray(sampleCount)
-                val buf = ByteArray(sampleCount * 2)
-                raf.readFully(buf)
-                var i = 0
-                var j = 0
-                while (j + 1 < buf.size) {
-                    val s = ((buf[j].toInt() and 0xFF) or ((buf[j + 1].toInt() and 0xFF) shl 8)).toShort()
-                    out[i++] = s / 32768f
-                    j += 2
-                }
-                out
-            }
-        } catch (e: Throwable) {
-            Log.e(TAG, "readWav16kMono failed", e)
-            null
-        }
-    }
-
-    private fun leShort(raf: RandomAccessFile): Int {
-        val b = ByteArray(2)
-        raf.readFully(b)
-        return (b[0].toInt() and 0xFF) or ((b[1].toInt() and 0xFF) shl 8)
-    }
-
-    private fun leInt(raf: RandomAccessFile): Int {
-        val b = ByteArray(4)
-        raf.readFully(b)
-        return (b[0].toInt() and 0xFF) or ((b[1].toInt() and 0xFF) shl 8) or
-            ((b[2].toInt() and 0xFF) shl 16) or ((b[3].toInt() and 0xFF) shl 24)
     }
 
     /** Parseia o vocab.json (array de strings) do Space da IBM. */

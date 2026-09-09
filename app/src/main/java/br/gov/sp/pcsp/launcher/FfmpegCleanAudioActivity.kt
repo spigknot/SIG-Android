@@ -192,7 +192,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
 
     private fun cleanSelectedAudio(strongConfirmed: Boolean = false) {
         val uri = selectedUri ?: return
-        if (!hasSigStorageAccess()) {
+        if (!MediaUriSupport.hasSigStorageAccess()) {
             requestSigStorageAccess()
             status.text = "Libere o acesso a todos os arquivos para salvar na pasta SIG."
             return
@@ -583,10 +583,6 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         val minutes = (totalSeconds / 60) % 60
         val hours = totalSeconds / 3600
         return String.format(Locale.US, "%02d:%02d:%02d.%03d", hours, minutes, seconds, milliseconds)
-    }
-
-    private fun hasSigStorageAccess(): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
     }
 
     private fun requestSigStorageAccess() {

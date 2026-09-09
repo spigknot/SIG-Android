@@ -382,7 +382,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private fun handleIncomingShareIntent(intent: Intent?) {
         if (intent?.action != Intent.ACTION_SEND) return
         val uri = sharedUrisFrom(intent).firstOrNull() ?: return
-        tryTakeReadPermission(uri, intent.flags)
+        MediaUriSupport.tryTakeReadPermission(contentResolver, uri, intent.flags)
         loadSelectedMedia(uri)
         status.text = "Arquivo recebido pelo compartilhamento."
     }
@@ -400,16 +400,9 @@ class FfmpegCutActivity : AppCompatActivity() {
         return uris.distinct()
     }
 
-    private fun tryTakeReadPermission(uri: Uri, flags: Int) {
-        try {
-            contentResolver.takePersistableUriPermission(uri, flags and Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (_: Throwable) {
-        }
-    }
-
     private fun loadSelectedMedia(uri: Uri) {
         selectedUri = uri
-        selectedName = queryDisplayName(uri) ?: "arquivo"
+        selectedName = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "arquivo"
         var mime = detectMediaMime(uri)
         if (mime.isEmpty()) {
             val extension = selectedName.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
@@ -1418,16 +1411,6 @@ class FfmpegCutActivity : AppCompatActivity() {
                 Toast.makeText(this, "Não consegui abrir a pasta.", Toast.LENGTH_SHORT).show()
             }
         }
-    }
-
-    private fun queryDisplayName(uri: Uri): String? {
-        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (index >= 0) return cursor.getString(index)
-            }
-        }
-        return uri.lastPathSegment
     }
 
     private fun readDuration(uri: Uri): Long {

@@ -361,25 +361,6 @@ object GraniteNarEngine {
         }
     }
 
-    private fun describeError(e: Throwable): String {
-        val sb = StringBuilder()
-        var cause: Throwable = e
-        val seen = mutableSetOf<String>()
-        while (true) {
-            val msg = cause.message ?: cause::class.java.simpleName
-            if (seen.add(msg)) {
-                if (sb.isNotEmpty()) sb.append(" -> ")
-                sb.append(msg)
-            }
-            val c = cause.cause ?: break
-            cause = c
-            if (cause === e) break
-        }
-        sb.append("\n")
-        sb.append(e.stackTraceToString())
-        return sb.toString()
-    }
-
     /** Carrega as libs nativas do ONNX Runtime (mesma ponte do GraniteEngine). */
     private fun loadOnnxRuntimeNatives(onLog: (String) -> Unit) {
         if (onnxNativesLoaded) return
@@ -500,8 +481,8 @@ object GraniteNarEngine {
             }
 
             frontend = GraniteNarFrontend(
-                readFloatBinary(File(dir, MEL_FILE)),
-                readFloatBinary(File(dir, WINDOW_FILE)),
+                GraniteBinarySupport.readFloatBinary(File(dir, MEL_FILE)),
+                GraniteBinarySupport.readFloatBinary(File(dir, WINDOW_FILE)),
             )
             vocab = parseVocabJson(File(dir, VOCAB_FILE).readText())
             // nar_embed_tokens.bin tem ~411 MB (tabela de embeddings fp16). readBytes()
@@ -521,7 +502,7 @@ object GraniteNarEngine {
                     return true
                 } catch (acceleratedError: Throwable) {
                     closeSessions()
-                    val reason = describeError(acceleratedError)
+                    val reason = GraniteBinarySupport.describeError(acceleratedError)
                     onLog("Sessões ${backend.reportLabel} rejeitadas: $reason")
                     if (!onFallbackPrompt(reason)) {
                         lastErrorMessage =
@@ -544,7 +525,7 @@ object GraniteNarEngine {
         } catch (e: Throwable) {
             closeSessions()
             lastLoadedBackend = null
-            lastErrorMessage = describeError(e)
+            lastErrorMessage = GraniteBinarySupport.describeError(e)
             Log.e(TAG, "load failed", e)
             false
         }
@@ -570,7 +551,7 @@ object GraniteNarEngine {
         try {
             return transcribeFileInner(wavFile, onProgress, onLog)
         } catch (e: Throwable) {
-            lastErrorMessage = describeError(e)
+            lastErrorMessage = GraniteBinarySupport.describeError(e)
             Log.e(TAG, "transcribeFile failed", e)
             throw e
         }
@@ -595,7 +576,7 @@ object GraniteNarEngine {
             stageStartedAt = now
         }
 
-        val wav = readWav16kMono(wavFile) ?: throw IllegalStateException("WAV inválido")
+        val wav = GraniteBinarySupport.readWav16kMono(wavFile, TAG) ?: throw IllegalStateException("WAV inválido")
         val features = fe.compute(wav)
         markStage("frontend")
         if (features.frames == 0) return ""
@@ -689,7 +670,7 @@ object GraniteNarEngine {
 
     /** Decodifica tokens BPE byte-level (id = byte-stand-in) para UTF-8. */
     private fun decodeByteLevel(ids: IntArray, pieces: List<String>): String {
-        val cm = byteLevelCharToByte()
+        val cm = GraniteBinarySupport.byteLevelCharToByte()
         val out = java.io.ByteArrayOutputStream()
         for (id in ids) {
             if (id < 0 || id >= pieces.size) continue
@@ -700,26 +681,6 @@ object GraniteNarEngine {
             }
         }
         return String(out.toByteArray(), Charsets.UTF_8)
-    }
-
-    private fun byteLevelCharToByte(): IntArray {
-        val bytes = mutableListOf<Int>()
-        for (b in 0x21..0x7e) bytes.add(b)
-        for (b in 0xa1..0xac) bytes.add(b)
-        for (b in 0xae..0xff) bytes.add(b)
-        val codepoints = bytes.toMutableList()
-        val printable = bytes.toHashSet()
-        var next = 0
-        for (b in 0 until 256) {
-            if (b !in printable) {
-                bytes.add(b)
-                codepoints.add(256 + next)
-                next++
-            }
-        }
-        val map = IntArray(256 + next) { -1 }
-        for (i in bytes.indices) map[codepoints[i]] = bytes[i]
-        return map
     }
 
     private fun closeSessions() {
@@ -737,88 +698,6 @@ object GraniteNarEngine {
         vocab = null
         embed = null
         lastLoadedBackend = null
-    }
-
-    private fun readFloatBinary(file: File): FloatArray {
-        val bytes = file.readBytes()
-        val floats = FloatArray(bytes.size / 4)
-        var i = 0
-        var j = 0
-        while (i + 3 < bytes.size) {
-            val bits = (bytes[i].toLong() and 0xFF) or
-                ((bytes[i + 1].toLong() and 0xFF) shl 8) or
-                ((bytes[i + 2].toLong() and 0xFF) shl 16) or
-                ((bytes[i + 3].toLong() and 0xFF) shl 24)
-            floats[j++] = Float.fromBits(bits.toInt())
-            i += 4
-        }
-        return floats.copyOf(j)
-    }
-
-    private fun readWav16kMono(file: File): FloatArray? {
-        return try {
-            RandomAccessFile(file, "r").use { raf ->
-                val riff = ByteArray(4)
-                raf.readFully(riff)
-                if (String(riff) != "RIFF") return null
-                raf.skipBytes(4)
-                raf.readFully(riff)
-                if (String(riff) != "WAVE") return null
-                var sampleRate = 0
-                var channels = 0
-                var bits = 0
-                var dataSize = 0L
-                var dataOffset = -1L
-                while (raf.filePointer < raf.length()) {
-                    val id = ByteArray(4)
-                    raf.readFully(id)
-                    val size = leInt(raf)
-                    when (String(id)) {
-                        "fmt " -> {
-                            raf.skipBytes(2)
-                            channels = leShort(raf)
-                            sampleRate = leInt(raf)
-                            raf.skipBytes(6)
-                            bits = leShort(raf)
-                            raf.skipBytes((size - 16).coerceAtLeast(0))
-                        }
-                        "data" -> { dataSize = size.toLong(); dataOffset = raf.filePointer }
-                        else -> raf.skipBytes(size.coerceAtLeast(0))
-                    }
-                    if (dataOffset >= 0) break
-                }
-                if (dataOffset < 0 || sampleRate != 16000 || channels != 1) return null
-                raf.seek(dataOffset)
-                val sampleCount = (dataSize / (bits / 8)).toInt()
-                val out = FloatArray(sampleCount)
-                val buf = ByteArray(sampleCount * 2)
-                raf.readFully(buf)
-                var i = 0
-                var j = 0
-                while (j + 1 < buf.size) {
-                    val s = ((buf[j].toInt() and 0xFF) or ((buf[j + 1].toInt() and 0xFF) shl 8)).toShort()
-                    out[i++] = s / 32768f
-                    j += 2
-                }
-                out
-            }
-        } catch (e: Throwable) {
-            Log.e(TAG, "readWav16kMono failed", e)
-            null
-        }
-    }
-
-    private fun leShort(raf: RandomAccessFile): Int {
-        val b = ByteArray(2)
-        raf.readFully(b)
-        return (b[0].toInt() and 0xFF) or ((b[1].toInt() and 0xFF) shl 8)
-    }
-
-    private fun leInt(raf: RandomAccessFile): Int {
-        val b = ByteArray(4)
-        raf.readFully(b)
-        return (b[0].toInt() and 0xFF) or ((b[1].toInt() and 0xFF) shl 8) or
-            ((b[2].toInt() and 0xFF) shl 16) or ((b[3].toInt() and 0xFF) shl 24)
     }
 
     /** Parseia vocab.json (array de strings, ids 0..N-1) ou objeto {piece: id}. */
