@@ -107,8 +107,11 @@ git push origin main
 - ⚠️ Se houver trabalho legítimo FORA do índice (ex.: código Granite WIP que o
   usuário pediu para não commitar), o pre-commit do harness
   (`scripts/check-staged-snapshot.ps1`, contrato `sig-staged-snapshot/v1`)
-  bloqueia o commit — `git add` apenas os arquivos da versão e use
-  `git commit --no-verify` pontual (ver pitfall na tabela).
+  bloqueia o commit — `git add` apenas os arquivos da versão e tire o arquivo
+  alheio do caminho **sem `git stash` e sem `--no-verify`**: backup do arquivo
+  (`git hash-object` antes/depois), `git restore -- <arquivo>`, commit (o gate
+  roda normal), `cp` do backup de volta. `git stash push -- <path>` NÃO limita
+  quando o pathspec é vazio e engole a árvore inteira (ver pitfall na tabela).
 
 ## 6. GitHub Releases (asset `sig.apk` — SEMPRE renomear)
 
@@ -186,7 +189,8 @@ a fonte da verdade e deve evoluir com a prática.
 | `O:\` desmontada no cp | unidade de rede indisponível | ignorar (destino menos importante); seguir com commit/GitHub |
 | `git add -A` puxa logs/byproducts da raiz (`*.log`, `.args`, dumps) | sessões deixam artefatos untracked na raiz | `git add -u` + arquivos novos do WIP nominalmente; conferir `git status` antes |
 | Build falha com `Gradle build daemon has been stopped ... garbage collector is thrashing` | daemon reaproveitado estourou o heap (512 MiB) em builds seguidos; falha de ambiente, não de código | `./gradlew --stop` e rodar o mesmo gate de novo; só vale como retry se o gate já passou verde antes |
-| Commit bloqueado: "commit bloqueado: N arquivo(s) tracked fora do índice" | pre-commit do harness (`check-staged-snapshot.ps1`) exige working tree == índice para inputs de build; trabalho legítimo fora do índice (ex.: Granite WIP não commitado) dispara o bloqueio | `git add` apenas os arquivos da versão (3 lugares + UPDATE.md) e `git commit --no-verify` pontual; o harness segue ativo para os próximos commits |
+| Commit bloqueado: "commit bloqueado: N arquivo(s) tracked fora do índice" | pre-commit do harness (`check-staged-snapshot.ps1`) exige working tree == índice para inputs de build; trabalho legítimo fora do índice (ex.: Granite WIP não commitado) dispara o bloqueio | `git add` apenas os arquivos da versão e tirar o arquivo alheio do caminho com **backup + `git restore -- <arquivo>` + commit + `cp` de volta** (conferir `git hash-object` antes/depois). NUNCA `--no-verify` (pula o gate) e NUNCA `git stash push` com pathspec vazio — ele engole a árvore inteira |
+| `git stash push -- <path>` levou TODA a árvore (e o commit morreu por timeout) | pathspec vazio/errado no stash não limita o escopo; timeout de shell mata o hook no meio e deixa stash + índice sujos | recuperar com `git show 'stash@{0}:<arquivo>'` conferindo o hash contra o backup, `cp` de volta, `git restore --staged <arquivo>` e `git stash drop`; daí em diante usar o fluxo backup + `git restore` (acima) |
 | Dependência nativa baixando do Drive | `NativeDependencyManager.kt` com URL antiga | usar `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-<abi>.zip` |
 | `EPERM` ao salvar TXT do Whisper/Ocorrência ou ao enviar texto para gerenciador de arquivos | Android com armazenamento segmentado: a pasta pública `SIG` não está autorizada e `ACTION_SEND` recebeu somente `EXTRA_TEXT` | usar o diretório externo privado como fallback e compartilhar um `.txt` real por `FileProvider`/`EXTRA_STREAM`; exportar para a pasta escolhida via SAF |
 
