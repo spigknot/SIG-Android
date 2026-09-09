@@ -5,6 +5,12 @@ import android.os.Build
 import android.media.MediaCodecList
 import androidx.appcompat.app.AlertDialog
 
+/** Registro dos encoders de video oferecidos ao usuario.
+ *
+ * Decide o que listar conforme a plataforma, com instancias maximas anunciadas
+ * e texto de ajuda. Nao executa encoder nem valida a midia.
+ */
+
 data class FfmpegVideoEncoder(
     val ffmpegName: String,
     val codecFamily: String,

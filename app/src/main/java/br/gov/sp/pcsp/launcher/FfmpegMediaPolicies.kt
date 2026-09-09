@@ -2,6 +2,13 @@ package br.gov.sp.pcsp.launcher
 
 import java.util.Locale
 
+/** Politicas de midia do FFmpeg: stream-copy, trim, juncao e selecao de faixas.
+ *
+ * Regra pura por codec/assinatura de stream (data classes de plano e probe).
+ * Nao executa FFmpeg nem le arquivo: recebe o que foi sondado e devolve a
+ * decisao (comando copiavel, motivo de fallback).
+ */
+
 internal data class FfmpegStreamCopySignature(
     val containerFamily: String,
     val ffmpegDescriptor: String,

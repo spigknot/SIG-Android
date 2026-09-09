@@ -96,6 +96,15 @@ import java.util.zip.ZipOutputStream
 import kotlin.math.pow
 import kotlin.random.Random
 
+/** HOTSPOT: UI e orquestracao da transcricao remota (REST) e ao vivo (WebSocket).
+ *
+ * Ferramentas Transcricao e Ocorrencia na mesma Activity (EXTRA_MODE). Regra
+ * testavel mora nos seams: SttRequestBuilders, SttResponseParsers,
+ * SttLanguageSettings, SttDiarization, AssemblyAiAsyncFlow,
+ * LiveDiagnosticContext e TranscriptionReport. Mudanca aqui exige o gate
+ * completo (ver AGENTS.md).
+ */
+
 class RemoteSttActivity : AppCompatActivity() {
 
     private lateinit var serverScroll: ScrollView

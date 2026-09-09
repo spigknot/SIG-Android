@@ -2,6 +2,12 @@ package br.gov.sp.pcsp.launcher
 
 import android.content.Context
 
+/** Preferencias da extracao de partes da transcricao (metodo, modelo, config).
+ *
+ * So le/escreve prefs; a chamada ao modelo e o parsing da resposta ficam na
+ * Activity e no cliente do assistente.
+ */
+
 object PartsExtractionSettings {
 
     const val MODEL_PROXY = GrokApiSettings.IA_PROXY_NAME

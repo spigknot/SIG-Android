@@ -3,6 +3,11 @@ package br.gov.sp.pcsp.launcher
 import android.content.Context
 import java.io.File
 
+/** Limpeza dos caches temporarios do app (por idade e tamanho).
+ *
+ * So varre/apaga arquivos de cache; nao mexe em transcricoes nem em prefs.
+ */
+
 object AppCacheManager {
     private const val DAY_MS = 24L * 60L * 60L * 1000L
 

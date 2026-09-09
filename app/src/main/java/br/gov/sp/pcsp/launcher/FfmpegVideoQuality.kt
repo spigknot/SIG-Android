@@ -4,6 +4,12 @@ import android.content.Context
 import androidx.appcompat.app.AlertDialog
 import kotlin.math.roundToLong
 
+/** Modelos de qualidade de video/audio do FFmpeg (bitrate, escala, GOP, falhas).
+ *
+ * Regra pura: converte a qualidade escolhida em parametros de encoder e estima
+ * bitrate/tamanho. Nao monta a linha de comando completa nem chama o FFmpeg.
+ */
+
 enum class FfmpegVideoQuality(val label: String) {
     MAXIMUM("Máxima"),
     VERY_HIGH("Muito alta"),

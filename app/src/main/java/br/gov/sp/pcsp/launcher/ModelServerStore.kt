@@ -2,6 +2,12 @@ package br.gov.sp.pcsp.launcher
 
 import org.json.JSONObject
 
+/** Servidores/modelos de texto e transcricao configurados pelo usuario.
+ *
+ * Le/escreve a configuracao (base URL, modelo, proposito) e resolve o modelo
+ * selecionado. Nao faz HTTP nem contem UI.
+ */
+
 enum class TextModelPurpose {
     HISTORY,
     STATEMENT,

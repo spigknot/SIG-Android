@@ -12,6 +12,13 @@ import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipInputStream
 
+/** Pacote nativo (release): versao, URLs, tamanhos e SHA-256 por ABI.
+ *
+ * Contrato de release: o build debug NAO compila nativos; o APK baixa o ZIP
+ * publicado no R2 e valida o SHA-256 antes de instalar. Mudar versao/URL aqui
+ * exige regenerar e aceitar os pacotes (ver AGENTS.md).
+ */
+
 object NativeDependencyManager {
     const val COMPONENT_VERSION = "3"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"

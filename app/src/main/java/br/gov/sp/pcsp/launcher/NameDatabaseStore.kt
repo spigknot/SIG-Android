@@ -6,6 +6,11 @@ import java.io.File
 import java.text.Normalizer
 import java.util.Locale
 
+/** Banco local de nomes usado pelo assistente (load/add/remove/normalize).
+ *
+ * So persistencia em arquivo do app; nenhuma chamada de rede nem UI.
+ */
+
 object NameDatabaseStore {
 
     @Volatile

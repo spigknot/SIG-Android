@@ -60,6 +60,12 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToLong
 import kotlin.math.sqrt
 
+/** UI e orquestracao da transcricao local com Whisper.
+ *
+ * A Activity cuida de tela, selecao de arquivo e relatorio; o nativo fica em
+ * WhisperNative. Nenhuma regra de transcricao mora aqui.
+ */
+
 class WhisperActivity : AppCompatActivity() {
 
     private lateinit var whisperScroll: ScrollView

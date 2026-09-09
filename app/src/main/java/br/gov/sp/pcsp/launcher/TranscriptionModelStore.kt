@@ -2,6 +2,11 @@ package br.gov.sp.pcsp.launcher
 
 import org.json.JSONObject
 
+/** Modelos de transcricao disponiveis e o selecionado.
+ *
+ * So configuracao/estado persistido; a chamada ao provedor e da Activity.
+ */
+
 object TranscriptionModelStore {
     const val SERVER_NAME = "servidor"
 

@@ -7,6 +7,11 @@ import android.text.style.ForegroundColorSpan
 import android.widget.TextView
 import android.os.SystemClock
 
+/** Estado das tarefas FFmpeg em andamento (progresso, encoder, fila).
+ *
+ * Guarda o estado exibido na UI; nao executa FFmpeg e nao persiste em disco.
+ */
+
 class FfmpegTaskTracker(
     private val textView: TextView,
     initialTasks: List<String>

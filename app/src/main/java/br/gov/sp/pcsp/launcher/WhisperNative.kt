@@ -1,5 +1,11 @@
 package br.gov.sp.pcsp.launcher
 
+/** Ponte JNI do Whisper (carregar modelo, transcrever, cancelar).
+ *
+ * So declara/aciona o nativo; selecao de modelo, UI e relatorio ficam em
+ * WhisperActivity. Nenhum segredo passa por aqui.
+ */
+
 object WhisperNative {
     init {
         NativeDependencyManager.loadLibrary(SigApplication.appInstance, "sig_whisper")

@@ -13,6 +13,12 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Cliente HTTP do assistente de texto (historico e extracao de nomes).
+ *
+ * Monta e envia a requisicao ao servidor configurado e devolve o texto; nao
+ * guarda historico, nao persiste nomes e nao tem UI.
+ */
+
 object TranscriptAssistantClient {
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
