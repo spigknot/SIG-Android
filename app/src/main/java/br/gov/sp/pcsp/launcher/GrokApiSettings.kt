@@ -13,9 +13,13 @@ object GrokApiSettings {
     const val ALIBABA_TRANSCRIPTION_NAME = "Alibaba Fun ASR/Qwen"
     const val TEXT_NAME = "grok-4.6"
     const val GROK_NON_REASONING_TEXT_NAME = "grok-4.20-0309-non-reasoning"
-    const val DEEPSEEK_TEXT_NAME = "deepseek-v4-flash"
+    /** Nome ATUAL do modelo DeepSeek. A API oficial orienta usar `deepseek-flash`:
+     *  os nomes antigos (deepseek-v4-flash/-pro) continuam aceitos, mas atendem
+     *  pelo mesmo modelo e seriam aposentados — usar o nome estável evita trocar
+     *  o código a cada lançamento. */
+    const val DEEPSEEK_TEXT_NAME = "deepseek-flash"
     const val IA_PROXY_NAME = "IA-Proxy"
-    const val IA_PROXY_DEEPSEEK_NAME = "IA-Proxy (deepseek-v4-flash)"
+    const val IA_PROXY_DEEPSEEK_NAME = "IA-Proxy (deepseek-flash)"
 
     val IA_PROXY_MODELS = listOf(
         GROK_NON_REASONING_TEXT_NAME,
@@ -27,7 +31,8 @@ object GrokApiSettings {
     private const val KEY_XAI_API = "xai_api_key"
     private const val KEY_DEEPSEEK_API = "deepseek_api_key"
     private const val KEY_DEEPGRAM_API = "deepgram_api_key"
-    private const val KEY_DEEPGRAM_KEYTERMS = "deepgram_keyterms"
+    private const val KEY_STT_KEYWORDS = "stt_keywords"
+    private const val KEY_STT_KEYWORDS_ENABLED = "stt_keywords_enabled"
     private const val KEY_ASSEMBLYAI_API = "assemblyai_api_key"
     private const val KEY_ELEVENLABS_API = "elevenlabs_api_key"
     private const val KEY_MUSE_API = "metamuse_api_key"
@@ -91,7 +96,24 @@ object GrokApiSettings {
 
     fun hasDeepgramApiKey(): Boolean = isPlausibleDeepgramKey()
 
-    fun deepgramKeyterms(): String = preferences().getString(KEY_DEEPGRAM_KEYTERMS, "").orEmpty().trim()
+    /** Keywords do STT: lista única do app (mesma tela para todos os
+     *  provedores). Persistida como JSON e traduzida por provedor na hora da
+     *  requisição — ver SttKeywords. */
+    fun sttKeywords(): List<String> = SttKeywords.decode(
+        preferences().getString(KEY_STT_KEYWORDS, "").orEmpty()
+    )
+
+    fun setSttKeywords(value: List<String>) {
+        preferences().edit().putString(KEY_STT_KEYWORDS, SttKeywords.encode(value)).apply()
+    }
+
+    /** Checkbox "Keywords" das telas de transcrição: liga/desliga o envio dos
+     *  termos nas requisições (REST e WebSocket). */
+    fun keywordsEnabled(): Boolean = preferences().getBoolean(KEY_STT_KEYWORDS_ENABLED, true)
+
+    fun setKeywordsEnabled(value: Boolean) {
+        preferences().edit().putBoolean(KEY_STT_KEYWORDS_ENABLED, value).apply()
+    }
 
     fun assemblyaiApiKey(): String = ApiKeyStore.get(preferences(), KEY_ASSEMBLYAI_API)
 
@@ -211,9 +233,10 @@ object GrokApiSettings {
 
     private fun normalizeTextSelection(stored: String): String = when (stored) {
             IA_PROXY_DEEPSEEK_NAME, "IA-Proxy (grok-4.6)" -> IA_PROXY_NAME
+            "IA-Proxy (deepseek-v4-flash)", "IA-Proxy (deepseek-v4-pro)" -> IA_PROXY_NAME
             "grok-4.20-non-reasoning" -> GROK_NON_REASONING_TEXT_NAME
-            "deepseek-v4-pro" -> DEEPSEEK_TEXT_NAME
-            "IA-Proxy (deepseek-v4-pro)" -> IA_PROXY_NAME
+            // Nomes antigos do DeepSeek (aposentados) migram para o nome atual.
+            "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp" -> DEEPSEEK_TEXT_NAME
             else -> stored
         }
     fun selectText(name: String) {
@@ -235,7 +258,7 @@ object GrokApiSettings {
         val stored = preferences().getString(KEY_PROXY_MODEL, TEXT_NAME).orEmpty()
         val normalized = when (stored) {
             "grok-4.20-non-reasoning" -> GROK_NON_REASONING_TEXT_NAME
-            "deepseek-v4-pro" -> DEEPSEEK_TEXT_NAME
+            "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp" -> DEEPSEEK_TEXT_NAME
             else -> stored
         }.takeIf { it in IA_PROXY_MODELS } ?: TEXT_NAME
         if (normalized != stored) selectProxyModel(normalized)

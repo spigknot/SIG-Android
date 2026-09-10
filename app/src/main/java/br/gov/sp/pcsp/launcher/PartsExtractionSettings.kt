@@ -14,7 +14,8 @@ object PartsExtractionSettings {
     const val MODEL_PROXY_DEEPSEEK = GrokApiSettings.IA_PROXY_DEEPSEEK_NAME
     const val MODEL_GROK = "grok-4.6"
     const val MODEL_GROK_NON_REASONING = "grok-4.20-0309-non-reasoning"
-    const val MODEL_DEEPSEEK = "deepseek-v4-flash"
+    /** Nome atual do modelo DeepSeek (fonte única: GrokApiSettings). */
+    const val MODEL_DEEPSEEK = GrokApiSettings.DEEPSEEK_TEXT_NAME
 
     enum class Method(val storedValue: String) {
         UPPERCASE("uppercase"),
@@ -43,8 +44,8 @@ object PartsExtractionSettings {
             "IA-Proxy (grok-4.6)" -> MODEL_PROXY
             MODEL_PROXY_DEEPSEEK -> MODEL_PROXY
             "grok-4.20-non-reasoning" -> MODEL_GROK_NON_REASONING
-            "deepseek-v4-pro" -> MODEL_DEEPSEEK
-            "IA-Proxy (deepseek-v4-pro)" -> MODEL_PROXY
+            "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp" -> MODEL_DEEPSEEK
+            "IA-Proxy (deepseek-v4-flash)", "IA-Proxy (deepseek-v4-pro)" -> MODEL_PROXY
             else -> stored
         }
         if (migrated != stored) selectModel(context, migrated)

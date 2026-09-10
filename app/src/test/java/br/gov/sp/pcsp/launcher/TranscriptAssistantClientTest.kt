@@ -180,7 +180,7 @@ class TranscriptAssistantClientTest {
             val body = JSONObject(request.body.readUtf8())
             assertTrue(body.has("messages"))
             assertTrue(!body.has("input"))
-            assertEquals("deepseek-v4-flash", body.optString("model"))
+            assertEquals("deepseek-flash", body.optString("model"))
             assertTrue(request.getHeader("Authorization") == null)
         }
     }

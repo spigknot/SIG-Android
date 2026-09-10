@@ -28,12 +28,12 @@ class SttRequestBuildersTest {
     }
 
     @Test
-    fun deepgramRest_repeatsKeytermsAndEncodesValues() {
+    fun deepgramRest_repeatsKeywordsAndEncodesValues() {
         val spec = SttRequestBuilders.deepgramRest(
             apiKey = "test-key",
             language = "pt-BR",
             diarize = true,
-            keyterms = listOf("placa", "ação policial"),
+            keywords = listOf("placa", "ação policial"),
         )
 
         assertEquals(
@@ -46,6 +46,23 @@ class SttRequestBuildersTest {
         assertTrue(spec.url.contains("diarize_model=latest"))
         assertTrue(spec.url.contains("keyterm=placa"))
         assertTrue(spec.url.contains("keyterm=a%C3%A7%C3%A3o%20policial"))
+    }
+
+    @Test
+    fun deepgram_omitsEveryKeywordParameterWhenListIsEmpty() {
+        val rest = SttRequestBuilders.deepgramRest(
+            apiKey = "test-key",
+            language = "pt-BR",
+            diarize = false,
+        )
+        val live = SttRequestBuilders.deepgramWebSocket(
+            apiKey = "test-key",
+            language = "pt-BR",
+            diarize = false,
+        )
+
+        assertFalse(rest.url.contains("keyterm"))
+        assertFalse(live.url.contains("keyterm"))
     }
 
     @Test
@@ -132,12 +149,12 @@ class SttRequestBuildersTest {
     }
 
     @Test
-    fun deepgramWebSocket_repeatsAndEncodesKeyterms() {
+    fun deepgramWebSocket_repeatsAndEncodesKeywords() {
         val spec = SttRequestBuilders.deepgramWebSocket(
             apiKey = "test-key",
             language = "pt-BR",
             diarize = true,
-            keyterms = listOf("placa", "ação policial"),
+            keywords = listOf("placa", "ação policial"),
         )
 
         assertTrue(spec.url.startsWith("wss://api.deepgram.com/v1/listen?"))
@@ -153,6 +170,125 @@ class SttRequestBuildersTest {
             SttRequestHeader("Authorization", "Token test-key"),
             spec.header,
         )
+    }
+
+    @Test
+    fun providerKeywords_useTheExactParameterOfEachProvider() {
+        val keywords = listOf("placa", "abordagem")
+
+        // Grok (xAI): keyterm repetido, no multipart da REST e na query do WS.
+        val grokRest = SttRequestBuilders.grokRest(
+            apiKey = "test-key",
+            language = "pt",
+            diarize = false,
+            keywords = keywords,
+        )
+        val grokLive = SttRequestBuilders.grokWebSocket(
+            apiKey = "test-key",
+            language = "pt",
+            diarize = false,
+            keywords = keywords,
+        )
+        assertEquals(
+            listOf("language", "format", "filler_words", "keyterm", "keyterm"),
+            grokRest.multipartFields.map { it.name },
+        )
+        assertTrue(grokLive.url.contains("keyterm=placa&keyterm=abordagem"))
+
+        // ElevenLabs: keyterms repetido (multipart REST e query do WS).
+        val elevenRest = SttRequestBuilders.elevenlabsRest(
+            apiKey = "test-key",
+            languageCode = "pt",
+            diarize = false,
+            keywords = keywords,
+        )
+        val elevenLive = SttRequestBuilders.elevenlabsWebSocket(
+            apiKey = "test-key",
+            primaryLanguage = "pt",
+            secondaryLanguages = emptyList(),
+            keywords = keywords,
+        )
+        assertEquals(
+            listOf("model_id", "language_code", "keyterms", "keyterms"),
+            elevenRest.multipartFields.map { it.name },
+        )
+        assertTrue(elevenLive.url.contains("keyterms=placa&keyterms=abordagem"))
+
+        // AssemblyAI: UM parâmetro com o array em JSON (multipart e query do WS).
+        val assemblyRest = SttRequestBuilders.assemblyaiRest(
+            apiKey = "test-key",
+            languageDetection = false,
+            languageCode = "pt",
+            speakerLabels = false,
+            punctuate = false,
+            keywords = keywords,
+        )
+        val assemblyLive = SttRequestBuilders.assemblyaiWebSocket(
+            apiKey = "test-key",
+            languageCodes = listOf("pt"),
+            diarize = false,
+            keywords = keywords,
+        )
+        assertEquals(
+            listOf("language_code", "keyterms_prompt"),
+            assemblyRest.multipartFields.map { it.name },
+        )
+        assertEquals(
+            "[\"placa\",\"abordagem\"]",
+            assemblyRest.multipartFields.single { it.name == "keyterms_prompt" }.value,
+        )
+        assertTrue(
+            assemblyLive.url.contains(
+                "keyterms_prompt=%5B%22placa%22%2C%22abordagem%22%5D"
+            )
+        )
+    }
+
+    @Test
+    fun museAndAlibaba_carryKeywordsInTheirJsonBodies() {
+        val keywords = listOf("placa")
+
+        val handshake = org.json.JSONObject(
+            SttRequestBuilders.museHandshake(
+                apiKey = "LLM|1|secret",
+                mode = "ENDPOINTING",
+                keywords = keywords,
+            )
+        )
+        val museRest = org.json.JSONObject(
+            SttRequestBuilders.museRestRequestJson(mode = "ENDPOINTING", keywords = keywords)
+        )
+        assertEquals("placa", handshake.getJSONArray("keywords").getString(0))
+        assertEquals("placa", museRest.getJSONArray("keywords").getString(0))
+
+        val alibabaRest = org.json.JSONObject(
+            SttRequestBuilders.alibabaRestBody(
+                audioDataUri = "data:audio/wav;base64,AAA",
+                vocabulary = SttKeywords.alibabaVocabulary(keywords),
+            )
+        )
+        val runTask = org.json.JSONObject(
+            SttRequestBuilders.alibabaRunTask(
+                taskId = "tid-1",
+                vocabulary = SttKeywords.alibabaVocabulary(keywords),
+            )
+        )
+        assertEquals(5, alibabaRest.getJSONObject("parameters").getJSONObject("vocabulary").getInt("placa"))
+        assertEquals(5, runTask.getJSONObject("payload").getJSONObject("parameters")
+            .getJSONObject("vocabulary").getInt("placa"))
+    }
+
+    @Test
+    fun museAndAlibaba_omitKeywordsWhenTheListIsEmpty() {
+        val handshake = org.json.JSONObject(
+            SttRequestBuilders.museHandshake(apiKey = "LLM|1|secret", mode = "ENDPOINTING")
+        )
+        val alibabaRest = org.json.JSONObject(
+            SttRequestBuilders.alibabaRestBody(audioDataUri = "x", vocabulary = emptyMap())
+        )
+
+        assertFalse(handshake.has("keywords"))
+        assertFalse(alibabaRest.getJSONObject("parameters").has("vocabulary"))
     }
 
     @Test

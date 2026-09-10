@@ -46,7 +46,12 @@ object SttRequestBuilders {
         fileField = fileField,
     )
 
-    fun grokRest(apiKey: String, language: String?, diarize: Boolean): SttRequestSpec =
+    fun grokRest(
+        apiKey: String,
+        language: String?,
+        diarize: Boolean,
+        keywords: List<String> = emptyList(),
+    ): SttRequestSpec =
         SttRequestSpec(
             url = ServiceEndpoints.GROK_STT_REST,
             headers = listOf(SttRequestHeader("Authorization", "Bearer $apiKey")),
@@ -55,6 +60,9 @@ object SttRequestBuilders {
                 add(SttMultipartField("format", "true"))
                 add(SttMultipartField("filler_words", "false"))
                 if (diarize) add(SttMultipartField("diarize", "true"))
+                SttKeywords.queryParams("grok", keywords).forEach { (name, value) ->
+                    add(SttMultipartField(name, value))
+                }
             },
             fileField = "file",
         )
@@ -63,7 +71,7 @@ object SttRequestBuilders {
         apiKey: String,
         language: String,
         diarize: Boolean,
-        keyterms: List<String>,
+        keywords: List<String> = emptyList(),
     ): SttRequestSpec = SttRequestSpec(
         url = queryUrl(
             base = ServiceEndpoints.DEEPGRAM_STT_REST,
@@ -73,9 +81,9 @@ object SttRequestBuilders {
                 add("smart_format" to "true")
                 add("punctuate" to "true")
                 if (diarize) add("diarize_model" to "latest")
-                keyterms.map(String::trim)
-                    .filter(String::isNotBlank)
-                    .forEach { add("keyterm" to it) }
+                SttKeywords.queryParams("deepgram", keywords).forEach { (name, value) ->
+                    add(name to value)
+                }
             },
         ),
         headers = listOf(SttRequestHeader("Authorization", "Token $apiKey")),
@@ -87,6 +95,7 @@ object SttRequestBuilders {
         languageCode: String?,
         speakerLabels: Boolean,
         punctuate: Boolean,
+        keywords: List<String> = emptyList(),
     ): SttRequestSpec = SttRequestSpec(
         url = ServiceEndpoints.ASSEMBLYAI_STT_REST,
         headers = listOf(
@@ -98,6 +107,9 @@ object SttRequestBuilders {
             languageCode?.let { add(SttMultipartField("language_code", it)) }
             if (speakerLabels) add(SttMultipartField("speaker_labels", "true"))
             if (punctuate) add(SttMultipartField("punctuate", "true"))
+            SttKeywords.queryParams("assemblyai", keywords).forEach { (name, value) ->
+                add(SttMultipartField(name, value))
+            }
         },
         fileField = "audio",
     )
@@ -106,6 +118,7 @@ object SttRequestBuilders {
         apiKey: String,
         languageCode: String?,
         diarize: Boolean,
+        keywords: List<String> = emptyList(),
     ): SttRequestSpec = SttRequestSpec(
         url = ServiceEndpoints.ELEVENLABS_STT_REST,
         headers = listOf(SttRequestHeader("xi-api-key", apiKey)),
@@ -113,6 +126,9 @@ object SttRequestBuilders {
             add(SttMultipartField("model_id", "scribe_v2"))
             languageCode?.let { add(SttMultipartField("language_code", it)) }
             if (diarize) add(SttMultipartField("diarize", "true"))
+            SttKeywords.queryParams("elevenlabs", keywords).forEach { (name, value) ->
+                add(SttMultipartField(name, value))
+            }
         },
         fileField = "file",
     )
@@ -121,6 +137,7 @@ object SttRequestBuilders {
         apiKey: String,
         language: String?,
         diarize: Boolean,
+        keywords: List<String> = emptyList(),
     ): SttWebSocketSpec = SttWebSocketSpec(
         url = queryUrl(
             base = ServiceEndpoints.GROK_STT_WEBSOCKET,
@@ -134,6 +151,9 @@ object SttRequestBuilders {
                 add("endpointing" to "900")
                 add("filler_words" to "false")
                 if (diarize) add("diarize" to "true")
+                SttKeywords.queryParams("grok", keywords).forEach { (name, value) ->
+                    add(name to value)
+                }
             },
         ),
         header = SttRequestHeader("Authorization", "Bearer $apiKey"),
@@ -143,7 +163,7 @@ object SttRequestBuilders {
         apiKey: String,
         language: String,
         diarize: Boolean,
-        keyterms: List<String>,
+        keywords: List<String> = emptyList(),
     ): SttWebSocketSpec = SttWebSocketSpec(
         url = queryUrl(
             base = ServiceEndpoints.DEEPGRAM_STT_WEBSOCKET,
@@ -158,9 +178,9 @@ object SttRequestBuilders {
                 add("interim_results" to "true")
                 add("endpointing" to "900")
                 if (diarize) add("diarize_model" to "latest")
-                keyterms.map(String::trim)
-                    .filter(String::isNotBlank)
-                    .forEach { add("keyterm" to it) }
+                SttKeywords.queryParams("deepgram", keywords).forEach { (name, value) ->
+                    add(name to value)
+                }
             },
         ),
         header = SttRequestHeader("Authorization", "Token $apiKey"),
@@ -170,6 +190,7 @@ object SttRequestBuilders {
         apiKey: String,
         languageCodes: List<String>,
         diarize: Boolean,
+        keywords: List<String> = emptyList(),
     ): SttWebSocketSpec = SttWebSocketSpec(
         url = queryUrl(
             base = ServiceEndpoints.ASSEMBLYAI_STT_WEBSOCKET,
@@ -180,6 +201,9 @@ object SttRequestBuilders {
                 add("continuous_partials" to "true")
                 languageCodes.forEach { add("language_codes" to it) }
                 if (diarize) add("speaker_labels" to "true")
+                SttKeywords.queryParams("assemblyai", keywords).forEach { (name, value) ->
+                    add(name to value)
+                }
             },
         ),
         header = SttRequestHeader("Authorization", apiKey),
@@ -189,6 +213,7 @@ object SttRequestBuilders {
         apiKey: String,
         primaryLanguage: String?,
         secondaryLanguages: List<String>,
+        keywords: List<String> = emptyList(),
     ): SttWebSocketSpec = SttWebSocketSpec(
         url = queryUrl(
             base = ServiceEndpoints.ELEVENLABS_STT_WEBSOCKET,
@@ -200,6 +225,9 @@ object SttRequestBuilders {
                 add("commit_strategy" to "vad")
                 add("vad_silence_threshold_secs" to "1.0")
                 add("include_timestamps" to "true")
+                SttKeywords.queryParams("elevenlabs", keywords).forEach { (name, value) ->
+                    add(name to value)
+                }
             },
         ),
         header = SttRequestHeader("xi-api-key", apiKey),
@@ -247,8 +275,9 @@ object SttRequestBuilders {
         if (languageBias.isNotEmpty()) {
             put("languageBias", JSONArray().apply { languageBias.forEach { put(it) } })
         }
-        if (keywords.isNotEmpty()) {
-            put("keywords", JSONArray().apply { keywords.forEach { put(it) } })
+        val keywordTerms = SttKeywords.museKeywords(keywords)
+        if (keywordTerms.isNotEmpty()) {
+            put("keywords", JSONArray().apply { keywordTerms.forEach { put(it) } })
         }
     }.toString()
 
@@ -275,8 +304,9 @@ object SttRequestBuilders {
         if (languageBias.isNotEmpty()) {
             put("languageBias", JSONArray().apply { languageBias.forEach { put(it) } })
         }
-        if (keywords.isNotEmpty()) {
-            put("keywords", JSONArray().apply { keywords.forEach { put(it) } })
+        val keywordTerms = SttKeywords.museKeywords(keywords)
+        if (keywordTerms.isNotEmpty()) {
+            put("keywords", JSONArray().apply { keywordTerms.forEach { put(it) } })
         }
     }.toString()
 
@@ -356,6 +386,7 @@ object SttRequestBuilders {
     fun alibabaRestBody(
         audioDataUri: String,
         languageHints: List<String>? = null,
+        vocabulary: Map<String, Int> = emptyMap(),
     ): String = JSONObject().apply {
         put("model", ALIBABA_REST_MODEL)
         put(
@@ -384,6 +415,11 @@ object SttRequestBuilders {
                     if (!languageHints.isNullOrEmpty()) {
                         put("language_hints", JSONArray().apply { languageHints.forEach { put(it) } })
                     }
+                    if (vocabulary.isNotEmpty()) {
+                        put("vocabulary", JSONObject().apply {
+                            vocabulary.forEach { (term, weight) -> put(term, weight) }
+                        })
+                    }
                 }
         )
     }.toString()
@@ -392,6 +428,7 @@ object SttRequestBuilders {
     fun alibabaRunTask(
         taskId: String,
         languageHints: List<String>? = null,
+        vocabulary: Map<String, Int> = emptyMap(),
     ): String = JSONObject().apply {
         put(
             "header", JSONObject()
@@ -413,6 +450,11 @@ object SttRequestBuilders {
                         .apply {
                             if (!languageHints.isNullOrEmpty()) {
                                 put("language_hints", JSONArray().apply { languageHints.forEach { put(it) } })
+                            }
+                            if (vocabulary.isNotEmpty()) {
+                                put("vocabulary", JSONObject().apply {
+                                    vocabulary.forEach { (term, weight) -> put(term, weight) }
+                                })
                             }
                         }
                 )

@@ -11,12 +11,20 @@
             </FrameLayout>
             <TextView style="@style/SettingsHeader" android:text="Chaves de serviços" />
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepseek:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_deepseek_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepseek" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
                 <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="xAI:" android:textColor="#FFFFFFFF" />
                 <EditText android:id="@+id/edit_xai_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da xAI" android:inputType="textPassword" />
             </LinearLayout>
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepseek:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_deepseek_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Deepseek" android:inputType="textPassword" />
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Meta:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_metamuse_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Meta Muse Voice (LLM|...)" android:inputType="textPassword" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="ElevenLabs:" android:textColor="#FFFFFFFF" />
+                <EditText android:id="@+id/edit_elevenlabs_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da ElevenLabs" android:inputType="textPassword" />
             </LinearLayout>
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
                 <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Deepgram:" android:textColor="#FFFFFFFF" />
@@ -27,15 +35,7 @@
                 <EditText android:id="@+id/edit_assemblyai_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da AssemblyAI" android:inputType="textPassword" />
             </LinearLayout>
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="ElevenLabs:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_elevenlabs_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API da ElevenLabs" android:inputType="textPassword" />
-            </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Muse Voice:" android:textColor="#FFFFFFFF" />
-                <EditText android:id="@+id/edit_metamuse_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave API do Muse Voice (LLM|...)" android:inputType="textPassword" />
-            </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
-                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Alibaba Cloud API Key:" android:textColor="#FFFFFFFF" />
+                <TextView android:layout_width="88dp" android:layout_height="wrap_content" android:text="Alibaba:" android:textColor="#FFFFFFFF" />
                 <EditText android:id="@+id/edit_alibaba_key" style="@style/SettingsEdit" android:layout_width="0dp" android:layout_weight="1" android:hint="Chave PAYG Singapore (sk-ws-...)" android:inputType="textPassword" />
             </LinearLayout>
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">

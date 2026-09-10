@@ -41,7 +41,7 @@ também é bloqueado.
 | `ImeiCalculatorActivity.kt` | Calculadora/consulta de IMEI (Luhn, API, histórico). |
 | `ImeiSettingsActivity.kt` | Configuração da consulta de IMEI. |
 | `ApiKeysSettingsActivity.kt` | Chaves de API: digitação, máscara, importação. |
-| `AdvancedSettingsActivity.kt` | Configurações avançadas gerais. |
+| `AdvancedSettingsActivity.kt` | Configurações avançadas: paralelismo e tabela de keywords. |
 | `ModelSettingsActivity.kt` | Servidores/modelos de texto e transcrição. |
 | `RemoteSttActivity.kt` | **HOTSPOT**: transcrição remota REST + ao vivo (WS) e Ocorrência; UI e orquestração. |
 | `GraniteActivity.kt` | Transcrição/geração local com Granite (STT/TTS) + assistente. |
@@ -74,6 +74,7 @@ também é bloqueado.
 | `SttRequestBuilders.kt` | Contratos de requisição REST/WS por provedor (URL, header, form). |
 | `SttLanguageSettings.kt` | Regras de idioma por provedor STT. |
 | `SttDiarization.kt` | Regras de diarização por provedor/modo. |
+| `SttKeywords.kt` | Keywords do STT: normalização, limites e parâmetro por provedor. |
 | `AssemblyAiAsyncFlow.kt` | Decisão sync/async + polling da AssemblyAI. |
 | `LiveDiagnosticContext.kt` | Correlação de diagnóstico da sessão ao vivo. |
 | `TranscriptionReport.kt` | Relatório HTML, log de terminal, nomes e tamanhos. |
@@ -81,7 +82,7 @@ também é bloqueado.
 | `MediaTypeRules.kt` | `isVideo`/`isAudio`/MIME por extensão. |
 | `MediaUriSupport.kt` | Nome de arquivo de URI + permissões de pasta. |
 | `SharedMediaIntents.kt` | Regras de intent de compartilhamento (vídeo/áudio/URI). |
-| `ApiKeysImportParser.kt` | Parser do arquivo de importação de chaves. |
+| `ApiKeysImportParser.kt` | Parser do arquivo de importação de chaves (uma linha por serviço). |
 | `SttOutputStorage.kt` | Escolha/criação da pasta de saída. |
 | `FfmpegOutputRemuxer.kt` | Remux da saída para o contêiner original (HEVC). |
 | `FfmpegProgressText.kt` | Texto de encoder/duração nas etapas FFmpeg. |

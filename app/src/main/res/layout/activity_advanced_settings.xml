@@ -96,6 +96,20 @@
                         android:textColor="#FFFFFFFF" />
                 </LinearLayout>
             </LinearLayout>
+
+            <TextView style="@style/SettingsHeader" android:text="Keywords" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#88101418" android:orientation="vertical" android:padding="8dp">
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                    <EditText android:id="@+id/input_keyword" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Digite a palavra" android:imeOptions="actionDone" android:inputType="text" android:maxLength="50" android:maxLines="1" android:textColor="#FFFFFFFF" android:textColorHint="#FF888888" android:textSize="13sp" />
+                    <ImageButton android:id="@+id/button_add_keyword" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginStart="8dp" android:background="@drawable/ffmpeg_outline_green_button_bg" android:contentDescription="Adicionar keyword" android:foreground="?attr/selectableItemBackground" android:padding="8dp" android:scaleType="fitCenter" android:src="@drawable/ic_ffmpeg_plus" app:tint="#FF2ECC71" />
+                    <ImageButton android:id="@+id/button_remove_keyword" android:layout_width="40dp" android:layout_height="40dp" android:layout_marginStart="6dp" android:background="@drawable/ffmpeg_outline_red_button_bg" android:contentDescription="Excluir keyword selecionada" android:foreground="?attr/selectableItemBackground" android:padding="8dp" android:scaleType="fitCenter" android:src="@drawable/ic_ffmpeg_minus" app:tint="#FFFF4A4A" />
+                </LinearLayout>
+                <TextView android:id="@+id/keyword_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" android:text="Nenhuma keyword cadastrada." android:textColor="#FF888888" android:textSize="12sp" />
+                <ScrollView android:id="@+id/keyword_scroll" android:layout_width="match_parent" android:layout_height="260dp" android:layout_marginTop="6dp" android:background="@drawable/ffmpeg_outline_button_bg" android:clipToPadding="false" android:visibility="gone">
+                    <LinearLayout android:id="@+id/keyword_rows" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="1dp" />
+                </ScrollView>
+            </LinearLayout>
+
         </LinearLayout>
     </ScrollView>
 

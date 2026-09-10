@@ -198,6 +198,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var checkboxLiveDiarize: CheckBox
     private lateinit var buttonLiveDiarizeHelp: TextView
     private lateinit var buttonLiveDiarizeRealtimeHelp: TextView
+    private lateinit var checkboxLiveKeywords: CheckBox
+    private var keywordControlsPopulating = false
 
     private val selectedItems = mutableListOf<MediaItem>()
     private val tempOutputFiles = mutableListOf<File>()
@@ -473,6 +475,7 @@ class RemoteSttActivity : AppCompatActivity() {
         checkboxLiveDiarize = findViewById(R.id.checkbox_live_diarize)
         buttonLiveDiarizeHelp = findViewById(R.id.button_live_diarize_help)
         buttonLiveDiarizeRealtimeHelp = findViewById(R.id.button_live_diarize_realtime_help)
+        checkboxLiveKeywords = findViewById(R.id.checkbox_live_keywords)
         arrowInputOutput = findViewById(R.id.arrow_input_output)
         buttonPlayPause = findViewById(R.id.button_play_pause)
         buttonSpeedDown = findViewById(R.id.button_speed_down)
@@ -585,6 +588,21 @@ class RemoteSttActivity : AppCompatActivity() {
                 Toast.makeText(
                     this,
                     "Diarização alterada: inicie novamente a transcrição ao vivo.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+        checkboxLiveKeywords.setOnCheckedChangeListener { _, checked ->
+            if (keywordControlsPopulating) return@setOnCheckedChangeListener
+            GrokApiSettings.setKeywordsEnabled(checked)
+            // As keywords entram nos parâmetros da conexão ao vivo; uma sessão
+            // ativa precisa ser reiniciada para valer. No REST (arquivos) a
+            // lista é lida no início de cada transcrição, sem interrupção.
+            if (liveTranscribing) {
+                stopLiveMicTranscription()
+                Toast.makeText(
+                    this,
+                    "Keywords alteradas: inicie novamente a transcrição ao vivo.",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -1375,15 +1393,13 @@ class RemoteSttActivity : AppCompatActivity() {
                 apiKey = GrokApiSettings.deepgramApiKey(),
                 language = SttLanguageSettings.deepgramLanguageParam(),
                 diarize = checkboxLiveDiarize.isChecked,
-                keyterms = GrokApiSettings.deepgramKeyterms()
-                    .split(',', '\n')
-                    .map { it.trim() }
-                    .filter { it.isNotBlank() },
+                keywords = activeSttKeywords(),
             )
             sttIsAssemblyai -> SttRequestBuilders.assemblyaiWebSocket(
                 apiKey = GrokApiSettings.assemblyaiApiKey(),
                 languageCodes = SttLanguageSettings.assemblyaiWsLanguageCodes(),
                 diarize = checkboxLiveDiarize.isChecked,
+                keywords = activeSttKeywords(),
             )
             sttIsElevenlabs -> {
                 val (primary, secondary) = SttLanguageSettings.elevenlabsWsLanguage()
@@ -1391,6 +1407,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     apiKey = GrokApiSettings.elevenlabsApiKey(),
                     primaryLanguage = primary,
                     secondaryLanguages = secondary,
+                    keywords = activeSttKeywords(),
                 )
             }
             sttIsMetamuse -> SttRequestBuilders.museWebSocket(
@@ -1403,6 +1420,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 apiKey = GrokApiSettings.apiKey(),
                 language = SttLanguageSettings.grokLanguageParam(),
                 diarize = checkboxLiveDiarize.isChecked,
+                keywords = activeSttKeywords(),
             )
         }
         val request = Request.Builder()
@@ -1422,6 +1440,7 @@ class RemoteSttActivity : AppCompatActivity() {
                         mode = SttDiarization.museMode(checkboxLiveDiarize.isChecked),
                         audioEncoding = SttRequestBuilders.MUSE_AUDIO_ENCODING_LIVE_16K,
                         languageBias = SttLanguageSettings.museLanguageBias(),
+                        keywords = activeSttKeywords(),
                     )
                     if (!webSocket.send(handshake)) {
                         handleGrokWebSocketDisconnect(webSocket, "não consegui enviar o handshake do Muse")
@@ -1444,6 +1463,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     val runTask = SttRequestBuilders.alibabaRunTask(
                         taskId = taskId,
                         languageHints = SttLanguageSettings.alibabaLanguageHints(),
+                        vocabulary = SttKeywords.alibabaVocabulary(activeSttKeywords()),
                     )
                     if (!webSocket.send(runTask)) {
                         handleGrokWebSocketDisconnect(webSocket, "não consegui enviar o run-task do Alibaba")
@@ -2584,6 +2604,7 @@ class RemoteSttActivity : AppCompatActivity() {
             // multi/custom com vários omitem o language (detecção nativa da xAI).
             language = SttLanguageSettings.grokLanguageParam(),
             diarize = SttDiarization.grokRestDiarize(checkboxLiveDiarize.isChecked),
+            keywords = activeSttKeywords(),
         )
         val requestBody = buildMultipartBody(requestSpec, uploadFile)
         val call = client.newCall(
@@ -2625,10 +2646,7 @@ class RemoteSttActivity : AppCompatActivity() {
             apiKey = apiKey,
             language = SttLanguageSettings.deepgramLanguageParam(),
             diarize = checkboxLiveDiarize.isChecked,
-            keyterms = GrokApiSettings.deepgramKeyterms()
-                .split(',', '\n')
-                .map { it.trim() }
-                .filter { it.isNotBlank() },
+            keywords = activeSttKeywords(),
         )
         val requestBody = uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())
         var attempt = 0
@@ -2693,6 +2711,7 @@ class RemoteSttActivity : AppCompatActivity() {
             languageCode = languageCode,
             speakerLabels = speakerLabels,
             punctuate = punctuate,
+            keywords = activeSttKeywords(),
         )
         val requestBody = buildMultipartBody(requestSpec, uploadFile)
         val call = client.newCall(
@@ -2736,6 +2755,7 @@ class RemoteSttActivity : AppCompatActivity() {
             languageCode = languageCode,
             // Scribe v2 REST: diarize=true quando a checkbox está marcada.
             diarize = SttDiarization.elevenlabsRestDiarize(checkboxLiveDiarize.isChecked),
+            keywords = activeSttKeywords(),
         )
         val requestBody = buildMultipartBody(requestSpec, uploadFile)
         val call = client.newCall(
@@ -2778,6 +2798,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val requestJson = SttRequestBuilders.museRestRequestJson(
             mode = mode,
             languageBias = SttLanguageSettings.museLanguageBias(),
+            keywords = activeSttKeywords(),
         )
         // O one-shot do Muse recebe os parâmetros como parte JSON "request"
         // (application/json) + o áudio como parte "audio" (não são form fields).
@@ -2832,6 +2853,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val requestJson = SttRequestBuilders.alibabaRestBody(
             audioDataUri = dataUri,
             languageHints = SttLanguageSettings.alibabaLanguageHints(),
+            vocabulary = SttKeywords.alibabaVocabulary(activeSttKeywords()),
         )
         val call = client.newCall(
             Request.Builder()
@@ -3260,6 +3282,11 @@ class RemoteSttActivity : AppCompatActivity() {
         refreshBatchProgressUi()
     }
 
+    /** Keywords que entram na requisição: a lista salva só é enviada quando a
+     *  checkbox "Keywords" está marcada (REST e WebSocket). */
+    private fun activeSttKeywords(): List<String> =
+        if (checkboxLiveKeywords.isChecked) GrokApiSettings.sttKeywords() else emptyList()
+
     private fun refreshGrokApiControls() {
         val config = TranscriptionModelStore.selectedConfig()
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
@@ -3307,6 +3334,13 @@ class RemoteSttActivity : AppCompatActivity() {
             checkboxLiveDiarize.isEnabled = false
             checkboxLiveDiarize.isChecked = false
         }
+        // Keywords: a checkbox existe só para os provedores de API (o
+        // servidor local não tem parâmetro de reforço).
+        val keywordsSupported = apiProvider != null && SttKeywords.supportsKeywords(apiProvider)
+        checkboxLiveKeywords.visibility = if (keywordsSupported) View.VISIBLE else View.GONE
+        keywordControlsPopulating = true
+        checkboxLiveKeywords.isChecked = GrokApiSettings.keywordsEnabled()
+        keywordControlsPopulating = false
         // O seletor t= e seus botões existem apenas para o Granite NAR.
         val narModel = config.name == TranscriptionModelStore.SERVER_NAME
         buttonLiveIntervalMinus?.visibility = if (narModel) View.VISIBLE else View.GONE
@@ -4514,6 +4548,11 @@ class RemoteSttActivity : AppCompatActivity() {
         val params = JSONObject().apply {
             put("audio_url", uploadUrl)
             put("speech_models", JSONArray().put("universal-3-5-pro").put("universal-2"))
+            // AssemblyAI: `keyterms_prompt` (array JSON com os termos).
+            val keywordTerms = SttKeywords.assemblyaiPrompt(activeSttKeywords())
+            if (keywordTerms.isNotEmpty()) {
+                put("keyterms_prompt", JSONArray().apply { keywordTerms.forEach { put(it) } })
+            }
             if (languageDetection) put("language_detection", true)
             languageCode?.let { put("language_code", it) }
             val (speakerLabels, punctuate) =

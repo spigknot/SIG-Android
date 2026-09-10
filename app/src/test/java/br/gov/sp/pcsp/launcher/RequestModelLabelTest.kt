@@ -43,6 +43,6 @@ class RequestModelLabelTest {
         )
 
         assertEquals("servidor", RequestModelLabel.from(server))
-        assertEquals("deepseek-v4-flash", RequestModelLabel.from(deepseek))
+        assertEquals("deepseek-flash", RequestModelLabel.from(deepseek))
     }
 }
