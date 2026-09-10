@@ -46,6 +46,19 @@ class AdvancedSettingsActivity : AppCompatActivity() {
         keywordScroll = findViewById(R.id.keyword_scroll)
         keywordEmpty = findViewById(R.id.keyword_empty)
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
+        findViewById<TextView>(R.id.button_keywords_help).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Keywords")
+                .setMessage(
+                    SttKeywordsHelp.text(
+                        provider = null,
+                        isLive = false,
+                        keywords = GrokApiSettings.sttKeywords(),
+                    )
+                )
+                .setPositiveButton("OK", null)
+                .show()
+        }
         findViewById<ImageButton>(R.id.button_add_keyword).setOnClickListener { addKeyword() }
         findViewById<ImageButton>(R.id.button_remove_keyword).setOnClickListener {
             confirmRemoveKeyword()

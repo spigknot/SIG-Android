@@ -199,6 +199,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var buttonLiveDiarizeHelp: TextView
     private lateinit var buttonLiveDiarizeRealtimeHelp: TextView
     private lateinit var checkboxLiveKeywords: CheckBox
+    private lateinit var buttonLiveKeywordsHelp: TextView
     private var keywordControlsPopulating = false
 
     private val selectedItems = mutableListOf<MediaItem>()
@@ -476,6 +477,7 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonLiveDiarizeHelp = findViewById(R.id.button_live_diarize_help)
         buttonLiveDiarizeRealtimeHelp = findViewById(R.id.button_live_diarize_realtime_help)
         checkboxLiveKeywords = findViewById(R.id.checkbox_live_keywords)
+        buttonLiveKeywordsHelp = findViewById(R.id.button_live_keywords_help)
         arrowInputOutput = findViewById(R.id.arrow_input_output)
         buttonPlayPause = findViewById(R.id.button_play_pause)
         buttonSpeedDown = findViewById(R.id.button_speed_down)
@@ -592,6 +594,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 ).show()
             }
         }
+        buttonLiveKeywordsHelp.setOnClickListener { showKeywordsHelp() }
         checkboxLiveKeywords.setOnCheckedChangeListener { _, checked ->
             if (keywordControlsPopulating) return@setOnCheckedChangeListener
             GrokApiSettings.setKeywordsEnabled(checked)
@@ -3287,6 +3290,39 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun activeSttKeywords(): List<String> =
         if (checkboxLiveKeywords.isChecked) GrokApiSettings.sttKeywords() else emptyList()
 
+    /** Provedor de API do modelo selecionado (null = servidor local/Granite). */
+    private fun currentApiProvider(): String? {
+        val config = TranscriptionModelStore.selectedConfig()
+        return when {
+            config.isDeepgramApi -> "deepgram"
+            config.isAssemblyaiApi -> "assemblyai"
+            config.isElevenlabsApi -> "elevenlabs"
+            config.isMetamuseApi -> "metamuse"
+            config.isAlibabaApi -> "alibaba"
+            config.isGrokApi -> "grok"
+            else -> null
+        }
+    }
+
+    /** Tela de ajuda do "?" das keywords: o que faz e quanto cada modelo aproveita. */
+    private fun showKeywordsHelp() {
+        val provider = currentApiProvider()
+        val message = if (provider == null) {
+            SttKeywordsHelp.text(provider = null, isLive = !transcriptionMode)
+        } else {
+            SttKeywordsHelp.text(
+                provider = provider,
+                isLive = !transcriptionMode,
+                keywords = GrokApiSettings.sttKeywords(),
+            )
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Keywords")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
+    }
+
     private fun refreshGrokApiControls() {
         val config = TranscriptionModelStore.selectedConfig()
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
@@ -3298,15 +3334,7 @@ class RemoteSttActivity : AppCompatActivity() {
         // Regra de diarização por provedor: Deepgram, AssemblyAI, Grok e Muse
         // sempre; Scribe v2 só em REST (a Ocorrência usa WebSocket/Realtime);
         // granite não exibe a checkbox.
-        val apiProvider = when {
-            config.isDeepgramApi -> "deepgram"
-            config.isAssemblyaiApi -> "assemblyai"
-            config.isElevenlabsApi -> "elevenlabs"
-            config.isMetamuseApi -> "metamuse"
-            config.isAlibabaApi -> "alibaba"
-            config.isGrokApi -> "grok"
-            else -> null
-        }
+        val apiProvider = currentApiProvider()
         val diarizeEnabled = apiProvider != null &&
             SttDiarization.supportsDiarize(apiProvider, isLive = !transcriptionMode)
         // A checkbox nem aparece apenas para o granite (não suporta).

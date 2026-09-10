@@ -75,6 +75,7 @@ também é bloqueado.
 | `SttLanguageSettings.kt` | Regras de idioma por provedor STT. |
 | `SttDiarization.kt` | Regras de diarização por provedor/modo. |
 | `SttKeywords.kt` | Keywords do STT: normalização, limites e parâmetro por provedor. |
+| `SttKeywordsHelp.kt` | Texto da ajuda das keywords (o que faz e o limite de cada modelo). |
 | `AssemblyAiAsyncFlow.kt` | Decisão sync/async + polling da AssemblyAI. |
 | `LiveDiagnosticContext.kt` | Correlação de diagnóstico da sessão ao vivo. |
 | `TranscriptionReport.kt` | Relatório HTML, log de terminal, nomes e tamanhos. |

@@ -97,7 +97,10 @@
                 </LinearLayout>
             </LinearLayout>
 
-            <TextView style="@style/SettingsHeader" android:text="Keywords" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView style="@style/SettingsHeader" android:layout_width="0dp" android:layout_weight="1" android:text="Keywords" />
+                <TextView android:id="@+id/button_keywords_help" android:layout_width="28dp" android:layout_height="28dp" android:layout_marginTop="14dp" android:gravity="center" android:text="?" android:textColor="#FFB8F7FF" android:textSize="15sp" android:textStyle="bold" />
+            </LinearLayout>
             <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:background="#88101418" android:orientation="vertical" android:padding="8dp">
                 <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center_vertical" android:orientation="horizontal">
                     <EditText android:id="@+id/input_keyword" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:hint="Digite a palavra" android:imeOptions="actionDone" android:inputType="text" android:maxLength="50" android:maxLines="1" android:textColor="#FFFFFFFF" android:textColorHint="#FF888888" android:textSize="13sp" />
