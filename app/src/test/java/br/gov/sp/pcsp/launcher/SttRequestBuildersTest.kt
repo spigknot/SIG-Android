@@ -273,9 +273,11 @@ class SttRequestBuildersTest {
                 vocabulary = SttKeywords.alibabaVocabulary(keywords),
             )
         )
-        assertEquals(5, alibabaRest.getJSONObject("parameters").getJSONObject("vocabulary").getInt("placa"))
-        assertEquals(5, runTask.getJSONObject("payload").getJSONObject("parameters")
-            .getJSONObject("vocabulary").getInt("placa"))
+        assertEquals(SttKeywords.ALIBABA_SUPER_WEIGHT,
+            alibabaRest.getJSONObject("parameters").getJSONObject("vocabulary").getInt("placa"))
+        assertEquals(SttKeywords.ALIBABA_SUPER_WEIGHT,
+            runTask.getJSONObject("payload").getJSONObject("parameters")
+                .getJSONObject("vocabulary").getInt("placa"))
     }
 
     @Test

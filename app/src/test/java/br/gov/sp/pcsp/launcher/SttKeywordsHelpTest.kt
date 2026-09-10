@@ -75,7 +75,10 @@ class SttKeywordsHelpTest {
 
         assertTrue(arquivo.contains("NÃO aplica keywords"))
         assertTrue(arquivo.contains("pré-cadastrada"))
-        assertTrue(vivo.contains("peso 5"))
+        // Ao vivo o reforço é máximo (peso 50) nos primeiros termos — foi o que
+        // corrigiu "Taguaí" no teste real.
+        assertTrue(vivo.contains("reforço máximo"))
+        assertTrue(vivo.contains("50 termos"))
     }
 
     @Test

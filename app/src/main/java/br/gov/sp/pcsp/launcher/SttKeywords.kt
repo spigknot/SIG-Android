@@ -31,8 +31,14 @@ object SttKeywords {
     /** Limite por termo dos provedores que o declaram (xAI/ElevenLabs: 50). */
     const val MAX_KEYWORD_LENGTH = 50
 
-    /** Peso das hotwords do DashScope (os exemplos oficiais usam 4, 5 e 50). */
+    /** Peso das hotwords do DashScope. A doc usa 1-5 como faixa normal e 50
+     *  como "super hotword" (no máximo 50 delas por lista). MEDIDO no modo ao
+     *  vivo: com peso 5 só um dos dois termos foi corrigido; com peso 50 os
+     *  DOIS saíram certos (2 execuções cada, mesmo áudio). */
     const val ALIBABA_WEIGHT = 5
+    const val ALIBABA_SUPER_WEIGHT = 50
+    /** Limite de "super hotwords" (peso 50) por requisição, segundo a doc. */
+    const val ALIBABA_MAX_SUPER = 50
 
     /** Limites DOCUMENTADOS por provedor (modo REST x ao vivo). Exceder o
      *  limite do Deepgram devolve erro ("Keyterm limit exceeded"); nos demais o
@@ -169,7 +175,11 @@ object SttKeywords {
     /** Muse Voice: `keywords` (lista) — vazia = omitir o campo. */
     fun museKeywords(keywords: List<String>): List<String> = normalize(keywords)
 
-    /** Alibaba (DashScope): `vocabulary` como {termo: peso} — vazio = omitir. */
+    /** Alibaba (DashScope): `vocabulary` como {termo: peso} — vazio = omitir.
+     *  Os primeiros termos vão com peso 50 (super hotword, o que provou corrigir
+     *  "Taguaí"); a partir do limite da doc, os demais ficam com o peso normal. */
     fun alibabaVocabulary(keywords: List<String>): Map<String, Int> =
-        normalize(keywords).associateWith { ALIBABA_WEIGHT }
+        normalize(keywords).mapIndexed { index, term ->
+            term to if (index < ALIBABA_MAX_SUPER) ALIBABA_SUPER_WEIGHT else ALIBABA_WEIGHT
+        }.toMap()
 }

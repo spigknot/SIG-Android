@@ -94,9 +94,16 @@ class SttKeywordsTest {
         assertEquals(terms, SttKeywords.museKeywords(terms))
         assertTrue(SttKeywords.museKeywords(listOf("  ")).isEmpty())
         assertEquals(
-            mapOf("placa" to SttKeywords.ALIBABA_WEIGHT, "abordagem" to SttKeywords.ALIBABA_WEIGHT),
+            mapOf("placa" to SttKeywords.ALIBABA_SUPER_WEIGHT,
+                  "abordagem" to SttKeywords.ALIBABA_SUPER_WEIGHT),
             SttKeywords.alibabaVocabulary(terms),
         )
+        // Acima do limite de super hotwords da doc, o resto volta ao peso normal.
+        val muitos = (1..SttKeywords.ALIBABA_MAX_SUPER + 3).map { "t$it" }
+        val pesos = SttKeywords.alibabaVocabulary(muitos)
+        assertEquals(SttKeywords.ALIBABA_SUPER_WEIGHT, pesos["t1"])
+        assertEquals(SttKeywords.ALIBABA_SUPER_WEIGHT, pesos["t${SttKeywords.ALIBABA_MAX_SUPER}"])
+        assertEquals(SttKeywords.ALIBABA_WEIGHT, pesos["t${SttKeywords.ALIBABA_MAX_SUPER + 1}"])
         assertTrue(SttKeywords.alibabaVocabulary(emptyList()).isEmpty())
     }
 

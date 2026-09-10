@@ -68,7 +68,9 @@ object SttKeywordsHelp {
             "Muse Voice (Meta): a lista inteira é enviada — não há limite publicado."
         "alibaba" ->
             if (isLive) {
-                "Alibaba Cloud (ao vivo): a lista inteira é enviada, com peso 5 para cada termo."
+                "Alibaba Cloud (ao vivo): a lista é enviada com reforço máximo nos primeiros " +
+                    "50 termos (nos testes, só assim o modelo passou a escrever \"Taguaí\" em vez " +
+                    "de \"Taguay\")."
             } else {
                 "Alibaba Cloud (arquivo): o modelo atual NÃO aplica keywords — ele exige uma " +
                     "lista de hotwords pré-cadastrada no painel do Alibaba (por isso, neste modo, " +
