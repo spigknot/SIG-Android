@@ -402,5 +402,187 @@ def test_quantized_bits_check_rejects_mixed_and_empty():
     assert common.quantized_bits_check([], 4) != ""
 
 
+def _einsum_qcr_model(m: int, h: int, c: int, d: int, r: int):
+    """Modelo ONNX minimo com o Einsum de atencao relativa `bmhcd,crd->bmhcr`."""
+    import onnx
+    from onnx import TensorProto, helper
+
+    q = helper.make_tensor_value_info("q", TensorProto.FLOAT, [1, m, h, c, d])
+    p = helper.make_tensor_value_info("P", TensorProto.FLOAT, [c, r, d])
+    out = helper.make_tensor_value_info("out", TensorProto.FLOAT, [1, m, h, c, r])
+    no = helper.make_node("Einsum", ["q", "P"], ["out"], equation="b m h c d , c r d -> b m h c r")
+    g = helper.make_graph([no], "einsum_ref", [q, p], [out])
+    return onnx.helper.make_model(g, opset_imports=[helper.make_opsetid("", 17)])
+
+
+def test_einsum_equacao_normaliza_espacos():
+    import onnx
+    from onnx import helper
+
+    import einsum_to_matmul as e2m
+
+    no = helper.make_node("Einsum", ["a", "b"], ["o"], equation="b m h c d , c r d -> b m h c r")
+    assert e2m.equacao_do_no(no) == e2m.EINSUM_ALVO
+
+
+def test_einsum_rejeita_equacao_errada():
+    from onnx import helper
+
+    import einsum_to_matmul as e2m
+
+    no = helper.make_node("Einsum", ["a", "b"], ["o"], equation="ij,jk->ik")
+    with pytest.raises(ValueError):
+        e2m.decompor(no, {}, None)
+
+
+def test_einsum_rejeita_batch_maior_que_um():
+    from onnx import helper
+
+    import einsum_to_matmul as e2m
+
+    no = helper.make_node("Einsum", ["q", "P"], ["o"], equation="bmhcd,crd->bmhcr")
+    shapes = {"q": [2, 3, 8, 20, 128], "P": [20, 20, 128]}
+    with pytest.raises(ValueError):
+        e2m.decompor(no, shapes, None)
+
+
+def test_einsum_rejeita_P_incompativel():
+    from onnx import helper
+
+    import einsum_to_matmul as e2m
+
+    no = helper.make_node("Einsum", ["q", "P"], ["o"], equation="bmhcd,crd->bmhcr")
+    shapes = {"q": [1, 3, 8, 20, 128], "P": [21, 20, 128]}   # c=21 != 20
+    with pytest.raises(ValueError):
+        e2m.decompor(no, shapes, None)
+
+
+def test_einsum_usa_shape_canonico_quando_o_inference_falha():
+    """O shape inference nao propaga as camadas 1..N; o canonico da camada 0 vale para todas."""
+    from onnx import helper
+
+    import einsum_to_matmul as e2m
+
+    no = helper.make_node("Einsum", ["q", "P"], ["o"], equation="bmhcd,crd->bmhcr")
+    shapes = {"q": [None, None, None, None, None], "P": [200, 200, 128]}
+    canon = [1, 4, 8, 200, 128]
+    nos, inits = e2m.decompor(no, shapes, canon)
+    # m=4 -> 4 Split outputs -> 4 ReshapeQ + 4 MatMul, mais 1 Split, 1 Transpose,
+    # 2 Reshape (P e saida) e 1 Concat = 4+4+1+1+2+1 = 13
+    assert len(nos) == 13
+    assert sum(1 for n in nos if n.op_type == "MatMul") == 4
+    assert sum(1 for n in nos if n.op_type == "Split") == 1
+
+
+def test_einsum_decomposicao_tem_paridade_matematica():
+    """Verificacao REAL: roda o modelo original e o decomposto no ORT e compara.
+
+    NAO se exige bit-exatidao (medido: o proprio kernel Einsum do ORT NAO e bit-exato
+    contra `np.einsum` — o MLAS acumula em ordem diferente, divergindo ja na 6a casa
+    decimal em float32). O que se exige: (a) a decomposicao concorda com o numpy na
+    tolerancia de float32 e (b) fica tao perto do Einsum original quanto o proprio
+    original fica do valor exato — ou seja, a reescrita nao introduz erro adicional.
+    """
+    ort = pytest.importorskip("onnxruntime")
+    import numpy as np
+    import onnx
+
+    import einsum_to_matmul as e2m
+
+    m_, h_, c_, d_, r_ = 3, 2, 5, 7, 4
+    original = _einsum_qcr_model(m_, h_, c_, d_, r_)
+
+    # mesma estrutura -> passa pelo caminho real de conversao
+    decomposto = _einsum_qcr_model(m_, h_, c_, d_, r_)
+    trocados, falhas, _ = e2m.decompor_modelo(decomposto)
+    assert trocados == 1 and not falhas
+
+    rng = np.random.default_rng(20260910)
+    q = rng.standard_normal((1, m_, h_, c_, d_)).astype(np.float32)
+    P = rng.standard_normal((c_, r_, d_)).astype(np.float32)
+
+    esperado = np.einsum("bmhcd,crd->bmhcr", q, P)
+
+    so = ort.SessionOptions()
+    so.log_severity_level = 3
+    so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+    res = {}
+    for rotulo, modelo in (("orig", original), ("dec", decomposto)):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            caminho = Path(td) / f"{rotulo}.onnx"
+            onnx.save(modelo, caminho)
+            s = ort.InferenceSession(str(caminho), so, providers=["CPUExecutionProvider"])
+            res[rotulo] = s.run(None, {"q": q, "P": P})[0]
+
+    assert res["orig"].shape == esperado.shape
+    assert res["dec"].shape == esperado.shape
+
+    def erro_rel(a, b):
+        return np.abs(a - b).max() / max(np.abs(b).max(), 1e-12)
+
+    e_orig = erro_rel(res["orig"], esperado)
+    e_dec = erro_rel(res["dec"], esperado)
+    e_par = erro_rel(res["dec"], res["orig"])
+    assert e_orig < 1e-5, f"o Einsum do ORT divergiu do numpy alem de fp32 ({e_orig:.2e})"
+    assert e_dec < 1e-5, f"a decomposicao divergiu do numpy alem de fp32 ({e_dec:.2e})"
+    assert e_par < 1e-5, f"decomposicao divergiu do original ({e_par:.2e})"
+    # a reescrita nao pode ser pior que a implementacao nativa contra o valor exato
+    assert e_dec <= max(e_orig * 10, 1e-7), (
+        f"a decomposicao introduziu erro adicional: orig={e_orig:.2e} dec={e_dec:.2e}")
+
+
+def test_fold_resumo_e_compara_ops():
+    import collections
+
+    import fold_constant_subgraphs as fcs
+
+    antes = collections.Counter({"Constant": 10, "Mod": 1, "MatMul": 5})
+    depois = collections.Counter({"Constant": 0, "MatMul": 5, "Add": 1})
+    d = fcs.compara(antes, depois)
+    assert d["Constant"] == {"antes": 10, "depois": 0}
+    assert d["Mod"] == {"antes": 1, "depois": 0}
+    assert "MatMul" not in d            # nao mudou: nao aparece
+    assert "Add" not in d               # nao monitorado
+
+
+def test_fold_remove_cadeia_de_constantes(tmp_path):
+    """Cadeia de constantes (Add de 2 Constant -> alimenta Mul) deve sumir com basic."""
+    ort = pytest.importorskip("onnxruntime")
+    from onnx import TensorProto, helper, numpy_helper
+
+    import fold_constant_subgraphs as fcs
+
+    x = helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 4])
+    y = helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 4])
+    a = numpy_helper.from_array(np.array([2.0], dtype=np.float32), "a")
+    b = numpy_helper.from_array(np.array([3.0], dtype=np.float32), "b")
+    c5 = numpy_helper.from_array(np.array([5.0], dtype=np.float32), "c5")
+    nos = [
+        helper.make_node("Add", ["a", "b"], ["soma"], name="Add_const"),
+        helper.make_node("Add", ["soma", "c5"], ["const_total"], name="Add_const2"),
+        helper.make_node("Mul", ["x", "const_total"], ["y"], name="Mul_runtime"),
+    ]
+    g = helper.make_graph(nos, "fold_test", [x], [y], [a, b, c5])
+    modelo = helper.make_model(g, opset_imports=[helper.make_opsetid("", 17)])
+    entrada = tmp_path / "in.onnx"
+    saida = tmp_path / "out.onnx"
+    import onnx
+
+    onnx.save(modelo, str(entrada))
+
+    antes = fcs.resumo_ops(entrada)
+    assert antes.get("Add", 0) == 2
+    fcs.otimizar(entrada, saida, "basic")
+    depois = fcs.resumo_ops(saida)
+    assert depois.get("Add", 0) == 0, f"constant folding nao removeu os Add: {depois}"
+    assert depois.get("Mul", 0) == 1
+    # contrato preservado
+    mb = onnx.load(str(saida), load_external_data=False)
+    assert [i.name for i in mb.graph.input] == ["x"]
+    assert [o.name for o in mb.graph.output] == ["y"]
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

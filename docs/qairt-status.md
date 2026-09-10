@@ -127,3 +127,120 @@ projector, embeddings e LLM, e evita as cópias integrais dos logits finais.
 1. Manter NPU (QNN HTP) habilitado: sessão e inferência reais estão aprovadas sem root
 2. Para GPU, testar um QNN EP mais novo ou particionar o grafo em subgrafos menores; o erro 6020 permanece específico do backend GPU atual
 3. Manter o fallback GPU→CPU com confirmação e registrar no relatório o backend efetivamente usado
+
+---
+
+# Diagnóstico dos bloqueadores de NPU do NAR (10/09/2026)
+
+Análise feita **fora do aparelho**, contra a documentação oficial de ops do QNN EP
+(`docs.onnxruntime.ai/execution-providers/QNN-ExecutionProvider.html`, mainline — a mesma
+família do `onnxruntime-android 1.29.0` que o app usa) e o fork
+`github.com/onnxruntime/onnxruntime-qnn`. Nada aqui é `npu-approved`: são hipóteses com
+artefato pronto para teste, não resultados de device.
+
+## 1. `Einsum` era o bloqueador real da NPU estrita (confirmado na documentação)
+
+A distribuição de ops explica a rejeição "encoder rejeitado porque há nós atribuídos ao CPU
+EP". O encoder conformer tem **16 nós `Einsum`**, todos na atenção relativa, com a equação
+
+```
+b m h c d , c r d -> b m h c r
+```
+
+e shapes reais q `[1,10,8,200,128]` / P `[200,200,128]`.
+
+| op | ORT **mainline** (o app) | fork da Qualcomm |
+|---|---|---|
+| `Einsum` | ⛔ **ausente** | ✅ presente |
+| `Mod` | ⛔ **ausente** | ✅ presente |
+
+Como o app usa mainline, cada `Einsum` vira **nó de CPU EP** — exatamente a mensagem de
+rejeição da NPU estrita.
+
+**Correção implementada:** `tools/granite/nar/einsum_to_matmul.py` reescreve a identidade
+
+```
+out[m,h,c,r] = sum_d q[m,h,c,d] * P[c,r,d]
+```
+
+como `Split + Reshape + Transpose + MatMul + Concat` (todos cobertos pelo HTP), explorando o
+broadcasting do `MatMul`. Medido no encoder de produção: **16/16 convertidos, 0 `Einsum`
+restantes**, `onnx.checker` OK, contrato de I/O idêntico (`encoder_bpe_logits
+[1,500,100352]`, `multilayer_features [1,2000,4096]`), custo de tempo neutro (174,6 s →
+176,1 s). O caminho `Mul` + `ReduceSum` foi descartado: geraria intermediário de 410 M
+elementos (~820 MB em fp16) por camada.
+
+## 2. O projector NÃO tem bloqueador de op — os dois suspeitos eram falsos
+
+Os suspeitos eram `Erf` e `Mod`, mas:
+
+- **`Mod`** é `/projector/Mod` = `2000 % 15` sobre **dois Constants** → `Sub` → `Unsqueeze` →
+  `Concat` → shape de um `Reshape`. É cálculo de forma, não aritmética.
+- **`Erf`** casa exatamente o padrão de fusão documentado
+  `[Div/Mul(√2)] → Erf → [Mul(0.5) →] Add(1) → Mul → [Mul(0.5)]` → `QNN_OP_GELU`
+  (medido no grafo: `Div(x, 1.4140625)` → `Erf` → `Add(1.0)` → `Mul` → `Mul(0.5)`).
+  Não existe `Erf` isolado em nenhuma das duas listas, o que explica a suspeita inicial.
+
+Portanto o travamento do projector na preparação (>2 min, ~3,3 GB de heap nativo) **não é
+rejeição de op** — é outra classe de problema.
+
+## 3. Achado novo e importante: `OptLevel.NO_OPT` desliga o constant folding
+
+`GraniteNarEngine.kt` cria as sessões aceleradas com `NO_OPT` (a intenção é boa: não criar
+padrões que o backend não reconheça). O efeito colateral é que **o constant folding não roda**:
+as cadeias de cálculo de forma chegam ao particionador do QNN como nós de verdade. Medido:
+
+| grafo | `Constant` | `Shape` | `Mod` |
+|---|---|---|---|
+| encoder (produção) | **690** | 49 | 0 |
+| encoder (convertido) | 690 | 49 | 0 |
+| projector | 45 | 3 | **1** |
+
+**Solução:** pré-dobrar o grafo offline e servir o artefato já dobrado
+(`tools/granite/nar/fold_constant_subgraphs.py`, usa `optimized_model_filepath` do ORT). O app
+continua em `NO_OPT` — não precisa otimizar em runtime porque o grafo já vem pronto. Medido no
+projector: `Mod` → 0, `Shape` → 0, `Constant` → 0; no encoder: `Constant` 690 → 0.
+
+⚠️ **Ressalva:** o grafo otimizado passa a declarar shapes **concretas** em vez de simbólicas.
+Isso é desejável para o QNN (compilação estática), mas o artefato vale apenas para a forma
+declarada — registre sempre com qual `T` ele foi gerado.
+
+## 4. Quantização: 4-bit weight-only preserva a qualidade (medido em CPU)
+
+A linha de quantização estava fechada com quatro paradigmas reprovados. Duas correções de
+medição mudaram o quadro:
+
+1. **Igualdade exata de texto é métrica inadequada** — é binária e reprova a amostra por um
+   caractere. Medido, com artefato ONNX real, corpus de 82 amostras:
+
+   | modelo | igualdade exata vs float | **CER vs FLEURS** |
+   |---|---|---|
+   | float | — | 0,0323 |
+   | **4-bit `MatMulNBits` RTN blk128** | 41/82 (50%) | **0,0324** |
+
+   Delta **+0,0001**. Análise pareada: 14 amostras melhoram, 48 empatam, 20 pioram.
+
+2. **A referência não pode ser a saída do próprio modelo.** Medido em 5 amostras: `ctc_ids`
+   idênticos 5/5, LLM fp16 == fp32 5/5, pipeline fp16 == fp32 4/5 — e **fp32 puro comete os
+   mesmos erros** em palavras raras (`wifi door bell` → `wi doorbell`, `inland waterways` →
+   `land`). Comparar contra a saída do modelo pune a quantização por erros que o float já tem.
+
+**Método:** `MatMulNBitsQuantizer` com `bits=4`, `block_size=128`, simétrico, **sem
+calibração. Ganho: **4,1× menor** (803 MB vs 3,26 GB) e **4,5× mais rápido**. A calibração
+*piorou* o resultado: GPTQ deu CER 0,1562 contra 0,0151 do RTN puro, com corrupção de prefixo
+que o RTN não apresenta.
+
+⚠️ **Armadilha medida:** `MatMulNBitsQuantizer.__init__` só usa o parâmetro `bits` quando
+`algo_config is None`. Passar `algo_config=RTNWeightOnlyQuantConfig()` (que **não tem** campo
+`bits`) faz o quantizador cair no default de 4 bits e o pedido ser **silenciosamente
+ignorado** — uma rodada rotulada "8 bits" saiu byte-idêntica à de 4 bits. Sempre verifique o
+atributo `bits` dos nós `MatMulNBits` no grafo salvo e o tamanho do `.data`.
+
+## 5. Próximo passo concreto
+
+Testar no aparelho se a NPU estrita aceita o encoder sem os `Einsum` (e, em paralelo, se a
+pré-dobra ajuda). O entrypoint existe e não exige mudança no engine:
+`GraniteNarSmokeTestActivity` (em `app/src/debug`) aceita `backend`,
+`require_full_acceleration`, `audio_path` por intent e **recusa fallback silencioso**
+(`session.disable_cpu_ep_fallback=1`), então "efetivo = NPU" é prova real.
+
