@@ -105,6 +105,65 @@ class SttKeywordsTest {
         assertEquals(listOf("placa"), SttKeywords.assemblyaiPrompt(listOf(" placa ", "PLACA")))
     }
 
+    // ---- Ajuste da lista ao provedor/modo (limites DOCUMENTADOS) ----
+
+    @Test
+    fun fitForProvider_grokKeepsAtMost100TermsOf50Chars() {
+        val many = (1..120).map { "termo$it" }
+        val long = "x".repeat(51)
+
+        // A normalização já corta em MAX_KEYWORDS; o limite do xAI é o mesmo.
+        assertEquals(SttKeywords.MAX_KEYWORDS, SttKeywords.fitForProvider("grok", many).size)
+        assertTrue(SttKeywords.fitForProvider("grok", listOf(long, "ok")).none { it == long })
+    }
+
+    @Test
+    fun fitForProvider_deepgramRespectsThe500TokenBudget() {
+        // Cada termo de 50 caracteres custa 13 tokens: o orçamento corta a lista.
+        val heavy = (1..40).map { "t".repeat(48) + "%02d".format(it) }
+        val fitted = SttKeywords.fitForProvider("deepgram", heavy)
+
+        val tokens = fitted.sumOf { (it.length + 3) / 4 }
+        assertTrue("tokens=$tokens", tokens <= 500)
+        assertTrue(fitted.size in 1 until heavy.size)
+        // Termos curtos normais continuam passando inteiros.
+        assertEquals(listOf("placa", "abordagem"), SttKeywords.fitForProvider("deepgram", terms))
+    }
+
+    @Test
+    fun fitForProvider_elevenlabsIsStricterLiveThanRest() {
+        val longTerm = "y".repeat(25)
+
+        // REST aceita até 50 caracteres; o Realtime documenta ~20 por termo.
+        assertEquals(
+            listOf(longTerm),
+            SttKeywords.fitForProvider("elevenlabs", listOf(longTerm), isLive = false),
+        )
+        assertTrue(SttKeywords.fitForProvider("elevenlabs", listOf(longTerm), isLive = true).isEmpty())
+
+        val many = (1..60).map { "t$it" }
+        assertEquals(50, SttKeywords.fitForProvider("elevenlabs", many, isLive = true).size)
+        assertEquals(60, SttKeywords.fitForProvider("elevenlabs", many, isLive = false).size)
+    }
+
+    @Test
+    fun fitForProvider_assemblyaiLiveCapsTermsAndSyncCapsTotalCharacters() {
+        val many = (1..120).map { "t$it" }
+        assertEquals(100, SttKeywords.fitForProvider("assemblyai", many, isLive = true).size)
+
+        val longTerms = (1..50).map { "a".repeat(48) + "%02d".format(it) }
+        val syncTerms = SttKeywords.fitForProvider("assemblyai", longTerms, isLive = false)
+        val chars = syncTerms.sumOf { it.length }
+        assertTrue("chars=$chars", chars <= 2048)
+        assertTrue(syncTerms.size < longTerms.size)
+    }
+
+    @Test
+    fun fitForProvider_leavesOtherProvidersUntouched() {
+        assertEquals(terms, SttKeywords.fitForProvider("metamuse", terms))
+        assertEquals(terms, SttKeywords.fitForProvider("alibaba", terms))
+    }
+
     @Test
     fun encodeDecode_roundTripsTheList() {
         val stored = SttKeywords.encode(terms)

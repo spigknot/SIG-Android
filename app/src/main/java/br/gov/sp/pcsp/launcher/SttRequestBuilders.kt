@@ -151,7 +151,7 @@ object SttRequestBuilders {
                 add("endpointing" to "900")
                 add("filler_words" to "false")
                 if (diarize) add("diarize" to "true")
-                SttKeywords.queryParams("grok", keywords).forEach { (name, value) ->
+                SttKeywords.queryParams("grok", keywords, isLive = true).forEach { (name, value) ->
                     add(name to value)
                 }
             },
@@ -178,7 +178,7 @@ object SttRequestBuilders {
                 add("interim_results" to "true")
                 add("endpointing" to "900")
                 if (diarize) add("diarize_model" to "latest")
-                SttKeywords.queryParams("deepgram", keywords).forEach { (name, value) ->
+                SttKeywords.queryParams("deepgram", keywords, isLive = true).forEach { (name, value) ->
                     add(name to value)
                 }
             },
@@ -201,7 +201,7 @@ object SttRequestBuilders {
                 add("continuous_partials" to "true")
                 languageCodes.forEach { add("language_codes" to it) }
                 if (diarize) add("speaker_labels" to "true")
-                SttKeywords.queryParams("assemblyai", keywords).forEach { (name, value) ->
+                SttKeywords.queryParams("assemblyai", keywords, isLive = true).forEach { (name, value) ->
                     add(name to value)
                 }
             },
@@ -225,7 +225,7 @@ object SttRequestBuilders {
                 add("commit_strategy" to "vad")
                 add("vad_silence_threshold_secs" to "1.0")
                 add("include_timestamps" to "true")
-                SttKeywords.queryParams("elevenlabs", keywords).forEach { (name, value) ->
+                SttKeywords.queryParams("elevenlabs", keywords, isLive = true).forEach { (name, value) ->
                     add(name to value)
                 }
             },
@@ -382,7 +382,15 @@ object SttRequestBuilders {
         ),
     )
 
-    /** Corpo JSON do REST DashScope nativo (áudio como data URI base64). */
+    /** Corpo JSON do REST DashScope nativo (áudio como data URI base64).
+     *
+     *  `vocabulary` ({termo: peso}) é o formato das hotwords instantâneas; a
+     *  documentação do DashScope declara o suporte inline apenas para o modelo
+     *  `qwen-audio-3.0-asr-flash`. No REST do fun-asr-flash o caminho oficial é
+     *  uma lista PRÉ-COMPILADA (`parameters.vocabulary_id`), que exigiria criar
+     *  a lista antes — por isso o campo é enviado (aceito pelo schema), mas
+     *  pode não produzir efeito nesse modelo; no streaming
+     *  (qwen-audio-3.0-asr-flash-streaming) as hotwords inline valem. */
     fun alibabaRestBody(
         audioDataUri: String,
         languageHints: List<String>? = null,

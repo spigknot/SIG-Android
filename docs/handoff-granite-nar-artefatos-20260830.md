@@ -121,3 +121,33 @@
 - Preservados no D: 22 reports + 8 scripts auxiliares (190 KB total). Modelos multigigabyte NAO copiados (serao recuperados do R2 ou regenerados).
 - Diagnosticos finais publicados no R2 (prefixo do experimento, diagnostics/, nomes novos sem sobrescrita, HeadObject + HTTP 200): final-summary-20260909.json, run-state-20260909.json, verify-remote-20260906.json, relatorio-geral-cerebro-20260909.txt.
 - Proximas tarefas usam --work-dir D:/SIG-granite-nar-lab-rebuild.
+
+## Verificacao 10/09 - QUANTIZACAO REABERTA (4-bit weight-only) + encoder pronto para NPU
+
+**Dois erros de MEDICAO meus invalidaram o veredito anterior de "linha encerrada":**
+- Igualdade exata de texto e metrica binaria: reprova a amostra por um caractere. Com artefato ONNX real, corpus de 82: `int8/4-bit` dava 41/82 exato (parecia reprovacao) mas **CER 0,0324 vs float 0,0323** (delta +0,0001). Pareado: 14 melhoram, 48 empatam, 20 pioram.
+- A referencia NAO pode ser a saida do proprio modelo: medido, `ctc_ids` identicos 5/5, LLM fp16 == fp32 5/5, e **fp32 puro comete os mesmos erros** em palavras raras (`wifi door bell` -> `wi doorbell`, `inland waterways` -> `land`). Isso descarta fp16 como causa e mostra que auto-referencia pune a quantizacao por erros que o float ja tem.
+
+**Metodo que funciona: `MatMulNBits` RTN weight-only, bits=4, block=128, SIMETRICO, SEM calibracao.**
+- LLM de PRODUCAO quantizado no contrato real do app (2 inputs, S dinamico, sem padding): **CER 0,0338 vs 0,0323 (x1,05)**, 59 empatam / 7 melhoram / 16 pioram, **x4,3 mais rapido, x3,9 menor** (841.617.408 B vs 3.263.500.288 B). Contrato `inputs_embeds`+`position_ids` preservado.
+- Contra os pilotos do PC auxiliar, na MESMA metrica deles: nosso CER 0,0151 vs GPTQ 0,1562 e dinamica INT8 0,2384, com zero corrupcao de prefixo. **O trabalho deles nao estava errado** - os metodos deles degradam mesmo; o que nao se sustentava era generalizar que nenhum serviria.
+- Contraintuitivo: a calibracao PIOROU (GPTQ 0,1562 vs RTN puro 0,0151).
+- Armadilha medida: `MatMulNBitsQuantizer` so usa o parametro `bits` quando `algo_config is None`; passar `RTNWeightOnlyQuantConfig()` (sem campo `bits`) faz o default de 4 valer e o pedido ser **silenciosamente ignorado** - uma rodada rotulada "8 bits" saiu byte-identica a de 4 bits. Agora o script ABORTA se os bits do grafo nao baterem.
+
+**Bloqueador da NPU identificado e removido (encoder):**
+- Documentacao oficial: `Einsum` e `Mod` existem **so no fork** `onnxruntime-qnn`, NAO no ORT mainline que o app usa. O encoder tem **16 `Einsum`** de atencao relativa -> cada um vira no de CPU EP -> e exatamente a rejeicao de 29/08 ("encoder rejeitado porque ha nos atribuidos ao CPU EP").
+- `tools/granite/nar/einsum_to_matmul.py` reescreve como `Split+Reshape+Transpose+MatMul+Concat`: **16/16, zero restantes**, contrato de I/O IDENTICO, prova algebrica em numpy/fp16, **tokens CTC identicos 6/6**, texto 5/6 com **delta CER -0,0068 (o convertido e MELHOR)** e custo de tempo neutro (174,6s -> 176,1s).
+- Achado novo: `OptLevel.NO_OPT` (GraniteNarEngine, por desenho) **desliga o constant folding** - 690 `Constant` e 49 `Shape` no encoder chegam ao particionador do QNN. `tools/granite/nar/fold_constant_subgraphs.py` pre-dobra offline. Medido: dobra propria e **BIT-EXATA** (projector, max|diff| = 0.0); `ORT_ENABLE_BASIC` **NAO e** (rel 1,5e-2).
+- O projector NAO tem bloqueador de op: `Erf` casa a fusao documentada `Div(sqrt2)->Erf->Add(1)->Mul->Mul(0.5)` -> `QNN_OP_GELU`, e `Mod` era calculo de shape (`2000 % 15` sobre dois Constants).
+
+**Pacote para o aparelho pronto** (`D:/SIG-granite-nar-lab-rebuild/pacote-teste-npu/`, com manifest + SHA-256 + qual hipotese cada artefato testa): encoder convertido, encoder dobrado, encoder ORT-opt, projector dobrado, projector ORT-opt, LLM 4-bit de producao. Roteiro `scripts/teste_no_celular.sh` com 7 testes que isolam hipoteses (faz backup e restaura o encoder de producao no device). **Nao exige tocar no `GraniteNarEngine`**: o `GraniteNarSmokeTestActivity` (app/src/debug) aceita `backend`/`require_full_acceleration`/`audio_path` por intent e recusa fallback silencioso.
+
+**Repo (commits `99077b5`, `b48cf43`, sem bypass de hook):** `common.build_insertion_slots()` (blank intercalado - estava DUPLICADO em 3 arquivos), `common.cer()`, `common.quantized_bits_check()`, + as duas ferramentas novas. Testes **24 -> 43**. Gates: pytest 43 passed, `check-module-map` PASS (72/72), harness exit 0, `testDebugUnitTest+lintDebug+assembleDebug` BUILD SUCCESSFUL. `docs/qairt-status.md` atualizado.
+
+**R2:** prefixo NOVO `models/granite/4.1-nar/experiments/nar-qnn-lab-rebuild-20260910/` - 19 objetos, 374.028 B, manifest publico HTTP 200, `npu_approved=false`. Prefixos anteriores conferidos INTACTOS (405 e 8 objetos). So diagnosticos pequenos; nenhum modelo publicado.
+
+**PENDENTE (decisao do gerente):**
+1. Limpeza de disco: `reports/proposta-limpeza-20260910.md` - 22,4 GB recuperaveis sem risco (14,81 GB de `.data` duplicado entre shells - esperado, os pesos nao dependem de `S`; 7,54 GB de intermediarios regeneraveis; 70 MB de corpus defeituoso). Nada removido sem aprovacao.
+2. Criterio S13: oficializar **CER <= CER float + 0,005** e zero amostras com CER > 0,30, deixando a igualdade exata como informativo.
+3. Validacao na NPU: so com o aparelho. Tudo continua `context-ready`, nada `npu-approved`.
+
