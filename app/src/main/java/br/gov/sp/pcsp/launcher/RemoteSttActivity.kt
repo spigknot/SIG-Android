@@ -1466,7 +1466,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     val runTask = SttRequestBuilders.alibabaRunTask(
                         taskId = taskId,
                         languageHints = SttLanguageSettings.alibabaLanguageHints(),
-                        vocabulary = SttKeywords.alibabaVocabulary(activeSttKeywords()),
+                        vocabulary = SttKeywords.alibabaVocabulary(activeSttKeywords(), isLive = true),
                     )
                     if (!webSocket.send(runTask)) {
                         handleGrokWebSocketDisconnect(webSocket, "não consegui enviar o run-task do Alibaba")
@@ -2856,7 +2856,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val requestJson = SttRequestBuilders.alibabaRestBody(
             audioDataUri = dataUri,
             languageHints = SttLanguageSettings.alibabaLanguageHints(),
-            vocabulary = SttKeywords.alibabaVocabulary(activeSttKeywords()),
+            vocabulary = SttKeywords.alibabaVocabulary(activeSttKeywords(), isLive = false),
         )
         val call = client.newCall(
             Request.Builder()

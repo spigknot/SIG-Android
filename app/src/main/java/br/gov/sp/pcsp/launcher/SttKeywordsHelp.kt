@@ -72,9 +72,9 @@ object SttKeywordsHelp {
                     "50 termos (nos testes, só assim o modelo passou a escrever \"Taguaí\" em vez " +
                     "de \"Taguay\")."
             } else {
-                "Alibaba Cloud (arquivo): o modelo atual NÃO aplica keywords — ele exige uma " +
-                    "lista de hotwords pré-cadastrada no painel do Alibaba (por isso, neste modo, " +
-                    "as keywords cadastradas aqui não surtem efeito)."
+                "Alibaba Cloud (arquivo): as keywords são aplicadas com peso normal. Nos " +
+                    "testes, com elas o nome próprio saiu correto em todas as tentativas; o termo " +
+                    "com acento só foi corrigido no modo ao vivo."
             }
         else -> null
     }

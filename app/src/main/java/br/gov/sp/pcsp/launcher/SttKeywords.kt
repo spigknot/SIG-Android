@@ -176,10 +176,16 @@ object SttKeywords {
     fun museKeywords(keywords: List<String>): List<String> = normalize(keywords)
 
     /** Alibaba (DashScope): `vocabulary` como {termo: peso} — vazio = omitir.
-     *  Os primeiros termos vão com peso 50 (super hotword, o que provou corrigir
-     *  "Taguaí"); a partir do limite da doc, os demais ficam com o peso normal. */
-    fun alibabaVocabulary(keywords: List<String>): Map<String, Int> =
+     *
+     *  O peso útil depende do modo, e isso foi MEDIDO com áudio real:
+     *  - ao vivo (qwen-audio-3.0-asr-flash-streaming): peso 50 (super hotword)
+     *    fez o modelo escrever "Taguaí" (com peso 5 saía "Taguay");
+     *  - arquivo (fun-asr-flash): peso 5 já corrige o nome próprio e a doc do
+     *    Fun-ASR só admite 1-5, então não enviamos o peso especial nesse modo.
+     */
+    fun alibabaVocabulary(keywords: List<String>, isLive: Boolean): Map<String, Int> =
         normalize(keywords).mapIndexed { index, term ->
-            term to if (index < ALIBABA_MAX_SUPER) ALIBABA_SUPER_WEIGHT else ALIBABA_WEIGHT
+            val weight = if (isLive && index < ALIBABA_MAX_SUPER) ALIBABA_SUPER_WEIGHT else ALIBABA_WEIGHT
+            term to weight
         }.toMap()
 }

@@ -264,16 +264,17 @@ class SttRequestBuildersTest {
         val alibabaRest = org.json.JSONObject(
             SttRequestBuilders.alibabaRestBody(
                 audioDataUri = "data:audio/wav;base64,AAA",
-                vocabulary = SttKeywords.alibabaVocabulary(keywords),
+                vocabulary = SttKeywords.alibabaVocabulary(keywords, isLive = false),
             )
         )
         val runTask = org.json.JSONObject(
             SttRequestBuilders.alibabaRunTask(
                 taskId = "tid-1",
-                vocabulary = SttKeywords.alibabaVocabulary(keywords),
+                // O modo ao vivo usa o peso máximo (super hotword); o REST, o normal.
+                vocabulary = SttKeywords.alibabaVocabulary(keywords, isLive = true),
             )
         )
-        assertEquals(SttKeywords.ALIBABA_SUPER_WEIGHT,
+        assertEquals(SttKeywords.ALIBABA_WEIGHT,
             alibabaRest.getJSONObject("parameters").getJSONObject("vocabulary").getInt("placa"))
         assertEquals(SttKeywords.ALIBABA_SUPER_WEIGHT,
             runTask.getJSONObject("payload").getJSONObject("parameters")

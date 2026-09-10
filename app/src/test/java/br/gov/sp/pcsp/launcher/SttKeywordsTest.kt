@@ -93,18 +93,24 @@ class SttKeywordsTest {
     fun museKeywords_andAlibabaVocabulary_omitWhenEmpty() {
         assertEquals(terms, SttKeywords.museKeywords(terms))
         assertTrue(SttKeywords.museKeywords(listOf("  ")).isEmpty())
+        // No modo ARQUIVO o Fun-ASR só admite peso 1-5: peso normal sempre.
+        assertEquals(
+            mapOf("placa" to SttKeywords.ALIBABA_WEIGHT, "abordagem" to SttKeywords.ALIBABA_WEIGHT),
+            SttKeywords.alibabaVocabulary(terms, isLive = false),
+        )
+        // Ao vivo (Qwen) o peso máximo corrigiu "Taguaí"; acima do limite da doc
+        // de super hotwords, o resto volta ao peso normal.
         assertEquals(
             mapOf("placa" to SttKeywords.ALIBABA_SUPER_WEIGHT,
                   "abordagem" to SttKeywords.ALIBABA_SUPER_WEIGHT),
-            SttKeywords.alibabaVocabulary(terms),
+            SttKeywords.alibabaVocabulary(terms, isLive = true),
         )
-        // Acima do limite de super hotwords da doc, o resto volta ao peso normal.
         val muitos = (1..SttKeywords.ALIBABA_MAX_SUPER + 3).map { "t$it" }
-        val pesos = SttKeywords.alibabaVocabulary(muitos)
+        val pesos = SttKeywords.alibabaVocabulary(muitos, isLive = true)
         assertEquals(SttKeywords.ALIBABA_SUPER_WEIGHT, pesos["t1"])
         assertEquals(SttKeywords.ALIBABA_SUPER_WEIGHT, pesos["t${SttKeywords.ALIBABA_MAX_SUPER}"])
         assertEquals(SttKeywords.ALIBABA_WEIGHT, pesos["t${SttKeywords.ALIBABA_MAX_SUPER + 1}"])
-        assertTrue(SttKeywords.alibabaVocabulary(emptyList()).isEmpty())
+        assertTrue(SttKeywords.alibabaVocabulary(emptyList(), isLive = false).isEmpty())
     }
 
     @Test

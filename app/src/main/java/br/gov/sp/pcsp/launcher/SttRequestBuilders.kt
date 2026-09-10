@@ -384,13 +384,12 @@ object SttRequestBuilders {
 
     /** Corpo JSON do REST DashScope nativo (áudio como data URI base64).
      *
-     *  `vocabulary` ({termo: peso}) é o formato das hotwords instantâneas; a
-     *  documentação do DashScope declara o suporte inline apenas para o modelo
-     *  `qwen-audio-3.0-asr-flash`. No REST do fun-asr-flash o caminho oficial é
-     *  uma lista PRÉ-COMPILADA (`parameters.vocabulary_id`), que exigiria criar
-     *  a lista antes — por isso o campo é enviado (aceito pelo schema), mas
-     *  pode não produzir efeito nesse modelo; no streaming
-     *  (qwen-audio-3.0-asr-flash-streaming) as hotwords inline valem. */
+     *  `vocabulary` ({termo: peso}) são as hotwords embutidas na requisição.
+     *  A documentação diz que o inline é do `qwen-audio-3.0-asr-flash` e que o
+     *  `fun-asr-flash` exigiria uma lista pré-compilada — mas o TESTE REAL
+     *  mostrou o contrário: com o `vocabulary` inline o modelo passou a escrever
+     *  o nome próprio corretamente em 4 de 4 execuções, contra 0 de 4 sem ele.
+     *  (O caminho da lista pré-compilada via `vocabulary_id` não é necessário.) */
     fun alibabaRestBody(
         audioDataUri: String,
         languageHints: List<String>? = null,

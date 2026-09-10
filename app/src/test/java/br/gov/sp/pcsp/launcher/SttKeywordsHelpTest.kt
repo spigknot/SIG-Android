@@ -73,8 +73,8 @@ class SttKeywordsHelpTest {
         val arquivo = SttKeywordsHelp.providerLimit("alibaba", isLive = false).orEmpty()
         val vivo = SttKeywordsHelp.providerLimit("alibaba", isLive = true).orEmpty()
 
-        assertTrue(arquivo.contains("NÃO aplica keywords"))
-        assertTrue(arquivo.contains("pré-cadastrada"))
+        assertTrue(arquivo.contains("aplicadas com peso normal"))
+        assertTrue(!arquivo.contains("NÃO aplica"))
         // Ao vivo o reforço é máximo (peso 50) nos primeiros termos — foi o que
         // corrigiu "Taguaí" no teste real.
         assertTrue(vivo.contains("reforço máximo"))
