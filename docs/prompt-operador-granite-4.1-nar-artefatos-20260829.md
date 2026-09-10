@@ -360,7 +360,34 @@ Métricas mínimas:
 - CER/WER quando houver referência;
 - NaN/Inf.
 
-O piloto só passa se o texto smoke for idêntico e as métricas não mostrarem regressão material. Se falhar, tente, nesta ordem, sem inventar mais:
+> **Critério revisado em 10/09/2026 (aprovado pelo gerente).** O texto original exigia
+> *"texto smoke idêntico"*, mas o mesmo documento já mandava coletar *"CER/WER quando houver
+> referência"* — e igualdade exata é binária: reprova a amostra por **um caractere**.
+>
+> Medido no corpus de 82 amostras (5 idiomas), artefato ONNX real, ORT CPU:
+>
+> | | igualdade exata | CER vs FLEURS |
+> |---|---|---|
+> | float | — | 0,0323 |
+> | **4-bit weight-only** | 41/82 (50%) | **0,0324** |
+>
+> As 41 "falhas" incluíam erros do **próprio modelo** — `wifi door bell` → `wi doorbell`
+> acontece em fp32 também. Um artefato **4,1× menor** e **4,5× mais rápido** era condenado a
+> `needs-precision-review` sendo indistinguível por CER (delta **+0,0001**).
+>
+> **Critério em vigor:** o piloto passa se
+>
+> 1. **CER do quantizado ≤ CER do float + 0,005** (≈15% do CER do float, menor que a variação
+>    entre amostras do próprio corpus); e
+> 2. **zero amostras com CER > 0,30** (limiar onde a degradação deixa de ser ruído e vira erro
+>    grosseiro — os pilotos reprovados tinham 4 de 16 acima disso, com corrupção de prefixo);
+> 3. sem NaN/Inf e sem regressão em `nans`/`infs`.
+>
+> A igualdade exata passa a ser **métrica informativa**, não critério. Justificativa empírica:
+> os paradigmas reprovados (GPTQ 0,1562, dinâmica INT8 0,2384) continuam reprovando; o que muda
+> é que um método **melhor** deixa de ser descartado por um caractere.
+
+O piloto passa pelo critério revisado acima (CER + ausência de corrupção), não por igualdade exata. Se falhar, tente, nesta ordem, sem inventar mais:
 
 1. revisar calibração e inputs;
 2. manter I/O/cabeça de logits em precisão maior;
