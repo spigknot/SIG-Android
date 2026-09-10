@@ -47,12 +47,8 @@ def ctc_collapse(logits: np.ndarray) -> list[int]:
 
 
 def build_slots(ctc_tokens: list[int]) -> list[int]:
-    n = len(ctc_tokens)
-    total = max(2 * n + 1, MIN_EDIT)
-    slots = [BLANK] * total
-    for i, t in enumerate(ctc_tokens):
-        slots[2 * i + 1] = t
-    return slots
+    """Delegado: a regra (blank intercalado) mora em `common.build_insertion_slots`."""
+    return common.build_insertion_slots(ctc_tokens, BLANK, MIN_EDIT)
 
 
 def main() -> int:

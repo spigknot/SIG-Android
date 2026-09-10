@@ -16,8 +16,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-from common import (atomic_write_json, base_parser, print_step,  # noqa: E402
-                    record_step, sha256_file, step_status, work_dirs)
+from common import (atomic_write_json, base_parser, build_insertion_slots,  # noqa: E402
+                    print_step, record_step, sha256_file, step_status, work_dirs)
 
 BLANK = 100257
 EMBED_MULT = 12.0
@@ -139,9 +139,8 @@ def main() -> int:
 
         # LLM input = real audio embeds (/12) + slot embeddings (chained)
         valid_audio = feats.shape[0] // 5
-        slots = [BLANK] * max(2 * len(ctc) + 1, MIN_EDIT)
-        for i, tok in enumerate(ctc):
-            slots[2 * i + 1] = tok
+        # Regra unica (blank intercalado) — ver common.build_insertion_slots.
+        slots = build_insertion_slots(ctc, BLANK, MIN_EDIT)
         S_real = valid_audio + len(slots)
         S = min((b for b in llm_by_S if b >= S_real), default=None)
         if S is None:

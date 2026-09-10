@@ -27,8 +27,8 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-from common import (atomic_write_json, base_parser, print_step,  # noqa: E402
-                    record_step, sha256_file, step_status, work_dirs)
+from common import (atomic_write_json, base_parser, build_insertion_slots,  # noqa: E402
+                    print_step, record_step, sha256_file, step_status, work_dirs)
 
 BLANK = 100257
 EMBED_MULT = 12.0
@@ -216,9 +216,8 @@ def collect_llm_calib(work: Path, S: int, max_files: int = 8) -> list[dict[str, 
             if t != prev and t != BLANK:
                 ctc.append(t)
             prev = t
-        slots = [BLANK] * max(2 * len(ctc) + 1, MIN_EDIT)
-        for i, tok in enumerate(ctc):
-            slots[2 * i + 1] = tok
+        # Regra unica (blank intercalado) — ver common.build_insertion_slots.
+        slots = build_insertion_slots(ctc, BLANK, MIN_EDIT)
         with torch.no_grad():
             text_emb = embed_w[torch.tensor(slots)].float().numpy()
         emb = np.concatenate([a, text_emb], axis=0)

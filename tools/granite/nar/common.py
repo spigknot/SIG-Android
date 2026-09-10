@@ -9,10 +9,12 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
+import unicodedata
 from pathlib import Path
 
 CHUNK = 4 * 1024 * 1024
@@ -172,3 +174,88 @@ def run_cmd(cmd: list[str], log_path: Path, env: dict | None = None,
 
 def print_step(msg: str) -> None:
     print(f"[nar] {time.strftime('%H:%M:%S')} {msg}", flush=True)
+
+
+# --------------------------------------------------------------------------- regras
+# Constantes congeladas do plano (nao mudar sem decisao explicita).
+BLANK_TOKEN_ID = 100257
+MIN_EDIT_SEQUENCE_LENGTH = 8
+
+
+def build_insertion_slots(ctc_tokens, blank: int = BLANK_TOKEN_ID,
+                          min_edit: int = MIN_EDIT_SEQUENCE_LENGTH) -> list[int]:
+    """Sequencia de entrada do LLM editor: blank INTERCALADO com os tokens CTC.
+
+    Espelha `_add_insertion_slots` do modelo (modeling_granite_speech_nar.py):
+
+        total = max(2*n + 1, min_edit_sequence_length)
+        slots = [blank] * total
+        slots[2*i + 1] = ctc_tokens[i]
+
+    Resultado para n=2:  [blank, t0, blank, t1, blank]
+    NAO e `[blank]*8 + tokens` — essa variante produz texto corrompido no inicio
+    (prefixo embaralhado) e se confunde com falha de quantizacao. A regra mora aqui
+    para existir UMA implementacao; antes estava duplicada em tres arquivos.
+    """
+    n = len(ctc_tokens)
+    total = max(2 * n + 1, min_edit)
+    slots = [blank] * total
+    for i, tok in enumerate(ctc_tokens):
+        slots[2 * i + 1] = int(tok)
+    return slots
+
+
+def normalize_for_cer(text: str) -> str:
+    """Normalizacao para comparacao de transcricao (case, acentos/pontuacao, espacos)."""
+    s = unicodedata.normalize("NFKC", str(text)).lower()
+    s = re.sub(r"[^\w\s]", " ", s, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def edit_distance(a: str, b: str) -> int:
+    """Distancia de Levenshtein (dois vetores, O(len(b)) de memoria)."""
+    if len(a) < len(b):
+        a, b = b, a
+    anterior = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        atual = [i]
+        for j, cb in enumerate(b, 1):
+            atual.append(min(anterior[j] + 1, atual[j - 1] + 1,
+                             anterior[j - 1] + (ca != cb)))
+        anterior = atual
+    return anterior[-1]
+
+
+def cer(hypothesis: str, reference: str):
+    """Character Error Rate: distancia de edicao / tamanho da referencia.
+
+    Esta e a metrica que decide qualidade de quantizacao. Comparar transcricao por
+    IGUALDADE EXATA e uma metrica binaria que reprova uma amostra por um unico
+    caractere: no mesmo corpus, um artefato 4-bit que por CER empata com o float
+    (0,0324 vs 0,0323) aparece com apenas 50% de acerto exato. Sempre reporte CER
+    (e a distribuicao pareada), nunca so o exact-match, e sempre contra a
+    transcricao de referencia do dataset — nunca contra a saida do proprio modelo,
+    que ja erra palavras raras em fp32.
+    """
+    o, r = normalize_for_cer(hypothesis), normalize_for_cer(reference)
+    if not r:
+        return None
+    return edit_distance(o, r) / len(r)
+
+
+def quantized_bits_check(node_bits, requested: int) -> str:
+    """Valida os bits REAIS gravados no grafo contra os pedidos.
+
+    O `MatMulNBitsQuantizer` do ORT 1.29 so usa o parametro `bits` quando
+    `algo_config is None`; passar um algo_config sem campo `bits` faz o quantizador
+    cair no proprio default (4) e o pedido e silenciosamente ignorado — ja produziu
+    uma rodada rotulada "int8" com artefatos 4-bit byte-identicos aos de 4 bits.
+    Retorna "" quando ok, senao a mensagem de erro.
+    """
+    distintos = {int(b) for b in node_bits}
+    if not distintos:
+        return "nenhum no MatMulNBits encontrado no grafo"
+    if distintos != {int(requested)}:
+        return (f"pedido bits={requested} mas o grafo tem {sorted(distintos)} "
+                f"({sum(1 for _ in node_bits)} nos)")
+    return ""

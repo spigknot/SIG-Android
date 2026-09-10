@@ -309,5 +309,98 @@ def test_lang_seed_differs_per_language():
     assert len(set(seeds)) == len(LANGS)
 
 
+# --------------------------------------------------------------------------- vacinas
+# Regras que ja custaram uma rodada de medicao inteira. Cada teste aqui existe para
+# quebrar o build no dia em que a regra for violada de novo.
+
+
+def test_insertion_slots_interleave_blank_between_tokens():
+    """A entrada do LLM e [blank, t0, blank, t1, ...], NAO [blank]*8 + tokens.
+
+    Este e o bug de montagem que produziu texto corrompido no inicio e foi confundido
+    com falha de quantizacao. Espelha `_add_insertion_slots` do modelo.
+    """
+    slots = common.build_insertion_slots([7, 9], blank=100257, min_edit=1)
+    assert slots == [100257, 7, 100257, 9, 100257]
+
+
+def test_insertion_slots_never_start_with_token_run():
+    """Vacina explicita contra a variante errada: blank de preenchimento ANTES dos tokens."""
+    ctc = [11, 22, 33]
+    slots = common.build_insertion_slots(ctc, blank=100257, min_edit=1)
+    errado = [100257] * 8 + ctc
+    assert slots != errado
+    # a posicao de cada token e sempre impar
+    for i, tok in enumerate(ctc):
+        assert slots[2 * i + 1] == tok
+    # todo indice par e blank
+    assert all(slots[i] == 100257 for i in range(0, len(slots), 2))
+
+
+def test_insertion_slots_respect_min_edit_length():
+    """Sequencia curta e preenchida ate `min_edit_sequence_length` (constante 8 do plano)."""
+    assert len(common.build_insertion_slots([], min_edit=8)) == 8
+    assert len(common.build_insertion_slots([1], min_edit=8)) == 8
+    assert len(common.build_insertion_slots([1, 2, 3], min_edit=8)) == 8
+    # acima do minimo, vale 2n+1
+    assert len(common.build_insertion_slots(list(range(10)), min_edit=8)) == 21
+
+
+def test_insertion_slots_matches_model_formula():
+    """Referencia cruzada com a formula do modeling_granite_speech_nar._add_insertion_slots."""
+    for n in range(0, 30):
+        ctc = list(range(100, 100 + n))
+        slots = common.build_insertion_slots(ctc, blank=0, min_edit=8)
+        assert len(slots) == max(2 * n + 1, 8)
+        assert sum(1 for s in slots if s != 0) == n
+
+
+def test_cer_zero_for_identical_text():
+    assert common.cer("hello world", "hello world") == 0.0
+
+
+def test_cer_ignores_case_punctuation_and_spacing():
+    assert common.cer("Hello,  World!", "hello world") == 0.0
+
+
+def test_cer_counts_a_single_substitution():
+    # 1 caractere errado em 5 = 0.2
+    assert common.cer("helo!", "hello") == pytest.approx(1 / 5)
+
+
+def test_cer_uses_external_reference_not_model_output():
+    """A referencia tem que ser a do dataset.
+
+    Caso real: o modelo (em qualquer precisao, inclusive fp32) transcreve
+    'wifi door bell' como 'wi doorbell'. Comparar o quantizado contra a saida do
+    proprio modelo conta esse erro do modelo como se fosse da quantizacao.
+    """
+    fleurs = "he built a wifi door bell he said"
+    float_out = "he built a wi doorbell, he said."
+    quant_out = "he built a wifi-fi dobell, he said."
+    # contra a referencia externa: ambos erram, e o quantizado erra um pouco mais
+    c_float, c_quant = common.cer(float_out, fleurs), common.cer(quant_out, fleurs)
+    assert c_float > 0 and c_quant > c_float
+    # contra a saida do float o quantizado parece "muito pior" (metrica enganosa)
+    assert common.cer(quant_out, float_out) > c_quant
+
+
+def test_quantized_bits_check_accepts_matching_bits():
+    assert common.quantized_bits_check([4] * 281, 4) == ""
+    assert common.quantized_bits_check([8] * 281, 8) == ""
+
+
+def test_quantized_bits_check_detects_silently_ignored_bits():
+    """O bug real: pedir 8 bits e o grafo sair com 4 (algo_config sem campo `bits`)."""
+    erro = common.quantized_bits_check([4] * 281, 8)
+    assert erro != ""
+    assert "4" in erro and "8" in erro
+
+
+def test_quantized_bits_check_rejects_mixed_and_empty():
+    assert common.quantized_bits_check([4] * 200 + [8] * 81, 4) != ""
+    assert common.quantized_bits_check([], 4) != ""
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
