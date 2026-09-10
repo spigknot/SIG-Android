@@ -35,6 +35,37 @@ def role_for(name: str) -> str:
     return "support"
 
 
+def external_data_files(onnx_path: Path) -> list[Path]:
+    """Todos os arquivos de dados externos de um ONNX, resolvidos pelo PROPRIO grafo.
+
+    O export TorchScript (external_data=True) grava um arquivo POR TENSOR, com
+    `location` = nome do tensor (sem offset/length) — nao um unico `<arquivo>.data`.
+    Cobrir so o caso `<onnx>.data` empacotou shells de 802 KB sem os ~3,3 GB de pesos
+    (LLM float do experimento nar-qnn-20260829-223957 foi publicado assim: 7 shells
+    orfaos no R2, inutilizaveis). Resolver pelos initializers cobre os dois layouts.
+    """
+    import onnx
+
+    found: dict[str, Path] = {}
+    legacy = onnx_path.with_name(onnx_path.name + ".data")
+    if legacy.exists():
+        found[legacy.name] = legacy
+    try:
+        model = onnx.load(str(onnx_path), load_external_data=False)
+    except Exception:  # noqa: BLE001 - shell corrompido: so o legado vale
+        return sorted(found.values())
+    for init in list(model.graph.initializer) + list(model.graph.sparse_initializer):
+        for kv in init.external_data:
+            if kv.key != "location":
+                continue
+            cand = (onnx_path.parent / kv.value).resolve()
+            if cand.exists() and cand.is_file():
+                found[cand.name] = cand
+            else:
+                print_step(f"AVISO: dado externo ausente para {init.name}: {kv.value}")
+    return sorted(found.values())
+
+
 def main() -> int:
     ap = base_parser(__doc__)
     ap.add_argument("--resume", action="store_true")
@@ -61,7 +92,6 @@ def main() -> int:
 
     artifacts = []
     for f in sorted(dirs["exports"].glob("*.onnx")):
-        data = f.with_name(f.name + ".data")
         rel = f"artifacts/{f.name}"
         shutil.copyfile(f, pkg / rel)
         entry = {"path": rel, "bytes": f.stat().st_size, "sha256": sha256_file(f),
@@ -72,7 +102,7 @@ def main() -> int:
                  "precision": "fp16-weights/f32-io", "parity": "unknown",
                  "intended_backend": "cpu-first; gpu/npu experimental"}
         artifacts.append(entry)
-        if data.exists():
+        for data in external_data_files(f):
             rele = f"artifacts/{data.name}"
             shutil.copyfile(data, pkg / rele)
             artifacts.append({"path": rele, "bytes": data.stat().st_size,
@@ -82,14 +112,13 @@ def main() -> int:
                               "intended_backend": "same-as-onnx"})
 
     for f in sorted(dirs["quantized"].glob("*qdq*.onnx")):
-        data = f.with_name(f.name + ".data")
         rel = f"artifacts/{f.name}"
         shutil.copyfile(f, pkg / rel)
         artifacts.append({"path": rel, "bytes": f.stat().st_size, "sha256": sha256_file(f),
                           "role": "qdq", "graph": "see-name", "bucket": "see-name",
                           "precision": "qdq-u16u8", "parity": "unknown",
                           "intended_backend": "npu-htp-context-ready-only"})
-        if data.exists():
+        for data in external_data_files(f):
             shutil.copyfile(data, pkg / f"artifacts/{data.name}")
             artifacts.append({"path": f"artifacts/{data.name}", "bytes": data.stat().st_size,
                               "sha256": sha256_file(data), "role": "support",

@@ -196,5 +196,118 @@ def test_metrics_nonzero():
     assert m["cosine"] < 1.0 and m["cosine"] > 0.99
 
 
+def test_external_data_files_covers_per_tensor_layout(tmp_path):
+    """Vacina: o export TorchScript grava UM ARQUIVO POR TENSOR (location = nome do
+    tensor), nao `<onnx>.data`. O empacotador so olhava o layout legado e publicou
+    7 shells LLM de 802 KB sem os ~3,3 GB de pesos no R2 (nar-qnn-20260829-223957)."""
+    import onnx
+    from onnx import helper, numpy_helper
+    from build_experiment_manifest import external_data_files
+
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    shell = exports / "m.onnx"
+
+    # modelo com external data por-tensor (location = nome do tensor, sem offsets)
+    w1 = numpy_helper.from_array(np.zeros((4, 4), dtype=np.float32), name="w_one")
+    w2 = numpy_helper.from_array(np.ones((2, 2), dtype=np.float32), name="w_two")
+    graph = helper.make_graph(
+        [helper.make_node("Identity", ["w_one"], ["out"])], "g", [],
+        [helper.make_tensor_value_info("out", onnx.TensorProto.FLOAT, [4, 4])],
+        initializer=[w1, w2])
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+    onnx.save_model(model, str(shell), save_as_external_data=True,
+                    all_tensors_to_one_file=False, size_threshold=0)
+    for name in ("w_one", "w_two"):
+        (exports / name).write_bytes(b"\x00" * 16)  # dados externos por tensor
+
+    found = {p.name for p in external_data_files(shell)}
+    assert {"w_one", "w_two"} <= found, found
+
+
+def test_external_data_files_covers_legacy_single_file(tmp_path):
+    from build_experiment_manifest import external_data_files
+
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    shell = exports / "m.onnx"
+    shell.write_bytes(b"not-a-real-onnx")  # shell ilegivel: so o legado vale
+    (exports / "m.onnx.data").write_bytes(b"\x00" * 8)
+    assert [p.name for p in external_data_files(shell)] == ["m.onnx.data"]
+
+
+def test_external_data_files_reports_missing(tmp_path):
+    import onnx
+    from onnx import helper, numpy_helper
+    from build_experiment_manifest import external_data_files
+
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    shell = exports / "m.onnx"
+    w = numpy_helper.from_array(np.zeros((2, 2), dtype=np.float32), name="w_missing")
+    graph = helper.make_graph([helper.make_node("Identity", ["w_missing"], ["o"])], "g", [],
+                              [helper.make_tensor_value_info("o", onnx.TensorProto.FLOAT, [2, 2])],
+                              initializer=[w])
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+    onnx.save_model(model, str(shell), save_as_external_data=True,
+                    all_tensors_to_one_file=False, size_threshold=0)
+    (exports / "w_missing").unlink(missing_ok=True)  # dado externo perdido
+    assert external_data_files(shell) == []
+
+
+def test_dedup_entries_keeps_first_and_reports_dups():
+    """Vacina: FLEURS repete `id` entre takes -> nomes de arquivo colidem e o
+    manifest fica com mais linhas do que arquivos (82 linhas / 79 arquivos).
+    Dedup por caminho, mantendo a PRIMEIRA, e reportando o que caiu."""
+    from build_calibration_corpus import dedup_entries
+
+    entries = [
+        {"file": "pt_br_1637.wav", "id": "1637"},
+        {"file": "pt_br_1637.wav", "id": "1637"},
+        {"file": "de_de_1520.wav", "id": "1520"},
+    ]
+    unique, dups = dedup_entries(entries)
+    assert [e["file"] for e in unique] == ["pt_br_1637.wav", "de_de_1520.wav"]
+    assert dups == ["pt_br_1637.wav"]
+
+
+def test_dedup_entries_noop_when_unique():
+    from build_calibration_corpus import dedup_entries
+
+    entries = [{"file": f"x_{i}.wav"} for i in range(5)]
+    unique, dups = dedup_entries(entries)
+    assert len(unique) == 5 and dups == []
+
+
+def test_lang_seed_is_stable_across_processes():
+    """Vacina: `hash(lang)` do Python e randomizado por processo (PYTHONHASHSEED),
+    entao o corpus "deterministico por seed" trocava de amostras a cada run
+    (duas execucoes com a mesma semente: apenas 27 de 82 amostras em comum).
+    A semente tem de vir de um hash ESTAVEL."""
+    import subprocess
+    import sys
+
+    from build_calibration_corpus import lang_seed
+
+    runs = set()
+    for _ in range(3):
+        out = subprocess.run(
+            [sys.executable, "-c",
+             "import sys; sys.path.insert(0, r'D:/Projetos/SIG/tools/granite/nar');"
+             "from build_calibration_corpus import lang_seed;"
+             "print(lang_seed('pt_br', 20260829))"],
+            capture_output=True, text=True, check=True).stdout.strip()
+        runs.add(out)
+    assert len(runs) == 1, f"semente variou entre processos: {runs}"
+    assert int(runs.pop()) == lang_seed("pt_br", 20260829)
+
+
+def test_lang_seed_differs_per_language():
+    from build_calibration_corpus import LANGS, lang_seed
+
+    seeds = [lang_seed(l, 20260829) for l in LANGS]
+    assert len(set(seeds)) == len(LANGS)
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

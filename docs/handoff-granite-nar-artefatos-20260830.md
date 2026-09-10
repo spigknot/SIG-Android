@@ -101,3 +101,23 @@
 - **Veredito §13: NÃO PASSA** → `needs-precision-review`; batch segue
   não-candidato (§17 mantém o bloqueio). Causa B confirmada como específica
   da chain do remoto; float local íntegro.
+
+## Verificacao 08/09 - rodada hibrido + SmoothQuant (nar-qnn-remote-20260907-224034)
+- Experimento verificado no R2 (7 objetos, manifest HEAD 200, diagnosticos GET integros, conteudo == relatado).
+- Fase A (hibrido enc-fp32 + LLM-QDQ s0064): FALHA 0/5 - float com texto real (CER 0,15-0,31), QDQ vazio em 100% (CER 1,0). Hipotese B-3 descartada: a causa esta dentro do LLM quantizado.
+- Fase B (SmoothQuant a0.3/a0.5/a0.7): FALHA 0/16 cada - a0.5 colapsa para repeticao, a0.3 da vazio/pontuacao. AWQ segue nunca tentado.
+- Veredito S13: NAO PASSA (terceira confirmacao independente) -> batch nao-candidato, needs-precision-review definitivo p/ QDQ estatico u16u8 neste LLM; S17 mantem o bloqueio de lote.
+- Restam, em ordem: (1) AWQ nos lineares do LLM; (2) fp32 parcial EMBARCADO L04-L07 como artefato; (3) bundle hibrido encoder-fp32 como candidato explicito. Sem telefone, teto = context-ready.
+
+## Verificacao 09/09 - AWQ s0064 (`nar-qnn-remote-20260908-192009`)
+- Experimento verificado no R2 (10 objetos, manifest HEAD 200, diagnosticos GET integros, conteudo == relatado). Nenhum artefato candidato publicado, so evidencias.
+- Fase A (hibrido enc-fp32 + LLM-QDQ): FALHA 0/5 - float com texto real (CER 0,15-0,31), QDQ vazio em 100%. Hipotese B-3 descartada definitivamente.
+- Fase B (AWQ a0.25/a0.5/a0.75): FALHA 0/16 cada; combinada AWQ+L04-L07 fp32: 0/16 + 0/5 multiligue (melhor cos 0.556 < QDQ puro 0.633).
+- Veredito S13: NAO PASSA (quarta confirmacao independente) -> needs-precision-review DEFINITIVO p/ QDQ estatico u16u8 neste LLM; S17 mantem o bloqueio de lote.
+- Restam, em ordem: (1) GPTQ; (2) quantizacao dinamica; (3) revisao de arquitetura/precisao. Proxima rodada so com ordem expressa.
+
+## Migracao 09/09 - drive E: falhando, work-dir agora D:/SIG-granite-nar-lab-rebuild
+- E: declarado falhando pelo usuario; uso do E: interrompido imediatamente. Nenhum processo escrevia no E: no momento.
+- Preservados no D: 22 reports + 8 scripts auxiliares (190 KB total). Modelos multigigabyte NAO copiados (serao recuperados do R2 ou regenerados).
+- Diagnosticos finais publicados no R2 (prefixo do experimento, diagnostics/, nomes novos sem sobrescrita, HeadObject + HTTP 200): final-summary-20260909.json, run-state-20260909.json, verify-remote-20260906.json, relatorio-geral-cerebro-20260909.txt.
+- Proximas tarefas usam --work-dir D:/SIG-granite-nar-lab-rebuild.

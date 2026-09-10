@@ -42,6 +42,39 @@ def t_bucket_for(frames: int) -> int:
     return 2000
 
 
+def lang_seed(lang: str, base: int = 20260829) -> int:
+    """Semente ESTAVEL por idioma.
+
+    NAO usar `hash(lang)`: o hash de string do Python e randomizado por processo
+    (PYTHONHASHSEED), entao o "corpus deterministico por seed" mudava a cada run —
+    duas execucoes com a mesma semente compartilharam so 27 de 82 amostras.
+    """
+    import hashlib
+
+    digest = hashlib.sha256(lang.encode("utf-8")).hexdigest()
+    return base + int(digest[:8], 16) % 1000
+
+
+def dedup_entries(entries: list[dict]) -> tuple[list[dict], list[str]]:
+    """Remove linhas duplicadas por caminho de arquivo, mantendo a PRIMEIRA.
+
+    Regra do plano: dedup por caminho de arquivo. Necessario porque `id` do FLEURS
+    se repete entre takes: sem isto o manifest declara mais amostras do que existem
+    em disco (observado: 82 linhas / 79 arquivos, uma linha por take perdido).
+    """
+    seen: set[str] = set()
+    unique: list[dict] = []
+    dups: list[str] = []
+    for e in entries:
+        key = e["file"]
+        if key in seen:
+            dups.append(key)
+            continue
+        seen.add(key)
+        unique.append(e)
+    return unique, dups
+
+
 def corpus(args) -> int:
     work = Path(args.work_dir).resolve()
     dirs = work_dirs(work)
@@ -62,17 +95,20 @@ import numpy as np
 
 work, per_lang = sys.argv[1], int(sys.argv[2])
 out_path = sys.argv[3]
+seeds = json.loads(sys.argv[4])
 from datasets import load_dataset, Audio
 import soundfile as sf
 
 LANGS = ["pt_br", "en_us", "es_419", "fr_fr", "de_de"]
 rows = []
+used_files = set()
+collisions = []
 with open(out_path, "w", encoding="utf-8") as out:
     for lang in LANGS:
         ds = load_dataset("google/fleurs", lang, split="validation", streaming=False)
         # decode=False: raw WAV bytes; decodificamos com soundfile (sem torchcodec)
         ds = ds.cast_column("audio", Audio(decode=False))
-        rng = np.random.RandomState(20260829 + abs(hash(lang)) % 1000)
+        rng = np.random.RandomState(seeds[lang])
         idx_order = rng.permutation(len(ds))
         picked = 0
         seen_buckets = {}
@@ -94,6 +130,16 @@ with open(out_path, "w", encoding="utf-8") as out:
             seen_buckets[b] = seen_buckets.get(b, 0) + 1
             fid = row["id"]
             fname = f"{lang}_{fid}.wav"
+            # FLEURS repete `id` entre takes diferentes (mesmo texto, audio distinto):
+            # sem desambiguar, o segundo take SOBRESCREVE o primeiro no disco e o
+            # manifest fica com duas linhas apontando para um arquivo so.
+            if fname in used_files:
+                k = 2
+                while f"{lang}_{fid}_{k}.wav" in used_files:
+                    k += 1
+                collisions.append(fname)
+                fname = f"{lang}_{fid}_{k}.wav"
+            used_files.add(fname)
             fpath = os.path.join(work, fname)
             sf.write(fpath, data, sr, subtype="PCM_16")
             rows.append(1)
@@ -108,10 +154,13 @@ with open(out_path, "w", encoding="utf-8") as out:
             picked += 1
         print(f"{lang}: picked {picked}", flush=True)
 print("TOTAL", len(rows))
+if collisions:
+    print("COLISOES", len(collisions), collisions)
 '''
     manifest_tmp = calib / "corpus-manifest.jsonl.partial"
+    seeds = {lang: lang_seed(lang, SEED) for lang in LANGS}
     rc = run_cmd([str(venv_py), "-c", code, str(calib), str(args.per_language),
-                  str(manifest_tmp)], dirs["logs"] / "fleurs-download.log",
+                  str(manifest_tmp), json.dumps(seeds)], dirs["logs"] / "fleurs-download.log",
                  env=env, timeout=7200)
     if rc != 0:
         record_step(work, "calibration_corpus", "failed", exit_code=rc,
@@ -135,6 +184,14 @@ print("TOTAL", len(rows))
             frames = int(e["duration_s"] * sr / 160 * 2)  # mel frames / stack approx
             e["T_bucket"] = t_bucket_for(max(frames, int(e["duration_s"] * 62.5)))
             entries.append(e)
+    entries, dup_paths = dedup_entries(entries)
+    if dup_paths:
+        print_step(f"AVISO: {len(dup_paths)} entradas duplicadas descartadas: {dup_paths[:5]}")
+    on_disk = {p.name for p in calib.glob("*.wav")}
+    declared = {e["file"] for e in entries}
+    if declared != on_disk:
+        print_step(f"AVISO: manifest x disco divergem — so no manifest: "
+                   f"{sorted(declared - on_disk)[:5]}; so no disco: {sorted(on_disk - declared)[:5]}")
     with open(manifest_path.with_suffix(".tmp"), "w", encoding="utf-8") as f:
         for e in entries:
             f.write(json.dumps(e, ensure_ascii=False) + "\n")
