@@ -16,6 +16,7 @@ class SttKeywordsHelpTest {
         val texto = SttKeywordsHelp.text(provider = "deepgram", isLive = false, keywords = listOf("placa"))
 
         assertTrue(texto.contains(SttKeywordsHelp.PURPOSE))
+        assertTrue(texto.contains(SttKeywordsHelp.PROFILES))
         assertTrue(texto.contains("A ORDEM IMPORTA"))
         assertTrue(texto.contains(SttKeywordsHelp.INSERTION_WARNING))
         assertTrue(texto.contains("NÃO foi dito no áudio"))

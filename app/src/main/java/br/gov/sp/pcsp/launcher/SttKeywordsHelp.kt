@@ -27,14 +27,19 @@ object SttKeywordsHelp {
             "medicamentos, placas...). Elas não substituem a transcrição normal — servem apenas " +
             "para aumentar a chance de o termo sair escrito corretamente quando ele aparecer no áudio."
 
+    const val PROFILES =
+        "Você pode manter VÁRIOS perfis (listas nomeadas) e trocar entre eles: crie no \"+\" " +
+            "verde da seção Keywords e escolha qual usar no seletor \"Keywords\" das telas de " +
+            "transcrição. \"Keywords: Não\" desliga o envio sem apagar nada."
+
     const val ORDER_TIP =
         "A ORDEM IMPORTA: os termos são enviados na ordem da tabela e cada modelo aproveita " +
             "apenas uma PARTE da lista (veja os limites abaixo). Cadastre primeiro os termos mais " +
             "importantes — os que ficarem no fim podem não ser usados."
 
     const val CHECKBOX_TIP =
-        "A caixa \"Keywords\" liga e desliga o envio. Desmarcada, nenhuma keyword vai na " +
-            "requisição e a transcrição segue como antes."
+        "O perfil \"Não\" desliga o envio: nenhuma keyword vai na requisição e a transcrição " +
+            "segue como antes. A escolha vale para as duas telas e para todos os modelos."
 
     const val INSERTION_WARNING =
         "ATENÇÃO: o reforço pode fazer o modelo escrever um termo cadastrado mesmo quando ele " +
@@ -100,6 +105,7 @@ object SttKeywordsHelp {
         keywords: List<String> = emptyList(),
     ): String = buildString {
         append(PURPOSE)
+        append("\n\n").append(PROFILES)
         append("\n\n").append(ORDER_TIP)
         if (provider != null) {
             append("\n\n").append(CHECKBOX_TIP)

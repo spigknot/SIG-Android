@@ -198,9 +198,8 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var checkboxLiveDiarize: CheckBox
     private lateinit var buttonLiveDiarizeHelp: TextView
     private lateinit var buttonLiveDiarizeRealtimeHelp: TextView
-    private lateinit var checkboxLiveKeywords: CheckBox
+    private lateinit var buttonLiveKeywords: TextView
     private lateinit var buttonLiveKeywordsHelp: TextView
-    private var keywordControlsPopulating = false
 
     private val selectedItems = mutableListOf<MediaItem>()
     private val tempOutputFiles = mutableListOf<File>()
@@ -476,7 +475,7 @@ class RemoteSttActivity : AppCompatActivity() {
         checkboxLiveDiarize = findViewById(R.id.checkbox_live_diarize)
         buttonLiveDiarizeHelp = findViewById(R.id.button_live_diarize_help)
         buttonLiveDiarizeRealtimeHelp = findViewById(R.id.button_live_diarize_realtime_help)
-        checkboxLiveKeywords = findViewById(R.id.checkbox_live_keywords)
+        buttonLiveKeywords = findViewById(R.id.button_live_keywords)
         buttonLiveKeywordsHelp = findViewById(R.id.button_live_keywords_help)
         arrowInputOutput = findViewById(R.id.arrow_input_output)
         buttonPlayPause = findViewById(R.id.button_play_pause)
@@ -595,21 +594,7 @@ class RemoteSttActivity : AppCompatActivity() {
             }
         }
         buttonLiveKeywordsHelp.setOnClickListener { showKeywordsHelp() }
-        checkboxLiveKeywords.setOnCheckedChangeListener { _, checked ->
-            if (keywordControlsPopulating) return@setOnCheckedChangeListener
-            GrokApiSettings.setKeywordsEnabled(checked)
-            // As keywords entram nos parâmetros da conexão ao vivo; uma sessão
-            // ativa precisa ser reiniciada para valer. No REST (arquivos) a
-            // lista é lida no início de cada transcrição, sem interrupção.
-            if (liveTranscribing) {
-                stopLiveMicTranscription()
-                Toast.makeText(
-                    this,
-                    "Keywords alteradas: inicie novamente a transcrição ao vivo.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
+        buttonLiveKeywords.setOnClickListener { showKeywordsProfileMenu() }
         buttonSaveRecording?.setOnClickListener { openOutputFolderPicker(REQUEST_SAVE_RECORDING_DIR) }
         buttonSelectOutputFolder?.setOnClickListener { openOutputFolderPicker(REQUEST_CHOOSE_PRE_OUTPUT_DIR) }
         buttonPlayPause?.setOnClickListener { togglePlayback() }
@@ -3285,10 +3270,53 @@ class RemoteSttActivity : AppCompatActivity() {
         refreshBatchProgressUi()
     }
 
-    /** Keywords que entram na requisição: a lista salva só é enviada quando a
-     *  checkbox "Keywords" está marcada (REST e WebSocket). */
-    private fun activeSttKeywords(): List<String> =
-        if (checkboxLiveKeywords.isChecked) GrokApiSettings.sttKeywords() else emptyList()
+    /** Keywords que entram na requisição: os termos do PERFIL ativo (REST e
+     *  WebSocket). Perfil "Não" (ou nenhum perfil criado) = nada é enviado. */
+    private fun activeSttKeywords(): List<String> = GrokApiSettings.activeSttKeywords()
+
+    /** Rótulo do seletor: "Keywords: Não" ou "Keywords: <perfil>". */
+    private fun refreshKeywordsButton() {
+        if (::buttonLiveKeywords.isInitialized) {
+            buttonLiveKeywords.text =
+                SttKeywordProfiles.label(GrokApiSettings.selectedKeywordProfile())
+        }
+    }
+
+    /** Menu de perfis do seletor das telas de transcrição. */
+    private fun showKeywordsProfileMenu() {
+        val profiles = GrokApiSettings.keywordProfiles()
+        val popup = PopupMenu(this, buttonLiveKeywords)
+        popup.menu.add(0, KEYWORDS_OFF_MENU_ID, 0, SttKeywordProfiles.OFF_LABEL)
+        profiles.forEachIndexed { index, profile ->
+            popup.menu.add(0, index + 1, index + 1, profile.name)
+        }
+        popup.setOnMenuItemClickListener { item ->
+            // Resolve pelo itemId: o título pode ter prefixos/acentos e os
+            // perfis podem repetir palavras — nunca case por título.
+            val name = if (item.itemId == KEYWORDS_OFF_MENU_ID) {
+                null
+            } else {
+                profiles.getOrNull(item.itemId - 1)?.name
+            }
+            if (name != GrokApiSettings.selectedKeywordProfile()) {
+                GrokApiSettings.selectKeywordProfile(name)
+                refreshKeywordsButton()
+                // O perfil entra nos parâmetros da conexão ao vivo: uma sessão
+                // ativa precisa ser reiniciada. No REST a lista é lida no
+                // início de cada transcrição, sem interrupção.
+                if (liveTranscribing) {
+                    stopLiveMicTranscription()
+                    Toast.makeText(
+                        this,
+                        "Perfil de keywords alterado: inicie novamente a transcrição ao vivo.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+            true
+        }
+        popup.show()
+    }
 
     /** Provedor de API do modelo selecionado (null = servidor local/Granite). */
     private fun currentApiProvider(): String? {
@@ -3313,7 +3341,7 @@ class RemoteSttActivity : AppCompatActivity() {
             SttKeywordsHelp.text(
                 provider = provider,
                 isLive = !transcriptionMode,
-                keywords = GrokApiSettings.sttKeywords(),
+                keywords = GrokApiSettings.activeSttKeywords(),
             )
         }
         AlertDialog.Builder(this)
@@ -3362,13 +3390,11 @@ class RemoteSttActivity : AppCompatActivity() {
             checkboxLiveDiarize.isEnabled = false
             checkboxLiveDiarize.isChecked = false
         }
-        // Keywords: a checkbox existe só para os provedores de API (o
-        // servidor local não tem parâmetro de reforço).
+        // Keywords: o seletor de perfis existe só para os provedores de API
+        // (o servidor local não tem parâmetro de reforço).
         val keywordsSupported = apiProvider != null && SttKeywords.supportsKeywords(apiProvider)
-        checkboxLiveKeywords.visibility = if (keywordsSupported) View.VISIBLE else View.GONE
-        keywordControlsPopulating = true
-        checkboxLiveKeywords.isChecked = GrokApiSettings.keywordsEnabled()
-        keywordControlsPopulating = false
+        buttonLiveKeywords.visibility = if (keywordsSupported) View.VISIBLE else View.GONE
+        refreshKeywordsButton()
         // O seletor t= e seus botões existem apenas para o Granite NAR.
         val narModel = config.name == TranscriptionModelStore.SERVER_NAME
         buttonLiveIntervalMinus?.visibility = if (narModel) View.VISIBLE else View.GONE
@@ -6651,6 +6677,9 @@ class RemoteSttActivity : AppCompatActivity() {
         (LIVE_SAMPLE_RATE * 2L * grokWebSocketChunkMillis() / 1000L).toInt().coerceAtLeast(640)
 
     companion object {
+        /** Id do item "Não" (desligado) no menu de perfis de keywords. */
+        private const val KEYWORDS_OFF_MENU_ID = 0
+
         const val EXTRA_MODE = "remote_stt_mode"
         const val MODE_TRANSCRIPTION = "transcription"
         const val MODE_OCCURRENCE = "occurrence"

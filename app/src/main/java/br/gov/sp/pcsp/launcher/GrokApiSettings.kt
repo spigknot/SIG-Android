@@ -33,6 +33,8 @@ object GrokApiSettings {
     private const val KEY_DEEPGRAM_API = "deepgram_api_key"
     private const val KEY_STT_KEYWORDS = "stt_keywords"
     private const val KEY_STT_KEYWORDS_ENABLED = "stt_keywords_enabled"
+    private const val KEY_STT_KEYWORD_PROFILES = "stt_keyword_profiles"
+    private const val KEY_STT_KEYWORD_PROFILE = "stt_keyword_profile"
     private const val KEY_ASSEMBLYAI_API = "assemblyai_api_key"
     private const val KEY_ELEVENLABS_API = "elevenlabs_api_key"
     private const val KEY_MUSE_API = "metamuse_api_key"
@@ -96,24 +98,46 @@ object GrokApiSettings {
 
     fun hasDeepgramApiKey(): Boolean = isPlausibleDeepgramKey()
 
-    /** Keywords do STT: lista única do app (mesma tela para todos os
-     *  provedores). Persistida como JSON e traduzida por provedor na hora da
-     *  requisição — ver SttKeywords. */
-    fun sttKeywords(): List<String> = SttKeywords.decode(
-        preferences().getString(KEY_STT_KEYWORDS, "").orEmpty()
-    )
-
-    fun setSttKeywords(value: List<String>) {
-        preferences().edit().putString(KEY_STT_KEYWORDS, SttKeywords.encode(value)).apply()
+    /** Perfis de keywords do STT: o app guarda VÁRIAS listas nomeadas e o
+     *  usuário escolhe qual está ativa (ver SttKeywordProfiles). Na primeira
+     *  leitura, o formato antigo (lista única) é migrado para um perfil. */
+    fun keywordProfiles(): List<KeywordProfile> {
+        val prefs = preferences()
+        val stored = prefs.getString(KEY_STT_KEYWORD_PROFILES, null)
+        if (stored != null) return SttKeywordProfiles.decode(stored)
+        val legacy = SttKeywords.decode(prefs.getString(KEY_STT_KEYWORDS, "").orEmpty())
+        val migrated = SttKeywordProfiles.migratedFromSingleList(legacy)
+        val wasEnabled = prefs.getBoolean(KEY_STT_KEYWORDS_ENABLED, true)
+        prefs.edit()
+            .putString(KEY_STT_KEYWORD_PROFILES, SttKeywordProfiles.encode(migrated))
+            .putString(
+                KEY_STT_KEYWORD_PROFILE,
+                if (wasEnabled) migrated.firstOrNull()?.name.orEmpty() else ""
+            )
+            .apply()
+        return migrated
     }
 
-    /** Checkbox "Keywords" das telas de transcrição: liga/desliga o envio dos
-     *  termos nas requisições (REST e WebSocket). */
-    fun keywordsEnabled(): Boolean = preferences().getBoolean(KEY_STT_KEYWORDS_ENABLED, true)
-
-    fun setKeywordsEnabled(value: Boolean) {
-        preferences().edit().putBoolean(KEY_STT_KEYWORDS_ENABLED, value).apply()
+    fun setKeywordProfiles(value: List<KeywordProfile>) {
+        preferences().edit()
+            .putString(KEY_STT_KEYWORD_PROFILES, SttKeywordProfiles.encode(value))
+            .apply()
     }
+
+    /** Nome do perfil ativo; null = keywords desligadas ("Keywords: Não"). */
+    fun selectedKeywordProfile(): String? {
+        val profiles = keywordProfiles()
+        val stored = preferences().getString(KEY_STT_KEYWORD_PROFILE, "").orEmpty()
+        return SttKeywordProfiles.resolveSelection(profiles, stored)
+    }
+
+    fun selectKeywordProfile(name: String?) {
+        preferences().edit().putString(KEY_STT_KEYWORD_PROFILE, name?.trim().orEmpty()).apply()
+    }
+
+    /** Termos do perfil ativo — o que entra nas requisições. */
+    fun activeSttKeywords(): List<String> =
+        SttKeywordProfiles.keywordsOf(keywordProfiles(), selectedKeywordProfile())
 
     fun assemblyaiApiKey(): String = ApiKeyStore.get(preferences(), KEY_ASSEMBLYAI_API)
 
