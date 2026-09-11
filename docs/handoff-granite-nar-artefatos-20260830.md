@@ -139,7 +139,16 @@
 - Achado novo: `OptLevel.NO_OPT` (GraniteNarEngine, **nas sessoes ACELERADAS** - a rota de CPU usa `BASIC_OPT`) **desliga o constant folding** - 690 `Constant` e 49 `Shape` no encoder chegam ao particionador do QNN. `tools/granite/nar/fold_constant_subgraphs.py` pre-dobra offline. Medido: dobra propria e **BIT-EXATA** (projector, max|diff| = 0.0); `ORT_ENABLE_BASIC` **NAO e** (rel 1,5e-2).
 - O projector NAO tem bloqueador de op: `Erf` casa a fusao documentada `Div(sqrt2)->Erf->Add(1)->Mul->Mul(0.5)` -> `QNN_OP_GELU`, e `Mod` era calculo de shape (`2000 % 15` sobre dois Constants).
 
-**Pacote para o aparelho pronto** (`D:/SIG-granite-nar-lab-rebuild/pacote-teste-npu-v2/`, com manifest + SHA-256 + qual hipotese cada artefato testa): 6 grafos de encoder convertidos no **formato do app** (buckets t0200..t2000, 736-813 KB cada) sobre um unico `encoder-pesos.data` compartilhado (1,01 GiB). Os pesos foram conferidos **472/472 initializers byte a byte** contra o publicado (com external data resolvido); o ARQUIVO `.data` difere em +352 B (initializers de shape da conversao) e **nao e intercambiavel** — o `.data` do teste vai junto. Roteiro `scripts/testa_encoder_npu.sh` = troca os 6 grafos + chama o benchmark OFICIAL do repo (`scripts/run-granite-nar-adb-benchmark.ps1`) com NPU estrita e fallback proibido. **Nao exige tocar no `GraniteNarEngine`**: o `GraniteNarSmokeTestActivity` (app/src/debug) aceita `backend`/`require_full_acceleration`/`audio_path` por intent e recusa fallback silencioso. (O diretorio `pacote-teste-npu/`, de formato antigo e pesos embutidos, esta OBSOLETO — ver `reports/proposta-limpeza-20260911.md`.)
+**Encoder pronto para a NPU — DUAS variantes** (rodada de 11/09, `reports/encoder-estatico-20260911.md`). As duas tem `Einsum=0` e um unico `encoder-pesos.data` compartilhado (1,01 GiB, pesos conferidos **472/472 initializers byte a byte**); o ARQUIVO `.data` difere do publicado em +352 B (initializers de shape da conversao) e **nao e intercambiavel** — vai junto no push. Roteiro: `scripts/testa_encoder_npu.sh <wav> --pacote <variante>`.
+
+| variante | dims de saida | o que isola |
+|---|---|---|
+| `pacote-teste-npu-v2` | SIMBOLICAS | efeito **so** do `Einsum` |
+| `pacote-npu-estatico` | **FIXADAS** | candidato completo (o plano exige "ausencia de dimensoes dinamicas") |
+
+As duas correcoes do plano para o encoder, medidas: (1) `Einsum` 16 -> 0 (existe so no fork `onnxruntime-qnn`); (2) dimensoes de saida simbolicas (`Cast..._dim_N` de um shape-inference que parou num `Cast`) -> valor **medido** na inferencia real, com **6/6 buckets bit-exatos** e verificacao independente (estrutura + paridade empirica) em `reports/estatico-verificado.json`. **Se a estatica passar e a simbolica falhar, a dim simbolica era o bloqueio; se as duas falharem, o bloqueio e outro** (proximo suspeito: o LLM com `sequence_length` dinamico, que NAO foi estaticado — decisao consciente).
+
+**Nao exige tocar no `GraniteNarEngine`**: o `GraniteNarSmokeTestActivity` (app/src/debug) aceita `backend`/`require_full_acceleration`/`audio_path` por intent e recusa fallback silencioso. (O diretorio `pacote-teste-npu/`, de formato antigo e pesos embutidos, esta OBSOLETO — ver `reports/proposta-limpeza-20260911.md`.)
 
 **Repo (commits `99077b5`, `b48cf43`, sem bypass de hook):** `common.build_insertion_slots()` (blank intercalado - estava DUPLICADO em 3 arquivos), `common.cer()`, `common.quantized_bits_check()`, + as duas ferramentas novas. Testes **24 -> 43**. Gates: pytest 43 passed, `check-module-map` PASS (72/72), harness exit 0, `testDebugUnitTest+lintDebug+assembleDebug` BUILD SUCCESSFUL. `docs/qairt-status.md` atualizado.
 
@@ -201,8 +210,11 @@ adb install -r O:\sig.apk     # md5 80c1dd4112b3ea5968c0b3226f03e282 (7,6 MB)
 # 2. Baseline CPU oficial por bucket (warmup + 3 medidas + thermal/bateria/JSONL)
 .\scripts\run-granite-nar-adb-benchmark.ps1 -AudioPath D:\audios\nar-pt-30s.wav -Backends CPU -WarmupRuns 1 -MeasuredRuns 3
 
-# 3. NPU ESTRITA: testa a hipotese dos Einsum (troca os 6 grafos convertidos e chama o oficial)
-bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_encoder_npu.sh
+# 3. NPU ESTRITA — variante A: so o Einsum convertido (dims de saida ainda simbolicas)
+bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_encoder_npu.sh D:\audios\nar-pt-30s.wav --pacote pacote-teste-npu-v2
+
+# 3b. NPU ESTRITA — variante B: candidato completo (Einsum=0 + dims FIXADAS)
+bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_encoder_npu.sh D:\audios\nar-pt-30s.wav --pacote pacote-npu-estatico
 
 # 4. Comparar as 3 variantes do LLM com o MESMO audio (fp16 / 8-bit / 4-bit)
 bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_variantes_celular.sh
