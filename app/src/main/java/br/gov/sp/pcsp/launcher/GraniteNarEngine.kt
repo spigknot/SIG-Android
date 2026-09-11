@@ -200,6 +200,202 @@ object GraniteNarInterleave {
     }
 }
 
+/**
+ * Seleção do bucket do encoder/projector pelo tamanho do áudio.
+ *
+ * O encoder/projector exportado tem forma ESTÁTICA (`[1, T, 160]`), então o áudio é
+ * preenchido com zeros até `T`. Esse padding **não é neutro**: a máscara de atenção do
+ * grafo é calculada estaticamente (todas as posições válidas), então os zeros entram na
+ * atenção. Medido em 10/09 (8 amostras com T_raw ≤ 198, mesmo encoder em dois buckets,
+ * mesma cadeia downstream):
+ *
+ * | | bucket 200 | bucket 2000 (T_FIXED) |
+ * |---|---|---|
+ * | texto idêntico | — | 6/8 |
+ * | CER médio vs FLEURS | 0,0435 | 0,0476 |
+ * | pareado | — | **1 piora · 7 empata · 0 melhora** |
+ * | tempo/amostra | 76 s | 745 s (**9,7×**) |
+ *
+ * A piora foi perda de palavra: `inland water can be…` → `inlandways can be…`.
+ * Nenhuma amostra melhorou com padding — o erro é unidirecional.
+ *
+ * Regra: usar o **MENOR bucket que ainda caiba** (`T >= realFrames`). Se nenhum couber,
+ * devolver o maior e deixar o chamador tratar (áudio longo).
+ */
+object GraniteNarBuckets {
+    /** Buckets exportados, em ordem crescente. O app escolhe o menor que caiba. */
+    val TODOS = intArrayOf(200, 400, 800, 1200, 1600, 2000)
+
+    /** Menor bucket disponível que caiba em [realFrames]; senão o maior disponível. */
+    fun escolhe(realFrames: Int, disponiveis: IntArray = TODOS): Int {
+        val cabe = disponiveis.filter { it >= realFrames }
+        return cabe.minOrNull() ?: disponiveis.max()
+    }
+
+    /** Nome do arquivo do encoder para um bucket (vazio se o bucket não é exportado). */
+    fun encoderFile(t: Int): String = "granite-4.1-nar-encoder-t%04d-fp16.onnx".format(t)
+
+    /** Nome do arquivo do projector para um bucket. */
+    fun projectorFile(t: Int): String = "granite-4.1-nar-projector-t%04d-fp16.onnx".format(t)
+
+    /**
+     * Arquivos do pacote ANTIGO (bucket único, pesos embutidos) — ~1,34 GB que viram lixo
+     * depois da troca. Só podem ser removidos quando o pacote novo está COMPLETO.
+     */
+    val LEGADOS = listOf(
+        "granite-4.1-nar-encoder-fp16.onnx",
+        "granite-4.1-nar-projector-fp16.onnx",
+        "granite-4.1-nar-projector-fp16.onnx.data",
+    )
+}
+
+/**
+ * Variantes do LLM editor — o trade-off que o usuário escolhe.
+ *
+ * Mesmo modelo, mesma arquitetura; muda só a precisão dos pesos do LLM (`MatMulNBits`
+ * weight-only, RTN, bloco 128 — ver `tools/granite/nar/`). É o análogo do
+ * tiny/small/medium/turbo do Whisper: tamanho, velocidade e qualidade andam juntos.
+ *
+ * Os números vêm de medição no laboratório (contrato REAL do app: 2 entradas, `S`
+ * dinâmico, sem padding; 82 amostras FLEURS em 5 idiomas; ORT CPU):
+ *
+ * | variante | `.data` | tempo/amostra | CER vs float (global) | pt_br |
+ * |---|---|---|---|---|
+ * | float     | 3.263 MB | 15,76 s | referência | referência |
+ * | 8-bit     | 1.657 MB | (medindo) | (medindo) | (medindo) |
+ * | 4-bit     |   841 MB |  3,64 s (4,3×) | +0,0015 | **+0,0054** |
+ *
+ * ⚠️ Os tempos são de **CPU no PC**; no aparelho os valores absolutos mudam. Por isso a UI
+ * mostra o **fator** (4,3×), não segundos.
+ *
+ * ⚠️ O CER de pt_br do 4-bit **excede o critério do plano** (+0,005). A escolha por padrão é
+ * a de maior qualidade; quem quiser velocidade assume a troca conscientemente.
+ */
+object GraniteNarLlm {
+    /**
+     * Uma variante do LLM.
+     *
+     * @param id identificador estável (usado na persistência — não renomear)
+     * @param bytes tamanho do `.data` (o `.onnx` tem ~2,2 MB e é desprezível)
+     * @param fatorVelocidade quanto mais rápido que o float (1,0 = float)
+     * @param cerDelta diferença de CER contra o float, medido no corpus de 82 amostras
+     * @param cerDeltaPtBr idem, restrito a português (idioma de uso)
+     */
+    data class Variante(
+        val id: String,
+        val rotulo: String,
+        val resumo: String,
+        val bytes: Long,
+        val fatorVelocidade: Double,
+        val cerDelta: Double,
+        val cerDeltaPtBr: Double,
+    ) {
+        /** Nome do grafo no device (a variante carrega o próprio nome). */
+        val onnx: String get() = "granite-4.1-nar-llm-$id.onnx"
+
+        /** Nome do `.data` no device; é o `external_data.location` gravado no artefato. */
+        val data: String get() = "$onnx.data"
+
+        /**
+         * Tamanho formatado para a UI (ex.: "3,3 GB" em pt-BR, "3.3 GB" em en-US).
+         *
+         * Usa a locale do SISTEMA de propósito: o usuário brasileiro espera vírgula decimal.
+         * Fixar `Locale.US` deixaria "3.3 GB" — tecnicamente legível, mas estranho para ele.
+         */
+        fun tamanhoLegivel(): String =
+            if (bytes >= 1_000_000_000L) "%.1f GB".format(bytes / 1_000_000_000.0)
+            // Arredonda: `%d` truncava (433,7 MB aparecia como "433 MB").
+            else "%d MB".format(kotlin.math.round(bytes / 1_000_000.0).toLong())
+
+        /** Ganho de velocidade para a UI (ex.: "4,3× mais rápido"); vazio no float. */
+        fun ganhoLegivel(): String =
+            if (fatorVelocidade <= 1.05) "" else "%.1f× mais rápido".format(fatorVelocidade)
+
+        /**
+         * Efeito na qualidade para a UI. Devolve "" quando indistinguível do float,
+         * e um aviso quando excede o critério do plano (+0,005) no idioma de uso.
+         */
+        fun qualidadeLegivel(): String = when {
+            cerDelta <= 0.0005 && cerDeltaPtBr <= 0.0005 -> "mesma qualidade"
+            cerDeltaPtBr > 0.005 -> "qualidade levemente menor (medido em pt-BR)"
+            else -> "qualidade praticamente igual"
+        }
+
+        /** true quando o CER em pt-BR excede o critério de aceitação do plano. */
+        fun excedeCriterioPtBr(): Boolean = cerDeltaPtBr > 0.005
+    }
+
+    val FLOAT = Variante(
+        id = "fp16",
+        rotulo = "Máxima qualidade",
+        resumo = "Modelo completo, sem quantização",
+        bytes = 3_263_500_288L,
+        fatorVelocidade = 1.0,
+        cerDelta = 0.0,
+        cerDeltaPtBr = 0.0,
+    )
+
+    val OITO_BITS = Variante(
+        id = "int8b-blk128",
+        rotulo = "Equilibrado",
+        resumo = "Pesos de 8 bits — metade do tamanho",
+        bytes = 1_657_409_536L,
+        // Medido em 11/09 (82 amostras, contrato do app): 15,30 s -> 6,29 s por amostra.
+        fatorVelocidade = 2.4,
+        // Delta de CER contra o float: -0,0002 global (levemente MELHOR) e +0,0012 em pt-BR.
+        cerDelta = -0.0002,
+        cerDeltaPtBr = 0.0012,
+    )
+
+    val QUATRO_BITS = Variante(
+        id = "int4b-blk128",
+        rotulo = "Mais leve e rápido",
+        resumo = "Pesos de 4 bits — menor e ~4× mais rápido",
+        bytes = 841_617_408L,
+        fatorVelocidade = 4.3,
+        cerDelta = 0.0015,
+        cerDeltaPtBr = 0.0054,
+    )
+
+    /**
+     * 2 bits por peso — **NÃO ENTRA NA UI**: medido e reprovado (11/09).
+     *
+     * O artefato é tecnicamente válido (`MatMulNBits={2: 281}`, carrega no ORT, contrato
+     * correto) e é 3,0× mais rápido — mas a transcrição é destruída:
+     *
+     * | | float | 2-bit |
+     * |---|---|---|
+     * | texto idêntico | — | **0/82** |
+     * | CER médio | 0,0323 | **0,7946** (24,6×) |
+     * | amostras com CER > 0,30 | 0 | **82/82** |
+     *
+     * Isso não é "qualidade menor": é lixo. Fica aqui registrado para que ninguém tente de
+     * novo sem saber — e para que a faixa pare no 4-bit, que ao menos preserva o conteúdo.
+     */
+    @Suppress("unused")
+    val DOIS_BITS_REPROVADO = Variante(
+        id = "int2b-blk128",
+        rotulo = "Mínimo (reprovado)",
+        resumo = "Pesos de 2 bits — não usar (texto destruído)",
+        bytes = 433_721_344L,
+        fatorVelocidade = 3.0,
+        cerDelta = 0.7623,
+        cerDeltaPtBr = 0.7850,
+    )
+
+    /**
+     * Variantes oferecidas ao usuário, da maior qualidade para a menor.
+     *
+     * A faixa termina no 4-bit: o 2-bit foi medido e reprovado (ver [DOIS_BITS_REPROVADO]).
+     */
+    val TODAS = listOf(FLOAT, OITO_BITS, QUATRO_BITS)
+
+    /** Variante com maior qualidade — usada quando nada foi escolhido. */
+    val PADRAO = FLOAT
+
+    fun porId(id: String?): Variante = TODAS.firstOrNull { it.id == id } ?: PADRAO
+}
+
 // ============================================================================
 // Engine (parte Android): 3 sessões ONNX Runtime + download do pacote.
 // ============================================================================
@@ -212,13 +408,18 @@ object GraniteNarInterleave {
 object GraniteNarEngine {
     private const val TAG = "GraniteNarEngine"
 
-    private const val PACKAGE_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/4.1-nar"
+    // Pacote v2: pesos compartilhados entre buckets + 3 variantes do LLM (o app baixa só a
+    // escolhida pelo usuário). O pacote v1 (`.../models/granite/4.1-nar`) continua publicado
+    // e intacto — a troca é reversível apontando de volta para ele.
+    private const val PACKAGE_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/4.1-nar/v2"
 
-    private const val ENCODER_FILE = "granite-4.1-nar-encoder-fp16.onnx"
-    private const val PROJECTOR_FILE = "granite-4.1-nar-projector-fp16.onnx"
-    private const val PROJECTOR_DATA = "granite-4.1-nar-projector-fp16.onnx.data"
-    private const val LLM_FILE = "granite-4.1-nar-llm-fp16.onnx"
-    private const val LLM_DATA = "granite-4.1-nar-llm-fp16.onnx.data"
+    // Pesos compartilhados por TODOS os buckets: o exporter renumera nomes de tensor entre
+    // shapes (`onnx::Conv_3197` -> `onnx::Conv_3199`), mas o CONTEUDO e identico —
+    // medido: 472/472 initializers iguais entre t0200 e t2000. Com um `.data` unico, cada
+    // bucket extra custa ~719 KB (o grafo) em vez de ~1,04 GB (pesos embutidos).
+    private const val ENCODER_PESOS = "encoder-pesos.data"
+    private const val PROJECTOR_PESOS = "projector-pesos.data"
+    // O par do LLM (.onnx + .data) vem de GraniteNarLlm.Variante — escolhido pelo usuário.
     private const val MEL_FILE = "nar_mel_filters.bin"
     private const val WINDOW_FILE = "nar_stft_window.bin"
     private const val VOCAB_FILE = "vocab.json"
@@ -228,11 +429,20 @@ object GraniteNarEngine {
     const val VOCAB_SIZE = 100352
     const val HIDDEN = 2048
     const val BLANK = 100257
+
+    /** Bucket padrão (maior): usado no load e como teto de duração. */
     const val T_FIXED = 2000
     const val EMBEDDING_MULTIPLIER = 12.0f
 
     @Volatile private var encoderSession: OrtSession? = null
+
+    /** Variante do LLM carregada em [llmSession] (ou null se nenhuma). */
+    @Volatile private var llmVariante: GraniteNarLlm.Variante? = null
+
+    /** Bucket da sessão de encoder aberta em [encoderSession] (-1 = nenhuma). */
+    @Volatile private var encoderBucket: Int = -1
     @Volatile private var projectorSession: OrtSession? = null
+    @Volatile private var projectorBucket: Int = -1
     @Volatile private var llmSession: OrtSession? = null
     @Volatile private var frontend: GraniteNarFrontend? = null
     @Volatile private var vocab: List<String>? = null
@@ -241,24 +451,38 @@ object GraniteNarEngine {
     @Volatile private var onnxNativesLoaded: Boolean = false
     @Volatile private var lastLoadedBackend: GraniteExecutionBackend? = null
 
+    // Parâmetros do load que o transcribe precisa para abrir buckets sob demanda.
+    @Volatile private var sessDir: File? = null
+    @Volatile private var sessBackend: GraniteExecutionBackend = GraniteExecutionBackend.CPU
+    @Volatile private var sessRequireFullAcceleration: Boolean = true
+
+    /** Variante do LLM escolhida pelo usuário, lida na carga. */
+    @Volatile private var sessVariante: GraniteNarLlm.Variante = GraniteNarLlm.PADRAO
+
     fun lastError(): String = lastErrorMessage
     fun loadedBackend(): GraniteExecutionBackend? = lastLoadedBackend
 
     fun packageDir(context: Context): File =
         File(context.getExternalFilesDir(null) ?: context.filesDir, "granite_nar_models")
 
-    private fun packageFiles(): List<Pair<String, String>> = listOf(
-        ENCODER_FILE to "$PACKAGE_BASE_URL/$ENCODER_FILE",
-        PROJECTOR_FILE to "$PACKAGE_BASE_URL/$PROJECTOR_FILE",
-        PROJECTOR_DATA to "$PACKAGE_BASE_URL/$PROJECTOR_DATA",
-        LLM_FILE to "$PACKAGE_BASE_URL/$LLM_FILE",
-        LLM_DATA to "$PACKAGE_BASE_URL/$LLM_DATA",
-        MEL_FILE to "$PACKAGE_BASE_URL/$MEL_FILE",
-        WINDOW_FILE to "$PACKAGE_BASE_URL/$WINDOW_FILE",
-        VOCAB_FILE to "$PACKAGE_BASE_URL/$VOCAB_FILE",
-        EMBED_FILE to "$PACKAGE_BASE_URL/$EMBED_FILE",
-        CONFIG_FILE to "$PACKAGE_BASE_URL/$CONFIG_FILE",
-    )
+    /**
+     * Pesos e dados independentes de bucket (baixados uma vez), mais o par do LLM da
+     * variante escolhida pelo usuário.
+     */
+    private fun arquivosComuns(variante: GraniteNarLlm.Variante = GraniteNarLlm.PADRAO): List<String> =
+        listOf(
+            ENCODER_PESOS, PROJECTOR_PESOS, variante.onnx, variante.data,
+            MEL_FILE, WINDOW_FILE, VOCAB_FILE, EMBED_FILE, CONFIG_FILE,
+        )
+
+    /** Grafos de encoder e projector por bucket (pequenos: ~35 KB a ~719 KB cada). */
+    private fun arquivosDosBuckets(): List<String> = GraniteNarBuckets.TODOS.flatMap {
+        listOf(GraniteNarBuckets.encoderFile(it), GraniteNarBuckets.projectorFile(it))
+    }
+
+    private fun packageFiles(variante: GraniteNarLlm.Variante = GraniteNarLlm.PADRAO):
+        List<Pair<String, String>> =
+        (arquivosComuns(variante) + arquivosDosBuckets()).map { it to "$PACKAGE_BASE_URL/$it" }
 
     /**
      * Tamanho total do download do pacote (para o diálogo).
@@ -268,13 +492,15 @@ object GraniteNarEngine {
      * [downloadPackage]. A soma fixa abaixo é apenas fallback quando a rede falha.
      */
     fun packageDownloadBytes(context: Context? = null): Long {
+        val variante = context?.let { GraniteNarLlmSettings.selected(it) } ?: GraniteNarLlm.PADRAO
         val dir = context?.let { packageDir(it) }
+        val todos = packageFiles(variante)
         val missing = dir?.let { d ->
-            packageFiles().filter { (name, _) ->
+            todos.filter { (name, _) ->
                 val f = File(d, name)
                 !(f.exists() && f.length() > 0L)
             }
-        } ?: packageFiles()
+        } ?: todos
         val remote = missing.sumOf { (_, url) ->
             runCatching {
                 val conn = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -290,23 +516,37 @@ object GraniteNarEngine {
         return if (remote > 0L) remote else FALLBACK_PACKAGE_BYTES
     }
 
-    /** Soma dos arquivos publicados (fallback quando os HEAD requests falham). */
+    /**
+     * Soma dos arquivos publicados (fallback quando os HEAD requests falham).
+     *
+     * Pacote com pesos COMPARTILHADOS: os 12 grafos de bucket somam ~4,5 MB, e os pesos
+     * (1,09 GB do encoder + 152 MB do projector) sao baixados uma vez so. Total ~4,59 GiB —
+     * ligeiramente MENOR que o pacote anterior de bucket unico (4,73 GiB) e com 6 buckets.
+     * GANHO: audio curto deixa de pagar padding de ate 12x (medido: 9,7x mais lento).
+     */
     internal const val FALLBACK_PACKAGE_BYTES =
-        1_086_629_439L + 159_568_555L + 159_535_104L + 2_149_128L + 3_263_500_288L +
-            82_240L + 2_048L + 1_612_704L + 411_041_792L + 289L
+        1_085_993_664L +        // encoder-pesos.data   (compartilhado pelos 6 buckets)
+            159_535_104L +      // projector-pesos.data (idem)
+            2_149_128L +        // granite-4.1-nar-llm-fp16.onnx
+            3_263_500_288L +    // granite-4.1-nar-llm-fp16.onnx.data
+            82_240L + 2_048L + 1_612_704L + 411_041_792L + 289L +
+            4_313_190L +        // 6 grafos de encoder (t0200..t2000)
+            209_833L            // 6 grafos de projector
 
     fun packageComplete(context: Context): Boolean {
+        val variante = GraniteNarLlmSettings.selected(context)
         val dir = packageDir(context)
-        return packageFiles().all { (name, _) ->
+        return packageFiles(variante).all { (name, _) ->
             val f = File(dir, name)
             f.exists() && f.length() > 0L
         }
     }
 
     fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit) {
+        val variante = GraniteNarLlmSettings.selected(context)
         val dir = packageDir(context).apply { mkdirs() }
         dir.listFiles()?.forEach { if (it.name.endsWith(".download")) it.delete() }
-        val files = packageFiles()
+        val files = packageFiles(variante)
         var totalBytes = 0L
         var copiedBytes = 0L
         val missing = files.filter { (name, _) ->
@@ -359,6 +599,37 @@ object GraniteNarEngine {
                 temp.delete()
             }
         }
+        // Depois de o pacote novo estar completo, os arquivos do pacote antigo viram lixo
+        // (~1,34 GB). `limparPacoteLegado` confere `packageComplete` antes de apagar —
+        // se algo faltou no download, não toca em nada.
+        limparPacoteLegado(context)
+    }
+
+    /**
+     * Remove os arquivos do pacote antigo **somente** quando o pacote novo está completo.
+     *
+     * Devolve quantos bytes foram liberados. É chamada depois de um download bem-sucedido;
+     * se o pacote novo estiver incompleto, não toca em nada (o usuário não pode ficar sem
+     * modelo nenhum por causa de uma limpeza).
+     */
+    fun limparPacoteLegado(context: Context): Long {
+        val dir = packageDir(context)
+        if (!packageComplete(context)) {
+            return 0L
+        }
+        // Variantes do LLM que NÃO estão em uso viram lixo ao trocar (0,4 a 3 GB cada).
+        val ativa = GraniteNarLlmSettings.selected(context)
+        val obsoletos = GraniteNarBuckets.LEGADOS +
+            GraniteNarLlm.TODAS.filter { it.id != ativa.id }.flatMap { listOf(it.onnx, it.data) }
+        var liberados = 0L
+        for (nome in obsoletos) {
+            val f = File(dir, nome)
+            if (f.isFile) {
+                val tamanho = f.length()
+                if (f.delete()) liberados += tamanho
+            }
+        }
+        return liberados
     }
 
     /** Carrega as libs nativas do ONNX Runtime (mesma ponte do GraniteEngine). */
@@ -435,25 +706,107 @@ object GraniteNarEngine {
         onLog("libs QNN carregadas: backend=$qnnBackend ${if (htpArch != null) "arch=v$htpArch" else ""}")
     }
 
+    /** Cria uma sessão ORT a partir de um arquivo do pacote, com o log do padrão. */
+    private fun criarSessao(
+        dir: File,
+        fileName: String,
+        rotulo: String,
+        backend: GraniteExecutionBackend,
+        requireFullAcceleration: Boolean,
+        onLog: (String) -> Unit,
+    ): OrtSession {
+        val env = OrtEnvironment.getEnvironment()
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        val created = createSessionOptions(backend, requireFullAcceleration).use { options ->
+            env.createSession(File(dir, fileName).absolutePath, options)
+        }
+        val elapsed = android.os.SystemClock.elapsedRealtime() - startedAt
+        onLog("ONNX $rotulo criado (${backend.reportLabel}) em ${elapsed}ms")
+        return created
+    }
+
+    /**
+     * Sessão do encoder para [bucket], reutilizando a que já está aberta quando o bucket
+     * coincide.
+     *
+     * ⚠️ Trocar de bucket **fecha** a sessão anterior. Cada encoder ocupa ~1 GB de memória
+     * nativa; manter os 6 vivos estouraria o app. É a mesma classe de problema que travou o
+     * laboratório no PC (4 sessões de encoder simultâneas -> 13 GB de RSS e a máquina
+     * parou de progredir sem erro).
+     */
+    private fun encoderPara(
+        dir: File,
+        bucket: Int,
+        backend: GraniteExecutionBackend,
+        requireFullAcceleration: Boolean,
+        onLog: (String) -> Unit,
+    ): OrtSession {
+        encoderSession?.let { if (encoderBucket == bucket) return it }
+        encoderSession?.close()
+        encoderSession = null
+        encoderBucket = -1
+        val nova = criarSessao(dir, GraniteNarBuckets.encoderFile(bucket), "encoder t$bucket",
+            backend, requireFullAcceleration, onLog)
+        encoderSession = nova
+        encoderBucket = bucket
+        return nova
+    }
+
+    /** Sessão do projector para [bucket]; mesma política de troca do encoder. */
+    private fun projectorPara(
+        dir: File,
+        bucket: Int,
+        backend: GraniteExecutionBackend,
+        requireFullAcceleration: Boolean,
+        onLog: (String) -> Unit,
+    ): OrtSession {
+        projectorSession?.let { if (projectorBucket == bucket) return it }
+        projectorSession?.close()
+        projectorSession = null
+        projectorBucket = -1
+        val nova = criarSessao(dir, GraniteNarBuckets.projectorFile(bucket), "projector t$bucket",
+            backend, requireFullAcceleration, onLog)
+        projectorSession = nova
+        projectorBucket = bucket
+        return nova
+    }
+
+    /**
+     * Sessão do LLM para [variante], reutilizando a aberta quando coincide.
+     *
+     * Trocar de variante **fecha** a anterior: as três ocupam de 800 MB a 3 GB de memória
+     * nativa cada — manter duas vivas é exatamente a classe de problema que travou o
+     * laboratório (sessões simultâneas estourando a RAM, sem erro visível).
+     */
+    private fun llmPara(
+        dir: File,
+        variante: GraniteNarLlm.Variante,
+        backend: GraniteExecutionBackend,
+        requireFullAcceleration: Boolean,
+        onLog: (String) -> Unit,
+    ): OrtSession {
+        llmSession?.let { if (llmVariante?.id == variante.id) return it }
+        llmSession?.close()
+        llmSession = null
+        llmVariante = null
+        val nova = criarSessao(dir, variante.onnx, "llm editor (${variante.rotulo})",
+            backend, requireFullAcceleration, onLog)
+        llmSession = nova
+        llmVariante = variante
+        return nova
+    }
+
     private fun createSessions(
         dir: File,
         backend: GraniteExecutionBackend,
         requireFullAcceleration: Boolean,
         onLog: (String) -> Unit,
     ) {
-        val env = OrtEnvironment.getEnvironment()
-        fun create(name: String, fileName: String): OrtSession {
-            val startedAt = android.os.SystemClock.elapsedRealtime()
-            val created = createSessionOptions(backend, requireFullAcceleration).use { options ->
-                env.createSession(File(dir, fileName).absolutePath, options)
-            }
-            val elapsed = android.os.SystemClock.elapsedRealtime() - startedAt
-            onLog("ONNX $name criado (${backend.reportLabel}) em ${elapsed}ms")
-            return created
-        }
-        encoderSession = create("encoder", ENCODER_FILE)
-        projectorSession = create("projector", PROJECTOR_FILE)
-        llmSession = create("llm editor", LLM_FILE)
+        // Abre o bucket PADRÃO (T_FIXED) na carga: valida que encoder e projector abrem e
+        // mantém o comportamento anterior. Buckets menores entram sob demanda no transcribe.
+        encoderPara(dir, T_FIXED, backend, requireFullAcceleration, onLog)
+        projectorPara(dir, T_FIXED, backend, requireFullAcceleration, onLog)
+        llmPara(dir, sessVariante, backend, requireFullAcceleration, onLog)
     }
 
     fun load(
@@ -473,7 +826,14 @@ object GraniteNarEngine {
             release()
 
             val dir = packageDir(context)
-            for (f in listOf(ENCODER_FILE, PROJECTOR_FILE, PROJECTOR_DATA, LLM_FILE, LLM_DATA, MEL_FILE, WINDOW_FILE, VOCAB_FILE, EMBED_FILE)) {
+            // Obrigatórios: os dados comuns + o bucket PADRÃO. Buckets menores são
+            // opcionais — o app escolhe o menor que estiver instalado e caiba no áudio.
+            val obrigatorios = arquivosComuns(GraniteNarLlmSettings.selected(context)) +
+                listOf(
+                    GraniteNarBuckets.encoderFile(T_FIXED),
+                    GraniteNarBuckets.projectorFile(T_FIXED),
+                )
+            for (f in obrigatorios) {
                 if (!File(dir, f).exists()) {
                     lastErrorMessage = "arquivo do modelo ausente: $f"
                     return false
@@ -497,6 +857,11 @@ object GraniteNarEngine {
             if (backend.accelerated) {
                 try {
                     prepareAcceleratedBackend(context, backend, onLog)
+                    // Guarda os parâmetros: o transcribe abre buckets SOB DEMANDA.
+                    sessDir = dir
+                    sessBackend = backend
+                    sessRequireFullAcceleration = requireFullAcceleration
+                    sessVariante = GraniteNarLlmSettings.selected(context)
                     createSessions(dir, backend, requireFullAcceleration, onLog)
                     lastLoadedBackend = backend
                     return true
@@ -514,6 +879,10 @@ object GraniteNarEngine {
                 }
             }
 
+            sessDir = dir
+            sessBackend = GraniteExecutionBackend.CPU
+            sessRequireFullAcceleration = false
+            sessVariante = GraniteNarLlmSettings.selected(context)
             createSessions(
                 dir,
                 GraniteExecutionBackend.CPU,
@@ -542,7 +911,12 @@ object GraniteNarEngine {
         }
     }
 
-    /** Transcreve um WAV 16 kHz mono (single shot até T_FIXED frames ~37,5s). */
+    /**
+     * Transcreve um WAV 16 kHz mono (single shot).
+     *
+     * O bucket do encoder/projector é escolhido pelo tamanho do áudio (o menor que caiba —
+     * ver [GraniteNarBuckets]); o teto de duração continua sendo [T_FIXED] frames.
+     */
     fun transcribeFile(
         wavFile: File,
         onProgress: (Int) -> Unit = {},
@@ -562,11 +936,9 @@ object GraniteNarEngine {
         onProgress: (Int) -> Unit,
         onLog: (String) -> Unit,
     ): String {
-        val enc = encoderSession ?: throw IllegalStateException("encoder não carregado")
-        val proj = projectorSession ?: throw IllegalStateException("projector não carregado")
-        val llm = llmSession ?: throw IllegalStateException("llm não carregado")
         val fe = frontend ?: throw IllegalStateException("front-end não carregado")
         val pieces = vocab ?: throw IllegalStateException("vocab não carregado")
+        val dir = sessDir ?: throw IllegalStateException("pacote não carregado")
 
         val totalStartedAt = android.os.SystemClock.elapsedRealtime()
         var stageStartedAt = totalStartedAt
@@ -580,19 +952,29 @@ object GraniteNarEngine {
         val features = fe.compute(wav)
         markStage("frontend")
         if (features.frames == 0) return ""
-        val realFrames = min(features.frames, T_FIXED)
-        onLog("NAR entrada: samples=${wav.size} frames=${features.frames} effective_frames=$realFrames")
+        onLog("NAR entrada: samples=${wav.size} frames=${features.frames}")
         if (features.frames > T_FIXED) {
             throw IllegalStateException("áudio muito longo para o Granite 4.1 NAR nesta versão (máx ~${T_FIXED * 160 / 16000}s)")
         }
+        val realFrames = features.frames
 
-        // Pad até T_FIXED e roda o encoder.
-        val input = FloatArray(T_FIXED * GraniteNarFrontend.INPUT_DIM)
+        // Bucket = MENOR que caiba. O padding até um T maior NÃO é neutro: a máscara de
+        // atenção do grafo é estática, então os zeros entram na atenção. Medido em 10/09:
+        // 1 piora / 7 empata / 0 melhora, com perda de palavra, e 9,7x mais lento.
+        val bucket = GraniteNarBuckets.escolhe(realFrames)
+        val enc = encoderPara(dir, bucket, sessBackend, sessRequireFullAcceleration, onLog)
+        val proj = projectorPara(dir, bucket, sessBackend, sessRequireFullAcceleration, onLog)
+        // A variante pode ter sido trocada nas configurações: `llmPara` fecha a anterior.
+        val llm = llmPara(dir, sessVariante, sessBackend, sessRequireFullAcceleration, onLog)
+        onLog("NAR bucket: frames=$realFrames -> T=$bucket")
+
+        // Pad até o BUCKET escolhido (não mais até T_FIXED fixo).
+        val input = FloatArray(bucket * GraniteNarFrontend.INPUT_DIM)
         for (r in 0 until realFrames) {
             System.arraycopy(features.data, r * features.dim, input, r * features.dim, features.dim)
         }
         val env = OrtEnvironment.getEnvironment()
-        val inputTensor = OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(input), longArrayOf(1L, T_FIXED.toLong(), GraniteNarFrontend.INPUT_DIM.toLong()))
+        val inputTensor = OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(input), longArrayOf(1L, bucket.toLong(), GraniteNarFrontend.INPUT_DIM.toLong()))
         val encOut = enc.run(mapOf("input_features" to inputTensor), setOf("encoder_bpe_logits", "multilayer_features"))
         inputTensor.close()
         markStage("encoder")
@@ -613,7 +995,7 @@ object GraniteNarEngine {
         onProgress(40)
 
         // Projector -> audio_embeds [402, 2048]; válidos = realFrames//5; /12 (scale).
-        val projTensor = OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(multilayerArr), longArrayOf(1L, T_FIXED.toLong(), 4096L))
+        val projTensor = OnnxTensor.createTensor(env, java.nio.FloatBuffer.wrap(multilayerArr), longArrayOf(1L, bucket.toLong(), 4096L))
         val projOut = proj.run(mapOf("multilayer_features" to projTensor), setOf("audio_embeds"))
         projTensor.close()
         val audioEmbeds = (projOut["audio_embeds"].get() as OnnxTensor).floatBuffer
@@ -688,8 +1070,11 @@ object GraniteNarEngine {
         try { projectorSession?.close() } catch (_: Throwable) {}
         try { llmSession?.close() } catch (_: Throwable) {}
         encoderSession = null
+        encoderBucket = -1
         projectorSession = null
+        projectorBucket = -1
         llmSession = null
+        llmVariante = null
     }
 
     fun release() {

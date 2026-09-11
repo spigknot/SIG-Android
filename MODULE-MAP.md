@@ -119,6 +119,7 @@ também é bloqueado.
 | `ImeiApiSettings.kt` | Chave da consulta de IMEI. |
 | `PartsExtractionSettings.kt` | Método/modelo/config da extração de partes. |
 | `GraniteParallelismSettings.kt` | Paralelismo do Granite. |
+| `GraniteNarLlmSettings.kt` | Variante do LLM do NAR escolhida pelo usuário (prefs). |
 | `ConversionParallelismSettings.kt` | Paralelismo das conversões. |
 | `NameDatabaseStore.kt` | Banco local de nomes (load/add/remove). |
 | `AppCacheManager.kt` | Limpeza de caches por idade e tamanho. |

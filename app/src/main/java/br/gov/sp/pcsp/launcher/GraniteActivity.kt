@@ -138,6 +138,9 @@ class GraniteActivity : AppCompatActivity() {
     private lateinit var buttonModel: TextView
     private lateinit var buttonBackend: TextView
 
+    /** Escolha da variante do LLM do NAR (só visível com o NAR selecionado). */
+    private lateinit var buttonNarVariante: TextView
+
     // ---- estado ----
     private val selectedItems = mutableListOf<MediaItem>()
     private val tempOutputFiles = mutableListOf<File>()
@@ -289,6 +292,7 @@ class GraniteActivity : AppCompatActivity() {
 
         // modelo/chip (Granite)
         graniteModelRow = findViewById(R.id.granite_model_row)
+        buttonNarVariante = findViewById(R.id.button_nar_variante)
         buttonModel = findViewById(R.id.button_model)
         buttonBackend = findViewById(R.id.button_backend)
         buttonModel.text = "5.0 Turbo"
@@ -313,6 +317,7 @@ class GraniteActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_select_media).setOnClickListener { showSourceMenu(it) }
         buttonModel.setOnClickListener { showModelMenu() }
         buttonBackend.setOnClickListener { showBackendMenu() }
+        buttonNarVariante.setOnClickListener { showNarVarianteDialog() }
         buttonTranscribe?.setOnClickListener {
             if (isTranscribing || isProcessing) cancelTranscription() else startGraniteTranscription()
         }
@@ -872,6 +877,80 @@ class GraniteActivity : AppCompatActivity() {
 
     // ---- menus modelo/chip (Granite) ----
 
+    /** Rótulo curto da variante atual, para caber no botão. */
+    private fun narVarianteRotuloCurto(): String =
+        when (GraniteNarLlmSettings.selected(this).id) {
+            GraniteNarLlm.FLOAT.id -> "Máxima"
+            GraniteNarLlm.OITO_BITS.id -> "Equilibrada"
+            GraniteNarLlm.QUATRO_BITS.id -> "Leve"
+            else -> GraniteNarLlmSettings.selected(this).rotulo
+        }
+
+    /**
+     * Diálogo de escolha da variante do LLM do NAR.
+     *
+     * Mostra tamanho, velocidade e efeito na qualidade de CADA opção — a ideia é que a
+     * escolha seja informada, como no Whisper (tiny/small/medium/turbo), em vez de o usuário
+     * descobrir a diferença depois. Os números vêm de medição no laboratório; o ganho de
+     * velocidade aparece como FATOR (os tempos absolutos do PC não valem no aparelho).
+     */
+    private fun showNarVarianteDialog() {
+        val atual = GraniteNarLlmSettings.selected(this)
+        val linhas: List<Pair<String, GraniteNarLlm.Variante>> =
+            GraniteNarLlm.TODAS.map { v ->
+                val partes = mutableListOf(v.tamanhoLegivel())
+                v.ganhoLegivel().takeIf { it.isNotEmpty() }?.let { partes.add(it) }
+                partes.add(v.qualidadeLegivel())
+                val detalhe = partes.joinToString(" · ")
+                val marca = if (v.id == atual.id) "✓ " else ""
+                val aviso = if (v.excedeCriterioPtBr()) "\n      (medido em pt-BR: levemente menor)" else ""
+                "$marca${v.rotulo} — $detalhe$aviso" to v
+            }
+
+        val rotulos = linhas.map { it.first }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Qualidade do Granite 4.1 NAR")
+            .setItems(rotulos) { _, indice ->
+                val escolhida = linhas[indice].second
+                if (escolhida.id == atual.id) return@setItems
+                if (GraniteNarLlmSettings.select(this, escolhida.id)) {
+                    // Trocar de variante muda os arquivos do pacote: libera as sessões para a
+                    // próxima transcrição carregar a nova, e informa o estado real.
+                    GraniteNarEngine.release()
+                    buttonNarVariante.text = narVarianteRotuloCurto()
+                    if (GraniteNarEngine.packageComplete(this)) {
+                        status.text = "Qualidade: ${escolhida.rotulo} (${escolhida.tamanhoLegivel()})"
+                    } else {
+                        // Sem o par da variante, não há como transcrever: oferecer o download
+                        // AGORA, com o tamanho da escolha (não do pacote inteiro).
+                        status.text = "Qualidade: ${escolhida.rotulo} — modelo ainda não baixado"
+                        confirmNarVarianteDownload(escolhida)
+                    }
+                }
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    /** Confirma e baixa o pacote do NAR já com a variante recém-escolhida. */
+    private fun confirmNarVarianteDownload(variante: GraniteNarLlm.Variante) {
+        val faltam = formatBytes(GraniteNarEngine.packageDownloadBytes(this))
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("Baixar ${variante.rotulo.lowercase()}")
+            .setMessage(
+                "Para usar \"${variante.rotulo}\" faltam $faltam.\n\n" +
+                    "Tamanho do LLM desta opção: ${variante.tamanhoLegivel()}" +
+                    variante.ganhoLegivel().takeIf { it.isNotEmpty() }
+                        ?.let { " · $it" }.orEmpty() +
+                    "\n\nO restante do modelo já está no aparelho e não será baixado de novo."
+            )
+            .setNegativeButton("Depois", null)
+            .setPositiveButton("Baixar") { _, _ ->
+                downloadPackage(selectedModel, onSuccess = { selectModel(selectedModel) })
+            }
+            .show()
+    }
+
     private fun showModelMenu() {
         PopupMenu(this, buttonModel).apply {
             // Mesmo padrão do Whisper: "✓ " quando o modelo já está baixado
@@ -905,6 +984,9 @@ class GraniteActivity : AppCompatActivity() {
     private fun selectModel(model: String) {
         selectedModel = model
         buttonModel.text = if (model == MODEL_NAR) "4.1 NAR" else "5.0 Turbo"
+        // A variante do LLM só existe no NAR (o Turbo tem outro pacote).
+        buttonNarVariante.visibility = if (model == MODEL_NAR) View.VISIBLE else View.GONE
+        if (model == MODEL_NAR) buttonNarVariante.text = narVarianteRotuloCurto()
         if (model == MODEL_NAR && selectedBackend.accelerated) {
             selectedBackend = GraniteExecutionBackend.CPU
             buttonBackend.text = GraniteExecutionBackend.CPU.shortLabel

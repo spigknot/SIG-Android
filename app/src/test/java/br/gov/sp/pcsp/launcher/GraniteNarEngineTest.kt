@@ -169,4 +169,171 @@ class GraniteNarEngineTest {
         val out = fe.compute(FloatArray(16000) { 0f })
         assertTrue(out.data.all { it.isFinite() })
     }
+
+    // ---- Seleção de bucket (vacinado em 10/09: padding piora e nunca melhora) ----
+
+    @Test
+    fun `bucket picks the smallest that fits`() {
+        assertEquals(200, GraniteNarBuckets.escolhe(165))
+        assertEquals(200, GraniteNarBuckets.escolhe(1))
+        assertEquals(200, GraniteNarBuckets.escolhe(200))
+    }
+
+    @Test
+    fun `bucket steps up when the audio does not fit`() {
+        assertEquals(400, GraniteNarBuckets.escolhe(201))
+        assertEquals(400, GraniteNarBuckets.escolhe(400))
+        assertEquals(800, GraniteNarBuckets.escolhe(401))
+        assertEquals(1200, GraniteNarBuckets.escolhe(801))
+        assertEquals(1600, GraniteNarBuckets.escolhe(1201))
+        assertEquals(2000, GraniteNarBuckets.escolhe(1601))
+    }
+
+    @Test
+    fun `bucket never returns less than the audio needs when one fits`() {
+        // A regra que a medição de 10/09 justifica: padding entra na atenção (máscara
+        // estática) e custa qualidade + 9,7x de tempo. Nunca escolher bucket < realFrames
+        // enquanto houver um que caiba.
+        for (t in 1..2000) {
+            val b = GraniteNarBuckets.escolhe(t)
+            assertTrue("bucket $b < frames $t", b >= t)
+        }
+    }
+
+    @Test
+    fun `bucket falls back to the largest when nothing fits`() {
+        // Áudio acima do maior bucket: devolve o maior e o chamador decide (hoje: erro claro).
+        assertEquals(2000, GraniteNarBuckets.escolhe(2001))
+        assertEquals(2000, GraniteNarBuckets.escolhe(99_999))
+    }
+
+    @Test
+    fun `bucket respects a custom available set`() {
+        // Se só um subconjunto estiver instalado, a escolha usa o que existe.
+        val soPares = intArrayOf(400, 800)
+        assertEquals(400, GraniteNarBuckets.escolhe(200, soPares))
+        assertEquals(800, GraniteNarBuckets.escolhe(500, soPares))
+        assertEquals(800, GraniteNarBuckets.escolhe(900, soPares))   // nada cabe -> maior
+    }
+
+    @Test
+    fun `legacy cleanup never touches a file the new package needs`() {
+        // Invariante que protege o usuário: a limpeza do pacote antigo não pode apagar
+        // nada que o pacote NOVO precise. Se alguém adicionar um nome à lista legada que
+        // hoje é usado, este teste quebra.
+        val doPacoteNovo = GraniteNarBuckets.TODOS.flatMap {
+            listOf(GraniteNarBuckets.encoderFile(it), GraniteNarBuckets.projectorFile(it))
+        } + listOf(
+            "encoder-pesos.data", "projector-pesos.data",
+            "granite-4.1-nar-llm-fp16.onnx", "granite-4.1-nar-llm-fp16.onnx.data",
+            "nar_mel_filters.bin", "nar_stft_window.bin", "vocab.json",
+            "nar_embed_tokens.bin", "preprocessor_config.json",
+        )
+        val colisao = GraniteNarBuckets.LEGADOS.intersect(doPacoteNovo.toSet())
+        assertTrue("a limpeza apagaria arquivo do pacote novo: $colisao", colisao.isEmpty())
+    }
+
+    @Test
+    fun `legacy list is exactly the old single-bucket package`() {
+        assertEquals(3, GraniteNarBuckets.LEGADOS.size)
+        assertTrue(GraniteNarBuckets.LEGADOS.contains("granite-4.1-nar-encoder-fp16.onnx"))
+        // nomes com sufixo de bucket NUNCA são legados — são o pacote atual
+        assertTrue(GraniteNarBuckets.LEGADOS.none { it.contains("-t0") || it.contains("-t1") || it.contains("-t2") })
+    }
+
+    @Test
+    fun `bucket file names match the exported artifacts`() {
+        assertEquals("granite-4.1-nar-encoder-t0200-fp16.onnx", GraniteNarBuckets.encoderFile(200))
+        assertEquals("granite-4.1-nar-encoder-t2000-fp16.onnx", GraniteNarBuckets.encoderFile(2000))
+        assertEquals("granite-4.1-nar-projector-t0800-fp16.onnx", GraniteNarBuckets.projectorFile(800))
+        // zero-padding de 4 dígitos, como os arquivos publicados
+        assertEquals("granite-4.1-nar-encoder-t0040-fp16.onnx", GraniteNarBuckets.encoderFile(40))
+    }
+
+    // ---- Variantes do LLM (escolha do usuário; dados mostrados na tela) ----
+
+    @Test
+    fun `llm variants are ordered from heaviest to lightest`() {
+        val tamanhos = GraniteNarLlm.TODAS.map { it.bytes }
+        assertEquals(tamanhos.sortedDescending(), tamanhos)
+        assertTrue("o float deve ser o maior", GraniteNarLlm.FLOAT.bytes == tamanhos.max())
+        // A faixa termina no 4-bit: 841 MB é a MENOR oferecida.
+        assertEquals(GraniteNarLlm.QUATRO_BITS.bytes, tamanhos.min())
+    }
+
+    @Test
+    fun `llm two bit variant is not offered to the user`() {
+        // Medido em 11/09: 0/82 textos iguais, CER 0,79 (24,6x o float), 82/82 acima de 0,30.
+        // Não é qualidade menor — é texto destruído. Não pode aparecer na tela.
+        assertTrue(
+            "o 2-bit nao pode estar na lista oferecida",
+            GraniteNarLlm.TODAS.none { it.id == GraniteNarLlm.DOIS_BITS_REPROVADO.id },
+        )
+        // mas fica registrado, com o número medido, para ninguém tentar de novo
+        assertTrue(GraniteNarLlm.DOIS_BITS_REPROVADO.cerDelta > 0.5)
+        assertTrue(GraniteNarLlm.DOIS_BITS_REPROVADO.excedeCriterioPtBr())
+    }
+
+    @Test
+    fun `llm variant ids are unique and stable`() {
+        val ids = GraniteNarLlm.TODAS.map { it.id }
+        assertEquals(ids.size, ids.toSet().size)
+        // os ids aparecem em nome de arquivo publicado: não podem mudar sem republicar
+        assertTrue(ids.contains("fp16"))
+        assertTrue(ids.contains("int8b-blk128"))
+        assertTrue(ids.contains("int4b-blk128"))
+    }
+
+    @Test
+    fun `llm variant file names follow the device contract`() {
+        val v = GraniteNarLlm.QUATRO_BITS
+        assertEquals("granite-4.1-nar-llm-int4b-blk128.onnx", v.onnx)
+        // o `.data` é o `external_data.location` gravado no artefato — precisa casar
+        assertEquals("granite-4.1-nar-llm-int4b-blk128.onnx.data", v.data)
+    }
+
+    @Test
+    fun `llm unknown id falls back to the highest quality`() {
+        // Uma preferência corrompida não pode deixar o app sem modelo.
+        assertEquals(GraniteNarLlm.FLOAT.id, GraniteNarLlm.porId(null).id)
+        assertEquals(GraniteNarLlm.FLOAT.id, GraniteNarLlm.porId("").id)
+        assertEquals(GraniteNarLlm.FLOAT.id, GraniteNarLlm.porId("nao-existe").id)
+        assertEquals(GraniteNarLlm.QUATRO_BITS.id, GraniteNarLlm.porId("int4b-blk128").id)
+    }
+
+    /** Normaliza o separador decimal: a formatação usa a locale do sistema (pt-BR = vírgula). */
+    private fun num(s: String) = s.replace(',', '.')
+
+    @Test
+    fun `llm sizes are human readable for the dialog`() {
+        assertEquals("3.3 GB", num(GraniteNarLlm.FLOAT.tamanhoLegivel()))
+        // 841,6 MB -> "842 MB" e 433,7 MB -> "434 MB" (arredonda, não trunca)
+        assertEquals("842 MB", num(GraniteNarLlm.QUATRO_BITS.tamanhoLegivel()))
+    }
+
+    @Test
+    fun `llm speed label is empty for the reference and informative for the others`() {
+        // O float é a referência: mostrar "1.0× mais rápido" seria ruído.
+        assertEquals("", GraniteNarLlm.FLOAT.ganhoLegivel())
+        assertEquals("4.3× mais rápido", num(GraniteNarLlm.QUATRO_BITS.ganhoLegivel()))
+    }
+
+    @Test
+    fun `llm quality label warns when pt-br exceeds the plan criterion`() {
+        // Este é o achado que motivou a escolha explícita: o 4-bit excede o critério do
+        // plano (+0,005) JUSTAMENTE em pt-BR, o idioma de uso. A tela precisa dizer isso.
+        assertTrue(GraniteNarLlm.QUATRO_BITS.excedeCriterioPtBr())
+        assertTrue(GraniteNarLlm.QUATRO_BITS.qualidadeLegivel().contains("pt-BR"))
+        // O float é a referência: sem aviso.
+        assertTrue(!GraniteNarLlm.FLOAT.excedeCriterioPtBr())
+        assertEquals("mesma qualidade", GraniteNarLlm.FLOAT.qualidadeLegivel())
+    }
+
+    @Test
+    fun `llm variant files never collide with the legacy cleanup list`() {
+        // Mesma classe de invariante dos buckets: a limpeza não pode apagar a variante em uso.
+        val arquivosDeVariantes = GraniteNarLlm.TODAS.flatMap { listOf(it.onnx, it.data) }
+        val colisao = GraniteNarBuckets.LEGADOS.intersect(arquivosDeVariantes.toSet())
+        assertTrue("a limpeza apagaria arquivo de variante: $colisao", colisao.isEmpty())
+    }
 }
