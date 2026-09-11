@@ -10,13 +10,9 @@ import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sin
 
 /**
  * Granite Speech 4.1 2B NAR — engine ONNX FP16 (pipeline NLE / non-autoregressive).

@@ -18,8 +18,9 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent))
-from common import (atomic_write_json, base_parser, print_step, record_step,  # noqa: E402
-                    sha256_bytes, sha256_file, step_status, work_dirs)
+from common import (atomic_write_json, base_parser, build_insertion_slots,  # noqa: E402
+                    print_step, record_step, sha256_bytes, sha256_file,
+                    step_status, work_dirs)
 
 BLANK = 100257
 VOCAB = 100352
@@ -48,7 +49,7 @@ def ctc_collapse(logits: np.ndarray) -> list[int]:
 
 def build_slots(ctc_tokens: list[int]) -> list[int]:
     """Delegado: a regra (blank intercalado) mora em `common.build_insertion_slots`."""
-    return common.build_insertion_slots(ctc_tokens, BLANK, MIN_EDIT)
+    return build_insertion_slots(ctc_tokens, BLANK, MIN_EDIT)
 
 
 def main() -> int:

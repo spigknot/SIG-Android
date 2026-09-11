@@ -23,11 +23,8 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
-import android.text.SpannableString
-import android.text.Spanned
 import android.text.TextUtils
 import android.text.method.ScrollingMovementMethod
-import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
@@ -36,9 +33,7 @@ import android.view.TextureView
 import android.view.View
 import android.widget.CheckBox
 import android.widget.EditText
-import android.widget.FrameLayout
 import android.widget.ImageButton
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.ProgressBar
@@ -53,7 +48,6 @@ import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -63,7 +57,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutorCompletionService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.roundToLong
 
 /**
  * STT local com Granite Speech 5.0 TurboCTC e Granite 4.1 NAR (ONNX).

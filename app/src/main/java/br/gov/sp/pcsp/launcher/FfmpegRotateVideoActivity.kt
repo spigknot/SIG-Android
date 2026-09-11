@@ -18,8 +18,6 @@ import android.text.Editable
 import android.text.SpannableString
 import android.text.TextWatcher
 import android.text.style.ForegroundColorSpan
-import android.provider.OpenableColumns
-import android.provider.Settings
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView

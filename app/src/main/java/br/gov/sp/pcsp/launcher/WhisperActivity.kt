@@ -21,8 +21,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.DocumentsContract
-import android.provider.OpenableColumns
-import android.provider.Settings
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.Gravity
