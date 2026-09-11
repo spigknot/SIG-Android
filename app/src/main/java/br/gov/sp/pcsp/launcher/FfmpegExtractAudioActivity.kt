@@ -1785,11 +1785,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         val bitrate: String
     )
 
-    private data class SaveResult(
-        val uri: Uri?,
-        val error: String?
-    )
-
     private enum class AudioPreset {
         NONE,
         LOCAL,

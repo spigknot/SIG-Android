@@ -67,6 +67,7 @@ object NameDatabaseStore {
         return true
     }
 
+    /** Mantido de propósito (decisão do dono, 11/09/2026): par do addName; a UI atual não expõe remoção. Não remover em limpezas. */
     @Synchronized
     fun removeName(context: Context, value: String): Boolean {
         val target = normalize(value)

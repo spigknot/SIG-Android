@@ -48,6 +48,7 @@ object PromptTemplateStore {
 
     fun partsSystemPrompt(): String = readPrompt("partes_system.txt")
 
+    /** Mantido de propósito (decisão do dono, 11/09/2026): variante a partir da transcrição (o fluxo atual usa FromHistory). Não remover em limpezas. */
     fun partsUserPromptFromTranscription(transcription: String): String =
         readPrompt("partes_user_botao_historico.txt")
             .replace(TRANSCRIPT_TRIPLE_MARKER, transcription.trim())

@@ -372,6 +372,7 @@ object SttResponseParsers {
         }
     }
 
+    /** Linha de envelope SSE (data:/event:/id:/retry:/[DONE]). Código morto intencional, preservado e travado por teste — não remover. */
     fun isServerEnvelopeLine(rawLine: String): Boolean {
         val line = rawLine.trim()
         return line.startsWith("data:") ||

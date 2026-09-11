@@ -45,6 +45,7 @@ object TranscriptAssistantClient {
         return call
     }
 
+    /** Mantida de propósito (decisão do dono, 11/09/2026): variante que devolve histórico+nomes; o fluxo atual usa requestHistory. Não remover em limpezas. */
     fun requestHistoryAndNames(
         client: OkHttpClient,
         serverConfig: ModelServerStore.Config,

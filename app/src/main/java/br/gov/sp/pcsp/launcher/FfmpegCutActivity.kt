@@ -2176,9 +2176,4 @@ class FfmpegCutActivity : AppCompatActivity() {
         val failureMessage: String,
         val reencodeRequiredReason: String? = null
     )
-
-    private data class SaveResult(
-        val uri: Uri?,
-        val error: String?
-    )
 }

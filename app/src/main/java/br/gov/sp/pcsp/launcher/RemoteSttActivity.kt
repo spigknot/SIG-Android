@@ -884,10 +884,6 @@ class RemoteSttActivity : AppCompatActivity() {
         activateServer(entry.ip, orderedEntries.map { it.ip }, 0)
     }
 
-    private fun serverNameForIp(ip: String): String {
-        return serverEntries.firstOrNull { it.ip == ip }?.name ?: ip
-    }
-
     private fun testManualServerIp() {
         val ip = manualIpOrNull()
         if (ip == null) {

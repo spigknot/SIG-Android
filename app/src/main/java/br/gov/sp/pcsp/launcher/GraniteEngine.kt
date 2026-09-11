@@ -463,17 +463,12 @@ object GraniteEngine {
     /** Nome do arquivo do modelo ONNX F32 (CPU). Usado pela Activity para conferência. */
         fun modelFileName(): String = MODEL_F32_FILE_NAME
 
-        fun modelDataFile(context: Context): File = File(packageDir(context), MODEL_F32_DATA_FILE_NAME)
-
         /** Modelo FP16 para backends acelerados (GPU/NPU via QNN). */
         fun modelFileFp16(context: Context): File = File(packageDir(context), MODEL_FP16_FILE_NAME)
-        fun modelDataFileFp16(context: Context): File = File(packageDir(context), MODEL_FP16_DATA_FILE_NAME)
 
         /** Seleciona o arquivo .onnx conforme o backend. */
         fun modelFileForBackend(context: Context, backend: GraniteExecutionBackend): File =
             if (backend.accelerated) modelFileFp16(context) else modelFile(context)
-
-        fun isDownloaded(context: Context): Boolean = packageComplete(context)
 
         /** True quando todos os arquivos do pacote existem e não estão vazios. */
         fun packageComplete(context: Context): Boolean {

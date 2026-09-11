@@ -2314,6 +2314,4 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         HFLIP,
         VFLIP
     }
-
-    private data class SaveResult(val uri: Uri?, val error: String?)
 }
