@@ -589,22 +589,33 @@ object GraniteNarEngine {
         for ((name, url) in missing) {
             val dest = File(dir, name)
             val temp = File(dir, "$name.download")
+            // Download RETOMAVEL: se sobrou um `.download` de uma tentativa anterior, pede
+            // apenas o restante (`Range: bytes=N-`). Com 4,6 GiB e rede instavel, reiniciar
+            // do zero a cada queda inviabiliza a instalacao.
+            var jaTemos = if (temp.isFile) temp.length() else 0L
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 15000
                 readTimeout = 120000
+                if (jaTemos > 0L) setRequestProperty("Range", "bytes=$jaTemos-")
             }
-            val total = connection.contentLengthLong.coerceAtLeast(0L)
+            val codigo = connection.responseCode
+            if (codigo == HttpURLConnection.HTTP_OK && jaTemos > 0L) {
+                // O servidor ignorou o Range e vai mandar tudo: recomeca para nao concatenar.
+                jaTemos = 0L
+                temp.delete()
+            }
+            val restante = connection.contentLengthLong.coerceAtLeast(0L)
             connection.inputStream.use { input ->
-                FileOutputStream(temp).use { output ->
+                FileOutputStream(temp, jaTemos > 0L).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var copied = 0L
+                    var copied = jaTemos
                     while (true) {
                         val read = input.read(buffer)
                         if (read < 0) break
                         output.write(buffer, 0, read)
                         copied += read
                         copiedBytes += read
-                        if (total > 0L) {
+                        if (restante > 0L) {
                             val percent = ((copiedBytes * 100L) / totalBytes.coerceAtLeast(1L)).coerceIn(0L, 100L).toInt()
                             onProgress(percent, copiedBytes / 1048576L)
                         } else {
@@ -613,6 +624,7 @@ object GraniteNarEngine {
                     }
                 }
             }
+            connection.disconnect()
             // Verifica ANTES de tornar o arquivo definitivo: o `.download` só vira oficial se
             // conferir. Falha = apaga e aborta com mensagem clara (em vez de ativar em
             // silêncio um modelo que não transcreveria).
