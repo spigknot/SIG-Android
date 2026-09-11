@@ -434,6 +434,15 @@ object GraniteNarEngine {
     const val T_FIXED = 2000
     const val EMBEDDING_MULTIPLIER = 12.0f
 
+    /**
+     * Folga exigida além do tamanho do download antes de começar.
+     *
+     * O arquivo é escrito como `.download` e renomeado no fim — durante o download o espaço
+     * ocupado é o do arquivo parcial, não o dobro. A margem cobre overhead do sistema de
+     * arquivos e a verificação de hash (que lê o arquivo inteiro).
+     */
+    private const val MARGEM_DISCO_BYTES = 256L * 1024L * 1024L
+
     @Volatile private var encoderSession: OrtSession? = null
 
     /** Variante do LLM carregada em [llmSession] (ou null se nenhuma). */
@@ -586,6 +595,20 @@ object GraniteNarEngine {
             }.getOrDefault(0L)
         }
         if (totalBytes <= 0L) totalBytes = fallbackPackageBytes(variante)
+
+        // LIMITE DE DISCO (Fase 7): com o pacote em 2,3-4,6 GiB conforme a variante, disco
+        // cheio no meio do download deixa um `.download` inutil e o usuário sem modelo.
+        // Recusa ANTES de começar, com os números reais (quanto falta x quanto há).
+        val livre = dir.usableSpace
+        val necessario = totalBytes + MARGEM_DISCO_BYTES
+        if (livre > 0L && livre < necessario) {
+            throw IllegalStateException(
+                "Espaço insuficiente para baixar o modelo: são necessários " +
+                    "${necessario / 1048576L} MB e há ${livre / 1048576L} MB livres. " +
+                    "Libere espaço e tente novamente."
+            )
+        }
+
         for ((name, url) in missing) {
             val dest = File(dir, name)
             val temp = File(dir, "$name.download")
