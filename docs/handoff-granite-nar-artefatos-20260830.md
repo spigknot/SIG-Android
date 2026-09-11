@@ -206,6 +206,21 @@ As duas correcoes do plano para o encoder, medidas: (1) `Einsum` 16 -> 0 (existe
 **Audios prontos em `D:\audios\`** (pt-BR, 16 kHz mono, com transcricao de referencia FLEURS em
 `audios.json` — `scripts/prepara_audios_teste.py`):
 
+**Gravacao de voz propria (opcional, mas cobre o que o corpus NAO cobre):** os textos para gravar
+estao em `D:\SIG-granite-nar-lab-rebuild\textos-para-gravar.txt`; grave em `D:\audios\originais\`
+(qualquer formato — `scripts/processa_audios_gravados.py` converte para 16 kHz mono e valida) e o
+que cada um acrescenta:
+
+| gravacao | o que cobre e nada mais cobre |
+|---|---|
+| `longo-taguai.wav` (~35 s) | **bucket 1600/2000** — o app escolhe o MENOR bucket, entao nenhum audio curto chega la; sem ela a selecao de bucket nao e exercitada de ponta a ponta |
+| `curto-taguai.wav` | a palavra **"Taguaí"** (nenhum corpus tem; o modelo ja entregou "Itaguaí") |
+| `medio-ocorrencia.wav` | vocabulario do trabalho + numeros por extenso |
+| `curto-ruido.wav` (opcional) | robustez a ruido de fundo — nenhum audio do lab tem ruido |
+
+⚠️ Limite real: `frames <= 2000` e `frames = amostras/320` -> **40 s** a 16 kHz. Acima disso o app
+rejeita o audio INTEIRO (nao trunca). O script de processamento corta com aviso se passar.
+
 | arquivo | duracao | frames | bucket | custo/rodada no PC |
 |---|---|---|---|---|
 | `nar-curto-7s.wav` | 7,1 s | 354 | **400** | ~149 s |
