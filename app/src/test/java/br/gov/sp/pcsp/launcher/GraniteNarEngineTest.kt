@@ -415,4 +415,36 @@ class GraniteNarEngineTest {
             tmp.delete()
         }
     }
+
+    /**
+     * A duração máxima ANUNCIADA tem de ser o limite REAL.
+     *
+     * O limite é `frames <= T_FIXED` e `frames = amostras / (2*HOP)`. A mensagem de erro já usou
+     * o HOP cru e anunciava **20 s** quando o limite real é **40 s** — o usuário evitaria áudios
+     * de 25-30 s que funcionam. Este teste chama a função de PRODUÇÃO (`outFrames`) para provar
+     * que o número anunciado é exatamente o ponto onde o áudio para de caber: se alguém mudar o
+     * `HOP`, o empilhamento ou o `T_FIXED`, o teste falha junto com a mensagem.
+     */
+    @Test
+    fun `max audio seconds equals the real frame limit`() {
+        val frontend = GraniteNarFrontend(
+            FloatArray(GraniteNarFrontend.N_MELS * GraniteNarFrontend.N_FREQS),
+            FloatArray(GraniteNarFrontend.N_FFT),
+        )
+        // 2000 frames * 2 * hop 160 / 16000 Hz = 40 s
+        assertEquals(40, GraniteNarEngine.MAX_AUDIO_SECONDS)
+
+        val noLimite = GraniteNarEngine.MAX_AUDIO_SECONDS * GraniteNarEngine.SAMPLE_RATE
+        assertTrue(
+            "audio EXATAMENTE no limite anunciado tem de caber",
+            frontend.outFrames(noLimite) <= GraniteNarEngine.T_FIXED,
+        )
+        // Um segundo a mais nao cabe: prova que o limite anunciado nao esta folgado demais.
+        assertTrue(
+            "um segundo alem do limite anunciado NAO pode caber",
+            frontend.outFrames(noLimite + GraniteNarEngine.SAMPLE_RATE) > GraniteNarEngine.T_FIXED,
+        )
+        // E um audio curto tem de sobrar espaco (guarda contra limite anunciado pequeno demais).
+        assertTrue(frontend.outFrames(10 * GraniteNarEngine.SAMPLE_RATE) < GraniteNarEngine.T_FIXED)
+    }
 }

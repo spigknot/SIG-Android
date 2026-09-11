@@ -203,24 +203,39 @@ As duas correcoes do plano para o encoder, medidas: (1) `Einsum` 16 -> 0 (existe
 
 **Cinco proximos comandos exatos quando o telefone voltar:**
 
-```powershell
-# 1. Instalar o APK com a escolha de variante (o md5 mudou nesta rodada)
-adb install -r O:\sig.apk     # md5 80c1dd4112b3ea5968c0b3226f03e282 (7,6 MB)
+**Audios prontos em `D:\audios\`** (pt-BR, 16 kHz mono, com transcricao de referencia FLEURS em
+`audios.json` — `scripts/prepara_audios_teste.py`):
 
-# 2. Baseline CPU oficial por bucket (warmup + 3 medidas + thermal/bateria/JSONL)
-.\scripts\run-granite-nar-adb-benchmark.ps1 -AudioPath D:\audios\nar-pt-30s.wav -Backends CPU -WarmupRuns 1 -MeasuredRuns 3
+| arquivo | duracao | frames | bucket | custo/rodada no PC |
+|---|---|---|---|---|
+| `nar-curto-7s.wav` | 7,1 s | 354 | **400** | ~149 s |
+| `nar-curto2-7s.wav` | 7,3 s | 366 | 400 | ~149 s |
+| `nar-medio-13s.wav` | 13,3 s | 666 | 800 | ~302 s |
+| `nar-longo-19s.wav` | 18,8 s | 939 | 1200 | ~516 s |
+
+⚠️ **Use o CURTO para aceitacao.** A pergunta "a NPU aceita o grafo?" e respondida na **criacao da
+sessao**, nao pelo audio longo — e um audio de 7 s custa 1/6 de um de 30 s (o benchmark multiplica
+por warmup+N). O limite do app e `frames <= 2000` = **40 s a 16 kHz** (a mensagem dizia 20 s por um
+bug de formula, corrigido nesta rodada).
+
+```powershell
+# 1. Instalar o APK (md5 68f5322b56aa57bdb0392232f2a36b88)
+adb install -r O:\sig.apk
+
+# 2. Baseline CPU oficial (warmup + 3 medidas + thermal/bateria/JSONL) — audio CURTO
+.\scripts\run-granite-nar-adb-benchmark.ps1 -AudioPath D:\audios\nar-curto-7s.wav -Backends CPU -WarmupRuns 1 -MeasuredRuns 2
 
 # 3. NPU ESTRITA — variante A: so o Einsum convertido (dims de saida ainda simbolicas)
-bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_encoder_npu.sh D:\audios\nar-pt-30s.wav --pacote pacote-teste-npu-v2
+bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_encoder_npu.sh D:\audios\nar-curto-7s.wav --pacote pacote-teste-npu-v2
 
 # 3b. NPU ESTRITA — variante B: candidato completo (Einsum=0 + dims FIXADAS)
-bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_encoder_npu.sh D:\audios\nar-pt-30s.wav --pacote pacote-npu-estatico
+bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_encoder_npu.sh D:\audios\nar-curto-7s.wav --pacote pacote-npu-estatico
 
 # 4. Comparar as 3 variantes do LLM com o MESMO audio (fp16 / 8-bit / 4-bit)
 bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_variantes_celular.sh
 
-# 5. Matriz de duracao com o pacote escolhido (CPU x NPU se a 3 passar)
-.\scripts\run-granite-nar-adb-benchmark.ps1 -AudioPath D:\audios\nar-pt-30s.wav -Backends CPU,NPU_QNN_HTP -WarmupRuns 1 -MeasuredRuns 3 -RequireAllPassed
+# 5. Qualidade num caso real (audio medio, com referencia para conferir o CER)
+.\scripts\run-granite-nar-adb-benchmark.ps1 -AudioPath D:\audios\nar-medio-13s.wav -Backends CPU -WarmupRuns 1 -MeasuredRuns 1 -IncludeTranscript
 ```
 
 O passo 3 e o unico que responde a pergunta aberta mais importante: **os 16 `Einsum` eram o
@@ -230,6 +245,6 @@ o bloqueio e outro e o diagnostico (secao 6 do `docs/qairt-status.md`) precisa s
 o log do aparelho.
 
 **PENDENTE (decisao do gerente):**
-1. Testar o APK no aparelho (O:/sig.apk, md5 `80c1dd4112b3ea5968c0b3226f03e282`, 7,6 MB); nada foi publicado como release nem teve bump de versao.
+1. Testar o APK no aparelho (O:/sig.apk, md5 `68f5322b56aa57bdb0392232f2a36b88`); nada foi publicado como release nem teve bump de versao.
 2. Limpeza de disco: 22,4 GB recuperaveis (`reports/proposta-limpeza-20260910.md`) + 3,1 GB de lixo do experimento exploratorio. Nada removido sem aprovacao.
 3. NPU: so com o aparelho. Tudo continua `context-ready`, nada `npu-approved`.

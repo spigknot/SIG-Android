@@ -430,6 +430,23 @@ object GraniteNarEngine {
     const val T_FIXED = 2000
     const val EMBEDDING_MULTIPLIER = 12.0f
 
+    /** Taxa de amostragem exigida do WAV (`readWav16kMono`). */
+    const val SAMPLE_RATE = 16000
+
+    /**
+     * Duração máxima aceita, em segundos — o número que a mensagem de erro mostra.
+     *
+     * O limite é `frames <= T_FIXED`, e `frames = amostras / (2 * HOP)`
+     * (`GraniteNarFrontend.outFrames`). Logo `amostras <= T_FIXED * 2 * HOP`, ou
+     * `T_FIXED * 2 * HOP / SAMPLE_RATE` segundos.
+     *
+     * ⚠️ A mensagem já usou `T_FIXED * HOP / SAMPLE_RATE` (HOP cru, sem o fator 2 do
+     * empilhamento) e anunciava **20 s** quando o limite real é **40 s**. O usuário evitaria
+     * áudios de 25-30 s que funcionam — um limite anunciado errado é pior que limite nenhum,
+     * porque ele decide por você.
+     */
+    const val MAX_AUDIO_SECONDS = T_FIXED * 2 * GraniteNarFrontend.HOP / SAMPLE_RATE
+
     /**
      * Folga exigida além do tamanho do download antes de começar.
      *
@@ -1016,7 +1033,9 @@ object GraniteNarEngine {
         if (features.frames == 0) return ""
         onLog("NAR entrada: samples=${wav.size} frames=${features.frames}")
         if (features.frames > T_FIXED) {
-            throw IllegalStateException("áudio muito longo para o Granite 4.1 NAR nesta versão (máx ~${T_FIXED * 160 / 16000}s)")
+            throw IllegalStateException(
+                "áudio muito longo para o Granite 4.1 NAR nesta versão " +
+                    "(máx ~${MAX_AUDIO_SECONDS}s)")
         }
         val realFrames = features.frames
 
