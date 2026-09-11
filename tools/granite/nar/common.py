@@ -245,6 +245,76 @@ def cer(hypothesis: str, reference: str):
     return edit_distance(o, r) / len(r)
 
 
+def normaliza_numeros(texto: str) -> str:
+    """Converte DIGITOS para extenso (pt-BR) antes de comparar transcricoes.
+
+    Motivo medido: o modelo escreve numeros em digitos ("457", "10 de setembro", "rua 7 de abril")
+    enquanto as referencias de corpus usam EXTENSO ("quatrocentos e cinquenta e sete"). Comparar
+    cru infla o CER com uma diferenca de FORMATO que **nao e erro de reconhecimento**. Num audio
+    real gravado, TRES conversoes (457 -> 10 -> 7) respondiam por quase todo um CER de 0,2054: a
+    transcricao estava correta e a metrica dizia que nao.
+
+    Cobre 0..99999 (suficiente para fala espontanea). Numero fora da faixa fica como esta — melhor
+    nao normalizar que normalizar errado.
+
+    NAO esta embutida em `normalize_for_cer` de proposito: os CER historicos (0,0323 do float, etc.)
+    foram medidos sem esta normalizacao, e mudar o default reescreveria numeros ja publicados.
+    Use explicitamente onde a comparacao e com fala real.
+    """
+    if not texto:
+        return texto
+
+    unidades = ["zero", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove",
+                "dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete",
+                "dezoito", "dezenove"]
+    dezenas = {20: "vinte", 30: "trinta", 40: "quarenta", 50: "cinquenta", 60: "sessenta",
+               70: "setenta", 80: "oitenta", 90: "noventa"}
+    centenas = {100: "cento", 200: "duzentos", 300: "trezentos", 400: "quatrocentos",
+                500: "quinhentos", 600: "seiscentos", 700: "setecentos", 800: "oitocentos",
+                900: "novecentos"}
+
+    def extenso(n: int) -> str:
+        if n < 20:
+            return unidades[n]
+        if n == 100:
+            return "cem"
+        if n < 100:
+            d, u = divmod(n, 10)
+            return dezenas[d * 10] + (f" e {unidades[u]}" if u else "")
+        if n < 1000:
+            c, resto = divmod(n, 100)
+            base = centenas[c * 100]
+            return base + (f" e {extenso(resto)}" if resto else "")
+        if n < 100000:
+            mil, resto = divmod(n, 1000)
+            base = "mil" if mil == 1 else f"{extenso(mil)} mil"
+            if not resto:
+                return base
+            liga = " e " if resto < 100 or resto % 100 == 0 else " "
+            return base + liga + extenso(resto)
+        return str(n)
+
+    # remove separador de milhar ("1.000" -> "1000") antes de converter
+    s = re.sub(r"\b(\d{1,3})(?:\.(\d{3}))+\b", lambda m: m.group(0).replace(".", ""), texto)
+
+    def troca(m: "re.Match[str]") -> str:
+        try:
+            n = int(m.group(0))
+        except ValueError:
+            return m.group(0)
+        return extenso(n) if 0 <= n <= 99999 else m.group(0)
+
+    return re.sub(r"\d+", troca, s)
+
+
+def cer_normalizado(hypothesis: str, reference: str):
+    """`cer` com numeros uniformizados (digitos -> extenso) dos DOIS lados.
+
+    Use esta para fala real; `cer` continua sendo a metrica historica dos relatorios de corpus.
+    """
+    return cer(normaliza_numeros(hypothesis), normaliza_numeros(reference))
+
+
 def quantized_bits_check(node_bits, requested: int) -> str:
     """Valida os bits REAIS gravados no grafo contra os pedidos.
 

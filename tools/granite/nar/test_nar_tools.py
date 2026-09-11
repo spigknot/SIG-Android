@@ -670,6 +670,61 @@ def test_single_session_libera_mesmo_com_excecao_no_corpo():
     with common.single_session(lambda: "ok") as s:
         assert s == "ok"
 
+# --------------------------------------------------------------------------------------------
+# VACINA: o CER precisa uniformizar NUMEROS antes de comparar. O modelo escreve numeros em
+# digitos ("457") e as referencias de corpus usam extenso ("quatrocentos e cinquenta e sete");
+# comparar cru infla o CER com diferenca de FORMATO, que nao e erro de reconhecimento. Medido num
+# audio real: 3 conversoes respondiam por quase todo um CER de 0,2054 - a transcricao estava certa.
+# --------------------------------------------------------------------------------------------
+
+def test_normaliza_numeros_centenas_e_dezenas():
+    assert common.normaliza_numeros("457") == "quatrocentos e cinquenta e sete"
+    assert common.normaliza_numeros("10") == "dez"
+    assert common.normaliza_numeros("7") == "sete"
+
+
+def test_normaliza_numeros_casos_de_borda():
+    assert common.normaliza_numeros("0") == "zero"
+    assert common.normaliza_numeros("100") == "cem"
+    assert common.normaliza_numeros("1000") == "mil"
+    assert common.normaliza_numeros("1020") == "mil e vinte"
+    assert common.normaliza_numeros("2000") == "dois mil"
+
+
+def test_normaliza_numeros_separador_de_milhar():
+    # "1.000" e um numero, nao fim de frase + "000"
+    assert common.normaliza_numeros("1.000") == "mil"
+
+
+def test_normaliza_numeros_fora_da_faixa_fica_intacto():
+    # melhor nao normalizar que normalizar errado
+    assert common.normaliza_numeros("123456") == "123456"
+
+
+def test_normaliza_numeros_preserva_o_resto_do_texto():
+    out = common.normaliza_numeros("número 457 do dia 10")
+    assert out == "número quatrocentos e cinquenta e sete do dia dez"
+
+
+def test_cer_normalizado_nao_pune_formato_de_numero():
+    """O caso REAL: transcricao correta, so com numeros em digitos.
+
+    Sem normalizar, o CER acusaria erro grave; com normalizacao, e ~0.
+    """
+    lido = ("Registro de ocorrência número quatrocentos e cinquenta e sete, do dia dez de "
+            "setembro. O solicitante informou que o veículo foi localizado na rua Sete de Abril.")
+    do_modelo = ("registro de ocorrência número 457 do dia 10 de setembro. o solicitante informou "
+                 "que o veículo foi localizado na rua 7 de abril.")
+    cru = common.cer(do_modelo, lido)
+    justo = common.cer_normalizado(do_modelo, lido)
+    assert cru > 0.05, f"o CER cru devia acusar diferenca de formato (deu {cru})"
+    assert justo == 0.0, f"normalizado tem de dar 0 (deu {justo})"
+
+
+def test_cer_historico_nao_mudou_de_comportamento():
+    """`cer` continua sem normalizar numeros: os relatorios ja publicados seguem reproduziveis."""
+    assert common.cer("457", "quatrocentos e cinquenta e sete") > 0.5
+
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
