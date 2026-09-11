@@ -192,7 +192,32 @@
 - `scripts/testa_encoder_npu.sh` = testa a hipotese dos `Einsum` na NPU (troca os 6 grafos convertidos e chama o oficial; os pesos nao mudam).
 - `scripts/testa_variantes_celular.sh` = compara fp16 / 8-bit / 4-bit com o mesmo audio.
 
+**Cinco proximos comandos exatos quando o telefone voltar:**
+
+```powershell
+# 1. Instalar o APK com a escolha de variante (o md5 mudou nesta rodada)
+adb install -r O:\sig.apk     # md5 80c1dd4112b3ea5968c0b3226f03e282 (7,6 MB)
+
+# 2. Baseline CPU oficial por bucket (warmup + 3 medidas + thermal/bateria/JSONL)
+.\scripts\run-granite-nar-adb-benchmark.ps1 -AudioPath D:\audios\nar-pt-30s.wav -Backends CPU -WarmupRuns 1 -MeasuredRuns 3
+
+# 3. NPU ESTRITA: testa a hipotese dos Einsum (troca os 6 grafos convertidos e chama o oficial)
+bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_encoder_npu.sh
+
+# 4. Comparar as 3 variantes do LLM com o MESMO audio (fp16 / 8-bit / 4-bit)
+bash D:\SIG-granite-nar-lab-rebuild\scripts\testa_variantes_celular.sh
+
+# 5. Matriz de duracao com o pacote escolhido (CPU x NPU se a 3 passar)
+.\scripts\run-granite-nar-adb-benchmark.ps1 -AudioPath D:\audios\nar-pt-30s.wav -Backends CPU,NPU_QNN_HTP -WarmupRuns 1 -MeasuredRuns 3 -RequireAllPassed
+```
+
+O passo 3 e o unico que responde a pergunta aberta mais importante: **os 16 `Einsum` eram o
+bloqueio da NPU estrita?** Se a sessao abrir com `Handoff` completo e sem fallback, a hipotese
+estava certa e o proximo trabalho e quantizar o encoder. Se voltar o "nodes assigned to CPU EP",
+o bloqueio e outro e o diagnostico (secao 6 do `docs/qairt-status.md`) precisa ser refeito com
+o log do aparelho.
+
 **PENDENTE (decisao do gerente):**
-1. Testar o APK no aparelho (O:/sig.apk, md5 `1b9558200cd016215402551df369ff19`); nada foi publicado como release nem teve bump de versao.
+1. Testar o APK no aparelho (O:/sig.apk, md5 `80c1dd4112b3ea5968c0b3226f03e282`, 7,6 MB); nada foi publicado como release nem teve bump de versao.
 2. Limpeza de disco: 22,4 GB recuperaveis (`reports/proposta-limpeza-20260910.md`) + 3,1 GB de lixo do experimento exploratorio. Nada removido sem aprovacao.
 3. NPU: so com o aparelho. Tudo continua `context-ready`, nada `npu-approved`.
