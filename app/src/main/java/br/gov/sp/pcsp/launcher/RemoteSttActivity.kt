@@ -404,6 +404,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Keywords SEMPRE começam desligadas: a seleção é zerada a cada entrada
+        // na tela (rotação não conta — o estado salvo preserva o que o usuário
+        // acabou de escolher). O envio só acontece se ele ativar manualmente.
+        if (savedInstanceState == null) GrokApiSettings.resetKeywordProfile()
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
         // Um intent-filter do manifest nao carrega extras, entao o alvo de
@@ -758,6 +762,12 @@ class RemoteSttActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // Compartilhar para uma instância já aberta é um NOVO uso: as keywords
+        // voltam a ficar desligadas, como em toda abertura da tela.
+        if (SharedMediaIntents.isShareAction(intent)) {
+            GrokApiSettings.resetKeywordProfile()
+            refreshKeywordsButton()
+        }
         handleIncomingShareIntent(intent)
     }
 

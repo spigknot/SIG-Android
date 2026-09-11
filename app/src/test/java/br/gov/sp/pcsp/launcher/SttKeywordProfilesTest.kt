@@ -110,6 +110,31 @@ class SttKeywordProfilesTest {
     }
 
     @Test
+    fun aSelecaoDeEdicaoNaoLigaOEnvio() {
+        // editedKeywordProfile / selectedKeywordProfile são seleções diferentes:
+        // editar na aba Avançado não pode fazer as requisições enviarem termos.
+        val perfis = listOf(lista1, lista2)
+
+        // "Não" (desligado) = nenhum termo, mesmo com perfis cheios.
+        assertEquals(emptyList<String>(), SttKeywordProfiles.keywordsOf(perfis, null))
+        // O perfil editado existe e é resolvível, mas o ativo é quem manda no envio.
+        assertEquals("Lista 1", SttKeywordProfiles.resolveSelection(perfis, "Lista 1"))
+        assertEquals(listOf("Furtura"), SttKeywordProfiles.keywordsOf(perfis, "Operação X"))
+    }
+
+    @Test
+    fun label_doSeletorDasTelas() {
+        assertEquals("Não", SttKeywordProfiles.OFF_LABEL)
+        assertEquals("Keywords: Não", SttKeywordProfiles.label(null))
+        assertEquals("Keywords: Operação X", SttKeywordProfiles.label("Operação X"))
+        // Perfil apagado resolve para null -> o seletor volta a mostrar "Não"
+        // (um rótulo apontando para perfil inexistente mentiria sobre o envio).
+        val resolvido = SttKeywordProfiles.resolveSelection(listOf(lista1), "apagado")
+        assertNull(resolvido)
+        assertEquals("Keywords: Não", SttKeywordProfiles.label(resolvido))
+    }
+
+    @Test
     fun migratedFromSingleList_viraUmPerfil() {
         assertEquals(
             listOf(KeywordProfile("Lista 1", listOf("placa", "abordagem"))),

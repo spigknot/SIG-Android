@@ -294,6 +294,91 @@ class SttRequestBuildersTest {
         assertFalse(alibabaRest.getJSONObject("parameters").has("vocabulary"))
     }
 
+    // ---- Keywords DESLIGADAS (seletor em "Keywords: Não"): omissão TOTAL ----
+
+    /** Nomes de parâmetro que qualquer provedor poderia receber. Se um deles
+     *  aparecer com a lista vazia, o app estaria ligando keywords escondido. */
+    private val parametrosDeKeyword = listOf("keyterm", "keyterms", "keyterms_prompt",
+        "vocabulary", "keywords", "vocabulary_id")
+
+    private fun semRastro(spec: SttRequestSpec): String? {
+        val alvo = (spec.url + spec.multipartFields.joinToString(" ") { "${it.name}=${it.value}" })
+            .lowercase()
+        return parametrosDeKeyword.firstOrNull { alvo.contains(it) }
+    }
+
+    @Test
+    fun comKeywordsDesligadas_nenhumRestEnviaParametro() {
+        val specs = listOf(
+            "grok" to SttRequestBuilders.grokRest(apiKey = "k", language = "pt", diarize = true, keywords = emptyList()),
+            "deepgram" to SttRequestBuilders.deepgramRest(apiKey = "k", language = "pt-BR", diarize = true, keywords = emptyList()),
+            "assemblyai" to SttRequestBuilders.assemblyaiRest(apiKey = "k", languageDetection = false,
+                languageCode = "pt", speakerLabels = true, punctuate = true, keywords = emptyList()),
+            "elevenlabs" to SttRequestBuilders.elevenlabsRest(apiKey = "k", languageCode = "pt",
+                diarize = true, keywords = emptyList()),
+        )
+
+        specs.forEach { (nome, spec) ->
+            assertEquals("$nome vazou keyword", null, semRastro(spec))
+        }
+    }
+
+    @Test
+    fun comKeywordsDesligadas_nenhumWebSocketEnviaParametro() {
+        val specs = listOf(
+            "grok" to SttRequestBuilders.grokWebSocket(apiKey = "k", language = "pt", diarize = true, keywords = emptyList()).url,
+            "deepgram" to SttRequestBuilders.deepgramWebSocket(apiKey = "k", language = "pt-BR", diarize = true, keywords = emptyList()).url,
+            "assemblyai" to SttRequestBuilders.assemblyaiWebSocket(apiKey = "k", languageCodes = listOf("pt"),
+                diarize = true, keywords = emptyList()).url,
+            "elevenlabs" to SttRequestBuilders.elevenlabsWebSocket(apiKey = "k", primaryLanguage = "pt",
+                secondaryLanguages = listOf("en"), keywords = emptyList()).url,
+            "muse" to SttRequestBuilders.museWebSocket(apiKey = "k").url,
+            "alibaba" to SttRequestBuilders.alibabaWebSocket(apiKey = "k").url,
+        )
+
+        specs.forEach { (nome, url) ->
+            assertFalse("$nome vazou keyword: $url", parametrosDeKeyword.any { url.lowercase().contains(it) })
+        }
+    }
+
+    @Test
+    fun comKeywordsDesligadas_nenhumCorpoJsonEnviaParametro() {
+        val handshake = org.json.JSONObject(
+            SttRequestBuilders.museHandshake(apiKey = "k", mode = "ENDPOINTING", keywords = emptyList())
+        )
+        val museRest = org.json.JSONObject(
+            SttRequestBuilders.museRestRequestJson(mode = "ENDPOINTING", keywords = emptyList())
+        )
+        val alibabaRest = org.json.JSONObject(
+            SttRequestBuilders.alibabaRestBody(audioDataUri = "x",
+                vocabulary = SttKeywords.alibabaVocabulary(emptyList(), isLive = false))
+        )
+        val runTask = org.json.JSONObject(
+            SttRequestBuilders.alibabaRunTask(taskId = "t",
+                vocabulary = SttKeywords.alibabaVocabulary(emptyList(), isLive = true))
+        )
+
+        assertFalse(handshake.has("keywords"))
+        assertFalse(museRest.has("keywords"))
+        assertFalse(alibabaRest.getJSONObject("parameters").has("vocabulary"))
+        assertFalse(runTask.getJSONObject("payload").getJSONObject("parameters").has("vocabulary"))
+        // O corpo do Muse segue com o resto intacto (não quebramos o contrato).
+        assertEquals("ENDPOINTING", handshake.getString("mode"))
+        assertEquals("wav", alibabaRest.getJSONObject("parameters").getString("format"))
+    }
+
+    @Test
+    fun comPerfilAtivo_osParametrosVoltamAUmaListaVazia() {
+        // Contraprova do teste acima: com a lista preenchida o parâmetro aparece.
+        val comTermos = SttRequestBuilders.deepgramWebSocket(apiKey = "k", language = "pt-BR",
+            diarize = false, keywords = listOf("Furtura")).url
+        val semTermos = SttRequestBuilders.deepgramWebSocket(apiKey = "k", language = "pt-BR",
+            diarize = false).url
+
+        assertTrue(comTermos.contains("keyterm=Furtura"))
+        assertFalse(semTermos.contains("keyterm"))
+    }
+
     @Test
     fun genericMultipart_preservesAcceptAndConfiguredFileField() {
         val spec = SttRequestBuilders.genericMultipart(

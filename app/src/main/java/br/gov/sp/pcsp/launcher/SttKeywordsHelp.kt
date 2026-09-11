@@ -28,9 +28,11 @@ object SttKeywordsHelp {
             "para aumentar a chance de o termo sair escrito corretamente quando ele aparecer no áudio."
 
     const val PROFILES =
-        "Você pode manter VÁRIOS perfis (listas nomeadas) e trocar entre eles: crie no \"+\" " +
-            "verde da seção Keywords e escolha qual usar no seletor \"Keywords\" das telas de " +
-            "transcrição. \"Keywords: Não\" desliga o envio sem apagar nada."
+        "Você pode manter VÁRIOS perfis (listas nomeadas). Na seção Keywords da aba Avançado " +
+            "você escolhe qual perfil EDITAR, cria no \"+\" verde e tira palavras no \"-\" vermelho. " +
+            "Editar não liga o envio: o perfil ativo é escolhido no seletor \"Keywords\" da " +
+            "própria tela de transcrição, que SEMPRE começa desligado (\"Keywords: Não\") — " +
+            "ative manualmente a cada uso. \"Keywords: Não\" não apaga nenhum perfil."
 
     const val ORDER_TIP =
         "A ORDEM IMPORTA: os termos são enviados na ordem da tabela e cada modelo aproveita " +
@@ -38,8 +40,9 @@ object SttKeywordsHelp {
             "importantes — os que ficarem no fim podem não ser usados."
 
     const val CHECKBOX_TIP =
-        "O perfil \"Não\" desliga o envio: nenhuma keyword vai na requisição e a transcrição " +
-            "segue como antes. A escolha vale para as duas telas e para todos os modelos."
+        "Keywords começam DESLIGADAS a cada abertura: com \"Keywords: Não\", nenhum parâmetro " +
+            "de keyword vai na requisição (nem na URL, nem no formulário, nem no corpo JSON). " +
+            "Ao escolher um perfil, o envio vale para as duas telas e para todos os modelos."
 
     const val INSERTION_WARNING =
         "ATENÇÃO: o reforço pode fazer o modelo escrever um termo cadastrado mesmo quando ele " +

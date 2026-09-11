@@ -35,6 +35,7 @@ object GrokApiSettings {
     private const val KEY_STT_KEYWORDS_ENABLED = "stt_keywords_enabled"
     private const val KEY_STT_KEYWORD_PROFILES = "stt_keyword_profiles"
     private const val KEY_STT_KEYWORD_PROFILE = "stt_keyword_profile"
+    private const val KEY_STT_KEYWORD_EDITED = "stt_keyword_profile_edited"
     private const val KEY_ASSEMBLYAI_API = "assemblyai_api_key"
     private const val KEY_ELEVENLABS_API = "elevenlabs_api_key"
     private const val KEY_MUSE_API = "metamuse_api_key"
@@ -124,15 +125,36 @@ object GrokApiSettings {
             .apply()
     }
 
-    /** Nome do perfil ativo; null = keywords desligadas ("Keywords: Não"). */
+    /** Nome do perfil ATIVO (o que entra nas requisições); null = desligado
+     *  ("Keywords: Não"). O app NUNCA nasce com keywords ligadas: quem cria a
+     *  tela de transcrição zera esta seleção (ver resetKeywordProfile). */
     fun selectedKeywordProfile(): String? {
         val profiles = keywordProfiles()
         val stored = preferences().getString(KEY_STT_KEYWORD_PROFILE, "").orEmpty()
         return SttKeywordProfiles.resolveSelection(profiles, stored)
     }
 
+    /** Desliga o envio de keywords: o padrão em toda abertura das telas de
+     *  transcrição — o usuário ativa o perfil manualmente a cada uso. */
+    fun resetKeywordProfile() {
+        preferences().edit().putString(KEY_STT_KEYWORD_PROFILE, "").apply()
+    }
+
     fun selectKeywordProfile(name: String?) {
         preferences().edit().putString(KEY_STT_KEYWORD_PROFILE, name?.trim().orEmpty()).apply()
+    }
+
+    /** Perfil sendo EDITADO na aba Avançado (não liga o envio): por padrão o
+     *  primeiro perfil, para a tabela nunca abrir vazia sem motivo. */
+    fun editedKeywordProfile(): String? {
+        val profiles = keywordProfiles()
+        val stored = preferences().getString(KEY_STT_KEYWORD_EDITED, "").orEmpty()
+        return SttKeywordProfiles.resolveSelection(profiles, stored)
+            ?: profiles.firstOrNull()?.name
+    }
+
+    fun selectEditedKeywordProfile(name: String?) {
+        preferences().edit().putString(KEY_STT_KEYWORD_EDITED, name?.trim().orEmpty()).apply()
     }
 
     /** Termos do perfil ativo — o que entra nas requisições. */

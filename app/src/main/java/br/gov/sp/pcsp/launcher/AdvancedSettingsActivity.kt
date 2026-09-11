@@ -20,8 +20,9 @@ import androidx.appcompat.app.AppCompatActivity
 /** Tela de configuracoes avancadas: paralelismo e perfis de keywords do STT.
  *
  * A secao "Keywords" mantem VARIOS perfis (listas nomeadas). O seletor escolhe
- * qual perfil esta ativo (e o mesmo das telas de transcricao): a tabela abaixo
- * edita os termos DESSE perfil. O "+" verde cria um perfil (pede o nome), o "-"
+ * qual perfil esta sendo EDITADO (a tabela abaixo edita os termos dele) — isso
+ * NAO liga o envio: o perfil ativo e escolhido na propria tela de transcricao,
+ * que sempre comeca com as keywords desligadas. O "+" verde cria um perfil (pede o nome), o "-"
  * vermelho exclui o perfil selecionado com confirmacao; tocar e segurar o
  * seletor renomeia. A persistencia e do GrokApiSettings e cada provedor monta o
  * SEU parametro na requisicao (SttKeywords).
@@ -124,20 +125,27 @@ class AdvancedSettingsActivity : AppCompatActivity() {
 
     private fun showProfileMenu() {
         val profiles = GrokApiSettings.keywordProfiles()
+        if (profiles.isEmpty()) {
+            Toast.makeText(
+                this,
+                "Nenhum perfil ainda: toque no \"+\" verde para criar o primeiro.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        // Aqui a lista é de EDIÇÃO: só perfis (não existe "desligado" para
+        // editar) — o liga/desliga fica na tela de transcrição.
         val popup = PopupMenu(this, keywordProfileSelector)
-        popup.menu.add(0, OFF_MENU_ID, 0, SttKeywordProfiles.OFF_LABEL)
         profiles.forEachIndexed { index, profile ->
             popup.menu.add(0, index + 1, index + 1, "${profile.name} (${profile.keywords.size})")
         }
         popup.setOnMenuItemClickListener { item ->
-            val name = if (item.itemId == OFF_MENU_ID) {
-                null
-            } else {
-                profiles.getOrNull(item.itemId - 1)?.name
+            // Resolve pelo itemId (nomes têm acentos/sufixos e podem repetir palavras).
+            profiles.getOrNull(item.itemId - 1)?.let { profile ->
+                GrokApiSettings.selectEditedKeywordProfile(profile.name)
+                selectedKeyword = -1
+                refreshKeywordsUi()
             }
-            GrokApiSettings.selectKeywordProfile(name)
-            selectedKeyword = -1
-            refreshKeywordsUi()
             true
         }
         popup.show()
@@ -163,7 +171,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
                 GrokApiSettings.setKeywordProfiles(
                     SttKeywordProfiles.withProfile(profiles, name, emptyList())
                 )
-                GrokApiSettings.selectKeywordProfile(name.trim())
+                GrokApiSettings.selectEditedKeywordProfile(name.trim())
                 selectedKeyword = -1
                 refreshKeywordsUi()
             }
@@ -172,7 +180,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
     }
 
     private fun renameSelectedProfile() {
-        val current = GrokApiSettings.selectedKeywordProfile()
+        val current = GrokApiSettings.editedKeywordProfile()
         if (current == null) {
             Toast.makeText(this, "Escolha um perfil para renomear.", Toast.LENGTH_SHORT).show()
             return
@@ -195,7 +203,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
                 GrokApiSettings.setKeywordProfiles(
                     SttKeywordProfiles.renamed(profiles, current, newName)
                 )
-                GrokApiSettings.selectKeywordProfile(newName.trim())
+                GrokApiSettings.selectEditedKeywordProfile(newName.trim())
                 refreshKeywordsUi()
             }
             .setNegativeButton("Cancelar", null)
@@ -203,23 +211,20 @@ class AdvancedSettingsActivity : AppCompatActivity() {
     }
 
     private fun confirmRemoveProfile() {
-        val current = GrokApiSettings.selectedKeywordProfile()
+        val current = GrokApiSettings.editedKeywordProfile()
         if (current == null) {
-            Toast.makeText(this, "Escolha um perfil para excluir.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Nenhum perfil para excluir.", Toast.LENGTH_SHORT).show()
             return
         }
         val profiles = GrokApiSettings.keywordProfiles()
         val count = SttKeywordProfiles.keywordsOf(profiles, current).size
         AlertDialog.Builder(this)
-            .setMessage(
-                "Excluir o perfil \"$current\" ($count palavra(s))? " +
-                    "O envio de keywords ficará desligado."
-            )
+            .setMessage("Excluir o perfil \"$current\" ($count palavra(s))?")
             .setPositiveButton("Excluir") { _, _ ->
                 GrokApiSettings.setKeywordProfiles(
                     SttKeywordProfiles.withoutProfile(profiles, current)
                 )
-                GrokApiSettings.selectKeywordProfile(null)
+                GrokApiSettings.selectEditedKeywordProfile(null)
                 selectedKeyword = -1
                 refreshKeywordsUi()
             }
@@ -231,13 +236,14 @@ class AdvancedSettingsActivity : AppCompatActivity() {
 
     private fun addKeyword() {
         var profiles = GrokApiSettings.keywordProfiles()
-        var profileName = GrokApiSettings.selectedKeywordProfile()
+        var profileName = GrokApiSettings.editedKeywordProfile()
         if (profileName == null) {
-            // Sem perfil ativo: cria um automaticamente para não perder o termo.
+            // Sem nenhum perfil: cria o primeiro automaticamente para não
+            // perder a palavra que o usuário acabou de digitar.
             profileName = SttKeywordProfiles.nextDefaultName(profiles)
             profiles = SttKeywordProfiles.withProfile(profiles, profileName, emptyList())
             GrokApiSettings.setKeywordProfiles(profiles)
-            GrokApiSettings.selectKeywordProfile(profileName)
+            GrokApiSettings.selectEditedKeywordProfile(profileName)
         }
         val current = SttKeywordProfiles.keywordsOf(profiles, profileName)
         val typed = keywordInput.text.toString()
@@ -271,7 +277,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
     }
 
     private fun removeKeyword(index: Int) {
-        val profileName = GrokApiSettings.selectedKeywordProfile() ?: return
+        val profileName = GrokApiSettings.editedKeywordProfile() ?: return
         val profiles = GrokApiSettings.keywordProfiles()
         val current = SttKeywordProfiles.keywordsOf(profiles, profileName)
         if (index !in current.indices) return
@@ -287,13 +293,14 @@ class AdvancedSettingsActivity : AppCompatActivity() {
     private fun selectedProfileKeywords(): List<String> =
         SttKeywordProfiles.keywordsOf(
             GrokApiSettings.keywordProfiles(),
-            GrokApiSettings.selectedKeywordProfile(),
+            GrokApiSettings.editedKeywordProfile(),
         )
 
     private fun refreshKeywordsUi() {
-        val profileName = GrokApiSettings.selectedKeywordProfile()
-        keywordProfileSelector.text = profileName ?: "${SttKeywordProfiles.OFF_LABEL} (desligado)"
-        val semPerfil = profileName == null
+        val profiles = GrokApiSettings.keywordProfiles()
+        val profileName = GrokApiSettings.editedKeywordProfile()
+        keywordProfileSelector.text = profileName ?: "Crie um perfil"
+        val semPerfil = profileName == null || profiles.isEmpty()
         keywordInput.isEnabled = !semPerfil
         buttonAddKeyword.isEnabled = true
         buttonAddKeyword.alpha = 1f
@@ -306,7 +313,7 @@ class AdvancedSettingsActivity : AppCompatActivity() {
         keywordScroll.visibility = if (keywords.isEmpty()) View.GONE else View.VISIBLE
         keywordEmpty.visibility = View.VISIBLE
         keywordEmpty.text = when {
-            semPerfil -> "Nenhum perfil ativo. Escolha um perfil acima ou crie um no \"+\" verde."
+            semPerfil -> "Nenhum perfil ainda. Toque no \"+\" verde para criar o primeiro."
             keywords.isEmpty() -> "Nenhuma palavra neste perfil. Digite e toque no \"+\" verde."
             else -> ""
         }
@@ -366,7 +373,6 @@ class AdvancedSettingsActivity : AppCompatActivity() {
         (value * resources.displayMetrics.density).toInt().coerceAtLeast(1)
 
     private companion object {
-        const val OFF_MENU_ID = 0
         const val NUMBER_CELL_WIDTH_DP = 34
         val ACCENT_COLOR = Color.rgb(94, 218, 242)
         val SELECTION_COLOR = Color.argb(0x33, 94, 218, 242)
