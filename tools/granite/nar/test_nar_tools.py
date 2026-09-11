@@ -583,6 +583,93 @@ def test_fold_remove_cadeia_de_constantes(tmp_path):
     assert [i.name for i in mb.graph.input] == ["x"]
     assert [o.name for o in mb.graph.output] == ["y"]
 
+# --------------------------------------------------------------------------------------------
+# VACINA: exact-match NAO e metrica de qualidade (item que invalidou o encerramento da linha
+# de quantizacao). Um artefato 4-bit que por CER empata com o float aparecia com 50% de acerto
+# exato; lido sozinho ele parecia "metade quebrado". Estes testes travam a regra: quem julga
+# uma variante recebe o CER junto, sempre.
+# --------------------------------------------------------------------------------------------
+
+def test_grade_variant_exact_match_reprova_o_que_o_cer_aprova():
+    """O caso REAL: 10 amostras com 1 caractere errado cada.
+
+    Exact-match = 0% (parece quebrado), CER medio ~0,005 (indistinguivel do float).
+    Se algum dia alguem voltar a decidir por exact-match, este teste mostra o absurdo.
+    """
+    refs = ["the quick brown fox jumps over the lazy dog"] * 10
+    hips = [r.replace("quick", "quik", 1) for r in refs]      # 1 letra em 42
+    g = common.grade_variant(hips, refs)
+    assert g["n"] == 10
+    assert g["exact_match"] == 0.0
+    assert g["cer_medio"] < 0.03
+    assert g["acima_de_0_30"] == 0
+
+
+def test_grade_variant_sempre_traz_o_cer_junto_com_o_exact_match():
+    """Nao existe caminho que devolva so o exact-match: a decisao nunca fica so com ele."""
+    g = common.grade_variant(["a"], ["a"])
+    assert "exact_match" in g and "cer_medio" in g and "acima_de_0_30" in g
+
+
+def test_grade_variant_sinaliza_variante_quebrada_e_nao_so_pior():
+    """2-bit real: o CER medio ate podia parecer toleravel; o estrago e em TODAS as amostras.
+
+    A contagem acima do limite por amostra separa "piorou um pouco" de "quebrou".
+    """
+    refs = ["hello world how are you today"] * 4
+    hips = ["zzz qqq mmm", "xy", "lorem ipsum dolor sit", "aaaa bbbb cccc"]
+    g = common.grade_variant(hips, refs)
+    assert g["acima_de_0_30"] == 4
+    # pior amostra: 29 edicoes em 30 caracteres = 0,9655 (medido, nao estimado)
+    assert g["pior_cer"] > 0.9
+
+
+def test_grade_variant_descarta_referencia_vazia():
+    g = common.grade_variant(["a", "b"], ["a", ""])
+    assert g["n"] == 1
+
+
+def test_grade_variant_sem_amostras_validas_nao_inventa_numero():
+    g = common.grade_variant([], [])
+    assert g["n"] == 0 and g["exact_match"] is None and g["cer_medio"] is None
+
+
+# --------------------------------------------------------------------------------------------
+# VACINA: uma sessao ONNX pesada por vez (4 encoders em paralelo = 13 GB de RSS e o processo
+# morria no meio; o sintoma parecia "modelo travado").
+# --------------------------------------------------------------------------------------------
+
+def test_single_session_abre_e_fecha():
+    criadas = []
+
+    def fabrica(nome):
+        criadas.append(nome)
+        return {"nome": nome}
+
+    with common.single_session(fabrica, "encoder") as s:
+        assert s == {"nome": "encoder"}
+        assert common.sessoes_abertas() == 1
+    assert criadas == ["encoder"]
+    assert common.sessoes_abertas() == 0
+
+
+def test_single_session_recusa_a_segunda_sessao():
+    with common.single_session(lambda: object()):
+        with pytest.raises(RuntimeError, match="uma por vez"):
+            with common.single_session(lambda: object()):
+                pass
+
+
+def test_single_session_libera_mesmo_com_excecao_no_corpo():
+    """Sessao vazada apos um erro e o pior caso: o proximo passo falharia sem motivo."""
+    with pytest.raises(ValueError):
+        with common.single_session(lambda: object()):
+            raise ValueError("falha no meio do processamento")
+    assert common.sessoes_abertas() == 0
+    # e continua utilizavel
+    with common.single_session(lambda: "ok") as s:
+        assert s == "ok"
+
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

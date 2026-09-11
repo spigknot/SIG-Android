@@ -6,11 +6,13 @@ writes JSON reports, uses streaming SHA-256 and .partial + atomic rename.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import time
@@ -259,3 +261,80 @@ def quantized_bits_check(node_bits, requested: int) -> str:
         return (f"pedido bits={requested} mas o grafo tem {sorted(distintos)} "
                 f"({sum(1 for _ in node_bits)} nos)")
     return ""
+
+
+# Limite por amostra: acima disso a variante nao degradou, ela QUEBROU. Foi o que reprovou o
+# 2-bit (82/82 amostras acima de 0,30) enquanto o CER medio escondia o tamanho do estrago.
+LIMITE_CER_AMOSTRA = 0.30
+
+
+def grade_variant(hypotheses, references) -> dict:
+    """Avalia uma variante devolvendo SEMPRE exact-match e CER juntos.
+
+    Motivo (a licao que invalidou o encerramento da linha de quantizacao): exact-match e
+    uma metrica BINARIA — um unico caractere errado reprova a amostra inteira. No mesmo
+    corpus, um artefato 4-bit que por CER empata com o float (0,0324 vs 0,0323) aparece
+    com 50% de acerto exato, e um 8-bit indistinguivel do float aparece com 58%. Lido
+    sozinho, o exact-match sugere "metade quebrado" quando nada quebrou.
+
+    Por isso esta funcao nao oferece o exact-match sozinho: quem julga uma variante
+    recebe as duas metricas na mesma chamada e nao consegue mais decidir por uma so.
+
+    Devolve: n, exact_match (fracao), cer_medio, cer_mediana, acima_do_LIMITE_CER_AMOSTRA
+    e pior_cer. Referencias vazias sao descartadas (cer devolve None).
+    """
+    n = exatos = 0
+    cers: list[float] = []
+    for hip, ref in zip(hypotheses, references):
+        valor = cer(hip, ref)
+        if valor is None:
+            continue
+        n += 1
+        cers.append(valor)
+        if valor == 0.0:
+            exatos += 1
+    if n == 0:
+        return {"n": 0, "exact_match": None, "cer_medio": None, "cer_mediana": None,
+                "acima_de_0_30": 0, "pior_cer": None}
+    return {
+        "n": n,
+        "exact_match": exatos / n,
+        "cer_medio": sum(cers) / n,
+        "cer_mediana": statistics.median(cers),
+        "acima_de_0_30": sum(1 for c in cers if c > LIMITE_CER_AMOSTRA),
+        "pior_cer": max(cers),
+    }
+
+
+_sessoes_abertas = 0
+
+
+@contextlib.contextmanager
+def single_session(factory, *args, **kwargs):
+    """Abre UMA sessao ONNX pesada por vez no processo.
+
+    Motivo: o encoder do NAR em T=2000 consome varios GB por sessao. Um roteiro que abria
+    4 sessoes de encoder em paralelo chegou a 13 GB de RSS e o processo foi morto pelo
+    sistema no meio — o resultado parecia "modelo travado" quando era falta de memoria.
+    Uma sessao por vez e a regra; a comparacao entre variantes e SEQUENCIAL.
+
+    A fabrica e injetada de proposito: assim o teste verifica a regra SEM carregar o ONNX
+    Runtime (que nao existe no JVM de teste nem e necessario para provar a contagem).
+    """
+    global _sessoes_abertas
+    if _sessoes_abertas:
+        raise RuntimeError(
+            f"ja existe {_sessoes_abertas} sessao(oes) ONNX aberta(s) neste processo; "
+            "abra uma por vez (ver single_session) para nao estourar a memoria")
+    sessao = factory(*args, **kwargs)
+    _sessoes_abertas += 1
+    try:
+        yield sessao
+    finally:
+        _sessoes_abertas -= 1
+        del sessao
+
+
+def sessoes_abertas() -> int:
+    """Quantas sessoes pesadas estao abertas agora (0 = nada vazando)."""
+    return _sessoes_abertas
