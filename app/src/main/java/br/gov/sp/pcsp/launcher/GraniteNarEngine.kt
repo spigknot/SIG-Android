@@ -513,22 +513,21 @@ object GraniteNarEngine {
                 len
             }.getOrDefault(0L)
         }
-        return if (remote > 0L) remote else FALLBACK_PACKAGE_BYTES
+        return if (remote > 0L) remote else fallbackPackageBytes(variante)
     }
 
     /**
      * Soma dos arquivos publicados (fallback quando os HEAD requests falham).
      *
-     * Pacote com pesos COMPARTILHADOS: os 12 grafos de bucket somam ~4,5 MB, e os pesos
-     * (1,09 GB do encoder + 152 MB do projector) sao baixados uma vez so. Total ~4,59 GiB —
-     * ligeiramente MENOR que o pacote anterior de bucket unico (4,73 GiB) e com 6 buckets.
-     * GANHO: audio curto deixa de pagar padding de ate 12x (medido: 9,7x mais lento).
+     * Depende da VARIANTE escolhida: o par do LLM varia de 434 MB a 3,26 GB. O resto do
+     * pacote é fixo — os pesos do encoder/projector são compartilhados por todos os buckets
+     * (por isso 6 buckets custam só ~4,3 MB em grafos, não 6 GB).
      */
-    internal const val FALLBACK_PACKAGE_BYTES =
+    private fun fallbackPackageBytes(variante: GraniteNarLlm.Variante): Long =
         1_085_993_664L +        // encoder-pesos.data   (compartilhado pelos 6 buckets)
             159_535_104L +      // projector-pesos.data (idem)
-            2_149_128L +        // granite-4.1-nar-llm-fp16.onnx
-            3_263_500_288L +    // granite-4.1-nar-llm-fp16.onnx.data
+            variante.bytes +    // .data do LLM da variante escolhida
+            2_300_000L +        // .onnx do LLM (varia ~40 KB entre variantes)
             82_240L + 2_048L + 1_612_704L + 411_041_792L + 289L +
             4_313_190L +        // 6 grafos de encoder (t0200..t2000)
             209_833L            // 6 grafos de projector
@@ -542,11 +541,32 @@ object GraniteNarEngine {
         }
     }
 
+    /**
+     * Busca o manifesto publicado (`<BASE>/manifest.json`) e devolve nome→sha256.
+     *
+     * Mapa vazio quando indisponível: um pacote legítimo antigo pode não ter hashes, e a
+     * ausência não pode impedir o uso. Hashes presentes são sempre verificados.
+     */
+    private fun buscarManifest(): Map<String, String> = runCatching {
+        val conn = (URL("$PACKAGE_BASE_URL/manifest.json").openConnection() as HttpURLConnection).apply {
+            connectTimeout = 8000
+            readTimeout = 20000
+            setRequestProperty("User-Agent", "Mozilla/5.0")
+        }
+        val texto = conn.inputStream.bufferedReader().use { it.readText() }
+        conn.disconnect()
+        GraniteNarManifest.parse(texto)
+    }.getOrDefault(emptyMap())
+
     fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit) {
         val variante = GraniteNarLlmSettings.selected(context)
         val dir = packageDir(context).apply { mkdirs() }
         dir.listFiles()?.forEach { if (it.name.endsWith(".download")) it.delete() }
         val files = packageFiles(variante)
+        // Fase 7 do plano: "SHA-256 antes da ativação". Sem isso um download truncado ou
+        // corrompido seria ativado em silêncio, e o sintoma apareceria depois como
+        // "o modelo não transcreve", sem pista da causa.
+        val hashes = buscarManifest()
         var totalBytes = 0L
         var copiedBytes = 0L
         val missing = files.filter { (name, _) ->
@@ -565,7 +585,7 @@ object GraniteNarEngine {
                 len
             }.getOrDefault(0L)
         }
-        if (totalBytes <= 0L) totalBytes = FALLBACK_PACKAGE_BYTES
+        if (totalBytes <= 0L) totalBytes = fallbackPackageBytes(variante)
         for ((name, url) in missing) {
             val dest = File(dir, name)
             val temp = File(dir, "$name.download")
@@ -592,6 +612,17 @@ object GraniteNarEngine {
                         }
                     }
                 }
+            }
+            // Verifica ANTES de tornar o arquivo definitivo: o `.download` só vira oficial se
+            // conferir. Falha = apaga e aborta com mensagem clara (em vez de ativar em
+            // silêncio um modelo que não transcreveria).
+            val esperado = hashes[name]
+            if (!GraniteNarManifest.confere(temp, esperado)) {
+                temp.delete()
+                throw IllegalStateException(
+                    "Download corrompido: $name não confere com o SHA-256 publicado. " +
+                        "Verifique a conexão e tente novamente."
+                )
             }
             if (dest.exists()) dest.delete()
             if (!temp.renameTo(dest)) {

@@ -336,4 +336,83 @@ class GraniteNarEngineTest {
         val colisao = GraniteNarBuckets.LEGADOS.intersect(arquivosDeVariantes.toSet())
         assertTrue("a limpeza apagaria arquivo de variante: $colisao", colisao.isEmpty())
     }
+
+    // ---- Integridade do pacote (Fase 7: "SHA-256 antes da ativação") ----
+
+    @Test
+    fun `manifest parse reads name to sha256`() {
+        val json = """
+            {"arquivos":[
+              {"name":"a.onnx","bytes":10,"sha256":"${"a".repeat(64)}"},
+              {"name":"b.data","bytes":20,"sha256":"${"B".repeat(64)}"}
+            ]}
+        """.trimIndent()
+        val m = GraniteNarManifest.parse(json)
+        assertEquals(2, m.size)
+        // o hash é normalizado para minúsculas
+        assertEquals("a".repeat(64), m["a.onnx"])
+        assertEquals("b".repeat(64), m["b.data"])
+    }
+
+    @Test
+    fun `manifest parse tolerates missing or malformed input`() {
+        // Pacote antigo pode não ter hashes: ausência não pode explodir.
+        assertEquals(0, GraniteNarManifest.parse("{}").size)
+        assertEquals(0, GraniteNarManifest.parse("nao e json").size)
+        assertEquals(0, GraniteNarManifest.parse("").size)
+        // entradas incompletas são ignoradas, não viram hash inválido
+        val parcial = """{"arquivos":[{"name":"x"},"lixo",{"sha256":"${"c".repeat(64)}"}]}"""
+        assertTrue(GraniteNarManifest.parse(parcial).isEmpty())
+        // sha de tamanho errado não entra (evita "verificar" contra lixo)
+        val curto = """{"arquivos":[{"name":"y","sha256":"abc"}]}"""
+        assertTrue(GraniteNarManifest.parse(curto).isEmpty())
+    }
+
+    @Test
+    fun `manifest sha256 matches a known digest`() {
+        // "abc" -> ba7816bf... é o vetor de teste padrão do SHA-256.
+        val tmp = java.io.File.createTempFile("sha", ".bin")
+        try {
+            tmp.writeText("abc")
+            assertEquals(
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                GraniteNarManifest.sha256(tmp),
+            )
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    @Test
+    fun `manifest confere accepts a matching file and rejects a tampered one`() {
+        val tmp = java.io.File.createTempFile("conf", ".bin")
+        try {
+            tmp.writeText("conteudo legitimo")
+            val hash = GraniteNarManifest.sha256(tmp)
+            assertTrue(GraniteNarManifest.confere(tmp, hash))
+            assertTrue(GraniteNarManifest.confere(tmp, hash.uppercase()))  // case-insensitive
+
+            tmp.writeText("conteudo ALTERADO")
+            assertTrue("hash diferente tem de reprovar", !GraniteNarManifest.confere(tmp, hash))
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    @Test
+    fun `manifest confere does not block an unlisted file`() {
+        // Arquivo que o manifesto não lista não é aprovado nem reprovado: segue o fluxo.
+        // (Impedir seria quebrar pacotes legítimos sem hashes.)
+        val tmp = java.io.File.createTempFile("nolist", ".bin")
+        try {
+            tmp.writeText("x")
+            assertTrue(GraniteNarManifest.confere(tmp, null))
+            assertTrue(GraniteNarManifest.confere(tmp, ""))
+            // mas arquivo INEXISTENTE com hash esperado reprova
+            val fantasma = java.io.File(tmp.parentFile, "nao_existe_${tmp.name}")
+            assertTrue(!GraniteNarManifest.confere(fantasma, "a".repeat(64)))
+        } finally {
+            tmp.delete()
+        }
+    }
 }

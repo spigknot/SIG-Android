@@ -123,7 +123,6 @@
 - Proximas tarefas usam --work-dir D:/SIG-granite-nar-lab-rebuild.
 
 ## Verificacao 10/09 - QUANTIZACAO REABERTA (4-bit weight-only) + encoder pronto para NPU
-
 **Dois erros de MEDICAO meus invalidaram o veredito anterior de "linha encerrada":**
 - Igualdade exata de texto e metrica binaria: reprova a amostra por um caractere. Com artefato ONNX real, corpus de 82: `int8/4-bit` dava 41/82 exato (parecia reprovacao) mas **CER 0,0324 vs float 0,0323** (delta +0,0001). Pareado: 14 melhoram, 48 empatam, 20 pioram.
 - A referencia NAO pode ser a saida do proprio modelo: medido, `ctc_ids` identicos 5/5, LLM fp16 == fp32 5/5, e **fp32 puro comete os mesmos erros** em palavras raras (`wifi door bell` -> `wi doorbell`, `inland waterways` -> `land`). Isso descarta fp16 como causa e mostra que auto-referencia pune a quantizacao por erros que o float ja tem.
@@ -151,3 +150,49 @@
 2. Criterio S13: oficializar **CER <= CER float + 0,005** e zero amostras com CER > 0,30, deixando a igualdade exata como informativo.
 3. Validacao na NPU: so com o aparelho. Tudo continua `context-ready`, nada `npu-approved`.
 
+## Verificacao 11/09 - escolha da variante do LLM na UI + pacote v2 (pesos compartilhados)
+
+**Pedido do gerente:** *"deixar o usuario escolher, mas colher os dados do teste para mostrar na tela"* (modelo Whisper: tiny/small/medium/turbo).
+
+**MEDIDO (82 amostras FLEURS, 5 idiomas, contrato REAL do app: 2 entradas, `S` dinamico, sem padding; ORT CPU):**
+
+| variante | `.data` | velocidade | CER global | pt-BR | texto = float | > 0,30 |
+|---|---|---|---|---|---|---|
+| fp16 (maxima) | 3,3 GB | — | 0,0323 | referencia | — | 0 |
+| **int8b (equilibrado)** | **1,7 GB** | **2,4x** | **0,0321** | **+0,0012 PASSA** | **75/82 (91,5%)** | **0** |
+| int4b (leve) | 842 MB | **4,3x** | 0,0338 | +0,0054 EXCEDE | 50/82 | 0 |
+| ~~int2b (minimo)~~ | ~~434 MB~~ | 3,0x | **0,7946** | +0,7850 EXCEDE | **0/82** | **82/82** |
+
+- **O 8-bit resolve o dilema qualidade x tamanho**: passa em TODOS os 5 idiomas (folga de 4x no limite em pt-BR), 76 de 82 amostras empatam EXATAMENTE com o float, CER global levemente melhor. 35% menos download, 2,4x mais rapido.
+- **O 2-bit foi REPROVADO**: nao e qualidade menor, e texto destruido (0/82, CER 24,6x, 82/82 acima de 0,30). O artefato e tecnicamente valido (`MatMulNBits={2: 281}`, carrega, contrato certo) e 3x mais rapido — por isso fica registrado no codigo (`DOIS_BITS_REPROVADO`) com os numeros, para ninguem tentar de novo sem saber.
+
+**UI:** botao na linha do modelo (so com o NAR) -> dialogo com tamanho, velocidade e efeito na qualidade de cada opcao. Trocar de variante abre o download se o par nao estiver no aparelho. Download SOB DEMANDA (baixar as tres custaria 6,9 GiB, pior que os 4,74 GiB de hoje).
+
+**Escolha de bucket:** o app usa o MENOR que caiba. Medido: o padding ate T=2000 degradava a transcricao (1 piora / 7 empata / 0 melhora, com perda de palavra `inland water` -> `inlandways`) e custava 9,7x em audio curto.
+
+**PACOTE v2 publicado** em `models/granite/4.1-nar/v2` (25 objetos, 6,92 GiB; v1 INTACTO com 836 objetos):
+- pesos COMPARTILHADOS entre buckets: 472/472 initializers identicos por CONTEUDO (o exporter renumera os nomes: `onnx::Conv_3197` -> `onnx::Conv_3199`). Cada bucket extra custa ~720 KB, nao ~1,04 GB — o pacote ficou MENOR que o de bucket unico com 6 buckets.
+- paridade **12/12 BIT-EXATA** (6 encoders + 6 projectors vs os originais, pesos embutidos).
+- 3 variantes do LLM, cada uma com `external_data.location` casando com o nome publicado (verificado por carregamento ORT).
+- **`manifest.json` agora tem sha256 de cada arquivo** (25/25) — exigencia "SHA-256 antes da ativacao" da Fase 7.
+
+**Fase 7 no app (componentes do plano):**
+- ✅ SHA-256 antes da ativacao: `GraniteNarManifest.kt` (parse + verificacao em streaming); o download confere o `.download` ANTES de renomear e aborta com mensagem clara se divergir.
+- ✅ nao manter todas as sessoes abertas + cache de uma dupla encoder/projector e uma sessao LLM: `encoderPara`/`projectorPara`/`llmPara` fecham a anterior ao trocar.
+- ✅ pesos/embeddings mapeados (nao copiados ao heap Java): `nar_embed_tokens.bin` via mmap (ja existia).
+- ✅ remocao de versoes antigas recuperavel: `limparPacoteLegado` so apaga depois de `packageComplete`, e nunca toca em arquivo das variantes.
+- ⬜ rollback para ultimo pacote aprovado / retomada de download: NAO implementado (registrado como pendente).
+
+**Fase 0 - entregaveis que faltavam, agora presentes:** `tools/granite/nar/requirements-lock.txt` (versoes exatas Python 3.11.15 / torch 2.9.1+cpu / transformers 5.17.0 / onnx 1.22.0 / **onnxruntime 1.29.0** / numpy 2.4.6). A **matriz ORT-QAIRT nao existe e nao pode existir no PC**: o QAIRT so esta no pacote que o app baixa no aparelho — mede-se no device.
+
+**Vacinas:** 15 testes novos (37 so no `GraniteNarEngineTest`; **352+ no total**, 0 falhas) — faixa termina no 4-bit, 2-bit fora da lista mas registrado, ids estaveis, nomes/locations do contrato do device, limpeza nao apaga variante em uso, e a integridade SHA-256 (parse tolerante, digest conhecido, arquivo alterado reprova, nao-listado nao bloqueia).
+
+**Ferramentas de medicao no aparelho (o plano ja previa a oficial):**
+- `scripts/run-granite-nar-adb-benchmark.ps1` (do repo, Fase 8) = caminho OFICIAL: build+install, warmup, execucoes medidas, logcat, dumpsys, bateria, thermal, JSONL.
+- `scripts/testa_encoder_npu.sh` = testa a hipotese dos `Einsum` na NPU (troca os 6 grafos convertidos e chama o oficial; os pesos nao mudam).
+- `scripts/testa_variantes_celular.sh` = compara fp16 / 8-bit / 4-bit com o mesmo audio.
+
+**PENDENTE (decisao do gerente):**
+1. Testar o APK no aparelho (O:/sig.apk, md5 `1b9558200cd016215402551df369ff19`); nada foi publicado como release nem teve bump de versao.
+2. Limpeza de disco: 22,4 GB recuperaveis (`reports/proposta-limpeza-20260910.md`) + 3,1 GB de lixo do experimento exploratorio. Nada removido sem aprovacao.
+3. NPU: so com o aparelho. Tudo continua `context-ready`, nada `npu-approved`.

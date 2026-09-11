@@ -1,0 +1,47 @@
+# Lock de ambiente do lab NAR — Granite Speech 4.1 2B NAR → QNN
+#
+# Entregável da Fase 0 do plano ("requirements-lock.txt ou lock equivalente").
+# Registra as versões EXATAS com que as medições publicadas foram feitas. Mudar qualquer
+# uma das linhas abaixo invalida a reprodutibilidade dos números relatados — em especial
+# `onnxruntime`, que define o quantizador (`MatMulNBitsQuantizer`) e o comportamento do
+# `MatMulNBits`.
+#
+# Python: 3.11.15
+#
+# NÃO instalar com `pip install -r` direto: `torch==2.9.1+cpu` exige o índice do PyTorch.
+# Para reproduzir:
+#   python -m venv venv
+#   venv/Scripts/pip install torch==2.9.1+cpu torchaudio==2.9.1+cpu \
+#       --index-url https://download.pytorch.org/whl/cpu
+#   venv/Scripts/pip install -r requirements-lock.txt
+#
+# --- pacotes que definem os resultados ---
+torch==2.9.1+cpu
+torchaudio==2.9.1+cpu
+transformers==5.17.0
+onnx==1.22.0
+onnxruntime==1.29.0
+numpy==2.4.6
+tokenizers==0.23.2
+datasets==5.0.1
+huggingface_hub==1.30.0
+soundfile==0.14.0
+pytest==9.1.1
+onnxscript==0.7.2
+onnx-ir==1.0.0
+#
+# --- ambiente de GPU (venv-gpu, só para referência PyTorch fp16) ---
+# torch==2.9.1+cu128 (CUDA 12.8), RTX 3060 Ti (8192 MiB, driver 616.92).
+# O ORT é CPU nos DOIS ambientes por decisão de paridade: as medições de quantização e de
+# texto usam `CPUExecutionProvider`. Usar CUDA mudaria os kernels e invalidaria a comparação
+# com o caminho que o app executa.
+#
+# --- onnxruntime-android (no app) ---
+# 1.29.0 — precisa casar com o ORT do lab para o quantizador e os grafos se comportarem
+# igual. A app usa OptLevel.NO_OPT nos backends acelerados (ver GraniteNarEngine).
+#
+# --- QAIRT/QNN ---
+# NÃO está no PC de exportação. O app baixa o pacote QAIRT no próprio aparelho
+# (`QairtDependencyManager`, `sig-qairt-arm64-v8a-v1.zip`, 55.682.231 B no R2).
+# `PACKAGE_VERSION = "1"` é a versão do pacote SIG, NÃO a versão do SDK Qualcomm — a
+# matriz ORT↔QAIRT real só pode ser medida no device (Fase 0, último item).

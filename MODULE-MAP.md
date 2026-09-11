@@ -120,6 +120,7 @@ também é bloqueado.
 | `PartsExtractionSettings.kt` | Método/modelo/config da extração de partes. |
 | `GraniteParallelismSettings.kt` | Paralelismo do Granite. |
 | `GraniteNarLlmSettings.kt` | Variante do LLM do NAR escolhida pelo usuário (prefs). |
+| `GraniteNarManifest.kt` | Integridade do pacote NAR: parse do manifesto e verificação SHA-256. |
 | `ConversionParallelismSettings.kt` | Paralelismo das conversões. |
 | `NameDatabaseStore.kt` | Banco local de nomes (load/add/remove). |
 | `AppCacheManager.kt` | Limpeza de caches por idade e tamanho. |
