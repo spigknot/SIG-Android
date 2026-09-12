@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtLoggingLevel
 import ai.onnxruntime.OrtSession
 import java.io.File
 import java.io.FileOutputStream
@@ -456,7 +457,19 @@ object GraniteNarEngine {
      */
     private const val MARGEM_DISCO_BYTES = 256L * 1024L * 1024L
 
-    @Volatile private var encoderSession: OrtSession? = null
+    /**
+     * Log verboso do ORT nas sessoes criadas a seguir — so diagnostico.
+     *
+     * Ligado pelo `GraniteNarSmokeTestActivity` (extra `ort_verbose`). Serve para o QNN EP LISTAR
+     * os nos nao atribuidos: a mensagem normal ("some nodes are assigned to the default CPU EP")
+     * nao diz quais, e foi por isso que a investigacao do encoder ficou no escuro depois de
+     * refutar tanto o Einsum quanto as dims simbolicas. Default false: producao nao muda.
+     */
+    @Volatile
+    var debugOrtVerbose: Boolean = false
+
+    @Volatile
+    private var encoderSession: OrtSession? = null
 
     /** Variante do LLM carregada em [llmSession] (ou null se nenhuma). */
     @Volatile private var llmVariante: GraniteNarLlm.Variante? = null
@@ -735,6 +748,17 @@ object GraniteNarEngine {
         requireFullAcceleration: Boolean,
     ): OrtSession.SessionOptions {
         val options = OrtSession.SessionOptions()
+        // Diagnostico: com o log verboso ligado o QNN EP LISTA os nos que nao conseguiu atribuir,
+        // em vez de so falhar com "some nodes are assigned to the default CPU EP". Sem isso a
+        // mensagem nao diz QUAIS nos e a investigacao fica no escuro (foi o que aconteceu com o
+        // encoder: nem os Einsum nem as dims simbolicas explicavam a rejeicao).
+        // Ligado apenas pelo smoke test (extra `ort_verbose`) — nao muda nada em producao.
+        if (debugOrtVerbose) {
+            runCatching {
+                options.setSessionLogLevel(OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE)
+                options.setSessionLogVerbosityLevel(1)
+            }
+        }
         options.setOptimizationLevel(
             if (backend == GraniteExecutionBackend.CPU) {
                 OrtSession.SessionOptions.OptLevel.BASIC_OPT

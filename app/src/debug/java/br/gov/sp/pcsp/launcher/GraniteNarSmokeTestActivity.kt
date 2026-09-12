@@ -33,6 +33,10 @@ class GraniteNarSmokeTestActivity : Activity() {
                 val measuredRuns = boundedExtra(EXTRA_MEASURED_RUNS, defaultValue = 1, minimum = 1, maximum = 20)
                 val loadOnly = intent.getBooleanExtra(EXTRA_LOAD_ONLY, false)
                 val includeText = intent.getBooleanExtra(EXTRA_INCLUDE_TEXT, false)
+                // Diagnostico: o QNN EP so LISTA os nos que nao atribuiu se o log do ORT estiver
+                // verboso. Precisa ser antes do load(), porque as sessoes sao criadas la.
+                GraniteNarEngine.debugOrtVerbose =
+                    intent.getBooleanExtra(EXTRA_ORT_VERBOSE, false)
                 val audioPath = checkNotNull(intent.getStringExtra(EXTRA_AUDIO_PATH)) {
                     "Extra obrigatório ausente: $EXTRA_AUDIO_PATH"
                 }
@@ -252,6 +256,8 @@ class GraniteNarSmokeTestActivity : Activity() {
     private companion object {
         const val EXTRA_BACKEND = "backend"
         const val EXTRA_REQUIRE_FULL_ACCELERATION = "require_full_acceleration"
+        /** Log verboso do ORT: faz o QNN EP listar os nos que nao conseguiu atribuir. */
+        const val EXTRA_ORT_VERBOSE = "ort_verbose"
         const val EXTRA_AUDIO_PATH = "audio_path"
         const val EXTRA_RUN_ID = "run_id"
         const val EXTRA_WARMUP_RUNS = "warmup_runs"

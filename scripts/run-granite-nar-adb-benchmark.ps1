@@ -60,8 +60,19 @@ function Invoke-Adb {
         [switch]$AllowFailure
     )
 
-    $output = & $adbCommand.Source @adbBase @Arguments 2>&1
-    $exitCode = $LASTEXITCODE
+    # O adb escreve informacao NORMAL no stderr (ex.: "1 file pushed, 0 skipped" de um `push`).
+    # Com `$ErrorActionPreference = "Stop"` (global deste script), o PowerShell transforma esse
+    # stderr em exceção ANTES de chegarmos a olhar o exit code — o script abortava no primeiro
+    # `adb push` e nenhum backend chegava a rodar. Aqui o erro nativo e capturado como TEXTO e a
+    # decisão continua sendo do exit code, que e o sinal correto.
+    $preferenciaAnterior = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $adbCommand.Source @adbBase @Arguments 2>&1
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $preferenciaAnterior
+    }
     if ($exitCode -ne 0 -and -not $AllowFailure) {
         throw "adb falhou ($exitCode): adb $($Arguments -join ' ')`n$($output -join [Environment]::NewLine)"
     }
