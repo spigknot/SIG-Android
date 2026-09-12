@@ -468,6 +468,20 @@ object GraniteNarEngine {
     @Volatile
     var debugOrtVerbose: Boolean = false
 
+    /**
+     * Cria a sessao do **LLM no CPU** mesmo quando o backend pedido e acelerado.
+     *
+     * Diagnostico, nao produto. Motivo medido no aparelho: o QNN EP **derruba o processo** ao
+     * preparar o grafo do LLM (3229-9138 nos, 3,26 GB) — cinco tentativas, sempre no mesmo ponto,
+     * e o MESMO LLM funciona no CPU. O encoder e o projector (85% do tempo de inferencia) vao para
+     * a NPU sem problema (161 s e 20 s de preparacao).
+     *
+     * Com isto ligado da para medir o ganho real da NPU sem antes resolver o LLM — que e a
+     * pergunta aberta. Default false: producao nao muda.
+     */
+    @Volatile
+    var debugLlmBackendCpu: Boolean = false
+
     @Volatile
     private var encoderSession: OrtSession? = null
 
@@ -892,8 +906,15 @@ object GraniteNarEngine {
         llmSession?.close()
         llmSession = null
         llmVariante = null
+        // Ver a KDoc de `debugLlmBackendCpu`: o QNN EP morre ao preparar este grafo, e o encoder +
+        // projector (85% do tempo) ja vao para a NPU. Aqui o LLM fica no CPU quando a flag esta
+        // ligada, para medir o ganho da NPU sem depender de resolver o LLM.
+        val backendEfetivo = if (debugLlmBackendCpu) GraniteExecutionBackend.CPU else backend
+        if (backendEfetivo != backend) {
+            onLog("LLM no CPU por diagnostico (backend pedido: ${backend.reportLabel})")
+        }
         val nova = criarSessao(dir, variante.onnx, "llm editor (${variante.rotulo})",
-            backend, requireFullAcceleration, onLog)
+            backendEfetivo, requireFullAcceleration, onLog)
         llmSession = nova
         llmVariante = variante
         return nova

@@ -37,6 +37,11 @@ class GraniteNarSmokeTestActivity : Activity() {
                 // verboso. Precisa ser antes do load(), porque as sessoes sao criadas la.
                 GraniteNarEngine.debugOrtVerbose =
                     intent.getBooleanExtra(EXTRA_ORT_VERBOSE, false)
+                // Diagnostico do limite do LLM: o QNN EP derruba o processo ao preparar esse grafo,
+                // entao ha um modo em que o LLM e criado no CPU e encoder/projector continuam na
+                // NPU — e isso que mede o ganho real da NPU sem resolver o LLM.
+                GraniteNarEngine.debugLlmBackendCpu =
+                    intent.getBooleanExtra(EXTRA_LLM_BACKEND_CPU, false)
                 val audioPath = checkNotNull(intent.getStringExtra(EXTRA_AUDIO_PATH)) {
                     "Extra obrigatório ausente: $EXTRA_AUDIO_PATH"
                 }
@@ -258,6 +263,8 @@ class GraniteNarSmokeTestActivity : Activity() {
         const val EXTRA_REQUIRE_FULL_ACCELERATION = "require_full_acceleration"
         /** Log verboso do ORT: faz o QNN EP listar os nos que nao conseguiu atribuir. */
         const val EXTRA_ORT_VERBOSE = "ort_verbose"
+        /** Cria a sessao do LLM no CPU mesmo com backend acelerado (mede o ganho da NPU). */
+        const val EXTRA_LLM_BACKEND_CPU = "llm_backend_cpu"
         const val EXTRA_AUDIO_PATH = "audio_path"
         const val EXTRA_RUN_ID = "run_id"
         const val EXTRA_WARMUP_RUNS = "warmup_runs"
