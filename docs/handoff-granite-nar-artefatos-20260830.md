@@ -60,12 +60,19 @@ Erro nas saídas (áudio de teste): cosseno **0,99905** (logits) / **0,99202** (
 - somando sem dedup: **7.042.391.640 B** → economiza **5,86 GB**
 - pacote total: **1,10 GiB**
 
-## 6. Objetos NÃO enviados ao R2 e por quê
+## 6. Upload R2 (seção 16)
 
-Os artefatos QDQ desta rodada **ainda não foram publicados** — estão locais, aguardando a decisão
-sobre o critério §13 e, idealmente, o teste de NPU. O prefixo autorizado seria
-`models/granite/4.1-nar/experiments/nar-qnn-lab-rebuild-20260910/`.
-Manifesto R2 já publicado (rodada anterior): `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/4.1-nar/v2/manifest.json`
+**Publicado:** o piloto QDQ U16/U8 aprovado (prioridade 3 da seção 16) —
+`models/granite/4.1-nar/experiments/nar-qnn-lab-rebuild-20260910/pacote-u16/`
+
+- **manifesto público:** https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/4.1-nar/experiments/nar-qnn-lab-rebuild-20260910/pacote-u16/manifest.json
+- 8 objetos: 1 `.data` (1.178.567.552 B) + 6 grafos + `manifest.json`
+- **8/8 com HTTP HEAD público 200**; `manifest.json` enviado **por último** (item 8)
+- prefixo próprio da rodada — a regra 6 (não sobrescrever conteúdo diferente) bloqueou corretamente
+  o envio ao `pacote-20260911/` da rodada anterior
+- `reports/r2-upload.jsonl` atualizado, sem segredos (item 12)
+
+**NÃO enviado:** o pacote de produção `models/granite/4.1-nar/v2` não foi tocado (item 11).
 
 ## 7. Gates (13/09)
 
