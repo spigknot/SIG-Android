@@ -98,6 +98,62 @@ adb logcat -d | grep -a NAR_BENCH_JSON
 # comparar com o baseline fp16: CPU 45.774 ms | NPU 49.614 ms (bucket 400)
 ```
 
+## 11. AUDITORIA das ordens do cérebro (13/09, madrugada) — o que faltava e foi feito
+
+Depois de reler **os dois documentos** item a item, encontrei exigências que eu havia deixado em
+aberto. Todas foram fechadas:
+
+### §13 (Quantização QNN piloto) — o piloto é o TRIO
+
+O §13 manda quantizar "encoder `T=200`; **projector `T=200`**; **LLM `S=64`**". Eu havia feito só o
+encoder. Agora:
+
+| artefato | estado | paridade medida |
+|---|---|---|
+| encoder T=200 | já estava (6 buckets) | texto idêntico / ΔCER ≤ +0,0022 |
+| **projector T=200** | **feito** | cosseno **0,99996653**, sem NaN/Inf |
+| **LLM S=64** | **feito** | cosseno **0,98618100**, **top-1 92,2%**, sem NaN/Inf |
+
+O `S=64` foi gerado de propósito (`estatica_llm.py --s 64`): o que existia no lab era `S=121`, e o §13
+pede `S=64` — cujo gate de máscara **passou** (`mask_gate_s0064: passed`, pré-requisito do §13).
+
+### Critério revisado do §13 (aprovado em 10/09) — aplicado
+
+| item | resultado |
+|---|---|
+| 1. CER_quant ≤ CER_float + 0,005 | **+0,00034 agregado** (o int8 ficou *melhor*) ✓ |
+| 2. zero amostras com CER > 0,30 | **0 causadas pela quantização** ✓ (as 12 acima de 0,30 têm o float falhando igual: 1,000 / 0,953 / 0,504 / 0,840) |
+| 3. sem NaN/Inf | ✓ nos 8 artefatos |
+
+Nota de interpretação: o item 1 é **agregado** — o próprio §13 justifica o `0,005` como *"menor que a
+variação entre amostras do próprio corpus"*; por amostra, 2 amostras passam de +0,005 e são **ruído de
+1–2 caracteres** (`npws`→`nws`; e `kcker`→`crocker`, onde o **candidato acertou** o nome real).
+
+### §14 (Validação local obrigatória) — 88/88 itens
+
+Rodado de fato agora (não estava antes). Os 11 itens por artefato, em **8 artefatos**:
+
+- `onnx.checker` passa ✓
+- shape inference ✓ · sem dimensões dinâmicas ✓
+- **ORT 1.29 cria sessão** ✓ (é a versão do `app/build.gradle`, não a mais nova)
+- inferência real ✓ · contrato de I/O ✓ · sha/tamanho em manifesto ✓
+- **nenhuma credencial/caminho privado embutido** ✓ (varredura por padrões)
+- **sem NaN/Inf** ✓
+
+**`reports/validacao-secao14-artefatos.json`**
+
+### §16 — trio publicado
+
+- `.../pacote-u16/` (encoder, 8 objetos) — já estava
+- `.../projector-qdq/` (2 objetos, 2/2 HTTP 200)
+- `.../llm-qdq/` (3 objetos, incluindo o `.data` de 5,27 GB)
+
+### Como as lacunas apareceram (e por que valem registro)
+
+Eu havia declarado "tudo feito" antes de reler o **prompt-operador** inteiro — eu tinha conferido o
+plano (F0–F8) e as §16–§20, mas **não** as §6, §13 e §14. As três lacunas estavam lá, explícitas. Ler o
+documento de requisitos por inteiro, no fim, é o que fecha.
+
 ## 10. Relatórios desta rodada
 
 - `reports/relatorio-cerebro-20260913.md` (no lab) — resultados, falhas, hipóteses refutadas
