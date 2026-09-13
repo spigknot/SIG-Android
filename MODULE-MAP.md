@@ -63,6 +63,7 @@ também é bloqueado.
 | `FfmpegJoinTimelineView.kt` | Timeline da junção (clipes + miniaturas). |
 | `FfmpegJoinPlaybackTimelineView.kt` | Timeline de reprodução do preview da junção. |
 | `FfmpegInsertAudioTimelineView.kt` | Timeline da inserção de áudio. |
+| `FfmpegPreviewOverlayView.kt` | Seleção de área e gestos (zoom/arrasto) do player FFmpeg. |
 | `AppVersionTextView.kt` | TextView com a versão do app. |
 | `SystemBars.kt` | Extensão para system bars / edge-to-edge. |
 
@@ -91,6 +92,9 @@ também é bloqueado.
 | `FfmpegCommandPresenter.kt` | Prévia do comando FFmpeg exibida ao usuário. |
 | `FfmpegMediaPolicies.kt` | Políticas de stream-copy/trim/junção por codec. |
 | `FfmpegVideoEncoderRegistry.kt` | Registro dos encoders de vídeo disponíveis. |
+| `FfmpegVideoEncoders.kt` | Catálogo de encoders do aparelho + escolha por tarefa (hardware/CPU). |
+| `FfmpegCutModes.kt` | Modos de corte (SmartCut/Reencode/Cópia) e despacho com motivo. |
+| `FfmpegPreviewSelection.kt` | Geometria do player: zoom, deslocamento e seleção de área (crop). |
 | `FfmpegVideoQuality.kt` | Modelos de qualidade/bitrate de vídeo e áudio. |
 | `SmartJoinPlanner.kt` | Plano da junção inteligente (clipes, alvo, compatibilidade). |
 | `RequestModelLabel.kt` | Rótulo curto do modelo usado numa requisição. |

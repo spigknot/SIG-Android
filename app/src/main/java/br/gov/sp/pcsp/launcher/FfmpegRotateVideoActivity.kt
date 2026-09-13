@@ -118,8 +118,16 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private var lastOutputName = ""
 
     private var selectedCodec: FfmpegVideoEncoder? = null
+    private var encoderCatalog: List<FfmpegVideoEncoders.Option> = emptyList()
+    private var encoderPath: String = FfmpegVideoEncoders.PATH_HARDWARE
+    private var encoderAdvanced: String = FfmpegVideoEncoders.ADVANCED_AUTO
+    private var sourceCodecFamily: String? = null
+    private lateinit var previewOverlay: FfmpegPreviewOverlayView
+    /** Seleção de área (frações do quadro exibido); `null` = sem recorte. */
+    private var previewSelection: FfmpegPreviewSelection.Selection? = null
+    /** Filtros com que a seleção foi desenhada (para reexpressá-la no giro). */
+    private var selectionFilters: String = ""
     private var selectedVideoQuality = FfmpegVideoQuality.default
-    private var availableCodecs: List<FfmpegVideoEncoder> = emptyList()
     private var savedFlipHorizontal = false
     private var savedFlipVertical = false
     private var savedTrimStartMs: Long? = null
@@ -183,6 +191,13 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         rotateScroll = findViewById(R.id.rotate_scroll)
         previewFrame = findViewById(R.id.preview_frame)
         videoPreview = findViewById(R.id.video_preview)
+        previewOverlay = findViewById(R.id.preview_overlay)
+        previewOverlay.onViewportChanged = { applyPreviewTransform() }
+        previewOverlay.onSelectionChanged = { selection ->
+            previewSelection = selection
+            onSelectionChangedForRotate()
+        }
+        previewOverlay.onSelectionMenuRequested = { showSelectionMenu() }
         controls = findViewById(R.id.rotate_controls)
         timeline = findViewById(R.id.timeline)
         currentTime = findViewById(R.id.current_time)
@@ -424,6 +439,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         clearOutputResult()
         controls.visibility = View.VISIBLE
         videoPreview.visibility = View.VISIBLE
+        previewOverlay.visibility = View.VISIBLE
+        previewOverlay.reset()
+        previewSelection = null
         setRotateEnabled(true)
         setPlaybackButtonPlaying(false)
         timeline.isEnabled = false
@@ -445,6 +463,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         if (previewSurface != null) {
             preparePreview(uri)
         }
+        sourceCodecFamily = detectSourceCodecFamily(uri)
+        refreshResolvedEncoder()
         scheduleRotatePreviewAnalysis(uri)
         refreshCommandPreview()
     }
@@ -495,6 +515,18 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 } else {
                     "O arquivo possui ${probe.value} faixas de vídeo. Esta ferramenta aceita exatamente uma para não descartar conteúdo."
                 }
+                return
+            }
+        }
+
+        // Com seleção de área o Executar pede confirmação (texto do Windows) e o
+        // modo por metadados cai: o recorte exige recodificar o quadro.
+        if (!containerRemapConfirmed) {
+            val confirmedCrop = previewSelection?.let {
+                FfmpegPreviewSelection.cropPixels(it, displayWidth(), displayHeight())
+            }
+            if (confirmedCrop != null) {
+                showSelectionConfirmation(confirmedCrop)
                 return
             }
         }
@@ -1359,17 +1391,71 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     }
 
     private fun detectAvailableCodecs() {
-        availableCodecs = FfmpegVideoEncoderRegistry.detect()
-        selectedCodec = availableCodecs.firstOrNull()
+        encoderCatalog = FfmpegVideoEncoderRegistry.detect()
         updateVideoEncoderButton()
+        // A sondagem real roda fora da UI thread (encode de 1 quadro por encoder).
+        Thread {
+            val probed = FfmpegVideoEncoderRegistry.probed()
+            runOnUiThread {
+                encoderCatalog = probed
+                refreshResolvedEncoder()
+                updateVideoEncoderButton()
+            }
+        }.start()
+    }
+
+    /** Encoder resolvido para a tarefa (codec do arquivo + duração da tarefa). */
+    private fun resolveEncoderForTask(codecFamily: String?, seconds: Double): FfmpegVideoEncoder? {
+        val choice = FfmpegVideoEncoders.resolve(
+            codec = codecFamily ?: DEFAULT_VIDEO_CODEC_FAMILY,
+            path = encoderPath,
+            available = encoderCatalog,
+            advanced = encoderAdvanced,
+            seconds = seconds
+        ) ?: return null
+        return FfmpegVideoEncoderRegistry.toEncoder(choice.option, choice.forced)
+    }
+
+    private fun currentTaskSeconds(): Double = (durationMs / 1000.0).coerceAtLeast(0.0)
+
+    private fun refreshResolvedEncoder() {
+        selectedCodec = resolveEncoderForTask(sourceCodecFamily, currentTaskSeconds())
+    }
+
+    /** Codec de vídeo do arquivo (video/avc -> h264, video/hevc -> hevc). */
+    private fun detectSourceCodecFamily(uri: Uri): String? {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(this, uri, null)
+            (0 until extractor.trackCount).firstNotNullOfOrNull { index ->
+                when (extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)) {
+                    "video/hevc" -> "hevc"
+                    "video/avc" -> "h264"
+                    else -> null
+                }
+            }
+        } catch (_: Throwable) {
+            null
+        } finally {
+            extractor.release()
+        }
     }
 
     private fun showVideoEncoderMenu() {
-        if (availableCodecs.isEmpty() || isProcessing) return
+        if (isProcessing) return
         PopupMenu(this, buttonVideoEncoder).apply {
-            availableCodecs.forEach { menu.add(it.displayName) }
+            menu.add(0, 1, 0, "Hardware (recomendado)")
+            menu.add(0, 2, 1, "CPU (libx264)")
             setOnMenuItemClickListener { item ->
-                selectedCodec = availableCodecs.firstOrNull { it.displayName == item.title.toString() }
+                encoderPath = if (item.itemId == 2) {
+                    FfmpegVideoEncoders.PATH_CPU
+                } else {
+                    FfmpegVideoEncoders.PATH_HARDWARE
+                }
+                if (encoderPath == FfmpegVideoEncoders.PATH_CPU) {
+                    encoderAdvanced = FfmpegVideoEncoders.ADVANCED_AUTO
+                }
+                refreshResolvedEncoder()
                 updateVideoEncoderButton()
                 true
             }
@@ -1378,11 +1464,11 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     }
 
     private fun updateVideoEncoderButton(refreshPreview: Boolean = true) {
-        val encoder = selectedCodec
-        buttonVideoEncoder.text = if (encoder == null) "Encoder indisponível" else encoder.shortName
-        val enabled = encoder != null && !metadataRotation.isChecked && !isProcessing
-        buttonVideoEncoder.isEnabled = enabled
-        buttonVideoEncoder.alpha = if (enabled) 1f else 0.42f
+        val hardware = encoderPath == FfmpegVideoEncoders.PATH_HARDWARE
+        buttonVideoEncoder.text = if (hardware) "Hardware" else "CPU"
+        val enabled = selectedCodec != null && !metadataRotation.isChecked && !isProcessing
+        buttonVideoEncoder.isEnabled = !isProcessing
+        buttonVideoEncoder.alpha = if (buttonVideoEncoder.isEnabled) 1f else 0.42f
         buttonVideoQuality.text = selectedVideoQuality.label
         buttonVideoQuality.isEnabled = enabled
         buttonVideoQuality.alpha = if (enabled) 1f else 0.42f
@@ -1650,8 +1736,14 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         if (hasTrim) args.addAll(listOf("-ss", formatFfmpegTime(startMs)))
         args.addAll(listOf("-noautorotate", "-display_rotation:v:0", "0", "-i", inputFile.absolutePath))
         if (hasTrim) args.addAll(listOf("-t", formatFfmpegTime(trimDurationMs)))
-        if (physicalFilters.isNotEmpty()) {
-            args.addAll(listOf("-vf", physicalFilters))
+        // Recorte por seleção: entra DEPOIS dos filtros de giro/espelho, como no
+        // Windows ("transpose=1,crop=200:100:5:5").
+        val cropFilter = previewSelection
+            ?.let { FfmpegPreviewSelection.cropPixels(it, displayWidth(), displayHeight()) }
+            ?.let { FfmpegPreviewSelection.cropFilter(it) }
+        val outputFilters = listOfNotNull(physicalFilters.takeIf { it.isNotEmpty() }, cropFilter).joinToString(",")
+        if (outputFilters.isNotEmpty()) {
+            args.addAll(listOf("-vf", outputFilters))
         }
         args.addAll(listOf("-map", "0:v:0", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?", "-map", "0:t?"))
         args.addAll(listOf("-c", "copy"))
@@ -1736,6 +1828,90 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
         videoPreview.setTransform(matrix)
         videoPreview.invalidate()
+        // O recorte trabalha sobre a mídia COMO ELA É EXIBIDA (dimensões
+        // trocadas no giro de 90°), igual ao palco do Windows.
+        previewOverlay.setMediaSize(displayWidth(), displayHeight(), resetSelection = false)
+        applyPreviewFrameAspect(displayWidth(), displayHeight())
+        syncSelectionFilters()
+    }
+
+    private fun isQuarterTurn(): Boolean =
+        transformOrder.contains(TransformOp.ROTATE) && (readDegrees() == 90 || readDegrees() == -90)
+
+    /** Largura da mídia como é exibida (trocada no giro de 90°). */
+    private fun displayWidth(): Int = if (isQuarterTurn()) videoHeight else videoWidth
+
+    /** Altura da mídia como é exibida (trocada no giro de 90°). */
+    private fun displayHeight(): Int = if (isQuarterTurn()) videoWidth else videoHeight
+
+    /** Dá ao quadro do player a proporção da mídia exibida (palco do Windows). */
+    private fun applyPreviewFrameAspect(mediaWidth: Int, mediaHeight: Int) {
+        if (mediaWidth <= 0 || mediaHeight <= 0) return
+        val widthPx = previewFrame.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val heightPx = (widthPx.toDouble() / (mediaWidth.toDouble() / mediaHeight.toDouble()))
+            .toInt()
+            .coerceIn(
+                (120 * resources.displayMetrics.density).toInt(),
+                (620 * resources.displayMetrics.density).toInt()
+            )
+        previewFrame.layoutParams = previewFrame.layoutParams.apply { height = heightPx }
+    }
+
+    /** A seleção continua sobre os MESMOS pixels quando o giro/espelho muda. */
+    private fun syncSelectionFilters() {
+        val current = buildOrderedFilters()
+        if (current == selectionFilters) return
+        val previous = selectionFilters
+        selectionFilters = current
+        if (previewSelection != null) {
+            previewOverlay.reexpressSelection(previous, current)
+        }
+    }
+
+    private fun onSelectionChangedForRotate() {
+        val hasSelection = previewSelection != null
+        if (hasSelection && metadataRotation.isChecked) {
+            // Seleção de área não combina com o modo por metadados: o quadro
+            // precisa ser recodificado para o recorte.
+            metadataRotation.isChecked = false
+        }
+        metadataRotation.isEnabled = !hasSelection
+        metadataRotation.alpha = if (hasSelection) 0.42f else 1f
+        updateVideoEncoderButton()
+    }
+
+    /** Menu da seleção de área (equivalente ao botão direito do Windows). */
+    private fun showSelectionMenu() {
+        if (previewSelection == null) return
+        AlertDialog.Builder(this)
+            .setTitle("Seleção de área")
+            .setItems(arrayOf("Desfazer seleção")) { _, _ -> previewOverlay.clearSelection() }
+            .show()
+    }
+
+    /** Confirmação da seleção antes de Executar (texto literal do Windows). */
+    private fun showSelectionConfirmation(crop: IntArray) {
+        val metadataOnly = metadataRotation.isChecked
+        val message = buildString {
+            append("Será salvo apenas o que está DENTRO da seleção: ${crop[2]} x ${crop[3]} pixels, ")
+            append("a partir de (${crop[0]}, ${crop[1]}).\nO restante do quadro será descartado.\n\n")
+            if (metadataOnly) {
+                append("O modo por metadados será trocado pelo ${FfmpegCutModes.REENCODE}: ")
+                append("o quadro precisa ser recodificado para o recorte.")
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Usar seleção de área")
+            .setMessage(message)
+            .setPositiveButton("OK") { _, _ ->
+                if (metadataRotation.isChecked) {
+                    metadataRotation.isChecked = false
+                    updateMetadataModeState()
+                }
+                rotateSelectedVideo(containerRemapConfirmed = true)
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun buildOrderedFilters(): String {
@@ -2303,6 +2479,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 4303
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val FALLBACK_VIDEO_BITRATE = "15M"
+        private const val DEFAULT_VIDEO_CODEC_FAMILY = "h264"
         private const val TAG = "FfmpegRotateVideo"
         private const val ROTATE_PREFS = "ffmpeg_rotate_preferences"
         private const val PREF_METADATA_ROTATION = "metadata_rotation"

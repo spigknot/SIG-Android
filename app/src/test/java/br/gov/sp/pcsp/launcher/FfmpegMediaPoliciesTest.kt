@@ -356,13 +356,69 @@ class FfmpegMediaPoliciesTest {
     @Test
     fun hybridBodyKeepsMicrosecondPrecisionAndSeeksBeforeInput() {
         val args = FfmpegMediaPolicies.hybridCopyBodyArguments("in.mp4", "out.mkv", 8_333_333L, 9_999_999L).toList()
-        assertEquals("8.333333", args[2])
-        assertTrue(args.indexOf("-ss") < args.indexOf("-i"))
+        val ssIndex = args.indexOf("-ss")
+        assertTrue(ssIndex < args.indexOf("-i"))
+        assertEquals("8.333333", args[ssIndex + 1])
         assertEquals("1.666666", args[args.indexOf("-t") + 1])
-        assertTrue(args.windowed(2).contains(listOf("-c", "copy")))
-        assertTrue(args.windowed(2).contains(listOf("-map", "0:t?")))
-        assertTrue(args.windowed(2).contains(listOf("-c:t", "copy")))
+        assertTrue(args.windowed(2).contains(listOf("-c:v", "copy")))
+        // O trecho copiado mapeia só vídeo+áudio: legenda/dados não existem em
+        // MPEG-TS e derrubariam a conversão do trecho (regra do SmartCut).
+        assertTrue(args.windowed(2).contains(listOf("-map", "0:v:0")))
+        assertTrue(args.windowed(2).contains(listOf("-map", "0:a?")))
+        assertFalse(args.windowed(2).contains(listOf("-map", "0")))
         assertTrue(args.windowed(2).contains(listOf("-f", "mpegts")))
+        // Os parâmetros do codec viajam no início de cada trecho.
+        assertTrue(args.windowed(2).contains(listOf("-mpegts_flags", "+resend_headers+initial_discontinuity")))
+        assertTrue(args.windowed(2).contains(listOf("-muxdelay", "0")))
+        assertTrue(args.windowed(2).contains(listOf("-muxpreload", "0")))
+    }
+
+    @Test
+    fun smartCutSegmentLevaOBitstreamFilterDoCodec() {
+        val h264 = FfmpegMediaPolicies.hybridSegmentArguments(
+            "in.mp4", "out.ts", 1_400_000L, 0.6, "h264", reencode = true, hasAudio = true,
+            videoArguments = listOf("-c:v", "h264_mediacodec"), audioArguments = listOf("-c:a", "aac", "-b:a", "128k")
+        ).toList()
+        assertTrue(h264.windowed(2).contains(listOf("-bsf:v", "h264_mp4toannexb")))
+        assertEquals("h264_mp4toannexb", FfmpegMediaPolicies.tsBitstreamFilter("h264"))
+        assertEquals("hevc_mp4toannexb", FfmpegMediaPolicies.tsBitstreamFilter("hevc"))
+        assertNull(FfmpegMediaPolicies.tsBitstreamFilter("vp9"))
+        // A borda reencodada espelha o fps do miolo copiado.
+        val withFps = FfmpegMediaPolicies.hybridSegmentArguments(
+            "in.mp4", "out.ts", 0L, 0.5, "hevc", reencode = true, hasAudio = false,
+            videoArguments = listOf("-c:v", "hevc_mediacodec"), frameRate = 30000.0 / 1001.0
+        ).toList()
+        assertTrue(withFps.windowed(2).contains(listOf("-bsf:v", "hevc_mp4toannexb")))
+        assertEquals("29.970030", withFps[withFps.indexOf("-r") + 1])
+        assertTrue(withFps.contains("-an"))
+    }
+
+    @Test
+    fun smartCutConcatColaSemReencodarEFechaOArquivo() {
+        val args = FfmpegMediaPolicies.hybridConcatArguments(
+            listPath = "lista.txt", outputPath = "saida.mkv", rotationDegrees = 0,
+            hasAudio = true, preciseAudio = true, audioIsAac = true, hevc = true
+        ).toList()
+        assertTrue(args.windowed(2).contains(listOf("-c:v", "copy")))
+        assertTrue(args.windowed(2).contains(listOf("-c:a", "copy")))
+        assertTrue(args.windowed(2).contains(listOf("-bsf:a", "aac_adtstoasc")))
+        assertTrue(args.windowed(2).contains(listOf("-tag:v", "hvc1")))
+        assertTrue(args.windowed(2).contains(listOf("-max_interleave_delta", "0")))
+        // A rotação devolvida no mux final e o inventário do concat
+        assertTrue(args.windowed(2).contains(listOf("-display_rotation:v:0", "0")))
+        assertTrue(args.windowed(2).contains(listOf("-f", "concat")))
+        assertTrue(args.windowed(2).contains(listOf("-map", "0:v:0")))
+    }
+
+    @Test
+    fun modoSemReencodeCopiaStreamsComSeekAntesDoInput() {
+        val args = FfmpegMediaPolicies.cutCopyCommandArguments(
+            "in.mp4", "out.mkv", "1.400", "3.200", listOf("-display_rotation:v:0", "0")
+        ).toList()
+        assertTrue(args.indexOf("-ss") < args.indexOf("-i"))
+        assertTrue(args.windowed(2).contains(listOf("-c", "copy")))
+        assertTrue(args.windowed(2).contains(listOf("-avoid_negative_ts", "make_zero")))
+        assertTrue(args.windowed(2).contains(listOf("-display_rotation:v:0", "0")))
     }
 
     @Test

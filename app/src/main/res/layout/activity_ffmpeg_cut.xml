@@ -57,9 +57,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:layout_gravity="center"
-                    android:layout_marginTop="36dp"
-                    android:scaleX="0.8"
-                    android:scaleY="0.8"
+                    android:visibility="gone" />
+
+                <br.gov.sp.pcsp.launcher.FfmpegPreviewOverlayView
+                    android:id="@+id/preview_overlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
                     android:visibility="gone" />
 
                 <LinearLayout
@@ -350,6 +353,53 @@
                 android:orientation="horizontal">
 
                 <TextView
+                    android:id="@+id/label_cut_mode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:gravity="center_vertical"
+                    android:text="Modo:"
+                    android:textColor="#CCFFFFFF"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/button_cut_mode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:minWidth="0dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="SmartCut"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/help_cut_mode"
+                    android:layout_width="28dp"
+                    android:layout_height="40dp"
+                    android:gravity="center"
+                    android:text="?"
+                    android:textColor="#99FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
                     android:id="@+id/label_video_encoder"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
@@ -385,6 +435,35 @@
                     android:text="?"
                     android:textColor="#99FFFFFF"
                     android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/label_encoder_advanced"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:gravity="center_vertical"
+                    android:text="Avançado:"
+                    android:textColor="#CCFFFFFF"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/button_encoder_advanced"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:minWidth="0dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="Automático"
+                    android:textColor="#FFFFFFFF"
+                    android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone" />
 
@@ -428,6 +507,16 @@
                     android:textStyle="bold"
                     android:visibility="gone" />
             </LinearLayout>
+
+            <TextView
+                android:id="@+id/encoder_decision"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text=""
+                android:textColor="#AAFFFFFF"
+                android:textSize="11sp"
+                android:visibility="gone" />
 
             <ImageButton
                 android:id="@+id/button_cut"

@@ -57,9 +57,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:layout_gravity="center"
-                    android:layout_marginTop="36dp"
-                    android:scaleX="0.8"
-                    android:scaleY="0.8"
+                    android:visibility="gone" />
+
+                <br.gov.sp.pcsp.launcher.FfmpegPreviewOverlayView
+                    android:id="@+id/preview_overlay"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
                     android:visibility="gone" />
 
                 <LinearLayout

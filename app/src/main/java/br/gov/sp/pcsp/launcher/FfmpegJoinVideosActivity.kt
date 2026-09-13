@@ -106,6 +106,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private var lastOutputName = ""
     private val processingSteps = mutableListOf<ProcessingStep>()
     private var availableVideoEncoders: List<FfmpegVideoEncoder> = emptyList()
+    private var encoderCatalog: List<FfmpegVideoEncoders.Option> = emptyList()
+    private var encoderPath: String = FfmpegVideoEncoders.PATH_HARDWARE
+    private var encoderAdvanced: String = FfmpegVideoEncoders.ADVANCED_AUTO
     private var selectedVideoEncoder: FfmpegVideoEncoder? = null
     private var selectedVideoQuality = FfmpegVideoQuality.default
     private var processingVideoQuality = FfmpegVideoQuality.default
@@ -460,17 +463,51 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun detectVideoEncoders() {
-        availableVideoEncoders = FfmpegVideoEncoderRegistry.detect()
-        selectedVideoEncoder = availableVideoEncoders.firstOrNull()
+        encoderCatalog = FfmpegVideoEncoderRegistry.detect()
+        availableVideoEncoders = encoderCatalog.map { FfmpegVideoEncoderRegistry.toEncoder(it, forceName = false) }
+        selectedVideoEncoder = resolveEncoderForTask(null, 0.0)
         updateVideoEncoderButton()
+        // A sondagem real roda fora da UI thread (encode de 1 quadro por encoder).
+        Thread {
+            val probed = FfmpegVideoEncoderRegistry.probed()
+            runOnUiThread {
+                encoderCatalog = probed
+                availableVideoEncoders = probed.map { FfmpegVideoEncoderRegistry.toEncoder(it, forceName = false) }
+                selectedVideoEncoder = resolveEncoderForTask(null, 0.0)
+                updateVideoEncoderButton()
+            }
+        }.start()
+    }
+
+    /** Encoder resolvido para a tarefa (codec de saída + duração da tarefa). */
+    private fun resolveEncoderForTask(codecFamily: String?, seconds: Double): FfmpegVideoEncoder? {
+        val choice = FfmpegVideoEncoders.resolve(
+            codec = codecFamily ?: DEFAULT_VIDEO_CODEC,
+            path = encoderPath,
+            available = encoderCatalog,
+            advanced = encoderAdvanced,
+            seconds = seconds
+        ) ?: return null
+        return FfmpegVideoEncoderRegistry.toEncoder(choice.option, choice.forced)
     }
 
     private fun showVideoEncoderMenu() {
-        if (availableVideoEncoders.isEmpty() || isProcessing) return
+        if (isProcessing) return
         PopupMenu(this, buttonVideoEncoder).apply {
-            availableVideoEncoders.forEach { menu.add(it.displayName) }
+            menu.add(0, 1, 0, "Hardware (recomendado)")
+            menu.add(0, 2, 1, "CPU (libx264)")
             setOnMenuItemClickListener { item ->
-                selectedVideoEncoder = availableVideoEncoders.firstOrNull { it.displayName == item.title.toString() }
+                encoderPath = if (item.itemId == 2) {
+                    FfmpegVideoEncoders.PATH_CPU
+                } else {
+                    FfmpegVideoEncoders.PATH_HARDWARE
+                }
+                if (encoderPath == FfmpegVideoEncoders.PATH_CPU) {
+                    encoderAdvanced = FfmpegVideoEncoders.ADVANCED_AUTO
+                }
+                // O SmartJoin pode adotar outro encoder por clipe; aqui a escolha
+                // vale para o codec de saída padrao.
+                selectedVideoEncoder = resolveEncoderForTask(null, 0.0)
                 updateVideoEncoderButton()
                 true
             }
@@ -479,9 +516,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun updateVideoEncoderButton() {
-        val encoder = selectedVideoEncoder
         if (!isProcessing) processingVideoQuality = selectedVideoQuality
-        buttonVideoEncoder.text = if (encoder == null) "Encoder indisponível" else encoder.shortName
+        buttonVideoEncoder.text = if (encoderPath == FfmpegVideoEncoders.PATH_HARDWARE) "Hardware" else "CPU"
         buttonVideoQuality.text = selectedVideoQuality.label
         updateReencodeControls()
     }

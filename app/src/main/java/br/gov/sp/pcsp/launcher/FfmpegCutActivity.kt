@@ -51,6 +51,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private lateinit var cutScroll: ScrollView
     private lateinit var previewFrame: View
     private lateinit var videoPreview: TextureView
+    private lateinit var previewOverlay: FfmpegPreviewOverlayView
     private lateinit var timeline: FfmpegRangeSlider
     private lateinit var audioWaveform: FfmpegWaveformView
     private lateinit var currentTime: TextView
@@ -102,10 +103,21 @@ class FfmpegCutActivity : AppCompatActivity() {
     private var hasPreviewPlaybackStarted = false
     private var playbackSpeed = 1f
     private var isProcessing = false
-    private var availableVideoEncoders: List<FfmpegVideoEncoder> = emptyList()
     private var selectedVideoEncoder: FfmpegVideoEncoder? = null
     private var selectedVideoQuality = FfmpegVideoQuality.default
     private var selectedAudioQuality = FfmpegAudioQuality.default
+    private lateinit var buttonCutMode: TextView
+    private lateinit var helpCutMode: TextView
+    private lateinit var labelEncoderAdvanced: TextView
+    private lateinit var buttonEncoderAdvanced: TextView
+    private lateinit var encoderDecision: TextView
+    private var selectedCutMode: String = FfmpegCutModes.DEFAULT
+    private var encoderPath: String = FfmpegVideoEncoders.PATH_HARDWARE
+    private var encoderAdvanced: String = FfmpegVideoEncoders.ADVANCED_AUTO
+    private var encoderCatalog: List<FfmpegVideoEncoders.Option> = emptyList()
+    private var lastEncoderReason: String = ""
+    /** Seleção de área do player (frações do quadro); `null` = sem recorte. */
+    private var previewSelection: FfmpegPreviewSelection.Selection? = null
     private var selectedStreamBitrates = StreamBitrates()
     private var selectedRotationDegrees = 0
     private var selectedKeyframesUs: List<Long> = emptyList()
@@ -182,6 +194,14 @@ class FfmpegCutActivity : AppCompatActivity() {
         previewFrame = findViewById(R.id.preview_frame)
         videoPreview = findViewById(R.id.video_preview)
         videoPreview.surfaceTextureListener = surfaceListener
+        previewOverlay = findViewById(R.id.preview_overlay)
+        previewOverlay.onViewportChanged = { applyPreviewTransform() }
+        previewOverlay.onSelectionChanged = { selection ->
+            previewSelection = selection
+            updateEncoderDecisionLabel()
+            refreshCommandPreview()
+        }
+        previewOverlay.onSelectionMenuRequested = { showSelectionMenu() }
         timeline = findViewById(R.id.timeline)
         audioWaveform = findViewById(R.id.audio_waveform)
         currentTime = findViewById(R.id.current_time)
@@ -201,6 +221,11 @@ class FfmpegCutActivity : AppCompatActivity() {
         helpVideoEncoder = findViewById(R.id.help_video_encoder)
         buttonVideoQuality = findViewById(R.id.button_video_quality)
         helpVideoQuality = findViewById(R.id.help_video_quality)
+        buttonCutMode = findViewById(R.id.button_cut_mode)
+        helpCutMode = findViewById(R.id.help_cut_mode)
+        labelEncoderAdvanced = findViewById(R.id.label_encoder_advanced)
+        buttonEncoderAdvanced = findViewById(R.id.button_encoder_advanced)
+        encoderDecision = findViewById(R.id.encoder_decision)
         buttonCut = findViewById(R.id.button_cut)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
@@ -223,6 +248,15 @@ class FfmpegCutActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_select_file).setOnClickListener { openFilePicker() }
         buttonVideoEncoder.setOnClickListener { showVideoEncoderMenu() }
         helpVideoEncoder.setOnClickListener { FfmpegVideoEncoderRegistry.showHelp(this) }
+        buttonCutMode.setOnClickListener { showCutModeMenu() }
+        helpCutMode.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Modos de corte")
+                .setMessage(FfmpegCutModes.HELP)
+                .setPositiveButton("OK", null)
+                .show()
+        }
+        buttonEncoderAdvanced.setOnClickListener { showEncoderAdvancedMenu() }
         buttonVideoQuality.setOnClickListener { showVideoQualityMenu() }
         helpVideoQuality.setOnClickListener {
             if (selectedMime.startsWith("audio/")) selectedAudioQuality.showHelp(this)
@@ -444,6 +478,9 @@ class FfmpegCutActivity : AppCompatActivity() {
             buttonVideoEncoder.visibility = View.VISIBLE
             setPreviewFrameHeight(450)
             videoPreview.visibility = View.VISIBLE
+            previewOverlay.visibility = View.VISIBLE
+            previewOverlay.reset()
+            previewSelection = null
             audioWaveform.configure(selectedName, durationMs)
             audioWaveform.setRange(0L, durationMs)
             playbackSpeedLabel.visibility = View.VISIBLE
@@ -456,6 +493,9 @@ class FfmpegCutActivity : AppCompatActivity() {
             buttonVideoEncoder.visibility = View.GONE
             setPreviewFrameHeight(88)
             videoPreview.visibility = View.GONE
+            previewOverlay.visibility = View.GONE
+            previewOverlay.reset()
+            previewSelection = null
             playbackSpeedLabel.visibility = View.VISIBLE
             releasePreviewPlayer()
             playWhenSeekCompletes = false
@@ -529,45 +569,48 @@ class FfmpegCutActivity : AppCompatActivity() {
             return
         }
         val jobMime = selectedMime
-        val jobEncoder = selectedVideoEncoder
         val jobQuality = selectedVideoQuality
         val jobAudioQuality = selectedAudioQuality
         val jobStartMs = startMs
         val jobEndMs = endMs
 
-        if (jobMime.startsWith("video/") && jobEncoder == null) {
-            status.text = "Nenhum encoder de vídeo compatível está disponível."
-            return
-        }
-        if (jobMime.startsWith("video/") && !fullReencodeConfirmed && jobEncoder != null) {
-            val sourceCodec = detectVideoCodecFamily(uri)
-            if (sourceCodec !in setOf("h264", "hevc")) {
-                AlertDialog.Builder(this)
-                    .setTitle("Este codec exige recodificação completa")
-                    .setMessage("A origem usa ${sourceCodec?.uppercase(Locale.ROOT) ?: "um codec não identificado"}. O corte será preciso, mas não poderá copiar o trecho central e levará mais tempo.")
-                    .setPositiveButton("Continuar") { _, _ -> cutSelectedMedia(true) }
-                    .setNegativeButton("Cancelar", null)
-                    .show()
+        // Com seleção de área o Executar pede confirmação (resolução do recorte
+        // e, no modo de cópia, a troca para o Reencode Completo).
+        if (jobMime.startsWith("video/") && !fullReencodeConfirmed) {
+            currentSelectionCrop()?.let { selectionCrop ->
+                showSelectionConfirmation(selectionCrop)
                 return
             }
-            if (jobEncoder.codecFamily != sourceCodec) {
-                val compatible = availableVideoEncoders.firstOrNull { it.codecFamily == sourceCodec }
-                val dialog = AlertDialog.Builder(this)
-                    .setTitle("O encoder escolhido exige recodificação completa")
-                    .setMessage("A origem usa ${sourceCodec.orEmpty().uppercase(Locale.ROOT)}, mas o encoder selecionado é ${jobEncoder.shortName}. Você pode manter sua escolha ou usar um encoder compatível para copiar o trecho central sem perdas.")
-                    .setPositiveButton("Manter ${jobEncoder.shortName}") { _, _ -> cutSelectedMedia(true) }
-                    .setNegativeButton("Cancelar", null)
-                if (compatible != null) {
-                    dialog.setNeutralButton("Usar ${compatible.shortName}") { _, _ ->
-                        selectedVideoEncoder = compatible
-                        updateVideoEncoderButton()
-                        cutSelectedMedia(false)
-                    }
+        }
+
+        val sourceCodec = if (jobMime.startsWith("video/")) detectVideoCodecFamily(uri) else null
+        val jobCrop = if (jobMime.startsWith("video/")) currentSelectionCrop() else null
+        var jobPlanMode = FfmpegCutModes.videoPlan(selectedCutMode, hasCrop = jobCrop != null).mode
+        val jobSeconds = (jobEndMs - jobStartMs) / 1000.0
+        var jobEncoder: FfmpegVideoEncoder? = null
+        if (jobMime.startsWith("video/") && FfmpegCutModes.usesVideoEncoder(jobPlanMode)) {
+            val choice = resolveEncoderForTask(sourceCodec, jobSeconds)
+            if (choice == null) {
+                // Nenhum encoder para o codec do arquivo (ex.: HEVC sem hardware):
+                // só continua com a confirmação do usuário, em H.264.
+                if (!fullReencodeConfirmed) {
+                    showCodecUnavailableConfirmation(sourceCodec)
+                    return
                 }
-                dialog.show()
-                return
+                val fallbackChoice = resolveEncoderForTask("h264", jobSeconds)
+                if (fallbackChoice == null) {
+                    status.text = "Nenhum encoder de vídeo compatível está disponível."
+                    return
+                }
+                jobPlanMode = FfmpegCutModes.REENCODE
+                jobEncoder = FfmpegVideoEncoderRegistry.toEncoder(fallbackChoice.option, fallbackChoice.forced)
+                lastEncoderReason = "Sem encoder ${sourceCodec?.uppercase(Locale.ROOT) ?: ""} neste aparelho: recodificando em H.264."
+            } else {
+                jobEncoder = FfmpegVideoEncoderRegistry.toEncoder(choice.option, choice.forced)
+                lastEncoderReason = choice.reason
             }
         }
+        selectedVideoEncoder = jobEncoder
 
         val producedMime = currentOutputMime()
         clearOutputResult()
@@ -586,16 +629,34 @@ class FfmpegCutActivity : AppCompatActivity() {
                 val tracker = FfmpegTaskTracker(status, listOf("Preparando arquivo"))
                 tracker.completeCurrentTask()
                 val execution = if (jobMime.startsWith("video/")) {
-                    executeHybridVideoCut(
-                        currentInputFile,
-                        currentTempOutput,
-                        jobStartMs,
-                        jobEndMs,
-                        tracker,
-                        jobEncoder!!,
-                        jobQuality,
-                        allowFullReencode = fullReencodeConfirmed
-                    )
+                    when (jobPlanMode) {
+                        FfmpegCutModes.COPY -> executeCopyVideoCut(
+                            currentInputFile,
+                            currentTempOutput,
+                            jobStartMs,
+                            jobEndMs,
+                            tracker
+                        )
+                        FfmpegCutModes.REENCODE -> executePreciseVideoCut(
+                            currentInputFile,
+                            currentTempOutput,
+                            jobStartMs,
+                            jobEndMs,
+                            tracker,
+                            jobEncoder ?: error("Encoder de vídeo indisponível"),
+                            jobQuality,
+                            jobCrop
+                        )
+                        else -> executeHybridVideoCut(
+                            currentInputFile,
+                            currentTempOutput,
+                            jobStartMs,
+                            jobEndMs,
+                            tracker,
+                            jobEncoder,
+                            jobQuality
+                        )
+                    }
                 } else {
                     val audioWillCopy = FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(
                         jobStartMs,
@@ -659,11 +720,6 @@ class FfmpegCutActivity : AppCompatActivity() {
                     tracker.completeTask(convertIndex)
                 }
                 runOnUiThread {
-                    execution.reencodeRequiredReason?.let { reason ->
-                        setProcessing(false)
-                        showFullReencodeConfirmation(reason)
-                        return@runOnUiThread
-                    }
                     if (execution.cancelled) {
                         setProcessing(false)
                         tracker.fail("Operação cancelada.")
@@ -737,15 +793,6 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
-    private fun showFullReencodeConfirmation(reason: String) {
-        AlertDialog.Builder(this)
-            .setTitle("O corte exige recodificação completa")
-            .setMessage("$reason\n\nO corte continuará preciso, mas levará mais tempo e poderá alterar a qualidade. Deseja continuar?")
-            .setPositiveButton("Recodificar e continuar") { _, _ -> cutSelectedMedia(fullReencodeConfirmed = true) }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
-
     private fun copyUriToCache(uri: Uri, displayName: String): File {
         val extension = displayName.substringAfterLast('.', "tmp")
         val inputFile = File(cacheDir, "ffmpeg_input_${System.currentTimeMillis()}.$extension")
@@ -763,7 +810,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         mime: String = selectedMime,
         encoder: FfmpegVideoEncoder? = selectedVideoEncoder,
         quality: FfmpegVideoQuality = selectedVideoQuality,
-        audioQuality: FfmpegAudioQuality = selectedAudioQuality
+        audioQuality: FfmpegAudioQuality = selectedAudioQuality,
+        crop: IntArray? = null
     ): Array<String> {
         val duration = (endMs - startMs) / 1000.0
         val durationText = String.format(Locale.US, "%.3f", duration)
@@ -797,6 +845,13 @@ class FfmpegCutActivity : AppCompatActivity() {
         val enc = encoder ?: error("Encoder de vídeo indisponível")
         args.addAll(FfmpegMediaPolicies.cutMappedCopyArguments())
         args.addAll(videoEncodingArguments(enc, streamBitrates.videoBitrateForEncoding(), quality, streamBitrates.frameRate))
+        // Recorte por seleção: o filtro entra DEPOIS do mapeamento e antes do
+        // encoder (copiar streams não recorta pixels — por isso o reencode).
+        crop?.let { args.addAll(listOf("-vf", FfmpegPreviewSelection.cropFilter(it))) }
+        args.addAll(FfmpegVideoEncoders.codecNameArguments(enc.codecName))
+        // Tag hvc1 só faz sentido quando o arquivo final é MP4/MOV; o alvo aqui é
+        // o contêiner original do arquivo de entrada.
+        args.addAll(FfmpegVideoEncoders.hevcTagArguments(enc.ffmpegName, selectedName))
         args.addAll(listOf("-avoid_negative_ts", "make_zero"))
         args.add(outputFile.absolutePath)
         return args.toTypedArray()
@@ -809,27 +864,13 @@ class FfmpegCutActivity : AppCompatActivity() {
         endMs: Long,
         tracker: FfmpegTaskTracker,
         encoder: FfmpegVideoEncoder? = selectedVideoEncoder,
-        quality: FfmpegVideoQuality = selectedVideoQuality,
-        allowFullReencode: Boolean = false
+        quality: FfmpegVideoQuality = selectedVideoQuality
     ): CutExecutionResult {
         val actualEncoder = encoder ?: return CutExecutionResult(false, false, "Encoder de vídeo indisponível")
         tracker.appendTasks(listOf("Analisando codec e orientação"))
         val sourceCodec = detectVideoCodecFamily(inputFile)
         val rotationDegrees = detectMetadataRotation(inputFile)
         tracker.completeCurrentTask()
-        FfmpegMediaPolicies.hybridCutFallbackReason(sourceCodec, actualEncoder.codecFamily)?.let { reason ->
-            if (!allowFullReencode) {
-                return CutExecutionResult(
-                    success = false,
-                    cancelled = false,
-                    failureMessage = "",
-                    reencodeRequiredReason = reason
-                )
-            }
-            tracker.appendTasks(listOf("Caminho rápido indisponível: ${reason.removeSuffix(".").lowercase(Locale.ROOT)}"))
-            tracker.completeCurrentTask()
-            return executeFullPrecisionFallback(inputFile, outputFile, startMs, endMs, rotationDegrees, tracker, actualEncoder, quality)
-        }
 
         tracker.appendTasks(listOf("Localizando keyframes no intervalo"))
         val keyframes = extractKeyframesFromFile(inputFile)
@@ -837,24 +878,27 @@ class FfmpegCutActivity : AppCompatActivity() {
         val endUs = endMs * 1000L
         val startKeyframe = keyframes.firstOrNull { it >= startUs }
         val endKeyframe = keyframes.lastOrNull { it <= endUs }
+        val hasInternalKeyframes = startKeyframe != null && endKeyframe != null &&
+            (endKeyframe - startKeyframe) / 1_000_000.0 > FfmpegCutModes.SMARTCUT_MIN_EDGE
         tracker.completeCurrentTask()
-        val hasInternalKeyframes = startKeyframe != null && endKeyframe != null && startKeyframe < endKeyframe
-        FfmpegMediaPolicies.hybridCutFallbackReason(
-            sourceCodec,
-            actualEncoder.codecFamily,
-            hasInternalKeyframes
-        )?.let { reason ->
-            if (!allowFullReencode) {
-                return CutExecutionResult(
-                    success = false,
-                    cancelled = false,
-                    failureMessage = "",
-                    reencodeRequiredReason = reason
-                )
-            }
-            tracker.appendTasks(listOf("Caminho rápido indisponível: ${reason.removeSuffix(".").lowercase(Locale.ROOT)}"))
+
+        val edgeEncoderAvailable = sourceCodec != null &&
+            resolveEncoderForTask(sourceCodec, 0.0)?.option?.codec == sourceCodec
+        val fallbackReason = FfmpegCutModes.smartCutFallbackReason(
+            codecFamily = sourceCodec,
+            hasInternalKeyframes = hasInternalKeyframes,
+            edgeEncoderAvailable = edgeEncoderAvailable
+        ) ?: if (actualEncoder.codecFamily != sourceCodec) {
+            "O encoder escolhido não produz o mesmo codec do arquivo (o miolo é copiado)."
+        } else {
+            null
+        }
+        if (fallbackReason != null) {
+            tracker.appendTasks(
+                listOf("Caminho rápido indisponível: ${fallbackReason.removeSuffix(".").lowercase(Locale.ROOT)}")
+            )
             tracker.completeCurrentTask()
-            return executeFullPrecisionFallback(inputFile, outputFile, startMs, endMs, rotationDegrees, tracker, actualEncoder, quality)
+            return executePreciseVideoCut(inputFile, outputFile, startMs, endMs, tracker, actualEncoder, quality)
         }
         val internalStartKeyframe = checkNotNull(startKeyframe)
         val internalEndKeyframe = checkNotNull(endKeyframe)
@@ -876,15 +920,22 @@ class FfmpegCutActivity : AppCompatActivity() {
                 }
             }
 
-            fun runPiece(arguments: Array<String>, expectedMs: Long, output: File): CutExecutionResult? {
+            fun runPiece(
+                build: (FfmpegVideoEncoder?) -> Array<String>,
+                encoder: FfmpegVideoEncoder?,
+                expectedMs: Long,
+                output: File
+            ): CutExecutionResult? {
                 var lastFailure = ""
+                var candidate = encoder
+                var attemptedCpuFallback = false
                 repeat(HYBRID_CUT_MAX_ATTEMPTS) { attempt ->
                     if (attempt > 0) {
                         output.delete()
                         Thread.sleep(180L)
                     }
                     tracker.startCurrentTask()
-                    val session = executeFfmpegWithProgress(arguments, expectedMs, tracker)
+                    val session = executeFfmpegWithProgress(build(candidate), expectedMs, tracker)
                     if (ReturnCode.isCancel(session.returnCode)) {
                         return CutExecutionResult(false, true, "")
                     }
@@ -894,14 +945,48 @@ class FfmpegCutActivity : AppCompatActivity() {
                         return null
                     }
                     lastFailure = ffmpegFailureDetails(session.allLogsAsString.orEmpty())
+                    // Falha de hardware: repete na CPU SOMENTE nesta tarefa (a
+                    // preferência do usuário não muda — regra do Windows).
+                    val current = candidate
+                    val cpu = current?.let { cpuEquivalentFor(it.codecFamily) }
+                    if (!attemptedCpuFallback && current != null && cpu != null &&
+                        FfmpegVideoEncoders.isHardwareEncoderError(lastFailure)
+                    ) {
+                        attemptedCpuFallback = true
+                        candidate = cpu
+                        val motivo = lastFailure.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(80)
+                        tracker.appendTasks(
+                            listOf(
+                                "${current.displayName} falhou ($motivo); repetindo na CPU (${cpu.ffmpegName}) SOMENTE nesta tarefa."
+                            )
+                        )
+                        tracker.completeCurrentTask()
+                    }
                 }
                 return CutExecutionResult(false, false, lastFailure)
+            }
+
+            val edgeEncoderForPiece: (Double) -> FfmpegVideoEncoder = { pieceSeconds ->
+                val choice = resolveEncoderForTask(sourceCodec, pieceSeconds)
+                if (choice == null) {
+                    actualEncoder
+                } else {
+                    val secondsText = String.format(Locale.US, "%.2f", pieceSeconds)
+                    tracker.appendTasks(listOf("Encoder da borda (${secondsText}s): ${choice.option.encoder} — ${choice.reason}"))
+                    tracker.completeCurrentTask()
+                    FfmpegVideoEncoderRegistry.toEncoder(choice.option, choice.forced)
+                }
             }
 
             if (internalStartKeyframe > startUs) {
                 val startPiece = File(workDir, "start.ts")
                 runPiece(
-                    buildHybridEdgeArguments(inputFile, startPiece, startUs, internalStartKeyframe, bitrates, encoder = actualEncoder, quality = quality),
+                    { candidate ->
+                        buildHybridEdgeArguments(
+                            inputFile, startPiece, startUs, internalStartKeyframe, bitrates, candidate, quality, sourceCodec
+                        )
+                    },
+                    edgeEncoderForPiece((internalStartKeyframe - startUs) / 1_000_000.0),
                     (internalStartKeyframe - startUs) / 1000L,
                     startPiece
                 )?.let { return it }
@@ -909,7 +994,8 @@ class FfmpegCutActivity : AppCompatActivity() {
 
             val bodyPiece = File(workDir, "body.ts")
             runPiece(
-                buildHybridBodyArguments(inputFile, bodyPiece, internalStartKeyframe, internalEndKeyframe),
+                { buildHybridBodyArguments(inputFile, bodyPiece, internalStartKeyframe, internalEndKeyframe, sourceCodec) },
+                null,
                 (internalEndKeyframe - internalStartKeyframe) / 1000L,
                 bodyPiece
             )?.let { return it }
@@ -917,25 +1003,47 @@ class FfmpegCutActivity : AppCompatActivity() {
             if (internalEndKeyframe < endUs) {
                 val endPiece = File(workDir, "end.ts")
                 runPiece(
-                    buildHybridEdgeArguments(inputFile, endPiece, internalEndKeyframe, endUs, bitrates, encoder = actualEncoder, quality = quality),
+                    { candidate ->
+                        buildHybridEdgeArguments(
+                            inputFile, endPiece, internalEndKeyframe, endUs, bitrates, candidate, quality, sourceCodec
+                        )
+                    },
+                    edgeEncoderForPiece((endUs - internalEndKeyframe) / 1_000_000.0),
                     (endUs - internalEndKeyframe) / 1000L,
                     endPiece
                 )?.let { return it }
             }
 
+            val copiedSeconds = (internalEndKeyframe - internalStartKeyframe) / 1_000_000.0
+            val totalSeconds = ((endMs - startMs) / 1000.0).coerceAtLeast(0.01)
+            tracker.appendTasks(
+                listOf(
+                    String.format(
+                        Locale.US,
+                        "SmartCut: %.2fs copiados sem reencode e %.2fs reencodados (%d trechos).",
+                        copiedSeconds,
+                        (totalSeconds - copiedSeconds).coerceAtLeast(0.0),
+                        pieces.size
+                    )
+                )
+            )
+            tracker.completeCurrentTask()
+
             val concatList = File(workDir, "parts.txt")
             concatList.writeText(pieces.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" }, Charsets.UTF_8)
-            val concatArguments = mutableListOf(
-                "-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0"
+            val hasAudio = hasAudioTrack(inputFile)
+            val concatArguments = FfmpegMediaPolicies.hybridConcatArguments(
+                listPath = concatList.absolutePath,
+                outputPath = outputFile.absolutePath,
+                rotationDegrees = rotationDegrees,
+                hasAudio = hasAudio,
+                preciseAudio = true,
+                audioIsAac = true,
+                hevc = sourceCodec == "hevc"
             )
-            concatArguments += listOf(
-                "-display_rotation:v:0", rotationDegrees.toString(), "-i", concatList.absolutePath,
-                "-map", "0", "-map_metadata", "0", "-map_chapters", "0", "-c", "copy",
-                "-avoid_negative_ts", "make_zero"
-            )
-            concatArguments += outputFile.absolutePath
+            tracker.startCurrentTask()
             val concatSession = executeFfmpegWithProgress(
-                concatArguments.toTypedArray(),
+                concatArguments,
                 endMs - startMs,
                 tracker
             )
@@ -953,17 +1061,18 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
-    private fun executeFullPrecisionFallback(
+    /** Reencode Completo: reencoda todo o trecho pedido (limites exatos). */
+    private fun executePreciseVideoCut(
         inputFile: File,
         outputFile: File,
         startMs: Long,
         endMs: Long,
-        rotationDegrees: Int,
         tracker: FfmpegTaskTracker,
         encoder: FfmpegVideoEncoder = selectedVideoEncoder ?: error("Encoder de vídeo indisponível"),
-        quality: FfmpegVideoQuality = selectedVideoQuality
+        quality: FfmpegVideoQuality = selectedVideoQuality,
+        crop: IntArray? = null
     ): CutExecutionResult {
-        val encoderName = encoder.shortName
+        val rotationDegrees = detectMetadataRotation(inputFile)
         val orientationTask = if (rotationDegrees == 0) {
             "Mantendo orientação original"
         } else {
@@ -976,23 +1085,144 @@ class FfmpegCutActivity : AppCompatActivity() {
                 orientationTask
             )
         )
-        tracker.setTaskEncoder(tracker.taskCount() - 2, encoderName)
-        tracker.completeCurrentTask()
-        tracker.startCurrentTask()
-        val session = executeFfmpegWithProgress(
-            buildPreciseFfmpegArguments(inputFile, outputFile, startMs, endMs, selectedMime, encoder, quality),
-            endMs - startMs,
-            tracker
-        )
-        if (ReturnCode.isSuccess(session.returnCode)) {
-            tracker.completeCurrentTask()
+        if (crop != null) {
+            tracker.appendTasks(
+                listOf("Recorte por seleção: ${crop[2]} x ${crop[3]} pixels a partir de (${crop[0]}, ${crop[1]})")
+            )
             tracker.completeCurrentTask()
         }
+        tracker.setTaskEncoder(tracker.taskCount() - 2, encoder.displayName)
+        tracker.completeCurrentTask()
+        tracker.startCurrentTask()
+
+        var candidate = encoder
+        var attemptedCpuFallback = false
+        var lastFailure = ""
+        repeat(HYBRID_CUT_MAX_ATTEMPTS) {
+            val session = executeFfmpegWithProgress(
+                buildPreciseFfmpegArguments(inputFile, outputFile, startMs, endMs, selectedMime, candidate, quality, crop = crop),
+                endMs - startMs,
+                tracker
+            )
+            if (ReturnCode.isSuccess(session.returnCode)) {
+                tracker.completeCurrentTask()
+                tracker.completeCurrentTask()
+                return CutExecutionResult(true, false, "")
+            }
+            if (ReturnCode.isCancel(session.returnCode)) return CutExecutionResult(false, true, "")
+            lastFailure = ffmpegFailureDetails(session.allLogsAsString.orEmpty())
+            val cpu = cpuEquivalentFor(candidate.codecFamily)
+            if (!attemptedCpuFallback && cpu != null && FfmpegVideoEncoders.isHardwareEncoderError(lastFailure)) {
+                attemptedCpuFallback = true
+                candidate = cpu
+                val motivo = lastFailure.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(80)
+                tracker.appendTasks(
+                    listOf("${encoder.displayName} falhou ($motivo); repetindo na CPU (${cpu.ffmpegName}) SOMENTE nesta tarefa.")
+                )
+                tracker.completeCurrentTask()
+            }
+        }
+        return CutExecutionResult(false, false, lastFailure)
+    }
+
+    /** Sem Reencode: copia os streams; os limites escorregam até o keyframe. */
+    private fun executeCopyVideoCut(
+        inputFile: File,
+        outputFile: File,
+        startMs: Long,
+        endMs: Long,
+        tracker: FfmpegTaskTracker
+    ): CutExecutionResult {
+        tracker.appendTasks(listOf("Copiando streams sem reencodar"))
+        tracker.completeCurrentTask()
+        val rotationDegrees = detectMetadataRotation(inputFile)
+        tracker.appendTasks(
+            listOf(
+                if (rotationDegrees == 0) "Mantendo orientação original"
+                else "Preservando rotação de ${rotationDegrees}° nos metadados"
+            )
+        )
+        tracker.startCurrentTask()
+        val arguments = FfmpegMediaPolicies.cutCopyCommandArguments(
+            inputPath = inputFile.absolutePath,
+            outputPath = outputFile.absolutePath,
+            start = formatSeconds(startMs),
+            duration = String.format(Locale.US, "%.3f", (endMs - startMs) / 1000.0),
+            rotationArguments = rotationInputArguments(rotationDegrees)
+        )
+        val session = executeFfmpegWithProgress(arguments, endMs - startMs, tracker)
+        if (ReturnCode.isSuccess(session.returnCode)) tracker.completeCurrentTask()
         return CutExecutionResult(
             success = ReturnCode.isSuccess(session.returnCode),
             cancelled = ReturnCode.isCancel(session.returnCode),
             failureMessage = ffmpegFailureDetails(session.allLogsAsString.orEmpty())
         )
+    }
+
+    /** CPU equivalente do codec (libx264); `null` em HEVC (não há software de
+     * HEVC neste app). */
+    private fun cpuEquivalentFor(codecFamily: String?): FfmpegVideoEncoder? {
+        val option = FfmpegVideoEncoders.cpuEquivalent(codecFamily ?: "h264", encoderCatalog) ?: return null
+        return FfmpegVideoEncoderRegistry.toEncoder(option, forceName = false)
+    }
+
+    private fun hasAudioTrack(file: File): Boolean {
+        val extractor = android.media.MediaExtractor()
+        return try {
+            extractor.setDataSource(file.absolutePath)
+            (0 until extractor.trackCount).any { index ->
+                extractor.getTrackFormat(index)
+                    .getString(android.media.MediaFormat.KEY_MIME)
+                    ?.startsWith("audio/") == true
+            }
+        } catch (_: Throwable) {
+            true
+        } finally {
+            extractor.release()
+        }
+    }
+
+    /** Sem encoder para o codec do arquivo (ex.: HEVC sem hardware): avisa e
+     * pede confirmação para recodificar em H.264. */
+    private fun showCodecUnavailableConfirmation(sourceCodec: String?) {
+        val codec = sourceCodec?.uppercase(Locale.ROOT) ?: "desconhecido"
+        AlertDialog.Builder(this)
+            .setTitle("Este aparelho não tem encoder $codec")
+            .setMessage(
+                "Não há encoder $codec disponível neste aparelho. " +
+                    "O corte pode continuar recodificando o vídeo em H.264, mas o arquivo deixa de preservar o codec original."
+            )
+            .setPositiveButton("Recodificar em H.264") { _, _ -> cutSelectedMedia(fullReencodeConfirmed = true) }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    /** Confirmação da seleção de área antes de Executar (regra do Windows):
+     * mostra a resolução do recorte e, no modo de cópia, avisa que o corte passa
+     * para o Reencode Completo (copiar streams não recorta pixels). O diálogo é
+     * assíncrono — o OK reentra em [cutSelectedMedia] já confirmado. */
+    private fun showSelectionConfirmation(crop: IntArray) {
+        val plan = FfmpegCutModes.videoPlan(selectedCutMode, hasCrop = true)
+        val message = buildString {
+            append("Será salvo apenas o que está DENTRO da seleção: ${crop[2]} x ${crop[3]} pixels, ")
+            append("a partir de (${crop[0]}, ${crop[1]}).\nO restante do quadro será descartado.\n\n")
+            if (plan.mode != selectedCutMode) {
+                append("O modo atual (${selectedCutMode}) não recorta pixels; ")
+                append("o corte será feito no ${FfmpegCutModes.REENCODE}.")
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Usar seleção de área")
+            .setMessage(message)
+            .setPositiveButton("OK") { _, _ ->
+                if (plan.mode != selectedCutMode) {
+                    selectedCutMode = plan.mode
+                    updateVideoEncoderButton()
+                }
+                cutSelectedMedia(fullReencodeConfirmed = true)
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun buildHybridEdgeArguments(
@@ -1001,28 +1231,47 @@ class FfmpegCutActivity : AppCompatActivity() {
         startUs: Long,
         endUs: Long,
         bitrates: StreamBitrates,
-        encoder: FfmpegVideoEncoder = selectedVideoEncoder ?: error("Encoder de vídeo indisponível"),
-        quality: FfmpegVideoQuality = selectedVideoQuality
+        encoder: FfmpegVideoEncoder? = selectedVideoEncoder,
+        quality: FfmpegVideoQuality = selectedVideoQuality,
+        codecFamily: String? = bitrates.codecFamily
     ): Array<String> {
-        val duration = (endUs - startUs) / 1_000_000.0
-        val args = mutableListOf("-y", "-ss", formatMicroseconds(startUs), "-noautorotate", "-i", inputFile.absolutePath)
-        args += listOf("-t", String.format(Locale.US, "%.6f", duration))
-        args += FfmpegMediaPolicies.cutMappedCopyArguments()
-        args += videoEncodingArguments(encoder, bitrates.videoBitrateForEncoding(), quality, bitrates.frameRate)
-        args += listOf(
-            "-avoid_negative_ts", "make_zero", "-f", "mpegts", outputFile.absolutePath
+        val actual = encoder ?: error("Encoder de vídeo indisponível")
+        return FfmpegMediaPolicies.hybridSegmentArguments(
+            inputPath = inputFile.absolutePath,
+            outputPath = outputFile.absolutePath,
+            startUs = startUs,
+            durationSeconds = (endUs - startUs) / 1_000_000.0,
+            codecFamily = codecFamily,
+            reencode = true,
+            hasAudio = hasAudioTrack(inputFile),
+            videoArguments = videoEncodingArguments(actual, bitrates.videoBitrateForEncoding(), quality, bitrates.frameRate),
+            audioArguments = preciseAudioSegmentArguments(bitrates),
+            frameRate = bitrates.frameRate
         )
-        return args.toTypedArray()
     }
+
+    /** Áudio dos trechos do SmartCut: sempre reencodado em AAC — assim o `-t`
+     * fecha exato (o áudio copiado escorrega até o pacote seguinte). */
+    private fun preciseAudioSegmentArguments(bitrates: StreamBitrates): List<String> =
+        listOf("-c:a", "aac", "-b:a", bitrates.audio ?: "128k")
 
     private fun buildHybridBodyArguments(
         inputFile: File,
         outputFile: File,
         startUs: Long,
-        endUs: Long
-    ): Array<String> {
-        return FfmpegMediaPolicies.hybridCopyBodyArguments(inputFile.absolutePath, outputFile.absolutePath, startUs, endUs)
-    }
+        endUs: Long,
+        codecFamily: String? = null
+    ): Array<String> =
+        FfmpegMediaPolicies.hybridSegmentArguments(
+            inputPath = inputFile.absolutePath,
+            outputPath = outputFile.absolutePath,
+            startUs = startUs,
+            durationSeconds = (endUs - startUs) / 1_000_000.0,
+            codecFamily = codecFamily,
+            reencode = false,
+            hasAudio = hasAudioTrack(inputFile),
+            audioArguments = preciseAudioSegmentArguments(selectedStreamBitrates)
+        )
 
     private fun extractKeyframesFromFile(inputFile: File): List<Long> {
         val extractor = android.media.MediaExtractor()
@@ -1470,6 +1719,9 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
         buttonVideoEncoder.isEnabled = !processing
         buttonVideoQuality.isEnabled = !processing
+        buttonCutMode.isEnabled = !processing
+        buttonEncoderAdvanced.isEnabled = !processing
+        helpCutMode.isEnabled = !processing
         timeline.isEnabled = !processing
         buttonPlayPause.isEnabled = !processing
         buttonSpeedDown.isEnabled = !processing
@@ -1537,6 +1789,10 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonVideoEncoder.visibility = if (visible && isVideo) View.VISIBLE else View.GONE
         helpVideoEncoder.visibility = buttonVideoEncoder.visibility
         findViewById<View>(R.id.label_video_encoder).visibility = buttonVideoEncoder.visibility
+        val modeVisibility = if (visible && isVideo) View.VISIBLE else View.GONE
+        buttonCutMode.visibility = modeVisibility
+        helpCutMode.visibility = modeVisibility
+        findViewById<View>(R.id.label_cut_mode).visibility = modeVisibility
         val qualityVisibility = if (visible && (isVideo || isAudio)) View.VISIBLE else View.GONE
         buttonVideoQuality.visibility = qualityVisibility
         helpVideoQuality.visibility = qualityVisibility
@@ -1548,17 +1804,25 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun detectVideoEncoders() {
-        availableVideoEncoders = FfmpegVideoEncoderRegistry.detect()
-        selectedVideoEncoder = availableVideoEncoders.firstOrNull()
+        encoderCatalog = FfmpegVideoEncoderRegistry.detect()
         updateVideoEncoderButton()
+        // A sondagem real (encode de 1 quadro por encoder do aparelho) roda
+        // fora da UI thread e alimenta o menu Avancado.
+        Thread {
+            val probed = FfmpegVideoEncoderRegistry.probed()
+            runOnUiThread {
+                encoderCatalog = probed
+                updateVideoEncoderButton()
+            }
+        }.start()
     }
 
-    private fun showVideoEncoderMenu() {
-        if (availableVideoEncoders.isEmpty() || isProcessing) return
-        PopupMenu(this, buttonVideoEncoder).apply {
-            availableVideoEncoders.forEach { menu.add(it.displayName) }
+    private fun showCutModeMenu() {
+        if (isProcessing) return
+        PopupMenu(this, buttonCutMode).apply {
+            FfmpegCutModes.MODES.forEachIndexed { index, mode -> menu.add(0, index + 1, index, mode) }
             setOnMenuItemClickListener { item ->
-                selectedVideoEncoder = availableVideoEncoders.firstOrNull { it.displayName == item.title.toString() }
+                selectedCutMode = FfmpegCutModes.MODES.getOrNull(item.itemId - 1) ?: FfmpegCutModes.DEFAULT
                 updateVideoEncoderButton()
                 true
             }
@@ -1566,17 +1830,113 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
+    private fun showVideoEncoderMenu() {
+        if (isProcessing) return
+        PopupMenu(this, buttonVideoEncoder).apply {
+            menu.add(0, 1, 0, "Hardware (recomendado)")
+            menu.add(0, 2, 1, "CPU (libx264)")
+            setOnMenuItemClickListener { item ->
+                encoderPath = if (item.itemId == 2) {
+                    FfmpegVideoEncoders.PATH_CPU
+                } else {
+                    FfmpegVideoEncoders.PATH_HARDWARE
+                }
+                if (encoderPath == FfmpegVideoEncoders.PATH_CPU) {
+                    encoderAdvanced = FfmpegVideoEncoders.ADVANCED_AUTO
+                }
+                updateVideoEncoderButton()
+                true
+            }
+            show()
+        }
+    }
+
+    private fun showEncoderAdvancedMenu() {
+        if (isProcessing || encoderPath != FfmpegVideoEncoders.PATH_HARDWARE) return
+        val options = FfmpegVideoEncoders.advancedOptions(encoderCatalog)
+        PopupMenu(this, buttonEncoderAdvanced).apply {
+            menu.add(0, 0, 0, "Automático")
+            options.forEachIndexed { index, option -> menu.add(0, index + 1, index + 1, option.label) }
+            setOnMenuItemClickListener { item ->
+                encoderAdvanced = if (item.itemId == 0) {
+                    FfmpegVideoEncoders.ADVANCED_AUTO
+                } else {
+                    options.getOrNull(item.itemId - 1)?.key ?: FfmpegVideoEncoders.ADVANCED_AUTO
+                }
+                updateVideoEncoderButton()
+                true
+            }
+            show()
+        }
+    }
+
+    /** Encoder resolvido para a tarefa (codec do arquivo + duração da tarefa). */
+    private fun resolveEncoderForTask(codecFamily: String?, seconds: Double): FfmpegVideoEncoders.Choice? =
+        FfmpegVideoEncoders.resolve(
+            codec = codecFamily ?: "h264",
+            path = encoderPath,
+            available = encoderCatalog,
+            advanced = encoderAdvanced,
+            seconds = seconds
+        )
+
     private fun updateVideoEncoderButton(refreshPreview: Boolean = true) {
-        val encoder = selectedVideoEncoder
-        buttonVideoEncoder.text = if (encoder == null) "Encoder indisponível" else encoder.shortName
-        buttonVideoEncoder.isEnabled = encoder != null && !isProcessing
+        val hardware = encoderPath == FfmpegVideoEncoders.PATH_HARDWARE
+        buttonVideoEncoder.text = if (hardware) "Hardware" else "CPU"
+        buttonVideoEncoder.isEnabled = !isProcessing
         buttonVideoEncoder.alpha = if (buttonVideoEncoder.isEnabled) 1f else 0.42f
+        val advancedVisible = hardware && buttonVideoEncoder.visibility == View.VISIBLE
+        labelEncoderAdvanced.visibility = if (advancedVisible) View.VISIBLE else View.GONE
+        buttonEncoderAdvanced.visibility = labelEncoderAdvanced.visibility
+        buttonEncoderAdvanced.text = if (encoderAdvanced == FfmpegVideoEncoders.ADVANCED_AUTO) {
+            "Automático"
+        } else {
+            encoderCatalog.firstOrNull { it.key == encoderAdvanced }?.label ?: "Automático"
+        }
         val audioMode = selectedMime.startsWith("audio/")
         buttonVideoQuality.text = if (audioMode) selectedAudioQuality.label else selectedVideoQuality.label
         updateVideoQualityButtonState()
+        updateEncoderDecisionLabel()
         // A restauracao automatica de UI apos o processamento nao deve
         // substituir o historico verde dos comandos executados pelo preview.
         if (refreshPreview) refreshCommandPreview()
+    }
+
+    /** Etiqueta discreta (regra do Windows): quando o automático manda para a
+     * CPU, a tela diz QUAL encoder e POR QUÊ — nada de decisão silenciosa. */
+    private fun updateEncoderDecisionLabel() {
+        if (!::encoderDecision.isInitialized) return
+        val seconds = currentIntervalSeconds()
+        val choice = if (selectedMime.startsWith("video/")) {
+            resolveEncoderForTask(selectedStreamBitrates.codecFamily, seconds)
+        } else {
+            null
+        }
+        val decision = if (
+            choice != null &&
+            choice.option.path == FfmpegVideoEncoders.PATH_CPU &&
+            encoderPath == FfmpegVideoEncoders.PATH_HARDWARE
+        ) {
+            "→ CPU (${choice.option.encoder}): ${choice.reason}"
+        } else {
+            ""
+        }
+        encoderDecision.text = decision
+        encoderDecision.visibility = if (decision.isBlank() || isProcessing) View.GONE else View.VISIBLE
+    }
+
+    private fun currentIntervalSeconds(): Double {
+        val startMs = parseTime(inputFrom.text?.toString().orEmpty()) ?: 0L
+        val endMs = parseTime(inputTo.text?.toString().orEmpty()) ?: durationMs
+        return ((endMs - startMs).coerceAtLeast(0L)) / 1000.0
+    }
+
+    /** Recorte da seleção de área em pixels do vídeo; `null` quando não há seleção. */
+    private fun currentSelectionCrop(): IntArray? {
+        val selection = previewSelection ?: return null
+        val width = if (videoWidth > 0) videoWidth else selectedStreamBitrates.width ?: 0
+        val height = if (videoHeight > 0) videoHeight else selectedStreamBitrates.height ?: 0
+        return FfmpegPreviewSelection.cropPixels(selection, width, height)
     }
 
     /**
@@ -1636,7 +1996,26 @@ class FfmpegCutActivity : AppCompatActivity() {
             return
         }
 
-        val encoder = selectedVideoEncoder
+        val previewExtension = inputName.substringAfterLast('.', "mkv")
+        val previewCrop = currentSelectionCrop()
+        val previewMode = FfmpegCutModes.videoPlan(selectedCutMode, hasCrop = previewCrop != null).mode
+        if (previewMode == FfmpegCutModes.COPY) {
+            // Sem Reencode: a prévia mostra a cópia fiel dos streams.
+            FfmpegCommandPresenter.preview(
+                status,
+                FfmpegMediaPolicies.cutCopyCommandArguments(
+                    inputPath = input.absolutePath,
+                    outputPath = File("output.$previewExtension").absolutePath,
+                    start = formatSeconds(startMs),
+                    duration = String.format(Locale.US, "%.3f", (endMs - startMs) / 1000.0),
+                    rotationArguments = rotationInputArguments(selectedRotationDegrees)
+                ).asIterable()
+            )
+            return
+        }
+        val intervalSeconds = (endMs - startMs) / 1000.0
+        val resolved = resolveEncoderForTask(selectedStreamBitrates.codecFamily, intervalSeconds)
+        val encoder = resolved?.let { FfmpegVideoEncoderRegistry.toEncoder(it.option, it.forced) } ?: selectedVideoEncoder
         if (encoder == null) {
             FfmpegCommandPresenter.preview(
                 status,
@@ -1650,9 +2029,16 @@ class FfmpegCutActivity : AppCompatActivity() {
         val endUs = endMs * 1_000L
         val startKeyframe = selectedKeyframesUs.firstOrNull { it >= startUs }
         val endKeyframe = selectedKeyframesUs.lastOrNull { it <= endUs }
-        val hybrid = selectedAnalysisReady && bitrates.codecFamily in setOf("h264", "hevc") &&
-            bitrates.codecFamily == encoder.codecFamily && startKeyframe != null && endKeyframe != null &&
-            startKeyframe < endKeyframe
+        // A prévia precisa decidir com os MESMOS dados da execução: se o
+        // SmartCut não pode copiar o miolo, ela já mostra o Reencode Completo.
+        val smartCutPossible = FfmpegCutModes.smartCutFallbackReason(
+            codecFamily = bitrates.codecFamily,
+            hasInternalKeyframes = startKeyframe != null && endKeyframe != null &&
+                (endKeyframe - startKeyframe) / 1_000_000.0 > FfmpegCutModes.SMARTCUT_MIN_EDGE,
+            edgeEncoderAvailable = encoder.codecFamily == bitrates.codecFamily
+        ) == null
+        val hybrid = previewMode == FfmpegCutModes.SMART && selectedAnalysisReady && smartCutPossible &&
+            bitrates.codecFamily in setOf("h264", "hevc") && bitrates.codecFamily == encoder.codecFamily
         if (hybrid) {
             val firstKeyframe = checkNotNull(startKeyframe)
             val lastKeyframe = checkNotNull(endKeyframe)
@@ -1684,6 +2070,9 @@ class FfmpegCutActivity : AppCompatActivity() {
             args += listOf("-t", String.format(Locale.US, "%.3f", (endMs - startMs) / 1000.0))
             args += FfmpegMediaPolicies.cutMappedCopyArguments()
             args += videoEncodingArguments(encoder, bitrates.videoBitrateForEncoding(), selectedVideoQuality, bitrates.frameRate)
+            previewCrop?.let { args += listOf("-vf", FfmpegPreviewSelection.cropFilter(it)) }
+            args += FfmpegVideoEncoders.codecNameArguments(encoder.codecName)
+            args += FfmpegVideoEncoders.hevcTagArguments(encoder.ffmpegName, inputName)
             args += listOf("-avoid_negative_ts", "make_zero", File("output.mkv").absolutePath)
             commands += FfmpegCommandPresenter.PreviewCommand(args)
         }
@@ -1935,6 +2324,8 @@ class FfmpegCutActivity : AppCompatActivity() {
                 timeline.setCurrent(0L)
                 currentTime.text = formatTime(0L)
                 updateTimeFields(0L, durationMs)
+                applyPreviewFrameAspect()
+                previewOverlay.setMediaSize(videoWidth, videoHeight)
                 applyPreviewTransform()
                 seekPreview(0L)
             }
@@ -1951,17 +2342,47 @@ class FfmpegCutActivity : AppCompatActivity() {
 
     private fun applyPreviewTransform() {
         if (videoPreview.width == 0 || videoPreview.height == 0 || videoWidth <= 0 || videoHeight <= 0) return
-        val frameWidth = videoPreview.width.toFloat()
-        val frameHeight = videoPreview.height.toFloat()
-        val centerX = frameWidth / 2f
-        val centerY = frameHeight / 2f
-        val fitScale = minOf(frameWidth / videoWidth.toFloat(), frameHeight / videoHeight.toFloat())
-        val fittedWidth = videoWidth * fitScale
-        val fittedHeight = videoHeight * fitScale
+        val stageWidth = videoPreview.width
+        val stageHeight = videoPreview.height
+        val (drawnWidth, drawnHeight, _) = FfmpegPreviewSelection.drawnSize(
+            stageWidth, stageHeight, previewOverlay.viewportZoom()
+        )
+        val (originX, originY) = FfmpegPreviewSelection.viewRect(
+            stageWidth, stageHeight, drawnWidth, drawnHeight,
+            previewOverlay.viewportOffsetX(), previewOverlay.viewportOffsetY()
+        )
+        // O quadro do player tem a MESMA proporção da mídia (palco do Windows):
+        // o zoom cresce o quadro e o deslocamento o posiciona, sempre cobrindo
+        // todo o palco — nunca aparece fundo.
+        val scaleX = drawnWidth.toFloat() / videoWidth.toFloat()
+        val scaleY = drawnHeight.toFloat() / videoHeight.toFloat()
         val matrix = Matrix()
-        matrix.postScale(fittedWidth / frameWidth, fittedHeight / frameHeight, centerX, centerY)
+        matrix.setScale(scaleX, scaleY)
+        matrix.postTranslate(originX.toFloat(), originY.toFloat())
         videoPreview.setTransform(matrix)
         videoPreview.invalidate()
+    }
+
+    /** Dá ao quadro do player a proporção da mídia (como o palco do Windows). */
+    private fun applyPreviewFrameAspect() {
+        if (videoWidth <= 0 || videoHeight <= 0) return
+        val widthPx = previewFrame.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+        val heightPx = (widthPx.toDouble() / (videoWidth.toDouble() / videoHeight.toDouble()))
+            .toInt()
+            .coerceIn(
+                (120 * resources.displayMetrics.density).toInt(),
+                (620 * resources.displayMetrics.density).toInt()
+            )
+        previewFrame.layoutParams = previewFrame.layoutParams.apply { height = heightPx }
+    }
+
+    /** Menu da seleção de área (equivalente ao botão direito do Windows). */
+    private fun showSelectionMenu() {
+        if (previewSelection == null) return
+        AlertDialog.Builder(this)
+            .setTitle("Seleção de área")
+            .setItems(arrayOf("Desfazer seleção")) { _, _ -> previewOverlay.clearSelection() }
+            .show()
     }
 
     private fun releasePreviewPlayer() {
@@ -2173,7 +2594,6 @@ class FfmpegCutActivity : AppCompatActivity() {
     private data class CutExecutionResult(
         val success: Boolean,
         val cancelled: Boolean,
-        val failureMessage: String,
-        val reencodeRequiredReason: String? = null
+        val failureMessage: String
     )
 }

@@ -284,16 +284,134 @@ internal object FfmpegMediaPolicies {
         "-avoid_negative_ts", "make_zero", "-f", "wav", outputPath
     )
 
+    /** Filtro de bitstream que leva o vídeo do MP4/MOV para MPEG-TS (concat do
+     * SmartCut); `null` quando o codec não tem par TS (VP9/AV1 etc.). */
+    fun tsBitstreamFilter(codecFamily: String?): String? = when (codecFamily?.lowercase(Locale.ROOT)) {
+        "h264", "avc", "avc1" -> "h264_mp4toannexb"
+        "hevc", "h265", "hvc1", "hev1" -> "hevc_mp4toannexb"
+        else -> null
+    }
+
+    /**
+     * Modo "Sem Reencode": cópia fiel dos streams, com os limites escorregando
+     * até o keyframe/pacote disponível. O seek fica ANTES do input (o seek de
+     * saída faria o FFmpeg recuar um GOP inteiro).
+     */
+    fun cutCopyCommandArguments(
+        inputPath: String,
+        outputPath: String,
+        start: String,
+        duration: String,
+        rotationArguments: List<String>
+    ): Array<String> = buildList {
+        addAll(listOf("-y", "-noautorotate"))
+        addAll(rotationArguments)
+        addAll(listOf("-ss", start, "-i", inputPath, "-t", duration))
+        addAll(cutMappedCopyArguments())
+        addAll(listOf("-avoid_negative_ts", "make_zero", outputPath))
+    }.toTypedArray()
+
+    /**
+     * Um trecho do SmartCut em MPEG-TS, pronto para o concat.
+     *
+     * As bordas reencodadas espelham o trecho COPIADO (mesmo codec, mesmo
+     * pix_fmt, mesmo fps e bitrate de referência) porque é o miolo intocado que
+     * dita o padrão do arquivo final. O vídeo copiado leva o bitstream filter
+     * (mp4toannexb) e o `mpegts_flags` reenvia os parâmetros no início de cada
+     * trecho — as duas correções medidas no Windows (miolo recuando um GOP e
+     * emenda sem os parâmetros do codec).
+     */
+    fun hybridSegmentArguments(
+        inputPath: String,
+        outputPath: String,
+        startUs: Long,
+        durationSeconds: Double,
+        codecFamily: String?,
+        reencode: Boolean,
+        hasAudio: Boolean,
+        videoArguments: List<String> = emptyList(),
+        audioArguments: List<String> = emptyList(),
+        frameRate: Double? = null
+    ): Array<String> {
+        val safeStart = startUs.coerceAtLeast(0L)
+        val start = String.format(Locale.US, "%.6f", safeStart / 1_000_000.0)
+        val duration = String.format(Locale.US, "%.6f", durationSeconds.coerceAtLeast(0.0))
+        return buildList {
+            addAll(listOf("-y", "-noautorotate", "-display_rotation:v:0", "0"))
+            addAll(listOf("-ss", start, "-i", inputPath, "-t", duration))
+            add("-map")
+            add("0:v:0")
+            if (hasAudio) {
+                add("-map")
+                add("0:a?")
+            }
+            if (reencode) {
+                addAll(videoArguments)
+                frameRate?.takeIf { it in 1.0..240.0 }?.let {
+                    addAll(listOf("-r", String.format(Locale.US, "%.6f", it)))
+                }
+            } else {
+                addAll(listOf("-c:v", "copy"))
+            }
+            if (!hasAudio) {
+                add("-an")
+            } else if (audioArguments.isEmpty()) {
+                addAll(listOf("-c:a", "copy"))
+            } else {
+                addAll(audioArguments)
+            }
+            tsBitstreamFilter(codecFamily)?.let {
+                addAll(listOf("-bsf:v", it))
+            }
+            addAll(
+                listOf(
+                    "-avoid_negative_ts", "make_zero",
+                    "-mpegts_flags", "+resend_headers+initial_discontinuity",
+                    "-muxdelay", "0", "-muxpreload", "0",
+                    "-f", "mpegts", outputPath
+                )
+            )
+        }.toTypedArray()
+    }
+
+    /** Argumentos do mux final do SmartCut: cola os trechos sem reencodar. */
+    fun hybridConcatArguments(
+        listPath: String,
+        outputPath: String,
+        rotationDegrees: Int,
+        hasAudio: Boolean,
+        preciseAudio: Boolean,
+        audioIsAac: Boolean,
+        hevc: Boolean
+    ): Array<String> = buildList {
+        addAll(listOf("-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0"))
+        addAll(listOf("-display_rotation:v:0", rotationDegrees.toString(), "-i", listPath))
+        addAll(listOf("-map", "0:v:0"))
+        if (hasAudio) addAll(listOf("-map", "0:a?"))
+        addAll(listOf("-c:v", "copy"))
+        if (!hasAudio) {
+            add("-an")
+        } else {
+            addAll(listOf("-c:a", "copy"))
+            if (preciseAudio || audioIsAac) addAll(listOf("-bsf:a", "aac_adtstoasc"))
+        }
+        if (hevc) addAll(listOf("-tag:v", "hvc1"))
+        addAll(listOf("-avoid_negative_ts", "make_zero", "-max_interleave_delta", "0"))
+        addAll(listOf("-map_metadata", "0", "-map_chapters", "-1", outputPath))
+    }.toTypedArray()
+
     fun hybridCopyBodyArguments(inputPath: String, outputPath: String, startUs: Long, endUs: Long): Array<String> {
         val safeStart = startUs.coerceAtLeast(0L)
         val safeEnd = endUs.coerceAtLeast(safeStart + 1L)
-        val start = String.format(Locale.US, "%.6f", safeStart / 1_000_000.0)
-        val duration = String.format(Locale.US, "%.6f", (safeEnd - safeStart) / 1_000_000.0)
-        return buildList {
-            addAll(listOf("-y", "-ss", start, "-noautorotate", "-i", inputPath, "-t", duration))
-            addAll(cutMappedCopyArguments())
-            addAll(listOf("-avoid_negative_ts", "make_zero", "-f", "mpegts", outputPath))
-        }.toTypedArray()
+        return hybridSegmentArguments(
+            inputPath = inputPath,
+            outputPath = outputPath,
+            startUs = safeStart,
+            durationSeconds = (safeEnd - safeStart) / 1_000_000.0,
+            codecFamily = null,
+            reencode = false,
+            hasAudio = true
+        )
     }
 
     fun normalizedAudioFilter(
