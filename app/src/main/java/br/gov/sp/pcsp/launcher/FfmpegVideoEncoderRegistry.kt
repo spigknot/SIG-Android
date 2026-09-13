@@ -60,7 +60,8 @@ object FfmpegVideoEncoderRegistry {
                             codec = codec,
                             encoder = if (codec == "hevc") "hevc_mediacodec" else "h264_mediacodec",
                             priority = vendorPriority(name),
-                            codecName = name
+                            codecName = name,
+                            shortLabel = vendorName(name)
                         )
                     )
                 }
@@ -184,9 +185,9 @@ object FfmpegVideoEncoderRegistry {
         }
     }
 
-    private fun friendlyLabel(name: String): String {
+    private fun vendorName(name: String): String {
         val lower = name.lowercase(Locale.ROOT)
-        val vendor = when {
+        return when {
             lower.contains("qti") || lower.contains("qcom") -> "Qualcomm"
             lower.contains("exynos") -> "Exynos"
             lower.contains("mtk") || lower.contains("mediatek") -> "MediaTek"
@@ -195,8 +196,10 @@ object FfmpegVideoEncoderRegistry {
             lower.contains("nvidia") -> "NVIDIA"
             else -> "Hardware"
         }
-        return "$vendor ($name)"
     }
+
+    /** Nome completo (menu de seleção): "Qualcomm (c2.qti.avc.encoder)". */
+    private fun friendlyLabel(name: String): String = "${vendorName(name)} ($name)"
 
     fun advertisedMaxInstances(encoder: FfmpegVideoEncoder): Int? {
         val mime = MIME_FOR_CODEC[encoder.codecFamily] ?: return null
@@ -220,10 +223,10 @@ object FfmpegVideoEncoderRegistry {
         AlertDialog.Builder(context)
             .setTitle("Encoders de vídeo")
             .setMessage(
-                "Hardware\nAceleração do próprio aparelho (MediaCodec). É a escolha padrão: " +
+                "GPU\nAceleração do próprio aparelho (MediaCodec). É a escolha padrão: " +
                     "processa mais rápido e gasta menos bateria.\n\n" +
                     "CPU\nEncoder por software (libx264, H.264). Mais lento e mais previsível.\n\n" +
-                    "Avançado\nAparece só no modo Hardware e lista os encoders de hardware que " +
+                    "Avançado\nAparece só no modo GPU e lista os encoders de hardware que " +
                     "passaram na sondagem real deste aparelho (um encode de 1 quadro cada). " +
                     "Escolher um deles FORÇA aquele encoder específico; em \"Automático\" o app " +
                     "escolhe o melhor disponível.\n\n" +

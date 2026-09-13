@@ -1798,7 +1798,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         helpVideoQuality.visibility = qualityVisibility
         findViewById<TextView>(R.id.label_video_quality).apply {
             this.visibility = qualityVisibility
-            text = if (isAudio) "Qualidade do áudio" else "Qualidade do vídeo"
+            text = if (isAudio) "Qualidade do áudio" else "Qualidade"
         }
         updateVideoEncoderButton()
     }
@@ -1833,7 +1833,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private fun showVideoEncoderMenu() {
         if (isProcessing) return
         PopupMenu(this, buttonVideoEncoder).apply {
-            menu.add(0, 1, 0, "Hardware (recomendado)")
+            menu.add(0, 1, 0, "GPU (recomendado)")
             menu.add(0, 2, 1, "CPU (libx264)")
             setOnMenuItemClickListener { item ->
                 encoderPath = if (item.itemId == 2) {
@@ -1882,16 +1882,17 @@ class FfmpegCutActivity : AppCompatActivity() {
 
     private fun updateVideoEncoderButton(refreshPreview: Boolean = true) {
         val hardware = encoderPath == FfmpegVideoEncoders.PATH_HARDWARE
-        buttonVideoEncoder.text = if (hardware) "Hardware" else "CPU"
+        buttonVideoEncoder.text = if (hardware) "GPU" else "CPU"
         buttonVideoEncoder.isEnabled = !isProcessing
         buttonVideoEncoder.alpha = if (buttonVideoEncoder.isEnabled) 1f else 0.42f
         val advancedVisible = hardware && buttonVideoEncoder.visibility == View.VISIBLE
         labelEncoderAdvanced.visibility = if (advancedVisible) View.VISIBLE else View.GONE
         buttonEncoderAdvanced.visibility = labelEncoderAdvanced.visibility
+        // O menu mostra o nome completo; o botão fica com o rótulo curto.
         buttonEncoderAdvanced.text = if (encoderAdvanced == FfmpegVideoEncoders.ADVANCED_AUTO) {
             "Automático"
         } else {
-            encoderCatalog.firstOrNull { it.key == encoderAdvanced }?.label ?: "Automático"
+            encoderCatalog.firstOrNull { it.key == encoderAdvanced }?.shortLabel ?: "Automático"
         }
         val audioMode = selectedMime.startsWith("audio/")
         buttonVideoQuality.text = if (audioMode) selectedAudioQuality.label else selectedVideoQuality.label
@@ -2042,26 +2043,51 @@ class FfmpegCutActivity : AppCompatActivity() {
         if (hybrid) {
             val firstKeyframe = checkNotNull(startKeyframe)
             val lastKeyframe = checkNotNull(endKeyframe)
+            // Cada borda resolve o encoder com a duração DAQUELE trecho (trecho
+            // curto cai na CPU) — a prévia precisa prever o que vai rodar.
+            fun edgeEncoder(seconds: Double): FfmpegVideoEncoder =
+                resolveEncoderForTask(bitrates.codecFamily, seconds)
+                    ?.let { FfmpegVideoEncoderRegistry.toEncoder(it.option, it.forced) }
+                    ?: encoder
             if (firstKeyframe > startUs) {
                 commands += FfmpegCommandPresenter.PreviewCommand(
-                    buildHybridEdgeArguments(input, File("output.ts"), startUs, firstKeyframe, bitrates, encoder, selectedVideoQuality).asIterable()
+                    buildHybridEdgeArguments(
+                        input,
+                        File("output.ts"),
+                        startUs,
+                        firstKeyframe,
+                        bitrates,
+                        edgeEncoder((firstKeyframe - startUs) / 1_000_000.0),
+                        selectedVideoQuality
+                    ).asIterable()
                 )
             }
             commands += FfmpegCommandPresenter.PreviewCommand(
-                buildHybridBodyArguments(input, File("output.ts"), firstKeyframe, lastKeyframe).asIterable()
+                buildHybridBodyArguments(input, File("output.ts"), firstKeyframe, lastKeyframe, bitrates.codecFamily).asIterable()
             )
             if (lastKeyframe < endUs) {
                 commands += FfmpegCommandPresenter.PreviewCommand(
-                    buildHybridEdgeArguments(input, File("output.ts"), lastKeyframe, endUs, bitrates, encoder, selectedVideoQuality).asIterable()
+                    buildHybridEdgeArguments(
+                        input,
+                        File("output.ts"),
+                        lastKeyframe,
+                        endUs,
+                        bitrates,
+                        edgeEncoder((endUs - lastKeyframe) / 1_000_000.0),
+                        selectedVideoQuality
+                    ).asIterable()
                 )
             }
             commands += FfmpegCommandPresenter.PreviewCommand(
-                listOf(
-                    "-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0",
-                    "-display_rotation:v:0", selectedRotationDegrees.toString(), "-i", File("input.txt").absolutePath,
-                    "-map", "0", "-map_metadata", "0", "-map_chapters", "0", "-c", "copy",
-                    "-avoid_negative_ts", "make_zero", File("output.mkv").absolutePath
-                )
+                FfmpegMediaPolicies.hybridConcatArguments(
+                    listPath = File("input.txt").absolutePath,
+                    outputPath = File("output.mkv").absolutePath,
+                    rotationDegrees = selectedRotationDegrees,
+                    hasAudio = true,
+                    preciseAudio = true,
+                    audioIsAac = true,
+                    hevc = encoder.codecFamily == "hevc"
+                ).asIterable()
             )
         } else {
             val args = mutableListOf("-y", "-noautorotate")

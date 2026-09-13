@@ -494,7 +494,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun showVideoEncoderMenu() {
         if (isProcessing) return
         PopupMenu(this, buttonVideoEncoder).apply {
-            menu.add(0, 1, 0, "Hardware (recomendado)")
+            menu.add(0, 1, 0, "GPU (recomendado)")
             menu.add(0, 2, 1, "CPU (libx264)")
             setOnMenuItemClickListener { item ->
                 encoderPath = if (item.itemId == 2) {
@@ -517,7 +517,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private fun updateVideoEncoderButton() {
         if (!isProcessing) processingVideoQuality = selectedVideoQuality
-        buttonVideoEncoder.text = if (encoderPath == FfmpegVideoEncoders.PATH_HARDWARE) "Hardware" else "CPU"
+        buttonVideoEncoder.text = if (encoderPath == FfmpegVideoEncoders.PATH_HARDWARE) "GPU" else "CPU"
         buttonVideoQuality.text = selectedVideoQuality.label
         updateReencodeControls()
     }

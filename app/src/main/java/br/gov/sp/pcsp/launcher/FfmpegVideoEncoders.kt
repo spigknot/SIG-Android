@@ -26,19 +26,21 @@ object FfmpegVideoEncoders {
     const val ADVANCED_AUTO = "auto"
 
     val PATH_LABELS = listOf(
-        PATH_HARDWARE to "Hardware",
+        PATH_HARDWARE to "GPU",
         PATH_CPU to "CPU"
     )
 
     val pathLabel: (String) -> String = { path ->
-        PATH_LABELS.firstOrNull { it.first == path }?.second ?: "Hardware"
+        PATH_LABELS.firstOrNull { it.first == path }?.second ?: "GPU"
     }
 
     /** Trecho curto: abaixo disto a inicialização do hardware não compensa
      * (mesma regra e mesmo limite medidos no Windows). */
     const val SHORT_JOB_SECONDS = 3.0
 
-    /** Um encoder concreto do catálogo do aparelho (um por combinação suportada). */
+    /** Um encoder concreto do catálogo do aparelho (um por combinação suportada).
+     * `label` é o nome completo (vai no menu de seleção); `shortLabel` é o rótulo
+     * curto que fica no botão depois de escolhido (ex.: "Qualcomm"). */
     data class Option(
         val key: String,
         val label: String,
@@ -46,7 +48,8 @@ object FfmpegVideoEncoders {
         val codec: String,
         val encoder: String,
         val priority: Int,
-        val codecName: String? = null
+        val codecName: String? = null,
+        val shortLabel: String = label
     )
 
     /** Encoder escolhido + por que (o motivo vai para o log/etiqueta da tela).

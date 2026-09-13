@@ -1444,7 +1444,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private fun showVideoEncoderMenu() {
         if (isProcessing) return
         PopupMenu(this, buttonVideoEncoder).apply {
-            menu.add(0, 1, 0, "Hardware (recomendado)")
+            menu.add(0, 1, 0, "GPU (recomendado)")
             menu.add(0, 2, 1, "CPU (libx264)")
             setOnMenuItemClickListener { item ->
                 encoderPath = if (item.itemId == 2) {
@@ -1465,7 +1465,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
 
     private fun updateVideoEncoderButton(refreshPreview: Boolean = true) {
         val hardware = encoderPath == FfmpegVideoEncoders.PATH_HARDWARE
-        buttonVideoEncoder.text = if (hardware) "Hardware" else "CPU"
+        buttonVideoEncoder.text = if (hardware) "GPU" else "CPU"
         val enabled = selectedCodec != null && !metadataRotation.isChecked && !isProcessing
         buttonVideoEncoder.isEnabled = !isProcessing
         buttonVideoEncoder.alpha = if (buttonVideoEncoder.isEnabled) 1f else 0.42f
@@ -1800,14 +1800,30 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         val frameHeight = videoPreview.height.toFloat()
         val centerX = frameWidth / 2f
         val centerY = frameHeight / 2f
-        val rotated = transformOrder.contains(TransformOp.ROTATE) && (readDegrees() == 90 || readDegrees() == -90)
+        val rotated = isQuarterTurn()
         val boundingWidth = if (rotated) videoHeight else videoWidth
         val boundingHeight = if (rotated) videoWidth else videoHeight
         val fitScale = minOf(frameWidth / boundingWidth.toFloat(), frameHeight / boundingHeight.toFloat())
         val fittedWidth = videoWidth * fitScale
         val fittedHeight = videoHeight * fitScale
+        // Zoom/deslocamento do palco (mesma matemática do Cortar, por cima da
+        // rotação): o quadro ampliado é posicionado pelo viewRect do palco e
+        // nunca deixa aparecer fundo.
+        val zoom = previewOverlay.viewportZoom()
+        val (drawnWidth, drawnHeight, _) = FfmpegPreviewSelection.drawnSize(
+            videoPreview.width, videoPreview.height, zoom
+        )
+        val (originX, originY) = FfmpegPreviewSelection.viewRect(
+            videoPreview.width, videoPreview.height, drawnWidth, drawnHeight,
+            previewOverlay.viewportOffsetX(), previewOverlay.viewportOffsetY()
+        )
         val matrix = Matrix()
-        matrix.postScale(fittedWidth / frameWidth, fittedHeight / frameHeight, centerX, centerY)
+        matrix.postScale(
+            (fittedWidth * zoom.toFloat()) / frameWidth,
+            (fittedHeight * zoom.toFloat()) / frameHeight,
+            centerX,
+            centerY
+        )
         for (operation in transformOrder) {
             when (operation) {
                 TransformOp.ROTATE -> {
@@ -1826,6 +1842,11 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 }
             }
         }
+        // Posiciona o quadro ampliado no retângulo do palco (zero quando 1x).
+        matrix.postTranslate(
+            originX + drawnWidth / 2f - centerX,
+            originY + drawnHeight / 2f - centerY
+        )
         videoPreview.setTransform(matrix)
         videoPreview.invalidate()
         // O recorte trabalha sobre a mídia COMO ELA É EXIBIDA (dimensões
