@@ -145,16 +145,7 @@
                 android:indeterminate="true"
                 android:visibility="gone" />
 
-            <TextView
-                android:id="@+id/status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:fontFamily="monospace"
-                android:gravity="center"
-                android:textColor="#CCFFFFFF"
-                android:textSize="12sp" />
-
+            
             <TextView
                 android:id="@+id/output_file_name"
                 android:layout_width="wrap_content"
@@ -235,6 +226,15 @@
                 android:textColor="#FF2ECC71"
                 android:textSize="12sp"
                 android:visibility="gone" />
+<TextView
+                android:id="@+id/status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:textColor="#CCFFFFFF"
+                android:textSize="12sp" />
         </LinearLayout>
     </ScrollView>
 

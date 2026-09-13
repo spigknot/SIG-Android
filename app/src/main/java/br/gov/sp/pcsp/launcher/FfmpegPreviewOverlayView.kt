@@ -37,6 +37,9 @@ class FfmpegPreviewOverlayView @JvmOverloads constructor(
     /** Avisa quando a seleção muda (inclusive ao ser apagada). */
     var onSelectionChanged: ((FfmpegPreviewSelection.Selection?) -> Unit)? = null
 
+    /** Avisa quando o desenho TERMINA (soltar o dedo) — para o aviso ao usuário. */
+    var onSelectionCommitted: ((FfmpegPreviewSelection.Selection?) -> Unit)? = null
+
     /** Pedido do menu da seleção (toque longo parado sobre ela). */
     var onSelectionMenuRequested: (() -> Unit)? = null
 
@@ -184,6 +187,10 @@ class FfmpegPreviewOverlayView @JvmOverloads constructor(
         if (videoWidth <= 0 || videoHeight <= 0) return false
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                // O gesto que começa DENTRO do player é do player: sem isso o
+                // ScrollView da tela rouba o arrasto vertical (o quadro não anda)
+                // e o toque longo é cancelado antes de virar desenho da seleção.
+                parent?.requestDisallowInterceptTouchEvent(true)
                 downX = event.x
                 downY = event.y
                 lastX = event.x
@@ -248,6 +255,7 @@ class FfmpegPreviewOverlayView @JvmOverloads constructor(
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 removeCallbacks(longPress)
+                parent?.requestDisallowInterceptTouchEvent(false)
                 if (mode == Mode.DRAW) {
                     val start = drawStart
                     val end = fractionAt(event.x.toDouble(), event.y.toDouble())
@@ -259,10 +267,12 @@ class FfmpegPreviewOverlayView @JvmOverloads constructor(
                         selection = built
                         invalidate()
                         onSelectionChanged?.invoke(built)
+                        onSelectionCommitted?.invoke(built)
                     } else {
                         selection = null
                         invalidate()
                         onSelectionChanged?.invoke(null)
+                        onSelectionCommitted?.invoke(null)
                     }
                 }
                 mode = Mode.NONE

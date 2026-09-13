@@ -67,6 +67,42 @@ Windows no mesmo dia — SmartCut, os três modos de corte, seleção de encoder
 - **Fase 4.** `:app:testDebugUnitTest`, `:app:lintDebug`, `:app:assembleDebug`,
   APK.
 
+## Ajustes após o primeiro teste real (12/09, aparelho CPH2747/Android 16)
+
+1. **Arrasto vertical no player e toque longo não funcionavam** (o usuário relatou
+   "o arrasto na vertical fica ruim" e "mantive o dedo pressionado, mas não
+   aconteceu nada"): **causa única** — o `ScrollView` da tela interceptava o
+   gesto que começava dentro do player (cancelava o `ACTION_CANCEL` do toque
+   longo e roubava o arrasto vertical). Correção: o overlay chama
+   `parent.requestDisallowInterceptTouchEvent(true)` no `ACTION_DOWN` e libera no
+   `ACTION_UP/CANCEL` — **toque dentro do player é do player; fora dele a tela
+   rola**, como pedido.
+2. **Caixa de comando (ffmpeg) movida para o FIM da tela** nas seis telas FFmpeg;
+   o que estava abaixo dela (arquivo de saída, botões e estatísticas) subiu para
+   a posição que era da caixa.
+3. **Rótulo do modo não atualizava**: o botão continuava "SmartCut" depois de
+   trocar para "Sem Reencode" (a prévia já mudava). Correção: `updateVideoEncoderButton()`
+   escreve `buttonCutMode.text = selectedCutMode`.
+4. Feedback do toque longo: ao soltar o dedo, um aviso mostra a seleção em
+   pixels ("Seleção: 322 x 162 pixels").
+
+### Evidências de teste (aparelho e emulador)
+
+- **SmartCut real (h264, 640x360, 6 s, GOP 1 s)**: miolo copiado **bit a bit
+  idêntico** à fonte (124/124 quadros iguais com 1 quadro de alinhamento), borda
+  de 1 s no **libx264 pela regra do trecho curto**, saída decodifica sem erros,
+  6,08 s (+2 quadros, igual ao Windows).
+- **HEVC**: SmartCut com `hevc_mp4toannexb` no miolo e `hevc_mediacodec` na
+  borda; saída continua **HEVC com tag `hvc1`** e decodifica limpo.
+- **Sem Reencode**: comando `-c copy -c:t copy`, saída HEVC 59 kb/s (idêntica à
+  fonte) — sem reencode.
+- **Seleção/crop**: toque longo + arrasto desenha o quadro amarelo; a prévia
+  passa a mostrar `-vf crop=W:H:X:Y`; o Executar abre a confirmação com o texto
+  do Windows ("Será salvo apenas o que está DENTRO da seleção: 322 x 162 pixels,
+  a partir de (100, 87)..."); a saída sai **exatamente 322x162**.
+- **Arrasto vertical dentro do player não rola mais a página** (posição dos
+  controles idêntica antes/depois do gesto).
+
 ## O que fica de fora (com justificativa)
 
 - **Persistência da escolha de encoder**: o Windows também não persistiu (o

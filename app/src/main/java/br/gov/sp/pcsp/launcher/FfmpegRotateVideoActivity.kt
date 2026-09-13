@@ -198,6 +198,14 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             onSelectionChangedForRotate()
         }
         previewOverlay.onSelectionMenuRequested = { showSelectionMenu() }
+        previewOverlay.onSelectionCommitted = { selection ->
+            val crop = selection?.let {
+                FfmpegPreviewSelection.cropPixels(it, displayWidth(), displayHeight())
+            }
+            if (crop != null) {
+                Toast.makeText(this, "Seleção: ${crop[2]} x ${crop[3]} pixels", Toast.LENGTH_SHORT).show()
+            }
+        }
         controls = findViewById(R.id.rotate_controls)
         timeline = findViewById(R.id.timeline)
         currentTime = findViewById(R.id.current_time)

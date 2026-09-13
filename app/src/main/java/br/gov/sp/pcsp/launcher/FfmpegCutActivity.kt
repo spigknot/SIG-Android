@@ -202,6 +202,16 @@ class FfmpegCutActivity : AppCompatActivity() {
             refreshCommandPreview()
         }
         previewOverlay.onSelectionMenuRequested = { showSelectionMenu() }
+        previewOverlay.onSelectionCommitted = { selection ->
+            val crop = selection?.let { currentSelectionCrop() }
+            if (crop != null) {
+                Toast.makeText(
+                    this,
+                    "Seleção: ${crop[2]} x ${crop[3]} pixels",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
         timeline = findViewById(R.id.timeline)
         audioWaveform = findViewById(R.id.audio_waveform)
         currentTime = findViewById(R.id.current_time)
@@ -1882,6 +1892,7 @@ class FfmpegCutActivity : AppCompatActivity() {
 
     private fun updateVideoEncoderButton(refreshPreview: Boolean = true) {
         val hardware = encoderPath == FfmpegVideoEncoders.PATH_HARDWARE
+        buttonCutMode.text = selectedCutMode
         buttonVideoEncoder.text = if (hardware) "GPU" else "CPU"
         buttonVideoEncoder.isEnabled = !isProcessing
         buttonVideoEncoder.alpha = if (buttonVideoEncoder.isEnabled) 1f else 0.42f

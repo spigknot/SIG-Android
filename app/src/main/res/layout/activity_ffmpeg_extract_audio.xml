@@ -468,15 +468,6 @@
             </ScrollView>
 
             <TextView
-                android:id="@+id/status"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                android:gravity="center"
-                android:text=""
-                android:textColor="#DDFFFFFF"
-                android:textSize="13sp" />
-<TextView
                 android:id="@+id/output_file_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -540,6 +531,16 @@
                 android:textColor="#FF2ECC71"
                 android:textSize="12sp"
                 android:visibility="gone" />
+
+<TextView
+                android:id="@+id/status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:text=""
+                android:textColor="#DDFFFFFF"
+                android:textSize="13sp" />
 
 
             
