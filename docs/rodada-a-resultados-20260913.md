@@ -146,3 +146,85 @@ semântica de interface, confirmado nos builders e nos artefatos.
 **Nada neste relatório foi implementado** — os artefatos e comandos ficam
 guardados para repetir a bateria depois de cada correção (mesmas entradas, mesma
 medição, antes e depois).
+
+---
+
+## Anexo — complementos pedidos na revisão 2 (R1, R2, R5, R6, R8)
+
+### R1 — os quatro bipes (a tabela anterior estava incompleta)
+
+Perfil de energia a cada 100 ms, no áudio decodificado:
+
+| Saída | Duração do áudio | Marcadores presentes |
+|---|---:|---|
+| Variante AAC (comando real do app, só o áudio trocado) | 3,228 s | **0,10 / 1,10 / 2,10 / 3,10 s** — os **quatro** |
+| Arquivo gerado **pelo app** (áudio copiado) | 3,622 s | **0,50 / 1,50 / 2,50 / 3,50 s** — os quatro, deslocados **+0,40 s** |
+
+O quarto bipe existe e está na posição esperada (3,10 s) na variante AAC; a
+tabela anterior listava três por limitação do meu detector (o último bipe cai nos
+últimos 130 ms do arquivo e não fechava a janela de detecção). **Não há perda de
+cauda em nenhum dos dois**; o deslocamento do arquivo do app é uniforme
+(+0,40 s em todos os marcadores), o que reforça o diagnóstico do prelúdio.
+
+### R2 — contagem de quadros: 80 em todos
+
+Com decodificação 1:1 (`-fps_mode passthrough`, sem duplicação/descarte):
+
+| Arquivo | Quadros |
+|---|---:|
+| Windows preciso | **80** |
+| Android preciso | **80** |
+| Variante AAC | **80** |
+| Windows SmartCut | **80** |
+| Android SmartCut | **80** |
+
+Esperado: índices 35–114 da fonte (1,40 s a 4,56 s) = 80 quadros.
+O intervalo “79–80” do relatório anterior foi **erro de medição meu** (parsing do
+CSV de PTS naquela passada); a contagem correta é 80 em todos os casos, com o
+primeiro quadro confirmado na fonte em 1,40 s.
+
+### R5 — crop sem ambiguidade (dois padrões, período 8 e período 9)
+
+O padrão de período 8 se repete a cada 8 linhas; para eliminar essa ambiguidade,
+o teste foi repetido combinando **dois padrões** (período 8 e período 9 — o que
+deixa 5 candidatos em 360 linhas: 14 / 86 / 158 / 230 / 302):
+
+- `crop=322:162:100:87` → primeira linha da saída = **fonte linha 86** (o
+  candidato mais próximo de 87 é 86). **Conclusão mantida, agora sem ambiguidade.**
+- Eixo **x** (mesmo mecanismo): `crop=322:162:101:87` (x ímpar) entrega a
+  primeira coluna da **fonte 100** — o arredondamento ocorre também no x.
+
+### R6 — os 30 ms do Smart Insert (medidos nas partes reais do app)
+
+| Parte (gerada pelo próprio app) | Duração | Amostras (48 kHz) |
+|---|---:|---:|
+| Peça esquerda `[0; 5)` com `-c copy` | **5,030 s** | 241.440 (**+1.440 = +30 ms**) |
+| Áudio inserido 2 s (com `afade curve=tri` 0,2 s) | 2,000 s | 96.000 (exato) |
+| Peça direita `[5 s; fim)` com `-c copy` | 5,000 s | 240.000 (exato) |
+| Concat final | 12,030 s | 577.440 = soma exata das partes |
+
+Decomposição: **400 ms = as duas sobreposições de 0,2 s que o Smart Insert não
+faz** (diferença editorial); **30 ms = overshoot de pacote da peça esquerda em
+`-c copy`** (a mesma família de aproximação do modo de cópia, não é atraso de
+AAC — a fonte e as partes são PCM).
+
+### R8 — rastreabilidade dos binários
+
+| Item | Valor |
+|---|---|
+| ffmpeg do SIG Windows | `8.0.1-full_build` (gyan.dev) |
+| ffmpeg embutido no Android | ffmpeg-kit 6.1.1 (pacote nativo, R2) |
+| APK usado na bateria Android | `app-debug.apk`, 9.049.127 bytes, sha256 `02ab6652c780beedabb0eb7e44b4808b…` |
+| HEAD do SIG Android na execução | `6714260` |
+| HEAD do SIG Windows na execução | `b549e60` (com 3 alterações locais do próprio usuário no painel/testes) |
+| Entradas (sha256, prefixo) | C1 `ae6af91b…`, C3 `46af02df…`, C4c `e64507fe…`, C1b `ac9d0453…` |
+
+### O que permanece sem prova
+
+- R3/R5/R7 na versão **corrigida** (dependem da implementação autorizada).
+- **R6 parcial**: a duração da saída do *integral* no **SIG Android** (mesmo caso
+  10 s + 2 s) não foi medida — exige dirigir a ferramenta Inserir no app.
+- T07 (posição relativa dos marcadores de áudio nas emendas do SmartCut) e o
+  lead do SmartCut medido em **aparelho físico** (o emulador não certifica
+  MediaCodec).
+
