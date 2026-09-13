@@ -2,6 +2,104 @@
 
 **Data:** 31/08/2026 · **De:** agente operador mecânico · **Para:** agente "cérebro" (decisões)
 
+---
+
+# ATUALIZAÇÃO — 13/09/2026 (rodada QDQ U16 + NPU diagnóstica)
+
+**experiment-id:** `nar-qnn-lab-rebuild-20260910`
+**status geral:** `PARTIAL` — F5 (QDQ para HTP) **fechada** na geração e paridade CPU; F6 e F8 dependem do aparelho.
+**work-dir:** `D:\SIG-granite-nar-lab-rebuild` ⚠️ (o handoff de 31/08 aponta `E:\SIG-granite-nar-lab\...`; por
+ordem do usuário de 10/09 **o E: não é mais escrito** — tudo migrou para D:)
+**aparelho:** OnePlus CPH2747 (SM8850, Android 16, arm64-v8a) — **desconectado** nesta rodada
+
+## 1. O que esta rodada decidiu (duas hipóteses do plano caíram)
+
+| hipótese do plano | veredito | evidência |
+|---|---|---|
+| os 16 `Einsum` bloqueiam a NPU | **REFUTADA** | o QNN compila os `Einsum`; o culpado é o op `Shape` (`qnn_node_group.cc:47 IsSupported`) |
+| a NPU compensa | **em fp16 não** | NPU 49.614 ms vs CPU 45.774 ms — mas fp16 é o pior caso do HTP |
+
+## 2. Artefatos QDQ (novos)
+
+6 encoders com **ativações QUInt16 + pesos QUInt8**, opset 21, 2574 nós, `Q=456 DQ=656`, 1,17 GB cada.
+Pacote `pacote-u16/` com **pesos compartilhados**: 1 `.data` de 1.178.567.552 B (sha `70fff8814a1e8d41`)
++ 6 grafos de ~1 MB. Dedup: `7.042.391.640` → `1.178.562.036` B (16,7%).
+Nomes idênticos aos que o app monta (`GraniteNarEngine.kt:233`) — testável sem alterar o app.
+
+## 3. Paridade (critério = TEXTO, não cosseno)
+
+| bucket | texto exato | delta CER | pioras | U8 (comparação) |
+|---|---|---|---|---|
+| t0200 | **6/6** | **+0,00000** | 0 | 6/6 |
+| t0400 | **5/6** | **+0,00000** | 0 | 3/6 |
+| t0800 | 4/6 | −0,00207 | 1 | **1/6** |
+| t1200 | **5/6** | **+0,00000** | 0 | **3/6** |
+| t1600 | 4/6 | +0,00222 | 1 | — |
+| t2000 | 4/6 | −0,00222 | 0 | — |
+
+Pior caso absoluto **+0,0022**. Divergências são pontuação e bordas (conteúdo idêntico).
+Erro nas saídas (áudio de teste): cosseno **0,99905** (logits) / **0,99202** (multilayer).
+
+## 4. Etapas que FALHARAM e o primeiro erro de cada
+
+| etapa | primeiro erro | resolução |
+|---|---|---|
+| `get_qnn_qdq_config` | módulo `qnn_quantizer` inexistente (nem no fork 2.6) | parâmetros diretos no `quantize_static` |
+| QDQ no modelo fp16 | `Type Error: QuantizeLinear bound to different types (float16/float)` | conversão para fp32 |
+| salvar fp32 | `EncodeError: Failed to serialize proto` (limite 2 GB) | external data |
+| `quant_pre_process` no fp32 | mesmo `EncodeError` (salva sem external data) | shape inference em memória |
+| opset 21 "na mão" | `Unrecognized attribute: axes for ReduceMax` | conversão cirúrgica |
+| opset 21 (2ª) | `Split: Neither 'split' input nor 'num_outputs'` | incluir os `Split` |
+| cache emprestado entre buckets | texto 1/4, CER **piorando** +0,023 | um cache por bucket |
+| U8 nas ativações | t0800 +0,01453 (4 pioras) | **U16** |
+| saturação por ativação | matching devolveu 0 pares (7 tentativas) | medido por saída; limite documentado |
+
+## 5. Bytes únicos/duplicados
+
+- `.data` compartilhado: **1.178.567.552 B** (único)
+- somando sem dedup: **7.042.391.640 B** → economiza **5,86 GB**
+- pacote total: **1,10 GiB**
+
+## 6. Objetos NÃO enviados ao R2 e por quê
+
+Os artefatos QDQ desta rodada **ainda não foram publicados** — estão locais, aguardando a decisão
+sobre o critério §13 e, idealmente, o teste de NPU. O prefixo autorizado seria
+`models/granite/4.1-nar/experiments/nar-qnn-lab-rebuild-20260910/`.
+Manifesto R2 já publicado (rodada anterior): `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/4.1-nar/v2/manifest.json`
+
+## 7. Gates (13/09)
+
+- Android: `testDebugUnitTest` + `lintDebug` + `assembleDebug` — verdes na última mudança (`d84e68a`)
+- Python: 51 testes das ferramentas + 58 das minhas — passando
+- Repo: HEAD `a79ce03` = `origin/main`; **nada desta rodada foi commitado** (vive no lab)
+
+## 8. Perguntas que exigem decisão do "cérebro"
+
+1. **Adotar §13 por CER?** Recomendo sim: 6/6 buckets com CER entre −0,00222 e +0,00000; o critério de
+   texto exato reprova por uma vírgula e é inadequado para int8.
+2. **F6 vale o investimento?** O contexto pré-compilado resolve os 165 s de preparação da NPU — mas só
+   importa **se** a NPU for de fato mais rápida. Sugiro **medir int8 na NPU primeiro**.
+3. Publicar o pacote U16 em `experiments/` agora, ou após o teste no aparelho?
+
+## 9. Cinco próximos comandos exatos (quando o telefone voltar)
+
+```bash
+cd /d/SIG-granite-nar-lab-rebuild
+adb devices
+bash scripts/testa_pacote_u16_no_aparelho.sh
+adb logcat -d | grep -a NAR_BENCH_JSON
+# comparar com o baseline fp16: CPU 45.774 ms | NPU 49.614 ms (bucket 400)
+```
+
+## 10. Relatórios desta rodada
+
+- `reports/relatorio-cerebro-20260913.md` (no lab) — resultados, falhas, hipóteses refutadas
+- `reports/final-summary.json`, `run-state.json`, `artifact-index.json`,
+  `validation-summary.json`, `r2-upload.jsonl`, `resume-command.txt` (§19)
+- `reports/cobertura-qdq.json` (§15-item 7)
+
+---
+
 ## Identificação
 - **experiment-id (float):** `nar-qnn-20260829-223957`
 - **experiment-id (QDQ remoto, toolchain correto):** `nar-qnn-remote-20260831-041516`
