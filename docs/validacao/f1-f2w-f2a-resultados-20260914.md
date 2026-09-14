@@ -91,3 +91,39 @@ Prova com os pacotes de áudio (md5 do bitstream):
 
 O passo também se anuncia: "Copiando áudio sem reencodar" contra "Extraindo <arquivo>" — o
 operador vê qual caminho foi usado, como no Android.
+
+## N4 — Juntar com 2/5/20 clipes (14/09)
+
+Clipes gerados: 20 × 1,52 s (o alvo era 1,5 s; a 25 fps o encoder fecha em 38 quadros, e isso
+virou parte da medida), cada um com um nível de cinza próprio e um bipe de 100 ms em 0,5 s.
+
+**Resposta principal — o Juntar NÃO acumula deriva.** Nos três tamanhos os bipes ficam
+espaçados exatamente pela duração do clipe (1,520 s), sem nenhuma deriva por emenda:
+
+| Caso | duração | quadros | bipes (esperado: 0,521 + 1,520·i) |
+|---|---|---|---|
+| Cópia K=5 | 7,621 s | 190 | 0,521 / 2,041 / 3,561 / 5,081 / 6,601 |
+| SmartJoin K=2 | 3,061 s | 76 | 0,521 / 2,041 |
+| SmartJoin K=5 | 7,621 s | 190 | 0,521 / 2,041 / 3,561 / 5,081 / 6,601 |
+| SmartJoin K=20 | 30,421 s | 760 | os 20 bipes, o último em 29,401 |
+
+(Os "+20 ms por clipe" da primeira medição eram **meu gerador**: 1,5 s a 25 fps = 38 quadros =
+1,52 s. O Juntar reproduz a duração real de cada clipe.)
+
+**Achado novo — com transição, o SmartJoin entrega o conteúdo FORA DE ORDEM.** Rodando o
+pipeline real com "Fade in/out" 0,5 s em 5 clipes, a linha do tempo medida no arquivo final foi
+clipe **2 → 3 → 4 → 5 → 1** e depois as emendas, em vez de 1 → 2 → 3 → 4 → 5 com as emendas
+intercaladas. Evidência: série crua de níveis de cinza amostrada a cada 0,2 s
+(`24 24 24 36 36 36 48 48 61… 12 12 12 12 12 …`) e os bipes de áudio em 0,0–0,2 s / 1,2–1,3 s
+(em vez de 0,5 + 1,52·i). O log do app anunciava 7,60 s esperados e entregou 7,822 s.
+
+Causa provável (apontada no código): em `_smart_join_execute` os segmentos são acumulados em
+**dois laços separados** — primeiro todos os corpos, depois todas as emendas — e o índice usado
+para ler `paths[index]` é a posição do laço, não `clip_plan.index`. O plano em si está na ordem
+certa (`ClipPlan(index, …)` por `enumerate(sources)`) e o total esperado bate com o log
+(`fade_in_out=True` → soma dos clipes), então a divergência nasce na montagem dos `pieces`.
+
+**Pró passo (F7):** ordenar `pieces` (corpo 1, emenda 1, corpo 2, emenda 2, …) usando
+`clip_plan.index`/`junction.index`, **verificar o mesmo trecho no Android** (o pipeline foi
+portado de lá — é provável que compartilhe o defeito) e provar com este mesmo roteiro N4
+(a ordem `1>2>3>4>5` com as emendas intercaladas e os bipes em 0,5 + 1,52·i).
