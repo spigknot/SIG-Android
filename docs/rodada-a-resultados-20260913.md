@@ -222,9 +222,62 @@ AAC — a fonte e as partes são PCM).
 ### O que permanece sem prova
 
 - R3/R5/R7 na versão **corrigida** (dependem da implementação autorizada).
-- **R6 parcial**: a duração da saída do *integral* no **SIG Android** (mesmo caso
-  10 s + 2 s) não foi medida — exige dirigir a ferramenta Inserir no app.
-- T07 (posição relativa dos marcadores de áudio nas emendas do SmartCut) e o
-  lead do SmartCut medido em **aparelho físico** (o emulador não certifica
-  MediaCodec).
+- **R6 parcial**: a duração da saída do *integral* no **SIG Android** no caso com
+  **transição** (Linear 0,2 s → 11,6 s esperados) não foi medida por automação: o
+  seletor de transição da tela não respondeu aos toques roteirizados (precisa de
+  toque manual). A variante **sem transição** foi medida: ver anexo abaixo.
+- T07 (posição relativa dos marcadores de áudio nas emendas do SmartCut) —
+  **executado no aparelho físico**; resultado no anexo abaixo.
+
+---
+
+## Anexo 2 — execução no aparelho físico (CPH2747, Android 16)
+
+Aparelho conectado por USB, APK `app-debug.apk` (sha256 `02ab6652…`) reinstalado;
+entradas C1b/C1c/C5 empurradas e indexadas; todas as execuções pelo app.
+
+### T06 no aparelho (MediaCodec/libx264 de verdade)
+
+SmartCut [1,4 → 4,6] em C1c, executado pelo app:
+
+| Medida | Resultado |
+|---|---|
+| Comandos | cabeça `-ss 1.400 -t 0.600` + miolo `-ss 2.000 -t 2.000 -c:v copy -c:a aac -bsf:v h264_mp4toannexb` + cauda `-ss 4.000 -t 0.600` + concat |
+| Regra do trecho curto | bordas de 0,6 s em **libx264** (CPU), miolo copiado (mesma regra do Windows) |
+| Quadros | **80** (15 recodificados + **50 copiados** + 15 recodificados) |
+| Miolo | **fonte[50]..fonte[99]** = 2,00 s a 3,96 s — exatamente o plano, `origem = k + 35` constante |
+
+### T07 — marcadores de áudio nas emendas (novo, fecha a lacuna da Rodada A)
+
+Fonte C1c com **marcadores a cada 250 ms** (24 marcadores em 6 s); corte
+[1,4 → 4,6]; perfil de energia do áudio decodificado:
+
+| Marcador | Saída (s) | Esperado se o áudio fosse contínuo (s) | Diferença |
+|---|---:|---:|---:|
+| 1–2 (cabeça) | 0,12 / 0,37 | 0,10 / 0,35 | **+20 ms** |
+| 3–10 (miolo copiado) | 0,66 … 2,41 | 0,60 … 2,35 | **+60 ms** |
+| 11–13 (cauda) | 2,68 / 2,93 / 3,18 | 2,60 / 2,85 / 3,10 | **+80 ms** |
+
+- **Nenhum silêncio, repetição ou perda de marcador**: o espaçamento permanece
+  exatamente 250 ms do começo ao fim.
+- Mas o áudio **acumula atraso nas emendas**: +20 ms na cabeça (atraso do
+  encoder AAC do trecho reencodado), **+40 ms na primeira emenda** e +20 ms na
+  segunda, chegando a **+80 ms no fim** — enquanto o **vídeo permanece
+  exatamente no plano** (80 quadros, miolo na fonte 2,0–4,0 s).
+- Ou seja: existe um **offset crescente de áudio em relação ao vídeo de até
+  ~80 ms (2 quadros) no fim do arquivo** — a mesma ordem do excesso de contêiner
+  (+0,09 s) medido antes. É o primeiro dado que **justifica** a arquitetura de
+  “áudio contínuo em uma passagem” que o parecer deixou como melhoria futura.
+
+### R6 (Android) — caminho integral medido no aparelho
+
+Ferramenta Inserir com principal 10 s + inserido 2 s (PCM 48 kHz estéreo),
+inserção no meio:
+
+| Caso | Duração medida |
+|---|---:|
+| **Sem transição** (padrão da tela) | **12,00 s** (= soma exata 10 + 2) ✓ igual ao Windows |
+| Com **“Linear” 0,2 s** | **não medido** — o seletor de transição não abriu com toques automatizados |
+
+
 
