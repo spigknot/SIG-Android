@@ -18,3 +18,24 @@ Commits: Android `c06520b`; Windows `46422b1` (+ F0 no Android).
 - **F4** nome/efeito da transição do Smart Insert (Windows) e caminho de cópia do Extrair.
 - **F5** áudio contínuo no SmartCut (provar antes/depois com C1c antes de mudar o núcleo).
 - **F6–F10** limites do Sem Reencode, SmartJoin (N4: 2/5/20 clipes), Extrair, Limpar, preset/capítulos/HDR/entrega.
+
+## Prova de campo (14/09, após a correção dos especificadores)
+
+Tudo medido nos apps reais, comparando com o manifesto:
+
+| Prova | Entrada | Antes | Depois |
+|---|---|---|---|
+| T02 Android — áudio do corte preciso | C1b (bipes), [1,4→4,6], Reencode Completo, emulador | 3,62 s com 0,44 s de áudio anterior ao corte | **3,227 s**, 80 pacotes, bipes em 0,12/1,12/2,12/3,12 (alinhado) |
+| T04 Android — inventário de faixas | C3b (A=mono/44,1k, B=estéreo/48k), corte preciso | perdia 1 faixa no remux; faixa B saía mono/44,1k | **2 faixas**: 44100/1 e 48000/2 |
+| T04 Windows — perfil por faixa | C3b, corte preciso (probe + pipeline reais) | faixa B saía mono/44,1k | **2 faixas**: 44100/1 e 48000/2 |
+
+**Achado que só a prova de campo pegaria:** `-ar:0`/`-ac:0` (especificador NU) casa por
+índice GLOBAL de stream — e o stream 0 é o vídeo. A forma correta é qualificada:
+`-ar:a:0`/`-ac:a:0`. Medido com o ffmpeg de referência:
+
+| Forma | Faixa A (fonte mono/44,1k) | Faixa B (fonte estéreo/48k) |
+|---|---|---|
+| `-ar:0 -ac:0 -ar:1 -ac:1` | 48000/2 (errado) | 48000/2 |
+| `-ar:a:0 -ac:a:0 -ar:a:1 -ac:a:1` | **44100/1** | **48000/2** |
+
+Os testes unitários codificavam a forma errada e passavam; corrigidos junto (os dois apps).

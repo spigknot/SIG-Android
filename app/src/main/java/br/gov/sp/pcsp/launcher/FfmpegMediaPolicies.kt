@@ -178,12 +178,15 @@ internal object FfmpegMediaPolicies {
             add("aac")
             add("-b:a:${track.index}")
             add(track.bitrate ?: "128k")
+            // Especificador QUALIFICADO (a:N): o nu (-ar:0) casa por indice
+            // GLOBAL de stream e o stream 0 e o video — medido: a faixa A saia
+            // com a taxa da B (48000/2 em vez de 44100/1).
             track.sampleRate?.takeIf { it > 0 }?.let {
-                add("-ar:${track.index}")
+                add("-ar:a:${track.index}")
                 add(it.toString())
             }
             track.channels?.takeIf { it > 0 }?.let {
-                add("-ac:${track.index}")
+                add("-ac:a:${track.index}")
                 add(it.toString())
             }
         }
