@@ -150,3 +150,32 @@ corpo j+1, … — e o concat usa essa lista.
 acima do que o próprio app espera (7,822 s contra 7,60 s em 4 emendas; sem transição o desvio é
 +20 ms no arquivo inteiro). Não é o defeito de ordem — é o custo do fade nas emendas — e entra na
 mesma discussão do áudio contínuo (F5).
+
+## F7 — verificação do lado Android (no aparelho, com o mesmo roteiro N4)
+
+Fiz o mesmo teste no app Android (emulador): 5 clipes marcados, "Fade in/out" 0,5 s, SmartJoin
+ligado. O app anunciou **7,600 s** processados e entregou **7,797 s** de vídeo / 7,842 s de áudio
+(190 quadros de vídeo) — dentro do mesmo perfil do Windows depois da correção.
+
+A linha do tempo medida no arquivo final seguiu **exatamente a ordem de entrada** — o seletor de
+arquivos entregou `clip_00 + clip_02 + clip_03 + clip_01 + clip_04` e o arquivo saiu
+`1 → fade → 3 → fade → 4 → fade → 2 → fade → 5`, com as emendas **intercaladas**:
+
+| t | nível | leitura |
+|---|---|---|
+| 0,0–1,0 | 12 | clipe 1 |
+| 1,2–2,0 | 7, 2, 6, 20, 35 | fade (emenda) |
+| 2,2–2,6 | 36 | clipe 3 |
+| 2,8–3,4 | 22, 7, 12, 30 | fade (emenda) |
+| 3,6–4,2 | 48 | clipe 4 |
+| 4,4–5,0 | 29, 9, 6, 15 | fade (emenda) |
+| 5,2–5,6 | 24 | clipe 2 |
+| 5,8–6,6 | 22, 13, 3, 20, 43 | fade (emenda) |
+| 6,8–7,6 | 61 (=60) | clipe 5 |
+
+Observação de método: os valores das emendas são soma ponderada dos dois clipes (ex.: 12 = 0,25 × 48,
+o fade-in do clipe 4) — não confundir um valor de fade com a reaparência de outro clipe, que foi o
+que a primeira leitura sugeriu.
+
+Conclusão: **o Android cumpre o contrato** (ordem + emendas intercaladas); a correção do F7 levou o
+Windows ao mesmo comportamento.
