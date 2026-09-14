@@ -362,10 +362,12 @@ class FfmpegMediaPoliciesTest {
         assertEquals("8.333333", args[ssIndex + 1])
         assertEquals("1.666666", args[args.indexOf("-t") + 1])
         assertTrue(args.windowed(2).contains(listOf("-c:v", "copy")))
-        // O trecho copiado mapeia só vídeo+áudio: legenda/dados não existem em
-        // MPEG-TS e derrubariam a conversão do trecho (regra do SmartCut).
+        // F5: o trecho é SÓ VÍDEO (o áudio do SmartCut vem de uma passagem única
+        // sobre a fonte, no mux final). Legenda/dados também não entram: não
+        // existem em MPEG-TS e derrubariam a conversão do trecho.
         assertTrue(args.windowed(2).contains(listOf("-map", "0:v:0")))
-        assertTrue(args.windowed(2).contains(listOf("-map", "0:a?")))
+        assertFalse(args.windowed(2).contains(listOf("-map", "0:a?")))
+        assertTrue(args.contains("-an"))
         assertFalse(args.windowed(2).contains(listOf("-map", "0")))
         assertTrue(args.windowed(2).contains(listOf("-f", "mpegts")))
         // Os parâmetros do codec viajam no início de cada trecho.
@@ -395,20 +397,30 @@ class FfmpegMediaPoliciesTest {
     }
 
     @Test
-    fun smartCutConcatColaSemReencodarEFechaOArquivo() {
+    fun smartCutConcatColaOvideoETrazOaudioContinuoDaFonte() {
+        // F5: o mux final cola o vídeo dos trechos (entrada 1) e puxa o áudio da
+        // FONTE (entrada 0, com seek no início pedido) — uma passagem só, sem
+        // emenda de áudio (antes o áudio vinha dos trechos e acumulava atraso).
         val args = FfmpegMediaPolicies.hybridConcatArguments(
             listPath = "lista.txt", outputPath = "saida.mkv", rotationDegrees = 0,
-            hasAudio = true, preciseAudio = true, audioIsAac = true, hevc = true
+            hasAudio = true, sourcePath = "fonte.mp4", startUs = 1_400_000L, hevc = true,
+            audioArguments = listOf("-c:a:0", "aac", "-b:a:0", "96k")
         ).toList()
         assertTrue(args.windowed(2).contains(listOf("-c:v", "copy")))
-        assertTrue(args.windowed(2).contains(listOf("-c:a", "copy")))
-        assertTrue(args.windowed(2).contains(listOf("-bsf:a", "aac_adtstoasc")))
+        // o áudio vem da fonte, no início pedido
+        assertEquals("1.400000", args[args.indexOf("-ss") + 1])
+        assertEquals("fonte.mp4", args[args.indexOf("-ss") + 3])
+        assertTrue(args.windowed(2).contains(listOf("-map", "1:v:0")))
+        assertTrue(args.windowed(2).contains(listOf("-map", "0:a?")))
+        assertTrue(args.windowed(2).contains(listOf("-c:a:0", "aac")))
+        assertFalse(args.contains("-bsf:a"))
         assertTrue(args.windowed(2).contains(listOf("-tag:v", "hvc1")))
         assertTrue(args.windowed(2).contains(listOf("-max_interleave_delta", "0")))
         // A rotação devolvida no mux final e o inventário do concat
         assertTrue(args.windowed(2).contains(listOf("-display_rotation:v:0", "0")))
         assertTrue(args.windowed(2).contains(listOf("-f", "concat")))
-        assertTrue(args.windowed(2).contains(listOf("-map", "0:v:0")))
+        // o vídeo vem da ENTRADA 1 (o concat); a 0 é a fonte, só para o áudio
+        assertFalse(args.windowed(2).contains(listOf("-map", "0:v:0")))
     }
 
     @Test

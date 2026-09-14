@@ -1067,9 +1067,12 @@ class FfmpegCutActivity : AppCompatActivity() {
                 outputPath = outputFile.absolutePath,
                 rotationDegrees = rotationDegrees,
                 hasAudio = hasAudio,
-                preciseAudio = true,
-                audioIsAac = true,
-                hevc = sourceCodec == "hevc"
+                sourcePath = inputFile.absolutePath,
+                startUs = startMs * 1000L,
+                hevc = sourceCodec == "hevc",
+                audioArguments = FfmpegMediaPolicies.preciseAudioTrackArguments(
+                    detectStreamBitrates(inputFile).audioTracks
+                )
             )
             tracker.startCurrentTask()
             val concatSession = executeFfmpegWithProgress(
@@ -2202,9 +2205,10 @@ class FfmpegCutActivity : AppCompatActivity() {
                     outputPath = File("output.mkv").absolutePath,
                     rotationDegrees = selectedRotationDegrees,
                     hasAudio = true,
-                    preciseAudio = true,
-                    audioIsAac = true,
-                    hevc = encoder.codecFamily == "hevc"
+                    sourcePath = input.absolutePath,
+                    startUs = startUs,
+                    hevc = encoder.codecFamily == "hevc",
+                    audioArguments = FfmpegMediaPolicies.preciseAudioTrackArguments(bitrates.audioTracks)
                 ).asIterable()
             )
         } else {

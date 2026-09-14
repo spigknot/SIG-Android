@@ -290,3 +290,49 @@ Decisões do usuário: (1) mesmo "forte" nos dois apps, independente de qual é 
 
 Observação: o "forte" continua avisando que pode alterar um pouco a voz (a ajuda do Android foi
 atualizada — ela citava o `anlmdn`).
+
+## F5 — áudio contínuo no SmartCut (Windows) — decisão do usuário: trocar a cópia do áudio por zero atraso
+
+**O defeito (medido antes):** o áudio do SmartCut era montado por trecho (cabeça/miolo/cauda), cada
+um começando numa fronteira de pacote AAC. Num corte [1,4–4,6] do arquivo de marcadores (250 ms),
+os marcadores saíram com deriva **+20, +20, +50, +60, +60… ms** — o atraso acumulava nas emendas.
+
+**A mudança:** o vídeo continua EXATAMENTE como era (3 trechos, miolo copiado bit-exato, concat com
+`-c:v copy`); o áudio deixou de ser costurado e passou a vir de **uma passagem única sobre a fonte**,
+com seek no início pedido (recorte por amostras, com reencode), no mux final.
+
+| | Antes | Depois |
+|---|---|---|
+| Deriva dos marcadores | +20, +20, **+50, +60, +60…** (acumulando) | **+20 constante** (o priming do encoder AAC — offset fixo, zero degraus) |
+| Miolo do vídeo | bit-exato | **bit-exato** (mesma hash da fonte, quadro a quadro) |
+| Quadros | 80 | **80** |
+| Tamanho | 89.928 B | 89.787 B |
+
+**Arquivos do A/B** (para ouvido humano): `%LOCALAPPDATA%\Temp\bateria3\f5_ab\antes` e `\depois`.
+
+**O que o usuário aceitou:** a cópia sem perdas do áudio do miolo dá lugar a um reencode AAC do
+intervalo, em troca de não haver mais atraso acumulado nas emendas. O app avisa isso no log
+("o áudio vai numa passagem única sobre a fonte").
+
+Testes: 2 atualizados (o trecho do SmartCut agora é só vídeo) + 1 novo (o mux final puxa o áudio
+da fonte, com `-map 1:v:0` + `-map 0:a?` e sem `aac_adtstoasc`).
+
+### F5 — port para o Android e prova no aparelho real (OnePlus PJA110, Android 13)
+
+Mesmo desenho do Windows: os trechos do SmartCut passam a ser **só vídeo** (`-an`) e o mux final
+puxa o áudio da **fonte** com seek no início pedido (`-map 1:v:0` + `-map 0:a?`, AAC por faixa,
+sem `aac_adtstoasc`). O Android já montava os segmentos e o concat pelos mesmos builders
+(`hybridSegmentArguments`/`hybridConcatArguments`), então a mudança foi nos dois + nos dois
+chamadores (execução e prévia) — os testes que travavam o desenho antigo foram atualizados.
+
+**Prova de campo (app real, C1c com marcadores de 250 ms, corte [1,4–4,6]):**
+
+| Medida | Resultado |
+|---|---|
+| Vídeo | 640×360, **80 quadros** (igual à fonte e ao Windows) |
+| Marcadores | 0,12 / 0,37 / 0,62 / 0,87 / 1,12 / 1,37 / 1,62 / 1,87 s |
+| Deriva | **+20 ms constante** — sem acúmulo ✓ (antes, o T07 media a acumulação idêntica nos dois apps) |
+
+**A/B do Windows** (mesmo trecho): antes +20/+20/+50/+60/+60 ms (acumulando) × depois +20 constante,
+com o miolo do vídeo bit-exato nos dois (mesma hash da fonte) — arquivos de escuta em
+`%LOCALAPPDATA%\Temp\bateria3\f5_ab_entrega`.

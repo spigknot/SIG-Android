@@ -455,10 +455,12 @@ internal object FfmpegMediaPolicies {
             addAll(listOf("-ss", start, "-i", inputPath, "-t", duration))
             add("-map")
             add("0:v:0")
-            if (hasAudio) {
-                add("-map")
-                add("0:a?")
-            }
+            // F5: o trecho do SmartCut é SÓ VÍDEO. O áudio saía por trecho e cada
+            // segmento começava numa fronteira de pacote AAC, acumulando ~20 ms
+            // por emenda (medido: +60 ms num corte de duas emendas). Agora o áudio
+            // vem de uma passagem única sobre a fonte, no mux final.
+            // (hasAudio/audioArguments ficam na assinatura por compatibilidade.)
+            add("-an")
             if (reencode) {
                 addAll(videoArguments)
                 frameRate?.takeIf { it in 1.0..240.0 }?.let {
@@ -466,13 +468,6 @@ internal object FfmpegMediaPolicies {
                 }
             } else {
                 addAll(listOf("-c:v", "copy"))
-            }
-            if (!hasAudio) {
-                add("-an")
-            } else if (audioArguments.isEmpty()) {
-                addAll(listOf("-c:a", "copy"))
-            } else {
-                addAll(audioArguments)
             }
             tsBitstreamFilter(codecFamily)?.let {
                 addAll(listOf("-bsf:v", it))
@@ -488,26 +483,37 @@ internal object FfmpegMediaPolicies {
         }.toTypedArray()
     }
 
-    /** Argumentos do mux final do SmartCut: cola os trechos sem reencodar. */
+    /**
+     * Argumentos do mux final do SmartCut (F5): vídeo concatenado (entrada 1)
+     * + áudio CONTÍNUO da fonte (entrada 0, com seek no início pedido).
+     *
+     * Antes o áudio também vinha dos trechos, e cada um começava numa fronteira
+     * de pacote AAC: o atraso acumulava ~20 ms por emenda. Numa passagem única
+     * não existe emenda de áudio — sobra só o priming do encoder (offset fixo).
+     */
     fun hybridConcatArguments(
         listPath: String,
         outputPath: String,
         rotationDegrees: Int,
         hasAudio: Boolean,
-        preciseAudio: Boolean,
-        audioIsAac: Boolean,
-        hevc: Boolean
+        sourcePath: String,
+        startUs: Long,
+        hevc: Boolean,
+        audioArguments: List<String> = emptyList()
     ): Array<String> = buildList {
-        addAll(listOf("-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0"))
-        addAll(listOf("-display_rotation:v:0", rotationDegrees.toString(), "-i", listPath))
-        addAll(listOf("-map", "0:v:0"))
+        addAll(listOf("-y", "-fflags", "+genpts"))
+        val inicio = String.format(Locale.US, "%.6f", startUs.coerceAtLeast(0L) / 1_000_000.0)
+        addAll(listOf("-ss", inicio, "-i", sourcePath))
+        addAll(listOf("-display_rotation:v:0", rotationDegrees.toString(), "-f", "concat", "-safe", "0", "-i", listPath))
+        addAll(listOf("-map", "1:v:0"))
         if (hasAudio) addAll(listOf("-map", "0:a?"))
         addAll(listOf("-c:v", "copy"))
         if (!hasAudio) {
             add("-an")
+        } else if (audioArguments.isEmpty()) {
+            addAll(listOf("-c:a", "aac"))
         } else {
-            addAll(listOf("-c:a", "copy"))
-            if (preciseAudio || audioIsAac) addAll(listOf("-bsf:a", "aac_adtstoasc"))
+            addAll(audioArguments)
         }
         if (hevc) addAll(listOf("-tag:v", "hvc1"))
         addAll(listOf("-avoid_negative_ts", "make_zero", "-max_interleave_delta", "0"))
