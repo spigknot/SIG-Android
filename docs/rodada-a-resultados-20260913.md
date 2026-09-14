@@ -279,5 +279,24 @@ inserção no meio:
 | **Sem transição** (padrão da tela) | **12,00 s** (= soma exata 10 + 2) ✓ igual ao Windows |
 | Com **“Linear” 0,2 s** | **não medido** — o seletor de transição não abriu com toques automatizados |
 
+### T07 no SIG Windows — o atraso das emendas é o MESMO (não é divergência)
+
+Mesma fonte de marcadores (250 ms), mesmo corte [1,4 → 4,6], pipeline real do
+Windows:
+
+| | Windows | Android (aparelho) |
+|---|---|---|
+| Marcadores | 0,12 / 0,37 / 0,66 … 3,18 s | **idênticos** |
+| Atraso acumulado | +20 / +60 / +80 ms | **idêntico** |
+| Duração do áudio | 3,20 s (contêiner 3,29 s) | 3,31 s (contêiner 3,31 s) |
+
+**Conclusão:** o deslocamento crescente de ~40 ms por emenda (≈2 quadros no fim)
+é uma **característica comum do SmartCut nos dois aplicativos** (áudio
+reencodado por trecho), não um defeito de uma plataforma. A decisão sobre
+“áudio contínuo em uma passagem” deixa de ser convergência entre apps e passa a
+ser uma escolha conjunta: aceitar/documentar (limite conhecido, ~2 quadros no
+fim) ou corrigir nos dois.
+
+
 
 
