@@ -55,3 +55,39 @@ efetivo — o mesmo que o filtro aplica. Prova nos apps reais:
 Implementação: `cropPixels` (Android) e `selection_crop_pixels` (Windows) alinham x0/y0 para
 baixo e mantêm largura/altura pares; `cropLabel`/`selection_crop_label` renderizam os mesmos
 números para o rótulo e o diálogo de confirmação. Cobre Cortar e Girar nos dois apps.
+
+## F4a — rótulo da transição do Inserir (Windows)
+
+O mesmo par (rótulo, curva) tinha EFEITO diferente por modo: no Smart Insert cada curva
+suaviza apenas o trecho **inserido** (afade); no Reencode Completo as curvas viram
+**crossfade** nas emendas. O mesmo "Linear" prometia, portanto, coisas diferentes.
+
+Agora o rótulo diz o efeito:
+- Smart Insert: `Linear (fade só no trecho inserido)`, …
+- Reencode Completo: `Crossfade linear`, … (o `Fade in/out` continua igual nos dois)
+
+Prova: uma preferência salva ("Linear") continua valendo — os três rótulos resolvem para a
+mesma curva (`tri`) e geram o **mesmo plano**; o plano executado de verdade nos arquivos do
+T08 (principal 10 s + inserido 2 s, 0,2 s de transição, inserção em 3 s) dá **12,000 s**,
+contra os 12,03 s de referência do T08 (fade só no inserido).
+
+**Deliberadamente não mudado:** os rótulos do Inserir no Android ("Curva linear",
+"Seno de quarto de onda"…) são neutros e o efeito lá é crossfade nos dois lados — não
+prometem efeito diferente do que entregam, então ficam como estão.
+
+## F4b — Extrair áudio copiando quando o pedido é o próprio stream (Windows)
+
+O Windows **sempre** reencodava ao extrair; o Android já copiava quando o pedido coincide com
+o stream de origem. Agora os dois usam o mesmo critério (`extract_can_copy`): mesma família de
+codec/extensão **e** mesma taxa **e** mesmos canais **e** sem recorte.
+
+Prova com os pacotes de áudio (md5 do bitstream):
+
+| Arquivo | md5 dos pacotes |
+|---|---|
+| Fonte (C1.mp4, aac 44,1k mono) | `7bde28e614f058570bd0ec3c02f24a21` |
+| Extraído com m4a/44100/1 (**cópia**) | `7bde28e614f058570bd0ec3c02f24a21` — **idêntico** |
+| Extraído com m4a/48000/1 (reencode) | `9436c3e74fd9f307dc053b65d0fc6d54` — diferente (é reencode) |
+
+O passo também se anuncia: "Copiando áudio sem reencodar" contra "Extraindo <arquivo>" — o
+operador vê qual caminho foi usado, como no Android.
