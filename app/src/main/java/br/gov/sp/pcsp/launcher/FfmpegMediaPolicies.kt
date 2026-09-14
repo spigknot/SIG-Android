@@ -209,6 +209,32 @@ internal object FfmpegMediaPolicies {
         return "AAC por faixa (${tracks.size} faixas: $detalhes)"
     }
 
+    /**
+     * Texto do intervalo PEDIDO x EFETIVO do modo Sem Reencode.
+     *
+     * Copiar streams não corta em qualquer ponto: o FFmpeg recua até o keyframe
+     * disponível. O modo promete cópia fiel, não o intervalo arbitrário exato —
+     * então o efetivo tem que aparecer (mesma política do SIG Windows).
+     */
+    fun copyIntervalMessage(
+        requestedStartMs: Long,
+        requestedEndMs: Long,
+        effectiveStartMs: Long
+    ): String {
+        fun segundos(valor: Long) = String.format(Locale.US, "%.3f", valor / 1000.0)
+        val pedido = (requestedEndMs - requestedStartMs).coerceAtLeast(0L) / 1000.0
+        val efetivo = (requestedEndMs - effectiveStartMs).coerceAtLeast(0L) / 1000.0
+        val recuo = (requestedStartMs - effectiveStartMs) / 1000.0
+        if (recuo <= 0.001) {
+            return "Sem Reencode: intervalo efetivo ${segundos(effectiveStartMs)}–" +
+                "${segundos(requestedEndMs)} s (${String.format(Locale.US, "%.3f", efetivo)} s) — igual ao pedido."
+        }
+        return "Sem Reencode: intervalo efetivo ${segundos(effectiveStartMs)}–${segundos(requestedEndMs)} s " +
+            "(${String.format(Locale.US, "%.3f", efetivo)} s); pedido ${segundos(requestedStartMs)}–" +
+            "${segundos(requestedEndMs)} s (${String.format(Locale.US, "%.3f", pedido)} s) — " +
+            "o início recua ${String.format(Locale.US, "%.3f", recuo)} s até o keyframe anterior."
+    }
+
     fun cutMappedCopyArguments(): List<String> = listOf(
         "-map", "0:v:0?",
         "-map", "0:a?",

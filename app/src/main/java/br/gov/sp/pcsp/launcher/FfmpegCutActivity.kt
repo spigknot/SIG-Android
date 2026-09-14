@@ -1165,6 +1165,18 @@ class FfmpegCutActivity : AppCompatActivity() {
     ): CutExecutionResult {
         tracker.appendTasks(listOf("Copiando streams sem reencodar"))
         tracker.completeCurrentTask()
+        // F6: o modo promete cópia fiel, não o intervalo exato — o início real
+        // depende do keyframe disponível, então o efetivo aparece antes de rodar.
+        tracker.appendTasks(
+            listOf(
+                FfmpegMediaPolicies.copyIntervalMessage(
+                    startMs,
+                    endMs,
+                    effectiveCopyStartMs(inputFile, startMs)
+                )
+            )
+        )
+        tracker.completeCurrentTask()
         val rotationDegrees = detectMetadataRotation(inputFile)
         tracker.appendTasks(
             listOf(
@@ -1173,11 +1185,14 @@ class FfmpegCutActivity : AppCompatActivity() {
             )
         )
         tracker.startCurrentTask()
+        // F6: ancorar o seek no keyframe (cortar no meio do GOP deixa o começo
+        // do arquivo sem keyframe) e manter o FIM pedido.
+        val inicioEfetivoMs = effectiveCopyStartMs(inputFile, startMs)
         val arguments = FfmpegMediaPolicies.cutCopyCommandArguments(
             inputPath = inputFile.absolutePath,
             outputPath = outputFile.absolutePath,
-            start = formatSeconds(startMs),
-            duration = String.format(Locale.US, "%.3f", (endMs - startMs) / 1000.0),
+            start = formatSeconds(inicioEfetivoMs),
+            duration = String.format(Locale.US, "%.3f", (endMs - inicioEfetivoMs) / 1000.0),
             rotationArguments = rotationInputArguments(rotationDegrees)
         )
         val session = executeFfmpegWithProgress(arguments, endMs - startMs, tracker)
@@ -1548,6 +1563,41 @@ class FfmpegCutActivity : AppCompatActivity() {
             }
         }
         return StreamBitrates(video, audio, width, height, frameRate, codecFamily, audioTracks)
+    }
+
+    /**
+     * Início EFETIVO de um corte em stream copy: o último keyframe <= início.
+     *
+     * Copiar streams não corta em qualquer ponto — o FFmpeg recua até o keyframe
+     * disponível, então o intervalo entregue é este, não o pedido.
+     */
+    private fun effectiveCopyStartMs(inputFile: File, startMs: Long): Long {
+        var extractor: android.media.MediaExtractor? = null
+        return try {
+            extractor = android.media.MediaExtractor()
+            extractor.setDataSource(inputFile.absolutePath)
+            val track = (0 until extractor.trackCount).firstOrNull { indice ->
+                extractor.getTrackFormat(indice)
+                    .getString(android.media.MediaFormat.KEY_MIME)
+                    ?.startsWith("video/") == true
+            }
+            if (track == null) {
+                startMs
+            } else {
+                extractor.selectTrack(track)
+                extractor.seekTo(startMs * 1000L, android.media.MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+                val amostraUs = extractor.sampleTime
+                if (amostraUs >= 0L) amostraUs / 1000L else startMs
+            }
+        } catch (_: Throwable) {
+            startMs
+        } finally {
+            try {
+                extractor?.release()
+            } catch (_: Throwable) {
+                // stub de teste: nao ha recurso nativo para liberar
+            }
+        }
     }
 
     private fun saveTempOutputsToUri(treeUri: Uri) {

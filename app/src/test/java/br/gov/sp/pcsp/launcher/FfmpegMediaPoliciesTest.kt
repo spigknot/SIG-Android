@@ -614,4 +614,23 @@ class FfmpegMediaPoliciesTest {
         )
         assertEquals("AAC (faixa unica)", FfmpegMediaPolicies.audioTracksSummary(emptyList()))
     }
+
+    @Test
+    fun copyIntervalMessageDeclaraOsLimitesEfetivos() {
+        // F6/T01: copiar streams nao corta em qualquer ponto — o FFmpeg recua ao
+        // keyframe. O modo promete copia fiel; o intervalo efetivo tem que aparecer.
+        assertEquals(
+            "Sem Reencode: intervalo efetivo 1.000–4.600 s (3.600 s); pedido " +
+                "1.400–4.600 s (3.200 s) — o início recua 0.400 s até o keyframe anterior.",
+            FfmpegMediaPolicies.copyIntervalMessage(1400L, 4600L, 1000L)
+        )
+    }
+
+    @Test
+    fun copyIntervalMessageQuandoOInicioJaEUmKeyframe() {
+        assertEquals(
+            "Sem Reencode: intervalo efetivo 2.000–4.600 s (2.600 s) — igual ao pedido.",
+            FfmpegMediaPolicies.copyIntervalMessage(2000L, 4600L, 2000L)
+        )
+    }
 }

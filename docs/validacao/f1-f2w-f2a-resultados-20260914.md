@@ -179,3 +179,26 @@ que a primeira leitura sugeriu.
 
 Conclusão: **o Android cumpre o contrato** (ordem + emendas intercaladas); a correção do F7 levou o
 Windows ao mesmo comportamento.
+
+## F6 — Sem Reencode: intervalo efetivo declarado e início ancorado no keyframe
+
+O modo promete **cópia fiel**, não o intervalo arbitrário exato. Medido no N1 (corte [1,4–4,6] num
+arquivo com keyframes de 1 em 1 s, nos dois apps):
+
+| Medida | Antes | Depois |
+|---|---|---|
+| Declaração ao operador | "limites aproximados" sem números | **"Sem Reencode: intervalo efetivo 1.000–4.600 s (3.600 s); pedido 1.400–4.600 s (3.200 s) — o início recua 0.400 s até o keyframe anterior."** |
+| Arquivo entregue | 3,221 s — começando em 1,4 s com os primeiros quadros **P**, primeiro keyframe em 0,6 s (início não decodificável limpo) | **3,621 s** — primeiro quadro **keyframe (I)** e keyframes em 0, 1, 2, 3 s (GOP limpo) |
+
+**O defeito silencioso**: `-ss` exato com `-c copy` corta no meio do GOP e deixa o começo do arquivo
+sem keyframe — os P-frames iniciais referenciam quadros descartados. A correção ancora o seek no
+keyframe ≤ início (mantendo o FIM pedido) e declara o intervalo efetivo, nos dois apps.
+
+Implementação: helpers puros `copy_effective_start_seconds`/`copy_interval_message` (Windows) e
+`copyIntervalMessage` (Android), com o início efetivo vindo dos keyframes extraídos (Windows) e do
+`SEEK_TO_PREVIOUS_SYNC` do MediaExtractor (Android). Testes: 2 + 2.
+
+**Observação de método**: a primeira medição do N1 me enganou duas vezes — o `_extract_keyframes`
+estava falhando no meu harness (sem `cancel_event`) e caía num `except` que devolvia lista vazia,
+o que fez o app buscar do zero (arquivo de 4,6 s). Vale conferir sempre o número que o app declara
+contra o arquivo, que é o que o teste faz.
