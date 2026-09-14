@@ -127,3 +127,26 @@ certa (`ClipPlan(index, …)` por `enumerate(sources)`) e o total esperado bate 
 `clip_plan.index`/`junction.index`, **verificar o mesmo trecho no Android** (o pipeline foi
 portado de lá — é provável que compartilhe o defeito) e provar com este mesmo roteiro N4
 (a ordem `1>2>3>4>5` com as emendas intercaladas e os bipes em 0,5 + 1,52·i).
+
+## F7 — ordem dos segmentos do SmartJoin (14/09)
+
+**O defeito era do port para o Windows.** O Android sempre montou intercalado — corpo j e
+emenda j no MESMO laço, `plan.clips.forEachIndexed { … plan.junctions.getOrNull(index)?.let { … } }`.
+O port separou em dois laços e as emendas caíam todas no fim: medido no N4, a linha do tempo
+saía 2>3>4>5>1 (e os bipes em 0,0/1,2 s em vez de 0,5 + 1,52·i).
+
+**Correção (Windows, aproximando do Android):** os segmentos são montados por
+`smart_join_segment_order(clip_count, has_body, junction_indexes)` — corpo j, emenda j,
+corpo j+1, … — e o concat usa essa lista.
+
+**Prova (mesmo roteiro N4, 5 clipes, "Fade in/out" 0,5 s):**
+
+| Medida | Antes | Depois |
+|---|---|---|
+| Ordem da linha do tempo | 2 > 3 > 4 > 5 > 1 | **1 > emenda > 2 > emenda > 3 > emenda > 4 > emenda > 5** |
+| Bipes | 0,0–0,2 s / 1,2–1,3 s | **0,521 / 2,075 / 3,641 / 5,207 / 6,773** |
+
+**Observação que fica para o acompanhamento:** no modo com fade o total sai ~50 ms por emenda
+acima do que o próprio app espera (7,822 s contra 7,60 s em 4 emendas; sem transição o desvio é
++20 ms no arquivo inteiro). Não é o defeito de ordem — é o custo do fade nas emendas — e entra na
+mesma discussão do áudio contínuo (F5).
