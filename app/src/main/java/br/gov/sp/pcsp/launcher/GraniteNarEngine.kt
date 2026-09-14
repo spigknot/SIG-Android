@@ -469,6 +469,20 @@ object GraniteNarEngine {
     var debugOrtVerbose: Boolean = false
 
     /**
+     * Diagnóstico: sobrescreve/adiciona opções do QNN EP, no formato `chave=valor;chave=valor`.
+     *
+     * Motivo: o orçamento de memória do DSP é o que falta para o bucket t0400 rodar com encoder E
+     * projector na NPU (o projector não mapeia os pesos: `fastrpc_mmap_validate failed` -> 6001,
+     * medido 14/09 com projector fp16 e U8). As opções do QNN EP — `offload_graph_io_quantization`,
+     * `enable_htp_fp16_precision`, `htp_graph_finalization_optimization_mode` — mudam exatamente
+     * esse orçamento, e testá-las pelo smoke test evita um rebuild de 3,5 min por hipótese.
+     *
+     * Default null: produção não muda.
+     */
+    @Volatile
+    var debugQnnOptions: String? = null
+
+    /**
      * Diagnóstico: cria a sessão do PROJECTOR no CPU mesmo com backend acelerado.
      *
      * Medido no aparelho (14/09): com o encoder QUANTIZADO residindo na NPU, o projector deixa de
@@ -810,6 +824,14 @@ object GraniteNarEngine {
             // mais curta; burst reduz latência durante a inferência interativa.
             qnnConfig["htp_graph_finalization_optimization_mode"] = "1"
             qnnConfig["htp_performance_mode"] = "burst"
+        }
+        // Diagnóstico: permite varrer opções do QNN EP sem rebuild (ver a KDoc de `debugQnnOptions`).
+        // Formato "chave=valor;chave=valor"; a última ocorrência de uma chave vence.
+        debugQnnOptions?.split(';')?.forEach { par ->
+            val igual = par.indexOf('=')
+            if (igual > 0) {
+                qnnConfig[par.substring(0, igual).trim()] = par.substring(igual + 1).trim()
+            }
         }
         options.addQnn(qnnConfig)
         // Sem isto, uma sessão rotulada NPU/GPU pode executar silenciosamente

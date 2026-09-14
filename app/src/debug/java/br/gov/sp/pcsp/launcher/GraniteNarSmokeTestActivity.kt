@@ -53,6 +53,9 @@ class GraniteNarSmokeTestActivity : Activity() {
                 // com texto correto, isolando o ganho do encoder.
                 GraniteNarEngine.debugProjectorBackendCpu =
                     intent.getBooleanExtra(EXTRA_PROJECTOR_BACKEND_CPU, false)
+                // Diagnostico: varredura de opcoes do QNN EP sem rebuild (formato "chave=valor;...").
+                GraniteNarEngine.debugQnnOptions =
+                    intent.getStringExtra(EXTRA_QNN_OPTS)?.takeIf { it.isNotBlank() }
                 val audioPath = checkNotNull(intent.getStringExtra(EXTRA_AUDIO_PATH)) {
                     "Extra obrigatório ausente: $EXTRA_AUDIO_PATH"
                 }
@@ -282,6 +285,8 @@ class GraniteNarSmokeTestActivity : Activity() {
         const val EXTRA_WARMUP_BUCKET = "warmup_bucket"
         /** Projector no CPU com backend acelerado (isola o ganho do encoder na NPU). */
         const val EXTRA_PROJECTOR_BACKEND_CPU = "projector_backend_cpu"
+        /** Opções extras do QNN EP ("chave=valor;chave=valor") — varredura sem rebuild. */
+        const val EXTRA_QNN_OPTS = "qnn_opts"
         const val EXTRA_AUDIO_PATH = "audio_path"
         const val EXTRA_RUN_ID = "run_id"
         const val EXTRA_WARMUP_RUNS = "warmup_runs"

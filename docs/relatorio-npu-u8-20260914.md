@@ -243,8 +243,21 @@ do **U8** (no dump de texto do pipeline ele já ficava abaixo do U16: 3/6 contra
 
 ⚠️ É essa a leitura correta: a NPU **acelera o encoder de verdade** (1,9×), mas no pipeline de 7 s
 ela vale ~11% porque o LLM editor — que roda no CPU por falta de espaço no DSP — domina o tempo.
-Nada disso diminui o resultado principal: em fp16 o encoder de 39 s virava gargalo e a NPU nem era
-usada; agora ela executa 1.064 ms.
+
+🔴 **RESSALVA MEDIDA (segunda amostra, mesmo config, 3 min depois):** `TOTAL 5.491 ms`
+(encoder 1.201, projector 577, **llm 3.329 ms**). O LLM varia de **1,9 s a 4,2 s** entre rodadas
+enquanto a **bateria vai de 29,2 °C a 32,8 °C** — ele é sensível à temperatura e domina o total, e
+como as configurações foram testadas em sequência, **os totais NÃO são comparáveis entre si sem
+cuidado**. O que é estável e comparável:
+
+| medida | fp16 | U16/U8 no CPU | U8 na NPU |
+|---|---|---|---|
+| encoder (t0400) | 39.028 ms | 2.001–3.148 ms | **966–1.401 ms** ✅ |
+| projector | 361 ms (CPU) | 430–540 ms (CPU) | **18–53 ms** ✅ |
+| preparação do encoder | 160.551 ms | ~0,3 s | 13,4–20,1 s |
+
+O que **não** muda com tanque quente: a NPU acelera encoder e projector com folga. O que decide o
+total é o LLM no CPU — e esse é o próximo alvo real, não o resto.
 
 Reprodução:
 
@@ -254,3 +267,47 @@ BACKEND=npu WARMUP_BUCKET=400 PROJ_CPU=1 bash scripts/testa_pacote_u16_no_aparel
 # a base honesta de comparação (tudo CPU, mesma variante de LLM)
 BACKEND=cpu WARMUP_BUCKET=400 bash scripts/testa_pacote_u16_no_aparelho.sh pacote-u8
 ```
+
+---
+
+## 11. Varredura das opções do QNN EP: existe um botão que faz tudo caber
+
+Como o projector falhava com fp16 **e** com U8, restava a hipótese de orçamento de memória do DSP.
+Em vez de rebuildar (3,5 min) por palpite, foi adicionado um injetor: `debugQnnOptions` no engine
+(default `null`, produção intacta) + extra `qnn_opts` no smoke test + `QNN_OPTS` no script. Com ele,
+**uma sessão de push varre vários combos** (`scripts/varre_qnn_opts.sh`, ~1,5 min por combo).
+
+| combo (t0400, encoder E projector na NPU) | veredito | preparação |
+|---|---|---|
+| baseline — `htp_graph_finalization_optimization_mode=1` (o de produção) | ❌ 6001 | ~31 s |
+| `offload_graph_io_quantization=0` | ❌ 6001 | 31 s |
+| `enable_htp_fp16_precision=0` | ❌ 6001 | 31 s |
+| **`htp_graph_finalization_optimization_mode=2`** | ✅ **PASSOU** | 111–151 s |
+| `offload_graph_io_quantization=0; htp_graph_finalization_optimization_mode=2` | ❌ 6001 | 48 s |
+| `htp_graph_finalization_optimization_mode=3` | ✅ passou | **~253 s** |
+
+**A variável que decide é uma só.** Mexer numa segunda opção junto **quebra** o que o mode=2 tinha
+resolvido — é o argumento mais forte para variar um fator por vez.
+
+**O que isso prova:** o fracasso do projector no t0400 **é orçamento de memória do DSP**, e existe
+modo de finalização que faz encoder e projector conviverem. Detalhe do mode=2 medido no log:
+`projector t400 criado ... em 61583 ms` (contra 6,5 s no mode=1) — ele gasta preparação para
+economizar memória.
+
+**Por que não vira produção:** o custo. Preparação de **111–253 s** (contra 28 s da configuração que
+fecha) e — efeito colateral medido — o **LLM no CPU passou a levar ~3,4 s** (contra 2,25 s),
+consistente nas três rodadas de preparação longa (o load enorme esquenta o aparelho). Total:
+5.045–5.711 ms contra **4.065 ms** da configuração com o projector no CPU.
+
+Reprodução da varredura:
+
+```bash
+cd /d/SIG-granite-nar-lab-rebuild
+bash scripts/varre_qnn_opts.sh                                          # lista padrão
+bash scripts/varre_qnn_opts.sh "htp_graph_finalization_optimization_mode=2"
+```
+
+Resumo em `reports/varredura-qnn-opts.jsonl` (+ `-run1.jsonl` da primeira varredura) e o stream de
+cada combo em `logs/varre-<combo>-stream.log` — **o stream do script de teste tem nome fixo por
+backend e é sobrescrito**; sem copiar por combo, o texto transcrito e a evidência crua se perdem
+(erro que cometi na primeira varredura).
