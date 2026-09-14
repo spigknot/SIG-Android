@@ -638,6 +638,14 @@ class FfmpegCutActivity : AppCompatActivity() {
                 tempOutput = currentTempOutput
                 val tracker = FfmpegTaskTracker(status, listOf("Preparando arquivo"))
                 tracker.completeCurrentTask()
+                // F10: fonte com mais de 8 bits por componente? O reencode grava em
+                // 8 bits — avisar antes de rodar (o Sem Reencode preserva).
+                if (jobMime.startsWith("video/")) {
+                    colorDepthTask(currentInputFile)?.let { aviso ->
+                        tracker.appendTasks(listOf(aviso))
+                        tracker.completeCurrentTask()
+                    }
+                }
                 val execution = if (jobMime.startsWith("video/")) {
                     when (jobPlanMode) {
                         FfmpegCutModes.COPY -> executeCopyVideoCut(
@@ -1563,6 +1571,20 @@ class FfmpegCutActivity : AppCompatActivity() {
             }
         }
         return StreamBitrates(video, audio, width, height, frameRate, codecFamily, audioTracks)
+    }
+
+    /**
+     * Aviso de profundidade de cor do vídeo (10/12 bits), lido do ffmpeg e
+     * traduzido pelo helper puro — null quando é 8 bits ou quando não deu para ler.
+     */
+    private fun colorDepthTask(inputFile: File): String? {
+        val session = runCatching {
+            FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", inputFile.absolutePath))
+        }.getOrNull() ?: return null
+        val texto = session.allLogsAsString.orEmpty()
+        val linhaVideo = texto.lineSequence().firstOrNull { it.contains("Video:") } ?: return null
+        val pixFmt = Regex("Video:\\s*[^,]+,\\s*([a-zA-Z0-9_]+)").find(linhaVideo)?.groupValues?.get(1)
+        return FfmpegMediaPolicies.colorDepthWarning(pixFmt)
     }
 
     /**

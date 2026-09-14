@@ -1148,6 +1148,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     "first=${source.keyframesSeconds.firstOrNull()}"
             )
         }
+        plannerSources.mapNotNull { source -> FfmpegMediaPolicies.colorDepthWarning(source.profile.pixelFormat) }
+            .firstOrNull()
+            ?.let { aviso -> Log.w(TAG, aviso) }
         Log.i(TAG, "SmartJoin plan: target=${plan.targetIndex}, copy=${plan.clips.map { it.copyVideo }}, ineligible=${plan.ineligibilityReason}")
         if (!plan.canSmartJoin) {
             return smartJoinFailure(

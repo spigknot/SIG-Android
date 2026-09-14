@@ -219,3 +219,33 @@ compatível + mesma taxa + mesmos canais + sem recorte) e o passo se anunciando 
 
 Verificação: rótulos idênticos na interface dos dois apps ("Padrão para transcrição",
 "Padrão compacto") e parâmetros conferidos no código — nenhuma mudança necessária.
+
+## F10 — HDR/10-bit: aviso antes de reencodar (nos dois apps)
+
+Verificação inicial: **nenhum** dos apps tratava profundidade de cor > 8 bits — reencodar um vídeo
+10/12 bits gravava tudo em yuv420p (8 bits) **em silêncio** ✗. O plano aceita "avisar/bloquear" nesta
+fase; ficou o aviso.
+
+**Implementação** (helper puro idêntico nos dois): `color_depth_warning` (Windows) /
+`colorDepthWarning` (Android) reconhecem yuv420p10le, p010le, gbrp12le, yuv420p16le, y210, y410,
+x2rgb10, rgb48, rgba64, … e devolvem o texto:
+
+> "Fonte em <format>: o reencode grava em 8 bits (yuv420p) e a profundidade de cor será reduzida —
+> o modo Sem Reencode preserva o original."
+
+Chamadas: Windows no Cortar (só quando reencoda), no Girar e no Juntar; Android no Cortar (com
+probe do ffmpeg lendo o `Video:` da própria fonte) e no Juntar (o `pixFmt` já estava no probe).
+
+**Provas com arquivo real (libx265 em yuv420p10le):**
+
+| Prova | Resultado |
+|---|---|
+| Probe do app Windows no arquivo 10-bit | `pix_fmt = yuv420p10le` → aviso com o texto exato |
+| Casos do helper (Windows) | 7/7 — 8 bits e vazio sem aviso; 10le/p010le/gbrp12le/16le com aviso |
+| **App Android em campo** (emulador, corte que reencoda) | relatório de tarefas mostrou: "Fonte em yuv420p10le: o reencode grava em 8 bits (yuv420p) e a profundidade de cor será reduzida — o modo Sem Reencode preserva o original." |
+
+Testes unitários: 1 no Android (4 formatos com aviso + 4 sem) e o helper coberto no Windows.
+
+**Nota de campo**: no emulador o corte de uma fonte HEVC abre o diálogo "Este aparelho não tem
+encoder HEVC" — o roteiro precisa responder "RECODIFICAR EM H.264" antes de a execução andar
+(a primeira passada da verificação não rodou por causa disso e parecia que o aviso não aparecia).

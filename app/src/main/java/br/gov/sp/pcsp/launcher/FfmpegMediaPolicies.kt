@@ -210,6 +210,23 @@ internal object FfmpegMediaPolicies {
     }
 
     /**
+     * Aviso quando a fonte tem mais de 8 bits por componente.
+     *
+     * Reencodar 10/12 bits (yuv420p10le, p010le, …) para yuv420p reduz a
+     * profundidade de cor — e sem aviso isso acontece em SILÊNCIO. O padrão
+     * desta rodada é avisar (o Sem Reencode preserva o original).
+     */
+    fun colorDepthWarning(pixelFormat: String?): String? {
+        val formato = pixelFormat?.lowercase(Locale.ROOT).orEmpty()
+        if (formato.isBlank()) return null
+        val marcadores = listOf("10le", "10be", "12le", "12be", "16le", "16be",
+            "p010", "p016", "y210", "y410", "x2rgb10", "rgb48", "rgba64")
+        if (marcadores.none { it in formato }) return null
+        return "Fonte em $pixelFormat: o reencode grava em 8 bits (yuv420p) e a " +
+            "profundidade de cor será reduzida — o modo Sem Reencode preserva o original."
+    }
+
+    /**
      * Texto do intervalo PEDIDO x EFETIVO do modo Sem Reencode.
      *
      * Copiar streams não corta em qualquer ponto: o FFmpeg recua até o keyframe

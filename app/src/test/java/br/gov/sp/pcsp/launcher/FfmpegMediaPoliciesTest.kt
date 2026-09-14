@@ -1,6 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -632,5 +633,22 @@ class FfmpegMediaPoliciesTest {
             "Sem Reencode: intervalo efetivo 2.000–4.600 s (2.600 s) — igual ao pedido.",
             FfmpegMediaPolicies.copyIntervalMessage(2000L, 4600L, 2000L)
         )
+    }
+
+    @Test
+    fun colorDepthWarningAcusaFonteComMaisDe8Bits() {
+        // F10: reencodar 10/12 bits para yuv420p reduz a profundidade de cor, e
+        // sem aviso isso acontece em silencio (o Sem Reencode preserva).
+        assertNull(FfmpegMediaPolicies.colorDepthWarning("yuv420p"))
+        assertNull(FfmpegMediaPolicies.colorDepthWarning("yuv422p"))
+        assertNull(FfmpegMediaPolicies.colorDepthWarning(""))
+        assertNull(FfmpegMediaPolicies.colorDepthWarning(null))
+
+        for (formato in listOf("yuv420p10le", "p010le", "gbrp12le", "yuv420p16le")) {
+            val aviso = FfmpegMediaPolicies.colorDepthWarning(formato)
+            assertNotNull("esperava aviso para $formato", aviso)
+            assertTrue("o aviso cita a profundidade e o formato de saida", aviso!!.contains("8 bits"))
+            assertTrue(aviso.contains(formato))
+        }
     }
 }
