@@ -202,3 +202,20 @@ Implementação: helpers puros `copy_effective_start_seconds`/`copy_interval_mes
 estava falhando no meu harness (sem `cancel_event`) e caía num `except` que devolvia lista vazia,
 o que fez o app buscar do zero (arquivo de 4,6 s). Vale conferir sempre o número que o app declara
 contra o arquivo, que é o que o teste faz.
+
+## F8 — Extrair: perfis (verificado, nada a mudar)
+
+O contrato dos perfis já estava alinhado entre os dois apps — mesmos nomes, mesmos parâmetros:
+
+| Perfil | Android | Windows |
+|---|---|---|
+| Padrão para transcrição | WAV 16 kHz, mono, PCM (256k) | `wav` 16000 / 1 / 256k |
+| Padrão compacto | OGG 16 kHz, mono, 32k | `ogg` 16000 / 1 / 32k |
+| Original (sem reencodar) | cópia automática quando o pedido é o próprio stream, anunciada como "cópia sem perdas" | idem, anunciada como "cópia sem reencodar" (F4b) |
+| Conversão | formato/taxa/canais/bitrate manuais | iguais |
+
+A peça que faltava (o caminho de cópia) entrou no **F4b**, com a mesma regra nos dois (mesmo codec
+compatível + mesma taxa + mesmos canais + sem recorte) e o passo se anunciando ao operador.
+
+Verificação: rótulos idênticos na interface dos dois apps ("Padrão para transcrição",
+"Padrão compacto") e parâmetros conferidos no código — nenhuma mudança necessária.
