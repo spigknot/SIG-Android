@@ -410,6 +410,14 @@ object GraniteNarEngine {
     // e intacto — a troca é reversível apontando de volta para ele.
     private const val PACKAGE_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/4.1-nar/v2"
 
+    /**
+     * Cache local do manifesto validado, gravado ao lado do pacote.
+     *
+     * Permite usar pacote já instalado sem depender do manifesto remoto a cada uso — e a
+     * identidade (SHA-256 do próprio texto) impede que um cache de OUTRA versão seja aceito.
+     */
+    private const val MANIFEST_CACHE = "manifest-cache.json"
+
     // Pesos compartilhados por TODOS os buckets: o exporter renumera nomes de tensor entre
     // shapes (`onnx::Conv_3197` -> `onnx::Conv_3199`), mas o CONTEUDO e identico —
     // medido: 472/472 initializers iguais entre t0200 e t2000. Com um `.data` unico, cada
@@ -620,49 +628,137 @@ object GraniteNarEngine {
     }
 
     /**
-     * Busca o manifesto publicado (`<BASE>/manifest.json`) e devolve nome→sha256.
+     * Busca o manifesto publicado (`<BASE>/manifest.json`) com resultado **explícito**.
      *
-     * Mapa vazio quando indisponível: um pacote legítimo antigo pode não ter hashes, e a
-     * ausência não pode impedir o uso. Hashes presentes são sempre verificados.
+     * Antes esta função devolvia `Map` vazio tanto para "manifesto válido" quanto para "não deu
+     * para ler" — e o chamador tratava os dois como "não verificar". Era a falha de projeto que o
+     * plano manda corrigir: com o mapa vazio, TODO download era aceito sem hash (e o parser ainda
+     * procurava a chave `name`, que o manifesto publicado não tem — ver `GraniteNarManifest`).
+     *
+     * Agora há três desfechos distintos:
+     *   1. remoto válido -> usa, e grava cache local validado da MESMA versão;
+     *   2. remoto indisponível/inválido -> usa o cache local, se a identidade do conteúdo conferir;
+     *   3. nenhum dos dois -> AUSENTE/INVALIDO com motivo acionável (o download recusa, em vez de
+     *      ativar sem verificação).
      */
-    private fun buscarManifest(): Map<String, String> = runCatching {
-        val conn = (URL("$PACKAGE_BASE_URL/manifest.json").openConnection() as HttpURLConnection).apply {
-            connectTimeout = 8000
-            readTimeout = 20000
-            setRequestProperty("User-Agent", "Mozilla/5.0")
+    private fun buscarManifest(context: Context): GraniteNarManifest.Resultado {
+        val doRemoto = runCatching {
+            val conn = (URL("$PACKAGE_BASE_URL/manifest.json").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 8000
+                readTimeout = 20000
+                setRequestProperty("User-Agent", "Mozilla/5.0")
+            }
+            try {
+                val texto = conn.inputStream.bufferedReader().use { it.readText() }
+                Triple(conn.responseCode, texto, GraniteNarManifest.parseEstrito(texto))
+            } finally {
+                conn.disconnect()   // sempre: falhar no meio não pode deixar conexão pendurada
+            }
+        }.getOrNull()
+
+        if (doRemoto != null && doRemoto.third.estado == GraniteNarManifest.Estado.VALIDO) {
+            gravarCacheManifest(context, doRemoto.second)
+            return doRemoto.third
         }
-        val texto = conn.inputStream.bufferedReader().use { it.readText() }
-        conn.disconnect()
-        GraniteNarManifest.parse(texto)
-    }.getOrDefault(emptyMap())
+        val motivoRemoto = doRemoto?.third?.motivo ?: "manifesto remoto inacessível"
+        val doCache = lerCacheManifest(context)
+        if (doCache != null) {
+            return doCache.copy(motivo = "cache local validado (remoto recusado: $motivoRemoto)")
+        }
+        return GraniteNarManifest.Resultado(
+            GraniteNarManifest.Estado.AUSENTE, emptyList(),
+            "sem manifesto válido e sem cache local — $motivoRemoto",
+        )
+    }
+
+    /**
+     * Grava o manifesto validado ao lado do pacote, com o SHA-256 do PRÓPRIO texto como
+     * identidade: um cache de outra versão (ou alterado) é recusado na leitura. É o que permite
+     * "uso offline de pacote já validado" sem depender do manifesto remoto a cada uso.
+     */
+    private fun gravarCacheManifest(context: Context, texto: String) {
+        runCatching {
+            val dir = packageDir(context).apply { mkdirs() }
+            val identidade = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(texto.toByteArray()).joinToString("") { "%02x".format(it) }
+            val doc = org.json.JSONObject()
+                .put("manifesto_sha256", identidade)
+                .put("manifesto", texto)
+            File(dir, MANIFEST_CACHE).writeText(doc.toString())
+        }
+    }
+
+    /** Lê o cache local e só devolve VALIDO se o texto conferir com a identidade gravada. */
+    private fun lerCacheManifest(context: Context): GraniteNarManifest.Resultado? = runCatching {
+        val f = File(packageDir(context), MANIFEST_CACHE)
+        if (!f.isFile) return@runCatching null
+        val doc = org.json.JSONObject(f.readText())
+        val texto = doc.optString("manifesto")
+        val esperada = doc.optString("manifesto_sha256")
+        val obtida = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(texto.toByteArray()).joinToString("") { "%02x".format(it) }
+        if (texto.isBlank() || esperada != obtida) return@runCatching null
+        GraniteNarManifest.parseEstrito(texto).takeIf {
+            it.estado == GraniteNarManifest.Estado.VALIDO
+        }
+    }.getOrNull()
 
     fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit) {
         val variante = GraniteNarLlmSettings.selected(context)
         val dir = packageDir(context).apply { mkdirs() }
-        dir.listFiles()?.forEach { if (it.name.endsWith(".download")) it.delete() }
         val files = packageFiles(variante)
         // Fase 7 do plano: "SHA-256 antes da ativação". Sem isso um download truncado ou
         // corrompido seria ativado em silêncio, e o sintoma apareceria depois como
         // "o modelo não transcreve", sem pista da causa.
-        val hashes = buscarManifest()
-        var totalBytes = 0L
-        var copiedBytes = 0L
+        //
+        // ️ DEFEITO CORRIGIDO (14/09/2026): `buscarManifest()` devolvia mapa vazio em QUALQUER
+        // falha e o parser lia a chave `name` (o manifesto publicado usa `caminho_relativo`) —
+        // logo `hashes[name]` era sempre null e `confere()`, com hash ausente, devolvia TRUE.
+        // Resultado medido: **nenhum download jamais foi verificado**. Agora o manifesto tem
+        // resultado EXPLÍCITO e o caminho de download EXIGE hash para todo arquivo pedido.
+        val manifesto = buscarManifest(context)
+        if (manifesto.estado != GraniteNarManifest.Estado.VALIDO) {
+            throw IllegalStateException(
+                "Não foi possível validar a integridade do pacote (${manifesto.motivo}). " +
+                    "Sem hashes publicados o download não pode ser ativado — verifique a conexão " +
+                    "e tente novamente.",
+            )
+        }
+        val hashes = manifesto.porNome
+
+        // Pedido que o manifesto NÃO lista: recusa ANTES de baixar. Não existe "confiar porque
+        // não tem hash" no caminho de download novo.
+        val semHash = files.map { it.first }.filter { hashes[it] == null }
+        if (semHash.isNotEmpty()) {
+            throw IllegalStateException(
+                "O manifesto publicado não traz SHA-256 para: ${semHash.joinToString(", ")}. " +
+                    "Download recusado — ativar sem verificação é o defeito que a Fase 7 corrige.",
+            )
+        }
+
+        // Faltando = inexistente, vazio, OU existente que NÃO confere com o hash publicado:
+        // "tamanho não nulo" não prova integridade (o plano manda validar arquivo reutilizado).
         val missing = files.filter { (name, _) ->
             val f = File(dir, name)
-            !(f.exists() && f.length() > 0L)
+            !f.isFile || f.length() == 0L ||
+                !GraniteNarManifest.confereEstrito(f, hashes[name]?.sha256)
         }
-        totalBytes = missing.sumOf { (_, url) ->
-            runCatching {
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    requestMethod = "HEAD"
-                }
-                val len = conn.contentLengthLong.coerceAtLeast(0L)
-                conn.disconnect()
-                len
-            }.getOrDefault(0L)
+
+        // Parciais: preservados quando pertencem ao MESMO arquivo e cabem no tamanho esperado —
+        // a retomada por `Range` logo abaixo depende deles. Antes TUDO era apagado no início,
+        // o que tornava a retomada código morto.
+        dir.listFiles()?.forEach { f ->
+            if (f.name.endsWith(".download")) {
+                val original = f.name.removeSuffix(".download")
+                val esperado = hashes[original]?.bytes ?: 0L
+                if (esperado <= 0L || f.length() > esperado) f.delete()
+            }
         }
+        var totalBytes = 0L
+        var copiedBytes = 0L
+        // O tamanho vem do MANIFESTO (autoritativo e já verificado), não de 9 HEADs que falham
+        // em silêncio e caíam no fallback.
+        totalBytes = missing.sumOf { (name, _) -> hashes[name]?.bytes ?: 0L }
         if (totalBytes <= 0L) totalBytes = fallbackPackageBytes(variante)
 
         // LIMITE DE DISCO (Fase 7): com o pacote em 2,3-4,6 GiB conforme a variante, disco
@@ -720,8 +816,10 @@ object GraniteNarEngine {
             // Verifica ANTES de tornar o arquivo definitivo: o `.download` só vira oficial se
             // conferir. Falha = apaga e aborta com mensagem clara (em vez de ativar em
             // silêncio um modelo que não transcreveria).
-            val esperado = hashes[name]
-            if (!GraniteNarManifest.confere(temp, esperado)) {
+            // `confereEstrito` (e não o tolerante): no caminho de DOWNLOAD o hash é obrigatório —
+                        // a variante tolerante existe para USAR pacote já validado, não para ativar download.
+                        val esperado = hashes[name]?.sha256
+                        if (!GraniteNarManifest.confereEstrito(temp, esperado)) {
                 temp.delete()
                 throw IllegalStateException(
                     "Download corrompido: $name não confere com o SHA-256 publicado. " +
