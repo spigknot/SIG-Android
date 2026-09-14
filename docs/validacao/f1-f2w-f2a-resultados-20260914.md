@@ -1,7 +1,9 @@
 # F1 / F2-W / F2-A — correções de dano comprovado (14/09/2026)
 
-Estado: **implementado, gates verdes, prova de campo pendente** (re-executar a bateria
-T01–T04 nos builds novos, com emulador/aparelho e o harness do SIG Windows).
+Estado: **F0–F4, F6–F8, F10 fechados com prova de campo** (arquivo real, app real ou pipeline
+real) e gates verdes nos dois repositórios. Restam **F5** (áudio contínuo no SmartCut, com prova
+A/B antes de mexer no núcleo) e **F9** (Limpar áudio, que depende de escuta). Cada fase tem sua
+seção abaixo com as medições antes/depois.
 
 | Fase | O que mudou | Arquivos | Gate |
 |---|---|---|---|
@@ -12,12 +14,27 @@ T01–T04 nos builds novos, com emulador/aparelho e o harness do SIG Windows).
 
 Commits: Android `c06520b`; Windows `46422b1` (+ F0 no Android).
 
-## Pendente (plano do agente de decisão)
-- **Prova de campo**: re-executar T01/T02 (áudio do corte preciso), T03/T04 (inventário de faixas) e T06 (SmartCut) nos builds novos — exige emulador/aparelho e o harness do Windows.
-- **F3** crop: coordenada ímpar (y=87 entrega 86) — alinhar à grade e mostrar o valor efetivo nos dois apps.
-- **F4** nome/efeito da transição do Smart Insert (Windows) e caminho de cópia do Extrair.
-- **F5** áudio contínuo no SmartCut (provar antes/depois com C1c antes de mudar o núcleo).
-- **F6–F10** limites do Sem Reencode, SmartJoin (N4: 2/5/20 clipes), Extrair, Limpar, preset/capítulos/HDR/entrega.
+## Pendente (atualizado em 14/09)
+
+**Do plano do agente de decisão:**
+- **F5 — áudio contínuo no SmartCut**: o único que mexe no núcleo. Critério já definido: vídeo
+  idêntico no miolo + degraus de áudio ≤ 1 nas emendas; os ~50 ms por emenda do modo com fade
+  (medidos no F7) entram nessa mesma conta. Exige a prova A/B antes da mudança.
+- **F9 — Limpar áudio**: unificar o modo "Forte" (afftdn × anlmdn — escolha por escuta), perfis de
+  saída e remover a promessa de normalização de volume.
+- **T18 (preset comum)**: o próprio plano deixa como "avaliar depois", separado das correções
+  temporais — segue fora de propósito.
+
+**Testes do roteiro do revisor ainda não executados:**
+- **R6-complemento**: a transição do Smart Insert no Android (o seletor não abria por toque
+  roteirizado — precisa de um toque manual).
+- **T12/T13/T20** (metadados/timecode), **T14** (HEVC curto/fallback), **T10/T11** (especificidades
+  do Juntar além do N4), **T16/T17** (Extrair/Limpar além do que o F4b cobriu).
+- **R7**: coberto pelo **N1** (limites do modo cópia e intervalo efetivo declarado).
+- **N1 e N4**: executados (ver seções abaixo).
+
+**Ambiente/release:** nada foi publicado como release (o APK e o `dist/sig.exe` são builds locais;
+publicação exige aprovação explícita). O emulador pode ser desligado quando não estiver em uso.
 
 ## Prova de campo (14/09, após a correção dos especificadores)
 
