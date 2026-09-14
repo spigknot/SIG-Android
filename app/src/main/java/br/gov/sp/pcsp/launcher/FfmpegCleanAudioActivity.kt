@@ -394,7 +394,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setMessage(
                 "Equilibrado usa afftdn, bom para chiado e ruído constante.\n\n" +
-                    "Forte usa anlmdn, costuma limpar mais, mas demora mais e pode alterar um pouco a voz.\n\n" +
+                    "Forte usa afftdn com parâmetros mais agressivos: limpa mais, mas pode alterar um pouco a voz.\n\n" +
                     "Isso reduz ruído no áudio inteiro. Não separa vozes de música nem remove perfeitamente barulho por cima da fala."
             )
             .setPositiveButton("OK", null)
@@ -619,8 +619,8 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         val label: String,
         val filter: String
     ) {
-        BALANCED("equilibrado", "afftdn=nf=-25"),
-        STRONG("forte", "anlmdn=s=0.00003:p=0.002:r=0.002")
+        BALANCED("equilibrado", FfmpegMediaPolicies.CLEAN_FILTER_BALANCED),
+        STRONG("forte", FfmpegMediaPolicies.CLEAN_FILTER_STRONG)
     }
 
     private data class AudioSourceProfile(

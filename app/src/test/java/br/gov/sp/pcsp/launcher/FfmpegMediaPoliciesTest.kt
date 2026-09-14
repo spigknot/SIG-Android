@@ -651,4 +651,12 @@ class FfmpegMediaPoliciesTest {
             assertTrue(aviso.contains(formato))
         }
     }
+
+    @Test
+    fun cleanFiltersSaoOsMesmosDoWindows() {
+        // F9: as MESMAS tecnologias nos dois apps. Antes o "forte" era anlmdn no
+        // Android e afftdn agressivo no Windows — mesmo rótulo, efeitos diferentes.
+        assertEquals("afftdn=nf=-25", FfmpegMediaPolicies.CLEAN_FILTER_BALANCED)
+        assertEquals("afftdn=nr=18:nf=-35:tn=1", FfmpegMediaPolicies.CLEAN_FILTER_STRONG)
+    }
 }

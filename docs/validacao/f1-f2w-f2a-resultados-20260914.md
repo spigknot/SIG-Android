@@ -266,3 +266,27 @@ Testes unitários: 1 no Android (4 formatos com aviso + 4 sem) e o helper cobert
 **Nota de campo**: no emulador o corte de uma fonte HEVC abre o diálogo "Este aparelho não tem
 encoder HEVC" — o roteiro precisa responder "RECODIFICAR EM H.264" antes de a execução andar
 (a primeira passada da verificação não rodou por causa disso e parecia que o aviso não aparecia).
+
+## F9 — Limpar áudio: mesma tecnologia, saída da fonte, confirmação (14/09)
+
+Decisões do usuário: (1) mesmo "forte" nos dois apps, independente de qual é melhor; (2) a saída
+**sempre** preserva a taxa e os canais da entrada; (3) confirmação antes do "forte" nos dois.
+
+| | Antes | Depois |
+|---|---|---|
+| "forte" no Android | `anlmdn=s=0.00003:p=0.002:r=0.002` (outra tecnologia) | **`afftdn=nr=18:nf=-35:tn=1`** — mesma string do Windows |
+| "equilibrado" | `afftdn=nf=-25` nos dois | igual (não mudou) |
+| Saída (Windows) | perfis "Transcrição (mono, 16 kHz)" × "Preservar taxa e canais" | **sempre a taxa e os canais da fonte** (o perfil de 16 kHz mono saiu) |
+| Saída (Android) | já preservava a fonte | igual |
+| Confirmação do "forte" | só no Android | **nos dois** (Windows ganhou o diálogo) |
+
+**Provas:**
+
+| Prova | Resultado |
+|---|---|
+| Windows — execução real (fonte 44,1 kHz mono com chiado) | equilibrado: `-af afftdn=nf=-25 -ar 44100 -ac 1` → arquivo `pcm_s16le,44100,1` ✓; forte: `-af afftdn=nr=18:nf=-35:tn=1 -ar 44100 -ac 1` → arquivo `pcm_s16le,44100,1` ✓ (antes, o padrão forçava 16 kHz mono) |
+| Android — prévia do comando no app (emulador, fonte idêntica) | com "forte" selecionado: `-af afftdn=nr=18:nf=-35:tn=1 … -ar 44100 -ac 1` ✓ — **a mesma string do Windows** |
+| Testes | Windows: filtros + taxa/canais da fonte + a confirmação (novo) · Android: `CLEAN_FILTER_BALANCED`/`CLEAN_FILTER_STRONG` iguais aos do Windows (novo) |
+
+Observação: o "forte" continua avisando que pode alterar um pouco a voz (a ajuda do Android foi
+atualizada — ela citava o `anlmdn`).

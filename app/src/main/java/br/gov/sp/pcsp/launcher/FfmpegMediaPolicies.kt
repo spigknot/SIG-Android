@@ -210,6 +210,14 @@ internal object FfmpegMediaPolicies {
     }
 
     /**
+     * Filtros do Limpar áudio. F9: as MESMAS tecnologias nos dois apps —
+     * "equilibrado" e "forte" são afftdn (antes o Android usava anlmdn no forte,
+     * enquanto o Windows usava afftdn agressivo: o mesmo rótulo, efeitos diferentes).
+     */
+    const val CLEAN_FILTER_BALANCED = "afftdn=nf=-25"
+    const val CLEAN_FILTER_STRONG = "afftdn=nr=18:nf=-35:tn=1"
+
+    /**
      * Aviso quando a fonte tem mais de 8 bits por componente.
      *
      * Reencodar 10/12 bits (yuv420p10le, p010le, …) para yuv420p reduz a
