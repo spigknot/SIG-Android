@@ -39,3 +39,19 @@ Tudo medido nos apps reais, comparando com o manifesto:
 | `-ar:a:0 -ac:a:0 -ar:a:1 -ac:a:1` | **44100/1** | **48000/2** |
 
 Os testes unitários codificavam a forma errada e passavam; corrigidos junto (os dois apps).
+
+## F3 — contrato espacial do recorte (14/09)
+
+O retângulo agora sai alinhado à grade par (origem E tamanho) e o rótulo mostra o valor
+efetivo — o mesmo que o filtro aplica. Prova nos apps reais:
+
+| Prova | Antes | Depois |
+|---|---|---|
+| Gesto conhecido no app Android (C4c) | `crop=322:162:100:87` (y ímpar) | **`crop=322:162:100:86`** |
+| Rótulo na lista de tarefas | não existia valor efetivo | **"Recorte por seleção: 322 x 162 pixels a partir de (100, 86)"** |
+| Arquivo gerado | — | **322 x 162** |
+| Geometria (ffmpeg de referência, C4e) | pedir y=87 entrega a fonte linha 86 | pedir y=86 entrega a fonte linha 86 (promessa == entrega) |
+
+Implementação: `cropPixels` (Android) e `selection_crop_pixels` (Windows) alinham x0/y0 para
+baixo e mantêm largura/altura pares; `cropLabel`/`selection_crop_label` renderizam os mesmos
+números para o rótulo e o diálogo de confirmação. Cobre Cortar e Girar nos dois apps.

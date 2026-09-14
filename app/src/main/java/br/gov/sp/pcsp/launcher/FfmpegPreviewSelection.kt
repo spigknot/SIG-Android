@@ -230,6 +230,12 @@ object FfmpegPreviewSelection {
         y0 = min(max(0, y0), max(0, videoHeight - 2))
         x1 = min(max(x0 + 2, x1), videoWidth)
         y1 = min(max(y0 + 2, y1), videoHeight)
+        // F3: a grade de croma (yuv420p) exige origem E tamanho PARES: com a
+        // origem impar o FFmpeg entrega o retangulo deslocado um pixel (medido:
+        // pedir y=87 entregou a linha 86). Alinhar para BAIXO faz o filtro e o
+        // rotulo anunciarem exatamente o retangulo que sai no arquivo.
+        x0 -= x0 % 2
+        y0 -= y0 % 2
         val largura = max(2, (x1 - x0) - (x1 - x0) % 2)
         val altura = max(2, (y1 - y0) - (y1 - y0) % 2)
         return intArrayOf(x0, y0, largura, altura)
@@ -239,6 +245,14 @@ object FfmpegPreviewSelection {
     fun cropFilter(crop: IntArray): String {
         require(crop.size >= 4) { "crop precisa de x, y, largura e altura" }
         return "crop=${crop[2]}:${crop[3]}:${crop[0]}:${crop[1]}"
+    }
+
+    /** Texto do recorte EFETIVO (os mesmos numeros que o filtro aplica).
+     * Existe para o rotulo nunca divergir do que sai no arquivo: o retangulo ja
+     * vem alinhado a grade par por cropPixels. */
+    fun cropLabel(crop: IntArray): String {
+        require(crop.size >= 4) { "crop precisa de x, y, largura e altura" }
+        return "${crop[2]} x ${crop[3]} pixels a partir de (${crop[0]}, ${crop[1]})"
     }
 
     /** Operações atômicas de giro/espelhamento na ordem em que são aplicadas. */

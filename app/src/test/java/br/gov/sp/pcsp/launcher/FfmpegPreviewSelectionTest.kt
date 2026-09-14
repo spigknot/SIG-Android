@@ -292,4 +292,25 @@ class FfmpegPreviewSelectionTest {
         // arrasto depois limita a 1.0 no clamp das frações)
         assertEquals(2.0, FfmpegPreviewSelection.minimumFraction(8.0, 4), 1e-9)
     }
+
+    @Test
+    fun recorteAlinhaOrigemImparNaGradePar() {
+        // F3/T05: pedir y=87 entregava a linha 86; com o alinhamento para baixo o
+        // retangulo anunciado (rotulo e filtro) e o entregue sao o mesmo.
+        val selection = selection(
+            100.0 / 1280,
+            87.0 / 720,
+            (100 + 322).toDouble() / 1280,
+            (87 + 162).toDouble() / 720
+        )
+
+        val crop = FfmpegPreviewSelection.cropPixels(selection, 1280, 720)!!
+
+        assertEquals(100, crop[0])
+        assertEquals(86, crop[1])
+        assertEquals(322, crop[2])
+        assertEquals(162, crop[3])
+        assertEquals("crop=322:162:100:86", FfmpegPreviewSelection.cropFilter(crop))
+        assertEquals("322 x 162 pixels a partir de (100, 86)", FfmpegPreviewSelection.cropLabel(crop))
+    }
 }

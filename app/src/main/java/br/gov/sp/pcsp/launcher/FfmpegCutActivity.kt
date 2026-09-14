@@ -1109,7 +1109,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         )
         if (crop != null) {
             tracker.appendTasks(
-                listOf("Recorte por seleção: ${crop[2]} x ${crop[3]} pixels a partir de (${crop[0]}, ${crop[1]})")
+                listOf("Recorte por seleção: " + FfmpegPreviewSelection.cropLabel(crop))
             )
             tracker.completeCurrentTask()
         }
