@@ -18,6 +18,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.view.inputmethod.EditorInfo
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.PopupMenu
@@ -54,6 +55,10 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     private lateinit var options: View
     private lateinit var transitionButton: TextView
     private lateinit var transitionTime: EditText
+    private lateinit var smartInsertCheck: CheckBox
+    private lateinit var smartInsertHelp: TextView
+    private lateinit var insertHint: TextView
+    private var smartInsertEnabled = false
     private lateinit var executeButton: ImageButton
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
@@ -111,6 +116,31 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         inputTime = findViewById(R.id.input_insert_time)
         options = findViewById(R.id.insert_options)
         transitionButton = findViewById(R.id.button_transition)
+        smartInsertCheck = findViewById(R.id.check_smart_insert)
+        smartInsertHelp = findViewById(R.id.help_smart_insert)
+        insertHint = findViewById(R.id.text_insert_hint)
+        smartInsertCheck.setOnCheckedChangeListener { _, marcado ->
+            smartInsertEnabled = marcado
+            insertHint.text = if (marcado) {
+                "Smart Insert (experimental): copia o corpo do áudio principal e reencoda só o trecho " +
+                    "inserido. O ponto de corte fica aproximado ao frame/pacote do codec; sem transição, " +
+                    "nada é reencodado além do inserido."
+            } else {
+                "A inserção usa recodificação precisa para respeitar exatamente o ponto e as transições escolhidas."
+            }
+        }
+        smartInsertHelp.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setMessage(
+                    "Smart Insert (experimental): preserva o corpo do áudio principal (copiado) e " +
+                        "reencoda apenas o trecho inserido.\n\n" +
+                        "Como é cópia, o ponto de corte fica aproximado ao frame/pacote do codec — não " +
+                        "tem a precisão de amostra do modo normal. É o caminho do SIG Windows, e vale " +
+                        "principalmente para fontes WAV/PCM."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+        }
         transitionTime = findViewById(R.id.input_transition_time)
         executeButton = findViewById(R.id.button_insert)
         progress = findViewById(R.id.progress)
@@ -523,6 +553,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             insertionMs = insertionMs,
             selectedTransition = selectedTransition,
             transitionSeconds = transitionTime.text.toString().replace(',', '.').toDoubleOrNull()?.coerceIn(0.0, 5.0) ?: 0.5,
+            smartInsert = smartInsertEnabled,
             mainAudioTrack = selectedAudioTracks[main.uri.toString()] ?: 0,
             insertedAudioTrack = selectedAudioTracks[inserted.uri.toString()] ?: 0
         )
@@ -548,10 +579,29 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 tracker.setTaskEncoder(1, encoderName)
                 tracker.startTask(1)
 
-                val session = executeWithProgress(
-                    buildFullReencodeArguments(mainFile, insertedFile, resultFile, profile, jobConfig),
-                    compositeDurationMs(), tracker, 1
-                )
+                // Smart Insert (experimental, igual ao SIG Windows): só quando o
+                // codec da fonte cabe na saída WAV/PCM — é o que permite copiar o
+                // corpo do principal em vez de reencodar tudo.
+                val smartRequested = jobConfig.smartInsert
+                val smartPossible = smartRequested &&
+                    FfmpegMediaPolicies.insertSmartCanPreserveCodec(profile.codec) &&
+                    safeExtension == "wav"
+                if (smartRequested && !smartPossible) {
+                    tracker.appendTasks(
+                        listOf(
+                            "Smart Insert não preserva o codec '${profile.codec}' na saída: usando a inserção precisa."
+                        )
+                    )
+                    tracker.completeCurrentTask()
+                }
+                val session = if (smartPossible) {
+                    runSmartInsert(mainFile, insertedFile, resultFile, profile, jobConfig, tracker)
+                } else {
+                    executeWithProgress(
+                        buildFullReencodeArguments(mainFile, insertedFile, resultFile, profile, jobConfig),
+                        compositeDurationMs(), tracker, 1
+                    )
+                }
                 if (ReturnCode.isCancel(session.returnCode)) throw ProcessingCancelled()
                 if (!ReturnCode.isSuccess(session.returnCode) || !resultFile.exists() || resultFile.length() == 0L) {
                     error(ffmpegFailureMessage(session))
@@ -560,7 +610,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 tracker.completeTask(2)
                 val elapsed = SystemClock.elapsedRealtime() - startedAt
                 val efficiency = compositeDurationMs() / elapsed.coerceAtLeast(1L).toDouble()
-                val mode = "Inserção precisa"
+                val mode = if (smartPossible) "Smart Insert (experimental)" else "Inserção precisa"
                 tracker.success(
                     "Tempo de processamento: ${formatTime(elapsed)}\n" +
                         "Mídia processada: ${formatTime(compositeDurationMs())}\n" +
@@ -601,6 +651,80 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 temporaryInputs.forEach { it.delete() }
             }
         }.start()
+    }
+
+    /**
+     * Smart Insert (portado do SIG Windows): peças [principal antes] + [inserido
+     * reencodado com o fade] + [principal depois], com o corpo COPIADO, e um
+     * concat final. Experimental por desenho: a cópia aproxima o ponto ao
+     * frame/pacote do codec.
+     */
+    private fun runSmartInsert(
+        main: File,
+        inserted: File,
+        output: File,
+        profile: AudioProfile,
+        jobConfig: InsertAudioJobConfig,
+        tracker: FfmpegTaskTracker
+    ): FFmpegSession {
+        val at = jobConfig.insertionMs / 1000.0
+        val insertedDur = (insertedAudio?.durationMs ?: 1L) / 1000.0
+        val mainDur = (mainAudio?.durationMs ?: 1L) / 1000.0
+        val work = File(cacheDir, "smart_insert_${System.currentTimeMillis()}")
+        work.mkdirs()
+        val pieces = mutableListOf<File>()
+        try {
+            if (at > 0.001) {
+                val left = File(work, "000.wav")
+                val s = executeWithProgress(
+                    FfmpegMediaPolicies.insertSmartLeftArguments(main.absolutePath, left.absolutePath, at),
+                    (at * 1000).toLong(), tracker, 1
+                )
+                if (ReturnCode.isCancel(s.returnCode)) throw ProcessingCancelled()
+                if (!ReturnCode.isSuccess(s.returnCode) || !left.exists() || left.length() == 0L) {
+                    error(ffmpegFailureMessage(s))
+                }
+                pieces += left
+            }
+            val middle = File(work, String.format(Locale.US, "%03d.wav", pieces.size))
+            val fadeCurve = audioCrossfadeCurve(jobConfig.selectedTransition)
+                .takeIf { jobConfig.selectedTransition !in setOf(TRANSITION_NONE, TRANSITION_FADE) }
+            val s2 = executeWithProgress(
+                FfmpegMediaPolicies.insertSmartMiddleArguments(
+                    inserted.absolutePath, middle.absolutePath, insertedDur,
+                    profile.sampleRate, profile.channels, jobConfig.transitionSeconds, fadeCurve
+                ),
+                (insertedDur * 1000).toLong(), tracker, 1
+            )
+            if (ReturnCode.isCancel(s2.returnCode)) throw ProcessingCancelled()
+            if (!ReturnCode.isSuccess(s2.returnCode) || !middle.exists() || middle.length() == 0L) {
+                error(ffmpegFailureMessage(s2))
+            }
+            pieces += middle
+            if (at < mainDur - 0.001) {
+                val right = File(work, String.format(Locale.US, "%03d.wav", pieces.size))
+                val s3 = executeWithProgress(
+                    FfmpegMediaPolicies.insertSmartRightArguments(main.absolutePath, right.absolutePath, at),
+                    ((mainDur - at) * 1000).toLong(), tracker, 1
+                )
+                if (ReturnCode.isCancel(s3.returnCode)) throw ProcessingCancelled()
+                if (!ReturnCode.isSuccess(s3.returnCode) || !right.exists() || right.length() == 0L) {
+                    error(ffmpegFailureMessage(s3))
+                }
+                pieces += right
+            }
+            val list = File(work, "lista.txt")
+            list.writeText(pieces.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" })
+            val s4 = executeWithProgress(
+                FfmpegMediaPolicies.insertSmartConcatArguments(
+                    list.absolutePath, output.absolutePath, profile.sampleRate, profile.channels
+                ),
+                compositeDurationMs(), tracker, 1
+            )
+            return s4
+        } finally {
+            work.deleteRecursively()
+        }
     }
 
     private fun buildFullReencodeArguments(main: File, inserted: File, output: File, profile: AudioProfile, jobConfig: InsertAudioJobConfig): Array<String> {
@@ -1039,6 +1163,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         val insertionMs: Long,
         val selectedTransition: String,
         val transitionSeconds: Double,
+        val smartInsert: Boolean = false,
         val mainAudioTrack: Int = 0,
         val insertedAudioTrack: Int = 0
     )

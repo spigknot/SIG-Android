@@ -336,3 +336,28 @@ chamadores (execução e prévia) — os testes que travavam o desenho antigo fo
 **A/B do Windows** (mesmo trecho): antes +20/+20/+50/+60/+60 ms (acumulando) × depois +20 constante,
 com o miolo do vídeo bit-exato nos dois (mesma hash da fonte) — arquivos de escuta em
 `%LOCALAPPDATA%\Temp\bateria3\f5_ab_entrega`.
+
+## Smart Insert no Android (autorizado pelo usuário: "experimental, igual ao Windows")
+
+**O que foi portado** (mesma semântica do SIG Windows): o corpo do áudio principal é **copiado** e
+só o trecho inserido é reencodado — peças `[principal antes] + [inserido reencodado com o fade] +
+[principal depois]` e um concat final. Quando o codec da fonte não pode ser preservado na saída
+WAV/PCM, o app cai no modo preciso com aviso explícito (como o Windows faz).
+
+**Na tela**: checkbox "Smart Insert (experimental)" + `?` com a explicação honesta (o ponto de
+corte fica aproximado ao frame/pacote) e a dica do rodapé muda quando o modo está ligado.
+
+**Achado do teste de campo**: o Android reporta PCM como `raw` (subtipo do MIME `audio/raw`), e a
+primeira versão do filtro só aceitava `pcm_*` — o app caía silenciosamente no modo preciso. A regra
+passou a aceitar as duas famílias (`pcm_*`, `raw`, `wav`, `x-wav`, `lpcm`) e ganhou teste.
+
+**Prova no aparelho (OnePlus PJA110, principal 10 s + inserido 2 s, inserção em 5 s, sem transição):**
+
+| Medida | Resultado |
+|---|---|
+| Estatística do app | **"Modo: Smart Insert (experimental)"**, mídia processada 12,000 s |
+| Arquivo | 2.304.078 bytes = **12,000 s** de PCM 48 kHz estéreo |
+| Corpo copiado (primeiros 5 s) | **idêntico** ao do modo preciso (md5 do payload igual) |
+| Depois da emenda | diverge (a aproximação de pacote da cópia — o preço documentado do modo) |
+
+Testes: 2 novos (as peças com o corpo copiado + a regra de codec) — 45 no arquivo de políticas.

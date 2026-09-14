@@ -362,6 +362,89 @@ internal object FfmpegMediaPolicies {
         addAll(listOf("-avoid_negative_ts", "make_zero", outputPath))
     }.toTypedArray()
 
+    // ---------------------------------------------------------------------
+    // Smart Insert (portado do SIG Windows, ferramenta experimental).
+    //
+    // Copia o corpo do áudio principal e reencoda SÓ o trecho inserido: o
+    // caminho de cópia não corta em qualquer ponto (o ponto fica aproximado ao
+    // frame/pacote do codec) — é o preço da preservação do corpo. Quando o codec
+    // da fonte não pode ser preservado na saída, o chamador cai no modo preciso.
+    // ---------------------------------------------------------------------
+
+    /** Trecho do principal antes da inserção, COPIADO sem reencodar. */
+    fun insertSmartLeftArguments(
+        mainPath: String,
+        outputPath: String,
+        insertionSeconds: Double
+    ): Array<String> = arrayOf(
+        "-y", "-ss", "0", "-i", mainPath,
+        "-t", String.format(Locale.US, "%.6f", insertionSeconds.coerceAtLeast(0.0)),
+        "-map", "0:a:0", "-c", "copy", "-avoid_negative_ts", "make_zero", outputPath
+    )
+
+    /** Trecho do principal depois da inserção, COPIADO sem reencodar. */
+    fun insertSmartRightArguments(
+        mainPath: String,
+        outputPath: String,
+        insertionSeconds: Double
+    ): Array<String> = arrayOf(
+        "-y", "-ss", String.format(Locale.US, "%.6f", insertionSeconds.coerceAtLeast(0.0)),
+        "-i", mainPath, "-map", "0:a:0", "-c", "copy", outputPath
+    )
+
+    /**
+     * Áudio inserido: reencodado no formato do principal e com as curvas de
+     * fade escolhidas (as curvas do Smart Insert suavizam SÓ o trecho inserido,
+     * como no SIG Windows).
+     */
+    fun insertSmartMiddleArguments(
+        insertedPath: String,
+        outputPath: String,
+        insertedDurationSeconds: Double,
+        sampleRate: Int,
+        channels: Int,
+        fadeSeconds: Double,
+        fadeCurve: String?
+    ): Array<String> = buildList {
+        addAll(listOf("-y", "-i", insertedPath, "-map", "0:a:0"))
+        addAll(listOf("-ar", sampleRate.toString(), "-ac", channels.toString()))
+        // Como no Windows: o fade efetivo não passa de metade do inserido e o
+        // fade-out começa em (duração - fade).
+        val efetivo = minOf(fadeSeconds.coerceAtLeast(0.0), insertedDurationSeconds.coerceAtLeast(0.0) / 2)
+        if (efetivo > 0.0) {
+            val curva = fadeCurve?.takeIf { it.isNotBlank() && it != "fade" }?.let { ":curve=$it" }.orEmpty()
+            val d = String.format(Locale.US, "%.6f", efetivo)
+            val st = String.format(Locale.US, "%.6f", (insertedDurationSeconds - efetivo).coerceAtLeast(0.0))
+            addAll(listOf("-af", "afade=t=in:st=0:d=$d$curva,afade=t=out:st=$st:d=$d$curva"))
+        }
+        addAll(listOf("-c:a", "pcm_s16le", "-f", "wav", outputPath))
+    }.toTypedArray()
+
+    /** Concat final do Smart Insert (peças já no mesmo formato). */
+    fun insertSmartConcatArguments(
+        listPath: String,
+        outputPath: String,
+        sampleRate: Int,
+        channels: Int
+    ): Array<String> = arrayOf(
+        "-y", "-f", "concat", "-safe", "0", "-i", listPath,
+        "-map", "0:a:0", "-c:a", "pcm_s16le",
+        "-ar", sampleRate.toString(), "-ac", channels.toString(),
+        "-avoid_negative_ts", "make_zero", outputPath
+    )
+
+    /**
+     * O Smart Insert só preserva o corpo quando o codec cabe na saída WAV/PCM.
+     *
+     * O Android reporta PCM como `raw` (subtipo do MIME `audio/raw`) e o ffmpeg
+     * chama de `pcm_*` — as duas famílias valem.
+     */
+    fun insertSmartCanPreserveCodec(sourceCodec: String?): Boolean {
+        val codec = sourceCodec?.lowercase(Locale.ROOT)?.trim().orEmpty()
+        if (codec.isEmpty()) return false
+        return codec.startsWith("pcm_") || codec in setOf("raw", "wav", "x-wav", "lpcm")
+    }
+
     fun insertAudioCommandArguments(
         mainInputPath: String,
         insertedInputPath: String,

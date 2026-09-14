@@ -671,4 +671,43 @@ class FfmpegMediaPoliciesTest {
         assertEquals("afftdn=nf=-25", FfmpegMediaPolicies.CLEAN_FILTER_BALANCED)
         assertEquals("afftdn=nr=18:nf=-35:tn=1", FfmpegMediaPolicies.CLEAN_FILTER_STRONG)
     }
+
+    @Test
+    fun smartInsertMontaAsPecasComOCorpoCopiado() {
+        // F-smart: o corpo do principal vai COPIADO (é o que preserva o áudio);
+        // só o inserido é reencodado, com o fade das curvas escolhidas.
+        val esquerda = FfmpegMediaPolicies.insertSmartLeftArguments("principal.wav", "000.wav", 5.0).toList()
+        assertTrue(esquerda.windowed(2).contains(listOf("-c", "copy")))
+        assertEquals("5.000000", esquerda[esquerda.indexOf("-t") + 1])
+
+        val direita = FfmpegMediaPolicies.insertSmartRightArguments("principal.wav", "002.wav", 5.0).toList()
+        assertEquals("5.000000", direita[direita.indexOf("-ss") + 1])
+        assertTrue(direita.windowed(2).contains(listOf("-c", "copy")))
+
+        val meio = FfmpegMediaPolicies
+            .insertSmartMiddleArguments("inserido.wav", "001.wav", 2.0, 48000, 2, 0.2, "tri")
+            .toList()
+        assertTrue(meio.windowed(2).contains(listOf("-c:a", "pcm_s16le")))
+        val af = meio[meio.indexOf("-af") + 1]
+        assertTrue("fade de entrada no começo do inserido", af.contains("afade=t=in:st=0:d=0.200000:curve=tri"))
+        assertTrue("fade de saída em (duração - fade)", af.contains("afade=t=out:st=1.800000:d=0.200000:curve=tri"))
+
+        val concat = FfmpegMediaPolicies.insertSmartConcatArguments("lista.txt", "saida.wav", 48000, 2).toList()
+        assertTrue(concat.windowed(2).contains(listOf("-f", "concat")))
+        assertTrue(concat.windowed(2).contains(listOf("-c:a", "pcm_s16le")))
+    }
+
+    @Test
+    fun smartInsertSoPreservaCorpoDeFontePcm() {
+        // Fora de PCM não há como copiar o corpo para uma saída WAV — o app cai
+        // no modo preciso (com aviso), como o próprio Smart Insert do Windows.
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("pcm_s16le"))
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("PCM_F32LE"))
+        // O Android entrega o subtipo do MIME (audio/raw) para PCM.
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("raw"))
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("WAV"))
+        assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec("aac"))
+        assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp3"))
+        assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec(null))
+    }
 }
