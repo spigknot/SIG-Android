@@ -469,6 +469,21 @@ object GraniteNarEngine {
     var debugOrtVerbose: Boolean = false
 
     /**
+     * Diagnóstico: cria a sessão do PROJECTOR no CPU mesmo com backend acelerado.
+     *
+     * Medido no aparelho (14/09): com o encoder QUANTIZADO residindo na NPU, o projector deixa de
+     * mapear os pesos no Hexagon — `fastrpc_mmap_validate failed` seguido de
+     * `QNN graph execute error 6001` — tanto com o projector fp16 (chunks de 52+54 MiB) quanto com
+     * o U8 (26+26 MiB). É orçamento de memória do DSP, não defeito do grafo: no bucket t0200, onde
+     * os pools são menores, a rodada PASSA com os dois na NPU.
+     *
+     * Com esta flag o ganho real do encoder acelerado (966 ms contra 3.148 ms no CPU) é medido com
+     * o pipeline COMPLETO e texto correto, sem depender de resolver o orçamento do DSP.
+     */
+    @Volatile
+    var debugProjectorBackendCpu: Boolean = false
+
+    /**
      * Cria a sessao do **LLM no CPU** mesmo quando o backend pedido e acelerado.
      *
      * Diagnostico, nao produto. Motivo medido no aparelho: o QNN EP **derruba o processo** ao
@@ -881,8 +896,15 @@ object GraniteNarEngine {
         projectorSession?.close()
         projectorSession = null
         projectorBucket = -1
+        // Ver a KDoc de `debugProjectorBackendCpu`: com o encoder quantizado residente na NPU, o
+        // projector nao consegue mapear os pesos no Hexagon (QNN 6001). Isolar o projector no CPU
+        // mede o ganho do encoder acelerado com o pipeline completo.
+        val backendEfetivo = if (debugProjectorBackendCpu) GraniteExecutionBackend.CPU else backend
+        if (backendEfetivo != backend) {
+            onLog("projector no CPU por diagnostico (backend pedido: ${backend.reportLabel})")
+        }
         val nova = criarSessao(dir, GraniteNarBuckets.projectorFile(bucket), "projector t$bucket",
-            backend, requireFullAcceleration, onLog)
+            backendEfetivo, requireFullAcceleration, onLog)
         projectorSession = nova
         projectorBucket = bucket
         return nova
@@ -925,11 +947,20 @@ object GraniteNarEngine {
         backend: GraniteExecutionBackend,
         requireFullAcceleration: Boolean,
         onLog: (String) -> Unit,
+        bucket: Int = T_FIXED,
     ) {
         // Abre o bucket PADRÃO (T_FIXED) na carga: valida que encoder e projector abrem e
         // mantém o comportamento anterior. Buckets menores entram sob demanda no transcribe.
-        encoderPara(dir, T_FIXED, backend, requireFullAcceleration, onLog)
-        projectorPara(dir, T_FIXED, backend, requireFullAcceleration, onLog)
+        //
+        // ⚠️ [bucket] existe para o BANCO DE TESTES (smoke test debug). Medido no aparelho
+        // (13-14/09): no QNN HTP o grafo QUANTIZADO do bucket t2000 derruba o processo do
+        // Hexagon DSP (`fastrpc_mmap_validate failed` + `setup_mempools` -> `allocate_buffer`,
+        // Bad VA 0x0) e o projector seguinte falha com `QNN graph execute error 6001`. Com o
+        // encoder fp16 o mesmo t2000 abria normal (160 s, 12/09). Aquecer um bucket pequeno
+        // isola a pergunta "o grafo quantizado roda no HTP?" da pergunta "o HTP comporta o
+        // MAIOR grafo?". Produção continua com T_FIXED (default).
+        encoderPara(dir, bucket, backend, requireFullAcceleration, onLog)
+        projectorPara(dir, bucket, backend, requireFullAcceleration, onLog)
         llmPara(dir, sessVariante, backend, requireFullAcceleration, onLog)
     }
 
@@ -939,6 +970,7 @@ object GraniteNarEngine {
         requireFullAcceleration: Boolean = true,
         onLog: (String) -> Unit = {},
         onFallbackPrompt: (String) -> Boolean = { true },
+        warmupBucket: Int = T_FIXED,
     ): Boolean {
         return try {
             lastLoadedBackend = null
@@ -986,7 +1018,9 @@ object GraniteNarEngine {
                     sessBackend = backend
                     sessRequireFullAcceleration = requireFullAcceleration
                     sessVariante = GraniteNarLlmSettings.selected(context)
-                    createSessions(dir, backend, requireFullAcceleration, onLog)
+                    // 0 (ou ausente) = comportamento de produção: abre o bucket PADRÃO.
+                    val bucketDaCarga = if (warmupBucket > 0) warmupBucket else T_FIXED
+                    createSessions(dir, backend, requireFullAcceleration, onLog, bucketDaCarga)
                     lastLoadedBackend = backend
                     return true
                 } catch (acceleratedError: Throwable) {

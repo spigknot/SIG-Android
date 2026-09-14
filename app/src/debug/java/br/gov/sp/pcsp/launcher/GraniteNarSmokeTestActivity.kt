@@ -33,6 +33,12 @@ class GraniteNarSmokeTestActivity : Activity() {
                 val measuredRuns = boundedExtra(EXTRA_MEASURED_RUNS, defaultValue = 1, minimum = 1, maximum = 20)
                 val loadOnly = intent.getBooleanExtra(EXTRA_LOAD_ONLY, false)
                 val includeText = intent.getBooleanExtra(EXTRA_INCLUDE_TEXT, false)
+                // Diagnostico do limite da NPU: o load() abre o bucket PADRAO (t2000) na carga, e no
+                // QNN HTP o grafo QUANTIZADO desse bucket derruba o processo do Hexagon DSP. 0 =
+                // padrao de producao (T_FIXED); um bucket pequeno isola "o grafo quantizado roda
+                // no HTP?" de "o HTP comporta o MAIOR grafo?".
+                val warmupBucket = boundedExtra(
+                    EXTRA_WARMUP_BUCKET, defaultValue = 0, minimum = 0, maximum = 2000)
                 // Diagnostico: o QNN EP so LISTA os nos que nao atribuiu se o log do ORT estiver
                 // verboso. Precisa ser antes do load(), porque as sessoes sao criadas la.
                 GraniteNarEngine.debugOrtVerbose =
@@ -42,6 +48,11 @@ class GraniteNarSmokeTestActivity : Activity() {
                 // NPU — e isso que mede o ganho real da NPU sem resolver o LLM.
                 GraniteNarEngine.debugLlmBackendCpu =
                     intent.getBooleanExtra(EXTRA_LLM_BACKEND_CPU, false)
+                // Diagnostico do projector: com o encoder quantizado residindo na NPU o projector
+                // nao mapeia os pesos no Hexagon (QNN 6001); no CPU ele roda e o pipeline fecha
+                // com texto correto, isolando o ganho do encoder.
+                GraniteNarEngine.debugProjectorBackendCpu =
+                    intent.getBooleanExtra(EXTRA_PROJECTOR_BACKEND_CPU, false)
                 val audioPath = checkNotNull(intent.getStringExtra(EXTRA_AUDIO_PATH)) {
                     "Extra obrigatório ausente: $EXTRA_AUDIO_PATH"
                 }
@@ -72,6 +83,7 @@ class GraniteNarSmokeTestActivity : Activity() {
                     requireFullAcceleration = requireFullAcceleration,
                     onLog = logger(loadCollector),
                     onFallbackPrompt = { false },
+                    warmupBucket = warmupBucket,
                 )
                 check(loaded) { GraniteNarEngine.lastError() }
                 val effectiveBackend = GraniteNarEngine.loadedBackend()
@@ -265,6 +277,11 @@ class GraniteNarSmokeTestActivity : Activity() {
         const val EXTRA_ORT_VERBOSE = "ort_verbose"
         /** Cria a sessao do LLM no CPU mesmo com backend acelerado (mede o ganho da NPU). */
         const val EXTRA_LLM_BACKEND_CPU = "llm_backend_cpu"
+        // Bucket aberto na carga (0 = padrao T_FIXED). Existe para diagnosticar o limite do
+        // QNN HTP com o grafo QUANTIZADO do bucket maior, sem tocar no comportamento de produção.
+        const val EXTRA_WARMUP_BUCKET = "warmup_bucket"
+        /** Projector no CPU com backend acelerado (isola o ganho do encoder na NPU). */
+        const val EXTRA_PROJECTOR_BACKEND_CPU = "projector_backend_cpu"
         const val EXTRA_AUDIO_PATH = "audio_path"
         const val EXTRA_RUN_ID = "run_id"
         const val EXTRA_WARMUP_RUNS = "warmup_runs"
