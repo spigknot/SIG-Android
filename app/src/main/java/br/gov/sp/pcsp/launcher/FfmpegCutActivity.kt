@@ -728,6 +728,13 @@ class FfmpegCutActivity : AppCompatActivity() {
                         FfmpegCommandPresenter.completeLastShown(status, false)
                     }
                     tracker.completeTask(convertIndex)
+                    // F1: nada e descartado em silencio - se o remux rejeitou
+                    // o resultado (inventario) ou deixou streams para tras,
+                    // o operador ve o motivo na lista de tarefas.
+                    remux.warning?.let { aviso ->
+                        tracker.appendTasks(listOf(aviso))
+                        tracker.completeTask(tracker.taskCount() - 1)
+                    }
                 }
                 runOnUiThread {
                     if (execution.cancelled) {
@@ -855,6 +862,11 @@ class FfmpegCutActivity : AppCompatActivity() {
         val enc = encoder ?: error("Encoder de vídeo indisponível")
         args.addAll(FfmpegMediaPolicies.cutMappedCopyArguments())
         args.addAll(videoEncodingArguments(enc, streamBitrates.videoBitrateForEncoding(), quality, streamBitrates.frameRate))
+        // F2-A: o audio do corte preciso nao e copiado as cegas — o pacote AAC
+        // que cruza o inicio comandava 0,44 s de som anterior ao corte. Aqui
+        // cada faixa e reencodada em AAC com o proprio perfil (politica igual
+        // a do SIG Windows).
+        args.addAll(FfmpegMediaPolicies.preciseAudioTrackArguments(streamBitrates.audioTracks))
         // Recorte por seleção: o filtro entra DEPOIS do mapeamento e antes do
         // encoder (copiar streams não recorta pixels — por isso o reencode).
         crop?.let { args.addAll(listOf("-vf", FfmpegPreviewSelection.cropFilter(it))) }
@@ -1101,6 +1113,14 @@ class FfmpegCutActivity : AppCompatActivity() {
             )
             tracker.completeCurrentTask()
         }
+        tracker.appendTasks(
+            listOf(
+                "Áudio: " + FfmpegMediaPolicies.audioTracksSummary(
+                    detectStreamBitrates(inputFile).audioTracks
+                )
+            )
+        )
+        tracker.completeCurrentTask()
         tracker.setTaskEncoder(tracker.taskCount() - 2, encoder.displayName)
         tracker.completeCurrentTask()
         tracker.startCurrentTask()
@@ -1493,6 +1513,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         var height: Int? = null
         var frameRate: Double? = null
         var codecFamily: String? = null
+        val audioTracks = mutableListOf<FfmpegMediaPolicies.AudioTrackProfile>()
         for (index in 0 until extractor.trackCount) {
             val format = extractor.getTrackFormat(index)
             val mime = format.getString(android.media.MediaFormat.KEY_MIME).orEmpty()
@@ -1510,9 +1531,23 @@ class FfmpegCutActivity : AppCompatActivity() {
                     else -> mime.substringAfter('/', "h264")
                 }
             }
-            if (mime.startsWith("audio/") && audio == null) audio = bitrate
+            if (mime.startsWith("audio/")) {
+                if (audio == null) audio = bitrate
+                audioTracks.add(
+                    FfmpegMediaPolicies.AudioTrackProfile(
+                        index = audioTracks.size,
+                        bitrate = bitrate,
+                        sampleRate = runCatching {
+                            format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE)
+                        }.getOrNull(),
+                        channels = runCatching {
+                            format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+                        }.getOrNull()
+                    )
+                )
+            }
         }
-        return StreamBitrates(video, audio, width, height, frameRate, codecFamily)
+        return StreamBitrates(video, audio, width, height, frameRate, codecFamily, audioTracks)
     }
 
     private fun saveTempOutputsToUri(treeUri: Uri) {
@@ -2623,7 +2658,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         val width: Int? = null,
         val height: Int? = null,
         val frameRate: Double? = null,
-        val codecFamily: String? = null
+        val codecFamily: String? = null,
+        val audioTracks: List<FfmpegMediaPolicies.AudioTrackProfile> = emptyList()
     ) {
         fun videoBitrateForEncoding(): String = video ?: estimateVideoBitrate(width, height, frameRate, codecFamily)
     }

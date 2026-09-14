@@ -563,4 +563,55 @@ class FfmpegMediaPoliciesTest {
             )
         )
     }
+
+    @Test
+    fun preciseAudioReencodesEachTrackWithItsOwnProfile() {
+        // T01/T02: copiar o audio no corte preciso deixava 0,44 s de som anterior
+        // ao inicio pedido; reencodar por faixa resolve sem impor o perfil da
+        // primeira faixa as demais.
+        val tracks = listOf(
+            FfmpegMediaPolicies.AudioTrackProfile(index = 0, bitrate = "64k", sampleRate = 44100, channels = 1),
+            FfmpegMediaPolicies.AudioTrackProfile(index = 1, bitrate = "128k", sampleRate = 48000, channels = 2)
+        )
+
+        assertEquals(
+            listOf(
+                "-c:a:0", "aac", "-b:a:0", "64k", "-ar:0", "44100", "-ac:0", "1",
+                "-c:a:1", "aac", "-b:a:1", "128k", "-ar:1", "48000", "-ac:1", "2"
+            ),
+            FfmpegMediaPolicies.preciseAudioTrackArguments(tracks)
+        )
+    }
+
+    @Test
+    fun preciseAudioWithoutInventoryStillReencodesInAac() {
+        assertEquals(
+            listOf("-c:a", "aac"),
+            FfmpegMediaPolicies.preciseAudioTrackArguments(emptyList())
+        )
+    }
+
+    @Test
+    fun preciseAudioOmitsUnknownFieldsAndDefaultsBitrate() {
+        assertEquals(
+            listOf("-c:a:0", "aac", "-b:a:0", "128k"),
+            FfmpegMediaPolicies.preciseAudioTrackArguments(
+                listOf(FfmpegMediaPolicies.AudioTrackProfile(0, null, null, null))
+            )
+        )
+    }
+
+    @Test
+    fun audioTracksSummaryDescribesEachTrack() {
+        assertEquals(
+            "AAC por faixa (2 faixas: 64k 44.1 kHz mono • 128k 48.0 kHz estéreo)",
+            FfmpegMediaPolicies.audioTracksSummary(
+                listOf(
+                    FfmpegMediaPolicies.AudioTrackProfile(0, "64k", 44100, 1),
+                    FfmpegMediaPolicies.AudioTrackProfile(1, "128k", 48000, 2)
+                )
+            )
+        )
+        assertEquals("AAC (faixa unica)", FfmpegMediaPolicies.audioTracksSummary(emptyList()))
+    }
 }

@@ -146,6 +146,66 @@ internal object FfmpegMediaPolicies {
     fun audioFilterInputSpecifier(inputIndex: Int, audioTrackIndex: Int): String =
         "$inputIndex:a:${audioTrackIndex.coerceAtLeast(0)}"
 
+    /** Perfil de UMA faixa de audio da entrada (uma por stream). */
+    data class AudioTrackProfile(
+        val index: Int,
+        val bitrate: String?,
+        val sampleRate: Int?,
+        val channels: Int?
+    )
+
+    /**
+     * Audio do corte preciso: reencoda CADA faixa em AAC com o perfil da
+     * propria faixa.
+     *
+     * Medido (T01/T02): copiar o audio no corte preciso deixa o pacote AAC que
+     * cruza o inicio comandar o som — o intervalo pedido [1,4; 4,6] saiu com
+     * 3,62 s e 0,44 s de audio anterior ao corte. Reencodando, o inicio e exato
+     * em todas as faixas (mesma politica do SIG Windows).
+     *
+     * Os especificadores :N valem para a SAIDA: a selecao mapeia todas as
+     * faixas de audio na ordem da entrada, entao a faixa N da saida e a faixa N
+     * da entrada (indice ABSOLUTO no container nao e o mesmo que indice de
+     * audio).
+     */
+    fun preciseAudioTrackArguments(tracks: List<AudioTrackProfile>): List<String> = buildList {
+        if (tracks.isEmpty()) {
+            addAll(listOf("-c:a", "aac"))
+            return@buildList
+        }
+        tracks.forEach { track ->
+            add("-c:a:${track.index}")
+            add("aac")
+            add("-b:a:${track.index}")
+            add(track.bitrate ?: "128k")
+            track.sampleRate?.takeIf { it > 0 }?.let {
+                add("-ar:${track.index}")
+                add(it.toString())
+            }
+            track.channels?.takeIf { it > 0 }?.let {
+                add("-ac:${track.index}")
+                add(it.toString())
+            }
+        }
+    }
+
+    /** Resumo para a lista de tarefas: "AAC por faixa (2 faixas: 64k 44,1 kHz mono • 128k 48 kHz estéreo)". */
+    fun audioTracksSummary(tracks: List<AudioTrackProfile>): String {
+        if (tracks.isEmpty()) return "AAC (faixa unica)"
+        val detalhes = tracks.joinToString(" • ") { track ->
+            val khz = track.sampleRate?.let { String.format(Locale.US, "%.1f", it / 1000.0) + " kHz" }
+                ?: "taxa original"
+            val canais = when (track.channels) {
+                1 -> "mono"
+                2 -> "estéreo"
+                null -> "canais originais"
+                else -> "${track.channels} canais"
+            }
+            "${track.bitrate ?: "128k"} $khz $canais"
+        }
+        return "AAC por faixa (${tracks.size} faixas: $detalhes)"
+    }
+
     fun cutMappedCopyArguments(): List<String> = listOf(
         "-map", "0:v:0?",
         "-map", "0:a?",
