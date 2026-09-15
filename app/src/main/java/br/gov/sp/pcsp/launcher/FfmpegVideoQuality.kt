@@ -25,6 +25,40 @@ enum class FfmpegVideoQuality(val label: String) {
         get() = if (this == HIGH) "$label (Recomendado)" else label
 }
 
+/**
+ * T18: VELOCIDADE e QUALIDADE são eixos separados. A qualidade manda no CRF
+ * (quanto de detalhe se preserva); a velocidade manda no esforço do encoder
+ * (preset do x264/x265) para chegar lá. O plano recomendou o equilíbrio "fast"
+ * como padrão comum.
+ */
+enum class FfmpegVideoSpeed(val label: String, val preset: String) {
+    FAST("Rápida", "veryfast"),
+    BALANCED("Equilibrada", "fast"),
+    MAX_QUALITY("Máxima qualidade", "medium");
+
+    companion object {
+        val default = BALANCED
+    }
+
+    val menuLabel: String
+        get() = if (this == BALANCED) "$label (Recomendado)" else label
+}
+
+fun FfmpegVideoSpeed.showHelp(context: Context) {
+    AlertDialog.Builder(context)
+        .setTitle("Velocidade")
+        .setMessage(
+            "Velocidade e qualidade são eixos separados: a Qualidade manda no CRF (quanto de " +
+                "detalhe se preserva), a Velocidade manda no esforço que o encoder faz para chegar lá.\n\n" +
+                "Rápida\nProcessa antes e gera arquivos maiores.\n\n" +
+                "Equilibrada (Recomendado)\nO melhor equilíbrio entre tempo e tamanho no encoder de CPU.\n\n" +
+                "Máxima qualidade\nArquivos menores para o mesmo CRF, processando mais lento.\n\n" +
+                "Nos encoders por hardware a velocidade não se aplica: eles têm presets próprios."
+        )
+        .setPositiveButton("OK", null)
+        .show()
+}
+
 enum class FfmpegAudioQuality(val label: String, val bitrate: String) {
     MAXIMUM("Máxima", "320k"),
     HIGH("Alta", "256k"),
@@ -46,7 +80,8 @@ data class FfmpegVideoEncoding(
 
 fun FfmpegVideoEncoder.encodingFor(
     quality: FfmpegVideoQuality,
-    sourceBitrate: String
+    sourceBitrate: String,
+    speed: FfmpegVideoSpeed = FfmpegVideoSpeed.default
 ): FfmpegVideoEncoding {
     if (ffmpegName == "libx264") {
         val crf = when (quality) {
@@ -57,7 +92,7 @@ fun FfmpegVideoEncoder.encodingFor(
             FfmpegVideoQuality.ECONOMIC -> 26
         }
         return FfmpegVideoEncoding(
-            arguments = listOf("-c:v", ffmpegName, "-preset", "ultrafast", "-crf", crf.toString()),
+            arguments = listOf("-c:v", ffmpegName, "-preset", speed.preset, "-crf", crf.toString()),
             targetBitrate = null
         )
     }

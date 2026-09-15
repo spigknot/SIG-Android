@@ -61,11 +61,12 @@ class FfmpegVideoQualityTest {
         val cpuEncoder = FfmpegVideoEncoder("libx264", "h264")
         val economic = cpuEncoder.encodingFor(FfmpegVideoQuality.ECONOMIC, "10000k")
         assertEquals(null, economic.targetBitrate)
-        assertEquals(listOf("-c:v", "libx264", "-preset", "ultrafast", "-crf", "26"), economic.arguments)
+        // T18: o preset padrao de CPU virou "fast" (equilibrio recomendado); o CRF nao mudou.
+        assertEquals(listOf("-c:v", "libx264", "-preset", "fast", "-crf", "26"), economic.arguments)
 
         val high = cpuEncoder.encodingFor(FfmpegVideoQuality.HIGH, "10000k")
         assertEquals(null, high.targetBitrate)
-        assertEquals(listOf("-c:v", "libx264", "-preset", "ultrafast", "-crf", "20"), high.arguments)
+        assertEquals(listOf("-c:v", "libx264", "-preset", "fast", "-crf", "20"), high.arguments)
     }
 
     @Test
@@ -89,5 +90,24 @@ class FfmpegVideoQualityTest {
 
         assertTrue(details.contains("MediaCodec.configure failed with status -22"))
         assertTrue(details.contains("Conversion failed!"))
+    }
+
+    @Test
+    fun t18VelocidadeEscolheOPresetDoX264() {
+        // T18: velocidade e qualidade sao eixos separados; o padrao recomendado e o fast.
+        val enc = FfmpegVideoEncoder("libx264", "h264")
+        fun preset(a: FfmpegVideoEncoding) = a.arguments[a.arguments.indexOf("-preset") + 1]
+        fun crf(a: FfmpegVideoEncoding) = a.arguments[a.arguments.indexOf("-crf") + 1]
+        val rapida = enc.encodingFor(FfmpegVideoQuality.HIGH, "2M", FfmpegVideoSpeed.FAST)
+        val equilibrada = enc.encodingFor(FfmpegVideoQuality.HIGH, "2M", FfmpegVideoSpeed.BALANCED)
+        val maxima = enc.encodingFor(FfmpegVideoQuality.HIGH, "2M", FfmpegVideoSpeed.MAX_QUALITY)
+        assertEquals("veryfast", preset(rapida))
+        assertEquals("fast", preset(equilibrada))
+        assertEquals("medium", preset(maxima))
+        // a velocidade NAO mexe no CRF (eixos separados, regra do plano)
+        assertEquals(crf(rapida), crf(maxima))
+        // o default e o equilibrio recomendado, tambem para quem nao passa o argumento
+        assertEquals(FfmpegVideoSpeed.BALANCED, FfmpegVideoSpeed.default)
+        assertEquals("fast", preset(enc.encodingFor(FfmpegVideoQuality.HIGH, "2M")))
     }
 }

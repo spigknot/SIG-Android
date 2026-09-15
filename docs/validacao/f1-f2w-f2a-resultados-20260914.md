@@ -438,3 +438,26 @@ recodificar (ex.: ac3) continuam caindo no modo preciso, com aviso.
 
 A ajuda do modo foi atualizada ("vale para qualquer formato", com a nota de que em AAC/MP3 a
 aproximação do ponto de corte é mais perceptível que em WAV).
+
+### T18 — preset (velocidade) padronizado: seletor nos dois apps
+
+Regra do plano: **qualidade e velocidade são eixos separados** (a qualidade manda no CRF/bitrate;
+a velocidade manda no esforço do encoder). Em vez de forçar o mesmo número nas duas plataformas,
+os dois apps ganharam o mesmo seletor de três níveis, com o mesmo rótulo e o mesmo preset:
+
+| Nível | Preset (x264/x265 CPU) |
+|---|---|
+| Rápida | `veryfast` |
+| **Equilibrada (Recomendado — padrão)** | **`fast`** |
+| Máxima qualidade | `medium` |
+
+- Windows: menu "Velocidade:" ao lado de "Qualidade:" + botão "?" com a explicação; o preset
+  alimenta o `_video_args` (CPU). NVENC/QSV/AMF não usam preset de CPU (têm os próprios).
+- Android: botão **Velocidade** na tela do Cortar (toque = menu, toque longo = ajuda); o enum
+  `FfmpegVideoSpeed` (`BALANCED` como `default`) alimenta o `encodingFor` — e como o parâmetro
+  é opcional, **Juntar e Girar já usam o equilíbrio sem mudança de tela**.
+- Mudança de comportamento declarada: o Corte do Windows usava `medium` fixo e o do Android
+  usava `ultrafast` fixo; os dois agora partem de `fast` (equilíbrio) e o usuário ajusta na tela.
+- Vacinas: Windows `test_video_speed_selects_the_cpu_preset` (presets por nível, hardware sem
+  preset de CPU); Android `t18VelocidadeEscolheOPresetDoX264` (presets por nível, CRF intocado,
+  default sem argumento). Os testes antigos do Android passaram a esperar o `fast` padrão.

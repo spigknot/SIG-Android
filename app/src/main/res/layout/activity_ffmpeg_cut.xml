@@ -492,6 +492,22 @@
                     android:paddingEnd="6dp"
                     android:text="Alta"
                     android:textColor="#FFFFFFFF"
+                    />
+
+                <TextView
+                    android:id="@+id/button_video_speed"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:background="@drawable/ffmpeg_outline_button_bg"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:gravity="center"
+                    android:minWidth="0dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="Equilibrada"
+                    android:textColor="#FFFFFFFF"
                     android:textSize="12sp"
                     android:textStyle="bold"
                     android:visibility="gone" />

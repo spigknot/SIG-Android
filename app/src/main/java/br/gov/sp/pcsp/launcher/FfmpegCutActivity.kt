@@ -70,6 +70,8 @@ class FfmpegCutActivity : AppCompatActivity() {
     private lateinit var buttonVideoEncoder: TextView
     private lateinit var helpVideoEncoder: TextView
     private lateinit var buttonVideoQuality: TextView
+    private lateinit var buttonVideoSpeed: TextView
+    private var selectedVideoSpeed = FfmpegVideoSpeed.default
     private lateinit var helpVideoQuality: TextView
     private lateinit var buttonCut: ImageButton
     private lateinit var progress: ProgressBar
@@ -230,6 +232,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         buttonVideoEncoder = findViewById(R.id.button_video_encoder)
         helpVideoEncoder = findViewById(R.id.help_video_encoder)
         buttonVideoQuality = findViewById(R.id.button_video_quality)
+        buttonVideoSpeed = findViewById(R.id.button_video_speed)
         helpVideoQuality = findViewById(R.id.help_video_quality)
         buttonCutMode = findViewById(R.id.button_cut_mode)
         helpCutMode = findViewById(R.id.help_cut_mode)
@@ -268,6 +271,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
         buttonEncoderAdvanced.setOnClickListener { showEncoderAdvancedMenu() }
         buttonVideoQuality.setOnClickListener { showVideoQualityMenu() }
+        buttonVideoSpeed.setOnClickListener { showVideoSpeedMenu() }
+        buttonVideoSpeed.setOnLongClickListener { selectedVideoSpeed.showHelp(this); true }
         helpVideoQuality.setOnClickListener {
             if (selectedMime.startsWith("audio/")) selectedAudioQuality.showHelp(this)
             else selectedVideoQuality.showHelp(this)
@@ -1928,6 +1933,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         findViewById<View>(R.id.label_cut_mode).visibility = modeVisibility
         val qualityVisibility = if (visible && (isVideo || isAudio)) View.VISIBLE else View.GONE
         buttonVideoQuality.visibility = qualityVisibility
+        val speedVisibility = if (visible && isVideo) View.VISIBLE else View.GONE
+        buttonVideoSpeed.visibility = speedVisibility
         helpVideoQuality.visibility = qualityVisibility
         findViewById<TextView>(R.id.label_video_quality).apply {
             this.visibility = qualityVisibility
@@ -2030,6 +2037,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
         val audioMode = selectedMime.startsWith("audio/")
         buttonVideoQuality.text = if (audioMode) selectedAudioQuality.label else selectedVideoQuality.label
+        buttonVideoSpeed.text = selectedVideoSpeed.label
         updateVideoQualityButtonState()
         updateEncoderDecisionLabel()
         // A restauracao automatica de UI apos o processamento nao deve
@@ -2280,13 +2288,27 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
+    private fun showVideoSpeedMenu() {
+        if (isProcessing) return
+        if (selectedMime.startsWith("audio/")) return
+        PopupMenu(this, buttonVideoSpeed).apply {
+            FfmpegVideoSpeed.entries.forEach { menu.add(it.menuLabel) }
+            setOnMenuItemClickListener { item ->
+                selectedVideoSpeed = FfmpegVideoSpeed.entries.first { it.menuLabel == item.title.toString() }
+                updateVideoEncoderButton()
+                true
+            }
+            show()
+        }
+    }
+
     private fun videoEncodingArguments(
         encoder: FfmpegVideoEncoder,
         sourceBitrate: String,
         quality: FfmpegVideoQuality = selectedVideoQuality,
         frameRate: Double? = null
     ): List<String> {
-        val settings = encoder.encodingFor(quality, sourceBitrate)
+        val settings = encoder.encodingFor(quality, sourceBitrate, selectedVideoSpeed)
         return buildList {
             addAll(settings.arguments)
             if (encoder.ffmpegName.endsWith("_mediacodec")) {
