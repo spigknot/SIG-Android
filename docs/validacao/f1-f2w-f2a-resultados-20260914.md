@@ -411,3 +411,30 @@ Ou seja: o que o app declara é exatamente o que ele entrega — agora também m
 | (T17) teste "benchmarked" | Renomeado para `test_clean_strong_uses_the_agreed_afftdn_filter` com o motivo no comentário (o nome prometia um benchmark que nunca existiu) | Suíte verde ✓ |
 
 Vacinas: +4 no Windows (`test_rate_and_offset_warnings.py`, com os casos reais do T12, incluindo o do PTS inicial) e +2 no Android. Gates verdes nos dois.
+
+### Smart Insert disponível para TUDO (decisão do usuário: "é pra estar disponível pra tudo")
+
+Antes: só PCM/WAV entrava; m4a/AAC/MP3 caíam no modo preciso (reencodando o principal inteiro).
+Agora: qualquer codec que o app saiba recodificar entra no Smart Insert — o corpo do principal é
+copiado no codec original, o trecho inserido nasce no MESMO codec (com o bitrate do perfil) e o
+concat final **copia** (zero segunda geração de compressão). Codecs que o app não saberia
+recodificar (ex.: ac3) continuam caindo no modo preciso, com aviso.
+
+**Dois achados do teste de campo (a mesma classe, os dois silenciosos):**
+1. PCM chega do Android como `raw` (subtipo do MIME `audio/raw`) — a primeira versão da regra só
+   aceitava `pcm_*` e o app caía no modo preciso sem dizer por quê;
+2. **AAC em m4a chega como `mp4a-latm`** — a mesma coisa: o rótulo do MIME do Android não é o nome
+   do ffmpeg. A regra passou a aceitar os dois vocabulários (`aac`/`mp4a-latm`/`mp4a`, `mp3`/`mpeg`,
+   `raw`/`pcm_*`, mais opus/vorbis/flac/alac).
+
+**Prova no aparelho físico (CPH2747), principal m4a 10 s + inserido m4a 2 s, inserção em 5 s:**
+
+| Medida | Resultado |
+|---|---|
+| Estatística do app | **"Modo: Smart Insert (experimental)"**, mídia processada 12,000 s, 0,111 s de processamento |
+| Arquivo entregue | `insert_..._t_m4a_main.m4a`, 195.147 bytes |
+| Formato/codec | **mov/mp4/m4a**, **aac 48 kHz estéreo a 127.987 bps** (o mesmo da fonte = corpo copiado) |
+| Duração | **12,005 s** (= 10 + 2) |
+
+A ajuda do modo foi atualizada ("vale para qualquer formato", com a nota de que em AAC/MP3 a
+aproximação do ponto de corte é mais perceptível que em WAV).

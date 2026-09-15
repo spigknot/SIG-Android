@@ -437,6 +437,8 @@ internal object FfmpegMediaPolicies {
         insertedDurationSeconds: Double,
         sampleRate: Int,
         channels: Int,
+        encoder: String,
+        bitrate: String?,
         fadeSeconds: Double,
         fadeCurve: String?
     ): Array<String> = buildList {
@@ -451,19 +453,23 @@ internal object FfmpegMediaPolicies {
             val st = String.format(Locale.US, "%.6f", (insertedDurationSeconds - efetivo).coerceAtLeast(0.0))
             addAll(listOf("-af", "afade=t=in:st=0:d=$d$curva,afade=t=out:st=$st:d=$d$curva"))
         }
-        addAll(listOf("-c:a", "pcm_s16le", "-f", "wav", outputPath))
+        // O trecho inserido nasce no MESMO codec do principal (a extensão do
+        // arquivo decide o contêiner), para o concat poder copiar sem reencodar.
+        addAll(listOf("-c:a", encoder))
+        if (bitrate != null && encoder !in setOf("flac", "alac", "pcm_s16le")) {
+            addAll(listOf("-b:a", bitrate))
+        }
+        add(outputPath)
     }.toTypedArray()
 
-    /** Concat final do Smart Insert (peças já no mesmo formato). */
+    /** Concat final do Smart Insert: as peças já estão no formato final, então
+     * o concat COPIA (nada de uma segunda geração de compressão). */
     fun insertSmartConcatArguments(
         listPath: String,
-        outputPath: String,
-        sampleRate: Int,
-        channels: Int
+        outputPath: String
     ): Array<String> = arrayOf(
         "-y", "-f", "concat", "-safe", "0", "-i", listPath,
-        "-map", "0:a:0", "-c:a", "pcm_s16le",
-        "-ar", sampleRate.toString(), "-ac", channels.toString(),
+        "-map", "0:a:0", "-c:a", "copy",
         "-avoid_negative_ts", "make_zero", outputPath
     )
 
@@ -476,7 +482,15 @@ internal object FfmpegMediaPolicies {
     fun insertSmartCanPreserveCodec(sourceCodec: String?): Boolean {
         val codec = sourceCodec?.lowercase(Locale.ROOT)?.trim().orEmpty()
         if (codec.isEmpty()) return false
-        return codec.startsWith("pcm_") || codec in setOf("raw", "wav", "x-wav", "lpcm")
+        // "Disponível para tudo": a saída usa o MESMO contêiner/codec da fonte, então
+        // o corpo pode ser copiado em qualquer família que o app saiba recodificar.
+        // Os nomes abaixo são os do MIME do Android (não os do ffmpeg): um m4a traz
+        // "mp4a-latm", um PCM traz "raw" — medidos em aparelho real.
+        return codec.startsWith("pcm_") || codec in setOf(
+            "raw", "wav", "x-wav", "lpcm",              // PCM
+            "aac", "mp4a-latm", "mp4a",                // AAC (m4a)
+            "mp3", "mpeg", "opus", "vorbis", "flac", "alac"
+        )
     }
 
     fun insertAudioCommandArguments(

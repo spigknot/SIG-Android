@@ -685,20 +685,37 @@ class FfmpegMediaPoliciesTest {
         assertTrue(direita.windowed(2).contains(listOf("-c", "copy")))
 
         val meio = FfmpegMediaPolicies
-            .insertSmartMiddleArguments("inserido.wav", "001.wav", 2.0, 48000, 2, 0.2, "tri")
+            .insertSmartMiddleArguments("inserido.wav", "001.wav", 2.0, 48000, 2, "pcm_s16le", null, 0.2, "tri")
             .toList()
         assertTrue(meio.windowed(2).contains(listOf("-c:a", "pcm_s16le")))
         val af = meio[meio.indexOf("-af") + 1]
         assertTrue("fade de entrada no começo do inserido", af.contains("afade=t=in:st=0:d=0.200000:curve=tri"))
         assertTrue("fade de saída em (duração - fade)", af.contains("afade=t=out:st=1.800000:d=0.200000:curve=tri"))
 
-        val concat = FfmpegMediaPolicies.insertSmartConcatArguments("lista.txt", "saida.wav", 48000, 2).toList()
+        val concat = FfmpegMediaPolicies.insertSmartConcatArguments("lista.txt", "saida.wav").toList()
         assertTrue(concat.windowed(2).contains(listOf("-f", "concat")))
-        assertTrue(concat.windowed(2).contains(listOf("-c:a", "pcm_s16le")))
+        // as peças já estão no formato final: o concat COPIA (sem segunda geração)
+        assertTrue(concat.windowed(2).contains(listOf("-c:a", "copy")))
     }
 
     @Test
-    fun smartInsertSoPreservaCorpoDeFontePcm() {
+    fun smartInsertReencodaOInseridoNoCodecDoPrincipal() {
+        // Fonte m4a/AAC: o trecho inserido nasce em AAC (não em PCM) para o concat
+        // poder copiar; o bitrate do perfil é aplicado.
+        val meio = FfmpegMediaPolicies
+            .insertSmartMiddleArguments("inserido.m4a", "001.m4a", 2.0, 48000, 2, "aac", "128k", 0.2, "tri")
+            .toList()
+        assertTrue(meio.windowed(2).contains(listOf("-c:a", "aac")))
+        assertTrue(meio.windowed(2).contains(listOf("-b:a", "128k")))
+        // codec sem bitrate configurável (FLAC) não recebe -b:a
+        val flac = FfmpegMediaPolicies
+            .insertSmartMiddleArguments("x.flac", "001.flac", 2.0, 48000, 2, "flac", "128k", 0.0, null)
+            .toList()
+        assertFalse(flac.contains("-b:a"))
+    }
+
+    @Test
+    fun smartInsertRecusaCodecQueOAppNaoSabeReencodar() {
         // Fora de PCM não há como copiar o corpo para uma saída WAV — o app cai
         // no modo preciso (com aviso), como o próprio Smart Insert do Windows.
         assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("pcm_s16le"))
@@ -706,8 +723,17 @@ class FfmpegMediaPoliciesTest {
         // O Android entrega o subtipo do MIME (audio/raw) para PCM.
         assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("raw"))
         assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("WAV"))
-        assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec("aac"))
-        assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp3"))
+        // "Disponível para tudo": os comprimidos que o app sabe reencodar também
+        // preservam o corpo copiado (a saída usa o contêiner da fonte).
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("aac"))
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp3"))
+        // Medido no aparelho: um m4a chega como "mp4a-latm" (MIME do Android).
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp4a-latm"))
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp4a"))
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("opus"))
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("vorbis"))
+        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("flac"))
+        assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec("ac3"))
         assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec(null))
     }
 
