@@ -361,3 +361,17 @@ passou a aceitar as duas famílias (`pcm_*`, `raw`, `wav`, `x-wav`, `lpcm`) e ga
 | Depois da emenda | diverge (a aproximação de pacote da cópia — o preço documentado do modo) |
 
 Testes: 2 novos (as peças com o corpo copiado + a regra de codec) — 45 no arquivo de políticas.
+
+### F6 no aparelho (Android) — lacuna de campo fechada
+
+O único código novo do Android sem prova física era o modo **Sem Reencode** com o contrato do F6.
+Rodado no OnePlus (C1c, corte [1,4–4,6]):
+
+| Medida | Resultado |
+|---|---|
+| Mensagem ao operador | "Sem Reencode: intervalo efetivo 1.000–4.600 s (3.600 s); pedido 1.400–4.600 s (3.200 s) — o início recua 0.400 s até o keyframe anterior." |
+| Comando executado | `-ss 1.000 ... -t 3.600` (âncora no keyframe <= 1,4 s) |
+| Arquivo entregue | **3,626 s**, **90 quadros**, **primeiro quadro em keyframe** |
+| Keyframes da fonte | 0 / 1 / 2 / 3 / 4 / 5 s -> a âncora em 1,000 s é o keyframe anterior |
+
+Ou seja: o que o app declara é exatamente o que ele entrega — agora também medido no aparelho.
