@@ -218,6 +218,40 @@ internal object FfmpegMediaPolicies {
     const val CLEAN_FILTER_STRONG = "afftdn=nr=18:nf=-35:tn=1"
 
     /**
+     * Aviso quando a fonte tem taxa de quadros VARIÁVEL (T12 do roteiro).
+     *
+     * O banner do ffmpeg mostra "18.71 fps, 25 tbr" numa fonte VFR: o primeiro é
+     * a média e o segundo o nominal. Reencodar converte para taxa fixa — e isso
+     * não pode acontecer em silêncio.
+     */
+    fun variableRateWarning(fps: String?, averageRate: String?): String? {
+        val fixa = fps?.replace(',', '.')?.toDoubleOrNull() ?: return null
+        val media = averageRate?.replace(',', '.')?.toDoubleOrNull() ?: return null
+        if (fixa <= 0.0 || media <= 0.0) return null
+        if (kotlin.math.abs(fixa - media) / fixa <= 0.02) return null
+        return "Fonte com taxa de quadros variável ($fps fps médios, $averageRate tbr nominais): " +
+            "a saída reencodada sai em taxa fixa. Para preservar a taxa original, use o modo Sem Reencode."
+    }
+
+    /**
+     * Aviso quando o áudio da fonte começa deslocado do vídeo (T12).
+     * A referência é o início do CONTÊINER — um PTS inicial deslocado tem os dois
+     * streams juntos e não é offset de A/V.
+     */
+    fun audioOffsetWarning(
+        audioStartSeconds: Double?,
+        containerStartSeconds: Double?,
+        toleranceMs: Double = 60.0
+    ): String? {
+        val audio = audioStartSeconds ?: return null
+        val container = containerStartSeconds ?: 0.0
+        val atraso = (audio - container) * 1000.0
+        if (kotlin.math.abs(atraso) <= toleranceMs) return null
+        return "Na fonte, o áudio começa ${atraso.toInt()} ms depois do vídeo: a saída normaliza os " +
+            "dois streams no início e o deslocamento não é mantido."
+    }
+
+    /**
      * Aviso quando a fonte tem mais de 8 bits por componente.
      *
      * Reencodar 10/12 bits (yuv420p10le, p010le, …) para yuv420p reduz a

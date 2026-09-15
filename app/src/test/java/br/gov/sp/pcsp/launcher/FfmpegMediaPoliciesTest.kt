@@ -710,4 +710,30 @@ class FfmpegMediaPoliciesTest {
         assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp3"))
         assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec(null))
     }
+
+    @Test
+    fun variableRateWarningAcusaFonteComTaxaVariavel() {
+        // T12: no banner, "18.71 fps, 25 tbr" = taxa variável (a média difere do
+        // nominal). Reencodar fixa a taxa — e não pode ser silencioso.
+        val aviso = FfmpegMediaPolicies.variableRateWarning("18.71", "25")
+        assertNotNull(aviso)
+        assertTrue(aviso!!.contains("variável"))
+
+        assertNull(FfmpegMediaPolicies.variableRateWarning("25", "25"))
+        assertNull(FfmpegMediaPolicies.variableRateWarning("29.97", "29.97"))
+        assertNull(FfmpegMediaPolicies.variableRateWarning("29.6", "30"))  // dentro de 2%
+        assertNull(FfmpegMediaPolicies.variableRateWarning("", "25"))
+        assertNull(FfmpegMediaPolicies.variableRateWarning(null, null))
+    }
+
+    @Test
+    fun audioOffsetWarningComparaComOInicioDoConteiner() {
+        // T12: PTS inicial deslocado tem os DOIS streams juntos (não é offset de
+        // A/V); o offset que importa é o áudio em relação ao início do contêiner.
+        assertNull(FfmpegMediaPolicies.audioOffsetWarning(4.976, 4.976))
+        assertNotNull(FfmpegMediaPolicies.audioOffsetWarning(0.176, 0.0))
+        assertTrue(FfmpegMediaPolicies.audioOffsetWarning(0.176, 0.0)!!.contains("176 ms"))
+        assertNull(FfmpegMediaPolicies.audioOffsetWarning(0.021, 0.0))
+        assertNull(FfmpegMediaPolicies.audioOffsetWarning(null, 0.0))
+    }
 }

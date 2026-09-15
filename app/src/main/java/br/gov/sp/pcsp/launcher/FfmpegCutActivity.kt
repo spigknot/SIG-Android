@@ -641,8 +641,9 @@ class FfmpegCutActivity : AppCompatActivity() {
                 // F10: fonte com mais de 8 bits por componente? O reencode grava em
                 // 8 bits — avisar antes de rodar (o Sem Reencode preserva).
                 if (jobMime.startsWith("video/")) {
-                    colorDepthTask(currentInputFile)?.let { aviso ->
-                        tracker.appendTasks(listOf(aviso))
+                    val notas = videoNotes(currentInputFile)
+                    if (notas.isNotEmpty()) {
+                        tracker.appendTasks(notas)
                         tracker.completeCurrentTask()
                     }
                 }
@@ -1109,7 +1110,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         val orientationTask = if (rotationDegrees == 0) {
             "Mantendo orientação original"
         } else {
-            "Preservando rotação de ${rotationDegrees}° nos metadados"
+            "Aplicando a rotação de ${rotationDegrees}° ao vídeo (a saída sai na orientação correta)"
         }
         tracker.appendTasks(
             listOf(
@@ -1580,14 +1581,26 @@ class FfmpegCutActivity : AppCompatActivity() {
      * Aviso de profundidade de cor do vídeo (10/12 bits), lido do ffmpeg e
      * traduzido pelo helper puro — null quando é 8 bits ou quando não deu para ler.
      */
-    private fun colorDepthTask(inputFile: File): String? {
+    private fun videoNotes(inputFile: File): List<String> {
         val session = runCatching {
             FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", inputFile.absolutePath))
-        }.getOrNull() ?: return null
+        }.getOrNull() ?: return emptyList()
         val texto = session.allLogsAsString.orEmpty()
-        val linhaVideo = texto.lineSequence().firstOrNull { it.contains("Video:") } ?: return null
+        val linhaVideo = texto.lineSequence().firstOrNull { it.contains("Video:") } ?: return emptyList()
+        val linhaAudio = texto.lineSequence().firstOrNull { it.contains("Audio:") }.orEmpty()
+        val notas = mutableListOf<String>()
+        // profundidade de cor (F10)
         val pixFmt = Regex("Video:\\s*[^,]+,\\s*([a-zA-Z0-9_]+)").find(linhaVideo)?.groupValues?.get(1)
-        return FfmpegMediaPolicies.colorDepthWarning(pixFmt)
+        FfmpegMediaPolicies.colorDepthWarning(pixFmt)?.let { notas += it }
+        // taxa variável (T12): o banner traz "<média> fps, <nominal> tbr"
+        val fps = Regex("(\\d+(?:\\.\\d+)?) fps").find(linhaVideo)?.groupValues?.get(1)
+        val tbr = Regex("(\\d+(?:\\.\\d+)?) tbr").find(linhaVideo)?.groupValues?.get(1)
+        FfmpegMediaPolicies.variableRateWarning(fps, tbr)?.let { notas += it }
+        // offset do áudio x início do contêiner (T12)
+        val audioStart = Regex("start\\s+(\\d+(?:\\.\\d+)?)").find(linhaAudio)?.groupValues?.get(1)?.toDoubleOrNull()
+        val containerStart = Regex("start:\\s*(\\d+(?:\\.\\d+)?)").find(texto)?.groupValues?.get(1)?.toDoubleOrNull()
+        FfmpegMediaPolicies.audioOffsetWarning(audioStart, containerStart)?.let { notas += it }
+        return notas
     }
 
     /**

@@ -399,3 +399,15 @@ Ou seja: o que o app declara é exatamente o que ele entrega — agora também m
    (A rotação, no caminho reencode, sai aplicada nos pixels — 180x320 sem metadado — o que é visualmente correto, mas a tarefa da UI diz "nos metadados": ajustar a frase.)
 
 **Correções propostas** (nenhuma feita ainda — aguardando o usuário): aviso de VFR, preservação/aviso do offset A/V, capítulos na mensagem, nome do teste "benchmarked" e o texto da rotação.
+
+### Correções dos achados do roteiro (T12/T17/T20) — feitas e provadas
+
+| Achado | Correção | Prova |
+|---|---|---|
+| VFR convertido em silêncio | Aviso "fonte com taxa variável" nos DOIS apps (o banner traz "<média> fps, <nominal> tbr"; divergência > 2% avisa) | Arquivo VFR de teste → avisa ✓; CFR 29,97 → silêncio ✓ |
+| Offset A/V intencional destruído | Aviso comparando o áudio com o **início do contêiner** (não com zero — um PTS inicial deslocado tem os dois streams juntos) | Áudio +176 ms → avisa ✓; PTS inicial 5 s → silêncio ✓ (a primeira versão acusava falso positivo de 4976 ms e foi corrigida pela própria prova) |
+| Capítulos omitidos sem aviso | A mensagem de extras passou a citar os capítulos ("a timeline de origem não vale mais depois do corte") | Log do corte ✓ |
+| (T20) texto da rotação | "Aplicando a rotação de X° ao vídeo (a saída sai na orientação correta)" — antes dizia "nos metadados" mesmo no caminho que aplica nos pixels | Tarefa do app ✓ |
+| (T17) teste "benchmarked" | Renomeado para `test_clean_strong_uses_the_agreed_afftdn_filter` com o motivo no comentário (o nome prometia um benchmark que nunca existiu) | Suíte verde ✓ |
+
+Vacinas: +4 no Windows (`test_rate_and_offset_warnings.py`, com os casos reais do T12, incluindo o do PTS inicial) e +2 no Android. Gates verdes nos dois.
