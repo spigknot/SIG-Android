@@ -375,3 +375,27 @@ Rodado no OnePlus (C1c, corte [1,4–4,6]):
 | Keyframes da fonte | 0 / 1 / 2 / 3 / 4 / 5 s -> a âncora em 1,000 s é o keyframe anterior |
 
 Ou seja: o que o app declara é exatamente o que ele entrega — agora também medido no aparelho.
+
+## Testes do roteiro executados (T10–T20) — 14/09
+
+| Teste | Resultado |
+|---|---|
+| **T11** — clipe central curto e várias junções | ✓ **PASS** — com transições de 0,5 s e um clipe central de 0,3 s o plano **recusa** com o motivo explícito ("A transição ocupa todo o clipe mais curto"); com 0,1 s aceita e posiciona as janelas corretamente. A sequência longa (20 clipes) já tinha passado no N4. |
+| **T12** — VFR, 30000/1001, PTS não-zero, offset A/V | ⚠️ **2 achados** (abaixo); CFR 29,97 preservado ✓; PTS não-zero com rebase previsível ✓ |
+| **T13** — HDR/10-bit | ~ coberto pelo F10 (aviso para >8 bits nos dois apps). Ressalva do critério: probe desconhecido não deve ser tratado como SDR 8-bit conhecido — hoje o app simplesmente não avisa nesse caso (risco residual pequeno, o probe é confiável). |
+| **T14** — HEVC curto/fallback | ✓ executado (Windows: fallback anunciado com motivo; modo cópia preserva `hevc/hvc1`). Android: diálogo "sem encoder HEVC" observado em campo. |
+| **T16** — Extrair: cópia, conversão e lote | ✓ **PASS** — item sem áudio identificado ("não possui trilha de áudio e foi ignorado"); item menor que o intervalo ajustado e identificado ("fim ajustado de 10.0 para 3.0") |
+| **T17** — Limpar: algoritmo/formato | ✓ coberto pelo F9 (mesma tecnologia nos dois, saída preservando taxa/canais, confirmação). A audição A/B fica com o usuário. Pendência menor: o teste do Windows ainda se chama "benchmarked" — o nome promete um benchmark que não existe; renomear. |
+| **T20** — capítulos, orientação e extras | ⚠️ **1 achado** (abaixo): extras anunciados ✓, capítulos omitidos sem aviso ✗, rotação sai aplicada nos pixels (visualmente correta) enquanto a tarefa fala "nos metadados" ✗ |
+
+### Achados do T12 (os dois com prova)
+
+1. **VFR convertido em silêncio** ✗ — fonte com taxa variável (avg 2825/151 ≈ 18,7 fps, r_frame_rate 25) foi cortada e a saída saiu com avg 21,3 fps, **sem nenhum aviso**. O critério do T12 pede "não transformar VFR em CFR silenciosamente" (recusar com clareza é aceitável).
+2. **Offset A/V intencional destruído** ✗ — fonte com o áudio começando 176 ms depois do vídeo (medido: vídeo 0.000, áudio 0.176) saiu do corte com **os dois streams em 0.000** — o offset não sobreviveu. O critério pede "preservar o offset intencional, em vez de fazer cada stream começar em zero por conta própria".
+
+### Achado do T20
+
+3. **Capítulos omitidos sem aviso** ✗ — o corte descarta os capítulos (`-map_chapters -1`, que é a política certa pós-corte), mas a única mensagem fala de "legendas, anexos e streams de dados". O critério pede omissão **explicitamente prevista**. Somar os capítulos à mensagem é uma linha de código.
+   (A rotação, no caminho reencode, sai aplicada nos pixels — 180x320 sem metadado — o que é visualmente correto, mas a tarefa da UI diz "nos metadados": ajustar a frase.)
+
+**Correções propostas** (nenhuma feita ainda — aguardando o usuário): aviso de VFR, preservação/aviso do offset A/V, capítulos na mensagem, nome do teste "benchmarked" e o texto da rotação.
