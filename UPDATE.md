@@ -26,7 +26,7 @@ bump da versão (3 lugares) → build (test+lint+assemble) → APK no O:\ → co
   1. `app/src/main/java/br/gov/sp/pcsp/launcher/AppUpdateChecker.kt` → `const val APP_VERSION = "YYYYMMDD_NNN"`
   2. `app/build.gradle` → `versionCode` (incrementar em 1)
   3. `app/build.gradle` → `versionName` (incrementar em 1)
-- **Formato da versão**: `YYYYMMDD_NNN` (mesma data, número sequencial seguinte; ex.: se está `20260823_001`, gere `20260823_002`). O `APP_VERSION` usa underscore; a comparação do checker ignora `_`/`-` (tags antigas como `20260817-002` continuam válidas).
+- **Formato da versão**: `YYYYMMDD_NNN`. Se a última versão for do MESMO dia, é o número sequencial seguinte (ex.: `20260823_001` → `20260823_002`); se o dia MUDOU, reinicie em `_001` com a data de hoje (ex.: `20260911_001` → `20260914_001`) — nunca continue a numeração do dia anterior. O `APP_VERSION` usa underscore; a comparação do checker ignora `_`/`-` (tags antigas como `20260817-002` continuam válidas).
 - **APK de saída**: `app/build/outputs/apk/debug/app-debug.apk`.
 - **Destino O:\**: `O:\sig.apk` (MESMO nome sempre). O `O:\` é unidade de rede que às vezes está desmontada — se o `cp` falhar, IGNORAR (é o destino menos importante) e seguir com o GitHub.
 
@@ -98,12 +98,14 @@ cp app/build/outputs/apk/debug/app-debug.apk "/o/sig.apk" && echo "APK copiado"
 
 ```bash
 cd "D:/Projetos/SIG"
-git add -A
+git add -u                 # tracked; NAO usar -A (byproducts da raiz entram por engano — pitfall da tabela)
+# se a versao criar arquivos NOVOS, adicionar nominalmente (git add caminho/arquivo)
 git commit -m "Versao YYYYMMDD_NNN: <descrição curta>"
 git push origin main
 ```
 
 - Não commitar: `local.properties`, chaves, `.gradle/`, `build/` (verificar `git status` antes do add se necessário).
+- **WIP alheio fora do índice** (ex.: Granite): o pre-commit bloqueia — seguir o fluxo do pitfall da tabela: backup dos arquivos + `git restore -- <tracked>` (e mover o untracked para fora) + commit + `cp` de volta, conferindo o hash antes/depois. **Sem `git stash` e sem `--no-verify`.** (Executado assim na `20260914_001`: `WIP_OK True`.)
 - ⚠️ Se houver trabalho legítimo FORA do índice (ex.: código Granite WIP que o
   usuário pediu para não commitar), o pre-commit do harness
   (`scripts/check-staged-snapshot.ps1`, contrato `sig-staged-snapshot/v1`)
@@ -187,6 +189,7 @@ a fonte da verdade e deve evoluir com a prática.
 | `RequestTimeTooSkewed` no R2 | relógio do Windows dessincronizado (w32time parado; >15 min de diferença) | `powershell -c "Start-Service w32time; w32tm /resync"` (elevação); conferir `date -u` vs `curl -sI https://api.cloudflare.com \| grep -i ^date:` |
 | ZIPs de dependências locais ausentes ou com SHA diferente | a release é somente do APK, ou há reconstruções locais; os ZIPs nativos são versionados separadamente | em release somente do APK, reutilizar os ZIPs já publicados no R2; se o pacote nativo mudou, gerar e aceitar os arquivos que batem com `NativeDependencyManager.kt` antes de publicar |
 | `O:\` desmontada no cp | unidade de rede indisponível | ignorar (destino menos importante); seguir com commit/GitHub |
+| `ls -la /o/sig.apk` mostra tamanho MENOR que o local (ex.: 8.020.385 × local igual, ou valor velho) e dá susto | cache de diretório do SMB — o `ls` pode ler tamanho desatualizado mesmo com a cópia íntegra | conferir SEMPRE por conteúdo: `md5sum /o/sig.apk` vs `md5sum` do APK local (iguais = cópia certa); nunca julgar pela coluna de tamanho |
 | `git add -A` puxa logs/byproducts da raiz (`*.log`, `.args`, dumps) | sessões deixam artefatos untracked na raiz | `git add -u` + arquivos novos do WIP nominalmente; conferir `git status` antes |
 | Build falha com `Gradle build daemon has been stopped ... garbage collector is thrashing` | daemon reaproveitado estourou o heap (512 MiB) em builds seguidos; falha de ambiente, não de código | `./gradlew --stop` e rodar o mesmo gate de novo; só vale como retry se o gate já passou verde antes |
 | Commit bloqueado: "commit bloqueado: N arquivo(s) tracked fora do índice" | pre-commit do harness (`check-staged-snapshot.ps1`) exige working tree == índice para inputs de build; trabalho legítimo fora do índice (ex.: Granite WIP não commitado) dispara o bloqueio | `git add` apenas os arquivos da versão e tirar o arquivo alheio do caminho com **backup + `git restore -- <arquivo>` + commit + `cp` de volta** (conferir `git hash-object` antes/depois). NUNCA `--no-verify` (pula o gate) e NUNCA `git stash push` com pathspec vazio — ele engole a árvore inteira |
