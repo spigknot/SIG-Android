@@ -4,6 +4,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -316,5 +318,64 @@ class SttResponseParsersTest {
         assertTrue(SttResponseParsers.isServerEnvelopeLine("retry: 100"))
         assertTrue(SttResponseParsers.isServerEnvelopeLine("[DONE]"))
         assertFalse(SttResponseParsers.isServerEnvelopeLine("texto normal"))
+    }
+
+    // ------------------------------------------- Tempos do servidor Granite NAR
+
+    @Test
+    fun parseServerTiming_leOsTemposQueOServidorGraniteInforma() {
+        // Forma REAL da resposta do servidor Granite NAR (medida em teste de
+        // campo: 1 arquivo de 46:19 processado em 59,61s; total da raiz 59,71s).
+        val timing = SttResponseParsers.parseServerTiming(
+            """
+            {"model":"ibm-granite/granite-speech-4.1-2b-nar",
+             "results":[{"filename":"crist.wav","text":"bom dia","transcription":"bom dia",
+                         "duration_seconds":2779.07,"duration_minutes":46.32,
+                         "processing_time_seconds":59.61,"chunks":24}],
+             "total_files":1,"total_processing_time_seconds":59.71}
+            """.trimIndent()
+        )
+        assertNotNull(timing)
+        assertEquals(59.61, timing!!.processingSeconds, 0.0001)
+        assertEquals(2779.07, timing.audioSeconds, 0.0001)
+        assertEquals(1, timing.files)
+    }
+
+    @Test
+    fun parseServerTiming_variosArquivos_somaOProcessamentoE_oAudio() {
+        val timing = SttResponseParsers.parseServerTiming(
+            """{"results":[{"filename":"a.wav","processing_time_seconds":59.61,"duration_seconds":2779.07},{"filename":"b.wav","processing_time_seconds":60.0,"duration_seconds":2800.0}]}"""
+        )
+        assertNotNull(timing)
+        assertEquals(119.61, timing!!.processingSeconds, 0.0001)
+        assertEquals(5579.07, timing.audioSeconds, 0.0001)
+        assertEquals(2, timing.files)
+    }
+
+    @Test
+    fun parseServerTiming_usaOTotalDaRaizQuandoNaoHaTempoPorArquivo() {
+        val timing = SttResponseParsers.parseServerTiming(
+            """{"transcriptions":[{"filename":"a.wav","text":"oi"}],"total_processing_time_seconds":59.71}"""
+        )
+        assertNotNull(timing)
+        assertEquals(59.71, timing!!.processingSeconds, 0.0001)
+        assertEquals(0, timing.files)
+    }
+
+    @Test
+    fun parseServerTiming_semTempos_devolveNull() {
+        assertNull(SttResponseParsers.parseServerTiming("""{"results":[{"filename":"a.wav","text":"oi"}]}"""))
+        assertNull(SttResponseParsers.parseServerTiming("""{"text":"transcrição crua"}"""))
+        assertNull(SttResponseParsers.parseServerTiming("transcrição crua"))
+        assertNull(SttResponseParsers.parseServerTiming("{invalido"))
+    }
+
+    @Test
+    fun parseServerTiming_zeroNaoViraTempoDeServidor() {
+        assertNull(
+            SttResponseParsers.parseServerTiming(
+                """{"results":[{"processing_time_seconds":0.0}],"total_processing_time_seconds":0.0}"""
+            )
+        )
     }
 }

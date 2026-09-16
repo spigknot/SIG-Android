@@ -4096,6 +4096,8 @@ class RemoteSttActivity : AppCompatActivity() {
         val logLines = StringBuilder()
         val results = mutableListOf<TranscriptionResult>()
         val vadStats = VadRunStats()
+        // Tempos da rodada: preparação por arquivo + tempos reportados pelo servidor.
+        val runTimings = MutableTranscriptionRunTimings()
         val serverStartedAt = AtomicLong(0L)
         val serverFinishedAt = AtomicLong(0L)
 
@@ -4131,7 +4133,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 items.forEachIndexed { index, item ->
                     prepareCompletion.submit(
                         prepareUploadTask(
-                            items, snapshotPrepareMode, tempDir, terminalLines, index, item, vadStats,
+                            items, snapshotPrepareMode, tempDir, terminalLines, index, item, vadStats, runTimings,
                             applyVad = !onlyConvert && !whiteRecording && snapshotVadMode != VadMode.NONE,
                             useTimeline = !whiteRecording,
                             timelineStartMs = snapshotTimelineStartMs,
@@ -4153,7 +4155,12 @@ class RemoteSttActivity : AppCompatActivity() {
                         if (onlyConvert || onlyVad || sendZip) {
                             preparedUploads += prepared
                         } else {
-                            uploadCompletion!!.submit(uploadTask(prepared, items.size, transcriptionDir, terminalLines, serverStartedAt, serverFinishedAt))
+                            uploadCompletion!!.submit(
+                                uploadTask(
+                                    prepared, items.size, transcriptionDir, terminalLines,
+                                    serverStartedAt, serverFinishedAt, runTimings
+                                )
+                            )
                             submittedUploads++
                         }
                     }
@@ -4192,7 +4199,15 @@ class RemoteSttActivity : AppCompatActivity() {
                 txtFile.writeText(finalText, Charsets.UTF_8)
                 htmlFile.writeText(TranscriptionReport.buildHtml(orderedResults.map { TranscriptionReport.Row(it.fileName, it.text) }), Charsets.UTF_8)
                 val serverElapsedMs = calculateServerElapsedMs(serverStartedAt, serverFinishedAt)
-                val report = buildReport(items.size, totalSentSeconds, elapsedMs, serverElapsedMs, prepareMode, vadStats)
+                val firstRequestMs = serverStartedAt.get()
+                    .takeIf { it > 0L }
+                    ?.let { (it - startedAt).coerceAtLeast(0L) }
+                val reportTimings = runTimings.snapshot(
+                    totalMs = elapsedMs,
+                    firstRequestMs = firstRequestMs,
+                    serverWindowMs = serverElapsedMs
+                )
+                val report = buildReport(items.size, totalSentSeconds, reportTimings, prepareMode, vadStats)
                 TranscriptionReport.appendLog(logLines, report)
                 logFile.writeText(logLines.toString(), Charsets.UTF_8)
                 terminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
@@ -4292,6 +4307,7 @@ class RemoteSttActivity : AppCompatActivity() {
         index: Int,
         item: MediaItem,
         vadStats: VadRunStats,
+        timings: MutableTranscriptionRunTimings,
         applyVad: Boolean = true,
         useTimeline: Boolean = true,
         timelineStartMs: Long = 0L,
@@ -4300,6 +4316,7 @@ class RemoteSttActivity : AppCompatActivity() {
         vadLevel: Int = selectedVadLevel
     ): Callable<PreparedUpload> {
         return Callable {
+            val preparationStartedAt = SystemClock.elapsedRealtime()
             ensureNotCancelled()
             val number = index + 1
             updateBatchProgressLine(number, if (applyVad) "Aplicando VAD" else "Convertendo")
@@ -4351,6 +4368,7 @@ class RemoteSttActivity : AppCompatActivity() {
             val sentAudioInfo = SttAudioProbe.describe(uploadFile.file)
             appendTerminal(terminalLines, "prepare done[$number/${items.size}]: ${item.name}")
             runOnUiThread { updateTerminalText(terminalLines) }
+            timings.recordPreparation(SystemClock.elapsedRealtime() - preparationStartedAt)
             PreparedUpload(number, item, uploadFile, durationToSend, originalAudioInfo, sentAudioInfo)
         }
     }
@@ -4370,7 +4388,8 @@ class RemoteSttActivity : AppCompatActivity() {
         transcriptionDir: File,
         terminalLines: StringBuilder,
         serverStartedAt: AtomicLong,
-        serverFinishedAt: AtomicLong
+        serverFinishedAt: AtomicLong,
+        timings: MutableTranscriptionRunTimings
     ): Callable<TranscriptionResult> {
         return Callable {
             ensureNotCancelled()
@@ -4385,7 +4404,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 updateTerminalText(terminalLines)
             }
 
-            val result = sendSingleToServer(prepared, itemCount, terminalLines, serverStartedAt, serverFinishedAt)
+            val result = sendSingleToServer(prepared, itemCount, terminalLines, serverStartedAt, serverFinishedAt, timings)
             if (result.text.isBlank()) {
                 appendTerminal(terminalLines, "transcrição vazia em ${result.fileName}")
                 throw IllegalStateException("transcrição vazia em ${result.fileName}")
@@ -4541,7 +4560,8 @@ class RemoteSttActivity : AppCompatActivity() {
         itemCount: Int,
         terminalLines: StringBuilder,
         serverStartedAt: AtomicLong,
-        serverFinishedAt: AtomicLong
+        serverFinishedAt: AtomicLong,
+        timings: MutableTranscriptionRunTimings
     ): TranscriptionResult {
         val config = TranscriptionModelStore.selectedConfig()
         // A decisão sync/async usa a duração REAL do arquivo preparado (medida
@@ -4561,7 +4581,8 @@ class RemoteSttActivity : AppCompatActivity() {
                 terminalLines = terminalLines,
                 config = config,
                 serverStartedAt = serverStartedAt,
-                serverFinishedAt = serverFinishedAt
+                serverFinishedAt = serverFinishedAt,
+                timings = timings
             ).firstOrNull() ?: TranscriptionResult(prepared.index, prepared.item.name, "")
         }
         return result.copy(index = prepared.index, fileName = prepared.item.name)
@@ -4722,7 +4743,8 @@ class RemoteSttActivity : AppCompatActivity() {
         terminalLines: StringBuilder,
         config: TranscriptionModelStore.Config,
         serverStartedAt: AtomicLong? = null,
-        serverFinishedAt: AtomicLong? = null
+        serverFinishedAt: AtomicLong? = null,
+        timings: MutableTranscriptionRunTimings? = null
     ): List<TranscriptionResult> {
         ensureNotCancelled()
         if (config.isGrokApi) {
@@ -4792,6 +4814,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     throw IllegalStateException("servidor respondeu ${response.code}. $body")
                 }
                 val bodyText = response.body?.string().orEmpty()
+                recordServerTiming(bodyText, timings, terminalLines)
                 return parseGraniteTranscriptions(bodyText, preparedUploads, terminalLines)
             }
         } finally {
@@ -6095,6 +6118,23 @@ class RemoteSttActivity : AppCompatActivity() {
         return if (started > 0L && finished >= started) finished - started else 0L
     }
 
+    /**
+     * Guarda os tempos que o servidor reporta na resposta (quando os informa) e
+     * deixa o número visível no terminal. É o único "tempo no servidor"
+     * honesto: a janela medida no cliente inclui o upload dentro dela.
+     */
+    private fun recordServerTiming(
+        responseText: String,
+        timings: MutableTranscriptionRunTimings?,
+        terminalLines: StringBuilder
+    ) {
+        val accumulator = timings ?: return
+        val timing = SttResponseParsers.parseServerTiming(responseText) ?: return
+        accumulator.recordServerTiming(timing)
+        val filesNote = if (timing.files > 0) " (${timing.files} arquivo(s))" else ""
+        appendTerminal(terminalLines, "servidor: ${formatSeconds(timing.processingSeconds)}s de processamento$filesNote")
+    }
+
     private fun appendTerminalTranscription(builder: StringBuilder, text: String) {
         appendTerminal(builder, "$TRANSCRIPTION_START$text$TRANSCRIPTION_END")
     }
@@ -6218,30 +6258,25 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun buildReport(
         fileCount: Int,
         totalAudioSeconds: Double,
-        elapsedMs: Long,
-        serverElapsedMs: Long,
+        timings: TranscriptionRunTimings,
         mode: PrepareMode,
         vadStats: VadRunStats
     ): String {
-        val elapsedSeconds = (elapsedMs / 1000.0).coerceAtLeast(0.001)
-        val serverSeconds = (serverElapsedMs / 1000.0).coerceAtLeast(0.001)
-        val generalEfficiency = totalAudioSeconds / elapsedSeconds
-        val serverEfficiency = totalAudioSeconds / serverSeconds
         val lines = mutableListOf(
             "Servidor: ${TranscriptionModelStore.selectedConfig().url}",
             "Formato enviado: ${mode.reportLabel}",
             "Arquivos: $fileCount",
-            "Total de áudio enviado: ${formatSeconds(totalAudioSeconds)}s",
-            "Tempo total: ${formatSeconds(elapsedSeconds)}s",
-            "Tempo no servidor: ${formatSeconds(serverSeconds)}s",
-            "Eficiência geral: ${String.format(Locale.US, "%.2fx", generalEfficiency)}",
-            "Eficiência do servidor: ${String.format(Locale.US, "%.2fx", serverEfficiency)}"
+            "Total de áudio enviado: ${formatSeconds(totalAudioSeconds)}s"
         )
+        lines += timings.reportLines(totalAudioSeconds)
         vadStats.snapshot()?.let { summary ->
             lines += "VAD: ${selectedVadMode.label}, nível $selectedVadLevel (${summary.files} arquivo(s))"
             lines += "Tempo de filtragem VAD: ${formatElapsedCompact(summary.elapsedMs)}"
             lines += "Tamanho antes do VAD: ${summary.beforeBytes} bytes"
             lines += "Tamanho após o VAD: ${summary.afterBytes} bytes"
+            // Com VAD ligado, o "Total de áudio enviado" acima é o áudio
+            // SELECIONADO (antes do VAD); o servidor informa o que processou.
+            timings.serverAudioMs?.let { lines += "Áudio efetivamente processado no servidor: ${formatSeconds(it)}s" }
         }
         return lines.joinToString("\n")
     }

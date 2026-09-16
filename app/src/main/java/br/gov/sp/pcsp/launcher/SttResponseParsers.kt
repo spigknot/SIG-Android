@@ -75,6 +75,58 @@ object SttResponseParsers {
         }
     }
 
+    /**
+     * Tempos que o SERVIDOR informa na própria resposta (Granite NAR):
+     * `total_processing_time_seconds` na raiz e, por arquivo,
+     * `processing_time_seconds` / `duration_seconds`. É o tempo de GPU real —
+     * diferente da janela de rede que o cliente mede com o relógio local.
+     */
+    data class ServerTiming(
+        val processingSeconds: Double,
+        val audioSeconds: Double,
+        val files: Int
+    )
+
+    /**
+     * Lê os tempos reportados pelo servidor. Prefere a soma POR ARQUIVO (é ela
+     * que separa arquivo de arquivo); cai no total da raiz quando só ele
+     * existe. Devolve null quando a resposta não traz tempos (APIs de
+     * terceiros, ZIP, respostas antigas) ou quando o valor é zero — nesses
+     * casos o relatório usa a janela medida no cliente.
+     */
+    fun parseServerTiming(responseText: String): ServerTiming? {
+        val trimmed = responseText.trim()
+        if (!trimmed.startsWith("{")) return null
+        val json = try {
+            JSONObject(trimmed)
+        } catch (_: Throwable) {
+            return null
+        }
+
+        var processingSeconds = 0.0
+        var audioSeconds = 0.0
+        var files = 0
+        listOf("results", "transcriptions", "files", "items", "data").forEach { key ->
+            val array = json.optJSONArray(key) ?: return@forEach
+            for (index in 0 until array.length()) {
+                val item = array.optJSONObject(index) ?: continue
+                val processing = item.finiteDouble("processing_time_seconds") ?: continue
+                processingSeconds += processing
+                audioSeconds += item.finiteDouble("duration_seconds") ?: 0.0
+                files++
+            }
+        }
+        if (processingSeconds > 0.0) return ServerTiming(processingSeconds, audioSeconds, files)
+
+        val total = json.finiteDouble("total_processing_time_seconds") ?: return null
+        return total.takeIf { it > 0.0 }?.let { ServerTiming(it, audioSeconds, files) }
+    }
+
+    private fun JSONObject.finiteDouble(key: String): Double? {
+        if (!has(key) || isNull(key)) return null
+        return optDouble(key).takeIf { it.isFinite() && it >= 0.0 }
+    }
+
     fun parseResponseItems(responseText: String): List<ParsedText> {
         val trimmed = responseText.trim()
         if (trimmed.isBlank()) return emptyList()

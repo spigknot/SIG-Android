@@ -81,6 +81,7 @@ também é bloqueado.
 | `AssemblyAiAsyncFlow.kt` | Decisão sync/async + polling da AssemblyAI. |
 | `LiveDiagnosticContext.kt` | Correlação de diagnóstico da sessão ao vivo. |
 | `TranscriptionReport.kt` | Relatório HTML, log de terminal, nomes e tamanhos. |
+| `TranscriptionRunTimings.kt` | Tempos da rodada: preparação, janela de rede e processamento do servidor. |
 | `SttAudioProbe.kt` | Sondagem FFmpeg + interpretação da saída (codec/Hz/canais). |
 | `MediaTypeRules.kt` | `isVideo`/`isAudio`/MIME por extensão. |
 | `MediaUriSupport.kt` | Nome de arquivo de URI + permissões de pasta. |
