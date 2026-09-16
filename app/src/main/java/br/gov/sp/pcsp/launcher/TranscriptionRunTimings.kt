@@ -14,11 +14,16 @@ import java.util.Locale
  *  - [firstRequestMs]: do clique até a 1ª requisição sair (a preparação do
  *    primeiro arquivo — os demais são preparados em paralelo, dentro da janela);
  *  - [preparationMs]: soma da preparação (copiar/converter/VAD) dos arquivos;
- *  - [serverWindowMs]: 1ª requisição -> última resposta lida (rede + servidor);
- *  - [serverProcessingMs]: o que o SERVIDOR informa ter processado
- *    (`total_processing_time_seconds` / `processing_time_seconds` na resposta).
- *    É o único número honesto para "tempo no servidor"; a diferença
- *    [networkMs] é upload + espera + download.
+ *  - [uploadMs]: MEDIDO do início da 1ª requisição até o último byte do último
+ *    arquivo ser entregue ao socket (é o custo de rede do envio, e não uma
+ *    subtração);
+ *  - [serverWindowMs]: 1ª requisição -> última resposta lida (upload + espera +
+ *    resposta + processamento);
+ *  - [serverProcessingMs]: o que o SERVIDOR informa ter levado com os arquivos
+ *    (`total_processing_time_seconds` / `processing_time_seconds`). É a medida
+ *    dele — pode ultrapassar a janela do cliente quando há fila/paralelismo no
+ *    servidor (medido: outro cliente com um lote de 200 arquivos dividindo a
+ *    mesma GPU), por isso NÃO é subtraída da janela para "estimar" rede.
  *
  * Puro (sem Android, UI, rede ou estado) para ser verificável por testes
  * unitários — TranscriptionRunTimingsTest.
@@ -28,19 +33,17 @@ data class TranscriptionRunTimings(
     val firstRequestMs: Long?,
     val preparationMs: Long,
     val preparedFiles: Int,
+    val uploadMs: Long?,
     val serverWindowMs: Long,
     val serverProcessingMs: Long?,
     val serverProcessingFiles: Int,
     val serverAudioMs: Long?
 ) {
-    /** Rede dentro da janela: upload + espera + resposta (nunca negativa). */
-    val networkMs: Long? = serverProcessingMs?.let { (serverWindowMs - it).coerceAtLeast(0L) }
-
     fun generalEfficiency(audioSeconds: Double): Double = ratio(audioSeconds, totalMs)
 
     fun windowEfficiency(audioSeconds: Double): Double = ratio(audioSeconds, serverWindowMs)
 
-    /** Eficiência real do servidor; null quando ele não informou o tempo. */
+    /** Eficiência pelo tempo que o servidor reportou; null quando ele não informou. */
     fun serverEfficiency(audioSeconds: Double): Double? =
         serverProcessingMs?.let { ratio(audioSeconds, it) }
 
@@ -49,13 +52,12 @@ data class TranscriptionRunTimings(
         val lines = mutableListOf<String>()
         lines += "Tempo total (clique -> fim): ${seconds(totalMs)}s"
 
-        val preparation = buildString {
+        lines += buildString {
             append("- preparação local (copiar/converter/VAD): ${seconds(preparationMs)}s")
             if (preparedFiles > 0) append(" somando $preparedFiles arquivo(s)")
             firstRequestMs?.let { append("; 1º arquivo pronto em ${seconds(it)}s") }
         }
-        lines += preparation
-
+        uploadMs?.let { lines += "- envio pela rede (upload dos arquivos): ${seconds(it)}s" }
         lines += "- janela de envio + servidor (1º envio -> última resposta): ${seconds(serverWindowMs)}s"
         val processing = serverProcessingMs
         if (processing == null) {
@@ -63,11 +65,12 @@ data class TranscriptionRunTimings(
         } else {
             lines += "- processamento no servidor (reportado por ele): ${seconds(processing)}s" +
                 if (serverProcessingFiles > 0) " ($serverProcessingFiles arquivo(s))" else ""
-            networkMs?.let { lines += "- rede dentro da janela (upload + espera + resposta): ${seconds(it)}s" }
         }
 
         lines += "Eficiência geral (clique -> fim): ${efficiency(generalEfficiency(audioSeconds))}"
-        serverEfficiency(audioSeconds)?.let { lines += "Eficiência do servidor (processamento real): ${efficiency(it)}" }
+        serverEfficiency(audioSeconds)?.let {
+            lines += "Eficiência no servidor (tempo reportado por ele): ${efficiency(it)}"
+        }
         lines += "Eficiência da janela de envio+servidor: ${efficiency(windowEfficiency(audioSeconds))}"
         return lines
     }
@@ -89,6 +92,8 @@ data class TranscriptionRunTimings(
 class MutableTranscriptionRunTimings {
     private var preparationMs = 0L
     private var preparedFiles = 0
+    private var firstRequestAt = 0L
+    private var lastUploadWrittenAt = 0L
     private var serverProcessingMs = 0L
     private var serverProcessingFiles = 0
     private var serverAudioMs = 0L
@@ -98,6 +103,18 @@ class MutableTranscriptionRunTimings {
     fun recordPreparation(elapsedMs: Long) {
         preparationMs += elapsedMs.coerceAtLeast(0L)
         preparedFiles++
+    }
+
+    /** Início da 1ª requisição (só a primeira conta para a janela de envio). */
+    @Synchronized
+    fun recordRequestStarted(at: Long) {
+        if (firstRequestAt == 0L || at < firstRequestAt) firstRequestAt = at
+    }
+
+    /** Último byte do último arquivo entregue ao socket (fim do upload). */
+    @Synchronized
+    fun recordUploadWritten(at: Long) {
+        if (at > lastUploadWrittenAt) lastUploadWrittenAt = at
     }
 
     @Synchronized
@@ -117,6 +134,11 @@ class MutableTranscriptionRunTimings {
             firstRequestMs = firstRequestMs,
             preparationMs = preparationMs,
             preparedFiles = preparedFiles,
+            uploadMs = if (firstRequestAt > 0L && lastUploadWrittenAt >= firstRequestAt) {
+                lastUploadWrittenAt - firstRequestAt
+            } else {
+                null
+            },
             serverWindowMs = serverWindowMs,
             serverProcessingMs = serverProcessingMs.takeIf { serverProcessingFiles > 0 },
             serverProcessingFiles = serverProcessingFiles,

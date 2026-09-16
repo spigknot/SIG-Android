@@ -69,6 +69,7 @@ import okhttp3.RequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.BufferedSink
 import okio.ByteString.Companion.toByteString
 import org.json.JSONArray
 import org.json.JSONObject
@@ -4175,7 +4176,8 @@ class RemoteSttActivity : AppCompatActivity() {
                     } else if (sendZip) {
                         results += sendZipBatchToServer(
                             preparedUploads.sortedBy { it.index }, transcriptionDir, tempDir,
-                            terminalLines, serverStartedAt, serverFinishedAt, selectedZipLevel
+                            terminalLines, serverStartedAt, serverFinishedAt, selectedZipLevel,
+                            timings = runTimings
                         )
                     } else {
                         repeat(submittedUploads) {
@@ -4461,7 +4463,8 @@ class RemoteSttActivity : AppCompatActivity() {
         terminalLines: StringBuilder,
         serverStartedAt: AtomicLong,
         serverFinishedAt: AtomicLong,
-        compressionLevel: Int
+        compressionLevel: Int,
+        timings: MutableTranscriptionRunTimings? = null
     ): List<TranscriptionResult> {
         val config = TranscriptionModelStore.selectedConfig()
         if (config.isGrokApi) throw IllegalStateException("Envio ZIP não está disponível para o Grok STT.")
@@ -4503,7 +4506,12 @@ class RemoteSttActivity : AppCompatActivity() {
             .setType(MultipartBody.FORM)
             .apply {
                 addTranscriptionParameters(config)
-                addFormDataPart("files", requestZip.name, requestZip.asRequestBody("application/zip".toMediaType()))
+                val zipBody = requestZip.asRequestBody("application/zip".toMediaType())
+                addFormDataPart(
+                    "files",
+                    requestZip.name,
+                    timings?.let { acc -> UploadTimingBody(zipBody) { acc.recordUploadWritten(it) } } ?: zipBody
+                )
             }
             .build()
         val request = Request.Builder()
@@ -4514,7 +4522,9 @@ class RemoteSttActivity : AppCompatActivity() {
         val call = client.newCall(request)
         currentCalls.add(call)
         val responseBytes = try {
-            serverStartedAt.compareAndSet(0L, SystemClock.elapsedRealtime())
+            val requestStartedAt = SystemClock.elapsedRealtime()
+            serverStartedAt.compareAndSet(0L, requestStartedAt)
+            timings?.recordRequestStarted(requestStartedAt)
             call.execute().use { response ->
                 appendTerminal(terminalLines, "http ${response.code} ${response.message}")
                 if (!response.isSuccessful) {
@@ -4788,10 +4798,11 @@ class RemoteSttActivity : AppCompatActivity() {
             .apply {
                 addTranscriptionParameters(config)
                 preparedUploads.forEach { prepared ->
+                    val fileBody = prepared.uploadFile.file.asRequestBody(prepared.uploadFile.mime.toMediaType())
                     addFormDataPart(
                         "files",
                         prepared.uploadFile.file.name,
-                        prepared.uploadFile.file.asRequestBody(prepared.uploadFile.mime.toMediaType())
+                        timings?.let { acc -> UploadTimingBody(fileBody) { acc.recordUploadWritten(it) } } ?: fileBody
                     )
                 }
             }
@@ -4805,7 +4816,9 @@ class RemoteSttActivity : AppCompatActivity() {
         val call = client.newCall(request)
         currentCalls.add(call)
         try {
-            serverStartedAt?.compareAndSet(0L, SystemClock.elapsedRealtime())
+            val requestStartedAt = SystemClock.elapsedRealtime()
+            serverStartedAt?.compareAndSet(0L, requestStartedAt)
+            timings?.recordRequestStarted(requestStartedAt)
             call.execute().use { response ->
                 appendTerminal(terminalLines, "http ${response.code} ${response.message}")
                 if (!response.isSuccessful) {
@@ -6119,9 +6132,32 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     /**
+     * Corpo de requisição que avisa quando o arquivo terminou de ser entregue
+     * ao socket — é o FIM DO UPLOAD. A resposta pode demorar mais (o servidor
+     * segue processando), mas o custo de rede do envio acaba aqui, e assim ele
+     * é MEDIDO em vez de estimado por subtração.
+     */
+    private class UploadTimingBody(
+        private val delegate: RequestBody,
+        private val onWritten: (Long) -> Unit
+    ) : RequestBody() {
+        override fun contentType() = delegate.contentType()
+
+        override fun contentLength() = delegate.contentLength()
+
+        override fun isOneShot() = delegate.isOneShot()
+
+        override fun writeTo(sink: BufferedSink) {
+            delegate.writeTo(sink)
+            sink.flush()
+            onWritten(SystemClock.elapsedRealtime())
+        }
+    }
+
+    /**
      * Guarda os tempos que o servidor reporta na resposta (quando os informa) e
-     * deixa o número visível no terminal. É o único "tempo no servidor"
-     * honesto: a janela medida no cliente inclui o upload dentro dela.
+     * deixa o número visível no terminal. É a medida DELE: pode ultrapassar a
+     * janela do cliente quando há fila/paralelismo no servidor.
      */
     private fun recordServerTiming(
         responseText: String,

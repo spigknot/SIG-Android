@@ -9,28 +9,33 @@ import org.junit.Test
 /**
  * Contratos dos tempos de uma rodada de transcrição.
  *
- * O ponto destes testes é separar o que o relatório antigo misturava: a
- * JANELA de rede (que tem o upload dentro e por isso não é tempo de servidor)
- * e o PROCESSAMENTO medido pelo próprio servidor. Se um destes quebrar, ou o
- * relatório voltou a somar coisas diferentes, ou a conta ganhou um caso novo
- * que precisa de decisão explícita.
+ * O ponto destes testes é separar o que o relatório antigo misturava: a JANELA
+ * de rede (que tem o upload dentro e por isso não é tempo de servidor), o
+ * ENVIO medido no socket e o PROCESSAMENTO reportado pelo servidor — que pode
+ * até ultrapassar a janela quando o servidor tem fila (medido em campo com
+ * outro cliente dividindo a GPU). Se um destes quebrar, ou o relatório voltou
+ * a somar coisas diferentes, ou a conta ganhou um caso novo que precisa de
+ * decisão explícita.
  */
 class TranscriptionRunTimingsTest {
 
+    /** Números do teste de campo no emulador (16/09): 1 arquivo de 46:19. */
     private fun timings(
-        totalMs: Long = 276_600,
-        firstRequestMs: Long? = 2_300,
-        preparationMs: Long = 20_400,
-        preparedFiles: Int = 3,
-        serverWindowMs: Long = 274_300,
-        serverProcessingMs: Long? = 180_300,
-        serverProcessingFiles: Int = 3,
-        serverAudioMs: Long? = 8_337_210
+        totalMs: Long = 99_400,
+        firstRequestMs: Long? = 10_600,
+        preparationMs: Long = 10_400,
+        preparedFiles: Int = 1,
+        uploadMs: Long? = 32_500,
+        serverWindowMs: Long = 88_800,
+        serverProcessingMs: Long? = 130_600,
+        serverProcessingFiles: Int = 1,
+        serverAudioMs: Long? = 2_779_072
     ) = TranscriptionRunTimings(
         totalMs = totalMs,
         firstRequestMs = firstRequestMs,
         preparationMs = preparationMs,
         preparedFiles = preparedFiles,
+        uploadMs = uploadMs,
         serverWindowMs = serverWindowMs,
         serverProcessingMs = serverProcessingMs,
         serverProcessingFiles = serverProcessingFiles,
@@ -38,72 +43,110 @@ class TranscriptionRunTimingsTest {
     )
 
     @Test
-    fun rede_e_oQueSobraDaJanelaDepoisDoProcessamentoDoServidor() {
-        assertEquals(94_000L, timings().networkMs)
+    fun envio_eMedido_naoDerivadoDaJanela() {
+        // O servidor reportou 130,6s (com fila) numa janela de 88,8s: subtrair
+        // daria "rede negativa". O envio medido continua sendo o do socket.
+        val linhas = timings().reportLines(2779.072)
+        assertTrue(linhas.any { it == "- envio pela rede (upload dos arquivos): 32.5s" })
+        assertFalse(linhas.any { it.contains("0.0s") })
     }
 
     @Test
-    fun rede_nuncaFicaNegativa_mesmoSeOServidorReportarMaisQueAJanela() {
-        // Arquivos em paralelo podem ter soma de processamento maior que a
-        // janela medida no cliente; a conta não pode virar tempo negativo.
-        assertEquals(0L, timings(serverWindowMs = 100_000, serverProcessingMs = 180_300).networkMs)
+    fun semMedicaoDeEnvio_aLinhaNaoAparece() {
+        val linhas = timings(uploadMs = null).reportLines(2779.072)
+        assertFalse(linhas.any { it.contains("envio pela rede") })
     }
 
     @Test
-    fun semTemposDoServidor_naoInventaRedeNemEficienciaDeServidor() {
-        val semServidor = timings(serverProcessingMs = null, serverProcessingFiles = 0)
-        assertNull(semServidor.networkMs)
-        assertNull(semServidor.serverEfficiency(8336.7))
+    fun semTemposDoServidor_naoInventaEficienciaDeServidor() {
+        val semServidor = timings(serverProcessingMs = null, serverProcessingFiles = 0, serverAudioMs = null)
+        assertNull(semServidor.serverEfficiency(2779.072))
+        val linhas = semServidor.reportLines(2779.072)
+        assertTrue(linhas.any { it.contains("processamento no servidor: não informado") })
+        assertFalse(linhas.any { it.startsWith("Eficiência no servidor") })
+        assertTrue(linhas.any { it.startsWith("Eficiência da janela de envio+servidor") })
     }
 
     @Test
     fun eficienciaGeral_usaOTotalDoCliqueAoFim() {
-        assertEquals(30.14, timings().generalEfficiency(8336.7), 0.01)
+        assertEquals(27.96, timings().generalEfficiency(2779.072), 0.01)
     }
 
     @Test
-    fun eficienciaDoServidor_usaOProcessamentoRealInformadoPorEle() {
-        assertEquals(46.24, timings().serverEfficiency(8336.7)!!, 0.01)
-        assertEquals(30.39, timings().windowEfficiency(8336.7), 0.01)
+    fun eficienciaNoServidor_usaOTempoReportadoPorEle() {
+        assertEquals(21.27, timings().serverEfficiency(2779.072)!!, 0.01)
+        assertEquals(31.29, timings().windowEfficiency(2779.072), 0.01)
     }
 
     @Test
     fun temposZerados_naoViramNaN() {
-        val zerado = timings(totalMs = 0, serverWindowMs = 0, serverProcessingMs = 0, serverAudioMs = null)
+        val zerado = timings(
+            totalMs = 0, serverWindowMs = 0, serverProcessingMs = 0,
+            uploadMs = 0, preparationMs = 0, serverAudioMs = null
+        )
         assertTrue(zerado.generalEfficiency(0.0).isFinite())
         assertTrue(zerado.windowEfficiency(0.0).isFinite())
         assertTrue(zerado.serverEfficiency(0.0)!!.isFinite())
     }
 
     @Test
-    fun linhasDoRelatorio_mostramATotal_ajanela_oProcessamentoEaRede() {
-        val linhas = timings().reportLines(8336.7)
-        assertTrue(linhas.any { it == "Tempo total (clique -> fim): 276.6s" })
+    fun linhasDoRelatorio_mostramATotal_aPreparacao_oEnvio_aJanelaEOProcessamento() {
+        val linhas = timings().reportLines(2779.072)
+        assertTrue(linhas.any { it == "Tempo total (clique -> fim): 99.4s" })
         assertTrue(
             linhas.any {
-                it.contains("preparação local") && it.contains("20.4s") &&
-                    it.contains("1º arquivo pronto em 2.3s")
+                it.contains("preparação local") && it.contains("10.4s") &&
+                    it.contains("1 arquivo") && it.contains("1º arquivo pronto em 10.6s")
             }
         )
-        assertTrue(linhas.any { it.contains("janela de envio + servidor") && it.contains("274.3s") })
+        assertTrue(linhas.any { it.contains("janela de envio + servidor") && it.contains("88.8s") })
         assertTrue(
             linhas.any {
-                it.contains("processamento no servidor") && it.contains("180.3s") && it.contains("3 arquivo")
+                it.contains("processamento no servidor") && it.contains("130.6s") && it.contains("1 arquivo")
             }
         )
-        assertTrue(linhas.any { it.contains("rede dentro da janela") && it.contains("94.0s") })
-
-        val eficienciaServidor = linhas.first { it.startsWith("Eficiência do servidor") }
+        val eficienciaServidor = linhas.first { it.startsWith("Eficiência no servidor") }
         val valor = eficienciaServidor.substringAfter(": ").removeSuffix("x").toDouble()
-        assertEquals(8336.7 / 180.3, valor, 0.01)
+        assertEquals(2779.072 / 130.6, valor, 0.01)
     }
 
     @Test
-    fun semTemposDoServidor_oRelatorioDizQueNaoFoiInformado() {
-        val linhas = timings(serverProcessingMs = null, serverProcessingFiles = 0).reportLines(8336.7)
-        assertTrue(linhas.any { it.contains("processamento no servidor: não informado") })
-        assertFalse(linhas.any { it.startsWith("Eficiência do servidor") })
-        assertTrue(linhas.any { it.startsWith("Eficiência da janela de envio+servidor") })
+    fun casoDeTresArquivos_somaPreparacaoEProcessamento() {
+        val tres = timings(
+            totalMs = 276_600,
+            firstRequestMs = 2_300,
+            preparationMs = 20_400,
+            preparedFiles = 3,
+            uploadMs = 96_300,
+            serverWindowMs = 274_300,
+            serverProcessingMs = 178_800,
+            serverProcessingFiles = 3,
+            serverAudioMs = 8_337_210
+        )
+        val linhas = tres.reportLines(8337.2)
+        assertTrue(linhas.any { it.contains("20.4s somando 3 arquivo(s)") })
+        assertTrue(linhas.any { it.contains("envio pela rede (upload dos arquivos): 96.3s") })
+        assertTrue(linhas.any { it.contains("processamento no servidor") && it.contains("178.8s") && it.contains("3 arquivo") })
+        assertEquals(30.14, tres.generalEfficiency(8337.2), 0.01)
+    }
+
+    @Test
+    fun acumulador_medeOEnvioDoPrimeiroEnvioAoUltimoByte() {
+        val acumulador = MutableTranscriptionRunTimings()
+        acumulador.recordRequestStarted(5_000)
+        acumulador.recordRequestStarted(6_000)   // 2ª requisição em paralelo
+        acumulador.recordUploadWritten(12_000)
+        acumulador.recordUploadWritten(9_000)    // fora de ordem: vale o MAIOR
+        val snap = acumulador.snapshot(totalMs = 20_000, firstRequestMs = 4_000, serverWindowMs = 15_000)
+        assertEquals(7_000L, snap.uploadMs)
+    }
+
+    @Test
+    fun acumulador_semMedicaoDeEnvio_naoInventa() {
+        val acumulador = MutableTranscriptionRunTimings()
+        acumulador.recordRequestStarted(5_000)
+        val snap = acumulador.snapshot(totalMs = 20_000, firstRequestMs = 4_000, serverWindowMs = 15_000)
+        assertNull(snap.uploadMs)
     }
 
     @Test
@@ -133,6 +176,6 @@ class TranscriptionRunTimingsTest {
         assertEquals(0, snap.preparedFiles)
         assertNull(snap.serverProcessingMs)
         assertNull(snap.serverAudioMs)
-        assertNull(snap.networkMs)
+        assertNull(snap.uploadMs)
     }
 }
