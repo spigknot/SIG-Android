@@ -7,7 +7,6 @@ import org.json.JSONObject
  * Le/escreve a configuracao (base URL, modelo, proposito) e resolve o modelo
  * selecionado. Nao faz HTTP nem contem UI.
  */
-
 enum class TextModelPurpose {
     HISTORY,
     STATEMENT,
@@ -17,6 +16,13 @@ object ModelServerStore {
 
     const val SERVER_GEMMA_NAME = "servidor (gemma-4-26B-A4B-abliterated)"
     const val SERVER_GEMMA_MODEL = "gemma4"
+    const val SERVER_QWEN_NAME = "servidor (qwen-2.5-3B-Instruct-Abliterated)"
+    const val SERVER_QWEN_MODEL = "qwen_2.5_3b"
+
+    /** Teto de saida FIXO autorizado para o Qwen (regra do usuario). O Gemma
+     * continua sem `max_tokens` declarado: o TranscriptAssistantClient mede o
+     * dele no /tokenize a cada requisicao. */
+    const val SERVER_QWEN_MAX_TOKENS = 16384
 
     data class Config(
         val name: String,
@@ -35,7 +41,7 @@ object ModelServerStore {
     fun defaultConfig() = selectedConfig(TextModelPurpose.HISTORY)
 
     fun readConfigs(purpose: TextModelPurpose = TextModelPurpose.HISTORY): List<Config> {
-        val available = mutableListOf(serverGemma(), proxyConfig())
+        val available = mutableListOf(serverGemma(), serverQwen(), proxyConfig())
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrok()
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrokNonReasoning()
         if (GrokApiSettings.isPlausibleDeepseekKey()) available += directDeepseek()
@@ -75,6 +81,7 @@ object ModelServerStore {
         GrokApiSettings.GROK_NON_REASONING_TEXT_NAME -> directGrokNonReasoning()
         GrokApiSettings.DEEPSEEK_TEXT_NAME -> directDeepseek(reasoning)
         SERVER_GEMMA_NAME -> serverGemma()
+        SERVER_QWEN_NAME -> serverQwen()
         else -> proxyConfig()
     }
 
@@ -90,16 +97,40 @@ object ModelServerStore {
         )
     }
 
-    private fun serverGemma() = Config(
+    private fun serverGemma() = localServerConfig(
         SERVER_GEMMA_NAME,
         ServiceEndpoints.SERVER_GEMMA,
+        SERVER_GEMMA_MODEL,
+    )
+
+    private fun serverQwen() = localServerConfig(
+        SERVER_QWEN_NAME,
+        ServiceEndpoints.SERVER_QWEN,
+        SERVER_QWEN_MODEL,
+        SERVER_QWEN_MAX_TOKENS,
+    )
+
+    /** Parametros de texto dos modelos do servidor local — fonte unica.
+     *
+     * Regra do usuario: os parametros do Qwen sao IDENTICOS aos do Gemma; so o
+     * `model` muda (e o `max_tokens`, quando o modelo tem teto proprio). Ter
+     * uma fonte unica evita que os dois conjuntos divirjam. */
+    private fun localServerConfig(
+        name: String,
+        url: String,
+        model: String,
+        maxTokens: Int? = null,
+    ): Config = Config(
+        name,
+        url,
         JSONObject()
-            .put("model", SERVER_GEMMA_MODEL)
+            .put("model", model)
             .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
             .put("temperature", 0.0)
             .put("seed", 1)
             .put("top_k", 1)
-            .put("top_p", 1),
+            .put("top_p", 1)
+            .apply { if (maxTokens != null) put("max_tokens", maxTokens) },
         provider = "servidor",
     )
 

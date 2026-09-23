@@ -261,7 +261,11 @@ object TranscriptAssistantClient {
             payload.put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put("content", systemPrompt))
                 .put(JSONObject().put("role", "user").put("content", transcript)))
-            payload.put("max_tokens", countInputTokens(client, serverConfig, systemPrompt, transcript))
+            // Teto declarado no catalogo (ex.: qwen_2.5_3b = 16384) prevalece;
+            // sem declaracao (gemma4) medimos o input no /tokenize.
+            if (!payload.has("max_tokens")) {
+                payload.put("max_tokens", countInputTokens(client, serverConfig, systemPrompt, transcript))
+            }
         } else {
             payload.put(
                 "input",

@@ -21,6 +21,7 @@ class ServiceEndpointsTest {
         assertEquals("wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference", ServiceEndpoints.ALIBABA_STT_WEBSOCKET)
         assertEquals("http://servidor:8500", ServiceEndpoints.IA_PROXY)
         assertEquals("http://servidor:8400/v1/chat/completions", ServiceEndpoints.SERVER_GEMMA)
+        assertEquals("http://servidor:8402/v1/chat/completions", ServiceEndpoints.SERVER_QWEN)
         assertEquals("https://api.x.ai/v1/responses", ServiceEndpoints.XAI_RESPONSES)
         assertEquals("https://api.deepseek.com/chat/completions", ServiceEndpoints.DEEPSEEK_CHAT_COMPLETIONS)
     }

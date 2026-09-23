@@ -36,6 +36,12 @@ class RequestModelLabelTest {
             parameters = JSONObject().put("model", ModelServerStore.SERVER_GEMMA_MODEL),
             provider = "servidor",
         )
+        val qwen = ModelServerStore.Config(
+            name = ModelServerStore.SERVER_QWEN_NAME,
+            url = "http://servidor:8402/v1/chat/completions",
+            parameters = JSONObject().put("model", ModelServerStore.SERVER_QWEN_MODEL),
+            provider = "servidor",
+        )
         val deepseek = ModelServerStore.Config(
             name = GrokApiSettings.DEEPSEEK_TEXT_NAME,
             url = "https://example.test",
@@ -43,6 +49,7 @@ class RequestModelLabelTest {
         )
 
         assertEquals("servidor", RequestModelLabel.from(server))
+        assertEquals("servidor", RequestModelLabel.from(qwen))
         assertEquals("deepseek-flash", RequestModelLabel.from(deepseek))
     }
 }

@@ -221,6 +221,101 @@ class TranscriptAssistantClientTest {
         }
     }
 
+    @Test
+    fun servidorQwenKeepsDeclaredMaxTokensWithoutTokenizeCall() {
+        MockWebServer().use { server ->
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"choices":[{"message":{"content":"Histórico do qwen"}}]}"""
+                )
+            )
+            val result = AtomicReference<Result<String>>()
+            val completed = CountDownLatch(1)
+            val config = ModelServerStore.Config(
+                name = ModelServerStore.SERVER_QWEN_NAME,
+                url = server.url("/v1/chat/completions").toString(),
+                parameters = JSONObject()
+                    .put("model", ModelServerStore.SERVER_QWEN_MODEL)
+                    .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+                    .put("temperature", 0.0)
+                    .put("seed", 1)
+                    .put("top_k", 1)
+                    .put("top_p", 1)
+                    .put("max_tokens", ModelServerStore.SERVER_QWEN_MAX_TOKENS),
+                provider = "servidor",
+            )
+
+            TranscriptAssistantClient.requestHistory(
+                client = OkHttpClient(),
+                serverConfig = config,
+                transcript = "transcrição",
+                historySystemPrompt = "sistema",
+                historyUserPrompt = "usuário",
+            ) {
+                result.set(it)
+                completed.countDown()
+            }
+
+            assertTrue(completed.await(5, TimeUnit.SECONDS))
+            assertEquals("Histórico do qwen", result.get().getOrThrow())
+            assertEquals(1, server.requestCount)
+            val body = JSONObject(server.takeRequest().body.readUtf8())
+            assertEquals(ModelServerStore.SERVER_QWEN_MODEL, body.optString("model"))
+            assertEquals(ModelServerStore.SERVER_QWEN_MAX_TOKENS, body.optInt("max_tokens"))
+            assertTrue(!body.getJSONObject("chat_template_kwargs").optBoolean("enable_thinking"))
+            assertEquals(0.0, body.optDouble("temperature"), 0.0)
+            assertEquals(1, body.optInt("seed"))
+            assertEquals(1, body.optInt("top_k"))
+            assertEquals(1, body.optInt("top_p"))
+            assertEquals(2, body.getJSONArray("messages").length())
+        }
+    }
+
+    @Test
+    fun servidorWithoutDeclaredMaxTokensMeasuresInputOnTokenize() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"count":10}"""))
+            server.enqueue(
+                MockResponse().setBody(
+                    """{"choices":[{"message":{"content":"Histórico do gemma"}}]}"""
+                )
+            )
+            val result = AtomicReference<Result<String>>()
+            val completed = CountDownLatch(1)
+            val config = ModelServerStore.Config(
+                name = ModelServerStore.SERVER_GEMMA_NAME,
+                url = server.url("/v1/chat/completions").toString(),
+                parameters = JSONObject()
+                    .put("model", ModelServerStore.SERVER_GEMMA_MODEL)
+                    .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+                    .put("temperature", 0.0)
+                    .put("seed", 1)
+                    .put("top_k", 1)
+                    .put("top_p", 1),
+                provider = "servidor",
+            )
+
+            TranscriptAssistantClient.requestHistory(
+                client = OkHttpClient(),
+                serverConfig = config,
+                transcript = "transcrição",
+                historySystemPrompt = "sistema",
+                historyUserPrompt = "usuário",
+            ) {
+                result.set(it)
+                completed.countDown()
+            }
+
+            assertTrue(completed.await(5, TimeUnit.SECONDS))
+            assertEquals("Histórico do gemma", result.get().getOrThrow())
+            assertEquals(2, server.requestCount)
+            assertTrue(server.takeRequest().path.orEmpty().endsWith("/tokenize"))
+            val body = JSONObject(server.takeRequest().body.readUtf8())
+            assertEquals(ModelServerStore.SERVER_GEMMA_MODEL, body.optString("model"))
+            assertEquals(15, body.optInt("max_tokens"))
+        }
+    }
+
     private fun call(primaryUrl: Any, fallbackUrl: Any): String {
         val primary = Request.Builder().url(primaryUrl.toString()).build()
         val fallback = Request.Builder().url(fallbackUrl.toString()).build()

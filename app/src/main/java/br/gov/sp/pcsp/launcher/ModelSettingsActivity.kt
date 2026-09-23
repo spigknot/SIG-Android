@@ -123,7 +123,9 @@ class ModelSettingsActivity : AppCompatActivity() {
     }
 
     private fun modelLabel(config: ModelServerStore.Config): String = when {
-        config.name == ModelServerStore.SERVER_GEMMA_NAME ->
+        config.provider == "servidor" ||
+            config.name == ModelServerStore.SERVER_GEMMA_NAME ||
+            config.name == ModelServerStore.SERVER_QWEN_NAME ->
             "${config.name} (${config.modelName})"
         else -> config.name
     }
