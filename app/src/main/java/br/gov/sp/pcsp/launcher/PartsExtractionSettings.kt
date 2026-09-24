@@ -12,7 +12,8 @@ object PartsExtractionSettings {
 
     const val MODEL_PROXY = GrokApiSettings.IA_PROXY_NAME
     const val MODEL_PROXY_DEEPSEEK = GrokApiSettings.IA_PROXY_DEEPSEEK_NAME
-    const val MODEL_GROK = "grok-4.6"
+    /** Fonte única do Grok de texto usada nas partes (alias grok-latest). */
+    const val MODEL_GROK = GrokApiSettings.TEXT_NAME
     const val MODEL_GROK_NON_REASONING = "grok-4.20-0309-non-reasoning"
     /** Nome atual do modelo DeepSeek (fonte única: GrokApiSettings). */
     const val MODEL_DEEPSEEK = GrokApiSettings.DEEPSEEK_TEXT_NAME
@@ -46,6 +47,11 @@ object PartsExtractionSettings {
             "grok-4.20-non-reasoning" -> MODEL_GROK_NON_REASONING
             "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp" -> MODEL_DEEPSEEK
             "IA-Proxy (deepseek-v4-flash)", "IA-Proxy (deepseek-v4-pro)" -> MODEL_PROXY
+            // Seleções salvas com os nomes ANTIGOS dos modelos migram sozinhas
+            // (grok-4.6 -> alias; nomes longos do servidor -> nomes curtos).
+            "grok-4.6" -> MODEL_GROK
+            ModelServerStore.SERVER_GEMMA_LEGACY_NAME -> ModelServerStore.SERVER_GEMMA_NAME
+            ModelServerStore.SERVER_QWEN_LEGACY_NAME -> ModelServerStore.SERVER_QWEN_NAME
             else -> stored
         }
         if (migrated != stored) selectModel(context, migrated)

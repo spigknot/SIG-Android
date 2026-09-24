@@ -36,4 +36,29 @@ class GrokApiSettingsTest {
         assertFalse(GrokApiSettings.isPlausibleMetamuseKey(valid48 + "X"))
         assertFalse(GrokApiSettings.isPlausibleMetamuseKey("Bearer "))
     }
+
+    /** Vacina: seleções salvas com nomes ANTIGOS migram sozinhas — sem a
+     *  migração o ModelServerStore.readConfigs descarta o valor salvo e cai
+     *  no primeiro da lista (gemma), trocando o modelo escolhido em silêncio. */
+    @Test
+    fun textSelection_migratesLegacyModelNames() {
+        assertEquals("grok-latest", GrokApiSettings.normalizeTextSelection("grok-4.6"))
+        assertEquals(
+            ModelServerStore.SERVER_GEMMA_NAME,
+            GrokApiSettings.normalizeTextSelection(ModelServerStore.SERVER_GEMMA_LEGACY_NAME)
+        )
+        assertEquals(
+            ModelServerStore.SERVER_QWEN_NAME,
+            GrokApiSettings.normalizeTextSelection(ModelServerStore.SERVER_QWEN_LEGACY_NAME)
+        )
+        // O 4.20 (não-reasoning) permanece igual; nomes válidos não mudam.
+        assertEquals(
+            GrokApiSettings.GROK_NON_REASONING_TEXT_NAME,
+            GrokApiSettings.normalizeTextSelection(GrokApiSettings.GROK_NON_REASONING_TEXT_NAME)
+        )
+        assertEquals(
+            GrokApiSettings.IA_PROXY_NAME,
+            GrokApiSettings.normalizeTextSelection(GrokApiSettings.IA_PROXY_NAME)
+        )
+    }
 }

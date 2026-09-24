@@ -13,7 +13,12 @@ object RequestModelLabel {
 
     private fun displayModel(value: String): String {
         val model = value.trim()
-        return if (model.startsWith("grok-", ignoreCase = true)) {
+        // "grok-latest" é alias, não versão: mantém o nome cru; "grok-4.x..."
+        // continua virando "Grok-4.x..." como antes.
+        val versioned = model.startsWith("grok-", ignoreCase = true) &&
+            model.length > "grok-".length &&
+            model["grok-".length].isDigit()
+        return if (versioned) {
             "Grok-${model.substringAfter('-')}"
         } else {
             model

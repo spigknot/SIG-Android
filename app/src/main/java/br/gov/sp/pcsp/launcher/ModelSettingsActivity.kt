@@ -113,7 +113,7 @@ class ModelSettingsActivity : AppCompatActivity() {
     private fun populateText(purpose: TextModelPurpose, controls: TextModelControls) {
         controls.modelGroup.removeAllViews()
         ModelServerStore.readConfigs(purpose).forEach { config ->
-            controls.modelGroup.addView(radio(modelLabel(config), config.selected) {
+            controls.modelGroup.addView(radio(config.name, config.selected) {
                 ModelServerStore.select(purpose, config.name)
                 refreshVisibility()
             })
@@ -122,13 +122,9 @@ class ModelSettingsActivity : AppCompatActivity() {
         refreshTextControls(purpose, controls)
     }
 
-    private fun modelLabel(config: ModelServerStore.Config): String = when {
-        config.provider == "servidor" ||
-            config.name == ModelServerStore.SERVER_GEMMA_NAME ||
-            config.name == ModelServerStore.SERVER_QWEN_NAME ->
-            "${config.name} (${config.modelName})"
-        else -> config.name
-    }
+    // O nome dos modelos do servidor local já embute o modelo
+    // ("servidor (gemma4)"), então o rótulo é o próprio nome; os demais
+    // configs também usam name direto — não há mais sufixo "(modelo)".
 
     private fun populateProxyModelGroup(group: RadioGroup) {
         group.removeAllViews()
@@ -218,7 +214,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                 PartsExtractionSettings.selectModel(this, it)
             }
         configs.forEach { config ->
-            partsModelGroup.addView(radio(modelLabel(config), config.name == resolvedModel) {
+            partsModelGroup.addView(radio(config.name, config.name == resolvedModel) {
                 PartsExtractionSettings.selectModel(this, config.name)
                 refreshVisibility()
             })

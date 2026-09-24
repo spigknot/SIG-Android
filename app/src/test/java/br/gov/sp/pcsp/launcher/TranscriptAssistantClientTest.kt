@@ -136,7 +136,7 @@ class TranscriptAssistantClientTest {
             val body = JSONObject(request.body.readUtf8())
             assertTrue(body.has("input"))
             assertTrue(!body.has("messages"))
-            assertEquals("grok-4.6", body.optString("model"))
+            assertEquals("grok-latest", body.optString("model"))
             assertTrue(request.getHeader("Authorization") == null)
         }
     }

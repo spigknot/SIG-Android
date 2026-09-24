@@ -13,7 +13,7 @@ class RequestModelLabelTest {
             parameters = JSONObject().put("model", GrokApiSettings.TEXT_NAME),
         )
 
-        assertEquals("Grok-4.6", RequestModelLabel.from(config))
+        assertEquals("grok-latest", RequestModelLabel.from(config))
     }
 
     @Test
@@ -25,7 +25,7 @@ class RequestModelLabelTest {
             isProxy = true,
         )
 
-        assertEquals("IA-Proxy/Grok-4.6", RequestModelLabel.from(config))
+        assertEquals("IA-Proxy/grok-latest", RequestModelLabel.from(config))
     }
 
     @Test

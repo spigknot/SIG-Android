@@ -14,10 +14,16 @@ enum class TextModelPurpose {
 
 object ModelServerStore {
 
-    const val SERVER_GEMMA_NAME = "servidor (gemma-4-26B-A4B-abliterated)"
+    /** Referência exibida: nome curto já com o modelo embutido (regra do
+     *  usuário, 23/09). As REQUISIÇÕES continuam mandando
+     *  `SERVER_GEMMA_MODEL`; o nome longo antigo só existe para migrar prefs. */
+    const val SERVER_GEMMA_NAME = "servidor (gemma4)"
     const val SERVER_GEMMA_MODEL = "gemma4"
-    const val SERVER_QWEN_NAME = "servidor (qwen-2.5-3B-Instruct-Abliterated)"
-    const val SERVER_QWEN_MODEL = "qwen_2.5_3b"
+    const val SERVER_GEMMA_LEGACY_NAME = "servidor (gemma-4-26B-A4B-abliterated)"
+    const val SERVER_QWEN_NAME = "servidor (qwen2.5)"
+    /** `model` enviado nas requisições do Qwen (regra do usuário, 23/09). */
+    const val SERVER_QWEN_MODEL = "qwen2.5-7b"
+    const val SERVER_QWEN_LEGACY_NAME = "servidor (qwen-2.5-3B-Instruct-Abliterated)"
 
     /** Teto de saida FIXO autorizado para o Qwen (regra do usuario). O Gemma
      * continua sem `max_tokens` declarado: o TranscriptAssistantClient mede o
@@ -80,8 +86,8 @@ object ModelServerStore {
         GrokApiSettings.TEXT_NAME -> directGrok(reasoning)
         GrokApiSettings.GROK_NON_REASONING_TEXT_NAME -> directGrokNonReasoning()
         GrokApiSettings.DEEPSEEK_TEXT_NAME -> directDeepseek(reasoning)
-        SERVER_GEMMA_NAME -> serverGemma()
-        SERVER_QWEN_NAME -> serverQwen()
+        SERVER_GEMMA_NAME, SERVER_GEMMA_LEGACY_NAME -> serverGemma()
+        SERVER_QWEN_NAME, SERVER_QWEN_LEGACY_NAME -> serverQwen()
         else -> proxyConfig()
     }
 

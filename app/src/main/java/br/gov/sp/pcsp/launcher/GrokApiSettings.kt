@@ -11,7 +11,9 @@ object GrokApiSettings {
     const val ELEVENLABS_TRANSCRIPTION_NAME = "ElevenLabs Scribe v2 Realtime"
     const val MUSE_TRANSCRIPTION_NAME = "Muse Voice"
     const val ALIBABA_TRANSCRIPTION_NAME = "Alibaba Fun ASR/Qwen"
-    const val TEXT_NAME = "grok-4.6"
+    /** Alias GENÉRICO do Grok 4.7 (antes "grok-4.6"): entra no `model` de
+     *  TODAS as requisições — diretas e via IA-Proxy. O 4.20 não muda. */
+    const val TEXT_NAME = "grok-latest"
     const val GROK_NON_REASONING_TEXT_NAME = "grok-4.20-0309-non-reasoning"
     /** Nome ATUAL do modelo DeepSeek. A API oficial orienta usar `deepseek-flash`:
      *  os nomes antigos (deepseek-v4-flash/-pro) continuam aceitos, mas atendem
@@ -277,12 +279,18 @@ object GrokApiSettings {
         preferences().edit().putString(key, normalizeTextSelection(name)).apply()
     }
 
-    private fun normalizeTextSelection(stored: String): String = when (stored) {
+    /** vira "grok-latest" e os nomes longos do servidor local encurtaram —
+     *  sem a migração o readConfigs DESCARTA o valor salvo e cai no primeiro
+     *  da lista (gemma), trocando o modelo escolhido em silêncio. */
+    internal fun normalizeTextSelection(stored: String): String = when (stored) {
             IA_PROXY_DEEPSEEK_NAME, "IA-Proxy (grok-4.6)" -> IA_PROXY_NAME
             "IA-Proxy (deepseek-v4-flash)", "IA-Proxy (deepseek-v4-pro)" -> IA_PROXY_NAME
             "grok-4.20-non-reasoning" -> GROK_NON_REASONING_TEXT_NAME
             // Nomes antigos do DeepSeek (aposentados) migram para o nome atual.
             "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp" -> DEEPSEEK_TEXT_NAME
+            "grok-4.6" -> TEXT_NAME
+            ModelServerStore.SERVER_GEMMA_LEGACY_NAME -> ModelServerStore.SERVER_GEMMA_NAME
+            ModelServerStore.SERVER_QWEN_LEGACY_NAME -> ModelServerStore.SERVER_QWEN_NAME
             else -> stored
         }
     fun selectText(name: String) {
