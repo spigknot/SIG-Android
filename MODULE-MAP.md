@@ -53,6 +53,7 @@ também é bloqueado.
 | `FfmpegInsertAudioActivity.kt` | Inserir áudio em vídeo. |
 | `FfmpegRotateVideoActivity.kt` | Girar vídeo. |
 | `FfmpegCleanAudioActivity.kt` | Limpar/melhorar áudio. |
+| `TextoActivity.kt` | Ferramenta Texto: tradução Hy-MT2 (entrada, Traduzir, saída). |
 
 ## B. Views customizadas
 
@@ -102,6 +103,7 @@ também é bloqueado.
 | `ServiceEndpoints.kt` | Endpoints oficiais embutidos no app. |
 | `LittleEndianIo.kt` | Leitura/escrita little-endian (WAV/pacotes). |
 | `GraniteBinarySupport.kt` | Byte↔codepoint, cadeia de erro, WAV 16k mono, floats. |
+| `HyMt2Translator.kt` | Tradução Hy-MT2: prompt oficial, payload e leitura da resposta. |
 
 ## D. Motores locais (inferência)
 

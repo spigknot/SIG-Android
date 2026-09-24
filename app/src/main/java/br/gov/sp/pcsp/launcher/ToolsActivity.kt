@@ -42,6 +42,9 @@ class ToolsActivity : AppCompatActivity() {
         findViewById<View>(R.id.button_transcription).setOnClickListener {
             startActivity(Intent(this, RemoteSttActivity::class.java).putExtra(RemoteSttActivity.EXTRA_MODE, "transcription"))
         }
+        findViewById<View>(R.id.button_texto).setOnClickListener {
+            startActivity(Intent(this, TextoActivity::class.java))
+        }
     }
 
     override fun onResume() {
