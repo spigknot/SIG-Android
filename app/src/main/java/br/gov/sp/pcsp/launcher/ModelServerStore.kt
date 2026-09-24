@@ -25,11 +25,6 @@ object ModelServerStore {
     const val SERVER_QWEN_MODEL = "qwen2.5-7b"
     const val SERVER_QWEN_LEGACY_NAME = "servidor (qwen-2.5-3B-Instruct-Abliterated)"
 
-    /** Teto de saida FIXO autorizado para o Qwen (regra do usuario). O Gemma
-     * continua sem `max_tokens` declarado: o TranscriptAssistantClient mede o
-     * dele no /tokenize a cada requisicao. */
-    const val SERVER_QWEN_MAX_TOKENS = 16384
-
     data class Config(
         val name: String,
         val url: String,
@@ -113,19 +108,17 @@ object ModelServerStore {
         SERVER_QWEN_NAME,
         ServiceEndpoints.SERVER_QWEN,
         SERVER_QWEN_MODEL,
-        SERVER_QWEN_MAX_TOKENS,
     )
 
     /** Parametros de texto dos modelos do servidor local — fonte unica.
      *
      * Regra do usuario: os parametros do Qwen sao IDENTICOS aos do Gemma; so o
-     * `model` muda (e o `max_tokens`, quando o modelo tem teto proprio). Ter
-     * uma fonte unica evita que os dois conjuntos divirjam. */
+     * `model` (e a porta) muda. `max_tokens` NUNCA vai aqui: os dois medem o
+     * input no /tokenize com margem x1.5 (TranscriptAssistantClient). */
     private fun localServerConfig(
         name: String,
         url: String,
         model: String,
-        maxTokens: Int? = null,
     ): Config = Config(
         name,
         url,
@@ -135,8 +128,7 @@ object ModelServerStore {
             .put("temperature", 0.0)
             .put("seed", 1)
             .put("top_k", 1)
-            .put("top_p", 1)
-            .apply { if (maxTokens != null) put("max_tokens", maxTokens) },
+            .put("top_p", 1),
         provider = "servidor",
     )
 

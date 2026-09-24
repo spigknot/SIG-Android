@@ -222,8 +222,9 @@ class TranscriptAssistantClientTest {
     }
 
     @Test
-    fun servidorQwenKeepsDeclaredMaxTokensWithoutTokenizeCall() {
+    fun servidorQwenMeasuresMaxTokensOnTokenizeLikeGemma() {
         MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"count":20}"""))
             server.enqueue(
                 MockResponse().setBody(
                     """{"choices":[{"message":{"content":"Histórico do qwen"}}]}"""
@@ -240,8 +241,7 @@ class TranscriptAssistantClientTest {
                     .put("temperature", 0.0)
                     .put("seed", 1)
                     .put("top_k", 1)
-                    .put("top_p", 1)
-                    .put("max_tokens", ModelServerStore.SERVER_QWEN_MAX_TOKENS),
+                    .put("top_p", 1),
                 provider = "servidor",
             )
 
@@ -258,10 +258,17 @@ class TranscriptAssistantClientTest {
 
             assertTrue(completed.await(5, TimeUnit.SECONDS))
             assertEquals("Histórico do qwen", result.get().getOrThrow())
-            assertEquals(1, server.requestCount)
+            // Igual ao gemma4: 1º mede o input no /tokenize, 2º faz o chat.
+            assertEquals(2, server.requestCount)
+            val tokenize = server.takeRequest()
+            assertTrue(tokenize.path.orEmpty().endsWith("/tokenize"))
+            assertEquals(
+                "sistema\nusuário",
+                JSONObject(tokenize.body.readUtf8()).optString("content")
+            )
             val body = JSONObject(server.takeRequest().body.readUtf8())
             assertEquals(ModelServerStore.SERVER_QWEN_MODEL, body.optString("model"))
-            assertEquals(ModelServerStore.SERVER_QWEN_MAX_TOKENS, body.optInt("max_tokens"))
+            assertEquals(30, body.optInt("max_tokens")) // round(20 * 1.5)
             assertTrue(!body.getJSONObject("chat_template_kwargs").optBoolean("enable_thinking"))
             assertEquals(0.0, body.optDouble("temperature"), 0.0)
             assertEquals(1, body.optInt("seed"))
