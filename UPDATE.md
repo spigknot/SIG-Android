@@ -197,6 +197,7 @@ a fonte da verdade e deve evoluir com a prática.
 | Dependência nativa baixando do Drive | `NativeDependencyManager.kt` com URL antiga | usar `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-<abi>.zip` |
 | Transcrição no emulador morre em segundos com `UnknownHostException: Unable to resolve host "servidor"` | o nome `servidor` só existe no arquivo hosts do PC (`100.70.207.12`); o emulador tem resolução própria e não enxerga esse arquivo (e não dá para editar `/system/etc/hosts`: build de produção) | subir o emulador com `-dns-server 100.100.100.100` (o MagicDNS responde o nome curto E o FQDN) e conferir com `adb shell ping -c 2 -W 3 servidor` antes de testar o APK |
 | `EPERM` ao salvar TXT do Whisper/Ocorrência ou ao enviar texto para gerenciador de arquivos | Android com armazenamento segmentado: a pasta pública `SIG` não está autorizada e `ACTION_SEND` recebeu somente `EXTRA_TEXT` | usar o diretório externo privado como fallback e compartilhar um `.txt` real por `FileProvider`/`EXTRA_STREAM`; exportar para a pasta escolhida via SAF |
+| Commit saiu com a MENSAGEM de outra mudança (conteúdo correto) | script de commit reaproveitado de uma mudança anterior sem reescrever a mensagem | escrever a mensagem `Versao YYYYMMDD_NNN: ...` NOVO padrão no script a cada uso — corrigir depois exige force push (proibido) |
 
 ---
 

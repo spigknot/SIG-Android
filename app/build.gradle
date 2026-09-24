@@ -77,8 +77,8 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 62
-        versionName "1.499"
+        versionCode 63
+        versionName "1.500"
 
         if (buildNativeComponents) {
             ndk {
