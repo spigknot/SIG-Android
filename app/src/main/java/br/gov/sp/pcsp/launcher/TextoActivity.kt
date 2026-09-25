@@ -98,6 +98,7 @@ class TextoActivity : AppCompatActivity() {
         buttonLanguage.text = selectedTarget.label
         selectedBackend = savedBackend()
         buttonBackend.text = selectedBackend.shortLabel
+        syncBackendWithModel()
         appendLog("Ferramenta Texto pronta.")
         appendLog(
             "Modelo: ${selectedModel!!.label} | Backend: ${selectedBackend.shortLabel} | " +
@@ -166,6 +167,7 @@ class TextoActivity : AppCompatActivity() {
         selectedModel = model
         buttonModel.text = model.label
         appendLog("Modelo selecionado: ${model.label}")
+        syncBackendWithModel()
     }
 
     private fun confirmModelDownload(model: HyMt2Model) {
@@ -249,15 +251,22 @@ class TextoActivity : AppCompatActivity() {
     }
 
     private fun showBackendMenu() {
+        val model = selectedModel ?: return
+        val gpuDisponivel = HyMt2ModelSupport.supportsGpu(model.fileName)
         PopupMenu(this, buttonBackend).apply {
-            HyMt2Backend.values().forEach { backend -> menu.add(backend.label) }
-            setOnMenuItemClickListener { item ->
-                val backend = HyMt2Backend.values().first { it.label == item.title.toString() }
-                if (backend == HyMt2Backend.NPU) {
-                    appendLog("Backend NPU: ainda não implementado (usando ${selectedBackend.shortLabel}).")
-                    status.text = "Backend NPU disponível em breve — usando ${selectedBackend.shortLabel}."
-                    return@setOnMenuItemClickListener true
+            HyMt2Backend.values().forEachIndexed { index, backend ->
+                when {
+                    // Sem kernel de GPU no modelo (1.25bit): GPU e NPU nem aparecem.
+                    !gpuDisponivel && backend != HyMt2Backend.CPU -> Unit
+                    // NPU: aparece desabilitado (ainda não implementado).
+                    backend == HyMt2Backend.NPU ->
+                        menu.add(0, index + 1, 0, backend.label).isEnabled = false
+                    else -> menu.add(0, index + 1, 0, backend.label)
                 }
+            }
+            setOnMenuItemClickListener { item ->
+                val backend = HyMt2Backend.values().getOrNull(item.itemId - 1)
+                    ?: return@setOnMenuItemClickListener true
                 if (backend != selectedBackend) {
                     selectedBackend = backend
                     buttonBackend.text = backend.shortLabel
@@ -274,6 +283,22 @@ class TextoActivity : AppCompatActivity() {
         }
     }
 
+    /** Alinha o backend com o modelo escolhido.
+     *
+     * Se o modelo não tem kernel de GPU (1.25bit) e a preferência aponta para
+     * GPU, volta para CPU e avisa — o menu já não oferece GPU nesse caso. */
+    private fun syncBackendWithModel() {
+        val model = selectedModel ?: return
+        if (HyMt2ModelSupport.supportsGpu(model.fileName) || selectedBackend == HyMt2Backend.CPU) return
+        selectedBackend = HyMt2Backend.CPU
+        buttonBackend.text = selectedBackend.shortLabel
+        loadedModelFile = null
+        loadedBackend = null
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(PREF_BACKEND, selectedBackend.name).apply()
+        appendLog("${model.label} não tem kernel de GPU — backend voltou para CPU.")
+    }
+
     /** Backend persistido; valor desconhecido volta para CPU. */
     private fun savedBackend(): HyMt2Backend {
         val name = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -283,13 +308,11 @@ class TextoActivity : AppCompatActivity() {
 
     /** Backend efetivo para um modelo.
      *
-     * O 1.25bit usa tensores STQ1_0, cujo kernel existe SÓ para CPU neste build:
-     * na GPU o OpenCL cai para CPU com cópias (mais lento) e o Vulkan pode
-     * devolver resultado incorreto (aceitou tensores que não sabe decodificar —
-     * visto em campo: saída alucinada, 25/09). Nunca mandamos STQ para GPU;
-     * os modelos Q4_0/Q4_K_M são os que aceleram de verdade. */
+     * O 1.25bit (tensores STQ1_0) não tem kernel de GPU: o menu já não oferece
+     * GPU para ele, e esta guarda cobre o caso de a preferência persistida
+     * apontar para um backend de GPU. */
     private fun effectiveBackend(model: HyMt2Model): HyMt2Backend =
-        if (model.fileName.contains("1.25Bit")) HyMt2Backend.CPU else selectedBackend
+        if (HyMt2ModelSupport.supportsGpu(model.fileName)) selectedBackend else HyMt2Backend.CPU
 
     private fun showLanguageMenu() {
         PopupMenu(this, buttonLanguage).apply {
@@ -386,6 +409,13 @@ class TextoActivity : AppCompatActivity() {
                                 "%.1fs.".format(Locale.US, (SystemClock.elapsedRealtime() - loadStart) / 1000.0)
                         )
                         appendLog("Backend em uso: $backendInUse")
+                        val resumo = HyMt2Native.loadSummary()
+                        if (resumo.isNotBlank()) {
+                            appendLog(
+                                "Memória: " +
+                                    resumo.lines().filter { it.isNotBlank() }.joinToString(" | ")
+                            )
+                        }
                     }
                 }
 
@@ -418,6 +448,10 @@ class TextoActivity : AppCompatActivity() {
                     appendLog(
                         "Tradução pronta em %.1fs.".format(Locale.US, seconds)
                     )
+                    val stats = HyMt2Native.lastStats()
+                    if (stats.isNotBlank()) {
+                        appendLog("Desempenho: $stats")
+                    }
                     status.text = "Tradução pronta."
                 }
             } catch (e: Throwable) {

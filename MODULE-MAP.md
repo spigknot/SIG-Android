@@ -104,6 +104,7 @@ também é bloqueado.
 | `LittleEndianIo.kt` | Leitura/escrita little-endian (WAV/pacotes). |
 | `GraniteBinarySupport.kt` | Byte↔codepoint, cadeia de erro, WAV 16k mono, floats. |
 | `HyMt2Translator.kt` | Tradução Hy-MT2: prompt oficial e template de chat do modelo. |
+| `HyMt2ModelSupport.kt` | Política de backend por modelo do Hy-MT2 (1.25bit sem GPU). |
 | `HyMt2Native.kt` | Ponte JNI do Hy-MT2 (carregar modelo, traduzir, liberar). |
 
 ## D. Motores locais (inferência)

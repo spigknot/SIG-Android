@@ -18,6 +18,8 @@
 
 #include <atomic>
 #include <cctype>
+#include <chrono>
+#include <cstdio>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -37,11 +39,45 @@ static llama_model * g_model = nullptr;
 static llama_context * g_ctx = nullptr;
 static std::string g_last_error;
 static std::string g_backend_desc = "CPU";
+static std::mutex g_summary_mutex;
+static std::string g_load_summary;   // linhas de memória/splits do último carregamento
+static std::string g_last_stats;     // "N tokens em X s (Y tokens/s)" da última geração
+
+/** Acrescenta uma linha qualquer ao resumo (ex.: VRAM do device). */
+static void summary_append_line(const std::string & line) {
+    std::lock_guard<std::mutex> lock(g_summary_mutex);
+    if (!g_load_summary.empty()) g_load_summary += "\n";
+    g_load_summary += line;
+}
+
+/** Guarda as linhas de memória do llama.cpp (tamanhos de buffer) para mostrar na UI. */
+static void summary_capture(const char * text) {
+    if (text == nullptr) return;
+    std::string line(text);
+    if (line.find("model buffer size") == std::string::npos &&
+        line.find("compute buffer size") == std::string::npos &&
+        line.find("graph splits") == std::string::npos) {
+        return;
+    }
+    while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+    summary_append_line(line);
+}
+
+static std::string summary_read() {
+    std::lock_guard<std::mutex> lock(g_summary_mutex);
+    return g_load_summary;
+}
+
+static void summary_reset(const std::string & prefixo) {
+    std::lock_guard<std::mutex> lock(g_summary_mutex);
+    g_load_summary = prefixo;
+}
 
 // Logs do llama.cpp/ggml -> logcat (tag SIGLlama): sem isso o diagnóstico de
 // campo (split de grafo, ops que caem para CPU, devices) fica invisível.
 static void sig_log_callback(enum ggml_log_level level, const char * text, void * /*user_data*/) {
     if (text == nullptr) return;
+    summary_capture(text);
     int priority = ANDROID_LOG_INFO;
     if (level == GGML_LOG_LEVEL_ERROR) priority = ANDROID_LOG_ERROR;
     else if (level == GGML_LOG_LEVEL_WARN) priority = ANDROID_LOG_WARN;
@@ -170,9 +206,13 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
     llama_model_params lparams = llama_model_default_params();
     lparams.n_gpu_layers = 0;
     std::string used_desc = "CPU";
+    ggml_backend_dev_t gpu_dev = nullptr;
 
     if (backendKind != 0) {
-        if (backendKind == 2) configure_vulkan_memory_limit();
+        // EXPERIMENTO 25/09 (b): env vars do whisper DESLIGADAS — suspeita de que
+        // forcem um caminho de shader que o driver Adreno rejeita
+        // (createComputePipeline: ErrorUnknown). Se o teste passar, viram opcionais.
+        // if (backendKind == 2) configure_vulkan_memory_limit();
         std::string device_name;
         ggml_backend_dev_t dev = find_gpu_device(backendKind, &device_name);
         if (dev == nullptr) {
@@ -194,17 +234,43 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
         static ggml_backend_dev_t devices[2] = { nullptr, nullptr };
         devices[0] = dev;
         devices[1] = nullptr;
+        gpu_dev = dev;
         lparams.devices = devices;
         lparams.n_gpu_layers = -1; // todas as camadas no device pedido
         used_desc = std::string(backend_label(backendKind)) + " (" + device_name + ")";
     }
 
+    summary_reset("Device: " + used_desc);
     // Recarregar troca o modelo; libera o anterior só depois de pronto o novo.
-    llama_model * model = llama_model_load_from_file(path, lparams);
+    // try/catch: o driver Adreno pode LANCAR (vk::SystemError) ao criar um shader —
+    // sem catch isso vira SIGABRT e mata o app (visto no Ace 2 Pro, 25/09).
+    llama_model * model = nullptr;
+    try {
+        model = llama_model_load_from_file(path, lparams);
+    } catch (const std::exception & e) {
+        env->ReleaseStringUTFChars(modelPath, path);
+        set_error(std::string("Backend ") + backend_label(backendKind) +
+                  " falhou ao carregar (driver): " + e.what());
+        return JNI_FALSE;
+    } catch (...) {
+        env->ReleaseStringUTFChars(modelPath, path);
+        set_error(std::string("Backend ") + backend_label(backendKind) +
+                  " falhou ao carregar (excecao desconhecida do driver).");
+        return JNI_FALSE;
+    }
     env->ReleaseStringUTFChars(modelPath, path);
     if (model == nullptr) {
         set_error("Falha ao carregar o modelo GGUF (arquivo corrompido ou formato nao suportado).");
         return JNI_FALSE;
+    }
+
+    if (gpu_dev != nullptr) {
+        size_t livre = 0, total = 0;
+        ggml_backend_dev_memory(gpu_dev, &livre, &total);
+        char vram[160];
+        snprintf(vram, sizeof(vram), "VRAM: %.0f MiB livres de %.0f MiB",
+                 livre / 1048576.0, total / 1048576.0);
+        summary_append_line(vram);
     }
 
     llama_context_params cparams = llama_context_default_params();
@@ -221,7 +287,20 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
         cparams.n_threads = nThreads;
         cparams.n_threads_batch = nThreads;
     }
-    llama_context * ctx = llama_init_from_model(model, cparams);
+    llama_context * ctx = nullptr;
+    try {
+        ctx = llama_init_from_model(model, cparams);
+    } catch (const std::exception & e) {
+        llama_model_free(model);
+        set_error(std::string("Backend ") + backend_label(backendKind) +
+                  " falhou ao criar o contexto (driver): " + e.what());
+        return JNI_FALSE;
+    } catch (...) {
+        llama_model_free(model);
+        set_error(std::string("Backend ") + backend_label(backendKind) +
+                  " falhou ao criar o contexto (excecao desconhecida do driver).");
+        return JNI_FALSE;
+    }
     if (ctx == nullptr) {
         llama_model_free(model);
         set_error("Falha ao criar o contexto de inferencia.");
@@ -281,6 +360,9 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
         return nullptr;
     }
 
+    // try/catch: no Vulkan o driver pode lancar (vk::SystemError na criacao de
+    // pipeline) durante a primeira decodificacao — sem catch vira SIGABRT.
+    try {
     const char * prompt_chars = env->GetStringUTFChars(prompt, nullptr);
     if (prompt_chars == nullptr) {
         set_error("Prompt invalido.");
@@ -348,6 +430,7 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
     std::vector<char> piece(512);
     llama_token token = 0;
     int32_t n_out = 0;
+    const auto geracao_inicio = std::chrono::steady_clock::now();
     for (int32_t i = 0; i < max_out; ++i) {
         token = llama_sampler_sample(smpl, g_ctx, -1);
         if (token == eos) break;
@@ -372,6 +455,34 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
 
     llama_sampler_free(smpl);
     g_last_error.clear();
+    {
+        const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - geracao_inicio).count();
+        const double tps = ms > 0 ? (n_out * 1000.0 / (double) ms) : 0.0;
+        char stats[160];
+        snprintf(stats, sizeof(stats), "%d tokens em %.1f s (%.1f tokens/s)",
+                 n_out, ms / 1000.0, tps);
+        g_last_stats = stats;
+    }
     LOGI("geracao concluida: %d tokens de saida (backend=%s)", n_out, g_backend_desc.c_str());
     return env->NewStringUTF(result.c_str());
+    } catch (const std::exception & e) {
+        set_error(std::string("Excecao na inferencia (") + g_backend_desc + "): " + e.what());
+        return nullptr;
+    } catch (...) {
+        set_error(std::string("Excecao desconhecida na inferencia (") + g_backend_desc + ").");
+        return nullptr;
+    }
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadSummary(JNIEnv * env, jobject) {
+    const std::string resumo = summary_read();
+    return env->NewStringUTF(resumo.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_br_gov_sp_pcsp_launcher_HyMt2Native_lastStats(JNIEnv * env, jobject) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    return env->NewStringUTF(g_last_stats.c_str());
 }

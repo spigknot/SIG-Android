@@ -35,5 +35,11 @@ object HyMt2Native {
 
     /** Backend realmente usado no último carregamento (ex.: "GPU Vulkan (Vulkan / Vulkan0)"). */
     external fun backendDescription(): String
+
+    /** Linhas de memória do último carregamento (tamanhos de buffer, VRAM do device). */
+    external fun loadSummary(): String
+
+    /** Estatísticas da última geração (ex.: "9 tokens em 1.2 s (7.4 tokens/s)"). */
+    external fun lastStats(): String
     external fun systemInfo(): String
 }

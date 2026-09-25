@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
  */
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "6"
+    const val COMPONENT_VERSION = "8"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
     private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
@@ -29,14 +29,14 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v6-arm64-v8a.zip",
-            "3b112cfb46b1de2caf033bc0fc130a2bd461d1e6258ed404df7d8de956954105",
-            70_945_466L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v8-arm64-v8a.zip",
+            "3a3134cd06e1be672f0ca8e428b14a379541044f01e897fb5cd5a07e735a98ae",
+            70_964_325L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v6-x86_64.zip",
-            "d6315065c1af31cbd238eda4e706def1282a3bb010d4a65b875306091eca2277",
-            78_545_147L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v8-x86_64.zip",
+            "ee2be602ad5a68f72e56dd29b78d497b340feec7b630afba529c7e923e8056fb",
+            78_561_574L
         )
     )
 
