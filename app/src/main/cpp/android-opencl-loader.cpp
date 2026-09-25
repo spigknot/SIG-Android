@@ -197,6 +197,31 @@ extern "C" CL_API_ENTRY cl_program CL_API_CALL clCreateProgramWithSource(
     return fn(context, count, strings, lengths, errcode_ret);
 }
 
+// Extras do fork do ggml-opencl (cl-program-cache usa binário de programa).
+extern "C" CL_API_ENTRY cl_program CL_API_CALL clCreateProgramWithBinary(
+        cl_context context, cl_uint num_devices, const cl_device_id * device_list,
+        const size_t * lengths, const unsigned char ** binaries,
+        cl_int * binary_status, cl_int * errcode_ret) {
+    auto fn = OPENCL_FN(clCreateProgramWithBinary);
+    if (!fn) {
+        if (errcode_ret) *errcode_ret = OPENCL_MISSING_ERROR;
+        return nullptr;
+    }
+    return fn(context, num_devices, device_list, lengths, binaries, binary_status, errcode_ret);
+}
+
+extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetProgramInfo(
+        cl_program program, cl_program_info param_name,
+        size_t param_value_size, void * param_value, size_t * param_value_size_ret) {
+    auto fn = OPENCL_FN(clGetProgramInfo);
+    return fn ? fn(program, param_name, param_value_size, param_value, param_value_size_ret) : OPENCL_MISSING_ERROR;
+}
+
+extern "C" CL_API_ENTRY cl_int CL_API_CALL clReleaseKernel(cl_kernel kernel) {
+    auto fn = OPENCL_FN(clReleaseKernel);
+    return fn ? fn(kernel) : OPENCL_MISSING_ERROR;
+}
+
 extern "C" CL_API_ENTRY cl_int CL_API_CALL clBuildProgram(
         cl_program program, cl_uint num_devices, const cl_device_id * device_list,
         const char * options, void (CL_CALLBACK * pfn_notify)(cl_program, void *), void * user_data) {

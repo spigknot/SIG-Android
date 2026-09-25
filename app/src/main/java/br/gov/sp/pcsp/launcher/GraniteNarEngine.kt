@@ -229,6 +229,35 @@ object GraniteNarBuckets {
         return cabe.minOrNull() ?: disponiveis.max()
     }
 
+    /**
+     * Buckets cujos DOIS grafos (encoder e projector) estão de fato instalados.
+     *
+     * O plano pede que a escolha use o que existe: escolher um bucket ausente troca um erro de
+     * política por um erro de "arquivo faltando" já dentro do carregamento da sessão.
+     */
+    fun bucketsInstalados(dir: java.io.File): IntArray = TODOS.filter { t ->
+        java.io.File(dir, encoderFile(t)).isFile && java.io.File(dir, projectorFile(t)).isFile
+    }.toIntArray()
+
+    /**
+     * Buckets liberados para backend acelerado NESTA fase.
+     *
+     * Medido no aparelho (14/09/2026): o grafo QUANTIZADO do bucket t2000 derruba o processo do
+     * Hexagon DSP durante `setup_mempools` (`Bad VA: 0x0`), e o erro só aparece depois, como
+     * `QNN graph execute error 6001` no sub-grafo seguinte. Enquanto a causa não estiver
+     * resolvida, o DSP recebe apenas t0200/t0400 — o CPU continua aceitando todos.
+     */
+    val LIBERADOS_NO_DSP = intArrayOf(200, 400)
+
+    /** `null` quando o bucket pode ir ao backend pedido; senão o motivo, para erro claro. */
+    fun politicaBucket(bucket: Int, acelerado: Boolean): String? = when {
+        !acelerado -> null
+        bucket in LIBERADOS_NO_DSP -> null
+        else -> "bucket t$bucket não está liberado para acelerador nesta fase " +
+            "(liberados: ${LIBERADOS_NO_DSP.joinToString { "t$it" }}); o grafo quantizado do " +
+            "bucket maior derruba o DSP do Hexagon"
+    }
+
     /** Nome do arquivo do encoder para um bucket (vazio se o bucket não é exportado). */
     fun encoderFile(t: Int): String = "granite-4.1-nar-encoder-t%04d-fp16.onnx".format(t)
 
@@ -1067,20 +1096,23 @@ object GraniteNarEngine {
         backend: GraniteExecutionBackend,
         requireFullAcceleration: Boolean,
         onLog: (String) -> Unit,
-        bucket: Int = T_FIXED,
+        bucket: Int = 0,
     ) {
-        // Abre o bucket PADRÃO (T_FIXED) na carga: valida que encoder e projector abrem e
-        // mantém o comportamento anterior. Buckets menores entram sob demanda no transcribe.
+        // ⚠️ P2 do plano (14/09/2026): a CARGA não abre mais encoder/projector.
         //
-        // ⚠️ [bucket] existe para o BANCO DE TESTES (smoke test debug). Medido no aparelho
-        // (13-14/09): no QNN HTP o grafo QUANTIZADO do bucket t2000 derruba o processo do
-        // Hexagon DSP (`fastrpc_mmap_validate failed` + `setup_mempools` -> `allocate_buffer`,
-        // Bad VA 0x0) e o projector seguinte falha com `QNN graph execute error 6001`. Com o
-        // encoder fp16 o mesmo t2000 abria normal (160 s, 12/09). Aquecer um bucket pequeno
-        // isola a pergunta "o grafo quantizado roda no HTP?" da pergunta "o HTP comporta o
-        // MAIOR grafo?". Produção continua com T_FIXED (default).
-        encoderPara(dir, bucket, backend, requireFullAcceleration, onLog)
-        projectorPara(dir, bucket, backend, requireFullAcceleration, onLog)
+        // Abrir o bucket PADRÃO (T_FIXED = t2000) era o que derrubava o DSP com pacote
+        // quantizado: o `setup_mempools` do Hexagon morria ao preparar esse grafo (`Bad VA: 0x0`)
+        // e o erro só aparecia depois, como `QNN graph execute error 6001` no sub-grafo seguinte.
+        // Além disso, "a sessão abriu na carga" nunca provou que a transcrição funcionaria — o
+        // custo (13–36 s por grafo no acelerador) era pago sempre, e um áudio curto que pede
+        // t0400 acabava abrindo dois grafos.
+        //
+        // Agora os grafos entram SOB DEMANDA, pelo bucket que o áudio pede. `bucket > 0` abre um
+        // explícito (é o que o banco de testes usa para medir carga); produção passa 0.
+        if (bucket > 0) {
+            encoderPara(dir, bucket, backend, requireFullAcceleration, onLog)
+            projectorPara(dir, bucket, backend, requireFullAcceleration, onLog)
+        }
         llmPara(dir, sessVariante, backend, requireFullAcceleration, onLog)
     }
 
@@ -1104,16 +1136,21 @@ object GraniteNarEngine {
             val dir = packageDir(context)
             // Obrigatórios: os dados comuns + o bucket PADRÃO. Buckets menores são
             // opcionais — o app escolhe o menor que estiver instalado e caiba no áudio.
-            val obrigatorios = arquivosComuns(GraniteNarLlmSettings.selected(context)) +
-                listOf(
-                    GraniteNarBuckets.encoderFile(T_FIXED),
-                    GraniteNarBuckets.projectorFile(T_FIXED),
-                )
+            // P2 do plano: a carga NÃO exige mais os arquivos do bucket PADRÃO (t2000). As
+            // sessões entram sob demanda, então um pacote com buckets menores é perfeitamente
+            // utilizável para áudios que caibam neles — exigir o t2000 só para "abrir" era o que
+            // derrubava o DSP com pacote quantizado. O que se exige é UM bucket COMPLETO.
+            val obrigatorios = arquivosComuns(GraniteNarLlmSettings.selected(context))
             for (f in obrigatorios) {
                 if (!File(dir, f).exists()) {
                     lastErrorMessage = "arquivo do modelo ausente: $f"
                     return false
                 }
+            }
+            if (GraniteNarBuckets.bucketsInstalados(dir).isEmpty()) {
+                lastErrorMessage =
+                    "nenhum bucket completo instalado (encoder + projector). Baixe o pacote novamente."
+                return false
             }
 
             frontend = GraniteNarFrontend(
@@ -1138,8 +1175,10 @@ object GraniteNarEngine {
                     sessBackend = backend
                     sessRequireFullAcceleration = requireFullAcceleration
                     sessVariante = GraniteNarLlmSettings.selected(context)
-                    // 0 (ou ausente) = comportamento de produção: abre o bucket PADRÃO.
-                    val bucketDaCarga = if (warmupBucket > 0) warmupBucket else T_FIXED
+                    // 0 (ou ausente) = PRODUÇÃO: nenhuma sessão de bucket na carga (P2).
+                    // Um valor explícito abre aquele bucket — o banco de testes usa para medir
+                    // carga; sem ele, um áudio curto pagaria a abertura do maior grafo à toa.
+                    val bucketDaCarga = if (warmupBucket > 0) warmupBucket else 0
                     createSessions(dir, backend, requireFullAcceleration, onLog, bucketDaCarga)
                     lastLoadedBackend = backend
                     return true
@@ -1241,9 +1280,27 @@ object GraniteNarEngine {
         // Bucket = MENOR que caiba. O padding até um T maior NÃO é neutro: a máscara de
         // atenção do grafo é estática, então os zeros entram na atenção. Medido em 10/09:
         // 1 piora / 7 empata / 0 melhora, com perda de palavra, e 9,7x mais lento.
-        val bucket = GraniteNarBuckets.escolhe(realFrames)
-        val enc = encoderPara(dir, bucket, sessBackend, sessRequireFullAcceleration, onLog)
-        val proj = projectorPara(dir, bucket, sessBackend, sessRequireFullAcceleration, onLog)
+        // ⚠️ Política de bucket/backend (P2 do plano): escolhe entre os buckets INSTALADOS e só
+        // manda ao acelerador os validados nesta fase — o grafo quantizado do bucket maior
+        // derruba o processo do Hexagon na abertura da sessão (ver `politicaBucket`).
+        val instalados = GraniteNarBuckets.bucketsInstalados(dir)
+        val bucket = GraniteNarBuckets.escolhe(
+            realFrames, if (instalados.isEmpty()) GraniteNarBuckets.TODOS else instalados,
+        )
+        val pedidoAcelerado = sessBackend?.accelerated == true
+        val impedimento = GraniteNarBuckets.politicaBucket(bucket, pedidoAcelerado)
+        val backendDaVez: GraniteExecutionBackend = when {
+            impedimento == null -> sessBackend ?: GraniteExecutionBackend.CPU
+            sessRequireFullAcceleration -> throw IllegalStateException(
+                "Modo estrito: $impedimento. Rode sem exigir aceleração total para usar o CPU.",
+            )
+            else -> {
+                onLog("bucket t$bucket: $impedimento — usando CPU neste áudio")
+                GraniteExecutionBackend.CPU
+            }
+        }
+        val enc = encoderPara(dir, bucket, backendDaVez, sessRequireFullAcceleration, onLog)
+        val proj = projectorPara(dir, bucket, backendDaVez, sessRequireFullAcceleration, onLog)
         // A variante pode ter sido trocada nas configurações: `llmPara` fecha a anterior.
         val llm = llmPara(dir, sessVariante, sessBackend, sessRequireFullAcceleration, onLog)
         onLog("NAR bucket: frames=$realFrames -> T=$bucket")

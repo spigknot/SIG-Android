@@ -1,19 +1,18 @@
 package br.gov.sp.pcsp.launcher
 
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Contratos da tradução Hy-MT2: prompt oficial do model card, payload de uma
- * única mensagem de usuário (sem system_prompt) e leitura da resposta.
+ * Contratos da tradução Hy-MT2: prompt oficial do model card e template de
+ * chat do modelo.
  *
  * O ponto destes testes é travar o formato que o modelo exige: idioma alvo em
- * nome completo em inglês, instrução de "apenas o resultado traduzido" e
- * separação em linha em branco antes do texto. Se um destes quebrar, o modelo
- * passa a devolver explicação junto com a tradução (ou inventa idioma alvo).
+ * nome completo em inglês, instrução de "apenas o resultado traduzido" e os
+ * tokens especiais do template de chat. Se um destes quebrar, o modelo passa a
+ * devolver explicação junto com a tradução (ou não reconhece o turno).
  */
 class HyMt2TranslatorTest {
 
@@ -34,34 +33,58 @@ class HyMt2TranslatorTest {
     }
 
     @Test
-    fun payload_montaMensagemUnicaDeUsuario_semSystem() {
-        val payload = JSONObject(HyMt2Translator.buildRequestPayload("Olá"))
-        assertEquals("hy-mt2-1.8b", payload.getString("model"))
-        assertEquals(false, payload.getBoolean("stream"))
-        assertEquals(4096, payload.getInt("max_tokens"))
-        val messages = payload.getJSONArray("messages")
-        assertEquals(1, messages.length())
-        assertEquals("user", messages.getJSONObject(0).getString("role"))
+    fun template_envolveComOsTokensDeChatDoModelo() {
+        val wrapped = HyMt2Translator.wrapWithChatTemplate("TEXTO")
         assertEquals(
-            HyMt2Translator.buildUserPrompt("Olá"),
-            messages.getJSONObject(0).getString("content")
+            "<｜hy_begin▁of▁sentence｜><｜hy_User｜>TEXTO<｜hy_Assistant｜>",
+            wrapped
         )
-        assertFalse(payload.has("system"))
     }
 
     @Test
-    fun parseTranslation_leConteudoDaEscolha_aparado() {
-        val body = """{"choices":[{"message":{"role":"assistant","content":"  Olá, como vai?  "}}]}"""
-        assertEquals("Olá, como vai?", HyMt2Translator.parseTranslation(body))
+    fun idiomas_rotulosUnicosENomesCompletosEmIngles() {
+        val labels = HyMt2Translator.TARGET_LANGUAGES.map { it.label }
+        assertEquals(labels.size, labels.toSet().size)
+        assertTrue(HyMt2Translator.TARGET_LANGUAGES.isNotEmpty())
+        for (language in HyMt2Translator.TARGET_LANGUAGES) {
+            assertTrue(
+                "promptName deve ser nome completo em inglês: ${language.promptName}",
+                language.promptName.matches(Regex("[A-Za-z]+"))
+            )
+        }
     }
 
-    @Test(expected = IllegalStateException::class)
-    fun parseTranslation_semChoices_lancaErroComMotivo() {
-        HyMt2Translator.parseTranslation("""{"object":"chat.completion"}""")
+    @Test
+    fun idiomas_portuguesEhOPrimeiroEPadrao() {
+        val first = HyMt2Translator.TARGET_LANGUAGES.first()
+        assertEquals("Português", first.label)
+        assertEquals(HyMt2Translator.DEFAULT_TARGET_LANGUAGE, first.promptName)
     }
 
-    @Test(expected = IllegalStateException::class)
-    fun parseTranslation_conteudoVazio_lancaErroComMotivo() {
-        HyMt2Translator.parseTranslation("""{"choices":[{"message":{"content":"   "}}]}""")
+    @Test
+    fun promptNameFor_converteRotuloEcaiNoPadraoQuandoDesconhecido() {
+        assertEquals("Spanish", HyMt2Translator.promptNameFor("Espanhol"))
+        assertEquals("English", HyMt2Translator.promptNameFor("Inglês"))
+        assertEquals(
+            HyMt2Translator.DEFAULT_TARGET_LANGUAGE,
+            HyMt2Translator.promptNameFor("Klingon")
+        )
+    }
+
+    @Test
+    fun prompt_aceitaQualquerIdiomaDaLista() {
+        for (language in HyMt2Translator.TARGET_LANGUAGES) {
+            val prompt = HyMt2Translator.buildUserPrompt("Bom dia", language.promptName)
+            assertTrue(prompt.startsWith("Translate the following text into ${language.promptName}."))
+        }
+    }
+
+    @Test
+    fun amostragem_segueOModelCardPara18B() {
+        assertEquals(4096, HyMt2Translator.MAX_TOKENS)
+        assertEquals(0.7f, HyMt2Translator.TEMPERATURE, 0.001f)
+        assertEquals(0.6f, HyMt2Translator.TOP_P, 0.001f)
+        assertEquals(20, HyMt2Translator.TOP_K)
+        assertEquals(1.05f, HyMt2Translator.REPEAT_PENALTY, 0.001f)
     }
 }

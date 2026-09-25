@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
  */
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "3"
+    const val COMPONENT_VERSION = "6"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
     private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
@@ -29,14 +29,14 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v3-arm64-v8a.zip",
-            "cbe1362403c57c9fe07d28da668200021458f4ddd377e4fb707b7ad6308b0de8",
-            39_257_230L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v6-arm64-v8a.zip",
+            "3b112cfb46b1de2caf033bc0fc130a2bd461d1e6258ed404df7d8de956954105",
+            70_945_466L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v3-x86_64.zip",
-            "34173e2c2dd94546bb4a158e9d7c3f34bc5adda384339937d8e79e57765af47b",
-            45_563_204L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v6-x86_64.zip",
+            "d6315065c1af31cbd238eda4e706def1282a3bb010d4a65b875306091eca2277",
+            78_545_147L
         )
     )
 
@@ -54,6 +54,7 @@ object NativeDependencyManager {
         "libomp.so",
         "libsig_whisper.so",
         "libsig_npu_probe.so",
+        "libsig_llama.so",
         "libonnxruntime.so",
         "libonnxruntime4j_jni.so"
     )
@@ -253,6 +254,9 @@ object NativeDependencyManager {
                 load("c++_shared")
                 load("omp")
             }
+            "sig_llama" -> {
+                load("c++_shared")
+            }
         }
         load(name)
     }
@@ -326,12 +330,26 @@ object NativeDependencyManager {
         }
     }
 
-    private fun extractSecurely(archive: File, destination: File) {
+    /**
+     * Normaliza o nome de uma entrada ZIP para usar separador '/'.
+     * Pacotes gerados no Windows (.NET ZipFile.CreateFromDirectory) gravam
+     * '\' (0x5c) como separador; no Android/Linux '\' NÃO é separador de
+     * caminho: File(dest, "lib\\libX.so") cria um arquivo com '\' no nome na
+     * raiz e a pasta lib/ nunca existe -> "Pacote incompleto.".
+     * Mesma vacina do QairtDependencyManager.normalizeZipEntryName.
+     */
+    internal fun normalizeZipEntryName(name: String): String = name.replace('\\', '/')
+
+    /**
+     * Extrai o pacote validando cada entrada contra zip-slip e normalizando o
+     * separador (ver [normalizeZipEntryName]).
+     */
+    internal fun extractSecurely(archive: File, destination: File) {
         val canonicalRoot = destination.canonicalFile
         ZipInputStream(BufferedInputStream(FileInputStream(archive))).use { zip ->
             while (true) {
                 val entry = zip.nextEntry ?: break
-                val output = File(destination, entry.name).canonicalFile
+                val output = File(destination, normalizeZipEntryName(entry.name)).canonicalFile
                 check(output.path.startsWith(canonicalRoot.path + File.separator)) { "Entrada ZIP inválida." }
                 if (entry.isDirectory) {
                     output.mkdirs()

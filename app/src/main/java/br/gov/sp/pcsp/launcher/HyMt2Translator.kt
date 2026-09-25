@@ -1,25 +1,54 @@
 package br.gov.sp.pcsp.launcher
 
-import org.json.JSONArray
-import org.json.JSONObject
-
-/** Tradução de texto com o modelo Hy-MT2 (Tencent, 1.25 bit, llama.cpp).
+/** Tradução de texto com o modelo Hy-MT2 (Tencent, 1.25 bit / Q4, llama.cpp local).
  *
  * Regra pura da ferramenta Texto: monta o prompt de instrução oficial do
- * model card do Hy-MT2 (idioma alvo em nome COMPLETO em inglês, prompt em
- * inglês) e lê a resposta do servidor llama.cpp no formato OpenAI-compatible.
- * Não contém UI nem HTTP.
+ * model card do Hy-MT2 e o envolve no template de chat do modelo (tokens
+ * especiais <｜hy_...｜>). A inferência acontece no aparelho via `HyMt2Native`;
+ * aqui não há UI nem HTTP.
  */
 object HyMt2Translator {
-
-    /** Modelo servido (rótulo enviado no payload; o llama.cpp ecoa o nome). */
-    const val MODEL_ID = "hy-mt2-1.8b"
 
     /** Idioma alvo padrão da ferramenta (nome completo em inglês, exigência do model card). */
     const val DEFAULT_TARGET_LANGUAGE = "Portuguese"
 
-    /** `max_tokens` recomendado pelo model card para o 1.8B/7B. */
+    /** Um idioma de destino da ferramenta Texto: rótulo exibido x nome que entra no prompt. */
+    data class TargetLanguage(val label: String, val promptName: String)
+
+    /** Idiomas oferecidos pelo botão de idioma-alvo (ordem do menu).
+     *
+     * O model card exige o nome COMPLETO em inglês no prompt ("Translate the
+     * following text into {promptName}"); o `label` é só o que o usuário vê. */
+    val TARGET_LANGUAGES: List<TargetLanguage> = listOf(
+        TargetLanguage("Português", "Portuguese"),
+        TargetLanguage("Inglês", "English"),
+        TargetLanguage("Espanhol", "Spanish"),
+        TargetLanguage("Francês", "French"),
+        TargetLanguage("Alemão", "German"),
+        TargetLanguage("Italiano", "Italian"),
+        TargetLanguage("Japonês", "Japanese"),
+        TargetLanguage("Chinês", "Chinese"),
+        TargetLanguage("Russo", "Russian"),
+        TargetLanguage("Coreano", "Korean"),
+        TargetLanguage("Árabe", "Arabic"),
+        TargetLanguage("Hindi", "Hindi"),
+        TargetLanguage("Holandês", "Dutch"),
+        TargetLanguage("Turco", "Turkish"),
+        TargetLanguage("Polonês", "Polish"),
+        TargetLanguage("Sueco", "Swedish")
+    )
+
+    /** Converte o rótulo persistido/exibido no nome que o prompt precisa;
+     *  rótulo desconhecido cai no padrão (Portuguese). */
+    fun promptNameFor(label: String): String =
+        TARGET_LANGUAGES.firstOrNull { it.label == label }?.promptName ?: DEFAULT_TARGET_LANGUAGE
+
+    /** Parâmetros de amostragem recomendados para o 1.8B/7B (model card). */
     const val MAX_TOKENS = 4096
+    const val TEMPERATURE = 0.7f
+    const val TOP_P = 0.6f
+    const val TOP_K = 20
+    const val REPEAT_PENALTY = 1.05f
 
     /** Prompt de tradução padrão do model card (Default Translation, prompt em inglês).
      *
@@ -32,32 +61,11 @@ object HyMt2Translator {
     ): String = "Translate the following text into $targetLanguage. Note that you should " +
         "only output the translated result without any additional explanation:\n\n$sourceText"
 
-    /** Payload POSTado em `/v1/chat/completions` (só mensagem de usuário; o modelo
-     *  não tem system_prompt padrão). Amostragem fica no servidor, como no model card. */
-    fun buildRequestPayload(
-        sourceText: String,
-        targetLanguage: String = DEFAULT_TARGET_LANGUAGE,
-        model: String = MODEL_ID
-    ): String = JSONObject()
-        .put("model", model)
-        .put("stream", false)
-        .put("max_tokens", MAX_TOKENS)
-        .put(
-            "messages",
-            JSONArray().put(
-                JSONObject().put("role", "user").put("content", buildUserPrompt(sourceText, targetLanguage))
-            )
-        )
-        .toString()
-
-    /** Lê `choices[0].message.content` da resposta e devolve a tradução aparada;
-     *  lança `IllegalStateException` com motivo real quando a resposta está vazia. */
-    fun parseTranslation(body: String): String {
-        val root = JSONObject(body)
-        val message = root.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("message")
-            ?: throw IllegalStateException("A resposta não contém choices[0].message.")
-        val content = (message.opt("content") as? String)?.trim()
-        if (content.isNullOrBlank()) throw IllegalStateException("O servidor devolveu uma tradução vazia.")
-        return content
-    }
+    /** Envolve o prompt no template de chat oficial do modelo (tokenizer.chat_template).
+     *
+     * Sem system message; o template renderiza para uma única mensagem de
+     * usuário com `add_generation_prompt`:
+     * `<｜hy_begin▁of▁sentence｜><｜hy_User｜>{texto}<｜hy_Assistant｜>`. */
+    fun wrapWithChatTemplate(userPrompt: String): String =
+        "<｜hy_begin▁of▁sentence｜><｜hy_User｜>$userPrompt<｜hy_Assistant｜>"
 }

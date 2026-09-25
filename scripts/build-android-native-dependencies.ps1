@@ -20,6 +20,10 @@ $onnxVersion = "1.29.0"
 $onnxGroup = "onnxruntime-android-qnn"
 $onnxAarDir = Join-Path $env:USERPROFILE ".gradle\caches\modules-2\files-2.1\com.microsoft.onnxruntime\$onnxGroup\$onnxVersion"
 $onnxAar = Get-ChildItem -Path $onnxAarDir -Recurse -Filter "onnxruntime-android-qnn-$onnxVersion.aar" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+# x86_64 (emulador): o AAR qnn só traz arm64-v8a — usar o AAR oficial do
+# onnxruntime-android (mesma versão; foi assim no pacote v3).
+$onnxPlainDir = Join-Path $env:USERPROFILE ".gradle\caches\modules-2\files-2.1\com.microsoft.onnxruntime\onnxruntime-android\$onnxVersion"
+$onnxPlainAar = Get-ChildItem -Path $onnxPlainDir -Recurse -Filter "onnxruntime-android-$onnxVersion.aar" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 New-Item -ItemType Directory -Force -Path $output | Out-Null
@@ -63,7 +67,8 @@ $ffmpegLibraries = @(
 $projectLibraries = @(
     "libomp.so",
     "libsig_whisper.so",
-    "libsig_npu_probe.so"
+    "libsig_npu_probe.so",
+    "libsig_llama.so"
 )
 $onnxLibraries = @(
     "libonnxruntime.so",
@@ -71,12 +76,50 @@ $onnxLibraries = @(
 )
 
 $packageRecords = @()
+
+# llama.cpp + JNI (ferramenta Texto) — projeto CMake ISOLADO em
+# app\src\main\cpp\llama-jni (o ggml do whisper e o do llama não coexistem no
+# mesmo projeto CMake: nomes de target iguais). Compilado aqui por ABI e
+# empacotado como libsig_llama.so.
+$llamaJniSource = Join-Path $root "app\src\main\cpp\llama-jni"
+$androidSdk = Join-Path $env:LOCALAPPDATA "Android\Sdk"
+$ndkDir = Join-Path $androidSdk "ndk\27.2.12479018"
+$cmakeExe = Join-Path $androidSdk "cmake\3.22.1\bin\cmake.exe"
+$ninjaExe = Join-Path $androidSdk "cmake\3.22.1\bin\ninja.exe"
+# Zig compila o vulkan-shaders-gen para o HOST (mesmo arranjo do build do
+# whisper via Gradle — preparado pelo task prepareZig em .tools/).
+$zigExe = Join-Path $root ".tools\zig-0.16.0\zig.exe"
+if (!(Test-Path -LiteralPath $llamaJniSource)) { throw "Projeto llama-jni nao encontrado: $llamaJniSource" }
+if (!(Test-Path -LiteralPath $cmakeExe)) { throw "CMake do Android SDK nao encontrado: $cmakeExe" }
+if (!(Test-Path -LiteralPath $zigExe)) { throw "Zig nao encontrado: $zigExe (rode o Gradle para preparar o .tools/zig-0.16.0)." }
+
 foreach ($abi in @("arm64-v8a", "x86_64")) {
     $source = Join-Path $nativeRoot $abi
     $staging = Join-Path $env:TEMP ("sig-native-" + $Version + "-" + $abi + "-" + [Guid]::NewGuid().ToString("N"))
     $libTarget = Join-Path $staging "lib"
     $modelTarget = Join-Path $staging "models"
     New-Item -ItemType Directory -Force -Path $libTarget, $modelTarget | Out-Null
+
+    # Compila o llama-jni (ferramenta Texto) para esta ABI.
+    # Sem backtick de continuação: o parser do PowerShell + CRLF engole a
+    # expansão de variável e o CMake recebe o literal (dor real, 24/09).
+    $llamaBuild = Join-Path $root "native-dependencies\build\llama\$abi"
+    $ndkToolchain = Join-Path $ndkDir "build\cmake\android.toolchain.cmake"
+    $llamaArgs = @(
+        "-S", $llamaJniSource,
+        "-B", $llamaBuild,
+        "-G", "Ninja",
+        "-DCMAKE_MAKE_PROGRAM=$ninjaExe",
+        "-DCMAKE_TOOLCHAIN_FILE=$ndkToolchain",
+        "-DANDROID_ABI=$abi",
+        "-DANDROID_PLATFORM=android-24",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DSIG_ZIG_EXE=$($zigExe.Replace('\','/'))"
+    )
+    & $cmakeExe @llamaArgs
+    if ($LASTEXITCODE -ne 0) { throw "Configure CMake do llama-jni falhou para $abi." }
+    & $cmakeExe --build $llamaBuild -j 8
+    if ($LASTEXITCODE -ne 0) { throw "Build do llama-jni falhou para $abi." }
 
     try {
         $fileRecords = @()
@@ -98,6 +141,17 @@ foreach ($abi in @("arm64-v8a", "x86_64")) {
         }
         foreach ($library in $projectLibraries) {
             $input = Join-Path $source $library
+            if ($library -eq "libsig_llama.so") {
+                $input = Join-Path $llamaBuild $library
+            }
+            if (!(Test-Path -LiteralPath $input)) {
+                # Libs no packaging.jniLibs.excludes (ex.: libsig_npu_probe.so) nao
+                # chegam ao merged_native_libs; procurar no output do CMake (cxx obj).
+                $cxxLib = Get-ChildItem -Path (Join-Path $root "app\build\intermediates\cxx") -Recurse -Filter $library -ErrorAction SilentlyContinue |
+                    Where-Object { $_.FullName -match [regex]::Escape($abi) } |
+                    Select-Object -First 1
+                if ($null -ne $cxxLib) { $input = $cxxLib.FullName }
+            }
             if (!(Test-Path -LiteralPath $input)) { throw "$library ausente para $abi." }
             $target = Join-Path $libTarget $library
             Copy-Item -LiteralPath $input -Destination $target
@@ -109,8 +163,13 @@ foreach ($abi in @("arm64-v8a", "x86_64")) {
         }
         # ONNX Runtime: extraído do AAR onnxruntime-android (o APK exclui essas libs
         # via packaging.jniLibs.excludes; aqui entram no pacote R2).
-        if ($null -eq $onnxAar -or $onnxAar -eq "") { throw "AAR do ONNX Runtime não encontrado em $onnxAarDir" }
-        $onnxAarForLibraries = [IO.Compression.ZipFile]::OpenRead($onnxAar)
+        if ($null -eq $onnxAar -or $onnxAar -eq "") { throw "AAR do ONNX Runtime nao encontrado em $onnxAarDir" }
+        $onnxSourceAar = $onnxAar
+        if ($abi -ne "arm64-v8a") {
+            if ($null -eq $onnxPlainAar -or $onnxPlainAar -eq "") { throw "AAR oficial do ONNX Runtime nao encontrado para $abi." }
+            $onnxSourceAar = $onnxPlainAar
+        }
+        $onnxAarForLibraries = [IO.Compression.ZipFile]::OpenRead($onnxSourceAar)
         try {
             foreach ($library in $onnxLibraries) {
                 $entry = $onnxAarForLibraries.GetEntry("jni/$abi/$library")
