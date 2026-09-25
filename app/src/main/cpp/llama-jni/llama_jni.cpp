@@ -38,6 +38,17 @@ static llama_context * g_ctx = nullptr;
 static std::string g_last_error;
 static std::string g_backend_desc = "CPU";
 
+// Logs do llama.cpp/ggml -> logcat (tag SIGLlama): sem isso o diagnóstico de
+// campo (split de grafo, ops que caem para CPU, devices) fica invisível.
+static void sig_log_callback(enum ggml_log_level level, const char * text, void * /*user_data*/) {
+    if (text == nullptr) return;
+    int priority = ANDROID_LOG_INFO;
+    if (level == GGML_LOG_LEVEL_ERROR) priority = ANDROID_LOG_ERROR;
+    else if (level == GGML_LOG_LEVEL_WARN) priority = ANDROID_LOG_WARN;
+    else if (level == GGML_LOG_LEVEL_DEBUG) priority = ANDROID_LOG_DEBUG;
+    __android_log_print(priority, LOG_TAG, "%s", text);
+}
+
 static void set_error(const std::string & message) {
     g_last_error = message;
     LOGE("%s", message.c_str());
@@ -130,6 +141,7 @@ static void configure_vulkan_memory_limit() {
 }
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM * vm, void * reserved) {
+    llama_log_set(sig_log_callback, nullptr);
     llama_backend_init();
     return JNI_VERSION_1_6;
 }
@@ -198,6 +210,13 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = nCtx > 0 ? (uint32_t) nCtx : 8192;
     cparams.n_batch = 2048;
+    // Flash attention desligado SÓ no caminho GPU (25/09): no Vulkan/Adreno 840 a
+    // rota mista com pesos STQ devolveu saída alucinada — o FA é o suspeito nº 1
+    // nesses drivers. Na CPU mantém o default (AUTO), que é o comportamento já
+    // validado em campo.
+    if (backendKind != 0) {
+        cparams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+    }
     if (nThreads > 0) {
         cparams.n_threads = nThreads;
         cparams.n_threads_batch = nThreads;

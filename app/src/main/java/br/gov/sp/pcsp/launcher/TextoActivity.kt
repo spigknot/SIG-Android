@@ -281,6 +281,16 @@ class TextoActivity : AppCompatActivity() {
         return HyMt2Backend.values().firstOrNull { it.name == name } ?: HyMt2Backend.CPU
     }
 
+    /** Backend efetivo para um modelo.
+     *
+     * O 1.25bit usa tensores STQ1_0, cujo kernel existe SÓ para CPU neste build:
+     * na GPU o OpenCL cai para CPU com cópias (mais lento) e o Vulkan pode
+     * devolver resultado incorreto (aceitou tensores que não sabe decodificar —
+     * visto em campo: saída alucinada, 25/09). Nunca mandamos STQ para GPU;
+     * os modelos Q4_0/Q4_K_M são os que aceleram de verdade. */
+    private fun effectiveBackend(model: HyMt2Model): HyMt2Backend =
+        if (model.fileName.contains("1.25Bit")) HyMt2Backend.CPU else selectedBackend
+
     private fun showLanguageMenu() {
         PopupMenu(this, buttonLanguage).apply {
             HyMt2Translator.TARGET_LANGUAGES.forEach { language -> menu.add(language.label) }
@@ -323,11 +333,13 @@ class TextoActivity : AppCompatActivity() {
         buttonTranslate.isEnabled = false
         status.text = "Traduzindo..."
         val startedAt = SystemClock.elapsedRealtime()
-        appendLog("Traduzindo com ${model.label} (${selectedBackend.shortLabel}) para ${selectedTarget.label}...")
-        if (selectedBackend != HyMt2Backend.CPU && model.fileName.contains("1.25Bit")) {
-            // O kernel STQ (1.25bit) só existe para CPU neste build: na GPU os pesos
-            // STQ caem para o CPU com cópias — pode ficar mais lento que CPU puro.
-            appendLog("AVISO: 1.25bit tem aceleração só de CPU — com GPU a mistura pode ser mais lenta.")
+        val backendVez = effectiveBackend(model)
+        appendLog("Traduzindo com ${model.label} (${backendVez.shortLabel}) para ${selectedTarget.label}...")
+        if (backendVez != selectedBackend) {
+            appendLog(
+                "1.25bit não tem kernel de GPU — executando em CPU " +
+                    "(escolha Q4_0/Q4_K_M para usar ${selectedBackend.shortLabel})."
+            )
         }
 
         Thread {
@@ -342,16 +354,16 @@ class TextoActivity : AppCompatActivity() {
                     }
                     return@Thread
                 }
-                // Recarrega o modelo quando o arquivo OU o backend mudam.
-                if (loadedModelFile != model.file || loadedBackend != selectedBackend) {
+                // Recarrega o modelo quando o arquivo OU o backend efetivo mudam.
+                if (loadedModelFile != model.file || loadedBackend != backendVez) {
                     runOnUiThread {
-                        appendLog("Carregando modelo ${model.label} (${selectedBackend.shortLabel})...")
+                        appendLog("Carregando modelo ${model.label} (${backendVez.shortLabel})...")
                         status.text = "Carregando modelo..."
                     }
                     val loadStart = SystemClock.elapsedRealtime()
                     val ok = HyMt2Native.loadModel(
                         model.file.absolutePath,
-                        selectedBackend.nativeKind,
+                        backendVez.nativeKind,
                         0,
                         8192
                     )
@@ -366,7 +378,7 @@ class TextoActivity : AppCompatActivity() {
                         return@Thread
                     }
                     loadedModelFile = model.file
-                    loadedBackend = selectedBackend
+                    loadedBackend = backendVez
                     val backendInUse = HyMt2Native.backendDescription()
                     runOnUiThread {
                         appendLog(
