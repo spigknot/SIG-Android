@@ -50,13 +50,15 @@ class TextoActivity : AppCompatActivity() {
     private var translating = false
     private var logCounter = 0
 
-    /** Modelos oficiais Hy-MT2 (GGUF). URLs diretas do HuggingFace; o Q4_0
+    /** Modelos oficiais Hy-MT2 (GGUF). URLs diretos do HuggingFace; o Q4_0
      *  (produzido a partir do Q8_0) fica no R2, na base dos modelos do Whisper. */
     private data class HyMt2Model(
         val label: String,
         val fileName: String,
         val file: File,
-        val downloadUrl: String
+        val downloadUrl: String,
+        /** Tamanho real publicado (medido no R2/HuggingFace em 25/09/2026). */
+        val bytes: Long
     )
 
     private enum class HyMt2Backend(val label: String, val shortLabel: String, val nativeKind: Int) {
@@ -125,26 +127,48 @@ class TextoActivity : AppCompatActivity() {
             ?: File(filesDir, "hymt2_models")
     }
 
+    /** Modelos oficiais Hy-MT2 1.8B, do MENOS ao MAIS bits (qualidade crescente).
+     *
+     * Medido no OnePlus 15 (CPU): 1.25bit=11 tok/s, Q4_0=12, Q4_K_M=14 — o modelo
+     * MAIOR em bytes é o MAIS rápido. Ou seja, aqui "menos bytes" NÃO significa
+     * "mais velocidade": o padrão de acesso do STQ (1 bit) perde para modelos
+     * maiores e mais bem agrupados. Por isso o menu traz a curva inteira:
+     * o benchmark escolhe o ponto ideal (qualidade × velocidade).
+     *
+     * Q8_0 é o topo prático: acima dele só existe F16/BF16 não quantizado
+     * (~3,7 GB), inviável para celular.
+     *
+     * Só entram no menu os que EXISTEM de verdade: o repo oficial do HF publica
+     * apenas Q4_K_M, Q6_K e Q8_0 (Q4_K_S, Q5_0 e Q5_K_M dão 404 —asurei). O
+     * Q4_0 e o Q8_0 ficam no R2, que é mais rápido e não depende do HF. */
     private fun officialModels(): List<HyMt2Model> {
         val dir = modelsDir().apply { mkdirs() }
+        val r2 = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/hymt2"
+        val hf = "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main"
+        fun r2Model(label: String, file: String, bytes: Long) =
+            HyMt2Model(label, file, File(dir, file), "$r2/$file", bytes)
+        fun hfModel(label: String, file: String, bytes: Long) =
+            HyMt2Model(label, file, File(dir, file), "$hf/$file", bytes)
+        // ⚠️ A ORDEM IMPORTA: o primeiro da lista é o modelo inicial do app.
+        // MEDIDO (OnePlus 15, 112 linhas, 6 threads, CPU — ver
+        // docs/relatorio-benchmark-qualidade-texto-hymt2.md):
+        //   Q4_K_M = 10,0 tok/s, 13/13 siglas e 9/9 nomes preservados, 1,08 GB
+        //   Q8_0   = 10,5 tok/s (NÃO é mais lento), melhor divergência (2,6%)
+        //   Q6_K   = 8,1 tok/s (o único que perde velocidade)
+        //   Q4_0   = 10,1 tok/s, 12/13 siglas
+        //   1.25bit= TRUNCA a saída (728 vs 2.458 tokens) e perde 38% dos números
+        //            → só serve para frase curta, por isso fica no fim.
         return listOf(
+            hfModel("Q4_K_M", "Hy-MT2-1.8B-Q4_K_M.gguf", 1_133_080_448L),
+            r2Model("Q8_0", "Hy-MT2-1.8B-Q8_0.gguf", 1_908_528_192L),
+            r2Model("Q4_0", "Hy-MT2-1.8B-Q4_0.gguf", 1_076_850_528L),
+            hfModel("Q6_K", "Hy-MT2-1.8B-Q6_K.gguf", 1_474_785_120L),
             HyMt2Model(
                 "1.25bit",
                 "Hy-MT2-1.8B-1.25Bit.gguf",
                 File(dir, "Hy-MT2-1.8B-1.25Bit.gguf"),
-                "https://huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF/resolve/main/Hy-MT2-1.8B-1.25Bit.gguf"
-            ),
-            HyMt2Model(
-                "Q4_0",
-                "Hy-MT2-1.8B-Q4_0.gguf",
-                File(dir, "Hy-MT2-1.8B-Q4_0.gguf"),
-                "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/hymt2/Hy-MT2-1.8B-Q4_0.gguf"
-            ),
-            HyMt2Model(
-                "Q4_K_M",
-                "Hy-MT2-1.8B-Q4_K_M.gguf",
-                File(dir, "Hy-MT2-1.8B-Q4_K_M.gguf"),
-                "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main/Hy-MT2-1.8B-Q4_K_M.gguf"
+                "https://huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF/resolve/main/Hy-MT2-1.8B-1.25Bit.gguf",
+                461_860_800L
             )
         )
     }
@@ -202,12 +226,61 @@ class TextoActivity : AppCompatActivity() {
             try {
                 model.file.parentFile?.mkdirs()
                 val temp = File(model.file.parentFile, "${model.fileName}.download")
-                URL(model.downloadUrl).openConnection().apply {
-                    connectTimeout = 20000
-                    readTimeout = 120000
-                }.let { connection ->
-                    val total = connection.contentLengthLong
-                    connection.getInputStream().use { input ->
+
+                // ⚠️ HuggingFace responde 302 para o CDN. Sem seguir o redirect, o
+                // corpo da resposta de 15 bytes ("Entry not found") era gravado
+                // como se fosse o modelo — daí "Preparando download" longo e barra
+                // que não anda. Aqui resolvemos o redirect e, se a resposta não for
+                // 200, falamos na hora com o motivo real.
+                var url = URL(model.downloadUrl)
+                var tentativas = 0
+                var http: java.net.HttpURLConnection? = null
+                while (tentativas < 5) {
+                    val conn = url.openConnection() as java.net.HttpURLConnection
+                    conn.connectTimeout = 20000
+                    conn.readTimeout = 120000
+                    conn.instanceFollowRedirects = false
+                    val code = conn.responseCode
+                    if (code == java.net.HttpURLConnection.HTTP_MOVED_PERM ||
+                        code == java.net.HttpURLConnection.HTTP_MOVED_TEMP ||
+                        code == java.net.HttpURLConnection.HTTP_SEE_OTHER ||
+                        code == 307 || code == 308
+                    ) {
+                        val destino = conn.getHeaderField("Location")
+                        if (destino.isNullOrBlank()) {
+                            conn.disconnect()
+                            throw IllegalStateException(
+                                "O servidor mandou redirecionar sem destino (HTTP $code)."
+                            )
+                        }
+                        url = URL(URL(model.downloadUrl), destino)
+                        conn.disconnect()
+                        tentativas++
+                        continue
+                    }
+                    http = conn
+                    break
+                }
+                if (http == null) {
+                    throw IllegalStateException("Não foi possível resolver o endereço do modelo.")
+                }
+                // HttpURLConnection não implementa Closeable: disconnect() no finally.
+                val conn: java.net.HttpURLConnection = http
+                try {
+                    val code = conn.responseCode
+                    if (code != 200) {
+                        val motivo = runCatching { conn.errorStream?.bufferedReader()?.readText() }
+                            .getOrNull()?.trim()?.take(120).orEmpty()
+                        throw IllegalStateException(
+                            when (code) {
+                                404 -> "Este modelo não existe no repositório (HTTP 404)."
+                                403 -> "Sem permissão para baixar este modelo (HTTP 403)."
+                                else -> "O servidor respondeu HTTP $code. $motivo"
+                            }
+                        )
+                    }
+                    val total = conn.contentLengthLong
+                    conn.getInputStream().use { input ->
                         FileOutputStream(temp).use { output ->
                             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
                             var copied = 0L
@@ -234,6 +307,8 @@ class TextoActivity : AppCompatActivity() {
                             }
                         }
                     }
+                } finally {
+                    conn.disconnect()
                 }
                 if (model.file.exists()) model.file.delete()
                 if (!temp.renameTo(model.file)) {
@@ -355,32 +430,82 @@ class TextoActivity : AppCompatActivity() {
         val pref = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(PREF_THREADS, "auto")
         if (pref == null || pref == "auto") {
-            return "Auto (${Runtime.getRuntime().availableProcessors()})"
+            return "Auto ${autoThreads()}"
         }
         return "$pref thr"
     }
 
+    /** Chamadas nativas informativas: nunca podem derrubar a tela.
+     *
+     * Todas existem só a partir do pacote nativo correspondente (v8/v9). Com um
+     * pacote mais antigo, a chamada lança UnsatisfiedLinkError e o app fecha no
+     * meio da tradução — foi o que aconteceu na 20260925_002. */
+    private fun nativoSeguro(chamada: () -> String): String = try {
+        chamada()
+    } catch (e: Throwable) {
+        ""
+    }
+
+    private fun resumoDeMemoria(): String = nativoSeguro { HyMt2Native.loadSummary() }
+
+    private fun statsDeDesempenho(): String = nativoSeguro { HyMt2Native.lastStats() }
+
+    /** Threads que o contexto realmente criou (informativo, nunca pode quebrar a tela).
+     *
+     * ⚠️ `threadCount()` é nativa e só existe a partir do pacote nativo v9. Se o
+     * aparelho ainda tiver um pacote antigo, a chamada lança UnsatisfiedLinkError
+     * e matava o app no meio da tradução — daí o runCatching. */
+    private fun threadsEmUso(): String = try {
+        HyMt2Native.threadCount()
+    } catch (e: Throwable) {
+        inferenceThreads().let { if (it == 0) "auto" else it.toString() }
+    }
+
     /** Quantas threads de CPU usar na inferência.
      *
-     * Medido no Ace 2 Pro (8 núcleos): 1.25bit, Q4_0 e Q4_K_M deram ~16 tokens/s
-     * com o MESMO tempo, o que descarta banda de memória como gargalo (o Q4_K_M
-     * lê 2,4× mais bytes que o 1.25bit e não é mais lento). O limite é o número
-     * de threads: com nThreads=0 o llama.cpp fica com ~4 e metade do aparelho
-     * fica ociosa.
+     * MEDIDO no OnePlus 15 (8 núcleos) com 5 quantizações diferentes (1.25bit,
+     * Q4_0, Q4_K_M, Q6_K, Q8_0) — a curva é **idêntica em todos os modelos**, o
+     * que prova que o gargalo é thread, não quantização nem banda de memória:
      *
-     * Por isso o padrão aqui é "Automático" (todos os núcleos) e o usuário pode
-     * fixar um valor para comparar. 0 = deixa o llama.cpp escolher. */
+     *     1 thread  ~ 4 tok/s      4 threads  ~ 14-20 tok/s
+     *     2 threads ~ 7,5 tok/s    6 threads  ~ 18-24 tok/s  ← pico
+     *     3 threads ~ 11 tok/s     8 threads  ~ 16-17 tok/s  (pior: cache)
+     *     12/16 threads ~ 0,1-0,2 tok/s  (colapso por over-subscription)
+     *
+     * Portanto: 1→6 escala quase linearmente, 8 piora (contenção de cache — usar
+     * todos os núcleos faz o escalonador migrar as threads o tempo todo) e 12+
+     * é desastre. Como o app é para qualquer Android, o padrão não pode ser 6
+     * fixo: num aparelho de 4 núcleos isso seria metade do potencial.
+     *
+     * Heurística escolhida: **max(n-2, min(4, n))** —
+     *   8 núcleos  -> 6 threads (o pico medido)
+     *   6 núcleos  -> 4 threads
+     *   4 núcleos  -> 4 threads (o piso de 4 protege o entry-level)
+     *   2 núcleos  -> 2 threads
+     * Devolve 0 quando o usuário deixa em "Automático"? Não: devolvemos o valor
+     * calculado, porque 0 (deixar o llama.cpp escolher) foi o que travou em ~4.
+     *
+     * O menu de 1..16 continua disponível para medir. */
     private fun inferenceThreads(): Int {
         val pref = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(PREF_THREADS, "auto")
-        return if (pref == null || pref == "auto") 0 else (pref.toIntOrNull() ?: 0)
+        if (pref == null || pref == "auto") return autoThreads()
+        return pref.toIntOrNull()?.coerceIn(1, 16) ?: autoThreads()
+    }
+
+    /** n-2, com piso de 4 e teto de n (ver KDoc de [inferenceThreads]). */
+    private fun autoThreads(): Int {
+        val n = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        return maxOf(n - 2, minOf(4, n))
     }
 
     private fun showThreadsMenu() {
-        val cores = Runtime.getRuntime().availableProcessors()
-        val opcoes = listOf("auto" to "Automático ($cores núcleos)") +
-            listOf(4, 6, 8, 12).filter { it <= cores }
-                .map { it.toString() to "$it threads" }
+        val n = Runtime.getRuntime().availableProcessors()
+        // "Auto" mostra o valor que a heuristica n-2 escolhe; 1..16 fica
+        // disponivel para medir (over-subscription as vezes ajuda, as vezes e
+        // desastre — ver o KDoc de inferenceThreads).
+        val opcoes = listOf("auto" to "Auto (n-2 = ${autoThreads()} de $n)") +
+            (1..16).map { it.toString() to "$it threads" }
         PopupMenu(this, buttonThreads).apply {
             opcoes.forEachIndexed { index, opcao ->
                 menu.add(0, index + 1, 0, opcao.second)
@@ -459,15 +584,16 @@ class TextoActivity : AppCompatActivity() {
                     }
                     loadedModelFile = model.file
                     loadedBackend = backendVez
-                    val backendInUse = HyMt2Native.backendDescription()
+                    val backendInUse = nativoSeguro { HyMt2Native.backendDescription() }
+                        .ifBlank { backendVez.label }
                     runOnUiThread {
                         appendLog(
                             "Modelo carregado em " +
                                 "%.1fs.".format(Locale.US, (SystemClock.elapsedRealtime() - loadStart) / 1000.0)
                         )
                         appendLog("Backend em uso: $backendInUse")
-                        appendLog("Threads: ${HyMt2Native.threadCount()}")
-                        val resumo = HyMt2Native.loadSummary()
+                        appendLog("Threads: ${threadsEmUso()}")
+                        val resumo = resumoDeMemoria()
                         if (resumo.isNotBlank()) {
                             appendLog(
                                 "Memória: " +
@@ -506,7 +632,7 @@ class TextoActivity : AppCompatActivity() {
                     appendLog(
                         "Tradução pronta em %.1fs.".format(Locale.US, seconds)
                     )
-                    val stats = HyMt2Native.lastStats()
+                    val stats = statsDeDesempenho()
                     if (stats.isNotBlank()) {
                         appendLog("Desempenho: $stats")
                     }
