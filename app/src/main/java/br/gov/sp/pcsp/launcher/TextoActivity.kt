@@ -36,6 +36,7 @@ class TextoActivity : AppCompatActivity() {
     private lateinit var buttonModel: TextView
     private lateinit var buttonBackend: TextView
     private lateinit var buttonLanguage: TextView
+    private lateinit var buttonThreads: TextView
     private lateinit var status: TextView
     private lateinit var terminalText: TextView
     private lateinit var terminalScroll: ScrollView
@@ -45,6 +46,7 @@ class TextoActivity : AppCompatActivity() {
     private var selectedTarget: HyMt2Translator.TargetLanguage = HyMt2Translator.TARGET_LANGUAGES.first()
     private var loadedModelFile: File? = null
     private var loadedBackend: HyMt2Backend? = null
+    private var threadsLabel: String = "Auto"
     private var translating = false
     private var logCounter = 0
 
@@ -75,6 +77,7 @@ class TextoActivity : AppCompatActivity() {
         buttonModel = findViewById(R.id.button_model)
         buttonBackend = findViewById(R.id.button_backend)
         buttonLanguage = findViewById(R.id.button_language)
+        buttonThreads = findViewById(R.id.button_threads)
         status = findViewById(R.id.status)
         terminalText = findViewById(R.id.terminal_text)
         terminalScroll = findViewById(R.id.terminal_scroll)
@@ -84,6 +87,7 @@ class TextoActivity : AppCompatActivity() {
         buttonModel.setOnClickListener { showModelMenu() }
         buttonBackend.setOnClickListener { showBackendMenu() }
         buttonLanguage.setOnClickListener { showLanguageMenu() }
+        buttonThreads.setOnClickListener { showThreadsMenu() }
         findViewById<TextView>(R.id.button_clear_translation).setOnClickListener {
             inputText.setText("")
             outputText.setText("")
@@ -98,6 +102,8 @@ class TextoActivity : AppCompatActivity() {
         buttonLanguage.text = selectedTarget.label
         selectedBackend = savedBackend()
         buttonBackend.text = selectedBackend.shortLabel
+        threadsLabel = threadsLabelSaved()
+        buttonThreads.text = threadsLabel
         syncBackendWithModel()
         appendLog("Ferramenta Texto pronta.")
         appendLog(
@@ -344,6 +350,57 @@ class TextoActivity : AppCompatActivity() {
             ?: HyMt2Translator.TARGET_LANGUAGES.first()
     }
 
+    /** Rótulo salvo das threads (para mostrar no botão ao reabrir a tela). */
+    private fun threadsLabelSaved(): String {
+        val pref = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(PREF_THREADS, "auto")
+        if (pref == null || pref == "auto") {
+            return "Auto (${Runtime.getRuntime().availableProcessors()})"
+        }
+        return "$pref thr"
+    }
+
+    /** Quantas threads de CPU usar na inferência.
+     *
+     * Medido no Ace 2 Pro (8 núcleos): 1.25bit, Q4_0 e Q4_K_M deram ~16 tokens/s
+     * com o MESMO tempo, o que descarta banda de memória como gargalo (o Q4_K_M
+     * lê 2,4× mais bytes que o 1.25bit e não é mais lento). O limite é o número
+     * de threads: com nThreads=0 o llama.cpp fica com ~4 e metade do aparelho
+     * fica ociosa.
+     *
+     * Por isso o padrão aqui é "Automático" (todos os núcleos) e o usuário pode
+     * fixar um valor para comparar. 0 = deixa o llama.cpp escolher. */
+    private fun inferenceThreads(): Int {
+        val pref = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(PREF_THREADS, "auto")
+        return if (pref == null || pref == "auto") 0 else (pref.toIntOrNull() ?: 0)
+    }
+
+    private fun showThreadsMenu() {
+        val cores = Runtime.getRuntime().availableProcessors()
+        val opcoes = listOf("auto" to "Automático ($cores núcleos)") +
+            listOf(4, 6, 8, 12).filter { it <= cores }
+                .map { it.toString() to "$it threads" }
+        PopupMenu(this, buttonThreads).apply {
+            opcoes.forEachIndexed { index, opcao ->
+                menu.add(0, index + 1, 0, opcao.second)
+            }
+            setOnMenuItemClickListener { item ->
+                val opcao = opcoes.getOrNull(item.itemId - 1) ?: return@setOnMenuItemClickListener true
+                getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit().putString(PREF_THREADS, opcao.first).apply()
+                threadsLabel = opcao.second
+                buttonThreads.text = threadsLabel
+                // o modelo recarrega com o novo n_threads
+                loadedModelFile = null
+                loadedBackend = null
+                appendLog("Threads: ${opcao.second} (o modelo será recarregado)")
+                true
+            }
+            show()
+        }
+    }
+
     private fun translate() {
         if (translating) return
         val source = inputText.text.toString().trim()
@@ -387,7 +444,7 @@ class TextoActivity : AppCompatActivity() {
                     val ok = HyMt2Native.loadModel(
                         model.file.absolutePath,
                         backendVez.nativeKind,
-                        0,
+                        inferenceThreads(),
                         8192
                     )
                     if (!ok) {
@@ -409,6 +466,7 @@ class TextoActivity : AppCompatActivity() {
                                 "%.1fs.".format(Locale.US, (SystemClock.elapsedRealtime() - loadStart) / 1000.0)
                         )
                         appendLog("Backend em uso: $backendInUse")
+                        appendLog("Threads: ${HyMt2Native.threadCount()}")
                         val resumo = HyMt2Native.loadSummary()
                         if (resumo.isNotBlank()) {
                             appendLog(
@@ -490,5 +548,6 @@ class TextoActivity : AppCompatActivity() {
         private const val PREFS_NAME = "texto_settings"
         private const val PREF_TARGET_LANGUAGE = "target_language"
         private const val PREF_BACKEND = "backend"
+        private const val PREF_THREADS = "threads"
     }
 }

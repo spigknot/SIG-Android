@@ -3029,6 +3029,33 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
     } catch (const vk::SystemError& e) {
         std::cerr << "ggml_vulkan: Compute pipeline creation failed for " << pipeline->name << std::endl;
         std::cerr << "ggml_vulkan: " << e.what() << std::endl;
+        // ⚠️ Vulkan: alguns drivers (Adreno 740) REPORTAM suporte a F16 mas REUSAM
+        // compilar o shader de matmul com Q4_0 (createComputePipeline -> ErrorUnknown).
+        // O comportamento original era relançar a exceção, que vira SIGABRT e MATA o app.
+        // Fallback: (1) se o shader era F16, desliga o acumulador F16 e tenta o F32;
+        // (2) se nem assim compilar, marca o device como "sem suporte real a este
+        // tipo" devolvendo pipeline vazio — o chamador cai para o CPU em vez de
+        // derrubar o processo. A opção (2) é específica deste app (variante SIG).
+        if (pipeline->name.find("_f16acc") != std::string::npos) {
+            device->fp16 = false;
+            std::cerr << "ggml_vulkan: driver recusou o shader F16 (" << pipeline->name
+                      << ") — desativando acumulador F16 e usando F32." << std::endl;
+            pipeline->pipeline = VK_NULL_HANDLE;
+            return;
+        }
+#ifdef SIG_VULKAN_NO_CRASH
+        if (pipeline->name.find("matmul_q4_0") != std::string::npos ||
+            pipeline->name.find("matmul_q8_0") != std::string::npos) {
+            std::cerr << "ggml_vulkan: driver recusou o shader de matmul (" << pipeline->name
+                      << ") — tipo sem suporte real neste device; o op cairá para CPU."
+                      << std::endl;
+            pipeline->pipeline = VK_NULL_HANDLE;
+            device->mul_mat_s[GGML_TYPE_Q4_0] = false;
+            device->mul_mat_m[GGML_TYPE_Q4_0] = false;
+            device->mul_mat_l[GGML_TYPE_Q4_0] = false;
+            return;
+        }
+#endif
         throw e;
     }
 

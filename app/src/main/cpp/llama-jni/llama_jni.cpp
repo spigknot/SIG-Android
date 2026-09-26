@@ -20,6 +20,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <iostream>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -85,7 +86,49 @@ static void sig_log_callback(enum ggml_log_level level, const char * text, void 
     __android_log_print(priority, LOG_TAG, "%s", text);
 }
 
+// ggml-vulkan escreve o diagnóstico de pipeline em std::cerr (ex.: "Compute pipeline
+// creation failed for <nome do shader>"), que no Android vai para o limbo — sem isto
+// não dá para saber QUAL shader o driver recusa. Redireciona cerr/clog para o logcat.
+struct CerrRedirect {
+    static std::mutex mutex;
+    static std::string buffer;
+
+    CerrRedirect() { std::cerr.rdbuf(&sink); std::clog.rdbuf(&sink); }
+    ~CerrRedirect() { std::cerr.rdbuf(std::cerr.rdbuf()); }
+
+    struct Buf : std::streambuf {
+        int overflow(int c) override {
+            if (c != EOF) CerrRedirect::mutex.lock(), CerrRedirect::buffer.push_back((char) c),
+                CerrRedirect::mutex.unlock();
+            return c;
+        }
+        std::streamsize xsputn(const char * s, std::streamsize n) override {
+            std::lock_guard<std::mutex> lock(CerrRedirect::mutex);
+            CerrRedirect::buffer.append(s, (size_t) n);
+            return n;
+        }
+    } sink;
+};
+std::mutex CerrRedirect::mutex;
+std::string CerrRedirect::buffer;
+
+static void cerr_drain() {
+    std::string linha;
+    {
+        std::lock_guard<std::mutex> lock(CerrRedirect::mutex);
+        linha.swap(CerrRedirect::buffer);
+    }
+    size_t inicio = 0;
+    while (inicio < linha.size()) {
+        size_t fim = linha.find('\n', inicio);
+        if (fim == std::string::npos) fim = linha.size();
+        LOGE("%s", linha.substr(inicio, fim - inicio).c_str());
+        inicio = fim + 1;
+    }
+}
+
 static void set_error(const std::string & message) {
+    cerr_drain();  // o diagnóstico do driver (std::cerr) vem junto do erro
     g_last_error = message;
     LOGE("%s", message.c_str());
 }
@@ -177,6 +220,7 @@ static void configure_vulkan_memory_limit() {
 }
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM * vm, void * reserved) {
+    static CerrRedirect cerr_to_logcat;  // ggml-vulkan diagnostica em std::cerr
     llama_log_set(sig_log_callback, nullptr);
     llama_backend_init();
     return JNI_VERSION_1_6;
@@ -209,10 +253,7 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
     ggml_backend_dev_t gpu_dev = nullptr;
 
     if (backendKind != 0) {
-        // EXPERIMENTO 25/09 (b): env vars do whisper DESLIGADAS — suspeita de que
-        // forcem um caminho de shader que o driver Adreno rejeita
-        // (createComputePipeline: ErrorUnknown). Se o teste passar, viram opcionais.
-        // if (backendKind == 2) configure_vulkan_memory_limit();
+        if (backendKind == 2) configure_vulkan_memory_limit();
         std::string device_name;
         ggml_backend_dev_t dev = find_gpu_device(backendKind, &device_name);
         if (dev == nullptr) {
@@ -485,4 +526,13 @@ extern "C" JNIEXPORT jstring JNICALL
 Java_br_gov_sp_pcsp_launcher_HyMt2Native_lastStats(JNIEnv * env, jobject) {
     std::lock_guard<std::mutex> lock(g_mutex);
     return env->NewStringUTF(g_last_stats.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_br_gov_sp_pcsp_launcher_HyMt2Native_threadCount(JNIEnv * env, jobject) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    if (g_ctx == nullptr) {
+        return env->NewStringUTF("0");
+    }
+    return env->NewStringUTF(std::to_string(llama_n_threads(g_ctx)).c_str());
 }

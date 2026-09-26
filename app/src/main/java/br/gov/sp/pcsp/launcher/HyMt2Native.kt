@@ -41,5 +41,8 @@ object HyMt2Native {
 
     /** Estatísticas da última geração (ex.: "9 tokens em 1.2 s (7.4 tokens/s)"). */
     external fun lastStats(): String
+
+    /** Threads de CPU em uso pelo contexto (ex.: "8"). */
+    external fun threadCount(): String
     external fun systemInfo(): String
 }

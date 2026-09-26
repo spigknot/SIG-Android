@@ -129,6 +129,9 @@ if (TARGET ggml-vulkan)
     target_include_directories(ggml-vulkan PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/../vulkan-headers/include"
             "${CMAKE_CURRENT_SOURCE_DIR}/../spirv-headers/include")
+    # O patch de "sem crash" fica em ggml-vulkan.cpp (target ggml-vulkan), então a
+    # flag precisa ser DEFINIDA nele — definir só no sig_llama não tem efeito.
+    target_compile_definitions(ggml-vulkan PRIVATE SIG_VULKAN_NO_CRASH=1)
 endif()
 
 add_library(sig_llama SHARED llama_jni.cpp)
@@ -139,7 +142,8 @@ target_include_directories(sig_llama PRIVATE
 
 target_compile_definitions(sig_llama PRIVATE
         SIG_BUILD_GGML_OPENCL=1
-        SIG_BUILD_GGML_VULKAN=1)
+        SIG_BUILD_GGML_VULKAN=1
+        SIG_VULKAN_NO_CRASH=1)
 
 target_link_libraries(sig_llama
         llama
