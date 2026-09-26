@@ -82,6 +82,7 @@ também é bloqueado.
 | `AssemblyAiAsyncFlow.kt` | Decisão sync/async + polling da AssemblyAI. |
 | `LiveDiagnosticContext.kt` | Correlação de diagnóstico da sessão ao vivo. |
 | `TranscriptionReport.kt` | Relatório HTML, log de terminal, nomes e tamanhos. |
+| `DownloadSizeFormat.kt` | Tamanhos de download: base decimal, plano por arquivo e log do download. |
 | `TranscriptionRunTimings.kt` | Tempos da rodada: preparação, janela de rede e processamento do servidor. |
 | `SttAudioProbe.kt` | Sondagem FFmpeg + interpretação da saída (codec/Hz/canais). |
 | `MediaTypeRules.kt` | `isVideo`/`isAudio`/MIME por extensão. |
@@ -145,6 +146,7 @@ também é bloqueado.
 | `NativeDependencyManager.kt` | Pacote nativo: versão/URL/SHA-256 por ABI e ativação. |
 | `QairtDependencyManager.kt` | Dependência QAIRT (Qualcomm NPU): detecção/instalação. |
 | `NativeDependencyPrompt.kt` | Diálogo de download do pacote nativo. |
+| `DownloadPlanDialog.kt` | Diálogo de download com lista rolável e log que acumula (todas as telas). |
 
 ## Adicionar arquivo novo
 

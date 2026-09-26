@@ -1,101 +1,96 @@
 package br.gov.sp.pcsp.launcher
 
 import android.app.Activity
-import android.graphics.Color
-import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
-import kotlin.math.roundToInt
 
-/** Dialogo de download do pacote nativo (somente UI).
+/**
+ * Diálogo de download do pacote nativo (somente UI).
  *
- * Download, verificacao de SHA-256 e instalacao sao do
- * NativeDependencyManager.
+ * Download, verificação de SHA-256 e instalação são do [NativeDependencyManager].
+ *
+ * ⚠️ O pacote é UM `.zip`: o plano mostra o próprio ZIP como arquivo único (71 MB
+ * no arm64), e não as 18 libs de dentro — listá-las mentiria sobre o que está
+ * sendo baixado. O texto de antes ("aproximadamente 40 MB") era o número
+ * congelado do pacote v1 e foi medido como 41% menor que o real.
  */
-
 object NativeDependencyPrompt {
     fun showIfNeeded(activity: Activity) {
         if (NativeDependencyManager.activateIfInstalled(activity) || activity.isFinishing) return
-        val spec = NativeDependencyManager.packageSpec()
-        val size = spec?.downloadBytes?.takeIf { it > 0L }?.let(::formatBytes) ?: "aproximadamente 40 MB"
-
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            val padding = (20 * resources.displayMetrics.density).roundToInt()
-            setPadding(padding, 0, padding, 0)
+        val plano = NativeDependencyManager.downloadPlan()
+        // Diálogo com lista rolável: a lista não precisa caber inteira, o
+        // usuário rola (é o mesmo padrão do log do SigUpdater no SIG Windows).
+        DownloadPlanDialog.confirmar(
+            activity = activity,
+            plano = plano,
+            negativo = "Agora não",
+            positivo = "Baixar",
+            prefacio = "O SIG precisa baixar seus componentes de áudio, vídeo, Whisper, NPU e transcrição local (Granite).\n\n" +
+                "Isto acontece apenas uma vez — os arquivos continuam instalados nas próximas atualizações do APK.\n" +
+                "Sem o download, várias ferramentas não funcionarão.",
+        ) {
+            install(activity, plano)
         }
-        val status = TextView(activity).apply {
-            text = "O SIG precisa baixar seus componentes de áudio, vídeo, Whisper, NPU e transcrição local (Granite) ($size).\n\n" +
-                "Isso será feito apenas uma vez. Os arquivos continuarão instalados nas próximas atualizações do APK. " +
-                "Sem o download, várias ferramentas não funcionarão."
-            setTextColor(Color.WHITE)
-            textSize = 15f
-        }
-        val progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = false
-            max = 1000
-            visibility = android.view.View.GONE
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = (18 * resources.displayMetrics.density).roundToInt()
-            }
-        }
-        content.addView(status)
-        content.addView(progress)
-
-        val dialog = AlertDialog.Builder(activity)
-            .setTitle("Componentes do SIG")
-            .setView(content)
-            .setNegativeButton("Agora não", null)
-            .setPositiveButton("Baixar", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                dialog.setCancelable(false)
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
-                dialog.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = false
-                progress.visibility = android.view.View.VISIBLE
-                Thread {
-                    val result = NativeDependencyManager.install(activity) { state ->
-                        activity.runOnUiThread {
-                            status.text = state.stage
-                            if (state.total > 0L) {
-                                progress.isIndeterminate = false
-                                progress.progress = ((state.downloaded.coerceAtMost(state.total) * 1000L) / state.total).toInt()
-                            } else {
-                                progress.isIndeterminate = true
-                            }
-                        }
-                    }
-                    activity.runOnUiThread {
-                        result.onSuccess {
-                            status.text = "Componentes instalados. O SIG está pronto."
-                            progress.progress = 1000
-                            dialog.getButton(AlertDialog.BUTTON_POSITIVE).apply {
-                                text = "Continuar"
-                                isEnabled = true
-                                setOnClickListener { dialog.dismiss() }
-                            }
-                        }.onFailure { error ->
-                            status.text = "Não foi possível instalar os componentes:\n${error.message ?: error.javaClass.simpleName}"
-                            dialog.setCancelable(true)
-                            dialog.getButton(AlertDialog.BUTTON_POSITIVE).apply {
-                                text = "Tentar novamente"
-                                isEnabled = true
-                                setOnClickListener { dialog.dismiss(); showIfNeeded(activity) }
-                            }
-                            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
-                        }
-                    }
-                }.start()
-            }
-        }
-        dialog.show()
     }
 
-    private fun formatBytes(bytes: Long): String {
-        val mib = bytes.toDouble() / (1024.0 * 1024.0)
-        return String.format(java.util.Locale.US, "%.1f MB", mib)
+    /** Faz a instalação real com o diálogo de progresso (mesmo plano na lista). */
+    private fun install(activity: Activity, plano: DownloadSizeFormat.Plano) {
+        if (activity.isFinishing) return
+        val progresso = DownloadPlanDialog.progresso(
+            activity = activity,
+            plano = plano,
+            titulo = "Baixando componentes do SIG",
+        )
+        Thread {
+            val result = NativeDependencyManager.install(activity) { state ->
+                activity.runOnUiThread {
+                    val percent = percentOf(state)
+                    // ZIP = arquivo único: vira ✓ só quando o pacote chega inteiro.
+                    val feitos = if (percent >= 100) plano.arquivos.map { it.nome }.toSet() else emptySet()
+                    progresso.atualizar(state.downloaded, state.total, percent, feitos)
+                }
+            }
+            activity.runOnUiThread {
+                if (result.isSuccess) {
+                    progresso.etapa("Componentes instalados. O SIG está pronto.")
+                    // Deixa o ✓ e o total visíveis antes de o diálogo sumir.
+                    progresso.fechar()
+                } else {
+                    val erro = result.exceptionOrNull()
+                    progresso.etapa(
+                        "Não foi possível instalar os componentes:\n${erro?.message ?: erro?.javaClass?.simpleName}"
+                    )
+                    progresso.fechar()
+                    // O botão "Tentar novamente" reabre a confirmação.
+                    AndroidAlert(
+                        activity,
+                        "Falha ao baixar os componentes",
+                        erro?.message ?: erro?.javaClass?.simpleName ?: "Erro desconhecido.",
+                    ) { showIfNeeded(activity) }
+                }
+            }
+        }.start()
+    }
+
+    /**
+     * Percentual 0..100 a partir do [NativeDependencyManager.Progress].
+     *
+     * Total desconhecido devolve -1 — a barra fica indeterminada, nunca "0%"
+     * fingindo que não avançou.
+     */
+    private fun percentOf(state: NativeDependencyManager.Progress): Int {
+        if (state.total <= 0L) return -1
+        return ((state.downloaded.coerceAtMost(state.total) * 100L) / state.total).toInt()
+    }
+
+    /** Alerta simples com "Tentar novamente" / "Agora não". */
+    private fun AndroidAlert(activity: Activity, titulo: String, mensagem: String?, aoTentar: () -> Unit) {
+        if (activity.isFinishing) return
+        AlertDialog.Builder(activity)
+            .setTitle(titulo)
+            .setMessage(mensagem ?: "Erro desconhecido.")
+            .setNegativeButton("Agora não", null)
+            .setPositiveButton("Tentar novamente") { _, _ -> aoTentar() }
+            .setCancelable(false)
+            .show()
     }
 }

@@ -67,6 +67,129 @@ object NativeDependencyManager {
 
     fun packageSpec(): PackageSpec? = supportedAbi()?.let(packages::get)
 
+    /**
+     * Tamanho de CADA arquivo dentro do ZIP do pacote nativo, por ABI.
+     *
+     * São os valores medidos no artefato publicado no R2 (conferidos por HEAD +
+     * leitura do diretório central do ZIP em 25/09/2026). Servem para o
+     * detalhamento do diálogo: o app baixa UM zip, mas o usuário precisa saber
+     * o que vem dentro — era o que o log do SigUpdater (SIG Windows) mostra.
+     *
+     * ⚠️ Estes números NÃO substituem [PackageSpec.downloadBytes]: aquele é o
+     * tamanho do ZIP (o que o app baixa e valida por SHA-256) e é conferido
+     * pelo `verify-native-dependencies`. A soma daqui deve fechar com ele —
+     * a porta de aceitação checa exatamente isso ([sumaConfereComZip]).
+     */
+    private val conteudoPorAbi = mapOf(
+        "arm64-v8a" to listOf(
+            "lib/libsig_llama.so" to 28_006_627L,
+            "lib/libsig_whisper.so" to 18_447_609L,
+            "lib/libonnxruntime.so" to 9_749_792L,
+            "lib/libavcodec.so" to 7_820_823L,
+            "lib/libavformat.so" to 2_081_430L,
+            "lib/libavfilter.so" to 1_878_203L,
+            "models/ggml-silero-v6.2.0.bin" to 821_390L,
+            "lib/libsig_npu_probe.so" to 461_645L,
+            "lib/libomp.so" to 432_045L,
+            "lib/libc++_shared.so" to 336_650L,
+            "lib/libavutil.so" to 328_831L,
+            "lib/libswscale.so" to 272_235L,
+            "lib/libffmpegkit.so" to 202_359L,
+            "lib/libswresample.so" to 48_193L,
+            "lib/libonnxruntime4j_jni.so" to 35_456L,
+            "lib/libavdevice.so" to 26_715L,
+            "lib/libffmpegkit_abidetect.so" to 11_094L,
+            "manifest.json" to 1_122L,
+        ),
+        "x86_64" to listOf(
+            // Mesmo conjunto de libs do arm64, com os tamanhos reais deste
+            // artefato (medidos no central directory do ZIP publicado).
+            "lib/libsig_llama.so" to 28_042_638L,
+            "lib/libsig_whisper.so" to 18_750_283L,
+            "lib/libonnxruntime.so" to 15_591_750L,
+            "lib/libavcodec.so" to 8_784_046L,
+            "lib/libavfilter.so" to 2_140_127L,
+            "lib/libavformat.so" to 2_105_008L,
+            "models/ggml-silero-v6.2.0.bin" to 821_390L,
+            "lib/libomp.so" to 454_230L,
+            "lib/libsig_npu_probe.so" to 440_759L,
+            "lib/libavutil.so" to 369_318L,
+            "lib/libc++_shared.so" to 365_059L,
+            "lib/libswscale.so" to 341_805L,
+            "lib/libffmpegkit.so" to 214_022L,
+            "lib/libswresample.so" to 61_148L,
+            "lib/libonnxruntime4j_jni.so" to 33_659L,
+            "lib/libavdevice.so" to 26_833L,
+            "lib/libffmpegkit_abidetect.so" to 16_272L,
+            "manifest.json" to 1_121L,
+        ),
+    )
+
+    /**
+     * Plano de download do pacote nativo: **um arquivo**, o próprio ZIP.
+     *
+     * O app baixa UM `.zip` e extrai; listar as 18 libs de dentro mentiria sobre
+     * o que está sendo baixado. Então o plano tem um item só, com o tamanho
+     * real do ZIP publicado ([PackageSpec.downloadBytes], o mesmo número que o
+     * SHA-256 confere).
+     *
+     * O conteúdo interno continua disponível em [conteudoPorAbi] para o
+     * detalhamento quando FOREMOS baixar por arquivo em vez de por ZIP — mas a
+     * tela mostra o ZIP.
+     *
+     * @param abiOverride força a ABI (só nos testes — o `Build.SUPPORTED_ABIS` é
+     *   nulo no stub da JVM)
+     */
+    fun downloadPlan(abiOverride: String? = null): DownloadSizeFormat.Plano {
+        val abi = abiOverride ?: supportedAbi()
+        val spec = if (abiOverride != null) packages[abiOverride] else packageSpec()
+        val bytes = spec?.downloadBytes ?: 0L
+        val arquivo = spec?.url?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+        val itens = if (arquivo != null && bytes > 0L) {
+            listOf(DownloadSizeFormat.Arquivo(arquivo, bytes))
+        } else {
+            emptyList()
+        }
+        return DownloadSizeFormat.Plano(
+            rotulo = "Componentes nativos",
+            arquivos = itens,
+            totalFallbackBytes = bytes,
+        )
+    }
+
+    /**
+     * O que DENTRO do ZIP será instalado: nome + tamanho, por ABI.
+     *
+     * Usado pelo detalhamento técnico e pela porta de aceitação; o diálogo de
+     * download mostra o ZIP ([downloadPlan]).
+     */
+    fun conteudoInstalado(abi: String): List<DownloadSizeFormat.Arquivo> =
+        conteudoPorAbi[abi].orEmpty().map { (nome, bytes) ->
+            DownloadSizeFormat.Arquivo(nome.substringAfterLast('/'), bytes)
+        }
+
+    /**
+     * Soma do conteúdo declarado x tamanho do ZIP publicado.
+     *
+     * @return a diferença em bytes (negativa = o ZIP tem o overhead). Usada pela
+     *   porta de aceitação `verify-native-dependencies` e pelo teste de tabela: se
+     *   o pacote for republicado com libs novas, a soma deixa de fechar e o
+     *   detalhamento da tela mentiria sobre o total.
+     */
+    fun somaConteudoVsZip(abi: String): Long {
+        val conteudo = conteudoPorAbi[abi]?.sumOf { it.second } ?: return -1L
+        val zip = packages[abi]?.downloadBytes ?: return -1L
+        return conteudo - zip
+    }
+
+    /**
+     * Tamanho do ZIP publicado para a ABI (0 se a ABI não for suportada).
+     *
+     * Expos separado de [packageSpec] para os testes poderem conferir a tabela
+     * por ABI sem depender de `Build.SUPPORTED_ABIS` (nulo no stub da JVM).
+     */
+    fun downloadBytesOf(abi: String): Long = packages[abi]?.downloadBytes ?: 0L
+
     fun isInstalled(context: Context): Boolean {
         val abi = supportedAbi() ?: return false
         val root = installedRoot(context, abi)

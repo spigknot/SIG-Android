@@ -66,6 +66,7 @@ import java.util.concurrent.atomic.AtomicReference
  * CPU/GPU/NPU). O motor é on-device (ONNX Runtime + QNN) via GraniteEngine/
  * GraniteNarEngine.
  */
+
 class GraniteActivity : AppCompatActivity() {
 
     // ---- views (IDs idênticos ao layout da Transcrição) ----
@@ -925,23 +926,24 @@ class GraniteActivity : AppCompatActivity() {
             .show()
     }
 
-    /** Confirma e baixa o pacote do NAR já com a variante recém-escolhida. */
     private fun confirmNarVarianteDownload(variante: GraniteNarLlm.Variante) {
-        val faltam = formatBytes(GraniteNarEngine.packageDownloadBytes(this))
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Baixar ${variante.rotulo.lowercase()}")
-            .setMessage(
-                "Para usar \"${variante.rotulo}\" faltam $faltam.\n\n" +
-                    "Tamanho do LLM desta opção: ${variante.tamanhoLegivel()}" +
-                    variante.ganhoLegivel().takeIf { it.isNotEmpty() }
-                        ?.let { " · $it" }.orEmpty() +
-                    "\n\nO restante do modelo já está no aparelho e não será baixado de novo."
-            )
-            .setNegativeButton("Depois", null)
-            .setPositiveButton("Baixar") { _, _ ->
-                downloadPackage(selectedModel, onSuccess = { selectModel(selectedModel) })
-            }
-            .show()
+        val plano = GraniteNarEngine.downloadPlan(this)
+        // Diálogo com lista rolável: o NAR tem 25 arquivos e a lista completa
+        // não cabe na tela — o usuário rola para ler tudo.
+        DownloadPlanDialog.confirmar(
+            activity = this,
+            plano = plano,
+            negativo = "Cancelar",
+            positivo = "Baixar",
+            prefacio = "Para usar \"${variante.rotulo}\":",
+            sufixo = buildString {
+                append("Tamanho do LLM desta opção: ${variante.tamanhoLegivel()}")
+                variante.ganhoLegivel().takeIf { it.isNotEmpty() }?.let { append(" · $it") }
+                append("\nO restante do modelo já está no aparelho e não será baixado de novo.")
+            },
+        ) {
+            downloadPackage(MODEL_NAR) { selectModel(selectedModel) }
+        }
     }
 
     private fun showModelMenu() {
@@ -989,21 +991,29 @@ class GraniteActivity : AppCompatActivity() {
     }
 
     private fun confirmModelDownload(model: String) {
-        val size = when (model) {
-            MODEL_NAR -> formatBytes(GraniteNarEngine.packageDownloadBytes(this))
-            else -> formatBytes(GraniteEngine.packageDownloadBytes(this))
+        val isNar = model == MODEL_NAR
+        // O NAR tira o detalhamento do MANIFESTO publicado (fonte do SHA-256);
+        // o 5.0 Turbo, da lista de arquivos com os tamanhos conferidos no R2.
+        val plano = if (isNar) {
+            GraniteNarEngine.downloadPlan(this)
+        } else {
+            GraniteEngine.downloadPlan()
         }
-        AlertDialog.Builder(this)
-            .setTitle("Baixar modelo")
-            .setMessage(
-                "Baixar ${modelLabel(model)} ($size)?\n\n" +
-                    "O Granite 4.1 NAR é multilíngue (EN/ES/FR/DE/PT); o 5.0 Turbo é só inglês."
-            )
-            .setNegativeButton("Não", null)
-            .setPositiveButton("Sim") { _, _ ->
-                downloadPackage(model, onSuccess = { selectModel(model) })
-            }
-            .show()
+        val aviso = if (isNar) {
+            "O Granite 4.1 NAR é multilíngue (EN/ES/FR/DE/PT); o 5.0 Turbo é só inglês."
+        } else {
+            "O Granite 5.0 Turbo reconhece apenas inglês."
+        }
+        DownloadPlanDialog.confirmar(
+            activity = this,
+            plano = plano,
+            negativo = "Não",
+            positivo = "Sim",
+            prefacio = "Baixar ${modelLabel(model)}?",
+            sufixo = aviso,
+        ) {
+            downloadPackage(model) { selectModel(model) }
+        }
     }
 
     private fun showBackendMenu() {
@@ -1052,57 +1062,47 @@ class GraniteActivity : AppCompatActivity() {
     }
 
     private fun showQairtDownloadDialog(backend: GraniteExecutionBackend) {
-        val sizeMb = QairtDependencyManager.downloadSize() / 1_048_576L
-        AlertDialog.Builder(this)
-            .setTitle("Componentes de aceleração Qualcomm")
-            .setMessage(
-                "O backend ${backend.label} precisa das bibliotecas do " +
-                    "Qualcomm AI Runtime (QAIRT)." +
-                    "Download: ~$sizeMb MB (uma única vez)."
-            )
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Baixar") { _, _ ->
-                downloadQairtPackage(backend)
-            }
-            .show()
+        val plano = QairtDependencyManager.downloadPlan()
+        DownloadPlanDialog.confirmar(
+            activity = this,
+            plano = plano,
+            negativo = "Cancelar",
+            positivo = "Baixar",
+            prefacio = "O backend ${backend.label} precisa das bibliotecas do Qualcomm AI Runtime (QAIRT).",
+            sufixo = "Download único: só nesta arquitetura, e apenas na primeira vez.",
+        ) {
+            downloadQairtPackage(backend)
+        }
     }
 
     private fun downloadQairtPackage(backend: GraniteExecutionBackend) {
-        val progressView = layoutInflater.inflate(R.layout.dialog_model_download, null)
-        val statusText = progressView.findViewById<TextView>(R.id.modelDownloadStatusText)
-        val progressBar = progressView.findViewById<ProgressBar>(R.id.modelDownloadProgressBar)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Baixando QAIRT")
-            .setView(progressView)
-            .setCancelable(false)
-            .create()
-        dialog.show()
+        val plano = QairtDependencyManager.downloadPlan()
+        val progresso = DownloadPlanDialog.progresso(this, plano, titulo = "Baixando QAIRT")
         setProcessing(true)
         Thread {
             val result = QairtDependencyManager.install(this) { progress ->
                 runOnUiThread {
                     val pct = if (progress.total > 0L) (progress.downloaded * 100L / progress.total).toInt() else -1
-                    if (pct >= 0) {
-                        progressBar.progress = pct.coerceIn(0, 100)
-                        val dlMb = progress.downloaded / 1_048_576L
-                        val totMb = progress.total / 1_048_576L
-                        statusText.text = "$pct% ($dlMb MB de $totMb MB)"
-                    } else {
-                        statusText.text = progress.stage
-                    }
+                    // O ZIP é arquivo único: a lista tem 1 item e ele só vira ✓
+                    // quando o pacote inteiro chega.
+                    val feitos = if (pct >= 100) plano.arquivos.map { it.nome }.toSet() else emptySet()
+                    progresso.atualizar(progress.downloaded, progress.total, pct, feitos)
                 }
             }
             runOnUiThread {
-                dialog.dismiss()
                 setProcessing(false)
                 result.fold(
                     onSuccess = {
+                        // "Continuar" no lugar de fechar: o usuário rola e lê a
+                        // lista e o log antes de seguir (mesmo do Granite).
+                        progresso.concluirContinuando(QairtDependencyManager.downloadSize())
                         // Instalação confirmada: só agora marca o chip como selecionado.
                         selectedBackend = backend
                         buttonBackend.text = backend.shortLabel
                         status.text = "${backend.label} pronto."
                     },
                     onFailure = { error ->
+                        progresso.fechar()
                         // O Result<Unit> do install captura falhas internas (rename,
                         // SHA, pacote incompleto). NÃO seleciona o backend e mostra o erro.
                         val message = error.message ?: "Erro desconhecido ao baixar o pacote QAIRT."
@@ -1119,39 +1119,79 @@ class GraniteActivity : AppCompatActivity() {
     }
 
     private fun downloadPackage(model: String, onSuccess: () -> Unit) {
-        val progressView = layoutInflater.inflate(R.layout.dialog_model_download, null)
-        val statusText = progressView.findViewById<TextView>(R.id.modelDownloadStatusText)
-        val progressBar = progressView.findViewById<ProgressBar>(R.id.modelDownloadProgressBar)
         val isNar = model == MODEL_NAR
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Baixando modelo ${modelLabel(model)}")
-            .setView(progressView)
-            .setCancelable(false)
-            .create()
-        dialog.show()
+        val plano = if (isNar) {
+            GraniteNarEngine.downloadPlan(this)
+        } else {
+            GraniteEngine.downloadPlan(GraniteEngine.packageDir(this))
+        }
+        // Diálogo com a lista que ACUMULA: o usuário vê arquivo a arquivo sendo
+        // marcado com ✓ e, no fim, rola para cima e lê o log inteiro.
+        val progresso = DownloadPlanDialog.progresso(
+            this,
+            plano,
+            titulo = "Baixando modelo ${modelLabel(model)}",
+        )
         setProcessing(true)
         Thread {
             try {
                 val totalBytes = if (isNar) GraniteNarEngine.packageDownloadBytes(this) else GraniteEngine.packageDownloadBytes(this)
-                val download: (Context, (Int, Long) -> Unit) -> Unit =
-                    if (isNar) { c, cb -> GraniteNarEngine.downloadPackage(c, cb) }
-                    else { c, cb -> GraniteEngine.downloadPackage(c, cb) }
+                // Os dois engines têm a própria `Etapa`; esta é a forma comum
+                // para a tela não duplicar o tratamento (mesmos campos).
+                val download: (Context, (Int, Long) -> Unit, (Int, Int, String, Int, Int) -> Unit) -> Unit =
+                    if (isNar) { c, cb, et -> GraniteNarEngine.downloadPackage(c, cb) { e ->
+                            et(e.indice, e.total, e.nome, e.percentArquivo, e.percentTotal)
+                        }
+                    }
+                    else { c, cb, et -> GraniteEngine.downloadPackage(c, cb) { e ->
+                            et(e.indice, e.total, e.nome, e.percentArquivo, e.percentTotal)
+                        }
+                    }
+                var ultimaLinha = ""
+                val pendentes = plano.arquivos.map { it.nome }.toMutableSet()
                 download(
                     this,
                     { percent, mb ->
                         runOnUiThread {
-                            val totalMb = totalBytes / 1048576L
-                            if (percent >= 0) {
-                                progressBar.progress = percent.coerceIn(0, 100)
-                                statusText.text = "$percent% ($mb MB de $totalMb MB)"
+                            // O engine passa `mb` em bytes-miB; a formatação é do
+                            // DownloadSizeFormat (decimal) para o texto não divergir
+                            // do total anunciado na confirmação.
+                            val baixado = mb * 1_048_576L
+                            val feitos = (baixado.toDouble() / totalBytes.coerceAtLeast(1L))
+                                .times(plano.arquivos.size).toInt().coerceIn(0, plano.arquivos.size)
+                            val concluidos = plano.arquivos.take(feitos).map { it.nome }.toSet()
+                            // Enquanto o engine não mandou etapa (o primeiro
+                            // arquivo ainda não começou), mostra o agregado.
+                            val linha = if (ultimaLinha.isEmpty()) {
+                                DownloadSizeFormat.progresso(baixado, totalBytes, percent)
                             } else {
-                                statusText.text = "Baixando... $mb MB"
+                                ultimaLinha
                             }
+                            progresso.atualizarComLinha(linha, baixado, totalBytes, percent, concluidos)
+                        }
+                    },
+                    { indice, total, nome, pctArquivo, pctTotal ->
+                        pendentes.remove(nome)
+                        val linha = if (pctArquivo >= 0) {
+                            DownloadSizeFormat.arquivoAtual(indice, total, nome, pctArquivo)
+                        } else {
+                            DownloadSizeFormat.arquivoAtualSemPercentual(indice, total, nome)
+                        }
+                        ultimaLinha = linha
+                        runOnUiThread {
+                            val baixado = totalBytes * pctTotal.coerceAtLeast(0) / 100L
+                            progresso.atualizarComLinha(
+                                linha, baixado, totalBytes, pctTotal,
+                                // Só o que ACABOU entra no log: marcar pelo
+                                // percentual global adiantaria arquivos.
+                                plano.arquivos.map { it.nome }.toSet() - pendentes,
+                            )
                         }
                     }
                 )
                 runOnUiThread {
-                    dialog.dismiss()
+                    // "Continuar" em vez de fechar: o usuário rola e lê antes.
+                    progresso.concluirContinuando(totalBytes)
                     setProcessing(false)
                     status.text = "Modelo pronto."
                     onSuccess()
@@ -1159,7 +1199,7 @@ class GraniteActivity : AppCompatActivity() {
             } catch (e: Throwable) {
                 Log.e(TAG, "Granite download failed", e)
                 runOnUiThread {
-                    dialog.dismiss()
+                    progresso.fechar()
                     setProcessing(false)
                     status.text = "Erro ao baixar modelo: ${e.message ?: "falha inesperada"}"
                 }
@@ -2407,13 +2447,6 @@ class GraniteActivity : AppCompatActivity() {
     private fun hasPublicStorageAccess(): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
             Environment.isExternalStorageManager()
-    }
-
-    private fun formatBytes(bytes: Long): String {
-        if (bytes < 1024L) return "$bytes B"
-        val kb = bytes / 1024.0
-        if (kb < 1024.0) return String.format(Locale.US, "%.1f KB", kb)
-        return String.format(Locale.US, "%.2f MB", kb / 1024.0)
     }
 
     private fun dp(value: Int): Int =

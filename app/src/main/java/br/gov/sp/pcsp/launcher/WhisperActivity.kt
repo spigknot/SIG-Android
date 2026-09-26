@@ -674,18 +674,26 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun confirmModelDownload(model: WhisperModel) {
         val url = model.downloadUrl ?: return
-        AlertDialog.Builder(this)
-            .setTitle("Baixar modelo")
-            .setMessage("Ainda não temos o modelo ${model.label} no aparelho. Baixar agora?")
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Baixar") { _, _ ->
-                downloadModelWithProgress(
+        // O diálogo ANTES não dizia tamanho nenhum — e o v3Turbo são 1,6 GB.
+        DownloadPlanDialog.confirmar(
+            activity = this,
+            plano = DownloadSizeFormat.Plano(
+                rotulo = "Modelo Whisper ${model.label}",
+                arquivos = listOf(
+                    DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = model.file.exists())
+                ),
+            ),
+            negativo = "Cancelar",
+            positivo = "Baixar",
+            prefacio = "Ainda não temos o modelo ${model.label} no aparelho.",
+            sufixo = "Baixar agora?",
+        ) {
+            downloadModelWithProgress(
                     label = model.label,
                     url = url,
                     destination = model.file
                 ) { selectModel(model) }
-            }
-            .show()
+        }
     }
 
     private fun showBackendMenu() {
@@ -1457,30 +1465,36 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun officialModels(): List<WhisperModel> {
         val dir = modelsDir().apply { mkdirs() }
+        // Tamanhos medidos no R2 em 25/09/2026 (HEAD): o v3Turbo são 1,6 GB e o
+        // diálogo precisa dizer isso antes de o usuário aceitar.
         return listOf(
             WhisperModel(
                 "tiny",
                 "ggml-tiny.bin",
                 File(dir, "ggml-tiny.bin"),
-                "$MODEL_BASE_URL/ggml-tiny.bin"
+                "$MODEL_BASE_URL/ggml-tiny.bin",
+                77_691_713L
             ),
             WhisperModel(
                 "base",
                 "ggml-base.bin",
                 File(dir, "ggml-base.bin"),
-                "$MODEL_BASE_URL/ggml-base.bin"
+                "$MODEL_BASE_URL/ggml-base.bin",
+                147_951_465L
             ),
             WhisperModel(
                 "small",
                 "ggml-small.bin",
                 File(dir, "ggml-small.bin"),
-                "$MODEL_BASE_URL/ggml-small.bin"
+                "$MODEL_BASE_URL/ggml-small.bin",
+                487_601_967L
             ),
             WhisperModel(
                 "v3Turbo",
                 "ggml-large-v3-turbo.bin",
                 File(dir, "ggml-large-v3-turbo.bin"),
-                "$MODEL_BASE_URL/ggml-large-v3-turbo.bin"
+                "$MODEL_BASE_URL/ggml-large-v3-turbo.bin",
+                1_624_555_275L
             )
         )
     }
@@ -1491,22 +1505,34 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun confirmVadDownload(onReady: () -> Unit) {
-        AlertDialog.Builder(this)
-            .setTitle("Baixar VAD")
-            .setMessage("O VAD filter usa o modelo Silero. Baixar agora?")
-            .setNegativeButton("Não") { _, _ ->
+        // O VAD é pequeno (885 KB) e o diálogo não dizia nada — sem o número o
+        // usuário não sabe se vale a pena aceitar.
+        val destino = vadModelFile()
+        DownloadPlanDialog.confirmar(
+            activity = this,
+            plano = DownloadSizeFormat.Plano(
+                rotulo = "VAD Silero",
+                arquivos = listOf(
+                    DownloadSizeFormat.Arquivo(VAD_MODEL_NAME, VAD_MODEL_BYTES, jaBaixado = destino.isFile)
+                ),
+            ),
+            negativo = "Não",
+            positivo = "Sim",
+            prefacio = "O VAD filter usa o modelo Silero.",
+            sufixo = "Baixar agora?",
+            aoNegar = {
                 checkboxVad.isChecked = false
                 status.text = "VAD desativado. Toque em transcrever novamente."
-            }
-            .setPositiveButton("Sim") { _, _ ->
+            },
+            aoConfirmar = {
                 downloadFile(
                     label = "VAD Silero",
                     url = VAD_MODEL_URL,
-                    destination = vadModelFile(),
+                    destination = destino,
                     onSuccess = onReady
                 )
-            }
-            .show()
+            },
+        )
     }
 
     private fun downloadFile(label: String, url: String, destination: File, onSuccess: () -> Unit) {
@@ -1560,25 +1586,38 @@ class WhisperActivity : AppCompatActivity() {
         }.start()
     }
 
+    /**
+     * Tamanho conhecido do modelo, para a lista do diálogo.
+     *
+     * Usa a tabela do catálogo ([WhisperModel.bytes], medida no R2) e cai no
+     * arquivo local quando o modelo já está no aparelho. Sem nenhum dos dois
+     * (modelo escolhido pelo seletor, nunca baixado) devolve 0 — a lista mostra
+     * o item sem tamanho em vez de inventar um número.
+     */
+    private fun bytesConhecidos(url: String, destination: File): Long {
+        officialModels().firstOrNull { it.downloadUrl == url }?.bytes?.takeIf { it > 0L }?.let { return it }
+        return destination.takeIf { it.isFile }?.length() ?: 0L
+    }
+
     private fun downloadModelWithProgress(label: String, url: String, destination: File, onSuccess: () -> Unit) {
-        val progressView = layoutInflater.inflate(R.layout.dialog_model_download, null)
-        val statusText = progressView.findViewById<TextView>(R.id.modelDownloadStatusText)
-        val progressBar = progressView.findViewById<ProgressBar>(R.id.modelDownloadProgressBar)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Baixando modelo $label")
-            .setView(progressView)
-            .setCancelable(false)
-            .create()
-        dialog.show()
+        val plano = DownloadSizeFormat.Plano(
+            rotulo = "Modelo Whisper $label",
+            arquivos = listOf(
+                DownloadSizeFormat.Arquivo(destination.name, bytesConhecidos(url, destination))
+            ),
+        )
+        val progresso = DownloadPlanDialog.progresso(this, plano, titulo = "Baixando modelo $label")
         Thread {
             try {
                 destination.parentFile?.mkdirs()
                 val temp = File(destination.parentFile, "${destination.name}.download")
+                // Declarado fora do `let` para o bloco de sucesso ter o total.
+                var total = 0L
                 URL(url).openConnection().apply {
                     connectTimeout = 15000
                     readTimeout = 30000
                 }.let { connection ->
-                    val total = connection.contentLengthLong
+                    total = connection.contentLengthLong
                     connection.getInputStream().use { input ->
                         FileOutputStream(temp).use { output ->
                             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -1593,14 +1632,12 @@ class WhisperActivity : AppCompatActivity() {
                                 if (now - lastUi > 300L) {
                                     lastUi = now
                                     val percent = if (total > 0L) (copied * 100L / total).coerceIn(0L, 100L) else -1L
-                                    val mb = copied / 1048576L
                                     runOnUiThread {
-                                        if (percent >= 0L) {
-                                            progressBar.progress = percent.toInt()
-                                            statusText.text = "$percent% ($mb MB de ${total / 1048576L} MB)"
-                                        } else {
-                                            statusText.text = "Baixando... $mb MB"
-                                        }
+                                        progresso.atualizar(
+                                            copied, total, percent.toInt(),
+                                            // Arquivo único: vira ✓ ao chegar em 100%.
+                                            if (percent >= 100L) plano.arquivos.map { it.nome }.toSet() else emptySet(),
+                                        )
                                     }
                                 }
                             }
@@ -1613,14 +1650,20 @@ class WhisperActivity : AppCompatActivity() {
                     temp.delete()
                 }
                 runOnUiThread {
-                    dialog.dismiss()
+                    progresso.atualizar(
+                        if (total > 0L) total else destination.length(),
+                        if (total > 0L) total else destination.length(),
+                        100,
+                        plano.arquivos.map { it.nome }.toSet(),
+                    )
+                    progresso.concluirContinuando(if (total > 0L) total else destination.length())
                     status.text = "$label pronto."
                     onSuccess()
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Download failed", e)
                 runOnUiThread {
-                    dialog.dismiss()
+                    progresso.fechar()
                     status.text = "Erro ao baixar $label: ${e.message ?: "falha inesperada"}"
                 }
             }
@@ -2506,17 +2549,28 @@ class WhisperActivity : AppCompatActivity() {
         private const val GLOBAL_LOG_NAME = "whisper_log.txt"
         private const val VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
         private const val VAD_MODEL_URL = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
+        /** Tamanho real do VAD publicado (HEAD no HuggingFace, 25/09/2026). */
+        private const val VAD_MODEL_BYTES = 885_098L
         private const val MODEL_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/whisper"
         private const val DEFAULT_BEAM_SIZE = 5
         private const val DEFAULT_BEST_OF = 5
         private const val TAG = "WhisperActivity"
     }
 
+    /**
+     * Um modelo Whisper do menu.
+     *
+     * @param bytes tamanho real do arquivo publicado (medido no R2 em
+     *   25/09/2026). Vem no mesmo data class para o menu e o diálogo compartilharem
+     *   a verdade: um `bytes` divergente da URL mostraria o número errado. 0 = o
+     *   modelo foi escolhido pelo seletor de arquivos (não tem tamanho conhecido).
+     */
     private data class WhisperModel(
         val label: String,
         val fileName: String,
         val file: File,
-        val downloadUrl: String?
+        val downloadUrl: String?,
+        val bytes: Long = 0L
     )
 
     private data class MediaItem(

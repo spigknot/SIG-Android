@@ -450,6 +450,52 @@ object GraniteEngine {
         return if (remote > 0L) remote else FALLBACK_PACKAGE_BYTES
     }
 
+    /**
+     * Plano de download do Granite 5.0 Turbo para o diálogo.
+     *
+     * Os tamanhos são os **medidos no R2** (HEAD em 25/09/2026) e a lista é a
+     * mesma de [packageFiles], a mesma que o download percorre — assim o
+     * detalhamento não pode prometer arquivo que o app não baixa.
+     *
+     * @param dir pasta já instalada; quando informada, o que está lá sai
+     *   marcado e o total cai para só o que falta
+     */
+    fun downloadPlan(dir: File? = null): DownloadSizeFormat.Plano {
+        val itens = packageFiles().map { (nome, _) ->
+            val bytes = TAMANHO_POR_ARQUIVO[nome] ?: 0L
+            val f = dir?.let { File(it, nome) }
+            DownloadSizeFormat.Arquivo(
+                nome = nome,
+                bytes = bytes,
+                jaBaixado = bytes > 0L && f != null && f.isFile && f.length() > 0L,
+            )
+        }
+        return DownloadSizeFormat.Plano(
+            rotulo = "Granite 5.0 Turbo",
+            arquivos = itens,
+            totalFallbackBytes = FALLBACK_PACKAGE_BYTES,
+        )
+    }
+
+    /**
+     * Tamanho medido de cada arquivo publicado no R2 (25/09/2026).
+     *
+     * A soma confere com [FALLBACK_PACKAGE_BYTES] (ver `GraniteEngineTest`): o
+     * total da tela e o total do download vêm da mesma lista.
+     */
+    private val TAMANHO_POR_ARQUIVO = mapOf(
+        MODEL_F32_FILE_NAME to 865_408L,
+        MODEL_F32_DATA_FILE_NAME to 1_891_581_952L,
+        MODEL_FP16_FILE_NAME to 946_740_875L,
+        MODEL_FP16_DATA_FILE_NAME to 945_790_976L,
+        FRONTEND_FILE_NAME to 303L,
+        MEL_FILTERS_FILE_NAME to 82_240L,
+        STFT_WINDOW_FILE_NAME to 2_048L,
+        VOCAB_FILE_NAME to 177_439L,
+        PCS_VOCAB_FILE_NAME to 640_793L,
+        PUNCT_FILE_NAME to 209_532_928L,
+    )
+
     /** Fallback quando os HEAD requests não respondem (tamanho real do pacote, soma verificada no R2 em 2026-08-29). */
     internal const val FALLBACK_PACKAGE_BYTES =
         865_408L + 1_891_581_952L + 946_740_875L + 945_790_976L + 303L +
@@ -492,8 +538,25 @@ object GraniteEngine {
             PUNCT_FILE_NAME to "$PACKAGE_BASE_URL/$PUNCT_FILE_NAME",
         )
 
+    /**
+     * Uma etapa do download, com o arquivo que está indo agora.
+     *
+     * Adicionado em 25/09/2026 para a tela mostrar a sequência "Baixando arquivo
+     * 3/25: x.onnx (12%)" — o mesmo formato do log do SigUpdater no SIG Windows.
+     * [bytes] e [percent] carregam o mesmo significado de sempre (o callback
+     * legado `(percent, mb)` continua existindo e é alimentado por aqui).
+     */
+    data class Etapa(
+        val indice: Int,
+        val total: Int,
+        val nome: String,
+        val bytes: Long,
+        val percentArquivo: Int,
+        val percentTotal: Int,
+    )
+
     /** Baixa o pacote completo do R2 (modelo + external data + front-end + vocab + punctuator). */
-    fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit) {
+    fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit, onEtapa: (Etapa) -> Unit = {}) {
         val dir = packageDir(context).apply { mkdirs() }
         // Limpa downloads residuais de tentativas anteriores.
         dir.listFiles()?.forEach { if (it.name.endsWith(".download")) it.delete() }
@@ -519,7 +582,8 @@ object GraniteEngine {
         }
         if (totalBytes <= 0L) totalBytes = FALLBACK_PACKAGE_BYTES
         // Baixa cada arquivo que falta.
-        for ((name, url) in missing) {
+        for ((i, par) in missing.withIndex()) {
+            val (name, url) = par
             val dest = File(dir, name)
             val temp = File(dir, "$name.download")
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -527,6 +591,9 @@ object GraniteEngine {
                 readTimeout = 120000
             }
             val total = connection.contentLengthLong.coerceAtLeast(0L)
+            // O nome com a pasta vai no log (é o que o usuário reconhece no R2);
+            // a lista da tela usa só o arquivo.
+            val rotulo = "lib/${File(name).name}"
             connection.inputStream.use { input ->
                 FileOutputStream(temp).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -537,11 +604,18 @@ object GraniteEngine {
                         output.write(buffer, 0, read)
                         copied += read
                         copiedBytes += read
-                        if (total > 0L) {
-                            val percent = ((copiedBytes * 100L) / totalBytes.coerceAtLeast(1L)).coerceIn(0L, 100L).toInt()
+                        val pctArquivo = if (total > 0L) {
+                            ((copied * 100L) / total).coerceIn(0L, 100L).toInt()
+                        } else {
+                            -1
+                        }
+                        if (totalBytes > 0L) {
+                            val percent = ((copiedBytes * 100L) / totalBytes).coerceIn(0L, 100L).toInt()
                             onProgress(percent, copiedBytes / 1048576L)
+                            onEtapa(Etapa(i + 1, missing.size, rotulo, total, pctArquivo, percent))
                         } else {
                             onProgress(-1, copiedBytes / 1048576L)
+                            onEtapa(Etapa(i + 1, missing.size, rotulo, total, pctArquivo, -1))
                         }
                     }
                 }

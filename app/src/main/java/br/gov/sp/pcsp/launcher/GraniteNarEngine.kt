@@ -600,6 +600,109 @@ object GraniteNarEngine {
         (arquivosComuns(variante) + arquivosDosBuckets()).map { it to "$PACKAGE_BASE_URL/$it" }
 
     /**
+     * Plano de download do NAR para o diálogo, com o detalhamento por arquivo.
+     *
+     * A lista e os tamanhos vêm do **manifesto publicado** (a mesma fonte do
+     * SHA-256 verificado no download) quando ele está disponível; senão cai na
+     * lista de arquivos com os tamanhos medidos no R2. Em nenhum dos dois casos
+     * o total é inventado: se tudo falhar, o plano sai só com o total
+     * ([fallbackPackageBytes]) e a tela mostra "arquivo único".
+     *
+     * Só entra no plano o que **ainda falta** baixar (existente E íntegro fica de
+     * fora), então o número muda conforme o aparelho avança — é o que o usuário
+     * precisa ver antes de aceitar.
+     */
+    fun downloadPlan(context: Context? = null): DownloadSizeFormat.Plano {
+        val variante = context?.let { GraniteNarLlmSettings.selected(it) } ?: GraniteNarLlm.PADRAO
+        val dir = context?.let { packageDir(it) }
+        val todos = packageFiles(variante)
+        val hashes = runCatching { buscarManifest(requireNotNull(context)).porNome }
+            .getOrDefault(emptyMap())
+        val itens = todos.mapNotNull { (nome, _) ->
+            val publicado = hashes[nome]
+            val remoto = publicado?.bytes
+                ?: TAMANHO_POR_ARQUIVO[nome]
+                ?: TAMANHO_POR_BUCKET.firstOrNull { it.first == nome }?.second
+                ?: return@mapNotNull null
+            val f = dir?.let { File(it, nome) }
+            // Sem hash publicado não dá para provar integridade por hash, mas o
+            // arquivo existir com o tamanho esperado já prova que NÃO está
+            // truncado — e `confereEstrito` com hash nulo devolveria false,
+            // fazendo a tela anunciar como "faltando" um arquivo já no aparelho.
+            val pronto = f != null && f.isFile && f.length() > 0L &&
+                (publicado?.sha256?.let { GraniteNarManifest.confereEstrito(f, it) } ?: (f.length() == remoto))
+            DownloadSizeFormat.Arquivo(nome, remoto, jaBaixado = pronto)
+        }
+        return DownloadSizeFormat.Plano(
+            rotulo = "Granite 4.1 NAR",
+            arquivos = itens,
+            totalFallbackBytes = fallbackPackageBytes(variante),
+        )
+    }
+
+    /** Os nomes de TODOS os arquivos do pacote (independe de manifesto e disco). */
+    fun nomesDoPacote(variante: GraniteNarLlm.Variante = GraniteNarLlm.PADRAO): List<String> =
+        packageFiles(variante).map { it.first }
+
+    /**
+     * Tamanho já conhecido de um arquivo publicado, sem rede.
+     *
+     * Serve para o plano mostrar a lista COMPLETA mesmo sem manifesto: os
+     * buckets (`t0200`…`t2000`) entram por [TAMANHO_POR_BUCKET]. Devolve 0 para
+     * o que não está na tabela — o chamador trata como "sem tamanho conhecido",
+     * nunca como 0 MB.
+     */
+    fun tamanhoConhecido(nome: String): Long =
+        TAMANHO_POR_ARQUIVO[nome]
+            ?: TAMANHO_POR_BUCKET.firstOrNull { it.first == nome }?.second
+            ?: 0L
+
+    /**
+     * Tamanho medido de cada arquivo publicado (quando não há manifesto).
+     *
+     * Do R2 em 25/09/2026. São os MESMOS valores que a soma de
+     * [fallbackPackageBytes] cobre — o fallback existe para quando a rede falha
+     * e o app ainda precisa de um total honesto.
+     */
+    private val TAMANHO_POR_ARQUIVO = mapOf(
+        ENCODER_PESOS to 1_085_993_664L,
+        PROJECTOR_PESOS to 159_535_104L,
+        "granite-4.1-nar-llm-fp16.onnx" to 2_149_128L,
+        "granite-4.1-nar-llm-fp16.onnx.data" to 3_263_500_288L,
+        "granite-4.1-nar-llm-int4b-blk128.onnx" to 2_220_834L,
+        "granite-4.1-nar-llm-int4b-blk128.onnx.data" to 841_617_408L,
+        MEL_FILE to 82_240L,
+        WINDOW_FILE to 2_048L,
+        VOCAB_FILE to 1_612_704L,
+        EMBED_FILE to 411_041_792L,
+        CONFIG_FILE to 289L,
+    )
+
+    /**
+     * Os 12 arquivos de bucket (6 encoders + 6 projectors), medidos no R2.
+     *
+     * Separados de [TAMANHO_POR_ARQUIVO] porque o nome depende do bucket
+     * (`t0200`…`t2000`) e não pode ser uma constante de texto. Sem manifesto
+     * disponível, a lista do plano ficaria com 11 de 25 arquivos — o usuário
+     * veria um total incompleto; por isso eles entram aqui.
+     */
+    private val TAMANHO_POR_BUCKET: List<Pair<String, Long>> = buildList {
+        // Todos os 6 encoders têm o MESMO tamanho (os pesos são compartilhados
+        // no `encoder-pesos.data`; só o grafo muda, e ele é igual em todos).
+        repeat(GraniteNarBuckets.TODOS.size) {
+            add(GraniteNarBuckets.encoderFile(GraniteNarBuckets.TODOS[it]) to 719_807L)
+        }
+        // Os projectors diferem em 1 byte entre si (arredondamento do grafo).
+        val porBucket = mapOf(
+            200 to 35_761L, 400 to 35_761L, 800 to 35_762L,
+            1200 to 31_433L, 1600 to 35_762L, 2000 to 35_762L,
+        )
+        GraniteNarBuckets.TODOS.forEach { t ->
+            porBucket[t]?.let { add(GraniteNarBuckets.projectorFile(t) to it) }
+        }
+    }
+
+    /**
      * Tamanho total do download do pacote (para o diálogo).
      *
      * Consulta os tamanhos reais no R2 via HEAD (fonte de verdade) e soma apenas
@@ -638,7 +741,7 @@ object GraniteNarEngine {
      * pacote é fixo — os pesos do encoder/projector são compartilhados por todos os buckets
      * (por isso 6 buckets custam só ~4,3 MB em grafos, não 6 GB).
      */
-    private fun fallbackPackageBytes(variante: GraniteNarLlm.Variante): Long =
+    internal fun fallbackPackageBytes(variante: GraniteNarLlm.Variante): Long =
         1_085_993_664L +        // encoder-pesos.data   (compartilhado pelos 6 buckets)
             159_535_104L +      // projector-pesos.data (idem)
             variante.bytes +    // .data do LLM da variante escolhida
@@ -732,7 +835,23 @@ object GraniteNarEngine {
         }
     }.getOrNull()
 
-    fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit) {
+    /**
+     * Uma etapa do download, com o arquivo que está indo agora.
+     *
+     * Criado em 25/09/2026 para a tela mostrar "Baixando arquivo 7/25: x.onnx
+     * (12%)" — o formato do log do SigUpdater no SIG Windows. O callback legado
+     * `(percent, mb)` continua existindo e é alimentado por aqui.
+     */
+    data class Etapa(
+        val indice: Int,
+        val total: Int,
+        val nome: String,
+        val bytes: Long,
+        val percentArquivo: Int,
+        val percentTotal: Int,
+    )
+
+    fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit, onEtapa: (Etapa) -> Unit = {}) {
         val variante = GraniteNarLlmSettings.selected(context)
         val dir = packageDir(context).apply { mkdirs() }
         val files = packageFiles(variante)
@@ -803,7 +922,8 @@ object GraniteNarEngine {
             )
         }
 
-        for ((name, url) in missing) {
+        for ((i, par) in missing.withIndex()) {
+            val (name, url) = par
             val dest = File(dir, name)
             val temp = File(dir, "$name.download")
             // Download RETOMAVEL: se sobrou um `.download` de uma tentativa anterior, pede
@@ -822,6 +942,10 @@ object GraniteNarEngine {
                 temp.delete()
             }
             val restante = connection.contentLengthLong.coerceAtLeast(0L)
+            // Tamanho cheio do arquivo: o manifesto manda, e numa retomada o
+            // `restante` é só a parte que falta (serve para a checagem de disco,
+            // não para o percentual deste arquivo).
+            val esperadoBytes = hashes[name]?.bytes ?: 0L
             connection.inputStream.use { input ->
                 FileOutputStream(temp, jaTemos > 0L).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -832,11 +956,20 @@ object GraniteNarEngine {
                         output.write(buffer, 0, read)
                         copied += read
                         copiedBytes += read
+                        // `esperado` é o tamanho CHEIO do arquivo; numa retomada o
+                        // `copied` já começa em `jaTemos`, então a conta fecha.
+                        val pctArquivo = if (esperadoBytes > 0L) {
+                            ((copied * 100L) / esperadoBytes).coerceIn(0L, 100L).toInt()
+                        } else {
+                            -1
+                        }
                         if (restante > 0L) {
                             val percent = ((copiedBytes * 100L) / totalBytes.coerceAtLeast(1L)).coerceIn(0L, 100L).toInt()
                             onProgress(percent, copiedBytes / 1048576L)
+                            onEtapa(Etapa(i + 1, missing.size, name, esperadoBytes, pctArquivo, percent))
                         } else {
                             onProgress(-1, copiedBytes / 1048576L)
+                            onEtapa(Etapa(i + 1, missing.size, name, esperadoBytes, pctArquivo, -1))
                         }
                     }
                 }

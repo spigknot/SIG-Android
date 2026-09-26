@@ -2,21 +2,14 @@ package br.gov.sp.pcsp.launcher
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Color
 import android.net.Uri
 import android.util.Log
-import android.view.ViewGroup
-import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
 import androidx.core.content.FileProvider
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
-import kotlin.math.roundToInt
 
 /**
  * Verificação silenciosa de atualização do APK no GitHub.
@@ -196,79 +189,68 @@ object AppUpdateChecker {
 
     private fun showUpdateDialog(activity: Activity, tag: String, apkUrl: String, apkSize: Long) {
         if (activity.isFinishing) return
-        val content = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            val padding = (20 * resources.displayMetrics.density).roundToInt()
-            setPadding(padding, 0, padding, 0)
+        // A API do GitHub JÁ entrega `apkSize` (o campo `size` do asset) e ele era
+        // ignorado: o usuário era convidado a baixar um APK sem saber quanto. O
+        // plano traz o próprio `.apk` como arquivo único (é o que o app baixa).
+        val plano = DownloadSizeFormat.Plano(
+            rotulo = "Atualização do SIG",
+            arquivos = listOf(DownloadSizeFormat.Arquivo(APK_ASSET_NAME, apkSize)),
+        )
+        DownloadPlanDialog.confirmar(
+            activity = activity,
+            plano = plano,
+            negativo = "Agora não",
+            positivo = "Atualizar",
+            prefacio = "Uma nova versão do SIG está disponível ($tag).",
+            sufixo = "Baixar e instalar agora?",
+        ) {
+            baixarEInstalar(activity, tag, apkUrl, plano)
         }
-        val status = TextView(activity).apply {
-            text = "Uma nova versão do SIG está disponível (" + tag + ").\n\nBaixar e instalar agora?"
-            setTextColor(Color.WHITE)
-            textSize = 15f
-        }
-        val progress = ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
-            isIndeterminate = false
-            max = 1000
-            visibility = android.view.View.GONE
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply {
-                topMargin = (18 * resources.displayMetrics.density).roundToInt()
-            }
-        }
-        content.addView(status)
-        content.addView(progress)
+    }
 
-        val dialog = AlertDialog.Builder(activity)
-            .setTitle("Atualização disponível")
-            .setView(content)
-            .setNegativeButton("Agora não", null)
-            .setPositiveButton("Atualizar", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                dialog.setCancelable(false)
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).isEnabled = false
-                dialog.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = false
-                progress.visibility = android.view.View.VISIBLE
-                status.text = "Baixando atualização..."
-                Thread {
-                    try {
-                        val file = downloadApk(activity, apkUrl) { downloaded, total ->
-                            activity.runOnUiThread {
-                                if (total > 0L) {
-                                    progress.isIndeterminate = false
-                                    progress.progress = ((downloaded.coerceAtMost(total) * 1000L) / total).toInt()
-                                } else {
-                                    progress.isIndeterminate = true
-                                }
-                            }
+    /** Baixa o APK com a lista que acumula e abre o instalador do sistema. */
+    private fun baixarEInstalar(
+        activity: Activity,
+        tag: String,
+        apkUrl: String,
+        plano: DownloadSizeFormat.Plano,
+    ) {
+        if (activity.isFinishing) return
+        val progresso = DownloadPlanDialog.progresso(
+            activity = activity,
+            plano = plano,
+            titulo = "Atualizando o SIG",
+        )
+        Thread {
+            try {
+                val file = downloadApk(activity, apkUrl) { downloaded, total ->
+                    activity.runOnUiThread {
+                        // Total desconhecido (sem Content-Length) não vira "de 0 B":
+                        // a barra fica indeterminada e o texto mostra só o baixado.
+                        val percent = if (total > 0L) {
+                            ((downloaded.coerceAtMost(total) * 100L) / total).toInt()
+                        } else {
+                            -1
                         }
-                        activity.runOnUiThread {
-                            status.text = "Download concluído. Instalando..."
-                            dialog.dismiss()
-                            installApk(activity, file)
-                        }
-                    } catch (error: Exception) {
-                        activity.runOnUiThread {
-                            status.text = "Não foi possível baixar a atualização:\n" + (error.message ?: error.javaClass.simpleName)
-                            dialog.setCancelable(true)
-                            dialog.getButton(AlertDialog.BUTTON_POSITIVE).apply {
-                                text = "Tentar novamente"
-                                isEnabled = true
-                                setOnClickListener {
-                                    dialog.dismiss()
-                                    showUpdateDialog(activity, tag, apkUrl, apkSize)
-                                }
-                            }
-                            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).isEnabled = true
-                        }
+                        val feitos = if (percent >= 100) plano.arquivos.map { it.nome }.toSet() else emptySet()
+                        progresso.atualizar(downloaded, total, percent, feitos)
                     }
-                }.start()
+                }
+                activity.runOnUiThread {
+                    progresso.atualizar(file.length(), file.length(), 100, plano.arquivos.map { it.nome }.toSet())
+                    progresso.fechar()
+                    installApk(activity, file)
+                }
+            } catch (error: Exception) {
+                activity.runOnUiThread {
+                    progresso.etapa(
+                        "Não foi possível baixar a atualização:\n${error.message ?: error.javaClass.simpleName}"
+                    )
+                    progresso.fechar()
+                    showUpdateDialog(activity, tag, apkUrl, plano.totalBytes)
+                }
             }
-        }
-        dialog.show()
+        }.start()
     }
 
     private fun downloadApk(activity: Activity, url: String, onProgress: (Long, Long) -> Unit): File =

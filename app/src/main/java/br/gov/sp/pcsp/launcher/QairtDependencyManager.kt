@@ -138,6 +138,59 @@ object QairtDependencyManager {
 
     fun downloadSize(): Long = PACKAGE_BYTES
 
+    /**
+     * Tamanho de cada biblioteca dentro do ZIP do QAIRT.
+     *
+     * Medido no artefato publicado (`sig-qairt-arm64-v8a-v1.zip`) em 25/09/2026,
+     * lendo o diretório central. Serve para o detalhamento do diálogo: o
+     * `libQnnHtpPrepare.so` sozinho são ~31 MB de um pacote de 53 MB, e sem
+     * esse número o usuário não sabe no que está gastando o armazenamento.
+     *
+     * ⚠️ Não substitui [PACKAGE_BYTES] (o ZIP, que o app baixa e valida por
+     * SHA-256) — a diferença entre as duas somas é o overhead do próprio ZIP,
+     * e [somaConteudoVsZip] existe para a porta de aceitação conferir.
+     */
+    internal val conteudo = listOf(
+        "libQnnHtpPrepare.so" to 32_362_472L,
+        "libQnnHtpV81Skel.so" to 4_390_990L,
+        "libQnnHtpV79Skel.so" to 4_033_713L,
+        "libQnnHtpV75Skel.so" to 3_997_297L,
+        "libQnnHtpV73Skel.so" to 3_979_555L,
+        "libQnnGpu.so" to 2_820_263L,
+        "libQnnSystem.so" to 1_490_938L,
+        "libQnnHtp.so" to 1_463_485L,
+        "libQnnHtpV81Stub.so" to 291_899L,
+        "libQnnHtpV79Stub.so" to 283_042L,
+        "libQnnHtpV75Stub.so" to 283_042L,
+        "libQnnHtpV73Stub.so" to 283_041L,
+        "manifest.json" to 942L,
+    )
+
+    /**
+     * Plano de download do QAIRT: **um arquivo**, o próprio ZIP.
+     *
+     * O app baixa UM `.zip` e extrai; listar as 13 libs de dentro mentiria sobre
+     * o que está sendo baixado. O plano tem um item só, com [PACKAGE_BYTES] — o
+     * mesmo número que o SHA-256 confere. O conteúdo interno fica em [conteudo]
+     * para a porta de aceitação.
+     */
+    fun downloadPlan(): DownloadSizeFormat.Plano = DownloadSizeFormat.Plano(
+        rotulo = "Componentes QAIRT",
+        arquivos = listOf(
+            DownloadSizeFormat.Arquivo(PACKAGE_URL.substringAfterLast('/'), PACKAGE_BYTES)
+        ),
+        totalFallbackBytes = PACKAGE_BYTES,
+    )
+
+    /**
+     * Diferença entre a soma do conteúdo e o tamanho do ZIP (0 = confere).
+     *
+     * A diferença real é o overhead do ZIP (cabeçalhos + compressão); ela não
+     * precisa ser zero, mas precisa ser PEQUENA e positiva. Serve de trava para
+     * o pacote ser republicado com libs novas sem ninguém atualizar a tabela.
+     */
+    internal fun somaConteudoVsZip(): Long = conteudo.sumOf { it.second } - PACKAGE_BYTES
+
     data class Progress(val downloaded: Long, val total: Long, val stage: String)
 
     fun install(context: Context, onProgress: (Progress) -> Unit): Result<Unit> = runCatching {

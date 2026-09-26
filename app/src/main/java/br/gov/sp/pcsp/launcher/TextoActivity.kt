@@ -201,26 +201,34 @@ class TextoActivity : AppCompatActivity() {
     }
 
     private fun confirmModelDownload(model: HyMt2Model) {
-        AlertDialog.Builder(this)
-            .setTitle("Baixar modelo")
-            .setMessage("Ainda não temos o modelo ${model.label} no aparelho. Baixar agora?")
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Baixar") { _, _ ->
-                downloadModelWithProgress(model) { selectModel(model) }
-            }
-            .show()
+        // O diálogo não dizia tamanho nenhum — e o Q8_0 são 1,9 GB.
+        DownloadPlanDialog.confirmar(
+            activity = this,
+            plano = DownloadSizeFormat.Plano(
+                rotulo = "Modelo Hy-MT2 ${model.label}",
+                arquivos = listOf(
+                    DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = model.file.exists())
+                ),
+            ),
+            negativo = "Cancelar",
+            positivo = "Baixar",
+            prefacio = "Ainda não temos o modelo ${model.label} no aparelho.",
+            sufixo = "Baixar agora?",
+        ) {
+            downloadModelWithProgress(model) { selectModel(model) }
+        }
     }
 
     private fun downloadModelWithProgress(model: HyMt2Model, onSuccess: () -> Unit) {
-        val progressView = layoutInflater.inflate(R.layout.dialog_model_download, null)
-        val statusText = progressView.findViewById<TextView>(R.id.modelDownloadStatusText)
-        val progressBar = progressView.findViewById<ProgressBar>(R.id.modelDownloadProgressBar)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Baixando modelo ${model.label}")
-            .setView(progressView)
-            .setCancelable(false)
-            .create()
-        dialog.show()
+        // Lista que acumula (item 1 do plano): o usuário vê o ✓ no fim e rola
+        // para cima para ler tudo antes de continuar.
+        val plano = DownloadSizeFormat.Plano(
+            rotulo = "Modelo Hy-MT2 ${model.label}",
+            arquivos = listOf(
+                DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = model.file.exists())
+            ),
+        )
+        val progresso = DownloadPlanDialog.progresso(this, plano, titulo = "Baixando modelo ${model.label}")
         appendLog("Baixando modelo ${model.label}...")
         Thread {
             try {
@@ -294,14 +302,11 @@ class TextoActivity : AppCompatActivity() {
                                 if (now - lastUi > 300L) {
                                     lastUi = now
                                     val percent = if (total > 0L) (copied * 100L / total).coerceIn(0L, 100L) else -1L
-                                    val mb = copied / 1048576L
                                     runOnUiThread {
-                                        if (percent >= 0L) {
-                                            progressBar.progress = percent.toInt()
-                                            statusText.text = "$percent% ($mb MB de ${total / 1048576L} MB)"
-                                        } else {
-                                            statusText.text = "Baixando... $mb MB"
-                                        }
+                                        progresso.atualizar(
+                                            copied, total, percent.toInt(),
+                                            if (percent >= 100L) plano.arquivos.map { it.nome }.toSet() else emptySet(),
+                                        )
                                     }
                                 }
                             }
@@ -316,14 +321,15 @@ class TextoActivity : AppCompatActivity() {
                     temp.delete()
                 }
                 runOnUiThread {
-                    dialog.dismiss()
-                    appendLog("Modelo ${model.label} baixado (${model.file.length() / 1048576L} MB).")
+                    progresso.atualizar(model.file.length(), model.file.length(), 100, plano.arquivos.map { it.nome }.toSet())
+                    progresso.concluirContinuando(model.file.length())
+                    appendLog("Modelo ${model.label} baixado (${DownloadSizeFormat.legivel(model.file.length())}).")
                     onSuccess()
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Download failed", e)
                 runOnUiThread {
-                    dialog.dismiss()
+                    progresso.fechar()
                     appendLog("ERRO ao baixar ${model.label}: ${e.message ?: "falha inesperada"}")
                     status.text = "Erro ao baixar ${model.label}: ${e.message ?: "falha inesperada"}"
                 }

@@ -708,44 +708,56 @@ class RemoteSttActivity : AppCompatActivity() {
      * abertura até o download ser aceito/concluído. */
     private fun ensureNativeDependenciesPrompt() {
         if (NativeDependencyManager.isInstalled(this)) return
-        AlertDialog.Builder(this)
-            .setTitle("Componentes nativos")
-            .setMessage("Para usar as ferramentas de vídeo/áudio e o transcritor offline, o SIG precisa baixar os componentes nativos (~41 MB, somente na primeira vez). Deseja baixar agora?")
-            .setPositiveButton("Baixar") { _, _ -> downloadNativeDependencies() }
-            .setNegativeButton("Agora não", null)
-            .setCancelable(false)
-            .show()
+        // O texto lia "componentes nativos (~41 MB, somente na primeira vez)" — número
+        // CONGELADO do pacote v1, enquanto o COMPONENT_VERSION 8 publica 71,0 MB
+        // (arm64). Além do valor errado, não dizia QUAIS arquivos. O ZIP é
+        // arquivo único (listar as 18 libs mentiria sobre o download).
+        DownloadPlanDialog.confirmar(
+            activity = this,
+            plano = NativeDependencyManager.downloadPlan(),
+            negativo = "Agora não",
+            positivo = "Baixar",
+            prefacio = "Para usar as ferramentas de vídeo/áudio e o transcritor offline, o SIG precisa " +
+                "baixar os componentes nativos (somente na primeira vez).",
+            sufixo = "Deseja baixar agora?",
+        ) {
+            downloadNativeDependencies()
+        }
     }
 
     private fun downloadNativeDependencies() {
-        val progressView = layoutInflater.inflate(R.layout.dialog_native_download, null)
-        val statusText = progressView.findViewById<TextView>(R.id.nativeStatusText)
-        val progressBar = progressView.findViewById<ProgressBar>(R.id.nativeProgressBar)
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Baixando componentes nativos")
-            .setView(progressView)
-            .setCancelable(false)
-            .create()
-        dialog.show()
+        val plano = NativeDependencyManager.downloadPlan()
+        // `cancelavel = false`: o diálogo original era setCancelable(false) e o
+        // motivo é real — fechar no meio deixaria o pacote pela metade sem o
+        // usuário ter escolha consciente. O botão "Continuar" (que só abre no
+        // fim) é a saída.
+        val progresso = DownloadPlanDialog.progresso(
+            this, plano, titulo = "Baixando componentes nativos", cancelavel = false,
+        )
         Thread {
             val result = NativeDependencyManager.install(this) { progress ->
                 runOnUiThread {
-                    statusText.text = if (progress.total > 0) {
-                        "${progress.stage} · ${progress.downloaded * 100 / progress.total}%"
+                    val percent = if (progress.total > 0L) {
+                        (progress.downloaded.coerceAtMost(progress.total) * 100 / progress.total).toInt()
                     } else {
-                        progress.stage
+                        -1
                     }
-                    progressBar.max = progress.total.toInt().coerceAtLeast(1)
-                    progressBar.progress = progress.downloaded.toInt()
+                    // ZIP = arquivo único: vira ✓ só quando o pacote inteiro chega.
+                    val feitos = if (percent >= 100) plano.arquivos.map { it.nome }.toSet() else emptySet()
+                    progresso.atualizar(progress.downloaded, progress.total, percent, feitos)
                 }
             }
             runOnUiThread {
-                dialog.dismiss()
+                progresso.fechar()
                 result.fold(
                     onSuccess = {
                         NativeDependencyManager.activateIfInstalled(this)
+                        // Lista e log ficam para o usuário rolar e ler. O total
+                        // vem do próprio plano (o mesmo número da lista).
+                        progresso.concluirContinuando(plano.totalBytes)
                     },
                     onFailure = { error ->
+                        progresso.fechar()
                         AlertDialog.Builder(this)
                             .setTitle("Falha ao baixar os componentes nativos")
                             .setMessage(error.message ?: error.javaClass.simpleName)
