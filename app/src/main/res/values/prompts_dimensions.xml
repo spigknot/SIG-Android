@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Current 239.4dp × 1.5 / × 0.5; both tabs only, not the + dialog. -->
+    <dimen name="prompt_tab_system_editor_height">359.1dp</dimen>
+    <dimen name="prompt_tab_user_editor_height">119.7dp</dimen>
+</resources>

@@ -43,6 +43,7 @@ também é bloqueado.
 | `ApiKeysSettingsActivity.kt` | Chaves de API: digitação, máscara, importação. |
 | `AdvancedSettingsActivity.kt` | Configurações avançadas: paralelismo e tabela de keywords. |
 | `ModelSettingsActivity.kt` | Servidores/modelos de texto e transcrição. |
+| `PromptsSettingsActivity.kt` | PROMPTS: abas Histórico/Oitiva, editores System/User independentes, criação por +, importação e atualização R2. |
 | `RemoteSttActivity.kt` | **HOTSPOT**: transcrição remota REST + ao vivo (WS) e Ocorrência; UI e orquestração. |
 | `GraniteActivity.kt` | Transcrição/geração local com Granite (STT/TTS) + assistente. |
 | `WhisperActivity.kt` | Transcrição local com Whisper. |
@@ -89,6 +90,7 @@ também é bloqueado.
 | `MediaUriSupport.kt` | Nome de arquivo de URI + permissões de pasta. |
 | `SharedMediaIntents.kt` | Regras de intent de compartilhamento (vídeo/áudio/URI). |
 | `ApiKeysImportParser.kt` | Parser do arquivo de importação de chaves (uma linha por serviço). |
+| `PromptStoreCore.kt` | Prompts da Ocorrência: slots, migração, prompt ativo e validação do download do R2. |
 | `SttOutputStorage.kt` | Escolha/criação da pasta de saída. |
 | `FfmpegOutputRemuxer.kt` | Remux da saída para o contêiner original (HEVC). |
 | `FfmpegProgressText.kt` | Texto de encoder/duração nas etapas FFmpeg. |
@@ -123,7 +125,7 @@ também é bloqueado.
 |---|---|
 | `ModelServerStore.kt` | Servidores/modelos configurados (texto e transcrição). |
 | `TranscriptionModelStore.kt` | Modelos de transcrição selecionados. |
-| `PromptTemplateStore.kt` | Templates de prompt (histórico, partes). |
+| `PromptTemplateStore.kt` | Prompts em uso da ferramenta Ocorrência + prompts legados de partes/qualificação. |
 | `GrokApiSettings.kt` | Preferências e chaves das integrações de API. |
 | `ApiKeyStore.kt` | Armazenamento cifrado das chaves digitadas. |
 | `ImeiApiSettings.kt` | Chave da consulta de IMEI. |

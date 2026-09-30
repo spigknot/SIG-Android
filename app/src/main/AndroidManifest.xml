@@ -232,6 +232,11 @@
             android:exported="false" />
 
         <activity
+            android:name=".PromptsSettingsActivity"
+            android:screenOrientation="portrait"
+            android:exported="false" />
+
+        <activity
             android:name=".FfmpegActivity"
             android:screenOrientation="portrait"
             android:exported="false" />

@@ -71,6 +71,9 @@ class ModelSettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.button_api_keys).setOnClickListener {
             startActivity(Intent(this, ApiKeysSettingsActivity::class.java))
         }
+        findViewById<Button>(R.id.button_prompts).setOnClickListener {
+            startActivity(Intent(this, PromptsSettingsActivity::class.java))
+        }
         findViewById<Button>(R.id.button_advanced).setOnClickListener {
             startActivity(Intent(this, AdvancedSettingsActivity::class.java))
         }
