@@ -87,8 +87,11 @@ Precheck PROCEDENCIA (device):
   maps/PID: COLETADO com ROOT (KernelSU) — /proc/20752/maps mostra a libsig_llama.so
   do pacote v10 mapeada (r-xp/r--p/rw-p em
   /data/data/br.gov.sp.pcsp.launcher/no_backup/native_dependencies/10-arm64-v8a/lib/libsig_llama.so).
-  libsig_whisper.so: carga capturada em fluxo (precheck .so sha 8e3982b2 confirmado);
-  maps dedicado da whisper exige transcricao no processo — captura em andamento.
+  libsig_whisper.so: **MAPS CAPTURADO** apos transcricao real no processo (tiny/CPU):
+  /proc/20752/maps mostra a lib v10 mapeada (r-xp 705021c000-7052485000 + r--p + rw-p em
+  /data/data/br.gov.sp.pcsp.launcher/no_backup/native_dependencies/10-arm64-v8a/lib/libsig_whisper.so)
+  e a libsig_llama v10 tambem mapeada (70f9c18000-70fb953000 r-xp + r--p + rw-p).
+  => procedencia do binario carregado: CONFIRMADA via maps (root).
 terminal.txt (build diagnostics): whisper 1.8.4 / ggml 0.11.1 / ggml_commit e1bd73e /
   SIG_BUILD_GGML_OPENCL=1 / SIG_BUILD_GGML_VULKAN=1 / OPENCL_EMBED=1 / SOA_Q=1 /
   ADRENO_KERNELS=1 / JNI_OPENMP=0; decode beam_search=5; best_of=5; vad=on
@@ -140,7 +143,8 @@ G. PENDENCIAS (sem novo device/publicacao sem autorizacao)
 ════════════════════════════════════════════════════════════════
 H. ESTADO GIT / ENTREGA
 ════════════════════════════════════════════════════════════════
-git status ANTES de qualquer commit (pendente de leitura nesta rodada);
-relatorios (SMOKES/AUDITORIA) UNTRACKED — novo commit SOMENTE se aprovado,
-sem amend/force. O:/sig.apk continua opcional/sem bloqueio.
+git status lido antes do commit; relatorios APROVADOS pelo usuario e commitados:
+  commit 5183a38 "Relatorios do ciclo v10: auditoria, release, smokes e provenance"
+  (4 arquivos: AUDITORIA / RELATORIO-RELEASE / SMOKES / PROVENANCE-v10), push origin/main OK
+  (3620bb3..5183a38). Sem amend/force. O:/sig.apk continua opcional/sem bloqueio.
 — fim —
