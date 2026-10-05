@@ -1,0 +1,49 @@
+MANIFEST DE FONTES — PRODUTO v10 (Vulkan/reset) — pin para reconstrucao
+Gerado: 05/10/2026. Fonte: worktree isolado D:/svr11.
+
+BASELINE (commit full):
+  e1bd73e31ba18bd36cdb65542a512fd8933901ca   (main do repo SIG-Android)
+
+PATCH EXATO (aplicavel ao baseline; contem as 6 entradas da allowlist):
+  vulkan-reset-v10.patch
+  sha256: 9ea0133107c6660631101255347c5a388c00b63a9a8a5dbd03c554217e677eb7
+
+HASHES POR ARQUIVO (estado final dos fontes usados no build do produto):
+  e90fcdc9963c57e5efd2247983998bb519915fe6dd97c740cded344d92f19cea  app/src/main/cpp/llama/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+  e1e9f4c594b4f6e13e48e2b0f2cb176a3f7ca4bf91e103897db232f845995b63  app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl
+  66d73b8e9b33f64cbf1d758092211c45c53ee9b1f83f6811db729ae7f7ff3c2d  app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl
+  bb13c72bdbb04789af4c3f6bab5e17bec273228f42fcc2a644833f8c6ca51055  app/src/main/cpp/llama-jni/hymt2_request_reset.h
+  f126ecfb9b406fc2db48fb9311557f825b51eb1c8a36c518bb1fb75a5017a308  app/src/main/cpp/llama-jni/llama_jni.cpp
+  59ff46af4adedfab34520bb3c088aa878d886a928f6d9707818ef9c694f1dd8b  app/src/main/cpp/llama-jni/CMakeLists.txt
+
+CONTEUDO DO PATCH (allowlist):
+  1. ggml-vulkan.cpp — workaround Qualcomm 0x5143 (disable_fused_rms_norm_mul,
+     disable_add_rms_fusion).
+  2. dequant_funcs.glsl / 3. mul_mm_funcs.glsl — leitura Q8 s8 aritmetica.
+  4. hymt2_request_reset.h (NOVO) — helper reset (llama_memory_clear data=true).
+  5. llama_jni.cpp — SOMENTE o reset (hymt2_begin_fresh_request no inicio de
+     generate, sob g_mutex). ZERO referencias a instrumentacao
+     (sig_sched/ggml_opencl_diag/hostprof/clcount — grep = 0).
+  6. CMakeLists.txt — correcao de comentario (GGML_VULKAN_DEBUG OFF).
+
+CONTEXTO DE BUILD (v10):
+  Toolchain: Android NDK 27.2.12479018; CMake 3.22.1; Gradle wrapper do repo.
+  ABIs: arm64-v8a + x86_64 (condicoes ABI identicas no CMakeLists).
+  Fluxo: gradlew :app:assembleDebug -PbuildNativeComponents=true
+         -> strip (llvm-strip --strip-unneeded) nas libs cxx/merged
+         -> scripts/build-android-native-dependencies.ps1 -Version 10
+  AAR pin: app/libs/ffmpeg-kit-6.1.1-gpl-x264-16kb.aar (FFmpeg libav*).
+  ONNX: onnxruntime-android-1.29.0 (Maven, x86_64) + qnn (arm64, cache).
+
+OBSERVACAO STRIP (fluxo real v10 — ver PROVENANCE §3):
+  O ZIP v10 final tem libsig_llama STRIPADA e libsig_whisper NAO STRIPADA
+  (build cxx Debug do Gradle). Causa: o whisper e copiado pelo script de
+  empacotamento a partir de merged_native_libs, que foi RE-POSTO pelo
+  assemble posterior ao strip do cxx (o strip precisa valer tambem no
+  merged, nao apenas no cxx; ou aplicar strip na copia do pacote ao zipar).
+  Nao altera os fontes deste patch.
+
+LIMITES: source hash NAO prova reprodutibilidade byte-a-byte — a prova de
+  bytes do v10 e o ELF/hash dos artefatos publicados (ZIP v10 SHA-256) e o
+  smoke runtime. Este manifesto permite RECONSTRUIR os fontes; uma prova de
+  reprodutibilidade byte-a-byte exigiria fresh build (nao undertaken).

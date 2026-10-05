@@ -56,6 +56,10 @@ tools/granite/*.wav
 *.sig_orig
 # Fixtures de pacotes nativos (artefatos de teste, nao entram no Git)
 app/src/test/resources/native-deps/*.zip
+# EXCECAO: fixture minimal deterministica do teste de contrato (≈1 KB,
+# versionada; os ZIPs reais de 50 MB continuam fora). Gerador:
+# scripts/gen-native-deps-fixture.py
+!app/src/test/resources/native-deps/contract-min.zip
 # Harness e artefatos de diagnostico nativos
 native-dependencies/harness/
 native-dependencies/diag-norm/

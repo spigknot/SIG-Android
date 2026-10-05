@@ -1,0 +1,196 @@
+diff --git a/app/src/main/cpp/llama-jni/CMakeLists.txt b/app/src/main/cpp/llama-jni/CMakeLists.txt
+index bd6e777..917eec9 100644
+--- a/app/src/main/cpp/llama-jni/CMakeLists.txt
++++ b/app/src/main/cpp/llama-jni/CMakeLists.txt
+@@ -130,7 +130,10 @@ if (TARGET ggml-vulkan)
+             "${CMAKE_CURRENT_SOURCE_DIR}/../vulkan-headers/include"
+             "${CMAKE_CURRENT_SOURCE_DIR}/../spirv-headers/include")
+     # O patch de "sem crash" fica em ggml-vulkan.cpp (target ggml-vulkan), então a
+-    # flag precisa ser DEFINIDA nele — definir só no sig_llama não tem efeito.
++    # flag precisa ser DEFINIDA nela — definir só no sig_llama não tem efeito.
++    # GGML_VULKAN_DEBUG (log de pipelines/buffers/descriptors) fica DESLIGADO
++    # por padrão: é barulhento. Para diagnóstico, liga com -DGGML_VULKAN_DEBUG=1
++    # no build (o probe "SIGVK" das capabilities não depende desta flag).
+     target_compile_definitions(ggml-vulkan PRIVATE SIG_VULKAN_NO_CRASH=1)
+ endif()
+ 
+diff --git a/app/src/main/cpp/llama-jni/hymt2_request_reset.h b/app/src/main/cpp/llama-jni/hymt2_request_reset.h
+new file mode 100644
+index 0000000..42338d0
+--- /dev/null
++++ b/app/src/main/cpp/llama-jni/hymt2_request_reset.h
+@@ -0,0 +1,30 @@
++// Isolamento de pedidos Hy-MT2: helper de reset usado pelo `generate`.
++//
++// Mesmo código no produto (`llama_jni.cpp`) e no teste de host
++// (`hymt2_reset_test.cpp`): sem duplicação. Só depende da API real do
++// llama (`llama.h`); sem Android/JNI para compilar no host.
++// O chamador (generate) já está sob `g_mutex`.
++#pragma once
++
++#include <string>
++
++#include "llama.h"
++
++/** Prepara o contexto para um pedido independente (contrato testável).
++ *
++ * Limpa a memória KV/posição do pedido anterior. Devolve o erro em
++ * `error_out` (sem tocar em log) para ser testável no host; o `generate`
++ * converte em `set_error`. Modelo/pesos permanecem carregados. Retorna
++ * false sem efeito parcial além da leitura (nenhum prefill/decode aqui).
++ */
++static inline bool hymt2_begin_fresh_request(llama_context * ctx, std::string * error_out) {
++    llama_memory_t mem = llama_get_memory(ctx);
++    if (mem == nullptr) {
++        if (error_out != nullptr) {
++            *error_out = "Contexto sem memoria para novo pedido.";
++        }
++        return false;
++    }
++    llama_memory_clear(mem, true);
++    return true;
++}
+diff --git a/app/src/main/cpp/llama-jni/llama_jni.cpp b/app/src/main/cpp/llama-jni/llama_jni.cpp
+index 2a60ca4..e2da608 100644
+--- a/app/src/main/cpp/llama-jni/llama_jni.cpp
++++ b/app/src/main/cpp/llama-jni/llama_jni.cpp
+@@ -28,6 +28,7 @@
+ 
+ #include "llama.h"
+ #include "ggml-backend.h"
++#include "hymt2_request_reset.h"
+ 
+ #define LOG_TAG "SIGLlama"
+ #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+@@ -401,6 +402,19 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
+         return nullptr;
+     }
+ 
++    // Isolamento de pedidos: o contexto e reutilizado entre traducoes (sem
++    // recarga de pesos), entao a memoria KV/posicao do pedido anterior deve
++    // ser limpa aqui - sob o MESMO g_mutex que protege inferência e release.
++    // Sem isso, llama_batch_get_one(pos=null) continua de seq_pos_max+1 e o
++    // pedido novo observa o anterior. Modelo/pesos permanecam carregados.
++    {
++        std::string reset_error;
++        if (!hymt2_begin_fresh_request(g_ctx, &reset_error)) {
++            set_error(reset_error);
++            return nullptr;
++        }
++    }
++
+     // try/catch: no Vulkan o driver pode lancar (vk::SystemError na criacao de
+     // pipeline) durante a primeira decodificacao — sem catch vira SIGABRT.
+     try {
+diff --git a/app/src/main/cpp/llama/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/app/src/main/cpp/llama/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index b909a3b..7080226 100644
+--- a/app/src/main/cpp/llama/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/app/src/main/cpp/llama/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -810,6 +810,10 @@ struct vk_device_struct {
+     bool float_controls_denorm_preserve_fp16;
+     bool subgroup_basic;
+     bool subgroup_arithmetic;
++    // SIG (fusion-round 27/09, PROVISORIO): contorno dos shaders fundidos
++    // rms_norm_mul_f32 e add_rms_fusion no Adreno (Qualcomm 0x5143).
++    bool disable_fused_rms_norm_mul;
++    bool disable_add_rms_fusion;
+     bool subgroup_shuffle;
+     bool subgroup_ballot;
+     bool subgroup_clustered;
+@@ -7069,7 +7073,19 @@ static vk_device ggml_vk_get_device(size_t idx) {
+ 
+         device->disable_fusion = getenv("GGML_VK_DISABLE_FUSION") != nullptr;
+ 
++        // SIG (fusion-round 27/09, PROVISORIO): contorno dos shaders fundidos
++        // rms_norm_mul_f32 e add_rms_fusion no Adreno (Qualcomm 0x5143).
++        // Sintoma: o kernel fundido executa mas nao escreve no destino
++        // (sentinela intacta) -> logits com cerca de metade do valor correto.
++        // Evidencia: docs/vulkan-hymt2-fusion-round/ (rodadas 1-4).
++        // Escopo Qualcomm-wide por conservadorismo: so o Adreno 840 foi testado.
++        device->disable_fused_rms_norm_mul =
++            device->vendor_id == VK_VENDOR_ID_QUALCOMM;
++        device->disable_add_rms_fusion =
++            device->vendor_id == VK_VENDOR_ID_QUALCOMM;
++
+         device->add_rms_fusion = !device->disable_fusion &&
++                                 !device->disable_add_rms_fusion &&
+                                  device->subgroup_arithmetic &&
+                                  device->vendor_id != VK_VENDOR_ID_INTEL;
+         device->partials_binding_alignment =
+@@ -16407,6 +16423,14 @@ static bool ggml_vk_can_fuse(const ggml_backend_vk_context * ctx, const struct g
+     }
+ 
+     if (ops.size() == 2 && ops.begin()[0] == GGML_OP_RMS_NORM && ops.begin()[1] == GGML_OP_MUL) {
++        // SIG (fusion-round 27/09, PROVISORIO): no Adreno (Qualcomm 0x5143) o
++        // pipeline fundido rms_norm_mul_f32 executa mas NAO escreve no destino
++        // (sentinela intacta) -> logits com cerca de metade do valor correto.
++        // Ver docs/vulkan-hymt2-fusion-round/. Escopo Qualcomm-wide por
++        // conservadorismo: so o Adreno 840 foi testado.
++        if (ctx->device->disable_fused_rms_norm_mul) {
++            return false;
++        }
+         // additional constraints specific to this fusion
+         const ggml_tensor *rms_norm = cgraph->nodes[node_idx];
+         const ggml_tensor *mul = cgraph->nodes[node_idx + 1];
+diff --git a/app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl b/app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl
+index d902ff3..57d6e1b 100644
+--- a/app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl
++++ b/app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl
+@@ -116,13 +116,22 @@ vec4 dequantize4(uint ib, uint iqs, uint a_offset) {
+ #endif
+ 
+ #if defined(DATA_A_Q8_0)
++// SIG-FIX (experimento local): os quants Q8_0 chegavam ao produto como
++// UNSIGNED neste compilador/driver (byte 0xFF valia 255, nao -1). Esta
++// conversao e' independente da convencao: normaliza para 0..255 com &0xFF e
++// aplica -256 quando o bit de sinal esta setado.
++float sig_s8(uint u) {
++    const float v = float(u & 0xFFu);
++    return v >= 128.0 ? v - 256.0 : v;
++}
+ vec2 dequantize(uint ib, uint iqs, uint a_offset) {
+-    return vec2(int(data_a[a_offset + ib].qs[iqs]), int(data_a[a_offset + ib].qs[iqs + 1]));
++    return vec2(sig_s8(uint(data_a[a_offset + ib].qs[iqs])),
++                sig_s8(uint(data_a[a_offset + ib].qs[iqs + 1])));
+ }
+ vec4 dequantize4(uint ib, uint iqs, uint a_offset) {
+-    const i8vec2 v0 = unpack8(int32_t(data_a_packed16[a_offset + ib].qs[iqs/2])).xy; // vec4 used due to #12147
+-    const i8vec2 v1 = unpack8(int32_t(data_a_packed16[a_offset + ib].qs[iqs/2 + 1])).xy;
+-    return vec4(v0.x, v0.y, v1.x, v1.y);
++    const u8vec2 r0 = u8vec2(unpack8(int32_t(data_a_packed16[a_offset + ib].qs[iqs/2])).xy);
++    const u8vec2 r1 = u8vec2(unpack8(int32_t(data_a_packed16[a_offset + ib].qs[iqs/2 + 1])).xy);
++    return vec4(sig_s8(uint(r0.x)), sig_s8(uint(r0.y)), sig_s8(uint(r1.x)), sig_s8(uint(r1.y)));
+ }
+ #endif
+ 
+diff --git a/app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl b/app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl
+index 31dfefe..8c702ef 100644
+--- a/app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl
++++ b/app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl
+@@ -1,3 +1,10 @@
++// SIG-FIX (experimento local MM): normaliza byte para 0..255 e aplica -256
++// quando o bit de sinal esta setado (funciona com leitura signed OU unsigned).
++float sig_mm_s8(uint u) {
++    const float x = float(u & 0xFFu);
++    return x >= 128.0 ? x - 256.0 : x;
++}
++
+ void load_a_to_shmem(const uint pos_a, const uint row, const uint col, const uint idx_m, const uint block, const uint end_k) {
+ #if defined(DATA_A_F32) || defined(DATA_A_F16)
+ #if LOAD_VEC_A == 8
+@@ -131,9 +138,12 @@ void load_a_to_shmem(const uint pos_a, const uint row, const uint col, const uin
+             const uint iqs = idx & 0x07;
+ 
+             const float d = float(data_a_packed16[ib].d);
+-            const i8vec2 v0 = unpack8(int32_t(data_a_packed16[ib].qs[2*iqs])).xy; // vec4 used due to #12147
+-            const i8vec2 v1 = unpack8(int32_t(data_a_packed16[ib].qs[2*iqs + 1])).xy;
+-            const vec4 v = vec4(v0.x, v0.y, v1.x, v1.y) * d;
++            // SIG-FIX (experimento local MM): conversao s8 explicita por
++            // aritmetica (robusta a leitura unsigned do caminho empacotado).
++            const u8vec2 r0 = u8vec2(unpack8(int32_t(data_a_packed16[ib].qs[2*iqs    ])).xy);
++            const u8vec2 r1 = u8vec2(unpack8(int32_t(data_a_packed16[ib].qs[2*iqs + 1])).xy);
++            const vec4 v = vec4(sig_mm_s8(uint(r0.x)), sig_mm_s8(uint(r0.y)),
++                                sig_mm_s8(uint(r1.x)), sig_mm_s8(uint(r1.y))) * d;
+ 
+             buf_a[buf_idx    ] = FLOAT_TYPEV2(v.xy);
+             buf_a[buf_idx + 1] = FLOAT_TYPEV2(v.zw);
