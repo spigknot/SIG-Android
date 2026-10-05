@@ -1,0 +1,25 @@
+REFERENCIA — fixtures do teste de CONTEUDO do blob Vulkan (check_shader_content.sh)
+=============================================================================
+Os dois arquivos .orig desta pasta sao as FONTES ORIGINAIS (pre-patch) dos
+shaders do fix Q8_0, preservadas para o teste compilar "patched vs original"
+e provar que o blob do build == patched != original. Sem elas o teste nao e'
+autocontido (antes viviam em cache scratch do executor).
+
+Arquivos e sha256 (verificar com `sha256sum fixtures/*.orig`):
+  dequant_funcs.glsl.orig  f4eb63fcc63a17ac2cdab0e039e4f414389a34763392be37aa8b11bdd1688faf
+  mul_mm_funcs.glsl.orig   57d2e5d84015555672e9a73b9dac2fe2423a8978cc239d68b2e7b3d4e7d4c4ea
+
+Fontes PATCHED correspondentes (estado vivo do repo; conferir antes de rodar):
+  app/.../vulkan-shaders/dequant_funcs.glsl  e1e9f4c594b4f6e13e48e2b0f2cb176a3f7ca4bf91e103897db232f845995b63
+  app/.../vulkan-shaders/mul_mm_funcs.glsl   66d73b8e9b33f64cbf1d758092211c45c53ee9b1f83f6811db729ae7f7ff3c2d
+
+Blobs esperados (medidos em 02/10/2026; o teste imprime os valores atuais):
+  vec mud_mat_vec_q8_0_f32_f32.spv : patched 2a71714a...  | original 63bdcc67...
+  mm  matmul_q8_0_f32_f16acc.spv   : patched 29f8eeda...  | original 839f1a31...
+
+Como REGERAR as fixtures se o patch mudar de forma legitima: salvar a versao
+pre-patch como *.orig novo, atualizar os hashes deste arquivo e re-rodar
+`bash check_shader_content.sh` (PASS esperado).
+
+PENDENTE DE CONSENTIMENTO: ligar isto ao CI (workflow) exige autorizacao
+separada; o teste vive no harness e roda sob demanda (nao toca produto).
