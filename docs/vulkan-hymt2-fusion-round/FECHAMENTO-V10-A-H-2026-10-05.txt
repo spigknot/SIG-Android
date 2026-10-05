@@ -1,0 +1,123 @@
+FECHAMENTO v10 — ENTREGA A-H (parecer 05/10 §5)
+Data: 05/10/2026. Base: PROVENANCE-v10 (rev.2), SMOKES-V10, AUDITORIA.
+Nada publicado/republicado. Artefatos R2/release 20261005_001 imutaveis.
+
+════════════════════════════════════════════════════════════════
+A. TESTES DE CHECKOUT LIMPO (reais, isolados)
+════════════════════════════════════════════════════════════════
+SNAPSHOT: `git archive HEAD` do commit 48067e2 -> D:/sigclean
+(4154 arquivos; SEM nenhum arquivo ignorado — ZIPs reais, gguf, harness,
+SIG Windows nao viajam; local.properties copiado do repo para o Gradle).
+Verificado: native-deps/ contem SOMENTE contract-min.zip.
+
+RESULTADO (suite completa no snapshot, offline):
+  541 testes | 0 falhas | 0 erros | 4 skipped (official: ZIPs ausentes)
+  BUILD SUCCESSFUL (JDK 21.0.12.1 Microsoft; Gradle 9.5.0; Kotlin 2.3.20)
+
+FALHA ENCONTRADA E CORRIGIDA (o valor do teste de snapshot):
+  `PromptAssetsParityTest` FALHOU no snapshot: o `git archive` (e um checkout
+  Windows com `* text=auto` + `core.autocrlf=true`) entrega o asset
+  `oitiva_user.txt` em CRLF (170 B), enquanto a pasta `SIG Windows/prompts`
+  esta em LF (167 B). A comparacao byte-a-byte reprovava por LINE-ENDING, nao
+  por conteudo. Correcao: normalizar eol na comparacao (conteudo segue
+  verificado — qualquer divergencia real reprova). Re-rodado no snapshot:
+  541/0/0/4skip. No repo vivo (working tree LF) tambem PASS.
+
+COM ZIPs REAIS (na maquina com os pacotes): suite 541/0/0/0 (official roda).
+
+TOOLCHAIN / DEPS CI (declarado): JDK 21 (Microsoft), Gradle 9.5.0 (wrapper
+do repo), Kotlin 2.3.20, Android SDK + NDK 27.2.12479018 para os gates
+nativos. O unit suite NAO precisa de rede (deps em cache do Gradle);
+o official precisa dos ZIPs v10 locais (nao versionados).
+
+════════════════════════════════════════════════════════════════
+B. FIXTURE CONTRACT (minimal deterministica, versionada)
+════════════════════════════════════════════════════════════════
+  app/src/test/resources/native-deps/contract-min.zip
+    1018 bytes | sha256 55ab08fb9047c3b42be08b7b3a484c826d4d8f63e121da279eade8c7c7fc220e
+    entries (tamanho descomprimido): manifest.json 34, libalpha.so 1000,
+    libbeta.so 2000, tiny.bin 512.
+  Gerador: scripts/gen-native-deps-fixture.py (timestamps/conteudo fixos;
+  stdlib Python; reproducao deterministica).
+  Testes: NativeDepsContractFixtureTest (6): estrutura, positivo, negativos
+  (entry faltante, entry extra, tamanho divergente, sha corrompido).
+  Os VALORES de producao NAO foram trocados por valores da fixture: o
+  official (NativeDepsOfficialFixturesTest, 4 testes) segue conferindo os
+  ZIPs reais (tabela x ZIP arquivo-a-arquivo, soma, sha declarado) e e'
+  pulado com assumptiva quando ausentes. A logica de conferencia e' UMA
+  (NativeDepsTestSupport.conferir) usada pelos dois.
+
+════════════════════════════════════════════════════════════════
+C. HASH PIN (fontes do produto)
+════════════════════════════════════════════════════════════════
+  native-dependencies/patches/vulkan-reset-v10.patch
+    sha256 9ea0133107c6660631101255347c5a388c00b63a9a8a5dbd03c554217e677eb7
+    (197 linhas; 6 entradas da allowlist; aplicavel ao baseline e1bd73e)
+  native-dependencies/patches/vulkan-reset-v10.manifest.txt
+    SHA-256 por arquivo (6) + contexto (toolchain/ABIs/fluxo) + nota do
+    strip real.
+  VALIDACAO: `git apply --check` OK num worktree limpo do baseline;
+  hashes pos-aplicacao identicos ao manifest (LF canonico; o unico arquivo
+  com divergencia aparente era line-ending CRLF do working copy do svr11 —
+  normalizado LF).
+
+════════════════════════════════════════════════════════════════
+D. DIFF RECIPE (fluxo real do v10, nao a receita idealizada)
+════════════════════════════════════════════════════════════════
+  FLUXO REAL: assemble (cxx+merged Debug) -> strip nas libs -> SEGUNDO
+  assemble REPOE merged_native_libs a partir do cxx Debug (whisper volta a
+  62,2 MB) -> script build-android copia whisper DO MERGED (unstripped) e
+  llama DO CXX (stripped) -> ZIP final: llama stripada, whisper NAO.
+  CAUSA: o strip cobriu cxx e merged, mas o 2o assemble re-populou o merged;
+  o script copia de DOIS lugares diferentes.
+  CORRECAO FUTURA (documentada, nao aplicada ao v10 imutavel): strip na
+  copia do pacote ao zipar (ponto unico) OU strip apos o ULTIMO assemble em
+  cxx E merged; e SEMPRE conferir as ELF sections das entries do ZIP final
+  antes de publicar. NAO re-stripar in-place.
+
+════════════════════════════════════════════════════════════════
+E. MANIFEST COUNTS/SHA/EXIST/SIZE/DEDUPE (auditoria Python)
+════════════════════════════════════════════════════════════════
+  ZIP v10 arm64:  18 entries | 18 unicas (dedupe OK) | 0 size invalido |
+    manifest.json interno (2833 B): 17 files, TODOS com path+size+sha256
+    conferidos contra as entries reais (17/17 OK; manifest.json nao se
+    auto-lista, esperado).
+  ZIP v10 x86_64: idem (18/18; manifest 2830 B; 17/17 OK).
+  SHA-256 por lib conferidos individualmente (ex.: libsig_llama arm64
+  ec9c8315..., whisper 8e3982b2...; x86: f1fb7e09.../f59c9077...).
+
+════════════════════════════════════════════════════════════════
+F. FONTES VERSIONADAS (git ls-files)
+════════════════════════════════════════════════════════════════
+  native-dependencies/tests/    29 arquivos (commit 3620bb3)
+  native-dependencies/patches/   3 arquivos (README + patch + manifest)
+  app/src/test/resources/native-deps/contract-min.zip + scripts/gerador
+  Fixtures ZIP reais (50 MB) permanecem FORA (gitignore com excecao nominal
+  apenas para contract-min.zip).
+
+════════════════════════════════════════════════════════════════
+G. CONSENTIMENTO / COMMITS
+════════════════════════════════════════════════════════════════
+  Usuario: "pode fazer as pendências" (recebido) -> commits:
+    5183a38  relatorios (auditoria/release/smokes/provenance)
+    25b0fe9  SMOKES-V10 update (maps com root + estado)
+    48067e2  testes fixture minimal + pin de fontes
+    (este A-H) commit novo apos este arquivo
+  Sem amend/force nos commits novos (o incidente do amend anterior fica
+  registrado na AUDITORIA §5, nao desfeito).
+
+════════════════════════════════════════════════════════════════
+H. ESTADO / ESCOPO
+════════════════════════════════════════════════════════════════
+  FECHADO (amostra CPH2747): Vulkan/reset v10 ACEITO — cadeia de evidencias:
+  install/download/activation + Q4/Q8 Vulkan + CPU controle + reset A-B-A
+  in-context CONFIRMADO + Whisper OFFLINE com precheck (so/maps/modelo/wav)
+  + gates 541/0/0 + release 20261005_001 (SHA conferido) + pin de fontes.
+  NAO COBERTO (escopo declarado): x86_64 target runtime; outros modelos
+  Whisper; OpenCL cache (patch separado — proxima etapa com autorizacao
+  separada; sem backpressure antes da consolidacao).
+  PENDENTE DOCUMENTAL: pin por-fonte do build isolado por arquivo ja feito
+  (patches/); eventual nova NativeVersion p/ corrigir strip do whisper
+  apenas se o usuario quiser (nao bloqueia a release existente).
+  O: opcional (sem bloqueio).
+— fim —
