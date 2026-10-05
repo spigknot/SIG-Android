@@ -810,6 +810,10 @@ struct vk_device_struct {
     bool float_controls_denorm_preserve_fp16;
     bool subgroup_basic;
     bool subgroup_arithmetic;
+    // SIG (fusion-round 27/09, PROVISORIO): contorno dos shaders fundidos
+    // rms_norm_mul_f32 e add_rms_fusion no Adreno (Qualcomm 0x5143).
+    bool disable_fused_rms_norm_mul;
+    bool disable_add_rms_fusion;
     bool subgroup_shuffle;
     bool subgroup_ballot;
     bool subgroup_clustered;
@@ -7069,7 +7073,19 @@ static vk_device ggml_vk_get_device(size_t idx) {
 
         device->disable_fusion = getenv("GGML_VK_DISABLE_FUSION") != nullptr;
 
+        // SIG (fusion-round 27/09, PROVISORIO): contorno dos shaders fundidos
+        // rms_norm_mul_f32 e add_rms_fusion no Adreno (Qualcomm 0x5143).
+        // Sintoma: o kernel fundido executa mas nao escreve no destino
+        // (sentinela intacta) -> logits com cerca de metade do valor correto.
+        // Evidencia: docs/vulkan-hymt2-fusion-round/ (rodadas 1-4).
+        // Escopo Qualcomm-wide por conservadorismo: so o Adreno 840 foi testado.
+        device->disable_fused_rms_norm_mul =
+            device->vendor_id == VK_VENDOR_ID_QUALCOMM;
+        device->disable_add_rms_fusion =
+            device->vendor_id == VK_VENDOR_ID_QUALCOMM;
+
         device->add_rms_fusion = !device->disable_fusion &&
+                                 !device->disable_add_rms_fusion &&
                                  device->subgroup_arithmetic &&
                                  device->vendor_id != VK_VENDOR_ID_INTEL;
         device->partials_binding_alignment =
@@ -16407,6 +16423,14 @@ static bool ggml_vk_can_fuse(const ggml_backend_vk_context * ctx, const struct g
     }
 
     if (ops.size() == 2 && ops.begin()[0] == GGML_OP_RMS_NORM && ops.begin()[1] == GGML_OP_MUL) {
+        // SIG (fusion-round 27/09, PROVISORIO): no Adreno (Qualcomm 0x5143) o
+        // pipeline fundido rms_norm_mul_f32 executa mas NAO escreve no destino
+        // (sentinela intacta) -> logits com cerca de metade do valor correto.
+        // Ver docs/vulkan-hymt2-fusion-round/. Escopo Qualcomm-wide por
+        // conservadorismo: so o Adreno 840 foi testado.
+        if (ctx->device->disable_fused_rms_norm_mul) {
+            return false;
+        }
         // additional constraints specific to this fusion
         const ggml_tensor *rms_norm = cgraph->nodes[node_idx];
         const ggml_tensor *mul = cgraph->nodes[node_idx + 1];

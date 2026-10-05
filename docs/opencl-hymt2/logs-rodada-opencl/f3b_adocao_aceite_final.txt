@@ -1,0 +1,21 @@
+== F3b ADOTADO (DEFAULT ON) — ACEITE FINAL diag8 e5f8a1d0 ==
+-- Q4 (chave vazia = default de produto) --
+  curto seg=16.6 confere=True valido=True sha=084f12f4b98b3d2a
+  medio seg=22.5 confere=True valido=True sha=1d328d7deece508c
+  longo seg=62.6 confere=True valido=True sha=812dfba6eec06f9b
+  mais_longo seg=98.1 confere=True valido=True sha=4d51e74fcd5332df
+  TODOS CONFEREM: True
+-- Q8 (leitura direta dos records; script lera dir errado no resumo) --
+  curto       VALIDO=True load= 7. Modelo carregado em 6.1s. pronta=11. Tradução pronta em 14.7s. sha=d36a3315698bab4b confere=True
+  medio       VALIDO=True load= 7. Modelo carregado em 5.7s. pronta=11. Tradução pronta em 22.4s. sha=cd1c7ce305c5128b confere=True
+  longo       VALIDO=True load= 7. Modelo carregado em 5.6s. pronta=11. Tradução pronta em 50.6s. sha=c18e04c83e72684a confere=True
+  mais_longo  VALIDO=True load= 7. Modelo carregado em 5.2s. pronta=11. Tradução pronta em 97.9s. sha=ee49738f4e2c09dc confere=True
+-- gate gradle --
+52 actionable tasks: 1 executed, 51 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
+-- estado final --
+
+FIM
+Leitura: 8/8 shas conferem; VALIDO=True nos 8; gate BUILD SUCCESSFUL.
+Aparelho revertido para 9698670c; a mudanca (default ON) fica no FONTE (WIP)
+para empacotamento no proximo pacote nativo quando aprovado.

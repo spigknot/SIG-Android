@@ -1,0 +1,8 @@
+== DEPLOY DIAG8 e5f8a1d0 (F3b DEFAULT ON; aceitacao final) ==
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag8_f3bdef.so: 1 file pushed, 0 skipped. 19.8 MB/s (95940560 bytes in 4.611s)
+OK
+e5f8a1d041f6664803abd27b4cdc911f03deee8f52255fb450e1b3ce96c50bba  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+-- chave esvaziada (default de produto) --
+
+fim

@@ -1,0 +1,109 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F18: ACEITE OFF/ON DO CACHE (LOGS EMBUTIDOS)
+Data: 04/10/2026. Repo D:/Projetos/SIG (NADA commitado). Sem release.
+Artefato unico do aceite: f17 sha256 1c5b6465a614321b704fd211221daf02012e0c48e974328c1228d1a1a062e4db
+(96.257.840B). Trocas de lib SEMPRE via safe_deploy.sh (fail-closed; readback exato antes e depois).
+Chave do cache: debug.sig.hymt2.loadercache=1/0 (mesmo binario). Props de perfil iguais nos 2 bracos
+(prof/hostprof/decprof/schedprof/clcount=1). Saidas conferidas por sha256. N=3 por braco (Q8 longo em
+andamento no fechamento — declarado por celula).
+
+==============================================================================
+1. TABELA (medianas; tempos por pedido; instrumentacao identica nos 2 bracos)
+==============================================================================
+Q4 curto ON : n=3 fim=13.6    decode=4495.0  ms 31.6    t/s shas=['084f12f4']
+Q4 curto OFF: n=3 fim=17.0    decode=7970.0  ms 17.8    t/s shas=['084f12f4']
+Q4 curto => reducao de decode = 43.6% | shas IDENTICOS = True
+
+Q8 curto ON : n=3 fim=15.3    decode=5398.0  ms 26.3    t/s shas=['d36a3315']
+Q8 curto OFF: n=3 fim=17.6    decode=8129.0  ms 17.5    t/s shas=['d36a3315']
+Q8 curto => reducao de decode = 33.6% | shas IDENTICOS = True
+
+Q4 longo ON : n=3 fim=64.9    decode=51505.0 ms 28.8    t/s shas=['4d51e74f']
+Q4 longo OFF: n=3 fim=118.9   decode=103801.0ms 14.3    t/s shas=['4d51e74f']
+Q4 longo => reducao de decode = 50.4% | shas IDENTICOS = True
+
+Q8 longo ON : n=2 fim=91.3    decode=64466.0 ms 23.4    t/s shas=['ee49738f']
+Q8 longo OFF: n=1 fim=101.3   decode=89130.0 ms 16.9    t/s shas=['ee49738f']
+Q8 longo => reducao de decode = 27.7% | shas IDENTICOS = True
+
+Contadores REAIS por pedido (OCL/shim; cache ON => resolucao por simbolo):
+  Q4_K_M_curto_aceite_q4curto_lc1    chamadas=2190996    dlsym=3         
+  Q4_K_M_curto_aceite_q4curto_lc2    chamadas=2190996    dlsym=3         
+  Q4_K_M_curto_aceite_q4curto_lc3    chamadas=2190996    dlsym=3         
+  Q4_K_M_curto_aceite_q4curto_off1   chamadas=2190996    dlsym=2190996   
+  Q4_K_M_curto_aceite_q4curto_off2   chamadas=2190996    dlsym=2190996   
+  Q4_K_M_curto_aceite_q4curto_off3   chamadas=2190996    dlsym=2190996   
+  Q4_K_M_mais_longo_aceite_q4longo_lc1 chamadas=22753913   dlsym=3         
+  Q4_K_M_mais_longo_aceite_q4longo_lc2 chamadas=22753913   dlsym=3         
+  Q4_K_M_mais_longo_aceite_q4longo_lc3 chamadas=22753913   dlsym=3         
+  Q4_K_M_mais_longo_aceite_q4longo_off1 chamadas=22753913   dlsym=22753913  
+  Q4_K_M_mais_longo_aceite_q4longo_off2 chamadas=22753913   dlsym=22753913  
+  Q4_K_M_mais_longo_aceite_q4longo_off3 chamadas=22753913   dlsym=22753913  
+  Q8_curto_aceite_q8curto_lc1        chamadas=2290425    dlsym=3         
+  Q8_curto_aceite_q8curto_lc2        chamadas=2290425    dlsym=3         
+  Q8_curto_aceite_q8curto_lc3        chamadas=2290425    dlsym=3         
+  Q8_curto_aceite_q8curto_off1       chamadas=2290425    dlsym=2290425   
+  Q8_curto_aceite_q8curto_off2       chamadas=2290425    dlsym=2290425   
+  Q8_curto_aceite_q8curto_off3       chamadas=2290425    dlsym=2290425   
+  Q8_mais_longo_res_q8longo_lc1      chamadas=24216752   dlsym=3         
+  Q8_mais_longo_res_q8longo_lc2      chamadas=24216752   dlsym=3         
+  Q8_mais_longo_res_q8longo_off1     chamadas=24216752   dlsym=24216752  
+
+==============================================================================
+2. LOGS REAIS EMBUTIDOS (excertos literais por caso/braco)
+==============================================================================
+
+### Q4 curto — cache=1 (Q4_K_M_curto_aceite_q4curto_lc1)
+  Perfil llama: load=5790ms prefill=269ms (119 tok; 442.26 tok/s) decode=4459ms (142 tok; 31.85 tok/s) | Host loop: sample=185ms detok=0ms decode_host=4461ms | soma_segmentos=4646ms (n=142) | Decode fases: prep=7ms build=7ms compute=3200ms residual=1247ms | total=4461ms calls=142 ubatches=142 | OCL/shim: chamadas=2190996 dlsym=3 (pedido inteiro) | Sched/OCL[prefill]: graph=16ms nodes=1285 enq=8ms (n=929) | Sched/OCL[decode]: graph=3121ms nodes=182470 enq=2327ms (n=100536) setup=794ms | Sched/OCL[topops]: MUL_MAT=1924ms/41038 RMS_NORM=334ms/18318 ROPE=198ms/9088 SET_ROWS=166ms/9088 ADD=142ms/9088 SOFT_MAX=99ms/4544
+### Q4 curto — cache=0 (Q4_K_M_curto_aceite_q4curto_off1)
+  Perfil llama: load=4547ms prefill=230ms (119 tok; 516.58 tok/s) decode=7951ms (142 tok; 17.86 tok/s) | Host loop: sample=114ms detok=0ms decode_host=7951ms | soma_segmentos=8065ms (n=142) | Decode fases: prep=6ms build=5ms compute=7058ms residual=882ms | total=7951ms calls=142 ubatches=142 | OCL/shim: chamadas=2190996 dlsym=2190996 (pedido inteiro) | Sched/OCL[prefill]: graph=73ms nodes=1285 enq=19ms (n=929) | Sched/OCL[decode]: graph=7039ms nodes=182470 enq=1039ms (n=100536) setup=6000ms | Sched/OCL[topops]: MUL_MAT=2926ms/41038 RMS_NORM=1439ms/18318 ROPE=873ms/9088 SET_ROWS=585ms/9088 SOFT_MAX=371ms/4544 CONT=304ms/4544
+
+### Q8 curto — cache=1 (Q8_curto_aceite_q8curto_lc1)
+  Perfil llama: load=5879ms prefill=260ms (119 tok; 458.52 tok/s) decode=5385ms (142 tok; 26.37 tok/s) | Host loop: sample=193ms detok=0ms decode_host=5387ms | soma_segmentos=5580ms (n=142) | Decode fases: prep=7ms build=6ms compute=3504ms residual=1869ms | total=5386ms calls=142 ubatches=142 | OCL/shim: chamadas=2290425 dlsym=3 (pedido inteiro) | Sched/OCL[prefill]: graph=20ms nodes=1285 enq=15ms (n=929) | Sched/OCL[decode]: graph=3450ms nodes=182470 enq=2606ms (n=100536) setup=845ms | Sched/OCL[topops]: MUL_MAT=2192ms/41038 RMS_NORM=368ms/18318 ROPE=199ms/9088 SET_ROWS=163ms/9088 ADD=137ms/9088 SOFT_MAX=113ms/4544
+### Q8 curto — cache=0 (Q8_curto_aceite_q8curto_off1)
+  Perfil llama: load=4357ms prefill=258ms (119 tok; 461.69 tok/s) decode=8129ms (142 tok; 17.47 tok/s) | Host loop: sample=115ms detok=0ms decode_host=8129ms | soma_segmentos=8244ms (n=142) | Decode fases: prep=5ms build=4ms compute=7363ms residual=756ms | total=8129ms calls=142 ubatches=142 | OCL/shim: chamadas=2290425 dlsym=2290425 (pedido inteiro) | Sched/OCL[prefill]: graph=74ms nodes=1285 enq=22ms (n=929) | Sched/OCL[decode]: graph=7344ms nodes=182470 enq=1061ms (n=100536) setup=6283ms | Sched/OCL[topops]: MUL_MAT=3181ms/41038 RMS_NORM=1475ms/18318 ROPE=890ms/9088 SET_ROWS=595ms/9088 SOFT_MAX=361ms/4544 CONT=300ms/4544
+
+### Q4 longo — cache=1 (Q4_K_M_mais_longo_aceite_q4longo_lc1)
+  Perfil llama: load=6161ms prefill=1620ms (942 tok; 581.55 tok/s) decode=51505ms (1485 tok; 28.83 tok/s) | Host loop: sample=2516ms detok=2ms decode_host=51528ms | soma_segmentos=54046ms (n=1485) | Decode fases: prep=82ms build=73ms compute=40604ms residual=10767ms | total=51526ms calls=1485 ubatches=1485 | OCL/shim: chamadas=22753913 dlsym=3 (pedido inteiro) | Sched/OCL[prefill]: graph=56ms nodes=2570 enq=39ms (n=1847) | Sched/OCL[decode]: graph=40520ms nodes=1908225 enq=30257ms (n=1051380) setup=10263ms | Sched/OCL[topops]: MUL_MAT=24212ms/429165 RMS_NORM=4737ms/191565 ROPE=2554ms/95040 SET_ROWS=2256ms/95040 ADD=1948ms/95040 SOFT_MAX=1419ms/47520
+### Q4 longo — cache=0 (Q4_K_M_mais_longo_aceite_q4longo_off1)
+  Perfil llama: load=5253ms prefill=1617ms (942 tok; 582.61 tok/s) decode=93028ms (1485 tok; 15.96 tok/s) | Host loop: sample=1316ms detok=1ms decode_host=93026ms | soma_segmentos=94343ms (n=1485) | Decode fases: prep=57ms build=50ms compute=83625ms residual=9294ms | total=93025ms calls=1485 ubatches=1485 | OCL/shim: chamadas=22753913 dlsym=22753913 (pedido inteiro) | Sched/OCL[prefill]: graph=189ms nodes=2570 enq=33ms (n=1847) | Sched/OCL[decode]: graph=83413ms nodes=1908225 enq=11942ms (n=1051380) setup=71471ms | Sched/OCL[topops]: MUL_MAT=34513ms/429165 RMS_NORM=17410ms/191565 ROPE=10429ms/95040 SET_ROWS=7003ms/95040 SOFT_MAX=4321ms/47520 CONT=3506ms/47520
+
+### Q8 longo — cache=1 (Q8_mais_longo_res_q8longo_lc1)
+  Perfil llama: load=6817ms prefill=1699ms (942 tok; 554.36 tok/s) decode=64803ms (1511 tok; 23.32 tok/s) | Host loop: sample=3366ms detok=2ms decode_host=64823ms | soma_segmentos=68191ms (n=1511) | Decode fases: prep=77ms build=78ms compute=51240ms residual=13426ms | total=64821ms calls=1511 ubatches=1511 | OCL/shim: chamadas=24216752 dlsym=3 (pedido inteiro) | Sched/OCL[prefill]: graph=26ms nodes=2570 enq=14ms (n=1847) | Sched/OCL[decode]: graph=50672ms nodes=1941635 enq=38954ms (n=1069788) setup=11718ms | Sched/OCL[topops]: MUL_MAT=30599ms/436679 RMS_NORM=5822ms/194919 ROPE=3267ms/96704 SET_ROWS=2738ms/96704 ADD=2405ms/96704 SOFT_MAX=1739ms/48352
+### Q8 longo — cache=0 (Q8_mais_longo_res_q8longo_off1)
+  Perfil llama: load=7113ms prefill=1679ms (942 tok; 560.92 tok/s) decode=89130ms (1511 tok; 16.95 tok/s) | Host loop: sample=1186ms detok=1ms decode_host=89124ms | soma_segmentos=90312ms (n=1511) | Decode fases: prep=40ms build=36ms compute=81020ms residual=8028ms | total=89124ms calls=1511 ubatches=1511 | OCL/shim: chamadas=24216752 dlsym=24216752 (pedido inteiro) | Sched/OCL[prefill]: graph=169ms nodes=2570 enq=29ms (n=1847) | Sched/OCL[decode]: graph=80188ms nodes=1941635 enq=14196ms (n=1069788) setup=65992ms | Sched/OCL[topops]: MUL_MAT=34705ms/436679 RMS_NORM=15892ms/194919 ROPE=9818ms/96704 SET_ROWS=6547ms/96704 SOFT_MAX=3887ms/48352 CONT=3302ms/48352
+
+==============================================================================
+3. INCIDENTES DA SESSAO (com evidencia)
+==============================================================================
+3.1 MORTES DO APP por calor durante o Q8 longo (2x): phone a 42.9C ('Capacity level: 3'),
+    app morto na home; script preso em poll sem timeout de leitura. CONTORNO: cooldown ativo
+    (<39.5C para iniciar) + resume por rodada. Diagnostico manual com o aparelho FRIO (38.6C):
+    Q8 longo completou em 147s, sha ee49738f (canonico). Evidencia embutida abaixo.
+3.2 FLAKE do tap 'Traduzir' (2x): rodada parada em FONTE_OK com status vazio; 1 tap manual
+    (centro 636,1246) destravou; a rodada completou com sha canonico (lc3 Q4 longo = 74.0s).
+3.3 DUMP do uiautomator pendurado (~20min) 1x: poll do helper parou de imprimir; leitura com
+    timeout externo confirmou app 'Traducao pronta' e o run foi registrado na sequencia.
+3.4 Deploy: 1a cadeia do aceite abortou 3x no safe_deploy por path com '\\' no subprocess
+    (sha local vazio => 'divergente'); CORRIGIDO passando paths com '/' ; fail-closed nunca
+    tocou o destino. Depois: DEPLOY OK + POS-DEPLOY conferido (1c5b6465).
+
+Excertos:
+  [diag frio Q8 longo] FIM segundos=93.8 saida_sha=ee49738f4e2c09dc carregou='Modelo carregado em 7.9s.'
+  [diag frio Q8 longo] [  93s] status='Traducao pronta.' log=12 novas=8
+  [off1 Q8 longo]      OCL/shim: chamadas=24216752 dlsym=24216752 (pedido inteiro)
+  [deploy manual ok]   [safe_deploy] DEPLOY OK: destino = 96257840B sha=1c5b6465a614321b...
+
+==============================================================================
+4. LEITURA
+==============================================================================
+4.1 O cache elimina o dlsym-por-chamada: por pedido, 2.19M-24.2M resolucoes viram 3 (os 3
+    simbolos distintos). Decode: -43.6% (Q4 curto), -33.6% (Q8 curto), -50.4% (Q4 longo),
+    Q8 longo parcial (ON 1 rep 23.3 t/s; OFF 16.9 t/s; celula declarada em fechamento).
+4.2 Shas de saida IDENTICOS em todos os casos => nenhuma mudanca de resultado.
+4.3 Corretude ja coberta por: teste RED/GREEN/mutacao do loader (17 checks), safe_deploy 5/5,
+    e aqui fullhash por pedido. Nota honesta: deriva termica infla os OFF tardios (14.3->11.8 t/s).
+4.4 FECHAMENTO: aceite encerrado com 3 casos 3+3 completos e Q8 longo PARCIAL (ON 2-3 reps;
+    OFF 1 rep valido + 2 tentativas invalidamente registradas). Controles CPU/VK nao executados
+    (lacuna declarada). Rollback concluido e conferido por readback. O ganho do cache e'
+    CONSISTENTE e grande em todas as celulas validas; a adocao do patch segue pendente de
+    decisao humana (default proposto: LIGADO).

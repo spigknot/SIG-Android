@@ -1,0 +1,5 @@
+== DEPLOY DIAG4 c3dfd5f6 (F3a; mesmo escopo/rollback) ==
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag4_f3a.so: 1 file pushed, 0 skipped. 3.6 MB/s (95711704 bytes in 25.528s)
+c3dfd5f6d6e0162cdbafa3c5529eef61f359ab3f6d0fbba454fc6161e22c4ffa  /data/local/tmp/diag4_c3dfd5f6.so
+OK
+c3dfd5f6d6e0162cdbafa3c5529eef61f359ab3f6d0fbba454fc6161e22c4ffa  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

@@ -1,0 +1,12 @@
+== A/B DO PROBE + FASES (resumo; detalhe no ab_probe_q4.log e nos run dirs) ==
+-- OpenCL Q4, skip_probe alternado 0/1/0/1/0/1 (run: load_s | fases) --
+   load_s=5.3 | Fases da carga: sonda=0.0s modelo=5.0s contexto=0.1s total=5.2s (skip_probe=0)
+   load_s=5.2 | Fases da carga: sonda=0.0s modelo=5.0s contexto=0.1s total=5.1s (skip_probe=1)
+   load_s=4.0 | Fases da carga: sonda=0.0s modelo=3.9s contexto=0.1s total=4.0s (skip_probe=0)
+   load_s=5.2 | Fases da carga: sonda=0.0s modelo=5.0s contexto=0.1s total=5.2s (skip_probe=1)
+   load_s=5.2 | Fases da carga: sonda=0.0s modelo=5.1s contexto=0.1s total=5.2s (skip_probe=0)
+   load_s=5.0 | Fases da carga: sonda=0.0s modelo=4.9s contexto=0.1s total=5.0s (skip_probe=1)
+-- Vulkan Q4 com a MESMA lib diag (skip=1, depois skip=0): 0.7-0.8s --
+   sonda=0.0s modelo=0.5s contexto=0.2s total=0.7-0.8s
+-- Vulkan Q4 com 9698670c (pos-rollback): 0.8/0.7/0.8s --
+-- >>> o gargalo OpenCL esta na FASE MODELO (upload/repack de pesos): 3.9-5.1s vs 0.5s (Vulkan) --

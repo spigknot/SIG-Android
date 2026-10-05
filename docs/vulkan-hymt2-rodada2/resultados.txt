@@ -1,0 +1,47 @@
+RESULTADOS — RODADA 2 (protocolo P/D1/D2, n_gpu=1, F16+EOS, template=1)
+======================================================================
+Data: 2026-09-27. Manifesto dos artefatos: manifesto.txt (esta pasta).
+
+1) EOS CORRIGIDO, VALIDADO NA CPU
+  F16+EOS (edicao in-place offset 5068477, 3 -> 120020, tamanho preservado):
+  CPU guloso para em EOG ("O servidor foi reiniciado.", 9 tokens).
+  D1=46 ("O"), D2=2292 (" serv") — usados como entradas fixas em tudo abaixo.
+
+2) P NO VULKAN: ERRO DETERMINISTICO, NAO E RUIDO
+  10 dumps P (reps A/B/C/D x3 menos 2 crashes) BIT-IDENTICOS (md5
+  43d7d800fa210738c0dcedec67a23e4c) — inclusive com SERIALIZE e NO-ASYNC.
+  vs CPU: max_abs=15.874813, rmse=1.172196, argmax igual (46) mas logit
+  16.868 vs 32.743 (METADE), margem 7.7 vs 14.9.
+  CONTROLE OpenCL (mesmo protocolo, dumps ocl_ref_*): max_abs=0.0023,
+  rmse=0.00048, argmax/margem/top5 IDENTICOS a CPU nos 3 passos.
+  -> Erro de P do Vulkan e' ~500x acima do ruido normal entre backends.
+  Tolerancia 1e-2 do comparador fica VALIDADA pelo controle.
+
+3) D NO VULKAN: COLAPSO NAO-DETERMINISTICO, FLAGS NAO MUDAM NADA
+  D1/D2 por run: tudo-NaN (120818/120818) em A_r1, B_r1(D2), C_r1(D2),
+  D_r1(D1), D_r2(D1+D2); tudo-ZERO com ranking preservado e valores ~0.0
+  nas demais finitas (ex. argmax=2292(0.000), top5 igual ao ref);
+  A_r2 e C_r2 com P todo-NaN + crash do harness no print (piece(-1) lanca
+  out_of_range — BUG DO HARNESS no resumo, nao do llama; dumps P perdidos
+  nessas 2; NaN counts registradas no log antes do crash).
+  D1: 8 hashes distintos em 10 dumps (3 iguais = padrao todo-NaN/zero).
+  Variantes A/B/C/D: nenhuma limpa; SERIALIZE e DISABLE_ASYNC nao reduzem
+  nem NaN nem erro de P (P bit-identico com e sem).
+
+4) LEITURA (hipotese de trabalho, nao fato provado)
+  Dois andares: (i) erro sistematico no prefill (P deterministico, grande,
+  insensivel a serialize/async) + (ii) colapso do decode (NaN ou zeros,
+  nao-deterministico, a partir do 1o passo autoregressivo). Plausivel:
+  computacao errada ja no prefill (kernel F16/F32 no Adreno 840) E falha
+  de estado/memoria no decode (KV/split). Sync simples (serialize/async)
+  DESCARTADA como causa unica. Proximo: mapear camada + primeiro op
+  divergente (CHECK_RESULTS ou comparacao por op), conforme roteiro.
+
+5) ARTEFATOS
+  Logs: rodada2/cpu_greedy.txt, cpu_ref.txt, vk_{A,B,C,D}_r{1,2,3}.txt,
+        ocl_ref.txt (em C:/Users/Gustavo/AppData/Local/Temp/rodada2/).
+  Dumps: 33 .f32 Vulkan + 3 CPU + 3 OpenCL (subdir dumps/).
+  Scripts: rodada_pd1d2.sh, rodada_ocl.sh, comparar_logits.py, fix_eos.py.
+  Bug conhecido do harness: print de P com argmax=-1 (tudo-NaN) lanca
+  out_of_range e aborta antes do dump — corrigir com guarda imax<0
+  antes da proxima rodada que precise de P.

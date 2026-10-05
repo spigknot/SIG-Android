@@ -1,0 +1,301 @@
+================================================================================
+RELATÓRIO FINAL — CURTO E AUDITÁVEL
+Hy-MT2 1.8B / llama.cpp / Vulkan / Adreno 840
+CPH2747 (OnePlus 15) · Android 16 · APK 1.505/68 · 28/09/2026
+
+Seis itens, um por um, como pedido. Estados precisos, sem "tudo fechado".
+
+================================================================================
+1. O QUE ESTÁ FUNCIONAL
+================================================================================
+
+TRADUCAO TRADUZ NO APP, com o contorno, no aparelho do usuario:
+    Texto original:  The server was restarted.
+    Tradução:        O servidor foi reiniciado.
+    Log:             Modelo: Q4_K_M | Backend: Vulkan | Idioma alvo: Português
+                     geracao concluida: 8 tokens de saida
+                     sched_reserve: graph nodes = 1286 | graph splits = 2
+
+IDENTIDADE DO QUE ESTA RODANDO (todos por sha256, cadeia sem elo por supor):
+    ZIP publicado no R2        5a98e6dd12922a2837612abb0e07744d0b80a4e66572fe353255389822389579
+      └─ lib/libsig_llama.so    31f6df15bf9b4fbdf073adf033eac55f353b4240e7894ec1d12469163516d2c2
+        └─ extraido no aparelho 31f6df15bf9b4fbdf073adf033eac55f353b4240e7894ec1d12469163516d2c2
+          └─ carregado no processo (maps, 780 -> 789 libs com a inferencia)
+    MODELO aberto pelo app      c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+                               Hy-MT2-1.8B-q4_k_m.gguf, 1.133.080.544 bytes
+
+ATRIBUICAO DE CAMADAS OBSERVADA (nao deduzida):
+    llama_prepare_model_devices: using device Vulkan0 (Adreno (TM) 840) - 19221 MiB free
+    llama_kv_cache: layer   0: dev = Vulkan0
+    ... (32 linhas, 0..31)
+    llama_kv_cache: layer  31: dev = Vulkan0
+    AS 32 CAMADAS NO VULKAN. Nada cai para CPU.
+
+REPRODUTIBILIDADE: 27 execucoes (3 variantes x 3 repeticoes x 3 passos) foram
+BIT A BIT IDENTICAS dentro de cada variante. max|r1-r2| = max|r1-r3|
+= max|r2-r3| = 0.000e+00 em todas. Nao ha ruido de execucao.
+
+ESTADO: "smoke test passou" + "validacao numerica com desvio medido".
+Nao e' "validacao numerica fechada": ha desvio residual de 3,12% a 5,53%.
+
+================================================================================
+2. O QUE FOI CORRIGIDO NO PLANEJADOR E O ESCOPO DO BLOQUEIO
+================================================================================
+
+O ERRO GRAVE QUE EU COMETI, E O QUE O EXPOSU
+  Na rodada 4 eu havia colocado o gate no SELETOR DE PIPELINE
+  (ggml_vk_op_get_pipeline) em vez do PLANEJADOR DE FUSAO. O contorno nao
+  funcionava e eu ja tinha reportado que funcionava. O A/B expoe:
+      vulkan normal (COM meu gate no lugar errado)  argmax 3657  " gr子 pac□主度度ruit上帝..."
+      vulkan com GGML_VK_DISABLE_FUSION=1            argmax 46    "O servidor foi reiniciado."
+      cpu                                            argmax 46    "O servidor foi reiniciado."
+  Trocar o pipeline depois do planejamento nao desfaz a fusao ja planejada.
+
+O GATE CORRETO (24 linhas, em ggml_vk_can_fuse):
+  static bool ggml_vk_can_fuse(const ggml_backend_vk_context * ctx,
+                               const struct ggml_cgraph * cgraph,
+                               int node_idx, std::initializer_list<enum ggml_op> ops) {
+      if (!ggml_can_fuse(cgraph, node_idx, ops)) {
+          return false;
+      }
+      if (ops.size() == 2 && ops.begin()[0] == GGML_OP_RMS_NORM
+                       && ops.begin()[1] == GGML_OP_MUL) {
+          // SIG (fusion-round 27/09, PROVISORIO): ...
+          if (ctx->device->disable_fused_rms_norm_mul) {
+              return false;
+          }
+          ...
+      }
+
+  Atribuicao (ggml-vulkan.cpp:7087-7089):
+      device->disable_fused_rms_norm_mul =
+          device->vendor_id == VK_VENDOR_ID_QUALCOMM;
+      device->disable_add_rms_fusion =
+          device->vendor_id == VK_VENDOR_ID_QUALCOMM;
+      device->add_rms_fusion = !device->disable_fusion &&
+                               !device->disable_add_rms_fusion &&
+                               device->subgroup_arithmetic &&
+                               device->vendor_id != VK_VENDOR_ID_INTEL;
+
+ESCOPO: Qualcomm-wide (vendor_id 0x5143). Conservadorismo de produto, nao conclusao
+  tecnica: SO O ADRENO 840 FOI TESTADO. Nao e' prova de defeito em toda a familia.
+
+SEM BYPASS: nao ha env, flag ou hook que reative a fusao em runtime. A
+  instrumentacao de diagnostico (SIGVK/SIGDISP/SIGFUSION/SIGOCL) esta sob #ifdef
+  e fora do build de producao.
+
+LACUNA DE COBERTURA (verificacao dirigida, B.1) — o gate pega UM dos tres padroes
+que incorporam RMS+MUL:
+    linha 17180  RMS_NORM, MUL                          (2 ops) -> GATE PEGA
+    linha 17172  RMS_NORM, MUL, ROPE                    (3 ops) -> NAO pega
+    linha 17161  RMS_NORM, MUL, ROPE, VIEW, SET_ROWS    (5 ops) -> NAO pega
+    (o de 5 ops nem passa por ggml_vk_can_fuse: usa ggml_can_fuse_subgraph +
+     ggml_vk_can_fuse_rms_norm_mul_rope)
+  O gate exige ops.size()==2. Isto e' VERIFICACAO DE COBERTURA; nao prova que os
+  padroes maiores falhem — o resultado da B.2 indica que nenhuma fusao alem das
+  duas do gate e' alcancada neste workload.
+
+================================================================================
+3. TABELA NUMÉRICA CPU x GATE x DISABLE-FUSION
+================================================================================
+
+IDENTIDADE CONGELADA (tudo igual nas tres variacoes):
+    modelo      Hy-MT2-1.8B-q4_k_m.gguf (c4bf1015), 1.133.080.544 bytes
+    harness     llama_harness, sha c1e706b3a4a28a064affc0bfb710159ada71c087eddd5c77cd2a444629f5b4be
+    lib         libsig_llama.so, sha 31f6df15... (stripada do ZIP publicado)
+    prompt      "Translate to Portuguese: The server was restarted.\n"
+    ids         P -> 46 -> 2292 (IDs DE TOKEN fixos, nao quantidades)
+    contexto    n_ctx=512, n_batch=128, n_ubatch=128
+    repeticoes  3 por variante, processo fresco
+
+FORMULAS:
+    max_abs = max_i |vulkan_i - cpu_i|
+    rel     = max_abs / max|cpu_i|          (razao; nao e' % de qualidade)
+    rmse    = sqrt( (1/n) * sum_i (vulkan_i - cpu_i)^2 )
+    margem  = top1 - top2                   (separa "errou" de "quase trocou")
+
+  variante                n      nan  inf  max_abs    rel      rmse      argmax         top5  margem cpu/vk
+  ----------------------  ------  ---  ---  --------  -------  --------  -------------  ----  ------------
+  gate x CPU              P     120818   0   0   1.122658  5,5303%  0.222219  46 = 46        5/5   3.079 / 2.978
+  gate x CPU              D1    120818   0   0   0.628402  3,1506%  0.128646  2292 = 2292    5/5   4.882 / 4.863
+  gate x CPU              D2    120818   0   0   0.767038  3,1245%  0.148289  65652 = 65652  5/5   8.007 / 8.366
+  disable-fusion x CPU    P     120818   0   0   1.122658  5,5303%  0.222219  46 = 46        5/5   (identico)
+  disable-fusion x CPU    D1    120818   0   0   0.628402  3,1506%  0.128646  2292 = 2292    5/5   (identico)
+  disable-fusion x CPU    D2    120818   0   0   0.767038  3,1245%  0.148289  65652 = 65652  5/5   (identico)
+  disable-fusion x GATE   P/D1/D2           0   0   0.000000  0,0000%  0.000000  (todos iguais)  5/5   (identico)
+
+RESULTADO CENTRAL DA B.2: disable-fusion e gate sao BYTE A BYTE IDENTICOS nos tres
+  passos, nas tres repeticoes. A flag cobre mais padroes (MULTI_ADD,
+  MUL_MAT_ADD, MUL_MAT_ADD_ADD, familia topk_moe), mas NENHUM deles e' alcancado
+  neste workload. Registro a equivalencia como controle util da politica seletiva,
+  NAO como ablacao independente.
+
+CARACTERIZACAO DO DESVIO (o que ela sustenta e o que nao sustenta):
+  SUSTENTA: o desvio existe, e' estavel ao bit, nao tem NaN/Inf, nao troca o
+    token escolhido (argmax igual nos 3 passos, top-5 5/5 nos 3 passos), e a
+    margem do topo fica intacta em D1 (4,882 -> 4,863) e AUMENTA em D2
+    (8,007 -> 8,366). Em P a margem cai 3,3% (3,079 -> 2,978).
+  NAO SUSTENTA: onde o desvio nasce. Retiro minhas leituras anteriores de
+    "nasce na camada 1" e "assinatura de arredondamento": n_gpu_layers e'
+    SUFIXO (llama-model.cpp:1318, i_gpu_start = max(n_layer_all+1-N, 0)), nao
+    prefixo, e a atribuicao envolve a saida do modelo.
+  LIMIAR: 1e-2 e' ultrapassado em QUALQUER das duas leituras (absoluta ou
+    relativa). Nao levantei a tolerancia. Divergencia numerica e juizo funcional
+    sao eixos separados: o funcional passou, o numerico nao.
+
+DIFERENCA ENTRE OS DOIS ARQUIVOS DE MODELO (P14.2 — nao assumi metadados):
+    passo   OFFICIAL (dc5f44fc, medido antes)   app (c4bf1015, B.2)
+    ------  ----------------------------------  -------------------------
+    P       1.009951  (4,9496%)                  1.122658  (5,5303%)
+    D1      0.997652  (4,8068%)                  0.628402  (3,1506%)
+    D2      0.737127  (2,9828%)                  0.767038  (3,1245%)
+  Diferenca de 96 bytes, e o resultado muda. Os arquivos NAO sao equivalentes
+  para efeito de medicao. As metricas antigas continuam validas — do arquivo
+  antigo, com o hash dele.
+
+================================================================================
+4. QUALIDADE E TEMPO NO APP
+================================================================================
+
+BENCHMARK (modelo do app, 3 repeticoes, ordem alternada, medias):
+  entrada    backend  ntok |    carga    prefill | carga+prefill
+  ---------  -------  ---- |  --------  -------- | -------------
+  curta      CPU          9 |    459,3     394,1 |      853,4 ms
+  curta      gate         9 |    662,0     742,0 |    1.404,1 ms
+  template   CPU         29 |    227,6     551,9 |      779,5 ms
+  template   gate        29 |    589,9     721,2 |    1.311,1 ms
+
+  razao Vulkan/CPU: prefill 1,88x (curto) e 1,31x (template);
+                    carga+prefill 1,65x e 1,68x.
+
+  O VULKAN PERDE NOS DOIS CASOS. A diferenca se mantem separando a carga do
+  modelo do prefill, ou seja, nao e' artefato de carregamento.
+
+  CORRECAO DE NUMERO: eu havia reportado "CPU 2,80x mais rapido" (medicao unica,
+  modelo OFFICIAL, fases nao separadas). Com medicao repetida e o modelo do app,
+  a faixa e' 1,65x a 1,88x. O 2,80x esta RETIRADO.
+
+  QUALIDADE FUNCIONAL: todas as 12 execucoes produziram "O serv" (protocolo
+  P/D1/D2 fixa 2 tokens) e o app traduziu "The server was restarted." ->
+  "O servidor foi reiniciado.". Sem loop, sem NaN, sem crash.
+
+  LIMITACAO DECLARADA: a secao 5 do seu parecer pede entrada curta, media e
+  longa. SO MEdi curta (9 tokens) e o template do app (29 tokens). O prompt e'
+  FIXO no codigo (llama_harness.cpp:133) e argv[7] so alterna entre os dois —
+  nao ha opcao de prompt por arquivo. Entrada media/longa exige BUILD NOVO, nao
+  autorizado. Portanto a hipotese "GPU ganha quando o prefill domina" NAO FOI
+  TESTADA, e nao a afirmo nem a nego.
+
+RECOMENDACAO (sua, da secao 5, corroborada pelos numeros acima): CPU como padrao
+  provisorio NESTE aparelho; Vulkan disponivel com o contorno, rotulado no
+  estagio real de validacao; OpenCL nao validado.
+
+================================================================================
+5. PROCEDÊNCIA DO PACOTE E VERIFICADORES
+================================================================================
+
+VERIFICADOR EXTERNO (o que ele REALMENTE faz):
+  scripts\verify-native-dependencies.ps1 -Version 9 -> ACEITO, exit 0
+    + arm64-v8a OK (v9, 43835831 bytes)
+    + x86_64 OK (v9, 49965326 bytes)
+  Li o script: so compara versao, tamanho do ZIP e SHA-256 EXTERNOS. NAO valida
+  o manifest.json interno nem a soma dos arquivos. Descreve-lo como
+  "verificacao de conteudo" seria exagerar.
+
+VERIFICACAO INDEPENDENTE (que fiz alem do script):
+  publicar -> baixar de volta -> comparar sha256:
+    arm64-v8a  43.835.831 B  5a98e6dd12922a2837612abb0e07744d0b80a4e66572fe353255389822389579
+    x86_64     49.965.326 B  115237821fe5fd88d853a306b8ac80bab25be8c28feabe5e396efdbbfb8b4e8a
+  ARMADILHA: urllib recebe HTTP 403 do R2 publico (Cloudflare bloqueia bot por
+  User-Agent) e da FALSO NEGATIVO. Verificacao exige curl com UA de browser.
+
+STRIP: apliquei llvm-strip --strip-unneeded nas .so de dentro do ZIP
+  (95,5 MB -> 30,6 MB na libsig_llama; ZIP 71 MB -> 43,8 MB, menor que o v8) e
+  regenerei o manifest.json interno, que o script gera ANTES do strip. STILL
+  NOT DONE: a etapa nao esta no pipeline oficial.
+
+COMENTARIO FALSO QUE ENCONTREI E CORRIGI no codigo:
+  NativeDependencyManager.kt dizia que "a soma deve fechar com [downloadBytes]"
+  e citava um metodo `sumaConfereComZip` que NAO EXISTE no projeto. Corrigido.
+
+WHISPER (precisao): codigo-fonte NAO alterado; binario RECOMPILADO, STRIPADO e
+  PUBLICADO. "Intocado" seria impreciso.
+
+================================================================================
+6. OPENCL E OS AJUSTES DE UX
+================================================================================
+
+OPENCL — "causa imediata identificada", NAO causa raiz:
+  -38 = CL_INVALID_MEM_OBJECT em clEnqueueWriteBuffer, porque
+ extra->data_device e' nulo no tensor OpenCL#embd#0. O tensor tem
+ offset=0 e data_device=0x0 — exatamente o estado que reset() deixa.
+ retirei a hipotese de que clCreateBuffer base fosse o culpado: alloc_buffer
+ (linha 10723) tem `if (err != CL_SUCCESS) return nullptr;`.
+ NAO PROVADO: qual dos dois buffer contexts tem o init_tensor que nao roda.
+ESTADO: "OpenCL indisponivel nesta configuracao; handle nulo confirmado;
+ causa raiz pendente". Nao marquei como consertado.
+
+UX (dialogo de componentes nativos) — "correcao compilada, validacao de UX pendente":
+  Corrigi um bug real (o dialogo so aparecia uma vez, no onCreate) com reexibicao
+  no onResume. Mas sua critica procede: onCreate roda uma vez POR INSTANCIA da
+  Activity, entao meu "beco sem saida permanente" estava mal fundado. E reexibir
+  no onResume impoe exatamente o modal repetido que voce nao recomenda.
+  RECOMENDACAO SUA NAO APLICADA: acao persistente e nao bloqueante, respeitando
+  "Agora nao". Isto e' pendencia de produto, a ser desenhada com os estados
+  ausente/baixando/verificando/instalado/falhou.
+  Nao descrevo esse fluxo como validado: o teste com pacote ja instalado passou
+  (activateIfInstalled=true), o que valida a supressao, nao a ausencia/refusa/
+  falha de download.
+
+================================================================================
+7. PENDÊNCIAS, SEPARADAS POR CATEGORIA
+================================================================================
+
+BLOQUEIA O USO
+  (nenhuma)
+
+LIMITA A RECOMENDACAO
+  L1. Entrada media/longa nao medida (prompt fixo no harness; exigiria build).
+      E o que impede dizer se o Vulkan ganha em prefill dominante.
+  L2. Escopo do gate e' Qualcomm-wide por conservadorismo; so Adreno 840
+      testado. Nao e' prova de defeito em toda a familia nem garantia para outros.
+  L3. Desvio residual de 3,12% a 5,53% acima do limiar 1e-2, sem causa localizada.
+      Argmax e top-5 corretos, margem intacta — mas o numerico nao fecha.
+  L4. Lacuna de cobertura do gate: padroes de 3 e 5 ops que incorporam RMS+MUL
+      nao passam por ele. Verificacao de cobertura, nao defeito demonstrado.
+  L5. Comparacao estruturada dos dois GGUF (quais chaves/pesos diferem) nao feita.
+      A diferenca de 96 bytes muda o resultado medido, entao a divergencia e' real.
+  L6. UX do prompt de componentes: validacao de fluxo (recusa, falha de rede,
+      reinstalacao) nao executada. A correcao atual impoe modal repetido.
+
+INVESTIGACAO OPCIONAL / ARQUIVADA
+  O1. Causa raiz do handle OpenCL nulo. Exige uma instrumentacao direcionada
+      (contador monotonico + id/geracao do extra, seguindo o mesmo objeto ate a
+      primeira escrita que falha).
+  O2. Crash do compilador de shader (libllvm-qgl.so). ARQUIVADO por sua
+      orientacao. A formulacao que voce propôs continua valendo; a origem causal
+      nao foi estabelecida.
+  O3. Desempenho em contexto longo (veja L1).
+
+================================================================================
+8. ESTADO DO REPO
+================================================================================
+
+NADA COMMITADO. Nada publicado alem do candidato v9, autorizado por voce.
+
+  app/src/main/cpp/llama/ggml/src/ggml-vulkan/ggml-vulkan.cpp   24 linhas (gate)
+  app/src/main/java/.../NativeDependencyManager.kt              manifesto v9
+  app/src/main/java/.../NativeDependencyPrompt.kt                correcao UX
+  app/src/main/java/.../MainActivity.kt                          onResume
+  app/src/main/cpp/llama/ggml/src/ggml-opencl/ggml-opencl.cpp    SIGOCL (inert)
+  app/src/main/cpp/android-opencl-loader.cpp                     clGetMemObjectInfo
+  native-dependencies/harness/repro_rmsmul.cpp                    fases + run_id
+  native-dependencies/harness/layer_diff.cpp                      harness que CRASHOU
+
+  NAO commitei o layer_diff.cpp: ele quebra o processo e nao serve para nada.
+  Nao commitei a instrumentacao OpenCl junto com o gate: sao coisas diferentes e
+  a separacao mantem a revisao do gate isolada.
+
+================================================================================
+FIM
+================================================================================

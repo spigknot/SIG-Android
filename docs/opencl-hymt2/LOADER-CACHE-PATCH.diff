@@ -1,0 +1,139 @@
+diff --git a/app/src/main/cpp/android-opencl-loader.cpp b/app/src/main/cpp/android-opencl-loader.cpp
+index 99277d0..583dc84 100644
+--- a/app/src/main/cpp/android-opencl-loader.cpp
++++ b/app/src/main/cpp/android-opencl-loader.cpp
+@@ -6,12 +6,47 @@
+ #include <CL/cl_function_types.h>
+ #include <dlfcn.h>
+ 
++#include <atomic>
+ #include <mutex>
+ #include <string>
+ #include <utility>
+ 
++#ifdef __ANDROID__
++#include <sys/system_properties.h>
++#endif
++
+ extern "C" const char * sig_opencl_loader_last_error();
+ 
++// SIG (F17): infra do cache de simbolos - chave runtime + contadores reais.
++// Chave loadercache: default LIGADA; "0" desliga (caminho original) => A/B
++// cache OFF/ON no MESMO artefato. Contador clcount (default OFF): conta
++// chamadas ao shim e dlsym REAIS do pedido (cache ligado: dlsym ~1/simbolo;
++// desligado: dlsym == chamadas).
++static std::atomic<long long> g_sig_shim_calls{0};
++static std::atomic<long long> g_sig_dlsym_calls{0};
++
++#ifdef SIG_LOADER_HOST_TEST
++extern "C" int g_sig_loader_test_key;      // 1 = cache ligada
++extern "C" int g_sig_loader_test_clcount;  // 1 = contadores ligados
++static bool sig_loadercache_enabled() { return g_sig_loader_test_key != 0; }
++static bool sig_clcount_enabled()     { return g_sig_loader_test_clcount != 0; }
++#else
++static bool sig_prop_equals_one(const char * name, bool def_val) {
++#ifdef __ANDROID__
++    char v[PROP_VALUE_MAX] = {0};
++    __system_property_get(name, v);
++    if (v[0] == 0) return def_val;
++    return v[0] == '1';
++#else
++    (void)name; return def_val;
++#endif
++}
++// leitura unica por processo (alternancia exige reinicio do app - o protocolo
++// de aceite ja reinicia a cada pedido).
++static bool sig_loadercache_enabled() { static const bool on = sig_prop_equals_one("debug.sig.hymt2.loadercache", true);  return on; }
++static bool sig_clcount_enabled()     { static const bool on = sig_prop_equals_one("debug.sig.hymt2.clcount",     false); return on; }
++#endif
++
+ namespace {
+ 
+ std::string g_opencl_loader_error = "OpenCL loader ainda não foi acionado.";
+@@ -61,20 +96,45 @@ void * opencl_handle() {
+ 
+ template <typename Fn>
+ Fn load_opencl_fn(const char * name) {
++    // SIG (F15/F17): cache de simbolos do shim OpenCL - ENDURECIDO para produto:
++    // - publicacao ATOMICA (nenhum ponteiro parcial observavel);
++    // - FALHAS nunca cacheadas (retry a cada chamada; primeiro acesso antes do
++    //   driver disponivel NAO envenena o cache);
++    // - handle dlopen process-lifetime (sem dlclose neste arquivo) => "1
++    //   resolucao por simbolo por processo" valido; invalidacao por generation
++    //   desnecessaria; null seguro para simbolo ausente (erro + log, sem crash);
++    // - chave runtime debug.sig.hymt2.loadercache (default LIGADA; "0" = caminho
++    //   original dlsym-por-chamada) para o A/B no MESMO artefato.
++    const bool cache_on = sig_loadercache_enabled();
++    const bool counting = sig_clcount_enabled();
++    if (counting) g_sig_shim_calls.fetch_add(1, std::memory_order_relaxed);
++    static std::atomic<Fn> cached{nullptr};
++    if (cache_on) {
++        Fn hit = cached.load(std::memory_order_acquire);
++        if (hit != nullptr) return hit;
++    }
+     void * handle = opencl_handle();
+     if (handle == nullptr) return nullptr;
+     dlerror();
++    if (counting) g_sig_dlsym_calls.fetch_add(1, std::memory_order_relaxed);
+     void * symbol = dlsym(handle, name);
+     if (symbol == nullptr) {
+         const char * error = dlerror();
+         set_opencl_loader_error(std::string("OpenCL carregou, mas faltou símbolo ") +
+                                 name + ": " + (error != nullptr ? error : "falha desconhecida"));
++        return nullptr;
+     }
+-    return reinterpret_cast<Fn>(symbol);
++    Fn fn = reinterpret_cast<Fn>(symbol);
++    if (cache_on) cached.store(fn, std::memory_order_release);
++    return fn;
+ }
+ 
+ } // namespace
+ 
++extern "C" long long sig_opencl_shim_calls()  { return g_sig_shim_calls.load(std::memory_order_relaxed); }
++extern "C" long long sig_opencl_dlsym_calls() { return g_sig_dlsym_calls.load(std::memory_order_relaxed); }
++extern "C" void      sig_opencl_counters_reset() { g_sig_shim_calls = 0; g_sig_dlsym_calls = 0; }
++
+ extern "C" const char * sig_opencl_loader_last_error() {
+     return g_opencl_loader_error.c_str();
+ }
+@@ -279,6 +339,16 @@ extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetKernelSubGroupInfo(
+     return fn ? fn(kernel, device, param_name, input_value_size, input_value, param_value_size, param_value, param_value_size_ret) : OPENCL_MISSING_ERROR;
+ }
+ 
++// SIG (fusion-round 27/09, item 4): o backend so precisava de clGetMemObjectInfo
++// para diagnosticar o CL_INVALID_MEM_OBJECT. Ausente no espelho de whisper, foi
++// adicionado seguindo exatamente o mesmo padrao dos outros wrappers acima.
++extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetMemObjectInfo(
++        cl_mem memobj, cl_mem_info param_name, size_t param_value_size,
++        void * param_value, size_t * param_value_size_ret) {
++    auto fn = OPENCL_FN(clGetMemObjectInfo);
++    return fn ? fn(memobj, param_name, param_value_size, param_value, param_value_size_ret) : OPENCL_MISSING_ERROR;
++}
++
+ extern "C" CL_API_ENTRY cl_int CL_API_CALL clEnqueueNDRangeKernel(
+         cl_command_queue command_queue, cl_kernel kernel, cl_uint work_dim,
+         const size_t * global_work_offset, const size_t * global_work_size,
+@@ -354,6 +424,22 @@ extern "C" CL_API_ENTRY cl_int CL_API_CALL clReleaseEvent(cl_event event) {
+     return fn ? fn(event) : OPENCL_MISSING_ERROR;
+ }
+ 
++extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetCommandQueueInfo(
++        cl_command_queue command_queue, cl_command_queue_info param_name,
++        size_t param_value_size, void * param_value, size_t * param_value_size_ret) {
++    auto fn = OPENCL_FN(clGetCommandQueueInfo);
++    return fn ? fn(command_queue, param_name, param_value_size, param_value, param_value_size_ret)
++              : OPENCL_MISSING_ERROR;
++}
++
++extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetEventInfo(
++        cl_event event, cl_event_info param_name, size_t param_value_size,
++        void * param_value, size_t * param_value_size_ret) {
++    auto fn = OPENCL_FN(clGetEventInfo);
++    return fn ? fn(event, param_name, param_value_size, param_value, param_value_size_ret)
++              : OPENCL_MISSING_ERROR;
++}
++
+ extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetEventProfilingInfo(
+         cl_event event, cl_profiling_info param_name, size_t param_value_size,
+         void * param_value, size_t * param_value_size_ret) {

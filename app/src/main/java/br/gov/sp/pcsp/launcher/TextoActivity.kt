@@ -3,6 +3,7 @@ package br.gov.sp.pcsp.launcher
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
@@ -19,7 +20,9 @@ import androidx.appcompat.app.AppCompatActivity
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URL
+import java.util.Date
 import java.util.Locale
+import java.text.SimpleDateFormat
 
 /** Ferramenta Texto: tradução de texto com o modelo Hy-MT2 (Tencent).
  *
@@ -96,6 +99,19 @@ class TextoActivity : AppCompatActivity() {
             status.text = ""
         }
         findViewById<ImageButton>(R.id.button_copy_translation).setOnClickListener { copyTranslation() }
+        findViewById<ImageButton>(R.id.button_paste_translation).setOnClickListener { pasteInput() }
+        findViewById<ImageButton>(R.id.button_share_translation).setOnClickListener { shareTranslation() }
+        findViewById<TextView>(R.id.button_save_translation).setOnClickListener { saveTranslation() }
+
+        // Acoes do texto de entrada (mesmo conjunto da traducao).
+        findViewById<TextView>(R.id.button_clear_input).setOnClickListener {
+            inputText.setText("")
+            status.text = "Texto original limpo."
+            appendLog("Texto original limpo.")
+        }
+        findViewById<ImageButton>(R.id.button_share_input).setOnClickListener { shareInput() }
+        findViewById<ImageButton>(R.id.button_copy_input).setOnClickListener { copyInput() }
+        findViewById<ImageButton>(R.id.button_paste_input).setOnClickListener { pasteInput() }
 
         val models = officialModels()
         selectedModel = models.first()
@@ -115,6 +131,27 @@ class TextoActivity : AppCompatActivity() {
         if (!selectedModel!!.file.exists()) {
             appendLog("Modelo ainda não baixado — toque em Traduzir para baixar.")
         }
+        carregarTextoCompartilhado(intent)
+    }
+
+    /**
+     * Se a Activity foi aberta por compartilhamento de texto (ACTION_SEND),
+     * coloca o conteúdo no campo de entrada. Também aceita o extra `extra_texto`
+     * (usado pelo driver de benchmark para injetar o texto sem digitar).
+     */
+    private fun carregarTextoCompartilhado(intent: Intent?) {
+        val texto = intent?.getStringExtra(Intent.EXTRA_TEXT)
+            ?: intent?.getStringExtra("extra_texto")
+        if (!texto.isNullOrBlank()) {
+            inputText.setText(texto)
+            appendLog("Texto recebido (${texto.length} caracteres).")
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        carregarTextoCompartilhado(intent)
     }
 
     override fun onDestroy() {
@@ -141,6 +178,31 @@ class TextoActivity : AppCompatActivity() {
      * Só entram no menu os que EXISTEM de verdade: o repo oficial do HF publica
      * apenas Q4_K_M, Q6_K e Q8_0 (Q4_K_S, Q5_0 e Q5_K_M dão 404 —asurei). O
      * Q4_0 e o Q8_0 ficam no R2, que é mais rápido e não depende do HF. */
+    /** Só para o EXPERIMENTO 1 do diagnóstico Vulkan (docs/vulkan-hymt2-plano-experimentos.txt).
+     *
+     * O modelo F16 (não quantizado) é uma ferramenta de DIAGNÓSTICO: separa
+     * "defeito no caminho de quantização" de "problema geral de matmul no
+     * Vulkan". Não faz sentido como produto — 3,59 GB contra 1,08 GB do Q4_K_M.
+     *
+     * Fica atrás de um arquivo-sinal (hymt2_f16.habilitar) para não poluir o
+     * menu de quem usa o app de verdade. Apague o arquivo para sumir com ele.
+     * Não é publicável: o HF não publica este GGUF, ele foi convertido do
+     * modelo base BF16 (tencent/Hy-MT2-1.8B). */
+    private fun diagnosticoF16(): HyMt2Model? {
+        val dir = modelsDir()
+        val arquivo = File(dir, "Hy-MT2-1.8B-f16.gguf")
+        if (!arquivo.exists()) return null
+        val habilitador = File(dir, "hymt2_f16.habilitar")
+        if (!habilitador.exists()) return null
+        return HyMt2Model(
+            "F16 (diagnóstico)",
+            arquivo.name,
+            arquivo,
+            "", // sem URL: não é baixável, só local
+            arquivo.length()
+        )
+    }
+
     private fun officialModels(): List<HyMt2Model> {
         val dir = modelsDir().apply { mkdirs() }
         val r2 = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/hymt2"
@@ -170,7 +232,7 @@ class TextoActivity : AppCompatActivity() {
                 "https://huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF/resolve/main/Hy-MT2-1.8B-1.25Bit.gguf",
                 461_860_800L
             )
-        )
+        ) + listOfNotNull(diagnosticoF16())
     }
 
     private fun showModelMenu() {
@@ -583,7 +645,15 @@ class TextoActivity : AppCompatActivity() {
                         runOnUiThread {
                             translating = false
                             buttonTranslate.isEnabled = true
-                            appendLog("ERRO ao carregar o modelo: $error")
+                            // Tempo de carga tambem no caminho de ERRO: o log
+                            // mostra "apos X.Xs" sempre que uma carga e' tentada.
+                            appendLog(
+                                "ERRO ao carregar o modelo apos " +
+                                    "%.1fs".format(
+                                        Locale.US,
+                                        (SystemClock.elapsedRealtime() - loadStart) / 1000.0
+                                    ) + ": $error"
+                            )
                             status.text = "Erro ao carregar o modelo (ver log)."
                         }
                         return@Thread
@@ -656,16 +726,128 @@ class TextoActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun copyTranslation() {
+    /**
+     * Compartilha um texto por Intent (o mesmo caminho do botão Compartilhar
+     * das ferramentas FFmpeg). Usado tanto para o texto original quanto para
+     * a tradução.
+     */
+    private fun shareText(texto: String, rotulo: String): Boolean {
+        if (texto.isBlank()) {
+            status.text = "Não há $rotulo para compartilhar."
+            return false
+        }
+        return try {
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, texto)
+            }
+            startActivity(Intent.createChooser(intent, "Compartilhar $rotulo"))
+            appendLog("$rotulo enviado para compartilhar.")
+            true
+        } catch (e: Exception) {
+            status.text = "Erro ao compartilhar: ${e.message}"
+            appendLog("Falha ao compartilhar $rotulo: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Copia um texto para a área de transferência.
+     */
+    private fun copyText(texto: String, rotulo: String): Boolean {
+        if (texto.isBlank()) {
+            status.text = "Não há $rotulo para copiar."
+            return false
+        }
+        return try {
+            val clipboard = getSystemService(ClipboardManager::class.java)
+            clipboard.setPrimaryClip(ClipData.newPlainText(rotulo, texto))
+            Toast.makeText(this, "$rotulo copiado", Toast.LENGTH_SHORT).show()
+            appendLog("$rotulo copiado para a área de transferência.")
+            true
+        } catch (e: Exception) {
+            status.text = "Erro ao copiar: ${e.message}"
+            appendLog("Falha ao copiar $rotulo: ${e.message}")
+            false
+        }
+    }
+
+    /** Compartilha a tradução. */
+    private fun shareTranslation() =
+        shareText(outputText.text.toString(), "tradução")
+
+    /** Compartilha o texto original digitado. */
+    private fun shareInput() =
+        shareText(inputText.text?.toString().orEmpty(), "texto original")
+
+    /** Copia a tradução. */
+    private fun copyTranslation() =
+        copyText(outputText.text.toString(), "tradução")
+
+    /** Copia o texto original digitado. */
+    private fun copyInput() =
+        copyText(inputText.text?.toString().orEmpty(), "texto original")
+
+    /**
+     * Cola o conteúdo da área de transferência no campo de entrada.
+     * Útil para reusar um texto sem digitar de novo (e para o driver de
+     * benchmark, que precisa inserir o mesmo texto em várias execuções).
+     */
+    private fun pasteInput() {
+        try {
+            val clipboard = getSystemService(ClipboardManager::class.java)
+            val texto = clipboard.primaryClip?.takeIf { it.itemCount > 0 }
+                ?.getItemAt(0)?.coerceToText(this)?.toString()
+            if (texto.isNullOrBlank()) {
+                status.text = "Área de transferência vazia."
+                appendLog("Colar: a área de transferência está vazia.")
+                return
+            }
+            val atual = inputText.text?.toString().orEmpty()
+            val inicio = inputText.selectionStart.coerceAtLeast(0)
+            val fim = inputText.selectionEnd.coerceAtLeast(0)
+            if (fim > inicio) {
+                // ha selecao: substitui, como um colar normal
+                inputText.text?.replace(inicio, fim, texto)
+            } else {
+                inputText.setText(atual + texto)
+            }
+            status.text = "Texto colado (${texto.length} caracteres)."
+            appendLog("Colado da área de transferência: ${texto.length} caracteres.")
+        } catch (e: Exception) {
+            status.text = "Erro ao colar: ${e.message}"
+            appendLog("Falha ao colar: ${e.message}")
+        }
+    }
+
+    /**
+     * Grava a tradução atual em arquivo para inspeção/comparação posterior.
+     *
+     * Fica em `files/textos/` (diretório externo da app, acessível por adb
+     * sem root) e o nome carrega modelo + backend + horário, para permitir
+     * comparar várias execuções do mesmo texto.
+     */
+    private fun saveTranslation() {
         val text = outputText.text.toString()
         if (text.isBlank()) {
-            status.text = "Não há tradução para copiar."
+            status.text = "Não há tradução para salvar."
             return
         }
-        val clipboard = getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(ClipData.newPlainText("tradução", text))
-        Toast.makeText(this, "Tradução copiada", Toast.LENGTH_SHORT).show()
-        appendLog("Tradução copiada para a área de transferência.")
+        try {
+            val dir = getExternalFilesDir("textos")?.apply { mkdirs() }
+                ?: throw IllegalStateException("sem acesso ao armazenamento externo")
+            val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val safeModel = (selectedModel?.label ?: "modelo").replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val safeBackend = selectedBackend.shortLabel.replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val file = File(dir, "trad_${safeModel}_${safeBackend}_$stamp.txt")
+            file.writeText(text, Charsets.UTF_8)
+            status.text = "Tradução salva em ${file.name}"
+            appendLog("Tradução salva: ${file.absolutePath} (${text.length} caracteres)")
+            Toast.makeText(this, "Tradução salva", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            status.text = "Erro ao salvar: ${e.message}"
+            appendLog("Falha ao salvar tradução: ${e.message}")
+        }
     }
 
     /** Acrescenta uma linha numerada ao log do rodapé (padrão de logs do usuário). */

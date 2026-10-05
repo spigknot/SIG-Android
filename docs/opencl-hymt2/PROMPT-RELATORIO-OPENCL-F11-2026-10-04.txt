@@ -1,0 +1,74 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F11: SPLIT INTERNO DO DECODE MEDIDO
+Data: 04/10/2026. Repo: D:/Projetos/SIG (NADA commitado).
+Base: parecer apos F9 + autorizacao do usuario para o piloto do profD (consentimento
+registrado; deploy/readback/rollback completos). Aparelho: CPH2747 (USB+wireless
+36001); lib padrao 9698670c restaurada e conferida ao vivo.
+
+================================================================================
+TABELA FINAL profD (same-run; um request por linha; saidas canonicas) ==========
+================================================================================
+run                | prefill (tok)        | prep | build | COMPUTE      | residual    | total  | sha
+Q4 curto OCL (ON)  | 254ms (119; 469 t/s) |  4ms |   3ms | 6415ms (88%) | 857ms (12%) | 7280ms | 084f12f4 ✓
+Q4 curto VK  (ON)  | 3595ms(119;  33 t/s) |  3ms |   6ms | 3746ms (99%) |  31ms ( 1%) | 3786ms | 084f12f4 ✓
+Q4 mais  OCL (ON)  | 1579ms(942; 598 t/s) | 29ms |  30ms |68649ms (88%) |9072ms (12%) |77780ms | 4d51e74f ✓
+Q4 mais  VK  (ON)  |16978ms(942;  55 t/s) | 83ms | 109ms |44245ms (98%) | 734ms ( 2%) |45171ms | 5f80d9b9 ✓
+Q8 curto OCL (ON)  | 243ms (119; 483 t/s) |  3ms |   3ms | 6756ms (91%) | 686ms ( 9%) | 7449ms | d36a3315 ✓
+Q8 mais  OCL (ON)  | 1646ms(942; 572 t/s) | 36ms |  35ms |75986ms (91%) |7402ms ( 9%) |83459ms | ee49738f ✓
+(Q4 curto OCL OFF: sha canonico; sem linha Decode — gating OFF verificado.)
+
+================================================================================
+CONCLUSOES (medidas; same-run; sem inferencia entre execucoes)
+================================================================================
+C1. CPU do grafo (prep+build) = 0,1-0,4% do decode em TODOS os runs => descartado
+    como gargalo. O custo e' 88-99% em `graph_compute`.
+C2. Inspecao da revisao REAL: llama_context::graph_compute (2509) chama APENAS
+    ggml_backend_sched_graph_compute_async (+threadpool cfg). O "compute" medido
+    = SUBMISSAO por-op (async) + o wait implicito da etapa anterior embutido no
+    sched. Para o OpenCL isso significa ~707 dispatches/token no caminho de
+    submissao; para o Vulkan, ~19ms/token MENOS no MESMO caminho (45,2 vs 26,4
+    ms/token) para os mesmos tokens.
+C3. Residual (copias/extractos fora do graph_compute): OCL 9-12% (6-7ms/token)
+    vs VK 1-2% => item SECUNDARIO OCL-especifico (provavel: copia de
+    logits/embeddings D2H + extract_layer_inputs no caminho OpenCL).
+C4. O CL-profiling (diag) permanece apenas como BOUND (infla ~1,9x); nao usado
+    como particao. A referencia de kernel-exec segue <=~26ms/token sob
+    instrumentacao — logo o excedente do compute OCL vs VK esta' sobretudo na
+    SUBMISSAO/espera por token, nao no exec de kernel.
+C5. Q4 vs Q8 (OCL, longo): compute/token 46,2ms (Q4) vs 51,0ms (Q8) — Q8 ~10%
+    mais caro por token, mesmo padrao do decode.
+
+================================================================================
+CANDIDATO (UM) E PROXIMO MICRO-NIVEL
+================================================================================
+D1. Candidato selecionado pelo custo dominante REAL: **o caminho de submissao
+    por-token do backend OpenCL** (o que o compute mede: 45,2ms/token; VK 26,4).
+    Nao e' kernel lento (bound de kernel ~26ms/token sob instrumentacao), nao e'
+    build de grafo (0,1-0,4%), nao e' sampler/detok (medidos).
+D2. Para atacar com seguranca, o proximo micro-nivel e' um split DENTRO do
+    compute: (a) wait da etapa anterior no realloc/sync do sched vs (b) tempo de
+    iteracao de submissao por op. Desenho do micro-instrumento pronto (mesmo
+    padrao opt-in; edicao pequena no sched path do fork). Artefato profD atual ja'
+    entregou o que dava sem esse passo.
+D3. Alternativas mapeadas (nao atalhos): (i) reducao de overhead por-op de
+    submissao (caching de args/launch config no fork — mudanca de produto,
+    exige RED-GREEN+aceite); (ii) residual OCL 9-12% (investigar a copia
+    D2H/extract); (iii) P1 lm_head permanece secundario (<=9% wall).
+D4. Nada disso sera iniciado sem consentimento; sem fastmath/sampler/EOG/fusao
+    ampla; sem default change.
+
+================================================================================
+EXECUCAO E ENTREGA
+================================================================================
+E1. Consentimento: recebido ("autorizo"); deploy profD com readback 2cef1f35;
+    piloto 7 runs (6 completos + 1 travado por tap perdido apos FONTE_OK —
+    preservado no log com fase/motivo; re-rodado como pd2). Todos os shas de
+    saida canonicos por backend/modelo/tamanho. Rollback 9698670c + UI
+    Q4_K_M/Vulkan/Portugues + chaves zero + limpeza (readback conferido).
+E2. Logs/hashes: profD_piloto2.log, profD_piloto3.log, f11_tabela.txt,
+    deploy_profD_36001.txt, rollback13_9698670c.txt + manifesto Python
+    (count/exist/size/dedupe; 0 erros).
+E3. PROVA DE LIFETIME e perfil anteriores: F8/F9 inalterados; device final =
+    estado stock (9698670c). Frente: carga F3b validada; perfil de inferencia
+    agora com o split interno MEDIDO (compute=submissao+wait); candidato unico
+    definido; proximo passo = micro-split dentro do sched (local, pronto para
+    consentimento).

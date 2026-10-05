@@ -1,0 +1,123 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F12: CORRECOES + MICRO-INSTRUMENTO PRONTO
+Data: 04/10/2026. Repo: D:/Projetos/SIG (NADA commitado).
+Base: parecer apos F11. Nenhuma ativacao no device nesta rodada (local apenas).
+Aparelho: CPH2747; lib padrao 9698670c (conferida; wireless 36001 + USB).
+
+================================================================================
+A. CORRECOES APLICADAS
+================================================================================
+A1. Q8 mais prefill: o RAW diz `prefill=1646ms (942 tok; 572,30 tok/s)` — a conta
+    do app esta' CORRETA (942*1000/1646 = 572,3). O "3762ms" foi ERRO DE
+    TRANSCRICAO no doc F11 (nao no instrumento); retificado aqui: 1646ms/572,3.
+A2. Nomenclatura: o campo antes chamado "total" na tabela F11 = **decode_total_ms**
+    (decode interno do llama); prefill/loop-wall/sampler/load permanecem colunas
+    separadas e associadas por request. Arredondamento: segmentos reportados com
+    precisao de ms; a soma prep+build+compute+residual = total dentro de +-2ms
+    (verificado nas linhas).
+A3. Prep/build pequenos NOS PEDIDOS MEDIDOS => CPU-do-grafo fica como BAIXA
+    prioridade (nao "descartado"): sao 6 requests, um por caso; repeticao futura
+    pode mudar. Nao generalizar.
+A4. `graph_compute` domina o intervalo MEDIDO, mas "async" no nome da API nao
+    prova ausencia de bloqueio transitorio (waits/sync/copies/reuso/backpressure
+    do driver). O alvo passa a ser rotulado **REGIAO sched/backend-compute** —
+    nao "causa submissao confirmada".
+A5. O bound de kernel (~26ms/token sob CL-profiling perturbado) NAO e' limite
+    superior/inferior do exec stock: mantido apenas como observacao; nem "kernel
+    lento" nem "excedente = submissao" foram afirmados no texto corrente.
+A6. compute OCL vs VK distintos NAO isolam overhead de CPU (kernels/scheduling/
+    execucao tambem diferem): comparacao mantida como "regiao distinta", sem
+    atribuicao causal.
+A7. P1 (lm_head) <=9% wall: estimativa em runs instrumentados, nao bound
+    validado stock — rotulado como tal.
+A8. OFF sem linha Decode = prova de GATING (nao de overhead baixo). Overhead
+    OFF/ON matched: NAO coletado ainda (o piloto F11 nao alternou decprof no
+    mesmo caso com repeats) — pendencia declarada; toda a latencia stock NAO foi
+    atribuida. Uma execucao por caso nao generaliza; Q8-VK: ausente (comparacao
+    delimitada ao que existe).
+A9. Falso-alarme investigado: `sync_with_other_backends` e' chamado POR NO no
+    graph_compute do OpenCL, mas com 1 device faz early-return (vetor < 2) —
+    documentado no F12; sem custo medivel neste alvo.
+A10. Novo dado do raw: `sched_reserve: graph splits = 2` (Q4 e Q8) — ha split
+    com fallback CPU; contabilizar splits nos proximos agregados.
+
+================================================================================
+B. MICRO-INSTRUMENTO LOCAL (profS) — PRONTO, NAO ATIVADO
+================================================================================
+B1. Inspecao previa das definicoes REAIS (llama/ggml do fork):
+    - `ggml_backend_sched_graph_compute_async` (ggml-backend.cpp:1949): reset ->
+      alloc_graph -> `ggml_backend_sched_compute_splits`;
+    - `ggml_backend_sched_synchronize` = por backend; o WAIT de resultado ocorre
+      nos GETTERS publicos (llama_get_logits/embeddings chamam ctx->synchronize
+      — llama-context.cpp:3757+): por isso o sampler e' instantaneo (a GPU ja'
+      terminou enquanto a submissao do proximo token flui).
+    - backend OpenCL: `ggml_backend_opencl_graph_compute` (7085) itera NOS e
+      despacha por op via `enqueue_ndrange_kernel`; `sync_with_other_backends`
+      por no' = early-return com 1 device (A9).
+B2. Instrumentacao implementada (opt-in `debug.sig.hymt2.schedprof`, default OFF;
+    sem mudar algoritmo/config; sem waits novos):
+    - `ggml-backend` OpenCL: **graph_us** (span do graph_compute, loop de nos) +
+      **nodes** (contagem REAL, nao deduzida do CSV antigo) + **enq_us** (span
+      das chamadas de `enqueue_ndrange_kernel`, n calls) + setup = graph - enq
+      (regiao nao-atribuida fina: op logic/arg-args/fusao).
+    - JNI: linha `Sched/OCL: graph=..ms nodes=.. enq=..ms (n=..) setup=..ms`
+      (inclusivo/exclusivo declarado; aninhado dentro do decode_total).
+    - Clocks host monotonicos; aggregates por REQUEST; reset por geracao.
+B3. Artefato: libsig_llama_profS.so sha256
+    c6be461843fb09e91683d0e3900385ad02d86da092b642d4897fe717a4bc1cde (95.894.848 B).
+    Fontes em scratch (ggml-opencl_profS_wip.cpp, llama_jni_profS_wip.cpp).
+    Compile Ninja real OK; string "Sched/OCL:" no .so ✓.
+B4. Testes locais declarados: gating OFF=>sem linha (mesmo padrao ja' verificado
+    no profD); identidade graph>=enq (sanidade aritmetica) no analisador do
+    piloto; n == nodes esperados >= chamadas Decode (EGO: chamadas podem exceder
+    tokens; contadores brutos disponiveis); reset por request. Bordas primeiro
+    token/EOG ficam como hipotese (142 vs 141) ate' o piloto contar direto.
+B5. Nao inclui: CL-profiling pesado (bound antigo permanece separado); Vulkan
+    (delimitado; sem instrumentacao para nao inflar escopo).
+
+================================================================================
+C. PEDIDO DE CONSENTIMENTO (exato)
+================================================================================
+Ativar TEMPORARIAMENTE o profS (deploy push+run-as com readback pelo sha
+c6be4618...; backup/rollback para 9698670c + UI Q4_K_M/Vulkan/Portugues/chaves
+zero) para piloto: **Q4 curto OFF/ON alternado (x2 cada)** para overhead matched
++ **Q4 mais_longo** e **Q8 curto** poucas reps; props {schedprof conforme o
+braco, prof/hostprof/decprof=1 no braco ON} para correlacao total->decode->
+graph->enq. Sem APK/ZIP/nativeversion/release.
+
+================================================================================
+D. DECISAO POS-DADOS (preparada)
+================================================================================
+wait-prev/request vs enqueue/arg-setup vs transfer vs GPU desconhecido:
+- se o `setup` (graph-enq) dominar => candidato = caching de args/launch config
+  no fork (invalidacao por identidade kernel/tensor/buffer/shape/config; nunca
+  cachear args mutaveis sem prova; concorrencia testada; RED-GREEN no helper
+  real + probe numerico independente + A/B mesmo artefato);
+- se o `enq` dominar => investigar blocking do driver/backpressure (sem remover
+  waits sem provar dependencia/lifetime);
+- sem fusao ampla/fastmath/sampler/EOG como atalho; sem default change.
+
+
+================================================================================
+F12.1 — SUPERSESSAO E PROTOCOLO FINAL (apos parecer "PILOTO PENDENTE")
+================================================================================
+- O artefato profS c6be4618... foi SUPERADO por **profS2** sha256
+  591e89a9b90967dc25e9f72b9ed8c4c8db82000ee2c33d4b9e4609d72bcaea95 (95.902.120 B):
+  inclui SNAPSHOT POR FASE — "Sched/OCL[prefill]" e "Sched/OCL[decode]" (deltas),
+  resolvendo "graph/enq/nodes por fase" (o agregado nao sera comparado com o
+  decode_total como se fosse so' decode).
+- Controle OFF/ON corrigido: em AMBOS os bracos: prof=1, hostprof=1, decprof=1
+  (no_perf=false identico); SOMENTE schedprof muda 0->1 (overhead exclusivo do
+  profS). Sem waits novos. Reset por request mantido.
+- Cobertura (lacunas declaradas): profS mede apenas o span do graph_compute do
+  backend OpenCL + spans de enqueue_ndrange_kernel (contagem de nos e chamadas
+  REAIS); NAO mede: waits alloc/sched antes/depois, sync dos getters,
+  transfers/copies fora do wrapper, nos do split CPU (splits=2), nem
+  bookkeeping fora do wrapper. "setup = graph - enq" = regiao NAO atribuida
+  (op logic/CPU/copies/bookkeeping), nao "custo de argumentos" por si.
+- Testes executados ATE' AGORA: compilacao Ninja real rc=0; string presente no
+  .so (presenca != funcionamento); gating/contadores no device ficam PENDENTES
+  do piloto. Sanidade aritmetica (graph>=enq) sera checada nos dados do piloto
+  (com contrato de agregacao single-thread por request declarado).
+- Getters synchronize = local de espera identificado; ordem real getter/decode/
+  sample sera observada nos dados por request antes de qualquer inferencia de
+  pipeline.

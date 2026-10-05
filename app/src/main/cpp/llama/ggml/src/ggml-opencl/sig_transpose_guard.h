@@ -1,0 +1,30 @@
+// Guard do F3b (transposes non-blocking) — SEPARADO para teste nativo local.
+// Habilita non-blocking SOMENTE com fila IN-ORDER confirmada por consulta;
+// qualquer incerteza (erro da consulta) => modo BLOQUEANTE (fail-safe).
+//
+// Sem cache: a consulta custa ~microssegundos e roda 1x por transpose
+// (~672 por carga => ~1-3ms total, desprezivel vs 1.2s economizado); a
+// ausencia de cache elimina a classe de bug de "cache por primeiro queue"
+// (fila recriada com propriedades diferentes herdaria resultado velho).
+// Teste: native-dependencies/harness/transpose_guard_test.cpp (RED-GREEN).
+#pragma once
+#include <atomic>
+
+// impl parametrizada para o teste (injeta a consulta); o consumidor usa a
+// variante abaixo com o clGetCommandQueueInfo real (loader/plataforma).
+static inline bool sig_transpose_guard_impl(
+        cl_command_queue q,
+        cl_int (*query)(cl_command_queue, cl_command_queue_info, size_t, void *, size_t *)) {
+    cl_command_queue_properties props = 0;
+    cl_int rc = query(q, CL_QUEUE_PROPERTIES, sizeof(props), &props, NULL);
+    int ooo = (rc == CL_SUCCESS)
+                  ? ((props & CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE) ? 1 : 0)
+                  : -1;
+    return ((ooo == 0) ? 1 : 0) == 1;  // so' habilita com IN-ORDER confirmado
+}
+
+#ifndef SIG_TRANSPOSE_GUARD_TEST
+static bool sig_transpose_can_skip_wait(cl_command_queue q) {
+    return sig_transpose_guard_impl(q, clGetCommandQueueInfo);
+}
+#endif

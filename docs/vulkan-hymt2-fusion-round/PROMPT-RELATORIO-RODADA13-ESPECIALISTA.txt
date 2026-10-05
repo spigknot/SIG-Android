@@ -1,0 +1,484 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 13 (29-30/09/2026)
+ISOLAR A NORMALIZACAO FINAL — Hy-MT2 1.8B / llama.cpp / Vulkan / CPH2747
+================================================================================
+Responde ao "PROMPT AO AGENTE — APOS RODADA 12 FINAL: ISOLAR NORMALIZACAO
+FINAL" (29/09 23:54). Ordem seguida: §2 (trace D.3), §3 (layer_inp vs
+pre_norm_final), §4 (controles sem/com), §5 (A/B/C/D + colocacao por
+operacao), §6 (replay local), §7 (reconciliacao auditada), §8 (entrega).
+NENHUM commit/push/publicacao/APK/troca de biblioteca de producao; WIP e
+controles intactos; modelo c4bf1015... e gate preservados; OpenCL/Whisper/
+NPU nao tocados; whisper.cpp intocado.
+
+ESTADOS (§9-style, separando classes de evidencia):
+  A. trace D.3 (arquitetura -> produtor -> extracao) ...... CCE
+  B. layer_inp vs solucao diagnostica ..................... CCE
+  C. controles sem/com captura CPU e GPU1 ................. CCE
+  D. A/B/C/D no L[342] + colocacao por operacao .......... CCE
+  E. replay local executado (norma) ....................... CCE
+     bisect temporal (A no passo 0) ....................... CCE
+     bisect por bloco ..................................... PENDENTE (unico
+       proximo passo, §9)
+  F. benchmark/qualidade preservados (auditoria) .......... CCE
+  G. diff/hashes/comandos/retornos ....................... CCE
+
+CLASSIFICACAO DE EVIDENCIA: "fonte inspecionado" (§2/§3/§5-build_norm),
+"teste sintetico" (nenhum novo — os 87/87 da rodada 11 permanecem),
+"teste de integracao" (runs com modelo no alvo, §4/§5/§6),
+"inferencia no alvo" (CPH2747, §4-§6). Nada rotulado "concluido" por
+compilar; o replay e' calculado no PC sobre artefatos do alvo.
+
+--------------------------------------------------------------------------------
+*** RETIFICACOES APLICADAS EM 30/09/2026 (parecer da rodada 14) ***
+As correcoes abaixo valem sobre o texto deste TXT; as medicoes NAO foram
+invalidadas — muda a LEITURA delas. Detalhes e novo experimento em
+PROMPT-RELATORIO-RODADA14-ESPECIALISTA.txt.
+ R1 (§2.1 do parecer): o replay f64 e' referencia matematica para os
+   VETORES CAPTURADOS — C_CPU/C_GPU sao proximos da formula aplicada
+   respectivamente a A_CPU/A_GPU. NAO e' exatidao bit a bit nem prova de
+   igualdade CPU/GPU para o MESMO A (A_CPU != A_GPU e nenhum kernel foi
+   executado nos dois backends).
+ R2 (§2.2): a verificacao "C/A == W/rms" NAO e' medicao independente —
+   deriva dos mesmos A/C/W e e' instavel perto de zero; nao e' "execucao
+   separada de dois operadores". O "~1 ULP" sera refeito POR ELEMENTO
+   (dtype/magnitude), nao pela norma global ~134.
+ R3 (§2.3): "B veio do mesmo GGUF" estabelece BYTES DE ORIGEM; nao prova
+   igualdade do buffer device carregado. Upload/readback de B so sera
+   investigado se a localizacao exigir (sem campanha de pesos).
+ R4 (§2.4): par lexical CORRIGIDO — 3415 = "event" (evento) e 16990 =
+   "incident" (incidente), provado pela linha do log da rodada 9:
+   "passo 342: id=3415  event" (CPU) e "passo 342: id=16990  incident"
+   (Vulkan). NAO "relatou/ocorreu". Frase real do caso longo:
+   "...leitura inconsistente de 2,4 bar e relatou o incidente atraves da
+   aplicacao movel" — a divergencia escolhe entre "evento" e "incidente"
+   no lugar de "incidente". IDs e pecas preservados.
+ R5 (§2.5): convencao L[0] = DEPOIS do prefill e ANTES de consumir o
+   primeiro id; o loop do harness le os logits E FAZ O DUMP antes do
+   llama_decode do passo (llama_harness.cpp:614-621 antes de :664).
+   Logo "dump-passo 0" e' L[0] com UMA chamada de decode (o prefill)
+   antes dele — a frase "primeiro decode apos o prefill" do §D.6 estava
+   INCORRETA e e' substituida por "estado pos-prefill (L[0])". A
+   divergencia existe apos o PREFILL (1 decode), antes de qualquer
+   decode de token.
+ R6 (§3): o checkpoint atual esta do lado GPU da fronteira —
+   pre_copy=Vulkan0 significa que o A observado inclui transferencia,
+   DUP e readback; nao e' o valor original do produtor CPU. Alem disso,
+   a frase "hipoese de Vulkan_Host testada e REFUTADA" (§D.5) foi
+   RETIRADA: o histograma conta BACKENDS EXECUTANTES (get_tensor_backend
+   por no), mas Vulkan_Host e' um TIPO DE BUFFER (o log mostra
+   "Vulkan_Host compute buffer size 12.0137 MiB" alocado); backend
+   executante e tipo de buffer sao conceitos distintos. Nao ha exclusao
+   de Vulkan_Host em intermediarios — so nao ha no executando la.
+ R7 (§4 do parecer): as variantes (a) build sem patch = v8,
+   (b) patchado sem escrita = v9f SEM --dump-embed, (c) patchado com
+   escrita = v9f COM --dump-embed. Os controles com/sem do §C comparam
+   (b) vs (c); a continuidade v9f-"sem" == v8/r12 (0/120818) e' (b)==(a).
+   O ggml_dup fica no grafo SEMPRE no build diagnostico (a flag alterna
+   so a leitura/escrita no harness).
+
+CONCLUSAO CENTRAL (§5 interpretacao — "A diferente")
+--------------------------------------------------------------------------------
+Os operandos da normalizacao final JA DIVERGEM entre CPU0 e GPU1 ANTES da
+normalizacao (A diferente, 2048/2048 posicoes, RMSE 0.009272756, max_abs
+0.031243354). A normalizacao em si e' EXATA: o replay local (float64) a
+partir do A capturado reproduz o C medido nos DOIS backends com erro
+maximo 8.7e-7 (0/2048 posicoes acima de 1e-4). Portanto, pela rubrica do
+§5, a diferenca de C (e dos logits) e' PROPAGADA de antes — a norma final
+NAO e' declarada causa raiz. Fato novo adicional: a divergencia de A
+JA EXISTE NO PRIMEIRO DECODE apos o prefill (RMSE 0.013252366), sendo
+que as 1122 operacoes dos 32 blocos transformer rodam em CPU nos DOIS
+casos e os microbatches do prefill sao identicos (§6.4). Nao ha resposta
+definitiva para essa contradicao nesta rodada; o proximo passo unico esta
+no §9 (bisect por bloco com o mesmo mecanismo de captura).
+
+--------------------------------------------------------------------------------
+A. TRACE: ARQUITETURA -> PRODUTOR DE t_embd -> EXTRACAO/READBACK  [§2, D.3]
+--------------------------------------------------------------------------------
+A.1 Arquitetura efetivamente instanciada
+  * GGUF declara arch hunyuan-dense (log do alvo: create_tensor
+    token_embd.weight q6_K; hunyuan-dense.load_arch_*).
+  * models.h: "using graph = llama_model_hunyuan_vl::graph" em
+    llama_model_hunyuan_dense — o arquivo hunyuan-vl.cpp apontado pelo
+    parecer e' o produtor REAL do grafo do nosso modelo (herdado pela
+    dense). Confirmado no fonte local, nao por suposicao.
+  * pooling: LLAMA_POOLING_TYPE_NONE (o decode entra no case NONE de
+    llama-context.cpp:1946-1959; nenhum build_pooling roda —
+    llama-graph.cpp:3541 so executa com pooling_type != NONE).
+  * flags: cparams.embeddings == true no harness (o caminho de extracao
+    copia t_embd); r12/r13 usaram o mesmo protocolo.
+  * Bibliotecas vinculadas: o harness v9* foi linkado contra a .a do
+    build diagnostico (SIGREPRO_BUILD=dia-norm/build -> $B/src/
+    libllama.a, sha 40e0012263b0325ad39c7763a0abed7cb9f02787ad6982b55071192609a35689);
+    a .a normal e' distinta (95b7464b... na rodada anterior). Prova
+    BINARIA do patch: ctor llama_model_hunyuan_vl::graph no .o do
+    diag tem 473 instrucoes vs 471 na normal (llvm-objdump -dr
+    --disassemble-symbols, diff de 2 instrucoes = a store extra).
+
+A.2 Produtor (hunyuan-vl.cpp, produto — linhas do fonte local)
+  167-173  cur = ggml_add(...) final do bloco; cur = build_cvec(cur, il);
+           cb "l_out"; inpL = cur;                      <- saida do bloco 31
+  175      cur = inpL;
+  177-179  cur = build_norm(cur, model.output_norm, NULL, LLM_NORM_RMS, -1);
+  181      cb(cur, "result_norm", -1);
+  182      res->t_embd = cur;                           <- POST-norma
+  184      cur = build_lora_mm(model.output, cur, model.output_s);
+  186      res->t_logits = cur;                         <- logits
+  => t_embd e' a SAIDA da normalizacao final, antes do lm_head. A tese do
+     parecer (§2) esta CONFIRMADA linha a linha.
+
+A.3 build_norm REAL (llama-graph.cpp:llm_graph_context::build_norm)
+  Para LLM_NORM_RMS com mw=output_norm e mb=NULL (como chamado acima):
+    1) cur = ggml_rms_norm(ctx0, cur, hparams.f_norm_rms_eps);  <- RMS puro
+    2) cur = ggml_mul(ctx0, cur, mw);                           <- escala pelo peso
+    (sem ggml_add — mb e' NULL; sem conversoes de dtype no caminho;
+     LLM_NORM_GROUP nao e' o caso).
+  Componentes registrados: RMS_NORM + MUL, nada mais (o parecer pediu
+  para nao assumir "RMS puro" — e' RMS + multiplicacao pelo weight).
+  epsilon efetivo: hparams.f_norm_rms_eps = 1e-5 (log do alvo:
+  "rms_eps=1e-5"). Peso: output_norm.weight, GGML_TYPE_F32
+  (tensor_type=0), shape (2048,), lido do GGUF c4bf1015... (§6.1).
+
+A.4 Extracao e readback (llama-context.cpp, decode)
+  1917  t_logits  = res->get_logits();
+  1918  t_embd    = cparams.embeddings ? res->get_embd() : nullptr;
+  1921  [DIAG]    log de embd/pooled/buffers/backend (instrumentacao)
+  1922-1924      SE res->get_embd_pooled() != nullptr, t_embd = pooled
+                 (o fork substitui pelo canal pooled — foi por ali que o
+                  pre_norm_final foi exposto, §3.2)
+  1942-1959      case LLAMA_POOLING_TYPE_NONE:
+                 ggml_backend_tensor_get_async(backend_embd, t_embd,
+                     embd.data + n_outputs_prev*n_embd_out, 0,
+                     n_outputs*n_embd_out*sizeof(float));
+  A copia e' ASYNC para embd.data; a sincronizacao e' garantida no GETTER:
+  llama_get_embeddings_ith -> ctx->synchronize() (llama-context.cpp:3743-3747)
+  ANTES de get_embeddings_ith, que resolve a linha via output_resolve_row(i)
+  e devolve embd.data + j*n_embd_out. i=-1 = a ULTIMA linha = a linha
+  copiada pelo decode EM EXECUCAO (n_outputs_prev posiciona a linha do
+  batch atual). Logo os 2048 floats do dump --dump-passo 342 sao a linha
+  de L[342] do decode 342 — pertencimento provado pelo caminho de
+  offset/linha, nao so pelo shape.
+  Limite temporal: a leitura e' posterior ao compute + synchronize() do
+  getter; o tensor-fonte (t_embd ou pooled) e' output marcado no build
+  (set_outputs, llama-graph.cpp:1334-1343) antes do alloc — nao e'
+  ponteiro intermediario lido fora de ordem. §2.3 ("demonstre caminho de
+  materializacao/copia/readback") atendido por este trace.
+
+A.5 Limite de procedencia (§2, fim)
+  Este trace e' sobre a ARVORE ATUAL do repo (app/src/main/cpp/llama e a
+  copia diag-norm/, ambas da sessao de hoje). Ele prova a revisao ATUAL;
+  NAO afirma que a revisao historica dos binarios v8/r12 era identica —
+  nao ha identidade de build daquelas .a para declara-lo. Os binarios sao
+  identificados por hash (manifesto), nao por commit.
+
+--------------------------------------------------------------------------------
+B. layer_inp: SUPORTE AUSENTE + SOLUCAO DIAGNOSTICA ESCOLHIDA  [§3]
+--------------------------------------------------------------------------------
+B.1 get_embeddings_layer_inp NAO e' chamada
+  * hunyuan-vl.cpp (produtor): ZERO ocorrencias de t_layer_inp nem de
+    embeddings_layer_inp — a arquitetura nao preenche a "entrada 32".
+  * llama-graph.cpp:1348-1352 (set_outputs): habilitar a captura exige
+    t_layer_inp[il] != nullptr e dispara GGML_ASSERT caso contrario.
+  * A API EXISTE no fork mas NESTA arquitetura nao ha produtor — a
+    condicao do parecer ("trace setter, produtor por arquitetura,
+    reserva/copia e getter antes de habilitar") resultou em NAO CHAMAR a
+    API. Nenhum assert foi provocado (nenhum run com layer_inp).
+
+B.2 Solucao: pre_norm_final em build diagnostico ISOLADO
+  Instrumentacao minima em native-dependencies/diag-norm/ (COPIA da
+  arvore + patch; o produto app/src/main/cpp/llama nao foi editado):
+  * hunyuan-vl.cpp (unica mudanca no produtor, +8 linhas originais):
+      ggml_tensor * t_pre = ggml_dup(ctx0, inpL);   <- tensor NOVO
+      ggml_build_forward_expand(gf, t_pre);          <- no ANTES da norma
+      ggml_set_output(t_pre);                        <- preserva o buffer
+      ggml_set_name(t_pre, "diag_pre_norm_final");
+      res->t_embd_pooled = t_pre;                    <- canal real do fork
+  * llama-context.cpp: em process_ubatch, logo apos build/reuso do grafo,
+      recupera o tensor pelo NOME no gf e seta res->t_embd_pooled do res
+      que a extracao efetivamente le (ver B.3) + logs DIAG*.
+  * Nomes: pre_norm_final (nova captura); o t_embd existente continua
+    sendo post_norm_final. Nenhum campo/API inventado — usa-se
+    t_embd_pooled (campo real), ggml_set_name/ggml_graph_get_tensor
+    (API real), ggml_set_output (mecanismo real de preservacao).
+  * diff: +42 -0 linhas em 2 arquivos, so adicoes —
+    diag-norm-diff-v2.patch, sha 951f142f76c73fe58eb43c8ce139884f49c6b326778fc4119dff491574e07595.
+
+B.3 Por que 3 tentativas ate funcionar (registro honesto de erro, §8-E)
+  Tentativa 1: res->t_embd_pooled = inpL no ctor. DIAGBUILD provou a
+    escrita (pooled=inpL), mas A continuou IDENTICO a C: a extracao le
+    OUTRO res (DIAGEXT res=...1100 vs DIAGBUILD res=...a780 — o
+    llama_model::build_graph cria um llm_graph_context proprio e o
+    decode le gf_res_prev). Correcao: setar o campo do res correto em
+    process_ubatch via ggml_graph_get_tensor(gf, "diag_pre_norm_final").
+  Tentativa 2: com o canal certo, A continuou IDENTICO a C. DIAGEXT com
+    buf_embd/buf_pre mostrou: buf_embd == buf_pre (MESMO endereco) —
+    o inpL e o cur compartilham o mesmo buffer (norma escreve sobre a
+    arena/proprio buffer) e ler o proprio inpL apos o compute devolve
+    pos-norma. Correcao: ggml_dup em tensor NOVO + set_output.
+  Tentativa 3 (atuais): buf_pre != buf_embd; A difere de C em
+    2048/2048; ||A||=8.778717 vs ||C||=134.413989 (escala coerente).
+  A tentativa 1 e 2 ficaram registradas nos logs DIAGBUILD/DIAGEXT dos
+  runs intermediarios (todos preservados).
+
+--------------------------------------------------------------------------------
+C. CONTROLES DE INSTRUMENTACAO SEM/COM CAPTURA — CPU E GPU1  [§4]
+--------------------------------------------------------------------------------
+C.1 Curto (4 tokens, teacher, ids_ctrl4)
+  CPU  (r12, harness v8): sem == com (byte a byte).
+  GPU1 (v8, esta rodada): ctl_gpu_sem_P3.f32 == ctl_gpu_com_P3.f32
+    sha 54e0d2260a8016e2f540ba5cb700cf2fb6e0c31db606491f7eba300599c7be84
+    (ambos 483272 B; artefatos em logs-rodada13/ctl_curto_gpu1/)
+  -> o efeito da flag na GPU NAO altera logits, embd, finitude, rc.
+
+C.2 L[342] completo (343 tokens, protocolo exato do alvo), harness v9f
+  backend   com captura   sem captura   difs         margem 3415-16990
+  cpu       cpu_com       cpu_sem       0/120818     +0.030470 (ambos)
+  vulkan    vulkan_com    vulkan_sem    0/120818     -0.147522 (ambos)
+  * A instrumentacao NAO altera nenhum dos 120818 logits em nenhum dos
+    dois backends; a inversao 3415/16990 permanece intacta.
+  * Continuidade: v9f "sem" == r12 (cpu0 e gpu1) byte a byte
+    (0/120818 nos dois) — o instrumento novo reproduz exatamente a
+    rodada 12.
+  * Estabilidade entre builds: A capturado por v9f e v9g identico
+    (cpu sha c56ae4b44944e3618e1d74b3e325f2befc655e31520c94999f0abc116a584214;
+     gpu sha 35f3d52021c7ea9bb6274921bf0dac1ca03ee2bb4e4059a54620e52dc52261e5;
+     v9f == v9g).
+  * Todos os runs rc=0; modo diagnostico com varredura de finitude
+    ativa; nenhum MEDICAO INVALIDA; nenhum dump .INCOMPLETO.
+  §4 concluido: captura nao muda o efeito em nenhum backend. A regra do
+  §5.4 ("se capturar tensor mudar a inversao, reduzir instrumentacao")
+  NAO foi acionada — a inversao nao mudou.
+
+--------------------------------------------------------------------------------
+D. A/B/C/D NO CASO L[342] + COLOCACAO POR OPERACAO  [§5]
+--------------------------------------------------------------------------------
+D.1 Operando A — entrada pre_norm_final (harness v9f --dump-embed)
+  CPU0:  sha c56ae4b44944e3618e1d74b3e325f2befc655e31520c94999f0abc116a584214
+         8192 B, F32, 2048 elementos, contíguo (nb[0]=4), ||A||=8.778717
+  GPU1:  sha 35f3d52021c7ea9bb6274921bf0dac1ca03ee2bb4e4059a54620e52dc52261e5
+         8192 B, F32, 2048
+  CPU0 x GPU1: difs 2048/2048 | max_abs 0.031243354 | RMSE 0.009272756
+  => A DIFERENTE (rubrica §5: diferenca de C e' propagada).
+
+D.2 Operando B — peso + epsilon
+  * output_norm.weight: GGML_TYPE_F32 (tensor_type=0), shape (2048,),
+    do GGUF c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+    (arquivo local puxido do aparelho, 1.133.080.544 B, SHA conferido).
+  * epsilon efetivo: 1e-5 (hparams.f_norm_rms_eps; log do alvo).
+  * B e o mesmo arquivo de pesos nos DOIS backends (mesmo GGUF, mesmos
+    bytes) — os bytes de ORIGEM de B sao os mesmos nos dois backends
+    (R3: isto NAO prova igualdade do buffer device carregado;
+    upload/readback de B so sera investigado se a localizacao exigir).
+
+D.3 Operando C — saida post_norm_final (t_embd, r12 sem instrumentacao)
+  CPU0: logs-rodada12/embed/cpu0_P342.emb, 8192 B, ||C||=134.413989
+  GPU1: logs-rodada12/embed/gpu1_P342.emb, 8192 B
+  (C difere entre backends — ja conhecido; aqui se prova que a norma
+   reproduz C a partir do proprio A com erro 8.7e-7, §6.1.)
+
+D.4 Operando D — logits finais (protocolo do alvo)
+  CPU0: logit[3415] - logit[16990] = +0.030470  ("event"/evento vence)
+  GPU1: logit[3415] - logit[16990] = -0.147522  ("incident"/incidente vence)
+  (par lexical CORRIGIDO — retificacao R4; linhas da rodada 9:
+   "passo 342: id=3415  event" e "passo 342: id=16990  incident";
+   frase real: "...2,4 bar e relatou o incidente atraves da aplicacao
+   movel")
+  identicos aos valores da rodada 12 (continuidade §4.2).
+
+D.5 Colocacao EFETIVA (nao so dos pesos) — logs DIAGBK/DIAGNODES (v9h)
+  Pesos: load_tensors — layers 0..31 assigned to device CPU (32 linhas);
+         layer 32 assigned to device Vulkan0; token_embd.weight (q6_K)
+         "cannot be used with preferred buffer type Vulkan_Host, using
+         CPU instead".
+  Operacoes (backend de cada tensor de saida, log DIAGBK):
+         CPU0  : norm_out=CPU        pre_copy=CPU        logits=CPU
+         GPU1  : norm_out=Vulkan0    pre_copy=Vulkan0    logits=Vulkan0
+  Operacoes (histograma de TODOS os nos do grafo, log DIAGNODES):
+         CPU0  : total=1127  cpu=1127  vulkan=0     vulkan_host=0
+         GPU1  : total=1127  cpu=1122  vulkan=5     vulkan_host=0
+  Buffers de compute (GPU1): Vulkan0 253.8164 MiB + Vulkan_Host 12.0137 MiB
+  => no GPU1 a normalizacao final e a projecao executam na GPU (5 nos);
+     os 1122 nos dos 32 blocos executam em CPU; nenhum no EXECUTA em
+     Vulkan_Host. LIMITES DESTE HISTOGRAMA (retificacao R6): ele conta
+     backends EXECUTANTES por no (get_tensor_backend); Vulkan_Host e' um
+     tipo de BUFFER (12.0137 MiB alocados no GPU1) e o histograma NAO
+     exclui uso de Vulkan_Host em intermediarios — backend executante e
+     tipo de buffer sao campos distintos. Correcao do "31/32": com n_gpu=1 sao 32/32 blocos
+     em CPU + output na GPU (relatorio da rodada 12 retificado no ponto,
+     §7.5 abaixo).
+
+D.6 Fato novo: A em L[0] (estado POS-PREFILL; ver retificacao R5)
+  A capturado em L[0] = depois do prefill, antes de consumir o primeiro
+  id (dump-passo 0 = L[0]; UMA chamada de decode — o prefill — antes do
+  dump; nenhuma de token):
+    cpu sha  d0724028178484ed7447e3db472d463d96b542bc85a7c5c54a51cdc843248358
+    gpu sha  d0a7c1ce75c389d05e29c34f3e75a64c8d4c4d5bd0ebe8a21c54ace4b48a65bc
+    difs 2048/2048 | max_abs 0.052284352 | RMSE 0.013252366
+  A divergencia JA EXISTE APOS O PREFILL (e e' MAIOR que em L[342]:
+  0.0133 vs 0.0093): o nascer da divergencia esta dentro do PREFILL
+  (ou na fronteira/captura dele), nao em decodes de token posteriores. Ver §6.4 para a contradicao com o
+  histograma de nos.
+
+--------------------------------------------------------------------------------
+E. REPLAY LOCAL COM OPERANDOS CONGELADOS  [§6]
+--------------------------------------------------------------------------------
+E.1 Referencia matematica Python/f64 (NAO e' execucao isolada CPU/Vulkan
+    com a mesma entrada — retificacao R1; o replay nao executou nenhum
+    kernel dos dois backends)
+  Formula reproduzida exatamente como o build_norm real:
+      rms = sqrt(mean(A^2) + 1e-5);   C_rep = (A / rms) * W
+  A_CPU0 -> C_CPU0:  max_abs 0.000000851 | RMSE 0.000000115 | 0/2048 >1e-4
+  A_GPU1 -> C_GPU1:  max_abs 0.000000865 | RMSE 0.000000118 | 0/2048 >1e-4
+  rms(A_CPU0)=0.194009836   rms(A_GPU1)=0.193892215
+  Verificacao DERIVADA (nao e' medicao independente — retificacao R2):
+  C/A == W/rms, max_abs 0.000003815 (deriva dos mesmos A/C/W)
+  Tolerancia: o replay e' f64 e o alvo e' f32. O "~1 ULP" afirmado na
+  rodada 13 sera refeito POR ELEMENTO considerando dtype/magnitude
+  (retificacao R2) — a norma global ~134 nao justifica a afirmacao.
+  NAO usei 0.01 nem outra tolerancia fixa.
+  Reproducao dos dois OPERADORES separadamente, conforme §6.1: o
+  separador rms e a multiplicacao de escala sao reproduzidos por esta
+  formula e batem com o C medido — sem reintroduzir fusao alguma na
+  producao (o replay e' Python no PC, zero mudanca em shader/gate).
+
+E.2 O que o replay PROVA e o que NAO prova
+  PROVA: dado o A (qualquer um dos dois), a normalizacao final e uma
+  escala deterministica reproduzida com erro de f32 — o operador
+  (RMS_NORM + MUL) nao introduz divergencia CPU vs Vulkan para o MESMO
+  A. Tambem prova que C_medido == norma(A_medido) nos dois backends:
+  a cadeia A -> C esta fechada em cada backend.
+  NAO PROVA: inocencia total do kernel em TODAS as condicoes — o replay
+  usa o A ja lido do readback; nao reproduz o caminho de buffer/transfer/
+  agendamento dentro do grafo (§6.3: essas diferencas ficam para a
+  investigacao do produtor de A, §9).
+
+E.3 Operador isolado vs subgrafo
+  O subgrafo efetivo e' pequeno (rms_norm + mul, sem add, sem conversao)
+  e foi reproduzido integralmente; a separacao rms | escala dentro do
+  subgrafo e' a propria formula acima, com cada parte conferida pela
+  verificacao C/A == W/rms.
+
+E.4 Identidade do artefato de replay
+  GGUF local = copia puxida do aparelho, 1.133.080.544 B, SHA-256
+  c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+  (confere com o declarado; NAO e' o OFFICIAL dc5f44fc...).
+
+--------------------------------------------------------------------------------
+F. RECONCILIACAO DOS RESULTADOS SEM REFACAO  [§7 — auditoria, sem refazer]
+--------------------------------------------------------------------------------
+F.1 (§7.1) Identidade do replay: ids_replay_343.txt sha
+  034879ca... (manifesto r12) — prefixo 0..341 identico ao greedy r8/r9;
+  replay[342]=3415=greedy[342]; prompt_fnv1a64=958caca6d5b78da6. O
+  precheck 340..400 continua declarado INSUFICIENTE como garantia; a
+  garantia e' o sha completo do arquivo de IDs + a conferencia por
+  indice, ja aplicadas. Nada foi refeto nesta rodada.
+
+F.2 (§7.2) Dumps GPU2==GPU33: texto mantido — "nao reproduzido no
+  instrumento corrigido; resultado antigo invalidado; a causa da antiga
+  igualdade nao e' atribuivel (devices e protocolo mudaram juntos)".
+
+F.3 (§7.3) Benchmarks: 18 logs da rodada 10/12 preservados (nada
+  repetido; esta rodada NAO fez benchmark). A vantagem medida em
+  medio/longo e a desvantagem no curto permanecem como resultado
+  LIMITADO do harness/processo, sem generalizacao para driver/aparelho.
+
+F.4 (§7.4) Temporizacao: a coluna "geracao" mede o llama_decode (sem
+  waits/readback/sampler) — mantida a ressalva; nenhum numero desta
+  rodada soma medianas de fases.
+
+F.5 (§7.5 + correcao do "31/32")
+  * Qualidade dos textos (r12): 3/3 identicos por backend, todos os
+    numeros preservados; nenhum texto antigo de GPU invalidado foi
+    usado como prova.
+  * RETIFICACAO aplicada no ponto: relatorio da rodada 12, linha que
+    dizia "31/32 blocos em CPU" -> "32/32 blocos transformer em CPU e
+    so a camada de output (indice 32) na GPU", com remissao a este TXT
+    (§5 do parecer). Evidencia: 32 linhas "layer .. assigned to CPU" +
+    1 linha "layer 32 assigned to Vulkan0" + DIAGNODES (§D.5).
+
+F.6 (§7.6) Identificacao Vulkan registrada no manifesto (via backend):
+  "Adreno Vulkan Driver", uma:1, fp16:1, warp 64 (r12 §7.6); identifica
+  GPU/driver Vulkan, nao revisao exata. A identificacao GLES continua
+  distinta e nao foi usada como prova de revisao Vulkan. Nao houve nova
+  campanha de capacidades.
+
+F.7 (§7.2/§7.1, controles gerais) v8 e todos os controles intactos;
+  llama_harness_pf (107.002.616 B, sha 507217644e21b7053d81eff9f40a2a1dd854edc072ce6715623c47836ac5540)
+  nao foi tocado; nenhum arquivo antigo apagado/sobrescrito.
+
+--------------------------------------------------------------------------------
+G. DIFF, HASHES, COMANDOS, RETORNOS E TESTES  [§8-G]
+--------------------------------------------------------------------------------
+G.1 Artefatos novos (logs-rodada13/, manifesto MANIFESTO-RODADA13.txt
+    com 45 entradas, SHA-256 completos):
+    hymt2_app.gguf (1.133.080.544, c4bf1015... conferido)
+    diag-norm-diff-v2.patch (4.140 B, +42 -0)
+    pre_norm/A_cpu0_v9f_P342.emb, A_gpu1_v9f_P342.emb (+ v9g identicos)
+    bisect_p0/A_cpu_P0.emb, A_vulkan_P0.emb
+    ctl_com_sem/{cpu,vulkan}_{sem,com}.{log,f32,emb}
+    ctl_curto_gpu1/ctl_gpu_{sem,com}.{log,f32,emb}
+    backends/{cpu,vulkan}.log + A_*_v9g.emb
+G.2 Binarios de diagnostico (NUNCA publicados):
+    llama_harness_v9h  106.929.808 B  580542edbfd7f7ebe2e2333d52f2067f51e54c106da91655f0029a8aa7ce2505
+    (v9..v9g preservados como series; v9 = 5e2315d5..., v9d = 4e1a5f8f...)
+    libllama.a diag     93.974.838 B  40e0012263b0325ad39c7763a0abed7cb9f02787ad6982b55071192609a35689
+G.3 Fontes diagnostico (diff completo no patch; hashes no manifesto):
+    diag-norm/cpp/llama/src/models/hunyuan-vl.cpp   (copia + patch)
+    diag-norm/cpp/llama/src/llama-context.cpp       (copia + logs)
+    o PRODUTO app/src/main/cpp/llama nao foi editado (diff -42/0).
+G.4 Comandos-tipo e retornos (todos rc=0):
+    build: cmake --build diag-norm/build -j16  -> 18/18 alvos
+           SIGREPRO_BUILD=... bash build_harness.sh -> BUILD_EC=0
+    runs no alvo (serial EXPLICITO 100.108.27.64:40229 em todos):
+      ./llama_harness_v9f --modelo hymt2_app.gguf --backend {cpu,vulkan}
+        --gpu-layers {0,1} --mode teacher --prompt-file app_longo.txt
+        --raw --ids ids_replay_343.txt --n-eval 343 --ctx 4096
+        --batch 512 --dump-passo 342 --dump-prefix <DIR>/A --dump-embed
+        --log-debug         -> rc=0 (todos; controles §C, §D, §E)
+      variante --dump-passo 0 -> rc=0 (§D.6)
+    replay: python replay_norm.py hymt2_app.gguf A.emb C.f32 D.f32
+      -> §E.1 (metricas acima)
+    prova binaria: llvm-objdump -dr --disassemble-symbols=<ctor graph>
+      hunyuan-vl.cpp.o (diag 473 vs normal 471 instrucoes)
+    hash: sha256sum conferido no aparelho e no PC (c4bf1015...)
+G.5 Testes
+    * Nenhum teste de harness alterado nesta rodada (nada em
+      harness_args.h/teste mudou; as mudancas foram so diag-norm e
+      logs). Os 87/87 da rodada 11 permanecem validos.
+    * Gate de producao NAO foi reexecutado: nada do app mudou (git
+      status identico ao da rodada 12; HEAD inalterado). Se o especialista
+      quiser, o gate (:app:lintDebug :app:testDebugUnitTest
+      :app:assembleDebug, 501/501 na r12) roda antes de qualquer commit.
+    * rc=0 e finitude verificados em TODOS os runs desta rodada.
+G.6 Segredos: nenhum arquivo desta rodada contem chaves; o GGUF e' o
+    modelo declarado; logs sao de harness (sem credenciais). R2/Drive nao
+    tocados.
+
+--------------------------------------------------------------------------------
+9. PROXIMO PASSO UNICO + LIMITES DECLARADOS
+--------------------------------------------------------------------------------
+PROXIMO PASSO UNICO (bisect por bloco, com o MESMO mecanismo ja validado):
+  mover o ggml_dup/setName de pre_norm_final para a SAIDA de um bloco
+  intermediario (comecar pelo bloco 0 e pelo bloco 31) no build
+  diagnostico e capturar A_bloco_k em CPU0 e GPU1 no passo 0 (onde a
+  divergencia ja existe, §D.6):
+    - se A_bloco0 ja divergir no passo 0 -> a divergencia nasce na
+      entrada/estado (embedding ou KV do prefill) — entao bisectar o
+      prefill;
+    - se A_bloco0 for identico e A_bloco31 divergir -> bissectar
+      0..31 por elevacao binaria.
+  Justificativa: com 1122/1127 nos em CPU e microbatches identicos nos
+  dois backends, A deveria ser identico — e NAO e. Essa contradicao e' o
+  fato novo a resolver; so um log de colocacao/valor por bloco a fecha.
+  Um experimento por rodada, sem ampliar matriz (§1).
+
+LIMITES DESTA RODADA
+  * A causa raiz NAO e' declarada; a norma final NAO e' declarada causa
+    (rubrica §5 e §8 respeitadas).
+  * A revisao historica dos binarios antigos nao e' provada (§A.5).
+  * O replay nao cobre caminho de buffer/transfer/agendamento (§E.2).
+  * GPU nao promovida a padrao; backend padrao, gate e pesos intactos.
+  * Nenhum commit, push, publicacao, APK, troca de biblioteca ou alteracao
+    de backend padrao nesta rodada.
+================================================================================
+FIM DO RELATORIO — RODADA 13
+================================================================================

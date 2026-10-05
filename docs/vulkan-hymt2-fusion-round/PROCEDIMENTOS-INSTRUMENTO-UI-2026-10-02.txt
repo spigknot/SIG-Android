@@ -1,0 +1,67 @@
+PROCEDIMENTOS DO INSTRUMENTO DE UI — Hy-MT2 / TextoActivity (02/10/2026)
+=====================================================================
+Registro procedural das rotas RECUPERADAS e validadas nesta rodada, para
+reuso em rodadas futuras. SEM alteracao de produto: todas as rotas usam
+recursos que JA' existem no app/build atual. Nada aqui autoriza deploy.
+
+1. SELECAO DE MODELO (popup fora do accessibility tree)
+   - O menu e' uma JANELA separada: `dumpsys window windows | grep
+     'ty=APPLICATION_SUB_PANEL'` -> `mAttrs={(x0,y0)(w x h)}` (ex.:
+     (60,463)(583x858)). O uiautomator dump NAO expoe os itens.
+   - Abrir por UM toque no centro de `button_model` (get do dump).
+     O popup e' TOGGLE (toque de novo fecha).
+   - Item i de n: x = x0 + w/2 ; y = y0 + h*(i + 0.5)/n.
+     Ordem = ordem do array do app: Q4_K_M, Q8_0, Q4_0, Q6_K, 1.25bit,
+     F16 (diagnostico). Ex.: n=6, alvo Q8_0 (i=1) -> (351, 677).
+   - Confirmar SEMPRE pela leitura de `button_model` (nao assumir);
+     o app tambem loga "Modelo selecionado: <X>".
+
+2. ENTRADA DE TEXTO (duas vias; escolher por tamanho)
+   - CURTAS (<= ~950 chars): tocar o campo (foco) e
+     `input text '<fonte>'` com espacos trocados por `%s` — UM comando.
+     ACIMA de ~950 chars o `input text` TRUNCA (medido: 2335/4924 ->
+     971/1244/965/1002). Lotes de 200 sem quoting sao piores (reinserem/
+     duplicam) — NAO usar.
+   - TODAS AS FONTES (rota recomendada): o proprio recurso do app —
+       am start -n br.gov.sp.pcsp.launcher/.TextoActivity \
+                --activity-single-top --es extra_texto "<fonte>"
+     Funciona cold (Activity nova) e warm (onNewIntent -> setText).
+     SEM `--activity-single-top` a entrega quente imprime "delivered to
+     currently running top-most instance" mas NAO efetiva (campo nao muda).
+     Conferir por IGUALDADE do campo e por "Texto recebido (N caracteres)"
+     no log do app. (Requer o APK com o recurso: dex contem "extra_texto".)
+
+3. LEITURA DO LOG (falso-vazio por teclado)
+   - Com o IME aberto, `terminal_text`/`status` saem do dump (leitura vazia
+     -> falso INVALIDO). Fechar teclado com `input keyevent 111` antes de ler.
+   - Basear a conclusao no DELTA do log ("Tradução pronta em" / "ERRO"),
+     usando `status` so' como atalho. Nada de "log cresceu OU saida existe".
+
+4. VACINA DE FRESCOR CONJUNTA (por run; substitui a vacina "OU")
+   ANTES: botao modelo == alvo E backend == Vulkan E campo == fonte EXATA.
+   DEPOIS (mesmo run): delta do log contem "Traduzindo com <modelo>
+   (<backend>) para" E "Tradução pronta em" E "Desempenho:"; saida nao
+   vazia; /proc/PID/maps com native_dependencies/9-arm64-v8a E o .gguf do
+   modelo. Qualquer elo falho => run INVALIDO.
+
+5. TAXONOMIA DE SESSAO (campos, nao rotulo "warm" solto)
+   process_restart (app reiniciado) | model_reload (pesos carregados no
+   processo, inclui 1a carga de processo novo e troca de modelo) |
+   context_fresh (contexto limpo pelo reset a cada pedido — comportamento
+   sob teste, true por desenho nos runs atuais).
+
+6. CAMPOS DE TEMPO (nao confundir)
+   total = "Tradução pronta em Xs" (interno do app, do clique ao fim);
+   geracao = "Desempenho: N tokens em T s (R tok/s)";
+   load = "Modelo carregado em Ls";
+   wall = parede do instrumento (tap -> deteccao; inclui I/O de UI);
+   elapsed_observacao = valor do instrumento em caso de artefato de leitura
+   (NAO publicar como latencia do app; excluir de medias com motivo).
+
+7. APARELHO (preparo/limpeza)
+   - USB preferido; validar serial (getprop ro.product.model == CPH2747).
+   - `svc power stayon true` durante a bateria; REVERTER ao final.
+   - `screen_off_timeout` como encontrado (nao alterar sem consentimento).
+
+Referencias: bateria_app2.py (instrumento), auditoria_reconciliada.py
+(reconciliacao offline), PROMPT-RELATORIO-RODADA-NOVA-2026-10-02.txt (A-H).

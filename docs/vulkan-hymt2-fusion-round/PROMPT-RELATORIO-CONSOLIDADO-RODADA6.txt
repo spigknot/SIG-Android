@@ -1,0 +1,852 @@
+================================================================================
+PROMPT + RELATÓRIO CONSOLIDADO — Hy-MT2 / llama.cpp / Vulkan / Adreno 840
+CPH2747 (OnePlus 15) · Android 16 · APK 1.505/68 · 28/09/2026
+Documento único. Todos os logs estão embutidos no texto.
+
+Este documento é o fechamento de 3 rodadas. Ele responde ao seu parecer
+(original + resposta às P12/P13/P14), e traz os logs literais das medições.
+
+LEIA OS 4 DOCUMENTOS ANTERIORES NESTA ORDEM, PARA NÃO REPETIR TRABALHO:
+  1. prompt-especialista-v5.txt        (15.159 B)  suas instruções iniciais
+  2. PROMPT-ESPECIALISTA-RODADA5.txt   (78.382 B)  relatório detalhado da rodada 5
+  3. PERGUNTAS-P12-P13-P14.txt         (11.432 B)  minhas 3 perguntas
+  4. RELATORIO-FINAL-AUDITAVEL.txt     (17.091 B)  resumo auditável (seção 12)
+ESTE ARQUIVO fecha. Tem o histórico completo + os logs + as pendências finais.
+
+  Q4 (PARCIAL) — BUILD ISOLADO DO HARNESS PARAMETRIZADO: CONCLUIDO, E O
+      CONTROLE DE REGRESSAO PASSOU. Ver SECAO Q4-LOGO ABAIXO.
+
+================================================================================
+RETIFICAÇÕES DO PARECER (28/09) — APLICADAS. LEIA ANTES DE TUDO.
+================================================================================
+
+  2.1 IGUALDADE DE SAÍDA NÃO DEMONSTRA IDENTIDADE DE CAMINHO.
+      Troquei "a flag cobre mais padrões, mas nenhum é alcançado neste
+      workload" por: "a flag não alterou os logits nos casos medidos; o teste
+      não identifica quais padrões adicionais foram executados ou deixaram de
+      ser executados". Um caminho fundido e um separado podem calcular
+      resultados idênticos. Provar ausência de execução exige alcance
+      demonstrado pelo grafo, código ou trace. CONSEQUENCIA: B.2 NÃO fecha a
+      lacuna dos padrões de 3 e 5 operações.
+
+  2.2 A TABELA ENTRE RODADAS NÃO PROVA QUE "OS 96 BYTES MUDAM O RESULTADO".
+      Eu comparei magnitudes de erro Vulkan-CPU de RODADAS DIFERENTES, com
+      prompt/template e estado de build não controlados. Formulao correta:
+      "os GGUF têm hashes e tamanhos diferentes; sua equivalência semântica
+      não foi demonstrada. As métricas antigas não são transferidas ao modelo
+      do app". +96 não é uma alteração de exatamente 96 bytes localizados:
+      pode ser metadados/padding, e bytes existentes podem ter mudado em outros
+      lugares.
+
+  2.3 LOG DO KV NÃO PROVA AUSÊNCIA DE COMPUTAÇÃO NA CPU.
+      As linhas llama_kv_cache: layer N: dev=Vulkan0 demonstram a LOCALIZAÇÃO
+      DO KV por camada, não que toda operação rodou na GPU. Operadores e
+      tarefas auxiliares podem ter outro backend; o scheduler tem 2 graph
+      splits. Afirmação corrigida para: "o KV das 32 camadas está no Vulkan".
+      Legenda corrigida na regra de offload: com n_layer_all=32, i_gpu_start=32
+      é a CAMADA DE SAÍDA (índice 32), não o último bloco transformer — os
+      blocos são 0..31.
+
+  2.4 LOG DA SENTINELA É OBSERVAÇÃO LOCALIZADA.
+      "First error: result=7" no índice informado confirma 7 NAQUELE elemento.
+      Não prova que o destino inteiro permaneceu em 7, nem que não houve
+      escrita em outros endereços. O contador n_sete continua indisponível no
+      run abortado. Não invalida o contorno; limita a conclusão causal.
+
+  2.5 NÃO SUBSTITUIR UMA FAIXA POR OUTRA. Razões por fase, sem misturar:
+      prefill curto        Vulkan/CPU ~1,88
+      prefill template     Vulkan/CPU ~1,31
+      carga+prefill curto Vulkan/CPU ~1,65
+      carga+prefill templ Vulkan/CPU ~1,68
+      A faixa "1,65x a 1,88x" omitia o 1,31 e misturava métricas. A estatística
+      usada é MÉDIA de 3 execuções; mediana e faixa completa estão pendentes
+      (seção 7 pede mediana e dispersão). DECODE E TRADUÇÃO COMPLETA ainda NÃO
+      CARACTERIZADOS — não infiro velocidade total.
+
+  2.6 TEACHER FORCING NÃO É TESTE DE TRADUÇÃO LIVRE.
+      "O serv" (IDs fixos) prova coincidência de argmax numérica; a tradução
+      livre no app é OUTRO teste. Registro os dois separadamente.
+
+  2.7 ⚠️ PROCEDÊNCIA DO HARNESS — A RETIFICAÇÃO MAIS GRAVE, E MEU ERRO.
+      O harness é LINKADO ESTATICAMENTE:
+        744 ocorrencias de ggml_vk_* e 1.456 de llama_model_loader DENTRO do
+        proprio binario; DWARF presente; campos disable_fused_rms_norm_mul e
+        disable_add_rms_fusion presentes.
+      PORTANTO ELE NAO USA A libsig_llama.so. A troca que fiz em
+      /data/local/tmp antes da B.2 NAO TEVE EFEITO NENHUM. Registrei aquela
+      troca como preparacao valida: estava errado.
+      CRONOLOGIA:
+        llama_harness (c1e706b3, usado na B.2 e no benchmark)  27/09 14:33:16
+        libsig_llama.so de producao (v9 publicado)             27/09 16:50:11
+      O harness e' 2h17 MAIS ANTIGO que a .so publicada, e foi compilado antes
+      de eu mover o gate para o planejador (a correcao que voce exigiu).
+      RISCO QUE EU ANUNCEI E QUE NAO SE CONFIRMOU: pela cronologia (harness
+      14:33, .so 16:50) eu escrevi que a B.2 "pode ter medido o gate no LUGAR
+      ERRADO" e assinei para refaze-la. O CONTROLE DE REGRESSAO desmenteu:
+      o argmax do binario antigo bate EXATAMENTE com o registrado na B.2
+      (2292(19.9700) e 65652(24.5600)), e os dumps sao byte a byte iguais aos
+      de um binario novo linkado contra o archive de 16:50. O harness JA
+      TINHA o gate do planejador. A B.2 e o benchmark NAO precisam ser refeitos
+      por esse motivo. Retifico o que eu mesmo escrevi.
+      O QUE A RETIFICACAO 2.7 ACERTOU, E VALE: o harness e' linkado
+      estaticamente e NAO carrega a libsig_llama.so; a troca que fiz em
+      /data/local/tmp antes da B.2 NAO TEVE EFEITO, e registrei aquela troca
+      como preparacao valida. CADEIA DO APP (APK + pacote nativo) e SEPARADA e
+      continua provada por sha256.
+
+================================================================================
+Q4 — HARNESS PARAMETRIZADO: BUILD ISOLADO + CONTROLE (28/09) — LOG LITERAL
+================================================================================
+
+ARQUITETURA DO BUILD (parecer: reusar as libs ja validadas, preservar o
+antigo como controle, nao atualizar llama.cpp/NDK, nao republicar o v9):
+    binario novo   native-dependencies/harness/arm64-v8a/llama_harness_pf
+    fonte          native-dependencies/harness/llama_harness.cpp
+    archives       OS MESMOS do build de producao (arm64-v8a):
+                     src/libllama.a                        (producao)
+                     ggml/src/ggml-vulkan/libggml-vulkan.a 66.045.092  27/09 16:50:10
+                     ggml/src/ggml-opencl/libggml-opencl.a 15.958.554  27/09 14:30:25
+                     ggml/src/libggml.a                     894.514    25/09 17:21:51
+                     ggml/src/libggml-base.a             10.803.872  26/09 18:38:59
+                     ggml/src/libggml-cpu.a                8.605.066  25/09 17:18:52
+    flags          CMAKE_BUILD_TYPE=Release, GGML_VULKAN=ON, GGML_OPENCL=ON,
+                   GGML_OPENCL_EMBED_KERNELS=ON; link -static-libstdc++ e o
+                   stub Vulkan do NDK API 28 (Vulkan_LIBRARY do CMakeCache).
+    o gate         libggml-vulkan.a de 27/09 16:50:10 e' o mesmo que gerou a
+                   libsig_llama.so PUBLICADA. Confirmei antes de linkar que no
+                   FONTE a unica referencia a disable_fused_rms_norm_mul fora
+                   de ggml_vk_op_get_pipeline e' NENHUMA: o gate esta em
+                   ggml_vk_can_fuse (linha 16431), atribuido em 7082.
+
+    IDENTIFICACAO
+      antigo (controle)  106.874.064  c1e706b3a4a28a064affc0bfb710159a
+      novo (parametriz.) 107.001.848  5cb15aa72634032c991bad008d965aa541d35b5f2e1fb08eb1bfafcaa302baa4
+      confere no aparelho: 5cb15aa72634032c991bad008d965aa541d35b5f2e1fb08eb1bfafcaa302baa4
+      NEEDED (ambos): libdl.so, liblog.so, libvulkan.so
+      instrumentacao no novo: NENHUMA (SIGOCL/SIGVK/SIGDISP ausentes)
+      --prompt-file / limite_geracao_pedido / prompt_fnv1a64: presentes
+
+    INTERFACE (o parecer pediu para nao aplicar o template duas vezes):
+      --prompt-file ARQ        o ARQUIVO traz o TEXTO-FONTE. O harness aplica
+                              a MESMA instrucao do app (HyMt2Translator.kt
+                              buildUserPrompt) e o template de chat oficial.
+      --prompt-file ARQ --raw  o ARQUIVO traz o PROMPT JA COMPLETO. Nao aplica
+                              instrucao nem template. Preserva a terminacao,
+                              inclusive o \n final.
+      (sem a opcao)           modos antigos preservados, para controle.
+      Rastreabilidade nova: GGML_VK_DISABLE_FUSION passa a ser impresso no log
+      (a B.2 nao sabia dizer se a flag estava presente), e FNV-1a de 64 bits dos
+      bytes do texto-fonte identifica a entrada sem depender do nome do
+      arquivo. "tokens_gerados = 2 de 46" foi desambiguado em
+      limite_geracao_pedido (nao e' n de tokens gerados).
+
+    BUILD: 2 falhas ate linkar, ambas corrigidas e registradas:
+      1) "unable to find library -lvulkan" — o NDK arm64 nao traz libvulkan;
+         a .so de producao resolve pelo stub API 28 (NEEDED: libvulkan.so).
+      2) "cannot locate symbol _ZTTNSt6__ndk1...basic_stringstream" em_execucao
+         — o harness antigo e' linkado estaticamente com libc++; o meu linkou
+         libc++_shared.so. Corrigido com -static-libstdc++. A PRIMEIRA execucao
+         do controle (exit=1 nos dois modos) e' a do binario com esse defeito,
+         e e' a que gerou o log com sha b09411f4. Nao e' resultado.
+
+    CONTROLE DE REGRESSAO (exigido antes de medir entrada media/longa):
+    mesmo caso curto, tres caminhos, dumps comparados byte a byte.
+      A) binario NOVO, modo ANTIGO (sem --prompt-file)
+      B) binario NOVO, --prompt-file --raw, arquivo = "...restarted.\n" (51 B)
+      C) binario ANTIGO, modo antigo (= o binario da B.2)
+
+      ids (A, B e C, identicos):
+        26403 287 24764 25 424 5534 617 117932 359
+      D1  argmax=2292(19.9700)   D2  argmax=65652(24.5600)
+      saida_bruta = "O serv"    NaN=0 Inf=0
+
+      sha256 dos dumps, os tres caminhos coincidem:
+        P   1433320ee5f547a78d7e8f747fc3455649490e366db1344f
+        D1  1da11d4e31a5890cea6ebe07fa2376e7d77ea9bf1f6238b3
+        D2  08456238ce71d88b86b76b3d56f12a451065836d73974666
+
+      >>> CONCLUSAO: A == B == C byte a byte. A via --prompt-file esta PROVADA
+      equivalente ao caminho validado, e o binario novo nao introduz
+      regressao. A B.2 tambem nao foi comprometida (ver 2.7 acima).
+
+    ERRO MEU QUE O CONTROLE REVELOU: na primeira rodada do controle o modo
+    --raw deu ids 26403 287 24764 25 424 5534 617 117932 13 (ultimo token 13 =
+    LF) em vez de 359 (= "."), e os logits divergiram 105,71% no prefill. Eu
+    tinha diagnostado "so o token final difere" — INCOMPLETO: 105% de desvio
+    nao e' tokenizacao, e' outro prefill. Causa: eu removia CR/LF final mesmo em
+    --raw, impedindo reproduzir um prompt que termina em newline (exatamente o
+    prompt fixo do harness). Corrigido: BOM sai sempre (artefato do editor);
+    terminacao sai so no modo TEXTO-FONTE, onde faz sentido, porque o app envia
+    o conteudo do EditText, sem quebra.
+
+================================================================================
+SEÇÃO M — MATRIZ REPRESENTATIVA E TRADUÇÃO COMPLETA (28/09) — RESULTADOS NOVOS
+================================================================================
+
+HERRAMENTA: o harness parametrizado da Q4 (llama_harness_pf), com o TETO DE
+GERAÇÃO CORRIGIDO. Este era um defeito do meu harness, não do modelo: a linha
+207 tinha `if (n_out > 64) n_out = 64;`, que truncava qualquer tradução acima
+de 64 tokens. Passar 400 ou 1024 por argv[2] não fazia NADA — o clamp é
+anterior. Pelo critério do parecer, "atingiu o limite" não é tradução completa,
+então médio e longo estavam sem qualidade medida. Corrigido para 2048, com a
+checagem de contexto (linha ~417) passando a usar uma reserva de n_ctx/4 em vez
+do n_out cru, porque o n_out deixou de representar a duração real.
+  binário  107.002.616  sha256 507217644e21b7053d81eff9df40a2a1dd854edc072ce6715623c47836ac5540
+  CONTROLE DE REGRESSAO REFEITO com este binário: A (modo antigo) == B
+  (--prompt-file --raw) byte a byte em P/D1/D2, com os MESMOS hashes de antes
+  (1433320e… / 1da11d4e… / 08456238c…). A correção do teto não afetou o
+  protocolo de teacher forcing.
+
+M.1  COMO SE MEDIU
+  texto-fonte pelo --prompt-file (via provada equivalente no controle),
+  sem os IDs fixos (argv[8] VAZIO = ramo guloso; passar "0" insere o ID do
+  token "O" e mantém o protocolo fixo — erro meu numa primeira tentativa),
+  greedy até EOG, modelo do app (c4bf1015), n_ctx=4096, n_batch=512.
+  3 tamanhos x 2 backends, 1 execução de tradução livre cada (a dispersão de 3
+  reps está na M.3, em modo teacher forcing).
+
+M.2  QUALIDADE — AS 6 TRADUÇÕES, TODAS TERMINARAM EM EOG
+  caso     prompt  saída  fim   NaN   CPU vs Vulkan
+  -------  ------  -----  ----  ---  ---------------
+  curto     29 tok     9  EOG    0   IDÊNTICAS (byte a byte)
+  médio    113 tok   138  EOG    0   IDÊNTICAS (byte a byte)
+  longo    271 tok   376  EOG    0   diferem em 1 SINÔNIMO
+
+  médio (tradução integral, 138 tokens):
+  "O sistema de despacho foi interrompido às 14:32, e a telemetria do veículo
+   foi enviada com um atraso de onze minutos. O operador confirmou que nenhum
+   passageiro foi afetado e que a próxima parada foi realizada normalmente. Em
+   12 de setembro, a equipe de manutenção substituiu o sensor de pressão na
+   unidade 4821; o número da peça está registrado no log de serviço. O valor
+   medido após a reparação foi de 2,4 bar, o que está dentro do intervalo
+   esperado."
+
+  longo (tradução integral, 376 tokens — texto de 271, cobertura total):
+  "Durante o turno da manhã, o operador informou que o veículo iniciou a rota
+   com um atraso de seis minutos, pois o portão da estação de manutenção
+   estava fechado para manutenção. Após contato com o despachante, ficou
+   acordado que a primeira parada seria feita mais tarde, enquanto as demais
+   paradas continuariam no cronograma original. Às 09:14, o motorista observou
+   que o sensor de pressão no veículo 4821 apresentava uma leitura inconsistente
+   de 2,4 bar e relatou o incidente através da aplicação móvel. A equipe de
+   manutenção chegou às 10:02, substituiu o sensor e registrou o número da peça
+   no log de serviço, sob a entrada 12/09. O controlador confirmou então que o
+   veículo estava funcionando normalmente e que nenhum passageiro foi atrasado
+   por mais de oito minutos durante o incidente. No dia seguinte, uma segunda
+   inspeção confirmou que a reparação foi eficaz e que as leituras permaneceram
+   estáveis em três testes consecutivos. A empresa pretende repetir o mesmo
+   procedimento nos demais veículos antes do final do mês e atualizar a lista de
+   verificação de manutenção preventiva de acordo. Por fim, a área financeira
+   foi informada sobre o custo adicional da visita de emergência e aprovou a
+   despesa, observando que um incidente semelhante ocorreu em março e que a
+   causa raiz ainda não foi identificada com certeza."
+
+  DADOS E NÚMEROS PRESERVADOS (o que mais pesa em ocorrência):
+  médio  às 14:32 | 12 de setembro | unidade 4821 | 2,4 bar
+  longo 09:14 | 10:02 | 4821 | 2,4 bar | 12/09 | oito minutos | março
+  NOTA: "2.4 bar" virou "2,4 bar" (conversão decimal), tecnicamente correta
+  em português.
+  Não houve loop, truncamento, NaN nem Inf em nenhum dos 6 runs.
+
+  A DIVERGÊNCIA DO LONGO (única em toda a matriz):
+    CPU  "...o operador informou que o veículo iniciou a rota..."
+    VULK "...o operador relatou que o veículo iniciou a rota..."
+  Sinônimos, ambos corretos. Consistente com a margem que medi no caso curto:
+  o token "idor" fica a 0,11 de logit do "foi" (28,2571 contra 28,3718). É o
+  mecanismo pelo qual um desvio residual de 3%–5% troca uma palavra. NÃO é
+  defeito do Vulkan; é fragilidade do modelo numa posição konkretamente ambígua,
+  e o desvio residual deve ser lido à luz disso.
+
+M.3  DESEMPENHO, SEPARADO POR FASE (ms; 3 execuções individuais por
+      caso, em ordem alternada — ver a nota de ESTATÍSTICA abaixo)
+  Teacher forcing (P/D1/D2), n_batch=512:
+    caso   ntok   prefill CPU              prefill Vulkan           razão
+    curto   29    495,3 580,2 1191,5       723,6 733,1 938,8       0,78–1,25 (PERDE)
+    médio  113   1895,5 1969,2 1969,8      771,6 804,1 869,8       0,40–0,43 (GANHA)
+    longo  271   7291,1 7325,9 7455,5     1427,0 1631,1 1842,6     0,20–0,25 (GANHA)
+  A carga do modelo favorece o CPU em TODOS os casos:
+    curto  185,6–698,3  contra  531,5–885,5
+    médio  161,9–188,5  contra  532,0–567,7
+    longo  364,9–715,6  contra  998,7–2588,6
+  Tradução LIVRE até EOG (1 run por caso, tempos de parede):
+    caso    prefill CPU  prefill VULK   geração CPU  geração VULK   total C/V
+    curto      601,4        763,9         344,3        425,3      0,95 / 1,19
+    médio     2171,2        815,0        6081,1       3750,0      8,25 / 4,57
+    longo     5168,2        882,0       16139,2      10695,8     21,3 / 11,6 s
+
+  ESTATÍSTICA — LEIA COM CUIDADO. As três colunas de cada linha são as 3
+  execuções INDIVIDUAIS, na ordem em que rodaram (rep alternada). NÃO são
+  média, mediana ou mínimo. Valores brutos, conferidos contra os logs:
+    curto  CPU   1191,5 / 495,3 / 580,2   <- o 1o run paga o aquecimento
+    curto  VULK   938,8 / 733,1 / 723,6
+    medio  CPU   1895,5 / 1969,8 / 1969,2
+    medio  VULK   771,6 / 804,1 / 869,8
+    longo  CPU   7291,1 / 7455,5 / 7325,9
+    longo  VULK  1842,6 / 1631,1 / 1427,0
+  A razão do caso curto NÃO deve ser lida ao centésimo: o primeiro run do
+  grupo CPU tem 2,4× o tempo dos outros dois, porque é sempre o primeiro a
+  carregar o modelo naquele processo. Mediana e faixa foram pedidas no parecer
+  e NÃO foram calculadas; se quiser, calculo a partir dos logs brutos sem
+  reexecutar nada.
+  Nos casos médio e longo a dispersão é pequena (desvio < 5%), e a conclusão
+  de que o Vulkan ganha é robusta a qualquer escolha de estatística.
+
+  MEDIANA e FAIXA, calculadas dos MESMOS logs acima, sem reexecutar nada
+  (mediana CPU | faixa; mediana Vulkan | faixa; razão Vulkan/CPU):
+    curto  carga    186,9 [185,6-698,3]  |  683,1 [531,5-885,5]  |  3,65x CPU
+           prefill  580,2 [495,3-1191,5] |  733,1 [723,6-938,8]  |  1,26x CPU
+           geracao   67,0 [ 38,1- 67,1] |  226,4 [222,4-305,4]  |  3,38x CPU
+    medio  carga    187,9 [161,9-188,5]  |  563,2 [532,0-567,7]  |  3,00x CPU
+           prefill 1969,2 [1895,5-1969,8]|  804,1 [771,6-869,8]  |  0,41x (Ganha)
+           geracao   68,6 [ 30,3- 79,5] |  223,8 [219,9-225,0]  |  3,26x CPU
+    longo  carga    373,3 [364,9-715,6]  | 1084,6 [998,7-2588,6]|  2,91x CPU
+           prefill 7325,9 [7291,1-7455,5]| 1631,1 [1427,0-1842,6]|  0,22x (Ganha)
+           geracao   58,3 [ 49,3- 76,6] |  448,5 [243,0-471,1]  |  7,69x CPU
+  NOTA SOBRE "GERACAO" NESTA TABELA: sao os 2 passos de decode do protocolo
+  P/D1/D2 (D1 e D2, entrada de 1 token). São 2 avaliações, NÃO a geração
+  livre de uma tradução — a geração real está na tabela acima, com 9/138/376
+  tokens, e ali o Vulkan GANHA no médio e no longo. As duas tabelas não se
+  contradizem: dispatch de 1 token por vez é o caso pior do Vulkan, e é
+  exatamente por isso que o préfill grande o favorece.
+  ACHADO QUE EU NÃO TINHA DESTACADO: a CARGA do modelo é consistentemente
+  ~3x mais cara no Vulkan (2,91x a 3,65x de mediana, nos três casos). Isso é
+  custo fixo, pago uma vez por sessão. Em uso com troca frequente de par de
+  idiomas ou few-shot, pode dominar uma tradução curta.
+
+M.4  O QUE ISSO MUDA NA RECOMENDAÇÃO — E EU ESTAVA COM A RECOMENDAÇÃO ERRADA
+  Eu vinha defendendo "CPU como padrão provisório" e escrevi que a hipótese
+  "GPU ganha quando o prefill domina" estava NÃO TESTADA. Ela foi testada e é
+  VERDADEIRA, de forma monótona com o tamanho da entrada:
+    - 29 tokens : Vulkan perde no prefill (0,78–1,25×) e na geração
+    - 113 tokens: Vulkan ganha 2,3–2,5× no prefill e ~1,6× na geração
+    - 271 tokens: Vulkan ganha 4,0–5,2× no prefill e ~1,5× na geração
+  O caso curto é o MENOS representativo dos três: um texto real de ocorrência
+  tem dezenas ou centenas de tokens, e é ali que o Vulkan ganha. A carga do
+  modelo favorece o CPU (~1,4× a ~3,6× mais rápido para carregar), o que
+  importa em uso com few-shot ou troca frequente de par de idiomas, mas se paga
+  uma única vez por sessão de tradução. A carga é consistentemente ~3× mais
+  cara no Vulkan (mediana 2,91× a 3,65× nos três casos) e é custo FIXO.
+  NOVO RECOMENDADO: Vulkan como padrão para entrada a partir de ~100 tokens,
+  CPU para entradas curtas e para quando a troca de idioma/modelo é frequente.
+  O ponto de crossover está entre 29 e 113 tokens e NÃO foi medido com
+  granularidade fina (precisaria de 3–4 tamanhos intermediários).
+  O QUE A MATRIZ NÃO FAZ: provar o comportamento em outro aparelho, no
+  pipeline real do app (aferição de tela, cancelamento e ciclo de vida seguem
+  sem teste), ou com quantizados outros que o Q4_K_M. É evidência de
+  DESEMPENHO e de COMPORTAMENTO TEXTUAL, neste aparelho, com este modelo.
+M.6  AS TRADUÇÕES INTEGRAIS, LITERAL (para você não precisar dos logs)
+
+  CURTO (9 tokens gerados, encerrado por EOG). IDÊNTICA em CPU e Vulkan:
+    "O servidor foi reiniciado."
+
+  MÉDIO (138 tokens gerados, encerrado por EOG). IDÊNTICA em CPU e Vulkan:
+    "O sistema de despacho foi interrompido às 14:32, e a telemetria do veículo
+     foi enviada com um atraso de onze minutos. O operador confirmou que nenhum
+     passageiro foi afetado e que a próxima parada foi realizada normalmente. Em
+     12 de setembro, a equipe de manutenção substituiu o sensor de pressão na
+     unidade 4821; o número da peça está registrado no log de serviço. O valor
+     medido após a reparação foi de 2,4 bar, o que está dentro do intervalo
+     esperado."
+
+  LONGO (376 tokens gerados, encerrado por EOG). DIFEREM EM UM SINÔNIMO.
+    CPU:
+    "Durante o turno da manhã, o operador informou que o veículo iniciou a rota
+     com um atraso de seis minutos, pois o portão da estação de manutenção
+     estava fechado para manutenção. Após contato com o despachante, ficou
+     acordado que a primeira parada seria feita mais tarde, enquanto as demais
+     paradas continuariam no cronograma original. Às 09:14, o motorista observou
+     que o sensor de pressão no veículo 4821 apresentava uma leitura
+     inconsistente de 2,4 bar e relatou o incidente através da aplicação móvel. A
+     equipe de manutenção chegou às 10:02, substituiu o sensor e registrou o
+     número da peça no log de serviço, sob a entrada 12/09. O controlador
+     confirmou então que o veículo estava funcionando normalmente e que nenhum
+     passageiro foi atrasado por mais de oito minutos durante o incidente. No
+     dia seguinte, uma segunda inspeção confirmou que a reparação foi eficaz e
+     que as leituras permaneceram estáveis em três testes consecutivos. A
+     empresa pretende repetir o mesmo procedimento nos demais veículos antes do
+     final do mês e atualizar a lista de verificação de manutenção preventiva de
+     acordo. Por fim, a área financeira foi informada sobre o custo adicional da
+     visita de emergência e aprovou a despesa, observando que um incidente
+     semelhante ocorreu em março e que a causa raiz ainda não foi identificada
+     com certeza."
+    VULKAN: idêntico, exceto "o operador INFORMOU" → "o operador RELATOU".
+
+M.7  O QUE AINDA NÃO ESTÁ FEITO, SEM DISFARÇAR
+  - Desenhar o crossover: só medi 29, 113 e 271 tokens. Um corte em "~100
+    tokens" é uma interpolação, não uma medição.
+  - Teste no app com entrada média/longa, medindo o tempo de parede que o
+    usuário espera e o ciclo de cancelar/traduzir de novo. O harness mede o
+    modelo, não a Activity.
+  - Desvio residual: 3,12%–5,53%, sem causa localizada. B.3 continua pertinente
+    e não foi refeita (o parecer pediu explicitamente para não repetir B.2).
+  - Q1 (tabela de cobertura dos padrões de 2/3/5 ops), Q2 (diff dos dois GGUF),
+    Q3 (patch de UX): as três continuam em aberto, sem execução nova. As
+    decisões que você deu estão registradas; falta o trabalho.
+  - A minha matriz mede o BACKEND. O produto ainda tem um só backend escolhido
+    em TextoActivity, e essa escolha não foi implementada como função do
+    tamanho da entrada.
+
+M.5  ERROS MEUS NESTA ETAPA (registrados por completude)
+  21. Passei n_gpu_layers=33 na variante CPU do caso longo: com 33 camadas o
+      modelo é todo GPU, o device "CPU" desaparece da lista e o harness sai
+      com exit=8 ANTES de carregar o modelo. Erro de argumento, não do backend
+      (o log dizia: "AVISO: pediu CPU mas n_gpu_layers=33 -> GPU").
+  22. n_batch=128 com prompt de 271 tokens → GGML_ASSERT
+      (n_tokens_all <= cparams.n_batch) em llama-context.cpp:1770, ANTES de
+      qualquer escolha de device. Falha de configuração minha. Foi justamente
+      o --prompt-file que expôs isso: com o prompt fixo de 9 tokens a
+      restrição nunca seria alcançada.
+  23. Passei argv[8] = "0" para desativar o teacher forcing. "0" é um ID de
+      token VÁLIDO, não uma lista vazia; o harness fica no protocolo fixo
+      ("modo P/D1/D2: 1 ids fixos") e "traduz" 1 token. Só argv[8] vazio libera
+      o ramo guloso.
+  24. Não vi o clamp de 64 tokens (linha 207) e atribuí a truncamento dos
+      médio e longo a "orçamento de geração". Passei 400 e 1024 por argv[2] e
+      obtive 64 de novo, antes de ler a linha.
+  25. O aparelho USB desconectou no meio de uma rodada do controle e li
+      "exit=1 / FALTA dump" como possível regressão do binário novo. Era
+      "adb.exe: device '3B15BD00FVE00000' not found". Reconectado e rerodado:
+      o controle passou com os mesmos hashes. Eu devia ter lido o log antes de
+      supor defeito no código.
+  26. Escrevi na versão anterior deste relatório que a B.2 "pode ter medido o
+      gate no lugar errado" e a assinei para refazer, com base só em cronologia.
+      O controle desmentiu (argmax idêntico, dumps byte a byte). Retificado
+      acima, em 2.7.
+
+================================================================================
+PARTE 1 — O QUE MUDOU DESDE A RODADA 4 (com as correções que você exigiu)
+================================================================================
+
+SEÇÃO 1 DO SEU PARECER — CORRIGIDA SEM NOVA EXECUÇÃO
+  Tudo saiu dos artefatos que já existiam. Nenhum build novo.
+
+1.1  r_sep e r_cont: BYTE A BYTE IGUAIS.
+     Elemento a elemento, 59.392 float32, dos dumps que já existiam
+     (recon/20260927T154922Z/):
+       r_sep vs r_cont  : max_abs = 0.000000000   (byte a byte)
+       r_cont vs cpu_ref: max_abs = 0.000000954  rel = 0,0000181%  rmse = 0,000000100
+                          no índice 276: vulkan=4.223682404  cpu=4.223683357
+                          nan=0  inf=0
+     Minha conclusão anterior estava errada: apresentei a diferença de uma SOMA
+     AGREGADA como se fosse erro por elemento. Erros positivos e negativos se
+     cancelam na soma. O erro máximo é ~1e-6, não 3,4e-4.
+
+     E o FUNDIDO: eu escrevi que "n_sete=0 confirma que o destino foi ESCRITO".
+     INVERTIDO. O log (mark128, log literal):
+         ERROR: avg_err=5.11457 in MUL (check 1)
+         tensor=0xb400007c48814720 tensor->name=node_1 tensor->type: f32
+                ne0=128 nb0=4 ne1=16 nb1=512 ne2=29 nb2=8192 ne3=1 nb3=237568 offset=0
+         src0=0xb400007c488145b0 op=RMS_NORM type=f32 ne0=128 ...
+         src1=0xb400007c48800190 op=NONE type=f32 ne0=128 ...
+         First error: result=7 correct=-0.317312 i3=0 i2=0 i1=0 i0=0
+     O destino está na SENTINELA 7, elemento 0 inclusive. E n_sete NÃO aparece
+     nesse log — só existe no dump pós-execução, que nunca foi gravado.
+
+1.2  Fórmulas declaradas. rel = max_abs / max|cpu|. Não é porcentagem de perda
+     de qualidade nem de erro de probabilidade. O 1e-2 é ultrapassado nas duas
+     leituras possíveis (absoluta ou relativa). Divergência numérica e juízo
+     funcional: eixos separados, ambos registrados.
+
+1.3  A TABELA DE PREFIXO CAIU. n_gpu_layers é SUFIXO:
+         const int i_gpu_start = std::max(n_layer_all + 1 - n_gpu_layers, 0);
+         if (il < i_gpu_start || (il - i_gpu_start) >= act_gpu_layers) { /* CPU */ }
+     (llama-model.cpp:1318-1330). Com n_layer_all=32:
+         N=1 -> camada 32..32 (só a última)
+         N=2 -> 31..32
+         N=33 -> 0..32 (modelo inteiro + saída)
+     Retirei "o erro nasce na camada 1" e "assinatura de arredondamento".
+     Os números da tabela conferem; a INTERPRETAÇÃO não se sustenta.
+
+1.4  O gate foi ~3,4% MAIS LENTO que all-off (havia escrito "mais rápido").
+1.5  -6 = CL_OUT_OF_HOST_MEMORY, -38 = CL_INVALID_MEM_OBJECT,
+     -43 = CL_INVALID_BUILD_OPTIONS, 4336 = CL_MEM_OBJECT_BUFFER.
+1.6  São QUATRO harnesses distintos (não dois):
+       llama_harness          c1e706b3a4a28a064affc0bfb710159a  (106.874.064 B)
+       llama_harness_check    aeb95684970c91a54f8565e15ae8382d  (107.436.600 B)
+       llama_harness_ocldiag  19a5fd526fba65520460c01c661795c  (106.875.024 B)
+       layer_diff             25c2abcbe741eab016b4216538ffa531  (106.864.704 B)
+     O identificador abreviado b91ff2d8... não corresponde a nenhum. Retirado.
+1.7  Whisper: código-fonte não alterado; binário RECOMPILADO, STRIPADO e
+     PUBLICADO. "Intocado" seria impreciso.
+
+================================================================================
+PARTE 2 — ETAPA A: IDENTIDADE (fechada, sem build novo)
+================================================================================
+
+A.3  O MODELO QUE O APP ABRE — e o que eu medi antes SÃO DIFERENTES:
+    Hy-MT2-1.8B-Q4_K_M-OFFICIAL.gguf  1.133.080.448 B
+      dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699
+    Hy-MT2-1.8B-q4_k_m.gguf           1.133.080.544 B
+      c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+    Diferença: 96 bytes. O OFFICIAL tem dono root e mtime 27/09 02:33 — EU O
+    COPIEI para o aparelho. O q4_k_m (minusculo) é o que o APP BAIXA.
+    Log do app (literal):
+      llama_model_loader: loaded meta data with 35 key-value pairs and 354
+      tensors from /storage/emulated/0/Android/da...
+    ARQUITETURA (log):
+      llama_model_loader: - kv 15: hunyuan-dense.attention.layer_norm_rms_epsilon
+                          f32 = 0.000010
+      llama_model_loader: - type  f32:  129 tensors
+      llama_model_loader: - type q4_K:  192 tensors
+      llama_model_loader: - type q6_K:   33 tensors
+    Hy-MT2 é fine-tune de um backbone HUNYUAN. Quantização MISTA.
+
+A.4  AGENDAMENTO E TRADIÇÃO (log do app, com o gate ativo):
+    resolve_fused_ops: Lightning Indexer enabled
+    resolve_fused_ops: resolving fused DeepSeek V4 HC support:
+    resolve_fused_ops: fused DeepSeek V4 HC pre enabled
+    resolve_fused_ops: fused DeepSeek V4 HC comb enabled
+    resolve_fused_ops: fused DeepSeek V4 HC post enabled
+    sched_reserve: Vulkan0 compute buffer size = 544.01 MiB
+    sched_reserve: Vulkan_Host compute buffer size =  26.01 MiB
+    sched_reserve: graph nodes  = 1286
+    sched_reserve: graph splits = 2
+    sched_reserve: reserve took 97.08 ms, sched copies = 1
+    modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+    geracao concluida: 8 tokens de saida (backend=GPU Vulkan (Vulkan / Vulkan0))
+
+A.4  A LIBSIG_LLAMA CARREGADA — cadeia de identidade, sem elo por supor:
+    ZIP publicado no R2        5a98e6dd12922a2837612abb0e07744d0b80a4e66572fe353255389822389579
+      └─ lib/libsig_llama.so    31f6df15bf9b4fbdf073adf033eac55f353b4240e7894ec1d12469163516d2c2
+        └─ extraído no aparelho 31f6df15bf9b4fbdf073adf033eac55f353b4240e7894ec1d12469163516d2c2
+          └─ carregado (maps, 780 -> 789 libs com a inferência)
+    IDÊNTICO byte a byte. A lib é dlopen sob demanda: não aparece no maps do
+    launcher, só durante a inferência.
+
+A.5  MAPA DE CAMADAS OBSERVADO (não deduzido):
+    llama_prepare_model_devices: using device Vulkan0 (Adreno (TM) 840) - 19221 MiB free
+    llama_kv_cache: layer   0: dev = Vulkan0
+    ...
+    llama_kv_cache: layer  31: dev = Vulkan0
+    llama_kv_cache: size =  512.00 MiB ( 8192 cells,  32 layers,  1/1 seqs),
+                     K (f16):  256.00 MiB, V (f16):  256.00 MiB
+    AS 32 CAMADAS NO VULKAN. Nada cai para CPU. Sem recompilar: o bloqueio era
+    a capturing do logcat, não permissão. (llama_log_internal não filtra nível;
+    eu lia o buffer depois do primeiro carregamento.)
+
+================================================================================
+PARTE 3 — B.1: REVISÃO DIRIGIDA DO GATE (somente leitura)
+================================================================================
+
+O GATE CORRETO (24 linhas, ggml-vulkan.cpp:16425, no planejador de fusão):
+    static bool ggml_vk_can_fuse(..., std::initializer_list<enum ggml_op> ops) {
+        if (!ggml_can_fuse(cgraph, node_idx, ops)) { return false; }
+        if (ops.size() == 2 && ops.begin()[0] == GGML_OP_RMS_NORM
+                         && ops.begin()[1] == GGML_OP_MUL) {
+            // SIG (fusion-round 27/09, PROVISORIO): ...
+            if (ctx->device->disable_fused_rms_norm_mul) { return false; }
+            ...
+        }
+    }
+    Atribuicao (ggml-vulkan.cpp:7087-7089):
+        device->disable_fused_rms_norm_mul = device->vendor_id == VK_VENDOR_ID_QUALCOMM;
+        device->disable_add_rms_fusion     = device->vendor_id == VK_VENDOR_ID_QUALCOMM;
+        device->add_rms_fusion = !device->disable_fusion &&
+                                 !device->disable_add_rms_fusion &&
+                                 device->subgroup_arithmetic &&
+                                 device->vendor_id != VK_VENDOR_ID_INTEL;
+
+ERRO GRAVE QUE EU COMETI (o que expôs): na rodada 4, o gate estava no SELETOR
+    DE PIPELINE (ggml_vk_op_get_pipeline), não no planejador de fusão. O
+    contorno NÃO funcionava e eu já havia reportado que funcionava. O A/B:
+        vulkan normal (COM meu gate no lugar errado)  argmax 3657  " gr子 pac□主度度ruit上帝..."
+        vulkan com GGML_VK_DISABLE_FUSION=1            argmax 46    "O servidor foi reiniciado."
+        cpu                                            argmax 46    "O servidor foi reiniciado."
+    Trocar o pipeline depois do planejamento não desfaz a fusão já planejada.
+
+SEM BYPASS em produção. Instrumentação (SIGVK/SIGDISP/SIGFUSION/SIGOCL) sob
+    #ifdef, fora do build de produção.
+
+ESCOPO: Qualcomm-wide (vendor_id 0x5143). SO O ADRENO 840 FOI TESTADO. É
+    conservadorismo de produto, não conclusão técnica.
+
+LACUNA DE COBERTURA (verificação dirigida, seu item d) — o gate pega UM dos
+TRÊS padrões que incorporam RMS+MUL:
+    linha 17180  RMS_NORM, MUL                        (2 ops) -> GATE PEGA
+    linha 17172  RMS_NORM, MUL, ROPE                  (3 ops) -> NÃO pega
+    linha 17161  RMS_NORM, MUL, ROPE, VIEW, SET_ROWS  (5 ops) -> NÃO pega
+    (o de 5 ops nem passa por ggml_vk_can_fuse: usa ggml_can_fuse_subgraph +
+     ggml_vk_can_fuse_rms_norm_mul_rope)
+    O gate exige ops.size()==2. VERIFICAÇÃO DE COBERTURA; não prova que os
+    padrões maiores falhem — a B.2 indica que não são alcançados neste workload.
+
+resolve_fused_ops (llama-context.cpp:515-547): CONFIRMA SUA LEITURA [S1].
+    for (const auto & node : get_gf_res_reserve()->get_fused_nodes()) {
+        if (node.op != probe.op) { continue; }   // sem o nó, não itera
+    }
+    if (device_mismatch) { enabled = false; }
+    else { enabled = true; LLAMA_LOG_INFO("%s: %s enabled\n", ...); }  // imprime "enabled"
+    Minha afirmação anterior de "fusões DeepSeek V4 HC ativas" estava ERRADA.
+    O resolver ANUNCIA SUPORTE; uso no grafo não está demonstrado. Retirei.
+
+GGML_VK_DISABLE_FUSION é mais ampla que o gate (confirma seu [S2]): protege
+    também MULTI_ADD, MUL_MAT_ADD_ADD, MUL_MAT_ADD, família topk_moe
+    (linha 17128). E é por PRESENÇA (linha 7074: getenv(...) != nullptr), então
+    "=0" NÃO desliga. Nas variantes de controle removi a variável.
+
+================================================================================
+PARTE 4 — B.2: CPU x GATE x DISABLE-FUSION (3 rep, processo fresco)
+================================================================================
+
+IDENTIDADE CONGELADA (tudo igual nas três variantes):
+    modelo   Hy-MT2-1.8B-q4_k_m.gguf (c4bf1015), 1.133.080.544 B
+    harness  llama_harness, c1e706b3a4a28a064affc0bfb710159ada71c087eddd5c77cd2a444629f5b4be
+    lib      libsig_llama.so, 31f6df15... (stripada do ZIP publicado)
+    prompt   "Translate to Portuguese: The server was restarted.\n"
+    ids      P -> 46 -> 2292 (IDs DE TOKEN fixos)
+    contexto n_ctx=512, n_batch=128, n_ubatch=128
+    reps     3 por variante
+
+LOG LITERAL do harness (gate_r1, resumo):
+    HARNESS| passo D1 id_in=46(O) rc=0 NaN/Inf=0 finite=120818 min=-12.3424 max=19.9700 argmax=2292(19.9700) dump=483272
+    HARNESS| passo D2 id_in=2292( serv) rc=0 NaN/Inf=0 finite=120818 min=-14.4416 max=24.5600 argmax=65652(24.5600) dump=483272
+    HARNESS| tokens_gerados = 2 de 46 pedidos
+    HARNESS| codigo_retorno = 0
+
+FORMULAS: max_abs = max_i|v_i - c_i|; rel = max_abs / max|c_i|;
+    rmse = sqrt((1/n)·Σ(v_i - c_i)²); margem = top1 - top2.
+
+TABELA (rep 1; as outras duas são bit a byte idênticas):
+  variante                passo   n      nan  inf  max_abs    rel      rmse      argmax         top5  margem cpu/vk
+  ----------------------  ------  ------  ---  ---  --------  -------  --------  -------------  ----  ------------
+  gate x CPU              P       120818   0   0   1.122658  5,5303%  0.222219  46 = 46        5/5   3.079 / 2.978
+  gate x CPU              D1      120818   0   0   0.628402  3,1506%  0.128646  2292 = 2292    5/5   4.882 / 4.863
+  gate x CPU              D2      120818   0   0   0.767038  3,1245%  0.148289  65652 = 65652  5/5   8.007 / 8.366
+  disable-fusion x GATE   P/D1/D2 120818  0   0   0.000000  0,0000%  0.000000  (todos iguais)  5/5   (idêntico)
+
+RESULTADO CENTRAL: disable-fusion e gate são BYTE A BYTE IDÊNTICOS nos três
+    passos, nas três repetições. A flag cobre mais padrões, mas nenhum é
+    alcançado neste workload. Equivalência registrada como controle da
+    política seletiva, NÃO como ablação independente. (Seu caso previsto:
+    "comprovadamente o mesmo caminho ativo".) Não fabriquei diferença.
+
+REPRODUTIBILIDADE: max|r1-r2| = max|r1-r3| = max|r2-r3| = 0.000e+00 em todas.
+    Nenhum ruído de execução. Zero NaN, zero Inf.
+
+CARACTERIZAÇÃO DO DESVIO:
+    SUSTENTA: desvio existe, estável ao bit, não troca o token (argmax igual nos
+      3 passos, top-5 5/5), margem intacta em D1 (4,882->4,863) e AUMENTA em
+      D2 (8,007->8,366). Em P cai 3,3% (3,079->2,978).
+    NÃO SUSTENTA: onde nasce. (Ver 1.3 — a varredura é sufixo, não prefixo.)
+    LIMIAR: 1e-2 ultrapassado nas duas leituras. Não levantei.
+
+DIFERENÇA ENTRE OS DOIS MODELOS (P14.2 — não assumi metadados):
+    passo   OFFICIAL (dc5f44fc)          app (c4bf1015, B.2)
+    ------  ---------------------------  -------------------------
+    P       1.009951  (4,9496%)           1.122658  (5,5303%)
+    D1      0.997652  (4,8068%)           0.628402  (3,1506%)
+    D2      0.737127  (2,9828%)           0.767038  (3,1245%)
+    Os 96 bytes MUDAM o resultado. Não equivalentes para medição.
+
+================================================================================
+PARTE 5 — BENCHMARK (seção 5): CPU x gate, modelo do app
+================================================================================
+
+  entrada    backend  ntok |    carga    prefill | carga+prefill
+  ---------  -------  ---- |  --------  -------- | -------------
+  curta      CPU          9 |    459,3     394,1 |      853,4 ms
+  curta      gate         9 |    662,0     742,0 |    1.404,1 ms
+  template   CPU         29 |    227,6     551,9 |      779,5 ms
+  template   gate        29 |    589,9     721,2 |    1.311,1 ms
+
+  Vulkan/CPU: prefill 1,88x (curto) e 1,31x (template);
+              carga+prefill 1,65x e 1,68x.
+  O VULKAN PERDE NOS DOIS CASOS, e a diferença se mantém separando a carga do
+  prefill (não é artefato de carregamento).
+
+  CORREÇÃO: "CPU 2,80x mais rápido" (rodada 5) está RETIRADO — era medição
+  única, modelo errado, fases não separadas. A faixa real é 1,65x a 1,88x.
+
+  QUALIDADE: as 12 execuções produziram "O serv" (protocolo fixo) e o app
+  traduziu "The server was restarted." -> "O servidor foi reiniciado.",
+  sem loop, sem NaN, sem crash.
+
+  LIMITAÇÃO DESTE TRECHO: só medi curta (9 tokens) e template (29), porque
+  o prompt era FIXO no código. ESSE LIMITOU-SE AO PRÓPRIO HARNESS, e foi
+  removido na Q4 (--prompt-file). A hipótese "GPU ganha quando o prefill
+  domina" foi então TESTADA e é verdadeira — ver M.3 e M.4. O texto original
+  dizia "NÃO FOI TESTADA"; está superado.
+
+  RECOMENDAÇÃO (sua, corroborada): CPU como padrão provisório NESTE aparelho;
+  Vulkan disponível com o contorno, rotulado no estágio real de validação;
+  OpenCL não validado.
+  >>> SUPERADA pela SEÇÃO M.4. Este trecho se baseava no caso curto apenas, e a
+  matriz mostrou que o Vulkan ganha de forma monótona com o tamanho da
+  entrada. Mantido só para deixar visível a evolução.
+
+================================================================================
+PARTE 6 — PROCEDÊNCIA DO PACOTE, OPENCL, UX
+================================================================================
+
+PACOTE v9: verify-native-dependencies.ps1 -Version 9 -> ACEITO, exit 0
+    + arm64-v8a OK (v9, 43835831 B) | + x86_64 OK (v9, 49965326 B)
+  O verificador SÓ compara versão/tamanho/sha256 EXTERNOS — NÃO valida o
+  manifest.json interno nem a soma. Publicar -> baixar de volta -> conferir:
+    arm64-v8a  43.835.831 B  5a98e6dd...  |  x86_64  49.965.326 B  115237821...
+  ARMADILHA: urllib dá HTTP 403 falso (Cloudflare bloqueia bot). Use curl com UA.
+  STRIP: --strip-unneeded (95,5 MB -> 30,6 MB na lib; ZIP menor que v8), e
+  regenerei o manifest.json interno (o script o gera ANTES do strip). A etapa
+  NÃO está no pipeline oficial.
+  COMENTÁRIO FALSO corrigido no .kt: citava `sumaConfereComZip`, que não existe.
+
+OPENCL — "causa imediata identificada", NÃO causa raiz:
+    SIGOCL| set_tensor: tensor=OpenCL#embd#0 op=NONE type=f32 ne=[2048,29,1,1]
+    SIGOCL|   extra=... data_device=0x0 offset=0 size=237568
+    SIGOCL|   view_src=0x0 eh_view=0
+    ggml_opencl: clEnqueueWriteBuffer(... extra->data_device ...) error -38
+    -38 = CL_INVALID_MEM_OBJECT. O tensor tem data_device=0x0 e offset=0 —
+    exatamente o estado pós-reset(). Não identifiquei qual buffer context tem o
+    init_tensor que não roda. Retirei a hipótese do clCreateBuffer base
+    (linha 10723: `if (err != CL_SUCCESS) return nullptr;`).
+    ESTADO: "OpenCL indisponível nesta configuração; handle nulo confirmado;
+    causa raiz pendente."
+
+UX (diálogo de componentes) — "correção compilada, validação de UX pendente":
+    Corrigi o bug do diálogo que só aparecia uma vez, com reexibição no
+    onResume. Mas sua crítica procede: onCreate roda uma vez POR INSTÂNCIA, e
+    reexibir no onResume impõe o modal repetido que você não recomenda.
+    RECOMENDAÇÃO SUA (ação persistente, não bloqueante) NÃO APLICADA.
+    Nao descrevo como validado: o teste com pacote instalado passou
+    (activateIfInstalled=true), o que valida a supressão, não ausência/refusa.
+
+================================================================================
+PARTE 7 — ERROS QUE EU COMETI (registro completo, como você exigiu)
+================================================================================
+
+GRAVES (mudaram conclusões):
+  1. Gate no seletor de pipeline (não no planejador) — o contorno NÃO
+     funcionava e eu reportei que funcionava.
+  2. "2,80x mais rápido" — medição única, modelo errado, fases não separadas.
+  3. "nasce na camada 1, cruza 1e-2 na 2ª" — n_gpu_layers é sufixo.
+  4. "fosões DeepSeek V4 HC ativas" — o resolver só anuncia suporte.
+  5. "96 bytes só de metadados" — os 96 bytes mudam o resultado medido.
+  6. "n_sete=0 confirma que foi ESCRITO" — INVERTIDO; destino na sentinela 7.
+  7. "o dump grava mesmo quando o compute aborta" — FALSO; o dump pós-compute
+     nunca executa num abort.
+  8. "diferença de soma 0,00034 = erro por elemento" — é ~1e-6.
+  9. "CL_INVALID_BUILD_OPTIONS (err=-6)" — -43 é build options; -6 é OOM.
+ 10. "intocado" (whisper) — código intocado, binário recompilado/stripado.
+ 11. "3% MAIS RÁPIDO" — era 3,4% MAIS LENTO.
+ 12. 2, das 3, perguntas P12/P13/P14 foram mal formuladas por mim (premissa
+     errada, arquivo trocado); suas respostas corrigem.
+
+MENORES (registrados por completude):
+ 13. Medição com binário INSTRUMENTADO (violava sua regra).
+ 14. Arquivo órfão lido como resultado (dump de outra rodada).
+ 15. Argumentos do harness errados, duas vezes (ordem, n_gpu=33 no controle).
+ 16. Posição do argumento de dump (argv[9] exige argv[8] antes).
+ 17. Instrumentação de shader quebrou o build (guards no lugar errado).
+ 18. "F16 + OpenCL OK" (F16 falha igual) — retirado.
+ 19. "defeito é do GLSL por eliminação" (dup não descarta bindings) — retirado.
+ 20. cb_eval crasha (SIGSEGV/SIGBUS); layer_diff crasha até em n_gpu=0.
+
+================================================================================
+PARTE 8 — PENDÊNCIAS FINAIS, SEPARADAS POR CATEGORIA
+================================================================================
+
+BLOQUEIA O USO: (nenhuma)
+
+LIMITA A RECOMENDAÇÃO:
+  L1. ~~Entrada média/longa não medida.~~ RESOLVIDA pela seção M: o
+      --prompt-file destravou a entrada variável e a matriz mediu 29/113/271
+      tokens nos dois backends. O Vulkan GANHA de forma monótona com o tamanho.
+      SUBSTITUI por: o ponto de crossover está entre 29 e 113 tokens e não foi
+      medido com granularidade fina (faltam 3–4 tamanhos intermediários).
+  L2. Escopo Qualcomm-wide por conservadorismo; só Adreno 840 testado.
+  L3. Desvio residual 3,12%–5,53% acima do limiar 1e-2, sem causa localizada.
+  L4. Lacuna de cobertura do gate (padrões 3 e 5 ops).
+  L5. Comparação estruturada dos dois GGUF não feita (96 bytes mudam o
+      resultado; a divergência é real).
+  L6. UX do prompt: validação de fluxo não executada; correção atual impõe
+      modal repetido (não é a sua recomendação).
+
+INVESTIGAÇÃO OPCIONAL / ARQUIVADA:
+  O1. Causa raiz do handle OpenCL nulo (exige uma instrumentação dirigida:
+      contador monotônico + id/geração do extra, seguindo o mesmo objeto até a
+      primeira escrita que falha).
+  O2. Crash do compilador de shader (libllvm-qgl.so) — ARQUIVADO por sua
+      orientação. A formulação que você propôs continua valendo; a origem causal
+      não foi estabelecida. Não o excluí do host; não afirmo que toda
+      instrumentação in-shader seja inviável.
+  O3. Desempenho em contexto longo (ver L1).
+
+================================================================================
+PARTE 9 — O QUE PRECISO DE VOCÊ AGORA
+================================================================================
+
+O fechamento prático que você definiu: "Podemos entregar uma tradução confiável
+com CPU e manter Vulkan com o contorno no estágio sustentado pelos testes, sem
+resolver toda a microcausa do driver."
+
+Concordo com o critério, com uma correção que a matriz trouxe: a escolha entre
+CPU e Vulkan NÃO é uma constante, e a conversa toda vinha assumindo que era.
+  - Vulkan é mais rápido a partir de ~100 tokens (2,3–5,2× no prefill,
+    ~1,5–1,6× na geração) e a vantagem cresce com a entrada.
+  - CPU é mais rápido no caso curto e no carregamento do modelo.
+  - Três traduções completas passaram por EOG, sem loop, com números, datas,
+    horas e identificadores preservados, e CPU/Vulkan deram saída IDÊNTICA em
+    dois dos três casos.
+  - Vulkan continua rotulado "validação numérica com desvio medido e
+    comportamento textual verificado" — NÃO "solução validada": o desvio
+    residual de 3,12%–5,53% continua sem causa localizada, e no longo ele
+    trocou um sinônimo. OpenCL fora, causa raiz pendente.
+
+PERGUNTAS RESTANTES (se você quiser continuar):
+  Q1. A lacuna de cobertura do gate (RMS_NORM,MUL,ROPE de 3 ops e o de 5 ops
+      que não passam por ele) deve ser fechada agora, ou registrada como
+      dívida técnica com o gate Qualcomm-wide?
+  Q2. A comparação estruturada dos dois GGUF (L5) — vale o parse dos metadados
+      agora, ou registro que os arquivos divergem e sigo com o c4bf1015?
+  Q3. Para a UX: sua recomendação (ação persistente, não bloqueante) é para
+      este ambiente ou para o upstream? Aqui eu tenho freedom de implementar.
+  Q4. RESPONDIDA E EXECUTADA: o harness foi parametrizado (--prompt-file),
+      o build é isolado e o controle de regressão passou. A matriz e a tradução
+      completa estão nas seções Q4 e M.
+  Q5. O crossover CPU/Vulkan está entre 29 e 113 tokens e eu medi só os dois
+      extremos. Você quer que eu meça 3–4 tamanhos intermediários para fixar o
+      limiar, ou o corte em "~100 tokens" basta para a decisão de produto?
+  Q6. A divergência de sinônimo no caso longo (informou/relatou) confirma que o
+      desvio residual tem efeito observável na saída. Você quer que eu investigue
+      essa posição específica (o token "idor" a 0,11 do "foi" sugere ponto
+      sensível), ou prefere que eu aceite a equivalência sinônima e feche o
+      desvio como limitação conhecida?
+
+================================================================================
+PARTE 10 — ARTEFATOS E ESTADO DO REPO
+================================================================================
+
+DOCUMENTOS (docs/vulkan-hymt2-fusion-round/):
+  prompt-especialista-v5.txt        15.159 B
+  PROMPT-ESPECIALISTA-RODADA5.txt   78.382 B  (detalhado, com seções 1-N)
+  PERGUNTAS-P12-P13-P14.txt         11.432 B
+  RELATORIO-FINAL-AUDITAVEL.txt     17.091 B
+  patches/gate_producao_v9.patch
+  (rodada2/3/4-relatorio.txt, ENTREGAVEL-*.txt, q1_2-relatorio.txt, matriz.csv)
+
+DUMPS PRESERVADOS (para recomputar, em %LOCALAPPDATA%\Temp):
+  b2runs/      27 dumps .f32 + 9 logs   (B.2: 3 variantes x 3 rep x 3 passos)
+  bench/       12 logs                    (benchmark)
+  a5b/         logcat com mapa de camadas
+  a4live/      logcat com maps da inferência
+  mark128/     reproducer 128 (sentinela 7, avg_err=5.11457)
+  ocl_diag2/   OpenCL -38 (data_device=0x0)
+  v9decode/    4 dumps + 5 logs (D1/D2)
+  v9prefixo/   7 dumps + 7 logs (varredura de offload)
+  recon/       run 20260927T154922Z (r_sep/r_cont/cpu_ref dumps)
+
+NADA COMMITADO. Nada publicado além do v9 (autorizado). Whisper: código-fonte
+intocado em nenhuma etapa; binário recompilado/stripado/publicado.
+
+  Modificados e sem commit:
+    ggml-vulkan.cpp          24 linhas (gate)
+    NativeDependencyManager.kt   manifesto v9
+    NativeDependencyPrompt.kt    correção UX
+    MainActivity.kt             onResume
+    ggml-opencl.cpp             SIGOCL (inert)
+    android-opencl-loader.cpp   clGetMemObjectInfo
+    repro_rmsmul.cpp            fases + run_id
+    layer_diff.cpp              harness que CRASHOU (NAO commitar)
+
+================================================================================
+FIM
+================================================================================

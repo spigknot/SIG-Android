@@ -1,0 +1,12 @@
+== PERFIL REAL — PILOTO profA2 (OpenCL, curto, 1 geracao/processo) ==
+Perfil llama: load=4962ms prefill=226ms (119 tok; 527.33 tok/s) decode=8397ms (142 tok; 16.91 tok/s)
+Perfil llama: load=5212ms prefill=250ms (119 tok; 475.57 tok/s) decode=8704ms (142 tok; 16.31 tok/s)
+
+-- leitura --
+PREFILL: 226-250ms para 119 tokens (~476-527 tok/s) => NAO e' gargalo.
+DECODE : 8.4-8.7s para 142 tokens (~16.3-16.9 tok/s) => gargalo dominante.
+GATING : prop=0 sem linha (stock); prop=1 com medicao; shas identicos ao
+         baseline nos 4 runs (084f12f4 Q4 / d36a3315 Q8).
+Contexto matched: o mesmo decode no app (Desempenho) era ~7.6-7.9s; no
+Vulkan curto o decode do app era ~4.8s (~29.9 tok/s) => OpenCL ~1.7x mais
+lento no decode (Q4 curto); prefill comparavel/rapido.

@@ -1,0 +1,6 @@
+== A/B SEAM — TABELA FINAL (mesmo protocolo; props identicas; saidas canonicas) ==
+curto_ab3_q4curto_lc_1   sha=084f12f4 | decode=3964ms (35.83 t/s) | graph=2465 enq=1831 setup=634
+urto_ab4_q4curto_970_2   sha=084f12f4
+curto_ab_q4curto_970_1   sha=084f12f4
+s_longo_ab3_q4longo_lc   sha=4d51e74f | decode=51615ms (28.77 t/s) | graph=40354 enq=30611 setup=9743
+8_curto_ab3_q8curto_lc   sha=d36a3315 | decode=4927ms (28.82 t/s) | graph=2402 enq=1886 setup=516

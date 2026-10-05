@@ -1,0 +1,84 @@
+================================================================================
+PARTE 1/3 — ESTADO, CORREÇÕES E O QUE CADA UMA PROVA
+================================================================================
+Documento autocontido. Não depende de nenhum arquivo, caminho ou imagem minha.
+Todo log, número e trecho de código necessários estão embutidos aqui.
+(Substitui as versões anteriores: relatório-final.txt, rodada2-relatorio.txt,
+ q1_2-relatorio.txt, prompt-especialista-v4/v5 — que ficaram incompletos.)
+
+AMBIENTE
+  Aparelho ....... OnePlus 15 (CPH2747), Android 16
+  GPU ........... QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)
+  Driver ........ libllvm-qgl.so BuildId 9d9dbc8ce8965d58371c4ba45c4b1438
+  llama.cpp ..... ggml 080e804-dirty (fork com alterações locais)
+  Modelo ........ Hy-MT2 1.8B, Q4_K_M oficial (1.133.080.448 bytes, file_type=15)
+  Capacidades .. subgroup_size=64 fp16storage=1 fp16compute=1 coopmat=0
+                  int_dot_final=0
+  Arquitetura .. embd 2048, 32 layers, GQA 16q/4kv head 128, FF 6144,
+                  rope type 2 (NeoX), freq_base 11158840.0, rms_eps 1e-5,
+                  vocab 120818, ctx 262144, bos 120000, eos 120020
+
+ESTADO CORRETO (consolidado das 3 rodadas)
+  Contorno FUNCIONAL validado em 4 níveis (CHECK, F16, Q4 oficial, app real).
+  Microcausa do driver NÃO estabelecida. Nenhum patch foi instalado, commitado
+  ou publicado. O contorno permanece no build local; o .so do app foi
+  restaurado ao original (95.509.296 bytes) e NÃO contém o contorno.
+
+--------------------------------------------------------------------------------
+AS 7 CORREÇÕES QUE VOCÊ EXIGIU — ACEITAS E APLICADAS
+--------------------------------------------------------------------------------
+Você estava certo nas sete. Registro o que cada uma mudou, porque três delas
+corrigem conclusões minhas que estavam erradas.
+
+A1. OpenCL -38 = CL_INVALID_MEM_OBJECT (não -30/CL_INVALID_VALUE).
+    Aplicado. O erro é em clEnqueueWriteBuffer, coerente com falha no OBJETO
+    DE MEMÓRIA, não no valor de offset/tamanho.
+
+A2. "Bit a bit (6 casas)" é inválido — removido do texto.
+    A correção expôs um erro numérico concreto meu. Os valores reais:
+      CPU    sum = 57572.912762
+      Vulkan sum = 57572.913102
+    Diferença = 3.4e-4. SEIS CASAS DECIMAIS A ESCONDERIAM. A afirmação honesta
+    é comparação de bytes, que é mais informativa que o que eu tinha escrito.
+    Identidade binária medida por md5 dos dumps:
+      CPU, base_cpu .......... 08366a24eae06f78fe4eeb93d8e410d1
+      fundido, separado, r1 . dd9877da2dcd8dbb01cef28af81bfeb0
+    Ou seja: CPU difere de Vulkan; fundido e separado são IGUAIS entre si.
+
+A3. "Determinismo total" → "repetibilidade nestes passos".
+    Reduzido. 2 execuções iguais provam repetibilidade NAS CONDIÇÕES DESSAS
+    EXECUÇÕES, não determinismo para todos os prompts/shapes/sequências.
+
+A4. "Contorno ≡ todas-off" NÃO prova que as mesmas operações foram removidas.
+    Aplicado, e sua ressalva é justa: isso prova apenas que, NESSES 3 passos,
+    os dumps RESULTANTES são idênticos (md5). NÃO prova (a) que o inventário
+    de fusões removidas seja o mesmo, (b) que o contorno seja mais barato —
+    NUNCA MEDI CUSTO — nem (c) que valha para outras entradas/modelos.
+
+A5. "Sentinela preservada" = ausência de alteração NESSE RANGE.
+    Aplicado. Afirmo apenas: nenhum byte do range monitorado foi alterado.
+    Não afirmo que o shader não escreveu em nenhum outro endereço.
+
+A6. O duplicado NÃO descarta bindings/offsets/push constants.
+    >>> ESTA É A CORREÇÃO MAIS SÉRIA E VOCÊ ESTAVA CERTO. <<<
+    Eu havia concluído por eliminação que o defeito era do GLSL. NÃO É VÁLIDO:
+      - o driver pode reutilizar compilação/cache interno para mesmo SPIR-V e
+        especialização, mesmo com VkPipeline novo;
+      - bindings/offsets/push constants são COMPARTILHADOS pelo mesmo dispatch;
+      - bug sistemático de criação se repetiria em ambos os objetos.
+    O que o duplicado REALMENTE descarta: apenas a hipótese de defeito de UMA
+    instância isolada do objeto. Status corrigido: enfraquece a explicação mais
+    estreita; NÃO prova erro no GLSL. Retiro a conclusão que havia dado.
+
+A7. Marcas que causam crash antes de serem lidas não dão evidência de progresso.
+    Concordado. As 4 variantes marcadas não produziram leitura nenhuma; a
+    ausência de marca não pode virar "não chegou ao estágio".
+
+--------------------------------------------------------------------------------
+O QUE VOCÊ NÃO RECEBEU, E QUE ESTÁ AQUI AGORA
+--------------------------------------------------------------------------------
+Você escreveu que não recebeu os patches C++/GLSL completos, SPIR-V, tombstone
+ou logs brutos. Nesta versão estão embutidos: o diff do patch mínimo (§4), o
+backtrace do crash (§2), o dispatch do nó defeituoso (§3), a cadeia do cl_mem
+do OpenCL (§5) e as saídas brutas dos testes. O que continua NÃO incluído está
+listado no fim, nomeado, em vez de omitido.

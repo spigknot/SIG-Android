@@ -219,6 +219,10 @@
 
     <include layout="@layout/view_sig_echo_footer" />
 
+    <!-- Faixa persistente dos componentes nativos (não bloqueante, com retry).
+         Some sozinha quando o pacote v9 está instalado. -->
+    <include layout="@layout/view_sig_native_deps_banner" />
+
     <ImageButton
         android:id="@+id/button_share_location"
         android:layout_width="38dp"

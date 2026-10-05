@@ -1,0 +1,118 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F10: INSTRUMENTO PROFUNDO PRONTO + RECONCILIACAO
+Data: 04/10/2026. Repo: D:/Projetos/SIG (NADA commitado).
+Base: "PARECER E PROMPT AO EXECUTOR — APOS F9". Sem ativacao nova no device nesta
+rodada (build/testes LOCAIS). Aparelho: CPH2747; lib padrao 9698670c conferida
+(wireless 37193 + USB disponiveis).
+
+================================================================================
+ESTADOS
+================================================================================
+[CCE] A/B: retificacoes aplicadas (VK prefill relevante; t_load≠timer app; % com
+      denominador correto; contagens exclusivas por Python)
+[CCE] TB4: tabela de TENTATIVAS exclusiva (13 = 6 validas + 5 protocolo + 2 output)
+[CCE] B3: reconciliacao same-run FECHA (soma = eval + sample + detok ±ms)
+[CCE] C:  INSTRUMENTO PROFUNDO COMPILADO (profD 2cef1f35, 95.981.248 B) —
+      fases internas prep/build/compute/residual no proprietario do contexto
+[PENDENTE: consentimento] ativacao do profD no device (piloto OFF/ON) — pedido
+      explicito no fim deste documento (hashes + backup/rollback)
+[PARCIAL] Q8: sem metricas (metric_invalido declarado na tabela de tentativas)
+
+================================================================================
+A/B — RETIFICACOES APLICADAS
+================================================================================
+1. Prefill VK no mais_longo (16.952ms) NAO e' desprezivel vs decode (46.731ms) —
+   agora reportado na TABELA POR REQUEST (abaixo) e nas contas de total.
+2. t_load_ms (llama) != timer "Modelo carregado" do app:
+   - curto VK: app=2.3s vs t_load_ms=5.692ms — o total do app fecha com o timer
+     APP (2.3 + prefill 3.6 + decode 3.2 + sample 0.1 = 9.2s = pronta ✓);
+   - curto OCL: app≈llama load (5.8) + 0.2 + 7.6 + 0.1 = 13.6 ≈ pronta 13.7 ✓.
+   => fronteiras DOCUMENTADAS; nao tratar como identicas. Load VK 5.7/18.1s vs
+   historico ~1.9-3.1s: registrar candidatas (processo frio, JIT de pipeline,
+   pagecache, backend probe/re-upload, reset, switch de backend) — NAO declarar
+   regressao; perfil matched identifica a causa (backends+mesma fronteira).
+3. Percentuais: exclusivo do sample/init medido contra a SOMA DOS SEGMENTOS e o
+   WALL do loop (nunca contra eval) — confirmado pelo cruzamento da secao C.
+4. Contagens EXCLUSIVAS (Python; tabela completa em f10_tentativas.csv):
+   total 13 = [6 valido_total] + [5 protocolo_invalido (env do instrumento/
+   modelo nao selecionado)] + [2 output_invalido (target Ingles no ciclo-1)].
+   Q8-canonico-sem-stats = output valido + metrica invalida (nao misturar).
+5. CSV F8: lote-completo != fim-completo (cauda <=2047 kernels declarada); a
+   explicacao 142-vs-141 permanece HIPOTESE (ultimo token/EOG) — sem prova de
+   call-path ainda; dados com profiling perturbado nao servem de particao stock.
+
+================================================================================
+C. RECONCILIACAO SAME-RUN POR REQUEST (fecha)
+================================================================================
+pt_q4_curto_ocl : pronta 13.7s | llama: load 5791 prefill 223 decode 7555 |
+                  host: sample 110 detok 0 decode_host 7554 | soma 7664ms
+                  cruzamento: soma - eval = 109ms = sample+detok ✓
+pt_q4_mais_ocl  : pronta 87.3s | load 6323 prefill 1579 decode 79633 |
+                  host: sample 1113 detok 1 | soma 80740 | delta = 1107 ✓
+pt2_q4_curto_vk : pronta  9.2s | load 5692 prefill 3561 decode 3204 |
+                  host: sample 101 detok 0 | soma 3305 | delta = 101 ✓
+                  (fecha com o timer APP 2.3s + 3.6 + 3.2 + 0.1 = 9.2)
+pt2_q4_mais_vk  : pronta 69.2s | load 18087 prefill 16952 decode 46731 |
+                  host: sample 4192 detok 2 | soma 50946 | delta = 4215 ✓
+LEITURA: sample+detok estao FORA do eval do llama (identidade fecha em todos os
+4 runs, ±2ms); decode_host ≈ decode (eval) dentro de ~21ms (fronteiras do
+wrapper JNI documentadas); o sampler e' o unico gasto de host mensuravel fora do
+eval (0,7-2,8ms/tok; max no VK-longo). O custo restante esta' DENTRO do decode.
+
+================================================================================
+D. INSTRUMENTO PROFUNDO (profD) — PRONTO, LOCAL, NAO ATIVADO
+================================================================================
+D1. Inspecao previa da revisao real: llama_context::decode (1701-2083):
+    sincroniza em 1777 (housekeeping) e o compute assincrono e' lancado em
+    process_ubatch->graph_compute (1381); o fechamento contabil t_eval ocorre no
+    llama_context::synchronize() (715). O instrumento mede as fronteiras SEM
+    criar waits e SEM sincronizar para timers.
+D2. Implementado em llama-context.cpp (opt-in; default OFF; sem clocks quando
+    desligado):
+      prep    = entrada do decode -> antes do loop de ubatch (reservas);
+      build   = entrada do process_ubatch -> graph_compute (sched/inputs);
+      compute = span do graph_compute (submit/execucao assincrona);
+      residual= total - prep - build - compute (copias/extractos/eventual sync);
+      total   = entrada->saida do decode (RAII, cobre todos os returns);
+      contadores: calls (decodes), ubatches.
+    Preserva: no_perf/sampler/seed/EOG/template/context/precision/backend.
+    Gating: `debug.sig.hymt2.decprof` (JNI chama sig_prof_set_enabled/reset);
+    impressao no resumo do app: "Decode fases: prep=..ms build=..ms compute=..ms
+    residual=..ms | total=..ms calls=.. ubatches=.." — log/IO FORA do cronometro.
+    Sem wait por op; nao chama submit de "tempo GPU" (enqueue pode bloquear
+    implicitamente — inclusive/exclusivo declarado no relatorio).
+D3. Artefato: libsig_llama_profD.so sha256
+    2cef1f35562deb2a0b3eefae2757969cc1aec7c6efeca499a5d1aba6c9c72096
+    (95.981.248 B). Inputs/hashes: fontes profD em scratch
+    (llama_jni_profD_wip.cpp, llama-context_profD_wip.cpp) + WIP.
+D4. Testes: compilacao no Ninja real OK (exit 0; string "Decode fases:" no .so
+    ✓); testes de fronteira/pausa = pilot check no device: OFF (default) sem
+    linha; ON com linha e identidade prep+build+compute+residual == total
+    (tolerancia ms) + cruzamento com wall do loop/app; reset por pedido
+    (por geracao); gating verificado. Compat do loader inalterada (nenhum shim
+    novo).
+D5. PEDIDO DE CONSENTIMENTO (exato): ativar TEMPORARIAMENTE o profD no CPH2747
+    (deploy por push+run-as com readback pelo sha acima; backup/rollback para
+    9698670c + UI Q4_K_M/Vulkan/Portugues + chaves zero ao final) para o PILOTO:
+    Q4 curto{OCL,VK} OFF/ON alternado (piloto de captura), depois mais_longo Q4
+    e Q8 curto/longo com poucas reps. Sem APK/ZIP/nativeversion/release.
+
+================================================================================
+E. CANDIDATO E CRITERIO
+================================================================================
+E1. Ainda sem candidato de OTIMIZACAO selecionado: o custo dominante esta'
+    DENTRO do decode e o profD e' quem vai dividir (graph/schedule/submit/wait/
+    residual). P1 (lm_head, 20% dos kernels) permanece PREPARACAO SECUNDARIA.
+E2. Criterio de selecao (apos profD): escolher o MAIOR componente exclusivo
+    medido (ex.: build (CPU do grafo) vs compute-launch vs wait); um candidato
+    por perfil; A/B no mesmo artefato; sem fusao de 707 ops/noshuffle/fastmath
+    como atalho; nenhuma afirmacao global OCL>VK (total+igualdade+overhead
+    decidem).
+
+================================================================================
+F. ENTREGA/G
+================================================================================
+F1. Novos: f10_tentativas.csv/.txt; f10_reconciliacao.txt; fontes/build profD;
+    relatorios F10 (este). Logs/builds com SHA no manifesto (count/exist/size/
+    dedupe por Python).
+F2. Nada foi ativado no device nesta rodada; lib padrao 9698670c permanece
+    (conferida ao vivo). Sem commit/push/release/R2/remove/default/NPU/Whisper.

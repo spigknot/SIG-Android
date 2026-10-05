@@ -1,0 +1,98 @@
+PROMPT PARA O ESPECIALISTA — Hy-MT-2 1.8B no Vulkan (Adreno 840): falta UMA resposta
+==============================================================================
+
+CONTEXTO
+--------
+Ferramenta "Texto" (tradução on-device) com Hy-MT-2 1.8B via llama.cpp,
+backend ggml-vulkan, no OnePlus 15 (CPH2747, Android 16, Adreno 840).
+Segui seu roteiro (revisão 95887577ab5fead779581a7030a83c7752ff3234).
+Todos os experimentos abaixo foram executados; os logs brutos existem.
+Falta UMA resposta sua para eu fechar: ONDE está o defeito (sincronização/
+transferência vs matemática de kernel) e qual o próximo experimento mínimo
+que discrimina. Detalhe no fim ("A PERGUNTA").
+
+NOTA DE REVISÃO (honestidade): o harness abaixo liga as bibliotecas do fork
+vendored (ggml-vulkan.cpp com 19.709 linhas, A FRENTE das 16.484 da 95887577;
+commit upstream exato desconhecido, sem .git próprio). O conversor BF16→F16
+é o da 95887577. O defeito persiste no código mais novo.
+
+O QUE FOI CONSTRUÍDO
+--------------------
+Harness nativo (`llama_harness`, ELF arm64) que roda no mesmo aparelho, fora
+do app, linkado contra AS MESMAS bibliotecas estáticas do APK. Força o device
+pelo nome (`devices[2]={dev,NULL}`, igual ao app), mede cada etapa, inspeciona
+logits (NaN/Inf, top1–3, rank do EOS) e usa argmax guloso. Prompt simples ou
+EXATO do app (template hy_ com bytes verificados via `od`: ｜=EF BD 9C,
+▁=E2 96 81; `add_special=false` como o app). Parâmetros variáveis: n_tokens,
+n_gpu_layers, n_ctx, n_batch, template.
+
+MODELO
+------
+hunyuan-dense, embd 2048, 32 layers, GQA 16q/4kv head 128, FF 6144,
+rope type 2 (NeoX), freq_base 11158840.0, rms_eps 1e-5, vocab 120818,
+ctx_train 262144, bos 120000. Capacidades medidas no device (probe próprio):
+subgroup_size=64, fp16storage=1, fp16compute=1, coopmat=0, int_dot_final=0
+(7 props de dot-product inteiro = 0; backend desliga int8 corretamente),
+fp16_ok=1. Offload 33/33, KV em Vulkan0, ~19 GB livres, splits=2.
+
+MATRIZ DE RESULTADOS (mesmo harness, mesmo prompt "The server was restarted.")
+-----------------------------------------------------------------------------
+Backend | F16 full (33)        | F16 parcial (8)      | Q4_K_M full
+--------+------------------------+----------------------+--------------
+CPU     | OK "O servidor..."  | n/a                  | OK (controle)
+OpenCL  | OK 8/8               | OK 8/8 (split OK)    | OK (app: idêntico a CPU)
+Vulkan0 | LOOP CJK (instável)  | NaN em ≤5 tok        | LOOP CJK
+-----------------------------------------------------------------------------
+- F16/Vulkan0 full: "喷嚏"×8, logits 6,94→13,60 (auto-reforço). 4 runs
+  idênticas deram 2 saídas distintas ("喷嚏skaldskaldskaldsk" divergiu).
+  INSTÁVEL SEM O APP. No app: 5 runs idênticas deram 6/7/12/4096/4096 tokens,
+  3 textos distintos, nenhum em PT.
+- Q4_K_M/Vulkan0 (controle, mesmo instrumento): "之间的矛盾"×8, 8,66→10,26.
+  O defeito reproduz COM e SEM quantização → causa NÃO é o caminho int8/K.
+- Varredura por camadas (F16/Vulkan0): 1wxr "O" (correto!)→NaN após 1 tok;
+  8→"O"→NaN/1; 16→"The new"→NaN/2; 24→"The"→NaN/1; 28→"The new"→NaN/2;
+  31→"דsk.The"→NaN/5; 32→"דskir"→NaN/3; 33→loop 8/8 SEM NaN.
+  Prompt-logits sempre válidos; NaN nasce do 2º token autoregressivo em diante.
+  Todo offload parcial = NaN; full = loop finito.
+- F16/CPU: correto em TODAS as condições do app (n_ctx 8192, n_batch 2048,
+  template hy_ com 29 tokens, ids começando em 120000 120006).
+  Velocidade: ~5 tok/s (n_ctx 512), ~1,4 tok/s (n_ctx 8192).
+- App/F16/CPU (reteste com monitor de processo, config confirmada na tela):
+  430 s queimando ~3,4 núcleos/s sem concluir ("geracao concluida" nunca),
+  PSS estável ~4,19 GB. LENTO, não deadlock.
+
+DEFEITO ENCONTRADO NA CONVERSÃO (fora do Vulkan, meu próximo passo)
+-------------------------------------------------------------------
+Meu F16 (conversor da 95887577) saiu com `eos_token_id=3`; o Q4_K_M oficial
+traz `eos_token_id=120020`. Trace comparativo: no Q4 o EOS vai a rank 13
+(logit 12,14) e depois rank 1 (38,89), parando em 9 tokens; no F16 o id 3
+fica em rank 779–99319 (logits −3,5 a +6,6) e a geração divaga 64/64 sem
+parar ("I'm not sure if I can do that..."). Pesos íntegros (0 Inf/0 NaN,
+max|x|=3,32812 idêntico ao BF16, massa 100,000%; 3.587.533.760 bytes,
+354 tensores). Vou refazer com eos=120020. Se você souber de outro campo do
+bloco tokenizer que o conversor dessa revisão escreve errado para hunyuan-
+dense, diga — senão sigo com só o EOS.
+
+QUASE-ERROS PEGOS (para você calibrar a confiança nos dados)
+------------------------------------------------------------
+1. Um teste "vulkan" rodou em OpenCL e passou (devices=NULL → primeiro
+   device). Depois disso, device sempre forçado e confirmado por log.
+2. Um SIGSEGV em llama.cpp:293 (pc=0x0, symbolizado) era bug do MEU harness
+   (`devices=&dev` sem terminador NULL), não do llama. Corrigido.
+3. `uiautomator dump /dev/tty` volta vazio às vezes via Tailscale; dumps
+   confiáveis são via arquivo. Uma rodada inteira foi descartada por isso
+   (rodou Q4_K_M/OpenCL em vez de F16/CPU).
+
+A PERGUNTA (a única resposta que me falta)
+------------------------------------------
+Diante desta matriz — (i) parcial sempre NaN a partir do 2º token
+autoregressivo, (ii) full sempre loop finito auto-reforçado e INSTÁVEL entre
+runs, (iii) 1º token (prefill) plausível até com 1 camada na GPU, (iv) OpenCL
+correto em full e split, (v) CPU correto — o defeito está mais provavelmente
+em (a) barreira/sincronização nas transferências do split 2 e no KV-cache
+entre CPU/GPU, ou em (b) matemática de kernel F16/F32 no Adreno 840
+(matmul, attention/softmax, rope com freq_base 11M, norm)? E qual é o
+experimento mínimo que discrimina (a) de (b) — ex.: que instrumentação
+adicionar (barreiras, dump de KV por camada, comparação CPU×GPU por op) e
+em que ordem? Preciso dessa orientação para implementar o próximo passo
+sem adivinhar.

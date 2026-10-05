@@ -1,0 +1,135 @@
+PLANO DE EXPERIMENTOS — Vulkan / Hy-MT-2 1.8B
+Derivado do roteiro do especialista (revisao 95887577ab5fead779581a7030a83c7752ff3234)
+Data: 2026-09-26
+
+================================================================================
+REGRA GERAL (ele mandou, e concordo)
+================================================================================
+"Revisar amostragem de threads e' SECUNDARIO: nao desvie a investigacao de
+correcao para uma nova campanha de otimizacao sem resolver o erro principal."
+
+  -> NAO rodamos mais bateria de threads. O que falta ali e' estatistica, nao
+     bug. Bloqueado ate o defeito ser resolvido.
+
+================================================================================
+EXPERIMENTOS ORDENADOS POR RENDIMENTO DE INFORMACAO
+================================================================================
+
+  EXP-1  [EM ANDAMENTO] Hy-MT-2 em F16 no Vulkan            <- O DECISIVO
+  ------------------------------------------------------------------
+  Quao: separa "defeito no caminho de quantizacao" de "problema geral de
+        matmul no Vulkan neste aparelho".
+  Se F16 FUNCIONA  -> o defeito e' especifico do caminho de quantizado
+                       (dequantizacao / layout K / specialization).
+  Se F16 FALHA     -> problema geral do backend Vulkan com este device, ou
+                       do driver Adreno. Muda completamente a direcao.
+  Custo: 4,08 GB de safetensors + conversao + ~5 min de teste.
+  Status: safetensors BF16 baixando de tencent/Hy-MT2-1.8B.
+          (O repo GGUF oficial NAO tem F16 — so Q4_K_M, Q6_K, Q8_0. Foi
+          necessario converter do modelo base.)
+
+  EXP-2  test-backend-ops com CHECK_RESULTS                       <- numerico
+  ------------------------------------------------------------------
+  Quao: valida CADA operacao do backend contra referencia CPU. Diferente do
+        "erro de link de shader" (que e' falha de compilacao): aqui o shader
+        compila e roda, e a verificacao e' se o RESULTADO numerico bate.
+  Pergunta que responde: a operacao de matmul quantizada esta devolvendo
+  numeros corretos no Vulkan deste aparelho?
+  Se sim -> o erro esta em outra camada (graph split, sincronizacao).
+  Se nao -> achamos a operacao culpada pelo nome. E' o passo de reducao.
+  Custo: build de ~20 min + execucao. Ele sugere "flags, pipelines, aviso de
+  async e CHECK_RESULTS" na revisao citada.
+  ATENCAO: "Nao incluir medicoes de builds CHECK_RESULTS na comparacao de
+  desempenho" — e' so para diagnostico, nao para benchmark.
+
+  EXP-3  Isolamento por shape: matmul minimo reproduzivel
+  ------------------------------------------------------------------
+  Quao: um unico shader + buffers minimos, entrada e saida conhecidas.
+        Reduz o caso de 1,8B para o minimo que ainda falha.
+  Criterio do especialista: "Nao atribuir culpa ao driver sem caso reproduzivel."
+  So vale a pena se EXP-2 nao localizar a operacao.
+
+  EXP-4  Versoes (V1 fork atual / V2 base sem patches / V3 upstream)
+  ------------------------------------------------------------------
+  Quao: se o problema desaparecer em outra revisao, bisect.
+  Criterio: "Nao atualize silenciosamente o runtime de producao. A mudanca de
+  revisao deve ser um experimento separado."
+  Custo alto. So depois de EXP-1 e EXP-2.
+
+  EXP-5  Modelo pequeno conhecido
+  ------------------------------------------------------------------
+  Quao: distinguir problema geral de problema dependente de shapes.
+  Criterio dele: "Nao substitui o caso Hy-MT-2." E' auxiliar, nao resolve.
+
+--------------------------------------------------------------------------------
+ATUALIZACAO 2026-09-26 21:55 — EXP-1 (F16) EM EXECUCAO
+--------------------------------------------------------------------------------
+Preparacao concluida:
+
+  - Pesos BF16 do modelo base baixados: tencent/Hy-MT2-1.8B/model.safetensors
+    4.077.072.784 bytes (verificado byte a byte).
+  - O repo GGUF oficial NAO tem F16 (so Q4_K_M, Q6_K, Q8_0). A conversao foi
+    feita a partir do modelo base, como o especialista exigiu ("Converta
+    diretamente dos pesos BF16 originais... Nao use o Q4_K_M como origem").
+  - Conversor: o convert_hf_to_gguf.py do NOSSO fork esta desatualizado
+    (importa o pacote 'conversion', que o fork nao tem). Usei o conversor da
+    REVISAO 95887577 (a mesma citada pelo especialista), baixado completo.
+
+  CONDICAO 2 (validar a conversao) — RESULTADO:
+    PESOS BF16 ORIGINAIS:  247.576.576 elementos | Inf=0 | NaN=0 | max|x|=3,32812
+    GGUF F16 CONVERTIDO:  354 tensores | 1.791.080.448 elementos
+                          Inf=0 | NaN=0 | 2.785 zeros (0,000%)
+                          max|x|=3,32812
+    VEREDITO: CONVERSAO OK.
+      - Zero Inf e zero NaN: sem overflow nem NaN na transicao de faixa.
+      - max|x| IDENTICO (3,32812 -> 3,32812, ratio 1,000000): os pesos sao de
+        escala pequena, muito dentro da faixa F16 (max 65.504).
+      - Massa nao-nula preservada (delta 0,000 pp).
+    Observacao: a contagem de elementos difere (247 mi BF16 vs 1,79 bi F16)
+    porque o GGUF nao guarda embed_tokens como tensor de peso.
+
+  PROXIMO PASSO (condicao 3 do especialista): validar o F16 NA CPU. Se falhar
+  na CPU, o problema e' a conversao e o experimento para. Se funcionar, o mesmo
+  arquivo vai para o Vulkan e a diferenca entre os dois e' atribuivel ao backend.
+
+  Nota de codigo: o menu de modelos do TextoActivity e' uma lista HARDCODED
+  (officialModels()), nao varre o diretorio. O F16 foi adicionado atras de um
+  arquivo-sinal (hymt2_f16.habilitar) para nao poluir o menu do usuario. Nao e'
+  publicavel: o HF nao publica este GGUF, ele foi convertido do modelo base.
+
+
+================================================================================
+O QUE JA ESTA ELIMINADO (nao repetir)
+================================================================================
+  - Nao e' o modelo (todas as quantizacoes falham, igual).
+  - Nao e' a quantizacao especifica (Q4_0, Q4_K_M, Q6_K, Q8_0 falham).
+  - Nao e' execucao hibrida (offload 33/33, 32 camadas KV em Vulkan0, zero CPU).
+  - Nao e' threads (1 a 12 threads, mesmo comportamento; 1 thread so piora).
+  - Nao e' tamanho de entrada (10, 40, 112 linhas, mesmo comportamento).
+  - Nao e' dot product inteiro (int_dot_final=0 — o backend DESLIGA o caminho
+    de 8 bits corretamente; nao ha dot product 4x8 em uso).
+  - Nao e' falha de link de shader no build atual (pipelines compilam).
+  - Nao e' crash (0 crash, 11 execucoes com 4.096 tokens, 3 colapsos,
+    2 timeouts de 600 s, 0 saida valida).
+  - Nao e' numero de threads ideal (questao separada, secundaria — ver acima).
+
+================================================================================
+O QUE AINDA ESTA EM ABERTO (as perguntas do especialista)
+================================================================================
+  Q-a  O fallback F32 do ggml-vulkan para quantizacoes K esta correto no
+       upstream? (revisao 95887577...)
+  Q-b  Existe teste conhecido de dequantizacao Q4_K no Vulkan que rode em
+       GPU Adreno?
+  Q-c  Pipeline specialization errada para Q4_K (constexpr com layout/params
+       errados)?  — candidatas (i) e (iii) da secao 3.4 do relatorio.
+  Q-d  Sincronizacao de subgroup com subgroupSize=64?  — CANDIDATA DESCARTADA
+       por estabilidade (3/3 execucoes = 4.096 tokens, seria nao-deterministico).
+  Q-e  Layout std430 do bloco K: block_q4_K tem escalas/min em int8; o offset
+       assumido pelo GLSL pode nao casar com o host. Shim uint8_t->uint ja
+       testado: LINKAVA e produzia lixo (consistente com esta classe).
+
+  Referencia citada por ele como caso SEMELHANTE (nao prova mesma causa):
+    issue 26314 — saida invalida em Adreno Gen 5
+  CUIDADO com este (ele mesmo avisou):
+    issue 25734 — tiling com subgroupSize=128, NAO corresponde ao 64 deste
+                  aparelho. Nao "corrigir" para 128 sem reproduzir.

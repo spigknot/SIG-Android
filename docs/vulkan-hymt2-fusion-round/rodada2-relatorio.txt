@@ -1,0 +1,107 @@
+================================================================================
+RODADA 2 (frente A + B do especialista) — 27/09/2026, madrugada
+Device: OnePlus 15 (CPH2747), Android 16, Adreno(TM) 840, driver Qualcomm
+Conexão: Tailscale 100.108.27.64:45467 (~4-6 MB/s)
+Modelo desta rodada: Hy-MT2-1.8B-Q4_K_M-OFFICIAL (HF, file_type=15, EOS 120020)
+Referência: llama.cpp fork, ggml 080e804-dirty, revisão 95887577ab5f
+================================================================================
+
+RESULTADO CURTO
+---------------
+1. A/B re-feitos com o Q4_K_M OFICIAL (não o re-quantizado): o CONTORNO
+   (gate Qualcomm) e o DISABLE_FUSION=1 dão resultados BIT-IDÊNTICOS entre si
+   (mesmo md5 de dump em P, D1 e D2). Ou seja: no Adreno 840 o gate já remove
+   exatamente o que o DISABLE_FUSION total removeria — nenhuma outra fusão
+   precisa de veto. Isso responde Q2/Q5: o vetoescopo atual (só Qualcomm) é
+   suficiente e mais barato que desativar tudo.
+2. Prefill ainda tem desvio maior que o decode (P max_abs 0.646 vs D1 0.487 vs
+   D2 0.616; ~93% dos índices acima de 0.01 em TODOS os passos) — mas argmax e
+   top-10 coincidem com a CPU, e o erro é distribuído (p50 ~0.07-0.09), não
+   concentrado. Compatível com reordenação/FP16 deaccum, não com a fusão
+   quebrada (que dava zero/NaN).
+3. OpenCL com o Q4_K_M OFICIAL QUEBRA: clEnqueueWriteBuffer erro -38
+   (CL_INVALID_VALUE) em ggml-opencl.cpp:9511. Reproduziu 3/3. Isto é um bug
+   do backend OpenCL do fork, independente do Vulkan — e significa que o
+   "controle OpenCL = CPU em 1e-2" citado antes valia para o F16, não para Q4.
+4. Instrumentação SIGDISP (nova, frente B Q1.1) funcionando: 391 linhas no
+   dump de n_gpu=1, com pipe, params, push_constant_size, wg_denoms, dispatch,
+   cada binding (buffer/offset/range) e push constants em hex e em f32.
+   Inventário capturado: mul_f32_f32_f32 (64×), add_f32_f32_f32_norepeat (1×).
+
+MÉTRICAS COMPLETAS (Q4 oficial, ref = CPU do mesmo modelo)
+---------------------------------------------------------
+Passo P   contorno: max_abs 0.646488  rmse 0.131380  p50 0.0868  p90 0.2166
+                  p99 0.3433  p99.9 0.4477  acima_0.01 113346/120818 (93.8%)
+                  argmax ref=46(33.1098) var=46(33.1113) IGUAL
+                  top10: [46,56971,25730,28647,678] vs [46,25730,56971,28647,678]
+                         → só 2º e 3º trocam de lugar (mesmo conjunto)
+                  margem(1o-2o) ref 14.9269 / var 14.9696
+                  piores: idx528 1.6989→1.0524 | idx89697 2.5795→1.9711
+                          idx64812 1.9379→1.3377
+Passo D1  contorno: max_abs 0.487043  rmse 0.100024  p50 0.0662  p90 0.1646
+                  p99 0.2626  p99.9 0.3446  acima_0.01 111231/120818 (92.1%)
+                  argmax ref=2292(32.1827) var=2292(32.0755) IGUAL
+                  top10 IDENTICO
+Passo D2  contorno: max_abs 0.615865  rmse 0.115929  p50 0.0758  p90 0.1902
+                  p99 0.3102  p99.9 0.4117  acima_0.01 111630/120818 (92.4%)
+                  argmax ref=65652(28.3417) var=65652(28.4526) IGUAL
+                  top10: [65652,326,14180,16308,383] vs [65652,326,14180,16308,383]
+                         → diferença só na 5ª posição
+Nenhum não-finite em nenhuma rota (CPU, contorno, todas-off, repetição).
+
+REPETIBILIDADE (Q5)
+-------------------
+Contorno run1 vs run2 (mesmo binário, mesmo modelo, processo novo):
+P, D1, D2 — dumps BIT-IDÉNTICOS (md5 igual). Determinismo total no Adreno 840
+com o gate ativo. Contrastando com o defeito pré-fix (D1 com 8 hashes distintos
+em 10 dumps), isto fecha a questão: não há mais não-determinismo.
+
+DISPATCH CAPTURADO (SIGDISP, exemplo real)
+-------------------------------------------
+SIGDISP| pipe=mul_f32_f32_f32 params=3 pc_size=116 wg_denoms=[512,1,1]
+        dispatch=[1,29,1]
+SIGDISP|   bind[0] buffer=0xb400007a83bed000 offset=237568 range=59392
+SIGDISP|   bind[1] buffer=0xb400007a83bed000 offset=296960 range=512
+SIGDISP|   bind[2] buffer=0xb400007a83bed000 offset=0       range=59392
+Observação relevante: o mesmo VkBuffer atende aos 3 bindings com offsets
+distintos — é este padrão (aliasing de um buffer em vários slots) que o
+especialista quer testar contra a hypothesis de a_buf.
+
+PIPELINE rms_norm (o que o gate deixou)
+---------------------------------------
+129 dispatches, TODOS rms_norm_f32 (nenhum rms_norm_mul_f32, nenhum
+rms_norm_partials_f32). Confirma em tempo de execução que o veto cobre as duas
+fusões quebradas e nada mais. Instrumentação SIGFUSION corrobora:
+  node=0  norm-0  ne=[2048,29,1,1] src0=embd#0  elements=[29,1,1]  eps=1e-5
+  node=14 norm-0  ne=[128,16,29,1] src0=Qcur-0 (ROPE) elements=[16,29,1]
+  node=16 norm-0  ne=[128,4,29,1]  src0=Kcur-0 (ROPE) elements=[4,29,1]
+
+O QUE NÃO FOI CONCLUÍDO (frente B, Q1.2-1.5)
+---------------------------------------------
+- Q1.2 (SSBO de "marcas" dentro do shader): NÃO implementada. Exige alterar
+  os shaders GLSL e o layout de descriptors — mudança invasiva no build de
+  produção, não só no de diagnóstico.
+- Q1.3 (reproducer separado para o caso partials): NÃO feito. O caso
+  rms_norm_partials só aparece com ADD→RMS_NORM nrows=1; o reproducer atual
+  cobre o caso mul, não o partials.
+- Q1.4/Q1.5: dependem de Q1.2/Q1.3.
+- Q10.2 (pacote nativo v9 + APK release): NÃO gerado. Requer decisão do
+  especialista sobre o patch antes de congelar versão.
+- Sem 2º aparelho: não há como testar se outros Qualcomm são afetados.
+
+ARTEFATOS
+---------
+Temp\etapaB\: metricas.txt (todas as métricas acima), sigdisp1.txt (391 linhas
+SIGDISP), q4cpu/q4vkc/q4vkt/q4vkc2/*.txt e *.f32 (12 dumps), ocl_r1/ocl_r2.txt
+(falha -38), sigdisp_all.txt.
+Temp\comparar_logits_v2.py (métricas completas: percentis, piores índices,
+par de logits, top-10, margens), Temp\gguf_kv.py (leitor de header GGUF).
+Patch: docs/vulkan-hymt2-fusion-round/patches/fusao_rmsnorm_fix_provisorio+
+instrumentacao.patch (inclui agora o SIGDISP).
+
+ESTADO DO APPARELHO
+-------------------
+libsig_llama.so ORIGINAL restaurado (95.509.296 bytes) — o fix não está no
+aparelho. Modelos: 6 GGUFs (1.25Bit, Q4_0, Q6_K, Q8_0, f16, q4_k_m local,
+q4_k_m official). Nada commitado, nada publicado.
+================================================================================

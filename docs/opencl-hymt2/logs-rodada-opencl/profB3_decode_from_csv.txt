@@ -1,0 +1,34 @@
+== fase DECODE (kernels recorrentes >=100 chamadas) ==
+soma exec: 3662 ms | kernels: 99674 | grupos: 708
+
+TOP 12 decode (op | kernel | ms | n | med):
+  result_output            | kernel_mul_mv_q6_K_f32_flat                  |   733.9 |   141 |   5.205
+  ffn_out-6                | kernel_gemv_noshuffle_q6_K_f32               |    25.9 |   141 |   0.184
+  ffn_out-31               | kernel_gemv_noshuffle_q6_K_f32               |    25.6 |   141 |   0.182
+  ffn_out-3                | kernel_gemv_noshuffle_q6_K_f32               |    25.5 |   141 |   0.181
+  ffn_out-28               | kernel_gemv_noshuffle_q6_K_f32               |    25.2 |   140 |   0.180
+  ffn_out-15               | kernel_gemv_noshuffle_q6_K_f32               |    25.2 |   140 |   0.180
+  ffn_out-12               | kernel_gemv_noshuffle_q6_K_f32               |    25.2 |   141 |   0.179
+  ffn_out-27               | kernel_gemv_noshuffle_q6_K_f32               |    25.2 |   140 |   0.180
+  ffn_out-9                | kernel_gemv_noshuffle_q6_K_f32               |    24.9 |   141 |   0.177
+  ffn_out-24               | kernel_gemv_noshuffle_q6_K_f32               |    24.9 |   140 |   0.178
+  ffn_out-29               | kernel_gemv_noshuffle_q6_K_f32               |    24.8 |   140 |   0.177
+  ffn_out-0                | kernel_gemv_noshuffle_q6_K_f32               |    24.7 |   141 |   0.175
+
+== fase LOAD/PREFILL (kernels <100 chamadas) ==
+soma exec: 202 ms | kernels: 678 | grupos: 600
+
+TOP 8 load/prefill:
+  ffn_out-0                | kernel_gemm_noshuffle_q6_k_q8_1_dp4a         |     2.0 |     1 |   2.025
+  ffn_out-10               | kernel_gemm_noshuffle_q4_k_f32               |     1.6 |     1 |   1.614
+  ffn_out-25               | kernel_gemm_noshuffle_q4_k_f32               |     1.6 |     1 |   1.600
+  ffn_out-23               | kernel_gemm_noshuffle_q4_k_f32               |     1.6 |     1 |   1.599
+  ffn_out-14               | kernel_gemm_noshuffle_q4_k_f32               |     1.6 |     1 |   1.598
+  ffn_out-26               | kernel_gemm_noshuffle_q4_k_f32               |     1.6 |     1 |   1.597
+  ffn_out-20               | kernel_gemm_noshuffle_q4_k_f32               |     1.6 |     1 |   1.597
+  ffn_out-8                | kernel_gemm_noshuffle_q4_k_f32               |     1.6 |     1 |   1.597
+
+-- contas --
+kernels/token (dec): 707
+kernel exec/token (dec): 26.0 ms vs decode wall/token = 8397/142 = 59.1 ms
+residual host/gaps por token: ~33.2 ms

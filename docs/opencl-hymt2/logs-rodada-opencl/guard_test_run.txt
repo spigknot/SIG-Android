@@ -1,0 +1,13 @@
+== guard F3b — teste nativo (host, mock CL) ==
+GREEN (design atual: consulta por chamada, sem cache):
+  in-order (props=0) -> fast                                 PASS
+  out-of-order -> blocking                                   PASS
+  erro na consulta -> blocking (fail-safe)                   PASS
+  volta a fila in-order -> fast (sem estado velho)           PASS
+  consulta executada por chamada (>= 4)                      PASS
+  consultas ao driver: 8
+RED (design ANTIGO: cache unico de primeiro-queue — copia p/ evidencia):
+  [antigo] A in-order->fast=1 | B ooo->fast=1
+  RED: design antigo devolve fast p/ fila OOO (bug demonstrado) PASS
+
+resultado: PASS (0 falhas)

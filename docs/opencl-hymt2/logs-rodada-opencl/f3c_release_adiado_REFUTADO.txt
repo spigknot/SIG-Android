@@ -1,0 +1,14 @@
+== F3c — RELEASE ADIADO: REFUTADO (diag7 82c24bfb) ==
+A/B alternado 3+3 (debug.sig.hymt2.defer_release 0/1), Q4/OpenCL:
+  dfr=0: loads [4.0, 4.5, 5.3] med 4.50 | cpu [2.0, 2.3, 2.4] | load+inf med 5.70
+  dfr=1: loads [4.7, 4.8, 4.9] med 4.80 | cpu [2.4, 2.4, 2.4] | load+inf med 6.00
+  saida_sha unico f8c093aecbd62027 nos 6 runs (correcao preservada)
+-- leitura --
+Sem ganho (mediana levemente pior, dentro do ruido); bucket cpu IDENTICO
+=> os clWaitForEvents do repack por tensor eram BARATOS (GPU acompanhava o
+host). O 'cpu' residual (~2s) = trabalho host/driver real (clCreateBuffer
+354x + manuseio por tensor), nao espera. Hipoteses F3 ENCERRADAS:
+  F3a escrita nao-bloqueante: REFUTADO | F3b transpose nao-bloq: GANHO
+  (-0.6s, sem regressao) | F3c release adiado: REFUTADO
+  (dados: salvo de hymt2-carga-rodada/r301-r306 apos falha de DIR no
+   script — resumo reconstruido aqui por Python; dirs reais preservados)

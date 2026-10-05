@@ -1,0 +1,5 @@
+== DEPLOY PRODMIN2 e14e6a80 (guard sem cache; smoke) ==
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_prodmin2.so: 1 file pushed, 0 skipped. 3.1 MB/s (95626512 bytes in 29.233s)
+OK
+e14e6a80fb6942a213f96465ca6adc2cc508fdf6e6d2a8178b81312b8cfda2de  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

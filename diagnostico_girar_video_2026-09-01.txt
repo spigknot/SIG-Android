@@ -1,0 +1,549 @@
+================================================================================
+DIAGNOSTICO - FALHAS NA FERRAMENTA GIRAR VIDEO (SIG Android)
+================================================================================
+Projeto:     D:\Projetos\SIG
+Ferramenta:  Girar Video (FfmpegRotateVideoActivity)
+Data:        2026-09-01
+Tipo:        Diagnostico apenas - NENHUM ARQUIVO DO PROJETO FOI MODIFICADO
+--------------------------------------------------------------------------------
+ARQUIVOS ENVOLVIDOS (caminhos absolutos)
+  app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt
+  app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegMediaPolicies.kt
+  app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegVideoQuality.kt
+  app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegVideoEncoderRegistry.kt
+  app/src/test/java/br/gov/sp/pcsp/launcher/FfmpegVideoQualityTest.kt
+================================================================================
+
+
+================================================================================
+(0) DADOS DISPONIVEIS DO USUARIO
+================================================================================
+
+FFPROBE - ORIGINAL (audiencia_143664636_1_V.mp4)
+
+    Container   : mov,mp4,m4a,3gp,3g2,mj2
+    Marca       : isom / iso2 / mp41 (Lavf60.3.100 NAO aparece aqui, ou seja
+                  este arquivo NAO passou pelo app - entrada bruta da camera)
+    Duracao     : 00:25:40.22, 1059 kb/s total
+    Stream #0:0 : Video h264 (Constrained Baseline) avc1, yuv420p(progressive),
+                  1920x1080, 1002 kb/s, 16 fps, 16 tbr, 10k tbn
+    Stream #0:1 : Audio aac LC, 16 kHz, mono, fltp, 54 kb/s
+    Tags visiveis: creation_time. NAO ha tag "rotate" nem displaymatrix side data.
+
+FFPROBE - SAIDA (audiencia_143664636_1_V_girado.mp4)
+
+    Container   : mov,mp4,m4a,3gp,3g2,mj2
+    encoder     : Lavf60.3.100     <<< confirma que o arquivo passou pelo
+                                       ffmpeg-kit 6.0 do app
+    Duracao     : 00:25:40.22, 1059 kb/s total (igual ao original)
+    Stream #0:0 : Video h264 (Constrained Baseline) avc1, yuv420p(progressive),
+                  1920x1080, 1002 kb/s, 16 fps, 16 tbr, 10k tbn
+    Stream #0:1 : Audio aac LC, 16 kHz, mono, fltp, 54 kb/s
+    Tags visiveis: handler_name. NAO ha tag "rotate" nem displaymatrix side data.
+
+OBSERVACOES CRITICAS A PARTIR DOS FFPROBES:
+  - Resolucao ficou 1920x1080 (igual a entrada). Em reencode real com
+    transpose=1 a saida seria 1080x1920. Como a saida preserva 1920x1080,
+    o caminho de metadados NAO tocou nos pixels, so remuxou.
+  - A tag de rotacao NAO esta visivel nem no original nem na saida no ffprobe
+    padrao do usuario. Falta rodar os comandos de verificacao descritos no
+    item (3) desta analise para fechar o diagnostico do problema 2.
+
+
+================================================================================
+(1) RESUMO DOS PROBLEMAS
+================================================================================
+
+PROBLEMA 1 - Encoders de hardware (h264_mediacodec e hevc_mediacodec) FALHAM;
+            encoder por CPU (libx264) FUNCIONA.
+
+  Quando o usuario NAO marca a checkbox "Girar com metadados" e dispara a
+  rotacao, o app monta um comando que combina transpose=1 (filtro de
+  rotacao) com -c copy global e -c:v h264_mediacodec sobrescrito so para
+  o video. O encoder MediaCodec recusa a configuracao e o FFmpeg aborta:
+
+      Erro: Nao não consegui girar o video. Conversion failed!
+
+  O comando exato que dispara o erro, capturado da imagem:
+
+      ffmpeg -y -noautorotate -display_rotation:v:0 0
+         -i /data/.../rotate_input_...mp4
+         -vf transpose=1
+         -map 0:v:0 -map 0:a? -map 0:s? -map 0:d? -map 0:t?
+         -c copy -c:v h264_mediacodec -b:v 1002K
+         -map_metadata 0 -avoid_negative_ts make_zero
+         /data/.../rotate_.../audiencia_143664636_1_V_girado.mkv
+
+  Note que o -b:v 1002K e identico ao bitrate original (ffprobe confirma
+  1002 kb/s para o video). Ou seja: o app preservou o bitrate, mas nao
+  passou parametros defensivos ao encoder MediaCodec.
+
+
+PROBLEMA 2 - Com a checkbox "Girar com metadados" ativa, NAO ha erro de
+            execucao, mas o video de saida NAO aparece girado no player.
+
+  O fluxo de metadados faz stream-copy e so adiciona a opcao
+  -display_rotation:v:0 <valor>. Pelo ffprobe basico fornecido pelo
+  usuario, a tag de rotacao NAO aparece nem no original nem na saida.
+  Faltam verificacoes adicionais (item 3) para distinguir entre:
+    (a) FFmpeg 6.0 do ffmpeg-kit ignora -display_rotation em stream-copy
+        para MP4 (limitacao conhecida em algumas versoes do muxer mov);
+    (b) o muxer grava a matriz de transformacao no moov atom mas nao
+        expõe a tag rotate nos metadados de stream;
+    (c) o calculo de angulo sai errado para algum caso (90 CCW vs CW).
+
+  O comando gerado pelo fluxo de metadados esta em
+  FfmpegMediaPolicies.metadataRotationCopyArguments (FfmpegMediaPolicies.kt
+  linhas 106-119) e produz:
+
+      ffmpeg -y -display_rotation:v:0 <rot> -i <in> -map 0 -c copy <out>
+
+
+================================================================================
+(2) CAUSA RAIZ - PROBLEMA 1 (ENCODER HARDWARE FALHA)
+================================================================================
+
+2.1 - CADEIA DE EXECUCAO (CAMINHO REENCODE)
+--------------------------------------------------------------------------------
+A execucao do girar parte de FfmpegRotateVideoActivity.executeRotation
+(FfmpegRotateVideoActivity.kt:526-...), que delega a
+executeRotation em si chama buildFfmpegArguments (:1310-1356). Para o
+caminho NAO-metadata (reencoder), esse metodo monta, em ordem:
+
+  Linha 1340: args += "-noautorotate" + "-display_rotation:v:0" + "0" + "-i"
+  Linha 1342-1344: args += "-vf" + filtros (transpose=1, etc.)
+  Linha 1345: args += "-map 0:v:0 -map 0:a? -map 0:s? -map 0:d? -map 0:t?"
+  Linha 1346: args += "-c copy"                  (todos stream-copy por padrao)
+  Linha 1347: args += videoEncodingArguments(...) (sobrescreve so o video)
+  Linha 1348-1353: args += -map_metadata 0 + -avoid_negative_ts make_zero
+  Linha 1354: args += output
+
+videoEncodingArguments (FfmpegRotateVideoActivity.kt:1301-1306) chama
+encoder.encodingFor (FfmpegVideoQuality.kt:41-79). Resultado identico ao
+ja diagnosticado para a ferramenta CORTAR:
+
+    Caminho CPU (libx264):    -c:v libx264 -preset ultrafast -crf <X>
+    Caminho hardware (h264_mediacodec): -c:v h264_mediacodec  (so isso!)
+    Caminho hardware (hevc_mediacodec): -c:v hevc_mediacodec  (so isso!)
+
+  O -b:v e adicionado fora, em videoEncodingArguments (linha 1503-1505).
+  Nenhum parametro defensivo (-pix_fmt, -bf, -g, -flags, -profile:v,
+  -level) e passado ao wrapper MediaCodec.
+
+
+2.2 - POR QUE O WRAPPER MEDIACODEC FALHA ESPECIFICAMENTE AQUI
+--------------------------------------------------------------------------------
+A causa raiz e a MESMA do bug do Cortar Video (ja diagnosticado no
+relatorio anterior): libavcodec/h264_mediacodec.c chama
+MediaCodec.configure() durante mediacodec_enc_init(), e sem parametros
+defensivos a configuracao e rejeitada.
+
+Especificidades deste caso que pioram a situacao:
+
+  (a) -vf transpose=1 ALTERA a resolucao de 1920x1080 para 1080x1920.
+      Apos o filtro, os frames sao entregues ao encoder em 1080x1920.
+      Muitos MediaCodec exigem resolucao multipla de 16 (1080 e multiplo
+      de 16, mas 1920 NAO e). Sem -pix_fmt explicito, o wrapper tenta
+      inferir a partir do contexto; em alguns dispositivos a combinacao
+      1080x1920 + bitrate 1002K + pix_fmt nao declarado e recusada.
+
+  (b) Pixel format padrao de saida de transpose e yuv420p, mas o codec
+      wrapper precisa de um COLOR_Format* compativel. Apos o filtro, o
+      pix_fmt pode estar em yuv420p, yuv420p10le ou outro dependendo do
+      build do FFmpeg - alguns dispositivos exigem declaracao explicita.
+
+  (c) O bitrate 1002K e o mesmo do source. Com -bf 0 implicitamente
+      habilitado em alguns MediaCodec, o encoder pode ignorar o -b:v ou
+      reclamar de GOP/B-frames nao especificados.
+
+  (d) libx264 ACEITA TUDO em software e faz as conversoes internamente,
+      por isso o caminho CPU sempre funciona (foi observado pelo usuario).
+
+  Em resumo: o problema do Cortar e o problema do Girar sao o MESMO bug.
+  A unica diferenca e que aqui ha um filtro de rotacao no meio, o que
+  torna o caso ainda mais sensivel a -pix_fmt.
+
+
+2.3 - POR QUE LIBX264 FUNCIONA E MEDIACODEC NAO
+--------------------------------------------------------------------------------
+libx264 (FFmpegVideoQuality.kt:45-57) recebe:
+    -c:v libx264 -preset ultrafast -crf <X>
+
+h264_mediacodec (FFmpegVideoQuality.kt:75-78) recebe:
+    -c:v h264_mediacodec
+    (mais -b:v 1002K adicionado fora)
+
+O x264 aceita qualquer pixel format em software, faz a conversao interna,
+aceita perfis/niveis arbitrarios, nao exige cor/resolucoes especificas.
+O wrapper MediaCodec tem que casar com o que o MediaCodec do Android
+aceita - sem parametros defensivos, a configuracao e rejeitada.
+
+
+2.4 - PROPAGACAO DO ERRO ENTRE WORKERS
+--------------------------------------------------------------------------------
+O codigo usa paralelismo em FfmpegRotateVideoActivity.kt:534-660 quando
+canUseParallel e true. canUseParallel exige !metadataOnly (linha 534), ou
+seja, o caminho com hardware encoder NAO entra no modo paralelo - cai no
+fluxo single-session em :660-691. Portanto nao ha propagacao entre
+workers; cada execucao e independente. O que descarta essa hipotese.
+
+O paralelismo funciona com hardware encoder? So se canUseParallel virar
+true. Para virar true, alem de !metadataOnly, exige !hasTrim E
+requestedParallel E orderedFilters.isNotBlank. Se esses pre-requisitos
+estiverem satisfeitos com hardware encoder, o paralelismo e tentado;
+mas a falha do encoder acontece dentro de cada worker, nao entre eles.
+
+
+================================================================================
+(2.b) CAUSA RAIZ - PROBLEMA 2 (ROTACAO POR METADADOS NAO APLICA)
+================================================================================
+
+2.5 - FLUXO DO MODO METADADOS
+--------------------------------------------------------------------------------
+Quando metadataRotation.isChecked = true (FfmpegRotateVideoActivity.kt
+:466), buildFfmpegArguments (:1310) cai no ramo:
+
+    if (FfmpegMediaPolicies.usesMetadataCopyCommand(metadataOnly)) {
+        val currentMetadataDegrees = detectCurrentMetadataRotation(inputFile)
+        return FfmpegMediaPolicies.metadataRotationCopyArguments(
+            inputPath = inputFile.absolutePath,
+            outputPath = outputFile.absolutePath,
+            currentCounterClockwise = currentMetadataDegrees,
+            requestedClockwise = degrees
+        )
+    }
+
+metadataRotationCopyArguments (FfmpegMediaPolicies.kt:106-119) produz:
+
+    -y
+    -display_rotation:v:0 <rotacao_em_CCW>
+    -i  <input>
+    -map 0
+    -c copy
+    <output>
+
+O calculo do angulo e metadataRotationAfterClockwiseRequest
+(FfmpegMediaPolicies.kt:567-568):
+
+    normalizeRightAngle(currentCounterClockwise - requestedClockwise)
+
+Para o caso do usuario (source sem rotacao, pediu 90 CW):
+  - currentCounterClockwise = 0
+  - requestedClockwise = 90
+  - resultado = normalizeRightAngle(0 - 90) = -90 CCW = 90 CW visualmente
+    CORRETO como angulo.
+
+Hipotese de erro no calculo: DESCARTADA (a funcao e direta, e foi alvo
+de teste unitario).
+
+buildOutputName (FfmpegRotateVideoActivity.kt:1904) preserva a extensao
+do source no modo metadados. Como o source e .mp4, saida e .mp4.
+CONFIRMADO pelo encoder Lavf60.3.100 no ffprobe do usuario.
+
+
+2.6 - POR QUE O MP4 DE SAIDA NAO EXIBE ROTACAO - HIPOTESES
+--------------------------------------------------------------------------------
+O comando gerado esta sintaticamente correto. O FFmpeg 6.0 (libav do
+ffmpeg-kit usado pelo app) deveria gravar a rotacao. Porem o ffprobe do
+usuario NAO mostra nem a tag "rotate" nem a side data displaymatrix.
+Antes de afirmar a causa, sao necessarias as verificacoes do item (3).
+
+Hipoteses, em ordem de probabilidade:
+
+  H1 (MAIS PROVAVEL): O muxer mov/mp4 do FFmpeg 6.0 deste build do
+      ffmpeg-kit NAO propaga -display_rotation:v:0 para a displaymatrix
+      side data em operacoes de stream-copy. Limitacao conhecida em
+      algumas versoes do libavformat/mov.c entre 4.x e 6.x. O comando
+      e aceito, o arquivo e gerado, mas a matriz no moov atom fica
+      como identidade e a tag rotate nao e gravada.
+
+  H2: O muxer grava a displaymatrix corretamente no moov atom (que e o
+      que players como QuickTime/iOS usam), mas NAO grava a tag rotate
+      nos metadados de stream (que e o que HTML5 video e alguns Android
+      players usam). O ffprobe padrao do usuario nao exibe side_data_list,
+      entao a matriz nao aparece - mas o video esta tecnicamente rotacionado
+      em players que honram a matriz.
+
+  H3: A tag rotate ESTA sendo gravada, mas o ffprobe nao a exibe por
+      padrao (so mostra os campos principais). Possivel - precisa do
+      comando de verificacao do item 3 para confirmar.
+
+  H4: O calculo do angulo produz um valor negativo que faz o muxer
+      descartar o comando - improvavel, dado que -90 e valor valido.
+
+A H1 explica o sintoma observado ("video nao gira") E o ffprobe sem
+tag. E a causa mais provavel e a unica que pode ser confirmada sem
+acesso ao dispositivo do usuario.
+
+
+2.7 - POR QUE O WORKER DE METADADOS NAO ESCREVE A TAG
+--------------------------------------------------------------------------------
+O codigo do app NAO manipula o displaymatrix nem a tag rotate - apenas
+delega ao FFmpeg via -display_rotation:v:0. Se o FFmpeg nao propaga
+(Mov muxer do FFmpeg 6.0 desta build), nao ha nada no Kotlin que
+recupere isso. E por isso a saida sai sem rotacao em players que
+ignoram a displaymatrix.
+
+O fix robusto NAO e adicionar -metadata:s:v:0 rotate=90 (so escreve a
+tag, mas a matriz continua identidade - alguns players vao girar,
+outros nao). O fix robusto e aplicar a matriz via filtro antes do
+copy, OU fazer o stream-copy passando displaymatrix side data
+explicitamente, OU trocar para reencode real (que ja funciona via
+libx264).
+
+
+================================================================================
+(3) VERIFICACOES COM FFPROBE/FFMPEG
+================================================================================
+
+Sem essas verificacoes NAO e possivel fechar o diagnostico do problema 2
+com certeza absoluta. O usuario tem acesso a um ffprobe 8.1.1 em termux
+(mais novo que o FFmpeg 6.0 do ffmpeg-kit). Rodar no termux:
+
+A) Side data de displaymatrix na saida (decisivo para H1/H2):
+
+      ffprobe -v quiet -select_streams v:0 \
+         -show_entries stream=side_data_list \
+         -of default=noprint_wrappers=1 \
+         audiencia_143664636_1_V_girado.mp4
+
+   Resultado esperado:
+     - H1 (muxer ignora): NADA impresso - matriz ausente
+     - H2 (muxer escreve matriz, mas ffprobe padrao nao mostra):
+       bloco "side_data_type=displaymatrix" com os 9 valores da matriz
+     - H3: idem H2
+
+B) Tag rotate (decisivo para H3):
+
+      ffprobe -v quiet -show_entries stream_tags:tag=rotate \
+         -of default=noprint_wrappers=1 \
+         audiencia_143664636_1_V_girado.mp4
+
+   Resultado esperado:
+     - tag=rotate=90 (em graus CCW ou CW dependendo do muxer)
+     - ou ausencia total da linha "TAG:rotate" (H1)
+
+C) Matriz gravada no moov atom (forma estrutural, complementar a A):
+
+      ffmpeg -v quiet -i audiencia_143664636_1_V_girado.mp4 \
+         -map 0:v -c copy -f null -
+
+   O log do ffmpeg 8.1.1 ao ler o arquivo deve mostrar
+   "displaymatrix=..." na lista de side data do stream. Se nao
+   mostrar, a matriz esta ausente.
+
+D) Comportamento de cada player (para confirmar efeito visual):
+
+      - VLC desktop: usa matriz E tag - deve girar de qualquer jeito
+      - HTML5 <video>: usa tag rotate - depende da tag existir
+      - QuickTime / iOS: usa matriz - depende da matriz existir
+      - Android MediaPlayer: usa tag rotate OU matriz
+
+   Se H1 for confirmada (matriz ausente E tag ausente), o video nao
+   gira em NENHUM player. E esse e o sintoma que o usuario descreveu.
+
+E) Verificacao especifica do problema 1:
+
+      ffmpeg -y -noautorotate -display_rotation:v:0 0 \
+         -i audiencia_143664636_1_V.mp4 \
+         -vf transpose=1 -map 0:v:0 -map 0:a? -map 0:s? -map 0:d? -map 0:t? \
+         -c copy -c:v h264_mediacodec \
+         -pix_fmt yuv420p -bf 0 -g 30 -b:v 1002K \
+         -map_metadata 0 -avoid_negative_ts make_zero \
+         test_girar_pixfmt.mkv
+
+   Se ESTE comando funcionar (gera o .mkv sem erro), o diagnostico do
+   problema 1 esta CONFIRMADO: encoder MediaCodec exige parametros
+   defensivos. Se falhar mesmo com -pix_fmt yuv420p -bf 0 -g 30,
+   adicionar -flags +cgop e/ou -profile:v high.
+
+
+================================================================================
+(4) PLANO DE CORRECAO - PROBLEMA 1 (ENCODER HARDWARE)
+================================================================================
+
+A correcao do problema 1 e a MESMA ja diagnosticada para o Cortar Video:
+endurecer encodingFor para MediaCodec em FfmpegVideoQuality.kt.
+
+PASSO 1 - Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegVideoQuality.kt
+          Funcao:  FfmpegVideoEncoder.encodingFor (linhas 41-79)
+          Trecho:  linhas 75-78
+
+  SITUACAO ATUAL:
+
+      return FfmpegVideoEncoding(
+          arguments = listOf("-c:v", ffmpegName),
+          targetBitrate = scaleVideoBitrate(sourceBitrate, multiplier)
+      )
+
+  NOVA LOGICA (minimo viavel, mesmo do Cortar):
+
+      return FfmpegVideoEncoding(
+          arguments = listOf(
+              "-c:v", ffmpegName,
+              "-pix_fmt", "yuv420p",
+              "-bf", "0",
+              "-g", "30"
+          ),
+          targetBitrate = scaleVideoBitrate(sourceBitrate, multiplier)
+      )
+
+  Se a verificacao (E) do item (3) mostrar que mesmo assim falha em
+  algum dispositivo, acrescentar:
+      "-flags", "+cgop"
+  e/ou
+      "-profile:v", "high"     (HEVC: "main")
+
+PASSO 2 - Atualizar FfmpegVideoQualityTest.kt:42-49 (mesma observacao do
+          relatorio do Cortar) para refletir os novos argumentos, mantendo
+          a regra de que o ramo libx264 NAO muda.
+
+PASSO 3 - Validacao unitaria:
+          .\gradlew.bat :app:testDebugUnitTest
+
+PASSO 4 - Validacao em campo: rodar o comando da verificacao (E) do item
+          (3) com o MP4 do usuario (audiencia_143664636_1_V.mp4). Cobrir
+          90, 180 e -90 graus, e tambem o caminho do Corte para garantir
+          que o mesmo fix nao quebrou nada la.
+
+
+================================================================================
+(5) PLANO DE CORRECAO - PROBLEMA 2 (ROTACAO POR METADADOS)
+================================================================================
+
+A escolha depende do resultado das verificacoes (A) e (B) do item (3).
+
+Se H1 for confirmada (tag E matriz ausentes):
+
+  O fix e trocar -display_rotation:v:0 pela combinacao que GARANTE a
+  propagacao da matriz no moov atom do MP4:
+
+  OPCAO A - Usar filtro displaymatrix antes do copy:
+
+      No lugar de:
+        -display_rotation:v:0 <rot>
+      colocar:
+        -vf "displaymatrix=0:1:0:-1:0:0:0:0:1"   (90 CW)
+        -c copy
+
+      onde a matriz e a matriz de rotacao canonica. Cada caso (90 CW,
+      90 CCW, 180) tem uma matriz diferente. Calcular via
+      metadataRotationAfterClockwiseRequest e mapear para a string.
+
+      Vantagem: matriz e gravada corretamente no MP4 moov atom.
+      Desvantagem: precisa de uma tabela de mapeamento (9 floats por
+      angulo) e o filtro e executado em cada remux.
+
+  OPCAO B - Reencode real (mais pesado, mas garantido):
+
+      Trocar metadataRotationCopyArguments por um comando com -vf
+      transpose + -c:v h264_mediacodec (ou libx264) + os parametros
+      defensivos do problema 1. Equivale a nao ter o checkbox "girar
+      com metadados" - reescreve todos os pixels.
+
+  OPCAO C - Apenas escrever a tag rotate (nao confiavel):
+
+      Trocar -display_rotation:v:0 <rot> por:
+        -metadata:s:v:0 rotate=90
+      HTML5 video e VLC giram. QuickTime/iOS NAO giram.
+
+  Recomendacao: OPCAO A. E o unico que preserva a intencao do usuario
+  ("girar sem reencode") e garante visualizacao em todos os players
+  relevantes.
+
+Se H2 for confirmada (matriz presente, tag ausente):
+
+  Nenhuma correcao necessaria no codigo - o vídeo está corretamente
+  rotacionado em players que honram a matriz (maioria). Considerar
+  apenas acrescentar a tag rotate via -metadata:s:v:0 rotate=<v> como
+  melhoria secundaria para players que so olham tag.
+
+Se H3 for confirmada (tag presente, ffprobe nao mostrou por padrao):
+
+  Bug visual falso positivo - o usuario precisa rodar o teste em
+  players reais antes de reclamar. Sugerir melhoria na UX para
+  exibir a tag rotate apos a operacao.
+
+
+================================================================================
+(6) RESUMO DAS MUDANCAS NO CODIGO KOTLIN (SE APLICADAS)
+================================================================================
+
+Arquivo 1: FfmpegVideoQuality.kt:75-78 (fix do Problema 1)
+
+  - arguments = listOf("-c:v", ffmpegName)
+  + arguments = listOf(
+  +     "-c:v", ffmpegName,
+  +     "-pix_fmt", "yuv420p",
+  +     "-bf", "0",
+  +     "-g", "30"
+  + )
+
+Arquivo 2: FfmpegVideoQualityTest.kt (ajuste de teste)
+
+  Atualizar o cenario que congela listOf("-c:v", "h264_mediacodec") para
+  os novos argumentos. Manter o ramo libx264 inalterado.
+
+Arquivo 3: FfmpegMediaPolicies.kt (fix do Problema 2, dependendo de H1)
+
+  Trocar metadataRotationCopyArguments para emitir -vf "displaymatrix=..."
+  no lugar de -display_rotation:v:0. Manter -c copy. Mapear cada angulo
+  para a matriz canonica (3 angulos: 90 CW, 180, 90 CCW).
+
+Arquivo 4 (efeito colateral): mesma mudanca de FfmpegVideoQuality.kt
+  atinge FfmpegRotateVideoActivity.kt:1302-1306 (videoEncodingArguments),
+  FfmpegCutActivity.kt:1497-1506 e FfmpegJoinVideosActivity.kt:2203-2210 -
+  beneficio para as tres ferramentas.
+
+
+================================================================================
+(7) PONTOS DE ATENCAO
+================================================================================
+
+1. O problema 1 do Girar e EXATAMENTE o mesmo bug ja diagnosticado no
+   Cortar Video (relatorio anterior). Fix unico no encodingFor resolve
+   os dois. A mudanca tambem cobre o Juntar (FfmpegJoinVideosActivity
+   :2203) sem custo extra.
+
+2. O problema 1 do Girar e PIOR que o do Cortar, porque aqui o filtro
+   transpose=1 muda a resolucao de 1920x1080 para 1080x1920 (1920 NAO
+   e multiplo de 16). Por isso a taxa de falha deve ser maior que no
+   Cortar. -pix_fmt explicito ajuda o wrapper a negociar a resolucao
+   com MediaCodec.
+
+3. A saida do Girar no modo reencode e SEMPRE MKV (linha 1907:
+   extension = if (metadataOnly) ... else "mkv"). MKV aceita qualquer
+   codec - isso nao esta relacionado ao erro, mas vale notar que a
+   escolha de container foi feita pra evitar travamentos de remux.
+
+4. O problema 2 do Girar NAO e o mesmo problema do Cortar. E uma
+   questao separada, ligada ao muxer MP4 do FFmpeg 6.0 e a forma como
+   -display_rotation propaga (ou nao) em stream-copy. NAO fazer fix
+  盲目 sem rodar as verificacoes (A) e (B) do item (3) primeiro.
+
+5. O calculo do angulo em metadataRotationAfterClockwiseRequest
+   (FfmpegMediaPolicies.kt:567-568) esta matematicamente correto para
+   o caso "source sem rotacao, usuario pede 90 CW". Hipotese de
+   calculo errado: DESCARTADA.
+
+6. NUNCA confiar no ffprobe padrao do usuario para checar rotacao.
+   ffprobe nao mostra side_data_list (displaymatrix) a menos que voce
+   peca explicitamente. Por isso o usuario concluiu "nao girou" e pode
+   ter sido falso negativo - mas como o sintoma visual foi confirmado,
+   e provavel que seja verdade mesmo. Verificar com (A) e (B) fecha o
+   diagnostico.
+
+7. O paralelismo no Girar NAO propaga erro entre workers porque
+   canUseParallel exige !metadataOnly (linha 534). O fluxo reencode
+   single-session (linha 660-691) tenta UM encoder; se ele falha, o
+   app mostra a mensagem de erro. Nao ha race condition ou
+   compartilhamento de estado MediaCodec entre sessoes.
+
+8. A escolha de manter o output em MKV no modo reencode evita outro
+   bug conhecido: MP4 nao suporta certos codecs que x264/encoders
+   legacy poderiam emitir. E defensiva, nao relacionada ao bug atual.
+
+================================================================================
+FIM DO DIAGNOSTICO
+Nenhum arquivo do projeto foi alterado nesta analise.
+================================================================================

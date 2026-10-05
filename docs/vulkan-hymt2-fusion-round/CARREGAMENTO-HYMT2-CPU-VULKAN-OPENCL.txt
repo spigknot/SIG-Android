@@ -1,0 +1,174 @@
+RELATORIO A-H — MEDICAO DE CARREGAMENTO: Q4_K_M/Q8_0 x CPU/Vulkan/OpenCL
+(Hy-MT2-1.8B no app Texto; 02/10/2026)
+=====================================================================
+Escopo: MEDICAO (sem correcao). Nada de codigo/APK/.so/modelos/default foi
+alterado nesta rodada de medicao. Rotulos [MEDIDO]/[HIPOTESE]/[LIMITE].
+
+CONTEXTO: OnePlus 15 CPH2747/OP611FL1, Android 16, Adreno 840; app
+br.gov.sp.pcsp.launcher APK debug 9f42b744... (vc69/1.506, loader v9); lib
+9698670c... na pasta 9-arm64-v8a (mapa por run); USB 3B15BD00FVE00000.
+Modelos confirmados no aparelho por SHA-256 COMPLETO (device-side):
+  Q4_K_M produto c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+    (1.133.080.544 B) — nao e' o OFFICIAL (dc5f44...)
+  Q8_0 5c3fe0b1408a5ceb0143184ef247b11b579c525f4b02b060e6c851bb76fef1a4
+    (1.908.528.192 B)
+
+A. METRICA E FRONTEIRA DO TIMER
+  Metrica PRINCIPAL: load_s do evento "Modelo carregado em Ls." (formato do
+  app: "%.1fs" -> PRECISAO 0.1s; nao inventamos ms).
+  Fronteira (fonte ATUAL, TextoActivity.kt:636-661 + llama_jni.cpp:231-350):
+  loadStart = elapsedRealtime() imediatamente antes de HyMt2Native.loadModel();
+  o JNI executa: (GPU) configure/probe do device + ggml_backend_dev_init e
+  free + llama_model_load_from_file (GGUF + upload de pesos ao device quando
+  n_gpu_layers=-1) + llama_init_from_model (contexto n_ctx=8192,
+  n_batch=2048, FA desligado p/ GPU, threads). O timer NAO inclui: escolha de
+  modelo/backend na UI, digitacao, nem o primeiro decode apos a carga
+  (kernel/JIT de primeira geracao fica fora; ver H).
+  [LIMITE] "Process cold" aqui = processo novo (PID novo); NAO e' disco frio:
+  o page cache do Android persiste (nao limpamos cache/reboot por instrucao).
+
+B. PROTOCOLO
+  - 2 modelos x 3 backends x 3 repeticoes = 18 process_cold PLANEJADOS
+    (+1 tentativa de VALIDACAO r00, fora da contagem — declarada).
+  - Ordem rotacionada por repeticao (contrabalanceamento):
+    r1: Q4Vulkan,Q4CPU,Q4OpenCL,Q8Vulkan,Q8CPU,Q8OpenCL
+    r2: Q4OpenCL,Q8Vulkan,Q8CPU,Q8OpenCL,Q4Vulkan,Q4CPU
+    r3: Q8Vulkan,Q8CPU,Q8OpenCL,Q4Vulkan,Q4CPU,Q4OpenCL
+  - Cada tentativa: force-stop + am start (PID novo) -> selecionar MODELO e
+    BACKEND pela UI (confirmados por leitura dos botoes) -> fonte CURTA fixa
+    "The meeting starts at nine. Please keep the door closed." (56 chars,
+    sha256 050c1860442bfbec730e2615673412821243ab3e8138159f041c61a2579c4148)
+    via rota extra_texto --activity-single-top com IGUALDADE conferida ->
+    fechar teclado -> baseline -> Traduzir -> esperar evento de carga e fim.
+  - Cadeia conjunta por run: modelo/backend lidos == alvo; fonte igual;
+    "Modelo carregado em" NOVO no delta; "Backend em uso:" do MESMO run
+    (efetivo); maps com pasta 9 + o .gguf do modelo; PID registrado.
+  - Backends (rotulos REAIS do menu, confirmados por screenshot):
+    CPU | GPU (OpenCL) | GPU (Vulkan) | NPU (desabilitado). Backend efetivo
+    lido do log: "CPU" / "GPU Vulkan (Vulkan / Vulkan0)" /
+    "GPU OpenCL (OpenCL / GPUOpenCL)".
+
+C. RESULTADOS — MATRIZ (load_s; mediana/min/max por combinacao)
+  | combinacao            | loads (s)      | mediana | min | max |
+  |-----------------------|----------------|---------|-----|-----|
+  | Q4_K_M | CPU          | 0.8 / 0.6 / 0.5 | 0.6    | 0.5 | 0.8 |
+  | Q4_K_M | GPU (Vulkan) | 1.9 / 1.7 / 2.0 | 1.9    | 1.7 | 2.0 |
+  | Q4_K_M | GPU (OpenCL) | 20.9 / 5.5 / 5.5| 5.5    | 5.5 | 20.9|
+  | Q8_0   | CPU          | 1.0 / 0.8 / 1.2 | 1.0    | 0.8 | 1.2 |
+  | Q8_0   | GPU (Vulkan) | 4.5 / 3.1 / 2.9 | 3.1    | 2.9 | 4.5 |
+  | Q8_0   | GPU (OpenCL) | 5.4 / 5.5 / 5.6 | 5.5    | 5.4 | 5.6 |
+  (tentativa de validacao r00, fora da matriz: Q4_K_M Vulkan 1.5s)
+  CONTAGENS (Python, hard assert): planejadas 18 | executadas 18 | carga OK
+  18 | inferencia OK 18 | bloqueadas 0 | invalidas 0. Nenhum numero
+  estimado; nenhuma falha.
+
+D. LEITURA DOS NUMEROS (com os limites)
+  - [MEDIDO] CPU e' a carga mais RAPIDA nos dois modelos (mediana 0.6s Q4 /
+    1.0s Q8) — consistente com carga por mmap sem upload para VRAM.
+  - [MEDIDO] Vulkan: 1.9s (Q4) e 3.1s (Q8) — upload de pesos ao device entra
+    no timer.
+  - [MEDIDO] OpenCL: mediana 5.5s nos dois modelos. A PRIMEIRA carga OpenCL
+    da rodada (r1 do Q4) foi 20.9s — outlier inicial; as seguintes ficaram em
+    5.4-5.6s.
+    [HIPOTESE-NAO-ESTABELECIDA] causa do 20.9s (compilacao inicial de
+    kernels OpenCL / init de driver no primeiro uso) — nao medida com
+    telemetria; registrar como observado, nao como lei.
+  - [MEDIDO] Razoes SO' na metrica de carga (mesmo modelo/protocolo):
+    Q4: CPU/Vulkan = 0.6/1.9 (CPU ~3x mais rapido); Vulkan/OpenCL =
+    1.9/5.5 (Vulkan ~2.9x); Q8: CPU/Vulkan = 1.0/3.1; Vulkan/OpenCL =
+    3.1/5.5 (~1.8x). NAO extrapolar para inferencia (medida separada, ~0.5-
+    1.1s no texto de 56 chars; nao e' comparacao de qualidade).
+  - [LIMITE] Cool-downs/termica nao controlados (amostras: bateria 69-70%,
+    temp sensor 31.1-31.4 C; PSS amostrado apos o run). "Process cold" nao e'
+    disco frio (page cache). Sem promessa de estado ideal.
+
+E. OPENCL — CLASSE DE FALHA (historico vs hoje)
+  [MEDIDO] O erro historico CL_INVALID_MEM_OBJECT (-38) NAO reproduziu nesta
+  rodada: 6/6 cargas OpenCL LOAD_OK (Q4 x3, Q8 x3) e a inferencia pos-carga
+  tambem concluiu nos 6 (saida 62/68 chars, Desempenho registrado). Backend
+  efetivo confirmado no log do run ("GPU OpenCL (OpenCL / GPUOpenCL)").
+  Circuit breaker nao foi acionado (nao houve falha). Portanto: a falha
+  historica fica registrada como NAO-PERSISTENTE-NA-AMOSTRA (nao e'
+  correcao nem garantia; apenas nao ocorreu nas 6 tentativas de hoje).
+  Nenhuma inferencia sobre causa/estabilidade futura.
+
+F. TELEMETRIA E CONTROLES
+  [MEDIDO] Por run: bateria (level 69-71%), temperatura do SENSOR DE BATERIA
+  (30.6-31.4 C — nao e' junction de GPU), PSS amostrado apos o run, inferencia
+  separada (0.5-1.1s), PIDs por run, horarios inicio/fim.
+  PSS (linha TOTAL do dumpsys meminfo, KiB->MiB, AMOSTRA pos-run):
+    CPU (Q4 1741-1760; Q8 2485-2492) e Vulkan (Q4 1919-1971; Q8 2502-2655)
+    na faixa de 1.7-2.7 GiB;
+    OpenCL MUITO MENOR: Q4 327-374; Q8 231-297 MiB — consistente nos 6 runs.
+  [MEDIDO] O carregamento OpenCL e' REAL: o resumo do proprio app no run
+  mostra "load_tensors: OpenCL model buffer size = 1075.85 MiB" (e "VRAM:
+  6532 MiB livres de 7556 MiB"), e a inferencia concluiu. Vulkan tambem:
+  "Vulkan0 model buffer size = 1075.74 MiB". CPU: 1075.74 MiB mapped.
+  [MEDIDO — verificado pareado 02/10, runs extras r90 fora da matriz]
+  Onde vive o 1 GB em cada backend (mesmo modelo Q4, mesma carga):
+   - OpenCL: PSS TOTAL 302 MiB / RSS 423 MiB; no /proc/PID/maps existe o
+     MAPEAMENTO de ~1076 MiB de /dev/kgsl-3d0 (rw-s, compartilhado), mas as
+     paginas NAO residem no processo (a CPU nunca toca os pesos) -> nao entra
+     no PSS. Categoria "Gfx dev" do meminfo: 9.5 MiB apenas.
+   - Vulkan: PSS TOTAL 1.92 GiB / RSS 2.14 GiB; a categoria "Gfx dev" (Private
+     Dirty) mostra 1.56 GiB — o mesmo buffer, alocado pelo driver por um
+     caminho que o kernel ATRIBUI ao processo (entra no PSS).
+  [LEITURA] A diferenca de PSS e' de CONTABILIDADE, nao de consumo: os dois
+  backends alocam os mesmos ~1.07 GB de pesos na GPU (inferencia funciona nos
+  dois; buffer size identico no resumo do app). Nao usar PSS para comparar
+  "quanto cada backend consome"; para isso, usar a linha "Memória" do app
+  (model buffer) + leitura de VRAM. Efeitos em LMK/OOM entre backends sao
+  plausiveis mas NAO foram medidos — nao afirmar. Evidencia bruta:
+  logs-rodada-carregamento/pss_explicacao.txt (dumpsys meminfo + smaps_rollup
+  + maps de cada backend, runs r90).
+  [LIMITE] uso de CPU/GPU de fundo nao instrumentado; sem power measurement.
+  NOTA DE PROCEDENCIA DESTES DADOS: `pss`/`bateria` vivem no evento RECURSO
+  do journal de cada run; neste fechamento foram COPIADOS para o record.json
+  do MESMO run (campo "pss_fonte": "journal RECURSO (mesmo run)") porque o
+  gravador os escrevia depois do record — nenhum valor foi inventado.
+
+G. ARTEFATOS E VERIFICACAO (paths reais)
+  Pasta de saida: C:/Users/Gustavo/Desktop/hymt2/hymt2-carga-rodada/ (20 dirs
+  r00..r19 — r19 e' a validacao pos-instalacao do APK novo; r00 a validacao
+  inicial; ambas FORA da matriz 18. cada um com journal.jsonl + record.json + delta.txt + log_final.txt
+  + n0.txt), mais resultados.csv (parcial, gravado a cada run).
+  Em docs/vulkan-hymt2-fusion-round/logs-rodada-carregamento/:
+  agregado.json, agregado.csv, por_run.csv, carga_matriz.log,
+  modelos_sha.txt (hash dos modelos device-side), manifest (abaixo).
+  [MEDIDO] Verificacao por Python: existencia/hash/tamanho de cada item do
+  manifesto + contagens com hard assert (18/18/18/0/0). O manifesto e'
+  registro; a validacao da conclusao sao os records por run + a cadeia.
+
+H. FINALIZACAO E ESTADO
+  - UI restaurada ao estado INICIAL DESTA RODADA (como encontrado):
+    Q4_K_M + CPU + Portugues + 6 thr; conferido por leitura e pelo prefs
+    (backend=CPU). Estado efetivo carregado no fim: nenhum (app recem-usado,
+    sem job ativo). Nota: cada run seleciona backend pela UI, que PERSISTE; a
+    restauracao cobriu isso.
+  - Nenhum novo APK/.so/install/pacote/publicacao/commit/push/remocao nesta
+    rodada de medicao. Nada de F32/default/OpenCL-fix/Whisper/NPU.
+  - [LIMITE] O timer mede ATE' o loadModel retornar; o custo ate' o primeiro
+    token (kernel/JIT de primeira geracao) nao esta incluido — o log do app
+    mostra a geracao de 56 chars em ~0.5-1.1s, mas isso nao substitui um
+    teste de first-token.
+  CONCLUSAO: tempo EXCLUSIVO de carga (timer do app, 0.1s) na amostra de
+  hoje: Q4_K_M -> CPU 0.6s | Vulkan 1.9s | OpenCL 5.5s (primeira 20.9s);
+  Q8_0 -> CPU 1.0s | Vulkan 3.1s | OpenCL 5.5s — com 18/18 cargas e 18/18
+  inferencias concluidas nos 6 combinacoes; OpenCL sem a falha historica
+  nesta amostra.
+
+
+POS-MEDICAO (pedido do usuario, fora do escopo da medicao): o log do app ja
+mostrava "Modelo carregado em X.Xs." em toda carga com sucesso (18/18 runs
+desta medicao leram a linha; evidencia na tela: evidencia_log_carga_na_tela.png).
+Para cobrir "sempre que for carregado" tambem no insucesso, o caminho de ERRO
+passou a registrar o tempo: "ERRO ao carregar o modelo apos X.Xs: <erro>".
+Gate completo executado: :app:testDebugUnitTest + :app:lintDebug +
+:app:assembleDebug -> BUILD SUCCESSFUL (2m22s; 52 tasks). Novo APK de DEBUG
+27d9b20b35679be2c4ec2e565fccc5a9277b79bb1b54e9bb32d241220facf5a8
+(11.410.064 B) instalado com install -r (Success, lastUpdate 02/10 12:07:13);
+rollback preservado (apk_instalado_agora.apk = 9f42b744...). Dex do APK novo
+continua lendo a pasta 9-arm64-v8a (conferido). Validacao ao vivo
+pos-instalacao (run r19, extra): Q4_K_M/CPU cold -> LOAD_OK 0.8s, inferencia
+0.6s, sem crash; log na tela (evidencia_log_pos_install.png) mostra
+"6. Modelo carregado em 0.8s.". NAO e' release promovida; e' APK de debug.

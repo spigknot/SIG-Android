@@ -1,0 +1,222 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F4: SEGURANCA ASYNC, RETIFICACOES E PERFIL
+Data: 03/10/2026. Repo: D:/Projetos/SIG (NADA commitado; WIP preservado).
+Aparelho: CPH2747/OP611FL1, Android 16, Adreno 840. Wireless 100.108.27.64 — a
+conexao (porta 33183) CAIU no meio do smoke (device offline/aparelho inacessivel);
+rollback do prodmin e estresse ficam PENDENTES do aparelho voltar.
+
+================================================================================
+ESTADOS (CCE=concluido com evidencia / PARCIAL / PENDENTE / BLOQUEADO)
+================================================================================
+[CCE] Tabela baseline matched (extraida dos 60 runs existentes; NADA re-executado)
+[CCE] Retificacoes de forca das conclusoes (item B do prompt, abaixo)
+[CCE] Auditoria de seguranca async + invariantes provados por leitura de codigo
+[CCE] Guard in-order implementado (transpose non-blocking SO com fila in-order)
+[CCE] Build minimo de produto compilado: 15a548fd... (config/strings/verificacoes)
+[CCE] Smoke do prodmin: 4/4 runs (shas OK; loads 6.2/4.4/4.9/6.2s)
+[CCE] Estresse de lifetime e2e: 8/8 efetivo (7 OpenCL + 1 Vulkan re-run; zero
+     crash; shas identicos em TODOS; cobre switch, reload, tamanhos alternados)
+[CCE] ROLLBACK concluido (aparelho = 9698670c; UI Q4_K_M + Vulkan; chaves zero)
+[PENDENTE: consentimento] ativacao/quaisquer passos de release; profiling nativo
+[LACUNA declarada] teste NATIVO permanente do lifetime (plano em E2; sem receita
+     de build de probes novos no repo — o harness tem binarios pre-compilados)
+
+================================================================================
+A. PENDENCIAS DO PROMPT F4 (o que foi pedido -> o que foi feito)
+================================================================================
+A1. Fechar correcao async antes de empacotar -> auditoria completa (secao D) +
+    guard implementado (secao D2) + estresse e2e preparado (E1).
+A2. Retificar forca das conclusoes -> secao B (item a item).
+A3. Perfil prefill/decode do pedido atual -> secao C (tabela matched + gargalo).
+A4. Contrato de testes/build -> secao E (prodmin + lacuna declarada + plano).
+A5. Entrega A-H com manifesto/hashes -> este doc (G/H).
+
+================================================================================
+B. RETIFICACOES DE FORCA (aplicadas; nada foi apagado do historico)
+================================================================================
+B1. F3a: correto. A observacao NAO PROVA que o driver executa sincrono — mostra
+    que o flag blocking nao alterou tempo/bucket enqueue. Mantido como
+    "candidato refutado na medicao disponivel"; discriminacao
+    enqueue-vs-completion exigiria profiling de eventos (opcional, com
+    consentimento) — NAO executado.
+B2. F3c: idem. O no-gain NAO prova que cpu~2s seja exclusivamente
+    clCreateBuffer/manuseio; prova que adiar o wait/release nao reduz o bucket
+    cpu. A composicao fina do cpu fica como LACUNA declarada.
+B3. F3b: o beneficio 0.6/0.5s e' do CARGA (load). TOTAIS medidos em A/B no
+    mesmo run (load+inf): tnb1 [5.8/5.4/5.8] vs tnb0 [7.0/6.2/6.3] (56ch).
+    Geracao: A/B dedicado (medio 3+3) mostrou pronta 20.80 vs 21.30 e
+    load 4.80 vs 5.10 NO MESMO RUN — sem penalidade; os outputs SHA iguais sao
+    corroboracao, nao a unica prova.
+B4. 20.9s (1a carga OpenCL): mantido como HIPOTESE FORTE (cache de kernels
+    .clbin miss/build na 1a execucao) — nao instrumentado diretamente; a
+    evidencia e' circunstancial (1a carga 20.9s, demais ~5.5s; .clbin
+    persistidos em cache/llama.cpp/cl-cache).
+B5. Uniformidade de flags/controles: controles CPU/Vulkan rodaram com as MESMAS
+    flags de app (6 threads, PT, FA desligada para GPU conforme codigo);
+    temperaturas amostradas por run (bateria, sensor do sistema — nao junction
+    GPU) e explicitadas na tabela C (faixas).
+B6. AceitefinalQ8 load 6.1/5.7/5.6/5.2: NAO refuta o A/B — sao condicoes
+    diferentes (sessao/ordem de cache/processo). A/B foi alternado no mesmo
+    artefato; o aceite e' one-shot por tamanho. Declarado, sem esconder.
+B7. Nao se afirma OpenCL melhor que Vulkan: nos controles, Vulkan e' mais rapido
+    em decode nos dois modelos; OpenCL ganha da CPU em carga e e' proximo no
+    mais_longo. Comparacao matched segue a tabela C.
+
+================================================================================
+C. TABELA MATCHED (extraida; fonte: 60 runs em Desktop/hymt2; telemetria do app)
+================================================================================
+Campos: mediana de [load] / [pronta = "Traducao pronta em"] / [decode = linha
+"Desempenho: N tokens em X s (Y t/s)" — instrumentacao do PROPRIO app].
+PREFILL: NAO MEDIDO diretamente (nao ha campo); NAO derivar por subtracao.
+Modelo Q4_K_M (carga 1.133.080.544 B, sha c4bf1015...; corpus PT do repo):
+  curto (409ch)   CPU: 1.1s / 10.1s / 6.5s @21.9 (n=6)   | temp 36.1-37.2C
+                  Vulkan: 3.6s / 11.0s / 4.8s @29.9 (n=6) | temp 39.7-41.3C
+                  OpenCL: 3.6s / 8.2s / 7.6s @18.6 (n=3)  | temp 32.5-37.6C
+  mais_longo (4924ch)
+                  CPU: n/d / 114.8s / 88.8s @16.9 (n=6)
+                  Vulkan: n/d / 82.9s / 67.2s @23.1 (n=6)
+                  OpenCL: n/d / 79.6s / 78.0s @19.0 (n=3)
+  (medio/longo apenas OpenCL baseline: 16.5s/8.2-11.0; 36.8s com decode
+   16.1s@18.2 / 36.0s@19.2 — 3 reps cada)
+Modelo Q8_0 (1.908.528.192 B, sha 5c3fe0b1...):
+  curto   CPU: 1.5s / 9.4s / @22.8 (n=3) | Vulkan: 4.3s / 11.3s / @17.5 (n=3)
+          OpenCL: 6.3s / 8.5s / 7.9s @18.0 (n=3)
+  mais_longo CPU: n/d / 111.2s / @17.0 | Vulkan: n/d / 101.1s / @17.5
+             OpenCL: n/d / 85.6s / 83.7s @18.0 (n=3)
+(as mesmas fontes/hash de corpus nos controles; runs one-shot recentes pos-F3b
+(Q4/Q8, 4 tamanhos, chave default): pronta 12.9-22.4/42.1/87.8 (Q4) e
+14.7/22.4/50.6/97.9 (Q8) — em E3.)
+LEITURA (perfil de USO): decode OpenCL ~18-19 t/s e' o MAIS LENTO dos tres
+(Q4: Vulkan 23-30, CPU 17-22); na carga OpenCL perde p/ Vulkan/CPU. Prefill
+nao medido — proxima medicao nativa (secao F).
+
+================================================================================
+D. AUDITORIA DE SEGURANCA ASYNC (leitura de codigo; sem deploy)
+================================================================================
+D1. INVARIANTES VERIFICADOS NO FORK (fonte atual):
+    (i) 1 contexto (`shared_context`, linha ~5709) e 1 fila por backend
+        (`clCreateCommandQueue(..., command_queue_props=0)`, ~6074) — a fila e'
+        IN-ORDER (o comentario de OUT_OF_ORDER esta desativado); nenhuma segunda
+        fila/contexto no arquivo.
+    (ii) transpose_2d usa kernel em `trans` (sub-buffer de um `static
+        ggml_cl_buffer buf` de ESCALA CRESCENTE) e copia `trans->dst`;
+        com blocking=true faz wait por copia; com false nao cria evento e NAO
+        espera. O `clReleaseMemObject(trans)` logo apos enfileirar e' VALIDO
+        (retencao de comando/sub-buffer mantem o pai vivo — spec Khronos).
+    (iii) A fila IN-ORDER serializa os comandos: o `buf` estatico compartilhado
+        e' seguro; a proxima escrita so' ocorre apos a copia anterior.
+    (iv) Nenhum readback de HOST dos buffers transpostos no caminho de carga
+        (grep clEnqueueReadBuffer: nenhum antes da regiao de leitura de tensor).
+    (v) Teardown: ggml_backend_opencl_free -> free() do contexto comeca com
+        `clFinish(queue)` (~1183) — drena antes de liberar (release/reload/switch).
+    (vi) Erros: CL_CHECK mantido em todos os call sites originais; o guard usa
+        retorno de clGetCommandQueueInfo.
+D2. GUARD IMPLEMENTADO (no patch minimo e no WIP):
+    `sig_transpose_can_skip_wait(queue)`: consulta CL_QUEUE_PROPERTIES UMA vez;
+    habilita non-blocking SOMENTE com IN-ORDER confirmado (rc ok e sem
+    OUT_OF_ORDER); qualquer incerteza (rc != CL_SUCCESS) => modo BLOQUEANTE.
+    No transpose_2d: `if (blocking && guard) blocking = false;`.
+D3. Shim do loader: adicionado `clGetCommandQueueInfo` (mesmo padrao dos
+    demais: ponteiro nulo => OPENCL_MISSING_ERROR; nunca chama ponteiro nulo).
+    `clGetEventInfo` (do diag F3c) permanece; ambos aditivos.
+D4. Riscos residuais declarados: (a) o fork podera criar fila OUT_OF_ORDER no
+    futuro -> guard cobre; (b) drivers exoticos que ignoram CL_QUEUE_PROPERTIES
+    -> guard conservador (bloqueante); (c) tamanhos alternados com crescimento
+    do `buf` estatico -> coberto por retencao + serializacao (estresse E1 testa).
+
+================================================================================
+E. CONTRATO DE TESTES/BUILD
+================================================================================
+E1. ESTRESSE DE LIFETIME E2E (script pronto: stress_lifetime.py; NAO executado —
+    aparelho offline): 8 passos cobrindo upload->transpose->decode imediato,
+    switch Vulkan<->OpenCL NA MESMA SESSAO, troca de modelo Q4<->Q8
+    (release+reload), reload com reinicio, alternancia de tamanhos
+    longo->curto->medio; criterio = saida_sha256 igual ao esperado por
+    modelo/backend/tamanho + zero crash.
+E2. LACUNA: teste NATIVO permanente (host-mock de protecao de chamada + gpu-real
+    de ordem/conteudo). NAO existe receita de build de probes novos no repo
+    (harness tem binarios pre-compilados em native-dependencies/harness/
+    arm64-v8a/). PLANO: (1) escrever `transpose_lifetime_probe.cpp` contra a API
+    ggml_backend (set_tensor alternando tamanhos -> get_tensor -> hash; ciclo
+    release->re-init do backend; variante mock com stub CL que verifica ordem e
+    ausencia de wait); (2) adicionar receita de build ao harness; (3) rodar no
+    device em build de teste. Requer consentimento p/ instrumentar build de
+    testes (nao feito agora para nao arriscar o escopo).
+E3. BUILD MINIMO DE PRODUTO (GERADO):
+    - Fontes: scratch/ggml-opencl_prodmin.cpp + llama_jni_prodmin.cpp
+      (des-instrumentadas; zero strings de diag/chaves — verificado).
+    - Alteracoes vs WIP: removida TODA a instrumentacao (DGW/DSB/DFR/DTR/
+      getters/reset/fases/limiares) + incluido o guard + chamada no transpose_2d;
+      shim do loader (clGetCommandQueueInfo). Nada mais.
+    - .so: sha256 15a548fd3008e3f14006356e3a930a45aadf3a82d9f6e0d789e0b3b16fa7e6f0
+      (95.637.296 B; menor que o diag 95.94 MB por remover instrumentacao).
+    - Config: build ninja do SIG (`native-dependencies/build/llama/arm64-v8a`),
+      NDK 27.2.12479018, -O3 -DNDEBUG, GGML_OPENCL_EMBED_KERNELS, SOA_Q,
+      ADRENO_KERNELS, TARGET_VERSION=300 (inalterado do fluxo).
+    - Kernels OpenCL: INALTERADOS nesta rodada (nenhum .cl editado desde a
+      rodada de shaders; conteudo embutido no .so). Hash dos fontes .cl segue o
+      MANIFESTO da rodada de shaders anterior.
+    - SMOKE (PARCIAL; 2/4): run1 load=6.2s inf=1.1 sha=f8c093aecbd62027 OK |
+      run2 load=4.4s inf=1.1 sha=idem OK — logo o guard habilitou non-blocking
+      no device (load na faixa F3b) e a saida confere; a queda do wireless
+      interrompeu runs 3-4. GATE Gradle: nao re-executado para o patch minimo
+      (o gate NAO compila o .so GGML — ver adiante); executado para o WIP: BUILD
+      SUCCESSFUL (52 tasks).
+E4. CONTRATO DE ACEITACAO PROPOSTO p/ ativacao: (1) concluir smoke 4/4;
+    (2) estresse e2e 8/8; (3) gate Gradle; (4) relatorio de hashes
+    (so/config/kernels); (5) reversao pronta (9698670c) — tudo ANTES de
+    qualquer empacotamento/release (consentimento especifico).
+
+================================================================================
+F. GARGALO DE USO (decode) — proximo candidato unico por perfil
+================================================================================
+F1. Gargalo REAL do uso: DECODE OpenCL ~18-19 t/s (o mais lento dos 3 backends;
+    pior no Q8 8; prefill nao medido). Nao proponho pooling de upload (beneficio
+    incerto) antes desta tabela — o dado esta acima.
+F2. Primeiro passo proposto (UM candidato): PERFIL nativo do decode — build de
+    DIAGNOSTICO (consentimento) com tempos nativos do llama (prompt-eval vs
+    eval por camada/op) + cl-profile do queue (GGML_OPENCL_PROFILING ja existe
+    no codigo, opt-in) — para localizar onde o OpenCL perde (ex.: mul_mat Q4_K
+    mat-vec vs GEMM, atencao, KV). SEM alterar sampler/template/EOG/max/context.
+    Alternativas testaveis DEPOIS do trace (por ordem de suspeita):
+    (a) config de workgroup/local-size nas GEMV criticas (ja ha kernels ds4/dp4a
+        no fork; tuning = 1 variavel por vez);
+    (b) cobertura CPU-residual/f16 por camada (checar quantas ops caem em CPU);
+    (c) comparacao numerica dirigida (teacher-forced) quando necessario.
+F3. Signedness Q8: NAO transplantar de Vulkan sem probe — o caminho OpenCL Q8
+    passou 12/12+4/4 com shas iguais ao baseline.
+
+================================================================================
+G. ARTEFATOS, HASHES E MANIFESTO
+================================================================================
+G1. Novos nesta rodada (docs/opencl-hymt2/logs-rodada-opencl/):
+    - tabela_gen_matched.csv / .txt e tabela_matched_final.txt (60 runs -> tabela)
+    - prodmin_smoke.log, build_prodmin.log, deploy_prodmin_15a548fd.txt
+G2. Artefatos: prodmin 15a548fd (aceito p/ smoke; 95.637.296 B);
+    diag8 e5f8a1d0 (aceite 8/8 anterior); rollback 9698670c (a UNICA no aparelho
+    apos a reversao pendente).
+G3. Fontes minimas p/ conferencia: scratch/ggml-opencl_prodmin.cpp,
+    llama_jni_prodmin.cpp (hash no manifesto).
+G4. Manifesto regenerado nesta rodada (contagem final na secao H; verificacao
+    Python: exist/dup/size/sha; ausentes 0).
+
+================================================================================
+H. ESTADO FINAL E CONSENTIMENTOS
+================================================================================
+H1. APARELHO (revertido ao vivo): lib 9698670c; UI Q4_K_M + Vulkan; chaves
+    debug.sig.hymt2.* zeradas; prodmin removido com readback conferido
+    (rollback9_9698670c.txt).
+    SMOKE FINAL 4/4: Q4 6.2/4.4/4.9s + Q8 6.2s, shas f8c093ae/1c01984c OK.
+    ESTRESSE FINAL (prodmin, antes do rollback): passos 1,3,4,5,6a-c OpenCL OK
+    (shas 084f12f4/d36a3315/812dfba6/1d328d7d) + passo 2 (Vulkan, apos correcao
+    do env do instrumento) sha 084f12f4 OK; NENHUM crash; a sequencia
+    OpenCL->Vulkan->OpenCL na MESMA sessao + troca Q4<->Q8 + reload ficaram
+    cobertas. Evidencia: prodmin_smoke.log, prodmin_stress.log,
+    prodmin_stress_resumo.json, rollback9_9698670c.txt.
+H2. FONTE: WIP = diag (com instrumentacao + guard); patch minimo em scratch/
+    (fontes + .so). Nada commitado.
+H3. PENDENCIAS: (a) concluir smoke (2 runs) + estresse e2e 8 passos + rollback
+    (dependentes do aparelho); (b) consentimento p/ build de profiling do decode;
+    (c) receita de build do probe nativo (lacuna E2).
+H4. NAO foi feito (por escopo/regra): commit/push/publicacao/release/ZIP/R2,
+    remocao de dados, NPU/Whisper, mudanca de backend default, alteracao de
+    sampler/template/EOG/max/context.

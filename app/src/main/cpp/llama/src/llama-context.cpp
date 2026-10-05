@@ -4,6 +4,39 @@
 #include "llama-arch.h"
 #include "llama-graph.h"
 #include "llama-impl.h"
+
+// SIG PROF (F10): fases internas do decode() — opt-in via debug.sig.hymt2.decprof
+// (default OFF; sem clocks quando desligado). Segmentos ANINHADOS: prep cobre
+// as reservas antes do loop; build/compute sao somados POR UBATCH dentro do loop
+// (dentro de total); residual = total - prep - build - compute.
+static int  sig_prof_enabled = 0;
+static long long sig_dc_prep_us = 0, sig_dc_build_us = 0, sig_dc_compute_us = 0;
+static long long sig_dc_total_us = 0, sig_dc_calls = 0, sig_dc_ubatches = 0;
+
+extern "C" void sig_prof_set_enabled(int on) { sig_prof_enabled = on; }
+extern "C" void sig_prof_reset(void) {
+    sig_dc_prep_us = sig_dc_build_us = sig_dc_compute_us = 0;
+    sig_dc_total_us = sig_dc_calls = sig_dc_ubatches = 0;
+}
+extern "C" long long sig_prof_prep_us(void)    { return sig_dc_prep_us; }
+extern "C" long long sig_prof_build_us(void)   { return sig_dc_build_us; }
+extern "C" long long sig_prof_compute_us(void) { return sig_dc_compute_us; }
+extern "C" long long sig_prof_total_us(void)   { return sig_dc_total_us; }
+extern "C" long long sig_prof_calls(void)      { return sig_dc_calls; }
+extern "C" long long sig_prof_ubatches(void)   { return sig_dc_ubatches; }
+
+struct SigDecProfScope {
+    std::chrono::steady_clock::time_point t0;
+    bool on;
+    SigDecProfScope() : t0(std::chrono::steady_clock::now()), on(sig_prof_enabled != 0) {}
+    ~SigDecProfScope() {
+        if (on) {
+            sig_dc_total_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                                   std::chrono::steady_clock::now() - t0).count();
+            sig_dc_calls++;
+        }
+    }
+};
 #include "llama-batch.h"
 #include "llama-io.h"
 #include "llama-memory.h"
@@ -1319,6 +1352,9 @@ bool llama_context::set_adapter_cvec(
 }
 
 llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, llm_graph_type gtype, llama_memory_context_i * mctx, ggml_status & ret) {
+    const bool sig_on = (sig_prof_enabled != 0);
+    const auto sig_t0 = sig_on ? std::chrono::steady_clock::now()
+                               : std::chrono::steady_clock::time_point();
     if (mctx && !mctx->apply()) {
         LLAMA_LOG_ERROR("%s: failed to apply memory context\n", __func__);
         ret = GGML_STATUS_FAILED;
@@ -1378,7 +1414,18 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         //LLAMA_LOG_INFO("graph set inputs time: %.3f ms\n", (ggml_time_us() - t_start_us)/1000.0);
     }
 
+    if (sig_on) {
+        sig_dc_build_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                               std::chrono::steady_clock::now() - sig_t0).count();
+    }
+    const auto sig_t1 = sig_on ? std::chrono::steady_clock::now()
+                               : std::chrono::steady_clock::time_point();
     const auto status = graph_compute(res->get_gf(), ubatch.n_tokens > 1);
+    if (sig_on) {
+        sig_dc_compute_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                                 std::chrono::steady_clock::now() - sig_t1).count();
+        sig_dc_ubatches++;
+    }
     if (status != GGML_STATUS_SUCCESS) {
         LLAMA_LOG_ERROR("%s: failed to compute graph, compute status: %d\n", __func__, status);
         ret = status;
@@ -1699,6 +1746,7 @@ static bool needs_raw_logits(const llama_ubatch & ubatch, const std::map<llama_s
 }
 
 int llama_context::decode(const llama_batch & batch_inp) {
+    SigDecProfScope sig_scope;
     // MTP hook batches carry both token (next-token id) and embd (h_nextn row),
     // so accept either present rather than requiring exactly one.
     GGML_ASSERT(batch_inp.token || batch_inp.embd);
@@ -1845,6 +1893,11 @@ int llama_context::decode(const llama_batch & batch_inp) {
 
     int64_t n_outputs_prev = 0;
     int64_t n_tokens_prev  = 0;
+
+    if (sig_scope.on) {
+        sig_dc_prep_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                              std::chrono::steady_clock::now() - sig_scope.t0).count();
+    }
 
     do {
         const auto & ubatch = mctx->get_ubatch();

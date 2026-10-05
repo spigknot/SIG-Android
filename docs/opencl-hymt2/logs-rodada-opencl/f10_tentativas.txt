@@ -1,0 +1,17 @@
+== TABELA DE TENTATIVAS (categorias EXCLUSIVAS por Python) ==
+  ciclo                  Q4_K_M_curto_ph_q4_curto_ocl       OpenCL curto  cat=protocolo_invalido           sha=c92eec98 modelo Q4_K_M nao selecionad
+  ciclo                  Q4_K_M_curto_ph_q4_curto_vk        Vulkan curto  cat=protocolo_invalido           sha= backend != OpenCL
+  ciclo                  Q4_K_M_mais_longo_ph_q4_mais_ocl   OpenCL mais_l cat=outro_invalido               sha=b20256db 
+  ciclo                  Q4_K_M_mais_longo_ph_q4_mais_vk    Vulkan mais_l cat=protocolo_invalido           sha= backend != OpenCL
+  ciclo                  Q8_curto_ph_q8_curto_ocl           OpenCL curto  cat=outro_invalido               sha=bb287296 
+  ciclo-pt               Q4_K_M_curto_pt2_q4_curto_vk       Vulkan curto  cat=valido_total                 sha=084f12f4 
+  ciclo-pt               Q4_K_M_curto_pt_q4_curto_ocl       OpenCL curto  cat=valido_total                 sha=084f12f4 
+  ciclo-pt               Q4_K_M_curto_pt_q4_curto_vk        Vulkan curto  cat=protocolo_invalido           sha= backend != OpenCL
+  ciclo-pt               Q4_K_M_mais_longo_pt2_q4_mais_vk   Vulkan mais_l cat=valido_total                 sha=5f80d9b9 
+  ciclo-pt               Q4_K_M_mais_longo_pt_q4_mais_ocl   OpenCL mais_l cat=valido_total                 sha=4d51e74f 
+  ciclo-pt               Q4_K_M_mais_longo_pt_q4_mais_vk    Vulkan mais_l cat=protocolo_invalido           sha= backend != OpenCL
+  ciclo-pt               Q8_curto_pt2_q8_curto_ocl          OpenCL curto  cat=valido_total                 sha=d36a3315 
+  ciclo-pt               Q8_curto_pt_q8_curto_ocl           OpenCL curto  cat=valido_total                 sha=d36a3315 
+
+CONTAGEM EXCLUSIVA: {'protocolo_invalido': 5, 'outro_invalido': 2, 'valido_total': 6} | total: 13
+csv: D:\Projetos\SIG\docs\opencl-hymt2\logs-rodada-opencl\f10_tentativas.csv

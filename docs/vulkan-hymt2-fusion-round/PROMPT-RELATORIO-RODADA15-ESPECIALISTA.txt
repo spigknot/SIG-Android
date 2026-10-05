@@ -1,0 +1,250 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 15 (30/09/2026)
+LOCALIZACAO NO PREFILL, BLOCO 0 — Hy-MT2 / Vulkan / CPH2747
+================================================================================
+Responde ao "PROMPT AO AGENTE — APOS RODADA 14: LOCALIZACAO NO PREFILL,
+BLOCO 0". Executado: retificacoes R1-R5 no TXT da r14 (§2), captura da
+ENTRADA e SAIDA do bloco 0 em L[0] com matriz COMPLETA por posicao (§4),
+controles estruturais (§4.5), refinamento interno do bloco 0 (§5-A) e
+REPLAY REAL da primeira operacao suspeita com operandos reais (§6).
+NENHUM commit/push/publicacao/APK; produto, gate e pesos intactos;
+OpenCL/Whisper/NPU fora de escopo; nenhum benchmark repetido (§8).
+
+ESTADOS:
+  A. fase corrigida (um prefill + decodes) ................. CCE
+  B. mapa compacto por op/backend do bloco 0 ............... CCE (no
+     nivel de NOS ATRIBUIDOS, rotulado — §B)
+  C. entradas/saidas completas por token + controles ....... CCE
+  D. intervalo refinado + replay real da operacao .......... CCE
+  E. conclusoes locais e limites ........................... CCE
+  F. hashes/diffs/comandos/retornos/testes ................ CCE
+
+--------------------------------------------------------------------------------
+A. FASE CORRIGIDA: UM PREFILL, DEPOIS DECODES  [§9-A]
+--------------------------------------------------------------------------------
+A.1 O run tem UMA unica fatia de prefill (277 tokens < n_batch 512) e,
+    depois, decodes teacher de UM token. O texto do TXT da r14 que dizia
+    "prefill posterior : cpu=1122 vulkan=5" estava ERRADO (retificacao
+    R1): a fase posterior e' DECODE. Leitura corrigida do DIAGNODES:
+      GPU1  prefill (1a e unica fatia, 277 tok): cpu=193  vulkan=934
+      GPU1  decode (1 tok x 342, fora do run de checkpoint): cpu=1122 vulkan=5
+      CPU0  qualquer fase:                       cpu=1127 vulkan=0
+A.2 Convencao L[0] confirmada em run: "apos 277 token(s) de prefill
+    (soma das fatias), 0 llama_decode(s) de token; dump ANTES do decode
+    do passo". A parada foi EXPLICITA (--parar-apos-dump) com selo
+    proprio: "MEDICAO: VALIDA (CHECKPOINT de L[0]: parada explicita por
+    protocolo — nao eram esperadas as 343 avaliacoes)" — contagens
+    preservadas e registradas (rc=0 nos dois backends).
+A.3 Correcao da r14 (retificacao R2): o rotulo "S = produtor CPU antes
+    da transferencia" era incorreto para o GPU1 (o trace mostrava
+    buffer=Vulkan0 exec=Vulkan0). Chamo aqui S de "saida dos blocos /
+    produtor de pre_norm_final", com o BACKEND EFETIVO declarado por
+    backend. S/U confirmam DUP/readback coerentes naquele ponto — NAO
+    sao a primeira fronteira CPU/GPU interna do prefill.
+
+--------------------------------------------------------------------------------
+B. MAPA COMPACTO POR OP/BACKEND DO BLOCO 0  [§9-B, §2.2]
+--------------------------------------------------------------------------------
+B.1 Inventario do log DIAGBLOCO0 — resumo AGREGADO por (tipo de
+    operacao, backend) dos nos do intervalo [entrada do bloco0,
+    saida do bloco0] no PREFILL (n_tok=277, run_id=run15_*), 35 nos:
+    CPU0  (tudo CPU):
+      ADD|CPU=2 FLASH_ATTN_EXT|CPU=1 GLU|CPU=1 MUL_MAT|CPU=7 MUL|CPU=4
+      PERMUTE|CPU=3 RESHAPE|CPU=4 RMS_NORM|CPU=4 ROPE|CPU=2
+      SET_ROWS|CPU=2 VIEW|CPU=5
+    GPU1 (mesmos 35 nos):
+      MUL_MAT|Vulkan0=7  RMS_NORM|Vulkan0=4  RESHAPE|Vulkan0=4
+      ADD|Vulkan0=2  ROPE|Vulkan0=2  VIEW|Vulkan0=3  MUL|Vulkan0=4
+      PERMUTE|Vulkan0=1  FLASH_ATTN_EXT|Vulkan0=1  GLU|Vulkan0=1
+      PERMUTE|CPU=2  SET_ROWS|CPU=2  VIEW|CPU=2
+      => 29 nos atribuidos a Vulkan0, 6 a CPU.
+B.2 ROTULO HONESTO (retificacao R3): isto e' um resumo de NOS
+    ATRIBUIDOS (ggml_backend_sched_get_tensor_backend por no), NAO de
+    shaders/kernels/dispatches; views podem nao executar e fusoes podem
+    juntar nos. Nao afirmo que os 934 do prefill sao "operacoes sem
+    pesos" nem que os 193 sao "matmuls" — o inventario acima e' o
+    primeiro nivel confiavel (tipo de op do no + backend atribuido) e
+    foi limitado ao bloco 0 como pedido.
+B.3 Buffer types SEPARADOS de backend executante (§4.2): no GPU1,
+    E0 (entrada do bloco0) = buffer Vulkan_Host, host=1, exec=CPU;
+    S0 (saida do bloco0)  = buffer Vulkan0, host=0, exec=Vulkan0.
+    No CPU0 os dois = buffer CPU, host=1, exec=CPU. Distingo portanto
+    identidade logica de operandos (mesmos ids/pesos/threads/batch)
+    de colocacao e memoria (R4: as alocacoes NAO sao iguais).
+
+--------------------------------------------------------------------------------
+C. ENTRADAS/SAIDAS COMPLETAS POR TOKEN, CONTROLES E RESULTADO  [§9-C]
+--------------------------------------------------------------------------------
+C.1 Instrumento: --dump-matriz grava a matriz COMPLETA do batch
+    (277 linhas x 2048 floats = 567.296 valores por canal) + .idx com
+    (idx_pos_global, id_token) por linha. Os .idx sao IDENTICOS entre
+    backends nos quatro canais (ids do prefill conferidos: 36058,
+    9036, 68876, 13696, 1791, 23184, ...). Nenhum recorte e' apresentado
+    como tensor inteiro: shape/stride/dtype vem do trace (shape
+    [2048,277,1], stride [4,8192,2269184], dtype=0 F32).
+C.2 DEFECTO ENCONTRADO E CORRIGIDO (§4.5): na primeira versao, E0
+    estava apenas NOMEADO (sem set_output) e o scheduler REUSOU o
+    buffer: E0.mat == S0.mat byte a byte no CPU0 (aliasing medido) e a
+    "entrada" era na verdade a saida do bloco. Correcao: set_output em
+    E0 e S0 (marca preserva o buffer antes do alloc). Controle exigido:
+    os LOGITS com e sem a marcacao sao IDENTICOS — cpu 0/120818,
+    vulkan 0/120818 (mesmos bins v11b x v11d). A marcacao nao alterou
+    o efeito; nenhum mapa de colocacao mudou (DIAGBLOCO0 identico).
+    (Logits iguais nao provam intermediarios iguais — apenas
+    reproducao, como registrado.)
+C.3 REPRODUTIBILIDADE: E0 de runs distintos (v11d x v11e, com e sem
+    canais configuraveis) idêntico: 0/567296. Finitude: 0 NaN/Inf nos
+    quatro checkpoints e nas duas saidas do replay.
+C.4 RESULTADOS (matriz completa CPU0 x GPU1; max_abs/RMSE globais e
+    linhas divergentes; escalas relativas ao rms do proprio tensor):
+    E0 (entrada do bloco0 = retorno de build_inp_embd: get_rows do
+        tok_embd q6_K + select + view/scale quando aplicavel):
+        difs 0/567296 | max_abs 0 | RMSE 0 | linhas 0/277 | rms 0.017125
+        => ENTRADA COMPLETA IDENTICA (rubrica §5-B descartada).
+    S0/primeiro checkpoint interno — attn_norm (saida da 1a RMS_NORM):
+        difs 169891/567296 | max_abs 1.1920929e-07 | RMSE ~2e-9
+        linhas 117/277 | rms 0.030228  => ~1 ULP (arredondamento f32).
+    attn_out (fim da atencao do bloco0, antes do residual/FFN):
+        difs 567294/567296 | max_abs 0.009426415 | RMSE 0.000157118
+        linhas 277/277 | rms 0.013477 => erro relativo 1.1658%.
+    S0 real (saida do bloco0, l_out do il=0):
+        difs 567295/567296 | max_abs 0.023579180 | RMSE 0.000340105
+        linhas 277/277 | rms 0.017376 => erro relativo 1.9573%.
+    Leitura: a ENTRADA e' bit-exata; a norma passa ~1 ULP; a divergencia
+    de ESCALA nasce ENTRE attn_norm e attn_out e cresce ate o fim do
+    bloco — propagacao classificada (rubrica §5-A/§5-D), sem chamar o
+    primeiro bit diferente de bug.
+
+--------------------------------------------------------------------------------
+D. INTERVALO REFINADO E REPLAY REAL DA OPERACAO SUSPEITA  [§9-D, §6]
+--------------------------------------------------------------------------------
+D.1 Intervalo concreto: [attn_norm, attn_out] do bloco 0. Suboperacoes
+    nesse intervalo (fonte hunyuan-vl, inspecionado): build_qkv (3
+    MUL_MATs: Q/K/V), RoPE (Q e K), normas Q/K (RMS_NORM), build_attn
+    (FLASH_ATTN_EXT + wo). O mapa §B coloca todos esses nos em
+    Vulkan0 no GPU1 e em CPU no CPU0.
+D.2 REPLAY REAL EXECUTADO (binario proprio boundary14, modo "mul"):
+    Operador: ggml_mul_mat(W, X) — a PRIMEIRA operacao suspeita
+    (projecao Q do bloco 0).
+    Operandos REAIS e MESMOS nos dois backends:
+      X = attn_norm capturado no alvo (277 x 2048, F32) — o proprio
+          tensor de entrada da operacao no grafo;
+      W = blk.0.attn_q.weight cru do GGUF c4bf1015... (Q4_K,
+          ne=[2048,2048], 2.359.296 bytes, 144/256 B/elem).
+    Registro minimo:
+      op=mul_mat dtype in=F32 out=F32, W=Q4_K ne=[2048,2048],
+      X ne=[2048,277] stride [4,8192], offsets alocados pelo gallocr,
+      sem parametros (mul_mat nao tem epsilon/rope/mask), pipeline:
+      backend CPU (libggml-cpu) x backend Vulkan0 (Adreno 840,
+      fp16=1, int_dot=0, matrix cores=none — identificacao do driver).
+      Upload do input conferido APOS o set: 0/567296 diferentes
+      (BIT-EXATO) nos DOIS backends; peso = mesmos bytes.
+      Finitude: 0 NaN/Inf nas duas saidas.
+      Erro CPU x Vulkan0: difs 567294/567296 | max_abs 0.005214367 |
+      RMSE 0.000375474 | erro relativo (RMSE/rms da saida CPU,
+      rms=0.032378) = 1.1596%.
+      ULP: a metrica por-elemento explodiu perto de zero
+      (35085258204 ULP — denominador ~FLT_MIN); REGISTRO a falha do
+      estimador e uso max_abs/RMSE como metricas robustas (o parecer
+      pede ULP "quando apropriado" — aqui nao e' perto de zero).
+D.3 POR QUE ISTO FECHA O INTERVALO: o replay isolado do MUL_MAT com
+    operandos identicos produz erro relativo 1.1596%, e o checkpoint
+    attn_out (que vem logo apos esses MUL_MATs) mede 1.1658% — as
+    escalas COINCIDEM (diferenca de 0.0062 pp). A norma antes da
+    operacao so tem ~1 ULP (0.000%). Ou seja: a divergencia de escala
+    observada no bloco 0 e' REPRODUZIDA pelo operador isolado com os
+    MESMOS operandos — nao e' da transferencia (uploads bit-exatos),
+    nao e' do input (E0 identico), nao e' da norma (ULP).
+    ATENCAO ao que isto NAO e': nao declara defeito. CPU e Vulkan
+    podem legalmente usar pipelines diferentes (ex.: acumulacao em
+    fp16 no Adreno — hipotese NAO afirmada, nao medida). O parecer
+    exige "avaliar erro local com os MESMOS operandos antes de propor
+    correcao" — avaliei; NENHUM patch de producao e' proposto.
+
+--------------------------------------------------------------------------------
+E. CONCLUSOES LOCAIS E LIMITES  [§9-E]
+--------------------------------------------------------------------------------
+E.1 Conclusoes locais (restritas aos fatos medidos):
+  1. A entrada completa do bloco 0 (277 posicoes) e' BIT-EXATA entre
+     CPU0 e GPU1 — a divergencia nasce dentro do bloco 0 (§5-B
+     descartado; §5-A aplicado).
+  2. A primeira RMS_NORM do bloco 0 diverge so em ~1 ULP —
+     compativel com o boundary14 (limiar 8 ULP = CRITERIO DAQUELE
+     TESTE, nao norma geral — R5).
+  3. Entre attn_norm e attn_out a divergencia cresce para 1.17%.
+  4. O replay real do MUL_MAT Q (Q4_K) com os MESMOS operandos
+     reproduz 1.16% — operador concreto localizado como a primeira
+     operacao com divergencia de escala relevante.
+  5. Controles: parada explicita com selo proprio; logits identicos
+     antes/depois da marcacao de output; idx/ids conferidos; E0
+     reproduzivel entre runs; rc=0; 0 NaN/Inf.
+E.2 Limites declarados:
+  * A sentinela/boundary14 sintetico NAO exclui copies interbackend do
+    scheduler, tensores com todas as linhas do prefill, pesos reais
+    nem pipeline/fusao do grafo original (R5) — por isso o replay da
+    D.2 usou operandos REAIS; outras fronteiras permanecem nao
+    testadas.
+  * O inventario §B e' de nos atribuidos, nao de shaders.
+  * Questoes ABERTAS (§2.3): o desvio e' anomalo ou e' o esperado
+    entre pipelines? e' unico (outros matmul/quant tambem)? o desvio
+    de L[342] vem exclusivamente de KV herdado? Nao respondidas.
+  * Nao e' causa raiz final: localizei o intervalo e o operador com
+    erro medido; atribuir o desvio total (L[342], 0.0305 de margem)
+    a este operador exige propagacao que nao foi medida ate la.
+  * ULP absurda perto de zero (metrica falhou); erro rel e' a
+    referencia.
+  * Nenhum shader/gate/produto alterado; nenhum patch proposto
+    (decisao separada exigiria teste permanente — fora do escopo).
+
+--------------------------------------------------------------------------------
+F. HASHES, DIFFS, COMANDOS, RETORNOS E TESTES  [§9-F]
+--------------------------------------------------------------------------------
+F.1 Artefatos (logs-rodada15/, MANIFESTO-RODADA15.txt — 76 entradas,
+    SHA-256 completos):
+    bloco0_final/  E0+S0 .mat/.idx + .emb/.f32/.sxn + logs (runs com
+                   set_output; selo CHECKPOINT VALIDA)
+    attn_norm/     E0 + attn_norm .mat/.idx + logs
+    attn_out/      E0 + attn_out .mat/.idx + logs
+    bloco0/        run anterior (aliasing medido: E0==S0) — preservado
+                   como evidencia do defecto, nao apagado
+    mul_q/         mulq_CPU.bin (sha 352edfa687771679fd354ba0...)
+                   mulq_Vulkan.bin (sha 3039ca8480ff5453a602275d...)
+    diag-norm-diff-rodada15.patch  +179 -0 (2 arquivos, so adicoes)
+    MANIFESTO-RODADA15.txt
+F.2 Binarios de diagnostico (NUNCA publicados; sha completos no
+    manifesto):
+    llama_harness_v11d  f639c8673f3fd66f138021215ebd7972050a2c45f89b4ce17603ddc7246baa02
+    llama_harness_v11e  5d3c370a1723304a92e55b28d35d49e05d1b98f686900db8ada9022322199cda
+    llama_harness_v11f  02bc46971203f72aced2dd64fde5de011748813729233455db167ae0f44e143b
+    boundary14          16a6b7e0446693e9c0def36ac10f00de56b2c753b927ae90b2f01ab3da809bbd
+F.3 Fontes alterados (produto NAO tocado; diff completo no patch):
+    diag-norm/.../hunyuan-vl.cpp: E0/S0/attn_norm/attn_out nomeados +
+      set_output; diag-norm/.../llama-context.cpp: canais por env
+      (DIAG_CANAL_NEXTN/POOLED), DIAGT com campos separados,
+      DIAGBLOCO0 agregado, run/fase/n_tok em cada linha com \n;
+      harness: --parar-apos-dump, --dump-matriz (.mat+.idx),
+      --canal-nextn/--canal-pooled, setenv HARNESS_RUN_ID, selo
+      CHECKPOINT; harness_args.h; boundary14.cpp (modo mul).
+F.4 Comandos-tipo e retornos (serial EXPLICITO 100.108.27.64:40229 em
+    todos; alvo confirmado antes de cada execucao):
+    cmake --build diag-norm/build -j16                      rc=0
+    build_harness.sh (SIGREPRO_BUILD=diag)                  rc=0
+    build_boundary14.sh / modo mul                          rc=0
+    ./llama_harness_v11[d-f] ... --dump-passo 0 --dump-embed
+        --dump-produtor --dump-matriz [--canal-*] --parar-apos-dump
+        --log-debug   -> cpu e vulkan: rc=0, MEDICAO: VALIDA
+                         (CHECKPOINT de L[0])
+    ./boundary14 mul attn_norm_X.mat blk0_q.q4k.bin 277 2048 2048
+        -> rc=0, MEDICAO: VALIDA (uploads bit-exatos)
+F.5 Testes aplicaveis aos instrumentos alterados
+    * harness_args_test (parser alterado com 4 flags novas):
+      102 passaram, 0 falharam (rc=0) no alvo.
+    * Nenhum teste de produto alterado; gate Gradle nao reexecutado
+      (nada do app mudou; itens M em app/ sao o WIP preexistente).
+    * Finitude/varredura ativa em todos os runs; rc=0; nenhum dump
+      incompleto; nenhum MEDICAO INVALIDA nos runs de checkpoint.
+F.6 Segredos: nenhum. Artefatos = dumps/binarios de harness e o GGUF
+    declarado (c4bf1015... conferido). R2/Drive nao tocados.
+================================================================================
+FIM DO RELATORIO — RODADA 15
+================================================================================

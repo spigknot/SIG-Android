@@ -1,0 +1,223 @@
+================================================================================
+PLANO DE CORRECAO - FALHA NO CORTE DE VIDEO COM ENCODERS H.264 / HEVC
+(SIG Android)
+================================================================================
+Projeto: D:\Projetos\SIG
+Ferramenta: Cortar Audio/Video (FfmpegCutActivity)
+Data: 2026-09-01
+Tipo: Plano de correcao (fix ainda NAO aplicado - aguarda aprovacao)
+Autor: revisao propria do diagnostico de 2026-09-01 (com refinamentos)
+Status: pronto para implementacao; validacao em campo pendente
+
+================================================================================
+(1) RESUMO DO BUG
+================================================================================
+Na ferramenta CORTAR VIDEO, ao selecionar o encoder por hardware
+(h264_mediacodec ou hevc_mediacodec), o corte FALHA imediatamente com:
+
+  [vost#0:0/h264_mediacodec @ ...] Error initializing output stream:
+  Conversion failed!
+
+A falha ocorre na RECODIFICACAO DAS BORDAS do corte hibrido (etapa
+"Recodificando borda final - 0% (h264)"). O trecho central (stream-copy)
+nunca aciona encoder e passa. Com o encoder por CPU (libx264) o MESMO corte
+funciona, inclusive com o mesmo comando/estrutura.
+
+O mesmo defeito afeta as ferramentas GIRAR VIDEO e JUNTAR VIDEOS, que usam a
+mesma funcao de parametrizacao de encoder.
+
+================================================================================
+(2) CAUSA RAIZ (confirmada no codigo)
+================================================================================
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegVideoQuality.kt
+Funcao: FfmpegVideoEncoder.encodingFor (linhas 41-79)
+Trecho do defeito: linhas 75-78
+
+Caminho CPU (libx264) - FUNCIONA (linhas 45-57):
+  -c:v libx264 -preset ultrafast -crf <16|18|20|23|26>
+
+Caminho hardware - FALHA (linhas 75-78):
+  -c:v h264_mediacodec        (so isso; -b:v <bitrate> e acrescentado fora,
+                               em videoEncodingArguments, FfmpegCutActivity
+                               .kt:1497-1506)
+
+O wrapper do FFmpeg (libavcodec/h264_mediacodec.c) chama
+MediaCodec.configure() durante mediacodec_enc_init(); sem parametros
+defensivos (-pix_fmt, -bf, -g), a negociacao de formato e rejeitada em
+muitos aparelhos (MediaCodec varia por fabricante: Qualcomm recentes sao
+permissivos; MediaTek/Exynos antigos falham). libx264 aceita qualquer
+pixel format/parametros em software - por isso o caminho CPU sempre
+funciona.
+
+CONFIRMADO EM TESTE REAL (emulador, FFmpeg 6.0 do proprio app, pacote
+nativo v3): o comando com -c:v h264_mediacodec + -pix_fmt yuv420p
++ -b:v 1002K executa com sucesso (rc=0). Ou seja: os parametros
+defensivos resolvem.
+
+NOTA DE HISTORICO: nao e regressao recente. O ramo hardware minimo existe
+desde o commit 197e0a9 (criacao de encodingFor).
+
+================================================================================
+(3) PLANO DE CORRECAO - PASSO A PASSO
+================================================================================
+PASSO 1 - FfmpegVideoQuality.kt - encodingFor (linhas 75-78)
+
+SITUACAO ATUAL:
+  return FfmpegVideoEncoding(
+      arguments = listOf("-c:v", ffmpegName),
+      targetBitrate = scaleVideoBitrate(sourceBitrate, multiplier)
+  )
+
+NOVA LOGICA:
+  val gop = frameRate?.takeIf { it in 1.0..240.0 }?.roundToInt()?.coerceIn(10, 240) ?: 30
+  return FfmpegVideoEncoding(
+      arguments = listOf(
+          "-c:v", ffmpegName,
+          "-pix_fmt", "yuv420p",
+          "-bf", "0",
+          "-g", gop.toString()
+      ),
+      targetBitrate = scaleVideoBitrate(sourceBitrate, multiplier)
+  )
+
+Assinatura passa a receber o fps da origem (opcional, default null):
+  fun FfmpegVideoEncoder.encodingFor(
+      quality: FfmpegVideoQuality,
+      sourceBitrate: String,
+      frameRate: Double? = null
+  ): FfmpegVideoEncoding
+
+Justificativa de cada parametro:
+  -pix_fmt yuv420p : declara explicitamente o pixel format ao MediaCodec
+                     (evita inferencia/negociacao falha; no-op em fonte
+                     8-bit 4:2:0, que e o caso mais comum).
+  -bf 0            : desativa B-frames; varios encoders MediaCodec rejeitam
+                     B-frames implicitos sem GOP definido.
+  -g <fps>         : GOP = 1 segundo da origem (round do fps real, fallback
+                     30). Evita GOP fixo grosseiro em fontes de 24/60 fps.
+  -b:v             : continua sendo aplicado FORA (videoEncodingArguments),
+                     inalterado.
+
+PASSO 2 - Repassar o frameRate nos callers (quando disponivel):
+
+  FfmpegCutActivity.videoEncodingArguments (linha 1497-1506) recebe o
+  bitrate; acrescentar frameRate do StreamBitrates (ja existe em
+  StreamBitrates.frameRate, FfmpegCutActivity.kt:1923):
+      settings = encoder.encodingFor(quality, sourceBitrate, streamBitrates.frameRate)
+  (ajustar a assinatura da helper para receber o StreamBitrates ou o fps)
+
+  FfmpegRotateVideoActivity.videoEncodingArguments (1301-1306) e
+  FfmpegJoinVideosActivity.videoEncodingArguments (2197-2211):
+  passar o fps quando a Activity ja o detecta; caso contrario deixar null
+  (fallback 30) - nao bloquear o fix por falta de fps.
+
+PASSO 3 - Atualizar o teste que congela o formato atual:
+  app/src/test/java/br/gov/sp/pcsp/launcher/FfmpegVideoQualityTest.kt
+  (linhas 42-49)
+
+  As duas assercoes do caminho hardware passam a esperar:
+      listOf("-c:v", "h264_mediacodec", "-pix_fmt", "yuv420p", "-bf", "0", "-g", "30")
+  (default frameRate=null -> GOP 30)
+
+  REGRA OBRIGATORIA: as assercoes do libx264 (linhas 53-62) NAO mudam.
+
+  Acrescentar casos novos:
+      - encodingFor(quality, bitrate, frameRate = 60.0) -> "-g" "60"
+      - encodingFor(quality, bitrate, frameRate = 24.0) -> "-g" "24"
+      - encodingFor(quality, bitrate, frameRate = null) -> "-g" "30"
+      - libx264 continua sem -pix_fmt/-bf/-g (imutavel)
+
+PASSO 4 - Diagnostico permanente (obrigatorio no mesmo pacote do fix):
+
+  O log do app mostra apenas as 3 ULTIMAS linhas da saida do FFmpeg
+  (FfmpegCutActivity.kt:843, :896 e :941 usam takeLast(3)) - e exatamente
+  a linha que explica o erro ("maybe incorrect parameters...", perfil,
+  formato de cor) que fica de fora.
+
+  Implementar um helper (ex.: em FfmpegMediaPolicies ou na Activity):
+    fun failureDetail(session: FFmpegSession): String
+      - extrai do log COMPLETO as linhas de erro (contendo "error",
+        "failed", "invalid", "cannot", "Conversion failed", "Error
+        initializing", etc.), limitando a ~15 linhas;
+      - NA FALHA, grava o log completo em
+        File(cacheDir, "ffmpeg_cut_error_<timestamp>.log")
+        (padrao ja usado no STT: writeFailureFiles grava correlation.txt;
+        nunca incluir segredos/audios).
+  Substituir os tres takeLast(3) pela chamada do helper.
+
+PASSO 5 - Gate completo (obrigatorio):
+  .\gradlew.bat :app:testDebugUnitTest
+  .\gradlew.bat :app:lintDebug
+  .\gradlew.bat :app:assembleDebug
+
+PASSO 6 - Validacao em campo (condicao para considerar resolvido):
+  Usar o MESMO MP4 da falha (inicio 1536 s, duracao 4,224 s, H.264 a
+  3,3 Mb/s) em 2+ dispositivos (fabricantes distintos; incluir pelo menos
+  um MediaTek/Exynos se possivel, pois sao os que mais falham).
+
+  Cenarios:
+    a) borda inicial (corte comecando fora de keyframe)
+    b) borda final (corte terminando fora de keyframe)
+    c) executeFullPrecisionFallback / buildPreciseFfmpegArguments
+       (FfmpegCutActivity.kt:705-750 e :903-943) - usa o mesmo encodingFor
+    d) H.264 E HEVC separadamente (comportamento difere por fabricante)
+    e) Girar Video e Juntar Videos (consumidores do mesmo encodingFor)
+
+  OBS: se mesmo com -pix_fmt yuv420p -bf 0 -g <fps> algum aparelho falhar,
+  o log completo (Passo 4) dira o motivo; segundo round possivel:
+  "-flags", "+cgop" e/ou "-profile:v" high (HEVC: main) - SOMENTE com
+  evidencia de log.
+
+================================================================================
+(4) ESCOPO E EFEITOS COLATERAIS
+================================================================================
+A mudanca em encodingFor afeta TRES ferramentas de uma vez (desejado):
+  - Cortar (FfmpegCutActivity.kt:1497-1506) - o bug reportado
+  - Girar (FfmpegRotateVideoActivity.kt:1301-1306) - mesmo defeito
+    (falha dos encoders hardware no reencode; confirmado no relatorio
+    do Girar)
+  - Juntar (FfmpegJoinVideosActivity.kt:2197-2211) - mesmo defeito,
+    beneficiado sem custo extra
+
+NAO alterar (fora de escopo):
+  - cutMappedCopyArguments (FfmpegMediaPolicies.kt:142-152) - a ordem
+    "-c copy" global + "-c:v" no fim e valida no FFmpeg (a opcao de
+    stream sobrescreve a global); o libx264 funciona com a mesma
+    estrutura, provando que nao e a causa.
+  - buildHybridEdgeArguments (FfmpegCutActivity.kt:945-963)
+  - O fluxo do modo metadados do Girar (problema separado)
+
+================================================================================
+(5) RISCOS E PONTOS DE ATENCAO
+================================================================================
+- -pix_fmt yuv420p REDUZ QUALIDADE em fontes com croma 4:2:2/4:4:4 ou
+  10-bit (screencasts, rastreamento facial). Troca deliberada:
+  compatibilidade absoluta em vez de fidelidade maxima. Se houver
+  reclamacao, considerar fallback para libx264 quando a origem nao for
+  yuv420p.
+- -bf 0 e OBRIGATORIO na maioria dos MediaCodec HEVC; inofensivo no H.264.
+- -g derivado do fps elimina a "aproximacao 30" em fontes de 24/60 fps;
+  se o fps nao estiver disponivel no caller, o default 30 e seguro.
+- O defeito NAO aparece em todos os dispositivos (por isso pode ter
+  passado nos testes do time); validacao em campo em 2+ aparelhos e
+  obrigatoria.
+- -b:v continua sendo aplicado fora de encodingFor; com -bf 0 alguns
+  MediaCodec passam a respeitar o bitrate informado de forma mais
+  previsivel.
+- NAO forcar -profile:v no primeiro round: forcar "high" num aparelho que
+  so aceita main/baseline TROCA a falha atual por outra.
+
+================================================================================
+(6) DEFINICAO DE PRONTO (Definition of Done)
+================================================================================
+1. encodingFor do ramo hardware emite -pix_fmt yuv420p -bf 0 -g <fps|30>;
+   libx264 intocado.
+2. FfmpegVideoQualityTest atualizado + casos novos (GOP por fps) verdes.
+3. Helper de diagnostico de erro em uso (log completo gravado na falha).
+4. Gate completo verde: testDebugUnitTest + lintDebug + assembleDebug.
+5. Campo: corte com H.264 e HEVC funcionando nas bordas e no fallback
+   em 2+ dispositivos; Girar e Juntar conferidos.
+6. Nenhuma chave/segredo/audio no diagnostico.
+
+================================================================================
+FIM DO PLANO

@@ -1,0 +1,10 @@
+== PENDENCIAS DEPENDENTES DO APARELHO (03/10) ==
+1) APARELHO INSTALADO COM prodmin 15a548fd... -> ROLLBACK para
+   9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53
+   e restaurar UI (Q4_K_M + GPU (Vulkan)) e chaves debug.sig.hymt2.* zeradas.
+2) Concluir smoke do prodmin: runs 3 e 4 (um_attempt Q4 + Q8; shas esperados
+   f8c093aecbd62027 / 1c01984ca11af809).
+3) Rodar estresse de lifetime: python stress_lifetime.py (Desktop/Temp),
+   8 passos; saida em Desktop/hymt2/hymt2-prodmin-stress/.
+Causa: conexao wireless (100.108.27.64:33183) caiu e nao reconecta
+("connection refused"); sem USB presente no momento do fechamento.

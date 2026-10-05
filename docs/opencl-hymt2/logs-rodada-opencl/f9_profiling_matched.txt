@@ -1,0 +1,17 @@
+== PROFILING MATCHED (profH a072cdc6; MESMA sessao/artefato; saidas canonicas) ==
+
+Q4 curto  OCL: load=5791 prefill= 223ms (119t; 533 t/s) decode= 7555ms (142t; 18.8 t/s) | sample=0.77ms/tok detok~0
+Q4 longo  OCL: load=6323 prefill=1579ms (942t; 596 t/s) decode=79633ms (1485t; 18.7 t/s) | sample=0.75ms/tok detok~0
+Q4 curto  VK : load=5692 prefill=3561ms (119t;  33 t/s) decode= 3204ms (142t; 44.3 t/s) | sample=0.71ms/tok
+Q4 longo  VK : load=18087 prefill=16952ms(942t;  56 t/s) decode=46731ms (1474t; 31.5 t/s) | sample=2.84ms/tok
+Q8 curto  OCL: (sem linha no delta; sha canonico d36a3315 no journal)
+
+LEITURA (same-run, mesmo artefato, shas canonicos por backend):
+ - PREFILL: OpenCL ~10-17x MAIS RAPIDO que Vulkan (533-596 vs 33-56 t/s).
+ - DECODE : Vulkan ~1.7-2.4x mais rapido (31-44 vs 18.7-18.8 t/s).
+ - LOAD   : OpenCL 5.8-6.3s vs Vulkan 5.7-18.1s (variavel).
+ - HOST do loop: sample 0.7-2.8ms/tok (1.5-5%), detok ~0; o llama_decode
+   (dispatch+GPU+wait) domina (~50ms/tok no OCL). GPU pura NAO separada
+   aqui (o CL profiling infla ~1.9x o wall; usar como bound, nao particao).
+ - saidas: cada backend mantem o SEU canonico (curto = identico nos 3;
+   longo difere entre backends por contagem de tokens — observacao honesta).

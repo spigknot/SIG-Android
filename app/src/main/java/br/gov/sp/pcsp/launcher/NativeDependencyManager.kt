@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
  */
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "8"
+    const val COMPONENT_VERSION = "10"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
     private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
@@ -29,14 +29,14 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v8-arm64-v8a.zip",
-            "3a3134cd06e1be672f0ca8e428b14a379541044f01e897fb5cd5a07e735a98ae",
-            70_964_325L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v10-arm64-v8a.zip",
+            "19373b869acda07c92cd7df6a6d5b29aeb1ebb21640534f175873d462e288398",
+            48_455_121L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v8-x86_64.zip",
-            "ee2be602ad5a68f72e56dd29b78d497b340feec7b630afba529c7e923e8056fb",
-            78_561_574L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v10-x86_64.zip",
+            "be70ce098c913dfc6b36fd0713b7db3bdb697785eb037673ced76689f2bd1349",
+            54_971_818L
         )
     )
 
@@ -76,52 +76,54 @@ object NativeDependencyManager {
      * o que vem dentro — era o que o log do SigUpdater (SIG Windows) mostra.
      *
      * ⚠️ Estes números NÃO substituem [PackageSpec.downloadBytes]: aquele é o
-     * tamanho do ZIP (o que o app baixa e valida por SHA-256) e é conferido
-     * pelo `verify-native-dependencies`. A soma daqui deve fechar com ele —
-     * a porta de aceitação checa exatamente isso ([sumaConfereComZip]).
+     * tamanho do ZIP comprimido (o que o app baixa e valida por SHA-256) e é
+     * conferido pelo `verify-native-dependencies`. A soma daqui é a dos arquivos
+     * DESCOMPRIMIDOS e por isso é MAIOR que o ZIP: não deve ser comparada com ele
+     * (o comentário antigo dizia o contrário e estava errado — no v8 a soma era
+     * 70.962.219 contra um ZIP de 70.964.325, e a diferença era só compressão).
      */
     private val conteudoPorAbi = mapOf(
         "arm64-v8a" to listOf(
-            "lib/libsig_llama.so" to 28_006_627L,
-            "lib/libsig_whisper.so" to 18_447_609L,
-            "lib/libonnxruntime.so" to 9_749_792L,
-            "lib/libavcodec.so" to 7_820_823L,
-            "lib/libavformat.so" to 2_081_430L,
-            "lib/libavfilter.so" to 1_878_203L,
-            "models/ggml-silero-v6.2.0.bin" to 821_390L,
-            "lib/libsig_npu_probe.so" to 461_645L,
-            "lib/libomp.so" to 432_045L,
-            "lib/libc++_shared.so" to 336_650L,
-            "lib/libavutil.so" to 328_831L,
-            "lib/libswscale.so" to 272_235L,
-            "lib/libffmpegkit.so" to 202_359L,
-            "lib/libswresample.so" to 48_193L,
-            "lib/libonnxruntime4j_jni.so" to 35_456L,
-            "lib/libavdevice.so" to 26_715L,
-            "lib/libffmpegkit_abidetect.so" to 11_094L,
-            "manifest.json" to 1_122L,
+            "lib/libsig_whisper.so" to 62_179_616L,
+            "lib/libsig_llama.so" to 30_761_920L,
+            "lib/libonnxruntime.so" to 23_990_744L,
+            "lib/libavcodec.so" to 15_143_992L,
+            "lib/libavfilter.so" to 4_241_064L,
+            "lib/libavformat.so" to 3_987_320L,
+            "lib/libomp.so" to 1_229_304L,
+            "lib/libc++_shared.so" to 1_027_408L,
+            "lib/libsig_npu_probe.so" to 948_912L,
+            "models/ggml-silero-v6.2.0.bin" to 885_098L,
+            "lib/libavutil.so" to 702_672L,
+            "lib/libswscale.so" to 594_472L,
+            "lib/libffmpegkit.so" to 470_040L,
+            "lib/libonnxruntime4j_jni.so" to 111_504L,
+            "lib/libswresample.so" to 101_136L,
+            "lib/libavdevice.so" to 63_192L,
+            "lib/libffmpegkit_abidetect.so" to 30_392L,
+            "manifest.json" to 2_833L,
         ),
         "x86_64" to listOf(
             // Mesmo conjunto de libs do arm64, com os tamanhos reais deste
             // artefato (medidos no central directory do ZIP publicado).
-            "lib/libsig_llama.so" to 28_042_638L,
-            "lib/libsig_whisper.so" to 18_750_283L,
-            "lib/libonnxruntime.so" to 15_591_750L,
-            "lib/libavcodec.so" to 8_784_046L,
-            "lib/libavfilter.so" to 2_140_127L,
-            "lib/libavformat.so" to 2_105_008L,
-            "models/ggml-silero-v6.2.0.bin" to 821_390L,
-            "lib/libomp.so" to 454_230L,
-            "lib/libsig_npu_probe.so" to 440_759L,
-            "lib/libavutil.so" to 369_318L,
-            "lib/libc++_shared.so" to 365_059L,
-            "lib/libswscale.so" to 341_805L,
-            "lib/libffmpegkit.so" to 214_022L,
-            "lib/libswresample.so" to 61_148L,
-            "lib/libonnxruntime4j_jni.so" to 33_659L,
-            "lib/libavdevice.so" to 26_833L,
-            "lib/libffmpegkit_abidetect.so" to 16_272L,
-            "manifest.json" to 1_121L,
+            "lib/libsig_whisper.so" to 62_337_856L,
+            "lib/libonnxruntime.so" to 38_473_056L,
+            "lib/libsig_llama.so" to 31_872_504L,
+            "lib/libavcodec.so" to 19_066_072L,
+            "lib/libavfilter.so" to 5_164_008L,
+            "lib/libavformat.so" to 4_017_488L,
+            "lib/libomp.so" to 1_158_008L,
+            "lib/libc++_shared.so" to 1_045_960L,
+            "lib/libswscale.so" to 947_960L,
+            "lib/libsig_npu_probe.so" to 916_480L,
+            "models/ggml-silero-v6.2.0.bin" to 885_098L,
+            "lib/libavutil.so" to 869_752L,
+            "lib/libffmpegkit.so" to 483_128L,
+            "lib/libswresample.so" to 141_808L,
+            "lib/libonnxruntime4j_jni.so" to 100_032L,
+            "lib/libavdevice.so" to 63_504L,
+            "lib/libffmpegkit_abidetect.so" to 43_248L,
+            "manifest.json" to 2_830L,
         ),
     )
 
@@ -189,6 +191,16 @@ object NativeDependencyManager {
      * por ABI sem depender de `Build.SUPPORTED_ABIS` (nulo no stub da JVM).
      */
     fun downloadBytesOf(abi: String): Long = packages[abi]?.downloadBytes ?: 0L
+
+    /**
+     * SHA-256 que a produção declara para o pacote desta ABI.
+     *
+     * Exposto para o teste de artefato: sem isto, a fixture em
+     * `app/src/test/resources/native-deps/` não tem como ser ancorada ao ZIP
+     * que o app realmente baixa, e o teste passaria concordando consigo mesmo.
+     * Somente LEITURA — não é caminho de instalação.
+     */
+    fun sha256DeclaradoDe(abi: String): String? = packages[abi]?.sha256
 
     fun isInstalled(context: Context): Boolean {
         val abi = supportedAbi() ?: return false

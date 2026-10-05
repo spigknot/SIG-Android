@@ -1,0 +1,107 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F19: RECONCILIACAO, CAUSA DE SAIDA, VACINAS (SEM NOVA BATERIA)
+Data: 04/10/2026. Repo D:/Projetos/SIG (NADA commitado). Sem device novo nesta rodada; sem deploy.
+Base: parecer "APOS F18: GANHO DO CACHE SUSTENTADO, FECHAR LACUNAS SEM NOVA BATERIA AMPLA".
+Recomendacao tecnica FAVORAVEL ao patch aceita como DIRECAO; efeitos produto/device permanecem
+pendentes de decisao explicita do usuario (nenhum default alterado, nenhum deploy feito).
+
+================================================================================
+A. ESCOPO DESTA RODADA (local apenas)
+================================================================================
+A1. Reconciliacao por TENTATIVA (sem mediana sobre invalidas) — dados existentes apenas.
+A2. Causa dos encerramentos do app — investigada em fonte de sistema (read-only).
+A3. Vacinas permanentes: safe_deploy (path com backslash) + timeout externo documentado.
+A4. Manifesto com HASH por item (exist/size/sha256 + verificacao de volta).
+A5. NADA de: device, deploy, batching, fusao, fastmath, EOG, sampler.
+
+================================================================================
+B. RECONCILIACAO POR TENTATIVA (CSV: Desktop/hymt2/hymt2-aceite-f17/reconciliacao_f19.csv)
+================================================================================
+B1. CONTAGEM EXCLUSIVA (Python):
+    OUTPUT_VALIDO+PERFIL ............. 21
+    OUTPUT_INVALIDO(vazio) ............ 2   (off2 tent. a [dir] + off2 tent. a [log])
+    SEM_FIM(injecao/poll perdido) ..... 2   (aceite_q8longo_lc1 + off2 tent. b)
+    ABORTADA(monkeypatch lento) ....... 1   (v3_off2_parada)
+    PARCIAL(resume_b: lc1,lc2,off1) ... 1   (registro de cadeia, nao de run)
+B2. POR CASO (validos): Q4 curto 3 ON + 3 OFF | Q8 curto 3+3 | Q4 longo 3+3 |
+    Q8 longo 2 ON (92,3s / 90,3s) + 1 OFF (101,3s). Excertos OFF vazio: e3b0c442 (sha do vazio).
+B3. FRONTEIRA DO CONTADOR (esclarecimento pedido): o contador clcount reseta POR PEDIDO
+    (o JNI chama sig_opencl_counters_reset no inicio do pedido); o CACHE de simbolos tem
+    escopo POR PROCESSO (handle dlopen process-lifetime, sem dlclose). "3 por pedido" nos
+    runs = cada run reinicia o APP (processo novo): 3 = os 3 simbolos DISTINTOS resolvidos
+    naquele pedido. Dentro de UM processo com 2+ pedidos, resolucao so ocorre 1x por simbolo
+    (prova: teste de endurecimento caso F — OFF->ON no MESMO processo => 1 resolucao nova).
+    NAO se afirma "3 no total do processo" nem "3 por pedido em processo longo".
+B4. FRONTEIRAS DE TEMPO (pedido do parecer): tres numeros distintos sem somar:
+    - FIM.segundos (instrumento): do FONTE_OK detectado ate a deteccao de conclusao
+      (~granularidade de poll; inclui carga/decode/taps do instrumento);
+    - "Traducao pronta em Xs" (app): timer interno do app para a traducao;
+    - "voltou em Xs" (cadeia): wall total do rodar_caso (restart+injecao+poll+pos-processo).
+    Ex.: diag 147s (cadeia) / FIM 93,8s / app 77,2s — todos o MESMO pedido, fronteiras distintas.
+B5. Deriva termica: OFF tardios progressivamente mais lentos (Q4 longo: 102->118,9->134,8s;
+    t/s 16,0->14,3->11,8). A magnitude -33,6% a -50,4% vale SOB instrumentacao; a
+    generalizacao stock depende do aceite minimo sem instrumentacao (secao E).
+
+================================================================================
+C. CAUSA DOS ENCERRAMENTOS DO APP — DETERMINADA (evidencia de sistema)
+================================================================================
+C1. Fonte: `dumpsys activity exit-info br.gov.sp.pcsp.launcher` (read-only, sem dados sensiveis).
+C2. RESULTADO: no periodo do aceite houve 2 encerramentos NAO-planejados, AMBOS
+    reason=6 (ANR), subreason=0:
+    - ANR #10: 17:23:22, pid 30640 — "Input dispatching timed out ... Waited 5000ms for
+      MotionEvent ... pointers=[0: (636.0, 1246.0)]" => O TAP DO BOTAO TRADUZIR durante
+      a UI ocupada (carga do Q8);
+    - ANR #1: 18:01:26, pid 28619 — idem, "pointers=[0: (1079.8, 255.7)]".
+    Todos os DEMAIS exits do periodo = reason=10 subreason=21 (FORCE STOP) = restarts do
+    instrumento (esperados). ZERO OOM/LMK/kill-termico nos registros disponiveis.
+C3. LEITURA: encerramento POR ANR DE INPUT (instrumento tateou enquanto o app carregava o
+    Q8 sob contexto lento/quente). NAO foi "morte por calor" nem kill da OS por temperatura
+    — o contexto termico AGRAVOU (janelas de ocupacao longas), mas a causa direta e'
+    o input-dispatch-timeout. Corrigido de fato: tap manual so apos estado pronto + o padrao
+    de timeout externo (D2). Nao se fabrica causa alem disso; traces ANR disponiveis em
+    /data/system/procexitstore/anr_* se necessario.
+
+================================================================================
+D. VACINAS IMPLEMENTADAS/TESTADAS NESTA RODADA
+================================================================================
+D1. safe_deploy.sh: NORMALIZACAO de path nativo (backslash -> '/') no proprio script
+    (idempotente) + caso de teste PERMANENTE "path com backslash" no safe_deploy_test.sh.
+    RESULTADO: 6/6 PASS (fonte ausente; push falho; push truncado; sha do destino divergente;
+    sucesso; path backslash). Comando: bash native-dependencies/harness/safe_deploy_test.sh.
+D2. Timeout externo POR CHAMADA adb (padrao usado no resume_v3): subprocess com timeout
+    + 1 retry + registro; watchdog por pedido e invalidacao por fase (sem poll cego de 20min)
+    ficam especificados como requisito do proximo instrumento — implementacao pronta no
+    resume_v3 (scratch) reaproveitavel.
+D3. Loader: design + 17 checks + mutacao no helper real (arquivos feedback em fixtures/loader_cache/
+    e run_loader_cache_test.sh) — anexados ao manifesto. Contratos cobertos: init thread-safe
+    (atomic publish), lifetime (sem dlclose; handle process-lifetime), sem ponteiro dangling,
+    simbolo ausente null-safe, falha-antes-load com retry (sem envenenamento), sem cache de falha.
+D4. Build minimo: f17 (1c5b6465...), GGML_OPENCL_PROFILING=OFF, sem chaves debug obrigatorias;
+    a chave loadercache existe com default LIGADA (PROPOSTA; efetivacao = decisao produto).
+
+================================================================================
+E. PENDENCIAS COM CONSENTIMENTO (device, minimas — nao repetir a matriz)
+================================================================================
+E1. Controles: 1 execucao curta CPU + 1 curta Vulkan (init/loader compartilhado; sem crash;
+    sha esperado). Q8 longo NAO e' declarado aceite completo: 1 execucao FRIA unica apos o
+    fix de captura, se autorizado; se falhar, PARA e documenta.
+E2. Aceite minimo SEM instrumentacao (props off): Q4/Q8 curto + Q4 longo, A-B-A quando
+    adequado (poucas reps; pares alternados com temperaturas comparaveis — nao OFF todos no fim).
+E3. Nada disso ocorre sem autorizacao explicita. Estado atual do aparelho: 9698670c + UI
+    Q4_K_M/Vulkan/Portugues + chaves 0 (readback conferido no fechamento do F18).
+
+================================================================================
+F. MANIFESTO
+================================================================================
+F1. MANIFESTO-OPENCL.json regenerado por Python: exist/size/SHA256 por item + dedupe +
+    VERIFICACAO DE VOLTA (re-leitura e comparacao de hash item a item; erros=0). Itens novos:
+    F19 (este), reconciliacao_f19.csv, safe_deploy_test_run3.txt.
+
+================================================================================
+G. LEITURA FINAL (sem exagero)
+================================================================================
+G1. O patch do loader e' SEGURO (contratos testados) e o ganho e' grande e consistente
+    sob instrumentacao (-33,6% a -50,4% no decode; contadores 2,19M-24,2M -> 3 resolucoes).
+G2. Generalizacao stock e Q8-longo completo permanecem ABERTOS ate o aceite minimo sem
+    instrumentacao (E2) — nao se promete magnitude; promete-se o metodo e os gates.
+G3. Decisoes separadas: (i) adocao local do patch; (ii) deploy/device; (iii) release.
+    Nenhuma foi tomada nesta rodada.

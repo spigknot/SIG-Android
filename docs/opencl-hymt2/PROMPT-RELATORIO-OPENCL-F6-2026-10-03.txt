@@ -1,0 +1,162 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F6: PREPARACAO LOCAL CONCLUIDA
+Data: 03/10/2026. Repo: D:/Projetos/SIG (NADA commitado; WIP preservado).
+Base: "PROMPT AO EXECUTOR — APOS F5: CONCLUIR PREPARACAO LOCAL E PERFIL REAL".
+Docs anteriores: ...-UNIFICADO (F1-F4), ...-F5 (sanemento), F3B-PATCH.diff, BUILD-RECIPE-F3B.md.
+Aparelho: CPH2747 em 9698670c + UI Q4_K_M+Vulkan + chaves zeradas (revertido, readback).
+Nenhuma operacao de device nesta rodada (apenas builds locais).
+
+================================================================================
+ESTADOS
+================================================================================
+[CCE] A) Estado historico reconciliado por runID (F5) + manifesto regerado pos-docs
+[CCE] B) Guard: mutation RED-GREEN no helper REAL; limites de ownership documentados;
+      probe nativo de lifetime COMPILADO (execucao no target pendente de permissao)
+[CCE] C) CSV por run com campos de evento/associacao + terminologia corrigida
+[CCE] D) BUILD DE PROFILING PRONTO (2 artefatos com hash) + plano de 1 consentimento
+[PENDENTE: consentimento] ativacao/envio dos artefatos de profiling no aparelho
+[PENDENTE: permissao] execucao do transpose_lifetime_probe no device
+================================================================================
+
+A. ESTADO HISTORICO (reconciliacao aplicada no F5; invalidas preservadas)
+--------------------------------------------------------------------------------
+A1. Smoke prodmin2: 1a tentativa (porta 45197) = r321/r322 falharam por LEITURA
+    DE UI VAZIA pos-deploy (transiente de instrumento) e r323 interrompido pela
+    queda do wireless; 2a tentativa (porta 39599) = r324/r325 (Q4) + r326 (Q8)
+    = os 3 VALIDOS novos; ROLLBACK10 em seguida. Blocos ESTADOS/B5/H1/F3 do F5
+    atualizados para refletir o pos-reconciliacao; logs originais preservados.
+A2. Manifesto: regerado APOS as ultimas docs (438 -> 442 com esta rodada);
+    verificacao Python count/exist/size/dedupe; 0 ausentes/0 dups/0 erros.
+
+B. GUARD E ASYNC (prova e vacina)
+--------------------------------------------------------------------------------
+B1. Mutation test no runner (ligado ao HELPER REAL, sem duplicar):
+    native-dependencies/harness/run_transpose_guard_test.sh
+    (1) GREEN contra app/.../sig_transpose_guard.h (o MESMO header que o
+    ggml-opencl.cpp inclui); (2) MUTACAO: copia do header com o guard quebrado
+    (return true) compilada em arvore isolada -> o teste DEVE falhar.
+    RESULTADO REAL: GREEN PASS (5/5) + mutante detectado (2 falhas) + exit 0.
+B2. Argumento de custo da consulta: NAO e' mais afirmado como "microssegundos"
+    sem medicao. EVIDENCIA MEDIDA (bound): prodmin2 (consulta por chamada) vs
+    prodmin v1 (cache) em smoke comparavel: loads 4.1-5.7s vs 4.3-5.2s (ruido);
+    => o custo total das ~672 consultas fica DENTRO do ruido (<~0.3s), nao
+    medido por op. Rotulado como BOUND, nao medicao direta.
+B3. Limites de ownership documentados (nao "seguro por construcao"):
+    - Invariante ATUAL do fork: 1 contexto + 1 fila IN-ORDER por backend; o
+      temp estatico do transpose e o buffer temporario do repack sao seguros
+      SO' nesse arranjo (a fila serializa; clFinish no free drena).
+    - O guard consulta POR FILA a cada chamada => fila OUT-OF-ORDER nunca entra
+      em non-blocking; MAS multi-FILA compartilhando o mesmo temp estatico NÃO
+      esta coberto pelo guard (IN-ORDER so' ordena a MESMA fila). Se o fork
+      futuramente criar 2+ filas/contextos que compartilhem buffers estaticos,
+      o modo non-blocking precisa ser revisto (bloqueio ou ownership por fila).
+      Isso esta' escrito no cabecalho do sig_transpose_guard.h.
+B4. Teste nativo de LIFETIME — PREPARADO E COMPILADO (local; execucao no device
+    pendente de permissao):
+    - Fonte: native-dependencies/harness/transpose_lifetime_probe.cpp.
+    - Build: build_transpose_lifetime_probe.sh (NDK 27.2, aarch64; usa a API
+      publica ggml_backend_tensor_set/get = o MESMO caminho que dispara os
+      transposes Adreno; shapes com ne0%32==0, ne1%4==0, ne2==ne3==1 e tipos
+      Q8_0/Q4_K; caso de controle F32 sem transpose).
+    - Casos: 6 shapes com TAMANHOS ALTERNADOS x 2 passadas (determinismo:
+      hash igual; transposto != entrada) + ciclo free/re-init do backend
+      (contexto+fila recriados) com hash estavel.
+    - Binario: native-dependencies/harness/arm64-v8a/transpose_lifetime_probe
+      (NEEDED somente libs de sistema) sha256 1c655931d3bda7a47a79c15389c9e9bdd9e3e8552a036b3a0e72565f07037a60.
+    - Camadas: mock (guard) != runtime-lifetime (este probe, alvo real) —
+      separadas; execucao/envio no aparelho requer permissao (nao executado).
+
+C. TIMER POR RUN AUDITAVEL (CSV atualizado)
+--------------------------------------------------------------------------------
+C1. tabela_por_run.csv (98 linhas) ganhou: t_ini_journal/t_fim_journal (brackets
+    do journal por run), assoc_load_pronta (rotulo de ASSOCIACAO com regra
+    explicita: mesmo_tap_consistente / taps_diferentes_inconsistente /
+    sem_load_no_delta_warm) e sha_full por output.txt.
+C2. ACHADO: nos 98 runs, NENHUM e' internamente inconsistente (53 mesmo_tap +
+    45 sem_load); a "incoerencia" apontada vinha dos MEDIANS AGREGADOS que
+    misturavam runs cold (pronta inclui load) com warm (pronta ~ decode+0.3).
+    Corrigido no entendimento e documentado; nao se somam campos de taps
+    diferentes.
+C3. Terminologia corrigida: o campo Desempenho do JNI = "loop de GERACAO no HOST
+    apos o prefill" (exclui prompt; INCLUI sampler sample/decode/detokenize por
+    token e qualquer sincronizacao/readback do loop) — NAO e' tempo de kernel
+    GPU. A distincao GPU x host sera' feita pelo profiling (secao D/E).
+C4. Contagem/ordem/temps: por grupo no CSV (cada run com sua temperatura);
+    comparacao CPU 6 x Vulkan 6 x OpenCL 3 permanece SEM claim causal puro
+    (nao matched por sessao); corpus/flags/reload anotados.
+
+D. BUILD DE PROFILING — PRONTO PARA ATIVACAO (consentimento unico)
+--------------------------------------------------------------------------------
+D1. Semantica verificada NA FONTE (nao inventada): llama_perf_context_data
+    (llama.h) = t_load_ms/t_p_eval_ms/n_p_eval (PREFILL) e t_eval_ms/n_eval
+    (DECODE); populado por perf_get_data() no llama-context.cpp; contadores
+    reais (n_p_eval += tokens enfileirados). reset disponivel.
+D2. profA — perfil llama (baixo overhead):
+    - WIP + bloco "Perfil llama: load/prefill/decode" no llama_jni, GATED por
+      debug.sig.hymt2.prof (default 0 = stock, sem log); resto do comportamento
+      stock (sampler/template/precision/reset/context inalterados).
+    - sha256: 91ac57a848b059f628225ec7f11c99b0043e6c89c3405978fea7e35a930d9c34
+      (95.955.016 B).
+D3. profB — profA + profiling OpenCL por op (opt-in de COMPILACAO):
+    - CMake GGML_OPENCL_PROFILING=ON (opcao do proprio fork; CL_QUEUE_
+      PROFILING_ENABLE + clGetEventProfilingInfo agregado) + paths de saida
+      corrigidos para pasta do app (cl_profiling.csv/cl_trace.json em
+      /sdcard/Android/data/br.gov.sp.pcsp.launcher/files/).
+    - Descarrega no FREE do contexto: protocolo de coleta = executar e depois
+      FORCAR o free (troca de modelo/backend ou saida normal do app) para
+      drenar o CSV/trace. (force-stop mata sem free — anotado.)
+    - sha256: 04083170b1b1ba4105c734540da52340b99412db8da8792a8d65b2dae63bf81c
+      (95.935.792 B). Cache CMake REVERTIDO para OFF apos o build.
+    - Flags/entradas/saidas documentadas (secao F/receita); Gradle assemble
+      NAO compila o .so nativo (declarado; gate nativo = este fluxo ninja).
+D4. CONTROLE DE OVERHEAD (desenho): (a) profA prop OFF vs ON no MESMO artefato
+    -> custo do log/leitura (~0); (b) profA vs build stock (969/prodmin) em
+    runs matched -> custo das camadas de instrumentacao; (c) profB vs profA ->
+    custo do profiling CL (esperado >0; quantificar por tempo total matched).
+    Warm/cold e 1a carga (JIT/kernels) SEPARADOS; 1a carga pos-swap ja'
+    observada em 25.2s (excluir da analise de estado quente).
+D5. Nenhum blocker de build: os dois artefatos compilaram; a unica pendencia e'
+    o CONSENTIMENTO de ativacao (deploy/envio). Rollback planejado = reverter
+    para 9698670c com readback (protocolo ja' executado 10x nesta frente).
+
+E. APOS CONSENTIMENTO — PROTOCOLO DE PERFIL (pronto para executar)
+--------------------------------------------------------------------------------
+E1. Precheck fresh (serial explicito/getprop/idle/path/readback) — sem reusar
+    porta antiga; backup 9698670c conferido antes de qualquer envio.
+E2. Sequencia: profA (prop OFF 3x + ON 3x) por {Q4,Q8} x {curto, mais_longo};
+    depois profB igual + reload final p/ descarregar CSV/trace; ordem
+    rotacionada; temperaturas por run; corpus/hashes preservados.
+E3. Analise: por run - prefill vs decode (llama_perf) vs total do app; no profB -
+    top ops por cmd_duration (device clock; queued/submit/start/end) + tempo de
+    fila/transfer/readback; classificar GPU-kernel x host-enqueue x wait x
+    sampler; propor UM candidato dominante com A/B no MESMO artefato/chave.
+E4. Regras: nada de signedness Vulkan->OpenCL; sem fastmath/precision/EOG/
+    sampler/reset como atalho; sem pooling profundo de upload (alvo e' decode);
+    new-prod-patch exige RED-GREEN + aceite matched.
+
+F. ARTEFATOS/HASHES (desta rodada; completos no manifesto)
+--------------------------------------------------------------------------------
+- profA 91ac57a8... (95.955.016 B) | profB 04083170... (95.935.792 B)
+- transpose_lifetime_probe 1c655931... (+ fonte/script de build no repo)
+- guard test c/ mutacao: guard_test_mutation.txt (+ runner atualizado)
+- tabela_por_run.csv (98 linhas, campos novos)
+- F3B-PATCH.diff 33e56f1c... | BUILD-RECIPE-F3B.md | sig_transpose_guard.h
+- Cache CMake: GGML_OPENCL_PROFILING de volta a OFF apos profB.
+
+G. MANIFESTO
+--------------------------------------------------------------------------------
+G1. Regerado apos esta entrega (count final no rodape do MANIFESTO-OPENCL.json);
+    verificacao Python: existencia/tamanho/sha/dedupe; 0 erros.
+
+H. ESTADO FINAL
+--------------------------------------------------------------------------------
+H1. Aparelho = 9698670c + Q4_K_M + Vulkan (NAO tocado nesta rodada).
+H2. Fonte: WIP (diag + guard + bloco Perfil gated + paths do profB) +
+    artefatos isolados; patch de produto versionado (F3B-PATCH).
+H3. PENDENCIAS: (a) consentimento p/ ativar profA/profB no device; (b)
+    permissao p/ executar o transpose_lifetime_probe no device; (c) perfil
+    real (apos a). Nenhuma pendencia de build/dep (tudo compilado local).
+H4. NAO feito: commit/push/release/pack/R2, remocao, default de backend,
+    NPU/Whisper, alteracao de sampler/template/EOG/max/context.
+Conclusao: preparacao LOCAL concluida; frente OpenCL segue com a otimizacao de
+CARGA validada na amostra e o diagnostico de INFERENCIA instrumentado e pronto
+para medicao sob consentimento.

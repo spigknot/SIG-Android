@@ -1,0 +1,5 @@
+== DEPLOY PROFH a072cdc6 (host instrumentation; continuacao autorizada) ==
+adb.exe: device '100.108.27.64:39599' not found
+adb: error: failed to get feature set: device '100.108.27.64:39599' not found
+adb.exe: device '100.108.27.64:39599' not found
+adb.exe: device '100.108.27.64:39599' not found

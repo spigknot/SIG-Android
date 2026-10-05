@@ -1,0 +1,95 @@
+RELATÓRIO DE VERIFICAÇÃO — 54 FINDINGS DAS FERRAMENTAS FFMPEG
+Commit verificado: 85b889f ("fix: alinhar ferramentas FFmpeg às opções da interface")
+Data: 2026-08-31
+Método: leitura caso a caso do código pós-commit + FfmpegMediaPoliciesTest (8 testes, 0 falhas)
+
+RESUMO: 53 corrigidos · 1 pendência · 0 parcialmente corrigidos
+
+==============================================================
+PENDÊNCIAS
+==============================================================
+
+Ferramenta de cortar áudio/vídeo
+Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt
+
+7. Finding: cortar áudio sempre reencoda. WAV vira PCM 16-bit e MP3 usa bitrate fixo, mesmo que a origem pudesse ser copiada.
+   Fix: oferecer stream copy quando codec e container forem compatíveis e expor a qualidade de saída.
+   Linhas: 961-970 (preciseAudioEncoderArguments), 657 (chamada no caminho de áudio). Numeração atual; o relatório original citava 900-909.
+   Gravidade: MÉDIA.
+   Detalhe da verificação: os caminhos de vídeo ganharam cópia sem perdas, mas o corte de áudio continua chamando preciseAudioEncoderArguments, que sempre devolve um encoder (-c:a pcm_s16le / libmp3lame / etc.) — não existe ramificação com -c:a copy. O Extract Audio já tem o padrão pronto para copiar (canCopyAudioWithoutConversion + -c:a copy), pode ser reaproveitado aqui.
+
+==============================================================
+VERIFICADOS E CORRIGIDOS (mecanismo encontrado no código)
+==============================================================
+
+Ferramenta de girar vídeo (FfmpegRotateVideoActivity.kt)
+1. CORRIGIDO — FfmpegMediaPolicies.metadataRotationAfterClockwiseRequest calcula current - requested (anti-horário FFmpeg vs. graus horários da UI); teste metadataRotationConvertsClockwiseUiToCounterClockwiseFfmpeg cobre o sinal.
+2. CORRIGIDO — checkbox desmarcada por padrão (PREF_METADATA_ROTATION default false) e persistida em "ffmpeg_rotate_preferences" no listener.
+3. CORRIGIDO — metadataRotationCopyArguments sempre emite -display_rotation:v:0 com o valor normalizado (0 quando a rotação final zera).
+4. CORRIGIDO — -map_metadata 0 nos três caminhos de reencode (linhas 935, 1065, 1256).
+5. CORRIGIDO — paralelo copia áudio (-c:a copy, linha 1061) e o concat final usa -c copy; o sequencial usa -c copy + reencode só de vídeo (audio preservado no codec original, sem -ar/-ac).
+6. CORRIGIDO — modo metadados mantém a extensão do original via FfmpegMediaPolicies.safeContainerExtension (linha 1824; cai para mkv apenas quando a extensão não é segura).
+7. CORRIGIDO — canUseParallel exige sem trim, sem modo metadados e com filtro físico; Toast explica cada ignorância; status "Paralelo ajustado: N trecho(s)" informa os segmentos reais.
+8. CORRIGIDO — split usa intermediários Matroska (-segment_format matroska) e a falha do paralelo cai no fallback sequencial (linhas 537-558).
+9. CORRIGIDO — -noautorotate antes de -i no split (738/758), nos trechos (1045) e no sequencial (1246).
+10. CORRIGIDO — updateMetadataModeState salva e restaura os flips (1368-1389).
+11. CORRIGIDO — o mesmo método salva e restaura o intervalo de corte (savedTrimStartMs/EndMs + timeline.setStart/setEnd).
+12. CORRIGIDO — parseDisplayRotation normaliza via normalizeRightAngle (arredonda ao múltiplo de 90 mais próximo); teste arbitraryRotationRoundsToNearestRightAngle.
+13. CORRIGIDO — sequencial mapeia 0:a? (todos os áudios), 0:s?, 0:d?, 0:t? com -c copy; trechos paralelos copiam -c:a/-c:s/-c:d/-c:t. Nota: o vídeo continua mapeado como 0:v:0 (faixa única) por desenho — arquivos com 2+ faixas de vídeo são patológicos.
+
+Ferramenta de cortar áudio/vídeo (FfmpegCutActivity.kt)
+1. CORRIGIDO — o corpo híbrido usa keyframes reais do MediaExtractor (µs→ms) e -ss DEPOIS de -i (decodifica e descarta, preciso por frame); bordas são reencodadas, então não há perda por seek.
+2. CORRIGIDO — mensagem agora é "Copiando vídeo do trecho central sem reencodar" (linha 697), coerente com o que o comando faz.
+3. CORRIGIDO — todos os caminhos mapeiam 0:v:0? 0:a? 0:s? 0:d? + -map_metadata 0 -map_chapters 0.
+4. CORRIGIDO — detectMediaMime usa MediaExtractor (linhas 472-487); extensão desconhecida cai em application/octet-stream, não mais video/mp4.
+5. CORRIGIDO — diálogo pré-execução "O encoder escolhido exige recodificação completa" (508-527) com opção de trocar para encoder compatível.
+6. CORRIGIDO — caminho de precisão usa -ss ANTES de -i (linha 642); com reencode o accurate seek mantém a precisão.
+8. CORRIGIDO — detectVideoCodecFamily usa MediaExtractor (video/avc, video/hevc), eliminando o parse da linha "Video:".
+
+Ferramenta de juntar vídeo/áudio (FfmpegJoinVideosActivity.kt)
+1. CORRIGIDO — videoNormalizeFilter e videoFillFrameFilter usam scale=...:force_original_aspect_ratio=decrease + pad (letterbox) por padrão.
+2. CORRIGIDO — Smart Join parcial foi desativado: smartJoinChecked = false com comentário (536-537); o caminho agora é o reencode completo preciso (o executeSmartJoinExperiment ficou como código morto).
+3. CORRIGIDO — seletor de faixa de áudio por clipe (requestAudioTrack) + validação que rejeita com explicação arquivos com legendas ou perfis incompatíveis (validateSupportedStreamTopology, 2599-2628).
+4. CORRIGIDO — audioEncodingArguments preserva o codec de origem (opus/vorbis/flac/mp3/ac3), não converte mais tudo para AAC.
+5. CORRIGIDO — detectAggregateOutputProfile escolhe maxOf de resolução, fps, bitrate e canais entre os clipes (2831-2861); o menor não puxa mais todos para baixo.
+6. CORRIGIDO — o concat direto é bloqueado quando os perfis divergem (codec, resolução, fps, rotação, pixfmt, sar, perfil H.264, áudio) com mensagem "Ative 'Recodificar'" (722-728).
+7. CORRIGIDO — fades aplicados após asetpts=PTS-STARTPTS/settb (1479-1496, 1574, 1590); timestamps normalizados antes dos fades.
+8. CORRIGIDO — a normalização usa o perfil real dos áudios (detectAggregateOutputProfile; sem mais 16 kHz mono forçado). Nota menor: o rótulo diz "Normalizando pelo primeiro áudio" mas o perfil agregado é o mais alto entre os clipes — comportamento correto, rótulo impreciso.
+9. CORRIGIDO — parseAudioChannels delega a FfmpegMediaPolicies.parseAudioChannelCount (regex "N channels", 5.1/6.1/7.1/quad) + channelLayout; KEY_CHANNEL_COUNT lido via formatIntOrNull.
+10. CORRIGIDO — bestVideoBitrate parseia o bitrate SOMENTE da linha da stream de vídeo (2890-2891); FfmpegVideoQuality recebe o bitrate de vídeo.
+11. CORRIGIDO — parseVideoProfile usa a whitelist parseKnownVideoProfile (Baseline/Main/High etc.); teste videoProfileParserDoesNotTreatCodecTagAsProfile cobre o falso "avc1" como perfil.
+12. CORRIGIDO — join_list_*.txt apagado ao fim de toda sessão com concat (1726-1728), inclusive em falha/cancelamento; workDir.deleteRecursively() no Smart Join.
+13. CORRIGIDO — MP3 no modo sem reencode cai na normalização (firstAudioExtension == "mp3" força audioNeedsNormalization, linha 566); concat direto de MP3 não existe mais.
+14. CORRIGIDO — menu de transições em português ("Dissolver", "Varredura para a esquerda"...) com VIDEO_TRANSITION_VALUES/AUDIO_TRANSITIONS mapeando o identificador FFmpeg só internamente.
+
+Ferramenta de extrair áudio (FfmpegExtractAudioActivity.kt)
+1. CORRIGIDO — padrão geral agora é WAV 48 kHz estéreo 128k (150-152); os presets marcam/desmarcam em sincronia com a configuração ativa (1175-1180).
+2. CORRIGIDO — canCopyAudioWithoutConversion + -c:a copy (791, 873-875): codec/extension/ø taxa/canais compatíveis copiam sem perdas, inclusive em lote. Nota: CBR/VBR do MP3 continua não exposto (o copy atende o cerne do finding).
+3. CORRIGIDO — OPUS usa -application audio -vbr on (895-900), alinhado com Cortar e Inserir.
+4. CORRIGIDO — seletor de faixa por arquivo (requestAudioTrack, linha 751) e o comando usa 0:a:$track (872); arquivo sem áudio falha só naquele item do lote com mensagem própria.
+5. CORRIGIDO — desmarcar preset restaura savedCustomSettings (1100-1129).
+6. CORRIGIDO — -ss/-t só quando o intervalo difere da duração completa (hasStartTrim/hasEndTrim com tolerância de 250 ms, 863-871).
+7. CORRIGIDO — as sondagens duplas por arquivo saíram do fluxo (describeAudioFile ficou sem chamadas); o terminal mostra o comando real via FfmpegCommandPresenter.
+8. CORRIGIDO — o bitrate exibido é parseado da linha "Audio:" (1675, 1692-1696); a estimativa por tamanho/duração é só fallback.
+
+Ferramenta de inserir áudio (FfmpegInsertAudioActivity.kt)
+1. CORRIGIDO — todo modo passa pelo reencode completo (fullReencode = true, 538, com comentário 535-537); os caminhos copy/smart com -ss antes de -i e concat de containers perderam todas as chamadas.
+2. CORRIGIDO — idem: Smart Insert parcial desativado junto (executeCopyInsert/executeSmartInsert sem call sites).
+3. CORRIGIDO — a comparação fraca de compatibilidade ficou sem uso: como não há mais concat de trechos copiados, o risco de parâmetros internos divergentes desapareceu.
+4. CORRIGIDO — o campo de tempo, o marcador da timeline e o comando usam a MESMA variável insertionMs (260, 420, 504); o playhead (compositePositionMs) é conceito separado no widget.
+5. CORRIGIDO — detectAudioProfile lê KEY_CHANNEL_COUNT real (815); nada de "mono ou resto é estéreo".
+6. CORRIGIDO — seleção de faixa por arquivo (requestAudioTrack 671; filtros [0:a:${track}] 613/620/624).
+7. CORRIGIDO — reencodeChecked é incondicional agora: fullReencode = true independe do Smart Insert (538-540).
+8. CORRIGIDO — menu de transições em português ("Curva linear" → tri, "Seno de quarto de onda" → qsin, etc., 1135-1155).
+
+Ferramenta de limpar áudio (FfmpegCleanAudioActivity.kt)
+1. CORRIGIDO — a saída preserva taxa/canais/profundidade da origem via inspectAudioSource + pcmEncoder (pcm_u8/pcm_f32le/pcm_s24le/pcm_s32le/pcm_s16le), linhas 260-279 e 306-323.
+2. CORRIGIDO — o modo Forte mostra confirmação com estimativa de tempo antes de executar (182-193: "Estimativa conservadora: X a Y" pela duração × 2 a × 6).
+3. CORRIGIDO — a faixa é validada antes de rodar: audioTracks != 1 → "O arquivo precisa ter exatamente uma faixa de áudio." (177-181).
+
+==============================================================
+OBSERVAÇÕES (não são findings; só higiene de código)
+==============================================================
+- Código morto deixado para trás pelos fixes: executeCopyInsert/executeSmartInsert/concatPieces (Insert), executeSmartJoinExperiment + buildTransitionArgumentsMkv (Join), detectContainerBitrateKbps (Join), describeAudioFile/probeAudioFile/estimateBitrate (Extract). Podem ser removidos numa passada futura.
+- Rótulo "Normalizando pelo primeiro áudio" (Join, linha 1047) na verdade normaliza pelo perfil agregado (mais alto) — benigno, mas o texto pode ser ajustado para "Normalizando pelo melhor perfil".
+- Teste de regressão novo no commit: FfmpegMediaPoliciesTest (8 casos) — verde na verificação: BUILD SUCCESSFUL, tests="8" failures="0".

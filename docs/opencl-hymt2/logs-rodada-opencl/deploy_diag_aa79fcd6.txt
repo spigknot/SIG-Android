@@ -1,0 +1,15 @@
+== DEPLOY DIAG aa79fcd6 (autorizado, 02/10) ==
+-- 1) app parado --
+/system/bin/sh: syntax error: unexpected 'parado'
+-- 2) push binario --
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag_opencl_aa79fcd6.so: 1 file pushed, 0 skipped. 116.6 MB/s (95625624 bytes in 0.782s)
+-- 3) hash no device ANTES de instalar --
+aa79fcd66a0792bb1d05f2c2c05bacb94bc9022777c6f5edd0168914080fac88  /data/local/tmp/diag_aa79fcd6.so
+95625624
+-- 4) instalacao (run-as cp + chmod) --
+INSTALADO
+-- 5) READBACK no destino --
+aa79fcd66a0792bb1d05f2c2c05bacb94bc9022777c6f5edd0168914080fac88  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+95625624
+-- 6) relanca + maps --
+native_dependencies/9-arm64-v8a

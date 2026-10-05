@@ -1,0 +1,6 @@
+== DEPLOY PROFB2 a5fe393d (piloto CL profiling) ==
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_profB2.so: 1 file pushed, 0 skipped. 13.8 MB/s (95936040 bytes in 6.618s)
+OK
+a5fe393d3a463070501b570c0775922ff372a00660213aba2484c27b5003fa18  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+-- limpa arquivos antigos de profiling (se houver) --
+LIMPO

@@ -1,0 +1,4 @@
+== DEPLOY DIAG3 ff7a2999 (mesmo escopo/rollback) ==
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag3.so: 1 file pushed, 0 skipped. 123.4 MB/s (95692456 bytes in 0.739s)
+OK
+ff7a299936bd8cdfd73516d5abf9060e95d158c4cd1ff68b21940244fb78e2b7  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

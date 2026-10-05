@@ -37,3 +37,36 @@ tools/granite/*.wav
 # Diretorios de agentes/ferramentas (scratch local)
 .workbuddy-ai/
 .pytest_cache/
+
+# === Artefatos grandes de build/nativos (fora do Git) ===
+# Binarios compilados e intermediarios (libs, objetos, pacotes de modelo)
+*.so
+*.a
+*.o
+*.obj
+*.exe
+*.pdb
+*.gguf
+*.npy
+*.mat
+*.bin
+*.f32
+*.f16
+*.csv
+*.sig_orig
+# Fixtures de pacotes nativos (artefatos de teste, nao entram no Git)
+app/src/test/resources/native-deps/*.zip
+# Harness e artefatos de diagnostico nativos
+native-dependencies/harness/
+native-dependencies/diag-norm/
+native-dependencies/build/
+# Artefatos de rodada OpenCL (preserva .txt/.md de relatorio)
+docs/opencl-hymt2/logs-rodada-opencl/*
+!docs/opencl-hymt2/logs-rodada-opencl/*.txt
+!docs/opencl-hymt2/logs-rodada-opencl/*.md
+# Artefatos das rodadas Vulkan (preserva .txt/.md de relatorio/prompt)
+docs/vulkan-hymt2-fusion-round/**
+!docs/vulkan-hymt2-fusion-round/**/*.txt
+!docs/vulkan-hymt2-fusion-round/**/*.md
+# Midia de teste
+emul_test_media/

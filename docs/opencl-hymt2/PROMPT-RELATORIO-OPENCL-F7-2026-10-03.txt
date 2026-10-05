@@ -1,0 +1,123 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F7: RESPOSTA AO PARECER (AJUSTES DE PROTOCOLO)
+Data: 03/10/2026. Repo: D:/Projetos/SIG (NADA commitado; WIP preservado).
+Base: "PARECER AO EXECUTOR — APOS F6: PRONTO PARA PEDIR ATIVACAO, COM AJUSTES DE
+PROTOCOLO". Nenhuma execucao no aparelho nesta rodada (so' correcoes/builds locais).
+Aparelho: CPH2747 em 9698670c + UI Q4_K_M+Vulkan + chaves zero (nao tocado).
+
+================================================================================
+ESTADOS
+================================================================================
+[CCE] 1) Conclusoes corrigidas (guard bound retirado; profA custo = hipotese;
+      CSV com rotulos INFERIDO_*; regra de nao-somar cold/warm documentada)
+[CCE] 2) Probe de lifetime CORRIGIDO (semantica get=canonico => igualdade EXATA
+      + prova de engate do transpose por contador) e RECOMPILADO
+[CCE] 3) profA2/profB2 reconstruidos: no_perf GATEADO (achado critico), hashes
+      completos, comparabilidade/prop-semantica documentadas
+[PENDENTE: consentimento] ativacao profA2/profB2 + execucao do probe no device
+================================================================================
+
+1. CORRECOES DE CONCLUSAO (aplicadas; F6 retificado NESTE documento)
+--------------------------------------------------------------------------------
+1a. Guard (custo das consultas): RETIRADO o "bound <0.3s". Texto correto: o custo
+    das consultas POR CHAMADA nao foi ISOLADO; o smoke comparativo (prodmin2 vs
+    prodmin v1) NAO mostrou regressao conclusiva NA AMOSTRA (dentro do ruido) —
+    nao e' prova de limite. Fica como questao aberta, de baixa prioridade.
+1b. profA (custo do log/leitura): HIPOTESE ate' medicao OFF/ON da propriedade no
+    device (o desenho de controle ja' preve: prop OFF vs ON no MESMO artefato;
+    profA vs stock para camadas).
+1c. CSV: "journal brackets + consistencia aritmetica NAO provam mesmo tap".
+    Rotulos renomeados para INFERIDO_* (INFERIDO_consistente_aritmetica /
+    INFERIDO_taps_distintos_ou_inconsistente / INFERIDO_sem_evento_load_no_delta)
+    — associacao INFERIDA, flags conservadas; regra escrita: NAO somar medianas
+    cold/warm nem tratar campos de taps distintos como aditivos.
+
+2. PROBE LIFETIME — CORRIGIDO (determinismo nao bastava)
+--------------------------------------------------------------------------------
+2a. SEMANTICA CONFIRMADA NA FONTE: ggml_backend_opencl_buffer_get_tensor
+    RESTAURA o layout canonico para os tipos do teste (kernels
+    restore_block_q8_0 / _trans a 10278/10306; restore_block_q4_k_trans4_ns a
+    10414) => o contrato e' IGUALDADE EXATA byte a byte apos set;get, qualquer
+    que seja o layout interno. A expectativa anterior ("hash diferente da
+    entrada") estava ERRADA e foi removida.
+2b. Probe v2: (i) igualdade EXATA (memcmp) em todos os casos; (ii) PROVA de que
+    o transpose ENGATOU no run via contador diag do backend
+    (ggml_opencl_diag_tr_calls delta>0 nos casos Q8_0/Q4_K; ==0 no controle
+    F32) — sem isso o teste poderia passar vacuamente; (iii) padrao nao
+    simetrico; (iv) tamanhos ALTERNADOS entre casos; (v) determinismo 2x;
+    (vi) ciclo free/re-init do backend; (vii) contagem tentativas/validos/
+    invalidos + codigos de retorno impressos; rc 0/1/3.
+2c. Binario recompilado: native-dependencies/harness/arm64-v8a/
+    transpose_lifetime_probe sha256 5e86f0e712a89906523e14aad11c0c0120e87639c1ca17dec1f8894b16dc06af
+    (fonte+script no repo; execucao no device PENDENTE de permissao).
+2d. Observacao de escopo: o probe declara os contadores diag do backend =>
+    roda no build de diagnostico/prof (que possui os getters). Para um build
+    stock, os getters nao existem (documentado; alternativa futura: canario
+    proprio ou deteccao por tempo).
+
+3. PROFA/PROFB — COMPARABILIDADE E ESCOPO (com um achado critico)
+--------------------------------------------------------------------------------
+3a. ACHADO CRITICO CORRIGIDO: o default do fork e' no_perf = TRUE
+    (llama_context_default_params, llama-context.cpp ~3514) e o JNI NAO
+    setava no_perf => o profA original teria impresso contadores ZERADOS.
+    Agora: cparams.no_perf = !(debug.sig.hymt2.prof=="1") — medicao ligada
+    SOMENTE com a propriedade; default = stock (sem contadores).
+3b. Artefatos reconstruidos (hashes completos):
+    - profA2 cbd1a033ef1626e2b75a27af116f4101610ca208d88a1dfb61e08bfcae32aa54
+      (95.955.040 B) = WIP + bloco "Perfil llama" (prop-gated) + no_perf gate.
+    - profB2 a5fe393d3a463070501b570c0775922ff372a00660213aba2484c27b5003fa18
+      (95.936.040 B) = profA2 + GGML_OPENCL_PROFILING=ON (cache revertido a OFF
+      apos o build) + paths do CSV/trace para a pasta do app.
+3c. Propriedade debug.sig.hymt2.prof controla a MEDICAO/LOG do llama (inclui
+    no_perf); NAO desliga o profiling CL do profB2. Controle do custo CL =
+    profB2 vs profA2 (entradas/config/ordem equivalentes).
+3d. WIP instrumentado != baseline stock (declarado); hashes de entrada no
+    BUILD-RECIPE/manifesto; diff A/B limitado a: bloco Perfil+no_perf (JNI),
+    flag de compilacao e paths de saida (sem tocar sampler/template/context/
+    precision/reset — inalterados).
+3e. Per-op waits do mecanismo CL: o trace em modo profiling identifica custos
+    SOB instrumentacao; nao replica automaticamente o scheduling stock
+    (documentado). queued/submit/start/end = relogio do DEVICE; host wall
+    separado; as fatias podem se sobrepor (nao somar como exclusivas). Kernels
+    nao medem host enqueue/sampler/readback => residual declarado, sem
+    atribuicao de causa antes de instrumentacao dedicada.
+3f. Contadores por pedido: o protocolo usa 1 geracao por processo (contexto
+    novo por run) => delta por pedido IMPLICITO; llama_perf_context_reset
+    existe (para multi-pedido por processo, se algum dia necessario). "Nao
+    confundir soma de stats llama com tempo GPU puro" — registrado.
+
+4. COLETA POR FASE E DESCARGA (protocolo ajustado)
+--------------------------------------------------------------------------------
+4a. CSV/trace no free AGREGAM fases/pedidos: protocolo exige (i) 1 geracao por
+    processo; (ii) descarga por LIVECYCLE que realmente chama o free do backend
+    (troca de modelo/backend ou saida normal) — NUNCA force-stop antes do
+    flush; (iii) hash do arquivo ANTES de reusar nome/sobrescrever (dado novo
+    confirmado por mudanca de hash/tamanho); (iv) separacao de fases por
+    janelas de tempo declarada como CORRELACAO APROXIMADA (host x device).
+4b. Paths/permissao: primeiro smoke do profB2 valida escrita na pasta do app
+    (arquivos aparecem) e shims do loader (clGetCommandQueueInfo ja' exercitado
+    no prodmin2; clGetEventInfo exercitado nos builds diag) — sem ampliar
+    permissoes.
+
+5. MEDICAO EM ETAPAS (sem matriz inflada; so' apos consentimento)
+--------------------------------------------------------------------------------
+Flagrante: precheck fresh (serial explicito/idle/libhash/readback) -> probe
+validado -> PILOTO curto (Q4 e Q8) com profA2 (prop OFF/ON) -> verificar
+stats/tokencounts/CSV/flush -> somente entao expandir para curto+mais_longo com
+reps alternadas/temperaturas; profB2 so' depois do piloto A2; stock matched
+pequeno para referencia. Se o instrumento falhar, PARAR o perfil e corrigir
+(sem inventar metrica). Cold/JIT (1a carga pos-swap) separado de warm.
+
+6. DECISAO E ENTREGA
+--------------------------------------------------------------------------------
+Saida da medicao (quando consentida): tabela host prefill/geracao (llama stats),
+total do app, top ops GPU por fase/dtype/shape/count, overhead OFF/ON e A/B,
+sha full/cobertura. Selecao de UM candidato pelo custo DOMINANTE medido; se o
+residual host for grande porem nao localizado, instrumentar ANTES de tuning de
+GEMV. Sem fastmath/precision/EOG/sampler. Este relatorio A-H + logs/hashes +
+manifesto (contagem no rodape) + registro explicito de consentimento pendente.
+
+ANEXO: artefatos desta rodada
+- profA2 cbd1a033... | profB2 a5fe393d... | probe v2 5e86f0e7...
+- Logs novos em logs-rodada-opencl/: probe_build2.log, build_profA2.log,
+  build_profB2.log, cmake_profB2.log, cmake_profB2_off.log.
+- CSV atualizado (rotulos INFERIDO_*).

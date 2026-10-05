@@ -1,0 +1,186 @@
+# RELATORIO UNIFICADO — FRENTE OPENCL Hy-MT2 1.8B (llama.cpp / Adreno 840 / CPH2747)
+Ferramenta 'Texto on-device' do SIG. Rodada F15-F20 (04-05/10/2026).
+Objetivo: OpenCL correto e mais rapido SEM sacrificar correção; foco = custo de setup por-op.
+
+## 0. SMOKING GUN (achado central)
+app/src/main/cpp/android-opencl-loader.cpp fazia dlerror()+dlsym() POR CHAMADA (sem cache):
+- contador REAL por pedido curto, cache OFF: chamadas=2.190.996 dlsym=2.190.996 (~15,4k/token)
+- cache ON: 3 dlsym. Pedido longo Q4: 22,75M chamadas.
+- Setup por-op caiu 83-87%; o custo dominante medido era o dlsym, nao a GPU.
+
+## 1. RESULTADOS — ACEITE MINIMO SEM INSTRUMENTACAO (F20; 'Desempenho' do proprio app)
+A-B-A no MESMO artefato (f17, sha 1c5b6465...), props de instrumentacao TODAS 0,
+unica chave = debug.sig.hymt2.loadercache (1=ON, 0=OFF).
+
+### Q4 curto (sha de saida 084f12f4 nos 3 braços — saida inalterada)
+  Q4_K_M_curto_min_q4c_A1on      fim=15.9  s pronto=11.2  s decode=5.8   s 24.4    t/s temp=None
+  Q4_K_M_curto_min_q4c_A2on      fim=20.1  s pronto=11.4  s decode=6.5   s 21.7    t/s temp=None
+  Q4_K_M_curto_min_q4c_B_off     fim=15.6  s pronto=12.6  s decode=7.6   s 18.7    t/s temp=None
+  Leitura: ON 5,8-6,5s (24,4-21,7 t/s) vs OFF 7,6s (18,7) => +16 a +30% (marcador stock)
+
+### Q8 curto (sha d36a3315 nos 3)
+  Q8_curto_min_q8c_A1on          fim=16.4  s pronto=12.7  s decode=6.2   s 23.0    t/s temp=None
+  Q8_curto_min_q8c_A2on          fim=15.4  s pronto=11.8  s decode=6.6   s 21.6    t/s temp=None
+  Q8_curto_min_q8c_B_off         fim=17.3  s pronto=13.6  s decode=7.8   s 18.3    t/s temp=None
+  Leitura: ON 6,2-6,6s (23,0-21,6) vs OFF 7,8s (18,3) => +20 a +26%
+
+### Q4 longo (sha 4d51e74f nos 3)
+  Q4_K_M_mais_longo_min_q4l_A1on fim=89.2  s pronto=88.1  s decode=81.4  s 18.2    t/s temp=None
+  Q4_K_M_mais_longo_min_q4l_A2on fim=65.1  s pronto=60.9  s decode=55.0  s 27.0    t/s temp=None
+  4_K_M_mais_longo_min_q4l_B_off fim=94.8  s pronto=90.3  s decode=84.3  s 17.6    t/s temp=None
+  Leitura: A2=55,0s (27,0 t/s) vs OFF 84,3s (17,6) => +53%; A1=86,9s/71,1s (18,2 t/s)
+  ANOMALO dentro do braco ON (declarado, nao escondido; ha dois runs no mesmo dir:
+  f20b A1on 89,2s/81,4s/18,2 e cadeia f20 A1on 86,9s/71,1s — ver §6.3)
+
+### Q8 longo FRIO, cache ON (sha ee49738f — canonico)
+  Q8_mais_longo_frio_q8longo_lc  fim=82.1  s pronto=78.6  s decode=70.8  s 21.3    t/s temp=None
+  1 execucao fria (32,8C) — caso que faltava, fechado. Para >=3 reps: nova janela.
+
+### Comparativo com a rodada INSTRUMENTADA (F18, props prof/hostprof ON)
+  Q4c: ON 13,5-14,3s x OFF 16,0-17,6s | Q4l: ON 62,1-74,0s x OFF 102,0-134,8s
+  Q8c canonicos; Q8l ON 23,3 t/s x OFF 16,9 (PARCIAL)
+  => Magnitude stock (+16 a +53%) E MENOR que a instrumentada (-33,6% a -50,4%):
+     interacao de instrumentacao (contador por chamada) confirmada, como o parecer pediu.
+
+## 2. SEGURANCA E TESTES DO PATCH
+- design: cache de simbolo em load_opencl_fn; publicacao atomica; falhas NAO cacheadas;
+  simbolo ausente = null seguro; chave runtime 'loadercache'; ZERO dlclose (lifetime =
+  processo, call_once — provado).
+- Testes host RED/GREEN com mock dlfcn: RED 4 / GREEN 2 / mutacao detectada.
+- Endurecimento A-F: 17/17 (transitoria/ausente/concorrencia 8x200/chave OFF/ON).
+- safe_deploy.sh (deploy fail-closed: fonte->push->verify tmp->cp->readback): 6/6 PASS,
+  inclui normalizacao de path com backslash (vacina do incidente F13/F17).
+- Saida: shas CANONICOS identicos nos braços ON e OFF (084f12f4 / 4d51e74f / d36a3315 /
+  ee49738f) — ausencia de mudanca de saida nesta amostra (nao e garantia universal).
+
+## 3. CAUSA DOS ENCERRAMENTOS (F19, ApplicationExitInfo)
+- 2 ANRs por INPUT: 'Waited 5000ms for MotionEvent ... pointers=[636.0,1246.0]' = o TAP
+  do botao Traduzir durante carga; demais = FORCE STOPs do protocolo.
+- ZERO OOM/LMK/termico. 'Morte por calor' NAO comprovada (so 42,9C + bateria 3%).
+- Q8-longo so completa FRIO (~33-38C); throttling operacional, nao crash.
+
+## 4. DECISOES QUE PRECISAM SER TOMADAS (pelo decisor de produto)
+  D1. ADOTAR o patch do loader no codigo local? (hoje: aplicado no working tree,
+      NADA commitado)
+  D2. Default ON de debug.sig.hymt2.loadercache? (hoje: 0; regra: so apos consentimento)
+  D3. Deploy do f17 para o dispositivo permanentemente? (hoje: rollback 9698670c)
+  D4. Commit/push? (hoje: nenhum; WIP preservado)
+  D5. Release/APK/R2? (NUNCA gerar sem pedido explicito)
+  D6. Abrir proxima frente: backpressure 'enq' (virou o gargalo visivel apos o cache)?
+  D7. Refazer controles CPU/VK (lacuna) e >=3 reps de Q8-longo em janela estavel?
+
+## 5. LOGS EMBUTIDOS (linhas reais dos journals; diretorios em hymt2-f20-minimo/)
+### Q4_K_M_curto_min_q4c_A1on
+  FIM {status=Tradução pronta., segundos=15.9, saida_chars=448, saida_sha=084f12f4b98b3d2a}
+  6. Modelo carregado em 5.1s.
+  10. Tradução pronta em 11.2s.
+  11. Desempenho: 142 tokens em 5.8 s (24.4 tokens/s)
+  RECURSO 
+
+### Q4_K_M_curto_min_q4c_A2on
+  FIM {status=Tradução pronta., segundos=20.1, saida_chars=448, saida_sha=084f12f4b98b3d2a}
+  6. Modelo carregado em 4.6s.
+  10. Tradução pronta em 11.4s.
+  11. Desempenho: 142 tokens em 6.5 s (21.7 tokens/s)
+  RECURSO 
+
+### Q4_K_M_curto_min_q4c_B_off
+  FIM {status=Tradução pronta., segundos=15.6, saida_chars=448, saida_sha=084f12f4b98b3d2a}
+  6. Modelo carregado em 4.7s.
+  10. Tradução pronta em 12.6s.
+  11. Desempenho: 142 tokens em 7.6 s (18.7 tokens/s)
+  RECURSO 
+
+### Q4_K_M_mais_longo_min_q4l_A1on
+  FIM {status=Tradução pronta., segundos=89.2, saida_chars=5156, saida_sha=4d51e74fcd5332df}
+  6. Modelo carregado em 5.0s.
+  10. Tradução pronta em 88.1s.
+  11. Desempenho: 1485 tokens em 81.4 s (18.2 tokens/s)
+  RECURSO 
+
+### Q4_K_M_mais_longo_min_q4l_A2on
+  FIM {status=Tradução pronta., segundos=65.1, saida_chars=5156, saida_sha=4d51e74fcd5332df}
+  6. Modelo carregado em 4.3s.
+  10. Tradução pronta em 60.9s.
+  11. Desempenho: 1485 tokens em 55.0 s (27.0 tokens/s)
+  RECURSO 
+
+### Q4_K_M_mais_longo_min_q4l_B_off
+  FIM {status=Tradução pronta., segundos=94.8, saida_chars=5156, saida_sha=4d51e74fcd5332df}
+  6. Modelo carregado em 4.3s.
+  10. Tradução pronta em 90.3s.
+  11. Desempenho: 1485 tokens em 84.3 s (17.6 tokens/s)
+  RECURSO 
+
+### Q8_curto_min_q8c_A1on
+  FIM {status=Tradução pronta., segundos=16.4, saida_chars=449, saida_sha=d36a3315698bab4b}
+  7. Modelo carregado em 6.2s.
+  11. Tradução pronta em 12.7s.
+  12. Desempenho: 142 tokens em 6.2 s (23.0 tokens/s)
+  RECURSO 
+
+### Q8_curto_min_q8c_A2on
+  FIM {status=Tradução pronta., segundos=15.4, saida_chars=449, saida_sha=d36a3315698bab4b}
+  7. Modelo carregado em 4.9s.
+  11. Tradução pronta em 11.8s.
+  12. Desempenho: 142 tokens em 6.6 s (21.6 tokens/s)
+  RECURSO 
+
+### Q8_curto_min_q8c_B_off
+  FIM {status=Tradução pronta., segundos=17.3, saida_chars=449, saida_sha=d36a3315698bab4b}
+  7. Modelo carregado em 5.5s.
+  11. Tradução pronta em 13.6s.
+  12. Desempenho: 142 tokens em 7.8 s (18.3 tokens/s)
+  RECURSO 
+
+### Q8_mais_longo_frio_q8longo_lc
+  FIM {status=Tradução pronta., segundos=82.1, saida_chars=5241, saida_sha=ee49738f4e2c09dc}
+  7. Modelo carregado em 6.0s.
+  11. Tradução pronta em 78.6s.
+  12. Desempenho: 1511 tokens em 70.8 s (21.3 tokens/s)
+  RECURSO 
+
+### Q4_K_M_curto_ctrl2_cpu (controle NAO concluido — travamento da injeção)
+  CONFIG {"button_model": "Q4_K_M", "button_backend": "CPU", ...}
+  FONTE_OK {"chars": 409}   <- apos isto o poll/injecao wedged (uiautomator)
+
+## 6. INCIDENTES E VACINAS
+6.1 Deploy F13/F17: safe_deploy bloqueou destino ambiguo; path com backslash quebrava
+    sha256sum local -> sha vazio -> 'tmp sha divergente' (fail-closed ATUOU). Vacina:
+    forward-slash + env antes dos imports + normalizacao de backslash (caso 6, 6/6).
+6.2 uiautomator WEDGE 3x na sessao (processo orfao em futex_wait; polls parados): cura =
+    kill -9 do pid + retry. Vacina a registrar: leitura com timeout externo HARD + kill
+    de orfao + abort-invalidar-por-fase (parecer C).
+6.3 Flake de tap/injecao: injecao perdida apos FONTE_OK em 2 tentativas (app reiniciou);
+    retry por rodada recuperou. ANR por input = causa (§3).
+    Q4l A1on: dois runs no mesmo diretorio (f20b: fim 89,2s / dec 81,4s / 18,2 t/s;
+    cadeia f20: fim 86,9s / pronta 71,1s) — reportado como medido, anomalo p/ ON.
+6.4 Run OFF invalida (e3b0c442, saida vazia, 262,5s): categorizada invalida, nao mediana.
+6.5 Reconciliacao por tentativa (f19_reconciliacao.py): 21 validos + 5 invalidos/abortados,
+    categorias exclusivas por Python — sem mediana sobre invalidas.
+
+## 7. ESTADO FINAL (readbacks)
+- Device 100.108.27.64:40663: lib = 9698670c460cec2f6e517a7a2019ec7ae80548ffd77948
+  4277a3831e806e9c53 (95.613.928 B) — STOCK; props prof/hostprof/decprof/schedprof/
+  clcount/loadercache = 0; UI = Q4_K_M / Vulkan / Portugues.
+- Repo D:/Projetos/SIG: NADA commitado; WIP preservado; whisper.cpp intocado.
+- Manifesto (manifesto-opencl.json): 542+ itens, SHA-256 por item, verificacao de volta = 0 erros.
+- Artefatos locais (scratch): f17 1c5b6465... (96.257.840 B); loadercache 290a6a0b...;
+  rollback 9698670c_ROLLBACK.so; anteriores 15a548fd/e14e6a80/cbd1a033/a5fe393d/
+  4718741e/811f76c9/9b1a714b.
+
+## 8. ARQUIVOS DE EVIDENCIA (repo)
+- LOADER-CACHE-PATCH.diff (139 linhas, patch golden; dry-run OK)
+- PROMPT-RELATORIO-OPENCL-F15..F20-*.txt (relatorios por fase, logs embutidos)
+- logs-rodada-opencl/: tabela_f18.json, tabela_f20.json, reconciliacao_f19.csv,
+  rollback*.txt (15 readbacks), safe_deploy_test_run*.txt, resume_f17b.log,
+  run_off2_invalida.log, profH/profS*.log, f20.log/f20b.log/f20c.log
+- native-dependencies/harness/safe_deploy.sh (+ safe_deploy_test.sh, 6/6)
+- fixtures/loader_cache/fake_dlfcn/ + loader_cache_test.cpp + run_loader_cache_test.sh
+
+## 9. PROXIMOS PASSOS (so com autorizacao)
+- Se D1/D2 sim: patch vira padrao local; default ON so apos consentimento explícito.
+- Se D6 sim: proximo candidato = lote de submissão / backpressure 'enq' (medido como
+  gargalo visivel apos o cache: enq subiu 10.709 -> 30.611 ms).
+- Se D7 sim: janela estavel p/ controles CPU/VK e >=3 reps de Q8-longo frio.
+- NAO: fastmath/precisão/EOG/sampler atalhos; F32 default global; sobrescrever controles.

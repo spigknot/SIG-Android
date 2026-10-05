@@ -1,0 +1,136 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F20: ACEITE MINIMO SEM INSTRUMENTACAO (RESULTADOS)
+Data: 05/10/2026 (madrugada). Repo D:/Projetos/SIG (NADA commitado).
+Escopo autorizado: controles minimos + Q8-longo frio + A-B-A sem instrumentacao; depois, relatorio.
+Artefato do candidato: f17 sha256 1c5b6465a614321b704fd211221daf02012e0c48e974328c1228d1a1a062e4db.
+Props de instrumentacao TODAS 0 nesta rodada; unica chave = debug.sig.hymt2.loadercache (1=ON, 0=OFF).
+Porta: 100.108.27.64:40663. Deploy/rollback SEMPRE via safe_deploy.sh (readback exato).
+
+==============================================================================
+1. MARCADOR STOCK — 'Desempenho' do PROPRIO APP (zero instrumentacao)
+==============================================================================
+(A-B-A: ON -> OFF -> ON; mesmo texto; sha de saida sempre o canonico da familia)
+
+### Q4 curto
+  Q4_K_M_curto_min_q4c_A1on    fim=15.9  s pronto=11.2  s decode=5.8   s  24.4    t/s  sha=084f12f4
+  Q4_K_M_curto_min_q4c_A2on    fim=20.1  s pronto=11.4  s decode=6.5   s  21.7    t/s  sha=084f12f4
+  Q4_K_M_curto_min_q4c_B_off   fim=15.6  s pronto=12.6  s decode=7.6   s  18.7    t/s  sha=084f12f4
+### Q8 curto
+  Q8_curto_min_q8c_A1on        fim=16.4  s pronto=12.7  s decode=6.2   s  23.0    t/s  sha=d36a3315
+  Q8_curto_min_q8c_A2on        fim=15.4  s pronto=11.8  s decode=6.6   s  21.6    t/s  sha=d36a3315
+  Q8_curto_min_q8c_B_off       fim=17.3  s pronto=13.6  s decode=7.8   s  18.3    t/s  sha=d36a3315
+### Q4 longo
+  _K_M_mais_longo_min_q4l_A1on fim=89.2  s pronto=88.1  s decode=81.4  s  18.2    t/s  sha=4d51e74f
+  _K_M_mais_longo_min_q4l_A2on fim=65.1  s pronto=60.9  s decode=55.0  s  27.0    t/s  sha=4d51e74f
+  K_M_mais_longo_min_q4l_B_off fim=94.8  s pronto=90.3  s decode=84.3  s  17.6    t/s  sha=4d51e74f
+### Q8 longo FRIO (cache ON)
+  8_mais_longo_frio_q8longo_lc fim=82.1  s pronto=78.6  s decode=70.8  s  21.3    t/s  sha=ee49738f
+
+Leitura (media simples do par ON valido; OFF como contraste):
+- Q4c: ON 5,8-6,5s (24,4-21,7 t/s) vs OFF 7,6s (18,7) => +16 a +30% no marcador stock.
+- Q8c: ON 6,2-6,6s (23,0-21,6 t/s) vs OFF 7,8s (18,3) => +20 a +26%.
+- Q4l: ON A2 55,0s (27,0 t/s) vs OFF 84,3s (17,6) => +53%; A1=81,4s (18,2) ANOMALO dentro do
+  braco ON (reportado como medido; provavel interacao de estado/carga do run - NAO escondido).
+- Q8l FRIO: 70,8s decode (21,3 t/s), saida canonica ee49738f, 32,8C => o caso que faltava,
+  fechado com aparelho frio e captura correta (sem ANR na rodada fria).
+
+Reconciliacao com a rodada instrumentada (F18/F19): a magnitude stock (+16 a +53%) e' MENOR
+que a instrumentada (-33,6% a -50,4% no decode medido) — consistente com interacao de
+instrumentacao (contador por chamada), exatamente o efeito que o parecer pediu para medir.
+
+==============================================================================
+2. LOGS REAIS EMBUTIDOS (linhas FIM/Desempenho dos journals; caminhos no run-dir)
+==============================================================================
+### Q4_K_M_curto_min_q4c_A1on
+  FIM {segundos=15.9, saida_chars=448, saida_sha=084f12f4b98b3d2a}
+  10. Tradução pronta em 11.2s.
+  11. Desempenho: 142 tokens em 5.8 s (24.4 tokens/s)
+  6. Modelo carregado em 5.1s.
+  
+### Q4_K_M_curto_min_q4c_A2on
+  FIM {segundos=20.1, saida_chars=448, saida_sha=084f12f4b98b3d2a}
+  10. Tradução pronta em 11.4s.
+  11. Desempenho: 142 tokens em 6.5 s (21.7 tokens/s)
+  6. Modelo carregado em 4.6s.
+  
+### Q4_K_M_curto_min_q4c_B_off
+  FIM {segundos=15.6, saida_chars=448, saida_sha=084f12f4b98b3d2a}
+  10. Tradução pronta em 12.6s.
+  11. Desempenho: 142 tokens em 7.6 s (18.7 tokens/s)
+  6. Modelo carregado em 4.7s.
+  
+### Q4_K_M_mais_longo_min_q4l_A1on
+  FIM {segundos=89.2, saida_chars=5156, saida_sha=4d51e74fcd5332df}
+  10. Tradução pronta em 88.1s.
+  11. Desempenho: 1485 tokens em 81.4 s (18.2 tokens/s)
+  6. Modelo carregado em 5.0s.
+  
+### Q4_K_M_mais_longo_min_q4l_A2on
+  FIM {segundos=65.1, saida_chars=5156, saida_sha=4d51e74fcd5332df}
+  10. Tradução pronta em 60.9s.
+  11. Desempenho: 1485 tokens em 55.0 s (27.0 tokens/s)
+  6. Modelo carregado em 4.3s.
+  
+### Q4_K_M_mais_longo_min_q4l_B_off
+  FIM {segundos=94.8, saida_chars=5156, saida_sha=4d51e74fcd5332df}
+  10. Tradução pronta em 90.3s.
+  11. Desempenho: 1485 tokens em 84.3 s (17.6 tokens/s)
+  6. Modelo carregado em 4.3s.
+  
+### Q8_curto_min_q8c_A1on
+  FIM {segundos=16.4, saida_chars=449, saida_sha=d36a3315698bab4b}
+  11. Tradução pronta em 12.7s.
+  12. Desempenho: 142 tokens em 6.2 s (23.0 tokens/s)
+  7. Modelo carregado em 6.2s.
+  
+### Q8_curto_min_q8c_A2on
+  FIM {segundos=15.4, saida_chars=449, saida_sha=d36a3315698bab4b}
+  11. Tradução pronta em 11.8s.
+  12. Desempenho: 142 tokens em 6.6 s (21.6 tokens/s)
+  7. Modelo carregado em 4.9s.
+  
+### Q8_curto_min_q8c_B_off
+  FIM {segundos=17.3, saida_chars=449, saida_sha=d36a3315698bab4b}
+  11. Tradução pronta em 13.6s.
+  12. Desempenho: 142 tokens em 7.8 s (18.3 tokens/s)
+  7. Modelo carregado em 5.5s.
+  
+### Q8_mais_longo_frio_q8longo_lc
+  FIM {segundos=82.1, saida_chars=5241, saida_sha=ee49738f4e2c09dc}
+  11. Tradução pronta em 78.6s.
+  12. Desempenho: 1511 tokens em 70.8 s (21.3 tokens/s)
+  7. Modelo carregado em 6.0s.
+  
+
+==============================================================================
+3. INCIDENTES/TENTATIVAS (com evidencia)
+==============================================================================
+3.1 Controles CPU/VK: NAO concluidos — 3 tentativas: (a) f20: helper recusa por HYM_BACKEND
+    (env) divergente do botao (bug do instrumento, corrigido depois); (b) f20c: ctrl CPU
+    selecionou CPU OK mas a injecao/leitura travou (uiautomator wedged). LACUNA declarada.
+3.2 uiautomator WEDGE 3x na sessao (processo orfao em futex_wait): cura = kill -9 do pid
+    + retry. Efeito: polls parados; solucao aplicada a cada ocorrencia. Vacina nova registrada:
+    leitura com timeout externo + kill-orfao + abort-invalidar-por-fase.
+3.3 Flakes de tap/injecao: q4l A1 (f20b) injetou e travou no poll; recuperado por retry;
+    o journal A1on final registrou 81,4s/18,2 t/s (anomalo p/ ON — reportado como medido).
+3.4 Causa dos encerramentos (F19): ANR por input (tap do instrumento durante carga) — sem
+    OOM/LMK/termico; mantido.
+
+==============================================================================
+4. ESTADO FINAL / CLEANUP (readbacks)
+==============================================================================
+4.1 ROLLBACK: device = 9698670c... (readback exato apos safe_deploy) — DUAS vezes nesta
+    sessao de aceite (f20b/f20c interrompidos exigiram).
+4.2 Props zeradas: prof/hostprof/decprof/schedprof/clcount/loadercache = 0.
+4.3 UI: Q4_K_M / Vulkan / Portugues (selecionada e conferida).
+4.4 Nada commitado; WIP preservado; manifesto com SHA por item atualizado.
+
+==============================================================================
+5. CONCLUSAO
+==============================================================================
+5.1 O ganho do cache CONFIRMA-SE no marcador stock do app (sem instrumentacao) em Q4c/Q8c/Q4l
+    e o Q8-longo frio fechou com saida canonica. Magnitude stock MENOR que a instrumentada.
+5.2 Pendencias: controles CPU/VK (lacuna declarada por instabilidade do instrumento) — nao
+    bloqueiam a conclusao sobre o cache; recomendacao tecnica favoravel mantida, com adocao
+    default/deploy/release ainda NAO autorizados.
+5.3 Q8-longo: 1 execucao fria OK; para >=3 reps completas do caso, nova janela quando o
+    instrumento estiver estavel (nao insistir em soak — regra do parecer).

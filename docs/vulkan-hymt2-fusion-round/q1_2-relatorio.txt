@@ -1,0 +1,148 @@
+================================================================================
+Q1.2 — MARCAS IN-SHADER (frente B) — 27/09/2026
+Device: OnePlus 15, Adreno(TM) 840. Build: arm64-v8a-check (CHECK_RESULTS=ON)
+Modelo: Hy-MT2-1.8B-Q4_K_M-OFFICIAL, n_gpu=33, n_ctx=512, n_batch=128
+================================================================================
+
+O QUE FOI IMPLEMENTADO
+----------------------
+Instrumentação in-shader SEM SSBO novo e SEM mexer no layout de descriptors, para
+não tocar o build de produção. A marca é gravada no PRÓPRIO buffer de destino
+(binding já existente), com valores escolhidos para nunca colidir com um
+resultado plausível de rms_norm (negativos, |v| >> 1).
+
+  rms_norm.comp: nova constante SIG_MARK_STAGE (0 = produção, idêntico ao
+  original) com 4 pontos de marca:
+    1 = entrada em main()                          (-1111)
+    2 = logo após sum = sumsh[0] (redução feita)   (-2222)
+    3 = entrada no ramo do_multiply                (-3333)
+    4 = após a primeira escrita em data_d          (-4444)
+  vulkan-shaders-gen.cpp: 3 variantes compiladas (mark_f32, mark_mul_f32,
+  mul_rope_mark_f32_f32) + 1 variante de controle (dup_mul_f32, SEM marcas).
+  ggml-vulkan.cpp: 3 pipelines novos + env SIGMARK_STAGE=<1..4> e SIGMARK_DUP=1
+  que trocam o pipeline em runtime; SIGMARK_ALLOW_FUSION=1 reabilita a fusão no
+  Qualcomm (o gate padrão a veda) para poder medir o defeito.
+
+RESULTADO DECISIVO (A/B)
+------------------------
+Todos com SIGMARK_ALLOW_FUSION=1 (fusão ativa, reproduzindo o defeito):
+
+  [base] pipeline rms_norm_mul_f32 ORIGINAL
+         → 7 checks, ABORT: avg_err=0.669589 in MUL (check 7)   = defeito
+  [dup]  rms_norm_dup_mul_f32 — MESMO source do rms_norm_f32, MESMA
+         especialização {0,1}, compilado como objeto de pipeline SEPARADO
+         → 7 checks, ABORT: avg_err=0.669589 in MUL (check 7)   = IDÊNTICO
+  [mark1..4] variantes com marcas
+         → 0 checks, Segmentation fault (ver ressalva abaixo)
+
+CONCLUSÃO
+---------
+O defeito NÃO é do objeto de pipeline (nem de cache/compilação do driver):
+o `dup` é byte-a-byte o mesmo shader, a mesma especialização, o mesmo push
+constant e o mesmo binding count, e falha com o MESMO avg_err. O que falha é o
+shader rms_norm.comp quando compilado com do_multiply=true, de forma
+determinística e idêntica a cada run.
+
+Isso elimina de uma vez as hipóteses:
+  ✗ cache de pipeline do driver
+  ✗ objeto de pipeline reutilizado/shared_ptr corrompido
+  ✗ binding/offset errado no dispatch (o dup usa o mesmo caminho de dispatch)
+e mantém como suspeito primário o GLSL em si — a construção de
+data_d[d_offset + col] = D_TYPE(scale * data_a[...] * data_b[...]) com
+fastmod e a especialização como constante de compilação.
+
+RESSALVA HONESTA — os 4 estágios com marca dão Segmentation fault
+----------------------------------------------------------------
+1ª tentativa (índice calculado): SIGSEGV em todos os 4 estágios.
+2ª tentativa (corrigida): marca escrita sempre em data_d[0], só pelo workgroup
+(0,0,0), sem barreira. RESULTADO: continua SIGSEGV nos 4.
+
+Diagnóstico do 2º tentativa (comprovado, não palpite):
+  - O switch FUNCIONA: o log imprime
+      "SIGMARK| stage=1 -> pipeline_rms_norm_mark_mul_f32"
+    e no mark1 o run para exatamente no primeiro RMS_NORM fundido (node=0,
+    norm-0 ne=[2048,29,1,1], src1=blk.0.attn_norm.weight buf_off=202982464).
+  - O SIGSEGV é no PROCESSO HOST, não há abort do checker nem
+    "avg_err"/NaN. Ou seja: o host morre ao sincronizar/enfileirar depois
+    da primeira dispatch com o shader marcado.
+  - O base (mesmo caminho, shader sem marca) NÃO segfaulta: aborta com o
+    avg_err 0.669589, o que é o defeito conhecido.
+  - O dup (objeto de pipeline separado, shader sem marca) também não
+    segfaulta: mesmo avg_err 0.669589.
+
+Interpretação (é o achado mais forte do Q1.2):
+  Shader sem instrumentação    → executa, resultado ERRADO (avg_err 0.6696)
+  Shader com UMA LINHA a mais  → host morre com SIGSEGV
+Isso é a assinatura de um problema de ALINHAMENTO/registro no driver: a
+compilação do rms_norm.comp com do_multiply=true já está no limite, e
+qualquer perturbação do código (uma linha extra, uma specialization
+constante a mais) piora o estado de compilação e produz falha que nem chega
+a ser um resultado numérico errado — mata o host. Reforça que a correção deve
+ser no GLSL (ou o contorno deve ser mantido), e que instrumentar este shader
+no próprio driver é arriscado.
+
+PERGUNTAS QUE ISSO DESPERTA (para o especialista)
+  - O SIGSEGV no host depois da 1ª dispatch com shader alterado é compatível
+    com corruption de descriptor/pipeline ou com assert do driver? Tem como
+    capturar o código exato (logcat do driver, VK_ERROR_DEVICE_LOST)?
+  - Existe uma versão do rms_norm.comp com do_multiply=true que o Adreno
+    840 compile sem explodir? Ex.: reescrever a redução com subgroup ops em
+    vez de shared+barrier, ou trocar fastmod por módulo simples.
+
+================================================================================
+BACKTRACE CAPTURADO (correção ao diagnóstico anterior) — 27/09, 11:59
+================================================================================
+Comando: adb logcat -b crash -d  (reprodução única controlada, stage=1)
+
+  signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x8
+  Cause: null pointer dereference
+  x0=0x0  x1=0x1  x2=0x7fff530b90  x4=0x0  x7=0x0
+  pc=0x7dc50180d4  lr=0x7dc51cf23c  (tid 2130 = tid do processo = main)
+
+  #00 pc +2f40d4  /vendor/lib64/libllvm-qgl.so  (!!271d8104!!+4)
+  #01 pc +4ab238  /vendor/lib64/libllvm-qgl.so
+  #02 pc +5cfa74  /vendor/lib64/libllvm-qgl.so
+  #03 pc +5ce7a8  /vendor/lib64/libllvm-qgl.so
+  #04 pc +36d4fc  /vendor/lib64/libllvm-qgl.so
+  (30 frames no total; os primeiros 5 são todos libllvm-qgl.so)
+  BuildId libllvm-qgl.so: 9d9dbc8ce8965d58371c4ba45c4b1438
+  ELF: /data/local/tmp/llama_harness_check, não stripado, símbolos exatos
+  (o backtrace do processo contém llama_decode → process_ubatch →
+   ggml_graph_compute, confirmando que é este build)
+
+O QUE ISSO CORRIGE
+-----------------
+A hipótese que eu havia lançado — "compilação no limite / pressão de registro
+no driver" — estava errada e era especulação. O crash NÃO é o host, NÃO é
+índice OOB, NÃO é corrupção de descriptor. Os 5 primeiros frames estão TODOS
+em libllvm-qgl.so, que é o COMPILADOR DE SHADER do driver Qualcomm, com
+x0 nulo e fault addr 0x8: é um NULL DEREF dentro do próprio compilador de
+shader, disparado ao compilar a variante instrumentada do rms_norm.comp.
+
+Consequência prática: a técnica de marca in-shader é INVIÁVEL neste Adreno
+840 — não é possível instrumentar este shader por dentro. Isso CONFIRMA a
+preocupação do especialista (ponto B do Q1.2: "um assert costuma se manifestar
+como abort, mas o sinal não substitui o backtrace") e invalida minha
+interpretação anterior.
+
+Observação que NÃO deve ser lida como micro causa resolvida: o mesmo driver
+compila o shader ORIGINAL sem crash (mas com resultado errado). Portanto o
+defeito numérico original e este crash do compilador são dois sintomas
+distintos; só o segundo foi localizado.
+
+COMANDO USADO (para reprodução)
+  adb -s SERIAL logcat -b crash -d
+Crash verificado 6x (10:27 ×3, 10:33 ×2, 11:59 ×1) — fault addr 0x8 idêntico
+nos seis, o que indica um caminho único, não corrupção aleatória.
+
+Arquivos: Temp\mark3\crash_1120.txt (buffer crash completo, 4581 linhas),
+Temp\mark3\bt1.txt (stdout do run), Temp\mark3\s1.txt, s4.txt.
+
+
+ARQUIVOS
+--------
+Patch: docs/vulkan-hymt2-fusion-round/patches/ (ggml-vulkan.cpp +
+vulkan-shaders-gen.cpp + rms_norm.comp). Logs: Temp\mark2\{base,dup,mark1..4}.txt,
+Temp\mark3\{s1,s4}.txt (com log do switch). Instrumentação de leitura:
+Temp\ler_marcas.py.
+================================================================================

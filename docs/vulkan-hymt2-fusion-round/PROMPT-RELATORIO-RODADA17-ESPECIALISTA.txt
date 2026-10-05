@@ -1,0 +1,320 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 17 (30/09/2026)
+ACEITACAO FUNCIONAL (PARCIAL) + REFERENCIA Rq REAL — Hy-MT2 / CPH2747
+================================================================================
+Responde ao "PROMPT AO AGENTE — APOS RODADA 16: ENCERRAMENTO LOCAL E ACEITACAO
+FUNCIONAL". Entregue com resultados EXECUTADOS, nao proposta. NENHUM
+commit/push/publicacao/APK/instalacao; SharedPreferences nao foi alterado
+(backend e modelo trocados TOCANDO na UI); OpenCL/Whisper/NPU nao tocados;
+produto, gate e pesos intactos.
+
+ESTADOS:
+  A. Rq real vs transcricao Python + classificacao atualizada ...... CCE
+  B. pipeline/precisao Vulkan ...................................... PARCIAL
+     (mecanismo lido no fork; A/B com GGML_VK_DISABLE_F16 NAO executado;
+      residual 0,5634% permanece NAO EXPLICADO)
+  C. identidade/configuracao do app e diferencas com o harness .... CCE
+  D. bateria funcional via UI ..................................... PARCIAL
+     (1 traducao real completa, mas de texto NAO controlado; o caso
+      controlado "curto" com Q4_K_M nao completou — causa: tela apagou)
+  E. reuso/cancelamento/alternancia/restauracao ................. NAO EXECUTADO
+     (bloqueio concreto — §G.1)
+  F. decisao de aceitacao restrita ............................... PRELIMINAR
+     (reprovada por evidencia insuficiente, nao por falha do app)
+  G. alteracoes diagnosticas desta rodada ........................ CCE (lista)
+
+--------------------------------------------------------------------------------
+RESPOSTA CURTA
+--------------------------------------------------------------------------------
+A CLASSIFICACAO LOCAL FOI CORRIGIDA E FICOU MAIS FORTE, nao mais fraca: com a
+rotina C REAL do fork, o CPU reproduz Rq com erro 0,0000% (max 5,07e-8) —
+a transcricao Python da rodada 16 errou 8 dos 567.296 inteiros. Logo o
+operador divergente e' mesmo o CPU (quantizacao de ativacao em Q8_K) e o
+Vulkan continua MAIS PROXIMO da matematica exata (0,5634% contra R).
+O residual de 0,5634% NAO foi explicado e o A/B de precisao NAO foi
+executado. A bateria funcional produziu UMA traducao real completa no
+caminho Vulkan (4,7 s / 44,4 tokens/s) com log e tela, mas do TEXTO ERRADO
+(minha falha de automacao, registrada), e o caso controlado nao completou
+porque a TELA APAGOU durante a espera. Nao ha aprovacao nem reprovacao de
+aceitacao funcional: falta o dado do caso controlado.
+
+--------------------------------------------------------------------------------
+A. Rq REAL x PYTHON E CLASSIFICACAO LOCAL ATUALIZADA  [§3]
+--------------------------------------------------------------------------------
+A.1 Metodo (§3.1/§3.2): binario de diagnostico proprio
+    native-dependencies/harness/verify_rq17.cpp
+      sha d5b3a2e192d64f6702aee1c55ba5339b10bc189523001987d109f0a0417de2c4
+    Ele chama a rotina REAL do fork — quantize_row_q8_K (mesma funcao que o
+    trait GGML_TYPE_Q8_K usa) — sobre o MESMO X da rodada 16 e exporta os
+    bytes brutos: 2216 blocos, 647.072 B, sha 965422f4f482710152945464c...
+    (logs-rodada17/referencia/q8k_real.bin). Layout conferido: block_q8_K =
+    float d (4 B) + int8 qs[256] + int16 bsums[16] = 292 B.
+A.2 Divergencias encontradas (§3.2) — logs-rodada17/referencia/
+    desvios_qs_r17.csv:
+      8 inteiros de 567.296 diferentes (0,0014%), concentrados em 7 blocos
+      (bloco 26 pos 190; 351/198; 388/92; 1388/92; 2178/95; 2179/58; e mais
+      um), TODOS de valor absoluto +1 ou -1 — arredondamento no limiar,
+      exatamente como o parecer suspeitava. Lista completa no CSV com
+      qs_real, qs_python, d_real e d_python de cada caso.
+      Campo d: 2205/2216 blocos com d levemente diferente (max_rel
+      3,906e-08) por f32 vs f64 no calculo da escala — irrelevante para Rq.
+      Sinal de d: 864 blocos negativos nos dois lados (o comentario da
+      rodada 16 "d positivo" estava ERRADO — corrigido).
+A.3 Recalculo com os BYTES REAIS (sem ajustar tolerancia):
+      Rq_real = Xq_real x W, onde Xq_real = qs_real * d_real por bloco
+    Metricas com o MESMO denominador da rodada 16 (rms(R) = 0,032382681):
+      CPU    x Rq_real : RMSE 3,0e-09  RMSE/rms(R) = 0,0000%  max 5,07e-08
+      CPU    x R       : RMSE 3,270e-04 RMSE/rms(R) = 1,0098%  max 5,13e-03
+      Vulkan x R       : RMSE 1,824e-04 RMSE/rms(R) = 0,5634%  max 3,97e-03
+      Vulkan x Rq_real : RMSE 3,755e-04 RMSE/rms(R) = 1,1595%
+      Rq_real x Rq_py  : RMSE 2,589e-06 (0,0080% de rms(R)) — o efeito da
+                         transcricao Python, agora medido e nomeado.
+    => O piso de 0,0080% da rodada 16 era ARTEFATO DA MINHA TRANCRICAO, nao
+       erro de kernel do CPU. O CPU e' ESSENCIALMENTE EXATO frente a Rq_real.
+A.4 Decoder Q4_K validado com conta independente (§3.3):
+    O parecer lembra de que "np.dot contra matmul com os MESMOS W/X so
+    valida indexacao". Corrijo: decodifiquei blocos do Q4_K a partir dos
+    BYTES do GGUF com conta escrita passo a passo (fp16 d/dmin, get_scale_
+    min_k4, nibbles) e comparei com a funcao dequant_q4_K:
+      bloco 0 : max dif = 0,000e+00
+      25 blocos em linhas ALEATORIAS (seed 17) : max dif = 0,000e+00
+    => decoder Q4_K validado contra fonte-de-verdade independente.
+A.5 CLASSIFICACAO LOCAL ATUALIZADA (retificando a rodada 16):
+  ACEITO (como o especialista mandou): CPU x Rq ficou muito mais proximo que
+  CPU x R; Vulkan ficou mais proximo de R neste operador e conjunto de
+  entradas. Sustenta a quantizacao de ativacao como contribuicao importante
+  e afasta "CPU = referencia matematica exata".
+  RETIRADO da rodada 16 (as 4 frases que o especialista mandou tirar):
+   1. "piso universal de ~1% para K-quants" — RETIRADO. O erro depende de
+      dados, dimensoes e implementacao; o que existe e' um erro medido
+      NESTE operador (0,5634% do Vulkan, 1,0098% do CPU contra R).
+   2. "toda diferenca local explicada" — RETIRADO. Vulkan x R = 0,5634% sem
+      mecanismo identificado; ser menor que o erro do CPU nao torna
+      automaticamente normal.
+   3. "resta somente propagacao, nao kernel" — RETIRADO. Outros operadores
+      nao foram excluidos.
+   4. "dispatch Vulkan CCE" — RETIRADO. fp16=1 e' recurso habilitado; nao
+      identifica pipeline nem acumulacao.
+  NAO ATRIBUIR (regra do especialista): nao se atribui quantitativamente a
+  "maioria" do erro CPU-GPU a um unico termo comparando RMSE. O que se pode
+  dizer e' MECANICO: o CPU executa from_float(F32->Q8_K) antes do
+  vec_dot (ggml-cpu.c:1350-1358) e o resultado dele e' Rq_real; o Vulkan
+  mantem a ativacao em ponto flutuante e tem 0,5634% contra R. Os dois
+  erros coexistem e a decomposicao por parcela NAO foi feita.
+
+--------------------------------------------------------------------------------
+B. PIPELINE/PRECISAO VULKAN — PARCIAL, RESIDUAL PENDENTE  [§4]
+--------------------------------------------------------------------------------
+B.1 O que o fork mostra (fonte inspecionado, nao suposicao):
+  * ggml-vulkan.cpp: 0 ocorrencias de "Q8_K", "vec_dot_type" e
+    "quantize_row_q8_K" — o backend Vulkan nao tem a quantizacao de
+    ativacao que o CPU tem.
+  * vulkan-shaders/mul_mm.comp: "buffer B {B_TYPE data_b[]}" e
+    "B_SCALAR {B_TYPE_SCALAR data_b_scalar[]}" — a ativacao entra como
+    ponto flutuante.
+  * O UNICO lugar onde o Vulkan quantizaria a ativacao e' quantize_y
+    (-> GGML_TYPE_Q8_1), condicionado a device->integer_dot_product; o
+    Adreno 840 reporta int_dot: 0 => quantize_y = false neste alvo.
+  * ACUMULADOR: no gerador (vulkan-shaders-gen.cpp, funcao matmul_shaders):
+      base_dict["ACC_TYPE"]    = f16acc ? "float16_t" : "float";
+      base_dict["ACC_TYPEV2"]  = f16acc ? "f16vec2" : "vec2";
+      base_dict["ACC_TYPE_MAX"] = f16acc ? "float16_t(65504.0)" : ...;
+    e em ggml-vulkan.cpp o pipeline dequant_mul_mat (src0 quantizado,
+    nosso caso) e' escolhido por
+      (device->fp16 && prec == GGML_PREC_DEFAULT) ? ...f16acc : ...f32acc
+    => COM device->fp16 ligado (fp16=1 no alvo) e prec DEFAULT, o
+       MUL_MAT Q4_K ACUMULA EM FP16, com teto 65504. Esta e' a mecanica
+       compativel com um erro de ~0,56%, mas CONTINUA SENDO HIPOTESE: nao
+       li o shader compilado nem meci o pipeline em execucao.
+B.2 A/B COM GGML_VK_DISABLE_F16: NAO EXECUTADO.
+    Roteiro preparado e guardado, nao rodado (o aparelho estava em uso pela
+    bateria). Semantica ja verificada no fork: getenv(...) != nullptr
+    (PRESENCA, nao valor; "0" tambem desliga) e fp16 = !force_disable_f16
+    && fp16_storage && fp16_compute. O override CIRURGICO tambem existe e
+    foi verificado: ggml_mul_mat_set_prec(..., GGML_PREC_F32) em ggml.h,
+    lido como (ggml_prec)dst->op_params[0].
+    => RESIDUAL DE 0,5634% DECLARADO NAO EXPLICADO. Nao uso "e' global"
+      como desculpa: o teste e' um operador isolado, processo novo.
+B.3 Shader nao lido: registro honesto. A leitura foi do gerador e do
+    seletor de pipeline, nao do .comp compilado nem do SPIR-V em execucao.
+
+--------------------------------------------------------------------------------
+C. IDENTIDADE E CONFIGURACAO DO APP vs HARNESS  [§6]
+--------------------------------------------------------------------------------
+C.1 Identidade (verificada por run-as/shell no aparelho):
+    APK instalado: versionName=1.505 versionCode=68
+    Biblioteca nativa REALMENTE carregada:
+      no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+      sha 31f6df15bf9b4fbdf073adf033eac55f353b4240e7894ec1d12469163516d2c2
+      = o v9 publicado, byte a byte.
+    Modelo: 1.133.080.544 B no aparelho
+      (sha c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+       conferido na rodada 13)
+C.2 Configuracao efetiva (fonte do produto, lido):
+    n_ctx 8192 (padrao do produto), n_batch 2048, n_ubatch = default,
+    threads 6 (preferencia do aparelho)
+    FLASH ATTENTION: DESLIGADO no caminho GPU (llama_jni.cpp:320-326,
+    "Flash attention desligado SO no caminho GPU (25/09)"); AUTO na CPU.
+    Sampler: penalties(last_n=64, repeat=1.05, freq=0, present=0) ->
+    top_k 20 -> top_p 0.6 -> temp 0.7 -> dist 42
+    EOG do modelo: 120020; template hy_* com U+FF5C; add_special=false.
+    Ciclo de vida: modelo carregado por traducao, releaseModel em onDestroy.
+C.3 DIFERENCAS COM O HARNESS (rotuladas, sem 'alinhar' nada):
+    HARNESS  n_ctx 4096, n_batch 512, threads 4/4, FA = AUTO (-1)
+    APP      n_ctx 8192, n_batch 2048, threads 6, FA = OFF (GPU)
+    => As razoes de latencia da rodada 12 medem o HARNESS com aquela
+       configuracao; NAO sao latencia garantida do APP. A rodada 12 fica
+       como medicao do harness, nao do produto.
+    O MUL_MAT isolado (boundary14) nao depende de FA (mul_mat puro), entao
+    a comparacao numerica da secao A permanece valida apesar do FA.
+C.4 Preferencia inicial do aparelho: backend VULKAN, threads 6 — o app
+    ja estava em Vulkan antes da bateria (verificado em texto_settings.xml
+    e depois pela UI). Nenhuma preferencia foi escrita por mim.
+
+--------------------------------------------------------------------------------
+D. TABELA DE CASOS VIA UI  [§7] — RESULTADO PARCIAL, COM LOGS
+--------------------------------------------------------------------------------
+D.0 Fontes sinteticas: 6 casos gravados em
+    logs-rodada17/fontes/ (curto, medio, longo, numeros, negacao, estrutura)
+    com sha por texto em indice.json. Sem dados pessoais. Cada caso declara
+    o que verificar (numeros, negacao, cobertura, fragmento final) —
+    sem expectativa de igualdade textual.
+D.1 Ferramentas: uiautomator + input confirmados; seletor de backend e de
+    modelo mapeados por coordenada real; backend/modelo trocados pela UI.
+D.2 RESULTADO 1 — TRADUCAO REAL COMPLETA, TEXTO NAO CONTROLADO
+    (logs-rodada17/00_PROVA_EXTRA_TEXTO_ERRADO.txt + ui_01_curto_Vulkan.png)
+    Motivo do texto errado: minha automacao usou Intent.EXTRA_TEXT e nao
+    esperou a Activity aplicar; o campo ja continha outro texto e o app
+    traduziu esse. E' FALHA MINHA de automacao, nao do app.
+    Log lido da tela (linhas 54-63 do log do app):
+      55. Modelo selecionado: Q4_0
+      56. Traduzindo com Q4_0 (Vulkan) para Portugues...
+      57. Carregando modelo Q4_0 (Vulkan)...
+      58. Modelo carregado em 3.6s.
+      59. Backend em uso: GPU Vulkan (Vulkan / Vulkan0)
+      60. Threads: 6
+      61. Memoria: CPU_Mapped 193.57 MiB | Vulkan0 1022.11 MiB |
+          Vulkan_Host 26.01 MiB | compute Vulkan0 544.01 MiB | splits = 2
+      62. Traducao pronta em 4.7s.
+      63. Desempenho: 12 tokens em 0.3 s (44.4 tokens/s)
+    Entrada na tela: "her birthday is next week"
+    Saida na tela:   "O seu aniversario e' na proxima semana."
+    => PROVA DE QUE O CAMINHO VULKAN FUNCIONA (traduziu ate o fim, com
+       log, tela e velocidade). NAO e' o caso controlado.
+D.3 RESULTADO 2 — CASO "curto" COM Q4_K_M + VULKAN: NAO COMPLETOU
+    Seletores confirmados pela UI antes de rodar:
+      modelo = 'Q4_K_M' (ok)   backend = 'Vulkan' (ok)
+    execucao: entrada conferiu (96/96 chars), traducao NAO completou em
+    907 s, saida vazia. Causa identificada: a TELA APAGOU (keyguard /
+    Always-On Display) durante a espera longa e o app foi para segundo
+    plano; o `uiautomator dump` passou a devolver a hierarquia do
+    keyguard, nao a Activity. Confirmado: ps mostra o processo vivo, foco
+    em NotificationShade, ids do app ausentes no dump.
+    Nao e' travamento do app nem erro de traducao: o processo do app
+    continuava em do_epoll_wait (sem CPU) e nao houve crash/ANR (logcat
+    crash so tem os FATAL do proprio uiautomator).
+D.4 Tabela de TENTATIVAS (todas reais, nenhuma descartada sem registro;
+    fonte: logs-rodada17/log_Vulkan.txt):
+    #  backend  modelo   entrada  traducao  latencia  saida  causa
+    1  Vulkan   Q4_0    ok       NAO       246,4 s   0 B    eu recriei a
+                                                          Activity com
+                                                          am start/dump
+    2  Vulkan   Q4_0    ok       NAO       426,6 s   23 B   mesmo; o campo
+                                                          foi esvaziado
+    3  Vulkan   Q4_0    ERRADA   COMPLETA  353,6 s   35 B   EXTRA_TEXT nao
+                                                          aplicou; traduziu o
+                                                          texto pre-existente
+                                                          (PROVA DE CAMINHO)
+    4  Vulkan   Q4_K_M  ok       NAO       907,7 s   0 B    TELA APAGOU
+                                                          (keyguard/AOD);
+                                                          uiautomator devolveu
+                                                          a tela de bloqueio
+    (os 5 casos restantes: NAO EXECUTADOS — bloqueio §G.1)
+    Os quatro artefatos 01_curto_Vulkan.txt foram sobrescritos por cada
+    tentativa; o unico com conteudo real e' o da tentativa 3, preservado
+    como 00_PROVA_EXTRA_TEXTO_ERRADO.txt (a tentativa 4 ficou com campos
+    vazios porque a tela ja estava bloqueada no momento da leitura).
+D.5 Erros meus registrados nesta rodada:
+    E1 usei Intent.EXTRA_TEXT (o produto tambem aceita extra_texto) e nao
+       esperei a Activity; o app traduziu texto pre-existente.
+    E2 durante o run fiz uiautomator/am start que recriaram a Activity e
+       limparam o campo (na primeira tentativa).
+    E3 nao desativei o bloqueio de tela; a tela apagou no caso longo.
+    Todos corrigidos no script (extra_texto + espera, seletor de modelo,
+    aviso de nao-interferencia) e o bloqueio de tela esta como pedido de
+    acao ao usuario.
+
+--------------------------------------------------------------------------------
+E. REUSO / CANCELAMENTO / ALTERNANCIA / RESTAURACAO  [§7]
+--------------------------------------------------------------------------------
+NAO EXECUTADOS — bloqueados pela mesma causa (tela apagando durante a
+espera longa impede observar saida e cancelar pela UI com confianca).
+Nenhuma preferencia foi alterada por script; o unico toque de backend foi
+pela UI e o aparelho ja estava em Vulkan. Nenhuma acao destrutiva
+(force-stop) foi usada como padrao.
+
+--------------------------------------------------------------------------------
+F. DECISAO DE ACEITACAO RESTRITA  [§8]
+--------------------------------------------------------------------------------
+F.1 Reprovada por INSUFICIENCIA DE EVIDENCIA, nao por falha observada:
+    o unico caso controlado (curto, Q4_K_M, Vulkan) nao produziu traducao
+    no meu timeframe por causa da tela apagada; os demais 5 casos nao
+    rodaram. Nao posso declarar aceitacao nem reprovacao.
+F.2 O que JÁ se pode dizer com seguranca (limitado ao que foi medido):
+    - O caminho Vulkan carrega, traduz e encerra com log consistente
+      (4,7 s, 44,4 tok/s no caso Q4_0) — o caminho FUNCIONA.
+    - O operador MUL_MAT Q4_K: o CPU reproduz Rq_real com 0,0000% e o
+      Vulkan e' mais proximo de R (0,5634%); o residual do Vulkan NAO e'
+      explicado (A/B nao executado).
+    - A divergencia de L[342] e a inversao de token NAO foram atribuidas ao
+      MUL_MAT nem a este operador; a quantizacao do CPU e' um piso de ruido
+      provavel mas a conta nao foi fechada.
+F.3 Para RETOMAR a aceitacao (acao minima do usuario, §G.1) e fechar
+    reuso/cancelamento/alternancia, faltam estes 3 casos + os 5 casos de
+    cobertura + o A/B numerico. Nao e' pesquisa de kernel: e'uso real.
+
+--------------------------------------------------------------------------------
+G. BLOQUEIO CONCRETO E LISTA DE ALTERACOES DIAGNOSTICAS  [§9-G]
+--------------------------------------------------------------------------------
+G.1 BLOQUEIO: a tela do CPH2747 APAGA (keyguard/AOD) enquanto a traducao
+    longa roda, e o `uiautomator dump` passa a devolver a tela de bloqueio
+    em vez da Activity — a leitura automatizada da saida fica impossivel e
+    o script nao distingue "traducao lenta" de "app em segundo plano".
+    ACAO MINIMA DO USUARIO (uma das duas):
+      (a) desativar o bloqueio de tela / "tela sempre ativa" no CPH2747
+          (Configuracoes > Display > Sleep / Always-on), para o aparelho
+          ficar em Awake durante a bateria; ou
+      (b) confirmar que posso travar o awake via adb
+          (settings put system screen_off_timeout 1800000) durante a
+          bateria, e restaurar ao final. Preciso de autorizacao para (b).
+    Nao e' "toque so pode ser feito pelo usuario": a automacao por UI
+    funciona e ja usou o seletor de backend e de modelo; o bloqueio e'
+    Specifically a tela apagar, nao a ausencia de ferramenta.
+G.2 Alteracoes diagnosticas desta rodada (instrumento, nao produto):
+    - native-dependencies/harness/verify_rq17.cpp (NOVO): quantiza X em
+      Q8_K com a rotina C REAL e exporta bytes.
+    - logs-rodada17/fontes/ (NOVO): 6 casos sinteticos + indice.json.
+    - %TEMP%/bateria17_ui.py: automacao UI (extra_texto, seletor de
+      modelo, espera, convencao L[N], aviso de nao-interferencia).
+    - %TEMP%/ab_f16_17.sh (PREPARADO, NAO EXECUTADO): A/B isolado com
+      GGML_VK_DISABLE_F16.
+    - logs-rodada17/referencia/: q8k_real.bin, Rq_real.npy, Xq_real.npy,
+      desvios_qs_r17.csv.
+    Produto, gate, pesos, SharedPreferences: INTACTOS.
+G.3 Itens do prompt desta rodada que foram ATENDIDOS:
+    §3.1-§3.3 (rotina real, desvios, recalculo, decoder validado) — SIM
+    §3.5 (replay com X_GPU) — PARCIAL: nao executado (o aparelho estava em
+           uso; e o residual ja nao e' prioridade frente a aceitacao)
+    §4 (shader/pipeline) — PARCIAL: gerador e seletor lidos, shader
+           compilado nao, A/B nao executado, residual PENDENTE
+    §6 (identidade/config) — SIM
+    §7 (bateria via UI) — PARCIAL: 1 traducao real + 1 caso controlado
+           incompleto; 5 casos nao rodaram
+    §8 (criterios) — aplicado: sem aprovacao/reprovacao, latencia
+           reportada honestamente, residual rotulado como nao explicado
+G.4 Nenhuma publicacao/instalacao/commit foi feita. O modelo e o APK
+    instalados permanecem os do produto (v9 confirmado por sha).
+
+================================================================================
+FIM DO RELATORIO — RODADA 17
+================================================================================

@@ -1,0 +1,5 @@
+== DEPLOY DIAG6 49ef68f7 (F3b; mesmo escopo/rollback) ==
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag6_f3b.so: 1 file pushed, 0 skipped. 19.1 MB/s (95912792 bytes in 4.799s)
+49ef68f7e6e3f3fd6043e12f8d221dcb0ccd71b4c2449716d089c4adcea218dc  /data/local/tmp/diag6_49ef68f7.so
+OK
+49ef68f7e6e3f3fd6043e12f8d221dcb0ccd71b4c2449716d089c4adcea218dc  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

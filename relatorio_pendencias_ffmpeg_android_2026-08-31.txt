@@ -1,0 +1,74 @@
+Ferramenta de girar vídeo
+Arquivo: [FfmpegRotateVideoActivity.kt](D:\\Projetos\\SIG\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\FfmpegRotateVideoActivity.kt)
+6. Finding: o modo somente metadados deixou de gerar sempre MP4, mas ainda não valida todos os codecs e streams antes de escolher o container de saída. Um stream incompatível ainda pode fazer o FFmpeg falhar.
+   Fix: validar codecs, legendas, anexos e demais streams contra o container escolhido, ou manter comprovadamente o container real da origem.
+   Linhas: 1824; FfmpegMediaPolicies.kt, 106–109.
+   Gravidade: ALTA.
+13. Finding: o mapeamento preserva todos os áudios, legendas, dados e anexos, mas usa 0:v:0 e preserva somente o primeiro stream de vídeo.
+   Fix: mapear todas as faixas de vídeo preserváveis ou informar e bloquear explicitamente faixas adicionais quando não puderem ser mantidas.
+   Linhas: 1251; 1048–1052.
+   Gravidade: ALTA.
+
+Ferramenta de cortar áudio/vídeo
+Arquivo: [FfmpegCutActivity.kt](D:\\Projetos\\SIG\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\FfmpegCutActivity.kt)
+3. Finding: o corte mapeia todos os áudios, legendas, dados e anexos, mas usa 0:v:0? e preserva somente o primeiro stream de vídeo nos modos preciso e híbrido.
+   Fix: mapear todas as faixas de vídeo preserváveis ou informar e bloquear explicitamente faixas adicionais quando não puderem ser mantidas.
+   Linhas: 650–651, 844–845.
+   Gravidade: ALTA.
+7. Finding: o corte de áudio continua sempre recodificando o áudio; não há caminho de stream copy nem opção de qualidade para esse caso.
+   Fix: oferecer stream copy quando codec, container e intervalo forem compatíveis, além de expor uma escolha de qualidade quando a recodificação for necessária.
+   Linhas: 547–553, 961–968.
+   Gravidade: MÉDIA.
+
+Ferramenta de juntar vídeo/áudio
+Arquivo: [FfmpegJoinVideosActivity.kt](D:\\Projetos\\SIG\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\FfmpegJoinVideosActivity.kt)
+2. Finding: o Smart Join foi desabilitado para impedir o caminho inseguro, mas a implementação antiga permanece no código, sem correção estrutural, e não deve ser reativada neste estado.
+   Fix: remover o caminho legado ou alinhá-lo com keyframes e recodificação segura das bordas, incluindo testes de duração e PTS antes de reativar.
+   Linhas: 408–409, 536–539, 1206–1340.
+   Gravidade: CRÍTICA.
+3. Finding: o concat direto usa -map 0, mas o reencode processa somente um áudio selecionado; além disso, o modo com vídeo e legendas é rejeitado em vez de preservar as faixas.
+   Fix: mapear todas as faixas compatíveis no reencode ou exibir aviso e seleção explícitos quando faixas adicionais forem descartadas.
+   Linhas: 1199, 1585–1592, 2618–2620.
+   Gravidade: ALTA.
+4. Finding: o reencode deixou de fixar AAC, mas escolhe o codec de áudio do primeiro perfil e pode converter os demais sem validação ou aviso explícito.
+   Fix: preservar o codec quando todos os streams forem compatíveis ou informar claramente a conversão e o perfil de destino.
+   Linhas: 1543–1553, 2831–2860.
+   Gravidade: ALTA.
+6. Finding: a validação do concat direto compara os perfis principais, mas não compara extradata nem a compatibilidade efetiva do container; uma cópia incompatível ainda pode falhar ou ser aceita indevidamente.
+   Fix: incluir parâmetros exatos do codec, extradata, codec tag e container real na pré-validação, rejeitando a cópia ou solicitando reencode quando necessário.
+   Linhas: SmartJoinPlanner.kt, 88–119; FfmpegJoinVideosActivity.kt, 1190–1200.
+   Gravidade: ALTA.
+8. Finding: com áudio incompatível e reencode desligado, o código usa um perfil agregado/máximo, enquanto a interface informa “Normalizando pelo primeiro áudio”; não há confirmação do perfil de destino.
+   Fix: normalizar estritamente para o primeiro áudio ou solicitar confirmação do usuário sobre taxa de amostragem, canais e formato de destino.
+   Linhas: 565–569, 1045–1060, 2831–2860.
+   Gravidade: ALTA.
+
+Ferramenta de extrair áudio
+Arquivo: [FfmpegExtractAudioActivity.kt](D:\\Projetos\\SIG\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\FfmpegExtractAudioActivity.kt)
+2. Finding: o caminho de cópia foi adicionado, mas a saída MP3 ainda emite -minrate e -maxrate, forçando CBR, e a interface não oferece escolha entre CBR e VBR.
+   Fix: oferecer a escolha CBR/VBR e emitir minrate e maxrate somente para CBR; manter a cópia quando codec, container e parâmetros de amostra forem compatíveis.
+   Linhas: 873–900, 1247–1251.
+   Gravidade: MÉDIA.
+
+Ferramenta de inserir áudio
+Arquivo: [FfmpegInsertAudioActivity.kt](D:\\Projetos\\SIG\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\FfmpegInsertAudioActivity.kt)
+1. Finding: o dispatcher atual sempre usa o reencode preciso, mitigando a rota insegura sem reencode, mas o código legado executeCopyInsert ainda usa -ss antes de -i com stream copy e concatenação de containers.
+   Fix: remover a rota obsoleta ou reescrevê-la com intermediário TS, reencode das bordas e testes antes de qualquer reativação.
+   Linhas: 535–538, 707–729.
+   Gravidade: ALTA.
+2. Finding: o dispatcher atual não executa Smart Insert, mas executeSmartInsert permanece com apenas o áudio inserido recodificado e as bordas concatenadas por cópia; o risco de incompatibilidade persiste na rota legada.
+   Fix: remover ou reescrever a rota legada, recodificando e validando todas as partes com parâmetros de stream idênticos.
+   Linhas: 534–538, 732–759.
+   Gravidade: ALTA.
+3. Finding: audioInputsAreCopyCompatible ainda compara somente codec, taxa e canais; AudioProfile não inclui formato de amostra, perfil AAC ou extradata. Hoje o risco está mitigado apenas porque a rota de cópia não é alcançável.
+   Fix: adicionar esses campos ao perfil e compará-los, ou remover o validador e a rota de copy mode.
+   Linhas: 1068–1080, 1110.
+   Gravidade: MÉDIA.
+6. Finding: a rota precisa ativa usa a faixa de áudio selecionada, mas as funções legadas de cópia e Smart Insert ainda fixam 0:a:0; a seleção de faixa não é consistente em todas as rotas.
+   Fix: usar a faixa selecionada em todas as rotas ou remover as rotas legadas, preservando ou rejeitando explicitamente faixas adicionais.
+   Linhas: 620, 714–724, 739–754.
+   Gravidade: MÉDIA.
+
+Ferramenta de limpar áudio
+Arquivo: [FfmpegCleanAudioActivity.kt](D:\\Projetos\\SIG\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\FfmpegCleanAudioActivity.kt)
+Nenhuma pendência identificada.

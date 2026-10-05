@@ -1,0 +1,138 @@
+================================================================================
+RELATORIO - DIAGNOSTICO: JUNTAR VIDEOS FALHA COM ENCODERS H.264 / HEVC (SIG Android)
+================================================================================
+Projeto: D:\Projetos\SIG
+Ferramenta: Juntar Videos (FfmpegJoinVideosActivity)
+Data: 2026-09-02
+Tipo: Diagnostico detalhado - NENHUM ARQUIVO DO PROJETO FOI MODIFICADO
+Evidencia: print do comando real que falhou (captura de tela) + codigo-fonte
+           verificado linha a linha
+
+================================================================================
+(1) RESUMO DO PROBLEMA
+================================================================================
+- Juntar AUDIO funciona normalmente.
+- Juntar VIDEO com encoder por hardware (h264_mediacodec ou hevc_mediacodec)
+  FALHA com "Error initializing output stream: Conversion failed!".
+- Juntar VIDEO com encoder por CPU (libx264) funciona.
+- Sintoma no app: etapa "Aplicando transições: FALHOU" e
+  "Preparar arquivo para salvar: FALHOU".
+
+================================================================================
+(2) COMANDO REAL QUE FALHOU (extraido do print do usuario)
+================================================================================
+ffmpeg -y
+  -i .../join_17627372484889.mp4
+  -i .../join_input_176276695756607.mp4
+  -filter_complex
+    [0:v]scale=1080:1920:force_original_aspect_ratio=decrease,
+         pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setdar=1,fps=16,format=yuv420p[v0];
+    [0:a:0]aresample=16000,aformat=sample_fmts=fltp:sample_rates=16000:
+         channel_layouts=mono[a0];
+    [1:v]scale=1080:1920:...,fps=16,format=yuv420p[v1];
+    [1:a:0]aresample=16000,...,channel_layouts=mono[a1];
+    [v0][a0][v1][a1]xfade=transition=fade:duration=0.500:offset=1539.725[vx1];
+    [vx1]copy[vout];
+    [a0][a1]acrossfade=d=0.500:c1=tri:c2=tri[aout]
+  -map [vout] -map [aout]
+  -c:v h264_mediacodec -b:v 1002K -minrate 1002K -maxrate 1002K -bufsize 2004k
+  -r 16
+  -c:a aac -b:a 54k -ar 16000 -ac 1
+  -avoid_negative_ts make_zero
+  "..._audiencia_..._girado (1)+..._girado (1).mkv"
+
+OBSERVACOES DO COMANDO:
+- Duas entradas MP4 (o mesmo video ja girado).
+- Filtro: scale/pad para 1080x1920, fps=16, format=yuv420p.
+- xfade com offset 1539.725 + duration 0.500 = transicao no fim do primeiro
+  video (~25:40) - offset VALIDO (nao e a causa da falha).
+- Encoder h264_mediacodec + BITRATE CBR FORCADO:
+    -b:v 1002K -minrate 1002K -maxrate 1002K -bufsize 2004k   <<< PONTO CHAVE
+- -r 16 apos o encoder.
+- Saida .mkv.
+
+================================================================================
+(3) CAUSA RAIZ - 4 FATORES (em ordem de peso)
+================================================================================
+FATOR 1 - Rate control CBR com MediaCodec (PRINCIPAL, exclusivo do Juntar)
+  - FfmpegJoinVideosActivity.videoEncodingArguments (linhas 2221-2236) e
+    chamado com constrained = true (linha 877) e adiciona:
+      -minrate <br> -maxrate <br> -bufsize <2x br>
+  - O wrapper h264_mediacodec do FFmpeg traduz esses campos para o MediaFormat
+    no MediaCodec.configure(). Encoders de hardware do Android NAO suportam
+    CBR com esses campos de forma uniforme -> configure() rejeitada ->
+    "Error initializing output stream: Conversion failed!".
+  - Nenhuma outra ferramenta passa constrained = true. Este e o diferencial
+    que faz o Juntar falhar alem do defeito comum.
+
+FATOR 2 - Encoder sem parametros defensivos (defeito sistemico)
+  - FfmpegVideoQuality.encodingFor (linhas 41-79): o ramo hardware envia
+    apenas ["-c:v", ffmpegName] (linhas 75-78).
+  - Sem -bf 0, sem -g (GOP). O Juntar e a UNICA ferramenta que NAO adiciona
+    -g em lugar nenhum (Cortar/Girar adicionam GOP). Varios MediaCodec
+    exigem GOP explicito no configure().
+  - O filtro entrega yuv420p, mas o encoder nao declara -pix_fmt.
+
+FATOR 3 - Resolucao fora de multiplo de 16
+  - Perfil agregado = 1080x1920. 1080 = 67,5 x 16 -> NAO e multiplo de 16
+    (apenas 1920 e). Encoders hardware mais rigidos recusam dimensoes fora
+    de multiplo de 16 no configure().
+
+FATOR 4 - -r 16 apos o encoder (linha 878)
+  - Forca o fps no muxer/encoder; com MediaCodec o fps e negociado no
+    configure() e valores do perfil agregado podem nao ser aceitos.
+
+================================================================================
+(4) POR QUE OS OUTROS CAMINHOS FUNCIONAM
+================================================================================
+- AUDIO: executeAudioJoin nunca instancia encoder de video (usa -c:a aac /
+  flac / pcm + normalizacao). Imune por construcao.
+- CPU (libx264): aceita qualquer combinacao em software (minrate/maxrate/
+  bufsize, resolucao impar, fps, GOP) - nao passa por MediaCodec.configure().
+- Direct concat (sem Reencodar): -c copy puro, sem encoder.
+
+================================================================================
+(5) RELACAO COM OS OUTROS BUGS (mesmo defeito sistemico)
+================================================================================
+- CORTAR: mesmo erro nas bordas com h264/hevc_mediacodec.
+- GIRAR: mesmo erro (ja com correcao parcial na working tree - intermediario
+  TS trocado por MP4 para contornar pacotes sem start code Annex-B).
+- JUNTAR: MESMO defeito + agravante exclusivo do constrained=true (CBR).
+
+Ou seja: corrigir encodingFor (parametros defensivos) resolve a base dos tres;
+corrigir o constrained resolve o Juntar.
+
+================================================================================
+(6) COMO CONFIRMAR COM CERTEZA (sem alterar codigo)
+================================================================================
+1) Log completo na falha:
+     adb logcat -d | grep -iE "FfmpegJoin|ffmpeg|mediacodec"
+   A linha exata do erro ("maybe incorrect parameters such as bit_rate...",
+   "Failed to configure", "Option ... not found") identifica o gatilho
+   (rate-control vs resolucao vs GOP).
+
+2) Teste A/B no device (termux/shell):
+   Rodar o MESMO comando SEM -minrate/-maxrate/-bufsize.
+   Se passar -> causa confirmada como o constrained (Fator 1).
+
+================================================================================
+(7) CORRECAO FUTURA (quando aprovada - NAO aplicada)
+================================================================================
+1) No Juntar: NAO aplicar constrained quando o encoder for *_mediacodec
+   (ou usar apenas -maxrate/-bufsize sem -minrate, se o device aceitar).
+2) encodingFor (hardware): emitir -c:v <nome> -pix_fmt yuv420p -bf 0
+   -g <fps|30> (fix sistemico ja planejado no relatorio do Cortar:
+   plano_fix_corte_video_h264_hevc_2026-09-01.txt).
+3) Alinhar a resolucao do perfil agregado a multiplo de 16 quando o encoder
+   for hardware (ou aceitar o pad do filtro para 16).
+
+================================================================================
+(8) VEREDITO
+================================================================================
+Defeito sistemico de encodingFor (parametrizacao do MediaCodec) + fator
+exclusivo do Juntar (constrained=true gerando -minrate/-maxrate/-bufsize).
+Audio imune por construcao; CPU imune por tolerancia do libx264.
+Nenhum arquivo do projeto foi modificado nesta analise.
+
+================================================================================
+FIM DO RELATORIO

@@ -1,0 +1,5 @@
+== DEPLOY DIAG5 4f2c4855 (mesmo escopo/rollback) ==
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag5.so: 1 file pushed, 0 skipped. 18.5 MB/s (95896352 bytes in 4.945s)
+4f2c4855b1a92afb93c6c535e3c36f75a9ddc515f75cae096a90a56d7062e3d9  /data/local/tmp/diag5_4f2c4855.so
+OK
+4f2c4855b1a92afb93c6c535e3c36f75a9ddc515f75cae096a90a56d7062e3d9  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

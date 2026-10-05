@@ -1,0 +1,99 @@
+== RED: loader ORIG (dlsym a cada chamada: 2+2=4) ==
+In file included from D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl.h:20,
+                 from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_cache_test.cpp:10:
+D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl_version.h:22:104: note: '#pragma message: cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)'
+   22 | #pragma message("cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)")
+      |                                                                                                        ^
+In file included from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_cache_test.cpp:38:
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_ORIG.cpp: In function '_cl_command_queue* clCreateCommandQueue(cl_context, cl_device_id, cl_command_queue_properties, cl_int*)':
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_ORIG.cpp:132:25: warning: 'clCreateCommandQueue_fn' is deprecated [-Wdeprecated-declarations]
+  132 |     auto fn = OPENCL_FN(clCreateCommandQueue);
+      |                         ^~~~~~~~~~~~~~~~~~~~
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_ORIG.cpp:82:40: note: in definition of macro 'OPENCL_FN'
+   82 | #define OPENCL_FN(name) load_opencl_fn<name##_fn>(#name)
+      |                                        ^~~~
+In file included from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_ORIG.cpp:6:
+D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl_function_types.h:643:1: note: declared here
+  643 | clCreateCommandQueue_fn CL_API_SUFFIX__VERSION_1_2_DEPRECATED;
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+dlsym calls = 4 (esperado 4) | rc=0000
+OK
+== GREEN: loader PATCHED (cache: 1 por simbolo: 1+1=2) ==
+In file included from D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl.h:20,
+                 from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_cache_test.cpp:10:
+D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl_version.h:22:104: note: '#pragma message: cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)'
+   22 | #pragma message("cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)")
+      |                                                                                                        ^
+In file included from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_cache_test.cpp:38:
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_PATCHED.cpp: In function '_cl_command_queue* clCreateCommandQueue(cl_context, cl_device_id, cl_command_queue_properties, cl_int*)':
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_PATCHED.cpp:192:25: warning: 'clCreateCommandQueue_fn' is deprecated [-Wdeprecated-declarations]
+  192 |     auto fn = OPENCL_FN(clCreateCommandQueue);
+      |                         ^~~~~~~~~~~~~~~~~~~~
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_PATCHED.cpp:142:40: note: in definition of macro 'OPENCL_FN'
+  142 | #define OPENCL_FN(name) load_opencl_fn<name##_fn>(#name)
+      |                                        ^~~~
+In file included from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_PATCHED.cpp:6:
+D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl_function_types.h:643:1: note: declared here
+  643 | clCreateCommandQueue_fn CL_API_SUFFIX__VERSION_1_2_DEPRECATED;
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+dlsym calls = 2 (esperado 2) | rc=0000
+OK
+== ENDURECIMENTO (F17): falha transitoria/ausente/concorrencia/chave OFF ==
+In file included from D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl.h:20,
+                 from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_hardening_test.cpp:13:
+D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl_version.h:22:104: note: '#pragma message: cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)'
+   22 | #pragma message("cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)")
+      |                                                                                                        ^
+In file included from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_hardening_test.cpp:42:
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_PATCHED.cpp: In function '_cl_command_queue* clCreateCommandQueue(cl_context, cl_device_id, cl_command_queue_properties, cl_int*)':
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_PATCHED.cpp:192:25: warning: 'clCreateCommandQueue_fn' is deprecated [-Wdeprecated-declarations]
+  192 |     auto fn = OPENCL_FN(clCreateCommandQueue);
+      |                         ^~~~~~~~~~~~~~~~~~~~
+D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_PATCHED.cpp:142:40: note: in definition of macro 'OPENCL_FN'
+  142 | #define OPENCL_FN(name) load_opencl_fn<name##_fn>(#name)
+      |                                        ^~~~
+In file included from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_PATCHED.cpp:6:
+D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl_function_types.h:643:1: note: declared here
+  643 | clCreateCommandQueue_fn CL_API_SUFFIX__VERSION_1_2_DEPRECATED;
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+== A) chave ON: 3 chamadas -> 1 dlsym; contadores shim=3 dlsym=1 ==
+  ok: shim conta TODAS as chamadas (3)
+  ok: dlsym real = 1 (cache por simbolo)
+== B) falha TRANSITORIA antes do load nao envenena (retry) ==
+  ok: 1a chamada falha-transitoria retorna erro (sem crash)
+  ok: 2a/3a resolvem e passam
+  ok: dlsym = 2 (falha NAO cacheada + retry)
+== C) simbolo AUSENTE: null seguro, SEM cache de falha (retry por chamada) ==
+  ok: erro retornado nas duas (null-safe)
+  ok: dlsym tentou de novo na 2a (sem envenenamento)
+  ok: driver 'disponivel' depois: resolve e passa
+  ok: dlsym = 3 (agora cacheado)
+== D) concorrencia: 8 threads x 200 chamadas num simbolo NOVO ==
+  ok: todas as 1600 chamadas OK (sem ponteiro parcial)
+  ok: shim = 1600
+  ok: dlsym <= 8 (corrida dupla-benigna no maximo)
+== E) chave OFF: caminho original (dlsym por chamada) ==
+  ok: cache OFF => 2 chamadas = 2 dlsym (comportamento original)
+== F) chave ON de novo: cache volta a valer ==
+  ok: resolucao unica ao voltar ON; 2a chamada = hit
+RESULTADO: PASS (A-F)
+== MUTACAO (patched com cache DESLIGADO deve falhar o GREEN esperado) ==
+In file included from D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl.h:20,
+                 from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_cache_test.cpp:10:
+D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl_version.h:22:104: note: '#pragma message: cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)'
+   22 | #pragma message("cl_version.h: CL_TARGET_OPENCL_VERSION is not defined. Defaulting to 300 (OpenCL 3.0)")
+      |                                                                                                        ^
+In file included from D:/Projetos/SIG/native-dependencies/harness/fixtures/loader_cache/loader_cache_test.cpp:38:
+D:/Projetos/SIG/.tmp_loader_test/loader_MUTANT.cpp: In function '_cl_command_queue* clCreateCommandQueue(cl_context, cl_device_id, cl_command_queue_properties, cl_int*)':
+D:/Projetos/SIG/.tmp_loader_test/loader_MUTANT.cpp:192:25: warning: 'clCreateCommandQueue_fn' is deprecated [-Wdeprecated-declarations]
+  192 |     auto fn = OPENCL_FN(clCreateCommandQueue);
+      |                         ^~~~~~~~~~~~~~~~~~~~
+D:/Projetos/SIG/.tmp_loader_test/loader_MUTANT.cpp:142:40: note: in definition of macro 'OPENCL_FN'
+  142 | #define OPENCL_FN(name) load_opencl_fn<name##_fn>(#name)
+      |                                        ^~~~
+In file included from D:/Projetos/SIG/.tmp_loader_test/loader_MUTANT.cpp:6:
+D:/Projetos/SIG/app/src/main/cpp/opencl-headers/include/CL/cl_function_types.h:643:1: note: declared here
+  643 | clCreateCommandQueue_fn CL_API_SUFFIX__VERSION_1_2_DEPRECATED;
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+  OK: mutante falhou como esperado (teste sensivel)
+== resultado: PASS (RED 4 / GREEN 2 / mutacao detectada) ==

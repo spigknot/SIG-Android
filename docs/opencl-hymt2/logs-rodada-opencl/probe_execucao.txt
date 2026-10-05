@@ -1,0 +1,38 @@
+== PROBE LIFETIME (transpose_lifetime_probe 5e86f0e7) — execucao no device ==
+D:/Projetos/SIG/native-dependencies/harness/arm64-v8a/transpose_lifetime_probe: 1 file pushed, 0 skipped. 13.2 MB/s (67841952 bytes in 4.912s)
+5e86f0e712a89906523e14aad11c0c0120e87639c1ca17dec1f8894b16dc06af  /data/local/tmp/transpose_lifetime_probe
+CHMOD_OK
+--- execucao (pode levar ~1-2 min; primeira compilacao de kernels) ---
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+ggml_opencl: OpenCL profiling enabled
+ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+
+ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+ggml_opencl: vector subgroup broadcast support: true
+ggml_opencl: subgroup shuffle support: true
+ggml_opencl: device FP16 support: true
+ggml_opencl: khr dot product support: true
+ggml_opencl: mem base addr align: 128
+ggml_opencl: global mem size: 7555 MB
+ggml_opencl: max mem alloc size: 2048 MB
+ggml_opencl: device max image buffer size (pixels): 2147483648
+ggml_opencl: device max image2d size: 16384 x 16384
+ggml_opencl: device max workgroup size: 1024
+ggml_opencl: SVM coarse grain buffer support: true
+ggml_opencl: SVM fine grain buffer support: true
+ggml_opencl: SVM fine grain system support: false
+ggml_opencl: SVM atomics support: true
+ggml_opencl: cl_qcom_subgroup_shuffle support: true
+ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+ggml_opencl: kernel cache enabled at '/data/local/tmp/llama.cpp/cl-cache'
+ggml_opencl: loading OpenCL kernels...................................................................................................................................................................
+device: GPUOpenCL (QUALCOMM Adreno(TM) 840)
+== passada 1 (igualdade exata + contador de transpose) ==
+    ERRO: caso deveria transpor mas tr_calls nao cresceu (delta=0)
+  q8_0_2048x64       FAIL hash=d5b94a7016c1c383 tr_delta=0
+RESULTADO: FAIL (caso q8_0_2048x64)
+RC=1

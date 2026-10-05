@@ -1,0 +1,86 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F13: setup DOMINA; POR-OP PRONTO
+Data: 04/10/2026. Repo: D:/Projetos/SIG (NADA commitado).
+Base: parecer "PILOTO profS AINDA PENDENTE" + autorizacao ("autorizo") executada.
+
+================================================================================
+1. PILOTO profS2 (591e89a9) — EXECUTADO (6 runs; OFF/ON alternado; 9698670c ao final)
+================================================================================
+Contraste Q4 curto OCL OFF x ON (AMBOS com prof/hostprof/decprof=1; so' schedprof
+muda — protocolo do parecer):
+  OFF#1: decode 7154ms (19.85 t/s) | OFF#2: 7549ms (18.81)
+  ON #1: decode 7487ms (18.97)     | ON #2: 7432ms (19.11)
+  => overhead do schedprof = DENTRO DO RUIDO (+4,7% / -1,6%) na amostra; gating
+     OFF=sem linha verificado; sem waits novos.
+Split (ON):
+  Q4 curto: graph=6563ms nodes=182470 enq=1024ms (n=100536) setup=5538ms (84%)
+  Q4 mais : graph=68060ms nodes=1908225 enq=10709ms (n=1051380) setup=57351ms (84%)
+  => por token: ~1285 iteracoes de no, ~708 enqueues; setup ~39ms/token; enq ~7ms/token.
+
+================================================================================
+2. LEITURA (medida direta; regiao rotulada, causa nao afirmada)
+================================================================================
+2a. Wrapper `enqueue_ndrange_kernel` cobre o caminho QUENTE: 204 usos vs 64
+    diretos — os diretos estao em get_tensor (30), set/dequant/flash (resto);
+    NENHUM direto nas GEMV/Q4K/Q8_0 do decode (por isso n/token ~708 bate com a
+    contagem CL antiga). Logo `setup` NAO esta' contaminado por enqueue fora do
+    wrapper NO caminho de op; permanece como regiao NAO-ATRIBUIDA fina
+    (dispatch de op, arg sets, checks de fusao, nos pulados ~30us/iteracao).
+2b. `sync_with_other_backends` por no = early-return (1 device) — ja' documentado.
+2c. CONSISTENCIA: graph(6563) ~= compute do profD (6578) +-0,2%; residual do profD
+    (903ms) > a copia de logits medida? Nao medida diretamente ainda — declarado
+    como NAO-ATRIBUIDO (nao double-count; regioes distintas: setup dentro do
+    graph vs residual fora).
+2d. Fase: snapshot funcionou para o lado decode; o PREFILL marcou 0 porque o
+    snapshot e' feito APOS o prefill (correto por desenho: o prefill roda ANTES
+    do snapshot — ver limitação: o custo do prefill fica no agregado `graph`
+    total menos decode? Nao: reset no inicio do request + snapshot pos-prefill =
+    o prefill esta' no "primeiro bucket" (nao impresso); declarar).
+
+================================================================================
+3. profS3 (811f76c9) — PRONTO (local; NAO ativado): LOCALIZA AS ROTAS
+================================================================================
+3a. Adiciona tempo por NO agregado por TIPO DE OP (array[128]) + impressao
+    "Sched/OCL[topops]: <op>=Xms/n ..." (top-6; reset por request; opt-in junto
+    com schedprof; nenhuma mudanca de algoritmo/config).
+3b. sha256 811f76c9bfad0872a8ac8e1606f9031bd793493e03a482d676e465034e281db5
+    (95.915.984 B); fontes em scratch/logs; Ninja rc=0; string "topops" ✓.
+    SUPERSEDE o profS2 para o proximo piloto (mesmo protocolo do parecer).
+3c. Uso: 1-2 runs (Q4 curto OCL ON) bastam para eleger a op dominante do setup;
+    depois Q4 longo/Q8 conforme captura.
+
+================================================================================
+4. PEDIDO DE CONSENTIMENTO (exato)
+================================================================================
+Ativar TEMPORARIAMENTE o profS3 (deploy push+run-as + readback pelo sha
+811f76c9...; rollback 9698670c + UI Q4_K_M/Vulkan/Portugues + chaves zero) para
+mini-piloto: Q4 curto OCL (schedprof=1) x2 + Q4 longo x1 (+Q8 curto se captura
+valida). Entrega: tabela por request graph/enq/setup + TOP-OPS que elege a rota
+dominante (candidato de caching/otimizacao com nome proprio). Sem APK/ZIP/release.
+
+================================================================================
+5. ESTADO
+================================================================================
+- Device: ROLLBACK do profS2 EXECUTADO ao fim (9698670c conferido por readback;
+  chaves zero; UI restaurada) — rollback14_9698670c.txt; WIP preservado;
+  manifesto regenerado (Python; count/size/dedupe).
+- Nota: no log do piloto, o run Q8 curto nao imprimiu linha Sched — verificar
+  na coleta final (possivel leitura tardia do delta; nao bloqueia).
+
+
+================================================================================
+6. INCIDENTE NO ROLLBACK DO PILOTO profS2 — REGISTRADO E CORRIGIDO
+================================================================================
+6a. O rollback profS2->9698670c falhou em escrever: o PUSH do /tmp/rb14 falhou
+    ("failed to read copy response: EOF") e o comando seguinte fez `cp` de um
+    arquivo de 0 bytes SOBRE a lib (cp de vazio trunca o destino) — a lib ficou
+    com 0 bytes (sha e3b0c44... = vazio). O `&&`/pipe mascararam o erro do push.
+6b. RECUPERACAO imediata: as copias validas permaneciam no device
+    (/data/local/tmp/rb11..rb13_9698670c.so, 95.613.928 B); rb13 conferido por
+    sha (9698670c...) e copiado sobre a lib; readback OK; app abriu normal
+    (pid vivo, TextoActivity em foco); UI restaurada (Q4_K_M/Vulkan/Portugues);
+    evidencia: recuperacao_lib_9698670c.txt (rollback14_9698670c.txt preserva o
+    incidente).
+6c. LICAO formalizada para os proximos casts: (i) verificacao de SOURCE
+    (tamanho/sha) ANTES do cp; (ii) push sem pipe mascarante e com checagem de
+    rc; (iii) readback de tamanho+sha obrigatorio; (iv) manter SEMPRE copias de
+    rollback no device (rb*) — foi o que salvou aqui.

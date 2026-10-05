@@ -1,0 +1,196 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F5: SANEAMENTO, GUARD, PATCH GOLDEN
+Data: 03/10/2026. Repo: D:/Projetos/SIG (NADA commitado; WIP preservado).
+Parecer-base: "PROMPT AO EXECUTOR — OPENCL F4: SANEAR METRICAS, TESTAR GUARD,
+PERFILAR INFERENCIA". Documento anterior: PROMPT-RELATORIO-UNIFICADO-OPENCL-2026-10-03.txt.
+Aparelho: CPH2747 (wireless 100.108.27.64, portas 45197/39599). RECONCILIACAO
+HISTORICA (por runID/timestamps, requisitada):
+  - 1a tentativa de smoke (porta 45197): runs r321/r322 falharam por LEITURA DE
+    UI VAZIA logo apos o deploy (transiente de instrumento) e o r323 foi
+    INTERROMPIDO pela queda do wireless. Todos preservados em prodmin2_smoke.log.
+  - Rollback10: NAO executado nesse momento (wireless fora).
+  - 2a tentativa (porta 39599): runs r324/r325 (Q4) e r326 (Q8) = os TRES runs
+    VALIDOS novos (shas f8c093ae x2 + 1c01984c; loads 25.2[1a pos-swap]/4.1/5.7s).
+  - ROLLBACK10 executado em seguida (rollback10_9698670c.txt; aparelho=9698670c,
+    UI Q4_K_M+Vulkan). ESTADO ATUAL: concluido.
+  As tentativas invalidas/interrompidas ficam PRESERVADAS (nao apagadas); as
+    secoes ESTADOS/B5/H1 refletem o estado POS-reconciliacao.
+
+================================================================================
+ESTADOS
+================================================================================
+[CCE] A) Inconsistencia de tempos RESOLVIDA por fronteiras de codigo + CSV por run
+[CCE] B) Guard endurecido (sem cache) + TESTE NATIVO RED-GREEN (PASS) local
+[CCE] C) Patch golden + build recipe versionaveis no repo (verificados)
+[CCE] E-retificacoes: D6 corrigido; sha FULL 8/8; contagens de tentativas
+[CCE] smoke do prodmin2 (guard novo): 3/3 shas OK (loads 25.2[1a pos-swap] /
+      4.1 / 5.7s; Q4 f8c093ae x2 e Q8 1c01984c); runs anteriores (1-2 falhas de
+      leitura pos-deploy + run3 queda do wireless) preservados no log maior
+[CCE] ROLLBACK concluido: aparelho = 9698670c; UI Q4_K_M + Vulkan; readback
+      conferido (rollback10_9698670c.txt)
+[PENDENTE: consentimento] build de PROFILING do decode (ativo/envio); empacotamento
+
+================================================================================
+A. INCONSISTENCIA PRIORITARIA DOS TEMPOS — RESOLVIDA
+================================================================================
+A1. FRONTEIRAS (por codigo, nao por suposicao):
+    - "Desempenho: N tokens em X s (Y t/s)" = loop de DECODE do JNI: timer
+      `geracao_inicio` e' setado no llama_jni.cpp APOS o decode do prompt e
+      ANTES do loop de amostragem (linha ~549) => exclui prefill/load/UI.
+    - "Modelo carregado em Xs" = um load (SystemClock), de QUALQUER tap que o
+      dispare (selecao/traducao).
+    - "Traducao pronta em Xs" = Translate(): startedAt ANTES do Thread (pode
+      INCLUIR o load quando o load ocorreu nesse mesmo tap).
+    - Os deltas acumulam linhas de TAPS diferentes: load de um tap e pronta de
+      outro => medians agregadas NAO sao aditivas (era a raiz da "inconsistencia").
+A2. EVIDENCIA POR RUN (CSV normalizado: logs-rodada-opencl/tabela_por_run.csv,
+    98 linhas; faltantes = vazio; nada derivado):
+    - Run COLD no mesmo tap (baseline Q4 curto r01): load 3.6 + pronta 11.0 +
+      decode 7.1 => pronta ~ load+decode+0.3 (ADITIVO).
+    - Run WARM (r06/r11): load vazio; pronta 7.9/8.2; decode 7.6/8.0 =>
+      pronta ~ decode+0.3 (sem load).
+    - Conclusao: pronta e load SO' somam quando do mesmo tap; o agregado misto
+      gerava a aparencia de incoerencia. CSV entrega cada run cru.
+A3. NAO chamar "decode do app" de decode puro sem fronteira: a fronteira agora
+    esta DOCUMENTADA (loop JNI pos-prompt) — o campo e' decode real, mas o
+    "total" (pronta) inclui prefill+UI+eventual load. Prefill continua NAO medido.
+A4. Repeticoes/temperaturas/ordem: contagens por grupo declaradas (CPU 6,
+    Vulkan 6, OpenCL 3 nos controles; baseline OpenCL 12; tabela por run lista
+    cada caso); temperatura por run no CSV (sensor de bateria).
+A5. RETIFICACAO D6 (aplicada): a frase "OpenCL ganha da CPU na carga" esta'
+    ERRADA — CPU carrega em 0.6/1.0s vs OpenCL 5.5/5.5s; CPU e' o mais rapido
+    na carga e OpenCL o mais LENTO. D6 corrigido no texto corrente.
+A6. Q8 decode: OpenCL 18.0 vs Vulkan 17.5 t/s — dentro de ruido e com saidas
+    comparadas por cobertura; NAO afirmar "Vulkan sempre mais rapido". O que o
+    dado sustenta: Q4 favorece Vulkan no decode; Q8 e' empirico (sem claim).
+    Tokens 1485/1491/1511 = tarefas de saida diferentes; comparacao end-to-end
+    com cobertura e tok/s separados (CSV).
+A7. Eval stats: os stats nativos do llama (prompt-eval/eval) NAO estao expostos
+    no app hoje (grep: sem prompt eval/eval time nos logs) => F3b segue como
+    "total NAO regrediu na amostra" (nao "causa-espera-nao-deslocada
+    confirmada"); a extracao de evalstats exige build de profiling (sec. D).
+
+================================================================================
+B. GUARD — PROVA E VACINA
+================================================================================
+B1. FIX: o guard agora e' `sig_transpose_guard.h` (novo arquivo, testavel):
+    consulta CL_QUEUE_PROPERTIES POR CHAMADA (sem cache). Motivo: a consulta
+    custa microssegundos (672/carga => ~ms) e elimina a classe "resultado do
+    primeiro queue" (fila/contexto recriados com props diferentes).
+    Fallback: erro/incerteza => modo BLOQUEANTE (fail-safe).
+B2. TESTE NATIVO PERMANENTE (local, sem device/NDK):
+    native-dependencies/harness/transpose_guard_test.cpp +
+    run_transpose_guard_test.sh (g++ host, mock CL controlavel).
+    RESULTADO REAL (03/10): PASS (0 falhas) —
+      GREEN: in-order=>fast; OOO=>blocking; erro=>blocking; sem estado velho
+      (volta a in-order=>fast); consulta por chamada (contador = 8);
+      RED (design antigo com cache unico, copia no teste): fila OOO devolveu
+      "fast" (bug demonstrado).
+B3. Cobertura por camadas (o que o teste cobre x o que nao cobre):
+    - COBRE: logica do guard com props 0/OOO/erro, ausencia de cache/estado
+      velho, fail-safe.
+    - NAO COBRE (camadas distintas, declaradas): lifetime real de comandos no
+      runtime, buffers reais com tamanhos alternados/upload/get/teardown no
+      device (o ESTRESSE e2e de 8 passos cobre o caminho real no app; a
+      prova NATIVA de lifetime em device segue LACUNA com plano).
+B4. Multiqueue/mutex: o fork cria 1 contexto/1 fila por backend (auditado);
+    o guard consulta POR FILA a cada chamada => multi-fila futuro fica correto
+    por construcao. O mutex JNI cobre o app; nenhum acesso concorrente novo.
+B5. Smoke do build novo (prodmin2 e14e6a80, guard sem cache): CONCLUIDO 3/3
+    com shas conferidos (Q4 f8c093ae x2; Q8 1c01984c; loads 4.1/5.7s no estado
+    quente; 25.2s na 1a carga pos-swap — mesmo padrao de 1a carga ja registrado,
+    nao e' regressao das cargas seguintes). Runs 1-2 da 1a tentativa falharam
+    por leitura de UI vazia logo apos o deploy (transiente de instrumento) e o
+    run3 caiu com a queda do wireless — tudo preservado no log; nenhum crash.
+
+================================================================================
+C. BUILD MINIMO — AGORA NO REPO (nao so' scratch)
+================================================================================
+C1. docs/opencl-hymt2/F3B-PATCH.diff (sha 33e56f1c...): patch focado (header
+    novo + 2 linhas no ggml-opencl + shim do loader). Verificado: aplica limpo
+    sobre HEAD (dry-run OK) e produz exatamente o guard + chamada.
+C2. docs/opencl-hymt2/BUILD-RECIPE-F3B.md: entradas com hash (fontes minimas,
+    header, loader, kernels combinado), toolchain/defines pinados, comando de
+    build, saida esperada (prodmin2 e14e6a80... 95.626.512 B), regras de
+    promocao. Lineage: v1 15a548fd (cache) -> v2 e14e6a80 (sem cache).
+C3. Enquadramento de escopo: o WIP continua instrumentado (diag) e NAO se
+    promove sozinho; o patch F3b e' o DELTA de produto. Próximo build oficial
+    parte do patch + baseline WIP-{sem-diag}.
+C4. GATE: o build rapido do Gradle NAO compila o .so nativo (declarado na
+    receita); a validacao do nativo e' smoke+estresse no device.
+
+================================================================================
+D. PREFILL/DECODE — DILIGENCIA DENTRO DO ESCOPO (estado atual)
+================================================================================
+D1. Gargalo de USO identificado e documentado na tabela matched: decode OpenCL
+    ~18-19 t/s; Q4 favorece Vulkan (23-30), Q8 empirico. Prefill NAO medido.
+D2. Metrica que JA existe e pode ser usada sem build novo: o campo Desempenho
+    (decode real) por run no CSV; a tabela matched por backend/modelo/tamanho.
+D3. Proximo passo tecnico (build de PROFILING, LOCAL, consentimento apenas
+    para ativar/enviar): expor os timings nativos do llama (prompt-eval vs eval)
+    + cl-profile opt-in (o codigo ja tem GGML_OPENCL_PROFILING; a flag altera
+    overhead/scheduling => controle OFF/ON na MESMA tracagem, impacto
+    quantificado). Sem clock de device comparado com host.
+D4. Proposta de ALVO unico por perfil (agora): identificar no trace se o gap do
+    decode OpenCL esta no KERNEL (GPU EXEC alto) ou no HOST (enqueue/event
+    wait/readback/sampler); so' depois escolher 1 candidato (ex.: tuning de
+    workgroup das GEMV) com A/B no MESMO artefato. Nada de pooling profundo de
+    upload (beneficio incerto) antes desta tabela.
+D5. Regras mantidas: sem transplante de signedness Vulkan->OpenCL; sem fastmath/
+    precisao/EOG/sampler/reset como atalho; probes independentes quando mudar
+    kernel de verdade.
+
+================================================================================
+E. RETIFICACOES/CONTAGENS (aplicadas)
+================================================================================
+E1. D6 corrigido (A5). E2. sha FULL: reconciliacao 8/8 byte-identica
+    (output.txt sha256 completos: Q4 e Q8, baseline vs aceites f3b/f3bdef) —
+    o prefixo de 8/16 chars agora tem prova completa.
+E3. Estresse: 9 TENTATIVAS / 8 VALIDAS / 1 INVALIDA-DE-INSTRUMENTO (env
+    HYM_BACKEND=OpenCL recusou o passo Vulkan) + 1 RE-RUN que substitui a
+    etapa 2 (sha 084f12f4 OK). Contabilizacao no prodmin_stress_resumo.json
+    (9 entradas, nota no 2b).
+E4. Smoke prodmin (v1): 4/4 runs validos; o "run3 retry" citado = falha de
+    leitura transiente do instrumento, preservada no log com fase; nada foi
+    zerado sem inventario.
+E5. maps_lib vazio "antes do load" e' aceitavel; a procedencia do .so no PID do
+    run vale pelo readback pos-load (deploys com sha). Para runs sem maps, a
+    procedencia fica INFERIDA e marcada (nao usada como prova).
+E6. Q8 aceite "None no log": era nome de diretorio (Q8_ vs Q8_0_); os records
+    originais foram lidos direto e a reconciliacao FULL acima (E2) fecha o
+    caso — nao se asserta 8/8 apenas por resumo.
+
+================================================================================
+F. ARTEFATOS E HASHES (novos desta rodada; hashes completos no manifesto)
+================================================================================
+F1. F3B-PATCH.diff (33e56f1c...), BUILD-RECIPE-F3B.md, transpose_guard_test.cpp,
+    run_transpose_guard_test.sh, tabela_por_run.csv (98 linhas).
+F2. prodmin2 libsig_llama_prodmin2.so e14e6a80... (95.626.512 B) + fontes
+    minimas atualizadas (guard sem cache) + log do teste (guard_test_run.txt).
+F3. Smoke/rollback: deploy_prodmin2_e14e6a80.txt (readback OK); smoke CONCLUIDO
+    3/3 na 2a tentativa (prodmin2_smoke2.log) apos a interrupcao da 1a
+    (prodmin2_smoke.log, preservada); rollback10 executado (rollback10_9698670c.txt).
+
+================================================================================
+G. MANIFESTO
+================================================================================
+G1. Regenerado com patch/recipe/testes/CSV/prodmin2 (contagem e grupos no
+    MANIFESTO-OPENCL.json; verificacao Python exist/size/dedupe; 0 erros).
+G2. Logs da rodada: docs/opencl-hymt2/logs-rodada-opencl/ (novos: guard_test_run,
+    patch_gen, prodmin2_smoke, deploy_prodmin2, tabela_por_run.csv).
+
+================================================================================
+H. ESTADO FINAL E PENDENCIAS
+================================================================================
+H1. APARELHO (revertido ao vivo): lib 9698670c; UI Q4_K_M + GPU (Vulkan);
+    chaves debug.sig.hymt2.* zeradas; prodmin2 removido com readback conferido.
+    Nada de release/pack.
+H2. FONTE: WIP instrumentado + patch golden no repo; scratch com fontes minimas.
+H3. PENDENCIAS: (a) device: smoke prodmin2 + rollback; (b) consentimento:
+    build/ativacao de profiling do decode; (c) lacuna: prova nativa de lifetime
+    em device (plano na secao B3).
+H4. NAO feito: commit/push/release/R2, remocao de dados, NPU/Whisper, default
+    de backend, alteracao de sampler/template/EOG/max/context.
+Conclusao parcial: otimizacao de CARGA validada na amostra (F3b);
+prova de regressao permanente em progresso (guard testado local RED-GREEN;
+teste nativo de lifetime = lacuna declarada); perfil de inferencia com
+gargalo identificado (decode) e proximo passo pronto (profiling build).

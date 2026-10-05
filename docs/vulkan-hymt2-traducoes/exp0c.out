@@ -1,0 +1,82 @@
+
+============================================================
+EXECUCAO 1/5
+============================================================
+--- GPU (Vulkan) | Q4_K_M | 6 threads ---
+   backend Vulkan selecionado em (696, 820)
+   backend na tela: 'Vulkan'
+   Traduzir em (636,960)
+   traduzindo...
+   tokens=6 (12s)
+   SALVAR em (792, 1407)
+   SALVO: VULKAN_6tok_trad_Q4_K_M_Vulkan_20260926_202933.txt (16 chars)
+   chars=15
+   conteudo: '6" no more than'
+
+============================================================
+EXECUCAO 2/5
+============================================================
+--- GPU (Vulkan) | Q4_K_M | 6 threads ---
+   backend Vulkan selecionado em (696, 820)
+   backend na tela: 'Vulkan'
+   Traduzir em (636,960)
+   traduzindo...
+   tokens=7 (12s)
+   SALVAR em (792, 1407)
+   SALVO: VULKAN_7tok_trad_Q4_K_M_Vulkan_20260926_203016.txt (17 chars)
+   chars=15
+   conteudo: 'CFR 4" not even'
+
+============================================================
+EXECUCAO 3/5
+============================================================
+--- GPU (Vulkan) | Q4_K_M | 6 threads ---
+   backend Vulkan selecionado em (696, 820)
+   backend na tela: 'Vulkan'
+   Traduzir em (636,960)
+   traduzindo...
+   tokens=12 (12s)
+   SALVAR em (792, 1407)
+   SALVO: VULKAN_12tok_trad_Q4_K_M_Vulkan_20260926_203059.txt (41 chars)
+   chars=37
+   conteudo: '4 you no one more than any other than'
+
+============================================================
+EXECUCAO 4/5
+============================================================
+--- GPU (Vulkan) | Q4_K_M | 6 threads ---
+   backend Vulkan selecionado em (696, 820)
+   backend na tela: 'Vulkan'
+   Traduzir em (636,960)
+   traduzindo...
+   tokens=4096 (184s)
+   SALVAR em (792, 1407)
+   arquivo e' de execucao anterior: trad_Q4_K_M_Vulkan_20260926_203059.txt
+   sem texto
+
+============================================================
+EXECUCAO 5/5
+============================================================
+--- GPU (Vulkan) | Q4_K_M | 6 threads ---
+   backend Vulkan selecionado em (696, 820)
+   backend na tela: 'Vulkan'
+   Traduzir em (636,960)
+   traduzindo...
+   tokens=4096 (244s)
+   SALVAR em (792, 1407)
+   arquivo e' de execucao anterior: trad_Q4_K_M_Vulkan_20260926_203059.txt
+   sem texto
+
+
+============================================================
+DISTRIBUICAO (3 execucoes com texto)
+============================================================
+  exec 1:     15 chars  '6" no more than'
+  exec 2:     15 chars  'CFR 4" not even'
+  exec 3:     37 chars  '4 you no one more than any other than'
+
+  chars: min=15 mediana=15 max=37
+  textos distintos: 3 de 3
+  -> NENHUMA execucao repete a anterior (nao e' loop estavel)
+
+  salvo: exp0c_distribuicao.txt

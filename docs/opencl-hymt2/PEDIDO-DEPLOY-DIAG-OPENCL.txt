@@ -1,0 +1,58 @@
+PEDIDO DE DEPLOY — LIB DIAGNOSTICA OpenCL (F2/F3) — 02/10/2026
+=====================================================================
+UNICA APROVACAO PEDIDA: substituir SOMENTE o libsig_llama.so da pasta
+9-arm64-v8a no aparelho, com backup e reversao. Nada de APK, nada de pesos,
+nada de dados, nada de publicacao.
+
+## ARTEFATO (unico, exato)
+  Local: C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag_opencl_aa79fcd6.so
+  sha256: aa79fcd66a0792bb1d05f2c2c05bacb94bc9022777c6f5edd0168914080fac88
+  tamanho: 95.625.624 bytes (atual 9698670c: 95.613.928; +11.696 = codigo de
+           diagnostico)
+  ELF64 AArch64 DYN | NEEDED: libandroid, liblog, libvulkan, libm, libdl,
+  libc (identicos ao 9698670c)
+  Entry points JNI DEFINIDOS (todos, nao so 3): generate, loadModel,
+  releaseModel, loadSummary, lastStats, backendDescription, lastError,
+  systemInfo, threadCount.
+  Strings presentes: "Fases da carga" (1), "debug.sig.hymt2.skip_probe" (1).
+
+## O QUE MUDA vs 9698670c (diagnostico apenas)
+  1. Tempos por fase da carga (sonda / modelo / contexto) — vao para o resumo
+     do app (linha "Memória:") e para o logcat (SIGLlama).
+  2. Chave de runtime `debug.sig.hymt2.skip_probe` (default 0 = comportamento
+     IDENTICO ao atual, com sonda; 1 = pula a sonda p/ A/B controlado).
+  Nada mais: reset de contexto, fix Q8, sampler, pesos — intocados.
+
+## ESTADO ATUAL CONFIRMADO
+  pasta 9 = 9698670c... (conferida agora) | APK = build 27d9b20b (12:07)
+
+## BACKUP / REVERSAO (sem perder nada)
+  - Copia de rollback puxada do aparelho (binario-seguro, hash conferido):
+    scratch/libsig_llama_9698670c_ROLLBACK.so = 95.613.928 B, sha256 9698670c...
+  - E a mesma copia segue no aparelho em /data/local/tmp/libsig_llama_9698670c.so
+    (conferida) — rollback nao depende do PC.
+  - Reverter = repetir o mesmo procedimento com o arquivo 9698670c.
+
+## PROCEDIMENTO DO DEPLOY (como sempre)
+  1. am force-stop br.gov.sp.pcsp.launcher
+  2. adb push <artefato> /data/local/tmp/diag_aa79fcd6.so (binario, NUNCA stdin)
+  3. run-as cp /data/local/tmp/diag_aa79fcd6.so no_backup/native_dependencies/
+     9-arm64-v8a/lib/libsig_llama.so + chmod 600
+  4. READBACK sha256 no destino ANTES de relancar
+  5. relancar o app; confirmar /proc/PID/maps na pasta 9 e o arquivo
+     inalterado durante os testes.
+
+## PLANO A/B (apos o deploy, ~12-15 min)
+  Protocolo de carga ja validado (force-stop + start + Traducao curta):
+  - OpenCL Q4: 3 cargas com skip_probe=0 (linha "Fases da carga" com sonda>0)
+    e 3 com skip_probe=1 (sonda=0.0s) — mesma janela temporal, alternado.
+  - Mesmo par para Q8 (3+3) se o Q4 mostrar efeito mensuravel.
+  - Registrar: "Fases da carga" (sonda/modelo/contexto), "Modelo carregado
+    em Ls", inferencia, maps — cadeia conjunta como na rodada 1.
+  - Ao final: RESTAURAR 9698670c (rollback) e confirmar por readback; ou
+    manter a diag se o usuario preferir continuar os testes (o default dela
+    e' identico ao 9698670c em comportamento).
+
+## NAO FAZ PARTE DESTE PEDIDO
+  APK novo, .so de release, publicacao/R2, commit/push, remocao de backups,
+  mudanca de backend default, sampler, pesos, FA, contexto/batch.

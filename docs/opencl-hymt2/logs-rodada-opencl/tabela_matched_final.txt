@@ -1,0 +1,42 @@
+
+== OpenCL_baseline_Q4 ==
+  curto       n=3 | load 3.6 | pronta 8.2 | decode 7.6s (18.6 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo       n=3 | load None | pronta 36.8 | decode 36.0s (19.2 tok/s, 693 tok) | prefill: NAO MEDIDO
+  mais_longo  n=3 | load None | pronta 79.6 | decode 78.0s (19.0 tok/s, 1485 tok) | prefill: NAO MEDIDO
+  medio       n=3 | load None | pronta 16.5 | decode 16.1s (18.2 tok/s, 293 tok) | prefill: NAO MEDIDO
+
+== OpenCL_baseline_Q8 ==
+  curto       n=3 | load 6.3 | pronta 8.5 | decode 7.9s (18.0 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo       n=3 | load None | pronta 39.7 | decode 38.8s (18.1 tok/s, 703 tok) | prefill: NAO MEDIDO
+  mais_longo  n=3 | load None | pronta 85.6 | decode 83.7s (18.0 tok/s, 1511 tok) | prefill: NAO MEDIDO
+  medio       n=3 | load None | pronta 17.7 | decode 17.2s (17.1 tok/s, 295 tok) | prefill: NAO MEDIDO
+
+== CPU_ctrl_Q4 ==
+  curto       n=6 | load 1.1 | pronta 10.1 | decode 6.5s (21.9 tok/s, 142.0 tok) | prefill: NAO MEDIDO
+  mais_longo  n=6 | load None | pronta 114.8 | decode 88.8s (16.9 tok/s, 1491.0 tok) | prefill: NAO MEDIDO
+
+== Vulkan_ctrl_Q4 ==
+  curto       n=6 | load 3.6 | pronta 11.0 | decode 4.8s (29.9 tok/s, 142.0 tok) | prefill: NAO MEDIDO
+  mais_longo  n=6 | load None | pronta 82.9 | decode 67.2s (23.1 tok/s, 1485.5 tok) | prefill: NAO MEDIDO
+
+== OpenCL_f3bdef_aceite ==
+  _curto      n=1 | load 5.0 | pronta 12.9 | decode 7.7s (18.5 tok/s, 142 tok) | prefill: NAO MEDIDO
+  _longo      n=1 | load 4.3 | pronta 42.1 | decode 37.0s (18.7 tok/s, 693 tok) | prefill: NAO MEDIDO
+  _mais_longo n=1 | load 4.8 | pronta 87.8 | decode 81.3s (18.3 tok/s, 1485 tok) | prefill: NAO MEDIDO
+  _medio      n=1 | load 4.6 | pronta 20.9 | decode 15.8s (18.5 tok/s, 293 tok) | prefill: NAO MEDIDO
+  curto       n=1 | load 6.1 | pronta 14.7 | decode 8.3s (17.2 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo       n=1 | load 5.6 | pronta 50.6 | decode 44.1s (15.9 tok/s, 703 tok) | prefill: NAO MEDIDO
+  mais_longo  n=1 | load 5.2 | pronta 97.9 | decode 91.0s (16.6 tok/s, 1511 tok) | prefill: NAO MEDIDO
+  medio       n=1 | load 5.7 | pronta 22.4 | decode 16.3s (18.1 tok/s, 295 tok) | prefill: NAO MEDIDO
+
+== OpenCL_f3b_aceite ==
+  curto_aceite_f3b n=1 | load 5.2 | pronta 13.4 | decode 7.9s (18.1 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo_aceite_f3b n=1 | load 4.4 | pronta 44.3 | decode 39.0s (17.8 tok/s, 693 tok) | prefill: NAO MEDIDO
+  mais_longo_aceite_f3b n=1 | load 4.6 | pronta 89.0 | decode 82.8s (17.9 tok/s, 1485 tok) | prefill: NAO MEDIDO
+  medio_aceite_f3b n=1 | load 4.9 | pronta 22.4 | decode 17.1s (17.2 tok/s, 293 tok) | prefill: NAO MEDIDO
+
+== OpenCL_f3b_ctrl0 ==
+  curto_aceite_f3b n=1 | load 3.4 | pronta 12.2 | decode 8.5s (16.8 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo_aceite_f3b n=1 | load 5.1 | pronta 40.9 | decode 35.0s (19.8 tok/s, 693 tok) | prefill: NAO MEDIDO
+  mais_longo_aceite_f3b n=1 | load 4.6 | pronta 87.9 | decode 81.7s (18.2 tok/s, 1485 tok) | prefill: NAO MEDIDO
+  medio_aceite_f3b n=1 | load 5.1 | pronta 22.0 | decode 16.5s (17.8 tok/s, 293 tok) | prefill: NAO MEDIDO

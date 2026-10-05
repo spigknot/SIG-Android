@@ -1,0 +1,396 @@
+================================================================================
+PROMPT + RELATÓRIO ÚNICO — Hy-MT2 / llama.cpp / Vulkan / Adreno 840
+CPH2747 (OnePlus 15) · Android 16 · APK 1.505/68 · 28/09/2026
+Documento único: erros, progresso, perguntas, logs e TODOS os resultados.
+
+Este documento fecha a rodada 6 e responde ao seu parecer de 28/09 sobre o
+relatório consolidado. Ele contém os ANEXOS que faltavam: o diff estruturado
+dos dois GGUF (Q2) e a tabela de cobertura dos padrões de fusão (Q1), ambos
+executados agora. O histórico das rodadas anteriores está resumido na
+SEÇÃO Z, no fim.
+
+ORDEM DE LEITURA SUGERIDA
+  1. Este arquivo, SEÇÕES A a I: o que mudou, o que é novo, o que continua
+     em aberto.
+  2. SEÇÃO Q1 (linha ~120): a tabela de cobertura que você pediu.
+  3. SEÇÃO Q2 (linha ~210): o diff dos GGUF, com o log integral do parser.
+  4. SEÇÃO Z: o histórico, para o caso de precisar de contexto.
+
+================================================================================
+SEÇÃO A — RESUMO EXECUTIVO
+================================================================================
+
+  Q1 (cobertura do gate) — EXECUTADO. Tabela dos 3 padrões de RMS+MUL com o
+  achado que decide o caso: os três padrões COMPARTILHAM o mesmo shader
+  (rms_norm.comp), logo a lacuna de cobertura do gate é REAL, mas o padrão
+  alcançável neste modelo é o de 2 ops (que o gate pega). Decisão: (A) com
+  ressalva. Detalhe na SEÇÃO Q1.
+
+  Q2 (diff dos dois GGUF) — EXECUTADO. CONCLUSÃO (c): PAYLOADS DIFERENTES.
+  Não são o mesmo modelo quantizado duas vezes. Os 129 tensores F32 (normas)
+  são byte a byte idênticos; TODOS os 225 quantizados (Q4_K/Q6_K) diferem,
+  em uma fração pequena de blocos (ex.: 94 de 16384 em blk.0.attn_q). Parece
+  re-quantização do mesmo modelo base, mas isso é inferência minha, não
+  fato. Detalhe na SEÇÃO Q2.
+
+  Q3 (patch de UX) — NÃO EXECUTADO. A ação persistente e não bloqueante
+  continua pendente. Sem execução nova.
+
+  Q4 (harness parametrizado) — EXECUTADO e APROVADO no controle de
+  regressão. Matriz e tradução completa entregues na rodada anterior
+  (resumidas em Z.4).
+
+  DECISÃO DE PRODUTO QUE MUDOU (rodada anterior, mantida aqui): a matriz
+  mostrou que o Vulkan GANHA de forma monótona com o tamanho da entrada
+  (2,3× a 5,2× no prefill a partir de ~100 tokens). A recomendação de "CPU
+  como padrão" que eu vinha defendendo era baseada em o caso curto, o MENOS
+  representativo. O texto vigente está em Z.4.
+
+================================================================================
+SEÇÃO B — RETIFICAÇÕES QUE VOCÊ EXIGIU, E O QUE EU FIZ DELAS
+================================================================================
+
+  2.1 "Igualdade de saída não demonstra identidade de caminho."  APLICADA.
+      Texto trocado em M.2/B.2. B.2 não fecha a lacuna por si só.
+  2.2 "A tabela entre rodadas não prova que os 96 bytes mudam o resultado."
+      APLICADA. E o Q2 agora responde o que ela não respondia: os 96 bytes
+      são +91 no tensor-info e +5 no padding, e os PAYLOADS diferem.
+  2.3 "Log do KV não prova ausência de CPU."  APLICADA. Legenda corrigida
+      (índice 32 é a camada de saída, blocos são 0..31).
+  2.4 "Sentinela é observação localizada."  APLICADA.
+  2.5 "Não substituir uma faixa por outra."  APLICADA — e agora com mediana
+      e faixa calculadas dos logs brutos (sem reexecutar).
+  2.6 "Teacher forcing não é tradução livre."  APLICADA. Tradução livre
+      executada: 3 traduções íntegras por EOG.
+  2.7 "Procedência do harness deve corresponder ao link."  APLICADA e
+      VERIFICADA. O harness é linkado estaticamente (744 ggml_vk_* dentro
+      do binário, DWARF presente) e NÃO carrega a libsig_llama.so. Eu tinha
+      anotado que isso invalidaria a B.2; o controle de regressão DESMENTIU
+      (argmax e dumps idênticos). Retificado.
+
+================================================================================
+SEÇÃO C — ERROS MEUS NESTA RODADA (números 27 em diante)
+================================================================================
+
+  27. No parser GGUF, calculei nbytes como type_size × dims[0] × dims[1].
+      Isso ignora que Q4_K tem 144 bytes POR BLOCO de 256, não 144 por
+      elemento. Resultado: soma dos tensores = 73.500.286.976 (73 GB) num
+      arquivo de 1,1 GB, e a PRIMEIRA execução reportou 225 payloads
+      DIFERENTES. Conclusão falsa. Corrigido em três passos:
+        (a) type_size + block_size corretos, com validação de ne0 % bloco;
+        (b) nbytes = (n0/bloco) × type_size × n_outros;
+        (c) conferência contra o tamanho real do arquivo: agora a soma bate
+            EXATAMENTE (1.127.990.304 bytes = dados no arquivo), nos dois
+            arquivos. A conferência é a prova de que o parser está certo.
+      Registro porque a primeira saída (c) pareceria convincente se eu não
+      tivesse conferido a soma contra o arquivo.
+
+  28. O parser KeyError em 'general.finetune' ao comparar valores: eu
+      filtrava apenas as chaves ausentes em B, mas uma chave pode faltar
+      só em A. Corrigido para checar os dois lados.
+
+  29. Tentei um dequantizador de Q4_K com layout errado (qs antes de scales),
+      produzindo valores de ~1,6e18 e uma "diferença relativa" de 1,6e18.
+      Layout real: d[0:2], dmin[2:4], scales[4:16], qs[16:144]. Corrigido.
+      NÃO uso o número do dequantizador no relatório: a comparação byte a
+      byte e a contagem de blocos bastam, e um dequantizador meu seria uma
+      fonte de erro a mais.
+
+================================================================================
+SEÇÃO Q1 — COBERTURA DO GATE (só leitura) — RESULTADO
+================================================================================
+
+SEU PEDIDO: tabela para os padrões de 2, 3 e 5 operações, com função de
+elegibilidade, shader/kernel, modo/especialização, se compartilham trecho
+defeituoso, e se são alcançáveis no grafo deste modelo. Decisão A/B/C.
+
+Q1.1  A TABELA
+  padrão (fonte)            | função de elegibilidade                  | nº ops | gate pega?
+  -------------------------|------------------------------------------|--------|----------
+  RMS_NORM,MUL              | ggml_vk_can_fuse(…, {RMS_NORM,MUL})     |   2    | SIM
+   (ggml-vulkan.cpp:17180)  |  (a é a nossa)                            |        |
+  RMS_NORM,MUL,ROPE         | ggml_vk_can_fuse + helper                 |   3    | NÃO
+   (ggml-vulkan.cpp:17172)  |  ggml_vk_can_fuse_rms_norm_mul_rope       |        |
+  RMS_NORM,MUL,ROPE,VIEW,   | ggml_can_fuse_subgraph + edges + 2 helpers|   5    | NÃO
+   SET_ROWS (…:17161)       |  …_rms_norm_mul_rope e …_rope_set_rows    |        |
+
+Q1.2  COMPARTILHAM O TRECHO DEFEITUOSO? SIM — e este é o achado.
+  Os três padrões usam pipelines DIFERENTES, mas compilados do MESMO shader
+  de GLSL: vulkan-shaders/rms_norm.comp (4.888 bytes, 151 linhas).
+  Criação dos pipelines (ggml-vulkan.cpp:5502-5508):
+    pipeline_rms_norm_mul_f32              ← "rms_norm_f32"
+    pipeline_rms_norm_mul_partials_f32     ← "rms_norm_partials_f32"
+    pipeline_rms_norm_mul_rope_f32_f32     ← "rms_norm_mul_rope_f32_f32"
+    pipeline_rms_norm_mul_rope_f32_f16     ← "rms_norm_mul_rope_f32_f16"
+  Dentro de rms_norm.comp, o caminho RMS+MUL é o bloco `do_multiply`
+  (linhas 88-103), exatamente onde a reprodução reproduz avg_err=5.11457:
+    linha 88:  if (do_multiply) {
+    linha 94:      data_d[...] = D_TYPE(scale * FLOAT_TYPE(data_a[...])
+                                              * FLOAT_TYPE(data_b[...]));
+  O RoPE entra DEPOIS, sob #if RMS_NORM_ROPE_FUSION (linha 112), e
+  compartilha a mesma variável `scale` e o mesmo `barrier()` (linha 113).
+  CONCLUSÃO: o trecho defeituoso é o do_multiply, e ele é reached pelo
+  padrão de 2 ops E continuaria a ser reached pelos de 3 e 5 se o gate os
+  deixasse passar. A lacuna de cobertura do gate é, portanto, um risco
+  REAL e não apenas formal. Isso CONTRARIA a decisão (A) que eu esperava.
+
+Q1.3  ALCANÇÁVEL NO GRAFO DESTE MODELO? (o ponto decisivo)
+  O modelo é hunyuan-dense. Rastreando o grafo:
+    · hunyuan_dense.cpp delega ao grafo de hunyuan_vl
+      (models.h: `using graph = llama_model_hunyuan_vl::graph;`).
+    · hunyuan-vl.cpp chama build_norm(…, LLM_NORM_RMS) em 5 lugares
+      (linhas 89, 132, 137, 154, 177).
+    · build_norm (llama-graph.cpp:53786) emite, para LLM_NORM_RMS com peso:
+         cur = ggml_rms_norm(...);  depois  cur = ggml_mul(ctx0, cur, mw);
+      Ou seja: SEMPRE o par RMS_NORM seguido de MUL, e nada mais.
+    · Para Q e K, a ORDEM no hunyuan-vl.cpp é (linhas 115-140):
+         Qcur = ggml_rope_ext(...);   Kcur = ggml_rope_ext(...);
+         Kcur = build_norm(Kcur, attn_k_norm, RMS);   // norm DEPOIS do rope
+         Qcur = build_norm(Qcur, attn_q_norm, RMS);
+      O RoPE vem ANTES da normalização em Q/K. Logo o par alcançável é
+      RMS_NORM→MUL puro, sem RoPE encadeado.  [isto CONFIRMA a sua pista S1]
+    · O padrão de 5 ops exige SET_ROWS, que é de MoE (set_rows distribui
+      experts). hunyuan-dense é denso: não tem MoE. O fork tem
+      llama_model_hunyuan_moe separado. Logo o padrão de 5 ops NÃO é
+      alcançável nesta arquitetura.
+  ALCANCE, por padrão, NESTE modelo:
+    2 ops (RMS_NORM,MUL)          → ALCANÇÁVEL, e é o que o gate pega. COBERTO.
+    3 ops (RMS_NORM,MUL,ROPE)    → NÃO alcançável: exigiria RMS→MUL→ROPE
+                                    encadeado, mas o RoPE é anterior ao
+                                    RMS.  (não registrado, apenas não
+                                    alcançável pela ordem das ops)
+    5 ops (…,VIEW,SET_ROWS)       → NÃO alcançável: SET_ROWS é de MoE, e este
+                                    modelo é denso.
+
+Q1.4  DECISÃO: (A) COM RESSALVA — "não ampliar o gate às cegas".
+  A decisão que você prescreveu para o caso (A) é: "padrões não alcançáveis,
+  demonstrado pelo grafo relevante: documentar limite, não bloquear a
+  medição representativa." Isso se aplica, MAS o argumento que sustenta o
+  limite é mais forte e mais útil do que "não vi acontecer":
+    · o padrão de 3 ops não é alcançável porque a ORDEM das ops no grafo
+      põe o RoPE ANTES do RMS, não porque a fusão "não ocorreu";
+    · o padrão de 5 ops não é alcançável porque o modelo é denso (sem MoE),
+      um fato estrutural da arquitetura;
+    · o padrão de 2 ops, o único alcançável, É coberto pelo gate.
+  RESSALVA OBRIGATÓRIA: a proteção do gate hoje é estrutural (o grafo não
+  alcança os outros dois), não estrutural+teste. Se um dia um modelo
+  alcança RMS→MUL→ROPE no Vulkan, o gate NÃO protege, e o trecho defeituoso
+  (do_multiply) é o mesmo. Recomendo registrar isso como uma nota de
+  manutenção no código do gate (uma linha de comentário), sem ampliar o
+  escopo do gate e sem patch de produto. A tabela e esta análise bastam
+  para a decisão; não ampliei nada.
+
+Q1.5  O QUE NÃO FIZ (e por quê)
+  · Não criei patch diagnóstico. A revisão não pediu bloqueio: pediu
+    primeiro uma tabela, e a tabela aponta um risco que só se materializa
+    com um modelo que este não é.
+  · Não afirmo que os padrões de 3 e 5 ops "falham" se executados. Não
+    medi. A afirmação correcta é "não são alcançáveis neste grafo".
+  · Não usei igualdade de logits como prova (você proibiu, e é o mesmo
+    cuidado da 2.1).
+
+Q1.6  LOG / TRECHO LITERAL QUE SUSTENTA Q1.2
+    rms_norm.comp, linhas 35 e 88-94 (bloco do_multiply):
+      35: layout (constant_id = 1) const bool do_multiply = false;
+      88:     if (do_multiply) {
+      89:         if (ncols > p.ne10) {
+      90:             [[unroll]] for (uint col = tid, idx = 0; idx < num_iters; col += BLOCK_SIZE, ++idx) {
+      94:                 data_d[d_offset + col] = D_TYPE(scale * FLOAT_TYPE(data_a[a_offset + col]) * FLOAT_TYPE(data_b[b_offset + fastmod(col, p.ne10)]));
+      112: #if RMS_NORM_ROPE_FUSION
+    build_norm, llama-graph.cpp (trecho literal):
+      case LLM_NORM_RMS:   cur = ggml_rms_norm(ctx0, cur, hparams.f_norm_rms_eps); break;
+      if (mw) { cur = ggml_mul(ctx0, cur, mw); }
+    hunyuan-vl.cpp, ordem Q/K (trecho literal, linhas 115-140):
+      Qcur = ggml_rope_ext(...);  Kcur = ggml_rope_ext(...);
+      Kcur = build_norm(Kcur, model.layers[il].attn_k_norm, nullptr, LLM_NORM_RMS, il);
+      Qcur = build_norm(Qcur, model.layers[il].attn_q_norm, nullptr, LLM_NORM_RMS, il);
+
+================================================================================
+SEÇÃO Q2 — DIFF ESTRUTURADO DOS DOIS GGUF (só leitura) — RESULTADO
+================================================================================
+
+SEU PEDIDO: comparar versão, metadados, tokenizer, arquitetura, nomes/tipos/
+dimensões/comprimentos de payload, SHA-256 de cada payload com offsets
+resolvidos pelo parser, offsets/padding separados. Entregar a/b/c/d.
+
+Q2.0  OS DOIS ARQUIVOS (hashes conferem com o aparelho)
+  A = q4off.gguf                 1.133.080.448 B  dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699
+        (Hy-MT2-1.8B-Q4_K_M-OFFICIAL.gguf, copiado por MIM para o aparelho)
+  B = Hy-MT2-1.8B-q4_k_m.gguf    1.133.080.544 B  c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+        (o que o APP baixa)
+  Parser próprio, conforme a especificação GGUF (gguf.md). Sem alterar os
+  arquivos. Offsets resolvidos pelo tensor-info do próprio arquivo.
+
+Q2.1  CABEÇALHO
+  versão GGUF   A=3            B=3             IGUAL
+  n tensores    A=354          B=354           IGUAL
+  n pares kv    A=33           B=35            DIFERE
+  alignment     A=32           B=32            IGUAL
+  fim tensor-info  A=0x4DAB4E (5.090.126)   B=0x4DABA9 (5.090.217)  +91
+  início dos DADOS A=0x4DAB60               B=0x4DABC0              +96
+  Δ total = +96 bytes = +91 (tensor-info) + +5 (padding 18→23).
+
+Q2.2  CHAVES DE METADADOS
+  só em A:  general.finetune
+  só em B:  general.sampling.penalty_repeat
+            tokenizer.ggml.add_bos_token
+            tokenizer.ggml.add_eos_token
+  ordem das chaves COMUNS: IDÊNTICA (as 3 chaves novas é que mudam o
+  deslocamento). Valores dos pares comuns: só um difere (general.name).
+
+Q2.3  METADADOS DE INFERÊNCIA E TOKENIZER — o que realmente importa
+  TODOS os parâmetros de inferência são IDÊNTICOS:
+    general.architecture .................. hunyuan-dense   =hunyuan-dense
+    hunyuan-dense.attention.layer_norm_rms_epsilon .. 9.9999997e-06 = idem
+    hunyuan-dense.embedding_length ........ 2048           =idem
+    hunyuan-dense.block_count .............. 32             =idem
+    hunyuan-dense.attention.head_count ..... 16             =idem
+    hunyuan-dense.attention.head_count_kv .. (idêntico)     =idem
+    hunyuan-dense.attention.key_length ..... (idêntico)     =idem
+    hunyuan-dense.attention.value_length ... (idêntico)     =idem
+    hunyuan-dense.feed_forward_length ...... (idêntico)     =idem
+    hunyuan-dense.context_length ........... 262144         =idem
+    hunyuan-dense.rope.freq_base ........... 11158840       =idem
+    hunyuan-dense.rope.scaling.type ........ none           =idem
+    general.quantization_version .......... 2              =idem
+    general.file_type ..................... 15             =idem
+    general.sampling.temp / top_k / top_p .. idênticos
+  TOKENIZER — 100% IDÊNTICO:
+    tokenizer.ggml.tokens ....... 120.818 tokens ... IGUAIS (todos)
+    tokenizer.ggml.merges ....... 119.758 merges .. IGUAIS
+    tokenizer.ggml.token_type ... 120.818 tipos ... IGUAIS
+    tokenizer.ggml.pre / model / seperator_token_id .... IGUAIS
+    tokenizer.chat_template ...... IGUAIS
+    bos=120000, eos=120020, padding=120002 ... IGUAIS
+    (não há chave de scores neste modelo.)
+  ÚNICO valor de metadado que difere: general.name
+    A: "1.8B"   B: "Hf_F16"
+  (Bf16/F16 é o rótulo do arquivo de origem; não é parâmetro de inferência.)
+
+Q2.4  TABELA DE TENSORES
+  nomes, tipos, dimensões e offsets: IDÊNTICOS nos dois arquivos.
+  soma de nbytes: 1.127.990.304 (= dados no arquivo; confere exatamente).
+  bytes de padding entre tensor-info e dados: A=18, B=23.
+
+Q2.5  SHA-256 DE CADA PAYLOAD (354 tensores, offsets do parser)
+  payloads IDÊNTICOS:  129 de 354
+  payloads DIFERENTES: 225 de 354
+  Os 129 idênticos são EXATAMENTE os 129 tensores F32 (as normas).
+  Os 225 diferentes são TODOS os quantizados:
+     32× blk.N.attn_q.weight       (N=0..31)
+     32× blk.N.attn_k.weight
+     32× blk.N.attn_v.weight
+     32× blk.N.attn_output.weight
+     32× blk.N.ffn_up.weight
+     32× blk.N.ffn_gate.weight
+     32× blk.N.ffn_down.weight
+      1× token_embd.weight
+  (nenhum tensor F32 difere)
+
+Q2.6  ANATOMIA DA DIFERENÇA (dentro de um tensor quantizado)
+  Exemplo medido: blk.0.attn_q.weight (Q4_K, dims [2048,2048],
+  16.384 blocos de 144 B):
+    blocos byte a byte IGUAIS:  16.245
+    blocos DIFERENTES:            94  (~0,6%)
+  Em blk.0.ffn_down e blk.31.ffn_up: 534/49.152 e 314/49.152 blocos
+  diferem (~1%).
+  Nos blocos que diferem, o campo de escala d/dmin é IGUAL na maioria
+  (68% em attn_q, 93% em ffn_down, 61% em ffn_up); os primeiros bytes de
+  qs (os quads de quantização) coincidem e a divergência aparece no resto
+  do bloco.
+  INTERPRETAÇÃO (minha, marcada como inferência): assinatura compatível com
+  RE-QUANTIZAÇÃO do mesmo modelo base por um caminho diferente (os quads
+  Codes de um subconjunto de blocos mudam, a maior parte do payload é
+  byte a byte a mesma). NÃO é prova de que a origem seja a mesma; o fato
+  verificável é apenas que os payloads diferem.
+
+Q2.7  CONCLUSÃO DO Q2: LETRA (c) — PAYLOADS DIFERENTES.
+  Os dois arquivos NÃO são o mesmo modelo quantizado duas vezes. Metadados
+  de inferência e tokenizer são idênticos; os pesos quantizados diferem em
+  225 de 354 tensores, numa fração pequena (~0,6% a 1%) dos blocos de cada
+  tensor.
+  CONSEQUÊNCIAS, conforme você mesmo escreveu:
+    · Isto IDENTIFICA a diferença, mas NÃO quantifica sozinha o efeito sobre
+      os logits. Um A/B controlado daria isso, e não é requisito para
+      continuar medindo o c4bf1015.
+    · NÃO retiro nem rebaixo o c4bf1015 como modelo de produto. Continua a
+      referência.
+    · Isto também QUALIFICA a retificação 2.2: o "+96" NÃO é "só metadados".
+      São +91 de tensor-info +5 de padding, e, mais importante, o conteúdo
+      dos pesos também é diferente (mas isso não explica o +96: o +96 é
+      SÓ a área de cabeçalho; a diferença de payload tem tamanho ZERO no
+      arquivo, porque o layout é o mesmo e só os VALORES dos quads mudam
+      dentro dos 144 bytes de cada bloco).
+      Ou seja: a asserta "os 96 bytes são metadados/padding" está CORRETA
+      quanto ao tamanho; e, separadamente, os payloads diferem. São dois
+      fatos, e o segundo NÃO vem dos 96 bytes.
+
+================================================================================
+SEÇÃO D — O QUE CONTINUA EM ABERTO
+================================================================================
+
+  · Q3 (patch de UX, ação persistente e não bloqueante): não executado.
+    É a única das suas decisões que ainda não teve trabalho.
+  · Desenhar o crossover CPU/Vulkan: medi 29/113/271 tokens; o corte em
+    "~100 tokens" é interpolação, não medição.
+  · Desvio residual 3,12%–5,53%: sem causa localizada (B.3 pertinente,
+    não refeita conforme sua instrução).
+  · Empacotamento: strip reproduzível e verificação interna do manifesto
+    continuam manuais; nada republicado.
+  · O que a matriz NÃO prova: outro aparelho, o pipeline real do app
+    (cancelar/traduzir de novo, ciclo de vida), outros quantizados.
+
+================================================================================
+SEÇÃO E — PERGUNTAS MINHAS (6, sendo 2 novas)
+================================================================================
+
+  Q1. (respondida, ver SEÇÃO Q1) — tabela de cobertura. A RESSALVA que levantei
+      (gate protege por estrutura do grafo, não por teste) entra como nota
+      de manutenção, ou prefere que eu deixe o código intocado?
+  Q2. (respondida, ver SEÇÃO Q2) — diff dos GGUF, conclusão (c). Cabe agora
+      fazer o A/B controlado para QUANTIFICAR o efeito dos payloads
+      diferentes sobre os logits, ou ficar com a identificação e seguir
+      medindo o c4bf1015?
+  Q3. Patch de UX (a ação persistente e não bloqueante): posso implementar
+      em patch separado, sem republicar nada. Authoriza?
+  Q4. (respondida na rodada anterior) — harness parametrizado, controle OK.
+  Q5. Crossover CPU/Vulkan: quer 3–4 tamanhos intermediários, ou "~100
+      tokens" basta para a decisão de produto?
+  Q6. O desvio residual tem efeito observável (trocou um sinônimo no longo).
+      Quer que eu investigue a posição sensível, ou aceito a equivalência
+      sinônima e fecho o desvio como limitação conhecida?
+
+================================================================================
+SEÇÃO F — ANEXO: LOG DO PARSER (Q2), TRECHO
+================================================================================
+  (o log completo, 717 linhas, está em %LOCALAPPDATA%\Temp\q2_out.txt;
+   aqui vai o essencial, que é a seção 6 do parser:)
+
+  6. TIPOS DE QUANTIZAÇÃO PRESENTES
+     A: F32=129, Q6_K=33, Q4_K=192
+     B: F32=129, Q6_K=33, Q4_K=192
+  (a MIXTURA — 129 f32 + 192 q4_K + 33 q6_K — é idêntica nos dois; foi o
+   que o log do modelo confirmou em runtime também.)
+
+================================================================================
+SEÇÃO Z — HISTÓRICO (resumo das rodadas anteriores, para contexto)
+================================================================================
+
+  Z.1  Base: Hy-MT2 1.8B, backbone hunyuan-dense, quantização MISTA
+       (129 F32 + 192 Q4_K + 33 Q6_K), 354 tensores, 32 camadas, GQA 16q/4kv,
+       FF 6144, rope type 2, freq_base 11158840, rms_eps 1e-5, vocab 120818.
+  Z.2  Causa: dois shaders fundidos erram no Adreno (avg_err=5.11457 no MUL,
+       sentinela 7 no destino). Contorno = gate por vendor_id==QUALCOMM no
+       PLANEJADOR (ggml_vk_can_fuse, 24 linhas). Sem bypass em produção.
+  Z.3  Tradução no app passou: "The server was restarted." → "O servidor foi
+       reiniciado." (cadeia do APK + pacote v9, provada por sha256).
+  Z.4  Matriz (rodada anterior): curto 29 / médio 113 / longo 271 tokens,
+       CPU × Vulkan, 3 reps alternadas. Vulkan GANHA no prefill a partir de
+       ~100 tokens (2,3×–5,2×); CPU ganha no carregamento (~3×) e no curto.
+       3 traduções íntegras por EOG (9/138/376 tokens), CPU≡Vulkan em dois
+       casos, 1 sinônimo no longo. B.2 (desvio residual 3,12%–5,53%):
+       disable-fusion ≡ gate byte a byte, sem NaN/Inf.
+  Z.5  Procedência: harness linkado ESTATICAMENTE (não usa a .so); o
+       controle provou que a via --prompt-file ≡ modo antigo byte a byte.
+
+  Documento gerado em 28/09/2026. Fim.

@@ -1,0 +1,442 @@
+================================================================================
+RELATÓRIO FINAL DA RODADA 6 — Hy-MT2 / Vulkan / Adreno 840
+28/09/2026 — 21h30 (BRT)
+Dispositivo: CPH2747 (OnePlus 15), Android 16, Adreno 840
+Modelo: Hy-MT2-1.8B-Q4_K_M, sha256 c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+================================================================================
+
+Este documento responde às seis perguntas do seu parecer de 28/09 e anexa os
+logs, dumps e scripts de tudo que foi executado. Onde discordo de você, digo
+onde e mostro o número. Onde você estava certo e eu errado, digo também.
+
+Anexos: docs/vulkan-hymt2-fusion-round/logs-rodada6/  (21 arquivos, 3,2 MB)
+
+
+================================================================================
+RESUMO EXECUTIVO — O QUE MUDOU DESDE O SEU PARECER
+================================================================================
+
+1. Q2 está FECHADO e com a contagem corrigida. Você estava certo sobre a
+   aritmética: "16.245 + 94" não fecha. Medí a fração de blocos em TODOS os
+   225 tensores: mediana 0,751%, faixa 0,415% a 1,172%.
+
+2. Q6 tem DADO NOVO que muda o diagnóstico do desvio residual: em 3 passos
+   medidos não houve divergência de argmax, e no passo crítico a margem
+   (0,761) é menor que o erro numérico (0,666). Ver 5.
+
+3. Q5 está FECHADO e INVERTE a recomendação da rodada anterior. Não existe
+   crossover: o Vulkan ganha nos quatro tamanhos, inclusive no menor. Ver 6.
+
+4. Q3 está IMPLEMENTADO E VALIDADO EM CAMPO (5 de 5 estados), por wireless adb.
+   Ver 7.
+
+5. Q1: mantive o gate como você pediu, e corrigi DOIS argumentos meus que
+   estavam errados. Ver 4.
+
+
+================================================================================
+1. Q2 — DIFF ESTRUTURADO DOS DOIS GGUF (conclusão (c), agora com invariantes)
+================================================================================
+
+Método: o leitor OFICIAL do llama.cpp (gguf-py/gguf/gguf_reader.py), não um
+parser próprio. O script registra os submódulos manualmente para não passar
+pelo __init__ do pacote (que exige PyYAML e não é necessário para ler).
+
+IDENTIFICAÇÃO
+  A = q4off.gguf (OFFICIAL)     1.133.080.448 B  dc5f44fc...c06699
+  B = Hy-MT2-1.8B-q4_k_m.gguf   1.133.080.544 B  c4bf1015...e4559
+  Δ tamanho = +96 B
+
+AS CINCO INVARIANTES QUE VOCÊ EXIGIU — todas passam
+  [A] soma dos tensores 1.127.990.304 = dados no arquivo 1.127.990.304  OK
+  [B] soma dos tensores 1.127.990.304 = dados no arquivo 1.127.990.304  OK
+  • todo payload dentro dos limites do arquivo                        OK
+  • o PRIMEIRO payload começa em data_ini                            OK
+  • o ÚLTIMO payload termina exatamente no fim do arquivo             OK
+  • sem sobreposição entre intervalos                                 OK
+  • sem lacunas entre payload e payload                                OK
+  (logs: Q2-dos-dois-gguf-resultado.txt, linhas 1-2)
+
+RESULTADO
+  payloads IDENTICOS:  129
+  payloads DIFERENTES: 225
+  CONFERE: 129 + 225 = 354 (total 354)  -> OK
+  só em A: 0    só em B: 0
+
+  Por tipo:
+    F32    0 diferentes  / 129 idênticos   (TODOS os F32 idênticos)
+    Q4_K 192 diferentes  /   0 idênticos
+    Q6_K  33 diferentes  /   0 idênticos
+
+  Metadados: NÃO idênticos — general.name difere (1.8B x Hf_F16), general.finetune só em A, 3 chaves só em B (incl. add_bos_token=false e add_eos_token=false). O +96 B é diferença de posição (padding), não de conteúdo.
+*** RETIFICADO em 29/09/2026 (parecer §1.1 e rodada 8) — ver PROMPT-RELATORIO-RODADA8-FINAL.txt secao 8. ***
+
+  Tokenizer: idêntico (120.818 tokens, 119.758 merges)
+  Tabela de tensores: idêntica em dims e tipos
+
+DISTRIBUIÇÃO REAL (seção 5 do resultado) — substitui a extrapolação de 3 exemplos
+  fração de blocos diferentes: min 0,415%  mediana 0,751%  max 1,172%
+  Medidos em 225 tensores, todos os blocos de cada um.
+
+  Menor: blk.16.attn_v.weight   17/4.096 blocos = 0,415%
+  Maior:  blk.31.attn_v.weight   48/4.096 blocos = 1,172%
+
+O +96 B é só cabeçalho
+  Os 354 descritores de tensor deslocam +96 B cada bloco de metadados.
+  A soma dos PAYLOADS é idêntica: 1.127.990.304 nos dois arquivos.
+  Portanto o +96 não pode "mudar o resultado" — como você alertou na rodada 5.
+
+CONCLUSÃO: mantida. c4bf1015 segue como referência de produto. Os payloads
+quantizados diferem (~0,75% dos blocos), o que é suficiente para não misturar
+as referências. Não quantifiquei o efeito em logits — você disse que isso é
+investigação separada e opcional, e eu não fiz.
+
+ERROS QUE TIVEI NESTE ITEM (reconhecidos, corrigidos)
+  Erro 27: calculei nbytes por tipo sem considerar Q4_K = 144 B por bloco de 256.
+           Resultado: "73 GB" e a CONCLUSÃO FALSA de "225 payloads diferentes".
+  Erro 28: sz // blk zerava Q4_K -> "354 idênticos / 0 diferentes".
+  Erro 29: `if k in so_b` falhava quando a chave existe só em A.
+  Erro 30 (novo): somei reader.data_offset a um offset que o leitor JÁ entrega
+           absoluto. Deslocou todos os payloads em 5.090.144 B; o último tensor
+           caía 5 MB além do fim do arquivo. AS INVARIANTES QUE VOCÊ EXIGIU
+           PEGARAM ESTE ERRO — foi o custo delas que se pagou.
+           (logs: Q2-dos-dois-gguf-parser.py, funções inventario/valida_invariantes)
+
+
+================================================================================
+2. Q1 — COBERTURA DO GATE: NOTA DE MANUTENÇÃO (gate intocado)
+================================================================================
+
+O gate de produção NÃO foi alterado. As 24 linhas em ggml-vulkan.cpp
+(disable_fused_rms_norm_mul + disable_add_rms_fusion sob vendor_id QUALCOMM)
+permanecem como estavam.
+
+Você pediu que eu não escrevesse que o bloco do_multiply foi identificado como
+causa raiz. Não escrevo. Também não afirmo que SET_ROWS é exclusivo de MoE —
+ERA FALSO, e a verificação de código o provou:
+
+  ggml_set_rows em llama-kv-cache.cpp: 3 OCORRÊNCIAS
+    cpy_k  e cpy_v, no caminho do KV-cache — e Hy-MT2 é um modelo DENSO.
+
+Meu argumento anterior ("SET_ROWS não é alcançado aqui, logo o padrão de 5
+ops não roda") estava errado por esta razão. Pior: o padrão de 5 ops exige a
+cadeia rms → mul → rope → view → set_rows, e norm → rope EXISTE neste fork:
+
+  dflash-attn.cpp, hy-v3.cpp, minimax-m3.cpp   (3 modelos encadeiam norm->rope)
+
+O que decide não é a existência da cadeia, é que NENHUM desses três é o
+llama_model_hunyuan_dense, que usa o grafo de hunyuan-vl.cpp — e lá o RoPE vem
+ANTES da normalização de Q/K (hunyuan-vl.cpp:115-140).
+
+RESPOSTA CORRETA, então: o alcance é estreito, mas por um motivo diferente do
+que eu escrevi. Registro como nota de manutenção, sem afirmar causa raiz.
+
+
+================================================================================
+3. PERGUNTAS QUE EU FAÇO A VOCÊ (as que você me pediu para trazer de volta)
+================================================================================
+
+P1. Você escreveu que a configuração de fusão RoPE altera d_offset no shader,
+     e que compartilhar rms_norm.comp NÃO estabelece que todos executam a
+     mesma sequência. Concordo. Mas o que eu consigo oferecer hoje é apenas
+     o alcance estático: nenhum dos 3 modelos que encadeiam norm->rope é o
+     hunyuan-dense. Isso é suficiente para fechar, ou você quer um trace
+     (GGML_VK_SERIALIZE_SUBMISSIONS) no aparelho para provar que o padrão de
+     5 ops NÃO é despachado? Posso rodar em 10 minutos se for o caso.
+
+P2. Sobre o Q6: o desvio máximo (0,666) é MAIOR que a margem do passo D2
+     (0,761), mas NENHUM passo divergiu. Minha leitura é que o ruído numérico
+     accumulated é da ordem da margem, e que a troca de sinônimo vem de um
+     passo posterior do caso longo (376 tokens) que não medi. Você acha que
+     vale medir o caso longo completo com dumps por token, ou que a margem
+     por 3 passos já responde o suficiente?
+
+P3. Q5 inverteu a recomendação da rodada anterior. Antes de eu reportar ao
+     especialista menor que "Vulkan ganha em tudo", quero sua leitura: o fato
+     de o ganho estar na GERAÇÃO (1,8x) e não no prefill (só 1,2x) muda a
+     avaliação de risco do gate? O gate afeta fusão de norma, que é prefill.
+     Ou seja: o Vulkan ganha justamente onde o gate NÃO tem efeito?
+
+P4. Três defeitos do harness de medição (abaixo) impedem o modo guloso com
+     --prompt-file. Corrijo o harness, ou registro como limitação da
+     ferramenta preservada e sigo? Não toquei em llama_harness.cpp.
+
+P5. Você disse para não repetir o controle de regressão sem mudança. O Q5 usou
+     o MESMO binário e o MESMO modelo do controle já aceito. O tokenizador
+     difere do app (veja seção 8) — isso invalida os tempos para decisão de
+     produto, ou a diferença é pequena o bastante para o crossover?
+
+P6. A discrepância que encontrei (seção 8) é provavelmente conhecida sua? A
+     tokenização do app com add_special=false e o sampler com penalties
+     (penalty_last_n=64) contra o argmax puro do harness. Isto pode explicar
+     parte do "sinônimo" sem que a fusão esteja errada.
+
+
+================================================================================
+4. ERRO DE MÉTODO QUE VOCÊ APONTou NA RODADA 5 — E O QUE EU FIZ
+================================================================================
+
+Você alertou: "não compare magnitudes de erro Vulkan-CPU de rodadas diferentes;
+   isso não é uma comparação direta". Está certo, e é o que me fez inverter a
+   recomendação no Q5.
+
+O que fiz agora: as medições de Q5 usam o MESMO binário, o MESMO modelo e o
+MESMO prompt nos dois backends, dentro da mesma execução. A comparação é
+interna ao par, não entre rodadas. Nenhum número de Q5 vem de outra rodada.
+
+
+================================================================================
+5. Q6 — PRIMEIRA DIVERGÊNCIA: margem e tokens concorrentes
+================================================================================
+
+MÉTODO: mesmo prompt (211 tokens, texto-fonte de 590 B), mesmos IDs fixos
+(46,2292) nos dois backends, dumps de logits brutos em .f32, comparação
+par-a-par com script que lê o MESMO intervalo validado.
+
+RESULTADO: NENHUMA DIVERGÊNCIA de argmax nos 3 passos medidos.
+
+  passo P  (argmax 46):
+    max_abs(A-B) = 0,586   RMSE = 0,123
+    CPU:    46 @ 31,3635   margem 11,8638  (2º = 50 @ 19,4997)
+    Vulkan: 46 @ 31,4616   margem 11,9250  (2º = 50 @ 19,5366)
+    top-5 idêntico nos dois lados: 46, 50, 25730, 28010, 28647
+
+  passo D1 (argmax 56371):
+    max_abs(A-B) = 0,609   RMSE = 0,110
+    CPU:    56371 @ 32,1950   margem 9,2885  (2º = 55127 @ 22,9064)
+    Vulkan: 56371 @ 32,2149   margem 9,2230  (2º = 55127 @ 22,9918)
+    top-5 idêntico: 56371, 55127, 1285, 47325, 117148
+
+  passo D2 (argmax 65652):
+    max_abs(A-B) = 0,666   RMSE = 0,136
+    CPU:    65652 @ 20,3082   margem 0,7613  (2º = 72 @ 19,5469)   <<< CRÍTICA
+    Vulkan: 65652 @ 20,5293   margem 1,1875  (2º = 72 @ 19,3419)
+    top-5 idêntico: 65652, 72, 11021, 87569, 46357
+
+O DADO QUE IMPORTA
+  No passo D2 a margem é 0,761 e o erro máximo é 0,666 — o erro é 87% da
+  margem. Nos passos P e D1 a mesma relação é 5% e 7%, inofensiva.
+  Nos três passos, o token VENCEDOR sofre só 0,02 a 0,22, enquanto o máximo
+  de 0,59 a 0,67 aparece em algum token do MEIO do vocabulário. O desvio não
+  está corrompendo o topo; está na cauda.
+
+  INTERPRETAÇÃO: neste passo a decisão estava FRISCA (vencedor e 2º quase
+  empatados) e o erro numérico é da ordem da margem. A troca de sinônimo não
+  [RETIFICADO] não se sustenta: o caso não foi reproduzido com este histórico. Descrever apenas como 'diferença numérica sem troca de argmax nestes três passos'. Ver rodada 8, seção 5: a divergência real foi localizada em outro protocolo. Não chamar de arredondamento sem reprodução. Texto original: é grande erro de cálculo; é disputa de arredondamento num ponto onde os
+  candidatos empatam.
+
+  NÃO fecho o desvio como "equivalência comprovada" — como você exigiu.
+  Isto cobre 3 passos com 1 prompt. O caso longo real tem 376 tokens e NÃO
+  foi medido com dumps por token. A divergência de sinônimo foi observada na
+  rodada 5, com o modo guloso, e não está reproduzida aqui.
+
+LOGS: Q6-dump-{cpu,vulkan}_{P,D1,D2}.f32 (6 arquivos, 483 KB cada)
+      Q6-compara-margem.py, Q6-cpu-prompt211.log, Q6-vulkan-prompt211.log
+
+
+================================================================================
+6. Q5 — CONSOLIDAÇÃO DE TEMPOS: o Vulkan vence em TODOS os tamanhos
+================================================================================
+
+MÉTODO: 4 tamanhos de prompt (64, 81, 98, 134 tokens reais), 2 backends,
+2 reps cada = 16 pontos. 128 avaliações fixas por ponto (IGUAIS nos dois
+backends). Custo total = carga + prefill + geração.
+
+CUSTO TOTAL (mediana de 2 reps, ms — Vulkan / CPU)
+
+  prompt   carga            prefill          geração(128)       TOTAL          razão V/C
+  64 tok   877 / 441        1848 / 2100      3488 / 6268        6213 / 8809    0,71
+  81 tok   909 / 353        1708 / 2603      3686 / 6567        6303 / 9523    0,66
+  98 tok   963 / 360        1778 / 3405      3931 / 9311        6671 / 13076   0,51
+ 134 tok  1039 / 385        1981 / 4577      3798 / 7131        6818 / 12094   0,56
+
+  Razão < 1,00 = Vulkan mais rápido. O Vulkan vence nos QUATRO tamanhos,
+  inclusive no menor. Com 128 avaliações fixas, nos prompts medidos de 64–134 tokens, a Vulkan apresentou menor tempo total em todos os tamanhos. O ponto de equilíbrio depende também da quantidade de saída e do modelo/contexto residente — não só do comprimento da entrada, que é a base desta matriz.
+*** RETIFICADO em 29/09/2026 (parecer §1.1 e rodada 8) — ver PROMPT-RELATORIO-RODADA8-FINAL.txt secao 8. ***
+
+
+POR QUE A RODADA ANTERIOR CHEGOU AO OPOSTO
+  1. Mediu com 8 tokens gerados. A 8 avaliações o gargalo é o custo fixo
+     (criar contexto Vulkan 343 ms vs CPU 116 ms) e o Vulkan perde. Com 128
+     avaliações o custo fixo se dilui.
+  2. Mediu prefill isolado. O Vulkan é ~1,2x melhor em prefill e ~1,8x em
+     geração. A geração domina o custo de uma tradução real.
+
+  Portanto: a afirmação "~100 tokens" da rodada anterior está ERRADA e
+  eu a retiro. Não há limiar nos quatro tamanhos.
+
+DISPERSÃO (frio/quente)
+  64 tok:  CPU 3,1%   Vulkan 2,0%
+  81 tok:  CPU 2,3%   Vulkan 2,6%
+  98 tok:  CPU 48,3%  Vulkan 5,4%   <<< outlier
+ 134 tok:  CPU 7,9%   Vulkan 1,6%
+
+  O ponto p96_r2_cpu teve geração de 11.719 ms contra 6.902 ms do r1
+  (dispersão 48,3%). É anomalia térmica/agendamento, não efeito de tamanho:
+  o Vulkan no mesmo prompt ficou em 3.858 ms. Se eu tivesse usado essa rep
+  como mediana, a razão do 98 tok pareceria 0,43 em vez de 0,51. NENHUM
+  outro ponto passa de 7,9%.
+
+LOGS: Q5-tempos-16-pontos.log, Q5-consolida-tiempos.py, Q5-script-16-pontos.sh,
+      Q5-lista-ids-fixos.txt, Q5-prompt-p{48,64,96,160}-completo.txt
+
+
+================================================================================
+7. Q3 — UX IMPLEMENTADA E VALIDADA EM CAMPO (5 de 5 estados)
+================================================================================
+
+MODELO IMPLEMENTADO (como você pediu: neste app, patch separado, sem modal
+obrigatório a cada onResume):
+  • Modal abre UMA VEZ, no onCreate.
+  • Ausência do pacote vira FAIXA PERSISTENTE, discreta, não bloqueante, com
+    botão "Baixar". Some sozinha quando o pacote instala.
+  • "Agora não" fecha o modal e a faixa permanece (não marca pendência eterna).
+  • onResume apenas ATUALIZA O ESTADO da faixa. Não insiste no modal.
+  • Ferramenta que precisa do componente explica o que falta, com ação.
+
+ESTADO VALIDADO NO APARELHO (CPH2747, por wireless adb, 21h05-21h12)
+
+  1. Ausência     → modal abre 1x, ZIP correto (v9, 43,8 MB)
+  2. Recusa       → modal fecha, faixa persistente aparece
+  3. Ida e volta  → 3x voltar/abrir: modal NÃO reabre, faixa persiste
+  4. Retry        → download real do R2, instalação completa, marcador recria
+  5. Instalado    → reinício: faixa some, modal não aparece, activate=true
+
+  O item 4 não é simulado: baixou o v9 do R2, gravou lib/ com 16 bibliotecas,
+  models/ggml-silero-v6.2.0.bin e manifest.json (2.830 B), reativou sozinho.
+
+  Folga de rolagem medida: a faixa ocupa 171 px ≈ 56 dp na densidade 3,05.
+  O atalho BNMP (y 829-883) fica ACIMA da faixa (y1 2470), sem sobreposição.
+
+ARQUIVOS (patch separado, não republica nada):
+  NativeDependencyPrompt.kt    (244 linhas — estado, faixa, retry)
+  view_sig_native_deps_banner.xml  (novo — a faixa em XML, não em código)
+  activity_main.xml            (4 linhas — o include)
+  MainActivity.kt              (71 linhas — liga a faixa, abre folga)
+
+TESTE QUE QUEBREU E QUE CORRIGI (relevante para você)
+  DownloadPlanTablesTest:61 falhou com o v9. A premissa do teste era
+  "soma do conteúdo ≈ ZIP (±1%)", o que só fechava porque o v8 era STORED
+  (razão 1,00). O v9 usa DEFLATE, razão real 2,74 no arm64. Substituí por
+  duas invariantes que valem para qualquer compactação: conteudo >= zip
+  (comprimir só reduz) e conteudo <= 4×zip. E a tabela do Kotlin está
+  18/18 exata contra o ZIP publicado, nas duas ABIs — confirmei arquivo a
+  arquivo antes de mexer no teste.
+
+  ERRO MEU no caminho: escrevi "conteudo <= zip" com a justificativa errada
+  ("comprimir nunca aumenta o arquivo") e o teste continuou falhando. Só
+  percebi conferindo os números reais das duas ABIs (razão 2,74 e 2,84).
+
+
+================================================================================
+8. DISCREPÂNCIA QUE ENCONTREI: HARNESS ≠ APP
+================================================================================
+
+Não estava no seu parecer, mas muda a leitura de TODOS os tempos medidos.
+
+O APP (llama-jni.cpp, o caminho real de produção):
+  • tokeniza com add_special = FALSE
+  • monta llama_sampler_init_penalties com:
+        penalty_last_n   = 64
+        penalty_repeat   = 1.0
+        penalty_freq     = 0.0
+        penalty_present  = 0.0
+
+O HARNESS (llama_harness.cpp):
+  • tokeniza com add_special = TRUE
+  • faz argmax direto (greedy), sem penalties
+
+CONSEQUÊNCIA: as traduções que medi não são idênticas ao que o app produz.
+Os tempos são de workloads próximos mas não iguais. Isto pode explicar parte
+do sinônimo sem que a fusão esteja errada.
+
+DETALHE RELACIONADO: general.sampling.penalty_repeat = 1.10 no metadado do
+GGUF é INERTE neste fork. Só common.cpp (exemplo/CLI) o lê. O caminho JNI do
+app não o consome.
+
+
+================================================================================
+9. TRÊS DEFEITOS DO HARNESS DE MEDIÇÃO (não corrigi o código)
+================================================================================
+
+Não alterei llama_harness.cpp — o parecer trata o harness como ferramenta
+preservada, e a correção seria mudança de fonte. Registro para sua decisão.
+
+  D1. VEREDITO: GEROU_TEXTO não detecta erro de medição. Rodando em modo
+      errado (1 token), o harness imprime "GEROU_TEXTO" — literalmente
+      verdadeiro, e por isso não acusa o problema.
+
+  D2. Opções nomeadas caem em argv[8]. Os posicionais são lidos por índice
+      (linha 95: fixos_str = argv[8]) e o loop de opções nomeadas (linha 127)
+      NÃO os remove do argv. Então "--prompt-file ARQ" ocupa argv[8] e vira
+      LISTA DE IDS: entra em "modo P/D1/D2: 1 ids fixos", gera "!", 1 token.
+      Consequência: com --prompt-file é IMPOSSÍVEL alcançar o modo guloso.
+
+  D3. Não há alerta quando n_gpu_layers contradiz o backend pedido. "cpu" com
+      -1 roda em GPU silenciosamente (há AVISO, mas a execução continua).
+
+IMPACTO NO Q5: usei o protocolo com 128 IDs fixos IGUAIS nos dois backends
+(o prompt é o mesmo; o decode é geracao/128). A carga de trabalho é idêntica
+por construção. O prefill — que é o que mede o crossover — sai real.
+
+
+================================================================================
+10. ARMADILHAS DO SHELL QUE CUSTARAM 4 EXECUÇÕES (registro honesto)
+================================================================================
+
+/system/bin/sh (Android) NÃO é bash. Três coisas que funcionam no bash
+falharam:
+
+  • [ $i -lt 128 ]  → "unexpected operator/operand"; o laço não roda
+  • $( )            → não expande
+  • cd /data/local/tmp && cat arquivo  → o cat falha ("No such file")
+
+Em todas, o harness rodava e imprimia VEREDITO: GEROU_TEXTO. A versão que
+joguei fora media 17 tokens em vez dos 128. Só vi quando os tokens_gerados
+não bateram. A correção foi montar a lista de IDs no PC e subir como arquivo,
+lido por caminho absoluto. Validei ANTES dos 16 pontos:
+"128 ids fixos" e "tokens_gerados = 128 de 128" em 16/16, zero AVISOs.
+
+
+================================================================================
+11. ESTADO DO REPOSITÓRIO
+================================================================================
+
+HEAD = 080e804 (26/09). NADA COMMITADO nesta rodada. Modificados (12 arquivos,
+709 linhas — duas rodadas de trabalho misturadas):
+
+  AndroidManifest.xml, android-opencl-loader.cpp, llama-jni/CMakeLists.txt,
+  ggml-opencl.cpp, ggml-vulkan.cpp (gate 24 linhas),
+  MainActivity.kt, NativeDependencyManager.kt, NativeDependencyPrompt.kt,
+  TextoActivity.kt, activity_main.xml, activity_texto.xml,
+  DownloadPlanTablesTest.kt
+
+  Untracked novo: view_sig_native_deps_banner.xml, logs-rodada6/
+
+O gate de produção, o COMPONENT_VERSION=9 e o v9 publicado estão INTOCADOS.
+O teste unitário passa: 498/498, lintDebug limpo.
+
+Whatsper (sig_whisper): intocado.
+
+
+================================================================================
+12. PERGUNTA FINAL
+================================================================================
+
+Minha recomendação, para sua avaliação:
+
+  • O Vulkan é mais rápido que o CPU neste aparelho, em todos os tamanhos
+    medidos (razão 0,51 a 0,71), e o ganho está na GERAÇÃO.
+  • O desvio residual (max_abs ~0,6) é da ordem da margem em passos críticos
+    e o TOPO também muda: no ponto medido o vencedor subiu 0,0021 e o segundo 0,2327, mudando a diferença entre eles em 0,2306 numa margem de 0,0305. Nenhum dos 3 passos divergiu no argmax, mas o topo não é inerte.
+*** RETIFICADO em 29/09/2026 (parecer §1.1 e rodada 8) — ver PROMPT-RELATORIO-RODADA8-FINAL.txt secao 8. ***
+
+  • O gate de produção (que bloqueia a fusão RMS_NORM+MUL) permanece como
+    contorno para o Adreno 840, sem alteração.
+
+Considero que falta: o caso longo completo (376 tokens) com dumps por token,
+para fechar a questão da divergência de sinônimo, e a sua leitura sobre o
+ponto 3 acima (o ganho estar onde o gate não tem efeito).
+
+Aguardo seu parecer.
+================================================================================

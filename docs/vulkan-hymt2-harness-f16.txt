@@ -1,0 +1,139 @@
+HARNESS NATIVO — Hy-MT-2 1.8B fora do app (OnePlus 15, Adreno 840)
+====================================================================
+Data: 2026-09-26. Aparelho: CPH2747/Android 16 via Tailscale.
+Objetivo: separar "GGUF/convertido ruim" de "app ruim" de "Vulkan ruim",
+sem a UI no caminho. Cada etapa medida; logits inspecionados.
+
+FONTE: native-dependencies/harness/llama_harness.cpp (binario em
+  native-dependencies/harness/arm64-v8a/llama_harness, ELF arm64, ~106 MB).
+Liga contra AS MESMAS bibliotecas estaticas do app (llama-build/*.a do fork
+vendored em app/src/main/cpp/llama) — mesma revisao do backend que o APK usa.
+Uso: harness <modelo> [n_tokens] [cpu|opencl|vulkan] [n_gpu] [n_ctx] [n_batch] [template]
+  n_gpu: 0 = CPU puro (devices=NULL); -1 = tudo no device forcado.
+  template=1: prompt EXATO do app (bytes copiados de HyMt2Translator.kt via
+  od: ｜=EF BD 9C, ▁=E2 96 81) + add_special=false (o app usa false; o modo
+  simples usa true). Amostragem sempre argmax guloso (o app usa
+  temp 0.7/top_p 0.6/top_k 20/penalty 1.05 — UNICA diferenca restante).
+
+RESULTADOS (todos com device confirmado por log, nao por label)
+---------------------------------------------------------------
+1) Q4_K_M, CPU, n_ctx 512 (CONTROLE): "O servidor foi reiniciado." OK.
+   (harness_Q4_K_M_cpu.txt; geracao 8 tok em 945 ms ≈ 8,5 tok/s)
+
+2) F16, CPU, n_ctx 512: "O servidor foi reiniciado." OK. VEREDITO: GEROU_TEXTO.
+   => A CONVERSAO ESTA CORRETA. (file_type=1, 0 NaN, 0 Inf nos logits.)
+
+3) F16, CPU, n_ctx 8192 (condicao do app): "O servidor foi reiniciado." OK.
+   (h_f16cpu8k.txt; carga 3,2 s; contexto 521 ms; geracao 8 tok em 5,6 s)
+   => n_ctx NAO explica o travamento do app.
+
+4) F16, CPU, n_ctx 512, n_batch 2048 (condicao do app): OK, mesmo texto.
+   (h_f16b2048.txt; geracao 8 tok em 1,5 s)
+   => n_batch NAO explica o travamento do app.
+
+5) F16, CPU, template=1 (prompt exato do app, 29 tokens, ids começam em
+   120000 120006 = especiais hy_ parseados): "O servidor foi reiniciado.
+   I'm not sure if" (16/16, continuacao gulosa esperada sem sampler).
+   (h_f16tpl.txt) => TEMPLATE E TOKENIZACAO OK no F16.
+
+6) F16, VULKAN REAL (device FORCADO: Vulkan0, using device Vulkan0,
+   offloaded 33/33, buffer Vulkan0 3416,48 MiB, graph splits = 2):
+   LOGITS validos (n=120818 NaN=0 Inf=0; argmax id 53294 "喷嚏" logit 6,94)
+   e geracao de 8/8 tokens: "喷嚏" x8, com logits SUBINDO a cada passo
+   (6,94 -> 9,25 -> 10,12 -> 10,65 -> 11,29 -> 11,90 -> 12,44 -> 13,60).
+   (h_f16v2.txt) => LOOP AUTO-REFORCADO, mesmo SEM quantizacao.
+
+7) Q4_K_M, VULKAN REAL (controle, mesmo instrumento): 8/8 tokens
+   "之间的矛盾" x8, logits subindo (8,66 -> 10,26). (h_q4kv.txt)
+   file_type=15, buffer 1075,74 MiB, splits = 2.
+   => O DEFEITO REPRODUZ COM E SEM QUANTIZACAO. A causa NAO e o caminho
+   int8/K-quant (o backend ja desliga int8 corretamente: int_dot_final=0).
+
+CONSEQUENCIA PARA O DIAGNOSTICO: a hipotese "fallback F32 dos quants"
+cai como causa unica. O defeito esta no caminho geral F32/F16 do Vulkan
+(matmul F16/F32, attention, norm, rope ou sincronizacao CPU/GPU no split 2).
+
+VELOCIDADES F16 NA CPU (pista sobre o "travamento" do app, EXP-1)
+-----------------------------------------------------------------
+  n_ctx 512:  ~5,1-5,4 tok/s | n_ctx 8192: ~1,4 tok/s (8 tok em 5,6 s).
+  O app pede MAX_TOKENS=4096 com n_ctx 8192: 4096 tok a 1,4 tok/s = 48 min.
+  O teste de 1500 s (25 min) NAO descarta "lento" — "travado" nao provado.
+  Falta: retestar o app com logcat ao vivo vendo se gera devagar ou para.
+
+ARTEFATOS DE METODOLOGIA (quase-erros pegos a tempo)
+----------------------------------------------------
+A) Falso positivo OpenCL: com devices=NULL e n_gpu=-1 o llama escolhe o
+   PRIMEIRO device (no OP15 e OpenCL, nao Vulkan). Um teste "vulkan" passou
+   em OpenCL. Corrigido: harness força o device pelo nome (mp.devices =
+   array terminado em NULL, igual ao app em llama_jni.cpp:275-279).
+B) SIGSEGV falso: a 1a versao do forcamento fez
+   mp.devices = &dev (SEM terminador NULL). O llama_prepare_model_devices
+   leu lixo da pilha e chamou ggml_backend_dev_get_props sobre device
+   invalido: pc=0x0 em llama.cpp:293 (symbolizado com llvm-addr2line:
+   llama_prepare_model_devices, llama.cpp:293). NAO e bug do llama —
+   o app faz certo (devices[2]={dev,NULL}). Corrigido e rebuildado.
+   Tombstone/backtrace guardados em %TEMP%/gdb_f16_vulkan.txt.tomb.
+
+NOTA DE REVISAO (honestidade para o especialista)
+--------------------------------------------------
+O harness liga o FORK vendored (ggml-vulkan.cpp com 19.709 linhas), que esta
+A FRENTE da revisao 95887577 (16.484 linhas) pinada no roteiro. O conversor
+BF16->F16 e o da 95887577, mas o backend testado e o do fork (commit upstream
+exato desconhecido — vendored sem .git proprio). O defeito persiste no codigo
+mais novo: nao e bug ja corrigido entre as revisoes.
+
+PENDENTE (aparelho caiu: adb device offline, porta 34815 recusando 10061)
+--------------------------------------------------------------------------
+- Repetir F16 Vulkan 3x (estabilidade no harness) + F16 OpenCL 1x.
+  Arquivos h_f16v_rep*.txt/h_f16o.txt vieram com 25 bytes ("device offline").
+- Localizacao por camadas: n_gpu_layers=1, 8, 16 no Vulkan (1 camada na GPU
+  ja quebra? busca binaria do op/camada).
+- Reteste app F16 CPU com logcat ao vivo (lento vs travado).
+- Pedir ao usuario a NOVA porta do wireless debugging (Tailscale pitfall 0).
+
+====================================================================
+ADENDO 27/09 (porta nova 45467 — tudo abaixo RODADO, nao pendente)
+====================================================================
+
+ESTABILIDADE NO HARNESS (F16, Vulkan0, 8 tok, prompt simples)
+  h_f16v2.txt:        "喷嚏" x8
+  h_f16v_rep1.txt:    "喷嚏skaldskaldskaldsk"   <- DIVERGIU
+  h_f16v_rep2.txt:    "喷嚏" x8
+  h_f16v_rep3.txt:    "喷嚏" x8
+  => 2 saidas distintas em 4 runs identicas. INSTAVEL TAMBEM SEM O APP.
+  Matematica errada deterministica repetiria igual; race/sync nao.
+  (Somado a retificacao de estabilidade do app: 6/7/12/4096/4096.)
+
+F16 NO OPENCL (GPUOpenCL forcado, mesmo instrumento)
+  full (-1):  "O servidor foi reiniciado." 8/8 OK. (h_f16o.txt)
+  parcial 8:  "O servidor foi reiniciado." 8/8 OK. (h_f16o_L8.txt)
+  => OpenCL correto em full E split. O scheduler/split esta OK;
+  o NaN do Vulkan parcial NAO e bug generico de split.
+
+VARREDURA POR CAMADAS (F16, Vulkan0 forcado, 8 tok)
+  n_gpu | offload | saida               | fim
+  ------+---------+---------------------+----
+    1   |  1/33   | "O" (correto!)      | NaN/Inf apos 1 tok
+    8   |  8/33   | "O"                 | NaN/Inf apos 1 tok
+   16   | 16/33   | "The new"           | NaN/Inf apos 2 tok
+   24   | 24/33   | "The"               | NaN/Inf apos 1 tok
+   28   | 28/33   | "The new"           | NaN/Inf apos 2 tok
+   31   | 31/33   | "דsk.The" (lixo)    | NaN/Inf apos 5 tok
+   32   | 32/33   | "דskir" (lixo)      | NaN/Inf apos 3 tok
+   33   | 33/33   | loop CJK 8/8        | SEM NaN (loop finito)
+  (h_f16v_L*.txt; prompt-logits sempre validos, argmax inicial plausivel;
+  o NaN aparece do 2o token autoregressivo em diante.)
+  => TODO offload parcial no Vulkan = NaN em <=5 tokens; full = loop
+  finito. Duas manifestacoes do mesmo backend quebrado no Adreno 840:
+  transferencia CPU/GPU corrompe (NaN) e computacao full-GPU erra (loop).
+  O 1o token (prefill) sai plausivel ate com 1 camada na GPU.
+
+MATRIZ FINAL (F16, mesmo harness, mesmo prompt)
+  Backend | full (33) | parcial (8)
+  --------+-----------+------------
+  CPU     | OK        | n/a
+  OpenCL  | OK        | OK
+  Vulkan  | loop instavel | NaN em <=5 tok
+
+FALTA (so app, fora do escopo do especialista Vulkan):
+  reteste app F16 CPU com logcat ao vivo (lento 1,4 tok/s vs travado).

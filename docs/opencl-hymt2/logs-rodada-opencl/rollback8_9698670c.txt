@@ -1,0 +1,6 @@
+== ROLLBACK diag8 -> 9698670c (adocao validada; release fica para pacote) ==
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_9698670c_ROLLBACK.so: 1 file pushed, 0 skipped. 22.0 MB/s (95613928 bytes in 4.138s)
+OK
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+
+FIM

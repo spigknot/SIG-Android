@@ -1,0 +1,7 @@
+== DEPLOY DIAG2 9b1a714b (autorizado; mesmo escopo/rollback) ==
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag2.so: 1 file pushed, 0 skipped. 118.1 MB/s (95672576 bytes in 0.773s)
+9b1a714b9143903a7186324124895a4606500b80daee94ea3521732b39201ba9  /data/local/tmp/diag2_9b1a714b.so
+INSTALADO
+-- readback --
+9b1a714b9143903a7186324124895a4606500b80daee94ea3521732b39201ba9  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+95672576

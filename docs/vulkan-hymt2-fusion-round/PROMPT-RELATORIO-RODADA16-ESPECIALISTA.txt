@@ -1,0 +1,390 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 16 (30/09/2026)
+CLASSIFICAR O MUL_MAT COM REFERENCIA INDEPENDENTE — Hy-MT2 / CPH2747
+================================================================================
+Responde ao "PROMPT AO AGENTE — APOS RODADA 15: CLASSIFICAR O MUL_MAT COM
+REFERENCIA INDEPENDENTE". Executado: auditoria do instrumento (§6), trace do
+dispatch CPU (§2.1) e Vulkan (§2.2), referencias independentes R e Rq
+(§3.3/§3.4), A/B de precisao NAO indicado (§4), Q do grafo ligado ao replay
+(§5), FA reconciliado (§8). NENHUM commit/push/publicacao/APK; produto, gate
+e pesos intactos; nenhum benchmark repetido.
+
+ESTADOS:
+  A. auditoria dos contratos do replay (§6) ................ CCE
+  B. dispatch CPU/Vulkan efetivo (§2.1/§2.2) ................ CCE (fonte)
+  C. referencias independentes R e Rq + metricas (§3) ...... CCE
+  D. Q do grafo x replay (§5) ............................... CCE
+  E. A/B de precisao ......................................... NAO INDICADO
+     (matriz ja decide — §4.2)
+  F. fontes publicas (§7) ..................................... ver §G
+  G. decisao: correcao localizada x aceitacao funcional ...... CONCLUIDO
+  H. hashes/diffs/comandos/retornos/testes .................... CCE
+
+--------------------------------------------------------------------------------
+RESPOSTA CURTA (a CLASSIFICACAO pedida)
+--------------------------------------------------------------------------------
+O MUL_MAT Q4_K do Vulkan NAO esta com defeito demonstrado. O operador
+divergente da rodada 15 (1,16%) e' o CPU: o backend CPU quantiza as
+ATIVACOES para Q8_K (vec_dot_type Q8_K) e essa quantizacao, sozinha,
+introduz 1,01% de erro. Medido contra referencias independentes com o MESMO
+denominador:
+      CPU    x R  (X original)   = 1,0098%     <- erro = quantizacao de ativacao
+      CPU    x Rq (X em Q8_K)    = 0,0080%     <- o CPU e' ESSENCIALMENTE EXATO
+      Vulkan x R  (X original)   = 0,5634%     <- o Vulkan e' MAIS PROXIMO da
+      Vulkan x Rq                = 1,1595%        matematica que o proprio CPU
+"Logo o 1,16% medido na rodada 15 e' (majoritariamente) a quantizacao de
+ativacao do CPU, e nao um erro do Vulkan. A diferenca local esta
+EXPLICADA; o proximo passo e a validacao FUNCIONAL, nao a correcao do
+kernel.
+
+--------------------------------------------------------------------------------
+A. AUDITORIA DOS CONTRATOS DO REPLAY (boundary14 modo mul)  [§6]
+--------------------------------------------------------------------------------
+A.1 Correcoes aplicadas (instrumento, nao produto):
+  * argc: o main faz o shift (modo_mul(argv+1)), portanto o minimo correto
+    e' 7; antes havia argc<6 com argv[6] lido (o bug apontado). Corrigido
+    para argc<7 + mensagem mostrando o argc recebido.
+  * parse estrito: strtoll + exige consumir a string inteira (antes usava
+    atoi/atoll, que aceitavam "abc" como 0). Testado: "abc" -> recusa.
+  * X: dimensao F32 fixa 2048; agora confiro o tamanho REAL do arquivo
+    contra n_rows*2048*4 (ex.: arquivo pela metade -> recusa com o tamanho
+    esperado), e exijo w_ne0 == ne0 de X (mul_mat exige igualdade) e
+    w_ne0 % 256 == 0 (Q4_K).
+  * Upload conferido por BYTES: X com memcmp (antes float !=, que NAO e'
+    identidade byte a byte: +0/-0) e TAMBEM o peso W (antes so X).
+  * Erro de compute: interrompe ANTES de ler a saida (antes imprimia e
+    seguia). Finitude da saida verificada antes de gravar.
+  * Escrita: fopen/fwrite/fclose com checagem de contagem e rc; caminho
+    truncado (snprintf >= sizeof) tratado; antes o "saida gravada" aparecia
+    mesmo com fopen falhando.
+  * ULP: o numero gigante (3,5e10) NAO e' bug do estimador — e' o
+    denominador ~FLT_MIN para valores opostos/primos de zero. Agora
+    ULP so e' reportado para |base| >= 1e-4, e a saida diz explicitamente
+    que a decisao e' por max_abs/RMSE/erro normalizado. FLT_MIN deixa de
+    ser tratado como "espacamento ULP geral".
+A.2 Testes de contrato executados no alvo (todos recusan como devem):
+    sem argumentos   -> "argc recebido = 1 (minimo 7)"
+    X pela metade    -> "X com 100000 bytes, esperado 2269184"
+    ne0 do peso 1024 -> "ne0 do peso (1024) != ne0 de X (2048)"
+    "abc"            -> "devem ser inteiros validos (recebidos: abc ...)"
+    comando completo -> uploads X e W BIT-EXATOS nos dois backends;
+                        saidas gravadas; RMSE/rms = 1,1596% (IDENTICO ao
+                        da rodada 15: mulq16_CPU.bin e mulq16_Vulkan.bin
+                        tem os MESMOS sha dos artefatos da r15 —
+                        352edfa6.../3039ca84...; a auditoria nao mudou o
+                        resultado).
+A.3 Veredito: os numeros das rodadas 15/16 SAO CONFIABILS; nenhum artefato
+    antigo foi invalidado.
+
+--------------------------------------------------------------------------------
+B. DISPATCH EFETIVO — CPU E VULKAN  [§2.1, §2.2]
+--------------------------------------------------------------------------------
+B.1 CPU — CAMINHO CONFIRMADO NO FONTE (fonte inspecionado):
+  * trait Q4_K (ggml-cpu.c:310-313): vec_dot=ggml_vec_dot_q4_K_q8_K,
+    vec_dot_type=GGML_TYPE_Q8_K;
+  * one_chunk (ggml-cpu.c:1187-1201): vec_dot_type=Q8_K, wsize para
+    Q8_K, e "wdata = (src1->type == vec_dot_type) ? src1->data :
+    params->wdata" — como X e' F32, o dado vem de params->wdata;
+  * a QUANTIZACAO (ggml-cpu.c:1350-1358): from_float(src1 F32 -> wdata
+    Q8_K) por linha/bloco, com from_float = quantize_row_q8_K;
+  * o produto e' ggml_vec_dot_q4_K_q8_K (variante ARM em
+    ggml-cpu/arch/arm/quants.c), que multiplica o q8_K pelo peso q4_K.
+  => ESTA EXECUTADO no replay: o replay tambem usou o backend CPU com
+     W=Q4_K e X=F32, logo passou pelo mesmo from_float->wdata->vec_dot.
+     (Nao afirmo que o app usa exatamente este codigo: o app pode
+     reempacotar pesos ou BLAS; ver limite E.4.)
+B.2 VULKAN — o que o alvo REPORTA e o que NAO sabemos:
+  * o dispositivo reporta fp16=1, int_dot=0, matrix cores=none, warp 64;
+  * o "1" em fp16 indica RECURSO habilitado (storage+compute); a linha de
+    device->fp16 no ggml-vulkan e' !force_disable_f16 && fp16_storage &&
+    fp16_compute — o Vulkan ESTA com fp16 ATIVO por padrao;
+  * o replayulkan e' o backend Vulkan0 real (mesmo driver, mesmo
+    dispositivo), sem scheduler/repack do modelo; NAO afirmo que o
+    pipeline do kernel do scheduler seja identico ao gallocr direto
+    (limite E.4);
+  * a hipotese "acumulacao FP16" e' PLAUSIVEL (o erro de ~0,56% e'
+    compativel com perda de precisao), mas nao foi provada: seria
+    necessario ler o shader do mul_mat_q, o que NAO fiz nesta rodada.
+    Registro como HIPOTESE, nao como evidencia.
+
+--------------------------------------------------------------------------------
+C. REFERENCIAS INDEPENDENTES R E Rq  [§3.1-§3.5]
+--------------------------------------------------------------------------------
+C.1 R: W Q4_K do GGUF c4bf1015... DECODIFICADO com a rotina do fork
+    (dequantize_row_q4_K + get_scale_min_k4, copiadas literalmente) e
+    multiplicado pelo X F32 original com acumulacao f64 no PC.
+    Operandos e hashes:
+      X (CPU, do replay): logs-rodada15/attn_norm/cpu_P.diag_b0_attn_norm.mat
+        sha f955aa1df531507c48e2f0cc... (277 x 2048 F32, origem = saida da
+        1a RMS_NORM do bloco 0, capturada NO ALVO)
+      X (GPU): .../vulkan_P.diag_b0_attn_norm.mat sha 4768e7690c1ba8ec5...
+        (X_cpu x X_gpu: max 1,19e-7, RMSE 1,76e-9 -> ~1 ULP: as entradas
+        sao as mesmas no nivel de precisao)
+      W = blk.0.attn_q.weight cru (Q4_K, ne=[2048,2048], 2.359.296 B)
+        sha e1f559a7cb061b4596de5fce... (extraido do MESMO GGUF; nao
+        requantizado, nao BF16)
+C.2 Validacao de R: a soma direta f64 de 4 posicoes (inicio, fim, meio)
+    bate com a matriz em delta = 0,000e+00 (numpy.dot x soma explicita) —
+    a orientacao W[c,i]xX[r,i] e as dimensoes estao CORRETAS. R rms =
+    0,032382681 (igual ao rms da saida real do replay: 0,032378 — a
+    referencia tem a escala correta).
+C.3 Rq: X quantizado em Q8_K pela MESMA rotina do CPU
+    (quantize_row_q8_K_ref: bloco de 256, iscale=-127/max, qs=MIN(127,
+    nearest_int), d=1/iscale) e desquantizado. O custo medido da
+    quantizacao de ATIVACAO: erro em X de max 5,34e-3, RMSE 4,69e-4
+    (1,551% relativo) — este e' o termo que a rodada 15 nao tinha.
+C.4 TABELA DE METRICAS (denominador COMUM rms(R)=0,032382681; percentis
+    de |erro|; sem normalizar por saidas diferentes):
+    comparacao      RMSE/rms(R)   p50        p90        p99        p99.9     max
+    CPU    x R      1,0098%      1,84e-4    5,10e-4    9,86e-4    1,86e-3   5,13e-3
+    CPU    x Rq     0,0080%      1,70e-9    5,00e-9    8,59e-6    3,67e-5   2,27e-4
+    Vulkan x R      0,5634%      7,54e-5    2,71e-4    6,54e-4    1,27e-3   3,97e-3
+    Vulkan x Rq     1,1595%      2,13e-4    5,89e-4    1,15e-3    2,07e-3   5,21e-3
+    erro por token: mediana CPU x Rq = 2,86e-9 (5 piores linhas 3,5e-5);
+                    mediana Vulkan x R = 1,80e-4 (5 piores 2,5e-4).
+    Finitude: 0 NaN/Inf em todas as comparacoes.
+C.5 LEITURA (matriz de decisao): o padrao observado e'
+    "Vulkan proximo de R, CPU proximo de Rq e afastado de R" -> e' a
+    primeira linha da matriz. Evidencia de diferenca ESPERADA do caminho
+    CPU (quantizacao de ativacao). NAO e' caso de "corrigir GPU para
+    imitar a aproximacao CPU". A perda por quantizacao de ativacao (~1%)
+    e' o piso de ruido do proprio backend CPU para K-quants: qualquer
+    comparacao CPU-vs-GPU deste modelo carrega esse piso.
+C.6 TOLERANCIA: nao fixei tolerancia a partir do erro observado. O
+    criterio de "explicado" aqui e' MECANICO: o CPU reproduz Rq (a
+    mesma formula do kernel CPU) a 0,0080%, o que mostra que a maior
+    parte do desvio CPU-Vulkan e' a quantizacao de ativacao, e nao
+    arbitraria.
+
+--------------------------------------------------------------------------------
+D. Q DO GRAFO x REPLAY (ligacao com evidencia)  [§5]
+--------------------------------------------------------------------------------
+D.1 Capturei o Q do GRAFO no ponto exato do replay: o tensor de saida do
+    MUL_MAT Q do bloco 0, ANTES do reshape_3d/RoPE/norma (build_qkv
+    llama-graph.cpp, ramo "separate Q/K/V path":
+    Qcur=build_lora_mm(layer.wq,cur) -> nomeado diag_b0_Q_mm; o reshape
+    vem DEPOIS). Nao e' um recorte nem transformacao invertida.
+D.2 Comparacao com o replay, MESMO X, MESMO backend:
+    Q_grafo CPU     x replay CPU    : max 0,000000000  RMSE 0,000000000
+                                     (0,0000% — BIT A BIT, sha identico
+                                      352edfa6... entre Q do grafo e a
+                                      saida do replay)
+    Q_grafo Vulkan  x replay Vulkan : max 1,22e-4     RMSE 5,25e-7
+                                     (0,0016% — o replay usou X_cpu; o
+                                      grafo Vulkan consumiu X_gpu, que
+                                      difere em ~1 ULP)
+    => O replay REPRODUZ o operador do grafo. A coincidencia de 1,16% da
+       rodada 15 nao e' "coincidencia de RMSE": e' o mesmo operador, com
+       entradas verificadas, comparado com a referencia independente.
+D.3 A similitude entre 1,1596% (Q isolado) e 1,1658% (attn_out) da r15
+    NAO e' usada como prova nesta rodada: aqui a ligacao e' direta (o Q do
+    grafo), nao por percentual. (attn_out inclui K/V, RoPE, normas,
+    atencao e wo — remains nao decomposto.)
+
+--------------------------------------------------------------------------------
+E. A/B DE PRECISAO — NAO INDICADO  [§4]
+--------------------------------------------------------------------------------
+E.1 Semantica do flag (fonte local, ggml-vulkan.cpp:6440 e 7178):
+    force_disable_f16 = getenv("GGML_VK_DISABLE_F16") != nullptr; logo e'
+    PRESENCA da variavel, nao valor — "0" TAMBEM desabilita. device->fp16 =
+    !force_disable_f16 && fp16_storage && fp16_compute. Com o Alvo
+    reportando fp16=1, o Vulkan roda com fp16 ATIVO por padrao. Nao
+    existe no fork, para o Q4_K, um controle por OPERACAO (verificado: as
+    flags sao de dispositivo/pipeline; nao ha flag por-op de precisao do
+    mul_mat_q). Inventar flag e' proibido e nao foi feito.
+E.2 POR QUE O A/B NAO FOI EXECUTADO: a matriz de decisao ja foi
+    resolvida em favor de "Vulkan proximo de R" (C.5) e o NMSE medido
+    (1,344e-4) esta ABAIXO da tolerancia do proprio upstream (5e-4,
+    F.3). Desligar fp16 por variavel de ambiente mudaria o pipeline
+    GLOBAL do dispositivo (pesos, KV, FA, indexer — F.4), nao apenas
+    este operador.
+E.3 OVERRIDE CIRURGICO DISPONIVEL (correcao do relatorio anterior): o
+    fork declara ggml_mul_mat_set_prec(tensor, GGML_PREC_F32) em
+    ggml.h, e o pipeline dequant_mul_mat escolhe o acumulador por
+    (ggml_prec)dst->op_params[0] — com GGML_PREC_DEFAULT e device->fp16
+    ligado, o pipeline e' o f16acc. Um A/B de PRECISAO correto seria,
+    portanto, setar GGML_PREC_F32 no no do MUL_MAT (escopo local, sem
+    variavel de ambiente global), medir o operador contra R e o custo de
+    tempo. NAO foi executado nesta rodada porque a classificacao ja nao
+    depende dele: o Vulkan ja e' o caminho mais preciso contra R
+    (0,5634%). Fica como experimento OPCIONAL e de escopo local, com
+    proposta e teste permanente se o especialista quiser quantificar a
+    contribuicao do acumulador fp16 — sem alterar o produto agora.
+
+--------------------------------------------------------------------------------
+F. FONTES PUBLICAS (§7) — pesquisa delegada + VERIFICACAO NO NOSSO FORK
+--------------------------------------------------------------------------------
+F.1 RESULTADO DA PESQUISA: NAO EXISTE correcao publica confirmada para
+    MUL_MAT Q4_K no backend Vulkan com ativacao F32. Fica declarado
+    explicitamente (nao inventado). Base: upstream lido no commit
+    5c200e0c8dfdbfa388f5d8f79ef7195dd4eb801e (master head no momento da
+    pesquisa 19e28a27702117d8f2eb16b825b9a308111f67d9).
+F.2 ACHADO DECISIVO (mecanismo, confirmado): o CPU quantiza a ATIVACAO
+    (Q8_K), o Vulkan NAO.
+    * upstream ggml-cpu.c:311-314 -> vec_dot_type Q8_K para Q4_K (igual ao
+      nosso fork, ja medido em B.1);
+    * upstream: o pipeline quantizado do Vulkan e' gerado em duas
+      variantes, _quant_f16 (B em float16_t) e _quant_f32 (B em float),
+      para TODOS os K-quants, e o peso e' DEQUANTIZADO NO SHADER; nao ha
+      quantize_row_q8_K no caminho Vulkan de MUL_MAT.
+    * VERIFICADO NO NOSSO FORK (nao apenas upstream):
+      - ggml-vulkan.cpp: 0 ocorrencias de "Q8_K", "vec_dot_type" e
+        "quantize_row_q8_K" (conferido por contagem no fonte);
+      - vulkan-shaders/mul_mm.comp declara "buffer B {B_TYPE data_b[]}"
+        e "B_SCALAR {B_TYPE_SCALAR data_b_scalar[]}" — a ativacao entra
+        como ponto flutuante, nao como bloco quantizado;
+      - o path de quantizacao de Y que EXISTE no Vulkan
+        (quantize_y -> Q8_1) esta condicionado a
+        device->integer_dot_product; o Adreno 840 reporta int_dot=0 =>
+        quantize_y = false neste alvo (Y permanece F32). Este ponto
+        merecia registro explicito porque e' o unico lugar em que o
+        Vulkan quantizaria a ativacao.
+F.3 TOLERANCIA UPSTREAM (o numero que decide): em
+    tests/test-backend-ops.cpp, test_mul_mat::max_nmse_err() devolve
+    5e-4 de forma INCONDICIONAL, com nmse = mse(a,b)/mse(a,0).
+    Nossas medicoes, na mesma metrica:
+        NMSE Vulkan x R   = 3,174e-05
+        NMSE CPU    x R   = 1,020e-04
+        NMSE Vulkan x CPU = 1,344e-04   < 5e-4  (3,7x abaixo)
+    Ou seja: o delta medido PASSARIA no criterio do proprio upstream. Este
+    e' o argumento mais forte contra tratar o observado como bug do
+    Vulkan — e NAO e' uma tolerancia que eu tenha escolhido a partir do
+    erro observado (era o criterio ja adotado pelo projeto upstream).
+    Ressalva: test-backend-ops.cpp NAO esta no fork local (verificado), a
+    tolerancia acima e' a do upstream no commit citado, nao um arquivo
+    deste repositorio.
+F.4 GGML_VK_DISABLE_F16 — semantica e escopo (confirmado no fork):
+    ggml-vulkan.cpp:6440 e 7178 -> force_disable_f16 = getenv(...) !=
+    nullptr (PRESENCA, nao valor; "0" tambem desliga) e fp16 = !
+    force_disable_f16 && fp16_storage && fp16_compute. Desligar e' AMPLO:
+    device->fp16 tambem governa shared memory/alinhamento, a extensao
+    shader_float16_int8, pipelines de Flash Attention e o lightning
+    indexer. Nao e' quirurgico.
+    O OVERRIDE CIRURGICO existe neste fork: ggml.h declara
+    ggml_mul_mat_set_prec(..., GGML_PREC_F32) e o pipeline e' escolhido
+    por (ggml_prec)dst->op_params[0]; no caminho dequant_mul_mat (nosso
+    caso, src0 quantizado) vale
+      (ctx->device->fp16 && prec == GGML_PREC_DEFAULT) ? ...f16acc :
+      ...f32acc
+    ou seja, GGML_PREC_F32 no no forca o acumulador f32 SEMPRE que
+    device->fp16 estiver ligado. (Correcao a um ponto do relatorio
+    anterior: eu escrevi que nao havia controle por operacao — ha.)
+F.5 ACHADOS APLICAVEIS vs SINTOMA PARECIDO (nao traspatchar):
+    APLICAVEIS como HIPOTESE, sem conserto upstream:
+      * PR #13607 — acumulador fp16 em matmul quantizado causando
+        incoerencia (GLM4-32B), propoe f32acc. DRAFT, nunca mergeado.
+        E o mecanismo candidata do nosso caso, mas continua HIPOTESE.
+      * Issue #25906 — Adreno 702 (Turnip) MUL_MAT numericamente errado,
+        inclusive f32xf32 sem quantizacao, ERR 0,6-1,5 (ordem de
+        grandeza 1e0, nao o nosso 1e-2); fechada como stale. Classe
+        proxima (Vulkan+Adreno+mul_mat), nao traspatchar.
+    DESCARTADOS (mecanismo intransferivel):
+      * #25734/#25735 (warptile WM>BM com subgroupSize=128): nosso
+        Adreno 840 reporta warp size 64 -> o invariante se mantem; os
+        casos que falhavam eram type_a=f16, nao Q4_K; superseded.
+      * #18164/#18180 (im2col/maxworkgroupcount, mmproj de visao em
+        RTX 4090): nao toca MUL_MAT Q4_K.
+      * #25477 (Q6_K em Adreno 740) e #28570 (q4_K split-K GEMV):
+        backend OPENCL, kernels read_imageui/split-K inexistentes no
+        Vulkan.
+      * #25805 (transpor scales q4_K para Adreno): OpenCL, otimizacao
+        de coalescencia, nao e' correcao de precisao.
+      * #29165 (guard de compat Adreno 750): evita SEGV do compilador de
+        shader, nao e' erro numerico.
+F.6 CONFORMIDADE fork x upstream: a logica de vec_dot_type (CPU) e a
+    ausencia de quantizacao de Y no Vulkan (int_dot=0) foram conferidas
+    DIRETAMENTE no fork local, nao apenas no upstream — a ressalva de
+    metodo que a pesquisa levantou esta, portanto, fechada para o que
+    importa nesta classificacao.
+
+--------------------------------------------------------------------------------
+G. DECISAO E LIMITES  [§9, §10]
+--------------------------------------------------------------------------------
+G.1 DECISAO: A diferenca local no MUL_MAT esta EXPLICADA (quantizacao de
+    ativacao do CPU). Nao ha evidencia de corrupcao no Vulkan neste
+    operador. NAO proponho patch de producao. Proponho ACEITACAO
+    FUNCIONAL, com a ressalva de que o replay e' o operador isolado e
+    nao prova global.
+G.2 BATERIA FUNCIONAL PROPOSTA (execucao no app SEM instalar nada):
+    Estado do app alvo ja verificado por 'run-as' (sem alterar):
+      versionName=1.505 versionCode=68, .TextoActivity presente;
+      shared_prefs/texto_settings.xml -> <string name="backend">VULKAN</string>
+      <string name="threads">6</string> (modelo ja configurado para Vulkan);
+      files/native_debug.txt existe (294 KB) e registra activateIfInstalled.
+    A Activity aceita intent com EXTRA_TEXT (ou extra_texto) para preencher
+    o campo de entrada, e o backend e' trocado por SharedPreferences
+    (PREF_BACKEND=backend, valores CPU|OPENCL|VULKAN|NPU) — mas o BOTAO
+    "traduzir" precisa de toque. Ou seja: a bateria e' de CAMPO/UI (toque),
+    nao headless; automatizar exige driver de UI no aparelho, que e' uma
+    acao do usuario/especialista, nao minha. Nao alterei preference nem
+    disparei Activity. Casos propostos:
+    * textos curto/medio/longo (3 casos) + casos de numeros, negacao e
+      nomes proprios;
+    * repeticao e reuso de contexto (mesmo prompt 2x; pergunta de
+      suivi sobre a traducao anterior);
+    * parada/cancelamento no meio;
+    * latencia por caso (CPU e GPU).
+    Cobertura automatica existente: HyMt2TranslatorTest (8 testes) e
+    HyMt2ModelSupportTest (2) cobrem PROMPT/sampler/suporte de GPU, nao
+    qualidade de traducao — a bateria acima e' de campo, nao unit.
+G.3 LIMITES DECLARADOS:
+    * O replay e' o operador ISOLADO (mul_mat direto), nao o caminho do
+      scheduler/repack do modelo — o produto pode empacotar pesos de
+      outra forma; equivalencia de pipeline NAO foi provada.
+    * A hipotese "acumulacao FP16 no Vulkan" (0,56%) e' plausivel e
+      NAO foi provada (shader nao lido nesta rodada).
+    * O FA (flash attention) esta ATIVO no harness/replay
+      (flash_attn_type=-1 AUTO) e DESLIGADO no produto no caminho GPU
+      (llama_jni.cpp:320-326, "Flash attention desligado SO no caminho
+      GPU (25/09)"). O replay nao depende de FA (mul_mat puro), mas
+      QUALQUER rodadas futuras que capturem atencao/atn_out devem
+      reconciliar essa diferenca antes de comparar com o produto.
+    * As diferencas de L[342] (margem +0.030470 vs -0.147522) e a
+      inversao de token nao sao atribuidas aqui ao MUL_MAT; a
+      quantizacao de ativacao do CPU e' um piso de ruido que
+      provavelmente participa, mas nao fechei essa conta.
+    * Nao ha erro local VULKAN demonstrado -> sem reproducer, sem patch.
+G.4 Como isto muda o quadro: a rodada 15 mediu 1,16% e sugeriu "operador
+    suspeito no Vulkan". A referencia independente mostra que esse numero
+    e' majoritariamente o comportamento DOCUMENTADO do backend CPU para
+    K-quants. Isso NAO prova que L[342]/token 342 estejam corretos, mas
+    tira o operator-local da lista de suspeitos e muda a pergunta: o que
+    resta e' o efeito acumulado da quantizacao CPU vs o caminho Vulkan ao
+    longo de 343 decodes, que e' questao de PROPAGACAO, nao de kernel.
+
+--------------------------------------------------------------------------------
+H. HASHES, DIFFS, COMANDOS, RETORNOS, TESTES  [§10]
+--------------------------------------------------------------------------------
+H.1 Artefatos (logs-rodada16/, MANIFESTO-RODADA16.txt — 27 entradas SHA):
+    grafo_Q/       cpu_P.diag_b0_Q_mm.mat (sha 352edfa6...), idem vulkan
+                   (c56f34de...), attn_norm .mat por backend, .idx, logs
+    mul_q_auditado/mulq16_CPU.bin (352edfa6... = r15), mulq16_Vulkan.bin
+                   (3039ca84... = r15), boundary14_mul_saida.txt
+    referencia/    replay_ref16.py (092b1b3d...), R16.npy, Rq16.npy, Xq16.npy
+    diag-norm-diff-rodada16.patch  +186 -0 (3 arquivos, so adicoes)
+H.2 Fontes alteradas (produto NAO tocado):
+    diag-norm/.../llama-graph.cpp: nomeia diag_b0_Q_mm (Q do grafo);
+    diag-norm/.../llama-context.cpp e hunyuan-vl.cpp: da rodada 15
+    (inalterados nesta); harness/boundary14.cpp: auditoria dos contratos
+    (§6); replay_ref16.py: novo (referencia PC).
+    Binarios: llama_harness_v12 b24970ccf8f4ba3b660e1e7157f33651f1fe191f7d4c8b830e6e44f00d883ab4
+              boundary14         f6aba4ea485d7ba1c03f70e97e4e49e5081038035dc4d11fe07a02c409df28c4
+H.3 Comandos-tipo e retornos (serial 100.108.27.64:40229 em todos):
+    cmake --build diag-norm/build -j16        rc=0
+    build_harness.sh / build_boundary14.sh    rc=0
+    ./llama_harness_v12 ... --dump-passo 0 --dump-matriz
+        --canal-pooled diag_b0_Q_mm --canal-nextn diag_b0_attn_norm
+        --parar-apos-dump --log-debug
+        -> cpu e vulkan rc=0, MEDICAO: VALIDA
+    ./boundary14 mul <X> <W> 277 2048 2048 mulq16   rc=0
+        uploads X e W bit-exatos; 4 casos de contrato recusan
+    python replay_ref16.py X_cpu.mat X_gpu.mat W.q4k.bin 277 2048 2048
+        -> R, Rq, validacao de orientacao OK
+H.4 Testes: harness_args_test nao foi alterado nesta rodada (o parser nao
+    mudou); 102/102 da r15 seguem validos. Nenhum teste de produto
+    alterado; gate Gradle nao reexecutado (produto intocado). rc=0 em
+    todos os runs; finitude 0 NaN/Inf.
+H.5 Segredos: nenhum. R2/Drive nao tocados; whisper.cpp intocado.
+================================================================================
+FIM DO RELATORIO — RODADA 16
+================================================================================

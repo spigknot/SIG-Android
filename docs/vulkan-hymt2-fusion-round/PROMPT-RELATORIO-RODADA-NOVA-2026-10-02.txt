@@ -1,0 +1,545 @@
+RELATORIO A-H — RODADA NOVA: AUDITORIA DE PROCEDENCIA, ENTRADA RECUPERADA,
+BATERIA Q8 NO APP E RECONCILIACAO AUDITAVEL (02/10/2026)
+=====================================================================
+Este e' o TXT da rodada nova pedido no parecer. Ele responde, secao por
+secao, aos itens A-H do prompt do especialista. Parecer separado por
+natureza da evidencia no fim de cada bloco: [MEDIDO] / [HIPOTESE] /
+[PROVA-VERIFICADA] / [BLOQUEIO-INSTRUMENTO].
+
+STATUS DA RODADA (CCE = concluido com evidencia | PARCIAL | PENDENTE |
+BLOQUEADO):
+  A  Procedencia/aprovacao ................. CCE (A2 = autorizacao relatada)
+  B  Frescor e config ...................... CCE (cadeia conjunta; contagens e
+                                               tempos corrigidos na revisao)
+  C  Entrada recuperada .................... CCE (limite localizado; via
+                                               Intent 6/6; 5 dirs de falha)
+  D  Rota diagnostica nova ................. CCE (nao necessaria) |
+  D2 Qualidade (4 textos) .................. CCE (catalogo com severidade)
+  E  Precisao FP16 ......................... CCE (nada alterado por decisao)
+  F  Testes permanentes/CI ................. PARCIAL (2 testes PASS no
+                                               harness; autoconternidade por
+                                               fixtures feita; integracao
+                                               em CI aguarda consentimento)
+  G  Bateria Q8 12/12 ...................... CCE (reconciliacao RC=0)
+  H  Entrega/manifesto ..................... CCE (manifesto verificado por
+                                               script; autoconternidade
+                                               registrada)
+=====================================================================
+
+CONTEXTO DE EXECUCAO (para autonomia do documento): aparelho OnePlus 15
+CPH2747 / OP611FL1, Android 16, GPU Adreno 840; app br.gov.sp.pcsp.launcher
+(APK debug 9f42b744..., loader v9) com a lib de teste 9698670c... na pasta
+9-arm64-v8a; corpus Hy-MT2-1.8B EN->PT (409/952/2335/4924 chars). Serial
+USB 3B15BD00FVE00000 (as sessoes wireless :43505/:35371/:39267 sao de
+01/10; o wireless caiu no meio e a rodada seguiu por USB).
+
+A. AUDITORIA DE APROVACAO E PROCEDENCIA (antes de qualquer acao nova)
+---------------------------------------------------------------------
+A1. APROVACAO DO .so 9698670c (pasta 9) — SEPARADA DA DO APK
+  [MEDIDO] O deploy rodou em 01/10 ~18:30-18:46 no fluxo autorizado da
+  rodada ("autorizo, chega o pauí"; "pode fazer"; bateria Q8 "autorizada"),
+  e foi anunciado ao usuario as 18:39 com escopo e plano:
+    "Deploy concluído (backup da 172c preservado no aparelho ... push
+    binário ... hash/tamanho conferidos no device antes de instalar e no
+    destino depois ... App relançado (PID 31172) ... Só falta uma coisa
+    sua: destravar a tela"
+  Evidencia: logs-hymt2-contexto-rodada1/deploy_9698670c.txt (backup
+  172c662a em /data/local/tmp/v9_172c_rollback.so; push 95.613.928 B;
+  readback 9698670c... no destino).
+  ESCOPO REAL: substituicao SOMENTE do libsig_llama.so da pasta
+  9-arm64-v8a; nada mais tocado; rollbacks preservados.
+
+A2. APROVACAO DA REINSTALACAO DO APK (install -r) — OBJETO PROPRIO
+  [MEDIDO] O APK NAO estava coberto pela aprovacao da .so. Foi pedido em
+  clarify PROPRIO as 21:47 de 01/10, com 3 opcoes explicitas, apos a
+  checagem de assinatura:
+    "(...) Você tinha escolhido a via (A); instalo agora?"
+    opcoes: ["Sim — instala agora (install -r, preserva dados) e segue
+    com smoke + bateria Q8", "Não prefiro instalar eu mesmo; só me dê o
+    comando", "Não instalo agora — registra o estado e para por aqui"]
+  O install rodou as 22:11-22:12 rotulado "(autorizado)", com backup do
+  APK antigo ANTES (apk_vc69_backup.apk), "Success" e conferencias depois.
+  [CLASSIFICACAO DE REGISTRO] "Autorizacao APK relatada": o pedido esta no
+  historico e a execucao seguiu rotulada como autorizada, MAS o texto
+  literal da resposta (resultado de clarify) nao e' recuperavel pela busca
+  deste perfil — nao ha registro direto disponivel. Isto NAO prova ausencia
+  de aprovacao nem e' prova conclusiva dela; qualquer NOVA alteracao de
+  produto/deploy exige consentimento claro no momento.
+  Assinaturas checadas antes: mesmo certificado debug nas duas pontas
+  (cert sha 19d6bd8f...), portanto install -r sem rejeicao.
+
+A3. VERSOES REAIS DOS ARTEFATOS (APK), verificadas nos arquivos/pull
+  APK ANTIGO (na maquina ate 22:12 de 01/10):
+    sha256 9a26c79ee0578a7d1c7e21fd0a6b00813d2d2210c8a67a3374fdb688c0bd5749
+    8.109.566 B | versionCode 69 / versionName 1.506 | dex: "8-arm64-v8a"
+    (COMPONENT_VERSION=8) | 3 pulls independentes (20:25, 21:40, 22:12)
+    deram o MESMO hash.
+  APK NOVO (sig-v9-debug.apk, construido 01/10 20:40):
+    sha256 9f42b744187dfe5c012e506475a3a235ab51de1727b0573be03f722b97595b4f
+    10.309.168 B | versionCode 69 / versionName 1.506 | dex: "9-arm64-v8a"
+    (COMPONENT_VERSION=9); diff de 2.199.602 B vs o antigo.
+  INSTALADO AGORA (pull de hoje + sha256): igual ao novo (9f42b744...),
+  lastUpdateTime 2026-10-01 22:12:19, firstInstallTime 2026-08-26 23:21:49.
+  [PROVA-VERIFICADA] "qual pasta o APK le" foi decidido por CONTEUDO do
+  dex (string 8- vs 9-arm64-v8a), nao por suposicao.
+
+A4. TIMELINE DE PROCEDENCIA (a descoberta "APK lia a pasta 8")
+  [MEDIDO] FONTES:
+   - Pasta 9 no aparelho: originalmente 31f6df15 (v9 publicado);
+     172c662a deployado 01/10 00:50 (C3); 9698670c deployado 01/10 18:46.
+   - Pasta 8 no aparelho: libsig_llama.so = 2a89c0652b3d6490..., 
+     95.509.296 B, mtime 27/09 01:58, DONO u0_a0 — identificado no PC
+     como C:\Users\Gustavo\AppData\Local\Temp\rodada2\libsig_llama_ORIGINAL.so
+     (mesmo sha256, mesmo tamanho). Todos os OUTROS arquivos da pasta 8
+     sao do uid do app (u0_a591).
+   - APK lendo "8": 9a26c79e (dex 8-arm64-v8a), no aparelho desde >= o
+     build de 30/09 16:56; o APK lendo "9" (9f42b744) so entrou 01/10 22:12.
+  CONSEQUENCIA (retificacao do relatorio anterior):
+   - TODOS os runs de APP anteriores a 01/10 22:12 usaram a pasta 8, ou
+     seja, a lib 2a89c065 (build debug de 27/09) — NAO a v9 publicada,
+     NAO a 172c, NAO a 9698670c.
+   - **Nenhum run de app JAMAIS usou a 172c.** O deploy C3 (172c -> pasta 9)
+     nunca teve efeito no processo do app. As evidencias "de app" daquela
+     janela ficam reclassificadas: valem como comportamento do APP com a
+     lib 2a89c065.
+   - As provas de RUNTIME do reset (hymt2_reset_rt, 8/8) sao de um BINARIO
+     de harness autocontido (nao leem pasta do app) — permanecem validas
+     como prova do CODIGO, nao como prova do app.
+   - Os primeiros runs de app na pasta 9 sao os de 01/10 22:13+ (smoke da
+     instalacao, com maps "native_dependencies/9-arm64-v8a") e os desta
+     rodada. TODOS usam 9698670c.
+   - Q4 bateria anterior (12/12) e CPU 24/24 (outra sessao): outputs
+     permanecem REAIS e deterministicos; a PROCEDENCIA da .so passa a ser
+     "2a89c065 (debug 27/09)", nao a v9 publicada.
+  [MEDIDO] Pasta 8 / Permission denied: o arquivo e' do uid 10000; hoje o
+  uid 10000 no aparelho e' com.oplus.android.overlay.gmsconfig.common
+  (pacote de sistema OPLUS). A autoria original nao e' reconstruivel com
+  os registros; o efeito verificado e' que run-as (uid do app, u0_a591)
+  nao pode sobrescrever o arquivo — foi a causa do "Permission denied" de
+  01/10 20:25. NAO trocar package por causa disso: o caminho correto
+  (APK com loader v9) ja foi feito e verificado.
+
+A5. EVIDENCIA CAUSAL DO Q8_0 (resumo dos canarios e do controle F32 — do
+    dossie anterior, com os logs citados)
+  [PROVA-VERIFICADA] Canarios analiticos (W uniforme de byte fixo por bloco,
+  X=ones, esperado MATEMATICO exato; caminho VEC mul_mat_vec_q8_0_f32_f32):
+    qs=-1   (esperado -2048)   -> Vulkan +522240  = 2048 x 255  (0xFF lido
+            como 255: SEM SINAL)
+    qs=-2   (esperado -4096)   -> +520192  = 2048 x 254
+    qs=-64  (esperado -131072) -> +393216  = 2048 x 192
+    qs=-128 (esperado -262144) -> +262144  = 2048 x 128
+    qs=+1/+127, d=2^-6, posicao/rampa/blocos -> EXATOS (o lado positivo
+    sempre passou; so' os negativos quebravam).
+    mix8minus (2040 x +1 e 8 x -1; esperado 2032) -> 4080 = 2040 + 8 x 255
+    — descarta saturacao (3056) e fecha a identidade do byte-sem-sinal.
+  [PROVA-VERIFICADA] Discriminator Q8_0 real (blk.0.attn_q.weight do GGUF):
+  VKxf64 rmse_rel 5.79 -> 1.18e-07 (n_rows 1, APOS o fix) e 6.64 -> ~0.0066
+  (64/512; residuo = acumulacao FP16 do caminho MM, nao sinal); bytes256
+  no caminho VEC: 256/256 exatos nas 4 escalas. Controles Q4_K (produto e
+  official), Q4_0 e Q6_K: sem regressao.
+  [PROVA-VERIFICADA] Controle causal de precisao (mesmos operandos, 3
+  condicoes): byte 3 (esp 96) DEFAULT +21.3125 vs F32ACC +0.0000; byte 5
+  (esp 160) DEFAULT -19.1250 vs F32ACC +0.0000 -> acumulacao FP16 sustentada
+  para os casos medidos; o replay FP16 sequencial no PC reproduz 117.3125 e
+  140.875 TER A TER. "~0.6%" NAO e' norma universal — e' dos casos medidos.
+  Logs: logs-hymt2-contexto-rodada1/mulmm_probe_v3_canary.txt,
+  prec_causal_mm.txt, patch_dequant_green.txt, patch_mm_green.txt (no
+  manifesto, grupo provas_referenciadas).
+
+B. FRESCOR E CONFIG (a vacina "OU" foi substituida por cadeia conjunta)
+---------------------------------------------------------------------
+B1. INSTRUMENTO NOVO (bateria_app2.py): a validacao de um run exige TODOS
+  os elos, do MESMO run:
+   ANTES: botao de modelo == alvo (leitura), backend == "Vulkan",
+          campo de entrada == fonte EXATA (por igualdade de string);
+   DEPOIS: DELTA do log (linhas novas desde o baseline) contendo
+          "Traduzindo com <alvo> (Vulkan) para" E "Tradução pronta em"
+          E "Desempenho:"; saida nao vazia; /proc/PID/maps com
+          "native_dependencies/9-arm64-v8a" E com o .gguf do modelo.
+   Qualquer elo falho => run INVALIDO (nao vira resultado).
+  [PROVA-VERIFICADA] O elo "modelo certo no run" e' verificavel porque o
+  app loga "Traduzindo com <modelo> (<backend>) para <idioma>..." no
+  inicio de CADA pedido (TextoActivity.kt:610) — nao depende do log de
+  startup ("Modelo: ..." da linha 128, que reflete a selecao inicial).
+
+B2. POR QUE A VACINA ANTIGA DAVA FALSO-VERDE/INVALIDO-por-engano
+  [MEDIDO] O painel de Log (terminal_text) fica FORA da janela do
+  uiautomator quando o TECLADO esta aberto (o IME cobre ~40% da tela).
+  Prova direta: dump com teclado aberto -> sem terminal_text; apos ESC
+  (keyevent 111) -> terminal_text [84,1723][1188,2354] com as 29 linhas
+  do log. Foi isso que produziu "log=0 linhas" nos smokes anteriores
+  (incluindo os de 01/10) — nao havia ausencia de log.
+  Correcao: aplicar fonte -> FECHAR TECLADO -> baseline -> traduzir ->
+  detectar fim TAMBEM pelo log ("Tradução pronta em"/"ERRO"), com
+  re-fechamento do teclado se as leituras vierem vazias.
+
+B3. CONTAGEM CORRETA DOS SMOKES Q8 (resolve B4-1caso vs D3-2casos)
+  [MEDIDO] Runs de app Q8_0 com prova, ate agora:
+   01/10 22:16  Q8_0 curto  (log smoke_q8_final.log): 20s, saida 452 ch,
+                maps=9-arm64-v8a. (Unico run preservado daquela janela;
+                tentativas anteriores as 22:13-22:15 foram sobrescritas
+                pelo proprio script e NAO sao evidencia.)
+   02/10 (hoje) Q8_0 curto frio (cold): log "Carregando 3.4s / pronta 12.4s /
+                142 tok 6.1s (23.3 tok/s)", saida 452 ch e426362d...
+   02/10       Q8_0 medio  quente : log "pronta 17.1s / 298 tok 13.0s
+                (22.9 tok/s)", saida 1010 ch 28a1a489...
+   02/10       Q8_0 curto quente A2: log "pronta 8.4s / 142 tok 6.1s
+                (23.2 tok/s)", saida 452 ch = MESMO sha do cold (A->B->A
+                limpo).
+  Ou seja: 13 runs Q8 de app com prova no total (1 de 01/10 22:16 + 12
+  desta rodada na matriz da secao G), mais 1 controle Q4. A afirmativa
+  anterior "2 casos" estava errada por contar registros do log de forma
+  ambigua; e "20s/56s/67s/110s" NAO tem artefato de origem — RETIRADO: os
+  tempos medidos sao os da secao G (MEDIANAS por tamanho: TOTAL interno
+  12.4/17.1/39.7/89.5s e GERACAO 6.1/13.0/31.5/73.8s; as primeiras reps
+  43.0/87.6 NAO sao medianas).
+  Variacao observada entre runs identicos: TOTAL interno 12.4s vs 8.4s (mesmo
+  409 ch, mesma sessao) — a GERACAO foi a MESMA (6.1s) nos dois; a variacao
+  e' do total, NAO da geracao (correcao do rotulo anterior). [HIPOTESE-NAO-
+  ESTABELECIDA] causa da variacao do total (carga/IO/UI) NAO medida em
+  telemetria continua; amostras: bateria 83-84%, temperatura 23.9-24.1 C
+  (sensor de bateria), PSS em amostra (nao pico).
+
+B4. COLD vs WARM (sem force-stop como muleta)
+  [MEDIDO] Duas sessoes de app na rodada (correcao): smoke+completar12 no
+   PID 23909 (um restart no inicio do smoke) e completar6 no PID 1931
+   (criada quando os testes de entrada reiniciaram o app). DENTRO de cada
+   fase nao houve force-stop:
+   - COLD: o restart do smoke + "Carregando modelo Q8_0 (Vulkan)" + 3.4s.
+   - WARM (mesmo processo): medio e curto-A2 SEM linha de carga.
+   - WARM com TROCA de modelo: reload natural do app ("Modelo selecionado:
+     Q4_K_M" -> carregado 2.8s) — registrado como tal, nao como cold.
+   - longo r1: primeira rodada do processo 1931 (sem modelo em memoria desde
+     o restart dos testes) -> "Modelo carregado em 2.3s" — e' um WARM de
+     sessao com 1a carga, nao um cold de restart.
+   - A->B->A: saida A2 == saida A byte a byte (e426362d) => sem
+     contaminacao entre pedidos com a lib 9698670c.
+  [PROVA-VERIFICADA] O reset de contexto (llama_memory_clear) esta' na lib
+  em uso no app (9698670c, compilada do fonte com o helper) e o A->B->A
+  limpo e' o comportamento observado no app.
+
+C. ENTRADA RECUPERADA (sem alteracao de produto)
+---------------------------------------------------------------------
+C1. O LIMITE FOI LOCALIZADO — e nao e' "shell/argv".
+  [MEDIDO] `input text '<fonte>'` (espacos->%s) funciona ate' ~950 chars e
+  TRUNCA acima disso: fontes de 2335/4924 chegaram ao campo como
+  971 / 1244 / 965 / 1002 chars (5 tentativas, 2 tamanhos). Os "600/600/1600"
+  e "parou em 199/0" dos logs da manha (limpeza/lote sem quoting) sao o
+  mesmo fenomeno de mecanismo, em outro formato. Nao e' limite de argv do
+  shell (o comando curto passa inteiro) nem do canal adb.
+  [MEDIDO] A rota que cobre TODOS os tamanhos e' o recurso do proprio app:
+    am start -n br.gov.sp.pcsp.launcher/.TextoActivity --activity-single-top
+             --es extra_texto "<fonte>"
+  Com ela: cold (activity nova) E warm (onNewIntent) preenchem o campo por
+  setText, com log "Texto recebido (N caracteres)". Verificado 3/3 em
+  sequencia (14/18/22 chars) + log, e agora em uso na bateria para
+  2335/4924 (conferido por IGUALDADE em cada run).
+  [MEDIDO] Dois detalhes que explicam os fails anteriores desta via:
+   (i) SEM `--activity-single-top` as entregas quentes imprimem
+       "delivered to currently running top-most instance" mas o
+       onNewIntent NAO efetiva (o campo nao muda; 3 tentativas) — com a
+       flag, efetiva sempre;
+   (ii) o APK ANTIGO (9a26c79e) NAO continha o recurso: o dex dele nao tem
+       "extra_texto"/"Texto recebido"; o APK NOVO (9f42b744) tem (classes4.dex).
+       Por isso o teste desta via em 01/10 falhou — era o APK antigo.
+  [MEDIDO] Variante tambem funcional: ACTION_SEND + EXTRA_TEXT (20 chars ok).
+  Registro extra do mesmo mecanismo: a ultima execucao do instrumento ANTIGO
+  de lotes (abandonado; `texto_entrada.aplicar`) terminou a fonte de 4924
+  chars com campo=0 apos ~47 min de tentativas ("prefixo quebrado (0 chars)
+  -> limpa e recomeca" x dezenas) — nenhum dos 12 runs validos usou esse
+  caminho; a evidencia fica com o instrumento, nao com o produto.
+  Nada de produto foi alterado; nenhum arquivo de settings tocado.
+C3. POPUP DO SELETOR (itens fora do AX): RESOLVIDO sem tocar settings.
+   [MEDIDO] O popup e' uma JANELA separada (dumpsys: ty=APPLICATION_SUB_PANEL,
+   mAttrs=(60,463)(583x858)); o uiautomator NAO expoe os itens. Posicao do
+   item i de n: x=x0+w/2, y=y0+h*(i+0.5)/n; n=6 e a ordem e' a do array do
+   app (Q4_K_M, Q8_0, Q4_0, Q6_K, 1.25bit, F16). Verificado por selecao
+   real ida-e-volta (Q8_0<->Q4_K_M) com confirmacao por leitura do botao, e
+   por dezenas de selecoes na bateria. O popup e' TOGGLE (toque fecha).
+D. ROTA DIAGNOSTICA NOVA: NAO FOI NECESSARIA.
+   Nenhuma mudanca de produto, nenhum Intent novo, nenhum persistir-modelo;
+   todas as rotas usadas ja' existiam no app: `input text` (curtas), Intent
+   `extra_texto` com `--activity-single-top` (todas as fontes), popup do
+   seletor (janela separada) e o proprio log do app.
+
+D2. QUALIDADE — AUDITORIA LADO A LADO DOS 4 TEXTOS (nova)
+   Metodo: leitura integral fonte x saida das 4 entradas (curto/medio/longo/
+   mais_longo), com verificacao por script e leitura humana das divergencias.
+   NAO houve nova inferencia para "corrigir" o documento; tudo vem das
+   saidas ja registradas.
+
+   Preservacao verificada (script):
+   - numeros: curto 5/5, medio 7/7, longo 12/12, mais_longo 23/23 — nenhum
+     numero perdido;
+   - nomes: Helen Ward, Daniel Costa, Omar Reed, Maya Chen, Sofia Mendes,
+     Peter Lewis, Nora Silva — todos presentes;
+   - unidades junto aos numeros: 12,5 kg / 48 km / 35 euros / 500 metros /
+     dois litros / 21,4 graus Celsius / 240 dolares / 16:45 / 08:35 / 17:00;
+   - agentes e negacoes: "inspetora Helen Ward recebeu", "nao as abriu",
+     "nao mova as caixas", "nao devem publicar", "nao exclui rajadas",
+     "nenhum membro... desaparecido" — preservados;
+   - modalidade (checagem dirigida): "must not publish"->"nao devem
+     publicar" [ok]; "may attend"->"podem participar" [ok]; "should not be
+     used"->"nao deve ser usado" [levemente mais forte; aceitavel];
+     "should notify"->"deve notificar" [idem];
+   - prazos: 30 de setembro, 16:45, 3 de outubro 09:00, "proxima terca",
+     "cinco dias" — todos presentes.
+
+   ERROS CATALOGADOS (fonte -> saida; severidade):
+   [MEDIA][sentido/fato] "Final confirmation phrase: silver compass." ->
+     "Frase de confirmacao final: compasso prateado." (mais_longo) —
+     "compass" aqui e' "bussola"; "compasso" e' o instrumento de desenho.
+     Numa frase-codigo de confirmacao o termo exato importa. (Mesmo tipo de
+     erro ja registrado na bateria CPU anterior.)
+   [MEDIA][PRAZO OPERACIONAL] "within eighteen working days" -> (mais_longo)
+     "dentro de dezoito dias" — omite "working": nao e' so' um numero, o
+     PRAZO muda de dias uteis para dias corridos. (O longo acertou "dezoito
+     dias uteis".)
+   [MEDIA][SENTIDO] "four unused batteries" -> (longo) "quatro baterias
+     inutilizadas" — "inutilizadas" altera o ESTADO do item (sugere
+     defeituosas/descartadas), nao e' mera gramatica; o mais_longo acertou
+     "nao utilizadas".
+   [BAIXA][gramatical] "The reference showed" -> "O referencia mostrou"
+     (genero; correto: "A referencia").
+   [BAIXA][gramatical] "The equipment belongs" -> "A equipamento pertence"
+     (genero; correto: "O equipamento").
+   [BAIXA][lexical] "no member had been reported missing" -> "nenhum membro
+     foi reportado desaparecido" (natural: "dado como desaparecido").
+   [BAIXA][regencia] "call the supervisor first" -> (curto) "ligue primeiro
+     com o supervisor" (padrao: "para o supervisor").
+   [BAIXA][nuance] "a parent remains in the building" -> "um dos pais
+     estiver/esteja no predio" (perde "remains/continue"; aceitavel).
+
+   Q4 vs Q8 no MESMO texto (curto): Q4 erra "seal"->"fechadura" [MEDIA —
+   objeto diferente] e usa "nota fiscal" para "receipt" (recibo seria o
+   exato); Q8 acerta "selo" e "recibo". CPU NAO e' gabarito: a comparacao
+   acima e' textual (fonte x saida), nao contra saida de CPU.
+   Nenhum erro de NUMERO/unidade nos 4 textos; os erros sao de sentido
+   lexical pontual, omissao e concordancia.
+
+   RESALVAS EXPLICITAS (aprovacao com ressalvas): os erros catalogados
+   ([MEDIA] e [BAIXA]) IMPEDEM usar as traducoes sem REVISAO HUMANA — em
+   especial os de [MEDIA] (frase-codigo "silver compass", prazo "working
+   days", estado de item "unused batteries"). A aprovacao e' da EXECUCAO
+   (12 Q8 na amostra), NAO da qualidade para producao. E o corpus aprovado
+   NAO e' garantia para documentos reais: os textos sao sinteticos e
+   controlados; qualquer documento real exige revisao.
+E. PRECISAO FP16: NADA MUDADO (DEFAULT mantido por decisao desta rodada).
+   [MEDIDO] Estabilidade atual: Q8_0 curto deu sha IDENTICO em 4 execucoes
+   (2 de hoje, 1 de ontem; e o A e A2) — e Q4_K_M curto deu 084f12f4...
+   identico ao de rodadas anteriores. Isso e' estabilidade de
+   implementacao, NAO prova de exatidao vs F32; o controle causal
+   DEFAULT-vs-F32ACC do relatorio anterior continua sendo o argumento de
+   precisao (nao repetido aqui).
+F. TESTES PERMANENTES / CI (situacao e o que foi FEITO nesta rodada)
+  [MEDIDO] Teste 1 — dependencia de build (ja' existia, rodou hoje):
+   native-dependencies/harness/check_shader_dep.sh "toca" um .glsl e exige
+   que o .cpp consumidor regenere e que o build responda; PASS (log
+   check_shader_dep.txt).
+  [MEDIDO] Teste 2 — CONTEUDO do blob (NOVO, escrito e executado hoje):
+   native-dependencies/harness/check_shader_content.sh. Ele nao se contenta
+   com "mudou": compila os .comp afetados com as fontes PATCHED atuais E com
+   as fontes ORIGINAIS guardadas (vkdbg/*.glsl.orig) e exige, para os DOIS
+   caminhos:
+     blob_do_build == patched  E  blob_do_build != original
+   Resultado (log logs-rodada-nova/check_shader_content.txt):
+     vec: build == patched (2a71714a...)  != original (63bdcc67...)  [ok]
+     mm : build == patched (29f8eeda...)  != original (839f1a31...)  [ok]
+     dependencia: .cpp regenerados [ok]; determinismo: blobs identicos
+     apos recompilar [ok]; fontes restauradas e conferidas por sha [ok]
+   RESULTADO: PASS. Isso fecha o pedido "blob esperado aplicado" para os
+   dois shaders do patch Q8_0. O script restaura por sha em qualquer falha
+   (trap) e nao toca produto (apenas a arvore de build local).
+  Proposta em camadas (NAO implementado nesta rodada; exige autorizacao):
+   (a) host: decoder fp16 incl. subnormais, byte256 assinado, escalas, com
+       expected analitico; (b) CI sem Adreno: compilar shaders + validar
+       SPIRV + regressao de API sempre, sem GPU; (c) runner Adreno
+       manual/on-demand (canarios vec/MM + tensor real; thresholds por
+       classe: correcao de sinal / precisao / overflow separados);
+   (d) nenhum GGUF gigante em CI; sem chaves/dados em log.
+   Nada foi commitado; os dois scripts vivem em native-dependencies/harness/.
+G. BATERIA FINAL — MATRIZ Q8 4x3 = 12 RUNS VALIDOS (fechada e RECONCILIADA)
+   Condicoes: app com APK 9f42b744 (loader 9), lib 9698670c (pasta 9),
+   backend Vulkan, Q8_0; SEM force-stop DENTRO de cada fase (duas sessoes
+   de app na rodada: smoke/completar12 no PID 23909 e completar6 no PID
+   1931, criada nos testes de entrada); fonte por Intent
+   (`extra_texto --activity-single-top`) conferida por IGUALDADE; cadeia
+   conjunta por run ("Traduzindo com <modelo> (Vulkan)" + "Tradução pronta
+   em" + "Desempenho:" + maps com 9-arm64-v8a e o .gguf).
+
+   TEMPOS SEPARADOS (correcao do rotulo anterior): o campo que eu chamava
+   "gen(log)" e' o TOTAL INTERNO do app ("Tradução pronta em Xs"); a GERACAO
+   e' a do "Desempenho: N tokens em T s". wall = parede do instrumento
+   (tap -> deteccao; inclui I/O de UI). load = "Modelo carregado em Ls"
+   (null quando nao houve carga).
+
+   | tamanho | run | frio/quente | load | TOTAL(log) | geracao | tokens | tok/s | wall | sha saida (16) | PSS MiB | temp C |
+   |---------|-----|-------------|------|------------|---------|--------|-------|------|----------------|---------|--------|
+   | curto   | 1   | FRIO        | 3.4s | 12.4s      | 6.1s    | 142    | 23.3  | 30.7s| e426362d615058a3 | 2518 | 26.9 |
+   | curto   | 2   | quente      | -    | 8.4s       | 6.1s    | 142    | 23.2  | 14.8s| e426362d615058a3 | 2554 | 23.9 |
+   | curto   | 3   | quente(rec) | 4.3s | 12.6s      | 6.1s    | 142    | 23.4  | 16.1s| e426362d615058a3 | 2492 | 23.9 |
+   | medio   | 1   | quente      | -    | 17.1s      | 13.0s   | 298    | 22.9  | [*]  | 28a1a489561fa514 | 2548 | 23.9 |
+   | medio   | 2   | quente      | -    | 17.1s      | 13.1s   | 298    | 22.8  | 26.7s| 28a1a489561fa514 | 2527 | 24.1 |
+   | medio   | 3   | quente      | -    | 16.9s      | 12.9s   | 298    | 23.1  | 25.9s| 28a1a489561fa514 | 2529 | 24.5 |
+   | longo   | 1   | quente(1o)  | 2.3s | 43.0s      | 32.0s   | 702    | 22.0  | 44.1s| 725e052c35e53eb2 | 2539 | 24.1 |
+   | longo   | 2   | quente      | -    | 39.7s      | 31.5s   | 702    | 22.3  | 41.9s| 725e052c35e53eb2 | 2585 | 25.1 |
+   | longo   | 3   | quente      | -    | 39.7s      | 31.5s   | 702    | 22.3  | 52.8s| 725e052c35e53eb2 | 2585 | 26.2 |
+   | mais_l. | 1   | quente      | -    | 87.6s      | 71.9s   | 1497   | 20.8  | 92.7s| d9d02d6d87fec317 | 2600 | 28.2 |
+   | mais_l. | 2   | quente      | -    | 89.5s      | 73.8s   | 1497   | 20.3  | 91.7s| d9d02d6d87fec317 | 2584 | 30.4 |
+   | mais_l. | 3   | quente      | -    | 91.6s      | 76.0s   | 1497   | 19.7  | 93.8s| d9d02d6d87fec317 | 2582 | 32.6 |
+   [*] medio-1: o valor 1501.1 NAO e' latencia do app — e' o ELAPSED DE
+   OBSERVACAO do instrumento corrompido pelo bug do parser (leitura de log
+   com teclado aberto, corrigido). No JSON ele fica como
+   `elapsed_observacao_s=1501.1` e o campo analitico `wall_s` fica null com
+   motivo declarado; NAO entra em mediana. total/geracao reais do log =
+   17.1s / 13.0s.
+   PSS = linha TOTAL do `dumpsys meminfo` convertida KiB->MiB (AMOSTRA apos o
+   run, nao pico). temp = sensor de BATERIA do aparelho (dumpsys battery),
+   NAO junction de GPU.
+
+   TAXONOMIA DE SESSao (sem categoria "warm" ambigua; campos no JSON por
+   run): `process_restart` (app reiniciado), `model_reload` (pesos carregados
+   no processo) e `context_fresh` (contexto de inferencia limpo pelo reset a
+   cada pedido — comportamento sob teste; true em todos por desenho).
+   - curto-1: restart=T, reload=T, cold de PROCESSO.
+   - medio-1/curto-2: restart=F, reload=F.
+   - Q4 e curto-r3: reload=T (troca de modelo).
+   - longo-r1: restart=F, reload=T — 1a CARGA em processo novo (model_cold),
+     ainda que a sessao de Activity existisse; NAO chamar de "warm".
+   - demais: reload=F.
+
+   MEDIANAS POR TAMANHO (Python; wall so' com valores validos e n declarado):
+   curto total=12.4 gen=6.1 tok/s=23.3 wall=16.1 (n=3) | medio 17.1 / 13.0 /
+   22.9 / 26.3 (n=2 — 1501.1 excluido, e' elapsed de observacao) | longo
+   39.7 / 31.5 / 22.3 / 44.1 (n=3) | mais_longo 89.5 / 73.8 / 20.3 / 92.7
+   (n=3). Valores 43.0/87.6 sao as PRIMEIRAS reps do total, NAO medianas.
+   CONCLUSAO DE TEMPO CORRIGIDA: a variacao "12.4s vs 8.4s" e' do TOTAL
+   interno (mesma geracao de 6.1s nos dois) — NAO e' variacao de geracao.
+   [HIPOTESE-NAO-ESTABELECIDA] causa da variacao do total (carga/IO/UI) —
+   sem telemetria continua; nao atribuir a termica/drain.
+
+   RECONCILIACAO AUDITAVEL (pedida pelo especialista): feita por script
+   offline (auditoria_reconciliada.py) que NAO altera os record.json.
+   Resultado (auditoria_reconciliada.json/.csv):
+   - 12 Q8 + 1 Q4 contados por Python; 3 por tamanho; sha de saida UNICO por
+     grupo (4 grupos) — por conteudo real dos output.txt (sha256 completo).
+   - Os 4 runs que estavam VALIDO=false (3 Q8 do smoke + Q4) passam a
+     VALIDO_RECONCILIADO com motivo auditavel: o parser antigo devolveu
+     delta vazio (teclado aberto escondia o log); a cadeia foi reconstituida
+     do log CONTEMPORANEO por marcador unico (modelo + total + tokens), com
+     associacao por conteudo — nao por identidade de hash como elo unico.
+   - Checagens de coerencia: source.txt == fonte exata do corpus (13/13);
+     record.saida_sha256 == sha do output.txt real (13/13); tokens x tamanho
+     plausivel; wall >= total. Problemas: 0 (RC=0).
+   - Fonte conferida por IGUALDADE + "recebido" no log (via Intent) nos runs
+     do completar6; nos do smoke, por igualdade lida no instrumento
+     (FONTE_OK) no mesmo run.
+
+   CONTROLE Q4 (mesma lib/sessao): Q4_K_M curto — load 2.8s | total 9.5s |
+   geracao 4.0s | 142 tok | 35.3 tok/s | wall 15.2s | 448 ch | sha
+   084f12f4b98b3d2a | PSS 1769 MiB | 24.0 C. (Mesmo sha das rodadas
+   anteriores com Q4_K_M curto — reprodutibilidade entre sessoes/dias.)
+   [LIMITE DE COMPARACAO] A bateria Q4 ANTIGA (12/12, 30/09) rodou com a lib
+   2a89c065 (debug de 27/09), build DIFERENTE da 9698670c desta rodada —
+   NAO dizer "mesmo build" nem apresentar comparacao Q4xQ8 como speedup
+   causal puro. Este controle Q4 de hoje e' o unico pareado com a lib nova.
+
+   DETERMINISMO (por entrada): 12/12 runs com sha de saida IDENTICO dentro do
+   mesmo tamanho (3 shas iguais por grupo). Entre tamanhos diferentes os
+   textos divergem tambem no trecho comum — esperado com sampling (temp 0.7,
+   top_p 0.6, seed fixa). A->B->A do smoke: curto cold == curto warm2
+   (e426362d) byte a byte — sem reuso indevido de contexto entre pedidos.
+
+   VEREDITO DA SECAO (contagem corrigida): 9 runs Q8 VALIDO direto + 3 runs
+   Q8 VALIDO_RECONCILIADO = **12 Q8**; mais 1 Q4 VALIDO_RECONCILIADO =
+   13 registros totais (4 reconciliados no TOTAL: 3 Q8 + 1 Q4). O smoke de
+   01/10 22:16 e' registrado a parte e NAO entra nesta matriz de 12.
+
+   TELEMETRIA: temperatura do aparelho subiu de 23.9 C (inicio) a 32.6 C
+   (fim do mais_longo), com tok/s caindo de 20.8->19.7 no mesmo bloco.
+   [HIPOTESE-NAO-ESTABELECIDA] nao houve telemetria continua nem PSS de
+   pico; nao atribuir a termica/drain como causa medida — e' correlacao
+   observada em amostras.
+
+   INSTRUMENTO (bloqueio resolvido, para registro): 5 tentativas com
+   diretorio preservado falharam por `input text` TRUNCAR fontes >~950 chars
+   (4 com ERRO registrado — campo 971/1244/965/1002 — e 1 interrompida no
+   meio; o mais_longo r3 nem chegou a rodar). Dirs: FALHA_INPUT_Q8_longo_r1/
+   r2/r3 e FALHA_INPUT_Q8_mais_longo_r1/r2 — sao evidencia, nao resultado.
+   As 6 rodadas faltantes (3 longo + 3 mais_longo) foram refeitas com a via
+   Intent: 6/6 VALIDAS (contagem por Python).
+
+   VEREDITO DA SECAO: 12/12 runs Q8 validos (matriz 4x3 completa) + 1
+   controle Q4. Nenhum resultado veio de leitura antiga: cada run tem
+   cadeia conjunta no log, sha de saida, maps e PSS/temperatura amostrados.
+H. ENTREGA
+  H1. ARQUIVOS DESTA RODADA (todos com sha256/tamanho no MANIFESTO verificado):
+   - docs/vulkan-hymt2-fusion-round/PROMPT-RELATORIO-RODADA-NOVA-2026-10-02.txt
+     (este relatorio A-H)
+   - docs/vulkan-hymt2-fusion-round/PROCEDIMENTOS-INSTRUMENTO-UI-2026-10-02.txt
+     (documentacao PROCEDURAL das rotas recuperadas: popup por frame+indice,
+     rota Intent `extra_texto --activity-single-top`, teclado/log, vacina de
+     frescor conjunta, taxonomia de sessao e campos de tempo — sem alteracao
+     de produto)
+   - docs/vulkan-hymt2-fusion-round/logs-rodada-nova/ (nova pasta de logs):
+     smoke_rodada_nova.log, completar12.log, completar6.log,
+     log_app_completo_smoke.txt, log_app_completo_final.txt,
+     ui_com_log_visivel.xml, ui_sem_keyboard.xml, ui_final.xml,
+     evidencia_apk.txt, estado_final.txt, check_shader_content.txt,
+     check_shader_content_fixtures.txt, rodada1_smoke_q8_final.log,
+     rodada1_smoke_q8_saida.txt, auditoria_reconciliada.json,
+     auditoria_reconciliada.csv
+   - MANIFESTO-RODADA-NOVA.json: gerado por script (gen_manifesto_v2.py) que
+     VERIFICA existencia/hash/tamanho por Python, deduplica e registra total
+     por grupo, com HARD ASSERT (falha se houver ausente/duplicado).
+     Resultado: 115 itens — entrega 2 (relatorio A-H + procedimentos),
+     logs 14, testes 5, instrumentos 8, runs 64 (record+output+delta+source+
+     log de cada run), apk 6, provas_referenciadas 12, fontes 4 — 0 ausentes,
+     0 duplicados; e re-verificacao Python item-a-item apos o ultimo doc
+     (hash/size/existencia/dedupe): 0 erros.
+     O manifesto e' registro (existencia/hash/tamanho); NAO e' o que valida a
+     conclusao — quem valida sao os artefatos por run + a auditoria.
+   - Artefatos por run em C:/Users/Gustavo/Desktop/hymt2/hymt2-app-rodada-nova/
+     (cada run: record.json, output.txt, delta.txt, source.txt, log.txt);
+     as 5 falhas de input preservadas em FALHA_INPUT_* (evidencia do limite
+     do `input text`, nao resultado).
+   - Testes no repo: native-dependencies/harness/check_shader_content.sh
+     (executado, PASS; agora com FIXTURES autocontidas em
+     native-dependencies/harness/fixtures/ + REFERENCIA.txt com hashes e o
+     passo de regeracao) e check_shader_dep.sh (pre-existente, PASS).
+     Integracao em CI NAO foi feita (aguarda consentimento).
+  H2. ESTADO FINAL VERIFICADO (arquivo logs-rodada-nova/estado_final.txt):
+   APK instalado = 9f42b744... — APK de DEBUG (loader 9; vc69/1.506; lastUpdate
+   01/10 22:12), NAO e' release promovida;
+   lib pasta 9 = 9698670c...; lib pasta 8 = 2a89c065... (intocada);
+   prefs = backend VULKAN / threads 6 / idioma Português (como estavam);
+   maps do processo final = native_dependencies/9-arm64-v8a + Hy-MT2-1.8B-Q8_0.gguf;
+   modelos presentes: 7 GGUF + arquivo-freio do F16; stayon revertido ao
+   default (mStayOn=false); nenhum arquivo de produto alterado nesta rodada;
+   NADA commitado/publicado; WIP preservado.
+   RESTAURACAO DE UI (pos-rodada): modelo final estava Q8_0 (da bateria);
+   restaurado para Q4_K_M (default de abertura) por leitura de popup com
+   confirmacao; backend/threads/idioma intactos; IDLE conferido (sem
+   traducao em andamento). O app NAO persiste o modelo — a restauracao e'
+   de UI apenas, e o estado inicial de qualquer abertura e' Q4_K_M.
+  H3. VEREDITO POR NATUREZA DA EVIDENCIA (o "parecer separado" pedido):
+   [MEDIDO] numeros de runtime do kernel (rodada anterior, reafirmados como
+     estao); tempos/tokens/sha/PSS/temperatura da bateria de hoje (secao G);
+     limite de ~950 chars do `input text`; dependencias de build.
+   [PROVA-VERIFICADA] signedness Q8_0 nos DOIS caminhos (canarios + blob
+     esperado aplicado: check_shader_content.sh PASS); isolamento A->B->A no
+     app (e426362d == e426362d); procedencia das libs/APKs (hashes de
+     artefato real + dex + maps); 12/12 runs Q8 validos com cadeia conjunta.
+   [HIPOTESE-NAO-ESTABELECIDA] causa da variacao de tempo entre runs
+     (termica/drain) — so' correlacao amostral; "~0.6%" do residuo MM NAO e'
+     norma universal (e' dos casos medidos).
+   [BLOQUEIO-INSTRUMENTO] nenhum bloqueio ABERTO: a entrada por Intent
+     resolveu os tamanhos grandes; o teclado/leitura de log foi explicado e
+     corrigido; a selecao de modelo por popup foi resolvida por frame+indice.
+     Historico de bloqueios da rodada: `input text` >950 chars (resolvido),
+     leitura de log com teclado aberto (resolvido), popup fora do AX
+     (resolvido).
+  H4. O QUE NAO FOI FEITO / AGUARDA CONSENTIMENTO: nenhum novo APK/.so/deploy;
+   nenhuma persistencia de modelo no produto; nenhum commit; nenhuma
+   alteracao de default/precisao (DEFAULT mantido); CI nao alterado (so' os
+   2 scripts no harness, que sao testes, nao pipeline).

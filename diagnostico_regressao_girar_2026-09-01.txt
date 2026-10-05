@@ -1,0 +1,567 @@
+================================================================================
+DIAGNOSTICO DE REGRESSAO - FALHA INTERMITENTE NO GIRAR VIDEO COM REENCODE
+================================================================================
+Projeto:     D:\Projetos\SIG
+Ferramenta:  Girar Video (FfmpegRotateVideoActivity.kt, 1980 linhas)
+Data:        2026-09-01
+Tipo:        Diagnostico apenas - NENHUM ARQUIVO DO PROJETO FOI MODIFICADO
+HEAD:        135d35a "Versao 20260831_001: correcoes das ferramentas FFmpeg"
+================================================================================
+
+NOVOS FATOS INFORMADOS PELO USUARIO (esta rodada)
+-------------------------------------------------
+  F1. O problema acontece independente de o player estar parado ou rodando.
+  F2. Uma execucao pode falhar e a proxima, 1 segundo depois, pode funcionar.
+  F3. "E mais uma coisa que antigamente funcionava e quebrou nas ultimas
+      baterias de correcoes."
+
+F1 DESCARTA qualquer hipotese ligada a Surface/player/MediaPlayer (H-original).
+F2 e a assinatura classica de RECURSO QUE AINDA NAO FOI LIBERADO: 1 segundo
+basta para o sistema recolher o recurso, entao a proxima tentativa passa.
+F3 transforma o problema de "bug de dispositivo" em REGRESSAO DE CODIGO.
+
+
+================================================================================
+(1) O QUE MUDOU: A ARQUEOLOGIA DO GIT
+================================================================================
+
+HEAD e 135d35a, MAS EXISTEM MUDANCAS NAO COMMITADAS NA ARVORE DE TRABALHO.
+E ai que esta a regressao.
+
+  git status --short
+    M  app/.../FfmpegRotateVideoActivity.kt      <-- 93 insercoes / 15 delecoes
+    M  app/.../FfmpegVideoQuality.kt
+    M  app/.../FfmpegCutActivity.kt
+    M  app/.../FfmpegJoinVideosActivity.kt
+    M  app/.../FfmpegMediaPolicies.kt
+    ?? app/.../FfmpegOutputRemuxer.kt            <-- ARQUIVO NOVO, NAO VERSIONADO
+
+O commit anterior que tocou Rotate (ca20f59 "fix(ffmpeg): close media tool
+regressions") mexeu em apenas 44 linhas do arquivo (refactor de videoTrackProbe
++ dialog de container de metadados + updateMetadataModeState()). NAO mexeu no
+pipeline. Portanto a regressao NAO veio de ca20f59: veio do diff nao commitado.
+
+--------------------------------------------------------------------------------
+1.1 O PIPELINE ANTIGO (o que "antigamente funcionava")
+--------------------------------------------------------------------------------
+
+  [1 sessao FFmpeg]
+  -i entrada -vf <filtros> -c copy -c:v h264_mediacodec -b:v N  -> saida final
+
+Uma unica sessao. Uma unica aquisicao de instancia MediaCodec por operacao.
+O resultado da operacao era lido direto dessa sessao.
+
+--------------------------------------------------------------------------------
+1.2 O PIPELINE NOVO (nao commitado)
+--------------------------------------------------------------------------------
+
+  Helpers novos:
+    isMediaCodecEncoder()       FfmpegRotateVideoActivity.kt:1410
+    rotationEncodingOutput()    FfmpegRotateVideoActivity.kt:1413
+    remuxRotationOutput()       FfmpegRotateVideoActivity.kt:1419
+    FfmpegOutputRemuxer         ARQUIVO NOVO (nao versionado)
+
+  SEQUENCIAL (sem paralelismo, sem metadados), encoder MediaCodec:
+
+    (a) PROBE   detectVideoBitrate()            :1379  -> processo FFmpeg completo
+    (b) PROBE   detectCurrentMetadataRotation() :1380  -> processo FFmpeg completo
+    (c) EXTRACT recommendedGopSize()            :1395  -> MediaExtractor
+    (d) SESAO 1 encode para cacheDir/rotate_encoded_<millis>.ts
+                 com -f mpegts -mpegts_flags +resend_headers      (:1402)
+    (e) SESAO 2 remuxRotationOutput(): .ts -> <saida>.mkv  (-c copy)  (:1419)
+    (f) SESAO 3 FfmpegOutputRemuxer.remuxToOriginalContainer():
+                 .mkv -> .mp4 (-c copy +faststart)   (executeRotation :~700)
+
+  PARALELO, encoder MediaCodec (workerCount = nucleos - 1, padrao):
+
+    (a) PROBE   detectVideoBitrate()            :838
+    (b) PROBE   detectCurrentMetadataRotation() :840
+    (c) EXTRACT recommendedGopSize()            :839
+    (d) N SESOES simultaneas, cada uma -> rotated/rotated_NNNNN.ts
+                 (antes eram .mkv; trocado no diff nao commitado, :962)
+    (e) SESAO   concat (-f concat -c copy) -> <saida>.mkv          (:1067)
+    (f) SESAO   FfmpegOutputRemuxer -> .mp4                        (:~700)
+    (g) SE (d)/(e) falharem: FALLBACK SEQUENCIAL IMEDIATO, que repete
+                 (d)+(e) do fluxo sequencial - ou seja, MAIS sessoes
+                 MediaCodec disparadas na mesma operacao.
+
+--------------------------------------------------------------------------------
+1.3 O NUMERO QUE EXPLICA A REGRESSAO
+--------------------------------------------------------------------------------
+
+                                    ANTES        DEPOIS
+  Sessoes FFmpeg (sequencial)         1             3
+  Sessoes FFmpeg (paralelo, N)        N+1          N+2
+  Sessoes FFmpeg (paralelo+fallback) N+1        N+2+2 = N+4
+  Processos FFmpeg de probe            2             2 (sequencial) / 2 (paralelo)
+  Aquisicoes MediaCodec por operacao   1             1 (seq) ou N (paralelo) + fallback
+
+O ponto critico NAO e o numero absoluto: e que agora ha TRES pontos distintos
+onde uma falha e reportada como "Nao consegui girar o video", e o veredito
+final deixou de ser lido da sessao de encode.
+
+  executeRotation, sequencial:
+      val session = if (isMediaCodecEncoder(encoder) && isSuccess(encode))
+                        remuxRotationOutput(...)   // sessao 2
+                    else encodeSession
+      success = isSuccess(session.returnCode) && tempOutput.exists() && length > 0
+
+  Ou seja: SE O ENCODE FUNCIONOU MAS O REMUX FALHAR, O USUARIO VE
+  "Nao consegui girar o video", SENDO QUE O VIDEO FOI GIRADO COM SUCESSO.
+  Antes, nao existia essa etapa - e portanto nao existia essa classe de falha.
+
+E tem mais: FfmpegOutputRemuxer.remuxToOriginalContainer() faz
+    output.delete()
+  ANTES de rodar o FFmpeg do remux. Se o arquivo de destino ja existir
+  (execucao repetida sobre o mesmo nome), o arquivo bom e apagado primeiro;
+  se o remux falhar em seguida, o trabalho anterior se perde.
+
+
+================================================================================
+(2) A PISTA DECISIVA: "Conversion failed!" SEM MAIS NADA
+================================================================================
+
+A mensagem exibida e montada em executeRotation:
+
+    tracker.fail("Nao consegui girar o video. ${result.failureMessage}")
+
+e failureMessage vem de FfmpegVideoQuality.ffmpegFailureDetails() (funcao
+NOVA, nao commitada). Essa funcao NAO devolve uma linha: ela devolve
+
+    (linhas com error|failed|invalid|not supported|exception).takeLast(8)
+    + ultimas 10 linhas do log
+    -> distinct -> join("\n") -> take(1500 caracteres)
+
+Se o log do FFmpeg contivesse a causa real, ela apareceria ai. O print mostra
+APENAS "Conversion failed!". Logo:
+
+  >> O LOG DO FFmpeg ESTAVA PRATICAMENTE VAZIO QUANDO O PROCESSO MORREU. <<
+
+Isso e importantissimo porque SEPARA as hipoteses:
+
+  - Uma rejeicao limpa do MediaCodec SEMPRE loga. Exemplos tipicos:
+      "Error initializing output stream ..."
+      "MediaCodec configure failed"
+      "No supported color format"
+    Como nada disso apareceu, a falha NAO foi uma rejeicao de capacidade
+    do encoder. A hipotese "h264_mediacodec nao suporta a resolucao" fica
+    ENFRAQUECIDA como causa da intermitencia.
+
+  - Um processo MORTO POR FORA (arquivo arrancado, kill, IO abortado)
+    produz exatamente esse padrao: meia duzia de linhas e "Conversion failed!".
+
+Isso aponta direto para as hipoteses H1 e H4 abaixo.
+
+
+================================================================================
+(3) HIPOTESES ORDENADAS POR PROBABILIDADE
+================================================================================
+
+--------------------------------------------------------------------------------
+H1 - (~40%) RACE ENTRE O FIM DAS SESSOES E A DELECAO DOS ARQUIVOS
+            + INSTANCIAS MediaCodec AINDA NAO LIBERADAS
+--------------------------------------------------------------------------------
+Onde: executeParallelKeyframeRotation, linhas 1000-1042 e finally 1092-1096.
+
+  1000  FFmpegKit.executeWithArgumentsAsync(
+  1001      segmentArguments,
+  1002      { s -> finalSession = s; latch.countDown() },   // callback de fim
+  ...
+  1017  latch.await()          // <- libera o worker assim que o callback roda
+  ...
+  1040  futures.forEach { it.get() }
+  1041  executor.shutdown()               // SEM awaitTermination()
+  1042  ffmpegSessionExecutor.shutdown()  // SEM awaitTermination()
+  ...
+  1092  finally {
+  ...
+  1096      workDir.deleteRecursively()   // apaga os .ts e segments/
+
+Mecanismo:
+  O countdown do latch dispara no callback de conclusao do FFmpegKit, que e
+  um sinal de "sessao concluida" - nao de "processo nativo encerrado e
+  MediaCodec liberado". shutdown() sem awaitTermination() NAO espera as
+  tarefas que ainda estao na fila do ffmpegSessionExecutor.
+
+  Quando alguma sessao ainda esta em voo (a mais lenta, ou uma que o callback
+  ainda nao disparou), workDir.deleteRecursively() ARRANCA OS ARQUIVOS .ts de
+  baixo do FFmpeg que ainda esta escrevendo. Esse FFmpeg morre com erro de IO,
+  quase sem log -> exatamente "Conversion failed!".
+
+  Em seguida executeRotation roda o FALLBACK SEQUENCIAL IMEDIATAMENTE, abrindo
+  mais uma instancia MediaCodec enquanto as N instancias do paralelo ainda
+  estao sendo recolhidas pelo sistema.
+
+Como isso gera intermitencia:
+  Depende de QUAL trecho termina por ultimo e de quantos milissegundos o
+  coletor de recursos do Android leva. Na maioria das vezes todos terminam a
+  tempo e funciona. Quando um trecho atrasa (GC, troca de contexto, decodificador
+  lento em um trecho com mais quadros), o apagamento chega primeiro -> falha.
+
+Por que casa com F1 e F2:
+  F1: nada disso envolve player/Surface. 100% independente.
+  F2: 1 segundo depois, as instancias MediaCodec ja foram recolhidas e os
+      arquivos temporarios da execucao anterior ja sumiram -> funciona.
+
+Como confirmar:
+  1. adb logcat | grep -i "mediacodec\|OMX\|CodecException\|deleteRecursively"
+     Procurar por "CodecException", "Insufficient resources",
+     "max instances", ou erros de IO em arquivo inexistente.
+  2. Rodar com o paralelismo DESLIGADO 20 vezes.
+     -> Se nunca falhar: H1 (via paralelo) confirmada.
+     -> Se ainda falhar: H1 via paralelo descartada, ir para H3/H5.
+  3. Rodar com paralelismo LIGADO mas "Trechos" = 1.
+     -> Se nunca falhar: confirma que e concorrencia de instancias.
+
+Como descartar:
+  Se com paralelismo ligado e workerCount = 1 ainda falhar NA MESMA taxa,
+  a causa nao e concorrencia de instancias -> H3/H5 sobem.
+
+--------------------------------------------------------------------------------
+H2 - (~20%) FALTA DE ORCAMENTO DE INSTANCIAS: O APP SABE O LIMITE
+            E NAO O RESPEITA
+--------------------------------------------------------------------------------
+Onde: FfmpegVideoEncoderRegistry.advertisedMaxInstances (linhas 62-91) existe
+      e le maxSupportedInstances do MediaCodecList.
+
+      MAS: a unica referencia no Rotate esta em showParallelSegmentsHelp(),
+      linha 1312 - ou seja, o limite e usado SOMENTE PARA ESCREVER UM TEXTO
+      DE AJUDA NA TELA. Nunca limita workerCount nem o numero de sessoes.
+
+      workerCount (linha 947):
+        minOf(requestedSegmentCount ?: defaultWorkerCount, segments.size)
+        defaultWorkerCount = availableProcessors() - 1
+
+Mecanismo:
+  Num aparelho de 8 nucleos, defaultWorkerCount = 7. Se o limite real do
+  MediaCodec for 8 (comum para video/avc), 7 sessoes simultaneas deixa o
+  processo COLADO no teto. Qualquer outra coisa no sistema usando codec
+  (o player do proprio app, notificacao com video, outra aba) estoura o teto.
+  O MediaCodec.configure() entao falha - mas como dito em (2), isso costuma
+  logar. A variante silenciosa e o FFmpeg morrer sem mensagem.
+
+Como isso gera intermitencia:
+  O teto e COMPARTILHADO com outros processos do sistema. A margem disponivel
+  muda de segundo para segundo.
+
+Por que casa com F2:
+  "falha agora, funciona 1s depois" e literalmente a descricao de um recurso
+  compartilhado que foi liberado nesse intervalo.
+
+Como confirmar:
+  1. Rodar `adb shell dumpsys media.codec` logo apos uma falha e contar as
+     instancias ativas de "video/avc" / "OMX.qcom.video.encoder.avc".
+  2. No app, abrir a ajuda de "Trechos" e anotar o numero que aparece em
+     "O limite de seu dispositivo parece ser N processos simultaneos".
+     Comparar com defaultWorkerCount (nucleos - 1).
+  3. Rodar 20 vezes com "Trechos" = 2 e comparar a taxa de falha com o padrao.
+
+--------------------------------------------------------------------------------
+H3 - (~20%) MPEG-TS INTERMEDIARIO: OFFSET DE 1.4s + CONCAT + REMUX
+--------------------------------------------------------------------------------
+Onde: buildFfmpegArguments :1402-1405 e buildSegmentRotationArguments :1206-1208
+      (ambos trecho NOVO, nao commitado):
+
+        if (outputFile.extension.equals("ts")) {
+            addAll(listOf("-mpegts_flags", "+resend_headers", "-f", "mpegts"))
+        }
+
+      remuxRotationOutput :1419  ->  -i .ts -map 0 -c copy -map_metadata 0
+                                     -map_chapters 0 -avoid_negative_ts make_zero
+      concat :1067                ->  -f concat -safe 0 -c copy
+                                     -avoid_negative_ts make_zero
+
+Mecanismo:
+  O muxer mpegts do FFmpeg aplica um offset padrao de +1.4s em PTS/DTS
+  (-output_ts_offset). Cada trecho .ts comeca em ~1.4s, nao em 0.
+  O demuxer concat espera trechos com timestamps monotonicos e contiguos.
+  Com N trechos todos comecando em 1.4s, o resultado depende de ONDE o
+  encoder colocou o primeiro IDR de cada trecho - e isso varia por execucao.
+
+  No caminho sequencial, remuxRotationOutput faz .ts -> .mkv com -c copy.
+  O make_zero desloca pelo primeiro pacote; com o offset de 1.4s do TS e
+  possivel o primeiro PTS ficar negativo em relacao ao DTS se o encoder
+  emitir B-frames (open GOP). O muxer MKV rejeita -> remux falha ->
+  executeRotation reporta "Nao consegui girar o video" MESMO O ENCODE
+  TENDO SIDO BEM SUCEDIDO.
+
+Como isso gera intermitencia:
+  Se o MediaCodec emitir ou nao B-frames/open-GOP em uma dada execucao
+  depende do estado interno do codec, que varia. Da mesma forma, a posicao
+  do primeiro keyframe de cada trecho varia.
+
+Como confirmar:
+  1. Rodar a MESMA operacao 10x e coletar os logs. Se a falha aparecer
+     sempre na etapa "Juntando video final" ou na etapa
+     "Convertendo para o formato original" (e nunca em "Girando trecho N"),
+     H3 confirmada.
+  2. Guardar o .ts intermediario (desativar temporariamente a delecao) e
+     rodar:
+        ffprobe -show_packets -select_streams v -read_intervals "%+#3" arq.ts
+     Verificar se o primeiro PTS comeca em ~1.4s.
+  3. Testar com -c:v libx264: se NUNCA falhar, o problema e especifico do
+     caminho MediaCodec -> .ts, o que fecha H3 + H1 juntos.
+
+--------------------------------------------------------------------------------
+H4 - (~10%) CONTAGEM DE TRECHOS SEM CHECAGEM DE TAMANHO
+--------------------------------------------------------------------------------
+Onde: :1053-1059
+
+        val rotatedSegments = rotatedDir.listFiles {
+            file -> file.extension.equals(rotatedExtension, ignoreCase = true)
+        }?.sortedBy { it.name }.orEmpty()
+        if (rotatedSegments.size != segments.size) {
+            return RotationExecutionResult(false, false,
+                "Nem todos os trechos foram processados.", ...)
+        }
+
+Mecanismo:
+  Aqui NAO ha a checagem `length() > 0` que existe na verificacao individual
+  do trecho (:1021). Um .ts de 0 bytes, ou parcialmente escrito, conta como
+  "processado". O concat entao recebe um arquivo truncado e pode falhar - ou
+  produzir um arquivo final corrompido.
+
+  Alem disso, File.listFiles() no Android pode devolver entradas desatualizadas
+  quando o diretorio acabou de ser escrito por N processos concorrentes.
+
+Como isso gera intermitencia:
+  Race de flush de diretorio: depende de timing puro.
+
+Como confirmar:
+  Logar nome + tamanho de cada arquivo listado em :1053 e comparar com o
+  tamanho checado em :1021. Divergencia = H4 confirmada.
+
+--------------------------------------------------------------------------------
+H5 - (~7%) recommendedGopSize() INSTAVEL -> -g DIFERENTE ENTRE EXECUCOES
+--------------------------------------------------------------------------------
+Onde: recommendedGopSize :1109-1129, chamado em :1395 (sequencial) e :839
+      (paralelo, uma vez, valor compartilhado por todos os trechos).
+
+        val frameRate = videoFormat
+            ?.takeIf { it.containsKey(KEY_FRAME_RATE) }
+            ?.getInteger(KEY_FRAME_RATE)?.coerceIn(1, 120) ?: 30
+        (frameRate * 2).coerceAtLeast(frameRate)
+      ... catch (_: Throwable) { 60 }
+
+Mecanismo:
+  KEY_FRAME_RATE e ausente em boa parte dos MP4 de celular (ela vive no CSD,
+  nao no container). Quando ausente -> 30 -> -g 60. No arquivo da audiencia
+  (16 fps) -> -g 32, que e exatamente o valor do print. Ou seja, para aquele
+  arquivo a leitura funcionou.
+
+  MAS: o arquivo passado para recommendedGopSize e o que acabou de ser escrito
+  por copyUriToCache(). Se o MediaExtractor.setDataSource() falhar por o
+  arquivo ainda estar em flush, o catch devolve 60 em vez de 32. Resultado:
+  -g 32 numa execucao, -g 60 na seguinte, para o MESMO video.
+
+Como isso gera intermitencia:
+  Configuracao de encoder diferente entre execucoes identicas.
+
+Como confirmar:
+  Logar o valor retornado por recommendedGopSize em toda execucao e comparar
+  com o -g da linha de comando exibida. Se variar para o mesmo arquivo,
+  H5 confirmada.
+
+--------------------------------------------------------------------------------
+H6 - (~3%) PROBES COM PROCESSOS FFmpeg COMPLETOS, CHAMADOS MULTIPLAS VEZES
+--------------------------------------------------------------------------------
+Onde: detectVideoBitrate :1495 e detectCurrentMetadataRotation :1579.
+      Cada uma executa:
+          FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", file))
+      ou seja, um fork/exec de processo inteiro so para ler uma linha.
+
+  Chamadas por execucao:
+    sequencial: detectVideoBitrate(:1379) + detectCurrentMetadataRotation(:1380)
+    paralelo:   detectVideoBitrate(:838)  + detectCurrentMetadataRotation(:840)
+    metadados:  detectCurrentMetadataRotation(:599)
+
+Mecanismo:
+  Sob pressao de memoria/processos, o log capturado pode vir truncado.
+  - detectCurrentMetadataRotation devolve 0 em vez de 180 -> sourceRotationFilters
+    fica VAZIO -> a cadeia de filtros muda de "hflip,vflip,transpose=2" para
+    apenas "transpose=2" (foi exatamente "hflip,vflip,transpose=2" que
+    apareceu no print, entao nessa execucao a leitura acertou 180).
+  - detectVideoBitrate devolve FALLBACK_VIDEO_BITRATE -> -b:v diferente.
+
+  Mudanca de filtro muda a resolucao de saida, o que muda a configuracao do
+  MediaCodec -> falha em uma execucao, sucesso na seguinte.
+
+Como confirmar:
+  Logar o retorno de detectCurrentMetadataRotation e a cadeia de filtros
+  (physicalFilters, :1382) em toda execucao. Se variar para o mesmo arquivo,
+  H6 confirmada.
+
+--------------------------------------------------------------------------------
+DESCARTADAS PELA NOVA INFORMACAO
+--------------------------------------------------------------------------------
+  - Estado do player / Surface / MediaPlayer  -> descartada por F1.
+  - Rejeicao limpa de capacidade do encoder   -> enfraquecida pelo log vazio
+    em (2): MediaCodec sempre loga quando rejeita.
+  - Colisao de nomes de temporarios entre execucoes: workDir usa
+    System.currentTimeMillis() (:836) e rotationEncodingOutput tambem (:1415).
+    Colisao exigiria duas execucoes no mesmo milissegundo -> improvavel.
+
+
+================================================================================
+(4) ROTEIRO DE TESTE PARA REPRODUCAO DETERMINISTICA
+================================================================================
+
+T0 - PREPARACAO (uma vez)
+  - Usar SEMPRE o mesmo arquivo: audiencia_143664636_1_V.mp4
+    (1920x1080, h264 Constrained Baseline, yuv420p, 16 fps, 1002 kb/s,
+     aac mono 16 kHz; tem displaymatrix de 180 graus).
+  - Anotar: numero de nucleos, limite exibido na ajuda de "Trechos",
+    modelo do aparelho, versao do Android.
+  - Capturar tudo:
+        adb logcat -c
+        adb logcat -v time | grep -i "ffmpeg\|mediacodec\|OMX\|rotate\|Codec"
+
+T1 - ISOLAR O PARALELISMO (separa H1/H2 de H3/H5/H6)
+  - Paralelismo DESLIGADO. Rodar 20x. Anotar quantas falham.
+  - Paralelismo LIGADO, Trechos = 1. Rodar 20x.
+  - Paralelismo LIGADO, Trechos = 2. Rodar 20x.
+  - Paralelismo LIGADO, padrao. Rodar 20x.
+
+  Leitura esperada:
+    so falha com paralelismo     -> H1 ou H2
+    falha tambem sem paralelismo -> H3, H5 ou H6
+
+T2 - ISOLAR O ENCODER (separa MediaCodec de CPU)
+  - Paralelismo DESLIGADO, encoder libx264. Rodar 20x.
+  - Paralelismo LIGADO, encoder libx264. Rodar 20x.
+
+  Leitura esperada:
+    libx264 nunca falha, mediacodec falha -> caminho .ts + instancias
+    (H1 + H3). O .ts so e usado quando isMediaCodecEncoder() e verdadeiro
+    (:962 e :1413), entao se libx264 nunca falhar isso fecha o cerco.
+
+T3 - ISOLAR A ETAPA QUE FALHA (separa H3 das outras)
+  - Anotar em qual tarefa a barra de progresso parou:
+      "Girando trecho N"                 -> falha no encode (H1, H2, H5)
+      "Juntando video final"             -> falha no concat (H3, H4)
+      "Convertendo para o formato original" -> falha no remux final (H3)
+      "Girando video" sem etapas         -> falha no remuxRotationOutput (H3)
+  - Se a falha aparecer DEPOIS de um progresso de 100% no encode, H3 e
+    praticamente certa: o video foi girado, quem morreu foi o remux.
+
+T4 - MEDIR O LOG (confirma ou derruba a leitura de (2))
+  - Salvar session.allLogsAsString COMPLETO em arquivo a cada falha
+    (ja existe saveParallelFailureDiagnostic para o paralelo; falta o
+    equivalente para o sequencial).
+  - Se o log completo tambem for quase vazio -> processo morto por fora
+    (H1). Se o log completo tiver a causa e so o resumo aparecer vazio,
+    o bug esta em ffmpegFailureDetails().
+
+T5 - TESTE DO "1 SEGUNDO DEPOIS" (confirma H1/H2)
+  - Ao falhar, aguardar exatamente 1s e repetir. Anotar quantas vezes a
+    segunda tentativa passa. Se passar em >80%, e libertacao de recurso.
+  - Variante: ao falhar, aguardar 10s e repetir. Se a taxa de sucesso subir
+    ainda mais, reforca H1/H2.
+
+T6 - TESTE DE CARGA DE CODEC (confirma H2)
+  - Com o app aberto, iniciar a reproducao de um video em outra aba e rodar
+    o girar. Se a taxa de falha SUBIR muito, e teto de instancias (H2).
+
+T7 - CONGELAR AS VARIAVEIS (elimina H5/H6)
+  - Instrumentar (sem alterar logica, so log) os valores por execucao:
+      recommendedGopSize -> valor e -g resultante
+      detectCurrentMetadataRotation -> graus detectados
+      physicalFilters -> cadeia final
+      detectVideoBitrate -> bitrate e -b:v resultante
+  - Rodar 20x no mesmo arquivo. Qualquer variacao = nao-determinismo de
+    configuracao, que por si so ja explica a intermitencia.
+
+T8 - VERIFICAR O ESTADO DO SISTEMA NO MOMENTO DA FALHA
+  - Imediatamente apos uma falha:
+        adb shell dumpsys media.codec
+        adb shell cat /proc/$(pidof br.gov.sp.pcsp)/status | grep -i threads
+  - Contar instancias de encoder ativas. Se estiver no teto ou acima, H2.
+
+
+================================================================================
+(5) O QUE AINDA FALTA PARA FECHAR O DIAGNOSTICO
+================================================================================
+
+  1. O LOG COMPLETO do FFmpeg da execucao que falhou (nao o resumo de
+     1500 caracteres). E a peca que separa H1 de H3.
+     Onde obter: saveParallelFailureDiagnostic() ja grava no paralelo;
+     no sequencial ainda nao ha equivalente.
+
+  2. EM QUAL ETAPA a barra de progresso parou (T3). Uma frase ja resolve:
+     "parou em Juntando video final" vs "parou em Girando trecho 3".
+
+  3. Resultado de T1 e T2 (taxa de falha por combinacao
+     paralelismo x encoder). Sem isso as probabilidades continuam sendo
+     estimativas.
+
+  4. O numero que aparece na ajuda de "Trechos"
+     ("O limite de seu dispositivo parece ser N processos simultaneos")
+     e o numero de nucleos do aparelho.
+
+  5. O conteudo do diretorio cacheDir/rotate_parallel_<millis>/rotated/
+     logo apos uma falha (nomes e tamanhos) - confirma ou derruba H4.
+     Nota: esse diretorio e apagado por workDir.deleteRecursively() no
+     finally (:1096), entao e preciso capturar antes do finally rodar.
+
+  6. Confirmar se o arquivo da audiencia e o unico que falha ou se a falha
+     acontece com qualquer video. Se for so esse, H5/H6 ganham peso
+     (KEY_FRAME_RATE de 16 fps e displaymatrix de 180 graus).
+
+
+================================================================================
+(6) DIRECAO DE CORRECAO (NAO APLICADA - DIAGNOSTICO APENAS)
+================================================================================
+
+Ordem sugerida, da mais barata para a mais estrutural:
+
+  1. Sincronizacao do paralelo (H1)
+     - trocar executor.shutdown() / ffmpegSessionExecutor.shutdown()
+       por shutdown() + awaitTermination(30, SECONDS) (:1041-1042)
+     - mover workDir.deleteRecursively() para DEPOIS do awaitTermination
+     - considerar remover workDir.deleteRecursively() do finally e limpar
+       apenas na proxima execucao ou no onDestroy
+
+  2. Respeitar o teto de instancias (H2)
+     - usar FfmpegVideoEncoderRegistry.advertisedMaxInstances para LIMITAR
+       workerCount (:947), nao apenas para escrever texto de ajuda (:1312)
+     - sugestao: min(advertisedLimit - 1, defaultWorkerCount)
+
+  3. Separar veredito de encode de veredito de remux (H3)
+     - em executeRotation, o success do encode deve ser preservado
+       independentemente do remux; se o remux falhar, manter o MKV
+       (FfmpegOutputRemuxer ja devolve converted=false e preserva o arquivo,
+       o problema e o fluxo chamar isso de falha de rotacao)
+     - nunca chamar output.delete() antes de saber que o remux funcionou
+       (FfmpegOutputRemuxer.remuxToOriginalContainer)
+
+  4. Corrigir o offset do TS (H3)
+     - adicionar -output_ts_offset 0 (ou -muxdelay 0 -muxpreload 0) nos
+       argumentos mpegts, em :1402 e :1206
+     - avaliar -copyts ou usar -fflags +genpts no remux .ts -> .mkv
+
+  5. Checar tamanho na contagem de trechos (H4)
+     - em :1053, filtrar tambem por length() > 0
+
+  6. Tornar os probes determinísticos (H5, H6)
+     - substituir recommendedGopSize por uma leitura unica de ffprobe
+       feita uma vez e propagada
+     - cachear detectVideoBitrate e detectCurrentMetadataRotation por
+       caminho de arquivo dentro da mesma execucao (hoje cada um pode
+       rodar 2x ou mais)
+     - tratar falha de probe como erro explicito, nao como valor padrao
+       silencioso (0 graus / bitrate fallback)
+
+  7. Reavaliar se o .ts intermediario e necessario
+     - o pipeline antigo escrevia direto no container final com 1 sessao.
+       O .ts foi introduzido para contornar limitacoes do MediaCodec com
+       MKV, mas custou 2 sessoes extras e 2 remuxes por operacao.
+       Vale testar -c:v mediacodec direto em MP4 com
+       -pix_fmt yuv420p -bf 0 -g N -flags +cgop antes de manter o .ts.
+
+OBSERVACAO FINAL: os itens 1 e 2 sao os unicos que explicam simultaneamente
+F1 (independente do player) e F2 (funciona 1 segundo depois). Se o objetivo
+for estancar a intermitencia com o menor risco, comecar por eles.
+
+================================================================================
+FIM - NENHUM ARQUIVO DO PROJETO FOI MODIFICADO
+================================================================================

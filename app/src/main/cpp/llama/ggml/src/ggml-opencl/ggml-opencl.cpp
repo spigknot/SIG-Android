@@ -46,6 +46,131 @@ typedef const void * (*get_adreno_bin_kernel_func_t)(
 #include <memory>
 #include <charconv>
 #include <mutex>
+#include <atomic>
+#include <chrono>
+#include <sys/system_properties.h>
+
+// DIAG (rodada F2b / diag3, 02/10): instrumenta as escritas
+// clEnqueueWriteBuffer do caminho de upload (host->device) sem alterar a
+// semantica. As chamadas do arquivo passam a usar DGW().
+// F3 (diag4): chave `debug.sig.hymt2.nonblock_writes` faz as escritas saírem
+// NAO-BLOQUEANTES (CL_FALSE). A fila e' IN-ORDER (props=0, linha ~6007):
+// toda leitura/kernel posterior na mesma fila e' ordenado apos a escrita,
+// e a fonte (`data`) e' o mmap do GGUF, valido durante a carga.
+static std::atomic<long long> g_diag_enq_us{0};
+
+// SIG PROF (F12): micro-instrumento do backend OpenCL — opt-in (default OFF).
+// graph_compute total (loop de nos) x span das chamadas de enqueue por op.
+// PROF (F13): tempo por NO agregado por tipo de op (localiza rotas dominantes
+// de setup no caminho de op). Opt-in junto com schedprof.
+static long long g_sig_perop_us[128] = {0};
+static long long g_sig_perop_n[128]  = {0};
+extern "C" long long sig_sched_perop_us(int op) { return (op >= 0 && op < 128) ? g_sig_perop_us[op] : 0; }
+extern "C" long long sig_sched_perop_n(int op)  { return (op >= 0 && op < 128) ? g_sig_perop_n[op] : 0; }
+// F17: reset SO dos contadores por-op (o snapshot pos-prefill chama este
+// reset para o topops medir APENAS a fase decode, como no F14).
+extern "C" void sig_sched_perop_reset(void) { for (int i = 0; i < 128; ++i) { g_sig_perop_us[i] = 0; g_sig_perop_n[i] = 0; } }
+
+static int g_sig_sched_enabled = 0;
+static long long g_sig_graph_us = 0, g_sig_enq_us = 0, g_sig_nodes = 0, g_sig_enq_n = 0;
+extern "C" void sig_sched_set_enabled(int on) { g_sig_sched_enabled = on; }
+extern "C" void sig_sched_reset(void) {
+    g_sig_graph_us = g_sig_enq_us = 0; g_sig_nodes = g_sig_enq_n = 0;
+    for (int i = 0; i < 128; ++i) { g_sig_perop_us[i] = 0; g_sig_perop_n[i] = 0; }
+}
+extern "C" long long sig_sched_graph_us(void) { return g_sig_graph_us; }
+extern "C" long long sig_sched_enq_us(void)   { return g_sig_enq_us; }
+extern "C" long long sig_sched_nodes(void)    { return g_sig_nodes; }
+extern "C" long long sig_sched_enq_n(void)    { return g_sig_enq_n; }
+static std::atomic<long long> g_diag_enq_calls{0};
+static std::atomic<int> g_diag_nb_mode{-1};
+static std::atomic<long long> g_diag_sb_us{0};
+static std::atomic<long long> g_diag_sb_calls{0};
+static inline cl_mem DSB(cl_mem buffer, cl_mem_flags flags, cl_buffer_create_type t,
+                         const void * info, cl_int * err) {
+    const auto t0 = std::chrono::steady_clock::now();
+    cl_mem m = clCreateSubBuffer(buffer, flags, t, info, err);
+    g_diag_sb_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - t0).count();
+    g_diag_sb_calls += 1;
+    return m;
+}
+static inline cl_int DGW(cl_command_queue q, cl_mem b, cl_bool blocking, size_t off,
+                         size_t sz, const void * p, cl_uint nw, const cl_event * wl, cl_event * ev) {
+    int nb = g_diag_nb_mode.load(std::memory_order_relaxed);
+    if (nb < 0) {
+        char v[8] = {0};
+        __system_property_get("debug.sig.hymt2.nonblock_writes", v);
+        nb = (v[0] == '1') ? 1 : 0;
+        g_diag_nb_mode.store(nb, std::memory_order_relaxed);
+    }
+    if (nb) blocking = CL_FALSE;
+    const auto t0 = std::chrono::steady_clock::now();
+    cl_int e = clEnqueueWriteBuffer(q, b, blocking, off, sz, p, nw, wl, ev);
+    g_diag_enq_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - t0).count();
+    g_diag_enq_calls += 1;
+    return e;
+}
+
+// DIAG (F3c, 02/10): libera o buffer temporario (data_device) SEM bloquear o
+// host: o par wait+release e' adiado e drenado quando o evento COMPLETA
+// (clGetEventInfo), mantendo a seguranca (nunca se libera memoria em uso).
+// Fila IN-ORDER continua garantindo a ordem; default OFF (chave de runtime).
+static std::atomic<int> g_diag_dfr_mode{-1};
+static std::vector<std::pair<cl_event, cl_mem>> g_diag_pending;
+static inline bool diag_defer_on(void) {
+    int m = g_diag_dfr_mode.load(std::memory_order_relaxed);
+    if (m < 0) {
+        char v[8] = {0};
+        __system_property_get("debug.sig.hymt2.defer_release", v);
+        m = (v[0] == '1') ? 1 : 0;
+        g_diag_dfr_mode.store(m, std::memory_order_relaxed);
+    }
+    return m == 1;
+}
+static inline void diag_drain_pending(bool all) {
+    for (size_t i = 0; i < g_diag_pending.size(); ) {
+        cl_int st = CL_QUEUED;
+        clGetEventInfo(g_diag_pending[i].first, CL_EVENT_COMMAND_EXECUTION_STATUS,
+                       sizeof(st), &st, NULL);
+        if (all || st == CL_COMPLETE) {
+            clReleaseEvent(g_diag_pending[i].first);
+            clReleaseMemObject(g_diag_pending[i].second);
+            g_diag_pending.erase(g_diag_pending.begin() + i);
+        } else {
+            ++i;
+        }
+    }
+}
+
+// F3b (prod, 02/10): guarda do modo non-blocking (ver versao minima em
+// scratch/ggml-opencl_prodmin.cpp). Habilita non-blocking SOMENTE com fila
+// IN-ORDER confirmada; caso contrario mantem o modo bloqueante.
+static bool sig_transpose_can_skip_wait(cl_command_queue q) {
+    static std::atomic<int> cache{-1};
+    int c = cache.load(std::memory_order_relaxed);
+    if (c < 0) {
+        cl_command_queue_properties props = 0;
+        cl_int rc = clGetCommandQueueInfo(q, CL_QUEUE_PROPERTIES, sizeof(props), &props, NULL);
+        int ooo = (rc == CL_SUCCESS)
+                      ? ((props & CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE) ? 1 : 0)
+                      : -1;
+        c = (ooo == 0) ? 1 : 0;
+        cache.store(c, std::memory_order_relaxed);
+    }
+    return c == 1;
+}
+
+static inline void DFR(cl_event evt, cl_mem mem) {
+    if (!diag_defer_on()) {
+        clWaitForEvents(1, &evt);
+        clReleaseMemObject(mem);
+        return;
+    }
+    g_diag_pending.emplace_back(evt, mem);
+    if (g_diag_pending.size() > 64) diag_drain_pending(false);
+}
 #include <regex>
 #include <set>
 #include <unordered_set>
@@ -967,7 +1092,7 @@ struct ggml_backend_opencl_context {
         }
 
         // Dump a csv
-        FILE * fperf = fopen("cl_profiling.csv", "w");
+        FILE * fperf = fopen("/sdcard/Android/data/br.gov.sp.pcsp.launcher/files/cl_profiling.csv", "w");
         if (!fperf) {
             GGML_LOG_ERROR("Failed to open cl_profiling.csv\n");
             return;
@@ -985,7 +1110,7 @@ struct ggml_backend_opencl_context {
         fclose(fperf);
 
         // Dump a simple chrome trace
-        FILE * ftrace = fopen("cl_trace.json", "w");
+        FILE * ftrace = fopen("/sdcard/Android/data/br.gov.sp.pcsp.launcher/files/cl_trace.json", "w");
         if (!ftrace) {
             GGML_LOG_ERROR("Failed to open cl_trace.json\n");
             return;
@@ -1018,6 +1143,18 @@ struct ggml_backend_opencl_context {
     }
 
     void enqueue_ndrange_kernel(cl_kernel kernel, cl_uint work_dim, size_t *global_work_size, size_t *local_work_size, const ggml_tensor * tensor) {
+        const bool sig_e = (g_sig_sched_enabled != 0);
+        const auto sig_e0 = sig_e ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+        struct SigEnqScope {
+            bool on; std::chrono::steady_clock::time_point t0;
+            ~SigEnqScope() {
+                if (on) {
+                    g_sig_enq_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                                        std::chrono::steady_clock::now() - t0).count();
+                    g_sig_enq_n++;
+                }
+            }
+        } sig_enq_scope{sig_e, sig_e0};
 #ifdef GGML_OPENCL_PROFILING
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL, global_work_size, local_work_size, 0, NULL, &evt));
@@ -1026,6 +1163,10 @@ struct ggml_backend_opencl_context {
         populateProfilingInfo(profiling_info.back(), evt, kernel, work_dim, global_work_size, local_work_size, tensor);
         if (profiling_info.size() >= 2048) {
             flush_profiling_batch();
+            write_profiling_info();   // F6/B2: descarrega no lote (contexto e'
+                                      // singleton refcounted; o free() do app
+                                      // NAO ocorre no reload -> sem isso o CSV
+                                      // nunca seria escrito)
         }
 #else
         GGML_UNUSED(tensor);
@@ -6042,6 +6183,7 @@ static void transpose_2d(
     bool blocking = true,
     bool auto_local = false // let driver pick local size for non-uniform workgroups
 ) {
+    if (blocking && sig_transpose_can_skip_wait(backend_ctx->queue)) blocking = false;  // F3b (guard)
     static ggml_cl_buffer buf;
 
     cl_event evt;
@@ -6054,7 +6196,7 @@ static void transpose_2d(
 
     region.origin = 0;
     region.size = size;
-    CL_CHECK((trans = clCreateSubBuffer(
+    CL_CHECK((trans = DSB(
         buf.buffer, CL_MEM_READ_WRITE,
         CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
@@ -6090,7 +6232,7 @@ static void transpose_2d_as_8b(
         src, dst, size, stride, rows, blocking, auto_local);
 }
 
-static void transpose_2d_as_16b(
+static void transpose_2d_as_16b_impl(
     ggml_backend_opencl_context * backend_ctx,
     cl_mem src, cl_mem dst, size_t size,
     cl_int stride, cl_int rows,
@@ -6100,7 +6242,7 @@ static void transpose_2d_as_16b(
         src, dst, size, stride, rows, blocking);
 }
 
-static void transpose_2d_as_32b(
+static void transpose_2d_as_32b_impl(
     ggml_backend_opencl_context * backend_ctx,
     cl_mem src, cl_mem dst, size_t size,
     cl_int stride, cl_int rows,
@@ -6108,6 +6250,43 @@ static void transpose_2d_as_32b(
 ) {
     transpose_2d(backend_ctx, backend_ctx->kernel_transpose_32_buf,
         src, dst, size, stride, rows, blocking);
+}
+
+
+// DIAG (diag5, 02/10): tempo dos transposes (bloqueantes) do caminho de carga.
+static std::atomic<long long> g_diag_tr_us{0};
+static std::atomic<long long> g_diag_tr_calls{0};
+static std::atomic<int> g_diag_tnb_mode{-1};
+static inline bool diag_trans_noblock(void) {
+    int m = g_diag_tnb_mode.load(std::memory_order_relaxed);
+    if (m < 0) {
+        char v[8] = {0};
+        __system_property_get("debug.sig.hymt2.trans_noblock", v);
+        // ADOCAO F3b (02/10): non-blocking e' o DEFAULT (aceito em aceite
+        // 4/4 shas nos dois modelos). Apenas "0" explicito volta ao modo
+        // antigo (wait por transpose).
+        m = (v[0] == '0') ? 0 : 1;
+        g_diag_tnb_mode.store(m, std::memory_order_relaxed);
+    }
+    return m == 1;
+}
+static void DTR16(ggml_backend_opencl_context * b, cl_mem src, cl_mem dst, size_t size,
+                  cl_int stride, cl_int rows, bool blocking = true) {
+    if (blocking && diag_trans_noblock()) blocking = false;   // F3b
+    const auto t0 = std::chrono::steady_clock::now();
+    transpose_2d_as_16b_impl(b, src, dst, size, stride, rows, blocking);
+    g_diag_tr_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - t0).count();
+    g_diag_tr_calls += 1;
+}
+static void DTR32(ggml_backend_opencl_context * b, cl_mem src, cl_mem dst, size_t size,
+                  cl_int stride, cl_int rows, bool blocking = true) {
+    if (blocking && diag_trans_noblock()) blocking = false;   // F3b
+    const auto t0 = std::chrono::steady_clock::now();
+    transpose_2d_as_32b_impl(b, src, dst, size, stride, rows, blocking);
+    g_diag_tr_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                        std::chrono::steady_clock::now() - t0).count();
+    g_diag_tr_calls += 1;
 }
 #endif // GGML_OPENCL_USE_ADRENO_KERNELS
 
@@ -6941,9 +7120,33 @@ static void ggml_opencl_op_group_norm_fused(ggml_backend_t backend, ggml_tensor 
 
 static ggml_status ggml_backend_opencl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {
     ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;
+    const bool sig_on = (g_sig_sched_enabled != 0);
+    const auto sig_t0 = sig_on ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point();
+    struct SigGraphScope {
+        bool on; std::chrono::steady_clock::time_point t0;
+        ~SigGraphScope() {
+            if (on) {
+                g_sig_graph_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                                      std::chrono::steady_clock::now() - t0).count();
+            }
+        }
+    } sig_graph_scope{sig_on, sig_t0};
 
+    if (sig_on) { g_sig_nodes += cgraph->n_nodes; }
+    struct SigNodeScope {
+        int op; bool on; std::chrono::steady_clock::time_point t0;
+        ~SigNodeScope() {
+            if (on && op >= 0 && op < 128) {
+                g_sig_perop_us[op] += std::chrono::duration_cast<std::chrono::microseconds>(
+                                          std::chrono::steady_clock::now() - t0).count();
+                g_sig_perop_n[op]++;
+            }
+        }
+    };
     for (int i = 0; i < cgraph->n_nodes; i++) {
         ggml_tensor * node = cgraph->nodes[i];
+        SigNodeScope sig_node{sig_on ? (int)node->op : -1, sig_on,
+                              sig_on ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point()};
 
         // NOTE: this may oversynchronize by synchronizing with
         //       backends/devices which don't compute 'cgraph's
@@ -7969,7 +8172,7 @@ static enum ggml_status ggml_backend_opencl_buffer_init_tensor(ggml_backend_buff
     return GGML_STATUS_SUCCESS;
 }
 
-static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
+static void ggml_opencl_set_tensor_impl(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
     ggml_backend_opencl_device_context * dev_ctx = (ggml_backend_opencl_device_context *) buffer->buft->device->context;
     ggml_backend_opencl_context * backend_ctx = dev_ctx->backend_ctx;
 
@@ -7994,7 +8197,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8005,7 +8208,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for scales.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8014,7 +8217,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for quants.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_q;
-        extra->q = clCreateSubBuffer(
+        extra->q = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8030,8 +8233,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         tensor->extra = extra;
 
@@ -8046,8 +8248,8 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(tensor->ne[2] == 1);
             GGML_ASSERT(tensor->ne[3] == 1);
 
-            transpose_2d_as_32b(backend_ctx, extra->q, extra->q, size_q, K/32,  M);
-            transpose_2d_as_16b(backend_ctx, extra->d, extra->d, size_d, K/128, M);
+            DTR32(backend_ctx, extra->q, extra->q, size_q, K/32,  M);
+            DTR16(backend_ctx, extra->d, extra->d, size_d, K/128, M);
         } // end transpose
 #endif // GGML_OPENCL_USE_ADRENO_KERNELS
 
@@ -8080,7 +8282,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8106,7 +8308,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for scales.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8115,7 +8317,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for quants.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_q;
-        extra->q = clCreateSubBuffer(
+        extra->q = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8139,8 +8341,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             // Create image for Q
             cl_image_format img_format_q = {CL_R, CL_UNSIGNED_INT32};
@@ -8178,8 +8379,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         tensor->extra = extra;
         ctx->q4_0_soa_tensors.insert(tensor);
@@ -8195,9 +8395,9 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(K % 32 == 0);
 
             // Transpose q as ushort
-            transpose_2d_as_16b(backend_ctx, extra->q, extra->q, size_q, K/4, M);
+            DTR16(backend_ctx, extra->q, extra->q, size_q, K/4, M);
             // Transpose d as ushort
-            transpose_2d_as_16b(backend_ctx, extra->d, extra->d, size_d, K/32, M);
+            DTR16(backend_ctx, extra->d, extra->d, size_d, K/32, M);
         }
 #endif // GGML_OPENCL_USE_ADRENO_KERNELS
         return;
@@ -8219,7 +8419,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8230,7 +8430,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for scales.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8239,7 +8439,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for mins.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_m;
-        extra->m = clCreateSubBuffer(
+        extra->m = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8248,7 +8448,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for quants.
         region.origin = align_to(previous_origin + size_m, backend_ctx->alignment);
         region.size = size_q;
-        extra->q = clCreateSubBuffer(
+        extra->q = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8273,8 +8473,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             // Create image for Q
             cl_image_format img_format_q = {CL_R, CL_UNSIGNED_INT32};
@@ -8311,8 +8510,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         tensor->extra = extra;
 
@@ -8325,11 +8523,11 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(K % 32 == 0);
 
             // Transpose q as ushort
-            transpose_2d_as_16b(backend_ctx, extra->q, extra->q, size_q, K/4, M);
+            DTR16(backend_ctx, extra->q, extra->q, size_q, K/4, M);
             // Transpose d as ushort
-            transpose_2d_as_16b(backend_ctx, extra->d, extra->d, size_d, K/32, M);
+            DTR16(backend_ctx, extra->d, extra->d, size_d, K/32, M);
             // Transpose m as ushort
-            transpose_2d_as_16b(backend_ctx, extra->m, extra->m, size_m, K/32, M);
+            DTR16(backend_ctx, extra->m, extra->m, size_m, K/32, M);
         }
 #endif // GGML_OPENCL_USE_ADRENO_KERNELS
         return;
@@ -8351,7 +8549,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8360,7 +8558,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for scales.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8369,7 +8567,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for qh.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_qh;
-        extra->qh = clCreateSubBuffer(
+        extra->qh = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8378,7 +8576,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for qs.
         region.origin = align_to(previous_origin + size_qh, backend_ctx->alignment);
         region.size = size_qs;
-        extra->qs = clCreateSubBuffer(
+        extra->qs = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8403,8 +8601,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             // Create image for Q
             cl_image_format img_format_qs = {CL_R, CL_UNSIGNED_INT32};
@@ -8459,8 +8656,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             tensor->extra = extra;
 
@@ -8469,11 +8665,11 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(K % 32 == 0);
 
             // Transpose qs as ushort
-            transpose_2d_as_16b(backend_ctx, extra->qs, extra->qs, size_qs, K/4, M);
+            DTR16(backend_ctx, extra->qs, extra->qs, size_qs, K/4, M);
             // Transpose qh as uchar
             transpose_2d_as_8b(backend_ctx, extra->qh, extra->qh, size_qh, K/8, M);
             // Transpose d as ushort
-            transpose_2d_as_16b(backend_ctx, extra->d, extra->d, size_d, K/32, M);
+            DTR16(backend_ctx, extra->d, extra->d, size_d, K/32, M);
 
             return;
         }
@@ -8491,8 +8687,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         tensor->extra = extra;
         return;
@@ -8515,7 +8710,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8526,7 +8721,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for scales.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8535,7 +8730,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for mins.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_m;
-        extra->m = clCreateSubBuffer(
+        extra->m = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8544,7 +8739,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for qh.
         region.origin = align_to(previous_origin + size_m, backend_ctx->alignment);
         region.size = size_qh;
-        extra->qh = clCreateSubBuffer(
+        extra->qh = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8553,7 +8748,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for qs.
         region.origin = align_to(previous_origin + size_qh, backend_ctx->alignment);
         region.size = size_qs;
-        extra->qs = clCreateSubBuffer(
+        extra->qs = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8579,8 +8774,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             // Create image for Q
             cl_image_format img_format_qs = {CL_R, CL_UNSIGNED_INT32};
@@ -8611,8 +8805,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             tensor->extra = extra;
 
@@ -8621,13 +8814,13 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(K % 32 == 0);
 
             // Transpose qs as ushort
-            transpose_2d_as_16b(backend_ctx, extra->qs, extra->qs, size_qs, K/4, M);
+            DTR16(backend_ctx, extra->qs, extra->qs, size_qs, K/4, M);
             // Transpose qh as uchar
             transpose_2d_as_8b(backend_ctx, extra->qh, extra->qh, size_qh, K/8, M);
             // Transpose d as ushort
-            transpose_2d_as_16b(backend_ctx, extra->d, extra->d, size_d, K/32, M);
+            DTR16(backend_ctx, extra->d, extra->d, size_d, K/32, M);
             // Transpose m as ushort
-            transpose_2d_as_16b(backend_ctx, extra->m, extra->m, size_m, K/32, M);
+            DTR16(backend_ctx, extra->m, extra->m, size_m, K/32, M);
 
             return;
         }
@@ -8646,8 +8839,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         tensor->extra = extra;
         return;
@@ -8668,7 +8860,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8679,7 +8871,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for scales.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_e;
-        extra->e = clCreateSubBuffer(
+        extra->e = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8688,7 +8880,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for quants.
         region.origin = align_to(previous_origin + size_e, backend_ctx->alignment);
         region.size = size_q;
-        extra->q = clCreateSubBuffer(
+        extra->q = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8712,8 +8904,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
             tensor->extra = extra;
 
             // Create image for Q
@@ -8742,8 +8933,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         // Create image for Q
         cl_image_format img_format_q = {CL_RG, CL_UNSIGNED_INT32};
@@ -8779,7 +8969,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8790,7 +8980,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for scales.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8799,7 +8989,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for quants.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_q;
-        extra->q = clCreateSubBuffer(
+        extra->q = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8815,8 +9005,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         tensor->extra = extra;
         ctx->q8_0_soa_tensors.insert(tensor);
@@ -8861,8 +9050,8 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(tensor->ne[2] == 1);
             GGML_ASSERT(tensor->ne[3] == 1);
 
-            transpose_2d_as_32b(backend_ctx, extra->q, extra->q, size_q, K/4,  M);
-            transpose_2d_as_16b(backend_ctx, extra->d, extra->d, size_d, K/32, M);
+            DTR32(backend_ctx, extra->q, extra->q, size_q, K/4,  M);
+            DTR16(backend_ctx, extra->d, extra->d, size_d, K/32, M);
         } // end transpose
 #endif // GGML_OPENCL_USE_ADRENO_KERNELS
 
@@ -8883,7 +9072,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8892,7 +9081,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for scales.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8901,7 +9090,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for quants.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_q;
-        extra->q = clCreateSubBuffer(
+        extra->q = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8930,8 +9119,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         tensor->extra = extra;
 
@@ -8942,9 +9130,9 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(K % 32 == 0);
 
             // Transpose q as ushort
-            transpose_2d_as_16b(backend_ctx, extra->q, extra->q, size_q, K/4, M);
+            DTR16(backend_ctx, extra->q, extra->q, size_q, K/4, M);
             // Transpose d as ushort
-            transpose_2d_as_16b(backend_ctx, extra->d, extra->d, size_d, K/32, M);
+            DTR16(backend_ctx, extra->d, extra->d, size_d, K/32, M);
         }
 #endif
         return;
@@ -8967,7 +9155,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_mem data_device = clCreateBuffer(context, CL_MEM_READ_WRITE,
             ggml_nbytes(tensor), NULL, &err);
         CL_CHECK(err);
-        CL_CHECK(clEnqueueWriteBuffer(
+        CL_CHECK(DGW(
             queue, data_device, CL_TRUE, 0,
             ggml_nbytes(tensor), data, 0, NULL, NULL));
 
@@ -8976,7 +9164,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for d.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8985,7 +9173,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for mins.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_dm;
-        extra->dm = clCreateSubBuffer(
+        extra->dm = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -8994,7 +9182,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for s.
         region.origin = align_to(previous_origin + size_dm, backend_ctx->alignment);
         region.size = size_s;
-        extra->s = clCreateSubBuffer(
+        extra->s = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -9003,7 +9191,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for quants.
         region.origin = align_to(previous_origin + size_s, backend_ctx->alignment);
         region.size = size_q;
-        extra->q = clCreateSubBuffer(
+        extra->q = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -9033,8 +9221,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             cl_image_format img_format_q = {CL_R, CL_UNSIGNED_INT32};
             cl_image_desc img_desc_q = {
@@ -9076,8 +9263,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         tensor->extra  = extra;
 #ifdef GGML_OPENCL_USE_ADRENO_KERNELS
@@ -9089,9 +9275,9 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(K % 32 == 0);
 
             // Transpose q, d, dm as ushort
-            transpose_2d_as_16b(backend_ctx, extra->q, extra->q, size_q, K/4, M);
-            transpose_2d_as_16b(backend_ctx, extra->d, extra->d, size_d, K/256, M);
-            transpose_2d_as_16b(backend_ctx, extra->dm, extra->dm, size_dm, K/256, M);
+            DTR16(backend_ctx, extra->q, extra->q, size_q, K/4, M);
+            DTR16(backend_ctx, extra->d, extra->d, size_d, K/256, M);
+            DTR16(backend_ctx, extra->dm, extra->dm, size_dm, K/256, M);
 
             // Transpose s as uchar
             transpose_2d_as_8b(backend_ctx, extra->s, extra->s, size_s, K/256*12, M, true, true);
@@ -9118,14 +9304,14 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_int err;
         cl_mem data_device;
         CL_CHECK((data_device = clCreateBuffer(context, CL_MEM_READ_WRITE, ggml_nbytes(tensor), NULL, &err), err));
-        CL_CHECK(clEnqueueWriteBuffer(queue, data_device, CL_TRUE, 0, ggml_nbytes(tensor), data, 0, NULL, NULL));
+        CL_CHECK(DGW(queue, data_device, CL_TRUE, 0, ggml_nbytes(tensor), data, 0, NULL, NULL));
 
         cl_buffer_region region;
 
         // Create subbuffer for d.
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_d;
-        extra->d = clCreateSubBuffer(
+        extra->d = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -9134,7 +9320,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for dm.
         region.origin = align_to(previous_origin + size_d, backend_ctx->alignment);
         region.size = size_dm;
-        extra->dm = clCreateSubBuffer(
+        extra->dm = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -9143,7 +9329,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for s.
         region.origin = align_to(previous_origin + size_dm, backend_ctx->alignment);
         region.size = size_s;
-        extra->s = clCreateSubBuffer(
+        extra->s = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -9152,7 +9338,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for q (lower 4 bits)
         region.origin = align_to(previous_origin + size_s, backend_ctx->alignment);
         region.size = size_q;
-        extra->q = clCreateSubBuffer(
+        extra->q = DSB(
             extra_orig->data_device, CL_MEM_READ_WRITE,
             CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
         CL_CHECK(err);
@@ -9161,7 +9347,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Create subbuffer for qh (upper 1 bit)
         region.origin = align_to(previous_origin + size_q, backend_ctx->alignment);
         region.size = size_qh;
-        CL_CHECK((extra->qh = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((extra->qh = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
         CL_CHECK(err);
 
 #ifdef GGML_OPENCL_USE_ADRENO_KERNELS
@@ -9190,8 +9376,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             cl_image_format img_format_q = {CL_R, CL_UNSIGNED_INT32};
             cl_image_desc img_desc_q = {
@@ -9261,8 +9446,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         extra->size_q  = size_q;
         extra->size_qh = size_qh;
@@ -9280,10 +9464,10 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             GGML_ASSERT(K % 32 == 0);
 
             // Transpose q, d, dm as ushort, qh as uchar
-            transpose_2d_as_16b(backend_ctx, extra->q,  extra->q,  size_q,  K/4,   M);
+            DTR16(backend_ctx, extra->q,  extra->q,  size_q,  K/4,   M);
             transpose_2d_as_8b (backend_ctx, extra->qh, extra->qh, size_qh, K/8,   M);
-            transpose_2d_as_16b(backend_ctx, extra->d,  extra->d,  size_d,  K/256, M);
-            transpose_2d_as_16b(backend_ctx, extra->dm, extra->dm, size_dm, K/256, M);
+            DTR16(backend_ctx, extra->d,  extra->d,  size_d,  K/256, M);
+            DTR16(backend_ctx, extra->dm, extra->dm, size_dm, K/256, M);
         }
 #endif // GGML_OPENCL_USE_ADRENO_KERNELS
         return;
@@ -9306,7 +9490,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         cl_int err;
         cl_mem data_device;
         CL_CHECK((data_device = clCreateBuffer(context, CL_MEM_READ_WRITE, ggml_nbytes(tensor), NULL, &err), err));
-        CL_CHECK(clEnqueueWriteBuffer(queue, data_device, CL_TRUE, 0, ggml_nbytes(tensor), data, 0, NULL, NULL));
+        CL_CHECK(DGW(queue, data_device, CL_TRUE, 0, ggml_nbytes(tensor), data, 0, NULL, NULL));
 
         cl_buffer_region region;
 
@@ -9321,25 +9505,25 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             // Subbuffer for ql
             region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
             region.size = moe_size_ql;
-            CL_CHECK((extra->ql = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((extra->ql = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
             auto previous_origin = region.origin;
 
             // Subbuffer for qh
             region.origin = align_to(previous_origin + moe_size_ql, backend_ctx->alignment);
             region.size = moe_size_qh;
-            CL_CHECK((extra->qh = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((extra->qh = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
             previous_origin = region.origin;
 
             // Subbuffer for scales
             region.origin = align_to(previous_origin + moe_size_qh, backend_ctx->alignment);
             region.size = moe_size_s;
-            CL_CHECK((extra->s = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((extra->s = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
             previous_origin = region.origin;
 
             // Subbuffer for d
             region.origin = align_to(previous_origin + moe_size_s, backend_ctx->alignment);
             region.size = moe_size_d;
-            CL_CHECK((extra->d = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((extra->d = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
             cl_kernel kernel = backend_ctx->kernel_convert_block_q6_k_trans4_ns;
 
@@ -9365,8 +9549,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
             cl_event evt;
             CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-            CL_CHECK(clWaitForEvents(1, &evt));
-            CL_CHECK(clReleaseMemObject(data_device));
+            DFR(evt, data_device);
 
             // Create image for ql
             cl_image_format img_format_ql = {CL_R, CL_UNSIGNED_INT32};
@@ -9386,25 +9569,25 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
         // Subbuffer for ql
         region.origin = align_to(extra_orig->offset + tensor->view_offs + offset, backend_ctx->alignment);
         region.size = size_ql;
-        CL_CHECK((extra->ql = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((extra->ql = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
         auto previous_origin = region.origin;
 
         // Subbuffer for qh
         region.origin = align_to(previous_origin + size_ql, backend_ctx->alignment);
         region.size = size_qh;
-        CL_CHECK((extra->qh = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((extra->qh = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
         previous_origin = region.origin;
 
         // Subbuffer for scales
         region.origin = align_to(previous_origin + size_qh, backend_ctx->alignment);
         region.size = size_s;
-        CL_CHECK((extra->s = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((extra->s = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
         previous_origin = region.origin;
 
         // Create subbuffer for d.
         region.origin = align_to(previous_origin + size_s, backend_ctx->alignment);
         region.size = size_d;
-        CL_CHECK((extra->d = clCreateSubBuffer(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((extra->d = DSB(extra_orig->data_device, CL_MEM_READ_WRITE, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
         previous_origin = region.origin;
 
         // Flatten the weights
@@ -9433,8 +9616,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
 
         extra->size_ql = size_ql;
         extra->size_qh = size_qh;
@@ -9449,7 +9631,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
             cl_int K = tensor->ne[0];   // ne00
 
             // Transpose ql as ushort
-            transpose_2d_as_16b(backend_ctx,
+            DTR16(backend_ctx,
                 extra->ql, extra->ql, size_ql, K/4, M);
 
             // Transpose qh as uchar
@@ -9457,11 +9639,11 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
                 extra->qh, extra->qh, size_qh, K/4, M);
 
             // Transpose s as ushort
-            transpose_2d_as_16b(backend_ctx,
+            DTR16(backend_ctx,
                 extra->s, extra->s, size_s, K/16/2, M);
 
             // Transpose d as ushort
-            transpose_2d_as_16b(backend_ctx,
+            DTR16(backend_ctx,
                 extra->d, extra->d, size_d, K/256, M);
         }
 #endif // GGML_OPENCL_USE_ADRENO_KERNELS
@@ -9496,8 +9678,7 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
 
         cl_event evt;
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, &evt));
-        CL_CHECK(clWaitForEvents(1, &evt));
-        CL_CHECK(clReleaseMemObject(data_device));
+        DFR(evt, data_device);
         CL_CHECK(clReleaseEvent(evt));
 
         return;
@@ -9506,7 +9687,73 @@ static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, 
     ggml_tensor_extra_cl * extra = (ggml_tensor_extra_cl *) tensor->extra;
     GGML_ASSERT(extra);
 
-    CL_CHECK(clEnqueueWriteBuffer(
+// SIG (fusion-round 27/09, item 4 da rodada 4): instrumentacao da PRIMEIRA
+// escrita que falha com CL_INVALID_MEM_OBJECT. Segue a ordem de decisao do
+// especialista: handle bruto -> consulta de info -> tipo do objeto.
+// Fica atrás de GGML_OPENCL_SIG_DIAG, que so é definido no build de
+// diagnostico; no release esta chamada fica inerte (ver 9505+).
+#ifdef GGML_OPENCL_SIG_DIAG
+#define SIGOCL_DIAG 1
+#else
+#define SIGOCL_DIAG 0
+#endif
+#if SIGOCL_DIAG
+    {
+        const cl_mem h = extra->data_device;
+        fprintf(stderr, "SIGOCL| set_tensor: tensor=%s op=%s type=%s ne=[%lld,%lld,%lld,%lld]\n",
+                tensor->name, ggml_op_name(tensor->op), ggml_type_name(tensor->type),
+                (long long)tensor->ne[0], (long long)tensor->ne[1],
+                (long long)tensor->ne[2], (long long)tensor->ne[3]);
+        fprintf(stderr, "SIGOCL|   extra=%p data_device=%p offset=%zu size=%zu host=%p buf_type=%p\n",
+                (void *)extra, (void *)(uintptr_t)h, extra->offset, size, (const void *)data,
+                (void *)tensor->buffer);
+        if (h == nullptr) {
+            fprintf(stderr, "SIGOCL|   VEREDITO=handle_nulo -> procurar criacao que falhou ou campo nao atribuido\n");
+            // SIG (item 7, rodada 4): com handle nulo, a UNICA atribuicao de
+            // data_device no arquivo e' a linha 7963 (ramo sem view). Se o
+            // tensor for view, o extra veio por heranca (7956) e o culpado e'
+            // o PAI. Sem view, o pai e' o proprio e a origem continua
+            // sem explicacao — por isso registramos a cadeia.
+            fprintf(stderr, "SIGOCL|   view_src=%p eh_view=%d\n",
+                    (void *)tensor->view_src, tensor->view_src != nullptr ? 1 : 0);
+            if (tensor->view_src) {
+                ggml_tensor * anc = tensor->view_src;
+                for (int k = 0; k < 6 && anc; k++) {
+                    ggml_tensor_extra_cl * ae = (ggml_tensor_extra_cl *) anc->extra;
+                    fprintf(stderr, "SIGOCL|     anc[%d] %-28s op=%-6s extra=%p data_device=%p eh_view=%d\n",
+                            k, anc->name ? anc->name : "(sem nome)",
+                            ggml_op_name(anc->op), (void *)ae,
+                            (void *)(uintptr_t)(ae ? ae->data_device : nullptr),
+                            anc->view_src != nullptr ? 1 : 0);
+                    anc = anc->view_src;
+                }
+            } else {
+                // sem view: qual buffer foi pedido e' que veio de onde?
+                fprintf(stderr, "SIGOCL|     sem_view: buffer=%p (o set_tensor recebeu este buffer)\n",
+                        (void *)tensor->buffer);
+            }
+        } else {
+            cl_mem_object_type mt = 0;
+            cl_int qe = clGetMemObjectInfo(h, CL_MEM_TYPE, sizeof(mt), &mt, nullptr);
+            size_t msz = 0;
+            cl_int qe2 = clGetMemObjectInfo(h, CL_MEM_SIZE, sizeof(msz), &msz, nullptr);
+            cl_context mctx = nullptr;
+            cl_int qe3 = clGetMemObjectInfo(h, CL_MEM_CONTEXT, sizeof(mctx), &mctx, nullptr);
+            fprintf(stderr, "SIGOCL|   CL_MEM_TYPE   -> ret=%d tipo=%d (1=buffer 2=image2d 3=image3d)\n", (int)qe, (int)mt);
+            fprintf(stderr, "SIGOCL|   CL_MEM_SIZE   -> ret=%d size=%zu (esperado=%zu)\n", (int)qe2, msz, ggml_nbytes(tensor));
+            fprintf(stderr, "SIGOCL|   CL_MEM_CONTEXT-> ret=%d ctx=%p (nosso=%p)\n", (int)qe3, (void *)mctx, (void *)backend_ctx->context);
+            if (qe != CL_SUCCESS) {
+                fprintf(stderr, "SIGOCL|   VEREDITO=handle_nao_nulo_consulta_falha -> lifecycle/corrupcao\n");
+            } else if (mt != CL_MEM_OBJECT_BUFFER) {
+                fprintf(stderr, "SIGOCL|   VEREDITO=objeto_nao_e_buffer -> selecao/API\n");
+            } else {
+                fprintf(stderr, "SIGOCL|   VEREDITO=buffer_valido -> conferir fila/contexto\n");
+            }
+        }
+    }
+#endif // GGML_OPENCL_SIG_DIAG
+
+    CL_CHECK(DGW(
         queue, extra->data_device, CL_TRUE, extra->offset + offset,
         size, data, 0, NULL, NULL));
 
@@ -9545,8 +9792,8 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_trans_d.allocate(backend_ctx->context, size_d);
             buf_unpacked.allocate(backend_ctx->context, ggml_nbytes(tensor));
 
-            transpose_2d_as_32b(backend_ctx, extra->q, buf_trans_q.buffer, size_q, M, K/32);
-            transpose_2d_as_16b(backend_ctx, extra->d, buf_trans_d.buffer, size_d, M, K/128);
+            DTR32(backend_ctx, extra->q, buf_trans_q.buffer, size_q, M, K/32);
+            DTR16(backend_ctx, extra->d, buf_trans_d.buffer, size_d, M, K/128);
 
             cl_kernel kernel = backend_ctx->kernel_restore_block_q1_0;
             CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf_trans_q.buffer));
@@ -9653,8 +9900,8 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_trans_d.allocate(backend_ctx->context, size_d);
             buf_unpacked.allocate(backend_ctx->context, ggml_nbytes(tensor));
 
-            transpose_2d_as_16b(backend_ctx, extra->q, buf_trans_q.buffer, size_q, M, K/4);
-            transpose_2d_as_16b(backend_ctx, extra->d, buf_trans_d.buffer, size_d, M, K/32);
+            DTR16(backend_ctx, extra->q, buf_trans_q.buffer, size_q, M, K/4);
+            DTR16(backend_ctx, extra->d, buf_trans_d.buffer, size_d, M, K/32);
 
             cl_uchar mask_0F = 0x0F;
             cl_uchar mask_F0 = 0xF0;
@@ -9754,9 +10001,9 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_unpacked.allocate(backend_ctx->context, ggml_nbytes(tensor));
 
             // transpose q, d, m back
-            transpose_2d_as_16b(backend_ctx, extra->q, buf_trans_q.buffer, size_q, M, K/4);
-            transpose_2d_as_16b(backend_ctx, extra->d, buf_trans_d.buffer, size_d, M, K/32);
-            transpose_2d_as_16b(backend_ctx, extra->m, buf_trans_m.buffer, size_m, M, K/32);
+            DTR16(backend_ctx, extra->q, buf_trans_q.buffer, size_q, M, K/4);
+            DTR16(backend_ctx, extra->d, buf_trans_d.buffer, size_d, M, K/32);
+            DTR16(backend_ctx, extra->m, buf_trans_m.buffer, size_m, M, K/32);
 
             cl_uchar mask_0F = 0x0F;
             cl_uchar mask_F0 = 0xF0;
@@ -9858,9 +10105,9 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_trans_d.allocate(backend_ctx->context, size_d);
             buf_unpacked.allocate(backend_ctx->context, ggml_nbytes(tensor));
 
-            transpose_2d_as_16b(backend_ctx, extra->qs, buf_trans_qs.buffer, size_qs, M, K/4);
+            DTR16(backend_ctx, extra->qs, buf_trans_qs.buffer, size_qs, M, K/4);
             transpose_2d_as_8b(backend_ctx, extra->qh, buf_trans_qh.buffer, size_qh, M, K/8);
-            transpose_2d_as_16b(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/32);
+            DTR16(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/32);
 
             cl_uchar mask_0F = 0x0F;
             cl_uchar mask_F0 = 0xF0;
@@ -9967,10 +10214,10 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_unpacked.allocate(backend_ctx->context, ggml_nbytes(tensor));
 
             // Transpose back: from col-major to row-major
-            transpose_2d_as_16b(backend_ctx, extra->qs, buf_trans_qs.buffer, size_qs, M, K/4);
+            DTR16(backend_ctx, extra->qs, buf_trans_qs.buffer, size_qs, M, K/4);
             transpose_2d_as_8b(backend_ctx, extra->qh, buf_trans_qh.buffer, size_qh, M, K/8);
-            transpose_2d_as_16b(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/32);
-            transpose_2d_as_16b(backend_ctx, extra->m,  buf_trans_m.buffer,  size_m,  M, K/32);
+            DTR16(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/32);
+            DTR16(backend_ctx, extra->m,  buf_trans_m.buffer,  size_m,  M, K/32);
 
             cl_uchar mask_0F = 0x0F;
             cl_uchar mask_F0 = 0xF0;
@@ -10165,8 +10412,8 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_unpacked.allocate(backend_ctx->context, ggml_nbytes(tensor));
 
             // transpose q, d back
-            transpose_2d_as_16b(backend_ctx, extra->q, buf_trans_q.buffer, size_q, M, K/4);
-            transpose_2d_as_16b(backend_ctx, extra->d, buf_trans_d.buffer, size_d, M, K/32);
+            DTR16(backend_ctx, extra->q, buf_trans_q.buffer, size_q, M, K/4);
+            DTR16(backend_ctx, extra->d, buf_trans_d.buffer, size_d, M, K/32);
 
             cl_uchar mask_0F = 0x0F;
             cl_uchar mask_F0 = 0xF0;
@@ -10276,9 +10523,9 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_trans_s.allocate(backend_ctx->context, size_s);
 
             // Transpose q, d, dm, s back
-            transpose_2d_as_16b(backend_ctx, extra->q,  buf_trans_q.buffer,  size_q,  M, K/4);
-            transpose_2d_as_16b(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/256);
-            transpose_2d_as_16b(backend_ctx, extra->dm, buf_trans_dm.buffer, size_dm, M, K/256);
+            DTR16(backend_ctx, extra->q,  buf_trans_q.buffer,  size_q,  M, K/4);
+            DTR16(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/256);
+            DTR16(backend_ctx, extra->dm, buf_trans_dm.buffer, size_dm, M, K/256);
             transpose_2d_as_8b (backend_ctx, extra->s,  buf_trans_s.buffer,  size_s,  M, K/256*12, true, true);
 
             cl_kernel kernel = backend_ctx->kernel_restore_block_q4_K_noshuffle;
@@ -10390,10 +10637,10 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_trans_dm.allocate(backend_ctx->context, size_dm);
 
             // Reverse transpose q, qh, d, dm
-            transpose_2d_as_16b(backend_ctx, extra->q,  buf_trans_q.buffer,  size_q,  M, K/4);
+            DTR16(backend_ctx, extra->q,  buf_trans_q.buffer,  size_q,  M, K/4);
             transpose_2d_as_8b (backend_ctx, extra->qh, buf_trans_qh.buffer, size_qh, M, K/8);
-            transpose_2d_as_16b(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/256);
-            transpose_2d_as_16b(backend_ctx, extra->dm, buf_trans_dm.buffer, size_dm, M, K/256);
+            DTR16(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/256);
+            DTR16(backend_ctx, extra->dm, buf_trans_dm.buffer, size_dm, M, K/256);
 
             cl_kernel kernel = backend_ctx->kernel_restore_block_q5_K_noshuffle;
             CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem),   &buf_trans_q.buffer));
@@ -10506,10 +10753,10 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
             buf_unpacked.allocate(backend_ctx->context, ggml_nbytes(tensor));
 
             // transpose ql, qh, s and d back
-            transpose_2d_as_16b(backend_ctx, extra->ql, buf_trans_ql.buffer, size_ql, M, K/4);
+            DTR16(backend_ctx, extra->ql, buf_trans_ql.buffer, size_ql, M, K/4);
             transpose_2d_as_8b(backend_ctx,  extra->qh, buf_trans_qh.buffer, size_qh, M, K/4);
-            transpose_2d_as_16b(backend_ctx, extra->s,  buf_trans_s.buffer,  size_s,  M, K/16/2);
-            transpose_2d_as_16b(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/256);
+            DTR16(backend_ctx, extra->s,  buf_trans_s.buffer,  size_s,  M, K/16/2);
+            DTR16(backend_ctx, extra->d,  buf_trans_d.buffer,  size_d,  M, K/256);
 
             // unpack
             cl_uchar mask = 0xFF;
@@ -10628,6 +10875,58 @@ static void ggml_backend_opencl_buffer_reset(ggml_backend_buffer_t buffer) {
     ctx->reset();
 }
 
+// DIAG (forward): a impl de alocacao e' definida mais abaixo neste arquivo.
+static ggml_backend_buffer_t ggml_opencl_alloc_buffer_impl(ggml_backend_buffer_type_t buffer_type, size_t size);
+
+// DIAG OpenCL (rodada F2, 02/10): tempo de upload (set_tensor) e de alocacao
+// de buffers durante a carga do modelo. Somente contadores/leituras — nenhuma
+// mudanca de comportamento. Getter extern "C" consumido pelo llama_jni.
+static std::atomic<long long> g_diag_set_us{0}, g_diag_alloc_us{0};
+static std::atomic<long long> g_diag_set_calls{0}, g_diag_set_bytes{0};
+
+extern "C" double ggml_opencl_diag_set_s(void) { return g_diag_set_us.load() / 1e6; }
+extern "C" long long ggml_opencl_diag_set_calls(void) { return g_diag_set_calls.load(); }
+extern "C" long long ggml_opencl_diag_set_bytes(void) { return g_diag_set_bytes.load(); }
+extern "C" double ggml_opencl_diag_alloc_s(void) { return g_diag_alloc_us.load() / 1e6; }
+extern "C" double ggml_opencl_diag_enq_s(void) { return g_diag_enq_us.load() / 1e6; }
+extern "C" long long ggml_opencl_diag_enq_calls(void) { return g_diag_enq_calls.load(); }
+extern "C" int ggml_opencl_diag_nb(void) { int v = g_diag_nb_mode.load(); return v < 0 ? 0 : v; }
+extern "C" int ggml_opencl_diag_tnb(void) { int m = g_diag_tnb_mode.load(); return m < 0 ? 0 : m; }
+extern "C" int ggml_opencl_diag_dfr(void) { int m = g_diag_dfr_mode.load(); return m < 0 ? 0 : m; }
+extern "C" double ggml_opencl_diag_tr_s(void) { return g_diag_tr_us.load() / 1e6; }
+extern "C" long long ggml_opencl_diag_tr_calls(void) { return g_diag_tr_calls.load(); }
+extern "C" double ggml_opencl_diag_sb_s(void) { return g_diag_sb_us.load() / 1e6; }
+extern "C" long long ggml_opencl_diag_sb_calls(void) { return g_diag_sb_calls.load(); }
+extern "C" void ggml_opencl_diag_reset(void) {
+    g_diag_set_us = 0;
+    g_diag_alloc_us = 0;
+    g_diag_set_calls = 0;
+    g_diag_set_bytes = 0;
+    g_diag_enq_us = 0;
+    g_diag_enq_calls = 0;
+    g_diag_tr_us = 0;
+    g_diag_tr_calls = 0;
+    g_diag_sb_us = 0;
+    g_diag_sb_calls = 0;
+}
+
+static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
+    const auto t0 = std::chrono::steady_clock::now();
+    ggml_opencl_set_tensor_impl(buffer, tensor, data, offset, size);
+    g_diag_set_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                         std::chrono::steady_clock::now() - t0).count();
+    g_diag_set_calls += 1;
+    g_diag_set_bytes += (long long) size;
+}
+
+static ggml_backend_buffer_t ggml_backend_opencl_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buffer_type, size_t size) {
+    const auto t0 = std::chrono::steady_clock::now();
+    ggml_backend_buffer_t r = ggml_opencl_alloc_buffer_impl(buffer_type, size);
+    g_diag_alloc_us += std::chrono::duration_cast<std::chrono::microseconds>(
+                           std::chrono::steady_clock::now() - t0).count();
+    return r;
+}
+
 static ggml_backend_buffer_i ggml_backend_opencl_buffer_interface = {
     /* .free_buffer     = */ ggml_backend_opencl_buffer_free_buffer,
     /* .get_base        = */ ggml_backend_opencl_buffer_get_base,
@@ -10652,7 +10951,7 @@ static const char * ggml_backend_opencl_buffer_type_get_name(ggml_backend_buffer
     GGML_UNUSED(buffer_type);
 }
 
-static ggml_backend_buffer_t ggml_backend_opencl_buffer_type_alloc_buffer(ggml_backend_buffer_type_t buffer_type, size_t size) {
+static ggml_backend_buffer_t ggml_opencl_alloc_buffer_impl(ggml_backend_buffer_type_t buffer_type, size_t size) {
     ggml_backend_opencl_context *backend_ctx = ggml_cl_init(buffer_type->device);
 
     if (!backend_ctx->program_cache_initialized) {
@@ -14353,7 +14652,7 @@ static bool ggml_cl_flash_attn_prepare_quantized_tensor(
     cl_int err;
     temp.data = clCreateBuffer(backend_ctx->context, CL_MEM_READ_WRITE, buffer_size, NULL, &err);
     CL_CHECK(err);
-    CL_CHECK(clEnqueueWriteBuffer(backend_ctx->queue, temp.data, CL_TRUE, 0, buffer_size, host_linear.data(), 0, NULL, NULL));
+    CL_CHECK(DGW(backend_ctx->queue, temp.data, CL_TRUE, 0, buffer_size, host_linear.data(), 0, NULL, NULL));
 
     data_device = temp.data;
     offset = 0;
@@ -14409,7 +14708,7 @@ static bool ggml_cl_flash_attn_convert_f16_to_f32(
     cl_int err;
     temp.data = clCreateBuffer(backend_ctx->context, CL_MEM_READ_WRITE, f32_bytes, NULL, &err);
     CL_CHECK(err);
-    CL_CHECK(clEnqueueWriteBuffer(backend_ctx->queue, temp.data, CL_TRUE, 0,
+    CL_CHECK(DGW(backend_ctx->queue, temp.data, CL_TRUE, 0,
                                   f32_bytes, host_f32.data(), 0, NULL, NULL));
 
     data_device = temp.data;
@@ -15693,7 +15992,7 @@ static void ggml_cl_mul_mat_kq_kqv_adreno(ggml_backend_t backend, const ggml_ten
         region.size = nb02 * ne02;
     }
 
-    A_sub_buffer = clCreateSubBuffer((extra0->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+    A_sub_buffer = DSB((extra0->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
     CL_CHECK(status);
 
     // <--------------------------------------------> //
@@ -15702,7 +16001,7 @@ static void ggml_cl_mul_mat_kq_kqv_adreno(ggml_backend_t backend, const ggml_ten
     // <--------------------------------------------> //
     region.origin = (extra1->offset + src1->view_offs);
     region.size = nb10 * ne10 * ne11 * ne12;
-    B_sub_buffer = clCreateSubBuffer((extra1->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+    B_sub_buffer = DSB((extra1->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
     CL_CHECK(status);
     // <--------------------------------------------> //
 
@@ -15723,7 +16022,7 @@ static void ggml_cl_mul_mat_kq_kqv_adreno(ggml_backend_t backend, const ggml_ten
     // <--------------------------------------------> //
     region.origin = (extrad->offset + dst->view_offs);
     region.size = ne0 * ne1 * dst->ne[2] * dst->nb[0]; // size of C in bytes
-    D_sub_buffer = clCreateSubBuffer((extrad->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+    D_sub_buffer = DSB((extrad->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
     CL_CHECK(status);
     // <--------------------------------------------> //
 
@@ -15837,7 +16136,7 @@ static void ggml_cl_mul_mat_q1_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // create a sub_buffer for B
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer((extra1->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB((extra1->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -15886,7 +16185,7 @@ static void ggml_cl_mul_mat_q1_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -15907,7 +16206,7 @@ static void ggml_cl_mul_mat_q1_0_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size = K * (N + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -16026,7 +16325,7 @@ static void ggml_cl_mul_mat_q4_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16088,7 +16387,7 @@ static void ggml_cl_mul_mat_q4_0_f32_adreno(ggml_backend_t backend, const ggml_t
             cl_mem a_sub = nullptr;
             region.origin = offset1;
             region.size   = (size_t)K * N * sizeof(float);
-            CL_CHECK((a_sub = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((a_sub = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
             const size_t n_blocks = (size_t)N * (K / 32);
             backend_ctx->prealloc_moe_qa.allocate(context, (size_t)N * K * sizeof(cl_char));
@@ -16135,7 +16434,7 @@ static void ggml_cl_mul_mat_q4_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16156,7 +16455,7 @@ static void ggml_cl_mul_mat_q4_0_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size = K * (N + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -16169,7 +16468,7 @@ static void ggml_cl_mul_mat_q4_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for output
         region.origin = extrad->offset; // Specify the starting offset (in bytes)
         region.size = M * N * sizeof(float); // Specify the size of the sub-buffer
-        CL_CHECK((d_sub_buf = clCreateSubBuffer(extrad->data_device, CL_MEM_WRITE_ONLY, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((d_sub_buf = DSB(extrad->data_device, CL_MEM_WRITE_ONLY, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // transpose activations
         int height_B = N/4;
@@ -16301,7 +16600,7 @@ static void ggml_cl_mul_mat_q4_1_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16339,7 +16638,7 @@ static void ggml_cl_mul_mat_q4_1_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16360,7 +16659,7 @@ static void ggml_cl_mul_mat_q4_1_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size = K * (N + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -16475,7 +16774,7 @@ static void ggml_cl_mul_mat_q5_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16520,7 +16819,7 @@ static void ggml_cl_mul_mat_q5_0_f32_adreno(ggml_backend_t backend, const ggml_t
             cl_mem a_sub = nullptr;
             region.origin = offset1;
             region.size   = (size_t)K * N * sizeof(float);
-            CL_CHECK((a_sub = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((a_sub = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
             const size_t n_blocks = (size_t)N * (K / 32);
             backend_ctx->prealloc_moe_qa.allocate(context, (size_t)N * K * sizeof(cl_char));
@@ -16595,7 +16894,7 @@ static void ggml_cl_mul_mat_q5_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16616,7 +16915,7 @@ static void ggml_cl_mul_mat_q5_0_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size = K * (N + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -16629,7 +16928,7 @@ static void ggml_cl_mul_mat_q5_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for output
         region.origin = extrad->offset;
         region.size = M * N * sizeof(float);
-        CL_CHECK((d_sub_buf = clCreateSubBuffer(extrad->data_device, CL_MEM_WRITE_ONLY, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((d_sub_buf = DSB(extrad->data_device, CL_MEM_WRITE_ONLY, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // transpose activations
         int height_B = N/4;
@@ -16736,7 +17035,7 @@ static void ggml_cl_mul_mat_q5_1_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16776,7 +17075,7 @@ static void ggml_cl_mul_mat_q5_1_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16797,7 +17096,7 @@ static void ggml_cl_mul_mat_q5_1_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size = K * (N + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -16810,7 +17109,7 @@ static void ggml_cl_mul_mat_q5_1_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for output
         region.origin = extrad->offset;
         region.size = M * N * sizeof(float);
-        CL_CHECK((d_sub_buf = clCreateSubBuffer(extrad->data_device, CL_MEM_WRITE_ONLY, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((d_sub_buf = DSB(extrad->data_device, CL_MEM_WRITE_ONLY, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // transpose activations
         int height_B = N/4;
@@ -16918,7 +17217,7 @@ static void ggml_cl_mul_mat_iq4_nl_f32_adreno(ggml_backend_t backend, const ggml
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -16962,7 +17261,7 @@ static void ggml_cl_mul_mat_iq4_nl_f32_adreno(ggml_backend_t backend, const ggml
             cl_mem a_sub = nullptr;
             region.origin = offset1;
             region.size   = (size_t)K * N * sizeof(float);
-            CL_CHECK((a_sub = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((a_sub = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
             const size_t n_blocks = (size_t)N * (K / 32);
             backend_ctx->prealloc_moe_qa.allocate(context, (size_t)N * K * sizeof(cl_char));
@@ -17007,7 +17306,7 @@ static void ggml_cl_mul_mat_iq4_nl_f32_adreno(ggml_backend_t backend, const ggml
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -17028,7 +17327,7 @@ static void ggml_cl_mul_mat_iq4_nl_f32_adreno(ggml_backend_t backend, const ggml
         region.origin = 0;
         region.size = K * (N + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -17154,7 +17453,7 @@ static void ggml_cl_mul_mat_q8_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // create a sub_buffer for B
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer((extra1->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB((extra1->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -17218,7 +17517,7 @@ static void ggml_cl_mul_mat_q8_0_f32_adreno(ggml_backend_t backend, const ggml_t
             cl_mem a_sub = nullptr;
             region.origin = offset1;
             region.size   = (size_t)K * N * sizeof(float);
-            CL_CHECK((a_sub = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((a_sub = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
             const size_t n_blocks = (size_t)N * (K / 32);
             backend_ctx->prealloc_moe_qa.allocate(context, (size_t)N * K * sizeof(cl_char));
@@ -17296,12 +17595,12 @@ static void ggml_cl_mul_mat_q8_0_f32_adreno(ggml_backend_t backend, const ggml_t
             // subbuffer for activations
             region.origin = offset1;
             region.size = K_pad * N * sizeof(float);
-            CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
             // Create subbuffer and image1d_buffer for dst
             region.origin = (extrad->offset); // + dst->view_offs;
             region.size = M * N * sizeof(float);
-            CL_CHECK((d_sub_buf = clCreateSubBuffer((extrad->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+            CL_CHECK((d_sub_buf = DSB((extrad->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
             // create an image for A
             img_fmt = { CL_R, CL_FLOAT};
@@ -17382,7 +17681,7 @@ static void ggml_cl_mul_mat_q8_0_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -17403,7 +17702,7 @@ static void ggml_cl_mul_mat_q8_0_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size = K * (N + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -17521,7 +17820,7 @@ static void ggml_cl_mul_mat_q4_k_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -17564,7 +17863,7 @@ static void ggml_cl_mul_mat_q4_k_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -17585,7 +17884,7 @@ static void ggml_cl_mul_mat_q4_k_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size = K * (N + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -17806,7 +18105,7 @@ static void ggml_cl_mul_mat_q6_K_f32_adreno(ggml_backend_t backend, const ggml_t
 
         region.origin = offset1;
         region.size = ne00 * ne1 * sizeof(float);
-        CL_CHECK((b_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         img_fmt.image_channel_order = CL_RGBA;
         img_fmt.image_channel_data_type = CL_FLOAT;
@@ -17846,7 +18145,7 @@ static void ggml_cl_mul_mat_q6_K_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activation
         region.origin = offset1;
         region.size = ne00 * ne1 * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // dp4a (int8) dense q6_K prefill GEMM
         static const char * q6k_dense_dp4a_env = getenv("GGML_OPENCL_Q6K_DENSE_DP4A");
@@ -17918,7 +18217,7 @@ static void ggml_cl_mul_mat_q6_K_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size = ne00 * (ne1 + padding) * sizeof(float)/2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activation
         img_fmt.image_channel_order = CL_RGBA;
@@ -18051,7 +18350,7 @@ static void ggml_cl_mul_mat_q5_K_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size   = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations (CL_RGBA, CL_FLOAT): width = K*N/4
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -18095,7 +18394,7 @@ static void ggml_cl_mul_mat_q5_K_f32_adreno(ggml_backend_t backend, const ggml_t
         // subbuffer for activations
         region.origin = offset1;
         region.size   = K * N * sizeof(float);
-        CL_CHECK((b_sub_buf = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for activations
         img_fmt = {CL_RGBA, CL_FLOAT};
@@ -18116,7 +18415,7 @@ static void ggml_cl_mul_mat_q5_K_f32_adreno(ggml_backend_t backend, const ggml_t
         region.origin = 0;
         region.size   = K * (N + padding) * sizeof(float) / 2;
         backend_ctx->prealloc_act_trans.allocate(context, region.size);
-        CL_CHECK((b_sub_buf_trans = clCreateSubBuffer(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
+        CL_CHECK((b_sub_buf_trans = DSB(backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err), err));
 
         // image for transposed activations
         img_fmt = {CL_RGBA, CL_HALF_FLOAT};
@@ -18309,8 +18608,8 @@ static cl_mem ggml_cl_mul_mat_dequant_quant_to_f16(
             cl_int err2 = CL_SUCCESS;
             cl_mem buf_tq = clCreateBuffer(backend_ctx->context, CL_MEM_READ_WRITE, size_q, NULL, &err2); CL_CHECK(err2);
             cl_mem buf_td = clCreateBuffer(backend_ctx->context, CL_MEM_READ_WRITE, size_d, NULL, &err2); CL_CHECK(err2);
-            transpose_2d_as_16b(backend_ctx, extra->q, buf_tq, size_q, p_ne01, p_ne00 / 4);
-            transpose_2d_as_16b(backend_ctx, extra->d, buf_td, size_d, p_ne01, p_ne00 / 32);
+            DTR16(backend_ctx, extra->q, buf_tq, size_q, p_ne01, p_ne00 / 4);
+            DTR16(backend_ctx, extra->d, buf_td, size_d, p_ne01, p_ne00 / 32);
             cl_uchar mask_0F = 0x0F, mask_F0 = 0xF0;
             cl_kernel kernel = backend_ctx->kernel_restore_block_q4_0_noshuffle;
             CL_CHECK(clSetKernelArg(kernel, 0, sizeof(cl_mem),   &buf_tq));
@@ -18466,7 +18765,7 @@ static cl_mem ggml_cl_img_pool_get_or_create(
     cl_buffer_region region = {};
     region.origin = (size_t)offset0;
     region.size   = required_bytes;
-    cl_mem sub = clCreateSubBuffer(data_device, 0,
+    cl_mem sub = DSB(data_device, 0,
                                    CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
     if (status != CL_SUCCESS) {
         return nullptr;
@@ -20613,43 +20912,43 @@ static void moe_router_reoerder(ggml_backend_t backend, const ggml_tensor * src,
     cl_buffer_region region;
     region.origin = offset;
     region.size = nb21 * ne21;
-    cl_mem original_router_buf = clCreateSubBuffer(extra->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
+    cl_mem original_router_buf = DSB(extra->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
     CL_CHECK(err);
 
     backend_ctx->prealloc_post_router.allocate(backend_ctx->context, sizeof(int) * max_post_router_tile * n_tile_size);
     region.origin = 0;
     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-    cl_mem post_router_buf = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
+    cl_mem post_router_buf = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
     CL_CHECK(err);
 
     backend_ctx->prealloc_emap.allocate(backend_ctx->context, sizeof(short) * max_post_router_tile);
     region.origin = 0;
     region.size = sizeof(short) * max_post_router_tile;
-    cl_mem emap_buf = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
+    cl_mem emap_buf = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
     CL_CHECK(err);
 
     backend_ctx->prealloc_hist.allocate(backend_ctx->context, sizeof(int) * ne02);
     region.origin = 0;
     region.size = sizeof(int) * ne02;
-    cl_mem hist_buf = clCreateSubBuffer(backend_ctx->prealloc_hist.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
+    cl_mem hist_buf = DSB(backend_ctx->prealloc_hist.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
     CL_CHECK(err);
 
     backend_ctx->prealloc_tile_offset.allocate(backend_ctx->context, sizeof(int) * ne02);
     region.origin = 0;
     region.size = sizeof(int) * ne02;
-    cl_mem tile_offset_buf = clCreateSubBuffer(backend_ctx->prealloc_tile_offset.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
+    cl_mem tile_offset_buf = DSB(backend_ctx->prealloc_tile_offset.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
     CL_CHECK(err);
 
     backend_ctx->prealloc_slot_counter.allocate(backend_ctx->context, sizeof(int) * ne02);
     region.origin = 0;
     region.size = sizeof(int) * ne02;
-    cl_mem slot_counter_buf = clCreateSubBuffer(backend_ctx->prealloc_slot_counter.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
+    cl_mem slot_counter_buf = DSB(backend_ctx->prealloc_slot_counter.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
     CL_CHECK(err);
 
     backend_ctx->prealloc_total_tiles.allocate(backend_ctx->context, sizeof(int));
     region.origin = 0;
     region.size = sizeof(int);
-    cl_mem total_tiles_buf = clCreateSubBuffer(backend_ctx->prealloc_total_tiles.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
+    cl_mem total_tiles_buf = DSB(backend_ctx->prealloc_total_tiles.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &err);
     CL_CHECK(err);
 
     // Histogram
@@ -20845,7 +21144,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = offset2;
                     region.size = ne20 * ne21 * sizeof(int);
-                    buf_src2 = clCreateSubBuffer(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // set thread grid
@@ -20857,7 +21156,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    src1_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    src1_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // create image for src1
@@ -20916,19 +21215,19 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = 0;
                     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-                    buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     region.origin = 0;
                     region.size = sizeof(short) * max_post_router_tile;
-                    buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Reorder activations
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     unsigned short map_ratio = ne20 / ne11;
@@ -20940,7 +21239,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                         region.origin = 0;
                         region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                         backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                        buf_src1_reordered = clCreateSubBuffer(
+                        buf_src1_reordered = DSB(
                             backend_ctx->prealloc_act_trans.buffer,
                             0,
                             CL_BUFFER_CREATE_TYPE_REGION,
@@ -20978,7 +21277,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // Create sub buffer for dst
                     region.origin = offsetd;
                     region.size = ne0 * ne1 * ne2 * sizeof(float);
-                    sub_buf_dst = clCreateSubBuffer(
+                    sub_buf_dst = DSB(
                         extrad->data_device,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -21137,7 +21436,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = offset2;
                     region.size = ne20 * ne21 * sizeof(int);
-                    buf_src2 = clCreateSubBuffer(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // set thread grid
@@ -21149,7 +21448,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    src1_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    src1_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // create image for src1
@@ -21198,19 +21497,19 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = 0;
                     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-                    buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     region.origin = 0;
                     region.size = sizeof(short) * max_post_router_tile;
-                    buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Reorder activations
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Create image for reordered src1
@@ -21218,7 +21517,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     region.origin = 0;
                     region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                     backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                    buf_src1_reordered = clCreateSubBuffer(
+                    buf_src1_reordered = DSB(
                         backend_ctx->prealloc_act_trans.buffer,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -21257,7 +21556,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // Create sub buffer for dst
                     region.origin = offsetd;
                     region.size = ne0 * ne1 * ne2 * sizeof(float);
-                    sub_buf_dst = clCreateSubBuffer(
+                    sub_buf_dst = DSB(
                         extrad->data_device,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -21323,7 +21622,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = offset2;
                     region.size = ne20 * ne21 * sizeof(int);
-                    buf_src2 = clCreateSubBuffer(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // set thread grid
@@ -21335,7 +21634,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    src1_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    src1_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // create image for src1
@@ -21381,19 +21680,19 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = 0;
                     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-                    buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     region.origin = 0;
                     region.size = sizeof(short) * max_post_router_tile;
-                    buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Reorder activations
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Generic dp4a MoE GEMM
@@ -21431,7 +21730,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
 
                             region.origin = offsetd;
                             region.size = ne0 * ne1 * ne2 * sizeof(float);
-                            cl_mem dp_sub_buf_dst = clCreateSubBuffer(extrad->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                            cl_mem dp_sub_buf_dst = DSB(extrad->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                             CL_CHECK(status);
                             cl_image_format dp_ifd = {CL_R, CL_FLOAT};
                             cl_image_desc dp_idd = {CL_MEM_OBJECT_IMAGE1D_BUFFER, static_cast<size_t>(ne0 * ne1 * ne2), 0,0,0,0,0,0,0, {dp_sub_buf_dst}};
@@ -21476,7 +21775,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     region.origin = 0;
                     region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                     backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                    buf_src1_reordered = clCreateSubBuffer(
+                    buf_src1_reordered = DSB(
                         backend_ctx->prealloc_act_trans.buffer,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -21510,7 +21809,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // Create sub buffer for dst
                     region.origin = offsetd;
                     region.size = ne0 * ne1 * ne2 * sizeof(float);
-                    sub_buf_dst = clCreateSubBuffer(
+                    sub_buf_dst = DSB(
                         extrad->data_device,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -21576,7 +21875,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = offset2;
                     region.size = ne20 * ne21 * sizeof(int);
-                    buf_src2 = clCreateSubBuffer(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // set thread grid
@@ -21588,7 +21887,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    src1_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    src1_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // create image for src1
@@ -21634,19 +21933,19 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = 0;
                     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-                    buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     region.origin = 0;
                     region.size = sizeof(short) * max_post_router_tile;
-                    buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Reorder activations
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Create image for reordered src1
@@ -21654,7 +21953,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     region.origin = 0;
                     region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                     backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                    buf_src1_reordered = clCreateSubBuffer(
+                    buf_src1_reordered = DSB(
                         backend_ctx->prealloc_act_trans.buffer,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -21688,7 +21987,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // Create sub buffer for dst
                     region.origin = offsetd;
                     region.size = ne0 * ne1 * ne2 * sizeof(float);
-                    sub_buf_dst = clCreateSubBuffer(
+                    sub_buf_dst = DSB(
                         extrad->data_device,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -21765,18 +22064,18 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                 cl_buffer_region region;
                 region.origin = 0;
                 region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-                buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                 CL_CHECK(status);
 
                 region.origin = 0;
                 region.size = sizeof(short) * max_post_router_tile;
-                buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                 CL_CHECK(status);
 
                 // Reorder activations (group tokens by expert into tiles of 32)
                 region.origin = offset1;
                 region.size = ne10 * ne11 * ne12 * sizeof(float);
-                sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                 CL_CHECK(status);
 
                 // Generic dp4a MoE GEMM
@@ -21814,7 +22113,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                         // dst image
                         region.origin = offsetd;
                         region.size = ne0 * ne1 * ne2 * sizeof(float);
-                        cl_mem dp_sub_buf_dst = clCreateSubBuffer(extrad->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                        cl_mem dp_sub_buf_dst = DSB(extrad->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                         CL_CHECK(status);
                         cl_image_format dp_ifd = {CL_R, CL_FLOAT};
                         cl_image_desc dp_idd = {CL_MEM_OBJECT_IMAGE1D_BUFFER, static_cast<size_t>(ne0 * ne1 * ne2), 0,0,0,0,0,0,0, {dp_sub_buf_dst}};
@@ -21856,7 +22155,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                 region.origin = 0;
                 region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                 backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                buf_src1_reordered = clCreateSubBuffer(
+                buf_src1_reordered = DSB(
                     backend_ctx->prealloc_act_trans.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                 CL_CHECK(status);
                 cl_image_format image_format_buf_src1 = {CL_RGBA, CL_FLOAT};
@@ -21881,7 +22180,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                 // dst image
                 region.origin = offsetd;
                 region.size = ne0 * ne1 * ne2 * sizeof(float);
-                sub_buf_dst = clCreateSubBuffer(extrad->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                sub_buf_dst = DSB(extrad->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                 CL_CHECK(status);
                 cl_image_format image_format_buf_dst = {CL_R, CL_FLOAT};
                 cl_image_desc image_desc_buf_dst = {CL_MEM_OBJECT_IMAGE1D_BUFFER, static_cast<size_t>(ne0 * ne1 * ne2), 0,0,0,0,0,0,0, {sub_buf_dst}};
@@ -22020,7 +22319,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = offset2;
                     region.size = ne20 * ne21 * sizeof(int);
-                    buf_src2 = clCreateSubBuffer(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // set thread grid
@@ -22032,7 +22331,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    src1_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    src1_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // create image for src1
@@ -22093,18 +22392,18 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = 0;
                     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-                    buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     region.origin = 0;
                     region.size = sizeof(short) * max_post_router_tile;
-                    buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Reorder activations
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     unsigned short map_ratio = ne20 / ne11;
@@ -22115,7 +22414,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                         region.origin = 0;
                         region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                         backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                        buf_src1_reordered = clCreateSubBuffer(
+                        buf_src1_reordered = DSB(
                             backend_ctx->prealloc_act_trans.buffer,
                             0,
                             CL_BUFFER_CREATE_TYPE_REGION,
@@ -22150,7 +22449,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // MoE kernel prepare
                     region.origin = offsetd;
                     region.size = ne0 * ne1 * ne2 * sizeof(float);
-                    sub_buf_dst = clCreateSubBuffer(
+                    sub_buf_dst = DSB(
                         extrad->data_device,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -22272,7 +22571,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = offset2;
                     region.size = ne20 * ne21 * sizeof(int);
-                    buf_src2 = clCreateSubBuffer(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // set thread grid
@@ -22284,7 +22583,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    src1_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    src1_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // create image for src1
@@ -22332,19 +22631,19 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = 0;
                     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-                    buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     region.origin = 0;
                     region.size = sizeof(short) * max_post_router_tile;
-                    buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Reorder activations
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Generic dp4a MoE GEMM
@@ -22384,7 +22683,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
 
                             region.origin = offsetd;
                             region.size = ne0 * ne1 * ne2 * sizeof(float);
-                            cl_mem dp_sub_buf_dst = clCreateSubBuffer(extrad->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                            cl_mem dp_sub_buf_dst = DSB(extrad->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                             CL_CHECK(status);
                             cl_image_format dp_ifd = {CL_R, CL_FLOAT};
                             cl_image_desc dp_idd = {CL_MEM_OBJECT_IMAGE1D_BUFFER, static_cast<size_t>(ne0 * ne1 * ne2), 0,0,0,0,0,0,0, {dp_sub_buf_dst}};
@@ -22429,7 +22728,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     region.origin = 0;
                     region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                     backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                    buf_src1_reordered = clCreateSubBuffer(
+                    buf_src1_reordered = DSB(
                         backend_ctx->prealloc_act_trans.buffer,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -22461,7 +22760,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // Create sub buffer for dst
                     region.origin = offsetd;
                     region.size = ne0 * ne1 * ne2 * sizeof(float);
-                    sub_buf_dst = clCreateSubBuffer(
+                    sub_buf_dst = DSB(
                         extrad->data_device,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -22529,7 +22828,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = offset2;
                     region.size = ne20 * ne21 * sizeof(int);
-                    buf_src2 = clCreateSubBuffer(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // set thread grid
@@ -22541,7 +22840,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    src1_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    src1_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // create image for src1
@@ -22603,19 +22902,19 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = 0;
                     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
-                    buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     region.origin = 0;
                     region.size = sizeof(short) * max_post_router_tile;
-                    buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Reorder activations
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     unsigned short map_ratio = ne20 / ne11;
@@ -22626,7 +22925,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                         region.origin = 0;
                         region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                         backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                        buf_src1_reordered = clCreateSubBuffer(
+                        buf_src1_reordered = DSB(
                             backend_ctx->prealloc_act_trans.buffer,
                             0,
                             CL_BUFFER_CREATE_TYPE_REGION,
@@ -22662,7 +22961,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // Create sub buffer for dst
                     region.origin = offsetd;
                     region.size = ne0 * ne1 * ne2 * sizeof(float);
-                    sub_buf_dst = clCreateSubBuffer(
+                    sub_buf_dst = DSB(
                         extrad->data_device,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,
@@ -22790,7 +23089,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     cl_buffer_region region;
                     region.origin = offset2;
                     region.size = ne20 * ne21 * sizeof(int);
-                    buf_src2 = clCreateSubBuffer(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(extra2->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // set thread grid
@@ -22802,7 +23101,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    src1_sub_buffer = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    src1_sub_buffer = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // create image for src1
@@ -22862,19 +23161,19 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     region.origin = 0;
                     region.size = sizeof(int) * max_post_router_tile * n_tile_size;
                     GGML_ASSERT(backend_ctx->prealloc_post_router.buffer);
-                    buf_src2 = clCreateSubBuffer(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2 = DSB(backend_ctx->prealloc_post_router.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     region.origin = 0;
                     region.size = sizeof(short) * max_post_router_tile;
-                    buf_src2_emap = clCreateSubBuffer(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    buf_src2_emap = DSB(backend_ctx->prealloc_emap.buffer, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     // Reorder activations
                     // create a sub_buffer for src1
                     region.origin = offset1;
                     region.size = ne10 * ne11 * ne12 * sizeof(float);
-                    sub_buf_src1_pre = clCreateSubBuffer(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
+                    sub_buf_src1_pre = DSB(extra1->data_device, 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
                     CL_CHECK(status);
 
                     unsigned short map_ratio = ne20 / ne11;
@@ -22886,7 +23185,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                         region.origin = 0;
                         region.size = ne00 * max_post_router_tile * n_tile_size * sizeof(float);
                         backend_ctx->prealloc_act_trans.allocate(backend_ctx->context, region.size);
-                        buf_src1_reordered = clCreateSubBuffer(
+                        buf_src1_reordered = DSB(
                             backend_ctx->prealloc_act_trans.buffer,
                             0,
                             CL_BUFFER_CREATE_TYPE_REGION,
@@ -22924,7 +23223,7 @@ static void ggml_cl_mul_mat_id(ggml_backend_t backend, const ggml_tensor * src0,
                     // Create sub buffer for dst
                     region.origin = offsetd;
                     region.size = ne0 * ne1 * ne2 * sizeof(float);
-                    sub_buf_dst = clCreateSubBuffer(
+                    sub_buf_dst = DSB(
                         extrad->data_device,
                         0,
                         CL_BUFFER_CREATE_TYPE_REGION,

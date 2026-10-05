@@ -1,0 +1,4 @@
+== A/B SEAM loadercache (via safe_deploy; alternado) ==
+-- precheck --
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+-- A1: rodar com 9698670c (ja instalado) --

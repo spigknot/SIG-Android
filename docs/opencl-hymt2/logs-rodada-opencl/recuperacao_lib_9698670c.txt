@@ -1,0 +1,9 @@
+== RECUPERACAO da lib (rb13 intacto no device) ==
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  /data/local/tmp/rb13_9698670c.so
+CP_OK
+95613928
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+-- smoke de abertura --
+Starting: Intent { cmp=br.gov.sp.pcsp.launcher/.TextoActivity }
+16568
+  mCurrentFocus=Window{7754f77 u0 br.gov.sp.pcsp.launcher/br.gov.sp.pcsp.launcher.TextoActivity}

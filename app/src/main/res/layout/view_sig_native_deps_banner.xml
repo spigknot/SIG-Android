@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Faixa persistente e NÃO bloqueante para os componentes nativos do SIG.
+
+  ⚠️ Substitui o comportamento anterior, em que o modal de download reaparecia
+  a cada `onResume`. Este aviso fica discreto, permanece enquanto faltar o
+  pacote, tem ação de retry e respeita "Agora não" sem reimportar.
+
+  Não é Snackbar: ele some sozinho e não serve como caminho manual de retorno.
+  O botão é gerado em código (NativeDependencyPrompt.buildFaixa) para que
+  layout, texto e ação vivam junto da lógica de estado.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/faixa_dependencias"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:background="#FFFFF3CD"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingTop="10dp"
+    android:paddingEnd="8dp"
+    android:paddingBottom="10dp"
+    android:visibility="gone">
+
+    <TextView
+        android:id="@+id/faixa_dependencias_texto"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Componentes do SIG não baixados — várias ferramentas não vão funcionar."
+        android:textColor="#FF664D03"
+        android:textSize="13sp" />
+
+    <TextView
+        android:id="@+id/faixa_dependencias_botao"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        android:padding="10dp"
+        android:text="Baixar"
+        android:textColor="#FF0D47A1"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

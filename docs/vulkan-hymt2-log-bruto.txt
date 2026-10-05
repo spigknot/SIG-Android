@@ -1,0 +1,90 @@
+09-26 18:50:14.422 D/SIGLlama( 4245): ggml_vulkan: Found 1 Vulkan devices:
+09-26 18:50:14.422 I/SIGLlama( 4245): SIGVK device:  | api=0.0.0 | type=0 | driver_ver=0
+09-26 18:50:14.422 I/SIGLlama( 4245): SIGVK features: dotproduct=1 coopmat=0 fp16storage=1 fp16compute=1 subgroup_size=64
+09-26 18:50:14.422 I/SIGLlama( 4245): SIGVK dotprop: 4x8signed=0 4x8mixed=0 4x8unsigned=0 8bitsigned=0 8bitmixed=0 16bitsigned=0 32bitsigned=0
+09-26 18:50:14.422 I/SIGLlama( 4245): SIGVK caps: int_dot_final=0 coopmat=0 fp16_ok=1
+09-26 18:50:14.422 D/SIGLlama( 4245): ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+09-26 18:50:14.441 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:14.485 I/SIGLlama( 4245): ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+09-26 18:50:14.486 I/SIGLlama( 4245): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+09-26 18:50:14.486 I/SIGLlama( 4245): ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+09-26 18:50:14.489 D/SIGLlama( 4245): ggml_vulkan: WARNING: Async execution disabled on certain Intel devices.
+09-26 18:50:14.552 I/SIGLlama( 4245): llama_model_loader: loaded meta data with 33 key-value pairs and 354 tensors from /storage/emulated/0/Android/data/br.gov.sp.pcsp.launcher/files/hymt2_models/Hy-MT2-1.8B-Q4_K_M.gguf (version GGUF V3 (latest))
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   0:                       general.architecture str              = hunyuan-dense
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   1:                               general.type str              = model
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   2:                     general.sampling.top_k i32              = 20
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   3:                     general.sampling.top_p f32              = 0.800000
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   4:                      general.sampling.temp f32              = 0.700000
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   5:                               general.name str              = 1.8B
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   6:                           general.finetune str              = 1.8B
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   7:                         general.size_label str              = 1.8B
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   8:                  hunyuan-dense.block_count u32              = 32
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   9:               hunyuan-dense.context_length u32              = 262144
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  10:             hunyuan-dense.embedding_length u32              = 2048
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  11:          hunyuan-dense.feed_forward_length u32              = 6144
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  12:         hunyuan-dense.attention.head_count u32              = 16
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  13:      hunyuan-dense.attention.head_count_kv u32              = 4
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  14:               hunyuan-dense.rope.freq_base f32              = 11158840.000000
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  15: hunyuan-dense.attention.layer_norm_rms_epsilon f32              = 0.000010
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  16:         hunyuan-dense.attention.key_length u32              = 128
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  17:       hunyuan-dense.attention.value_length u32              = 128
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  18:            hunyuan-dense.rope.scaling.type str              = none
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  19:          hunyuan-dense.rope.scaling.factor f32              = 1.000000
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  20: hunyuan-dense.rope.scaling.original_context_length u32              = 262144
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  21:                       tokenizer.ggml.model str              = gpt2
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  22:                         tokenizer.ggml.pre str              = hunyuan-dense
+09-26 18:50:14.579 I/SIGLlama( 4245): llama_model_loader: - kv  23:                      tokenizer.ggml.tokens arr[str,120818]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+09-26 18:50:14.587 I/SIGLlama( 4245): llama_model_loader: - kv  24:                  tokenizer.ggml.token_type arr[i32,120818]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  25:                      tokenizer.ggml.merges arr[str,119758]  = ["Ġ Ġ", "Ġ t", "Ġ a", "i n", "h e...
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  26:                tokenizer.ggml.bos_token_id u32              = 120000
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  27:                tokenizer.ggml.eos_token_id u32              = 120020
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  28:            tokenizer.ggml.padding_token_id u32              = 120002
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  29:          tokenizer.ggml.seperator_token_id u32              = 120007
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  30:                    tokenizer.chat_template str              = {% if messages[0]['role'] == 'system'...
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  31:               general.quantization_version u32              = 2
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  32:                          general.file_type u32              = 15
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - type  f32:  129 tensors
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - type q4_K:  192 tensors
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - type q6_K:   33 tensors
+09-26 18:50:14.612 I/SIGLlama( 4245): print_info: file format = GGUF V3 (latest)
+09-26 18:50:14.612 I/SIGLlama( 4245): print_info: file type   = Q4_K - Medium
+09-26 18:50:14.612 I/SIGLlama( 4245): print_info: file size   = 1.05 GiB (5.04 BPW) 
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_prepare_model_devices: using device Vulkan0 (Adreno (TM) 840) (unknown id) - 19221 MiB free
+09-26 18:50:14.681 D/SIGLlama( 4245): init_tokenizer: initializing tokenizer for type 2
+09-26 18:50:14.693 I/SIGLlama( 4245): load: 0 unused tokens
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120817 '<｜hy_place▁holder▁no▁799｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120815 '<｜hy_place▁holder▁no▁797｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120814 '<｜hy_place▁holder▁no▁796｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120813 '<｜hy_place▁holder▁no▁795｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120810 '<｜hy_place▁holder▁no▁792｜>' is not marked as EOG
+09-26 18:51:35.632 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:39.847 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:43.942 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:48.033 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:52.232 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:56.325 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:00.519 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:04.715 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:08.925 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:13.125 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:17.295 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:21.449 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:25.605 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:29.803 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:34.005 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:38.120 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:42.233 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:46.392 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:50.546 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:54.698 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:58.862 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:03.087 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:07.281 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:11.480 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:15.692 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:19.879 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:24.077 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:25.579 I/SIGLlama( 4245): geracao concluida: 4096 tokens de saida (backend=GPU Vulkan (Vulkan / Vulkan0))
+09-26 18:53:28.192 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:28.283 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''

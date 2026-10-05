@@ -130,7 +130,10 @@ if (TARGET ggml-vulkan)
             "${CMAKE_CURRENT_SOURCE_DIR}/../vulkan-headers/include"
             "${CMAKE_CURRENT_SOURCE_DIR}/../spirv-headers/include")
     # O patch de "sem crash" fica em ggml-vulkan.cpp (target ggml-vulkan), então a
-    # flag precisa ser DEFINIDA nele — definir só no sig_llama não tem efeito.
+    # flag precisa ser DEFINIDA nela — definir só no sig_llama não tem efeito.
+    # GGML_VULKAN_DEBUG (log de pipelines/buffers/descriptors) fica DESLIGADO
+    # por padrão: é barulhento. Para diagnóstico, liga com -DGGML_VULKAN_DEBUG=1
+    # no build (o probe "SIGVK" das capabilities não depende desta flag).
     target_compile_definitions(ggml-vulkan PRIVATE SIG_VULKAN_NO_CRASH=1)
 endif()
 

@@ -1,0 +1,261 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 12 (29/09/2026) — VERSAO FINAL
+Hy-MT2 1.8B / llama.cpp / Vulkan / Adreno 840 / CPH2747
+================================================================================
+Responde ao "PROMPT AO AGENTE EXECUTOR — RETOMADA APOS A RODADA 11" de
+29/09 21:44. SUBSTITUI a versao parcial anterior (que terminava em BLOQUEADO):
+o alvo foi CONECTADO (endereco/porta de CONEXAO fornecido pelo usuario) e as
+secoes C, D e E foram EXECUTADAS. NENHUM commit/push/publicacao/APK (§1):
+HEAD 080e804, 82 itens WIP preexistentes intactos.
+
+ESTADOS (§9): CCE / PARCIAL / PENDENTE / INVALIDADO / BLOQUEADO
+
+  A. conexao/identidade ...... CCE  (serial explicito; hashes conferidos)
+  B. helper/wrapper + testes . CCE  (102/102 logicos + 13/13 wrapper)
+  C. controle CPU + 0/1/2/33 . CCE  (controle byte-a-byte; mapa por RUNTIME)
+  D. captura/replay local .... PARCIAL (embeddings capturados e validados;
+                               identidade exata do tensor pendente, D.3)
+  E. benchmark pareado ....... CCE  (18/18 com v8; ratios novos abaixo)
+  F. evidencias/inventario ... CCE
+
+CLASSIFICACAO DE EVIDENCIA (§9): "fonte inspecionado" (B.1, D.3), "teste
+sintetico" (102 + 13), "teste de integracao" (controle curto D.1, com modelo)
+e "inferencia no alvo" (C, D, E — EXECUTADAS nesta rodada) sao rotulos
+distintos. Nada e' "concluido porque compilou".
+
+--------------------------------------------------------------------------------
+A. CONEXAO E IDENTIDADE — CCE
+--------------------------------------------------------------------------------
+Estado: CCE. O usuario forneceu 100.108.27.64:45763 (porta de CONEXAO, nao de
+pareamento — §2). Identidade conferida ANTES de qualquer execucao, com o
+SERIAL EXPLICITO em todos os comandos (o 1164a04/PJA110 nunca recebeu
+inferencia — so testes logicos da B.5, rotulados):
+
+  adb -s 100.108.27.64:45763 getprop -> model=CPH2747 device=OP611FL1
+                                        platform=canoe
+  GPU (via GLES, §7.6): Qualcomm Adreno (TM) 840, OpenGL ES 3.2 V@0842.41
+       — identifica GPU + driver OPENGL, NAO a revisao exata do driver VULKAN.
+  Identificacao VULKAN REAL (backend ggml_vulkan, dos logs da rodada 12):
+       "ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno
+        Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64"
+       Revisao numerica do driver Vulkan: NAO reportada pelo backend (o que o
+       backend expoe e' o nome); registrado sem nova campanha de capacidades.
+  sha256 hymt2_app.gguf   = c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+        == modelo de produto (OK; nao misturado com dc5f44fc...)
+  sha256 llama_harness_v8 = 6b20a48b992904c3604d6c44631e764fa35caeacff02511cebe6c8950106a358
+  ids_replay_343.txt      = 343 ids (contagem por script = 343, na faixa
+        340..400 exigida pelo pre-check)
+
+--------------------------------------------------------------------------------
+B. HELPER E WRAPPER — CCE (igual ao previo + correcao nova)
+--------------------------------------------------------------------------------
+Mantidos do TXT parcial: device_list.h (contrato de 3 condicoes, ctor zera o
+array, lifetime `static` conferido nos 3 chamadores), config_coerente
+rejeitando backend desconhecido, replay12.sh (rc imediato, dir exclusivo,
+hashes, pos-checks), harness_dump.h (fwrite/fclose -> .INCOMPLETO +
+dump_falhou invalida o veredito), 102/102 logicos (PJA110, logica pura) e
+13/13 wrapper sinteticos (acharam 2 bugs meus: tr do espaco; grep da
+colocacao "to Vulkan0" vs a linha real "assigned to device Vulkan0").
+
+CORRECAO NOVA nesta versao: o --help do harness nao listava --dump-passo —
+o pre-check FALHOU num run real no alvo (evidencia de que o pre-check
+funciona). Ajuda atualizada com TODAS as opcoes (--dump-passo, --log-debug,
+--benchmark, --dump-embed, --accept-duplo, cadeia do app); v8 recompilado
+(EXIT=0, 0 erros).
+
+--------------------------------------------------------------------------------
+C. CONTROLE CPU E MAPA 0/1/2/33 — CCE (EXECUTADO NO ALVO)
+--------------------------------------------------------------------------------
+
+C.1 CONTROLE CPU vs REFERENCIA PRESERVADA (§6.1) — EXECUTADO:
+  replay12.sh no alvo (dir exclusivo replay12_20260929_195709); protocolo
+  sequencial do controle original: prefill fatiado em 512 + 1 decode por ID;
+  L[342] capturado ANTES de consumir a escolha 342. Comparado com o dump
+  PRESERVADO da rodada 8 (dump_replay_cpu_P342.f32):
+    483.272 B (120.818 floats) nos dois
+    max_abs = 0.000000000 | RMSE = 0 | 0/120.818 posicoes diferentes
+      => BYTE A BYTE IDENTICO
+    margem assinada 3415-16990 = +0.030470 nos dois
+      => a referencia historica foi REPRODUZIDA (nao forcada)
+    nan=0, MEDICAO VALIDA, contagens consistentes=sim, finitude VERIFICADA
+  sha256 do dump novo: af72aaef4a906c8ac050e87524432fb459ad0a812fb8214dccca2e3435a78e1f
+
+C.2 MATRIZ SOMENTE 0/1/2/33 (§6.2 — sem 4/8/16, sequencial puro):
+  config    margem 3415-16990  vencedor   dump sha256 (16)
+  CPU 0      +0.030470         3415       af72aaef4a906c8a
+  GPU 1      -0.147522         16990      0a08090969bbe8bf
+  GPU 2      -0.127686         16990      6135f9ac68306f9f
+  GPU 33     -0.200150         16990      35cc5dfd34dfb220
+  Todos: 483.272 B, nan=0, MEDICAO VALIDA, rc=0.
+  Deltas vs CPU (max_abs / RMSE):
+    CPU x GPU1   0.550151 / 0.112112   CPU x GPU2    0.517009 / 0.110042
+    CPU x GPU33  0.476870 / 0.100522   GPU2 x GPU33  0.336368 / 0.068184
+  [CORRECAO DA RODADA 10 (§7.2): os dumps GPU2 == GPU33 bit-a-bit daquela
+   rodada NAO se reproduziram no instrumento corrigido (agora diferem em
+   120.818/120.818 posicoes); o resultado antigo e' INVALIDADO.
+   NAO afirmo qual mudanca causou a igualdade antiga — a lista devices e o
+   protocolo mudaram JUNTOS, entao a causa nao esta isolada.]
+
+C.3 COLOCACAO REAL POR RUNTIME (§5 — nao resumido): linhas LLAMA_LOG_D|
+  "load_tensors: layer N assigned to device ..." com --log-debug:
+    GPU1 : layers 0..31 -> CPU ; layer 32 -> Vulkan0  (SO o OUTPUT)
+    GPU2 : 2 layers em Vulkan0 (bloco 31 + output)
+    GPU33: 33 layers em Vulkan0 ; CPU0: 33 layers em CPU, 0 em Vulkan
+  O mapa do fonte (0=CPU; 1=output; 2=bloco31+output; 33=todos) foi
+  CONFIRMADO EM EXECUCAO nas 4 configuracoes — associacao da formula pela
+  execucao, nao so por strings na .a (§5).
+
+C.4 LEITURA LIMITADA DE C (§6.3): a inversao do par 3415/16990 JA OCORRE
+  COM n_gpu=1 — com 32/32 blocos transformer em CPU e SO a camada de output (indice 32) na GPU *** RETIFICADO em 29/09/2026 (parecer da rodada 13, §5): o texto anterior dizia '31/32 blocos', errado — pela regra i_gpu_start = 33-1 = 32, TODOS os 32 blocos (0..31) ficam em CPU e apenas o output vai para a GPU; ver PROMPT-RELATORIO-RODADA13-ESPECIALISTA.txt. ***
+  na GPU. Isso ORIENTA o caminho de saida como suspeito (norma final,
+  projecao de vocabulario, conversoes, readback, selecao da linha de
+  logits), sem provar: nao analisei o resto do vocabulario nem operacoes
+  intermediarias, e colocacao de pesos nao e' colocacao de todas as
+  operacoes do grafo (§5). Nao forco bloco 1/embedding/projecao como causa.
+
+--------------------------------------------------------------------------------
+D. CAPTURA E REPLAY LOCAL — PARCIAL (EXECUTADO, COM PENDENCIA HONESTA)
+--------------------------------------------------------------------------------
+
+D.1 CAPTURA VALIDADA NO CONTROLE CURTO (§6.5) — EXECUTADA:
+  flag --dump-embed (off por padrao; nao altera o caminho normal) grava
+  llama_get_embeddings_ith(ctx,-1) junto de L[342]. Validacao ANTES do caso
+  focal: curto 4 ids, CPU, com e sem a flag =>
+    sha256 dos LOGITS = 7392c3465141f62b nos dois (a instrumentacao NAO
+    altera a reproducao) | .emb = 8.192 B = 2048 floats, sem NaN, rc=0.
+  Reconfirmado no focal: cpu0 com-emb == cpu0 sem-emb byte a byte
+  (af72aaef4a906c8a). Lifetime/sincronizacao: captura na mesma chamada do
+  dump, com contexto vivo; sem callback dentro do compute.
+
+D.2 OPERANDO CAPTURADO (dir exclusivo emb_20260929_200642):
+  4 runs (0/1/2/33): rc=0, MEDICAO VALIDA, .f32 483.272 B + .emb 8.192 B
+  em CADA run.
+  hidden state (2048 floats, nan=0) cpu0 vs GPUs:
+    cpu0 x GPU1   max_abs = 0.480949163  RMSE = 0.140250970  2048/2048 dif
+    cpu0 x GPU2   max_abs = 0.488643169  RMSE = 0.137567818  2048/2048 dif
+    cpu0 x GPU33  max_abs = 0.468287945  RMSE = 0.122486330  2048/2048 dif
+  O operando capturado DIVERGE em todas as configuracoes GPU.
+
+D.3 PENDENCIA HONESTA — IDENTIDADE DO TENSOR (§6.4/6.5; nao afirmo sem ler):
+  Ainda NAO determinei se o buffer lido por get_embeddings_ith e' a saida do
+  ULTIMO BLOCO (entao os blocos ja divergiriam em GPU1) OU a saida da NORMA
+  FINAL (entao a divergencia nasce na norma na GPU). Localizei a leitura
+  (llama-context.cpp get_embeddings_ith -> embd.data) mas NAO li a linha que
+  preenche `embd` no grafo — afirmar sem ler seria repetir o erro das
+  rondadas 7/9 (leitura parcial de funcao).
+  Proximo passo EXATO: achar a copia que alimenta `embd` em llama-graph/
+  llama-context; se preciso, llama_get_embeddings_layer_inp(lid) (API existe
+  no fork) para capturar a ENTRADA da camada 32 (saida do bloco 31) — ai a
+  referencia local com operandos congelados se decide: entrada identica
+  CPU/GPU1 => intervalo = norma+projecao+readback com MESMO operando;
+  diferente => divergencia antes (atencao/KV).
+  NENHUMA causal atribuida (§6.3: nao forco bloco 1/embedding/projecao).
+
+--------------------------------------------------------------------------------
+E. BENCHMARK PAREADO NOVO — CCE (18/18 EXECUTADOS COM v8)
+--------------------------------------------------------------------------------
+Estado: CCE. Ratios antigos (1,552/0,544/0,408) seguem RETIRADOS de qualquer
+conclusao (TXT rodada 10: [RESULTADO HISTORICO INVALIDADO] na tabela, §C.5
+retirada). CPU antigo = observacao historica; nenhum run novo combinado com
+run antigo — esta bateria e' TODA contemporanea (mesmo v8, mesma sessao,
+mesmo aparelho).
+
+Bateria (bench12.sh, dir exclusivo bench12_20260929_201652):
+  3 casos x 2 backends x 3 reps = 18 runs, ordem contrabalanceada, seed 42,
+  config congelada (n_ctx 4096, n_batch 512, n_eval 1024, mode app),
+  --benchmark (sem varredura/top-5/log-por-passo), rc capturado por run,
+  TODAS as amostras preservadas. Resultado: 18/18 ok, falha=0, BENCH_RC=0,
+  18/18 MEDICAO VALIDA, 18/18 fim=EOG, 18/18 contagens consistentes.
+
+ESTATISTICAS GERADAS POR SCRIPT dos logs (logs-rodada12/bench_rodada12.csv
++ bench_rodada12_stats.json; min/mediana/max por run, sem somar medianas):
+  caso    be      n  min_total  mediana    max   disp  med_geracao  med_residual
+  curto   cpu     3      2.639    2.761  3.991   1,51          572      65.7 ms
+  curto   vulkan  3      4.403    4.696  4.761   1,08          529      64.8 ms
+  medio   cpu     3     11.218   12.291 14.992   1,34        7.256     133.8 ms
+  medio   vulkan  3      8.845    9.079  9.484   1,07        1.325     128.2 ms
+  longo   cpu     3     33.061   43.964 48.683   1,47       31.832     264.2 ms
+  longo   vulkan  3     19.127   19.452 23.270   1,22        2.527     255.3 ms
+  Ratios mediana VK/CPU:
+    curto   total 1,701 | decode 0,925   (tokens 8 x 8)
+    medio   total 0,739 | decode 0,183   (tokens 138 x 137)
+    longo   total 0,442 | decode 0,079   (tokens 373 x 376)
+  Residual por run = total - (5 fases) - (3 fases do passo): mediana 65-264 ms
+  (0,7-1,8% do total por run) — NAO atribuido a strings/logging por exclusao;
+  e' apenas "nao discriminado" (sem cronometro proprio).
+  §7.4 (a): a coluna "geracao" mede SO o llama_decode (desde a chamada ate o
+  retorno), NAO o ciclo completo de geracao: esperas/readback, get_logits,
+  sampler e detokenizacao ficam FORA dela (get_logits/sampler/detok tem fase
+  propria; waits/readback ficam no nao-discriminado). O total e' medido de
+  parede, nao derivado. §7.4 (b): nenhum numero deste TXT soma medianas de
+  fases para fabricar mediana de total — medianas sao sempre por coluna.
+
+LEITURA LIMITADA (§7): neste aparelho e workload, com v8 e processo novo:
+  o decode da Vulkan e' 1,08x (curto, empate) a 12,7x (longo) mais rapido;
+  no TOTAL, a Vulkan e' MAIS LENTA no curto (1,70x) — o overhead fixo nao e'
+  amortizado em 8 tokens — e mais rapida no medio (0,74x) e longo (0,44x).
+  Nao isola o custo do gate; nao generalizo para outros aparelhos; 3 casos
+  nao sustentam corte automatico de tamanho; estes ratios NAO vem de
+  instrumentacao debug (sem top-5/scan/log no modo benchmark).
+
+--------------------------------------------------------------------------------
+F. EVIDENCIAS, INVENTARIO, PROCEDENCIA — CCE
+--------------------------------------------------------------------------------
+F.1 BINARIOS COM/SEM o defeito devices (§8):
+  v3/v4/v5 e layer_diff v1/v2 -> ramo Vulkan afetado (UB); runs Vulkan
+    antigos = PENDENTES DE RECONFIRMACAO; runs CPU = observacoes historicas.
+  v6/v7/v8 -> CORRIGIDOS (ListaDevices terminada e testada).
+  Sampler CPU (penalties 10/10, integracao PASS) = fora do ramo, NAO
+  invalidados. Repetibilidade 3/3 = observada (nao determinismo universal).
+
+F.2 PROCEDENCIA (§5): build_harness.sh -> libllama.a de
+  native-dependencies/build/.../llama-build; hashes completos nos manifestos.
+  A formula do mapa agora tem confirmacao POR RUNTIME (C.3), alem de
+  strings (que so provam pertenca do trecho de log, nao a formula).
+
+F.3 INVENTARIO GERADO POR SCRIPT (§9): logs-rodada12/
+  MANIFESTO-RODADA12.txt (SHA-256 completos; declara se conta a si = nao).
+  Conteudo: testes/ (102/0 + 13/0), scripts/ (replay12, testa, bench12),
+  replay12_* + exec (replay 4 runs), emb_200642 (captura 4 runs),
+  ctl_* (controle curto), bench12/ (18 logs) + bench12_exec.txt,
+  bench_rodada12.csv + stats.json. Local vs anexo: TXTs/manifestos/CSV/
+  saidas = anexaveis; binarios de 107 MB = LOCAIS por SHA (nao afirmo
+  anexo inexistente). Controles pf/v2/v3/v4/v5/v6 intactos.
+
+F.4 ALTERACOES vs WIP (nenhum WIP tocado; nenhum commit):
+  ALTER llama_harness.cpp  (--dump-embed + ajuda completa do --help)
+  ALTER harness_args.h     (flag --dump-embed)
+  NOVO  scripts_replay/bench12.sh
+  NOVO  arm64-v8a/llama_harness_v8
+        6b20a48b992904c3604d6c44631e764fa35caeacff02511cebe6c8950106a358
+  (da rodada 12 ja entregues: device_list.h, harness_dump.h, replay12.sh,
+   testa_replay12.sh, harness_args_test.cpp — ver TXT parcial §F.4)
+
+F.5 COMANDOS E RETORNOS:
+  build_harness.sh (v8) .................. EXIT=0, 0 erros
+  controle curto sem/com --dump-embed .... rc=0 x2, logits IDENTICOS
+  replay12.sh (4 runs sequenciais) ........ WRAPPER_RC=0, 4/4 pos-check,
+                                            "REPLAY12 DONE"
+  matriz 0/1/2/33 com --dump-embed ........ rc=0 x4, 4/4 MEDICAO VALIDA
+  bench12.sh (18 runs) ................... falha=0, BENCH_RC=0, 18/18 VALIDA
+  build_args_test 102/0 (PJA110) ......... EXIT=0 / RC=0
+  testa_replay12 13/0 (PC) ............... WRAPPER_EXIT=0
+  NENHUM commit/push/publicacao/APK/remocao (§1 cumprido).
+
+================================================================================
+PROXIMOS PASSOS (ordem do parecer)
+================================================================================
+1. Fechar D.3: ler a linha que preenche `embd`; se preciso,
+   llama_get_embeddings_layer_inp(32) para a entrada do output — ai a
+   referencia local com operandos congelados (ou bloqueio tecnico concreto
+   com a linha exata onde trava).
+2. So entao captura de operandos da operacao suspeita (§6.4), com a guarda:
+   instrumentacao que remove a divergencia e' alteracao de reproducao.
+3. Reconfirmar o que depender de run Vulkan antigo com o defeito (F.1)
+   antes de qualquer conclusao de qualidade/desempenho sobre esses runs.
+
+================================================================================
+FIM — RODADA 12 VERSAO FINAL (A, B, C, E, F = CCE; D = PARCIAL)
+Anexos: logs-rodada12/ (manifesto, testes 102/0 e 13/0, replay, emb,
+controle curto, 18 logs de benchmark, CSV + stats.json)
+================================================================================

@@ -1,0 +1,5 @@
+== DEPLOY PROFA2 cbd1a033 (piloto de perfil; escopo autorizado) ==
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_profA2.so: 1 file pushed, 0 skipped. 13.7 MB/s (95955040 bytes in 6.674s)
+OK
+cbd1a033ef1626e2b75a27af116f4101610ca208d88a1dfb61e08bfcae32aa54  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

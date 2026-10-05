@@ -1,0 +1,14 @@
+== 1) fonte ausente: deve ABORTAR sem push ==
+  OK (abortou antes do push)
+== 2) push falho: deve ABORTAR sem cp no destino ==
+  OK (sem cp; fail-closed)
+== 3) push truncado (EOF): deve detectar size divergente e NAO copiar ==
+  OK (sem cp; vacina ativa)
+== 4) sha do destino divergente apos cp: deve falhar no readback ==
+  OK (readback detectou divergencia)
+== 5) sucesso: caminho completo ==
+  OK (deploy completo verificado)
+== 6) path com BACKSLASH (subprocess/PowerShell): deve NORMALIZAR e passar ==
+  OK (path normalizado; regressao do bug de deploy corrigida)
+
+RESULTADO: PASS (6/6 casos; fail-closed comprovado)

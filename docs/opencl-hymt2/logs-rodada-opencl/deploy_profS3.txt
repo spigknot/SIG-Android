@@ -1,0 +1,8 @@
+== DEPLOY PROFS3 811f76c9 (protocolo corrigido pos-incidente) ==
+fonte: 95915984B sha=811f76c9bfad0872a8ac8e1606f9031bd793493e03a482d676e465034e281db5
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_profS3.so: 1 file pushed, 0 skipped. 2.3 MB/s (95915984 bytes in 39.521s)
+push rc=0
+device: 95915984B sha=811f76c9bfad0872a8ac8e1606f9031bd793493e03a482d676e465034e281db5
+CP_OK
+95915984
+811f76c9bfad0872a8ac8e1606f9031bd793493e03a482d676e465034e281db5  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

@@ -1,0 +1,6 @@
+== DEPLOY PROFD 2cef1f35 (via 36001) ==
+CPH2747
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_profD.so: 1 file pushed, 0 skipped. 9.0 MB/s (95981248 bytes in 10.115s)
+OK
+2cef1f35562deb2a0b3eefae2757969cc1aec7c6efeca499a5d1aba6c9c72096  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

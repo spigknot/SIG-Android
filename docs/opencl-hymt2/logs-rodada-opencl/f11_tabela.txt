@@ -1,0 +1,10 @@
+== TABELA FINAL profD (same-run; por request) ==
+rot | modelo/tam/backend | prof: prefill|decode | decfases: prep/bld/cmp/res/tot | sha
+to_pd_q4_curto_ocl_off     | (sem linhas completas) sha=084f12f4
+rto_pd_q4_curto_ocl_on     | 119 tok 469.02tok/s | prep 4 build 3 comp 6415 (88%) res 857 (12%) tot 7280 | 084f12f4
+urto_pd_q4_curto_vk_on     | 119 tok 33.10tok/s | prep 3 build 6 comp 3746 (99%) res 31 (1%) tot 3786 | 084f12f4
+ngo_pd2_q4_mais_ocl_on     | 942 tok 597.93tok/s | prep 29 build 30 comp 68649 (88%) res 9072 (12%) tot 77780 | 4d51e74f
+ongo_pd2_q4_mais_vk_on     | 942 tok 55.48tok/s | prep 83 build 109 comp 44245 (98%) res 734 (2%) tot 45171 | 5f80d9b9
+ongo_pd_q4_mais_ocl_on     | (sem linhas completas) sha=
+to_pd2_q8_curto_ocl_on     | 119 tok 483.31tok/s | prep 3 build 3 comp 6756 (91%) res 686 (9%) tot 7449 | d36a3315
+ngo_pd2_q8_mais_ocl_on     | 942 tok 572.30tok/s | prep 36 build 35 comp 75986 (91%) res 7402 (9%) tot 83459 | ee49738f

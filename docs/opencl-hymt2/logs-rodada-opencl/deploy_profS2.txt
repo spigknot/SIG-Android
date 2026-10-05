@@ -1,0 +1,5 @@
+== DEPLOY PROFS2 591e89a9 (piloto autorizado) ==
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_profS2.so: 1 file pushed, 0 skipped. 12.7 MB/s (95902120 bytes in 7.229s)
+OK
+591e89a9b90967dc25e9f72b9ed8c4c8db82000ee2c33d4b9e4609d72bcaea95  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

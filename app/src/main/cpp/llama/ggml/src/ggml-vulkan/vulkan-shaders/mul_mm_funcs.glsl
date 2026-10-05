@@ -1,3 +1,10 @@
+// SIG-FIX (experimento local MM): normaliza byte para 0..255 e aplica -256
+// quando o bit de sinal esta setado (funciona com leitura signed OU unsigned).
+float sig_mm_s8(uint u) {
+    const float x = float(u & 0xFFu);
+    return x >= 128.0 ? x - 256.0 : x;
+}
+
 void load_a_to_shmem(const uint pos_a, const uint row, const uint col, const uint idx_m, const uint block, const uint end_k) {
 #if defined(DATA_A_F32) || defined(DATA_A_F16)
 #if LOAD_VEC_A == 8
@@ -131,9 +138,12 @@ void load_a_to_shmem(const uint pos_a, const uint row, const uint col, const uin
             const uint iqs = idx & 0x07;
 
             const float d = float(data_a_packed16[ib].d);
-            const i8vec2 v0 = unpack8(int32_t(data_a_packed16[ib].qs[2*iqs])).xy; // vec4 used due to #12147
-            const i8vec2 v1 = unpack8(int32_t(data_a_packed16[ib].qs[2*iqs + 1])).xy;
-            const vec4 v = vec4(v0.x, v0.y, v1.x, v1.y) * d;
+            // SIG-FIX (experimento local MM): conversao s8 explicita por
+            // aritmetica (robusta a leitura unsigned do caminho empacotado).
+            const u8vec2 r0 = u8vec2(unpack8(int32_t(data_a_packed16[ib].qs[2*iqs    ])).xy);
+            const u8vec2 r1 = u8vec2(unpack8(int32_t(data_a_packed16[ib].qs[2*iqs + 1])).xy);
+            const vec4 v = vec4(sig_mm_s8(uint(r0.x)), sig_mm_s8(uint(r0.y)),
+                                sig_mm_s8(uint(r1.x)), sig_mm_s8(uint(r1.y))) * d;
 
             buf_a[buf_idx    ] = FLOAT_TYPEV2(v.xy);
             buf_a[buf_idx + 1] = FLOAT_TYPEV2(v.zw);

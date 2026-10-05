@@ -1,0 +1,5 @@
+== DEPLOY PROFH a072cdc6 via USB (ok=continuacao autorizada) ==
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_profH.so: 1 file pushed, 0 skipped. 119.9 MB/s (95965144 bytes in 0.763s)
+OK
+a072cdc63709d2e32d963c5b40513e392b28d2d67dd772e5d9f0f595c711f739  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

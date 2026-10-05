@@ -1,0 +1,839 @@
+PROMPT-RELATORIO AO ESPECIALISTA — HY-MT2 / OPENCL: UNIFICADO (RELATORIO + LOGS)
+Data: 02-03/10/2026. Repo: D:/Projetos/SIG (NADA commitado; WIP preservado).
+Aparelho: CPH2747 / OP611FL1 / Android 16 / Adreno 840 (serial USB 3B15BD00FVE00000;
+wireless 100.108.27.64 — portas usadas: 40229/40245/42129/33419/33183/45197).
+Biblioteca de referencia: 9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53
+APK: 27d9b20b35679be2c4ec2e565fccc5a9277b79bb1b54e9bb32d241220facf5a8 (debug, vc69/1.506, loader 9)
+Modelo produto: Hy-MT2-1.8B-q4_k_m.gguf c4bf1015... (1.133.080.544 B; inode 1849637 no /proc/maps).
+Q8 oficial: Hy-MT2-1.8B-Q8_0.gguf 5c3fe0b1... (1.908.528.192 B).
+
+================================================================================
+ESTADOS FINAIS (CCE=concluido com evidencia; PARCIAL; PENDENTE; BLOQUEADO)
+================================================================================
+[CCE] Baseline (smokes 8/8; baseline 24/24; controles CPU/Vulkan 24/24; carga 18/18)
+[CCE] Gargalo isolado: upload -> enqueue x host -> subbuf/tr/cpu (diag2/3/5)
+[CCE] F3a REFUTADO | F3b GANHO (-0.6s Q4 / -0.5s Q8) | F3c REFUTADO
+[CCE] F3b ADOTADO (default ON) + aceite 8/8 VALIDO=True + gate BUILD SUCCESSFUL
+[CCE] Auditoria async + guard in-order (fail-safe) + shims do loader
+[CCE] Build MINIMO de produto 15a548fd (0 instrumentacao/chaves): smoke 4/4;
+      estresse de lifetime 8/8 (switch/reload/tamanhos; zero crash; shas iguais)
+[CCE] Reversao total: aparelho = 9698670c; UI Q4_K_M + Vulkan; chaves zero
+[CCE] Tabela matched (60 runs existentes): decode OpenCL 18-19 t/s = mais lento
+[PENDENTE: consentimento] empacotamento/release do prod-min; build de profiling
+      do decode (proximo candidato unico por perfil; prefill NAO medido)
+[LACUNA declarada] teste nativo permanente do lifetime (plano na secao E)
+================================================================================
+A. ESCOPO (pedidos do especialista, frentes F1-F4)
+--------------------------------------------------------------------------------
+F1: baseline confiavel antes de otimizar. F2: medir carga Q4/Q8 x CPU/Vulkan/OpenCL.
+F3: deixar OpenCL o melhor possivel SEM sacrificar correcao; implementar correcoes
+locais focadas QUANDO SUSTENTADAS; sem prometer superioridade antes dos numeros.
+F4: fechar correcao async antes de empacotar (auditoria+tests+lifetime); retificar
+forca das conclusoes; perfil prefill/decode como PARTE do pedido atual; contrato
+de testes/build (build minimo de produto + gap declarado); entrega A-H com logs.
+
+B. LINHA DO TEMPO (resultados por fase)
+--------------------------------------------------------------------------------
+B1 Smokes OpenCL 8/8 OK (Q4/Q8; A->B->A identico). Baseline 24/24. Controles
+   24/24. Carga 18/18 (mediana de LOAD, timer do app): Q4K CPU 0.6 / Vulkan 1.9 /
+   OpenCL 5.5s (1a: 20.9s); Q8 CPU 1.0 / Vulkan 3.1 / OpenCL 5.5s.
+B2 Gargalo (diag2/3/5): o custo mora no caminho set_tensor do OpenCL — Vulkan
+   nem usa (0 chamadas); OpenCL: upload 3.4-4.7s/354 chamadas; split fino:
+   enqueue 1.1-1.6s; subbuf 0.0s/1796; TR 0.9-1.3s/672 (672 clWaitForEvents!);
+   cpu 1.1-1.6s. Causa-raiz: transpose_2d(blocking=true) esperava cada copia.
+B3 F3a (escritas non-blocking, chave): REFUTADO (loads iguais; enqueue inalterado).
+   F3b (transposes non-blocking, chave): GANHO — Q4 5.2->4.6s; Q8 5.5->5.0s;
+   tr 1.2-1.3->0.1s; geracao sem penalidade (A/B medio: 20.80 vs 21.30, load
+   4.80 vs 5.10 no MESMO run); shas de saida identicos em TODOS os runs.
+   F3c (release adiado, chave): REFUTADO (cpu identico; waits do repack baratos).
+B4 Aceitacao F3b (tnb=1): Q4 4/4 shas = baseline; Q8 4/4 shas = baseline
+   (uma passada interrompida por WhatsApp; refeita).
+B5 ADOCAO: F3b default ON; diag8 e5f8a1d0; aceite final com CHAVE VAZIA =
+   8/8 VALIDO=True; gate Gradle BUILD SUCCESSFUL (52 tasks). Reversoes em todos
+   os passos (diag2..diag8) com readback por sha.
+B6 F4: auditoria async (sec. E) + guard + build MINIMO de produto 15a548fd
+   (des-instrumentado: 0 strings de diag/chaves) + smoke 4/4 + estresse de
+   lifetime 8/8 + revertido; tabela matched extraida; retificacoes aplicadas.
+C. NUMEROS (medidos; fontes nos logs da secao F)
+--------------------------------------------------------------------------------
+C1 TABELA MATCHED (mediana; telemetria do app: load / pronta / decode do app):
+  Q4_K_M curto:     CPU 1.1/10.1/6.5s@21.9 | Vulkan 3.6/11.0/4.8s@29.9 | OpenCL 3.6/8.2/7.6s@18.6
+  Q4_K_M mais_longo:CPU n/d/114.8/88.8s@16.9 | Vulkan n/d/82.9/67.2s@23.1 | OpenCL n/d/79.6/78.0s@19.0
+  Q8_0 curto:       CPU 1.5/9.4/@22.8 | Vulkan 4.3/11.3/@17.5 | OpenCL 6.3/8.5/7.9s@18.0
+  Q8_0 mais_longo:  CPU n/d/111.2/@17.0 | Vulkan n/d/101.1/@17.5 | OpenCL n/d/85.6/83.7s@18.0
+  (medio/longo OpenCL Q4: pronta 16.5/36.8; decode 16.1s@18.2 / 36.0s@19.2)
+  PREFILL: nao medido (nao ha campo; nao derivado por subtracao).
+C2 F3b A/B (56ch): Q4 tnb0 med 5.2s [5.9/5.1/5.2] -> tnb1 4.6s [4.8/4.3/4.6];
+  Q8 tnb0 5.5s [6.1/5.5/5.5] -> tnb1 5.0s [5.0/5.4/4.8]; tr bucket 1.2-1.3 -> 0.1s;
+  load+inf Q4: 6.3 -> 5.8; Q8: 6.9 -> 6.2. Shas unicos por braco em todos.
+C3 ADOCAO (chave vazia): Q4 shas 084f12f4/1d328d7d/812dfba6/4d51e74f (wall 16.6/
+  22.5/62.6/98.1); Q8 shas d36a3315/cd1c7ce3/c18e04c8/ee49738f (loads 6.1/5.7/5.6/
+  5.2; pronta 14.7/22.4/50.6/97.9). Gate: BUILD SUCCESSFUL.
+C4 PROD-MIN 15a548fd: smoke Q4 6.2/4.4/4.9s + Q8 6.2s (shas f8c093ae/1c01984c OK);
+  estresse 8/8: passos OpenCL shas 084f12f4/d36a3315/812dfba6/1d328d7d + Vulkan
+  084f12f4; zero crash; cover: upload->transpose->decode imediato, switch OCL->
+  Vulkan->OCL na mesma sessao, troca Q4<->Q8 (release+reload), reload por
+  reinicio, alternancia longo->curto->medio.
+D. REFUTACOES E RETIFICACOES (aplicadas; historico preservado)
+--------------------------------------------------------------------------------
+D1 F3a: "refutado na medicao disponivel" — nao PROVA driver sincrono; discriminar
+   exigiria profiling de eventos (opcional, nao executado).
+D2 F3c: no-gain nao prova que cpu~2s = so' clCreateBuffer/manuseio (composicao
+   fina = lacuna).
+D3 F3b: beneficio = CARGA; totais no mesmo run reportados (acima); geracao sem
+   penalidade por A/B dedicado + sha como corroboracao.
+D4 20.9s: hipotese forte (cache .clbin miss/build na 1a execucao), evidencia
+   circunstancial; nao instrumentado diretamente.
+D5 Aceite Q8 load 6.1/5.7/5.6/5.2: condicoes de sessao/ordem (nao refuta o A/B).
+D6 Sem claim "OpenCL melhor que Vulkan": matched mostra Vulkan mais rapido no
+   decode; OpenCL ganha da CPU na carga e empata no mais_longo.
+D7 Uniformidade: mesmas flags de app nos 3 backends (6 thr, PT; FA desligada em
+   GPU); temperatura = sensor de bateria por run (faixas na secao C).
+E. AUDITORIA ASYNC + GUARD + INSTRUMENTO
+--------------------------------------------------------------------------------
+E1 Invariantes (leitura de codigo): 1 contexto (shared_context ~5709) + 1 fila
+   por backend (~6074, props=0 => IN-ORDER); transpose_2d usa sub-buffer de um
+   static ggml_cl_buffer (crescente) e copia trans->dst; release de trans apos
+   enqueue e' VALIDO (retencao de comando/sub-buffer); nenhum readback host dos
+   buffers transpostos; teardown com clFinish(queue) no free do contexto (~1183).
+E2 Guard implementado (prod-min e WIP): sig_transpose_can_skip_wait() consulta
+   CL_QUEUE_PROPERTIES 1x; habilita non-blocking SOMENTE com IN-ORDER confirmado;
+   rc!=CL_SUCCESS => BLOQUEANTE (fail-safe). Chamada: transpose_2d.
+E3 Loader: shims clGetCommandQueueInfo (guard) + clGetEventInfo (diag F3c) —
+   ponteiro nulo => OPENCL_MISSING_ERROR (nunca chama null).
+E4 Estresse e2e executado (8/8) cobre as sequencias de lifetime pedidas; teste
+   NATIVO permanente = LACUNA com plano (probe contra ggml_backend: set_tensor
+   tamanhos alternados -> get_tensor hash; ciclo release/re-init; variante mock
+   com stub CL verificando ordem/ausencia de wait; receita de build + run no
+   device; requer consentimento de escopo).
+F. LOGS (verbatim dos arquivos reais; sha256 por bloco; tudo no mesmo arquivo)
+================================================================================
+
+=== F2b split do gargalo ===
+
+----- BEGIN LOG: f2b_split_gargalo.txt (sha256 fdcc6056c7e3427c31ba5a4fde0e93fc5c6352faa680f32bafa9e227c9cc1ae9) -----
+== F2b — DIVISAO DO GARGALO (diag2 9b1a714b) ==
+-- linha completa por run (load | fases | upload | alloc) --
+[  10s] st='Tradução pronta.' novas=8 load=5.1
+Q4_K_M OpenCL: load=5.1 | Fases da carga: sonda=0.0s modelo=4.7s contexto=0.3s total=5.0s (skip_probe=0) | upload=3.7s em 354 chamadas (1076 MiB) | alloc=0.4s
+[  11s] st='Tradução pronta.' novas=8 load=5.3
+Q4_K_M OpenCL: load=5.3 | Fases da carga: sonda=0.0s modelo=5.0s contexto=0.1s total=5.2s (skip_probe=0) | upload=4.3s em 354 chamadas (1076 MiB) | alloc=0.3s
+[  10s] st='Tradução pronta.' novas=8 load=5.1
+Q4_K_M OpenCL: load=5.1 | Fases da carga: sonda=0.0s modelo=4.8s contexto=0.3s total=5.1s (skip_probe=0) | upload=4.0s em 354 chamadas (1076 MiB) | alloc=0.4s
+[  10s] st='Tradução pronta.' novas=8 load=1.3
+Q4_K_M Vulkan: load=1.3 | Fases da carga: sonda=0.0s modelo=0.9s contexto=0.3s total=1.2s (skip_probe=0) | upload=0.0s em 0 chamadas (0 MiB) | alloc=0.0s
+[  11s] st='Tradução pronta.' novas=8 load=5.4
+Q8_0 OpenCL: load=5.4 | Fases da carga: sonda=0.0s modelo=5.0s contexto=0.3s total=5.4s (skip_probe=0) | upload=3.4s em 354 chamadas (1815 MiB) | alloc=0.7s
+
+-- leitura --
+OpenCL Q4: upload=3.7-4.3s (media 3.85s) em 354 chamadas para 1076 MiB (279 MB/s efetivos)
+OpenCL Q8: upload=3.4s em 354 chamadas para 1815 MiB (534 MB/s efetivos) -> NAO e' banda pura:
+           o custo por chamada/transformacao pesa; escritas maiores rendem mais.
+Vulkan:    0 chamadas (NAO usa o caminho set_tensor; carrega por outro mecanismo em 0.5-0.9s)
+alloc: 0.3-0.7s (secundario). Resto da fase modelo: ~0.5-0.9s (parse/IO).
+----- END LOG: f2b_split_gargalo.txt -----
+
+=== F2c split fino (diag3) ===
+
+----- BEGIN LOG: f2c_split_fino.txt (sha256 fe822c1381d2195aa33ae7792cd5e93872a3327bd3cf416b596a34105f8efaf6) -----
+== F2c/diag3 — SPLIT FINO (enqueue x host) ==
+[  12s] st='Tradução pronta.' novas=8 load=5.1
+Q4_K_M: load=5.1 | Fases da carga: sonda=0.0s modelo=4.8s contexto=0.3s total=5.1s (skip_probe=0) | upload=3.9s em 354 chamadas (1076 MiB) [enqueue=1.6s/354; host=2.2s] | alloc=0.5s
+[  11s] st='Tradução pronta.' novas=8 load=5.4
+Q4_K_M: load=5.4 | Fases da carga: sonda=0.0s modelo=5.2s contexto=0.1s total=5.4s (skip_probe=0) | upload=4.7s em 354 chamadas (1076 MiB) [enqueue=1.5s/354; host=3.2s] | alloc=0.2s
+[  11s] st='Tradução pronta.' novas=8 load=5.0
+Q4_K_M: load=5.0 | Fases da carga: sonda=0.0s modelo=4.8s contexto=0.1s total=5.0s (skip_probe=0) | upload=4.4s em 354 chamadas (1076 MiB) [enqueue=1.3s/354; host=3.1s] | alloc=0.2s
+[  13s] st='Tradução pronta.' novas=8 load=6.0
+Q8_0: load=6.0 | Fases da carga: sonda=0.0s modelo=5.8s contexto=0.1s total=6.0s (skip_probe=0) | upload=4.4s em 354 chamadas (1815 MiB) [enqueue=2.4s/354; host=1.9s] | alloc=0.5s
+
+-- leitura --
+Q4: enqueue=1.3-1.6s / host=2.2-3.2s (host domina ~65%)
+Q8: enqueue=2.4s / host=1.9s (equilibrado; enqueue escala com bytes: 1815 MiB)
+O bucket 'host' inclui: criacao de sub-buffers + transposes GPU intencionais
+(repack Adreno p/ decode) + clFinish/barreiras + manipulacao CPU por tensor.
+Upload total: 3.4-4.7s. F3 alvo duplo: (1) host/por-tensor; (2) escritas blocking.
+----- END LOG: f2c_split_fino.txt -----
+
+=== F3a refutado ===
+
+----- BEGIN LOG: f3a_nao_bloqueante_REFUTADO.txt (sha256 319209a338bcf928f32addaa7281b6ea64c11e9769026c63567a576a533dba6b) -----
+== F3a (diag4 c3dfd5f6) — ESCRITAS NAO-BLOQUEANTES: REFUTADO ==
+== RESUMO F3a ==
+  nb=0: loads=[5.6, 5.0, 5.1] inf=[1.1, 1.2, 1.2] load+inf=[6.7, 6.2, 6.3]
+  nb=1: loads=[5.2, 5.4, 5.2] inf=[1.2, 1.2, 1.2] load+inf=[6.4, 6.6, 6.4]
+
+-- leitura --
+Medianas: nb=0 load=5.1s / nb=1 load=5.2s; load+inf: 6.3 vs 6.4s.
+Dentro do ruido => CL_FALSE NAO muda o custo: o bucket enqueue ficou
+identico (1.3-1.4s) nos dois modos, indicando que o driver processa a
+escrita de forma efetivamente sincrona (staging/paginas da fonte).
+Conclusao honesta: candidato refutado; resta o bucket 'host' (2.9-3.2s,
+sub-buffers/transposes/CPU por tensor) como proximo alvo (diag5).
+----- END LOG: f3a_nao_bloqueante_REFUTADO.txt -----
+
+=== F3c refutado ===
+
+----- BEGIN LOG: f3c_release_adiado_REFUTADO.txt (sha256 e13e469e83e08b2538f58aec97407d05c33d510d83e4e7c84c93d767a2f31b68) -----
+== F3c — RELEASE ADIADO: REFUTADO (diag7 82c24bfb) ==
+A/B alternado 3+3 (debug.sig.hymt2.defer_release 0/1), Q4/OpenCL:
+  dfr=0: loads [4.0, 4.5, 5.3] med 4.50 | cpu [2.0, 2.3, 2.4] | load+inf med 5.70
+  dfr=1: loads [4.7, 4.8, 4.9] med 4.80 | cpu [2.4, 2.4, 2.4] | load+inf med 6.00
+  saida_sha unico f8c093aecbd62027 nos 6 runs (correcao preservada)
+-- leitura --
+Sem ganho (mediana levemente pior, dentro do ruido); bucket cpu IDENTICO
+=> os clWaitForEvents do repack por tensor eram BARATOS (GPU acompanhava o
+host). O 'cpu' residual (~2s) = trabalho host/driver real (clCreateBuffer
+354x + manuseio por tensor), nao espera. Hipoteses F3 ENCERRADAS:
+  F3a escrita nao-bloqueante: REFUTADO | F3b transpose nao-bloq: GANHO
+  (-0.6s, sem regressao) | F3c release adiado: REFUTADO
+  (dados: salvo de hymt2-carga-rodada/r301-r306 apos falha de DIR no
+   script — resumo reconstruido aqui por Python; dirs reais preservados)
+----- END LOG: f3c_release_adiado_REFUTADO.txt -----
+
+=== F3b adocao - aceite final ===
+
+----- BEGIN LOG: f3b_adocao_aceite_final.txt (sha256 35a28e6ee8b3679f3d0be887049cad3bb747bba7a468880ca9aad11ffe69b249) -----
+== F3b ADOTADO (DEFAULT ON) — ACEITE FINAL diag8 e5f8a1d0 ==
+-- Q4 (chave vazia = default de produto) --
+  curto seg=16.6 confere=True valido=True sha=084f12f4b98b3d2a
+  medio seg=22.5 confere=True valido=True sha=1d328d7deece508c
+  longo seg=62.6 confere=True valido=True sha=812dfba6eec06f9b
+  mais_longo seg=98.1 confere=True valido=True sha=4d51e74fcd5332df
+  TODOS CONFEREM: True
+-- Q8 (leitura direta dos records; script lera dir errado no resumo) --
+  curto       VALIDO=True load= 7. Modelo carregado em 6.1s. pronta=11. Tradução pronta em 14.7s. sha=d36a3315698bab4b confere=True
+  medio       VALIDO=True load= 7. Modelo carregado em 5.7s. pronta=11. Tradução pronta em 22.4s. sha=cd1c7ce305c5128b confere=True
+  longo       VALIDO=True load= 7. Modelo carregado em 5.6s. pronta=11. Tradução pronta em 50.6s. sha=c18e04c83e72684a confere=True
+  mais_longo  VALIDO=True load= 7. Modelo carregado em 5.2s. pronta=11. Tradução pronta em 97.9s. sha=ee49738f4e2c09dc confere=True
+-- gate gradle --
+52 actionable tasks: 1 executed, 51 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
+-- estado final --
+
+FIM
+Leitura: 8/8 shas conferem; VALIDO=True nos 8; gate BUILD SUCCESSFUL.
+Aparelho revertido para 9698670c; a mudanca (default ON) fica no FONTE (WIP)
+para empacotamento no proximo pacote nativo quando aprovado.
+----- END LOG: f3b_adocao_aceite_final.txt -----
+
+=== Tabela matched (por bloco) ===
+
+----- BEGIN LOG: tabela_matched_final.txt (sha256 2fd16ccb3293f27476a4fee94f99f6c863d79a7682b09435af0d50f293dd2b51) -----
+== OpenCL_baseline_Q4 ==
+  curto       n=3 | load 3.6 | pronta 8.2 | decode 7.6s (18.6 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo       n=3 | load None | pronta 36.8 | decode 36.0s (19.2 tok/s, 693 tok) | prefill: NAO MEDIDO
+  mais_longo  n=3 | load None | pronta 79.6 | decode 78.0s (19.0 tok/s, 1485 tok) | prefill: NAO MEDIDO
+  medio       n=3 | load None | pronta 16.5 | decode 16.1s (18.2 tok/s, 293 tok) | prefill: NAO MEDIDO
+
+== OpenCL_baseline_Q8 ==
+  curto       n=3 | load 6.3 | pronta 8.5 | decode 7.9s (18.0 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo       n=3 | load None | pronta 39.7 | decode 38.8s (18.1 tok/s, 703 tok) | prefill: NAO MEDIDO
+  mais_longo  n=3 | load None | pronta 85.6 | decode 83.7s (18.0 tok/s, 1511 tok) | prefill: NAO MEDIDO
+  medio       n=3 | load None | pronta 17.7 | decode 17.2s (17.1 tok/s, 295 tok) | prefill: NAO MEDIDO
+
+== CPU_ctrl_Q4 ==
+  curto       n=6 | load 1.1 | pronta 10.1 | decode 6.5s (21.9 tok/s, 142.0 tok) | prefill: NAO MEDIDO
+  mais_longo  n=6 | load None | pronta 114.8 | decode 88.8s (16.9 tok/s, 1491.0 tok) | prefill: NAO MEDIDO
+
+== Vulkan_ctrl_Q4 ==
+  curto       n=6 | load 3.6 | pronta 11.0 | decode 4.8s (29.9 tok/s, 142.0 tok) | prefill: NAO MEDIDO
+  mais_longo  n=6 | load None | pronta 82.9 | decode 67.2s (23.1 tok/s, 1485.5 tok) | prefill: NAO MEDIDO
+
+== OpenCL_f3bdef_aceite ==
+  _curto      n=1 | load 5.0 | pronta 12.9 | decode 7.7s (18.5 tok/s, 142 tok) | prefill: NAO MEDIDO
+  _longo      n=1 | load 4.3 | pronta 42.1 | decode 37.0s (18.7 tok/s, 693 tok) | prefill: NAO MEDIDO
+  _mais_longo n=1 | load 4.8 | pronta 87.8 | decode 81.3s (18.3 tok/s, 1485 tok) | prefill: NAO MEDIDO
+  _medio      n=1 | load 4.6 | pronta 20.9 | decode 15.8s (18.5 tok/s, 293 tok) | prefill: NAO MEDIDO
+  curto       n=1 | load 6.1 | pronta 14.7 | decode 8.3s (17.2 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo       n=1 | load 5.6 | pronta 50.6 | decode 44.1s (15.9 tok/s, 703 tok) | prefill: NAO MEDIDO
+  mais_longo  n=1 | load 5.2 | pronta 97.9 | decode 91.0s (16.6 tok/s, 1511 tok) | prefill: NAO MEDIDO
+  medio       n=1 | load 5.7 | pronta 22.4 | decode 16.3s (18.1 tok/s, 295 tok) | prefill: NAO MEDIDO
+
+== OpenCL_f3b_aceite ==
+  curto_aceite_f3b n=1 | load 5.2 | pronta 13.4 | decode 7.9s (18.1 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo_aceite_f3b n=1 | load 4.4 | pronta 44.3 | decode 39.0s (17.8 tok/s, 693 tok) | prefill: NAO MEDIDO
+  mais_longo_aceite_f3b n=1 | load 4.6 | pronta 89.0 | decode 82.8s (17.9 tok/s, 1485 tok) | prefill: NAO MEDIDO
+  medio_aceite_f3b n=1 | load 4.9 | pronta 22.4 | decode 17.1s (17.2 tok/s, 293 tok) | prefill: NAO MEDIDO
+
+== OpenCL_f3b_ctrl0 ==
+  curto_aceite_f3b n=1 | load 3.4 | pronta 12.2 | decode 8.5s (16.8 tok/s, 142 tok) | prefill: NAO MEDIDO
+  longo_aceite_f3b n=1 | load 5.1 | pronta 40.9 | decode 35.0s (19.8 tok/s, 693 tok) | prefill: NAO MEDIDO
+  mais_longo_aceite_f3b n=1 | load 4.6 | pronta 87.9 | decode 81.7s (18.2 tok/s, 1485 tok) | prefill: NAO MEDIDO
+  medio_aceite_f3b n=1 | load 5.1 | pronta 22.0 | decode 16.5s (17.8 tok/s, 293 tok) | prefill: NAO MEDIDO
+----- END LOG: tabela_matched_final.txt -----
+
+=== Aceite final Q4 (log) ===
+
+----- BEGIN LOG: aceite_final_q4.log (sha256 3a38864e44469ccd08c177e48e140c76298c7e44271f3ebd3ad1eb75adc4526b) -----
+modelo: Q4_K_M | esperado por tamanho: {'curto': 1, 'longo': 1, 'mais_longo': 1, 'medio': 1}
+prop: 
+backend antes: OpenCL
+
+>> aceite Q4_K_M curto
+    INICIO {"modelo": "Q4_K_M", "tam": "curto", "chars": 409, "sha_fonte": "e8b35290983a2dfc"}
+    PROCESSO {"pid": "19161", "maps_lib": ""}
+    CONFIG {"button_model": "Q4_K_M", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 409}
+      [  16s] status='Carregando modelo.' log=11 novas=8
+    FIM {"status": "Tradução pronta.", "segundos": 16.6, "saida_chars": 448, "saida_sha": "084f12f4b98b3d2a", "carregou": " 6. Modelo carregado em 5.0s.", "tempo_pronta": "10. Tradução pronta em 12.9s.", "des
+    RECURSO {"pss": "TOTAL   385763   141248   221120      141   502304   182820 ", "bateria": "level: 57 |   temperature: 348"}
+   ok=True segundos=16.6 sha256=084f12f4b98b3d2a7b66395f confere_baseline=True VALIDO=True
+
+>> aceite Q4_K_M medio
+    INICIO {"modelo": "Q4_K_M", "tam": "medio", "chars": 952, "sha_fonte": "2115fd95a02fd6ee"}
+    PROCESSO {"pid": "20092", "maps_lib": ""}
+    CONFIG {"button_model": "Q4_K_M", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 952}
+      [  22s] status=''                 log=11 novas=8
+    FIM {"status": "Tradução pronta.", "segundos": 22.5, "saida_chars": 994, "saida_sha": "1d328d7deece508c", "carregou": " 6. Modelo carregado em 4.6s.", "tempo_pronta": "10. Tradução pronta em 20.9s.", "des
+    RECURSO {"pss": "TOTAL   378583   145188   215312      143   504820   182832 ", "bateria": "level: 59 |   temperature: 354"}
+   ok=True segundos=22.5 sha256=1d328d7deece508cc5d3fbd6 confere_baseline=True VALIDO=True
+
+>> aceite Q4_K_M longo
+    INICIO {"modelo": "Q4_K_M", "tam": "longo", "chars": 2335, "sha_fonte": "6991a6310ef4944c"}
+    PROCESSO {"pid": "22473", "maps_lib": ""}
+    CONFIG {"button_model": "Q4_K_M", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 2335}
+      [  23s] status=''                 log=3 novas=0
+      [  48s] status=''                 log=9 novas=6
+      [  62s] status='Tradução pronta.' log=11 novas=8
+    FIM {"status": "Tradução pronta.", "segundos": 62.6, "saida_chars": 2435, "saida_sha": "812dfba6eec06f9b", "carregou": " 6. Modelo carregado em 4.3s.", "tempo_pronta": "10. Tradução pronta em 42.1s.", "de
+    RECURSO {"pss": "TOTAL   386932   154076   214836      123   514108   182868 ", "bateria": "level: 62 |   temperature: 363"}
+   ok=True segundos=62.6 sha256=812dfba6eec06f9ba098bf78 confere_baseline=True VALIDO=True
+
+>> aceite Q4_K_M mais_longo
+    INICIO {"modelo": "Q4_K_M", "tam": "mais_longo", "chars": 4924, "sha_fonte": "b20256db73482002"}
+    PROCESSO {"pid": "23987", "maps_lib": ""}
+    CONFIG {"button_model": "Q4_K_M", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 4924}
+      [  24s] status=''                 log=3 novas=0
+      [  46s] status=''                 log=3 novas=0
+      [  70s] status=''                 log=3 novas=0
+      [  98s] status='Tradução pronta.' log=11 novas=8
+    FIM {"status": "Tradução pronta.", "segundos": 98.1, "saida_chars": 5156, "saida_sha": "4d51e74fcd5332df", "carregou": " 6. Modelo carregado em 4.8s.", "tempo_pronta": "10. Tradução pronta em 87.8s.", "de
+    RECURSO {"pss": "TOTAL   389796   158608   213696      123   516700   184984 ", "bateria": "level: 65 |   temperature: 368"}
+   ok=True segundos=98.1 sha256=4d51e74fcd5332df0afb634f confere_baseline=True VALIDO=True
+
+== RESUMO ACEITE F3b Q4_K_M ==
+  curto seg=16.6 confere=True valido=True sha=084f12f4b98b3d2a
+  medio seg=22.5 confere=True valido=True sha=1d328d7deece508c
+  longo seg=62.6 confere=True valido=True sha=812dfba6eec06f9b
+  mais_longo seg=98.1 confere=True valido=True sha=4d51e74fcd5332df
+  TODOS CONFEREM: True
+----- END LOG: aceite_final_q4.log -----
+
+=== Aceite final Q8 (log) ===
+
+----- BEGIN LOG: aceite_final_q8.log (sha256 7d45e3c87a54a717ee4822702199b76f8fbea4d0c9b69e819eb332ca00fb7024) -----
+modelo: Q8_0 | esperado por tamanho: {'curto': 1, 'longo': 1, 'mais_longo': 1, 'medio': 1}
+prop: 
+backend antes: OpenCL
+
+>> aceite Q8_0 curto
+    INICIO {"modelo": "Q8_0", "tam": "curto", "chars": 409, "sha_fonte": "e8b35290983a2dfc"}
+    PROCESSO {"pid": "25610", "maps_lib": ""}
+    CONFIG {"button_model": "Q8_0", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 409}
+      [  18s] status=''                 log=12 novas=8
+    FIM {"status": "Tradução pronta.", "segundos": 18.4, "saida_chars": 449, "saida_sha": "d36a3315698bab4b", "carregou": " 7. Modelo carregado em 6.1s.", "tempo_pronta": "11. Tradução pronta em 14.7s.", "des
+    RECURSO {"pss": "TOTAL   356564   121336   195860    20639   434184   184912 ", "bateria": "level: 67 |   temperature: 380"}
+   ok=True segundos=None sha256= confere_baseline=None VALIDO=None
+
+>> aceite Q8_0 medio
+    INICIO {"modelo": "Q8_0", "tam": "medio", "chars": 952, "sha_fonte": "2115fd95a02fd6ee"}
+    PROCESSO {"pid": "27327", "maps_lib": ""}
+    CONFIG {"button_model": "Q8_0", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 952}
+      [  22s] status=''                 log=4 novas=0
+      [  37s] status='Tradução pronta.' log=12 novas=8
+    FIM {"status": "Tradução pronta.", "segundos": 37.8, "saida_chars": 1006, "saida_sha": "cd1c7ce305c5128b", "carregou": " 7. Modelo carregado em 5.7s.", "tempo_pronta": "11. Tradução pronta em 22.4s.", "de
+    RECURSO {"pss": "TOTAL   451227   145616   282420      434   564488   184920 ", "bateria": "level: 69 |   temperature: 386"}
+   ok=True segundos=None sha256= confere_baseline=None VALIDO=None
+
+>> aceite Q8_0 longo
+    INICIO {"modelo": "Q8_0", "tam": "longo", "chars": 2335, "sha_fonte": "6991a6310ef4944c"}
+    PROCESSO {"pid": "30021", "maps_lib": ""}
+    CONFIG {"button_model": "Q8_0", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 2335}
+      [  23s] status=''                 log=4 novas=0
+      [  46s] status=''                 log=4 novas=0
+      [  61s] status='Tradução pronta.' log=12 novas=8
+    FIM {"status": "Tradução pronta.", "segundos": 61.3, "saida_chars": 2457, "saida_sha": "c18e04c83e72684a", "carregou": " 7. Modelo carregado em 5.6s.", "tempo_pronta": "11. Tradução pronta em 50.6s.", "de
+    RECURSO {"pss": "TOTAL   411788   154812   234752      143   527132   184956 ", "bateria": "level: 71 |   temperature: 384"}
+   ok=True segundos=None sha256= confere_baseline=None VALIDO=None
+
+>> aceite Q8_0 mais_longo
+    INICIO {"modelo": "Q8_0", "tam": "mais_longo", "chars": 4924, "sha_fonte": "b20256db73482002"}
+    PROCESSO {"pid": "32009", "maps_lib": ""}
+    CONFIG {"button_model": "Q8_0", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 4924}
+      [  22s] status=''                 log=4 novas=0
+      [  47s] status=''                 log=4 novas=0
+      [  70s] status=''                 log=4 novas=0
+      [ 102s] status=''                 log=12 novas=8
+    FIM {"status": "Tradução pronta.", "segundos": 102.6, "saida_chars": 5241, "saida_sha": "ee49738f4e2c09dc", "carregou": " 7. Modelo carregado em 5.2s.", "tempo_pronta": "11. Tradução pronta em 97.9s.", "d
+    RECURSO {"pss": "TOTAL   380395   160004   197892     1970   504280   185016 ", "bateria": "level: 73 |   temperature: 399"}
+   ok=True segundos=None sha256= confere_baseline=None VALIDO=None
+
+== RESUMO ACEITE F3b Q8_0 ==
+  curto seg=None confere=None valido=None sha=
+  medio seg=None confere=None valido=None sha=
+  longo seg=None confere=None valido=None sha=
+  mais_longo seg=None confere=None valido=None sha=
+  TODOS CONFEREM: True
+----- END LOG: aceite_final_q8.log -----
+
+=== Smoke prod-min (log) ===
+
+----- BEGIN LOG: prodmin_smoke.log (sha256 7f928e31d024cd609fb8c206ccbd3b76df2376da13e998ffa7e43f0e9cf5e738) -----
+backend: Vulkan
+    INICIO {"modelo": "Q4_K_M", "backend": "GPU (OpenCL)", "rep": 211, "ordem": 311, "fonte_sha": "050c1860442bfbec730e2615673412821243ab3e8138159f041c61a2579c4148", "processo": "cold"}
+    PROCESSO {"pid": "20869"}
+    CONFIG {"button_model": "Q4_K_M", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 56}
+      [  12s] st='Tradução pronta.' novas=8 load=6.2
+    FIM {"estado": "LOAD_OK", "load_s": 6.2, "erro": "", "backend_efetivo": "GPU OpenCL (OpenCL / GPUOpenCL)", "crash": false}
+    RECURSO {"pss": "TOTAL   165339   127272    19908      160   284620   182512 ", "bateria": "level: 95 |   temperature: 333"}
+Q4_K_M run1: load=6.2 inf=1.1 sha=f8c093aecbd62027
+    INICIO {"modelo": "Q4_K_M", "backend": "GPU (OpenCL)", "rep": 212, "ordem": 312, "fonte_sha": "050c1860442bfbec730e2615673412821243ab3e8138159f041c61a2579c4148", "processo": "cold"}
+    PROCESSO {"pid": "21377"}
+    CONFIG {"button_model": "Q4_K_M", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 56}
+      [  11s] st='Tradução pronta.' novas=8 load=4.4
+    FIM {"estado": "LOAD_OK", "load_s": 4.4, "erro": "", "backend_efetivo": "GPU OpenCL (OpenCL / GPUOpenCL)", "crash": false}
+    RECURSO {"pss": "TOTAL   377102   124652   232396      168   499956   180424 ", "bateria": "level: 95 |   temperature: 332"}
+Q4_K_M run2: load=4.4 inf=1.1 sha=f8c093aecbd62027
+    INICIO {"modelo": "Q4_K_M", "backend": "GPU (OpenCL)", "rep": 213, "ordem": 313, "fonte_sha": "050c1860442bfbec730e2615673412821243ab3e8138159f041c61a2579c4148", "processo": "cold"}
+    PROCESSO {"pid": "10143"}
+    CONFIG {"button_model": "Q4_K_M", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 56}
+      [  13s] st=''               novas=0 load=-
+      [  26s] st=''               novas=0 load=-
+      [  43s] st=''               novas=0 load=-
+      [  78s] st=''               novas=0 load=-
+      [  95s] st=''               novas=0 load=-
+      [ 113s] st=''               novas=0 load=-
+    INICIO {"modelo": "Q4_K_M", "backend": "GPU (OpenCL)", "rep": 213, "ordem": 313, "fonte_sha": "050c1860442bfbec730e2615673412821243ab3e8138159f041c61a2579c4148", "processo": "cold"}
+    PROCESSO {"pid": "29601"}
+    CONFIG {"button_model": "Q4_K_M", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 56}
+      [  11s] st='Tradução pronta.' novas=8 load=4.9
+    FIM {"estado": "LOAD_OK", "load_s": 4.9, "erro": "", "backend_efetivo": "GPU OpenCL (OpenCL / GPUOpenCL)", "crash": false}
+    RECURSO {"pss": "TOTAL   154446   118144    14532     6302   299672   182444 ", "bateria": "level: 79 |   temperature: 372"}
+Q4_K_M run3: load=4.9 inf=1.1 sha=f8c093aecbd62027 confere=True
+    INICIO {"modelo": "Q8_0", "backend": "GPU (OpenCL)", "rep": 214, "ordem": 314, "fonte_sha": "050c1860442bfbec730e2615673412821243ab3e8138159f041c61a2579c4148", "processo": "cold"}
+    PROCESSO {"pid": "30261"}
+    CONFIG {"button_model": "Q8_0", "button_backend": "OpenCL", "button_language": "Português", "button_threads": "6 thr", "status": ""}
+    FONTE_OK {"chars": 56}
+      [  12s] st='Tradução pronta.' novas=8 load=6.2
+    FIM {"estado": "LOAD_OK", "load_s": 6.2, "erro": "", "backend_efetivo": "GPU OpenCL (OpenCL / GPUOpenCL)", "crash": false}
+    RECURSO {"pss": "TOTAL   363807   123728   221320      750   504336   182500 ", "bateria": "level: 78 |   temperature: 356"}
+Q8_0 run4: load=6.2 inf=1.2 sha=1c01984ca11af809 confere=True
+----- END LOG: prodmin_smoke.log -----
+
+=== Estresse prod-min (resumo JSON) ===
+
+----- BEGIN LOG: prodmin_stress_resumo.json (sha256 dd13df1673a89a2593e97e8ab36a28308277aa7bf6a9ff8f5ceed49561fab51e) -----
+[
+ {
+  "rot": "1_ocl_q4_curto",
+  "modelo": "Q4_K_M",
+  "tam": "curto",
+  "sha": "084f12f4",
+  "esperado": "084f12f4",
+  "confere": true,
+  "ok": true,
+  "backend": "OpenCL"
+ },
+ {
+  "rot": "2_vulkan_q4_curto",
+  "modelo": "Q4_K_M",
+  "tam": "curto",
+  "sha": "",
+  "esperado": "084f12f4",
+  "confere": false,
+  "ok": false,
+  "backend": "Vulkan"
+ },
+ {
+  "rot": "3_ocl_q4_curto",
+  "modelo": "Q4_K_M",
+  "tam": "curto",
+  "sha": "084f12f4",
+  "esperado": "084f12f4",
+  "confere": true,
+  "ok": true,
+  "backend": "OpenCL"
+ },
+ {
+  "rot": "4_ocl_q8_curto",
+  "modelo": "Q8_0",
+  "tam": "curto",
+  "sha": "d36a3315",
+  "esperado": "d36a3315",
+  "confere": true,
+  "ok": true,
+  "backend": "OpenCL"
+ },
+ {
+  "rot": "5_ocl_q4_reload",
+  "modelo": "Q4_K_M",
+  "tam": "curto",
+  "sha": "084f12f4",
+  "esperado": "084f12f4",
+  "confere": true,
+  "ok": true,
+  "backend": "OpenCL"
+ },
+ {
+  "rot": "6a_ocl_q4_longo",
+  "modelo": "Q4_K_M",
+  "tam": "longo",
+  "sha": "812dfba6",
+  "esperado": "812dfba6",
+  "confere": true,
+  "ok": true,
+  "backend": "OpenCL"
+ },
+ {
+  "rot": "6b_ocl_q4_curto",
+  "modelo": "Q4_K_M",
+  "tam": "curto",
+  "sha": "084f12f4",
+  "esperado": "084f12f4",
+  "confere": true,
+  "ok": true,
+  "backend": "OpenCL"
+ },
+ {
+  "rot": "6c_ocl_q4_medio",
+  "modelo": "Q4_K_M",
+  "tam": "medio",
+  "sha": "1d328d7d",
+  "esperado": "1d328d7d",
+  "confere": true,
+  "ok": true,
+  "backend": "OpenCL"
+ },
+ {
+  "rot": "2b_vulkan_rerun",
+  "modelo": "Q4_K_M",
+  "tam": "curto",
+  "sha": "084f12f4",
+  "esperado": "084f12f4",
+  "confere": true,
+  "ok": true,
+  "backend": "Vulkan",
+  "nota": "re-run apos correcao do env do instrumento (passo 2 original recusado por HYM_BACKEND=OpenCL)"
+ }
+]
+----- END LOG: prodmin_stress_resumo.json -----
+
+=== Gate Gradle (pos-adocao) ===
+
+----- BEGIN LOG: gate_pos_f3bdef.log (sha256 6caadd3348fb848f91d555f20e9e054456f83d9252e788d73d7b02c0e6e52484) -----
+[Incubating] Problems report is available at: file:///D:/Projetos/SIG/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.5.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 20s
+52 actionable tasks: 1 executed, 51 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.5.0/userguide/configuration_cache_enabling.html
+----- END LOG: gate_pos_f3bdef.log -----
+
+=== Deploy diag8 (readback) ===
+
+----- BEGIN LOG: deploy_diag8_f3bdef.txt (sha256 4d9d9d660dd114e8fddd2c7c06dcaa404c812a948491aaf04acd57e3dcf0f69a) -----
+== DEPLOY DIAG8 e5f8a1d0 (F3b DEFAULT ON; aceitacao final) ==
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag8_f3bdef.so: 1 file pushed, 0 skipped. 19.8 MB/s (95940560 bytes in 4.611s)
+OK
+e5f8a1d041f6664803abd27b4cdc911f03deee8f52255fb450e1b3ce96c50bba  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+-- chave esvaziada (default de produto) --
+
+fim
+----- END LOG: deploy_diag8_f3bdef.txt -----
+
+=== Deploy prod-min (readback) ===
+
+----- BEGIN LOG: deploy_prodmin_15a548fd.txt (sha256 1804c657afd689b67d1c2a2cddd21e873f8fd0072ed5d6fbcaf02c6121272037) -----
+== DEPLOY PROD-MIN 15a548fd (smoke de controle; escopo/rollback de sempre) ==
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_prodmin_f3b.so: 1 file pushed, 0 skipped. 14.3 MB/s (95637296 bytes in 6.397s)
+OK
+15a548fd3008e3f14006356e3a930a45aadf3a82d9f6e0d789e0b3b16fa7e6f0  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+----- END LOG: deploy_prodmin_15a548fd.txt -----
+
+=== Rollback final (diag8/prodmin->9698670c) ===
+
+----- BEGIN LOG: rollback9_9698670c.txt (sha256 3ecea73ac3e2a729534c481ce89041fef83a4b835078fee6275ed767fd4d2ede) -----
+== ROLLBACK prodmin -> 9698670c (fechamento F4) ==
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_9698670c_ROLLBACK.so: 1 file pushed, 0 skipped. 15.0 MB/s (95613928 bytes in 6.096s)
+OK
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+----- END LOG: rollback9_9698670c.txt -----
+
+=== Interferencia 13h15 ===
+
+----- BEGIN LOG: interferencia_13h15.txt (sha256 26fe081042d14761de37c026cf69effc156bfab36734fe6e73db80f8800f8397) -----
+== REGISTRO DE INTERFERENCIA EXTERNA (02/10 13:15) ==
+-- foco no momento --
+  mCurrentFocus=Window{5933d0 u0 com.instagram.android/com.instagram.modal.ModalActivity}
+-- app vivo? --
+18925
+-- ultimas geracoes no logcat (o run em voo completou?) --
+10-02 13:15:54.714  4522  4522 I adbd    : adbd service requested 'shell,v2,TERM=xterm-256color,raw:logcat -d -t 120 2>/dev/null | grep -iE 'SIGLlama|FATAL|AndroidRuntime|ANR|opencl|kgsl|crash' | tail -n 12'
+10-02 13:16:29.223  4522  4522 I adbd    : adbd service requested 'shell,v2,TERM=xterm-256color,raw:logcat -d 2>/dev/null | grep -E 'SIGLlama' | tail -n 8'
+== ESTADO FINAL — RODADA OpenCL (02/10) ==
+agregados/lancamentos acima; UI restaurada em 17:46 UTC
+----- END LOG: interferencia_13h15.txt -----
+
+=== Interferencia WhatsApp ===
+
+----- BEGIN LOG: interferencia_2_whatsapp.txt (sha256 890e105a6fb776d414d2151a2698d1b8802e3627636b55f7d6e4d2a8cb440106) -----
+== INTERFERENCIA NA TELA — 02/10 ~23:2x ==
+Durante o aceite Q8 (4o run, mais_longo), o WhatsApp assumiu o foreground:
+mCurrentFocus=com.whatsapp/com.whatsapp.Conversation (topResumedActivity idem).
+Instrumento morto educadamente (proc_2b9224bc87b0 kill); sem toques apos a deteccao.
+Runs preservados: curto/medio/longo (verificados por sha abaixo); mais_longo nao completou.
+----- END LOG: interferencia_2_whatsapp.txt -----
+
+=== A/B F3b Q4 (resumo) ===
+
+----- BEGIN LOG: ab_f3b_resumo.json (sha256 c19cbaae340ee2bf744592b748e67dc192b50cc9c89d6ccd0506ac9e8e86ee20) -----
+[
+ {
+  "tnb": 0,
+  "load_s": 5.9,
+  "inferencia_s": 1.1,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=5.5s contexto=0.3s total=5.8s (skip_probe=0) | upload=4.0s em 354 chamadas (1076 MiB) [enqueue=1.4s/354; subbuf=0.0s/1796; tr=1.1s/672; cpu=1.5s; nb=0; tnb=1823814913] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 1,
+  "load_s": 4.8,
+  "inferencia_s": 1.0,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.4s contexto=0.3s total=4.8s (skip_probe=0) | upload=3.3s em 354 chamadas (1076 MiB) [enqueue=1.0s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.1s; nb=0; tnb=-976641203] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 0,
+  "load_s": 5.1,
+  "inferencia_s": 1.1,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.8s contexto=0.2s total=5.1s (skip_probe=0) | upload=4.1s em 354 chamadas (1076 MiB) [enqueue=1.3s/354; subbuf=0.0s/1796; tr=1.2s/672; cpu=1.6s; nb=0; tnb=-394449796] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 1,
+  "load_s": 4.3,
+  "inferencia_s": 1.1,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.0s contexto=0.2s total=4.3s (skip_probe=0) | upload=3.4s em 354 chamadas (1076 MiB) [enqueue=1.1s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.2s; nb=0; tnb=1913699988] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 0,
+  "load_s": 5.2,
+  "inferencia_s": 1.1,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.9s contexto=0.2s total=5.1s (skip_probe=0) | upload=4.2s em 354 chamadas (1076 MiB) [enqueue=1.3s/354; subbuf=0.0s/1796; tr=1.3s/672; cpu=1.6s; nb=0; tnb=1982419465] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 1,
+  "load_s": 4.6,
+  "inferencia_s": 1.2,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.3s contexto=0.2s total=4.5s (skip_probe=0) | upload=3.7s em 354 chamadas (1076 MiB) [enqueue=1.2s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.3s; nb=0; tnb=2139649628] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ }
+]
+----- END LOG: ab_f3b_resumo.json -----
+
+=== A/B F3b Q8 (resumo) ===
+
+----- BEGIN LOG: ab_f3b_q8_resumo.json (sha256 3f1d841990b5dc4bf091d4dc1faa9009f56bc3a8748954e8429b928d3eccf7c9) -----
+[
+ {
+  "tnb": 0,
+  "load_s": 6.1,
+  "inferencia_s": 1.0,
+  "saida_sha": "1c01984ca11af809",
+  "fases": "Fases da carga: sonda=0.0s modelo=5.7s contexto=0.2s total=6.0s (skip_probe=0) | upload=3.5s em 354 chamadas (1815 MiB) [enqueue=1.8s/354; subbuf=0.0s/898; tr=0.9s/448; cpu=0.9s; nb=0; tnb=277076930] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 1,
+  "load_s": 5.0,
+  "inferencia_s": 1.2,
+  "saida_sha": "1c01984ca11af809",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.6s contexto=0.3s total=4.9s (skip_probe=0) | upload=3.5s em 354 chamadas (1815 MiB) [enqueue=2.3s/354; subbuf=0.0s/898; tr=0.1s/448; cpu=1.1s; nb=0; tnb=242167436] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 0,
+  "load_s": 5.5,
+  "inferencia_s": 1.1,
+  "saida_sha": "1c01984ca11af809",
+  "fases": "Fases da carga: sonda=0.0s modelo=5.3s contexto=0.1s total=5.5s (skip_probe=0) | upload=4.4s em 354 chamadas (1815 MiB) [enqueue=2.1s/354; subbuf=0.0s/898; tr=1.1s/448; cpu=1.2s; nb=0; tnb=-583840674] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 1,
+  "load_s": 5.4,
+  "inferencia_s": 1.2,
+  "saida_sha": "1c01984ca11af809",
+  "fases": "Fases da carga: sonda=0.0s modelo=5.1s contexto=0.2s total=5.3s (skip_probe=0) | upload=4.2s em 354 chamadas (1815 MiB) [enqueue=2.9s/354; subbuf=0.0s/898; tr=0.1s/448; cpu=1.2s; nb=0; tnb=-1660812314] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 0,
+  "load_s": 5.5,
+  "inferencia_s": 1.4,
+  "saida_sha": "1c01984ca11af809",
+  "fases": "Fases da carga: sonda=0.0s modelo=5.3s contexto=0.1s total=5.5s (skip_probe=0) | upload=4.5s em 354 chamadas (1815 MiB) [enqueue=2.2s/354; subbuf=0.0s/898; tr=1.0s/448; cpu=1.2s; nb=0; tnb=-1511003854] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ },
+ {
+  "tnb": 1,
+  "load_s": 4.8,
+  "inferencia_s": 1.0,
+  "saida_sha": "1c01984ca11af809",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.4s contexto=0.3s total=4.8s (skip_probe=0) | upload=3.7s em 354 chamadas (1815 MiB) [enqueue=2.6s/354; subbuf=0.0s/898; tr=0.1s/448; cpu=1.0s; nb=0; tnb=-711933779] | alloc=0.0s",
+  "estado": "LOAD_OK"
+ }
+]
+----- END LOG: ab_f3b_q8_resumo.json -----
+
+=== A/B geracao (resumo) ===
+
+----- BEGIN LOG: f3b_gen_ab_resumo.json (sha256 e160e9599c25327ed86cc5611f85545391079534e7fb736bb0a368599c8713e0) -----
+[
+ {
+  "tnb": 1,
+  "load": 5.0,
+  "pronta": 20.8,
+  "sha": "1d328d7deece508c"
+ },
+ {
+  "tnb": 0,
+  "load": 5.1,
+  "pronta": 20.8,
+  "sha": "1d328d7deece508c"
+ },
+ {
+  "tnb": 1,
+  "load": 4.5,
+  "pronta": 20.7,
+  "sha": "1d328d7deece508c"
+ },
+ {
+  "tnb": 0,
+  "load": 5.2,
+  "pronta": 21.3,
+  "sha": "1d328d7deece508c"
+ },
+ {
+  "tnb": 1,
+  "load": 4.8,
+  "pronta": 20.9,
+  "sha": "1d328d7deece508c"
+ },
+ {
+  "tnb": 0,
+  "load": 4.6,
+  "pronta": 21.5,
+  "sha": "1d328d7deece508c"
+ }
+]
+----- END LOG: f3b_gen_ab_resumo.json -----
+
+=== A/B F3c (resumo salvage) ===
+
+----- BEGIN LOG: ab_f3c_resumo.json (sha256 f8a30820b987d26e00dc1d8ae696c39ac414f0d85e053c5a0a7dad547c328957) -----
+[
+ {
+  "run": 301,
+  "dfr": 0,
+  "load_s": 5.3,
+  "inferencia_s": 1.2,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=5.0s contexto=0.2s total=5.2s (skip_probe=0) | upload=3.8s em 354 chamadas (1076 MiB) [enqueue=1.4s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.3s; nb=0; tnb=1; dfr=0] | alloc=0.4s"
+ },
+ {
+  "run": 302,
+  "dfr": 1,
+  "load_s": 4.7,
+  "inferencia_s": 1.3,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.4s contexto=0.2s total=4.6s (skip_probe=0) | upload=3.9s em 354 chamadas (1076 MiB) [enqueue=1.4s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.4s; nb=0; tnb=1; dfr=1] | alloc=0.3s"
+ },
+ {
+  "run": 303,
+  "dfr": 0,
+  "load_s": 4.5,
+  "inferencia_s": 1.2,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.3s contexto=0.1s total=4.5s (skip_probe=0) | upload=3.7s em 354 chamadas (1076 MiB) [enqueue=1.2s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.4s; nb=0; tnb=1; dfr=0] | alloc=0.2s"
+ },
+ {
+  "run": 304,
+  "dfr": 1,
+  "load_s": 4.9,
+  "inferencia_s": 1.2,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.7s contexto=0.2s total=4.9s (skip_probe=0) | upload=4.1s em 354 chamadas (1076 MiB) [enqueue=1.5s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.4s; nb=0; tnb=1; dfr=1] | alloc=0.3s"
+ },
+ {
+  "run": 305,
+  "dfr": 0,
+  "load_s": 4.0,
+  "inferencia_s": 1.3,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=3.8s contexto=0.2s total=3.9s (skip_probe=0) | upload=3.2s em 354 chamadas (1076 MiB) [enqueue=1.1s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.0s; nb=0; tnb=1; dfr=0] | alloc=0.2s"
+ },
+ {
+  "run": 306,
+  "dfr": 1,
+  "load_s": 4.8,
+  "inferencia_s": 1.2,
+  "saida_sha": "f8c093aecbd62027",
+  "fases": "Fases da carga: sonda=0.0s modelo=4.6s contexto=0.2s total=4.8s (skip_probe=0) | upload=4.0s em 354 chamadas (1076 MiB) [enqueue=1.5s/354; subbuf=0.0s/1796; tr=0.1s/672; cpu=2.4s; nb=0; tnb=1; dfr=1] | alloc=0.2s"
+ }
+]
+----- END LOG: ab_f3c_resumo.json -----
+
+G. ARTEFATOS E MANIFESTO
+--------------------------------------------------------------------------------
+G1 Libs (sha256 / bytes): diag3 ff7a2999 (95.692.456) | diag4 c3dfd5f6 (95.711.704) |
+   diag5 4f2c4855 (95.896.352) | diag6 49ef68f7 (95.912.792) | diag7 82c24bfb
+   (95.940.552) | diag8 e5f8a1d0 (95.940.560) | PROD-MIN 15a548fd (95.637.296) |
+   rollback 9698670c (95.613.928).
+G2 Fontes minimas: scratch/ggml-opencl_prodmin.cpp + llama_jni_prodmin.cpp
+   (hashes no MANIFESTO-OPENCL.json).
+G3 Manifesto: 422 itens; grupos: entrega 5, logs 62, artefato_diag 9,
+   artefato_prodmin 1, fonte_prodmin 2, instrumentos 6, smokes 24, baseline 72,
+   controles 75, ab_probe 28, f2b 10, diag3 8, f3a 12, diag5 6, f3b 12,
+   f3b_aceite 12, f3b_ctrl0 12, f3b_gen_ab 18, f3b_q8 12, f3b_q8_aceite 12,
+   f3bdef_aceite 24. Ausentes 0 / duplicados 0 / erros 0 (Python).
+
+H. ESTADO FINAL E CONSENTIMENTOS
+--------------------------------------------------------------------------------
+H1 Aparelho (relido ao vivo): lib 9698670c; UI Q4_K_M + GPU (Vulkan); chaves
+   debug.sig.hymt2.* zeradas; prod-min removido (readback conferido).
+H2 Fonte: WIP = diag (instrumentacao + guard); patch minimo em scratch/ (fontes
+   + .so aceito). Sem commit/push/publicacao/release/ZIP/R2.
+H3 Proximo passo de USO (consentimento): build de profiling do decode (tempos
+   nativos prompt-eval vs eval por camada/op + cl-profile opt-in) para localizar
+   onde o OpenCL perde no decode; depois UM candidato por perfil. Sem alterar
+   sampler/template/EOG/max/context. Signedness Q8 OpenCL: NAO transplantar de
+   Vulkan (o caminho passou 12/12+4/4 com shas iguais).
+H4 Pendencia de empacotamento: somente com aprovacao especifica (recompilar pelo
+   fluxo oficial; o artefato e' referencia de conteudo, nao o arquivo a instalar).

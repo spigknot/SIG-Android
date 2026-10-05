@@ -1,0 +1,238 @@
+PROMPT AO ESPECIALISTA — llama.cpp Vulkan × Hy-MT2 1.8B no Adreno 840
+Relatório completo das rodadas 1, 2 e Q1.2 + 11 perguntas
+========================================================================
+Revisão de referência: 95887577ab5fead779581a7030a83c7752ff3234
+Fork: llama.cpp do SIG Android, ggml 080e804-dirty, commit base 53c8fc0
+Device: OnePlus 15 (CPH2747), Android 16, Adreno(TM) 840, driver Qualcomm
+Modelo: Hy-MT2 1.8B (hunyuan-dense; embd 2048, 32 camadas, GQA 16q/4kv head 128,
+FF 6144, rms_eps 1e-5, vocab 120818, bos 120000, eos 120020, rope type 2 NeoX,
+freq_base 11158840.0, ctx_train 262144)
+Config: n_gpu=33 (full offload), n_ctx=512, n_batch=128, template Hy-MT
+Caps: subgroup_size=64, fp16storage=1, fp16compute=1, coopmat=0, int_dot_final=0,
+7 propriedades de dot-product inteiro = 0.
+Tolerância adotada: 1e-2 (validada contra controle OpenCL no F16: max_abs
+0.0023, rmse 0.00048, argmax/top5 idênticos).
+
+========================================================================
+PARTE 1 — O QUE JÁ ESTÁ PROVADO (rodada 1)
+========================================================================
+1. CAUSA-RAIZ: a fusão rms_norm_mul_f32 no Adreno 840 executa mas NÃO escreve
+   no destino. Reproducer isolado (sem modelo): X[f32 128,16,T] → RMS_NORM →
+   MUL(W[128]). R0=cpu, R1=vulkan separado, R2=vulkan fundido.
+     - R1 = R0 bit a bit (6 casas) em 6 padrões
+     - R2 = TUDO-ZERO em 6/6 (inclusive fullw sem broadcast, e ones_w)
+     - SENTINELA: dst pré-preenchido com 7.0 → R2 devolve tudo-7.0
+       (sum=57344, min=max=7.0), R1 devolve o correto (5343.17).
+     → o kernel fundido não escreve 1 byte. Compila sem erro, sem crash.
+2. SEGUNDA fusão quebrada: add_rms_fusion (rms_norm_partials_f32). Com só a
+   1ª vedação, o CHECK passava 667 checks e abortava no 668: RMS_NORM norm-31,
+   avg_err=0.606154, result=0 correct=0.817621, pipe=rms_norm_partials_f32
+   (partials=1, param3=4, elements=[16,1,1]). Com DISABLE_FUSION=1 passavam
+   1290 checks.
+3. PATCH PROVISÓRIO: em ggml-vulkan.cpp, só para vendor 0x5143 (Qualcomm):
+     (a) disable_fused_rms_norm_mul — veta can_fuse{RMS_NORM,MUL}
+     (b) disable_add_rms_fusion — veta o caminho de somas parciais
+   Feito por vendor_id, não por chip (1 device testado — ver Q5).
+   Observação de processo: a flag (b) foi criada mas o gate esqueceu de
+   consumi-la; o CHECK acusou (partials=1 persistiu) e o gate foi adicionado.
+4. REGRESSÃO (tudo sem env, gate ativo por padrão):
+     - CHECK full 33/33: EXIT=0, 1290 checks, 0 ERROR
+     - F16 P/D1/D2: argmax 46/2292/65652 = CPU, top5/margem iguais, 0 NaN
+       (P max_abs 0.30, D1 0.08, D2 0.10)
+     - Q4_K_M (EOS 120020): EXIT=0, D1 2292, D2 65652
+     - app (swap temporário do .so, restaurado depois): Q4_K_M+Vulkan traduz
+       curta ("O servidor foi reiniciado.", 8 tok, 33.3 t/s) e média
+       (43 tok, 36 t/s) corretamente.
+   O F16 foi convertido de um safetensors original; o eos_token_id veio como 3
+   (errado) e foi corrigido in-place no offset 5068477 (3 → 120020), tamanho
+   3587533760 preservado, sha256 f8c1e74a….
+
+========================================================================
+PARTE 2 — RODADA 2: Q4 OFICIAL, MÉTRICAS COMPLETAS, REPETIBILIDADE
+========================================================================
+Modelo: Hy-MT2-1.8B-Q4_K_M-OFFICIAL baixado do HuggingFace
+(tencent/Hy-MT2-1.8B-GGUF, X-Linked-Size 1133080448, sha256 dc5f44fc…,
+file_type=15, quant_version=2, eos_token_id=120020 de fábrica, 354 tensores,
+33 KVs). Header validado com leitor GGUF próprio (Temp\gguf_kv.py).
+
+RESULTADO 2.1 — O GATE JÁ É SUFICIENTE
+  CONTORNO (gate Qualcomm, sem env) vs DISABLE_FUSION=1:
+  → dumps BIT-IDÉNTICOS em P, D1 e D2 (mesmo md5).
+  Ou seja: no Adreno 840 o gate remove exatamente o que o DISABLE_FUSION total
+  removeria. NENHUMA outra fusão precisa de veto. Responde Q5: o veto só
+  Qualcomm é mais barato e suficiente que desativar tudo.
+  Inventário em runtime (129 dispatches): TODOS rms_norm_f32 — nenhum
+  rms_norm_mul_f32, nenhum partials. Confirma que o veto cobre as duas fusões
+  quebradas e nada mais.
+  (Nota: DISABLE_FUSION=1 como controle gave 1354 checks, EXIT=0.)
+
+RESULTADO 2.2 — MÉTRICAS COMPLETAS (ref = CPU do mesmo modelo)
+  Passo P  contorno: max_abs 0.646488  rmse 0.131380  p50 0.0868  p90 0.2166
+                     p99 0.3433  p99.9 0.4477  acima_0.01 113346/120818 (93.8%)
+                     argmax ref=46(33.1098) var=46(33.1113) IGUAL
+                     top10: [46,56971,25730,28647,678] vs [46,25730,56971,28647,678]
+                            → só 2º/3º trocam de lugar (mesmo conjunto)
+                     margem(1o-2o) ref 14.9269 / var 14.9696
+                     piores: idx528 1.6989→1.0524 | idx89697 2.5795→1.9711
+                             idx64812 1.9379→1.3377
+  Passo D1 contorno: max_abs 0.487043  rmse 0.100024  p50 0.0662  p90 0.1646
+                     p99 0.2626  p99.9 0.3446  acima_0.01 111231/120818 (92.1%)
+                     argmax ref=2292(32.1827) var=2292(32.0755) IGUAL
+                     top10 IDENTICO
+  Passo D2 contorno: max_abs 0.615865  rmse 0.115929  p50 0.0758  p90 0.1902
+                     p99 0.3102  p99.9 0.4117  acima_0.01 111630/120818 (92.4%)
+                     argmax ref=65652(28.3417) var=65652(28.4526) IGUAL
+                     top10: [65652,326,14180,16308,383] vs [65652,326,14180,16308,383]
+                            → diferença só na 5ª
+  Nenhum não-finite em nenhuma rota (CPU, contorno, todas-off, repetição).
+  Erro DISTRIBUÍDO (p50 ~0.07-0.09), não concentrado; o pior caso típico é o
+  Vulkan COMPRIMINDO um valor alto (1.699→1.052), não o destruindo. Compatível
+  com reordenação/FP16 deaccum, não com a fusão quebrada (que dava zero/NaN).
+
+RESULTADO 2.3 — REPETIBILIDADE (Q5 antigo)
+  Contorno run1 vs run2 (mesmo binário, mesmo modelo, processo novo):
+  P, D1, D2 → dumps BIT-IDÉNTICOS (md5 529180fa7be5 / 4da8cebdda51 /
+  3f2b97ff67e2). Determinismo total. Contraste: pré-fix, D1 tinha 8 hashes
+  distintos em 10 dumps. Não há mais não-determinismo.
+
+RESULTADO 2.4 — OpenCL QUEBRA com Q4_K_M (bug NOVO, fora do escopo do Vulkan)
+  clEnqueueWriteBuffer erro -38 (CL_INVALID_VALUE) em ggml-opencl.cpp:9511.
+  Reproduziu 3/3. Consequência: o "OpenCL = CPU em 1e-2" citado antes valia
+  para o F16, NÃO para Q4. É bug do backend OpenCL do fork, independente do
+  Vulkan. (No F16 o OpenCL funciona — o bug está no caminho de quant.)
+
+RESULTADO 2.5 — SIGDISP (Q1.1): dump do ponto EXATO antes do vkCmdDispatch
+  391 linhas capturadas, com pipe, params, pc_size, wg_denoms, dispatch, cada
+  binding (buffer/offset/range) e push constants em hex e f32.
+  Exemplo real:
+    SIGDISP| pipe=mul_f32_f32_f32 params=3 pc_size=116 wg_denoms=[512,1,1]
+            dispatch=[1,29,1]
+    SIGDISP|   bind[0] buffer=0xb400007a83bed000 offset=237568 range=59392
+    SIGDISP|   bind[1] buffer=0xb400007a83bed000 offset=296960 range=512
+    SIGDISP|   bind[2] buffer=0xb400007a83bed000 offset=0       range=59392
+  ACHADO: o mesmo VkBuffer atende a 3 bindings com offsets distintos
+  (aliasing de um buffer em vários slots) — é este padrão que você quer testar
+  contra a hipótese do a_buf. Inventário: mul_f32_f32_f32 (64×),
+  add_f32_f32_f32_norepeat (1×).
+
+========================================================================
+PARTE 3 — Q1.2 (MARCAS IN-SHADER): IMPLEMENTADO + RESULTADO DECISIVO
+========================================================================
+IMPLEMENTAÇÃO (sem SSBO novo, sem mexer em layout de descriptors):
+  rms_norm.comp: nova constante SIG_MARK_STAGE (0=produção, idêntico ao
+  original) com 4 pontos de marca, gravados no PRÓPRIO buffer de destino
+  (binding já existente), valores negativos |v|>>1 que nunca colidem com
+  resultado plausível:
+    1 = entrada em main()                        (-1111)
+    2 = logo após sum = sumsh[0] (redução feita)  (-2222)
+    3 = entrada no ramo do_multiply                (-3333)
+    4 = após a primeira escrita em data_d          (-4444)
+  vulkan-shaders-gen.cpp: 3 variantes marcadas + 1 de CONTROLE (dup_mul_f32,
+  mesmo source, SEM marcas). ggml-vulkan.cpp: 3 pipelines novos + env
+  SIGMARK_STAGE=<1..4> e SIGMARK_DUP=1 que trocam o pipeline em runtime;
+  SIGMARK_ALLOW_FUSION=1 reabilita a fusão no Qualcomm (o gate padrão a veda)
+  para poder medir o defeito.
+
+A/B DECISIVO (todos com SIGMARK_ALLOW_FUSION=1, n_gpu=33, Q4 oficial):
+  [base] pipeline rms_norm_mul_f32 ORIGINAL
+         → 7 checks, ABORT: avg_err=0.669589 in MUL (check 7)
+  [dup]  rms_norm_dup_mul_f32 — MESMO source do rms_norm_f32, MESMA
+         especialização {0,1}, compilado como objeto de pipeline SEPARADO
+         → 7 checks, ABORT: avg_err=0.669589 in MUL (check 7)  ← IDÊNTICO
+  [mark1..4] variantes com marcas
+         → 0 checks, SIGSEGV
+
+CONCLUSÃO DO A/B (elimina hipóteses por eliminação):
+  ✗ cache de pipeline do driver — o dup falha igual
+  ✗ objeto de pipeline reutilizado/shared_ptr corrompido — idem
+  ✗ binding/offset errado no dispatch — o dup usa o mesmo caminho de dispatch
+  ✗ é o GLSL em si, rms_norm.comp compilado com do_multiply=true, de forma
+    determinística. O suspeito primário é a construção
+      data_d[d_offset+col] = D_TYPE(scale*data_a[...]*data_b[...])
+    com fastmod e do_multiply como constante de especialização.
+
+O PROBLEMINHA (detalhe, é o achado mais forte do Q1.2):
+  Duas tentativas de implementar as marcas:
+  1ª (índice calculado a partir de gl_NumWorkGroups / d_offset): SIGSEGV nos 4.
+  2ª (corrigida — marca SEMPRE em data_d[0], só pelo workgroup (0,0,0), sem
+     barreira, valores com |v|>>1): CONTINUA SIGSEGV nos 4.
+  Diagnóstico comprovado da 2ª:
+    - O switch FUNCIONA — o log imprime
+        "SIGMARK| stage=1 -> pipeline_rms_norm_mark_mul_f32"
+      e o run para exatamente no primeiro RMS_NORM fundido (node=0, norm-0
+      ne=[2048,29,1,1], src1=blk.0.attn_norm.weight buf_off=202982464).
+    - O SIGSEGV é no PROCESSO HOST, não há abort do checker nem avg_err/NaN.
+      O host morre ao sincronizar/enfileirar depois da 1ª dispatch marcada.
+    - O base e o dup (mesmo caminho, shader sem marca) NÃO segfaultam —
+      abortam com avg_err 0.669589, o defeito conhecido.
+  ASSINATURA:
+    Shader sem instrumentação    → executa, resultado ERRADO (avg_err 0.6696)
+    Shader com UMA LINHA a mais  → host morre com SIGSEGV
+  Isso é a assinatura de compilação no limite / alinhamento de registro no
+  driver: o rms_norm.comp com do_multiply=true já compila no limite, e QUALQUER
+  perturbação do código (uma linha extra, mais uma specialization constante)
+  piora o estado de compilação e produz o pior sintoma possível — em vez de um
+  resultado numérico errado, mata o host. Reforça que a correção tem de ser no
+  GLSL (ou o contorno se mantém), e que instrumentar ESTE shader no próprio
+  driver é arriscado.
+
+  Honestidade: a LEITURA das marcas por estágio ficou impossível (o host morre
+  antes). Mas a eliminação via dup/base já entrega a mesma informação. O que
+  PRECISA de ser revisto: por que o base/dup não segfaultam mas o shader com
+  uma linha a mais sim? Isso é a pergunta que fica.
+
+========================================================================
+PERGUNTAS
+========================================================================
+Q1. O SIGSEGV no host depois da 1ª dispatch com shader alterado é compatível
+    com corruption de descriptor/pipeline, ou com assert interno do driver? Tem
+    como capturar o código exato (logcat do driver, VK_ERROR_DEVICE_LOST,
+    VK_ERROR_MEMORY)? Sem isso, o Q1.2 fica cego.
+Q2. Existe uma versão do rms_norm.comp com do_multiply=true que o Adreno 840
+    compile SEM explodir? Sugestões: reescrever a redução com subgroup ops em
+    vez de shared+barrier; trocar fastmod por módulo simples; separar data_b
+    num aliasing diferente.
+Q3. Dado o A/B (dup idêntico), confirma que o cache de pipeline pode ser
+    descartado como hipótese e que a correção deve ser no shader?
+Q4. Prefill tem max_abs 0.646, maior que D1 (0.487) e D2 (0.616), mas argmax/
+    top10 = CPU. Isso é reordenação/FP16 deaccum aceitável, ou indica uma 3ª
+    fusão defeituosa a bissectar? (93% dos índices > 0.01 em TODOS os passos,
+    erro distribuído — mas o prefill é o pior).
+Q5. Veto Qualcomm-wide (1 device testado) — mantenho, ou restrinjo por chip
+    (Adreno 840) / versão de driver até ter 2º aparelho?
+Q6. O controle negativo (runs pré-fix com zero/sentinela, same binário) basta,
+    ou preciso reintroduzir o bug de propósito e re-rodar?
+Q7. Para reportar upstream: que pack mínimo (reproducer + dumps + diff) e
+    contra qual revisão devo rebasar o teste?
+Q8. Q4_K_M gerado com llama-quantize WinGet (≠ fork) — o modelo que usei na
+    rodada 1 era re-quantizado, mas a rodada 2 usou o OFICIAL do HF. Alguma
+    conclusão sobre quants depende disso? (o oficial tem EOS 120020 de fábrica,
+    igual ao meu)
+Q9. Custo: 2 dispatches/camada em vez de 1 em todo Qualcomm. Como medir o
+    impacto sem 2º aparelho, ou aceito como custo da correção?
+Q10. Algum teste de sanidade que devo rodar ANTES de propor o pacote nativo
+     novo (COMPONENT_VERSION 9) com este fix?
+Q11. BUG NOVO fora do escopo: OpenCL quebra com Q4_K_M (erro -38 em
+     ggml-opencl.cpp:9511, 3/3). Isso é separado do Vulkan, mas precisa de um
+     olhar — é regressão do fork ou pré-existente? O texto (F16) funciona em
+     OpenCL, então o bug está no caminho de quant.
+
+========================================================================
+ARTEFATOS (docs/vulkan-hymt2-fusion-round/ e %LOCALAPPDATA%\Temp\)
+========================================================================
+  relatorio-final.txt         — a rodada 1 (causa, reproducer, patch, regressão)
+  rodada2-relatorio.txt      — a rodada 2 (Q4 oficial, métricas, repetibilidade)
+  q1_2-relatorio.txt          — o Q1.2 (marcas, A/B, o probleminha)
+  matriz.csv                  — 16 runs da rodada 1
+  manifesto.json              — hashes do modelo e binários
+  patches/*.patch             — ggml-vulkan.cpp + vulkan-shaders-gen.cpp +
+                                rms_norm.comp (SIGFUSION + SIGDISP + SIGMARK)
+  Temp\etapaB\metricas.txt     — todas as métricas (percentis, piores índices)
+  Temp\etapaB\sigdisp1.txt    — 391 linhas SIGDISP
+  Temp\mark2\, Temp\mark3\    — logs do A/B e das marcas
+  Temp\comparar_logits_v2.py, Temp\gguf_kv.py, Temp\ler_marcas.py
+
+ESTADO: libsig_llama.so ORIGINAL no aparelho (95.509.296 bytes) — o fix NÃO está
+no aparelho. Nada commitado, nada publicado. O patch é para você revisar antes
+de qualquer decisão sobre o escopo.
+========================================================================

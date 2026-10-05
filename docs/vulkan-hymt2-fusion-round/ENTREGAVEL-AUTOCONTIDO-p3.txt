@@ -1,0 +1,236 @@
+================================================================================
+PARTE 3/3 — DISPATCH DEFEITUOSO, PATCH MÍNIMO, OPENCL, REGRESSÃO, PENDÊNCIAS
+================================================================================
+
+================================================================================
+§3 — DISPATCH DO NÓ DEFEITUOSO (capturado, sem modelo)
+================================================================================
+Você tinha razão: o alvo tinha mudado. A marca caía no norm-0 de largura 2048;
+o defeito foi isolado em Qcur_norm de largura 128. Não são o mesmo nó nem o
+mesmo shape. Reproducer SEM MODELO do caso (128,16,T), padrão real29, T=29,
+compilado contra build instrumentado (CHECK_RESULTS=ON).
+
+SAÍDA LITERAL DO INSTRUMENTO DE DISPATCH (host, antes de vkCmdDispatch)
+  SIGDISP| pipe=rms_norm_mul_f32 params=4 pc_size=116 wg_denoms=[1,1,1]
+          dispatch=[16,29,1]
+  SIGDISP|   bind[0] buffer=0xb400007c4c295400 offset=0      range=237568
+  SIGDISP|   bind[1] buffer=0xb400007c4c295400 offset=237568 range=512
+  SIGDISP|   bind[2] buffer=0xb400007c4c295400 offset=475648 range=237568
+  SIGDISP|   bind[3] buffer=0xb400007c4c295400 offset=0      range=237568
+  SIGDISP|   pushc(116)= 00e8000080000000100000001d000000010000000100000080
+             0000000000800000 0e800008000000001000000010000000100000001000000
+             800000008000000080000000800000000100000001d00000001000000010000
+             00800000000008000000e80000000000 00acc527370000000000000000
+  SIGDISP|   pushc_f32[ 0:8.32259e-41 1:1.79366e-43 2:2.24208e-44 3:4.06377e-44
+             4:1.4013e-45 5:1.4013e-45 6:1.79366e-43 7:2.86986e-42 8:8.32259e-41
+             9:1.79366e-43 10:1.4013e-45 ... 24:8.32259e-41 25:0 26:1e-05 27:0 28:0 ]
+
+  ERROR: avg_err=5.11457 in MUL (check 1)
+  First error: result=7 correct=-0.317312 i3=0 i2=0 i1=0 i0=0
+
+LEITURA DO DISPATCH
+  bind[0] A = X      [128,16,29]  offset 0      range 237568
+  bind[1] B = peso   [128,1,1]    offset 237568 range 512  (128 floats)
+  bind[2] C = destino[128,16,29]  offset 475648 range 237568
+  bind[3] D         = reuso de A  (aliasing de handle, offset 0)
+  pushc_f32[26] = 1e-05  = eps do RMS_NORM
+  params=4, pc_size=116, wg_denoms=[1,1,1], dispatch=[16,29,1]
+
+  Conforme sua observação: usar o mesmo VkBuffer com regiões diferentes é
+  subalocação NORMAL, não aliasing nocivo por si só. Os ranges NÃO se
+  sobrepõem. Registro isso como observação, não como defeito.
+
+  E conforme sua outra observação: NÃO priorizo trocar fastmod por %. Com
+  ncols=ne10=128, a expressão fastmod(col,ne10) do ramo de colunas não é
+  exercitada. Outros cálculos de índice continuam usando fastmod; não mapeei
+  o shader inteiro, então não concluo que está ausente.
+
+RESULTADOS DO REPRODUCER (md5 dos dumps — comparação binária, não 6 casas)
+  fundido.f32   = dd9877da2dcd8dbb01cef28af81bfeb0   abort check 1 avg 5.11457
+  separado.f32  = dd9877da2dcd8dbb01cef28af81bfeb0   (idêntico ao fundido)
+  cpu.f32       = 08366a24eae06f78fe4eeb93d8e410d1   sum 57572.912762
+  fundido_limpo e fundido_disp2: abort com avg_err=5.11457, check 1, mesmo
+    First error → REPETIBILIDADE do fundido neste reproducer (2 execuções).
+  Sentinela 7.0 gravada no destino: íntegra nas variantes fundidas, ou seja,
+    nenhum byte do range monitorado foi alterado (ver A5: só isso se afirma).
+
+  ACHADO QUE MERECE DESTAQUE: fundido e separados são BYTE-A-BYTE IGUAIS aqui,
+  enquanto no modelo completo a versão fundida é ERRADA e a separada é CPU.
+  avg_err 5.11 aqui é muito pior que os ~0.64 do modelo — esperado, porque no
+  nó isolado não há redeAbsorvendo erro. Isto é a pista mais nova: o fundido
+  neste reproducer produz UM RESULTADO, e o mesmo que o separado.
+
+================================================================================
+§4 — PATCH MÍNIMO (diff exato, sem experimentos)
+================================================================================
+Removi do código de produção todo o experimento: pipelines rms_norm_mark_*,
+o pipeline duplicado (dup), o switch SIGMARK no dispatch e as marcas no shader.
+Diff do gate, no ggml-vulkan.cpp (fora o probe/anti-crash pré-existentes):
+
+  +    bool disable_fused_rms_norm_mul;
+  +    bool disable_add_rms_fusion;
+  +
+  +        // SIG (fusion-round 27/09, PROVISORIO): ver campo acima.
+  +        device->disable_fused_rms_norm_mul =
+  +            device->vendor_id == VK_VENDOR_ID_QUALCOMM &&
+  +            getenv("SIGMARK_ALLOW_FUSION") == nullptr;
+  +        device->disable_add_rms_fusion =
+  +            device->vendor_id == VK_VENDOR_ID_QUALCOMM &&
+  +            getenv("SIGMARK_ALLOW_FUSION") == nullptr;
+
+  gate no can_fuse (caso GGML_OP_RMS_NORM, ramo do_multiply):
+  +    if (device->disable_fused_rms_norm_mul) {
+  +        // fusão rms_norm_mul desativada neste dispositivo
+  +    } else if (ctx->num_additional_fused_ops > 0) {
+            ... (caminho original do rms_norm_mul_f32) ...
+        }
+
+  segunda fusão (add_rms_fusion / partials), mesma forma:
+  +    add_rms_fusion = ... && !device->disable_add_rms_fusion;
+
+  NÚMERO DE LINHAS: 177 adicionadas no .cpp, das quais o gate em si são ~7.
+  As demais são o probe SIGVK e o anti-crash que já existiam no projeto.
+  Build limpo (arm64-v8a normal, sem CHECK, sem experimento) COMPILOU SEM ERRO.
+
+DECISÃO QUE PRECISO DO USUÁRIO: o getenv("SIGMARK_ALLOW_FUSION") está dentro
+  do patch mínimo. Ele existe só para diagnóstico. Num pacote de produção
+  qualquer app poderia reabilitar a fusão quebrada com uma variável de
+  ambiente. Recomendo REMOVÊ-lo do artefato final (recompilar sem o getenv),
+  mantendo-o apenas no build de diagnóstico.
+
+ESCOPO (sua Q5): o gate é vendor_id == VK_VENDOR_ID_QUALCOMM (0x5143), o que
+  é MAIS AMPLO que "este Adreno 840". Você mantém a recomendação de restringir
+  à combinação comprovadamente afetada, com identificação real. Registro como
+  pendência:ainda nao tenho identificação de driver/API version que isole
+  este aparelho dos demais Qualcomm. Um único Adreno 840 não valida veto para
+  todos os Qualcomm. CPU permanece como fallback conhecido.
+
+================================================================================
+§5 — OPENCL: -38 (diagnóstico corrigido + correção de uma conclusão minha)
+================================================================================
+Sua Q11 estava certa: -38 = CL_INVALID_MEM_OBJECT, -30 = CL_INVALID_VALUE.
+Começar pelo objeto de memória, não pela matemática do quant. Segui.
+
+>>> CORREÇÃO DE UMA CONCLUSÃO MINHA QUE ESTAVA ERRADA <<<
+  Eu havia escrito antes: "F16+OpenCL OK; o Q4 oficial quebra no OpenCL
+  (-38) — única combinação que falha". ERRADO.
+  O F16 TAMBÉM FALHA com -38. Reproduzido nesta rodada:
+    Q4 oficial, OpenCL: rc=134 (SIGABRT), 3 execuções, todas -38
+    F16,        OpenCL: -38 também
+  Portanto o -38 NÃO é específico do Q4. Isso RETIRA a recomendação anterior
+  de "usar OpenCL no Q4 porque é 1,4x mais rápido" — ela se baseava numa
+  premissa refutada.
+
+LOCALIZAÇÃO (código-fonte)
+  ggml-opencl.cpp:9506-9511, função ggml_backend_opencl_buffer_set_tensor:
+      ggml_tensor_extra_cl * extra = (ggml_tensor_extra_cl *) tensor->extra;
+      GGML_ASSERT(extra);
+      CL_CHECK(clEnqueueWriteBuffer(
+          queue, extra->data_device, CL_TRUE, extra->offset + offset,
+          size, data, 0, NULL, NULL));
+  GGML_ASSERT(extra) PASSA (extra não é nulo); o handle extra->data_device é
+  que é inválido. -38 = objeto de memória inválido = já liberado ou nulo.
+
+QUANDO ACONTECE (saída literal)
+    HARNESS| contexto                       84.3 ms
+    HARNESS| tokenizacao                     1.0 ms
+    HARNESS| tokens do prompt: 29
+    HARNESS| ids: 120000 120006 26403 252 1873 2602 1079 24764 13 10306 369
+               444 1029 1370 3602 252 17960 1398 2553 1232 5682 12509 1015 628
+    ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+    ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+    HARNESS| device FORCADO: GPUOpenCL (de 3)
+    llama_prepare_model_devices: using device GPUOpenCL ... 6531 MiB free
+    load_tensors: layer   0..32 assigned to device GPUOpenCL
+    ggml_opencl: clEnqueueWriteBuffer( queue, extra->data_device, CL_TRUE,
+        extra->offset + offset, size, data, 0, NULL, NULL) error -38 at
+        ggml-opencl.cpp:9511
+    ggml-opencl.cpp:9511: GGML_ASSERT(0) failed
+  => PRIMEIRA escrita do tensor de entrada, com contexto alocado e 33 camadas
+     carregadas. Não é falha de carga de modelo nem de memória (6531 MiB free).
+
+CONTROLE: o MESMO Q4 oficial em VULKAN passa:
+    avg_err=0.0101315 in MUL_MAT (check 676)
+  Logo o problema é EXCLUSIVO do backend OpenCL, não do modelo nem do tensor.
+
+CAUSA PROVADA: extra->data_device é um cl_mem inválido (liberado ou nulo).
+
+O QUE NÃO ESTÁ PROVADO (hipótese, NÃO diagnóstico — conforme sua instrução de
+  não mascarar a falha):
+  - QUAL cl_mem foi liberado. O arquivo tem 343 chamadas de clReleaseMemObject.
+    Existe um pool de imagens/subbuffers com "pending-release-queue"
+    (comentado em :614-617, structs kq_img_pool/kqv_img_pool/dequant_f16_pool).
+    É CANDIDATO a lifecycle, não causa.
+  - Não instrumentei a cadeia do buffer (tensor/dtype/tamanho/criação/flags/
+    retorno/sub-buffer/imagem/lifetime/clGetMemObjectInfo) que sua Q11 pede.
+    Requer build instrumentado novo; NÃO FEITO nesta rodada.
+  - Não afasto falta de memória: -38 não a implica. Para afastar seria
+    preciso o erro ORIGINAL de criação, que não capturei.
+  - Um clReleaseMemObject(data_device) no caminho de set_tensor (:9500,
+    ramo de kernels) libera o handle logo após clEnqueueNDRangeKernel +
+    clWaitForEvents. Se o mesmo handle for reutilizado depois, é use-after-
+    release. HIPÓTESE a medir, não conclusão.
+
+RECOMENDAÇÃO ATUALIZADA: como o OpenCL falha em QUALQUER quantização nesta
+  configuração, o caminho confiável é Vulkan (com o contorno) ou CPU. OpenCL
+  NÃO pode ser chamado de "fallback validado" (sua Q10.8).
+
+================================================================================
+§6 — REGRESSÃO DO CONTORNO (o que está validado, e com que limites)
+================================================================================
+Build limpo, gate ativo (Qualcomm), sem experimento:
+  CHECK ....... EXIT=0, 1290 checks, 0 ERROR
+  controle (DISABLE_FUSION=1): EXIT=0, 1354 checks
+  P (prompt) ..... argmax 46   = idêntico à CPU
+  D1 ............. argmax 2292 = idêntico à CPU
+  D2 ............. argmax 65652= idêntico à CPU
+  D2 métricas: max_abs 0.101884  rmse 0.017003  top5 idêntico à CPU
+  F16 no app ..... traduziu em Vulkan, 33-36 tok/s
+  Q4 oficial .... Vulkan OK (avg_err 0.0101, MUL_MAT check 676)
+  NaN/Inf ........ nenhum nos 3 passos
+  app real ....... "O servidor foi reiniciado." traduzido; .so do app
+                   RESTAURADO ao original (95.509.296 bytes), SEM o contorno
+
+LIMITES (conforme sua exigência): CPU como fallback conhecido; OpenCL não
+  validado. NÃO medi custo real em nenhum momento (contorno vs todas-off vs
+  CPU) — o custo do contorno é DESCONHECIDO, não "barato".
+
+================================================================================
+§7 — PENDÊNCIAS NOMEADAS (o que NÃO está incluído aqui)
+================================================================================
+1. SPIR-V: hash e desassemblagem de base vs dup vs produção (sua Q2.E/Q3).
+2. Cadeia do cl_mem do OpenCL até o ponto exato de release (Q11 completa).
+3. SHA-256 completo do Q4 oficial + URL/revisão de download (Q8). Tenho
+   tamanho e file_type, não o sha256 do artefato.
+4. Discrepância histórica com o GGUF de 1.082.929.088 bytes: identificar qual
+   arquivo o app distribuirá (Q8). Não troquei modelos silenciosamente.
+5. Custo real: contorno vs todas-off vs CPU, com estado térmico e contagem de
+   dispatches reais (Q9). NUNCA medido.
+6. Contexto real do app (8192 se for o padrão), não só 512 (Q10.6).
+7. Q4: DISABLE_F16 como experimento separado; métricas após remoção de
+   deslocamento constante do vetor; log-probs em conjunto fixo mais amplo (Q4).
+8. Identificação de driver/API que isole este aparelho para escopo do gate (Q5).
+9. Artefatos v9: manifesto, ABIs, JNI, origem das libs, instruções de
+   reversão (Q10.9). NÃO FEITO — aguardando autorização. Não instalo, não
+   commito, não publico sem pedido explícito.
+10. Após autorização, conferir identidade do .so realmente carregado pelo APK
+    final (Q10.10). O original restaurado NÃO contém o contorno.
+
+================================================================================
+PERGUNTAS QUE AINDA PRECISO DE VOCÊ
+================================================================================
+P1. A marca in-shader é inviável aqui (null-deref no compilador de driver,
+    confirmado por backtrace). Concorda em abandonar essa via e ir para
+    SSBO dedicado no reproducer, ou prefere captura host/validation layers?
+P2. O fundido e o separados são byte-a-byte IGUAIS no reproducer de 128,
+    mas ERRADOS os dois (avg 5.11). Isso contraria a hipótese de "fundido não
+    escreve". Você considera isso o mesmo defeito, ou um segundo caso
+    (como voce registrou em sua Q2.A: "o nó 2048 pode ser um segundo caso")?
+P3. Para o gate: removo o getenv("SIGMARK_ALLOW_FUSION") do artefato final
+    (recomendo) e mantenho a versão com bypass só no build de diagnóstico?
+P4. O -38 do OpenCL é de lifecycle de cl_mem, e o F16 falha também. Você
+    quer que eu rastreie o release (build instrumentado) antes de mexer em
+    qualquer lógica OpenCL?
+P5. Para a Q4 (erro 0,646 distribuído): sigo com as métricas que vocêPediu
+    (deslocamento constante removido, log-probs em posições amplas, F16 vs Q4
+    separados) ou priorizo fechar a cadeia do cl_mem primeiro?

@@ -1,0 +1,300 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 18 (30/09/2026)
+SMOKE CONTROLADO Q4_K_M + CAUSA DO RESIDUAL VULKAN ISOLADA
+Hy-MT2 / Vulkan / CPH2747
+================================================================================
+Responde ao "PROMPT AO AGENTE — APOS RODADA 17: PRIORIDADE RECUPERAR
+OBSERVABILIDADE E TESTAR Q4_K_M NO APP". Dois marcoSalcancados:
+  (1) bateria de aceitacao funcional do Q4_K_M no app INSTALADO, com
+      observabilidade recuperado; os SEIS casos passaram no Vulkan;
+  (2) a CAUSA do residual numerico do MUL_MAT no Vulkan foi ISOLADA e
+      CONFIRMADA por A/B em processo limpo: o acumulador FP16 do operador.
+NENHUM commit/push/publicacao/instalacao/APK; SharedPreferences nao
+escrito por script (so toques de UI, restaurados/registrados); OpenCL/
+Whisper/NPU nao tocados; produto/gate/pesos intactos.
+
+ESTADOS:
+  A. retificacoes de causalidade/status/tempos ............. APLICADAS
+  B. tela ativa / valor original / restauracao ............. SEM ALTERACAO
+     NECESSARIA (screen_off_timeout ja estava em 30 min)
+  C. script + logica de estados + testes .................. CCE (31/31)
+  D. smoke e bateria Q4_K_M CPU/Vulkan ..................... CCE (6/6 + 1/1)
+  E. reuso/cancelamento/alternancia ....................... NAO EXECUTADO
+     (instrumento pronto; exige orquestracao que nao coube nesta rodada)
+  F. precisao local A/B ................................. CCE — CAUSA ISOLADA
+  G. hashes/comandos/diretorios unicos ................... CCE
+  H. decisao restrita ..................................... CCE
+
+--------------------------------------------------------------------------------
+RESPOSTA CURTA
+--------------------------------------------------------------------------------
+O Vulkan FUNCIONA no app com o modelo Q4_K_M: os 6 casos sinteticos
+rodaram ate o fim, com numeros, unidades, datas, negacao e estrutura
+preservados, e a saida do caso curto e IDENTICA entre CPU e Vulkan. A
+aceitacao funcional do Vulkan como OPCAO EXPERIMENTAL no CPH2747 esta
+sustentada pelo que foi medido, com as ressalvas do §E.
+O residual numerico do MUL_MAT foi CAUSALMENTE ATRIBUIDO: com
+ggml_mul_mat_set_prec(op, GGML_PREC_F32) — controle LOCAL por no — o
+Vulkan passa de 0,5634% para 0,0210% de erro relativo contra a referencia
+exata R, com os MESMOS operandos. O controle foi confirmado em runtime
+(prec_no=F32, op_params[0]=10) e a variante DEFAULT reproduz
+byte-a-byte o resultado da rodada 16. Ou seja: o acumulador FP16 do
+MUL_MAT e' a causa; o operador nao tem defeito de indexacao/copia.
+
+--------------------------------------------------------------------------------
+A. RETIFICACOES DE CAUSALIDADE / STATUS / TEMPOS  [§2 do prompt]
+--------------------------------------------------------------------------------
+A.1 Status funcional: a rodada 17 saidou "reprovada"; corrigido para
+    INCONCLUSIVO / bateria incompleta (nao houve criterio funcional medido
+    que reprovou). A rodada 18 TEM casos controlados executados.
+A.2 Caso Q4_0 da r17: era prova restrita de execucao Vulkan com OUTRO
+    modelo e entrada nao controlada. Registrado como tal; nao usado aqui.
+    Todos os resultados desta rodada sao com Q4_K_M
+    (sha c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559,
+    conferido no aparelho).
+A.3 Caso Q4_K_M da r17: "saida nao observada; perda de acesso a UI por
+    keyguard/AOD; causa do nao termino nao determinada". Confirmado como
+    INCONCLUSIVO; nesta rodada o deadline curto (§5) e a observabilidade
+    por maquina de estados resolveram a duvida: o mesmo caso terminou em
+    ~20-30 s quando a tela estava ativa (§D). Nao afirmo que a tela
+    apagar caused o nao-termino da r17 — afirmo que a tela apagada
+    IMPEDIU A OBSERVACAO e que, com tela ativa, o caso termina.
+A.4 uiautomator dump: e' COLETA. Nao afirmo que recria Activity. O que
+    foi medido: na r17 eu CHAMEI am start e dumps durante a observacao, o
+    que reiniciou a Activity NAQUELE momento (o campo esvaziou e o log
+    reiniciou em "1. Ferramenta Texto pronta."). Desde entao o script foi reescrito
+    para nunca fazer isso apos acionar (§C.1).
+A.5 Tempos: a r17 reportou "353,6 s" (wrapper) e "4,7 s / 44,4 tok/s"
+    (log do app). Sao GRANDEZA DIFERENTES: 353,6 s era o tempo do meu
+    wrapper (que-pollava a UI, incluindo o tempo de carga de modelo e o
+    overhead de uiautomator), nao a traducao. 4,7 s era o tempo de
+    traducao que o APP registrava. Nesta rodada os tempos sao separados:
+    preparacao / espera-pos-acionamento / ponta-a-ponta, por relogio
+    monotonico (§D). Nao uso nenhum desses tempos para benchmark CPU/GPU.
+A.6 SharedPreferences: afirmo "nenhuma escrita direta por script". Toques
+    de UI persistem selecao: o botao de backend foi tocado para CPU no
+    smoke CPU e para Vulkan nos demais; o estado final e' VULKAN (igual ao
+    inicial). Threads (6) e modelo (Q4_K_M) foram tocados pela UI; o modelo
+    inicial era Q4_K_M (ja estava), threads 6 (ja estava). Idioma nao
+    tocado. Leitura final registrada em preferencias_*.json.
+A.7 Referencia Rq real: a r17 pode afirmar "
+    operacao com ativacoes quantizadas" (0,0000% contra Rq_real). Nao
+    chamo CPU de defeituoso. RETIRO a mencao a "piso de ruido" universal da
+    r17: o que existe e' um erro medido NESTE operador e NESTES operandos.
+
+--------------------------------------------------------------------------------
+B. TELA ATIVA, VALOR ORIGINAL E RESTAURACAO  [§3 do prompt]
+--------------------------------------------------------------------------------
+B.1 CONSENTIMENTO: perguntado ao usuario ANTES de qualquer teste (prompt
+    de escolha, com opcoes). Resposta: nao autorizo mexer no aparelho
+    agora; aviso quando conectar. So prossegui apos o usuario conectar o
+    CPH2747 na porta 40245.
+B.2 VALOR ORIGINAL (lido, sem alterar):
+      settings get system screen_off_timeout = 1800000 ms (30 min)
+      stay_on_while_plugged = null ; adaptive_sleep = null
+    O valor ja era de 30 minutos, ou seja a tela que apagou na r17 nao o
+    fez por timeout curto. NAO ALTEREI screen_off_timeout (nem PID nem
+    outra seguranca). Confirmado novamente antes dos testes.
+B.3 VERIFICATIVO DE TELA VIVA (por run, sem interferir):
+      antes de cada smoke: dumpsys window -> mCurrentFocus = Activity do
+      launcher; dumpsys power -> mWakefulness=Awake; mShowingDream=false;
+      a hierarquia uiautomator tinha package=br.gov.sp.pcsp.launcher.
+      Se a tela tivesse apagado, o script marca OBSERVACAO_PERDIDA (§C.2).
+B.4 RESTAURACAO: nao ha valor de tela para restaurar (nada foi alterado).
+    A unica alteracao persistente foi a selecao de backend pela UI
+    (Vulkan -> CPU no smoke CPU -> Vulkan nos smokes seguintes); estado
+    final = VULKAN = inicial. Threads/modelo/idioma inalterados. Nao
+    gravei 'null' em nada.
+
+--------------------------------------------------------------------------------
+C. INSTRUMENTO UI VACINADO + TESTES  [§4 do prompt]
+--------------------------------------------------------------------------------
+C.1 Maquina de estados (bateria18_ui.py, sha ec35c979...):
+    estados: PREPARADO, INICIADO, CARREGANDO, GERANDO, CONCLUIDO,
+             CANCELADO, ERRO, OBSERVACAO_PERDIDA, TIMEOUT.
+   Garantias do instrumento:
+    - cada tentativa em diretorio UNICO (timestamp+pid): nunca sobrescreve;
+    - aplica texto ANTES do run e confere por SHA do CAMPO (nao so len);
+    - so aciona Traduzir se estado=PREPARADO E modelo/backend conferidos
+      E SHA do campo == SHA da fonte;
+    - DEPOIS de acionar: nao reenvia intent, nao am start, nao recria
+      Activity (garantido por teste estatico + ordem no codigo);
+    - confirmacao de inicio por MUDANCA observada (log cresce/status),
+      com o log ANTES do run capturado como linha de base (log historico
+      nao vira "iniciou");
+    - tela/keyguard ausente -> OBSERVACAO_PERDIDA (nao "traducao lenta");
+    - timeout preserva fonte, log, dump e screenshot;
+    - relogio monotonico, tempos separados: preparacao / espera /
+      ponta-a-ponta;
+    - seletores casam rotulo com prefixo '✓ ' (o "Q4_K_M" ja selecionado
+      aparece como "✓ Q4_K_M" — corrigido apos falha real).
+C.2 Testes sinteticos (testes_bateria18.py, 31/31, RC=0):
+    - diretorio unico (T1);
+    - SHA detecta troca sutil (mesmo comprimento, texto diferente) (T2);
+    - tela morta / keyguard / shade / outro app / dump vazio (T3);
+    - log historico nao vira inicio (T4);
+    - os 9 estados existem (T5);
+    - smoke aborta antes de acionar se preparo/modelo/backend/sha falhar;
+      toda abertura de Activity ANTES de acionar; nenhum am start no laco
+      de observacao (T6);
+    - prefs() lidas no inicio e no finally; nunca grava 'null' (T7).
+    - T6 ACHOU UM DEFЕITO REAL no meu proprio script (2 chamadas am start,
+      uma delas DENTRO da funcao de aplica_fonte, pos-observacao) — corrigi
+      e o teste passou a exigir ORDEM (todas antes de acionar), nao contagem.
+C.3 Erros meus nesta rodada (registrados, nao atribuidos ao app):
+    E1 (r17) usei Intent.EXTRA_TEXT e nao esperei a Activity; aqui uso o
+       caminho extra_texto (o mesmo do driver de benchmark do produto) e
+       espero a Activity aplicar, conferindo SHA do campo.
+    E2 (r17) interferi com o aparelho durante a observacao; aqui, apos
+       acionar, o script so faz dump/leitura (nada recria Activity).
+
+--------------------------------------------------------------------------------
+D. SMOKE E BATERIA Q4_K_M — RESULTADOS EXECUTADOS  [§5 e §7]
+--------------------------------------------------------------------------------
+D.0 Identidade conferida antes: CPH2747 / OnePlus / Android 16;
+    libsig_llama.so carregado sha 31f6df15bf9b4fbdf073adf033eac55f353b4240e
+    7894ec1d12469163516d2c2 (= v9 publicado); Q4_K_M no aparelho sha
+    c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559;
+    backend inicial VULKAN, threads 6, modelo Q4_K_M; idioma Portugues.
+D.1 SMOKE (caso curto, deadline 120 s):
+    Vulkan: PREPARADO -> INICIADO(0,38s) -> log cresce(8,67s) -> GERANDO
+            -> CONCLUIDO(19,89s). Ponta-a-ponta 57,31 s (inclui carga de
+            modelo). Status final "Tradução pronta."
+      SAIDA (97 chars): "O técnico trocou o sensor de pressão da unidade
+      4821 hoje, às 09:14. O valor lido foi de 2,4 bar."
+    CPU:    mesmo caso, CONCLUIDO em 23,85 s, SAIDA IDENTICA byte-a-byte
+            a do Vulkan (sha igual).
+    => NUMEROS/unidade/hora preservados; CPU e Vulkan concordam neste caso.
+D.2 BATERIA (6 casos sinteticos, Vulkan, Q4_K_M, deadline 150-180 s):
+    Todos CONCLUIDO. Latencias de espera (pos-acionamento): curto 19,9s |
+    medio 24,9s | longo 29,2s | numeros 24,5s | negacao 24,7s |
+    estrutura 24,9s. (Sao tempos de espera observada, nao de traducao
+    isolating — ver A.5.)
+    Qualidade por caso (contra as expectativas do fonte):
+      - numeros: CNPJ 12.345.678/0001-90, "03 de março de 2024", "1.250",
+        "R$ 47,3 milhões", "28,5°C", "12,7%", "XT-2000", "Marcelo
+        Fernandes", "(11) 98888-7777" — TODOS preservados. Sem erro factual.
+      - negacao: "não foi substituído" preservado (negacao NAO invertida);
+        atribuicao a Maria e ao relatorio anterior preservada; contradicao
+        entre as duas fontes mantida; condicional "Se o defeito
+        persistir..." mantida. Sem erro factual.
+      - longo: tres lotes com 40/25/18 unidades; datas 07:20, 15 de
+        outubro, 20; fragmento final distintivo "até lá" PRESENTE (sem
+        truncamento); todos os itens presentes.
+      - estrutura: 4/4 itens numerados presentes; "Observação final"
+        preservada.
+      - medio: seis frases traduzidas; numeros 3/08:40/09:05/25/2,4 bar.
+      - curto: ver D.1.
+    Nota de qualidade: sinonimos/ajustes de formato ocorreram (ex.:
+    "peça"->"componente", "embalagem rompida"->"quebrada"); o especialista
+    DEFINIU que sinonimo/ajuste de formato nao e' falha automatica — nenhum
+    caso teve inverter-negacao, erro de numero/unidade/data ou omissao.
+D.3 CPU: rodado so o caso curto (para paridade com o smoke). Nao rodei os
+    6 casos em CPU (tempo); os erros de CPU devem ser registrados
+    independentemente quando a bateria rodar em CPU — NOTA PENDENTE.
+
+--------------------------------------------------------------------------------
+E. REUSO / CANCELAMENTO / ALTERNANCIA  [§7]
+--------------------------------------------------------------------------------
+NAO EXECUTADOS nesta rodada. O instrumento ja os suporta por construcao
+(estados CANCELADO, diretorio por tentativa, leitura de prefs antes/
+depois), mas a orquestracao (A->B->A no mesmo processo, cancelamento no
+meio, alternancia sem tarefa ativa) nao foi rodada. Marco PENDENTE, nao
+favoravel nem desfavoravel.
+
+--------------------------------------------------------------------------------
+F. PRECISAO LOCAL A/B — CAUSA DO RESIDUAL ISOLADA  [§8]
+--------------------------------------------------------------------------------
+F.1 O que foi construido (boundary18_prec.cpp, binario diagnostico,
+    sha do binario e fonte no manifesto): replay do MUL_MAT Q4_K com os
+    MESMOS operandos das rodadas 15-17 (X = attn_norm capturado no
+    alvo, W = blk.0.attn_q Q4_K do GGUF c4bf1015...), duas variantes:
+      - DEFAULT (sem chamada de precisão), e
+      - PREC_F32 (ggml_mul_mat_set_prec(op, GGML_PREC_F32) no proprio no,
+        antes de construir/alocar/executar o grafo).
+    O modo --only=<variante> garante UMA variante por PROCESSO (estado
+    limpo) — isso foi descoberto por um resultado intermediario
+    enganoso (abaixo).
+F.2 Controle confirmado em runtime: o binario le o proprio
+    op_params[0] e imprime prec_no; na variante F32 veio "F32 (=10)".
+    Portanto o fork HONRA ggml_mul_mat_set_prec nesta rota (retifico a
+    afirmacao anterior de que "nao havia controle por operacao").
+F.3 RESULTADO (processo limpo por variante, denominador comum
+    rms(R)=0,032382681):
+      variante             x R        x Rq_real   sha da saida
+      Vulkan DEFAULT       0,5634%     1,1595%    3039ca84... (=r16)
+      Vulkan prec=F32      0,0210%     1,0106%    8dae2b6b...
+      CPU DEFAULT          1,0098%     0,0000%    352edfa6...
+    - A variante DEFAULT reproduz BYTE-A-BYTE o resultado da rodada 16
+      (sha 3039ca84... identico ao mulq_Vulkan.bin da r16) e o CPU
+      reproduz o sha 352edfa6... da r16 — confirmando que o experimento
+      e' reprodutivel e que o X/W sao os mesmos.
+    - O controle por no REDUZ o erro do Vulkan contra R em ~27x
+      (0,5634% -> 0,0210%), com os MESMOS operandos. Isso ATRIBUI o
+      residual ao ACUMULADOR (f16acc), nao a copia/indexacao.
+F.4 O residual e' do ACUMULADOR, com mecanismo no fork (ja lido na r17):
+    o pipeline dequant_mul_mat escolhe
+      (device->fp16 && prec == GGML_PREC_DEFAULT) ? ...f16acc : ...f32acc
+    e o gerador define ACC_TYPE=float16_t (+ ACC_TYPE_MAX=65504) quando
+    f16acc. O resultado experimental confirma essa leitura em runtime.
+    ⇒ PROPOSTA RESTRITA (NAO aplicada): setar GGML_PREC_F32 no no do
+    MUL_MAT das camadas OFFLOADED. Escopo: local ao operador, sem alterar
+    pesos/KV/modelo, sem desabilitar f16 do dispositivo. Custo medido
+    localmente: tempo do operador essentially igual (0,382s default vs
+    0,385s F32 para este operador — dentro de ruido). Nao alterei produto;
+    a decisao de aplicar e do especialista/usuario.
+F.5 RESULTADO INTERMEDIARIO ENGANOSO (registrado por transparencia): uma
+    primeira versao rodava as 3 variantes no MESMO processo e reportava
+    Vulkan DEFAULT = 0,0210% (melhor que F32!), o que contradizia a r16.
+    Ao isolar em processos limpos, o DEFAULT voltou a 0,5634% (byte-a-byte
+    igual a r16) e o F32 a 0,0210%. Conclusao: medicao multi-variante no
+    mesmo processo NAO e' confiavel neste replay (o gallocr/reuso de heap
+    contamina). O numero final e' o de processo limpo.
+
+--------------------------------------------------------------------------------
+G. HASHES, COMANDOS, DIRETORIOS UNICOS  [§9-G / §10-G]
+--------------------------------------------------------------------------------
+G.1 Artefatos em logs-rodada18/ (MANIFESTO-RODADA18.txt, 63 entradas SHA):
+    - smoke_<caso>_<backend>_<timestamp>_<pid>/ : uma pasta por TENTATIVA
+      (caso.json, saida.txt, ui_final.png, ui_final.xml). 11 diretorios.
+    - precisao/ : lim_vkdef.bin, lim_vkf32.bin, lim_cpudef.bin,
+      cmp16_Vulkan.bin, cmp16_CPU.bin (reproducao da r16 no binario novo),
+      p18_*.bin (rodada multi-variante,marked nao-confiavel).
+    - bateria18_ui.py, testes_bateria18.py (instrumento + testes).
+    - EXT: boundary18_prec.cpp + binario.
+G.2 Comandos/retornos (serial explicito 100.108.27.64:40245 em todos):
+    - testes_bateria18.py -> 31/31, RC=0.
+    - bateria18_ui.py <caso> <backend> <deadline> -> prints do registro;
+      MDICAO: VALIDA / CONCLUIDO por caso; preferencias lidas no fim.
+    - boundary18_prec X.mat W.bin 277 2048 2048 lim --only=<vkdef|vkf32|
+      cpudef> -> MEDICAO: VALIDA (variante unica em processo limpo).
+    - builds: build_b18prec.sh -> BUILD_OK.
+G.3 Sem alteracao de produto/librerias/pesos/gate/padrao. Nenhum
+    SharedPreferences escrito por script.
+
+--------------------------------------------------------------------------------
+H. DECISAO RESTRITA E PENDENCIAS  [§9-H]
+--------------------------------------------------------------------------------
+H.1 DECISAO SUGERIDA (nao anunciada por mim): aprovar restritamente o
+    Vulkan como OPCAO EXPERIMENTAL validada no CPH2747, na configuracao
+    testada (Q4_K_M c4bf1015..., threads 6, Vulkan), mantendo CPU e
+    mantendo Vulkan como experimental (sem promocao, sem publicacao,
+    sem generalizar para outros Android). Base: 6/6 casos completos no
+    Vulkan com qualidade preservada, paridade de saida com CPU no caso
+    curto, backend efetivo confirmado por log do app.
+H.2 PENDENCIAS declaradas (nao favaveis nem desfavoraveis):
+    - reuso A->B->A, cancelamento, alternancia: nao executados (§E);
+    - os 5 casos restantes em CPU: nao executados (erro de CPU deve ser
+      registrado independentemente — §D.3);
+    - A/B de precisao: EXECUTADO e causal, mas a PROPOSTA de patch
+      (GGML_PREC_F32 no no offloaded) NAO foi aplicada nem testada no
+      app — decisao separada;
+    - generalizacao do residual: o operador MUL_MAT foi isolado; outros
+      operadores NAO foram exclusivados.
+H.3 Observacoes finais de qualidade: em nenhum dos 6 casos houve erro
+    factual critico (inverter negacao, agente, numero/unidade/data,
+    omissao). Houve sinonimos e ajustes de formato, aceitos por criterio.
+
+================================================================================
+FIM DO RELATORIO — RODADA 18
+================================================================================

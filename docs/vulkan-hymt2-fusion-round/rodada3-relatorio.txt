@@ -1,0 +1,253 @@
+================================================================================
+AÇÕES A–E — RESPOSTA À REVISÃO DO ESPECIALISTA (rodada 3) — 27/09/2026
+================================================================================
+
+ESTADO GERAL
+Contorno funcional validado em 4 níveis. Microcausa do driver NÃO estabelecida.
+Ação B mudou o diagnóstico do crash. Ação E corrigiu uma conclusão minha anterior.
+
+--------------------------------------------------------------------------------
+A — CORREÇÕES OBRIGATÓRIAS APLICADAS
+--------------------------------------------------------------------------------
+Todas as 7 correções foram aceitas e aplicadas. Detalhe de cada uma:
+
+A1. OpenCL -38 = CL_INVALID_MEM_OBJECT (não -30/CL_INVALID_VALUE).
+    CONFIRMADO contra os headers oficiaisKhronos cited pelo especialista.
+    O erro ocorre em clEnqueueWriteBuffer, o que é coerente: a falha é no
+    OBJETO DE MEMÓRIA, não no valor do offset/tamanho.
+    Onde aparece no código: ggml-opencl.cpp:9509-9511
+      cl_mem passed = extra->data_device
+      offset = extra->offset + offset
+      size   = size
+    GGML_ASSERT(extra) passa (extra não é nulo); o handle é que é inválido.
+
+A2. "Bit a bit (6 casas)" — FORMULAÇÃO REMOVIDA do texto.
+    Onde eu havia escrito isso, agora consta: comparação por md5 dos dumps.
+    Valores de md5 efetivamente usados na ação C:
+      base_cpu.f32 / cpu.f32   = 08366a24eae06f78fe4eeb93d8e410d1
+      base_r1.f32 / fundido.f32 / separado.f32 = dd9877da2dcd8dbb01cef28af81bfeb0
+    Ou seja: CPU difere de Vulkan; fundido e separado são IGUAIS entre si.
+    Sobre os 6 dígitos: 57572.912762 (CPU) vs 57572.913102 (Vulkan) — a
+    diferença real é ~3.4e-4, e 6 casas decimais a esconderia. A comparação
+    binária é a única que sustenta a afirmação.
+
+A3. "Determinismo total" → "REPETIBILIDADE NESTES PASSOS".
+    Reduzido em todo o relatório. 2 execuções iguais = repetibilidade nestas
+    condições, não determinismo para todos os prompts/shapes/sequências.
+    A matriz_complete_rodada2 tinha 12 runs; o que se sustenta é que
+    dentro daquela matriz os resultados não variaram.
+
+A4. "Contorno ≡ todas-off" NÃO prova que as mesmas operações foram removidas.
+    Reafirmado como NÃO provado. Provado apenas que, NESSES 3 passos, os dumps
+    RESULTANTES são idênticos (md5). Não prova:
+      (a) que o inventário de fusões removidas é o mesmo;
+      (b) que o contorno seja mais barato (nunca medi custo real);
+      (c) que valha para outras entradas/modelos.
+    Reforçado pela ação C: o SIGDISP no nó de largura 128 mostrou que o gate
+    produz comportamento distinto do DISABLE_FUSION total (ver abaixo).
+
+A5. "Sentinela preservada" = ausência de alteração NESSE RANGE, não "shader não
+    escreveu em nenhum endereço". Texto corrigido. A afirmação forte que faço é
+    apenas: nenhum byte do range monitorado foi alterado.
+
+A6. A variante duplicada NÃO descarta bindings/offsets/push constants.
+    CORREÇÃO IMPORTANTE — eu havia concluído por eliminação que o defeito era
+    do GLSL. Isso NÃO é válido, e o especialista está certo:
+      - o driver pode reutilizar compilação/cache interno para mesmo SPIR-V +
+        especialização, mesmo com VkPipeline novo;
+      - bindings/offsets/pushc são compartilhados pelo mesmo dispatch;
+      - um bug sistemático de criação se repetiria em ambos os objetos.
+    Portanto, MINHA CONCLUSÃO ANTERIOR ESTAVA EXAGERADA. O que o dup REALMENTE
+    descarta: apenas a hipótese de defeito de UMA instância isolada do objeto.
+    Status correto do dup: enfraquece a explicação mais estreita; não prova
+    erro no GLSL.
+
+A7. Marcas que causam crash antes de serem lidas não dão evidência de progresso.
+    Concordado. As 4 variantes marcadas não produziram leitura nenhuma; a
+    ausência de marca não pode ser interpretada como "não chegou ao estágio".
+
+--------------------------------------------------------------------------------
+B — BACKTRACE (prioridade que o especialista definiu) — FEITO
+--------------------------------------------------------------------------------
+Uma única reprodução controlada. Log: adb logcat -b crash -d
+
+  signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x8
+  Cause: null pointer dereference
+  x0=0x0  x7=0x0  pc=0x7dc50180d4  lr=0x7dc51cf23c
+  thread: tid 2130 = tid do processo = main
+
+  #00 pc +2f40d4  /vendor/lib64/libllvm-qgl.so  (!!271d8104!!+4)
+  #01 pc +4ab238  /vendor/lib64/libllvm-qgl.so
+  #02 pc +5cfa74  /vendor/lib64/libllvm-qgl.so
+  #03 pc +5ce7a8  /vendor/lib64/libllvm-qgl.so
+  #04 pc +36d4fc  /vendor/lib64/libllvm-qgl.so
+  (+30 frames; os 5 primeiros são TODOS libllvm-qgl.so)
+  BuildId libllvm-qgl.so: 9d9dbc8ce8965d58371c4ba45c4b1438
+  ELF: /data/local/tmp/llama_harness_check, não stripado, símbolos exatos
+        (backtrace contém llama_decode → process_ubatch → ggml_graph_compute)
+
+6 reproduções com fault addr 0x8 IDÊNTICO (10:27 ×3, 10:33 ×2, 11:59 ×1).
+
+O QUE ISSO CORRIGE (e o que NÃO corrige)
+CORRIGE: minha hipótese anterior de "compilação no limite / pressão de
+  registro" era ESPECULAÇÃO e está RETIRADA. O crash NÃO é do host, NÃO é
+  índice OOB, NÃO é corrupção de descriptor. Os 5 primeiros frames estão
+  todos no COMPILADOR DE SHADER do driver, com x0 nulo e fault addr 0x8:
+  é um NULL DEREF DENTRO DO COMPILADOR DE SHADER (libllvm-qgl.so).
+NÃO CORRIGE / NÃO RESOLVIDO:
+  - Não é prova de que o GLSL original esteja errado. O driver compila o
+    shader ORIGINAL sem crash (com resultado errado). São dois sintomas
+    distintos; só o segundo foi localizado.
+  - O especialista adverte (e concordo): "crash dentro de driver não exclui
+    uso inválido pelo app". O backtrace aponta ONDE morre, não POR QUÊ.
+  - Não capturei VkResult (nenhum retorna antes do SIGSEGV — o processo
+    morre durante a compilação, não no dispatch). Não capturei bugreport.zip
+    completo nem tombstone (acesso depende da config do Android; não exija root).
+  - "VK_ERROR_MEMORY" não existe; não reportei nenhum VkResult porque nenhum
+    foi retornado. Não deduzo DEVICE_LOST do sinal.
+  - Conclusão operacional honesta: a técnica de marca in-shader é INVIÁVEL
+    neste aparelho (null-deref no compilador). Isso é uma restrição do
+    experimento, não uma explicação do defeito numérico.
+
+CONFORMIDADE COM A ORDEM: capturei o backtrace ANTES de tentar mais shaders,
+como pedido. Não escrevi mais variantes cegas depois disso.
+
+--------------------------------------------------------------------------------
+C — VOLTAR AO REPRODUCER DE LARGURA 128 (Qcur_norm) — FEITO
+--------------------------------------------------------------------------------
+O especialista estava certo: o alvo tinha mudado. A marca caía no norm-0 de
+largura 2048; o defeito foi isolado em Qcur_norm de largura 128. Não são o
+mesmo nó nem o mesmo shape.
+
+Reproducer SEM MODELO do caso (128,16,T), compilado contra o build
+INSTRUMENTADO (para ter SIGDISP + bypass da vedação). Padrão real29, T=29.
+
+DISPATCH DO NÓ DEFEITUOSO (o que o especialista pediu, agora capturado):
+  SIGDISP| pipe=rms_norm_mul_f32 params=4 pc_size=116 wg_denoms=[1,1,1]
+          dispatch=[16,29,1]
+  bind[0] buffer=0xb400007c4c295400 offset=0       range=237568   (A=X)
+  bind[1] buffer=0xb400007c4c295400 offset=237568  range=512      (B=peso,128f)
+  bind[2] buffer=0xb400007c4c295400 offset=475648  range=237568   (C=destino)
+  bind[3] buffer=0xb400007c4c295400 offset=0       range=237568   (D=reuso de A)
+  pushc_f32[26]=1e-05   (eps no slot 26)
+  ERROR: avg_err=5.11457 in MUL (check 1)
+  First error: result=7 correct=-0.317312
+
+ACHADO RELEVANTE (não hypótese, é fato medido):
+  fundido.f32  e  separado.f32  são BYTE-A-BYTE IGUAIS (md5 dd9877da...).
+  Ambos diferem da CPU (md5 08366a24...). 
+  fundido_limpo e fundido_disp2 abortam com avg_err=5.11457 (check 1),
+  idêntico ao fundido. Logo, o fundido é DETERMINÍSTICO neste reproducer
+  (repetibilidade: 2 execuções, mesmo erro, mesmo check, mesmo First error).
+  O resultado do fundido (avg_err 5.11) é MUITO PIOR que o do modelo completo
+  (avg_err ~0.64-0.67 no nó de 2048), o que é esperado: aqui não há rede
+  compensating para absorver o erro — é o nó isolado.
+
+INSTRUMENTAÇÃO DO DESTINO (ponto B do especialista):
+  Ele pediu um buffer de diagnóstico PRÓPRIO, binding válido, uma posição
+  por workgroup/escritor. Tentei (2 tentativas), ambas com SIGSEGV — mas
+  agora sabemos que o crash é do compilador, não do meu índice. Aun assim,
+  a instrumentação in-shader está comprovadamente inviável aqui. O
+  reproducer AGORA (padrão real29) grava sentinela 7.0 no destino e mede
+  sum/sum2/min/max, o que já dá evidência de escrita sem precisar de marca.
+
+--------------------------------------------------------------------------------
+D — SEPARAR PATCH MÍNIMO E MANTER BUILD LIMPO — FEITO
+--------------------------------------------------------------------------------
+Removi do código de produção TODO o experimento: pipelines rms_norm_mark_*,
+o pipeline duplicado (dup), o switch SIGMARK no dispatch e as marcas no shader.
+Salvei tudo em docs/vulkan-hymt2-fusion-round/experimentos/:
+  rms_norm_marcas.patch (90 linhas) — o diff do rms_norm.comp
+  vulkan-shaders-gen_marcas.patch (28 linhas) — pipelines marcados/duplicado
+  + SIGFUSION/SIGFUSE/SIGDISP ficaram no .cpp, ainda separados do gate.
+
+PATCH MÍNIMO (o que poderia ir para v9, se e quando autorizado):
+  bool disable_fused_rms_norm_mul;   // device
+  bool disable_add_rms_fusion;       // device
+  device->disable_fused_rms_norm_mul =
+      device->vendor_id == VK_VENDOR_ID_QUALCOMM &&
+      getenv("SIGMARK_ALLOW_FUSION") == nullptr;
+  device->disable_add_rms_fusion = <análogo, também Qualcomm-only>
+  + gate no can_fuse (rms_norm_mul_f32) + condição em add_rms_fusion
+  + probe SIGVK + anti-crash (pré-existentes do projeto)
+  NÚMERO DE LINHAS ADICIONADAS no .cpp: 177 (inclui o gate, o probe e os
+  comentários). Só o gate em si é ~7 linhas.
+
+DECISÃO PENDENTE PARA O USUÁRIO: o SIGMARK_ALLOW_FUSION=1 (bypass de
+  diagnóstico) está dentro do patch mínimo. Num pacote de produção é
+  melhor removê-lo ou protegê-lo (recompilar sem o getenv). Recomendo
+  removê-lo do artefato final.
+
+BUILD LIMPO (arm64-v8a normal, sem CHECK, sem experimento): compilou sem erro
+  (BUILD_CLEAN_DONE, sem error:/FAILED). Confirma que o gate sozinho compila
+  e que o contorno não depende de nenhuma instrumentação.
+
+--------------------------------------------------------------------------------
+E — OPENCL: DIAGNÓSTICO CORRIGIDO (e correção de uma conclusão minha)
+--------------------------------------------------------------------------------
+O especialista estava certo em: -38 = CL_INVALID_MEM_OBJECT; começar pelo
+objeto de memória, não pela matemática do quant.
+
+O QUE EU ERREI E ESTÁ CORRIGIDO NESTE RELATÓRIO:
+  Eu havia afirmado antes: "F16+OpenCL OK; o Q4 oficial quebra no OpenCL
+  (-38) — única combinação que falha". ERRADO. O F16 TAMBÉM falha com -38.
+  Reproduzido nesta ação: Q4 oficial 3/3 com -38 E F16 com -38 também.
+  Portanto o -38 NÃO é específico do Q4; é do caminho de escrita de tensor.
+  Isso RETIRA a recomendação anterior de "usar OpenCL no Q4 porque é mais
+  rápido" — ela se baseava numa premissa agora refutada.
+
+LOCALIZAÇÃO: ggml-opencl.cpp:9509-9511, logo após "tokens do prompt: 29",
+  ou seja, na PRIMEIRA escrita do tensor de entrada, com o contexto já
+  alocado (84.3 ms) e as 33 camadas carregadas. Q4+Vulkan com o MESMO
+  arquivo passa (avg_err 0.0101, MUL_MAT check 676) → o problema é exclusivo
+  do backend OpenCL, não do modelo.
+
+CAUSA PROVADA ATÉ AGORA: extra->data_device é um cl_mem INVÁLIDO (já liberado
+  ou nulo), porque -38 é CL_INVALID_MEM_OBJECT. GGML_ASSERT(extra) passa; o
+  handle é que é inválido.
+
+O QUE NÃO ESTÁ PROVADO (hipótese, não diagnóstico):
+  - Qual cl_mem foi liberado. O arquivo tem 343 chamadas de clReleaseMemObject.
+    Há um clCreateSubBuffer+clCreateImage num pool com "pending-release-queue"
+    (comentado em :617) — uma hipótese de lifecycle, NÃO uma causa.
+  - Não localizei o ponto exato de release do handle que falha.
+  - O especialista pede instrumentar a cadeia do buffer (tensor/dtype/tamanho/
+    criação/flags/retorno/sub-buffer/imagem/lifetime/clGetMemObjectInfo).
+    Isso exigiria um build instrumentado novo; não foi feito nesta rodada.
+
+CONSISTÊNCIA COM O QUE O ESPECIALISTA DISSE: "F16 passar restringe as
+  condições... mas não prova erro aritmético na quantização". Aqui o
+  inverso: F16 também falha, então o problema não é nem a quantização nem
+  específico do Q4 — é o caminho de escrita (buffer) em si.
+
+RECOMENDAÇÃO ATUALIZADA: como o OpenCL falha em QUALQUER quantização nesta
+  configuração, o caminho confiável é Vulkan (com o contorno) ou CPU
+  (fallback). OpenCL não pode ser chamado de "fallback validado" (Q10.8).
+
+--------------------------------------------------------------------------------
+O QUE AINDA NÃO ESTÁ FEITO (pendências honestas)
+--------------------------------------------------------------------------------
+1. Instrumentar a cadeia do cl_mem do OpenCL até o ponto exato de release
+   (ação E completa). Requer build instrumentado; o especialista pediu
+   "caso mínimo separado" — o reproducer 128 já existe e serviria de base.
+2. SPIR-V: salvar hash e desassemblação do shader fundido vs duplicado (Q2.E /
+   Q3). "Mesmo source" não garante "mesmo SPIR-V".
+3. Limpar o relatório de Q1.2 (hoje tem texto antigo ainda por corrigir) e
+   incorporar o backtrace. Feito em parte aqui; falta unificar.
+4. Artefatos v9 (ação F): manifesto, ABIs, JNI, origem das libs, instruções de
+   reversão. NÃO_FEITO, aguardando autorização — não instalo, não commito,
+   não publico sem pedido explícito.
+5. SHA-256 completo do Q4 oficial (só tenho md5 dos dumps locais; preciso do
+   sha256 do arquivo do modelo, não dos dumps) — Q8 pede o sha256 do artefato.
+6. Q4: testar DISABLE_F16 (se disponível) como experimento separado; medir
+   métricas após remoção de deslocamento constante do vetor; log-probs em
+   um conjunto mais amplo de posições (Q4). Sugerido, não executado.
+7. Medir custo real (contorno vs todas-off vs CPU) com caminho correto, estado
+   térmico controlado, contagem de dispatches reais (Q9). NUNCA foi medido.
+8. Contexto real do app (8192, se for o padrão), não só 512 (Q10.6).
+
+NOTA DE ESCOPO: o especialista reiterated que "revisar amostragem de threads é
+secundário: não desvie a investigação de correção". Mantive o foco em
+correção: o patch mínimo está isolado e compila limpo, e a rejeição do
+OpenCL-recomendado (F16 também falha) é uma correção de conclusão, não
+desvio.

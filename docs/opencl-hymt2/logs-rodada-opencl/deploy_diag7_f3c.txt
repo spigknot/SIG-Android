@@ -1,0 +1,5 @@
+== DEPLOY DIAG7 82c24bfb (F3c; escopo/rollback de sempre) ==
+49ef68f7e6e3f3fd6043e12f8d221dcb0ccd71b4c2449716d089c4adcea218dc  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/libsig_llama_diag7_f3c.so: 1 file pushed, 0 skipped. 12.4 MB/s (95940552 bytes in 7.394s)
+OK
+82c24bfbf1cc570a3671e2ea4a7225353129a3f18ab51446af15f470086e9ba4  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so

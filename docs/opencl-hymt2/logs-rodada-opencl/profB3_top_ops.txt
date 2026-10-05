@@ -1,0 +1,22 @@
+colunas: ['op name', 'kernel name', 'exec duration (ms)', 'global size', 'local size', 'output size'] | linhas: 100352
+soma exec total (ms): 3864 | n kernels: 100352 | n grupos: 1308
+
+TOP 18 (op | kernel | soma ms | n | media ms | %):
+  result_output              | kernel_mul_mv_q6_K_f32_flat                    |    733.9 |   141 |    5.205 |  19.0%
+  ffn_out-6                  | kernel_gemv_noshuffle_q6_K_f32                 |     25.9 |   141 |    0.184 |   0.7%
+  ffn_out-31                 | kernel_gemv_noshuffle_q6_K_f32                 |     25.6 |   141 |    0.182 |   0.7%
+  ffn_out-3                  | kernel_gemv_noshuffle_q6_K_f32                 |     25.5 |   141 |    0.181 |   0.7%
+  ffn_out-28                 | kernel_gemv_noshuffle_q6_K_f32                 |     25.2 |   140 |    0.180 |   0.7%
+  ffn_out-15                 | kernel_gemv_noshuffle_q6_K_f32                 |     25.2 |   140 |    0.180 |   0.7%
+  ffn_out-12                 | kernel_gemv_noshuffle_q6_K_f32                 |     25.2 |   141 |    0.179 |   0.7%
+  ffn_out-27                 | kernel_gemv_noshuffle_q6_K_f32                 |     25.2 |   140 |    0.180 |   0.7%
+  ffn_out-9                  | kernel_gemv_noshuffle_q6_K_f32                 |     24.9 |   141 |    0.177 |   0.6%
+  ffn_out-24                 | kernel_gemv_noshuffle_q6_K_f32                 |     24.9 |   140 |    0.178 |   0.6%
+  ffn_out-29                 | kernel_gemv_noshuffle_q6_K_f32                 |     24.8 |   140 |    0.177 |   0.6%
+  ffn_out-0                  | kernel_gemv_noshuffle_q6_K_f32                 |     24.7 |   141 |    0.175 |   0.6%
+  ffn_out-18                 | kernel_gemv_noshuffle_q6_K_f32                 |     24.6 |   140 |    0.176 |   0.6%
+  ffn_out-21                 | kernel_gemv_noshuffle_q6_K_f32                 |     24.5 |   140 |    0.175 |   0.6%
+  ffn_out-30                 | kernel_gemv_noshuffle_q6_K_f32                 |     24.5 |   140 |    0.175 |   0.6%
+  ffn_out-1                  | kernel_gemv_noshuffle_q6_K_f32                 |     24.3 |   141 |    0.172 |   0.6%
+  ffn_out-2                  | kernel_gemv_noshuffle_q6_K_f32                 |     23.9 |   141 |    0.169 |   0.6%
+  ffn_out-4                  | kernel_gemv_noshuffle_q4_k_f32                 |     21.1 |   141 |    0.149 |   0.5%

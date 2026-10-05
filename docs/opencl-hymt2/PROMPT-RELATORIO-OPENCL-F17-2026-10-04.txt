@@ -1,0 +1,139 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F17: AUDITORIA DO LOADER, ARTEFATO MINIMO, VACINA
+Data: 04/10/2026. Repo: D:/Projetos/SIG (NADA commitado). Local; nada ativado sem consentimento.
+Base: parecer "APOS F16: CONSOLIDAR LOADERCACHE, ACEITE MINIMO E SEGURANCA".
+
+================================================================================
+A. CONSOLIDACAO DOS NUMEROS (item 1) — com contagens Python e hashes
+================================================================================
+A1. Baseline Q4 curto (build 9698670c): 7154/7432/7487/7549ms => mediana 7459,5ms
+    (18,8-19,9 t/s). Candidato: 3964ms (35,83 t/s). Reducao = 46,86%; speedup =
+    1,88. Caracterizacao HONESTA: ganho PILOTO FORTE; 1 amostra do candidato
+    (nao estatistica robusta) — o aceite OFF/ON com reps e' o que fecha.
+A2. "970" foi APENAS atalho de comunicacao; nos logs/artefatos o baseline e'
+    SEMPRE o mesmo build 9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53
+    (95.613.928B, rollback verificado por readback). Nao existe build "970".
+A3. Q4 mais_longo: 77927/77933ms => 51615ms = -33,8% a -35,2% (faixa declarada).
+    Q8 curto: baseline aproximado ~7449-8000ms (sem captura de perfil nos runs
+    de referencia) vs 4927ms — faixa APROXIMADA, nao percentual exato; o aceite
+    OFF/ON com perfil capturado fecha o numero.
+A4. Contador REAL de dlsym/pedido: implementado (prop debug.sig.hymt2.clcount;
+    contadores shim/dlsym por pedido, impressos como "OCL/shim: ..."). A
+    estimativa "~6000 dlsym/token" NAO e' afirmada como medida; a MEDICAO do
+    contador no device e' item do aceite pendente. Semantica: resolucao por
+    funcao (template) — cache ligada => dlsym ~= nro de simbolos distintos no
+    pedido; desligada => dlsym == chamadas do shim.
+A5. Dados brutos de TODAS as tentativas: permanecem nos run-dirs
+    (Desktop/hymt2/hymt2-ab-seam*/<caso>/journal.jsonl + delta.txt), com
+    artifact-hash/serial/config/props/ordem; os logs da cadeia ab_seam*.log
+    registram os abortos de deploy e o A2. Nada foi apagado.
+
+================================================================================
+B. AUDITORIA DO LOADER (classe critica) — resultados de CODIGO
+================================================================================
+B1. Handle: opencl_handle() usa std::call_once (dlopen de candidatas UMA vez);
+    NAO existe dlclose no arquivo (grep = 0). => lifetime process-lifetime
+    PROVADO; "1 resolucao por simbolo por processo" valido; nenhuma invalidacao
+    por generation necessaria; nenhum unload a tratar.
+B2. Wrappers: TODOS no padrao `auto fn = OPENCL_FN(x); return fn ? fn(...) :
+    OPENCL_MISSING_ERROR;` => simbolo ausente/falha de init = null SEGURO com
+    mensagem de diagnostico (sig_opencl_loader_last_error), sem crash.
+B3. Cache ENDURECIDO para produto (mudanca F17 sobre o F15):
+    - publicacao ATOMICA (std::atomic<Fn>, acquire/release) — sem ponteiro
+      parcial visivel a outras threads;
+    - FALHAS NUNCA cacheadas: se o primeiro acesso ocorre antes do driver
+      responder, a proxima chamada tenta de novo (sem envenenamento);
+    - chave runtime debug.sig.hymt2.loadercache (1 leitura por processo; default
+      LIGADA = comportamento de produto; "0" = caminho ORIGINAL dlsym-por-
+      chamada) => A/B cache OFF/ON no MESMO artefato; alternancia exige reinicio
+      do app (o protocolo ja reinicia por pedido);
+    - contadores opt-in (clcount) para o numero REAL por pedido;
+    - chave default LIGADA somente como default PROPOSTO — a adocao e' decisao
+      humana (item F).
+B4. Callers: loader compilado no app (CMakeLists raiz, l.69) e no llama-jni
+    (CMakeLists, l.117); whisper_jni.cpp consome apenas a mensagem de erro do
+    loader (diagnostico). Whisper nao usa o shim para inferencia; smoke de
+    controle pequeno entra no aceite (nao garantia por intuicao).
+
+================================================================================
+C. TESTES REAIS (comando/rc) — permanentes no repo
+================================================================================
+C1. `native-dependencies/harness/fixtures/loader_cache/run_loader_cache_test.sh`
+    RED (ORIG, dlsym por chamada): 4 dlsym p/ 2+2 chamadas.
+    GREEN (PATCHED): 2 dlsym (1/simbolo) por instancia.
+    ENDURECIMENTO A-F (17 checks): transitoria nao envenena; ausente null-safe
+    com retry; concorrencia 8x200=1600 OK (dlsym<=8); contadores shim/dlsym
+    exatos; chave OFF = 2 chamadas/2 dlsym; OFF->ON resolve 1x e cacheia.
+    MUTACAO (cache desligado no codigo): detectada (teste nao passa).
+    RESULTADO: PASS; rc=0.
+C2. `native-dependencies/harness/safe_deploy_test.sh`: 5/5 PASS (fonte ausente;
+    push falho; push TRUNCADO [incidente F13] bloqueado; sha divergente no
+    destino detectado; sucesso completo). rc=0.
+C3. Build local: ninja rc=0 (log build_f17_v2.log), GGML_OPENCL_PROFILING=OFF.
+
+================================================================================
+D. ARTEFATO MINIMO + RECEITA (item 3)
+================================================================================
+D1. Produto candidato: libsig_llama_f17.so
+    sha256 1c5b6465a614321b704fd211221daf02012e0c48e974328c1228d1a1a062e4db
+    (96.257.840B). Fonte = WIP aceito (guard F3b + resets + fixes Vulkan) + cache
+    endurecido. SEM profiling cmake (OFF); instrumentacao propria inativa por
+    props (default 0) — nenhum caminho quente alterado com props off alem do
+    proprio cache (que e' o produto).
+D2. Patch golden: docs/opencl-hymt2/LOADER-CACHE-PATCH.diff (139 linhas; sha256
+    96114116323b389d1b451cceea15c2c0...). Dry-run `git apply --check` sobre o
+    arquivo de HEAD: OK. NOTA HONESTA: o diff inclui tambem os shims F3b
+    (clGetEventInfo/clGetCommandQueueInfo) ja aceitos — o patch total do arquivo
+    e' versionavel como um todo; a base de produto e' o WIP aceito, NAO HEAD.
+D3. Receita: cmake flags GGML_OPENCL=ON / GGML_OPENCL_PROFILING=OFF; alvo ninja
+    sig_llama no diretorio native-dependencies/build/llama/arm64-v8a; toolchain
+    NDK (mesmo do BUILD-RECIPE-F3B.md). Nenhum ZIP/nativeVersion/R2 tocado.
+
+================================================================================
+E. FIX DE INSTRUMENTACAO PARA O ACEITE (item 4, sem tocar KV)
+================================================================================
+E1. Reset do schedprof MOVIDO para ANTES do decode do prompt => o snapshot pos-
+    prefill captura a fase PREFILL de verdade (antes [prefill] saia 0 por
+    construcao). Reset per-op separado apos o snapshot => topops continua
+    medindo APENAS decode (comparavel ao F14). KV/estado funcional NAO tocado.
+E2. Aceite proposto (apos autorizacao): MESMO artefato 1c5b6465, alternando
+    debug.sig.hymt2.loadercache 1/0, >=3 reps: curto Q4, curto Q8, mais_longo Q4,
+    mais_longo Q8 (estado quente; ordem alternada; props identicas em ambos os
+    bracos exceto a chave; temperatura registrada). Coletar: decode/prefill/
+    graph/enq/setup por fase + OCL/shim chamadas/dlsym + fullhash das saidas +
+    agregado do APP (tempo pronto) com props de profiler OFF no braco produto.
+    Controles pequenos: CPU e Vulkan (nao usam o shim) + Whisper smoke (loader
+    compartilhado em build-link).
+E3. safe deploy: retry LIMITADO (max 3, 2s) apenas da LEITURA tmp/readback apos
+    push; fonte ausente/sha errado/push rc!=0 abortam SEM retry cego; se o
+    readback pos-cp falhar => abort + rollback verificado (a lib do device e'
+    restaurada por copia verificada; backups rb* preservados).
+
+================================================================================
+F. ADOCAO (separar consentimentos)
+================================================================================
+F1. Adocao LOCAL de fonte: manter o cache endurecido no WIP (ja esta; nada a
+    fazer) — default de produto proposto: LIGADO.
+F2. Deploy no device: requer consentimento especifico (aceite E2). Nada foi
+    deployado nesta fase; device segue 9698670c/UI Q4_K_M/Vulkan/Portugues/
+    chaves 0 (readback pendente de conferencia no precheck do aceite).
+F3. Release/commit/push: NAO pedidos; nenhuma acao.
+
+================================================================================
+G. PENDENCIAS DECLARADAS (nao bloqueiam o aceite do cache)
+================================================================================
+G1. Q8 topops/perop (numeros ausentes) e reconciliacao por-op
+    (op_total/enqueue/restante) — documentadas; novo stats exige o reset E1.
+G2. Backpressure do queue (enq maior no ganho): medir ANTES de qualquer 'batch'
+    de produto; nao iniciar enquanto o aceite do cache nao fechar.
+G3. Ganho no agregado do APP (tempo pronto) com profiler OFF: parte do aceite.
+
+================================================================================
+H. ESTADO / MANIFESTO
+================================================================================
+H1. Manifesto regenerado por Python (exist/size/SHA/dedupe) — numeros no rodape.
+H2. Artefatos locais: 9698670c (prod), loadercache 290a6a0b (F16), f17 1c5b6465
+    (candidato endurecido), profS3/profB3/profA2 (instrumentacao), todos em
+    scratch com SHA conferido.
+H3. Conclusao: rotas dominantes localizadas no F14; causa = dlsym-por-chamada no
+    shim (codigo); ganho PILOTO forte (-47%/-35%/~-36%); o ACEITE OFF/ON no
+    mesmo artefato e' o passo que fecha a adocao — aguardando consentimento.

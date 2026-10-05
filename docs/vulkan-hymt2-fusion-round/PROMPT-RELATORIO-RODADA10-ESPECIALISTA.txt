@@ -1,0 +1,386 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 10 (29/09/2026)
+Hy-MT2 1.8B / llama.cpp / Vulkan / Adreno 840 / CPH2747 (OnePlus 15)
+================================================================================
+Responde ao "PROMPT AO AGENTE EXECUTOR — CONTINUACAO APOS A RODADA 9" de
+29/09 16:24. Executou os 4 eixos pedidos: SAMPLER, LOOP, BENCHMARK e a
+PRIMEIRA INVESTIGACAO POR OPERACAO. Nenhum commit/push/publicacao/APK (§1.5/§8.4
+cumpridos). HEAD 080e804, nada alterado em app/ nesta rodada.
+
+ESTADOS (§9): CCE = CONCLUIDO COM EVIDENCIA / PARCIAL / PENDENTE / BLOQUEADO
+
+  A. SAMPLER ......... CCE  (auditoria corrigida; testes diretos 10/10;
+                             integracao PASS; logs semanticamente corretos)
+  B. LOOP ............ CCE  (ordem de validacao corrigida; 16 testes de
+                             logica sintetica; modos separados)
+  C. BENCHMARK ....... CCE  (18/18; CSV+JSON; fases; limites declarados)
+  D. QUALIDADE ....... CCE  (repetibilidade medida; §6.1 corrigido)
+  E. OPERACOES ....... PARCIAL (checkpoints executados e o efeito esta
+                             LOCALIZADO no 1o contorno; captura de operandos
+                             = pendente, com o experimento minimo definido)
+  F. ALTERACOES ...... CCE  (backups, hashes, gates, comandos)
+
+--------------------------------------------------------------------------------
+A. SAMPLER — A AUDITORIA ERA MINHA E O ESPECIALISTA ACERTOU (§2, §3)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+A.1 O ERRO. Eu citei llama-sampler.cpp:810-820 (retorno de backend) e conclui
+"historico sempre vazio". O corpo COMPLETO (§2.1), lido agora, tem:
+    868 llama_sampler_apply(smpl, &cur_p);
+    874 llama_sampler_accept(smpl, token);      <-- ACEITACAO AUTOMATICA
+    876 return token;
+O trecho de 817-820 so dispara se um sampler de backend ja escolheu o token.
+
+A.2 QUAL CAMINHO O APP USA (§2.2) — verificado, nao presumido:
+  * llama_set_sampler: 0 ocorrencias em llama_jni.cpp, llama_harness.cpp e
+    layer_diff*. params.samplers: 0 no JNI (cparams = default_params).
+  * Sem set_sampler, sampling.sampled nunca recebe dados de selecao
+    (llama-context.cpp:2013 so copia se has_samplers), logo
+    get_sampled_token_ith devolve LLAMA_TOKEN_NULL e o early-return de 817
+    NAO dispara. Caminho host SEMPRE, app e harness.
+  * Chain do app (llama_jni.cpp:442-449): penalties(64,1.05,0,0) -> top_k(20)
+    -> top_p(0.6) -> temp(0.7) -> dist(42). Reproduzida identica no harness.
+  * Ciclo de vida: chain criada POR PEDIDO em llama_jni.cpp:442 e liberada em
+    497 (llama_sampler_free) — reset implicito por criacao; prompt NUNCA passa
+    por accept (só sample() aceita); EOG: o token e aceito por sample() antes
+    do break, e a chain morre logo depois — sem persistencia entre pedidos.
+
+  TABELA DE QUEM ACEITA CADA TOKEN (§3 criterio de saida):
+  quem                    quantas vezes por token gerado   onde
+  ----------------------  ------------------------------  -----------------
+  APP (produto)           1x                              sample():874 (interno)
+  harness v5 (padrao)     1x                              sample():874 (interno)
+  harness --accept-duplo  2x (sample + explicita)         llama_harness.cpp:544
+  (legado; NAO representa o app)
+
+A.3 PROCEDENCIA (§2.3): libllama.a do build de 25/09 17:21 (posterior a
+  ultima edicao do fonte em 24/09 14:06); desmontagem de
+  llama-sampler.cpp.o do proprio .a mostra as duas chamadas indiretas na
+  ordem apply -> leitura do token -> accept (blr nas offsets 0x10/0x08 da
+  iface, com os argumentos corretos). v2/v3 linkaram este .a (build_harness.sh).
+  LIMITACAO declarada: nao tenho o log de build de v2/v3 com a lista de .a;
+  a prova e o .a unico + a regressao byte-a-byte v2==v4 (secao B.3).
+
+A.4 TESTES DIRETOS (§3.2) — VINCULADOS A LIBLLAMA.A, sem GGUF (§3.1):
+  sampler_penalties_test.cpp, compilado NDK r27c aarch64, EXECUTADO NO
+  CPH2747: 10 passaram, 0 falharam. Enumeracao:
+   (a) repeat=1.0/freq=0/present=0 preserva os logits
+   (b) repeat=1.05 com historico vazio: NENHUM candidato alterado
+   (c) +2.1 no historico => /1.05 ; -2.1 => *1.05 ; 0 => 0
+   (d) token AUSENTE do historico permanece intacto
+   (e) reset remove o efeito do historico
+   (f) aceite 2x do MESMO token: escala IGUAL (nao e' /1.05^2) — o aviso do
+       parecer esta certo: com freq=present=0 conta nao multiplica escala
+   (f1) anel=4, 1x/passo: A (5o aceite) ja expulso, E presente
+   (f2) anel=4, 2x/passo: A expulso MAIS CEDO (slots duplicados) — o efeito
+       real da dupla aceitacao e' janela/expulsao, nao penalidade ao quadrado
+  LOG: logs-rodada10/testes/sampler_penalties_test-saida.txt (10/0, RC=0,
+  saida integral gravada no aparelho e puxada; reproduzivel pelo binario da F.3).
+
+A.5 INTEGRACAO (§3.3) — sample() aceita sozinho, PROVADO com contexto real:
+  sampler_integration_test.cpp: carrega c4bf1015... (hash conferido no
+  aparelho), CPU puro, ctx minimo, chain {penalties, greedy}, UMA chamada de
+  llama_sampler_sample(), NENHUM accept explicito neste programa:
+    amostrado = 316
+    token amostrado apos sample() : 1.904762  (= 2.0/1.05)  -> PROVADO
+    token nunca amostrado         : 2.000000  (controle negativo OK)
+    chain nova                    : 2.000000  (controle 2 OK)
+  RESULTADO: PASS, RC=0. LOG: logs-rodada10/testes/sampler_integration_test-saida.txt
+  (saida integral, incluindo a transcricao numerica acima).
+
+A.6 CORRECOES DE INTERFACE (§2.4):
+  * Flag renomeada: --aceitar-penalidade -> --accept-duplo. A antiga agora
+    e' RECUSADA com rc=2 e mensagem ("foi renomeada... sample() ALIMENTA o
+    historico sozinho (llama-sampler.cpp:874)...") — sem quebrar scripts em
+    silencio; teste cobre a recusa.
+  * Padrao do harness: 1x/token via sample() — comportamentalmente igual ao
+    app (por isso a regressao v4==v2 vira identica; a correcao foi de
+    SEMANTICA, nao de comportamento — eu documentei historico VAZIO e isso
+    era falso).
+  * Log novo (extraido do run): "HARNESS| penalidade = repeat=1.050
+    last_n=64 aceitacoes_por_token=1 [aceitacao 1x/token via sample() interna
+    — == o app (llama-sampler.cpp:874)]".
+  * Comentario do harness reescrito (llama_harness.cpp:534-544) citando o
+    erro da rodada 9.
+
+--------------------------------------------------------------------------------
+B. LOOP — VALIDACAO ANTES DA ESCOLHA, MODOS SEPARADOS (§4)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+B.1 CORRECOES (§4.1/4.2) em llama_harness.cpp + harness_loop.h novo:
+  * Varredura de finitude MOVIDA para ANTES do sampler/argmax (antes: escolha
+    primeiro, contagem depois — sample() lia logits invalidos sem interrupt).
+    Invalido => interrupcao com motivo no log e RC=3 (retorna
+    medicao_valida ? 0 : 3).
+  * NaN/Inf contados UMA vez (antes: no argmax E na varredura = 2x).
+  * Greedy SEM sentinela -1e30f: argmax_finito() com flag; todos nao-finitos
+    => "greedy: NENHUM candidato elegivel" e invalida (antes: emitia id 0).
+    Finitos muito negativos (-1e31) agora sao elegiveis (antes excluidos).
+  * Falha de decode => flag decode_falhou => invalida; nenhum passo seguinte
+    le logits.
+  * EOG x teto: motivos separados por motivo_parada(); contagem
+    escolhas/decodes/EOG conferida por escolhas_consistentes() e impressa
+    ("contagens: escolhas=N decodes=M ... consistentes=sim").
+  * peca>buffer: retorno negativo NAO vira texto; o texto final e remontado
+    dos ids (re-tok), nunca de placeholder.
+
+B.2 MODOS (§4.3): --benchmark separa. Diagnostico (padrao) = varredura
+  completa. Benchmark = sem varredura/top-5/log-por-passo e, ACIMA de tudo,
+  declara no log: "finitude_de_todos_os_logits: NAO VERIFICADA (modo
+  benchmark...)" e sela "MEDICAO: VALIDA (parcial: sem verificacao de
+  finitude por desenho do modo)" — o mesmo certificado NAO e' emitido.
+
+B.3 TESTES (§4.4) — 16 testes de logica pura com arrays SINTETICOS
+  (harness_loop.h e' o MESMO codigo que o harness chama, nao copia):
+  2 NaN+2 Inf detectados; todos nao-finitos => nenhum candidato; -1e31 nao
+  excluido; so-negativos => maior vence; nullptr invalido; peca 5/-12/0;
+  EOG/teto/teacher-completo/teacher-incompleto nomeados separados; 4 testes
+  de contagem (EOG=>decodes=escolhas-1, teto=>=, falha=><, EOG+10=10
+  INCONSISTENTE).
+  TOTAL DO BINARIO DE TESTES: 63 passaram, 0 falharam
+    [RETIFICADO §9 — a decomposicao antiga "44 parser + 7 + 16" somava 67 e
+    DUPLICAVA os 7 de penalidade (ja estavam dentro dos 44 da rodada 9).
+    Decomposicao GERADA POR SCRIPT da execucao (logs-rodada10/testes/...):
+      37 parser (10+7+6+3+4+2+3+2)
+    +  7 penalidade renomeada (--accept-duplo)
+    +  3 rejeicao do nome antigo (--aceitar-penalidade)
+    + 16 logica do loop (harness_loop.h)
+    = 63, bate com o total declarado pelo binario.]
+  Local: compilado NDK, EXECUTADO NO APARELHO (nao host — §4.2).
+  LOG: logs-rodada10/testes/harness_args_test-saida.txt (saida integral;
+  as categorias de parser ficam na saida da rodada 9; aqui contam 37).
+
+B.4 REGRESSAO (§4.5): v5 == v2 nos 3 dumps (P/D1/D2 =
+  3e9b59544c314d55 / 93b5dc3536d6c79d / 28afda438da3abfe), teacher CPU.
+  Fronteiras L[0]/L[1]/L[2] (§4.6): P identico entre runs (prefill puro,
+  sha 3e9b59544c314d55); D1 so existe apos 1 token consumido e difere quando
+  o prefixo difere; dump do passo k = L[k] conferido (captura ANTES do
+  decode do passo). Convencao L[k] mantida; arquivos antigos nao renomeados.
+
+--------------------------------------------------------------------------------
+C. BENCHMARK — 18/18, CONFERIDO POR SCRIPT (§5)
+--------------------------------------------------------------------------------
+Estado: CCE (com limites declarados)
+
+C.1 CONFIGURACAO (§5.6, congelada): modelo c4bf1015... (hash conferido),
+  prompt renderizado do app, mode app (cadeia real), n_ctx 4096, n_batch 512,
+  4 threads, CPU n_gpu=0 / VK n_gpu=33, ordem contrabalanceada
+  (cpu-vk / vk-cpu / cpu-vk), 3 reps por par, processo novo por run
+  (= NAO mede reuso de contexto do app — declarado), sem root/limpeza.
+
+C.2 TABELA (mediana de 3, LOGS em logs-rodada10/bench/bench_<caso>_<be>_r<n>.log):
+  caso   backend  n  min_total  mediana   max  disp  med_geracao
+  curto  cpu      3      2.797    3.122  3.239  1,16         586
+  curto  vulkan   3      4.645    4.845  5.440  1,17         556
+  medio  cpu      3     16.744   16.787 19.361  1,16      10.535
+  medio  vulkan   3      8.850    9.130  9.260  1,05       1.527
+  longo  cpu      3     47.599   49.928 51.081  1,07      34.539
+  longo  vulkan   3     19.041   20.378 24.551  1,29       3.137
+  [RESULTADO HISTORICO INVALIDADO (§7 rodada 12): os 9 runs VULKAN desta
+  tabela sao do v5, que compartilhava o defeito da lista devices (UB no
+  ramo backend!=cpu) — os numeros e os ratios abaixo NAO sao recomendacao
+  de desempenho sustentada; sao observacoes historicas ate reexecucao com
+  v6. Os 9 runs CPU sao preservados como observacoes historicas (ramo
+  defeituoso nao executa em cpu). Nao combinar CPU antigo com Vulkan novo
+  como se fosse comparacao contemporanea.]
+  ratio mediana VK/CPU (HISTORICO INVALIDADO): curto 1,552 | medio 0,544 |
+  longo 0,408.  Decode: 0,949 / 0,145 / 0,091.
+  A amostra lenta VK do longo (24.551) foi MANTIDA (§5.1).
+  18/18 EXECUCAO RODOU, MEDICAO VALIDA, device_efetivo correto, EOG,
+  contagens consistentes=sim — integridade de artefato, que NAO elimina o UB
+  de producao dos runs Vulkan.
+
+C.3 CRONOMETROS (§5.3/5.4) — fases novas por passo (logits/sampler/detok):
+  gap residual do total: caiu de ~13.000 ms (v3, sem instrumentacao de fase)
+  para ~79 ms (ex.: curto cpu r1: total 2.914,6 = soma das 5 fases 2.835,9 +
+  logits 0,3 + sampler 7,2 + detok ~0 + strings). O gap ANTERIOR do modo app
+  nao era top-5 (§5.2: imprime_top so existe no ramo greedy) — era a
+  varredura de finitude + log por passo, ambos DESLIGADOS no modo benchmark.
+  LIMITE declarado (§5.4): o cronometro de geracao cobre llama_decode; a
+  espera ate logits acessiveis pode cair em get_logits (agora cronometrado
+  como fase propria — "logits"), e o acesso via sampler tambem. Nao reivindico
+  "aceleracao integral" so com o numero do decode.
+
+C.4 ESTATISTICAS POR SCRIPT (§5.7): logs-rodada10/bench_rodada10.csv (18
+  linhas x ~26 colunas) e bench_rodada10_stats.json, gerados por
+  consolida_bench10.py a partir dos LOGS (nao do texto de relatorio).
+  Nenhum outlier excluido. Validade: 18/18. Dispersao maxima 1,29. [RETIFICADO §8.4: a dispersao 10,0 da rodada 8 NAO pode
+  ser atribuida a instrumentacao — os logs antigos se perderam, sampler e
+  configuracao mudaram entre as rodadas, e nao ha A/B causal controlado. Pode-se
+  dizer apenas: a nova bateria teve menor dispersao que a antiga.]
+
+C.5 CONCLUSAO — RETIRADA como conclusao de desempenho (§7 rodada 12):
+  [PENDENTE de reexecucao] A frase que estava aqui ("curto pior, medio/longo
+  melhor") era uma RECOMENDACAO de desempenho apoiada em ratios cujos runs
+  Vulkan tem UB na carga — NAO sustentada. Retirada.
+  O que permanece declaravel: CPU vs Vulkan+gate neste aparelho e workload,
+  sem isolar o custo do gate; os 9 CPU sao observacoes historicas; a
+  reexecucao pareada (3 reps x 3 casos x 2 backends com o v6, ordem
+  contrabalanceada) e' PENDENTE de conexao do alvo (§7, ordem: depois da
+  integracao do instrumento e controles focais). Sem corte automatico por
+  tamanho a partir de tres casos.
+
+--------------------------------------------------------------------------------
+D. QUALIDADE E SEED (§6)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+D.1 REPETIBILIDADE SOB CONFIG FIXA (§6.3) — medido, nao presumido:
+  nos 6 pares (3 casos x 2 backends), 3/3 runs com a MESMA sequencia de ids
+  (sha12 identicos por par). Ex.: longo cpu = a737eac2d505 x3;
+  longo vk = 8445a160c1c8 x3. Seed 42 + logits/caminho iguais => deterministico.
+
+D.2 §6.1 CORRIGIDO: a troca de lado entre as rodadas 8 e 9 coincidiu com a
+  MUDANCA no tratamento do sampler (rodada 8: accept explicito adicional;
+  rodada 9+: so sample()). Nao provava instabilidade — provava mudanca de
+  configuracao. §6.2: CPU/Vulkan alteram os logits, a primeira escolha
+  divergente embaralha o historico e o resto NAO e' "centenas de erros
+  numericos independentes".
+
+D.3 DIVERGENCIA CPU x VK SOB MESMA CONFIG (app, run r1):
+  curto:  9 ids, SEQUENCIAS IDENTICAS, textos identicos
+          "O servidor foi reiniciado."
+  medio:  primeira divergencia na pos 25; texto: 1 palavra
+          "carregada"(CPU) x "enviada"(VK) — fonte "was uploaded";
+          ambos preservam 14:32, September/12 de setembro, 4821, 2,4 bar.
+  longo:  primeira divergencia na pos 2; 8 diferencas de palavra:
+          a/o (turno: CPU errou o genero — "a turno"; VK "o turno")
+          rota/viagem; "de armazenamento" SO na VK (depot: leitura
+          aceitavel, a fonte nao tem "storage"); "serviço sob a"/"serviço, na";
+          operando/funcionando; final/fim; de acordo./correspondente.;
+          adicional/extra. Nenhuma muda agente/tempo/negacao/fato/unidade.
+  Avaliacao: nenhuma diferenca semantica que altere conteudo factual nos 3
+  casos; CPU nao e' gabarito (§6.4) — aqui a CPU errou genero e a VK foi
+  literal em "rota... viagem" (perda de especificidade aceitavel).
+
+--------------------------------------------------------------------------------
+E. OPERACOES — PRIMEIRA INVESTIGACAO POR OPERACAO (§7)
+--------------------------------------------------------------------------------
+Estado: PARCIAL (efeito LOCALIZADO; causa por operacao ainda nao isolada)
+
+E.1 INSTRUMENTO (§7.4): layer_diff_v2.cpp — REPLAY do prefixo real
+  (prompt do app + 342 ids gerados do prefixo comum), device Vulkan FORCADO
+  por enumeracao (nao por default), sem cb_eval (a v1 documentou
+  SIGSEGV/SIGBUS lendo tensor dentro do compute; nao reutilizei esse
+  caminho). Controle curto VALIDADO antes do longo (§7.4): 4 ids, CPU x VK,
+  argmax identico (12486) nos dois, dumps com sha diferentes — captura
+  funciona nos dois backends.
+
+E.2 CHECKPOINTS DO CASO FOCAL L[342] (§7.3 — checkpoints maiores):
+  config            margem 3415-16990   vencedor   dump sha12
+  CPU 0/33              +0,037746      3415        648e418546b0
+  VK 1/33               -0,172441      16990       0c08609e612b
+  VK 2/33               -0,211639      16990       bcf243a6402e
+  VK 4/33               -0,211639      16990       (rerun identico)
+  VK 8/33               -0,211639      16990
+  VK 16/33              -0,211639      16990
+  VK 33/33              -0,211639      16990       bcf243a6402e (IGUAL a 2/33)
+  Offload REAL confirmado nos logs de cada run ("offloaded 1/33..33/33
+  layers to GPU"; "offloading output layer to GPU" sempre que n_gpu>0).
+  Rerun de 4/33 e 33/33 reproduzidos com os mesmos 6 casas.
+
+  LEITURA (com o alcance dela): a inversao de argmax NAO e' acumulacao
+  gradual de erro ao longo das camadas — ela ja esta INTEIRA com n_gpu>=1 e
+  NADA muda de 2 ate 33 (sha identico bit a bit). O efeito nasce no PRIMEIRO
+  contorno CPU/GPU (bloco 1 e/ou a camada de output, que o llama offloada
+  junto quando n_gpu>0). Nao e' causa por operacao: e' a janela causal
+  estreitada de 33 camadas para 1 contorno.
+
+E.3 O QUE FALTA E O MENOR PROXIMO EXPERIMENTO (§7.8 — sem matriz ampla):
+  (1) Referencia LOCAL (§7.5): capturar a ENTRADA do bloco 1 (saida do
+      embedding) nos dois backends com os MESMOS operandos. Se identica, o
+      operador suspeito esta no bloco 1 ou na projecao de output; se
+      diferente, a divergencia ja vem do embedding e o bloco 1 e' inocente.
+      Instrumento minimo: dump do tensor de embedding apos a 1a camada —
+      captura APOS o compute (nao dentro do cb_eval que crashava), validada
+      primeiro no controle curto como no E.1. ~1 executavel novo.
+  (2) Se (1) acusar o bloco 1: capturar operandos de UMA operacao (a
+      normalizacao de entrada do bloco 1) e replay local com tolerancia
+      justificada por dtype/escala (§10.5), nao 0.01 universal.
+  BLOQUEIO NAO ALEGADO: nenhuma; o passo (1) e' codigo novo, nao bloqueio.
+
+--------------------------------------------------------------------------------
+F. ALTERACOES, BACKUPS, GATES (§8, §11.F)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+F.1 BACKUP ANTES DE EDITAR (§1.2): native-dependencies/harness/
+  backup-rodada10/ — 8 arquivos copiados + MANIFESTO-BACKUP.txt com
+  SHA-256 completos (fontes da rodada 9, scripts de build, manifestos
+  anteriores). Nenhum exemplar unico sobrescrito (v2/v3/pf intactos).
+
+F.2 FONTES ALTERADOS NESTA RODADA (vs WIP preexistente — nenhum tocado):
+  native-dependencies/harness/llama_harness.cpp     34.625 B  7a52eff0...
+  native-dependencies/harness/harness_args.h        19.292 B  351f5f2e...
+  native-dependencies/harness/harness_loop.h         3.761 B  a55133eb...  NOVO
+  native-dependencies/harness/harness_args_test.cpp 17.483 B  36f77771...
+  native-dependencies/harness/sampler_penalties_test.cpp   6.246 B  537a64f5...  NOVO
+  native-dependencies/harness/sampler_integration_test.cpp 5.538 B  d7c8e7ba...  NOVO
+  native-dependencies/harness/layer_diff_v2.cpp      6.547 B  e9f3bea7...  NOVO
+
+F.3 BINAIROS (mesmo metodo: isolados, sem substituir controles):
+  llama_harness_v5        106.893.632 B  de49787e07e54175d82eae640477b504c4acf818565d0538ced479f2a469563d
+  llama_harness_v4        106.892.816 B  98e8618ad931f4bfee0e98d82f00037502e622cc25a0cd7bfd49d4b985c123ad
+  sampler_penalties_test  106.867.072 B  02276d478d923cc1685fb816f6dddcc3958ed8f4f8b1cef38d2039754b61e843
+  sampler_integration_test 106.864.464 B f6ddffc02ed9e2bc2fbe6fd68da950416069535c95d7b8cb110270367750f755
+  layer_diff_v2          106.868.768 B  99e1b05658d5c4bc028531442d0d4f8c7a6a19dd7dbebc53ebef092e9901e0ee
+  Controles preservados: llama_harness_pf 507217644e21..., v2 6ae9bdda668b...,
+  v3 3857cdd35616... (SHA completos nos manifestos).
+  Biblio vinculada: mesma libllama.a de producao (25/09); nada substituido.
+
+F.4 COMANDOS E RETORNOS (§8.6):
+  bash build_sampler_test.sh ........... EXIT=0
+  ./sampler_penalties_test (CPH2747) ... 10 passaram, 0 falharam, RC=0
+  bash build_integ_test.sh ............. EXIT=0 (1 warning de API deprecated)
+  ./sampler_integration_test (CPH2747) . RESULTADO: PASS, RC=0
+  bash build_args_test.sh .............. EXIT=0
+  ./harness_args_test (CPH2747) ........ 63 passaram, 0 falharam, RC=0
+  bash build_harness.sh x2 ............. EXIT=0 x2 (v4, depois v5)
+  regressao v4/v5 x v2 (3 dumps) ....... IGUAL em P/D1/D2
+  fronteiras L[0..2] ................... RC=0 x3, contagens consistentes=sim
+  bash build_layerdiff_v2.sh ........... EXIT=0
+  layer_diff_v2 controle curto ......... rc_cpu=0, rc_vk=0
+  layer_diff_v2 focal x7 ............... rc=0 em todos (155 s)
+  sh bench10.sh (18 runs) .............. rc=0 em TODOS, BENCH DONE, EXIT=0
+  gradlew :app:lintDebug :app:testDebugUnitTest
+      BUILD SUCCESSFUL in 17s, EXIT=0. NOTA HONESTA: testDebugUnitTest
+      UP-TO-DATE (nada Kotlin mudou nesta rodada; a ultima execucao real
+      continua 502 testes / 0 falhas de 29/09 06:35Z). lint EXECUTOU.
+  NADA commitado; nenhum APK; nenhuma publicacao; fixtures intocadas;
+  Whisper/OpenCL/NPU reabrados nao.
+
+F.5 LOGS QUE ACOMPANHAM ESTA ENTREGA (§11: arquivo local != anexo):
+  docs/vulkan-hymt2-fusion-round/logs-rodada10/ (28 arquivos + manifesto):
+    bench/          18 logs completos de run (bench_<caso>_<be>_r<n>.log)
+    focal/          focal_cpu0/vk1/vk2/vk33 .f32 + ctrl_cpu/vk .err +
+                    ids_para_L342.txt + ids_ctrl4.txt
+    bench_rodada10.csv, bench_rodada10_stats.json (gerados por script)
+    MANIFESTO-RODADA10.txt  — SHA-256 COMPLETOS de todos
+  testes/           3 saidas integrais:
+      sampler_penalties_test-saida.txt   (10 passaram, 0 falharam, RC=0)
+      sampler_integration_test-saida.txt (PASS, RC=0)
+      harness_args_test-saida.txt        (37 parser + 7 penalidade + 3 rejeicao
+                                          + 16 logica = 63; RC=0 — contagem
+                                          gerada por script, ver §9)
+  Total com manifesto: 31 arquivos. Todas as saidas gravadas com RC=0 em
+  29/09, aparelho CPH2747 (re-executadas para salvar o arquivo antes da
+  entrega — mesma saida das 3 execucoes originais).
+
+--------------------------------------------------------------------------------
+PENDENTES DA FILA (ordem do parecer)
+--------------------------------------------------------------------------------
+ 1. E.3(1): captura da entrada do bloco 1 (referencia local) — 1 exe novo,
+    validado primeiro no controle curto.
+ 2. E.3(2): replay local da operacao suspeita se (1) acusar bloco 1.
+ 3. NADA disto bloqueia Vulkan como opcao experimental (§5.8 do parecer):
+    o efeito esta localizado, nao resolvido.
+ 4. ZIP (§8.1): separacao de fixtures sinteticas = preparada como proposta,
+    NAO executada (exige decisao explicita; nao bloqueia Vulkan).
+
+================================================================================
+FIM — PROMPT-RELATORIO-RODADA10 (29/09/2026)
+Artefatos: logs-rodada10/ (manifesto com SHA-256 completos),
+backup-rodada10/ (manifesto), fontes na secao F.2.
+================================================================================

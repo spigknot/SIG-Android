@@ -116,13 +116,22 @@ vec4 dequantize4(uint ib, uint iqs, uint a_offset) {
 #endif
 
 #if defined(DATA_A_Q8_0)
+// SIG-FIX (experimento local): os quants Q8_0 chegavam ao produto como
+// UNSIGNED neste compilador/driver (byte 0xFF valia 255, nao -1). Esta
+// conversao e' independente da convencao: normaliza para 0..255 com &0xFF e
+// aplica -256 quando o bit de sinal esta setado.
+float sig_s8(uint u) {
+    const float v = float(u & 0xFFu);
+    return v >= 128.0 ? v - 256.0 : v;
+}
 vec2 dequantize(uint ib, uint iqs, uint a_offset) {
-    return vec2(int(data_a[a_offset + ib].qs[iqs]), int(data_a[a_offset + ib].qs[iqs + 1]));
+    return vec2(sig_s8(uint(data_a[a_offset + ib].qs[iqs])),
+                sig_s8(uint(data_a[a_offset + ib].qs[iqs + 1])));
 }
 vec4 dequantize4(uint ib, uint iqs, uint a_offset) {
-    const i8vec2 v0 = unpack8(int32_t(data_a_packed16[a_offset + ib].qs[iqs/2])).xy; // vec4 used due to #12147
-    const i8vec2 v1 = unpack8(int32_t(data_a_packed16[a_offset + ib].qs[iqs/2 + 1])).xy;
-    return vec4(v0.x, v0.y, v1.x, v1.y);
+    const u8vec2 r0 = u8vec2(unpack8(int32_t(data_a_packed16[a_offset + ib].qs[iqs/2])).xy);
+    const u8vec2 r1 = u8vec2(unpack8(int32_t(data_a_packed16[a_offset + ib].qs[iqs/2 + 1])).xy);
+    return vec4(sig_s8(uint(r0.x)), sig_s8(uint(r0.y)), sig_s8(uint(r1.x)), sig_s8(uint(r1.y)));
 }
 #endif
 

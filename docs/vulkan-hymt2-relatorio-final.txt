@@ -1,0 +1,122 @@
+RELATORIO COMPLETO — Investigacao Vulkan do llama.cpp com Hy-MT2 1.8B no Adreno 840
+==============================================================================
+Data: 27/09/2026. Aparelho: OnePlus 15 CPH2747, Android 16, Adreno 840.
+Conexao: Tailscale 100.108.27.64:45467. Modelo: Hy-MT2-1.8B (hunyuan-dense,
+32 layers, vocab 120818, bos 120000, eos oficial 120020).
+Revisao do roteiro do especialista: 95887577ab5fead779581a7030a83c7752ff3234.
+NOTA DE REVISAO: o harness liga as libs do fork vendored
+(ggml-vulkan.cpp com 19.709 linhas; commit ggml 080e804-dirty). O defeito
+persiste no codigo mais novo que a revisao do roteiro.
+
+--------------------------------------------------------------------------------
+1. TAREFAS DO ESPECIALISTA x EXECUCAO
+--------------------------------------------------------------------------------
+1.1 Confirmar que as flags existem no fork antes de usar — FEITO.
+    SERIALIZE_SUBMISSIONS (ggml-vulkan.cpp:7068), DISABLE_ASYNC (:6351),
+    CHECK_RESULTS (ggml/CMakeLists.txt:224, ggml-vulkan/CMakeLists.txt:121-122).
+    Semantica lida no codigo: serialize/async por presenca, async ON por
+    default no Adreno; CHECK aborta so em NaN/Inf, mas lista todo op com
+    avg_err>0,01 em ordem de grafo (primeiro ERROR = primeiro op divergente).
+1.2 EOS como correcao so de metadados, sem reconversao — FEITO (§2).
+1.3 Diff direcionado de metadados + registrar EOG ids — FEITO antes: so nomes,
+    file_type e EOS diferem entre F16 convertido e Q4_K_M oficial; tokenizer
+    identico.
+1.4 Nao depender do EOS no experimento — FEITO: protocolo usa ids fixos, sem
+    argmax/EOS, sem interromper em NaN.
+1.5 P→D1→D2 com tokens fixos da CPU, n_gpu_layers=1 — FEITO: D1=46 ("O"),
+    D2=2292 (" serv") congelados em todas as runs.
+1.6 Comparacao numerica completa — FEITO: comparar_logits.py (NaN/Inf,
+    min/max, max_abs, RMSE, relativo protegido, top, margem), tolerancia 1e-2.
+1.7 3 reps por variante A/B/C/D, sequencial, processo fresco, env registrado —
+    FEITO: 12 runs Vulkan + env impresso por run (A limpo, B serialize,
+    C no-async, D ambas).
+1.8 Pasta de rastreabilidade — FEITO: docs/vulkan-hymt2-rodada2/manifesto.txt.
+1.9 Nao mexer em threads, sem geracoes longas — FEITO: 6 thr, 3 avaliacoes
+    fixas por run.
+1.10 Mapear camada + primeiro op divergente via CHECK_RESULTS — FEITO (§4, §5).
+
+--------------------------------------------------------------------------------
+2. CORRECAO DO EOS (pre-requisito)
+--------------------------------------------------------------------------------
+fix_eos.py: parse real do header GGUF v3 (354 tensores, 35 KVs), edicao
+in-place u32 3 → 120020 no offset 5068477. Tamanho preservado: 3.587.533.760
+bytes. Backup feito antes. Push ao device: 748 s a 4,6 MB/s, conferido via stat.
+Validacao CPU (harness guloso, template hy_ exato do app): para em EOG —
+"O servidor foi reiniciado.", 9 tokens.
+
+--------------------------------------------------------------------------------
+3. PROTOCOLO P/D1/D2 (rodada 2) — METODO
+--------------------------------------------------------------------------------
+Harness estendido (n_tokens=2 + 1 id fixo + prefixo de dump): P = prefill do
+prompt exato do app (29 tokens), despeja *_P.f32; D1 = 1 decode id 46, *_D1.f32;
+D2 = 1 decode id 2292, *_D2.f32. Cada dump = 120818 f32 = 483.272 bytes.
+Params fixos: F16+EOS, n_gpu_layers=1, n_ctx=512, n_batch=128, template=1.
+Controles: cpu_ref (referencia) e ocl_ref (tolerancia, mesmo protocolo em
+OpenCL). Processo fresco por run, sequencial.
+
+--------------------------------------------------------------------------------
+4. RESULTADOS RODADA 2
+--------------------------------------------------------------------------------
+4.1 CPU e OpenCL — OK. CPU: P argmax 46 (32,743, margem 14,9); D1 argmax 2292
+    (31,806); D2 argmax 65652 (29,119). OpenCL vs CPU nos 3 passos:
+    max_abs≈0,0023, rmse≈0,00048, argmax/margem/top5 IDENTICOS → tolerancia
+    1e-2 VALIDADA (ruido normal entre backends).
+4.2 P no Vulkan: erro DETERMINISTICO. 10 dumps P bit-identicos (md5
+    43d7d800…), inclusive com SERIALIZE e NO-ASYNC. vs CPU: max_abs=15,87,
+    rmse=1,17, argmax igual (46) mas logit METADE (16,87 vs 32,74). Erro ~500x
+    acima do ruido. Sync simples DESCARTADA como causa unica.
+4.3 D no Vulkan: colapso NAO-DETERMINISTICO. Por run: tudo-NaN (120818/120818)
+    ou tudo-zero com ranking preservado (argmax 2292 a 0,000). D1: 8 hashes
+    distintos em 10 dumps. Nenhuma variante (A/B/C/D) limpa.
+4.4 Bug do harness (nao do llama): 2 runs com P todo-NaN crashearam no print
+    (piece(-1) lanca out_of_range antes do dump). Guarda imax<0 adicionada.
+4.5 Artefatos: Temp/rodada2/{cpu_greedy,cpu_ref,vk_A..D_r1..3,ocl_ref}.txt
+    (14 logs) + dumps/*.f32 (39: 33 Vulkan + 3 CPU + 3 OpenCL); scripts
+    rodada_pd1d2.sh, rodada_ocl.sh, comparar_logits.py, fix_eos.py.
+
+--------------------------------------------------------------------------------
+5. CHECK PER-OP — BUILD ISOLADO
+--------------------------------------------------------------------------------
+build_check.sh: mesmos flags de build-android-native-dependencies.ps1
+(NDK 27.2.12479018, arm64-v8a, Release, toolchain, Zig) + apenas
+-DGGML_VULKAN_CHECK_RESULTS=ON, em build/llama/arm64-v8a-check/. Build do app
+e whisper INTOCADOS. OK em 374 s (657 targets). Flag confirmada via grep -a
+(TENSOR CHECK / First error / Invalid value / SKIP_CHECKS presentes; baseline
+do app tem 0). Binario llama_harness_check (107.051.584 bytes, ELF aarch64).
+
+--------------------------------------------------------------------------------
+6. CHECK PER-OP — PRIMEIROS OPS DIVERGENTES (achado principal)
+--------------------------------------------------------------------------------
+Offload total 33/33, P, F16+EOS. Aborts por desenho (avg_err>0,5), EXIT=134:
+  check  7: MUL Qcur_norm-0 (camada 0), avg_err=0,669767,
+             result=-0,0114594 correct=-0,664494
+  check 24: MUL Qcur_norm-1 (camada 1), avg_err=0,647066,
+             result=-0,0058136 correct=-0,964508   (SKIP=8..13, todos iguais;
+             checks 8-23 passam)
+  check 41: MUL Qcur_norm-2 (camada 2), avg_err=0,625963,
+             result=0,0104065 correct=1,89128     (SKIP=25)
+Offload parcial 1/33: check 65: ADD l_out-31 (saida residual da camada 31,
+  cur_mlp+ffn_inp, hunyuan-vl.cpp:167), avg_err=0,694529,
+  result=-0,0304313 correct=0,572084; GPU ±0,3 vs CPU ±2,0.
+LEITURA: o primeiro erro ACOMPANHA A CAMADA OFFLOADED (17 checks/camada).
+  Qcur_norm = RMS_NORM(Q) x peso attn_q_norm — o mesmo MUL falha igual nas
+  camadas 0, 1 e 2, sempre com saida ~zerada de entradas sas. Nao e op isolado:
+  e falha sistematica por camada offloaded. Com fontes NONE (pesos) e P
+  deterministico com logit pela metade, o quadro aponta para matematica de
+  kernel F16/F32 errada no Adreno 840 — nao dado herdado errado, nao sync.
+RESSALVA: a 1a iteracao SKIP usou nome errado (GGML_VK_SKIP_CHECKS); o nome
+  real e GGML_VULKAN_SKIP_CHECKS (codigo linha 7693) — refeita e validada.
+  OUTPUT_TENSOR forca o check mesmo dentro do skip (nao usar junto).
+
+--------------------------------------------------------------------------------
+7. ARQUIVOS E PROXIMOS PASSOS
+--------------------------------------------------------------------------------
+Novos: native-dependencies/harness/llama_harness.cpp (modo P/D1/D2, dumps,
+  guarda NaN), build_check.sh, build_harness_check.sh, rodada_pd1d2.sh,
+  rodada_ocl.sh, rodada_check*.sh, comparar_logits.py, fix_eos.py,
+  docs/vulkan-hymt2-rodada2/{manifesto.txt,resultados.txt},
+  docs/vulkan-hymt2-relatorio-final.txt (este arquivo).
+Logs CHECK: Temp/rodada2/check_{run,full,skip8b,env,manual,vskip8..13,25}.txt,
+  check_iter2.txt.
+Proximo: montar o relatorio de 5 itens do especialista + prompt unico
+  (nada foi enviado a ele ate agora, por ordem).

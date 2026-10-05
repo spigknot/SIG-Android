@@ -1,0 +1,224 @@
+================================================================================
+P12, P13, P14 — TRÊS PERGUNTAS QUE TRAVAM A ETAPA B
+Preciso das respostas para conseguir terminar a tarefa.
+Hy-MT2 / llama.cpp / Vulkan / OnePlus 15 (CPH2747, Adreno 840, Android 16)
+28/09/2026
+
+Leia inteiro antes de responder. Este prompt é curto de propósito: ele pede
+três decisões específicas, e cada uma delas destrava (ou bloqueia) um trabalho
+concreto. Todo o contexto que você precisa está aqui dentro.
+
+O ESTADO, EM 5 LINHAS
+  1. A Etapa A do seu parecer está FECHADA e registrada. Identidade do modelo,
+     da libsig_llama em runtime e mapa de camadas, todos provados.
+  2. Um achado da Etapa A mudou a leitura do gate: o modelo resolve fusões
+     DeepSeek V4 HC (pre/comb/post) que o gate NÃO toca.
+  3. Para terminar, preciso rodar a Etapa B.2 (CPU × gate × all-off) e a
+     B.1 (revisão dos pontos de decisão de fusão).
+  4. Três decisões suas são pré-requisito. As duas últimas (P13, P14) têm
+     efeito direto sobre quais números eu registro.
+  5. Já tenho sua autorização para executar no aparelho. NÃO tenho (e não
+     preciso) autorização para build novo, publicação ou instalação.
+
+================================================================================
+P12 — O "ALL-OFF" DA B.2 DESLIGA TAMBÉM AS FUSÕES DEEPSEEK V4 HC?
+================================================================================
+
+POR QUE ISSO TRAVA O TRABALHO
+
+  A B.2 que você especificou (seção 4.3) é: "Compare gate com all-off
+  DIRETAMENTE. Isso distingue erro comum ao Vulkan de diferença que ainda
+  depende de outra fusão mantida pelo gate seletivo."
+
+  Essa distinção só existe se all-off e gate diferirem em mais que as duas
+  fusões que o gate controla. E o log do aparelho mostra que existem OUTRAS
+  fusões ativas neste modelo, que o gate não toca.
+
+O QUE O LOG DO APARELHO MOSTRA (com o gate ativo, produção, sem build)
+
+    resolve_fused_ops: Lightning Indexer enabled
+    resolve_fused_ops: resolving fused DeepSeek V4 HC support:
+    resolve_fused_ops: fused DeepSeek V4 HC pre enabled
+    resolve_fused_ops: fused DeepSeek V4 HC comb enabled
+    resolve_fused_ops: fused DeepSeek V4 HC post enabled
+    sched_reserve: Vulkan0 compute buffer size = 544.01 MiB
+    sched_reserve: Vulkan_Host compute buffer size =  26.01 MiB
+    sched_reserve: graph nodes  = 1286
+    sched_reserve: graph splits = 2
+
+MINHAS PERGUNTAS
+
+  1. O `GGML_VK_DISABLE_FUSION=1` que eu uso para o all-off desliga TAMBÉM
+     pre/comb/post do DeepSeek V4 HC, ou só as fusões do planejador Vulkan
+     (rms_norm_mul e add_rms) que o gate controla?
+
+  2. Se desliga tudo: a B.2 vai isolar exatamente o que você quer, e eu
+     executo como está.
+
+     Se desliga só as duas do gate: então gate e all-off são IDÊNTICOS no
+     modelo real, a comparação não separa nada, e a B.2 perde o sentido
+     nesse modelo. Nesse caso eu precisaria de uma terceira variante
+     (desligar só as DeepSeek), o que é instrumentação nova.
+
+  3. "graph splits = 2" indica fronteira host/GPU no grafo. Isso é esperado
+     com este modelo, ou é sinal de que alguma coisa deveria estar fusada e
+     não está? Pergunto porque 1286 nós com 2 splits me parece razoável,
+     mas não sei se é o número que você esperaria.
+
+  4. O "Lightning Indexer enabled" tem custo que possa polluting a medição
+     de tempo (seção 5 do parecer)? Pergunto porque vou medir tempo de
+     parede e não quero atribuir ao Vulkan o custo de um índice que só
+     esse modelo usa.
+
+NÃO MEDI a contribuição dessas fusões para o desvio residual. É hipótese.
+
+================================================================================
+P13 — TRATAR O MODELO COMO Hy-MT2 OU COMO BACKBONE HUNYUAN?
+================================================================================
+
+O QUE O LOG DE CARGA DO APP DIZ (literal)
+
+    llama_model_loader: loaded meta data with 35 key-value pairs and 354
+    tensors from /storage/emulated/0/Android/da...
+    llama_model_loader: - kv 15: hunyuan-dense.attention.layer_norm_rms_epsilon
+                        f32 = 0.000010
+    llama_model_loader: - type  f32:  129 tensors
+    llama_model_loader: - type q4_K:  192 tensors
+    llama_model_loader: - type q6_K:   33 tensors
+    llama_model_loader: llama_kv_cache: size = 512.00 MiB ( 8192 cells,
+                        32 layers, 1/1 seqs), K (f16): 256.00 MiB, V (f16): 256.00 MiB
+
+TRÊS FATOS QUE TROCAM A INTERPRETAÇÃO
+
+  a) A chave de metadados é `hunyuan-dense.attention.layer_norm_rms_epsilon`.
+     Hy-MT2 é fine-tune de um backbone Hunyuan.
+
+  b) A quantização é MISTA: 129 tensores f32 + 192 q4_K + 33 q6_K, num total
+     de 354. Não é um Q4_K_M uniforme. (Consistente com o que já vi antes:
+     embd 2048, 32 camadas, GQA 16q/4kv head 128, FF 6144, rope type 2,
+     freq_base 11158840.0, vocab 120818, rms_eps 1e-5.)
+
+  c) Há 354 tensores para 32 camadas. Já vi a nomenclatura `blk.N.` em
+     investigação anterior.
+
+MINHAS PERGUNTAS
+
+  1. Para a análise de camada e para classificar o desvio residual, devo
+     tratar "o modelo" como Hy-MT2 (o fine-tune, com a identidade de produto)
+     ou como o backbone Hunyuan mais o que o fine-tune mudou? Pergunto porque
+     as fusões DeepSeek V4 HC que o log mostra são do backbone, e a pergunta
+     "qual operação-layered" faz mais sentido no backbone.
+
+  2. Os 129 tensores f32 no meio de um q4_K mudam a leitura do desvio
+     residual? Minha hipótese: mais um dtype no caminho, e possivelmente
+     mais accumulate em precisão diferente, o que poderia contribuir para o
+     erro por camada que medi. Isso faz sentido, ou estou errado na direção?
+
+  3. rms_eps = 1e-5 (não o 1e-6 mais comum). Isso é o valor esperado para um
+     fine-tune de tradução, ou é sinal de que o modelo foi convertido com
+     um eps de origem diferente? Não consigo avaliar isso sozinho.
+
+  4. Se houver algum detalhe da nomenclatura `blk.N.` que importe para
+     localizar operações, registro agora. Não quero descobrir depois que
+     procurei pelo identificador errado.
+
+================================================================================
+P14 — OS 96 BYTES DE DIFERENÇA: ASSUMO METADADOS OU REFAÇO A MEDIÇÃO?
+================================================================================
+
+OS DOIS ARQUIVOS, COM HASH
+
+    arquivo                          bytes          sha256
+    --------------------------------  ------------  ------------------------------------------------------------
+    Hy-MT2-1.8B-Q4_K_M-OFFICIAL.gguf  1.133.080.448  dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699
+    Hy-MT2-1.8B-q4_k_m.gguf           1.133.080.544  c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+
+  Diferença: 96 bytes (o do app é MAIOR).
+
+  O OFFICIAL tem dono root e mtime 27/09 02:33 — EU O COPIEI para o aparelho
+  durante a investigação. O q4_k_m (minusculo) tem mtime 27/09 01:48 e é o
+  que o APP BAIXA.
+
+  O logcat do app confirma que ele abre o `q4_k_m`:
+    llama_model_loader: loaded meta data ... from /storage/emulated/0/Android/da...
+
+O QUE JÁ REGISTREI (e por quê importa)
+
+  Todas as métricas das seções D.2 e F.2/F.3 do relatório foram medidas no
+  OFFICIAL (dc5f44fc), que NÃO é o arquivo do usuário. A ressalva K.9 já
+  dizia isso; agora está quantificado em 96 bytes.
+
+MINHAS PERGUNTAS
+
+  1. Para a B.2, a identidade tem de ser o c4bf1015 (o do app), certo?
+     Assumo que sim, porque a B.2 serve para decidir padrão de produto, e é
+     esse arquivo que o usuário executa. Se você discorda, me diga qual.
+
+  2. Assumo que 96 bytes é metadados (timestamps, caminho de origem, build
+     id) e que o comportamento numico é o mesmo. Você manteria essa
+     suposição, ou refaço a medição no c4bf1015 antes de comparar
+     gate × all-off?
+
+     Se você disser para refazer: isso custa uma medição extra (o harness
+     aceito um path arbitrário), e eu faço antes da B.2. Não é build novo.
+
+  3. Os nomes diferem em capitalização: `Hy-MT2-1.8B-Q4_K_M-OFFICIAL` contra
+     `Hy-MT2-1.8B-q4_k_m`. O sufixo OFFICIAL e a minúscula sugerem que o
+     "OFFICIAL" é um build de referência que você (ou o GGUF oficial do
+     HuggingFace) nomeou assim, e o do app é um build separado. Se esses dois
+     nomes designam builds de quantização DIFERENTES (não só nomes
+     diferentes), então 96 bytes não é "só metadados" e minha medição pode
+     estar medindo um modelo que o app não usa. Isso muda sua leitura da
+     K.9?
+
+================================================================================
+O QUE EU VOU FAZER DEPOIS DAS SUAS RESPOSTAS
+================================================================================
+
+  Com as três respostas, executo nesta ordem (todas com sua autorização já
+  dada, no aparelho CPH2747, sem build novo):
+
+  B.1  Revisão dirigida dos pontos de decisão de fusão, conforme sua seção 2:
+       (a) chamadores que selecionam RMS_NORM+MUL
+       (b) se todos respeitam a recusa antes de pular nós
+       (c) ADD/RMS e caminhos auxiliares
+       (d) inicialização das duas flags em todos os caminhos de device
+       (e) ausência de bypass em produção
+       (f) comentário de produção descrevendo a falha observada, sem afirmar
+           "executa mas não escreve" como verdade geral
+
+  B.2  CPU × gate × all-off em P/D1/D2, identidade congelada, 3 repetições
+       curtas por variante em processo fresco, conforme sua seção 4.3. Com a
+       resposta da P12, sei se essa comparação separa alguma coisa; com a
+       P14, sei qual arquivo usar.
+
+  B.3  Se o desvio residual persistir depois de B.2, a investigação limitada
+       da sua seção 4.4 (CHECK_RESULTS), com referência CPU das MESMAS
+       entradas daquele operador. Não se ela não for necessária.
+
+  NÃO farei, sem nova autorização sua:
+  - build novo (a B.1 é leitura de código; a B.2 é execução, não build)
+  - publicação de qualquer artefato
+  - instalação de APK
+  - limpeza das 6 versões antigas do pacote nativo (v2,3,5,6,8,9)
+  - reabertura do crash do libllvm-qgl.so (arquivado por sua orientação)
+
+================================================================================
+SUMÁRIO DAS TRÊS PERGUNTAS, PARA RESPOSTA CURTA
+================================================================================
+
+Se você quiser responder só o essencial, isto basta:
+
+  P12: all-off desliga também as DeepSeek V4 HC (pre/comb/post)? Se sim, a B.2
+       separa como você quer. Se não, gate ≡ all-off neste modelo e a B.2
+       precisa de instrumentação nova. E: graph splits = 2 é esperado?
+
+  P13: trato como Hy-MT2 (fine-tune) ou backbone Hunyuan? E os 129 tensores
+       f32 no meio de um q4_K contribuem para o desvio por camada?
+
+  P14: a B.2 usa o c4bf1015 (do app)? E assumo que os 96 bytes são metadados,
+       ou refaço a medição antes?
+
+================================================================================
+FIM
+================================================================================

@@ -1,0 +1,297 @@
+================================================================================
+DIAGNOSTICO - FALHA NO CORTE DE VIDEO COM H.264 / HEVC (SIG Android)
+================================================================================
+Projeto:     D:\Projetos\SIG
+Ferramenta:  Cortar Audio/Video (FfmpegCutActivity)
+Data:        2026-09-01
+Tipo:        Diagnostico apenas - NENHUM ARQUIVO DO PROJETO FOI MODIFICADO
+--------------------------------------------------------------------------------
+ARQUIVOS ENVOLVIDOS
+  app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt
+  app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegMediaPolicies.kt
+  app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegVideoQuality.kt
+  app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegVideoEncoderRegistry.kt
+  app/src/test/java/br/gov/sp/pcsp/launcher/FfmpegVideoQualityTest.kt
+  (efeito colateral) app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt
+  (efeito colateral) app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+================================================================================
+
+
+================================================================================
+(1) RESUMO DO PROBLEMA
+================================================================================
+
+A ferramenta CORTAR VIDEO falha quando o usuario seleciona o encoder H.264 ou
+HEVC (rota por hardware, via Android MediaCodec). O mesmo corte funciona
+normalmente quando se seleciona a opcao de reencodar pela CPU (libx264).
+
+Na falha, o FFmpeg aborta com a seguinte mensagem:
+
+    [vost#0:0/h264_mediacodec @ 0xb400007c2ac7da00] Error initializing output
+    stream: Conversion failed!
+
+O erro ocorre imediatamente apos o app exibir a etapa:
+
+    Recodificando borda final - 0% (h264)
+
+Ou seja: a falha acontece na RECODIFICACAO DO TRECHO DE BORDA, e nao na copia
+do trecho central. O arquivo MKV final nunca e escrito.
+
+Comando exato que dispara o erro:
+
+    ffmpeg -y -ss 1536.000000 -noautorotate -i .../ffmpeg_input_...mp4
+       -t 4.224000 -map 0:v:0? -map 0:a? -map 0:s? -map 0:d? -map 0:t?
+       -map_metadata 0 -map_chapters 0
+       -c copy -c:t copy
+       -c:v h264_mediacodec -b:v 3318K
+       -avoid_negative_ts make_zero -f matroska .../cut_hybrid_.../end.mkv
+
+Leitura do comando:
+  - audio, legendas, dados e anexos: stream-copy (-c copy -c:t copy)
+  - video: reencodificado com h264_mediacodec a 3318 kb/s
+  - saida: MKV
+
+
+================================================================================
+(2) CAUSA RAIZ COM REFERENCIAS DE CODIGO
+================================================================================
+
+2.1 - CADEIA DE EXECUCAO DA BORDA DO CORTE HIBRIDO
+--------------------------------------------------------------------------------
+FfmpegCutActivity.executeHybridVideoCut (FfmpegCutActivity.kt:752-901)
+  - detecta codec e orientacao          (:763-766)
+  - varre keyframes do intervalo        (:781-787)
+  - divide o intervalo em 3 trechos: borda inicial, corpo central, borda final
+    (:813-817)
+  - a print mostra a BORDA FINAL, executada por runPiece(...) em :866-870
+
+FfmpegCutActivity.buildHybridEdgeArguments (FfmpegCutActivity.kt:945-963)
+  monta o comando da borda:
+      -y -ss <s> -noautorotate -i <in> -t <d>
+      + FfmpegMediaPolicies.cutMappedCopyArguments()
+      + videoEncodingArguments(encoder, bitrate, quality)
+      + -avoid_negative_ts make_zero -f matroska <out>
+
+FfmpegMediaPolicies.cutMappedCopyArguments (FfmpegMediaPolicies.kt:142-152)
+  emite explicitamente:
+      -map 0:v:0? -map 0:a? -map 0:s? -map 0:d? -map 0:t?
+      -map_metadata 0 -map_chapters 0
+      -c copy -c:t copy
+  Resultado: TODOS os streams nao-video viram stream-copy; somente o video e
+  recodificado.
+
+FfmpegCutActivity.videoEncodingArguments (FfmpegCutActivity.kt:1497-1506)
+  repassa encoder.encodingFor(...) e acrescenta -b:v quando ha targetBitrate.
+
+
+2.2 - ONDE OS ARGUMENTOS DO ENCODER SAO CONSTRUIDOS (PONTO EXATO DA FALHA)
+--------------------------------------------------------------------------------
+FfmpegVideoQuality.kt:41-79 - funcao FfmpegVideoEncoder.encodingFor
+
+  Caminho CPU (FUNCIONA) - FfmpegVideoQuality.kt:45-57
+
+      if (ffmpegName == "libx264") {
+          val crf = when (quality) { ... }
+          return FfmpegVideoEncoding(
+              arguments = listOf("-c:v", ffmpegName,
+                                 "-preset", "ultrafast",
+                                 "-crf", crf.toString()),
+              targetBitrate = null
+          )
+      }
+
+  Caminho hardware (FALHA) - FfmpegVideoQuality.kt:75-78
+
+      return FfmpegVideoEncoding(
+          arguments = listOf("-c:v", ffmpegName),
+          targetBitrate = scaleVideoBitrate(sourceBitrate, multiplier)
+      )
+
+  >>> ESTA E A CAUSA RAIZ <<<
+
+  Para h264_mediacodec e hevc_mediacodec o app envia APENAS -c:v <encoder>
+  (mais -b:v <k> derivado do bitrate). Nenhum parametro defensivo e enviado:
+  nao ha -pix_fmt, -bf, -g, -flags, -profile:v nem -level.
+
+  Diferenca concreta entre os dois caminhos:
+      libx264           -> -c:v libx264 -preset ultrafast -crf 20
+      h264_mediacodec   -> -c:v h264_mediacodec -b:v 3318K
+
+  Detectores de encoder: FfmpegVideoEncoderRegistry.detect
+  (FfmpegVideoEncoderRegistry.kt:29-60) - adiciona h264_mediacodec se o
+  dispositivo declara video/avc, hevc_mediacodec se declara video/hevc;
+  libx264 e sempre adicionado.
+
+
+2.3 - POR QUE O WRAPPER FALHA COM ESSA COMBINACAO
+--------------------------------------------------------------------------------
+A mensagem "Error initializing output stream: Conversion failed!" e emitida por
+libavcodec/h264_mediacodec.c, dentro de mediacodec_enc_init(), quando
+MediaCodec.configure() retorna falha ou quando a negociacao de formato e
+abortada.
+
+Causas provaveis, em ordem de probabilidade (todas decorrentes da ausencia de
+parametros):
+
+  1. -pix_fmt AUSENTE (mais comum). O wrapper precisa casar o pixel format da
+     saida do decoder com um COLOR_Format* aceito pelo MediaCodec do aparelho.
+     Sem instrucao explicita, ele tenta inferir a partir da origem. Em MP4
+     remuxados, conteudo HDR/10-bit, variantes yuvj420p, ou em dispositivos que
+     so aceitam COLOR_FormatYUV420Flexible ou COLOR_FormatSurface, a negociacao
+     falha. libx264 aceita qualquer pixel format em software.
+
+  2. -bf 0 AUSENTE. Varios encoders MediaCodec rejeitam B-frames implicitamente
+     habilitados quando o GOP nao e definido. libx264 aceita sem restricao.
+
+  3. -profile:v / -level IMPLICITOS. O wrapper pode escolher um perfil que o
+     encoder do aparelho nao suporta (ex.: High 10 em encoder que so aceita
+     Baseline/Main). libx264 aceita praticamente todos.
+
+  4. -flags +cgop / -g AUSENTES. Alguns encoders exigem GOP fechado; sem essa
+     informacao o configure() rejeita a configuracao.
+
+  5. MODO SURFACE EXIGIDO (Android 10+). Alguns encoders so aceitam entrada via
+     Surface. Sem -pix_fmt explicito, o FFmpeg tenta entrada por buffer YUV e o
+     encoder recusa. libx264 nao passa pelo MediaCodec, portanto e imune.
+
+  CONCLUSAO: o caminho CPU sempre funciona porque o libx264 aceita praticamente
+  qualquer combinacao de parametros e executa as conversoes em software - nao
+  existe MediaCodec.configure() para rejeitar a configuracao.
+
+
+2.4 - POR QUE O ERRO APARECE SOMENTE NAS BORDAS
+--------------------------------------------------------------------------------
+O corpo central do corte usa FfmpegMediaPolicies.hybridCopyBodyArguments
+(FfmpegMediaPolicies.kt:280-290), que emite apenas -c copy e NUNCA aciona
+encoder - por isso passa direto (a print mostra "Copiando video do trecho
+central sem reencodar 100%").
+
+As bordas sao os unicos trechos que chamam o encoder, e e exatamente onde o log
+mostra "Recodificando borda final - 0% (h264)" antes de "Falha no FFmpeg".
+
+
+================================================================================
+(3) PLANO DE CORRECAO PASSO A PASSO
+================================================================================
+
+PASSO 1 - Arquivo: app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegVideoQuality.kt
+          Funcao:  FfmpegVideoEncoder.encodingFor (linhas 41-79)
+          Trecho:  linhas 75-78
+
+  SITUACAO ATUAL:
+
+      return FfmpegVideoEncoding(
+          arguments = listOf("-c:v", ffmpegName),
+          targetBitrate = scaleVideoBitrate(sourceBitrate, multiplier)
+      )
+
+  NOVA LOGICA (minimo viavel):
+
+      return FfmpegVideoEncoding(
+          arguments = listOf(
+              "-c:v", ffmpegName,
+              "-pix_fmt", "yuv420p",
+              "-bf", "0",
+              "-g", "30"
+          ),
+          targetBitrate = scaleVideoBitrate(sourceBitrate, multiplier)
+      )
+
+  SE AINDA FALHAR EM ALGUM DISPOSITIVO, acrescentar:
+      "-flags", "+cgop"
+  e/ou
+      "-profile:v", "high"      (para HEVC usar "main")
+
+PASSO 2 - Atualizar o teste que congela o formato atual:
+          app/src/test/java/br/gov/sp/pcsp/launcher/FfmpegVideoQualityTest.kt
+          linhas 42-49 - espera exatamente listOf("-c:v", "h264_mediacodec")
+          Ajustar para os novos argumentos. Manter a regra de que a saida do
+          libx264 NAO muda.
+
+PASSO 3 - Validacao unitaria:
+          .\gradlew.bat :app:testDebugUnitTest
+          (vai falhar ate o teste do Passo 2 ser atualizado)
+
+PASSO 4 - Validacao em campo:
+          Usar o MESMO MP4 da print (inicio em 1536 s, duracao de 4,224 s,
+          H.264 a 3,3 Mb/s) em pelo menos 2 dispositivos distintos, pois os
+          codecs MediaCodec variam muito por fabricante.
+
+          Cobrir tres cenarios:
+            a) borda inicial
+            b) borda final
+            c) executeFullPrecisionFallback / buildPreciseFfmpegArguments
+               (FfmpegCutActivity.kt:705-750 e :903-943) - usa o mesmo
+               encodingFor, portanto tambem e beneficiado
+
+PASSO 5 - Verificar as outras duas ferramentas que consomem encodingFor:
+            app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt:1302-1303
+            app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt:2203-2210
+          Provavelmente sofrem do mesmo defeito. O reparo e benefico, mas
+          amplia a area de teste.
+
+PASSO 6 - NAO alterar cutMappedCopyArguments nem buildHybridEdgeArguments.
+          O problema nao esta no "-c copy" global: a ordem e valida no FFmpeg
+          (a opcao global e sobrescrita por -c:v). O defeito esta na
+          parametrizacao do encoder MediaCodec.
+
+COMANDO ESPERADO APOS O REPARO (mesmo arquivo da print):
+
+    ffmpeg -y -ss 1536.000000 -noautorotate -i ... -t 4.224000
+       -map 0:v:0? -map 0:a? -map 0:s? -map 0:d? -map 0:t?
+       -map_metadata 0 -map_chapters 0
+       -c copy -c:t copy
+       -c:v h264_mediacodec -pix_fmt yuv420p -bf 0 -g 30 -b:v 3318K
+       -avoid_negative_ts make_zero -f matroska .../end.mkv
+
+
+================================================================================
+(4) PONTOS DE ATENCAO
+================================================================================
+
+1. HEVC TEM COMPORTAMENTO DISTINTO DE H.264 em alguns fabricantes. Testar os
+   dois caminhos em campo. -pix_fmt yuv420p e seguro para ambos; -profile:v
+   main e o padrao de todos os MediaCodec HEVC no Android.
+
+2. -bf 0 E OBRIGATORIO na maioria dos MediaCodec HEVC. Alguns exigem tambem
+   GOP fixo de 1 segundo no framerate da origem; o valor 30 e uma aproximacao
+   razoavel (30 fps) e pode precisar de parametrizacao por dispositivo no
+   futuro.
+
+3. MUDAR encodingFor AFETA TRES FERRAMENTAS: Cortar, Girar
+   (FfmpegRotateVideoActivity.kt:1302) e Juntar
+   (FfmpegJoinVideosActivity.kt:2203). E o desejado, pois o defeito e
+   sistemico, mas amplia a area de teste.
+
+4. -b:v CONTINUA SENDO APLICADO FORA de encodingFor, em
+   videoEncodingArguments (FfmpegCutActivity.kt:1503-1505). Com -bf 0, alguns
+   MediaCodec passam a respeitar o bitrate informado de forma mais previsivel
+   (antes podiam ignora-lo).
+
+5. -pix_fmt yuv420p PODE REDUZIR QUALIDADE em fontes com croma 4:2:2 ou 4:4:4
+   (rastreamento facial, screencasts). E uma troca deliberada: privilegia
+   compatibilidade absoluta em vez de fidelidade maxima. Se houver reclamacao,
+   considerar fallback para libx264 quando a origem nao for yuv420p.
+
+6. NAO E UM DEFEITO QUE APARECE EM TODOS OS DISPOSITIVOS. Aparelhos com
+   MediaCodec mais permissivos (alguns Qualcomm recentes) funcionam sem o
+   reparo; outros (MediaTek mais antigos, Exynos antigos) falham
+   sistematicamente. Isso explica por o problema pode ter passado pelos testes
+   do time: so se manifesta em uma faixa de dispositivos.
+
+7. CAUSA CONCORRENTE POSSIVEL, MAS SECUNDARIA: "-c copy" antes de
+   "-c:v <encoder>" e uma ordem incomum. O FFmpeg aceita, e alguns parsers
+   antigos tinham defeito nesse cenario; nao parece ser o caso aqui, porque o
+   libx264 funciona com exatamente a mesma estrutura de comando.
+
+8. O LOG DO APP MOSTRA APENAS AS TRES ULTIMAS LINHAS DA SAIDA DO FFmpeg
+   (FfmpegCutActivity.kt:843: session.allLogsAsString...takeLast(3)). Parte do
+   diagnostico e inferencia a partir da mensagem curta. Para confirmar com
+   certeza qual das 5 causas do item 2.3 se aplica, seria util capturar o log
+   completo em nivel info do FFmpeg no dispositivo que falha.
+
+
+================================================================================
+FIM DO DIAGNOSTICO
+Nenhum arquivo do projeto foi alterado nesta analise.
+================================================================================

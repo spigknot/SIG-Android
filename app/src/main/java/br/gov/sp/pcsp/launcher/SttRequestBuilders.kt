@@ -78,7 +78,10 @@ object SttRequestBuilders {
             params = buildList {
                 add("model" to "nova-3")
                 add("language" to language)
-                add("smart_format" to "true")
+                // Valores fixos (02/10, a pedido do usuário): iguais no REST e no WS.
+                // Vacina: SttRequestBuildersTest.deepgram_usaSmartFormatFalseNumeralsFalseEPunctuateTrue
+                add("smart_format" to "false")
+                add("numerals" to "false")
                 add("punctuate" to "true")
                 if (diarize) add("diarize_model" to "latest")
                 SttKeywords.queryParams("deepgram", keywords).forEach { (name, value) ->
@@ -170,7 +173,10 @@ object SttRequestBuilders {
             params = buildList {
                 add("model" to "nova-3")
                 add("language" to language)
-                add("smart_format" to "true")
+                // Valores fixos (02/10, a pedido do usuário): iguais no REST e no WS.
+                // Vacina: SttRequestBuildersTest.deepgram_usaSmartFormatFalseNumeralsFalseEPunctuateTrue
+                add("smart_format" to "false")
+                add("numerals" to "false")
                 add("punctuate" to "true")
                 add("encoding" to "linear16")
                 add("sample_rate" to "16000")

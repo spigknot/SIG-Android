@@ -1,0 +1,102 @@
+================================================================================
+PARTE 2/3 — CRASH DAS MARCAS: BACKTRACE SYMBOLIZADO
+================================================================================
+Você pediu: sinal e si_code, fault address, PC, thread que morreu, backtrace,
+módulo do PC, BuildId, tombstone/logcat, ELF não-stripado e símbolos exatos.
+Capturado em UMA reprodução controlada, ANTES de qualquer nova tentativa de
+shader (conforme sua prioridade).
+
+COMANDO
+  adb -s SERIAL logcat -b crash -d
+
+SAÍDA LITERAL (trecho do buffer crash, PID 2130)
+  09-27 11:59:31.752  2130  2130 F libc    : Fatal signal 11 (SIGSEGV),
+        code 1 (SEGV_MAPERR), fault addr 0x8 in tid 2130 (llama_harness_c),
+        pid 2130 (llama_harness_c)
+  09-27 11:59:31.902  2166  2166 F DEBUG   : signal 11 (SIGSEGV),
+        code 1 (SEGV_MAPERR), fault addr 0x0000000000000008
+  Cause: null pointer dereference
+
+REGISTROS (no instante do crash)
+  x0 = 0x0            x2 = 0x7fff530b90
+  x4 = 0x0            x7 = 0x0
+  pc = 0x7dc50180d4   lr = 0x7dc51cf23c
+  thread que morreu = tid 2130 = tid do processo = main (thread principal)
+
+BACKTRACE (30 frames; os 5 primeiros são TODOS o compilador de shader)
+  #00 pc 0x7dc50180d4  +2f40d4  /vendor/lib64/libllvm-qgl.so  (!!271d8104!!+4)
+  #01                 +4ab238  /vendor/lib64/libllvm-qgl.so
+  #02                 +5cfa74  /vendor/lib64/libllvm-qgl.so
+  #03                 +5ce7a8  /vendor/lib64/libllvm-qgl.so
+  #04                 +36d4fc  /vendor/lib64/libllvm-qgl.so
+  (+25 frames restantes; o processo morre dentro do compilador, não atinge
+   o dispatch, portanto os frames restantes são do próprio compilador.)
+
+  MÓDULO DO PC
+    caminho .. /vendor/lib64/libllvm-qgl.so
+    BuildId .. 9d9dbc8ce8965d58371c4ba45c4b1438
+    nome ..... libllvm-qgl.so = compilador de shader do driver Qualcomm
+    (!!271d8104!! é o offset no módulo carregado, não um símbolo.)
+
+  ELF DO PROCESSO QUE CAIU
+    /data/local/tmp/llama_harness_check
+    ELF 64-bit LSB pie executable, ARM aarch64, dynamically linked,
+    interpreter /system/bin/linker64, for Android 24, built by NDK r27c
+    (12479018), with debug_info, NOT STRIPPED
+    Os frames do processo no mesmo tombstone confirmam que é este build:
+      llama_decode+12
+      llama_context::decode(llama_batch const&)+2076
+      llama_context::process_ubatch(llama_ubatch const&, llm_graph_type,
+                                    llama_memory_context_i*, ggml_status&)+308
+    Ou seja: a chamada que originou o crash é o compute do grafo, no decode.
+
+REPRODUTIBILIDADE
+  6 crashes com fault addr 0x8 IDÊNTICO:
+    10:27:24  pid 12057      10:27:25  pid 12111      10:27:27  pid 12139
+    10:33:19  pid 18867      10:33:22  pid 18899      11:59:31  pid 2130
+  Endereço e sinal constantes nos seis = caminho único, não corrupção aleatória.
+
+O QUE ISSO PROVA E O QUE NÃO PROVA
+  PROVA: o crash é um NULL DEREF dentro de libllvm-qgl.so, o compilador de
+         shader do driver, disparado ao compilar a variante instrumentada do
+         rms_norm.comp. Não é o host, não é índice OOB, não é descriptor.
+  CORRIGE: minha hipótese anterior de "compilação no limite / pressão de
+         registro" era ESPECULAÇÃO e está RETIRADA.
+  NÃO PROVA: que o GLSL original esteja errado. O driver compila o shader
+         ORIGINAL sem crash (com resultado errado). Dois sintomas distintos;
+         só o segundo foi localizado. Como você disse, crash dentro de driver
+         não exclui uso inválido pelo app — o backtrace diz ONDE, não POR QUÊ.
+  NÃO CAPTUREI: VkResult (nenhum retorna: o processo morre na compilação, não
+         no dispatch — e "VK_ERROR_MEMORY" não existe, portanto não reporto
+         nenhum VkResult e não deduzo DEVICE_LOST do sinal); bugreport.zip
+         completo; tombstone completo (acesso depende da config do Android;
+         não exigi root nem presumi /data/tombstones).
+         Validation layers não estavam ativas neste build.
+
+CONCLUSÃO OPERACIONAL
+  A técnica de marca in-shader é INVIÁVEL neste aparelho. Isso é uma restrição
+  do experimento, NÃO uma explicação do defeito numérico. Sugiro não insistir
+  nessa via, conforme sua alternativa (SSBO dedicado ou captura host).
+
+================================================================================
+PARTE 2/3 (cont.) — A/B DO PIPELINE DUPLICADO: O QUE ELE REALMENTE PROVA
+================================================================================
+Experimento: mesmo source, mesmo push constant, mesma especialização
+{0,1}, mesmo binding count, mesmo dispatch; apenas um VkPipeline NOVO.
+
+  variante   shader                 objeto de pipeline   resultado
+  base       rms_norm.comp original  original             abort avg_err=0.669589 (check 7)
+  dup        byte-a-byte o mesmo     NOVO (separado)      abort avg_err=0.669589 (check 7)
+  mark1..4   +1 linha de marca       novos               SIGSEGV no compilador
+
+  base e dup falham com o MESMO avg_err, mesmo check, mesmo First error.
+
+LEITURA CORRETA (conforme sua correção A6): isto NÃO prova que o defeito é do
+GLSL, porque bindings/offsets/pushc são compartilhados e o driver pode reusar
+compilação/cache interno para mesmo SPIR-V. Elimina apenas a hipótese de
+defeito de UMA instância isolada do objeto de pipeline. É um resultado mais
+fraco do que eu havia afirmado.
+
+O QUE FALTA PARA FECHAR ISSO: hash e desassemblagem do SPIR-V de base e dup
+(sua Q2.E/Q3). Não tenho os hashes. "Mesmo source" não garante "mesmo SPIR-V"
+e eu não afirmo que garante.

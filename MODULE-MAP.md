@@ -109,6 +109,7 @@ também é bloqueado.
 | `HyMt2Translator.kt` | Tradução Hy-MT2: prompt oficial e template de chat do modelo. |
 | `HyMt2ModelSupport.kt` | Política de backend por modelo do Hy-MT2 (1.25bit sem GPU). |
 | `HyMt2Native.kt` | Ponte JNI do Hy-MT2 (carregar modelo, traduzir, liberar). |
+| `HyMt2RequestIsolation.kt` | Isolamento de pedidos Hy-MT2: reset antes de cada prefill (contrato testável). |
 
 ## D. Motores locais (inferência)
 

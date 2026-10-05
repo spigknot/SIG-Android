@@ -1,0 +1,417 @@
+================================================================================
+AUDITORIA FINDINGS FFmpeg (SIG ANDROID) — APENAS NÃO CORRIGIDOS
+================================================================================
+HEAD auditado: 52f6253 (base dos findings originais: 85b889f)
+Data:          2026-08-31
+Método:        leitura integral dos fontes + diff 85b889f..52f6253 + testes
+               unitários JVM (testDebugUnitTest, 26 testes, todos verdes)
+Base:          findings_consolidados_ffmpeg_2026-08-31.txt (29 findings)
+Escopo:        este relatório contém APENAS os itens NÃO totalmente corrigidos:
+               17 PARCIALMENTE CORRIGIDOS + 4 ABERTOS = 21 itens.
+               Itens corrigidos, não-bug, melhoria ou contraproducente ficam
+               de fora. Cada item indica a FERRAMENTA FFmpeg em que ocorre.
+
+================================================================================
+FERRAMENTA DE GIRAR VÍDEO — FfmpegRotateVideoActivity.kt
+================================================================================
+
+1) Status: PARCIALMENTE CORRIGIDO
+   Ferramenta: GIRAR VÍDEO
+   Finding: o modo somente-metadados herda a extensão da origem via
+            safeContainerExtension, mas sem validar codecs/legendas/streams
+            contra o container; um stream incompatível ainda pode falhar no fim.
+   Evidência: buildOutputName (FfmpegRotateVideoActivity.kt:1890-1895);
+            rotateSelectedVideo (kt:462-464) só Toast para container não
+            reconhecido; executeRotation (kt:574-607) roda PREFLIGHT
+            (metadataCopyPreflightArguments, FfmpegMediaPolicies.kt:48-60,
+            -t 0.001) e aborta se falhar.
+   Argumentos FFmpeg efetivos: preflight -y -hide_banner -loglevel error
+            -display_rotation:v:0 <g> -i <in> -map 0 -c copy -t 0.001 <probe>;
+            cópia real -y -display_rotation:v:0 <g> -i <in> -map 0 -c copy <out>.
+   Impacto residual: preflight curto (0.001s) pode não capturar falha tardia
+            de remux (anexos grandes, legendas atrasadas); remap exótico→MKV
+            só com Toast, sem diálogo.
+   Fix restante: validar codecs/streams contra o container antes de executar
+            (ou preflight com amostra maior) e aviso explícito no remap.
+   Gravidade: ALTA
+
+2) Status: PARCIALMENTE CORRIGIDO
+   Ferramenta: GIRAR VÍDEO
+   Finding: o vídeo continua restrito à primeira faixa (-map 0:v:0 no
+            sequencial e no trecho paralelo); arquivos com 2+ faixas de vídeo
+            perdem a segunda.
+   Evidência: rotateSelectedVideo (FfmpegRotateVideoActivity.kt:450-458)
+            agora BLOQUEIA com videoTrackCount != 1
+            ("O arquivo possui N faixas de vídeo. Esta ferramenta aceita
+            exatamente uma..."); -map 0:v:0 permanece em kt:1332 (sequencial)
+            e kt:1129 (trecho).
+   Impacto residual: limitação de 1 faixa mantida no comando, mas sem
+            descarte silencioso (bloqueio ativo na UI). Falta suporte real a
+            múltiplas faixas ou decisão formal de manter o bloqueio.
+   Fix restante: mapear 0:v:0?, 0:v:1?, ... OU manter bloqueio (já ativo).
+   Gravidade: ALTA (original) → residual BAIXA (bloqueio ativo)
+
+3) Status: PARCIALMENTE CORRIGIDO
+   Ferramenta: GIRAR VÍDEO
+   Finding: marcar "paralelo" junto com "girar pelos metadados" descarta o
+            paralelismo sem explicação.
+   Evidência: canUseParallel (FfmpegRotateVideoActivity.kt:521) exclui
+            !metadataOnly; updateMetadataModeState (kt:1462-1469) desabilita
+            parallelKeyframes com alpha 0.42 (checkbox cinza), mas sem
+            Toast/tooltip do motivo.
+   Impacto residual: bloqueio visual presente; falta a mensagem "por que".
+   Fix restante: Toast/diálogo ou tooltip ao tentar paralelo+metadados.
+   Gravidade: MÉDIA
+
+================================================================================
+FERRAMENTA DE CORTAR ÁUDIO/VÍDEO — FfmpegCutActivity.kt
+================================================================================
+
+5) Status: ABERTO
+   Ferramenta: CORTAR ÁUDIO/VÍDEO
+   Finding: cortar áudio sempre reencoda. Não existe -c:a copy no caminho de
+            áudio (exceto quando não há corte real: hasRealTrim=false usa
+            -c:a copy). WAV derruba 24/32-bit? NÃO — detectPcmEncoder agora
+            preserva profundidade; o que permanece: MP3 CBR (-b:a fixo, sem
+            VBR), sem exposição de qualidade na UI, e sem cópia quando o
+            intervalo é compatível.
+   Evidência: buildPreciseFfmpegArguments (FfmpegCutActivity.kt:667-682):
+            hasRealTrim → preciseAudioEncoderArguments
+            (FfmpegMediaPolicies.cutAudioEncoderArguments kt:65-74);
+            detectPcmEncoder (kt:1010-1029) já escolhe pcm_s24le/s32le/f32le.
+   Impacto residual: todo corte real de áudio reencoda (perda em
+            AAC/MP3/Opus e tempo); MP3 sem escolha VBR; sem -c:a copy mesmo
+            quando codec/container/intervalo permitiriam.
+   Fix restante: (a) -c:a copy quando compatível (reaproveitar
+            canCopyAudioWithoutConversion do Extrair); (b) expor CBR/VBR e
+            qualidade na UI.
+   Gravidade: MÉDIA
+
+6) Status: PARCIALMENTE CORRIGIDO
+   Ferramenta: CORTAR ÁUDIO/VÍDEO
+   Finding: corpo híbrido truncava µs→ms e usava -ss depois de -i.
+   Evidência: FfmpegMediaPolicies.hybridCopyBodyArguments
+            (FfmpegMediaPolicies.kt:187-199) agora formata %.6f e põe -ss
+            ANTES de -i: -y -ss <6 casas> -noautorotate -i <in> -t ... ;
+            buildHybridEdgeArguments (kt:887) usa formatMicroseconds.
+            Teste: FfmpegMediaPoliciesTest.hybridBodyKeepsMicrosecondPrecision
+            AndSeeksBeforeInput (verde).
+   Impacto residual: correção aplicada; custo de I/O eliminado; resta apenas
+            dependência de manutenção conjunta (se alguém reverter um dos
+            dois pontos, o bug volta).
+   Fix restante: nenhum obrigatório (documentar a invariante).
+   Gravidade: MÉDIA → residual BAIXA
+
+7) Status: ABERTO
+   Ferramenta: CORTAR ÁUDIO/VÍDEO
+   Finding: o caminho rápido (híbrido) continua caindo em reencode completo
+            sem aviso prévio quando o codec é fora de h264/hevc ou não há
+            keyframes internos no intervalo.
+   Evidência: executeHybridVideoCut (FfmpegCutActivity.kt:720-738): fallback
+            para executeFullPrecisionFallback com tracker
+            ("Caminho rápido indisponível: ...") — mas o AVISO SÓ APARECE
+            DEPOIS de iniciar, no status/tracker; o diálogo pré-execução
+            (kt:516-543) cobre apenas conflito de encoder, não codec fora de
+            h264/hevc nem keyframes ausentes.
+   Impacto residual: usuário descobre que o corte será lento só depois de
+            clicar em cortar.
+   Fix restante: diálogo/aviso ANTES da execução com o motivo da queda.
+   Gravidade: MÉDIA
+
+8) Status: ABERTO
+   Ferramenta: CORTAR ÁUDIO/VÍDEO
+   Finding: detectStreamBitrates usava parse do log com
+            logs.lines().firstOrNull { it.contains("Video:") } sem restringir
+            a "Stream #...: Video:" e caía em parseBitrateFromText(logs) —
+            bitrate do CONTAINER como bitrate de vídeo.
+   Evidência: detectStreamBitrates (FfmpegCutActivity.kt:1035-1056) foi
+            REEESCRITA para MediaExtractor (KEY_BIT_RATE por faixa) — a parte
+            principal do fix foi aplicada; mas quando a faixa não expõe
+            KEY_BIT_RATE, video/audio ficam null e o caller usa FALLBACK
+            ("15M"/"192k"), sem parse de log. A leitura por faixa está
+            correta; o risco residual é o fallback fixo alto (15M) quando o
+            MediaExtractor não reporta bitrate.
+   Impacto residual: para codecs onde o Android não expõe KEY_BIT_RATE, o
+            -b:v usa 15M fixo (superdimensionado) em vez de estimar da faixa.
+   Fix restante: estimar bitrate da faixa (tamanho/duração) quando
+            KEY_BIT_RATE ausente, em vez de fallback fixo.
+   Gravidade: MÉDIA → residual BAIXA (o bug de parse foi removido)
+
+9) Status: PARCIALMENTE CORRIGIDO
+   Ferramenta: CORTAR ÁUDIO/VÍDEO
+   Finding: corte preserva áudios/legendas/dados/anexos, mas só a primeira
+            faixa de vídeo (-map 0:v:0?).
+   Evidência: cutSelectedMedia (FfmpegCutActivity.kt:491-497) agora BLOQUEIA
+            com videoTrackCount != 1 ("O corte foi bloqueado para não
+            descartar conteúdo."); -map 0:v:0? permanece em kt:697 (preciso),
+            kt:890 (híbrido) e FfmpegMediaPolicies.kt:195 (corpo).
+   Impacto residual: mesmo padrão do finding 2 — limitação mantida no comando,
+            mas sem descarte silencioso (bloqueio ativo).
+   Fix restante: suportar múltiplas faixas de vídeo OU manter bloqueio
+            (já implementado).
+   Gravidade: ALTA (original) → residual BAIXA (bloqueio ativo)
+
+================================================================================
+FERRAMENTA DE JUNTAR VÍDEO/ÁUDIO — FfmpegJoinVideosActivity.kt
+================================================================================
+
+11) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: JUNTAR VÍDEO/ÁUDIO
+    Finding: a aridade de áudio continua 1 em todos os caminhos
+             (concat v=0:a=1 / v=1:a=1); faixas secundárias e legendas são
+             descartadas.
+    Evidência: requestAudioTrack (FfmpegJoinVideosActivity.kt:1860-1871)
+             agora avisa "as demais não entrarão na saída recodificada", mas
+             o descarte continua: concat v=0:a=1 (kt:713, :724) e v=1:a=1
+             (kt:872, :907); SmartJoinPlanner removido → não há mais comparação
+             de audioStreamCount em lugar nenhum.
+    Impacto residual: o usuário é avisado, mas a saída perde faixas
+             secundárias; sem contagem automática por clipe.
+    Fix restante: concatenar todas as faixas compatíveis ou incluir
+             audioStreamCount na validação e avisar quantas serão descartadas.
+    Gravidade: ALTA
+
+12) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: JUNTAR VÍDEO/ÁUDIO
+    Finding: não existe -c:a copy em nenhuma rota de reencode; áudios
+             idênticos continuam sendo reencodados.
+    Evidência: audioEncoderForOutput (FfmpegJoinVideosActivity.kt:738-756)
+             e audioEncodingArguments (kt:810-821) escolhem o codec certo do
+             container (corrigido), mas buildAudioReencodeArguments
+             (kt:685-736) SEMPRE reencoda quando normalize=true; sem
+             validação cruzada entre clipes para emitir -c:a copy.
+    Impacto residual: reencode de áudios já idênticos (perda em AAC/MP3/Opus/
+             Vorbis e tempo); sem aviso de conversão.
+    Fix restante: detectar codec+taxa+canais+sample format idênticos → -c:a
+             copy; avisar quando converter.
+    Gravidade: ALTA
+
+13) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: JUNTAR VÍDEO/ÁUDIO
+    Finding: pré-validação do concat direto olhava só a topologia.
+    Evidência: directConcatCompatibilityError (FfmpegJoinVideosActivity.kt:
+             1731-1736) + directConcatSignaturesCompatible
+             (FfmpegMediaPolicies.kt:313-321) comparam assinaturas detalhadas
+             (containerFamily, ffmpegDescriptor, mime, profile, level,
+             sampleRate, channels, channelMask, pcmEncoding, width, height,
+             frameRate, cor, codecTag, sampleFormat, channelLayout, timeBase,
+             csd0/1/2); streamCopySignatures (kt:1738-1787). Se incompatível,
+             bloqueia com "Ative 'Recodificar'." Teste dedicado verde.
+    Impacto residual: validação agora extensa, mas conservadora: MP4/MOV
+             mistos e TS/FLV (containerFamily="unknown") são bloqueados mesmo
+             quando o concat seria seguro; depende de MediaExtractor expor
+             csd/codec-tag.
+    Fix restante: permitir famílias de container equivalentes sem exigir
+             igualdade exata de csd quando codec tag compatível.
+    Gravidade: ALTA → residual BAIXA
+
+14) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: JUNTAR VÍDEO/ÁUDIO
+    Finding: áudios incompatíveis viram WAV de forma silenciosa.
+    Evidência: audioWillStandardizeToWav (FfmpegJoinVideosActivity.kt:540-541)
+             + buildJoinedOutputName (kt:1709-1726) renomeiam para .wav;
+             executeAudioJoin (kt:653-660) mostra "Convertendo áudios
+             incompatíveis para WAV no perfil agregado" no status e
+             renameProcessingStep.
+    Impacto residual: aviso presente no status DEPOIS de iniciar; não há
+             diálogo de confirmação ANTES (padrão do modo forte do Limpar).
+    Fix restante: opcional — pedir confirmação antes da conversão.
+    Gravidade: MÉDIA → residual BAIXA
+
+16) Status: ABERTO (decisão de produto)
+    Ferramenta: JUNTAR VÍDEO/ÁUDIO
+    Finding: o Smart Join legado (executeSmartJoinExperiment, -ss antes de -i
+             com -c:v copy, intermediários .ts com -c:a aac) era inalcançável
+             (smartJoinChecked=false) mas permanecia no arquivo; join parcial
+             deixou de existir.
+    Evidência: NO HEAD ATUAL o código foi REMOVIDO: SmartJoinPlanner.kt
+             (-191 linhas), SmartJoinPlannerTest.kt (-154), executeSmartJoin
+             Experiment, buildTransitionArgumentsMkv, detectContainerBitrate
+             Kbps, layout smart_join_row/check_smart_join — tudo removido
+             (diff 85b889f..52f6253). O defeito do -ss/-c copy NÃO existe
+             mais no arquivo.
+    Impacto residual: o bug estrutural foi eliminado por remoção; o que resta
+             é a decisão de produto pendente sobre reimplementar join parcial
+             (a funcionalidade "juntar trechos" deixou de existir junto com o
+             Smart Join). Por isso classifico como ABERTO (produto), não
+             como bug de código.
+    Fix restante: decidir se reimplementa join parcial com alinhamento a
+             keyframes/reencode de bordas (com testes de duração/PTS) ou
+             arquiva a funcionalidade.
+    Gravidade: CRÍTICA (original) → residual BAIXA (código removido; resta
+             decisão de produto)
+
+================================================================================
+FERRAMENTA DE EXTRAIR ÁUDIO — FfmpegExtractAudioActivity.kt
+================================================================================
+
+18) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: EXTRAIR ÁUDIO
+    Finding: caminho de cópia restrito: corte sempre reencoda; WAV derrubava
+             para pcm_s16le; MP3 CBR forçado; mime WAV só "audio/raw".
+    Evidência: canCopyAudioWithoutConversion (FfmpegExtractAudioActivity.kt:
+             937-970) agora aceita audio/raw, audio/x-raw, audio/wav,
+             audio/x-wav (linha 961); detectPcmEncoder (kt:972-991) preserva
+             pcm_u8/f32le/s24le/s32le; MP3 sem -minrate/-maxrate
+             (FfmpegMediaPolicies.kt:93). MAS: cópia com corte ainda retorna
+             false (kt:945), e não há CBR/VBR na UI.
+    Impacto residual: cortar um WAV/FLAC sempre reencoda; MP3 sem escolha
+             VBR; sem opção "Voz (CBR)" para OPUS (ver 20).
+    Fix restante: permitir cópia com corte em containers de taxa constante
+             (WAV/FLAC); expor CBR/VBR.
+    Gravidade: MÉDIA
+
+19) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: EXTRAIR ÁUDIO
+    Finding: mapa da faixa de áudio sem "?" (defesa em profundidade).
+    Evidência: buildFfmpegArguments (FfmpegExtractAudioActivity.kt:873) usa
+             audioStreamSpecifier(0, audioTrack) → "0:a:N" sem "?"
+             (FfmpegMediaPolicies.kt:62-63); contagem prévia (kt:881-893) +
+             seletor (kt:895-910) garantem índice válido.
+    Impacto residual: falha teórica se a faixa mudar entre validação e
+             execução.
+    Fix restante: "0:a:N?" (uma linha).
+    Gravidade: BAIXA
+
+20) Status: PARCIALMENTE CORRIGIDO (melhoria)
+    Ferramenta: EXTRAIR ÁUDIO
+    Finding: OPUS corrigido (-application audio, -vbr on) mas sem perfil de
+             voz (voip CBR) na UI.
+    Evidência: extractAudioEncoderArguments (FfmpegMediaPolicies.kt:97);
+             teste extractionUsesVbrCapableMp3AndAudioOpusProfile (verde).
+    Impacto residual: não é bug; falta opção "Voz (CBR)".
+    Fix restante: melhoria de produto.
+    Gravidade: BAIXA
+
+================================================================================
+FERRAMENTA DE INSERIR ÁUDIO — FfmpegInsertAudioActivity.kt
+================================================================================
+
+24) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: INSERIR ÁUDIO
+    Finding: seleção de faixa inconsistente entre rotas; rotas legadas
+             fixavam 0:a:0; rota ativa sem "?".
+    Evidência: rotas legadas executeCopyInsert/executeSmartInsert/concatPieces
+             REMOVIDAS; rota ativa buildFullReencodeArguments (kt:586, :593,
+             :597) usa audioStreamSpecifier(0/1, track) — índice correto, mas
+             sem "?".
+    Impacto residual: inconsistência eliminada; falta só o "?" de defesa.
+    Fix restante: "0:a:$track?".
+    Gravidade: MÉDIA → residual BAIXA
+
+25) Status: PARCIALMENTE CORRIGIDO (melhoria de UX)
+    Ferramenta: INSERIR ÁUDIO
+    Finding: modos "sem reencodar"/"Smart Insert" eliminados por
+             fullReencode=true sem comunicação clara na UI.
+    Evidência: layout activity_ffmpeg_insert_audio.xml sem check_reencode/
+             check_smart_insert (removidos); texto (xml:247) explica
+             "A inserção usa recodificação precisa..."; variáveis
+             canCopyDirectly/smartInsertViable e smartInsertChecked removidas.
+    Impacto residual: comportamento agora claro no texto; falta apenas
+             documentação mais visível do motivo.
+    Fix restante: melhoria de UX opcional.
+    Gravidade: BAIXA
+
+================================================================================
+FERRAMENTA DE LIMPAR ÁUDIO — FfmpegCleanAudioActivity.kt
+================================================================================
+
+26) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: LIMPAR ÁUDIO
+    Finding: mapa da faixa de áudio sem "?".
+    Evidência: buildFfmpegArguments (FfmpegCleanAudioActivity.kt:267-275) usa
+             audioStreamSpecifier(0, 0) → "0:a:0" sem "?"
+             (FfmpegMediaPolicies.kt:62-63); inspectAudioSource exige
+             exatamente 1 faixa (kt:177-180, :302-319) — mitigação ativa.
+    Impacto residual: índice 0 sempre válido por lógica; falta o "?".
+    Fix restante: "0:a:0?" (uma linha).
+    Gravidade: BAIXA
+
+================================================================================
+PENDÊNCIAS TRANSVERSAIS
+================================================================================
+
+27) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: TRANSVERSAL (Girar/Cortar/Juntar — política de legendas)
+    Finding: não existe política única de legendas; Girar e Cortar preservam,
+             Juntar rejeitava.
+    Evidência: Girar preserva -map 0:s? 0:d? 0:t? (kt:1332); Cortar preserva
+             -map 0:s? 0:d? (kt:697, :890; FfmpegMediaPolicies.kt:195);
+             Juntar não rejeita mais legendas (validateSupportedStreamTopology
+             limpo, kt:1811-1834) e pede confirmação de remoção no reencode
+             (kt:503-510).
+    Impacto residual: comportamento coerente (preservar/avisar), mas ainda
+             não centralizado em FfmpegMediaPolicies — cada ferramenta mantém
+             seus mapas.
+    Fix restante: centralizar política de legendas/streams e reutilizar.
+    Gravidade: ALTA → residual BAIXA (comportamento corrigido; falta
+             refatoração)
+
+28) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: TRANSVERSAL (cobertura de testes)
+    Finding: nenhum teste cobria construtores de comando por ferramenta.
+    Evidência: FfmpegMediaPoliciesTest cresceu de 8 para 16 casos cobrindo
+             rotação/metadados+preflight, corte de áudio com PCM-depth,
+             extração MP3 VBR/OPUS, join direto/filtrado, insert com faststart,
+             clean PCM profile, concat por assinatura, híbrido µs/-ss antes,
+             normalização com asetpts, conversão de rotação, filtros físicos,
+             parser de canais, parser de perfil, formatter. Execução:
+             ./gradlew.bat :app:testDebugUnitTest — 26 testes, 0 falhas.
+    Impacto residual: faltam testes para buildReencodeArguments/
+             buildFadeInOutFilterComplex do Juntar (vídeo) e
+             buildFullReencodeArguments do Inserir (exigem extração para
+             objeto puro).
+    Fix restante: extrair e testar os construtores de vídeo do Juntar/Inserir.
+    Gravidade: BAIXA
+
+29) Status: PARCIALMENTE CORRIGIDO
+    Ferramenta: TRANSVERSAL (código morto)
+    Finding: código morto deixado pelas correções reativava bugs se chamado.
+    Evidência: Inserir: executeCopyInsert/executeSmartInsert/concatPieces/
+             canCopyDirectly/smartInsertViable/audioInputsAreCopyCompatible/
+             isSmartInsertCodecSupported — TODOS REMOVIDOS. Juntar:
+             executeSmartJoinExperiment/buildTransitionArgumentsMkv/
+             detectContainerBitrateKbps/SmartJoinPlanner/SmartJoinPlannerTest
+             — REMOVIDOS; videoFillFrameFilter sem parâmetro letterbox
+             (kt:912-915). Extrair: describeAudioFile/probeAudioFile/
+             estimateBitrate — REMOVIDOS do FfmpegExtractAudioActivity.
+    Impacto residual: quase todo o código morto citado foi removido; não há
+             mais rota legada reativável com bug de -ss/-c copy. Restam
+             helpers de parser do Juntar vivos (usados por detectOutputProfile).
+    Fix restante: nenhum obrigatório.
+    Gravidade: BAIXA
+
+================================================================================
+RESUMO EXECUTIVO (não corrigidos)
+================================================================================
+Total de itens NÃO totalmente corrigidos: 21 (17 parciais + 4 abertos)
+
+Por ferramenta FFmpeg:
+- GIRAR VÍDEO:       1, 2, 3            (parciais)
+- CORTAR ÁUDIO/VÍDEO: 5 (aberto), 6, 7 (aberto), 8 (aberto), 9
+- JUNTAR VÍDEO/ÁUDIO: 11, 12, 13, 14, 16 (aberto — decisão de produto)
+- EXTRAIR ÁUDIO:     18, 19, 20
+- INSERIR ÁUDIO:     24, 25
+- LIMPAR ÁUDIO:      26
+- TRANSVERSAIS:      27, 28, 29
+
+Abertos (sem nenhuma correção aplicada):
+- 5  (Cortar): corte de áudio sempre reencoda; sem -c:a copy, sem CBR/VBR na UI.
+- 7  (Cortar): fallback para reencode completo sem aviso prévio (codec não
+     h264/hevc ou sem keyframes no intervalo).
+- 8  (Cortar): parse de bitrate por log removido (MediaExtractor), mas
+     fallback fixo 15M quando KEY_BIT_RATE ausente.
+- 16 (Juntar): Smart Join legado REMOVIDO (bug eliminado); resta decisão de
+     produto sobre join parcial.
+
+Risco residual de operação FFmpeg incorreta:
+- 11 (Juntar): descarte de faixas de áudio secundárias — ALTA.
+- 12 (Juntar): reencode desnecessário de áudio idêntico — ALTA.
+- 1  (Girar): preflight curto pode não capturar falha tardia de remux.
+- 19/24/26 (Extrair/Inserir/Limpar): mapas sem "?" — BAIXA.
+- 13 (Juntar): concat direto bloqueia casos seguros (conservadorismo).
+
+Conclusão: análise estática + testes unitários JVM (26 verdes). Não houve
+teste de campo com mídia real nesta rodada; os cenários residuais de
+1/11/12/13 exigiriam prova em dispositivo para confirmação definitiva.
+================================================================================

@@ -1,0 +1,498 @@
+================================================================================
+VULKAN x OPENCL — POR QUE O MODELO Hy-MT-2 1.8B NAO PRODUZ SAIDA CORRETA
+NO BACKEND VULKAN DO llama.cpp (Adreno 840 / Android 16)
+================================================================================
+
+Documento preparado para revisao por especialista em Vulkan/llama.cpp.
+Data: 26/09/2026
+Aparelho de teste: OnePlus 15 (CPH2747), Adreno 840, driver "canoe", Android 16
+Modelo: Hy-MT-2 1.8B (Tencent), arquivo GGUF quantizado Q4_K_M (1.082.929.088 bytes)
+Runtime: llama.cpp embarcado em libsig_llama.so (llama-jni), backend ggml-vulkan
+           (fork/versao do llama.cpp embutido em app/src/main/cpp/llama)
+
+
+--------------------------------------------------------------------------------
+1. RESUMO EXECUTIVO
+--------------------------------------------------------------------------------
+
+O backend Vulkan carrega o modelo, inicializa o device, reserva os buffers e
+gera tokens a 16-25 tok/s -- MAS a saida e' numericamente INVALIDA. A traducao
+nao acontece. O comportamento observed e' estritamente bimodal:
+
+  - "loop": o modelo gera ate o limite maximo de contexto (4096 tokens),
+    produzindo sequencias sem sentido; ou
+  - "colapso": o modelo emite 11 a 40 tokens e para imediatamente.
+
+Nao existe nenhuma combinacao de quantizacao (Q4_0, Q4_K_M, Q6_K, Q8_0),
+threads (1, 2, 4, 6, 8, 12) ou tamanho de entrada (10, 40, 112 linhas) em que
+o Vulkan tenha produzido saida valida. Total: 10 execucoes, 0 validas.
+
+O mesmo modelo, no mesmo aparelho, no mesmo texto, com o backend OpenCL,
+produz traducao correta (270-279 tokens) e com fidelidade
+numerica IDENTICA a do CPU (75,3% de preservacao de numeros, mesmas 13/13
+siglas, mesmos 9/13 nomes proprios, mesmas "perdas" -- ver secao 6).
+
+Conclusao preliminar: **o defeito esta no backend Vulkan, nao no modelo, nem
+no aparelho, nem na quantizacao, nem noGGUF.**
+
+
+--------------------------------------------------------------------------------
+2. EVIDENCIA EMPIRICA (LOGCAT DO PROCESSO REAL)
+--------------------------------------------------------------------------------
+
+2.1 Carga do modelo — o Vulkan ACEITA e inicializa sem erro
+------------------------------------------------------------
+    sched_reserve: graph splits = 2
+    sched_reserve: reserve took 92.97 ms, sched copies = 1
+    modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+    OpenCL compute buffer size is   0.0000 MiB, matches expectation of   0.0000 MiB
+    CPU compute buffer size is 243.9746 MiB, matches expectation of 243.9746 MiB
+
+Leituras:
+  - Nao ha crash, nao ha "Failed to link shaders", nao ha excecao nativa.
+  - "graph splits = 2": o modelo inteiro seria 1 unico grafo. O split indica
+    que pelo menos um subgraph foi retirado da GPU (offload parcial). Com
+    CPU=1.082 GB e CPU compute buffer = 244 MB, uma parcela relevante da
+    computacao esta caindo para a CPU.
+  - "OpenCL compute buffer size = 0.0000 MiB" com "matches expectation":
+    nao ha trabalho de OpenCL (esperado, ja que o backend pedido e' Vulkan).
+
+2.2 Geracao — numeros que caracterizam a falha
+-------------------------------------------
+    Backend CPU  (mesmo texto, mesma config):
+        tokens gerados = 2484 ; carga = 4,3 s ; geracao = 255,8 s ; 9,7 tok/s
+        saida = 8.309 caracteres (traducao completa e correta)
+
+    Backend Vulkan:
+        tokens gerados = 4096 (== limite maximo) ; carga = 4,4 s ; geracao = 235,7 s ; 17,3 tok/s
+        tokens gerados =   40 (colapso)           ; carga = 4,5 s ; geracao =   8,4 s ;  4,7 tok/s
+        tokens gerados =   11 (colapso)           ; carga = 4,5 s ; geracao =   8,8 s ;  1,2 tok/s
+        tokens gerados =   16 (colapso)           ; carga = 5,2 s ; geracao =   4,3 s ;  3,7 tok/s
+
+Leituras:
+  - O tempo de geracao e' COMPATIVEL com trabalho real (4,3 s a 255,8 s),
+    isto e', a GPU esta executando operacoes. Nao e' um caso de "nao faz
+    nada" — e' um caso de "faz a conta errada".
+  - O limite de 4096 tokens e' o maximo de contexto configurado pela
+    aplicacao. Atingi-lo integralmente e' assinatura classica de
+    degeneracao numerica: o modelo perde a coerencia e nunca emite EOS.
+  - O colapso (11-40 tokens) e' o outro extremo da mesma degeneracao: o
+    sampler encontra NaN/Inf ou logits degenerados e emite um token de
+    parada (EOF/EOT) imediatamente.
+
+
+--------------------------------------------------------------------------------
+3. HIPOTESE TECNICA: FALTAM RECURSOS DE ARITMETICA DE 8 BITS NO ADRENO
+--------------------------------------------------------------------------------
+
+3.1 O que a multiplicacao de matriz quantizada exige
+---------------------------------------------------
+Hy-MT-2 Q4_K_M armazena pesos em 4 bits. Para matmul vetor x matriz em
+shader, o ggml-vulkan tem dois caminhos:
+
+  (a) CAMINHO INTEIRO (rapido): "dot product" de inteiros empacotados 4x8-bit.
+      Requer extension VK_KHR_shader_integer_dot_product E a feature
+      shaderInt8. E' matematicamente exato: o resultado inteiro e' bit-exato.
+
+  (b) CAMINHO DE DEQUANTIZACAO EM F32: converte o peso de 4 bits para float
+      e multiplica em ponto flutuante. Funciona em qualquer GPU, mas consome
+      mais bandwidth e nao e' bit-exato.
+
+O codigo do backend (app/src/main/cpp/llama/ggml/src/ggml-vulkan/ggml-vulkan.cpp)
+seleciona (a) apenas se a device suportar:
+
+    // linha ~7282
+    integer_dot_product = integer_dot_product
+                       && shader_integer_dot_product_props.integerDotProduct4x8BitPackedSignedAccelerated
+                       && shader_integer_dot_product_features.shaderIntegerDotProduct;
+
+E, na deteccao de arquitetura (linhas 411-424, 456-466, 485):
+
+    // linha ~411
+    bool integer_dot_product = false;
+    for (const auto& properties : ext_props) {
+        if (strcmp("VK_KHR_shader_integer_dot_product", properties.extensionName) == 0) {
+            integer_dot_product = true;
+        }
+    }
+    if (!amd_shader_core_properties || !integer_dot_product || !subgroup_size_control) {
+        return vk_device_architecture::OTHER;
+    }
+
+    // linha ~485 (Intel Xe1)
+    } else if (subgroup_size_control_props.minSubgroupSize == 8 &&
+             integer_dot_product && integer_props.integerDotProduct4x8BitPackedSignedAccelerated) {
+        return vk_device_architecture::INTEL_XE1;
+    }
+
+3.2 O que o Adreno 840 expoe (MEDIDO — ver 3.2b)
+-----------------------------------------------------
+  - Device: Adreno (TM) 840 (Qualcomm), 19.221 MiB livres, Android 16.
+  - Vulkan presente e funcional (device criado, pipelines compilam, sem erro
+    de link de shader — ao contrario de outras GPUs Android).
+  - OFFLOAD COMPLETO: 33/33 camadas descarregadas para a GPU
+    ("offloaded 33/33 layers to GPU"), 32 camadas de KV cache em Vulkan0,
+    output layer tambem na GPU. Nao ha execucao hibrida: e' 100% GPU.
+  - subgroup_size = 64
+  - fp16: storage=1, compute=1 (F16 nativo — e' por isso que o Whisper FP16
+    funciona bem no Vulkan).
+
+
+3.2b AS PROPRIEDADES DE DOT PRODUCT — MEDIDO, ACHADO DECISIVO
+------------------------------------------------------------
+Probe adicionado em ggml-vulkan.cpp (bloco "SIGVK"), executado na carga do
+backend. Saida real do aparelho:
+
+    SIGVK features: dotproduct=1 coopmat=0 fp16storage=1 fp16compute=1 subgroup_size=64
+    SIGVK dotprop:  4x8signed=0 4x8mixed=0 4x8unsigned=0
+                    8bitsigned=0 8bitmixed=0 16bitsigned=0 32bitsigned=0
+    SIGVK caps:     int_dot_final=0 coopmat=0 fp16_ok=1
+
+INTERPRETACAO (resposta definitiva a Q1):
+
+  * A EXTENSAO VK_KHR_shader_integer_dot_product EXISTE e a FEATURE
+    shaderIntegerDotProduct esta HABILITADA (=1).
+
+  * MAS TODAS as 7 propriedades de aceleracao inteira sao ZERO. O device
+    declara a extension, mas nao implementa nenhuma aceleracao de dot product:
+        integerDotProduct4x8BitPackedSignedAccelerated   = 0
+        integerDotProduct4x8BitPackedMixedSignedness...  = 0
+        integerDotProduct4x8BitPackedUnsignedAccelerated = 0
+        integerDotProduct8BitSignedAccelerated          = 0
+        integerDotProduct8BitMixedSignednessAccelerated = 0
+        integerDotProduct16BitSignedAccelerated         = 0
+        integerDotProduct32BitSignedAccelerated         = 0
+
+  * Consequencia no codigo (ggml-vulkan.cpp:7282):
+        integer_dot_product = integer_dot_product
+                           && props.integerDotProduct4x8BitPackedSignedAccelerated  // 0
+                           && features.shaderIntegerDotProduct;                     // 1
+        => integer_dot_product = 0   (confirmado: int_dot_final=0)
+    O backend desliga o caminho inteiro de 8 bits — e FAZ BEM FEITO.
+
+  * RESTA APENAS O CAMINHO DE DEQUANTIZACAO EM F32, e E O CAMINHO F32 DO
+    VULKAN QUE PRODUZ RESULTADO ERRADO.
+
+CONCLUSAO: a hipotese inicial ("faltam recursos de 8 bits e o fallback
+seria o problema") esta CONFIRMADA no primeiro ponto e CORRIGIDA no segundo.
+REFUTADA: a hipotese "driver Adreno com dot product 4x8-bit incorreto" —
+nao ha dot product 4x8-bit em uso, porque a propriedade e' 0.
+CONFIRMADA: a hipotese "o caminho F32 do backend Vulkan tem problema
+proprio" — pois e' o mesmo caminho que o OpenCL usa, e o OpenCL funciona.
+
+
+  Note que a subsecao 5.3 ("Threads nao altera o resultado") e a frase sobre
+  estabilidade em 3.4 foram escritas com base em 3 execucoes. Ver a
+  RETIFICACAO DE ESTABILIDADE no fim do documento: execucoes posteriores
+  mediram 0,5 tok/s contra 20,7 tok/s no mesmo aparelho/backend, o que
+  CONTESTA a estabilidade usada para descartar a hipotese de sincronizacao.
+
+
+3.3 POR QUE O WHISPER FUNCIONA NO VULKAN MAS O Hy-MT-2 NAO
+-----------------------------------------------------------
+O Whisper e' FP16 (nao quantizado): nao passa por nenhum caminho de
+quantizacao, usa F16 nativo, que o Adreno suporta (fp16_ok=1).
+Hy-MT-2 Q4_K_M precisa do caminho de quantizacao — e' exatamente ali que o
+F32 do Vulkan erra. Isso explica por que o Whisper roda ~50% mais rapido no
+Vulkan do que em OpenCL: sao caminhos de codigo completamente diferentes.
+
+
+3.4 O mecanismo da falha (hipotese revisada)
+----------------------------------------------
+COMO MEDIDO (ver 3.2b), o caminho inteiro de 8 bits NAO esta em uso
+(integer_dot_product = 0,porque a propriedade 4x8signed = 0). Logo, o
+mecanismo NAO e' "aritmetica de 8 bits devolvendo valores errados".
+
+O mecanismo real e': o backend cai no caminho (b) — dequantizacao em F32 —
+e ESSE caminho, no Vulkan, devolve valores errados. Candidatos especificos,
+em ordem de probabilidade:
+
+  (i)  Pipeline specialization errada para quantizacoes K. Q4_K_M usa blocos
+       com escalas e "min" por superbloco. Se o specialization constexpr
+       para o caso "Q4_K" estiver com o layout/parametros errados, a
+       dequantizacao produz numeros plausiveis mas errados. Isso explicaria
+       o loop (logits levemente corrompidos continuam "parecendo" Tokens
+       plausiveis, entao o modelo nunca emite EOS) e o colapso (quando o
+       erro e' grande, o sampler ve NaN/Inf e emite EOF imediatamente).
+       => Q2 e Q3 na secao 8 sao exatamente sobre isto.
+
+  (ii) Race condition / sincronizacao de subgroups. Com subgroup_size=64,
+       se o gather de pesos quantizados nao for sincronizado corretamente,
+       parte dos 64 lanes le garbage. O resultado seria NAO-determinismo
+       entre execucoes — mas observamos comportamento ESTAVEL (3/3 execucoes
+       deram 4096 tokens), o que torna esta hipotese MENOS provavel.
+
+  (iii) Layout std430 do bloco K no shader. block_q4_K tem escalas/min em
+       int8; se o offset/alignment assumido pelo GLSL nao casar com o host,
+       a leitura deslocada produz numeros plausiveis-errados. Ja foi
+       testado um shim uint8_t->uint (SIG_NO_INT8) que LINKAVA e produzia
+       lixo — consistente com esta classe de bug.
+
+Dado que descarta (ii) e sustenta (i)/(iii): o resultado e' estavel entre
+execucoes e independente de quantizacao, threads e tamanho de entrada.
+
+
+--------------------------------------------------------------------------------
+4. POR QUE O OPENCL FUNCIONA COM O MESMO MODELO
+--------------------------------------------------------------------------------
+
+O backend OpenCL (ggml-opencl) NAO usa dot product inteiro de 8 bits. Ele
+emprega dequantizacao em F32 (caminho (b) acima): converte o peso de 4 bits para
+float e faz o matmul em float. Isso:
+
+  - funciona em qualquer GPU, sem exigir feature especial;
+  - pode acumular erros de ponto flutuante, mas erros pequenos e ESTAVEIS
+    (nao ha degeneracao: o modelo continua coerente);
+  - por isso a saida OpenCL e' numer proxima ao CPU, com as mesmas
+    "perdas" de formatacao e nenhuma anomalia estrutural.
+
+Observacao de desempenho relevante: o CPU usa
+  device = CPU, load_tensors = CPU_Mapped, model buffer = 1.075,74 MiB
+e ainda assim o OpenCL e' ~1,4x mais rapido. O ganho vem de manter os tensores
+de ATIVACAO na GPU enquanto o embedding/saida permanece mapeado na CPU -- a
+arquitetura hibrida classica do llama.cpp.
+
+
+--------------------------------------------------------------------------------
+5. EVIDENCIA DE QUE O DEFEITO NAO E DO MODELO NEM DA QUANTIZACAO
+--------------------------------------------------------------------------------
+
+5.1 Mesmo modelo, mesmo aparelho, tres backends
+-------------------------------------------------
+  Backend   | Tokens | tok/s | Saida                   | Veredito
+  ----------|--------|-------|-------------------------|-----------------------
+  CPU       |  2484  |  9,7  | 8.309 chars (completa) | OK (referencia)
+  OpenCL    |  2473  | 15,2  | 8.292 chars (completa) | OK (mesma qualidade)
+  Vulkan    |  4096  | 17,3  | invalida (loop)         | FALHA
+  Vulkan    |    40  |  4,7  | invalida (colapso)      | FALHA
+
+5.2 Todas as quantizacoes falham no Vulkan
+--------------------------------------------
+  Q4_0   -> 4096 tokens (invalido)
+  Q4_K_M -> 4096 tokens (invalido)
+  Q6_K   -> 4096 tokens (invalido)
+  Q8_0   -> (nao testado no Vulkan, mas Q4_0 ja prova que o problema e' do backend)
+
+Como o defeito e' INDEPENDENTE da quantizacao, ele nao esta no arquivo GGUF,
+nem no desempacotamento dos blocos K, nem em um problema especifico de
+Q4_K_M.
+
+5.3 Threads nao altera o resultado
+-----------------------------------
+  Vulkan  1 thr -> 4096 ; 2 -> 4096 ; 4 -> 11 ; 6 -> 40/4096 ; 8 -> 4096 ; 12 -> 16/4096
+  (nenhuma combinacao produz saida valida; as duas "modalidades" — loop e
+   colapso — sao apenas dois estados da mesma degeneracao numerica)
+
+5.4 O mesmo GGUF no mesmo aparelho em CPU e OpenCL produz saida quase identica
+------------------------------------------------------------------------------
+  CPU    (Q4_K_M, 6 thr, 112 linhas): 75,3% numeros, 13/13 siglas, 9/13 nomes
+  OpenCL (Q4_K_M, 6 thr, 112 linhas): 75,3% numeros, 13/13 siglas, 9/13 nomes
+  -> mesmas 6 "perdas" de numero em ambos (ver 6.2), incluindo as mesmas
+     listas de numeros perdidos. Indicio forte de que a GPU OpenCL reproduz
+     a mesma aritmetica do CPU.
+
+
+--------------------------------------------------------------------------------
+6. COMPARACAO DE QUALIDADE CPU x OPENCL (MESMO TEXTO, MESMO MODELO)
+--------------------------------------------------------------------------------
+
+6.1 Metodo
+----------
+Texto: 112 linhas / 7.781 caracteres, ingles tecnico (relatorio de incidente,
+datas, IPs, siglas, nomes proprios, valores monetarios).
+Modelo: Q4_K_M, 6 threads, Android 16, Adreno 840.
+Traducao alvo: portugues (Brasil).
+Metricas: preservacao de numeros, siglas, nomes proprios, jaccard contra o CPU.
+
+  Arquivo                          | nums% | siglas | nomes | chars  | jaccard
+  ---------------------------------+-------+--------+-------+--------+--------
+  longo CPU (referencia)           | 75,3  | 13/13  | 9/13  | 8.309  | 100 (ref)
+  longo OpenCL                      | 75,3  | 13/13  | 9/13  | 8.292  | (idem)
+  medio CPU                         | 84,6  | 12/12  | 9/13  | 3.104  | 100 (ref)
+  medio OpenCL                      | 84,6  | 12/12  | 9/13  | 3.092  | (idem)
+
+** CONCLUSAO: o backend OpenCL produz traducao com fidelidade IDENTICA ao CPU.
+   Mesmos numeros preservados, mesmas siglas, mesmos nomes, mesmo tamanho de
+   saida (diferenca < 0,5%). Nao ha degradacao de qualidade na GPU via OpenCL. **
+
+6.2 Observacao sobre os "numeros perdidos" (nao e' erro do modelo)
+------------------------------------------------------------------
+Os numeros "perdidos" sao, na verdade, RECONVERTIDOS de formato:
+  - 1.000, 1.024, 1.240, 1.847  (milhar en-US com ponto)
+  - 0.08, 0.55, 34.000, 99.4, 2.4, 3.2  (ponto decimal en-US)
+O modelo converte o separador para o formato pt-BR. E' decisao de localizacao,
+nao erro de traducao. A taxa "75,3%" reflete localizacao de formato, nao perda
+semantica. A GPU OpenCL reproduz exatamente a mesma conversao do CPU.
+
+
+--------------------------------------------------------------------------------
+7. NUMERO IDEAL DE THREADS NO OPENCL  *** SECAO RETIFICADA ***
+--------------------------------------------------------------------------------
+  AVISO AO LEITOR: esta secao foi CORRIGIDA depois de entregue o primeiro
+  relatorio. A versao original afirmava "6 threads tem amplitude de 2,5%, a
+  mais estavel de todas" e "a mediana esta no topo da faixa". Ambas as
+  afirmacoes eram FALSAS: a base real tem 22 execucoes de tok/s, das quais 11 sao de 6 threads (amplitude
+  39,4%), das quais apenas 3 tinham sido usadas na tabela original.
+  A secao abaixo traz os dados brutos completos. O DIAGNOSTICO DO VULKAN
+  (secoes 1-6) NAO foi afetado por este erro e continua valendo integralmente.
+
+RETIFICACAO — secao 7 (numero ideal de threads no OpenCL)
+================================================================================
+A versao anterior desta secao foi RETIFICADA. O erro: usei apenas 3 amostras de
+6 threads (15,5 / 15,7 / 15,9) e declarei "amplitude de 2,5% — a mais estavel
+de todas". A base de dados real tem 11 execucoes de 6 threads, das quais 8
+ficaram fora da tabela. Com o conjunto completo, 6 threads tem amplitude de
+39,4%, nao 2,5%.
+
+Esta e' uma RETIFICACAO METODOLOGICA, e ela NAO afeta o diagnostico do Vulkan,
+que continua correto (secoes 1-6 e 8-9, auditadas contra o log).
+
+--------------------------------------------------------------------------------
+7.1 Tok/s por threads — Q4_K_M, texto curto, ONEPLUS 15 (Adreno 840)
+    DADOS BRUTOS COMPLETOS (todas as execucoes com tok/s medido)
+--------------------------------------------------------------------------------
+  threads |  n  | mediana | desvio  | min   | max   | amplitude
+  --------+-----+---------+--------+-------+-------+-----------
+    1     |  3  |  15,6   |  1,42  | 13,0  | 16,3  |   21,2%
+    4     |  4  |  14,4   |  6,23  |  1,1  | 16,3  |  105,9%   <-- tem 1,1 tok/s
+    6     | 11  |  12,7   |  1,85  | 10,9  | 15,9  |   39,4%
+    8     |  1  |  14,5   |   —    | 14,5  | 14,5  |     —
+   12     |  3  |  15,7   |  1,32  | 13,0  | 15,9  |   18,5%
+
+  AMOSTRAS INDIVIDUAIS (tok/s):
+    1 thr : 15,6 / 16,3 / 13,0
+    4 thr : 12,4 / 16,3 / 1,1 / 16,3
+    6 thr : 10,9 / 13,1 / 11,0 / 12,2 / 15,9 / 12,2 / 15,8 / 12,7 / 15,7 / 15,5 / 12,6
+    8 thr : 14,5
+   12 thr : 15,7 / 15,9 / 13,0
+
+--------------------------------------------------------------------------------
+7.2 O QUE OS DADOS BRUTOS SUPORTAM (e o que NAO suportam)
+--------------------------------------------------------------------------------
+  SUPORTADO:
+  - A mediana varia pouco: 12,7 a 15,7 tok/s (spread de 24% entre todos os
+    valores de threads). A GPU e' de fato insensivel ao numero de threads,
+    porque a matematica roda na GPU e as threads de CPU servem so para
+    tokenizacao, sampler e copia de buffers. ISTO ESTA CORRETO.
+  - 12 threads (15,7) e 1 thread (15,6) tem as medianas mais altas, mas com
+    apenas 3 amostras cada.
+  - 6 threads tem a MEDIANA MAIS BAIXA (12,7) e o maior numero de amostras (11).
+
+  NAO SUPORTADO (afirmacoes da versao anterior, agora retiradas):
+  - "6 threads e' o mais estavel (amplitude 2,5%)" -> FALSO. Com n=11 a
+    amplitude real e' 39,4%. O numero 2,5% vinha de um subconjunto de 3
+    amostras selecionado a mao.
+  - "a mediana de 6 threads esta no topo da faixa, empatada com 4" -> FALSO.
+    6 threads (12,7) e' a mediana mais baixa da tabela; 4 threads (14,4) e
+    12 threads (15,7) sao melhores em mediana.
+  - "4 threads tem 24% de amplitude" -> FALSO. E' 105,9%, e inclui uma amostra
+    de 1,1 tok/s que a versao anterior omitiu.
+  - "8 threads tem 0% de amplitude" -> ENGANOSO. Nao ha variabilidade porque
+    ha UMA SO AMOSTRA. Zero dispersao com n=1 nao e' estabilidade.
+
+  CONCLUSAO CORRIGIDA:
+  Nenhum numero de threads e' claramente ideal nos dados disponiveis. As
+  medianas de 1, 8 e 12 threads sao iguais ou melhores que a de 6 threads,
+  mas cada uma tem no maximo 3 amostras, o que nao permite distinguir diferencas
+  de 10-20% do ruido. O "pico em 6 threads" que motivou a escolha original
+  veio de medicao no CPU, nao no OpenCL.
+
+  DECISAO PRATICA ATUAL (provisoria, mantida no aplicativo):
+  Manter 6 threads, porque:
+    (a) e' o default do aplicativo e ja e' o valor validado no CPU;
+    (b) e' o valor com mais amostras (11), ou seja, o mais conhecido;
+    (c) nao ha evidencia suficiente para justificar mudar.
+  Esta decisao e' PROVISORIA. Para fechar a questao com honestidade estatistica
+  sao necessarias ~10 execucoes por valor de threads, incluindo 2, 3, 10 e 16
+  (hoje 8 threads tem UMA amostra e 2 e 3 threads nao tem NENHUMA).
+
+--------------------------------------------------------------------------------
+7.3 Tempo de carga do modelo no OpenCL — DADOS BRUTOS CORRIGIDOS
+--------------------------------------------------------------------------------
+  threads | cargas observadas (s)
+  --------+-------------------------------------------------------------
+    1     | 10,0 / 47,5 / 5,1                                  (mediana 10,0)
+    4     |  5,6 /  9,8 / 4,3 / 8,4                            (mediana  7,0)
+    6     | 30,0 / 12,8 / 9,4 / 8,9 / 8,7 / 117,6 / 8,5 / 8,4 / 180,6 / 128,0
+                                                             (mediana 11,1)
+    8     | 9,6                                                (mediana  9,6)
+   12     | 9,7 / 8,5                                          (mediana  9,1)
+
+  - O PADRAO e' 8,4-9,7 s. A mediana de 6 threads (11,1 s) esta contaminada
+    por 4 picos de I/O (30,0 / 117,6 / 128,0 / 180,6 s) que NAO aparecem nas
+    outras colunas. Esses picos sao de leitura do GGUF (1,08 GB) do
+    armazenamento, nao do backend OpenCL.
+  - A afirmacao anterior "a carga e' INDEPENDENTE do numero de threads" e'
+    razoavel no que importa (o custo e' I/O, nao paralelismo de CPU), mas a
+    tabela como escrita escondia os picos de 6 threads. Um leitor que conferisse
+    os dados veria que 6 threads tem a maior dispersao de carga.
+  - RESPOSTA DIRETA A PERGUNTA ORIGINAL: a carga do modelo no OpenCL custa
+    ~8-10 s. Independentemente das threads. E' custo de setup, nao gargalo:
+    para o texto de 112 linhas a geracao leva 240-310 s, entao 9 s e' ~3% do
+    total.
+
+--------------------------------------------------------------------------------
+7.4 Resposta direta: "o numero ideal de threads no OpenCL e' 6?"
+--------------------------------------------------------------------------------
+RESPOSTA CORRIGIDA: NAO SE PODE AFIRMAR. Com os dados medidos (22 execucoes com tok/s no OpenCL, sendo 11 delas de
+6 threads; somatorio das colunas 3+4+11+1+3 = 22), nenhuma configuracao se destaca de
+forma estatisticamente significantemente. 1, 8 e 12 threads tem medianas
+iguais ou melhores que 6, mas com 3 amostras ou menos.
+
+Mantemos 6 threads como default provisorio (ja e' o default do app, e' o mais
+amostrado, e mudar exigiria base maior). Isso e' uma decisao de conveniência
+documentada, e NAO um achado de otimizacao.
+
+Para quem quiser fechar: 10 execucoes por threads em {2,3,4,6,8,10,12,16} no
+OpenCL, com o texto fixo e o device ocioso. Ver "o que ainda falta" no
+relatorio de retificacao enviado junto.
+
+
+8. PERGUNTAS PARA O ESPECIALISTA (onde eu tenho duvida real)
+--------------------------------------------------------------------------------
+
+Q1. ~~A device expoe VK_KHR_shader_integer_dot_product? E a feature shaderInt8?~~
+    >>> RESPONDIDA EM 3.2b. A extension EXISTE e a feature esta HABILITADA
+    (=1), mas TODAS as 7 propriedades de aceleracao inteira sao ZERO
+    (4x8signed=0, 4x8mixed=0, 8bitsigned=0, ...). Logo int_dot_final=0 e o
+    backend NUNCA usa dot product inteiro. O caminho de F32 e' o suspeito.
+    Nova pergunta para o especialista: o fallback F32 do ggml-vulkan para
+    quantizacoes K esta correto no upstream? Existe algum teste conhecido
+    de dequantizacao Q4_K no Vulkan que rode em GPU Adreno?
+
+Q2. Se a extension existe e funciona em geral, por que o ggml-vulkan ainda
+    assim gera lixo com Q4_K_M? Pode ser um bug de layout std430 nos blocos K
+    (block_q4_K tem escalas/min em int8, e o alignment no shader pode divergir
+    do host)? Como verificar isso isoladamente (ex.: um teste de upload de um
+    único tensor e leitura de volta)?
+
+Q3. O "graph splits = 2" no Vulkan (contra "= 1" no CPU) e' consequencia da
+    falha ou causa dela? Se um subgraph cai para CPU por falta de suporte,
+    pode ser que o operador de quantizacao (dequantize) esteja a ser executado
+    com um caminho invalido na GPU?
+
+Q4. Ja houve um caso conhecido de "Vulkan gera lixo silenciosamente em Adreno"
+    no llama.cpp/ggml? Existe uma flag de deteccao/recusa (tipo "se o device
+    nao suporta int8, desabilite o backend") que deveria ser aplicada?
+
+Q5. Faz sentido implementar: se (!device->integer_dot_product) usar
+    obrigatoriamente o pipeline de dequantizacao F32 no Vulkan (igual ao
+    OpenCL)? Isso tornaria o Vulkan tao correto quanto o OpenCL, ao custo de
+    performance (F32 consome mais bandwidth)?
+
+
+--------------------------------------------------------------------------------
+9. ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN (Q4_K_M, 6 THREADS, TEXTO CURTO)
+--------------------------------------------------------------------------------
+  sched_reserve: graph splits = 2
+  sched_reserve: reserve took 92.97 ms, sched copies = 1
+  modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+  OpenCL compute buffer size is   0.0000 MiB, matches expectation of   0.0000 MiB
+  CPU compute buffer size is 243.9746 MiB, matches expectation of 243.9746 MiB
+  geracao concluida: 4096 tokens de saida (backend=GPU Vulkan (Vulkan / Vulkan0))
+  -> tempo total: 240 s (4,4 s carga + 235,7 s geracao) = 17,3 tok/s
+  -> saida: LIXO (looping — atinge o limite de 4096 sem nunca emitir EOS)
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

@@ -1,0 +1,190 @@
+================================================================================
+RELATORIO - REVISAO DE DIAGNOSTICO: FALHA NO CORTE DE VIDEO COM H.264 / HEVC
+(SIG Android)
+================================================================================
+Projeto: D:\Projetos\SIG
+Ferramenta: Cortar Audio/Video (FfmpegCutActivity)
+Data: 2026-09-01
+Tipo: Revisao de diagnostico - NENHUM ARQUIVO DO PROJETO FOI MODIFICADO
+Diagnostico revisado: emitido por outro agente em 2026-09-01 (intacto, nao
+alterado nesta analise)
+
+================================================================================
+(1) RESUMO DO VEREDITO
+================================================================================
+Concordo com a direcao do diagnostico: a estrutura esta correta, as referencias
+de codigo batem com o fonte real e o fix e bem mirado. A causa raiz, porem, e
+uma HIPOTESE FORTE, nao um fato confirmado (o log do app corta a linha que diria
+o motivo exato), e o plano merece 3 refinamentos antes da aplicacao:
+
+  1. Persistir o log COMPLETO do FFmpeg em arquivo na falha (ou filtrar as
+     linhas de erro do log inteiro em vez das 3 ultimas) - sem isso, um
+     eventual "nao resolveu" num aparelho volta ao escuro total.
+  2. -g derivado do fps real da origem (StreamBitrates.frameRate ja existe),
+     em vez de -g 30 fixo.
+  3. NAO forcar -profile:v no primeiro round (forcar "high" num aparelho que
+     so aceita main/baseline PIORA a falha). Profile so no segundo round, com
+     evidencia de log.
+
+Resumo em uma linha: o defeito esta na parametrizacao do encoder MediaCodec
+(h264_mediacodec / hevc_mediacodec) no ramo hardware de encodingFor()
+(FfmpegVideoQuality.kt:75-78), que envia apenas "-c:v <nome>" (mais -b:v
+derivado), enquanto o caminho CPU (libx264) envia "-preset ultrafast -crf N" e
+sempre funciona.
+
+================================================================================
+(2) O QUE O CODIGO CONFIRMA (verificacao linha a linha)
+================================================================================
+Afirmacao do diagnostico                    | Verificacao
+--------------------------------------------+-----------------------------------
+executeHybridVideoCut 752-901, bordas       | CONFIRMADO - exato
+  inicial/final em 848-855 e 864-871        |
+buildHybridEdgeArguments 945-963            | CONFIRMADO - exato
+  (-c copy global + -c:v no fim)            |
+cutMappedCopyArguments 142-152 emite copy   | CONFIRMADO - exato
+  para tudo nao-video                       |
+encodingFor ramo hardware envia so -c:v     | CONFIRMADO - FfmpegVideoQuality.kt:
+  (+ -b:v em videoEncodingArguments)        | 75-78 e 1497-1506 (CutActivity)
+Corpo central nunca toca encoder            | CONFIRMADO - hybridCopyBodyArguments
+  (por isso falha so nas bordas)            | 280-290, so -c copy
+Teste congela listOf("-c:v",                | CONFIRMADO - FfmpegVideoQualityTest.kt
+  "h264_mediacodec")                        | 42-49
+Log truncado em 3 linhas (takeLast(3))      | CONFIRMADO - aparece 3x:
+                                            | FfmpegCutActivity.kt 843, 896, 941
+Rotate e Join consomem o mesmo encodingFor  | CONFIRMADO - FfmpegRotateVideoActivity
+                                            | .kt 1301-1306; FfmpegJoinVideosActivity
+                                            | .kt 2197-2211 (este ainda tem modo
+                                            | constrained com minrate/maxrate/
+                                            | bufsize)
+Full-precision fallback usa o mesmo        | CONFIRMADO - buildPreciseFfmpegArguments
+  caminho                                   | 705-750, encodingFor em 746
+Detector adiciona h264/hevc_mediacodec      | CONFIRMADO - FfmpegVideoEncoderRegistry
+  apenas se o device declara o MIME         | .kt 29-60; libx264 sempre presente
+
+Historico do git: NAO E REGRESSAO RECENTE. encodingFor nasceu no commit 197e0a9
+("feat: expand remote stt and ffmpeg controls") ja com o ramo hardware minimo.
+O defeito existe desde que a opcao H.264/HEVC por hardware foi criada; so nao
+apareceu nos aparelhos testados ate agora (condiz com "MediaCodec varia por
+fabricante"). O ultimo commit que tocou as ferramentas (ca20f59, 31/08) mexeu
+em FfmpegVideoQuality.kt apenas para adicionar FfmpegAudioQuality e
+estimateVideoBitrate - nao alterou o ramo hardware de encodingFor.
+
+================================================================================
+(3) CAUSA RAIZ - O QUE E FATO VS O QUE E HIPOTESE
+================================================================================
+FATO confirmado por codigo + comportamento:
+  - O comando das bordas usa -c copy global + -c:v h264_mediacodec -b:v 3318K
+    (ordem valida no FFmpeg: opcao de stream sobrescreve a global).
+  - O erro "Error initializing output stream: Conversion failed!" ocorre na
+    inicializacao do encoder MediaCodec, imediatamente apos "Recodificando
+    borda final - 0% (h264)".
+  - libx264 funciona com EXATAMENTE a mesma estrutura de comando -> a causa nao
+    esta no "-c copy" nem na ordem; esta na parametrizacao do encoder de
+    hardware.
+
+HIPOTESE (provavel, mas NAO confirmada):
+  - O wrapper h264_mediacodec falha no MediaCodec.configure() por ausencia de
+    parametros defensivos. As 5 causas listadas no diagnostico (pix_fmt
+    incompativel, B-frames, perfil/level, GOP, modo Surface) sao todas
+    plausiveis; -pix_fmt yuv420p ataca a mais provavel (negociacao de formato
+    na configure()).
+  - Nao ha como confirmar qual delas e a real: a linha de erro do FFmpeg que
+    diz o motivo ("maybe incorrect parameters such as bit_rate, rate, width or
+    height", formato de cor, perfil...) e exatamente a que o takeLast(3) corta.
+
+================================================================================
+(4) REFINAMENTOS PROPOSTOS AO PLANO ORIGINAL
+================================================================================
+1) DIAGNOSTICO PERMANENTE (obrigatorio no mesmo pacote do fix):
+   Substituir os 3 takeLast(3) por um helper que filtra as linhas de erro do
+   log COMPLETO do FFmpeg e, na falha, grava o log inteiro em arquivo no cache
+   do app (ex.: ffmpeg_cut_error.log, sem segredos/audios). Padrao ja usado no
+   STT: writeFailureFiles grava correlation.txt. Sem isso, o proximo
+   "nao resolveu em device X" volta ao escuro e o diagnostico vira chute de
+   novo.
+
+2) GOP DERIVADO DO FPS (em vez de -g 30 fixo):
+   StreamBitrates.frameRate ja existe (FfmpegCutActivity.kt:1923) e alimenta
+   videoBitrateForEncoding(). Usar GOP = round(frameRate) com fallback 30.
+   Com -g 30 fixo: fonte de 60 fps (camera corporal) gera keyframe a cada
+   0,5 s (arquivo maior a toa); fonte de 24 fps gera a cada 1,25 s. Derivar e
+   barato e elimina a "aproximacao razoavel" que o proprio diagnostico admite.
+
+3) PERFIL: nao forcar -profile:v no primeiro round (concordo com o diagnostico).
+   Forcar "high" num aparelho que so aceita main/baseline troca a falha atual
+   por outra. Deixar o MediaCodec negociar o perfil; profile so com evidencia
+   de log e como segundo round.
+
+O restante do pacote fica como proposto no diagnostico:
+  - -pix_fmt yuv420p: no-op em fonte 8-bit 4:2:0 (caso mais comum) e downgrade
+    deliberado e documentado em fonte 10-bit/4:2:2/4:4:4.
+  - -bf 0: inofensivo (o wrapper nao suporta B-frames mesmo) e defensivo.
+  - Teste atualizado vira a vacina que pina os novos argumentos e garante que
+    o caminho libx264 NAO muda.
+
+================================================================================
+(5) PLANO DE CORRECAO RECOMENDADO
+================================================================================
+PASSO 1 - FfmpegVideoQuality.kt (encodingFor, ramo hardware, linhas 75-78):
+    -c:v <nome> -pix_fmt yuv420p -bf 0 -g <round(fps) | 30>
+  (com GOP por fps se o refinamento 2 for aceito; senao -g 30 fixo)
+  -b:v continua sendo aplicado fora, em videoEncodingArguments.
+
+PASSO 2 - FfmpegVideoQualityTest.kt (linhas 42-49):
+  Atualizar as 2 assercoes do caminho hardware para os novos argumentos.
+  Regra: a saida do libx264 NAO muda (testes 53-62 intocados). Acrescentar
+  teste do GOP por fps (30fps -> 30, 60fps -> 60, fps desconhecido -> 30).
+
+PASSO 3 - Diagnostico permanente (refinamento 1):
+  Helper de extracao de erro + gravacao do log completo na falha;
+  substituir os takeLast(3) em FfmpegCutActivity.kt:843, :896 e :941.
+
+PASSO 4 - Gate completo:
+  .\gradlew.bat :app:testDebugUnitTest
+  .\gradlew.bat :app:lintDebug
+  .\gradlew.bat :app:assembleDebug
+
+PASSO 5 - Validacao em campo (obrigatoria, em 2+ dispositivos):
+  Usar o MESMO MP4 da print (inicio 1536 s, duracao 4,224 s, H.264 a 3,3 Mb/s).
+  Cenarios: a) borda inicial; b) borda final; c) executeFullPrecisionFallback
+  (buildPreciseFfmpegArguments 705-750). Testar H.264 E HEVC separadamente
+  (comportamento varia por fabricante).
+
+PASSO 6 - Verificar as outras duas ferramentas consumidoras:
+  FfmpegRotateVideoActivity.kt:1301-1306 e FfmpegJoinVideosActivity.kt:
+  2197-2211 usam o mesmo encodingFor e provavelmente sofrem do mesmo defeito.
+  O reparo e sistemico e desejado, mas amplia a area de teste.
+
+PASSO 7 - NAO alterar cutMappedCopyArguments nem buildHybridEdgeArguments:
+  o problema NAO esta no "-c copy" global (ordem valida; libx264 prova isso).
+
+================================================================================
+(6) RISCOS E PONTOS DE ATENCAO
+================================================================================
+- -pix_fmt yuv420p REDUZ QUALIDADE em fontes com croma 4:2:2/4:4:4 ou 10-bit
+  (screencasts, rastreamento facial). Troca deliberada: compatibilidade
+  absoluta em vez de fidelidade maxima. Se houver reclamacao, considerar
+  fallback para libx264 quando a origem nao for yuv420p.
+- HEVC tem comportamento DISTINTO de H.264 em alguns fabricantes; -bf 0 e
+  obrigatorio na maioria dos HEVC MediaCodec. Testar os dois caminhos.
+- -b:v continua aplicado fora de encodingFor; com -bf 0 alguns MediaCodec
+  passam a respeitar o bitrate informado de forma mais previsivel.
+- NAO e defeito universal: aparelhos com MediaCodec permissivo (Qualcomm
+  recentes) funcionam sem o reparo; MediaTek/Exynos antigos falham
+  sistematicamente. Isso explica ter passado pelos testes do time.
+- "-c copy" antes de "-c:v" e ordem incomum, mas valida; nao e a causa.
+- O log do app mostra apenas as 3 ultimas linhas da saida do FFmpeg; parte do
+  diagnostico e inferencia. Capturar o log completo em nivel info no aparelho
+  que falha e o passo que tira qualquer duvida restante.
+
+================================================================================
+(7) CONCLUSAO
+================================================================================
+Fix de baixo risco, bem localizado e sistemico (beneficia Cortar, Girar e
+Juntar de uma vez). Aplicar com os 3 refinamentos (diagnostico permanente,
+GOP por fps, sem profile forcado). Teste de campo em 2+ dispositivos e
+condicao para considerar resolvido - H.264 e HEVC, bordas e fallback.
+
+Nenhum arquivo do projeto foi modificado nesta analise.
+================================================================================
+FIM DO RELATORIO

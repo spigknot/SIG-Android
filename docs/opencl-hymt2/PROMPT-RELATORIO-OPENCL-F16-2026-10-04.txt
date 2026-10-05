@@ -1,0 +1,67 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F16: A/B DO SEAM VALIDADO (GANHO REAL)
+Data: 04/10/2026. Repo: D:/Projetos/SIG (NADA commitado).
+Base: consentimento do A/B do loadercache (autorizado). Deploy/revert por
+safe_deploy.sh (gate fail-closed) em todas as trocas.
+
+================================================================================
+1. RESULTADOS (mesmo protocolo; props identicas; saidas canonicas; mesmo aparelho)
+================================================================================
+Q4 curto OCL: 970 (4 runs: decode 7154/7432/7487/7549ms; 18,8-19,9 t/s)
+              loadercache: decode=3964ms (35,83 t/s)  => -47% (1,9x)
+              graph 6471->2465ms | setup 4928-5538->634ms (-87%)
+Q4 longo OCL: 970 (decode 77927-79633ms; setup 56558-57351ms; enq 10709-11387)
+              loadercache: decode=51615ms (28,77 t/s) => -35% (1,5x)
+              graph 67945->40354ms | setup 56558->9743ms (-83%) | enq 11387->30611ms
+Q8 curto OCL: 970 (~7449-8000ms; ~18-19 t/s) | loadercache: decode=4927ms
+              (28,82 t/s) => ~-36%
+Shas de saida CANONICOS em todos os runs (084f12f4 / 4d51e74f / d36a3315).
+nota: no Q4 longo/Q8 os "enq" SOBEM no loadercache (10709->30611;
+~1000->1831 no curto): o host passa a submeter mais rapido que o driver
+consome => BACKPRESSURE do queue aparece no span do enqueue. O saldo LIQUIDO
+(grafo/decode) e' fortemente positivo; a backpressure e' o proximo alvo
+visivel (queue-depth/submissao em lote) — NAO tocado aqui.
+
+================================================================================
+2. LEITURA
+================================================================================
+2a. O cache de simbolos do loader (1 dlsym por simbolo por processo) removeu a
+    parcela dominante do `setup` (~6.000 dlsym/token => ~-83-87% do setup).
+    RMS_NORM no topops caiu 1308->244ms (o op pequeno vivia de overhead de shim);
+    MUL_MAT 2733->1607ms.
+2b. Ganho de DECODE medido: -47% (curto Q4), -35% (longo Q4), ~-36% (curto Q8).
+    Compatible com a hipotese quantitativa do F15; agora DEMONSTRADO por A/B.
+2c. Corretude preservada (shas canonicos) em todas as rotas testadas; sem
+    fastmath/sampler/EOG; sem alterar config/algorithm.
+
+================================================================================
+3. VACINA F13 EM USO REAL
+================================================================================
+3a. O safe_deploy.sh bloqueou um deploy quando a verificacao do tmp ficou
+    ambigua em leitura pos-push (fail-closed; destino intocado) — o gate
+    funcionou em producao. Reexecucao verificada com sucesso (DEPLOY OK).
+3b. Nota de operacao: as tentativas em subprocess tiveram a divergencia
+    transitoria; a via verificada (bash direto + retry) foi usada; registrar
+    como melhoria do gate: retry interno + re-leitura do sha apos pequeno
+    intervalo (sem afrouxar o criterio).
+
+================================================================================
+4. ARTEFATOS E ESTADO
+================================================================================
+4a. loadercache: sha256 290a6a0ba0c5be4fb68b97473051a21af9021d6f7c560aa5836b379b89bcc7e1
+    (95.924.464 B). Patch = cache em load_opencl_fn (fixtures/testes no repo;
+    RED/GREEN/mutacao PASS no F15).
+4b. Rollback FINAL: device = 9698670c (readback conferido); UI Q4_K_M/Vulkan/
+    Portugues; props zeradas. Logs: ab_seam*.log, f16_tabela_ab.txt, deploys.
+4c. Manifesto regenerado (Python; count/size/dedupe; 0 erros).
+
+================================================================================
+5. PROXIMOS PASSOS (sugeridos, aguardando coordenacao)
+================================================================================
+5a. ADOCAO do patch do loader como patch MINIMO de produto (mesmo fluxo do
+    F3b: patch focado + receita + RED-GREEN (feito) + aceite (A/B feito) +
+    aprovacao) — o ganho e' grande e independente de backend? (medido em OCL;
+    Vulkan nao usa o shim CL => sem efeito la; CPU idem).
+5b. Backpressure do queue (agora visivel no enq): investigar lote/batch de
+    submissao APOS a adocao do cache (nao antes).
+5c. Pendencias antigas: fix da ordem do reset (prefill snapshot), Q8 topops,
+    reconciliacao por-op.

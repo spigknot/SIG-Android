@@ -1,0 +1,25 @@
+== 1) GREEN: teste contra o header REAL do produto ==
+== guard F3b — teste nativo (host, mock CL) ==
+GREEN (design atual: consulta por chamada, sem cache):
+  in-order (props=0) -> fast                                 PASS
+  out-of-order -> blocking                                   PASS
+  erro na consulta -> blocking (fail-safe)                   PASS
+  volta a fila in-order -> fast (sem estado velho)           PASS
+  consulta executada por chamada (>= 4)                      PASS
+  consultas ao driver: 8
+RED (design ANTIGO: cache unico de primeiro-queue — copia p/ evidencia):
+  [antigo] A in-order->fast=1 | B ooo->fast=1
+  RED: design antigo devolve fast p/ fila OOO (bug demonstrado) PASS
+
+resultado: PASS (0 falhas)
+== 2) MUTACAO: copia do header com guard QUEBRADO deve FALHAR ==
+In file included from D:/Projetos/SIG/native-dependencies/harness/transpose_guard_test.cpp:19:
+D:/Projetos/SIG/.tmp_guard_test/sig_guard_mut/sig_transpose_guard.h: In function 'bool sig_transpose_guard_impl(cl_command_queue, cl_int (*)(cl_command_queue, cl_command_queue_info, size_t, void*, size_t*))':
+D:/Projetos/SIG/.tmp_guard_test/sig_guard_mut/sig_transpose_guard.h:20:9: warning: unused variable 'ooo' [-Wunused-variable]
+   20 |     int ooo = (rc == CL_SUCCESS)
+      |         ^~~
+  OK: mutante falhou como esperado (teste sensivel a regressao)
+  out-of-order -> blocking                                   FAIL
+  erro na consulta -> blocking (fail-safe)                   FAIL
+resultado: FAIL (2 falhas)
+== resultado final: PASS (GREEN ok + mutante detectado) ==

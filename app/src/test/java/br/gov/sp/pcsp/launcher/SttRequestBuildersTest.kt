@@ -173,6 +173,31 @@ class SttRequestBuildersTest {
     }
 
     @Test
+    fun deepgram_usaSmartFormatFalseNumeralsFalseEPunctuateTrue() {
+        // Vacina (02/10): smart_format=false, numerals=false e punctuate=true nos DOIS
+        // transportes (REST e WebSocket), a pedido do usuário — espelho do SIG Windows.
+        // `paragraphs` nunca entra; voltar a smart_format=true quebra aqui de propósito.
+        val rest = SttRequestBuilders.deepgramRest(
+            apiKey = "test-key",
+            language = "pt-BR",
+            diarize = false,
+        )
+        val live = SttRequestBuilders.deepgramWebSocket(
+            apiKey = "test-key",
+            language = "pt-BR",
+            diarize = false,
+        )
+
+        listOf("REST" to rest.url, "WS" to live.url).forEach { (nome, url) ->
+            assertTrue("$nome sem smart_format=false: $url", url.contains("smart_format=false"))
+            assertTrue("$nome sem numerals=false: $url", url.contains("numerals=false"))
+            assertTrue("$nome sem punctuate=true: $url", url.contains("punctuate=true"))
+            assertFalse("$nome ainda com smart_format=true: $url", url.contains("smart_format=true"))
+            assertFalse("$nome vazou paragraphs: $url", url.contains("paragraphs"))
+        }
+    }
+
+    @Test
     fun providerKeywords_useTheExactParameterOfEachProvider() {
         val keywords = listOf("placa", "abordagem")
 

@@ -1,0 +1,246 @@
+PROMPT AO ESPECIALISTA — Hy-MT2 / VULKAN: CAUSA DO Q8_0 CORRIGIDA, LIB NOVO
+COMO DEPLOY, E LIMITE DE AUTOMATIZACAO DA UI (relatorio final, 02/10/2026)
+=====================================================================
+LEIA PRIMEIRO: o texto original dizia "causa do Q8 nao localizada" e
+"baseline Antigo com bug; nenhum resultado dele sera chamado de corrigido".
+ISSO MUDOU. A causa FOI localizada, corrigida e PROVADA no aparelho. Este
+relatorio traz (A) o que mudou, (B) TODOS os dados medidos, (C) os erros
+meus de instrumento — inclusive aquele que quase me fez declarar vitoria
+falsa — e (D) o que ficou bloqueado e por que. Nada aqui e' suposicao: se algo
+nao foi medido, esta' dito como nao medido.
+=====================================================================
+
+A. RESUMO EXECUTIVO
+A1. DUAS CORRECOES, DOIS SINTOMAS DISTINTOS
+  (a) ISOLAMENTO DE PEDIDOS (bug de produto, independente do modelo):
+      generate() reutilizava g_ctx sem limpar a memoria; llama_batch_get_one
+      com pos=null deriva a posicao de seq_pos_max+1, entao o segundo
+      pedido herdeva KV/posicao do primeiro. CORRECAO: llama_memory_clear
+      (llama_get_memory(g_ctx), true) no inicio de cada generate, sob o
+      MESMO g_mutex, no helper hymt2_request_reset.h (mesmo codigo no
+      produto e no teste).
+  (b) SIGNEDNESS DO Q8_0 NO VULKAN (bug de kernel, independente do pedido):
+      os quants de peso do Q8_0 chegavam ao PRODUTO como bytes SEM SINAL.
+      CORRECAO: conversao aritmetica explicita do byte para int8 em dois
+      shaders (dequant_funcs.glsl no caminho vec; mul_mm_funcs.glsl no
+      caminho mm).
+
+A2. A CAUSA (B) FOI PROVADA POR CANARIOS ANALITICOS
+  W uniforme com um byte fixo por bloco, escala fp16 conhecida, X=ones,
+  esperado matematico exato. Sem modelo, sem sampler, sem EOG.
+  No caminho VEC (mul_mat_vec_q8_0_f32_f32, 1..8 linhas):
+      qs=-1   (esp -2048)   -> Vulkan +522240 = 2048 x 255  (0xFF lido 255)
+      qs=-2   (esp -4096)   -> +520192 = 2048 x 254
+      qs=-64  (esp -131072) -> +393216 = 2048 x 192
+      qs=-128 (esp -262144) -> +262144 = 2048 x 128
+      qs=+1/+127/d=2^-6/posicao/rampa/blocos/pos  -> EXATOS
+  A IDENTIDADE ARITMETICA fecha: a leitura e' unsigned, e todo o resto
+  (escala, stride de 34 B, posicao no bloco, contagem de blocos, lado B)
+  esta' CORRETO. Os casos negativos (qs<0) quebravam; os positivos, nao.
+  Um caso de amplitude pequena (mix8minus: 2040 x +1 e 8 x -1, esperado
+  2032) devolveu 4080 = 2040 + 8x255 — o que DESCARTA saturacao (3056) e
+  confirma o byte-sem-sinal.
+
+A3. O RESIDUO QUE SOBROU NO MM E' PRECISAO, NAO DEFEITO
+  Controle causal (mesmos operandos, 3 condicoes: CPU / Vulkan DEFAULT
+  f16acc / Vulkan com GGML_PREC_F32 -> f32acc), escalas bem condicionadas
+  (d=2^-6, |soma| <= 2048, longe de 65504):
+      byte  1 (esp 32.0)   : DEFAULT +0.0000 | F32ACC +0.0000
+      byte  3 (esp 96.0)   : DEFAULT +21.3125 | F32ACC +0.0000
+      byte  5 (esp 160.0)  : DEFAULT -19.1250 | F32ACC +0.0000
+      byte 32/64/-64       : DEFAULT +0.0000 | F32ACC +0.0000
+  E o replay FP16-sequencial no PC reproduz o valor do GPU TER A TERT
+  (117.3125 e 140.875). Conclusao: o resíduo do caminho MM e' ACUMULACAO EM
+  FP16, independente de signedness; o mesmo patamar (~0.6-0.7%) aparece nos
+  controles Q4_K_M / Q4_0 / Q6_K no mesmo n_rows. Nao ha defeito la.
+
+=====================================================================
+B. TODOS OS DADOS MEDIDOS (nenhum selecionado; o resto e' "nao medido")
+B1. NUMERICO DO KERNEL (mulmm_probe, mesmo build/llama do app, no aparelho)
+    Q8_0 REAL (blk.0.attn_q.weight do Hy-MT2-1.8B-Q8_0.gguf, ne=[2048,2048]):
+      n_rows 1   : VKxf64 rmse_rel 5.79  -> 1.18e-07  (AMBOS_OK)
+      n_rows 8   : VKxf64 rmse_rel 6.83  -> 1.08e-07  (AMBOS_OK)
+      n_rows 16  : VKxf64 rmse_rel 6.65  -> 0.00638   (VULKAN_ATENCAO)
+      n_rows 64  : VKxf64 rmse_rel 6.64  -> 0.00659   (VULKAN_ATENCAO)
+      n_rows 512 : VKxf64 rmse_rel 6.64  -> 0.00664   (VULKAN_ATENCAO)
+    (rmse_rel = RMSE(subconjunto)/RMS_cpu, sub = primeiras 256 colunas;
+     fator, nao porcentagem.)
+    Q8_0 SINTETICO: 3.64/4.48/4.30/4.30 (n_rows 1/8/16/64) -> 1.03e-07 /
+    1.05e-07 / 0.0067 / 0.0067 / 0.0067.
+    CONTROLES (n_rows 1 -> 64), pos-fix, sem regressao:
+      Q4_K_M produto (c4bf1015...) : 5.2e-07 (OK) -> 0.0067 (ATENCAO)
+      Q4_K_M OFFICIAL (dc5f44fc)  : 5.2e-07 (OK) -> 0.0068 (ATENCAO)
+      Q4_0 (5c3fe0b1 no Q8; Q4_0 e' o modelo) : 1.05e-07 (OK) -> 0.0063
+      Q6_K (blk.0.attn_v.weight [2048,512]) : 1.02e-07 (OK) -> 0.0065
+    BYTES256 (256 valores de byte x 4 escalas, esperado analitico):
+      VEC (n_rows=1): VK 256/256 OK em d=1, d=2^-6, d=-1, d=0 (exatos).
+      MM  (n_rows=64): VK 13-18/256 — os "erros" sao de PRECISAO fp16 em
+      escala (ex.: b=3 d=1: esp 6144 -> 7508); d=0 passa 256/256. Classi-
+      ficado como LIMITE FP16, nao como falha de sinal.
+
+B2. NO APP (Q8_0 + Vulkan, lib nova) — o dado deSmoking
+    Fonte curta (409 chars, hash e8b35290...), DIGITADA e conferida por
+    igualdade antes de traduzir; processo NOVO com /proc/PID/maps mostrando
+    native_dependencies/9-arm64-v8a (a lib nova, 9698670c...).
+      status "Traducao pronta." | tempos 20s, 56s, 67s, 110s (variam com a
+      carga termica e o drain) | saida 452 chars de portugues coerente.
+    ANTES DA CORRECAO (mesmo modelo/fonte, lib antiga): 4096 tokens, 209.6s,
+    saida degenerada repetindo uma frase CJK. A patologia sumiu.
+
+B3. BATERIA Q8_0 NO APP: NAO CONCLUIDA — E O MOTIVO ESTA' DOCUMENTADO
+    Nao tenho matriz 4x3 do Q8 no app. Motivo esta' em D3 (selecao de modelo
+    por UI nao e' confiavel; texto longo nao entra). Nao vou apresentar
+    2/12 como "bateria parcial aprovada".
+
+B4. QUALIDADE DA TRADUCAO (unico caso medido no app com a lib nova)
+    Saida: "Em 14 de setembro de 2026, a inspetora Helen Ward recebeu três
+    caixas seladas as 08:35. Ela registrou a massa total das caixas como
+    12,5 kg, mas nao as abriu. Por favor, envie o recibo para Daniel Costa
+    antes das 17:00 de amanha. Se o selo estiver danificado, nao mova as
+    caixas; ligue primeiro para o supervisor. O supervisor disse que a
+    aprovacao ainda estava em processo, e nao que o transporte ja havia
+    sido autorizado."
+    Fatos da fonte preservados: data (14/09/2026), 08:35, 12,5 kg, 17:00,
+    negacoes ("nao as abriu", "nao mova"), agente ("O supervisor disse"), e
+    a distincao critica "a aprovacao ainda estava em processo, e nao que o
+    transporte ja havia sido autorizado". Um (1) caso — nao e' prova de
+    qualidade geral.
+
+=====================================================================
+C. O QUE MUDOU NO CODIGO (exatamente)
+C1. app/src/main/cpp/llama-jni/llama_jni.cpp (+13 linhas): bloco de reset
+    no inicio de generate, sob g_mutex; erro "Contexto sem memoria para
+    novo pedido."; helper em llama-jni/hymt2_request_reset.h.
+C2. app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/dequant_funcs.glsl
+    (caminho VEC): helper sig_s8(uint u) = (u & 0xFF) e, se >=128, u-256;
+    aplicado em dequantize e dequantize4 do Q8_0.
+C3. app/src/main/cpp/llama/ggml/src/ggml-vulkan/vulkan-shaders/mul_mm_funcs.glsl
+    (caminho MM): helper local sig_mm_s8 (o shader do mm nao inclui
+    dequant_funcs.glsl); aplicado no branch DATA_A_Q8_0 de load_a_to_shmem.
+C4. NADA MAIS foi alterado: backend padrao, pesos, template, sampler,
+    EOG, limite de saida, gates, OpenCL, Whisper, NPU — intocados.
+    Um APK debug novo foi gerado (sig-v9-debug.apk) porque o APK instalado
+    (1.506/vc69) foi compilado com COMPONENT_VERSION="8" e lia a pasta
+    8-arm64-v8a; o codigo do repo diz "9". O APK novo faz o app ler a pasta
+    9, onde a lib corrigida esta.
+
+C5. A LIB DE PRODUTO
+    sha256 9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53
+    95613928 bytes | ELF64 AArch64 DYN | NEEDED identicos a anterior
+    (libandroid/liblog/libvulkan/libm/libdl/libc) | 3 entry points JNI
+    (generate/loadModel/releaseModel) definidos | gate nativo do artefato
+    8/8. Instalada em 9-arm64-v8a com backup da anterior e readback do
+    hash no destino. Rollbacks preservados (172c662a..., 2a89c065..., e o
+    v9 original 31f6df15...).
+    ESTADO FINAL DO APARELHO (02/10, apos tudo):
+      9-arm64-v8a/lib = 9698670c... (a lib corrigida — a que o app usa)
+      8-arm64-v8a/lib = 2a89c065... (intocada; nao e' mais lida)
+      APK: versionCode 69 / 1.506 (o APK debug novo, COMPONENT_VERSION=9)
+      prefs: backend VULKAN, threads 6, idioma Português (como estava)
+
+=====================================================================
+D. LIMITES E ERROS MEUS (leia antes de confiar em qualquer medida futura)
+D1. "FUNCIONOU" QUE EU ANUNCIEI E ERA LEITURA DE TELA VELHA.
+    Atras do primeiro deploy, eu vi status "Traducao pronta em 3.3s" e uma
+    saida boa e anuncie que o Q8 estava corrigido. Era conteudo ANTIGO na
+    tela: o log dizia "Modelo: Q4_K_M" e "Texto recebido (96 caracteres)" —
+    nao o Q8_0 com 409 chars que eu acabava de digitar. DOIS erros meus:
+    (a) li a UI sem verificar frescor; (b) nao conferi qual pasta o
+    processo carregava antes de concluir. A VACINA que criei depois
+    (maps + igualdade da fonte + log crescendo) e' a que usei dali em
+    diante. Nenhum resultado anterior a isso deve ser considerado prova.
+D2. O DEPLOY FOI FEITO NA PASTA ERRADA (9) E O APP LIA A PASTA 8.
+    A autorizacao de deploy (autorizada) cobria 9-arm64-v8a; o APK
+    instalado usava 8-arm64-v8a. Corrigido com APK novo (mesma assinatura,
+    install -r preservou dados). O arquivo em 8 era de outro UID e
+    nao podia ser sobrescrito via run-as.
+D3. INSTRUMENTO DE UI: o que NAO da para automatizar neste aparelho/build.
+    MEDICAO DIRETA (teste de entrada, 4 tamanhos, campo lido do aparelho):
+      curto  409 chars -> campo ficou com 199 chars (ok=False) em 439 s
+      medio  952 chars -> campo ficou com 0   chars (ok=False) em  43 s
+      longo 2335 chars -> campo ficou com 0   chars (ok=False) em  45 s
+      (o 4o, 4924 chars, foi abortado por timeout do wrapper)
+    PADRAO REPRODUZIDO em dezenas de tentativas (log da bateria Q4, que
+    aplicou config corretamente — Q4_K_M/Vulkan — e falhou SO no texto):
+      "corrompido em 600/409" | "corrompido em 600/952" | "corrompido em
+      1600/4924" | "sem progresso: parou em 199/409" | "sem progresso: parou
+      em 0/4924"
+    LEITURA: o `input text` aceita ate ~600 chars por chamada (acima disso
+    reescreve/duplica) e, no maximo, ~199 chars sobrevivem quando ha
+    tentativas sucessivas. Ou seja: o campo nao cresce de forma confiavel
+    em NENHUM tamanho — nem no curto de 409. Sem o toque previo no campo,
+    nada entra (o texto vai para o lado). Nao ha correcao pelo lado do
+    script.
+    - O campo aceita texto por Intent (EXTRA_TEXT/extra_texto) mas SO via
+      onNewIntent (Activity ja aberta); e o shell tem limite de argv, que
+      impediu o texto de 409+ chars por essa via.
+    - O PopupMenu do seletor de modelo ABRE com input tap, mas o
+      uiautomator dump nao expoe os itens do popup e o toque shell dentro
+      do popup e' inconsistente. Logo: **nao consigo trocar o modelo do
+      app por UI de forma confiavel**. O app tambem NAO persiste o modelo
+      (selectedModel = models.first() -> sempre abre em Q4_K_M).
+      CONSEQUENCIA: nem a bateria Q8_0 nem a Q4_K_M com texto longo sao
+      automatizaveis com este instrumento. O que ficou automatizado e'
+      (a) o KERNEL (mulmm_probe com o tensor real do GGUF, 5 tamanhos de
+      n_rows, bytes256, controles) e (b) UM caso de app no texto curto
+      (409 chars) — suficiente para provar que a lib entra no processo e
+      traduz. Matriz 4x3 no app exigiria rota confiavel de selecao de modelo
+      E de insercao de texto (persistir modelo / Intent seguro) ou execucao
+      assistida; NAO fiz nenhuma dessas alteracoes (sao mudancas de
+      produto sem necessidade provada). E NAO se deve ler "2/12" como
+      bateria parcial aprovada: os 2 casos com prova sao Q8 curto; o resto
+      falhou por instrumento, nao por defeito.
+D4. DUAS ARMADILHAS DE BUILD QUE QUASE DERAM FALSO VERDE (registradas
+    como lição permanente na skill de tooling):
+    - Editar um .glsl NAO dispara a regeneracao no ninja (depfile nao
+      rastreia o include) — o rebuild "passava" com o binario VELHO. A
+      verificacao correta e' conferir que o SHA DO ARTEFATO MUDOU antes de
+      confiar no teste; e ha agora um teste permanente
+      (native-dependencies/harness/check_shader_dep.sh) que FAILS se o
+      build ficar stale.
+    - Eu primeiro patchei o arquivo ERRADO (mul_mat_vecq_funcs.glsl, que
+      nao participa do caminho Q8); so percebi quando o sha nao mudou
+      duas vezes. O caminho real e' mul_mat_vec.comp -> dequant_funcs.glsl.
+D5. VACINAS DO INSTRUMENTO QUE EXISTEM (e o que cada uma protege):
+    - reinicia o app por caso (contexto novo real);
+    - focar_texto() antes de cada toque (um toque abriu outro app uma vez);
+    - selecao de modelo/backend por item do popup + confirmacao de
+      rotulo + fechar popup antes de cada acao;
+    - fonte conferida por IGUALDADE (hint do EditText descartado);
+    - log como linha de base + "fresco" (cresceu OU tem marcador OU saida
+      nao-vazia);
+    - pasta da lib conferida no /proc/PID/maps antes de marcar ok.
+
+=====================================================================
+E. PEDIDOS AO ESPECIALISTA (o que ainda e' util)
+E1. Julgar se vale a pena uma ROTA DE SELECAO DE MODELO no app (persistir o
+    modelo escolhido ou um Intent seguro) — hoje ela bloqueia a bateria
+    Q8 (e a Q4) por texto longo no app, e e' a unica barreira de automacao
+    que sobrou. Em concreto: se o texto viesse por Intent seguro (sem
+    limite de argv) e o modelo fosse persistido/exposto, a matriz 4x3
+    fecharia sem nenhum outro obstaculo tecnico.
+E2. Se o resíduo de ~0.6% (acumulação fp16 no caminho MM) justifica uma
+    decisao de produto (f32acc para Q8) ou se o nivel dos controles Q4 e'
+    aceitavel como esta. Nao mudei nada nisso.
+E3. Se ha interesse em transformar o mulmm_probe + os canarios em um
+    teste permanente no CI/repositorio (hoje ele vive em
+    native-dependencies/harness, executado manualmente no aparelho).
+
+=====================================================================
+ARQUIVOS DE EVIDENCIA (SHA no manifesto do relatorio anterior)
+  - logs-hymt2-contexto-rodada1/: mulmm_probe_v3_canary.txt (bytes256),
+    prec_causal_mm.txt (controle F32ACC vs f16acc), mulmm_probe_v3dbg.txt
+    (dispatch observado + canarios), patch_dequant_green.txt e
+    patch_mm_green.txt (RED/GREEN por caminho), gate_lib_produto.txt (8/8),
+    check_shader_dep.txt (build stale PASS), instalacao_apk_v9.txt,
+    deploy_9698670c.txt (hash/readback), lib_produto_build.txt, runtime_reset.txt
+    (8/8 do reset), MANIFESTO.json (SHA-256 completo de tudo).
+  - Fontes: mulmm_probe_v3.cpp (canarios/bytes256/prec/replay FP16),
+    hym_ui.py + texto_entrada.py + bateria_*.py (instrumento, com as
+    discoveries acima), check_shader_dep.sh, gate_lib_produto.cpp.
+
+=====================================================================
+ESTADO HONESTO EM UMA LINHA: o bug de signedness do Q8_0 no Vulkan foi
+localizado, corrigido e provado no kernel E no app (um caso); a bateria
+Q8 4x3 no app NAO foi feita porque a selecao de modelo por UI nao e'
+confiavel neste aparelho — e isso e' limite de instrumento, nao do produto.

@@ -1,0 +1,92 @@
+SCRIPTS DE REPRODUCAO — Hy-MT-2 1.8B no Vulkan (Adreno 840)
+================================================================================
+
+Todos os scripts estao em:
+  C:\Users\Gustavo\AppData\Local\Temp\
+
+Para levar junto com o relatorio, copie-os para uma pasta e ajuste ADB/SERIAL.
+
+--------------------------------------------------------------------------------
+1. CONVERSAO DO MODELO F16 (condicao 1 do especialista)
+--------------------------------------------------------------------------------
+  baixar_f16.py       baixa tencent/Hy-MT2-1.8B/model.safetensors (BF16, 4,08 GB)
+                      e confere o tamanho byte a byte
+  converter_f16.sh    converte BF16 -> GGUF F16 usando o conversor da revisao
+                      95887577 (o do fork SIG esta desatualizado: importa o
+                      pacote 'conversion' que o fork nao tem)
+  validar_f16.py      CONDICAO 2 — procura Inf/NaN, compara massa nao-nula e
+                      max|x| entre BF16 e F16. Saida esperada:
+                        BF16: Inf=0 NaN=0 max|x|=3,32812
+                        F16:  Inf=0 NaN=0 max|x|=3,32812  ratio 1,000000
+                        VEREDITO: CONVERSAO OK
+
+  Requer: pip install torch (cpu) gguf safetensors numpy transformers
+
+--------------------------------------------------------------------------------
+2. CAPTURA DO TEXTO QUE O BACKEND PRODUZ (o dado que faltava)
+--------------------------------------------------------------------------------
+  exp0b_vulkan.py     roda UMA traducao e SALVA o texto (botao SALVAR).
+                      Coordenadas dos botoes medidas no dump real:
+                        button_model     (223, 409)
+                        button_backend   (512, 409)
+                        button_threads   (982, 409)
+                        button_translate (636, 960)
+                        button_save      (792, 1407)
+                      CONFIRMA o backend por dump antes de traduzir, porque o
+                      logcat pode relatar o estado de uma carga anterior.
+  exp0c_distribuicao.py 5    repete 5x e mostra a distribuicao.
+
+  Saida observada (Q4_K_M, Vulkan, 6 threads, mesmo texto):
+    6 tokens  -> '6" no more than'
+    7 tokens  -> 'CFR 4" not even'
+    12 tokens -> '4 you no one more than any other than'
+    4096      -> (nao grava: loop ate o limite)
+    4096      -> (nao grava: loop ate o limite)
+
+--------------------------------------------------------------------------------
+3. MATRIZ E AUDITORIA
+--------------------------------------------------------------------------------
+  matriz_full.py      bateria completa (backend x threads x tamanho).
+                      ATENCAO: a funcao sh() tem guarda de queda — se o
+                      aparelho desconectar, marca offline por 90 s em vez de
+                      ficar pendurado no timeout inteiro.
+  auditar_doc.py      confere CADA numero do relatorio contra a linha de log
+                      que o sustenta. Foi construido depois do erro de
+                      amostragem (reportou 14 amostras, a tabela somava 22).
+  gerar_matriz_csv.py gera a matriz de experimentos em CSV + manifesto com
+                      hashes. Nao transcreve numero a mao.
+
+--------------------------------------------------------------------------------
+4. EXP-1 — F16 NO CPU E NO VULKAN (condicao 3 do especialista)
+--------------------------------------------------------------------------------
+  exp1_f16_run.py [CPU] [Vulkan]
+      Se F16 falhar na CPU: o problema e' a conversao, parar aqui.
+      Se F16 funcionar no Vulkan: o defeito e' do caminho de quantizacao.
+      Se F16 falhar no Vulkan tambem: problema geral do backend/sincronizacao.
+
+--------------------------------------------------------------------------------
+5. REQUISITOS PARA REPRODUZIR NO APARELHO
+--------------------------------------------------------------------------------
+  - Hy-MT2-1.8B-Q4_K_M.gguf em
+      /sdcard/Android/data/br.gov.sp.pcsp.launcher/files/hymt2_models/
+  - APK com o patch: SIG_VULKAN_NO_CRASH=1 e o probe SIGVK
+    (o probe imprime no logcat, na carga do backend:
+       SIGVK features: dotproduct=1 ... subgroup_size=64
+       SIGVK dotprop:  4x8signed=0 ... (7 propriedades, todas 0)
+       SIGVK caps:     int_dot_final=0 ...)
+  - O F16 e' DIAGNOSTICO, nao produto: entra no menu so se existir
+    Hy-MT2-1.8B-f16.gguf E o arquivo-sinal hymt2_f16.habilitar no mesmo
+    diretorio. Apague o .habilitar para tirar do menu.
+
+--------------------------------------------------------------------------------
+6. CUIDADOS QUE CUSTARAM TEMPO (para quem for repetir)
+--------------------------------------------------------------------------------
+  - o logcat MENTE sobre o backend: ele pode relatar a execucao anterior.
+    SEMPRE confirmar por dump de tela que o backend esta aplicado.
+  - botao SALVAR em y=1407 (nao 1268: essa era a coordenada de outra tela).
+  - o texto do Vulkan so e' capturado se a Activity nao fechar antes; nas
+    execucoes de 4.096 tokens o arquivo nao e' gravado (a Activity fecha).
+  - adb via Tailscale cai sem aviso (EOF / device offline / 10061). Se
+    qualquer um aparecer, o aparelho precisa reabrir o wireless debugging e
+    a PORTA muda.
+  - `adb push` de GB pela rede e' lento e morre: 3,59 GB a ~4 MB/s = ~15 min.

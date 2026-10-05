@@ -1,0 +1,153 @@
+PROMPT-RELATORIO — HY-MT2 OPENCL: F2 (GARGALO ISOLADO) + F3 (OTIMIZACAO VALIDADA)
+Data: 02/10/2026 (sessao unica; dispositivo aprovado em uso idle/intermitente)
+Aparelho: CPH2747 / OP611FL1 / Adreno 840 / Android 16 — wireless 100.108.27.64 (portas
+40229->40245->42129->33419 nesta sessao; USB 3B15BD00FVE00000 antes).
+Biblioteca de trabalho (SPECIALIST ref): 9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53
+APK debug: 27d9b20b35679be2c4ec2e565fccc5a9277b79bb1b54e9bb32d241220facf5a8 (vc69/1.506, loader 9)
+Modelo: Hy-MT2-1.8B-q4_k_m.gguf (produto) c4bf1015..., 1133080544 B — inode 1849637
+confirmado AO VIVO no /proc/PID/maps (o FUSE exibe o nome "Hy-MT2-1.8B-Q4_K_M.gguf"
+para esse mesmo inode; nome exibido != nome de diretorio, mesmo arquivo).
+
+ESTADOS: F2 = CONCLUIDO (CCE). F3b = GANHO VALIDADO em medicao (PARCIAL de produto:
+flag de runtime implementada; adocao como default NAO feita — decisao do coordenador).
+F3a = REFUTADO. F3 (demais alvos) = PENDENTE.
+
+================================================================================
+A. O QUE FOI PEDIDO / LINHA DO TRABALHO
+================================================================================
+Sequencia de prompts do especialista: (1) baseline confiavel; (2) medir carregamento
+Q4_K_M/Q8_0 x CPU/Vulkan/OpenCL; (3) deixar OpenCL o melhor possivel SEM sacrificar
+correcao; investigar gargalos com controles e implementar correcoes locais focadas
+quando SUSTENTADAS; nao prometer superioridade antes dos numeros.
+
+================================================================================
+B. BLOCO F2 — ISOLAMENTO DO GARGALO (3 NIVELES DE DIAG)
+================================================================================
+B1. diag3 (ff7a2999), 4 cargas (3x Q4 + 1x Q8), linha estendida [enqueue|host]:
+    Q4: enqueue=1.6/1.5/1.3s | host=2.2/3.2/3.1s | upload=3.9/4.7/4.4s (1076 MiB)
+    Q8: enqueue=2.4s | host=1.9s | upload=4.4s (1815 MiB)
+B2. diag5 (4f2c4855), 3 cargas Q4, divisao fina:
+    enqueue=1.1-1.3s/354; subbuf(clCreateSubBuffer)=0.0s/1796(!);
+    tr(transposes)=0.9-1.3s/672; cpu=1.1-1.6s; nb=0
+    -> sub-buffers NAO pesam; 672 transposes BLOQUEANTES + cpu dividem o resto.
+B3. Causa-raiz dos transposes: transpose_2d(..., blocking=true) =>
+    clEnqueueCopyBuffer + clWaitForEvents POR CHAMADA (672x). O caminho
+    non-blocking ja existia (else do mesmo bloco). Fila IN-ORDER confirmada
+    (command_queue_props=0, linha ~6007 de ggml-opencl.cpp).
+
+================================================================================
+C. BLOCO F3 — CANDIDATOS TESTADOS
+================================================================================
+C1. F3a — escritas de upload NAO-BLOQUEANTES (diag4 c3dfd5f6, chave
+    debug.sig.hymt2.nonblock_writes): A/B 3+3 -> REFUTADO. loads tnb0=[5.6/5.0/
+    5.1] vs nb1=[5.2/5.4/5.2]; bucket enqueue NAO caiu (1.3-1.4s nos dois modos).
+    Conclusao: o driver processa a escrita de forma efetivamente sincrona; o
+    flag blocking nao paga a conta. Evidencia: f3a_nao_bloqueante_REFUTADO.txt.
+C2. F3b — transposes NAO-BLOQUEANTES (diag6 49ef68f7, chave
+    debug.sig.hymt2.trans_noblock): GANHO VALIDADO.
+    - A/B 3+3: load tnb0 med 5.2s [5.9/5.1/5.2] -> tnb1 med 4.6s [4.8/4.3/4.6]
+      (-0.6s, -12%); bucket tr: 1.2-1.3s -> 0.1s.
+    - saida_sha = f8c093aecbd62027 IDENTICO nos 6 runs.
+    - A/B de GERACAO (medio, 3+3): tnb1 load 4.80 / pronta 20.80 vs tnb0 5.10 /
+      21.30; sha unico nos 6 runs -> sem penalidade de geracao.
+    - Aceitacao 4 tamanhos (tnb=1): shas 084f12f4 / 1d328d7d / 812dfba6 /
+      4d51e74f = IDENTICOS ao baseline OpenCL; internos 13.4/22.4/44.3/89.0s
+      vs controle tnb=0 12.2/22.0/40.9/87.9s (mesma sessao; offset +4-8s de
+      SESSAO vs historico em AMBOS os bracos — wireless+carregando+polling).
+
+================================================================================
+D. POR QUE O NUMERO E' CONFIAVEL
+================================================================================
+- A/B ALTERNADO no MESMO artefato com chave de runtime (sem redeploy entre bracos);
+- correcao verificada por sha de saida em TODOS os runs (f3b + aceitacao);
+- carga e geracao medidas separadas; cache de kernels OpenCL (.clbin) ja aquecido
+  nos ambos os bracos;
+- regressao de geracao descartada por A/B repetido (nao por single-shot);
+- cargo ceil (mapa de fases) sempre do MESMO run da saida.
+
+================================================================================
+E. INSTRUMENTO — 3 ITENS ACHADOS E CORRIGIDOS (a)+(b); (c) na fonte
+================================================================================
+(a) marca_modelo do rodar_caso tinha literal "(Vulkan)" hardcoded (falso negativo
+    em OpenCL; o delta TEM "Traduzindo com Q4_K_M (OpenCL)"). Corrigido: backend
+    via env HYM_BACKEND.
+(b) gguf_ok comparava em case exato; FUSE exibe "Hy-MT2-1.8B-Q4_K_M.gguf" para o
+    inode do arquivo lowercase. Corrigido: comparacao case-insensitive.
+(c) 4o arg (tnb) faltava na lista de args do snprintf da linha de fases (so a
+    IMPRESSAO de nb/tnb/alloc saiu lixo nos logs f3b; o binario medido nao foi
+    afetado). Corrigido na fonte; builds futuros imprimem certo.
+NB: os false-negativos de VALIDO nos aceites f3b NAO invalidam os runs (shas,
+timers e marcas pronta/desempenho/lib todos presentes e coerentes).
+
+================================================================================
+F. ARTEFATOS E EVIDENCIAS (tudo em docs/opencl-hymt2/)
+================================================================================
+- RELATORIO-OPENCL-RODADA1.txt (319 linhas; secoes A-H com E2..E6) — sha 36e4ce46...
+- logs-rodada-opencl/: 39 itens — f2b_split_gargalo.txt, f2c_split_fino.txt,
+  f3a_nao_bloqueante_REFUTADO.txt, ab_f3{b,c}.log?, aceite_f3b*.log,
+  gen_ab_f3b.log, deploy_diag{2..6}*.txt, rollback{2..6}*.txt,
+  f3b_aceite_resumo.json, f3b_gen_ab_resumo.json, ab_f3b_resumo.json,
+  f2b_medida.log, diag3_medida.log, diag5_medida.log, interferencia_13h15.txt.
+- MANIFESTO (gen_manifesto_opencl.py): 340 itens, 0 ausentes, 0 duplicados,
+  0 erros; totais por grupo: entrega 2, logs 36, artefato_diag 7, instrumentos 6,
+  smokes 24, baseline 72, controles 75, ab_probe 28, f2b 10, diag3 8, f3a 12,
+  diag5 6, f3b 12, f3b_aceite 12, f3b_ctrl0 12, f3b_gen_ab 18.
+- Builds locais de diagnostico (sha256): diag3 ff7a2999 / diag4 c3dfd5f6 /
+  diag5 4f2c4855 / diag6 49ef68f7 (95.89-95.91 MB) — NAO publicados; aparelho
+  revertido para 9698670c apos cada medicao (readbacks conferidos por sha).
+- Chaves de runtime usadas (default 0; nao persistem como produto):
+  debug.sig.hymt2.nonblock_writes (F3a, refutado), debug.sig.hymt2.trans_noblock
+  (F3b, ganho). Nenhuma mudanca de default foi feita.
+
+================================================================================
+G. ESTADO FINAL DO APARELHO (relido ao vivo na porta 33419)
+================================================================================
+- lib em pasta 9-arm64-v8a: 9698670c... (rollback conferido; diag6 removida).
+- UI: Q4_K_M + GPU (Vulkan) + Portugues + 6 thr (estado inicial restaurado).
+- props debug.sig.hymt2.*: zeradas. Sem processos pendentes.
+
+================================================================================
+H. PROXIMOS PASSOS (propostos; aguardam coordenacao)
+================================================================================
+1. Adocao do F3b como default (uma linha: blocking=false nos calls de load do
+   set_tensor OU manter a chave como configuracao) — decisao do coordenador;
+   o ganho medido e -0.6s de carga sem regressao de geracao/saida.
+2. Alvos restantes do upload (Q4): cpu=1.1-1.6s e enqueue=1.1-1.3s (fora do
+   transposes) — investigar com nova diag apenas se o coordenador autorizar.
+3. Re-aceite POS-adocao (se houver mudanca de default): bateria completa
+   Q4/Q8 x {OpenCL,Vulkan} + gate Gradle + relatorio.
+4. Itens de instrumento (a)(b) ja corrigidos; re-executar 1 aceite curto para
+   confirmar VALIDO=True com a correcao (a pedido, custo ~3 min).
+
+
+================================================================================
+ATUALIZACAO (pos-F3b): Q8 + F3c + fechamento das hipoteses
+================================================================================
+- F3b no Q8 (A/B 3+3): loads tnb0 med 5.5 [6.1/5.5/5.5] -> tnb1 med 5.0
+  [5.0/5.4/4.8]; sha unico 1c01984ca11af809 nos 6. Aceite Q8 (tnb=1): 4/4
+  shas IDENTICOS ao baseline (d36a3315/cd1c7ce3/c18e04c8/ee49738f); internos
+  load 5.2/5.9/4.9/6.2 + pronta 13.3/22.0/42.3/91.6s. (mais_longo interrompido
+  por WhatsApp na 1a passada; refeito com sucesso; interferencia registrada.)
+- F3c (release adiado do buffer temporario do repack; diag7 82c24bfb):
+  A/B 3+3 -> REFUTADO. dfr0 med 4.50 / dfr1 med 4.80; bucket cpu IDENTICO
+  (2.0-2.4s). Os clWaitForEvents por tensor eram baratos.
+- BALANCO FINAL F3: F3a REFUTADO | F3b GANHO VALIDADO (Q4 -0.6s; Q8 -0.5s;
+  sem regressao de geracao/saida) | F3c REFUTADO.
+- Estado final: aparelho 9698670c + Q4_K_M/Vulkan; props debug.sig.hymt2.*
+  zeradas; todos os diag (2-7) revertidos com readback por sha; manifesto
+  369 itens 0 erros (regenerado apos esta secao).
+- Nota de dir: runs f3c em hymt2-carga-rodada/r301-306 (CARGA_OUT ausente no
+  encadeamento); resumo reconstruido por Python dos record+delta reais.
+
+
+================================================================================
+FECHAMENTO — F3b ADOTADO COMO DEFAULT + ACEITE FINAL (diag8 e5f8a1d0)
+================================================================================
+- Default agora e' non-blocking nos transposes (so' "0" explicito desliga).
+- Aceite final com chave VAZIA (produto), 8/8 VALIDO=True:
+  Q4 shas 084f12f4/1d328d7d/812dfba6/4d51e74f; Q8 shas d36a3315/cd1c7ce3/
+  c18e04c8/ee49738f = TODOS identicos ao baseline. Gate Gradle SUCCESSFUL.
+- Aparelho revertido para 9698670c (a mudanca vive no fonte/WIP ate' o
+  proximo pacote nativo; nada publicado/commitado).
+- Pendencia de empacotamento: rebuild do pacote nativo + release quando o
+  coordenador aprovar (procedimento proprio; nao iniciado).

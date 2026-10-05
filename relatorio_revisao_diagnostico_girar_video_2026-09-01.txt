@@ -1,0 +1,227 @@
+================================================================================
+RELATORIO - REVISAO DE DIAGNOSTICO: FALHAS NA FERRAMENTA GIRAR VIDEO (SIG Android)
+================================================================================
+Projeto: D:\Projetos\SIG
+Ferramenta: Girar Video (FfmpegRotateVideoActivity)
+Data: 2026-09-01
+Tipo: Revisao de diagnostico - NENHUM ARQUIVO DO PROJETO FOI MODIFICADO
+Diagnostico revisado: emitido por outro agente em 2026-09-01
+Metodo: verificacao linha a linha do codigo + teste EMPIRICO com FFmpeg 8.0
+no Windows (comandos exatos do app) + leitura do CODIGO-FONTE do FFmpeg n6.0
+(o mesmo do ffmpeg-kit embarcado no app, libavformat 60.3.100)
+
+================================================================================
+(1) RESUMO DO VEREDITO
+================================================================================
+PROBLEMA 1 (encoders h264/hevc_mediacodec falham no reencode):
+  CONCORDO com o diagnostico: e o MESMO bug do Corte - o ramo hardware de
+  encodingFor() (FfmpegVideoQuality.kt:75-78) envia apenas "-c:v <nome>" sem
+  parametros defensivos; o MediaCodec rejeita na inicializacao. O fix proposto
+  (-pix_fmt yuv420p -bf 0 -g 30) e correto e beneficia as tres ferramentas.
+  Porem o diagnostico contem 2 ERROS DE FATO (paralelismo e multiplos de 16),
+  corrigidos no item (3).
+
+PROBLEMA 2 (girar com metadados nao gira o video):
+  O diagnostico ERROU NA CAUSA e NAS DUAS OPCOES DE FIX PROPOSTAS:
+  (a) A H1 ("muxer mov do FFmpeg 6.0 nao propaga -display_rotation em
+      stream-copy") e REFUTADA por codigo-fonte do n6.0 E por teste empirico:
+      o comando EXATO do app GRAVA a displaymatrix no moov atom.
+  (b) A OPCAO A (-vf displaymatrix + -c copy) e IMPOSSIVEL: o FFmpeg aborta
+      com "Filtering and streamcopy cannot be used together".
+  (c) A OPCAO C (-metadata:s:v:0 rotate=90) NAO GRAVA NADA no muxer mov
+      (testado: nem tags arbitrias de stream sao gravadas).
+  (d) A "evidencia" do usuario (ffprobe padrao sem tag) e FALSO NEGATIVO por
+      construcao: o resumo padrao do ffprobe NUNCA exibe side data, mesmo
+      quando a displaymatrix existe no arquivo.
+  Conclusao: o codigo do app para o modo metadados esta CORRETO e
+  provavelmente ja grava a rotacao. Falta fechar o diagnostico visual no
+  device (verificacoes no item 5). NAO ha fix a fazer no codigo antes disso.
+
+================================================================================
+(2) EVIDENCIAS EMPIRICAS (testes executados com ffmpeg 8.0 no Windows)
+================================================================================
+Arquivo de teste: 1920x1080, 16 fps, H.264, 1002 kb/s, AAC (espelha o MP4
+do usuario: audiencia_143664636_1_V.mp4).
+
+TESTE A - comando EXATO do modo metadados do app (90 graus):
+  ffmpeg -y -display_rotation:v:0 90 -i test_in.mp4 -map 0 -c copy saida.mp4
+  Resultado: ffmpeg -v info ao reler o arquivo mostra
+  "displaymatrix: rotation of 90.00 degrees" -> MATRIZ GRAVADA no moov.
+
+TESTE E - angulo real que o app envia (pedido de 90 graus sentido horario):
+  o app calcula metadataRotationAfterClockwiseRequest(0, 90) = -90 e envia
+  -display_rotation:v:0 -90. Resultado: matrix "rotation of -90.00 degrees"
+  gravada (-90 CCW = 90 CW visual) -> calculo do angulo CORRETO.
+
+TESTE M - mesma opcao com saida MKV: matrix tambem gravada.
+
+TESTE I - ffprobe PADRAO (o mesmo formato que o usuario rodou no termux)
+  sobre um arquivo QUE TEM displaymatrix: NAO EXIBE NADA de rotacao.
+  Confirma que o ffprobe do usuario nao prova ausencia de rotacao.
+
+TESTE J - OPCAO A do diagnostico (-vf "displaymatrix=..." + -c copy):
+  ERRO DO FFMPEG: "Filtergraph 'displaymatrix=...' was specified, but codec
+  copy was selected. Filtering and streamcopy cannot be used together."
+  -> a opcao A proposta e IMPOSSIVEL como descrita.
+
+TESTE L/N - OPCAO C do diagnostico (-metadata:s:v:0 rotate=90):
+  o arquivo de saida fica SEM tag rotate E SEM matrix. Teste controle com
+  -metadata:s:v:0 title=x tambem nao grava nada nos streams do MP4 (o
+  muxer mov so grava tags globais; tags de stream sao ignoradas).
+  -> a opcao C NAO FUNCIONA no muxer mov.
+
+================================================================================
+(3) PROBLEMA 1 - CONFIRMACAO E CORRECOES AO DIAGNOSTICO
+================================================================================
+CONFIRMADO (mesma causa do Corte):
+  - Comando da imagem bate com buildFfmpegArguments (FfmpegRotateVideoActivity
+    .kt:1338-1355): -noautorotate -display_rotation:v:0 0 + -vf transpose=1
+    + maps + -c copy + -c:v h264_mediacodec -b:v 1002K.
+  - videoEncodingArguments (:1301-1306) chama encodingFor (FfmpegVideoQuality
+    .kt:41-79): hardware envia SO "-c:v <nome>"; libx264 envia
+    "-preset ultrafast -crf N" e funciona.
+  - "Girando video - 0% (h264)" + "Conversion failed!" = falha imediata em
+    mediacodec_enc_init()/MediaCodec.configure(), antes do 1o frame.
+  - Fix: mesmo pacote do Corte (-pix_fmt yuv420p -bf 0 -g <fps>) resolve
+    Cortar, Girar e Juntar (beneficio sistemico, 1 so teste).
+
+ERRO 1 DO DIAGNOSTICO - paralelismo:
+  "canUseParallel exige !metadataOnly (linha 534), ou seja, o caminho com
+  hardware encoder NAO entra no modo paralelo" -> FALSO.
+  canUseParallel (:534) = !hasTrim && !metadataOnly && requestedParallel &&
+  orderedFilters.isNotBlank(). NAO depende do encoder: com a checkbox
+  "paralelismo" marcada, o caminho hardware TENTA o paralelo
+  (executeParallelKeyframeRotation :786+; cada worker usa o MESMO encoder e
+  falha na inicializacao). O usuario testou sem paralelismo (single-session,
+  :656-676) e falhou igual. A conclusao final do diagnostico (nao e race nem
+  propagacao entre workers; a falha e da inicializacao do encoder) esta
+  CORRETA, mas a justificativa esta errada. Resposta a pergunta 4 do usuario:
+  propagacao de erro entre workers NAO e a causa.
+
+ERRO 2 DO DIAGNOSTICO - multiplos de 16:
+  "1080 e multiplo de 16, mas 1920 NAO e" -> INVERTIDO. 1920 = 16 x 120
+  (e multiplo); 1080 = 16 x 67,5 (NAO e). Ambos sao pares (suficiente para
+  yuv420p). A tese geral (alguns encoders MediaCodec sao chatos com
+  dimensoes apos transpose) permanece plausivel, mas o argumento especifico
+  e falso. Resposta a pergunta 3 do usuario: formato de pixel/resolucao sao
+  FATOR CONTRIBUINTE, mas NAO o gatilho primario - o mesmo encoder falha no
+  CORTE sem transpose, mantendo a resolucao original.
+
+RESPOSTAS AS PERGUNTAS DO USUARIO (problema 1):
+  1. Inicializacao do encoder: SIM, e a causa (configure() rejeita).
+  2. Ordem do filtro de rotacao: NAO e a causa. -noautorotate +
+     -display_rotation:v:0 0 + -vf transpose=1 esta correto; o transpose
+     funciona com libx264 (prova que o filtro/ordem nao quebram).
+  3. Formato de pixel/resolucao: contribuinte secundario (ver erro 2).
+  4. Propagacao de erro entre workers: NAO e a causa.
+
+================================================================================
+(4) PROBLEMA 2 - O CODIGO ESTA CERTO; A EVIDENCIA DO USUARIO E INSUFICIENTE
+================================================================================
+4.1 - O QUE O APP FAZ (FfmpegMediaPolicies.metadataRotationCopyArguments
+      :106-119, chamado de buildFfmpegArguments :1323-1331):
+      ffmpeg -y -display_rotation:v:0 <N> -i <in> -map 0 -c copy <out>
+
+4.2 - POR QUE ISSO GRAVA A ROTACAO (codigo-fonte FFmpeg n6.0, o MESMO do
+      ffmpeg-kit embarcado - Lavf60.3.100):
+      a) fftools/ffmpeg_demux.c:566-577: -display_rotation cria o side data
+         AV_PKT_DATA_DISPLAYMATRIX no stream de entrada.
+      b) fftools/ffmpeg.c:2925-2949: o side data e copiado para o stream de
+         saida (funciona com -c copy; FFMPEG_ROTATION_METADATA=1 em
+         fftools/ffmpeg.h:56).
+      c) libavformat/movenc.c:3277-3305 (mov_write_tkhd_tag): a matrix e
+         escrita no atom tkhd do MP4 - EXATAMENTE onde o Android
+         MediaPlayer/MediaMetadataRetriever e os players padrao leem.
+      d) Teste empirico (8.0) confirma o comportamento ponta a ponta (A/E/M).
+
+4.3 - POR QUE O FFPROBE DO USUARIO NAO MOSTROU NADA:
+      O comando "ffprobe arquivo.mp4" exibe um RESUMO que nao inclui
+      side data. Teste I: um arquivo COMPROVADAMENTE com displaymatrix
+      exibido com o mesmo formato nao mostra rotacao nenhuma. O ffprobe do
+      termux (8.1.1) dele prova apenas que o arquivo passou pelo app
+      (Lavf60.3.100) e que o bitrate/resolucao foram preservados - NAO
+      prova ausencia de rotacao.
+
+4.4 - O QUE ISSO SIGNIFICA PARA O SINTOMA "NAO FICA GIRADO":
+      Se a matrix estiver gravada (provarel, por 4.2), o arquivo esta
+      CORRETO e gira em: Android MediaPlayer (o preview do app usa
+      MediaPlayer, :418), Google Fotos, VLC, QuickTime/iOS. O sintoma pode
+      ser: player usado no teste que ignora displaymatrix (alguns players
+      antigos/simples), ou o arquivo errado sendo aberto (o fluxo reencode
+      .mkv FALHOU - o .mp4 girado foi o do modo metadados). ANTES de mexer
+      no codigo, fechar com as verificacoes do item (5).
+
+4.5 - AS OPCOES DE FIX DO DIAGNOSTICO NAO SE SUSTENTAM:
+      OPCAO A (-vf displaymatrix + -c copy): impossivel (teste J).
+      OPCAO B (reencode real): funciona, mas joga fora o proposito da
+        checkbox "girar sem reencode"; so como fallback consciente.
+      OPCAO C (-metadata:s:v:0 rotate=90): nao grava nada (teste L/N).
+      Ou seja: o mecanismo ATUAL do app (-display_rotation + copy) e o
+      UNICO que funciona entre os avaliados - e ele JA ESTA IMPLEMENTADO.
+
+================================================================================
+(5) PLANO RECOMENDADO
+================================================================================
+PROBLEMA 1 (reencode hardware) - aplicar junto com o fix do Corte:
+  PASSO 1 - FfmpegVideoQuality.kt:75-78: ramo hardware passa a emitir
+            "-c:v <nome> -pix_fmt yuv420p -bf 0 -g <round(fps) | 30>"
+            (GOP derivado do fps real quando disponivel; StreamBitrates
+            .frameRate ja existe no Corte; no Girar, detectVideoBitrate
+            pode receber o mesmo tratamento).
+  PASSO 2 - FfmpegVideoQualityTest.kt: atualizar as assercoes do caminho
+            hardware; libx264 INTOCADO.
+  PASSO 3 - Gate: .\gradlew.bat :app:testDebugUnitTest + lintDebug +
+            assembleDebug.
+  PASSO 4 - Campo: mesmo MP4 do usuario, 90/180/-90, com e sem paralelismo,
+            H.264 e HEVC; conferir que o Corte continua ok.
+
+PROBLEMA 2 (metadados) - VERIFICAR ANTES DE QUALQUER MUDANCA:
+  PASSO 1 - No device, sobre o arquivo audiencia_143664636_1_V_girado.mp4:
+      ffprobe -v quiet -select_streams v:0 \
+        -show_entries stream=side_data_list \
+        -of default=noprint_wrappers=1 saida.mp4
+    Se aparecer "side_data_type=Display Matrix" -> matrix PRESENTE.
+    (Alternativa: ffmpeg -v info -i saida.mp4 -map 0:v -c copy -f null -
+     | grep displaymatrix)
+  PASSO 2 - Abrir o MESMO arquivo em: Google Fotos (ou VLC / o preview do
+            proprio app, que usa MediaPlayer e honra matrix). Se girar, o
+            bug era do player do teste.
+  PASSO 3 - Se matrix presente: NENHUM fix de comando. Melhoria opcional de
+            UX: informar no app que a rotacao foi gravada como metadado
+            (depende do player exibir) e/ou oferecer reencode como opcao.
+  PASSO 4 - SOMENTE se a matrix NAO aparecer (contra a evidencia de codigo):
+            investigar o build real do ffmpeg-kit no pacote nativo (versao
+            exata das libs no R2) e, so entao, considerar alternativas.
+
+================================================================================
+(6) PONTOS DE ATENCAO
+================================================================================
+- O diagnostico anterior acertou o problema 1 e suas verificacoes (A/B/C do
+  item 3 dele) - os comandos de verificacao sao corretos e devem ser usados
+  no passo 5.1 acima.
+- A tag "rotate" que o ffprobe/players "exibem" e GERADA pelo demuxer a
+  partir da displaymatrix - nao e armazenada separadamente no MP4 (na
+  escrita). Por isso "procurar a tag rotate" no MP4 e um metodo que confunde
+  mais do que ajuda.
+- O MKV de saida do modo reencode tambem recebe displaymatrix (teste M),
+  mas os players Android leem matrix de MP4/MKV de formas diferentes; o
+  modo reencode (transpose real) nao depende de matrix.
+- NAO mudar metadataRotationCopyArguments antes das verificacoes. O comando
+  atual e o unico mecanismo valido entre os avaliados.
+- O -display_rotation e opcao de INPUT e funciona com stream copy apenas
+  porque o CLI materializa o side data DISPLAYMATRIX; nao confundir com
+  -metadata (que nao grava tags de stream no muxer mov).
+
+================================================================================
+(7) CONCLUSAO
+================================================================================
+Problema 1: mesmo bug do Corte, fix unico e sistemico (encodingFor).
+Problema 2: o codigo do app esta correto; o ffprobe do usuario e falso
+negativo; a H1 do diagnostico e refutada por codigo n6.0 + teste empirico;
+as opcoes A e C propostas nao funcionam. Fechar com a verificacao de side
+data no device antes de qualquer alteracao - a resposta mais provavel e
+"o arquivo ja esta girado e o sintoma e do player usado no teste".
+
+Nenhum arquivo do projeto foi modificado nesta analise.
+================================================================================
+FIM DO RELATORIO

@@ -1,0 +1,39 @@
+MANIFESTO — RODADA 2 (protocolo P/D1/D2, roteiro do especialista cap. 5)
+======================================================================
+Aparelho: OnePlus 15 CPH2747, Android 16, Adreno 840. ADB via Tailscale.
+
+ARTEFATOS (sha256, 16 primeiros digitos; completos nos scripts)
+  harness fonte : native-dependencies/harness/llama_harness.cpp  14df000aa96512c8
+  harness arm64 : native-dependencies/harness/arm64-v8a/llama_harness
+                  5bcf1c64275f1a0d  (ELF aarch64, NDK r27c, debug_info)
+  ggml-vulkan.cpp (fork): 60ef09d46c809de3  (19709 linhas; probe SIGVK presente,
+                  GGML_VULKAN_DEBUG desligado, SIG_VULKAN_NO_CRASH=1 no .so do app;
+                  harness liga os mesmos .a — flags de sync sao por env, nao build)
+  F16 GGUF (local, COM eos=120020): 3.587.533.760 bytes
+                  f8c1e74a838958965427a30acbe8daf8fa60907dbbb4b73f41421327e35974be
+                  (edicao in-place de 4 bytes no offset 5068477: 3 -> 120020;
+                  backup: Hy-MT2-1.8B-f16.gguf.bak-eos3)
+  Toolchain: NDK 27.2.12479018, aarch64-linux-android24-clang (API 24),
+             host clang 18.0.3 (r522817c). Libs: mesmos .a do build do app
+             (llama-build/arm64-v8a). CHECK_RESULTS desligado (baseline real).
+
+PARAMETROS FIXOS DA RODADA (config causal preservada)
+  prompt: template hy_ exato do app (template=1, add_special=false igual ao app)
+  n_ctx=512, n_batch=128, ubatch=128, threads=6, F16, n_gpu_layers=1 (Vulkan)
+  passos: P (prompt) + D1 + D2 (ids fixos extraidos da CPU gulosa, mesmos em
+  todos os backends/variantes; sem argmax/EOS; sem interrupcao em NaN/EOG)
+
+VARIANTES (env por presenca; harness imprime o estado efetivo a cada run)
+  A = env limpo (env -u nas duas; async ON = baseline real)
+  B = GGML_VK_SERIALIZE_SUBMISSIONS=1
+  C = GGML_VK_DISABLE_ASYNC=1
+  D = ambas; 3 repeticoes cada, sequencial no aparelho.
+
+COMPARACAO (comparar_logits.py, local)
+  NaN/Inf por lado; min/max finitos; max_abs; RMSE; relativo protegido
+  (|ref|+1); top-5 + margem top1-top2; tolerancia declarada: max_abs > 1e-2
+  = relevante. Dumps .f32 (120818 floats) puxados do aparelho para
+  C:/Users/Gustavo/AppData/Local/Temp/rodada2/dumps.
+
+EVIDENCIAS BRUTAS: C:/Users/Gustavo/AppData/Local/Temp/rodada2/
+  cpu_greedy.txt (origem de D1/D2), cpu_ref.txt, vk_{A,B,C,D}_r{1,2,3}.txt.

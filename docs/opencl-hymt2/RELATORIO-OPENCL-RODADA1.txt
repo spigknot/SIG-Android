@@ -1,0 +1,378 @@
+RELATORIO A-H — FRENTE OpenCL: CORRECAO, ESTABILIDADE E DESEMPENHO (RODADA 1)
+Hy-MT2-1.8B no app Texto — 02/10/2026
+=====================================================================
+Escopo desta rodada: MEDIR e perfilhar OpenCL (baseline confiavel +
+primeiro gargalo), com correcao/estabilidade verificadas antes de qualquer
+otimizacao. Vulkan/CPU = CONTROLES (nao refatorados). NPU/Whisper fora.
+Classificacao: [MEDIDO] / [HIPOTESE] / [PARCIAL] / [BLOQUEADO].
+=====================================================================
+
+A. CONTEXTO E PRECHECK (procedencia conferida AO VIVO)
+  - Aparelho: OnePlus 15 CPH2747 / OP611FL1, Android 16 (CPH2747_16.0.9.400),
+    Adreno 840 (plataforma "canoe"), serial USB 3B15BD00FVE00000.
+  - APK instalado: build 27d9b20b35679be2c4ec2e565fccc5a9277b79bb1b54e9bb32d241220facf5a8
+    (vc69/1.506, loader v9, lastUpdate 02/10 12:07) — confirmado por pull+sha.
+  - Lib efetiva (pasta 9): 9698670c… (reset+signedness) — confirmada por
+    run-as sha256; maps do processo por run (records).
+  - Modelos (sha256 device-side completo):
+      Q4_K_M c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559 (1.133.080.544 B)
+      Q8_0   5c3fe0b1408a5ceb0143184ef247b11b579c525f4b02b060e6c851bb76fef1a4 (1.908.528.192 B)
+  - Corpus (4 fontes do corpus.json, conferidas por sha256 na fonte real):
+      curto 409 (e8b35290…) / medio 952 (2115fd95…) / longo 2335 (6991a631…) /
+      mais_longo 4924 (b20256db…).
+  - Config efetiva do app: modelo/backend por run (lidos), idioma Português,
+      threads 6, contexto 8192/batch 2048 (JNI); FA desligado no caminho GPU
+      (JNI, por desenho). Sampler stock intocado.
+  - UI INICIAL desta rodada (a restaurar no fim): Q4_K_M + Vulkan + Português
+      + 6 thr (estado encontrado; o backend foi alterado pelos runs).
+
+B. DESIGN E PROTOCOLO (ver DESIGN-OPENCL-RODADA1.md)
+  - Metricas separadas: load_s ("Modelo carregado em Ls", timer do app,
+    0.1s), TOTAL interno ("Tradução pronta em"), GERACAO ("Desempenho: N
+    tokens em T s"), wall (tap→observacao), tokens. Nada de TTFT derivado.
+  - process_cold (restart) ≠ disco frio (page cache); reload registrado.
+  - Cadeia conjunta por run: fonte EXATA por igualdade + "Traduzindo com
+    <modelo> (<backend>)" + "pronta em" + "Desempenho:" + maps (pasta 9 +
+    gguf); backend EFETIVO lido do run de carga. Sem cadeia => INVALIDO
+    (nunca 0.0 ficticio).
+  - Instrumentos: smoke_opencl.py (smokes, fail-fast), baseline_opencl.py
+    (+resume_q8.py na retomada), controles_opencl.py, agrega_opencl.py.
+    Popup por frame+indice com ordem REAL conferida; teclado fechado antes
+    de ler; scroll para o log quando fora da viewport (visto 1x e tratado).
+
+C. SMOKES PROGRESSIVOS OpenCL — 8/8 VALIDOS
+  Protocolo: 1 sessao por modelo; r1 frio (carga), r2/r3/r4 warm sem reload;
+  fail-fast em crash/erro/patologia (nenhum acionado).
+  | modelo | run | tipo | load_s | total_s | tokens | tok/s | saida |
+  |--------|-----|------|--------|---------|--------|-------|-------|
+  | Q4_K_M | curto r1 | frio | 5.3 | 13.1 | 142 | 18.9 | 448 ch 084f12f4… |
+  | Q4_K_M | medio r2 | warm | - | 17.3 | 293 | 17.4 | 994 ch 1d328d7d… |
+  | Q4_K_M | longo r3 | warm | - | 40.5 | 693 | 17.4 | 2435 ch 812dfba6… |
+  | Q4_K_M | curto r4 | warm | - | 8.8 | 142 | 16.6 | 448 ch 084f12f4… (== r1) |
+  | Q8_0   | curto r1 | frio | 5.3 | 13.6 | 142 | 17.6 | 449 ch d36a3315… |
+  | Q8_0   | medio r2 | warm | - | 17.4 | 295 | 17.5 | 1006 ch cd1c7ce3… |
+  | Q8_0   | longo r3 | warm | - | 40.4 | 703 | 17.8 | 2457 ch c18e04c8… |
+  | Q8_0   | curto r4 | warm | - | 8.7 | 142 | 16.9 | 449 ch d36a3315… (== r1) |
+  - TEXTO LONGO OK: nenhum -38/CL_INVALID_MEM_OBJECT, nenhum NaN, nenhum
+    limite 4096, nenhuma saida patologica (checagem: repeticao, CJK, tamanho).
+  - A→B→A identico byte a byte nos DOIS modelos (sem reuso indevido).
+  - Backend efetivo confirmado nos runs de carga: "GPU OpenCL (OpenCL /
+    GPUOpenCL)". O historico -38 NAO reapareceu nestes 8 runs.
+
+D. BASELINE OpenCL — MATRIZ 24 RUNS (2 modelos x 4 tamanhos x 3 reps)
+  Ordem rotacionada por rep; 1 frio + 2 warm por grupo (bloco por modelo,
+  sem force-stop entre warm). Runs 24/24 validos.
+  Mediana (min-max) do TOTAL interno e tok/s (mediana):
+  | modelo | curto | medio | longo | mais_longo |
+  |--------|-------|-------|-------|------------|
+  | Q4_K_M | 8.2 (7.9-11.0) / 18.6 | 16.5 (15.6-17.1) / 18.2 | 36.8 (36.7-39.4) / 19.2 | 79.6 (78.9-80.9) / 19.0 |
+  | Q8_0   | 8.5 (8.2-14.5) / 18.0 | 17.7 (16.7-17.7) / 17.1 | 39.7 (39.5-41.7) / 18.1 | 85.6 (85.1-88.8) / 18.0 |
+  (o max do curto inclui o run FRIO, que carrega o modelo; warm puro fica
+  8.2-8.5s. Loads na baseline: Q4 5.3s / Q8 6.3s no run frio.)
+  - Determinismo por entrada: sha de saida IDENTICO nos 3 runs de cada grupo
+    (Q4: 084f12f4/1d328d7d/812dfba6/4d51e74f; Q8: d36a3315/cd1c7ce3/
+    c18e04c8/ee49738f).
+  - Nota de interferencia externa (honestidade): o run r4 do Q8 (mais_longo)
+    foi cortado nas LEITURAS quando o Instagram tomou a tela (13:15), mas a
+    traducao COMPLETOU em segundo plano (88.8s / 1511 tokens); recuperado do
+    log do app e marcado "capturado_apos_interferencia" no record. Nao foi
+    contado como falha nem escondido.
+
+E2. A/B DO CANDIDATO Nº1 + GARGALO REFINADO (com build diagnóstica — F2/F3)
+  [MEDIDO] Build diagnóstica autorizada e implantada, com rollback:
+   - artefato aa79fcd66a0792bb1d05f2c2c05bacb94bc9022777c6f5edd0168914080fac88
+     (95.625.624 B; ELF64 AArch64; NEEDED identicos; TODOS os 9 entry points
+     JNI definidos) — deploy via push+run-as cp, readback no destino OK
+     (deploy_diag_aa79fcd6.txt).
+   - Ao final: ROLLBACK para 9698670c (readback OK; rollback_9698670c.txt);
+     nenhum dado/modelo tocado; propriedade de teste zerada.
+  [MEDIDO] A/B do "skip_probe" (3+3 cargas cold OpenCL Q4, alternadas):
+   skip=0 -> 5.3 / 4.0 / 5.2 s ; skip=1 -> 5.2 / 5.2 / 5.2 s.
+   Fases (nova linha "Fases da carga", aparece no log do app):
+     OpenCL: sonda=0.0s, modelo=3.9-5.1s, contexto=0.1s.
+     Vulkan: sonda=0.0s, modelo=0.5s, contexto=0.2s (load 0.7-0.8s).
+   >>> CANDIDATO Nº1 (sonda duplicada) REFUTADO: a sonda custa ~0.0s nos
+   dois backends; pular a sonda NAO muda o load. Nada a otimizar nesse ponto.
+  [MEDIDO] O gargalo esta na FASE MODELO do OpenCL: ~4.5s a mais que o
+   Vulkan para o MESMO arquivo (upload/repack dos pesos no device OpenCL;
+   3.9-5.1s vs 0.5s). E o candidato nº 2 a atacar.
+  [OBSERVACAO — nao atribuida] Cargas Vulkan medidas mais cedo hoje (rodada
+   de carga ~11:30 e controles ~13:45) deram 1.5-3.1s; agora (14:5x) dao
+   0.7-0.8s COM A MESMA LIB 9698670c (verificado pos-rollback). Diferenca de
+   ESTADO (nao da build); causa nao isolada. O OpenCL ficou ~5s nas duas
+   janelas — o gap OpenCL x Vulkan no estado ATUAL e' ~4.5s.
+  [HIPOTESES PROXIMAS — F2 continua] (H1) caminho de upload por tensor
+   (clEnqueueWriteBuffer/map no ggml-opencl) sem staging/mapeamento
+   persistente; (H2) a FLATTENING SOA_Q dos pesos quantizados feita no host
+   durante o load (custo ~GB); (H3) alocacao/realinhamento de buffers.
+   Instrumentacao sugerida: timers no set_tensor/buffer-aloc do ggml-opencl
+   (proxima build diagnostica) ou log verbose dirigido do backend; so entao
+   propor uma otimizacao (F3) com A/B de 3 reps.
+  [PARCIAL] F2: gargalo LOCALIZADO na fase (modelo), mecanismo interno ainda
+   nao isolado — proxima build diagnóstica ja tem o padrao pronto (esta).
+
+E. PRIMEIRO GARGALO PERFILADO (offline; sem alterar produto)
+  1) [MEDIDO] CACHE DE KERNELS EM USO: `.clbin` persistidos em
+     <app>/cache/llama.cpp/cl-cache (entradas de hoje 11:41). O outlier de
+     20.9s no primeiro load OpenCL do dia = MISS inicial (build de todos os
+     kernels a partir do fonte + save); os loads seguintes = 5.3-6.3s (HIT).
+     [HIPOTESE] o HIT ainda carrega ~3-4s do programa+device; separar isso
+     do resto do load exige build diagnostica (abaixo).
+  2) [HIPOTESE FORTE — candidato n.1 de otimizacao] O `loadModel` do JNI
+     inicializa o DEVICE DUAS VEZES por carga: a "sonda de inicializacao"
+     (ggml_backend_dev_init + free, llama_jni.cpp ~268-275) e de novo dentro
+     de llama_model_load_from_file. Para OpenCL cada init inclui carregar o
+     programa; eliminar/compartilhar a sonda ENCURTA a carga (a medir com
+     instrumentacao antes de propor deploy). Ganho esperado: alvo = load_s
+     do OpenCL; aceite so com A/B repetivel (regra do parecer).
+  3) [MEDIDO] Rota real: kernels dedicados por quantizacao (mul_mv_q4_K,
+     mul_mv_q8_0 + variantes "_flat" por GGML_OPENCL_SOA_Q, com branches
+     por familia INTEL/ADRENO); USE_ADRENO_KERNELS=ON no build do app.
+  4) [MEDIDO] Decode OpenCL ~17-19.5 tok/s vs Vulkan ~22-23 (curto/longo
+     comparaveis apos controles). Gargalo de kernel exige profiling OpenCL
+     (cl events) ou build com timestamps — ambos fora do escopo sem
+     consentimento de deploy.
+  5) Proximo passo (F2): (a) build DIAGNOSTICA local com tempos por etapa
+     (probe/load/upload/context) + eventos OpenCL opcionais; (b) candidatos
+     F3: sonda duplicada (2), SOA_Q/parametros Adreno, cache de contexto —
+     um por vez, A/B com 3 reps. Tudo PRONTO OFFLINE; ativacao no aparelho
+     exige consentimento com hash/escopo/backup/reversao.
+
+F. QUALIDADE — CATALOGO OpenCL x CONTROLES (leitura integral)
+  - Q4_K_M curto: saida OpenCL == Vulkan byte a byte (084f12f4…, 448 ch).
+  - Q8_0: divergencia por TOKENS (precisao muda amostragem), poucos pontos:
+      curto: 1 troca ("em processo" ⇄ "pendente") — resto identico;
+      medio: 3 trocas ("em andamento"⇄"em processo", "tivesse"⇄"havia",
+             "chover"⇄"chuva");
+      longo: 3 trocas (ordem de frase, "dessas"⇄"das");
+      mais_longo: 13 trocas em 846 palavras (parafrases: "desde que"⇄
+             "apenas se", "manuscrito"⇄"escrito à mão", ordem; e a frase
+             final).
+  - ACHADO A FAVOR do OpenCL: na frase-codigo "silver compass" o OpenCL
+    produziu "**bussola prateada**" (correto) enquanto o Vulkan (rodada
+    anterior) produziu "compasso prateado" (errado). Diferenca de amostra
+    entre backends, nao correcao — registrar como dado.
+  - ACHADO CONTRA OS DOIS: "A wet cable must never be handled with bare
+    hands" -> OpenCL "…à lazeia." (palavra inexistente) e Vulkan "…à vista."
+    — AMBOS erram (fraqueza do modelo nesse trecho; nao e' regressao de
+    backend).
+  - Numeros/unidades/nomes/negacoes: preservados nos 4 tamanhos nos dois
+    backends (checagem por script; 23/23 numeros e todos os nomes no maior).
+  - Ressalvas: erros lexicais pontuais JA catalogados (compasso/mãos nuas/
+    dias úteis/genero) mantem a REGRA: revisao humana obrigatoria;
+    aprovacao e' da EXECUCAO.
+
+G. CONTROLES CPU/VULKAN (matched, mesma APK/lib/config/corpus) — 24/24
+  Blocos por (backend, modelo); 1 frio + 5 warm cada; rotacao curto/mais_longo.
+  Mediana (min-max) do TOTAL interno e tok/s (mediana), runs WARM:
+  | modelo | tamanho | CPU | GPU (Vulkan) | GPU (OpenCL) |
+  |--------|---------|-----|--------------|--------------|
+  | Q4_K_M | curto | 10.1s (21.6) | **6.3s (35.1)** | 8.2s (18.6) |
+  | Q4_K_M | mais_longo | 117.8s (16.6) | **68.7s (27.8)** | 79.6s (19.0) |
+  | Q8_0 | curto | 9.4s (22.8) | 11.3s (17.5) | **8.5s (18.0)** |
+  | Q8_0 | mais_longo | 111.2s (17.0) | 101.1s (17.5) | **85.6s (18.0)** |
+  CARGA (runs frios): CPU 0.6s (Q4) / 1.5s (Q8); Vulkan 3.0s / 4.3s;
+  OpenCL 5.3s / 6.3s (cache HIT; ver E).
+  LEITURA (com o limite temporal declarado): no Q4 o Vulkan domina (curto e
+  longo); no Q8 o OpenCL fica A FRENTE dos dois (curto 8.5s vs 9.4/11.3;
+  mais_longo 85.6s vs 101.1/111.2) nesta amostra. O Q4 curto do CPU tokens/s
+  (21.6) supera o OpenCL (18.6) apesar do total maior (overhead fixo maior).
+  [LIMITE — interferencia temporal] baseline OpenCL rodou ~13:00-13:40 e os
+  controles ~13:45-14:35; a deriva termica e' visivel (Vulkan Q8 mais_longo
+  96.8 -> 101.1 -> 120.1s no mesmo bloco; temp do sensor subiu ao longo do
+  dia). Onde a diferenca for menor que a deriva (Q8 mais_longo OpenCL x
+  Vulkan ~85 vs ~97-120), classificar com ressalva: sinal pro-OpenCL
+  CONSISTENTE nos 3 pares, mas confirmacao exige A/B pareado no tempo
+  (proposta: repetir 3 pares OpenCL/Vulkan intercalados 1-a-1 quando
+  autorizado). Onde a diferenca e' grande e repetivel (Q4 Vulkan curto
+  6.2-6.3s vs 8.2-8.5 OpenCL; Q4 Vulkan longo 27.6-28.5 vs 19.0 tok/s),
+  o veredito e' robusto a essa deriva.
+  QUALIDADE MATCHED (saidas): Q4 curto IDENTICO nos 3 backends (084f12f4);
+  Q8 curto: CPU == OpenCL (d36a3315) e Vulkan difere em 1 palavra;
+  Q4 mais_longo: 3 saidas distintas (~29-32 trocas de palavra entre pares);
+  Q8 mais_longo: 3 saidas distintas (13 trocas OCL x VK em 846 palavras).
+  Numeros/nomes/negacoes preservados em todas.
+
+
+G2. TOTAIS POR SCRIPT (contagem Python sobre os run dirs/manifesto)
+  smoke_opencl.py (smokes OpenCL Q4+Q8): 8 runs (8 validos)
+  baseline_opencl.py + resume_q8.py (baseline OpenCL 4x3x2): 24 runs (24 validos;
+   1 capturado apos interferencia externa, marcado)
+  controles_opencl.py (CPU/Vulkan matched): 24 runs (24 validos; 2 abortados
+   por bug do instrumento na 1a tentativa, preservados em ABORTADO_*)
+  ab_probe.py (A/B do probe + fases): 6 runs OpenCL + 3 Vulkan (skip=1) + 2
+   Vulkan (skip=0) = 11 runs (todos LOAD_OK)
+  um_attempt pos-rollback (verificacao): 3 runs Vulkan (LOAD_OK)
+  TOTAL: 70 runs executados nesta frente; 68 validos + 2 abortados-por-
+  instrumento (nao contam como falha de backend); 0 falhas de execucao reais.
+
+E3. GARGALO ISOLADO NO CAMINHO DE UPLOAD (diag2 9b1a714b; implantado e revertido)
+  [MEDIDO] Split por run (5 cargas; linha "Fases da carga" estendida):
+    OpenCL Q4: upload=3.7 / 4.3 / 4.0 s em 354 chamadas (1076 MiB); alloc=0.3-0.4s
+    OpenCL Q8: upload=3.4 s em 354 chamadas (1815 MiB); alloc=0.7s
+    Vulkan Q4: upload=0.0 s em 0 CHAMADAS; alloc=0.0s (NAO usa o caminho set_tensor)
+  [LEITURA] O custo da carga OpenCL mora no caminho `set_tensor` do ggml-opencl:
+   354 operacoes seriais (host + escrita blocking) a 279-534 MB/s efetivos.
+   NAO e' banda pura: o Q8 moveu +69% de dados em MENOS tempo que o Q4 (escritas
+   maiores rendem mais; o overhead por chamada/transformacao pesa).
+  [CANDIDATOS F3 — ordem sugerida] (a) escritas nao-bloqueantes (CL_FALSE)
+   confiando na fila in-order (remove sync por chamada); (b) reduzir/otimizar o
+   trabalho host por tensor (staging/transform antes do write); (c) batching de
+   tensores. Confirmar a divisao host-transform x enqueue com uma diag3 (timer
+   dentro do set_tensor) ANTES de implementar; depois A/B de 3 reps.
+  [ESTADO] F2 COMPLETO (mecanismo localizado ate' o caminho de upload); F3 e a
+   aceitacao ficam para a proxima rodada (com consentimento, como sempre).
+  Evidencia: logs-rodada-opencl/f2b_split_gargalo.txt + f2b_medida.log +
+  deploy_diag2_9b1a714b.txt + rollback2_9698670c.txt.
+
+
+E4. SPLIT FINO DO UPLOAD (diag3 ff7a2999; implantado e revertido)
+  [MEDIDO] 4 cargas (3x Q4 + 1x Q8), linha estendida [enqueue=X/; host=Y]:
+    Q4: enqueue=1.6/1.5/1.3s | host=2.2/3.2/3.1s | upload=3.9/4.7/4.4s (1076 MiB)
+    Q8: enqueue=2.4s | host=1.9s | upload=4.4s (1815 MiB)
+  [LEITURA] Q4: o trabaho por-tensor (bucket "host") domina (~65%); Q8:
+   as escritas passam a pesar mais (bytes maiores) e fica equilibrado
+   (2.4 vs 1.9s). Bucket "host" = criacao de sub-buffers por tensor +
+   transposes GPU intencionais (repack Adreno que acelera o decode) +
+   clFinish/barreiras + manipulacao CPU.
+  [F3 — alvos definidos por dado] (1) reduzir custo POR TENSOR no
+   set_tensor (sub-buffer/barreira por tensor); (2) escritas blocking
+   (1.3-2.4s) -> nao-bloqueantes com fila in-order. Cada um exige
+   implementacao + A/B de 3 reps (proxima rodada); sem promessa de ganho
+   antes do numero. Evidencia: f2c_split_fino.txt + diag3_medida.log +
+   deploy_diag3_ff7a2999.txt + rollback3_9698670c.txt.
+
+
+E5. F3a — ESCRITAS NAO-BLOQUEANTES: CANDIDATO REFUTADO (diag4 c3dfd5f6)
+  [MEDIDO] A/B alternado 3+3 (chave debug.sig.hymt2.nonblock_writes 0/1,
+   runtime, fila IN-ORDER confirmada props=0):
+     nb=0: loads=5.6/5.0/5.1s | inf=1.1/1.2/1.2s | enqueue=1.3s
+     nb=1: loads=5.2/5.4/5.2s | inf=1.2/1.2/1.2s | enqueue=1.4s
+  [LEITURA] Sem efeito mensuravel (medianas 5.1 vs 5.2s; load+inf 6.3 vs
+   6.4s). O bucket enqueue NAO caiu com CL_FALSE => o driver processa a
+   escrita de forma efetivamente sincrona (staging/paginas da fonte); o
+   flag blocking nao e' o que paga a conta. Candidato abandonado; segue o
+   bucket "host" (2.9-3.2s por tensor) como proximo alvo de investigacao
+   (diag5: medir clCreateSubBuffer e transposes separadamente).
+  Evidencia: f3a_nao_bloqueante_REFUTADO.txt + ab_f3a.log +
+  deploy_diag4_f3a.txt + rollback4_9698670c.txt.
+
+
+E6. F3b — TRANSPOSES NAO-BLOQUEANTES: GANHO VALIDADO (diag6 49ef68f7)
+  [MEDIDO] A/B alternado 3+3 (chave debug.sig.hymt2.trans_noblock 0/1):
+    load:  tnb=0 med 5.2s [5.9/5.1/5.2] | tnb=1 med 4.6s [4.8/4.3/4.6]  (-0.6s)
+    tr:    1.2-1.3s (672 chamadas com clWaitForEvents BLOQUEANTE) -> 0.1s
+    sha de saida: f8c093ae IDENTICO nos 6 runs (mesma fonte/modelo)
+  [MEDIDO] A/B de GERACAO (medio 3+3): tnb=1 load 4.80 / pronta 20.80 vs
+    tnb=0 load 5.10 / pronta 21.30; sha unico nos 6 runs -> SEM penalidade
+    (o ganho de carga nao desloca custo para a inferencia).
+  [MEDIDO] Aceitacao 4 tamanhos (1 rep, tnb=1): shas 084f12f4/1d328d7d/
+    812dfba6/4d51e74f = IDENTICOS ao baseline OpenCL (correcao preservada);
+    internos 13.4/22.4/44.3/89.0s vs controle tnb=0 12.2/22.0/40.9/87.9s
+    (mesma sessao wireless/carregando; +4-8s de offset de SESSAO em AMBOS).
+  [CAUSA-RAIZ] transpose_2d(blocking=true) => clWaitForEvents por chamada
+    (672x); o caminho non-blocking ja existia (else) e foi ativado.
+  [INSTRUMENTO — 3 ITENS] (a) marca_modelo do rodar_caso tinha literal
+    "(Vulkan)" -> False falso em OpenCL (delta TEM "Traduzindo ... (OpenCL)");
+    (b) gguf_ok em case exato: FUSE exibe "Hy-MT2-1.8B-Q4_K_M.gguf" para o
+    inode 1849637 = "Hy-MT2-1.8B-q4_k_m.gguf" (produto, 1.133.080.544 B);
+    (c) arg tnb faltava no snprintf (corrigido; binario medido nao afetado —
+    so a IMPRESSAO nb/tnb/alloc saiu lixo). (a)+(b) corrigidos no
+    instrumento; futuros aceites rodarao com VALIDO=True.
+  Evidencia: f3b_aceite_resumo.json + f3b_gen_ab_resumo.json + ab_f3b.log +
+  aceite_f3b*.log + gen_ab_f3b.log + deploy_diag6_f3b.txt + rollback6.
+
+
+E7. F3b NO Q8 + ACEITE Q8 (parcial por interferencia)
+  [MEDIDO] A/B 3+3 (Q8_0/OpenCL): tnb=0 loads [6.1/5.5/5.5] med 5.5s; tnb=1
+   [5.0/5.4/4.8] med 5.0s (-0.5s); inf equivalente; saida_sha unico
+   1c01984ca11af809 nos 6 runs.
+  [MEDIDO] Aceite Q8 (tnb=1): curto d36a3315 / medio cd1c7ce3 / longo c18e04c8
+   = IDENTICOS ao baseline Q8; internos load 5.2/5.9/4.9 + pronta 13.3/22.0/
+   42.3s. mais_longo: INTERROMPIDO — WhatsApp assumiu o foreground
+   (logs/interferencia_2_whatsapp.txt); refazer com o aparelho livre.
+E8. F3c (diag7 82c24bfb) — IMPLEMENTADO, A/B PENDENTE (nao medido)
+  Causa: o par clWaitForEvents+clReleaseMemObject(data_device) apos o kernel de
+   repack BLOQUEIA o host por tensor (16 sites no set_tensor + 6 no caminho
+   irmao). Solucao DFR(): adia o wait/release; drenagem por completude
+   (clGetEventInfo) a cada 64 pendencias; default OFF (chave de runtime
+   debug.sig.hymt2.defer_release). Shim clGetEventInfo adicionado ao loader
+   (aditivo). Expectativa: remover o stall por tensor (bucket cpu 1.4-2.3s).
+   Sem numero ainda — medir A/B 3+3 quando o aparelho liberar; nao avaliar
+   antes do dado.
+
+
+E9. F3c — RELEASE ADIADO: REFUTADO (diag7 82c24bfb; medido e revertido)
+  A/B alternado 3+3 (debug.sig.hymt2.defer_release 0/1), Q4/OpenCL:
+    dfr=0: loads [4.0, 4.5, 5.3] med 4.50 | cpu [2.0, 2.3, 2.4] | load+inf med 5.70
+    dfr=1: loads [4.7, 4.8, 4.9] med 4.80 | cpu [2.4, 2.4, 2.4] | load+inf med 6.00
+    saida_sha unico f8c093aecbd62027 nos 6 runs (correcao preservada).
+  [LEITURA] Sem ganho; bucket cpu IDENTICO nos dois modos => os waits do repack
+   por tensor eram baratos (GPU acompanhava o host). O cpu residual (~2s) e'
+   trabalho host/driver real (clCreateBuffer 354x + manuseio), nao espera.
+  [BALANCO F3] F3a REFUTADO | F3b GANHO (-0.6s, sem regressao; Q8 -0.5s) |
+   F3c REFUTADO. Encerradas as hipoteses de bloqueio; alvos restantes (cpu/
+   enqueue) exigem rework mais profundo (pooling de buffers / via de upload).
+  [NOTA DE DIR] Os 6 runs do f3c foram gravados em hymt2-carga-rodada/r301-306
+   (CARGA_OUT nao exportado no encadeamento); resumo reconstruido por Python
+   dos record+delta reais; dirs preservados. Evidencia: f3c_release_adiado_
+   REFUTADO.txt + ab_f3c.log + deploy_diag7_f3c.txt + rollback7_9698670c.txt.
+
+
+E10. F3b ADOTADO COMO DEFAULT (ON) + ACEITE FINAL (diag8 e5f8a1d0)
+  Mudanca: transposes non-blocking passam a ser o DEFAULT (apenas "0" explicito
+  em debug.sig.hymt2.trans_noblock volta ao modo antigo). Fonte WIP; a mudanca
+  sera' empacotada no proximo pacote nativo quando aprovado.
+  [MEDIDO] Aceite final com CHAVE VAZIA (default de produto), 2 modelos x 4
+   tamanhos, VALIDO=True em todos os 8:
+    Q4: shas 084f12f4/1d328d7d/812dfba6/4d51e74f = IDENTICOS ao baseline;
+        wall 16.6/22.5/62.6/98.1s
+    Q8: shas d36a3315/cd1c7ce3/c18e04c8/ee49738f = IDENTICOS ao baseline;
+        internos load 6.1/5.7/5.6/5.2 + pronta 14.7/22.4/50.6/97.9s
+  [GATE] :app:testDebugUnitTest :app:lintDebug :app:assembleDebug ->
+   BUILD SUCCESSFUL (52 tasks; 1 executed / 51 up-to-date).
+  [ESTADO] Aparelho revertido para 9698670c apos o aceite (readback conferido);
+   chave debug.sig.hymt2.trans_noblock removida/vazia; UI restaurada para
+   Q4_K_M + Vulkan. Artefato aceito: scratch/libsig_llama_diag8_f3bdef.so
+   (e5f8a1d0..., 95940560 B).
+  [NOTA DE INSTRUMENTO] O resumo do aceite Q8 no log imprimiu seg=None por
+   nome de dir (Q8_* vs Q8_0_*); leitura CORRETA feita direto dos 4 record.json
+   (acima). Runs validos; sem refazer.
+  Evidencia: f3b_adocao_aceite_final.txt + aceite_final_q4.log +
+  aceite_final_q8.log + deploy_diag8_f3bdef.txt + gate_pos_f3bdef.log +
+  rollback8_9698670c.txt.
+
+H. ENTREGA, LIMITES E PROXIMOS PASSOS
+  - Artefatos: esta pasta (docs/opencl-hymt2/) + logs-rodada-opencl/ +
+    runs em Desktop/hymt2/hymt2-opencl-{smokes,baseline,controles}/;
+    MANIFESTO-OPENCL.json gerado por script (existencia/sha/tamanho,
+    dedupe, totais por grupo; verificacao de volta por Python).
+  - Contagens (Python): smokes 8/8; baseline 24/24 (1 salvado de
+    interferencia, marcado); controles 24/24; falhas de execucao: 0;
+    falhas de correcao: 0 nesta amostra. Total executado: 56 runs validos
+    (8 smokes + 24 baseline + 24 controles).
+
+  - NOTA DE INSTRUMENTO (honestidade): a primeira tentativa dos controles
+    falhou por bug DO INSTRUMENTO (validacao da cadeia fixa em "OpenCL"),
+    abortando 2 runs e nao o backend: evidencia preservada em
+    Desktop/hymt2/hymt2-opencl-controles/ABORTADO_bug_instrumento_CPU/ +
+    logs-rodada-opencl/controles_opencl_PRIMEIRA_TENTATIVA_bug.log;
+    corrigido (backend esperado configuravel) e relancado limpo (24/24).
+  - Deploy DIAGNOSTICO (F2/F3): autorizado especificamente, executado e
+    REVERTIDO no mesmo dia (aa79fcd6 -> 9698670c, readbacks OK). Artefato
+    diagnostico preservado em scratch + /data/local/tmp (nao removido). A
+    fonte do diagnostico (timings por fase + chave skip_probe, anotada
+    "DIAG rodada OpenCL" em llama_jni.cpp) permanece no working tree como WIP;
+    antes de QUALQUER promocao futura, decidir se mantem, simplifica ou
+    remove. Runs extras de F2/F3: 14 (6 A/B + 5 fases Vulkan + 3 pos-rollback).
+  - LIMITES: (a) process_cold ≠ disco frio; (b) PSS do OpenCL nao conta os
+    pesos no processo (verificado antes: contabilidade do driver);
+    (c) estabilidade em 1 aparelho/driver nao e' garantia Android-wide;
+    (d) a matriz de controles cobre curto+mais_longo (nao medio/longo);
+    (e) o perfil de kernel exige instrumentacao (pendente de consentimento).
+  - BLOQUEADO/nada pendente de deploy nesta rodada: nenhum .so/APK novo foi
+    gerado; as otimizacoes candidatas (E.2 etc.) aguardam o consentimento
+    especifico quando/se o usuario quiser leva-las adiante.
+  - Estado final: UI restaurada ao inicial (Q4_K_M + Vulkan + Português +
+    6 thr) com readback; lib aprovada 9698670c preservada; sem mudancas de
+    default/sampler/pesos; nada commitado/publicado.

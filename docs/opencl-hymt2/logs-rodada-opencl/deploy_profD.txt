@@ -1,0 +1,5 @@
+== DEPLOY PROFD 2cef1f35 (piloto autorizado) ==
+adb.exe: device '100.108.27.64:37193' not found
+adb: error: failed to get feature set: device '100.108.27.64:37193' not found
+adb.exe: device '100.108.27.64:37193' not found
+adb.exe: device '100.108.27.64:37193' not found

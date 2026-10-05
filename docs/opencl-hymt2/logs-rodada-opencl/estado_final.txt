@@ -1,0 +1,11 @@
+== ESTADO FINAL — RODADA OpenCL (releitura 16:50 local) ==
+    versionName=1.506
+    lastUpdateTime=2026-10-02 12:07:13
+9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53  no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+    <string name="target_language">Português</string>
+    <string name="threads">6</string>
+    <string name="backend">OPENCL</string>
+  button_model   'Q4_K_M'
+  button_backend 'OpenCL'
+  status         ''
+0

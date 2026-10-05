@@ -1,0 +1,16 @@
+== F2c/diag3 — SPLIT FINO (enqueue x host) ==
+[  12s] st='Tradução pronta.' novas=8 load=5.1
+Q4_K_M: load=5.1 | Fases da carga: sonda=0.0s modelo=4.8s contexto=0.3s total=5.1s (skip_probe=0) | upload=3.9s em 354 chamadas (1076 MiB) [enqueue=1.6s/354; host=2.2s] | alloc=0.5s
+[  11s] st='Tradução pronta.' novas=8 load=5.4
+Q4_K_M: load=5.4 | Fases da carga: sonda=0.0s modelo=5.2s contexto=0.1s total=5.4s (skip_probe=0) | upload=4.7s em 354 chamadas (1076 MiB) [enqueue=1.5s/354; host=3.2s] | alloc=0.2s
+[  11s] st='Tradução pronta.' novas=8 load=5.0
+Q4_K_M: load=5.0 | Fases da carga: sonda=0.0s modelo=4.8s contexto=0.1s total=5.0s (skip_probe=0) | upload=4.4s em 354 chamadas (1076 MiB) [enqueue=1.3s/354; host=3.1s] | alloc=0.2s
+[  13s] st='Tradução pronta.' novas=8 load=6.0
+Q8_0: load=6.0 | Fases da carga: sonda=0.0s modelo=5.8s contexto=0.1s total=6.0s (skip_probe=0) | upload=4.4s em 354 chamadas (1815 MiB) [enqueue=2.4s/354; host=1.9s] | alloc=0.5s
+
+-- leitura --
+Q4: enqueue=1.3-1.6s / host=2.2-3.2s (host domina ~65%)
+Q8: enqueue=2.4s / host=1.9s (equilibrado; enqueue escala com bytes: 1815 MiB)
+O bucket 'host' inclui: criacao de sub-buffers + transposes GPU intencionais
+(repack Adreno p/ decode) + clFinish/barreiras + manipulacao CPU por tensor.
+Upload total: 3.4-4.7s. F3 alvo duplo: (1) host/por-tensor; (2) escritas blocking.

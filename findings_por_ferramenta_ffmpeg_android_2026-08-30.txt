@@ -1,0 +1,811 @@
+================================================================================
+SIG ANDROID - FINDINGS CONFIRMADOS POR FERRAMENTA
+Auditoria das 6 ferramentas FFmpeg - 2026-08-30
+================================================================================
+
+Escopo: apenas findings CONFIRMADOS por leitura de codigo no projeto Android.
+Excluidos: A15 e A27 (pontos positivos, sem acao) e os ~16 itens da lista do
+SIG Windows que NAO se reproduzem no Android (ver Parte 3 do relatorio
+relatorio_auditoria_ffmpeg_android_2026-08-30.txt).
+
+Gravidade: CRITICO > ALTO > MEDIO > BAIXO
+Linhas: referem-se ao estado do codigo em 2026-08-30.
+
+Resumo por ferramenta:
+  Girar video .......... 14 entradas  (0 crit / 6 alto / 6 medio / 2 baixo)
+  Cortar audio/video ...  8 entradas  (0 crit / 3 alto / 4 medio / 1 baixo)
+  Juntar video/audio ... 16 entradas  (2 crit / 4 alto / 5 medio / 5 baixo)
+  Extrair audio ........ 10 entradas  (0 crit / 3 alto / 2 medio / 5 baixo)
+  Inserir audio ........  8 entradas  (0 crit / 1 alto / 5 medio / 2 baixo)
+  Limpar audio .........  4 entradas  (0 crit / 1 alto / 2 medio / 1 baixo)
+  Transversais .........  3 entradas  (0 crit / 1 alto / 1 medio / 1 baixo)
+  ------------------------------------------------------------------
+  TOTAL ................ 63 entradas = 61 findings unicos
+  (A57 aparece em Juntar e Inserir; A63 aparece em Girar e Juntar)
+
+  Distribuicao por gravidade (61 findings unicos):
+    2 CRITICO | 19 ALTO | 25 MEDIO | 15 BAIXO
+  (a soma por ferramenta da 63 porque A57 e A63 sao contados duas vezes)
+
+================================================================================
+FERRAMENTA DE GIRAR VIDEO  (FfmpegRotateVideoActivity.kt)
+================================================================================
+
+1) [ALTO] Modo metadados gira no sentido OPOSTO ao da previa e ao do reencode
+   O que e: "degrees" vem da UI e e HORARIO (postRotate :1225, transpose=1
+            :1250). "currentMetadataDegrees" vem da display matrix e e
+            ANTI-HORARIO. Os dois sao SOMADOS em :1169. Para +/-90 o resultado
+            sai invertido. Agravante: parseDisplayRotation() (:1373) le a tag
+            legada "rotate : N" (horaria) como se fosse anti-horaria.
+            Casos reais: arquivo so com tag "rotate : 90" + padrao da tela (0
+            grau) => video gira 180 sem o usuario pedir nada; arquivo com
+            display matrix -90 + pedido de +90 => saida identica a entrada.
+   Fix:     (a) metadataDegrees = normalize(currentMetadataDegrees - degrees);
+            (b) em parseDisplayRotation(), negar o valor do ramo "rotate : N";
+            (c) teste unitario puro com os 4 casos (tag-only x matrix-only) x
+                (0 / 90 / -90 / 180).
+   Linhas:  :1169, :1225, :1250, :1363-1379 (fallback em :1373)
+
+2) [ALTO] "Girar pelos metadados" vem LIGADO por padrao e nao persiste
+   O que e: o checkbox nasce marcado, entao o usuario escolhe 90 graus e o
+            video nao gira de fato - so recebe uma flag que players e editores
+            ignoram. Nao ha SharedPreferences em nenhuma das 6 ferramentas:
+            a preferencia volta ao padrao a cada abertura. Com metadados
+            ligado, o dialogo "Voce nao pediu nenhuma mudanca" (:448-455) e
+            ignorado, entao 0 grau gera copia identica sem confirmacao.
+   Fix:     android:checked="false" no layout; remover a linha :295;
+            opcionalmente persistir em SharedPreferences.
+   Linhas:  res/layout/activity_ffmpeg_rotate_video.xml :417-422;
+            FfmpegRotateVideoActivity.kt :295, :448-455
+
+3) [ALTO] Rotacao por metadados que resulte em 0 grau e no-op silencioso
+   O que e: se a soma der 0, nenhum -display_rotation e emitido (:1171), mas o
+            comando usa -map 0 -c copy, que COPIA o side data de display
+            matrix da entrada intacto. O app pediu 0 e entregou "o que ja
+            estava la". Dispara em 90+(-90), -90+90, 180+180 e qualquer par
+            cuja soma seja multiplo de 360.
+   Fix:     emitir sempre -display_rotation:v:0 <valor>, inclusive quando 0.
+            Uma linha, risco nulo. (A formula corrente+graus esta correta -
+            NAO mexer; o defeito e a omissao no caso zero.)
+   Linhas:  :1167-1182 (guard em :1171)
+
+4) [ALTO] Modo com reencode apaga TODA a metadados global, inclusive GPS
+   O que e: creation_time, location (coordenadas GPS), titulo, make/model e
+            comentarios sao destruidos. Em video probatorio a geolocalizacao e
+            metadado relevante. A linha seguinte :1199 (rotate=0) ja resolve o
+            unico problema que o -1 poderia estar tentando evitar.
+   Fix:     trocar "-map_metadata","-1" por "-map_metadata","0" nos tres
+            pontos, mantendo -metadata:s:v:0 rotate=0.
+   Linhas:  :1198 (sequencial), :1004 (cada segmento paralelo), :878 (concat
+            final do paralelo). Contraste: Cortar usa 0 em :612 e :616.
+
+5) [ALTO] Paralelo reencoda o audio para AAC 48 kHz estereo; sequencial copia
+   O que e: marcar "Processar em paralelo" muda o audio de copia bit-a-bit
+            para transcode com downmix, sem aviso. Um AC3 5.1 sai como AAC
+            estereo. O argumento do comentario em :1000-1001 (concat com -c
+            copy ser valido em MP4) vale para o CODEC, nao para taxa/canais.
+   Fix:     remover "-ar","48000","-ac","2" de :1003 e deixar o FFmpeg herdar
+            os parametros da fonte; ou avisar na UI.
+   Linhas:  :1197 (sequencial: -c:a copy quando sem trim) vs
+            :1002-1003 (paralelo: aac + -ar 48000 + -ac 2)
+
+6) [ALTO] Modo somente-metadados grava -c copy em .mp4 FIXO sem validar codec
+   O que e: -i entrada -map 0 -c copy saida, sem nenhuma validacao, ao
+            contrario do Inserir que tem audioCodecCopySafe(). O nome de saida
+            e literal em .mp4. Entradas problematicas: VP9/AV1/MPEG-4 Part
+            2/WMV (sem tag em MP4), audio wmav2/amr/vorbis em MP4, qualquer
+            MKV com legenda ASS/SRT. Gera arquivo corrompido ou falha critica.
+   Fix:     reaproveitar audioCodecCopySafe() + teste equivalente para video;
+            derivar a extensao do container de ENTRADA em vez de fixar .mp4;
+            checar streams de legenda antes de -map 0.
+   Linhas:  :1174-1182 (comando), :1754-1759 (buildOutputName)
+
+7) [MEDIO] Paralelismo desligado em silencio em dois dos quatro cenarios
+   O que e: "Processar em paralelo" fica marcado e habilitado, mas o video e
+            processado em thread unica. So o caso hasTrim gera Toast
+            (:480-486). Sem aviso quando (a) orderedFilters.isBlank() - 0 grau
+            e nenhum espelhamento; (b) video curto - :669-681 reduz os pontos
+            de split sem mensagem.
+   Fix:     emitir Toast/ajuste no rotulo do passo nos quatro casos e
+            desabilitar/esmaecer o checkbox nos dois ultimos.
+   Linhas:  :477 (canUseParallel), :669-681 (reducao silenciosa de splitPoints)
+
+8) [MEDIO] Segmentacao paralela forca MP4 intermediario e NAO degrada para serial
+   O que e: os pedacos sao gravados com -f segment -segment_format mp4 -c copy,
+            um MP4 completo por pedaco (mesmo padrao que causa A34/A38 no
+            Inserir, e que o Cortar ja evitou com .ts + aac_adtstoasc). Se o
+            split falhar, a funcao retorna falha: NAO existe reexecucao em modo
+            serial - o usuario perde o trabalho e tenta de novo. Agravante: o
+            split usa -map 0, entao legendas/anexos de MKV tambem tem de caber
+            em MP4.
+   Fix:     (1) -segment_format mpegts + -bsf:v h264_mp4toannexb; ou
+            (2) try/catch em volta de executeParallelKeyframeRotation e, em
+                falha de split, reexecutar com canUseParallel = false.
+   Linhas:  :686-723 (comando de split), :724-734 (retorno de falha sem fallback)
+
+9) [MEDIO] Politica de -avoid_negative_ts nao uniforme entre branches com -ss + copia
+   O que e: o flag so aparece em :698 e :716, as duas dentro do split paralelo.
+            Nao aparece no sequencial com trim (:1188-1200) nem na rotacao de
+            cada segmento (:971-1010). Resultado: timestamps negativos ou
+            primeiro frame duplicado/cortado, de forma dificil de reproduzir.
+   Fix:     acrescentar "-avoid_negative_ts","make_zero" em :1188-1200 e em
+            buildSegmentRotationArguments; ou centralizar a montagem de
+            argumentos para que todos os branches compartilhem a politica.
+   Linhas:  :698, :716 (tem) vs :1188-1200, :971-1010 (nao tem).
+            Referencia: Cortar explicita sempre em :614, :724, :811, :831.
+
+10) [MEDIO] -metadata:s:v:0 rotate=0 e no-op e a ferramenta NAO passa -noautorotate
+    O que e: (a) a tag legada "rotate" e ignorada pelas versoes atuais do
+             FFmpeg, entao rotate=0 e inerte e induz a erro no diagnostico;
+             (b) ao contrario de Cortar (:601, :802, :826) e Juntar (:1316,
+             :1320), o Girar nao passa -noautorotate - se o FFmpeg autorrotacionar,
+             os frames chegam girados ao filtro e o transpose/hflip gira de novo.
+    Fix:     acrescentar -noautorotate antes de -i em :1187-1190 e emitir
+             -display_rotation:v:0 0 de forma explicita. Confirmar com um video
+             de celular com display matrix -90 antes e depois.
+    Linhas:  :1195-1201 (montagem), :879 (repetido no concat paralelo)
+
+11) [MEDIO] Modo metadados descarta espelhamentos sem aviso
+    O que e: ao ligar metadados, flipH/flipV sao desmarcados e removidos de
+             transformOrder. Os controles ficam esmaecidos (o usuario ve), mas
+             ao desligar a opcao as caixas continuam desmarcadas - a selecao
+             nao volta.
+    Fix:     guardar o estado anterior e restaurar ao desligar; ou Toast no
+             momento da limpeza.
+    Linhas:  :1309-1315 (limpeza), :1316-1322 (esmaecimento)
+
+12) [MEDIO] Modo metadados zera o intervalo de corte sem aviso
+    O que e: se o usuario marcou um intervalo e depois liga metadados (que e o
+             PADRAO - ver item 2), o intervalo e zerado e ele cai no caso do
+             item 3 (soma 0 = no-op).
+    Fix:     confirmar antes de zerar, ou desabilitar a opcao quando ha intervalo.
+    Linhas:  :1328-1333
+
+13) [BAIXO] normalizeMetadataDegrees colapsa qualquer valor nao multiplo de 90
+    O que e: o when mapeia 90/180/270 e devolve 0 para todo o resto. Um side
+             data com rotacao 45 ou 271 graus e truncado para 0, e a soma do
+             item 3 fica errada.
+    Fix:     arredondar para o multiplo de 90 mais proximo antes de normalizar.
+    Linhas:  :1342-1350
+
+14) [BAIXO] Encoder/qualidade lidos na thread de trabalho
+    O que e: o valor e lido por parametro padrao DENTRO da Thread
+             (selectedVideoQuality), sem barreira de memoria nem @Volatile.
+             Risco contido porque setProcessing() desabilita os controles, mas
+             o Cortar faz certo: captura tudo na UI antes de abrir a Thread.
+    Fix:     capturar encoder e qualidade em variaveis locais antes de Thread{},
+             como FfmpegCutActivity.kt:481-485.
+    Linhas:  :1194 (chamada), FfmpegVideoQuality.kt (default)
+
+================================================================================
+FERRAMENTA DE CORTAR AUDIO/VIDEO  (FfmpegCutActivity.kt)
+================================================================================
+POSITIVO: o Cortar do Android e o melhor das 6 ferramentas. Tem modo hibrido
+real (corpo copiado, bordas reencodadas), preserva capitulos (-map_chapters 0)
+e trata rotacao com -noautorotate + -display_rotation. Os achados abaixo sao
+de precisao e de rotulos, nao de arquitetura.
+
+1) [ALTO] Corpo do corte hibrido comeca no keyframe errado: duplica ate um GOP
+   O que e: o inicio do trecho aparece DUAS VEZES e o trecho final e PERDIDO.
+            Silencioso, sem erro, duracao final aparentemente correta.
+            Cadeia de tres decisoes: (1) :849 faz sampleTime / 1000L - o valor
+            esta em MICROSSEGUNDOS, entao 8.333.333 us vira 8333 ms, truncado
+            para baixo; (2) :643 usa o valor ja truncado; (3) :826 passa esse
+            -ss ANTES de -i com -c:v copy, e o FFmpeg faz seek para o keyframe
+            MENOR OU IGUAL - caindo no keyframe ANTERIOR.
+            Dispara sempre que um keyframe nao cair em milissegundo inteiro:
+            tipico em 29,97 / 30 / 60 fps. Nao dispara em 25/50 fps com GOP redondo.
+   Fix:     (a) guardar os keyframes em microsegundos e so converter na hora de
+                formatar: String.format("%.6f", sampleTime / 1_000_000.0) - duas linhas;
+            (b) alternativa: somar 1 ms de margem ao -ss; ou
+            (c) mover o -ss para depois de -i no corpo.
+   Linhas:  :849 (truncamento), :643 (uso), :826 (comando do corpo)
+
+2) [ALTO] "Copiando trecho central sem reencodar" so e verdade para o VIDEO
+   O que e: o rotulo mostrado ao usuario promete copia, mas o audio do trecho
+            central e sempre reencodado para AAC. Nao existe -c:a copy em
+            lugar nenhum do Cortar.
+   Fix:     mudar o rotulo para "Copiando video do trecho central" e, se o
+            audio da fonte ja for AAC com a mesma taxa, usar -c:a copy
+            (reutilizar a logica de Girar:1197).
+   Linhas:  :656 (rotulo), :830 (corpo), :810 (bordas), :614 (precisao)
+
+3) [ALTO] Legendas e faixas extras de audio descartadas em silencio
+   O que e: -map 0:v:0? -map 0:a:0? => um MKV com dois idiomas + legenda sai
+            com 1 video + 1 audio. Ver tambem achado transversal 1.
+   Fix:     adicionar "-map","0:s?" e "-map","0:a" (todas as faixas de audio),
+            com -c:s copy quando o container aceitar. No minimo, contar as
+            faixas e avisar no log quantas foram descartadas.
+   Linhas:  :612, :806, :828
+
+4) [MEDIO] Classificacao video/audio por MIME declarado ou extensao, nunca por conteudo
+   O que e: extensao fora da lista cai no default "video/mp4" (:1479). Um
+            arquivo de audio com extensao desconhecida (ou um MKV so com audio)
+            e tratado como video: resultado e um .mp4 sem faixa de video e com
+            o audio reencodado para AAC. Nenhuma ferramenta consulta o
+            conteudo real (MediaExtractor/ffprobe) para decidir se ha video.
+   Fix:     sondar com MediaExtractor (como extractKeyframesFromFile :836-857
+            ja faz) e usar a presenca de faixa de video como criterio; para o
+            default, cair em "audio/" quando nao houver faixa de video.
+   Linhas:  :401-409 (decisao). selectedMime e usado em :439-468 (UI), :508
+            (worker) e :1120-1128 (nome de saida).
+
+5) [MEDIO] HEVC (ou encoder HEVC) desliga o caminho rapido sem aviso
+   O que e: o usuario marca nada, o arquivo e HEVC, e o corte cai no reencode
+            completo - muito mais lento. Nada na UI explica a escolha.
+   Fix:     exibir o modo escolhido na UI antes de executar (o Cortar ja tem
+            estrutura de etapas para isso - FfmpegTaskTracker).
+   Linhas:  :637
+
+6) [MEDIO] Caminho de precisao usa -ss DEPOIS de -i: corte no fim de arquivo
+           longo decodifica o arquivo inteiro
+   O que e: -i input -ss X -t Y => decodificacao desde o inicio do arquivo.
+            Cortar os ultimos 2 s de um video de 2 h decodifica 2 h. E o unico
+            caminho para HEVC, VP9, AV1, MPEG-4 e para arquivos cujos
+            keyframes nao foram encontrados (:646-648).
+            NOTA: o problema NAO e reencodar 2 h - e o -ss estar do lado
+            errado do -i.
+   Fix:     colocar -ss antes de -i (o accurate_seek do FFmpeg garante precisao
+            quando ha reencode) e manter -t como opcao de saida.
+   Linhas:  :604-608, :646-648
+
+7) [MEDIO] Corte de audio: WAV sempre 16-bit, MP3 travado em CBR, sem copia
+   O que e: wav -> pcm_s16le (derruba WAV 24/32-bit); mp3 -> libmp3lame -b:a X
+            (sem VBR, sem -minrate/-maxrate aqui); flac -> flac (ok); outros ->
+            aac. Nenhuma opcao oferece -c:a copy: cortar o mesmo formato sempre
+            reencoda.
+   Fix:     adicionar um caminho -c:a copy quando a extensao de saida for
+            compativel com o codec de entrada (wav<->pcm, mp3<->mp3,
+            m4a/aac<->aac, flac<->flac, ogg<->vorbis).
+   Linhas:  :900-910 (preciseAudioEncoderArguments)
+
+8) [BAIXO] isH264Video usa contains("Video:") na primeira linha que aparecer
+   O que e: logs.firstOrNull { it.contains("Video:", ignoreCase = true) }. Se o
+            arquivo tiver capitulos, titulos ou metadados com a palavra
+            "Video:", a linha errada e analisada, a deteccao falha e o corte
+            cai no reencode completo (achado 5).
+   Fix:     ancorar no padrao de stream:
+            Regex("""Stream #\d+:\d+.*: Video:""", IGNORE_CASE)
+   Linhas:  :859-869
+
+================================================================================
+FERRAMENTA DE JUNTAR VIDEO/AUDIO  (FfmpegJoinVideosActivity.kt)
+================================================================================
+POSITIVO: a uniao direta valida rotacao antes de executar (:557 calcula
+directConcatOrientationMismatch, :704-709 recusa com mensagem explicita).
+Esse era o B1 do Windows e esta resolvido aqui.
+
+1) [CRITICO] Clipes sao CORTADOS (crop), nao letterbox, quando as proporcoes
+             diferem - sem nenhum aviso
+   O que e: juntar um clipe 16:9 com um clipe 9:16 faz o clipe vertical perder
+            a maior parte do quadro. O conteudo das bordas desaparece.
+            videoFillFrameFilter tem dois ramos: letterbox
+            (decrease + pad) e o default (increase + crop). O predicado
+            hasMixedOrientations() compara apenas ROTACAO - nunca proporcao.
+            16:9 + 9:16 (ambos rotacao 0) cai no CROP.
+            Exemplo: base 1920x1080, clipe vertical 1080x1920.
+              scale=1920:1080:increase -> 1920 x 3413
+              crop=1920:1080            -> mantem 1080 linhas centrais de 3413
+              = 68% do quadro do clipe vertical descartado.
+            REGRESSAO: no Windows o filtro era scale+pad (conteudo preservado).
+   Fix:     minimo (1 linha): inverter o padrao - letterbox por default, cortar
+            so se o usuario pedir. Recomendado: calcular a maior resolucao
+            entre os clipes em vez de copiar o clip 1 (mitiga tambem o item 5)
+            e exibir dialogo antes de executar listando os clipes normalizados.
+   Linhas:  :1583-1592 (videoFillFrameFilter), :1594-1596 (hasMixedOrientations),
+            chamadas em :1513 (fade) e :1552 (xfade)
+
+2) [CRITICO] SmartJoin duplica e REMOVE conteudo em toda emenda interna
+   O que e: com SmartJoin ativo, cada clipe (exceto o primeiro) tem os
+            primeiros instantes repetidos e um trecho antes do fim omitido.
+            Com a transicao padrao de 0,5 s e GOP de 2 s, sao 0,5 s duplicados
+            e 0,5 s perdidos por clipe. Silencioso.
+            Causa: -ss <bodyStart> ANTES de -i com -c:v copy => seek por
+            keyframe. bodyStart e transitionSeconds (0,5 s), que quase nunca e
+            keyframe. Com k = keyframe escolhido e d = bodyStart - k:
+              esperado corpo_i = [T, C-T]     (T = transitionSeconds)
+              obtido   corpo_i = [T-d, C-T-d]
+            => [T-d, T] aparece DUAS VEZES e [C-T-d, C-T] nao aparece.
+            O primeiro clipe escapa (bodyStart = 0). Agravo: a duracao total
+            fica errada em relacao a soma das duracoes na timeline da UI.
+   Fix:     (a) alinhar bodyStart ao keyframe: usar extractKeyframesFromFile
+                (FfmpegCutActivity.kt:836-857), arredondar para o keyframe
+                imediatamente ANTERIOR e compensar a diferenca em bodyDuration;
+            (b) alternativa curta: recalcular bodyDuration como (bodyEnd - k)
+                em vez de (bodyEnd - bodyStart) - nada se perde e a duplicacao
+                e absorvida pelo crossfade;
+            (c) ate corrigir, avisar que Smart Join e experimental.
+            Ha teste do planejador (SmartJoinPlannerTest.kt) mas nenhum de
+            executeSmartJoinExperiment.
+   Linhas:  :1193-1198 (comando), :1183-1184 (bodyStart/bodyEnd)
+
+3) [ALTO] Nenhum caminho preserva multiplas faixas de audio; aridade 1
+   O que e: SmartJoin mapeia -map 0:v:0 e -map 0:a:0?; o reencode usa
+            concat=n=N:v=1:a=1; o grafo do filtro so comporta um rotulo de
+            audio por clipe. Juntar clipes com audio original + dublagem
+            descarta a dublagem. O validador nao ve o problema:
+            SmartJoinPlanner.profilesCompatible() compara 10 campos e nao
+            compara a CONTAGEM de faixas de audio.
+   Fix:     passo 1 (barato): incluir audioStreams em SmartJoinMediaProfile e
+            recusar SmartJoin quando o primeiro clipe tiver mais de uma faixa.
+            Passo 2: no reencode, usar concat com a=N e -map dos rotulos por faixa.
+   Linhas:  :1195-1196, :1543, :1578, :1463, :1524-1539;
+            SmartJoinPlanner.kt :128-161 (profilesCompatible)
+
+4) [ALTO] Todo reencode forca -c:a aac com taxa e canais do primeiro clipe
+   O que e: nao existe -c:a copy em nenhum ponto de reencode. AC3, EAC3, FLAC,
+            Opus e Vorbis sao convertidos para AAC. Assimetria com o Girar,
+            que faz -c:a copy (:1197).
+   Fix:     quando todos os clipes compartilharem codec/taxa/canais de audio E
+            o container aceitar, usar -c:a copy. A informacao ja existe em
+            OutputProfile.audioCodec (:2877).
+   Linhas:  :1118-1121 (audio), :1203-1206 (SmartJoin corpo), :1337-1340
+            (SmartJoin transicao), :1480 (reencode com transicao), :1492 (fade)
+
+5) [ALTO] O perfil de saida e sempre o do primeiro clipe
+   O que e: detectOutputProfile(inputs.firstOrNull(), ...) sem condicao.
+            Adicionar um 480p primeiro e tres 1080p depois => saida inteira em
+            480p, com reescala e (pelo item 1) corte. Diferente do Windows,
+            aqui NAO ha aviso nem no log nem na UI: os rotulos de etapa
+            (:2252-2259) sao apenas "Aplicando transicoes" / "Aplicando Fade
+            in/out". O usuario so descobre vendo o resultado.
+   Fix:     escolher o perfil pela maior resolucao entre os clipes (ou pela
+            moda) e exibir antes de executar um resumo "Saida: 1920x1080;
+            clipes 2 e 3 serao reescalados".
+   Linhas:  :552, :1172, :1473, :1485; rotulos em :2252-2259
+
+6) [ALTO] O caminho "sem reencodar" nao valida o audio do primeiro clipe nem
+          legendas/anexos
+   O que e: (a) audioInputsAreCopyCompatible() (:2547-2559) - que compara mime,
+            sample rate, canais E pcmEncoding - so e chamado para join de
+            AUDIO (:547). Para video, a unica checagem e
+            smartJoinInputsCompatible (:579-583), que via profilesCompatible
+            compara apenas campos de VIDEO (mais sample rate/canais do audio).
+            Nao ha checagem do CODEC de audio do primeiro clipe.
+            (b) buildDirectConcatArguments usa -c copy sem nenhum -map, e a
+            saida de video e sempre .mp4 (:2542). Um MKV com legenda ASS/SRT
+            ou com fontes anexas entra no MP4 e o FFmpeg aborta - ou produz um
+            arquivo com legenda que nenhum player le.
+   Fix:     aplicar audioInputsAreCopyCompatible() tambem no caminho de video;
+            antes do concat direto, contar streams de legenda/anexo e decidir
+            entre "-map 0:v -map 0:a" ou avisar que e necessario reencodar.
+   Linhas:  :547, :579-583, :1147-1161 (buildDirectConcatArguments),
+            :2542 (buildJoinedOutputName), :2547-2559 (validador)
+
+7) [MEDIO] fade/afade aplicados ANTES de setpts/asetpts - janelas calculadas
+           sobre o PTS original
+   O que e: a transicao "Fade in/out" simplesmente nao acontece (ou sai
+            deslocada) em entradas cujo PTS nao comeca em zero. O filtro fade
+            avalia st=/d= contra o PTS de ENTRADA; como setpts=PTS-STARTPTS
+            vem DEPOIS, uma entrada cujo primeiro PTS seja 1,4 s (tipico de
+            MPEG-TS, de MP4 com edit list ou de gravacoes com offset) faz o
+            fade-in cair fora da janela e nao disparar nunca.
+            Os outros dois caminhos (:1436-1448 e :1552-1556) normalizam
+            antes - o que torna o bug intermitente e dificil de diagnosticar.
+   Fix:     mover setpts=PTS-STARTPTS / asetpts=PTS-STARTPTS para o INICIO da
+            cadeia de cada clipe e aplicar fade/afade depois da normalizacao.
+   Linhas:  :1506-1530 (video :1508-1509 + :1515; audio :1521-1522 + :1530);
+            join de audio :1076-1085
+
+8) [MEDIO] Audios incompativeis viram WAV 16 kHz mono em silencio
+   O que e: quando audioInputsAreCopyCompatible() falha e o usuario NAO marcou
+            Recodificar, o codigo forca pcm_s16le -ar 16000 -ac 1. O nome do
+            arquivo muda para .wav (:2536), mas nada na UI explica a queda de
+            qualidade. Justificavel como padrao de transcricao; destrutivo para
+            musica.
+   Fix:     exibir dialogo de confirmacao com o que sera feito, ou reutilizar
+            os presets ja existentes em Extrair Audio (AudioPreset.LOCAL).
+   Linhas:  :1109-1115, :548-549, :1040, :2536
+
+9) [MEDIO] Deteccao de canais so reconhece mono/estereo; todo o resto vira 2.0
+   O que e: when { contains("mono") -> 1; contains("stereo") -> 2; else -> 2 }.
+            A linha de audio para 5.1 e "Audio: aac (LC), 48000 Hz, 5.1, fltp"
+            - nao contem "stereo" => devolve 2 => audioLayout "stereo" =>
+            aformat=channel_layouts=stereo => downmix silencioso.
+            O mesmo padrao se repete em FfmpegInsertAudioActivity.kt:763.
+   Fix:     ler o campo de layout com regex ("5.1","7.1","mono","stereo") e
+            mapear para a contagem; ou usar MediaExtractor (KEY_CHANNEL_COUNT),
+            como o proprio app ja faz em inspectAudioInput() (:2561-2581).
+   Linhas:  :2906-2912 (deteccao), :2672 (audioLayout), :1464 (aformat)
+
+10) [MEDIO] O bitrate de video usado como alvo e, na pratica, o do CONTAINER
+    O que e: a linha de stream de um MP4 normalmente NAO traz bitrate; o valor
+             vem da linha "Duration: ..., bitrate: N kb/s", que e do container
+             inteiro (video + audio + overhead). O max() garante que o maior -
+             isto e, o do container - seja escolhido. Com qualidade "Alta"
+             (multiplicador 1,00), -b:v fica acima do bitrate de video
+             original: arquivo inflado sem ganho de qualidade.
+    Fix:     usar o bitrate da linha de stream quando existir; caso contrario,
+             subtrair as faixas de audio do bitrate do container, ou usar
+             MediaMetadataRetriever.METADATA_KEY_BITRATE com desconto.
+    Linhas:  :2720-2727 (candidates + maxOrNull);
+             multiplicadores em FfmpegVideoQuality.kt :54-58
+
+11) [MEDIO] parseVideoProfile captura campos diferentes conforme o arquivo
+    O que e: Regex("""Video:\s*[a-zA-Z0-9_-]+\s*\(([^)]+)\)""").
+             Em "Video: h264 (High) (avc1 / 0x...)" captura "High";
+             em "Video: h264 (avc1 / 0x...)" captura "avc1 / 0x...".
+             Ambos sao H.264. Como profilesCompatible() compara esse campo,
+             dois arquivos H.264 identicos podem ser considerados
+             incompativeis => SmartJoin recusado => reencode completo
+             desnecessario e mais lento.
+    Fix:     extrair o perfil de forma especifica (procurar High/Main/Baseline
+             no texto) e devolver null quando nao houver.
+    Linhas:  :2864-2866; comparacao em SmartJoinPlanner.kt :144-147
+
+12) [BAIXO] join_list_*.txt nunca e apagado
+    O que e: :1148 grava em cacheDir e nao ha delete correspondente. O Cortar,
+             em situacao equivalente, usa workDir.deleteRecursively() (:743).
+    Fix:     apos o concat, listFile.delete().
+    Linhas:  :1148
+
+13) [BAIXO] Concat direto de MP3 com -c copy
+    O que e: buildDirectConcatArguments() tambem e usado para audio (:1043).
+             Unir MP3s pelo demuxer concat gera um arquivo cujo cabecalho
+             Xing/ID3 nao descreve o resultado: duracao reportada incorreta e
+             tags do segundo arquivo no meio da stream.
+    Fix:     para MP3, preferir o protocolo concat ("concat:a.mp3|b.mp3") ou
+             reencodar.
+    Linhas:  :1147-1161, :1043
+
+14) [BAIXO] Nomes internos do FFmpeg exibidos ao usuario no menu de transicao
+    O que e: a UI em portugues exibe "fade", "dissolve", "wipeleft",
+             "wiperight", "slideleft", "slideright", "smoothleft",
+             "smoothright", "circleopen", "circleclose".
+             (Mesmo achado no Inserir, com 26 itens como "Quarter sine wave
+             (qsin)" e "Inverted sine cardinal function (isinc)".)
+    Fix:     mapear cada nome interno para um rotulo em portugues, mantendo o
+             valor interno separado - o padrao ja e esse em AUDIO_TRANSITIONS
+             (LinkedMap nome -> curva); basta traduzir as chaves.
+    Linhas:  :475-477, :3030-3049 (TRANSITIONS / AUDIO_TRANSITIONS);
+             tambem FfmpegInsertAudioActivity.kt :467, :1074-1101
+
+15) [BAIXO] Encoder/qualidade lidos na thread de trabalho
+    O que e: settings = encoder.encodingFor(selectedVideoQuality, ...) e
+             avaliado por parametro padrao DENTRO da thread, sem barreira de
+             memoria nem @Volatile. (Mesmo padrao do Girar:1194.)
+    Fix:     capturar encoder e qualidade em variaveis locais antes de
+             Thread{}, como o Cortar faz em :481-485.
+    Linhas:  :1479 -> :2833. Risco contido: setProcessing() desabilita os
+             controles (FfmpegCutActivity.kt:1153-1154 e equivalentes).
+
+16) [BAIXO] Codigo morto: configureFadeProcessingPlan nao tem chamador
+    O que e: verificado por grep - a unica ocorrencia do identificador no
+             arquivo e a propria declaracao. Alguem vai encontrar essa funcao
+             aparentemente pronta e liga-la sem saber que nunca foi exercitada.
+             (Varredura de todas as "private fun" das seis Activities: esta e
+             a unica morta.)
+    Fix:     remover ou ligar ao fluxo de fade, e cobrir com teste.
+    Linhas:  :2326-2352
+
+================================================================================
+FERRAMENTA DE EXTRAIR AUDIO  (FfmpegExtractAudioActivity.kt)
+================================================================================
+
+1) [ALTO] O padrao de fabrica e WAV 16 kHz mono
+   O que e: quem escolhe um video e toca Extrair recebe 16 kHz mono. Agravo:
+            os valores sao identicos ao preset "Padrao para transcricao"
+            (:1014), mas o checkbox aparece DESMARCADO, porque
+            refreshOutputSettingsUi() so marca a caixa quando
+            outputPreset == LOCAL. A UI diz "personalizado" para o que e de
+            fato o preset de transcricao.
+   Fix:     subir o padrao para 48000 Hz / estereo, ou marcar o checkbox
+            coerente com os valores iniciais.
+   Linhas:  :146-150 (defaults), :1014 (preset LOCAL), :1053-1058
+            (refreshOutputSettingsUi)
+
+2) [ALTO] Sem caminho de copia; WAV sempre 16-bit; MP3 travado em CBR
+   O que e: WAV -> pcm_s16le (derruba 24/32-bit); MP3 -> libmp3lame -b:a X
+            -minrate X -maxrate X (CBR forcado; VBR vira CBR); M4A -> aac;
+            OGG -> libvorbis; FLAC -> flac. Nenhuma opcao oferece -c:a copy:
+            extrair o FLAC de um MKV com FLAC reencoda (lossless, mas lento e
+            inutil); extrair WAV de um WAV reencoda.
+   Fix:     quando a extensao de saida casar com o codec de entrada, oferecer
+            -c:a copy. Reaproveitar audioCodecCopySafe() de
+            FfmpegInsertAudioActivity.kt:1033-1044, que ja faz esse teste.
+   Linhas:  :861-888 (buildFfmpegArguments); MP3 em :866
+
+3) [ALTO] OPUS forcado como VOIP + CBR
+   O que e: -c:a libopus -application voip -b:a X -vbr off. -application voip
+            otimiza para voz em banda estreita e desliga parte da banda de
+            audio; para musica e a escolha errada. -vbr off desliga o VBR.
+            O proprio app usa -application audio em outros contextos
+            (encoderForExtension :980 mapeia ogg/opus para libopus sem essas
+            flags).
+   Fix:     trocar para "-application","audio" e remover "-vbr","off".
+   Linhas:  :877-884
+
+4) [MEDIO] -map 0:a:0 sem "?" e sempre a primeira faixa
+   O que e: se o arquivo nao tiver audio, o FFmpeg aborta com "Stream map
+            '0:a:0' matches no streams". Mitigado pelo filtro hasAudioTrack()
+            (:531-544) na selecao, mas nao em todos os caminhos.
+   Fix:     usar "-map","0:a:0?" e checar o tamanho do arquivo de saida.
+   Linhas:  :856; mitigacao em :531-544
+
+5) [MEDIO] Desmarcar um preset mantem os valores dele
+   O que e: setTranscriptionStandard(enabled) so restaura outputPreset; os
+            quatro valores (extensao, sample rate, canais, bitrate) ficam com
+            os do preset. Nao ha restauracao do estado anterior.
+   Fix:     guardar os valores antes de aplicar o preset e restaura-los ao
+            desligar.
+   Linhas:  :990-1010
+
+6) [BAIXO] Opus: politica divergente entre as ferramentas
+   O que e: o mesmo audio exportado como Opus sai com qualidade/timbre
+            diferente dependendo da ferramenta usada. O Extrair forca
+            -application voip -vbr off (ver item 3); Cortar (:906) e Inserir
+            (:980, :1007) usam libopus sem nenhuma flag, ou seja os padroes do
+            FFmpeg (-application audio, VBR ligado). Nenhuma das tres explica a
+            diferenca ao usuario, e nenhuma deixa escolher.
+   Fix:     unificar em "-application","audio" (voip so faria sentido para o
+            preset de transcricao, que hoje e WAV 16 kHz) e documentar no help.
+   Linhas:  FfmpegExtractAudioActivity.kt :877-884 (voip + vbr off) vs
+            FfmpegCutActivity.kt :906 e FfmpegInsertAudioActivity.kt :980, :1007
+
+7) [BAIXO] Selecao de arquivo unico sempre injeta -ss 0 -t <duracao>, mesmo
+           sem pedido de corte
+   O que e: com um arquivo selecionado, endMs nunca e nulo (inputTo vem
+            preenchido com a duracao), entao TODO comando de arquivo unico sai
+            com "-ss 0 -t <duracao>". Se o campo "fim" estiver desatualizado
+            em relacao a midia, o audio sai truncado sem aviso.
+   Fix:     so emitir -ss/-t quando startMs > 0 ou endMs < duracao - margem.
+   Linhas:  :731-734 (trimSingleMedia / endMs), :838-856 (emissao)
+
+8) [BAIXO] Dois processos FFmpeg extras por arquivo, so para o terminal
+   O que e: por arquivo, alem da extracao, o codigo chama describeAudioFile()
+            duas vezes (:770 entrada, :798 saida) e cada uma executa um
+            processo FFmpeg completo ("-hide_banner -i <arquivo>"). Em lote com
+            muitos arquivos curtos, o custo fixo domina o tempo total.
+            readDuration() (:1587, :1601) usa MediaMetadataRetriever e e barato.
+   Fix:     extrair as informacoes do proprio log da sessao de extracao, ou
+            tornar o detalhamento do terminal opcional/desativado em lote.
+   Linhas:  :770, :798 (chamadas), :1547-1577 (probeAudioFile)
+
+9) [BAIXO] O terminal mostra o bitrate do CONTAINER como se fosse o do audio
+   O que e: Regex("""(\d+(?:\.\d+)?)\s*kb/s""").find(logs) procura a PRIMEIRA
+            ocorrencia no log inteiro, que e a linha "Duration: ... bitrate: N
+            kb/s" - do container. Para o arquivo original (um video), o numero
+            exibido inclui o video.
+   Fix:     procurar na audioLine, como ja fazem :1557 e :1561.
+   Linhas:  :1570-1573 (probeAudioFile)
+
+10) [BAIXO] O menu de bitrate oferece 24k, rejeitado/clampado em silencio pelo
+            libmp3lame
+    O que e: a lista e unica para todas as extensoes. libmp3lame nao aceita 24
+             kbps (o minimo util da familia MPEG-1 Layer III e 32 kbps) e o
+             FFmpeg clampa com um aviso que fica apenas no log. O controle
+             continua exibindo 24k. O mesmo menu e oferecido para
+             AAC/M4A/OGG/OPUS, onde 24k e valido.
+    Fix:     filtrar a lista por extensao/codec, ou clampar e refletir o valor
+             efetivo no botao.
+    Linhas:  :1127 (lista), :1068 / :1121-1123 (gating do controle)
+
+================================================================================
+FERRAMENTA DE INSERIR AUDIO  (FfmpegInsertAudioActivity.kt)
+================================================================================
+
+1) [ALTO] -ss antes de -i com -c copy no trecho direito; pedacos sao containers
+          completos
+   O que e: dois problemas somados. (a) -ss como opcao de entrada + stream copy
+            => corte na grade de PACOTES, nao de amostras: AAC = 1024 amostras
+            (~21,3 ms a 48 kHz), MP3 = 1152 (~26,1 ms a 44,1 kHz). (b) cada
+            pedaco e gravado como um .m4a/.mp3 COMPLETO e independente, e a
+            uniao e feita com o demuxer concat + -c copy. Um MP4/M4A carrega
+            edit list e priming do encoder AAC (~2048 amostras, ~43 ms); o
+            demuxer concat nao preserva isso. Com 3 pedacos => 2 emendas =>
+            ate ~85 ms de deriva acumulada.
+            CONTRASTE: o Cortar NAO sofre disso porque grava os pedacos em
+            MPEG-TS (:812, :832) e aplica -bsf:a aac_adtstoasc no concat
+            (:724) - TS nao tem edit list. O proprio app ja tem a solucao, na
+            aba ao lado.
+   Fix:     copiar a estrategia do Cortar: pedacos em .ts com
+            -mpegts_flags +resend_headers e -bsf:a aac_adtstoasc no concat. Ou
+            mover -ss para depois de -i e reencodar apenas as bordas.
+   Linhas:  :679 (copy), :709 (smart), :668 / :673 / :678 (pedacos), :721
+            (concat)
+
+2) [MEDIO] Smart Insert reencoda apenas o trecho inserido e une com -c copy
+   O que e: o trecho inserido e gravado com um encoder escolhido por
+            encoderForProfile() e depois concatPieces() une tudo com -c copy.
+            Se o encoder do trecho inserido produzir parametros de stream
+            diferentes dos do principal, o resultado e tecnicamente invalido: o
+            FFmpeg aceita, players podem engasgar. Alem disso os pedacos sao
+            containers completos (causa do item 1).
+   Fix:     mesma solucao do item 1 (.ts + aac_adtstoasc), e validar que os
+            parametros do trecho reencodado casam com o principal.
+   Linhas:  :699-706 (trecho inserido), :997-1011 (encoderForProfile),
+            :717-724 (concatPieces)
+
+3) [MEDIO] A validacao de copia ignora formato de amostra, perfil AAC e extradata
+   O que e: audioInputsAreCopyCompatible() compara somente codec && sampleRate
+            && channels. AudioProfile nem carrega sample_fmt, perfil de codec
+            nem extradata - detectAudioProfile() so extrai sampleRate, channels,
+            bitrate e codec. Resultado: a uniao com -c copy aceita pares que
+            players reproduzem errado (AAC-LC + HE-AAC, PCM s16 + PCM f32), ou
+            falha tarde. Agravo: channels e comparado como contagem, nao como
+            layout, e a contagem ja e limitada a 1/2 pelo item 5.
+   Fix:     extrair tambem sample_fmt e profile na sondagem e inclui-los na
+            comparacao; ou, mais simples e mais seguro, exigir reencode/Smart
+            Insert quando os dois arquivos nao vierem do mesmo encoder com os
+            mesmos parametros.
+   Linhas:  :1013-1026 (validador), :1053-1058 (AudioProfile),
+            :758-767 (detectAudioProfile)
+
+4) [MEDIO] O campo de tempo exibe a posicao do playhead, nao o ponto de insercao
+   O que e: o mesmo EditText (inputTime) tem dois significados. Para ESCREVER o
+            ponto: applyTypedInsertionTime() le o texto e grava insertionMs.
+            Para MOSTRAR a posicao: seekComposite, updateCompositePlaybackPosition,
+            configureTimeline e finishPlayback sobrescrevem o texto com a
+            posicao do playhead. Como a reproducao e o ticker atualizam o campo
+            continuamente, qualquer arrasto apaga visualmente o ponto digitado -
+            embora insertionMs continue com o valor antigo (e seja esse o valor
+            usado no comando). O usuario confere, ve um numero, e o executado e
+            outro.
+   Fix:     usar dois campos distintos (ou um rotulo dinamico "ponto de
+            insercao" x "posicao"), e so reescrever o campo do ponto de
+            insercao quando o valor realmente mudar.
+   Linhas:  :416-427 (escrita), :399, :360, :256, :388 (sobrescrita),
+            :493 (uso de insertionMs)
+
+5) [MEDIO] detectAudioProfile so reconhece mono/estereo
+   O que e: val channels = if (audioLine.contains("mono", true)) 1 else 2.
+            Fonte 5.1 => 2. Mesma falha do Juntar, item 9.
+   Fix:     ler o campo de layout com regex e mapear para a contagem; ou usar
+            MediaExtractor (KEY_CHANNEL_COUNT).
+   Linhas:  :763
+
+6) [MEDIO] -map 0:a:0 sem "?" em todas as extracoes de pedaco
+   O que e: seis pontos. Se qualquer pedaco nao tiver audio, o FFmpeg aborta
+            no meio do processo, depois de os primeiros pedacos ja terem sido
+            gerados.
+   Fix:     usar "0:a:0?" ou validar a presenca de audio antes.
+   Linhas:  :669, :674, :679, :694, :701, :709
+
+7) [BAIXO] "Recodificar" e ignorado quando Smart Insert + transicao "none"
+   O que e: a condicao (reencodeChecked && (!smartInsertChecked || transicao !=
+            NONE)) faz fullReencode = false com os dois marcados e transicao
+            "none", caindo em Smart Insert. O rotulo final informa "Modo: Smart
+            Insert" (perceptivel), mas a intencao declarada pelo usuario e
+            descartada em silencio.
+   Fix:     se reencodeChecked, priorizar fullReencode independentemente do
+            Smart Insert.
+   Linhas:  :522 (condicao), :544 (queda em Smart Insert), :556-559 (rotulo)
+
+8) [BAIXO] Nomes internos do FFmpeg exibidos ao usuario no menu de transicao
+   O que e: 26 itens com nomes tecnicos em ingles ("Quarter sine wave (qsin)",
+            "Double-exponential sigmoid (desi)", "Inverted sine cardinal
+            function (isinc)") exibidos numa UI em portugues.
+            (Mesmo achado no Juntar, com 10 itens.)
+   Fix:     mapear cada nome interno para rotulo em portugues, mantendo o valor
+            interno separado.
+   Linhas:  :467 (menu), :1074-1101 (AUDIO_TRANSITIONS)
+
+================================================================================
+FERRAMENTA DE LIMPAR AUDIO  (FfmpegCleanAudioActivity.kt)
+================================================================================
+POSITIVO: e a unica ferramenta que mostra o comando FFmpeg ao usuario (:192).
+Excelente para diagnostico - as outras cinco escondem.
+
+1) [ALTO] Saida sempre WAV 16 kHz mono, sem opcao e sem aviso
+   O que e: -c:a pcm_s16le -ar 16000 -ac 1 -f wav, irreversivel. O nome da
+            ferramenta e "Limpar audio", o que sugere que o resultado e o mesmo
+            audio limpo - nao um derivado reduzido para transcricao.
+            Nota: 16 kHz mono 16-bit e de fato o padrao do Whisper, entao a
+            escolha e tecnicamente defensivel. O problema e a ausencia de opcao
+            e de aviso.
+   Fix:     expor o formato de saida na UI (reutilizando AudioExtension /
+            AudioPreset de Extrair Audio) ou, no minimo, avisar claramente
+            antes de executar.
+   Linhas:  :251-254
+
+2) [MEDIO] anlmdn (filtro "forte") e extremamente lento, sem estimativa
+   O que e: anlmdn e um denoiser non-local means: ordens de magnitude mais
+            lento que afftdn. Em um celular, minutos de audio podem levar
+            dezenas de minutos, sem previsao de tempo e sem indicacao na UI.
+   Fix:     avisar na descricao do filtro (showFilterHelp :300) que o modo
+            forte e muito mais lento, e mostrar a velocidade relativa - o
+            tracker ja suporta isso (ver Girar:607-608).
+   Linhas:  :502 (CleanMode.STRONG), :300 (showFilterHelp)
+
+3) [MEDIO] -map 0:a:0 sem "?"
+   O que e: diferente das outras ferramentas, nao ha filtro previo de faixa de
+            audio; um arquivo de video sem audio aborta o FFmpeg.
+   Fix:     "0:a:0?" + checagem de saida vazia.
+   Linhas:  :249
+
+4) [BAIXO] So o Limpar Audio mostra o comando FFmpeg ao usuario
+   O que e: appendTerminal("ffmpeg ${args.joinToString(" ")}"). Informativo -
+            sugestao de padronizacao para as outras cinco ferramentas, nao bug.
+   Fix:     padronizar: todas as ferramentas deveriam registrar o comando.
+   Linhas:  :192
+
+================================================================================
+ACHADOS TRANSVERSAIS (afetam mais de uma ferramenta)
+================================================================================
+
+1) [ALTO] Nenhuma das 6 ferramentas preserva legendas
+   O que e: verificado - nao existe "-c:s", nem "-map 0:s", nem "-sn" em
+            nenhum arquivo Ffmpeg*.kt. A unica excecao e o Girar em modo
+            metadados, que usa -map 0 (:1177) e por consequencia carrega tudo.
+            Impacto: qualquer operacao sobre um MKV com legenda embutida
+            descarta a legenda. Em contexto probatorio, legenda de transcricao
+            embutida pode ser conteudo relevante.
+   Fix:     adotar -map 0:s? + -c:s copy onde o container de saida aceitar;
+            onde nao aceitar, contar as faixas e avisar quantas foram
+            descartadas (no minimo, registrar no log).
+   Linhas:  Girar :1177 (excecao); Cortar :612, :806, :828; Juntar :1147-1161;
+            Extrair :856; Inserir :669, :674, :679, :694, :701, :709;
+            Limpar :249
+
+2) [MEDIO] Tratamento de metadados e inconsistente entre ferramentas
+   O que e: Cortar preserva (-map_metadata 0, :612 e :616); Girar DESTROI
+            (-map_metadata -1 em :878, :1004, :1198); Juntar, Extrair, Inserir
+            e Limpar nao mapeiam (o FFmpeg copia por padrao - ok).
+   Fix:     padronizar em -map_metadata 0. Ver Girar, item 4.
+   Linhas:  Girar :878, :1004, :1198; Cortar :612, :616
+
+3) [BAIXO] Nenhum teste cobre a montagem de comandos
+   O que e: os unicos testes de FFmpeg sao FfmpegVideoQualityTest,
+            FfmpegProgressTextTest, FfmpegKitClasspathTest e
+            SmartJoinPlannerTest. Nao ha teste para buildFfmpegArguments de
+            NENHUMA das 6 ferramentas, nem para detectOutputProfile,
+            buildFilterComplex, videoFillFrameFilter, executeHybridVideoCut ou
+            executeSmartJoinExperiment.
+   Fix:     SmartJoinPlanner.kt ja e uma seam pura e testada - e o modelo a
+            seguir. Extrair a montagem de argumentos para funcoes puras (como
+            ja e buildDirectConcatArguments) e testar. Cobrir primeiro:
+            videoFillFrameFilter (critico 1 do Juntar), buildOrderedFilters +
+            metadataDegrees (Girar itens 1 e 3) e extractKeyframesFromFile
+            (Cortar item 1).
+   Linhas:  app/src/test/... (SmartJoinPlannerTest.kt, FfmpegVideoQualityTest.kt,
+            FfmpegProgressTextTest.kt, FfmpegKitClasspathTest.kt)
+
+================================================================================
+ORDEM DE EXECUCAO SUGERIDA (top 10 por relacao custo/beneficio)
+================================================================================
+ 1. Juntar #1  (crop em vez de letterbox)   - 1 linha, risco zero, evita perda
+    de conteudo. Maior relacao custo/beneficio da lista.
+ 2. Girar #3   (rotacao 0 = no-op)          - 1 linha, risco zero.
+ 3. Girar #2   (metadados ligado por padrao)- 2 linhas de layout + 1 de codigo.
+ 4. Girar #4   (-map_metadata -1)           - 3 pontos, trocar -1 por 0.
+ 5. Girar #1   (sentido invertido)          - 2 sinais + teste unitario. E o
+    unico achado que depende de convencao de sinal: confirmar empiricamente
+    antes de fechar.
+ 6. Inserir #1 + #2                         - adotar a estrategia .ts +
+    aac_adtstoasc que o Cortar ja usa. Medio esforco.
+ 7. Juntar #2  (SmartJoin deslocado)        - medio/alto esforco. Requer
+    alinhar bodyStart ao keyframe. Alternativa curta: desabilitar SmartJoin
+    ate corrigir.
+ 8. Cortar #1  (keyframe truncado)          - 2 linhas (guardar em microsegundos).
+ 9. Extrair #3 (opus voip)                  - 1 linha.
+10. Juntar #4 / Extrair #2 (caminho -c:a copy) - medio. Reaproveitar
+    audioCodecCopySafe.
+
+Depois: deteccao e UX (Juntar #5, #9, #10, #11; Extrair #1; Limpar #1),
+codigo morto e testes (Juntar #16, transversal #3).
+
+Esforco total estimado: 1-2 dias para os itens 1-9, mais 2-3 dias para o
+resto.
+
+================================================================================
+OBSERVACOES DE METODO
+================================================================================
+- Nenhum binario FFmpeg Android foi executado nesta auditoria: nao ha
+  dispositivo nem emulador, e o workspace nao contem o .so do ffmpeg-kit
+  compilado para Android. Todos os achados sao de leitura de codigo, com
+  numero de linha verificavel.
+- Girar #1 depende da convencao de sinal de -display_rotation (anti-horaria,
+  via av_display_rotation_get/set) e de Matrix.postRotate do Android (horaria
+  para valores positivos). Ambas estao documentadas, mas e o item que mais se
+  beneficia de confirmacao empirica antes de qualquer correcao.
+- Girar #10 depende do comportamento padrao de -autorotate. A assimetria com
+  Cortar e Juntar (que passam -noautorotate explicitamente) e verificavel por
+  leitura; a consequencia exige teste.
+- Cortar #1, Juntar #2 e Inserir #1 dependem do comportamento de seek do
+  FFmpeg com -ss antes de -i mais -c copy. Esse comportamento e documentado e
+  estavel, mas a magnitude exata do deslocamento depende do GOP da entrada -
+  recomendavel confirmar com teste real antes de considerar o fix validado.
+- Juntar #1 e verificavel por inspecao direta do filtro gerado; nao depende de
+  execucao.
+- Os numeros de linha referem-se ao estado do codigo em 2026-08-30.
+================================================================================

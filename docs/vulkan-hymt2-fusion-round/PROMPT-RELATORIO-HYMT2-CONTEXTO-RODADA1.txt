@@ -1,0 +1,746 @@
+PROMPT-RELATORIO — HY-MT2 isolamento de pedidos + bateria Vulkan (rodada 1)
+Repo: D:/Projetos/SIG | Branch: main...origin/main | Aparelho: USB 3B15BD00FVE00000 (CPH2747/OP611FL1/Android 16/Adreno 840)
+Data: 2026-10-01. Sem commit/push/publicacao/release/assinatura/upload/R2/Drive/remocao. Sem mudanca de backend padrao, pesos, template, sampler, EOG, limite, gate. OpenCL/Whisper/NPU fora.
+
+A. DESIGN / CONTRATO / RESET / API E DIFFS DE PRODUTO
+A1. Contrato: pedido novo nao usa KV/posicao/historico do anterior. Modelo e
+pesos permanecem carregados (sem recarga como muleta). Sampler e criado por
+pedido; llama_sampler_sample ja faz accept interno (llama.h:1502-1512), sem
+accept duplo. Reset nao muda EOG/limite (achados EOS/is_eog separados).
+A2. Causa (fonte vendored = autoridade): generate() reutiliza g_ctx sem limpar
+memoria (baseline anterior a correcao: 0 ocorrencias de memory_clear/seq_rm
+em llama_jni.cpp; o codigo atual inclui o helper + chamada). decode usa
+llama_batch_get_one(data,count) com pos=null (llama_jni.cpp:457-458); a
+revisao infere pos de seq_pos_max+1 (llama-batch.cpp:100). Segundo pedido
+continua KV/posicao do anterior -> contaminacao (texto anterior reaparece).
+Sustenta contaminacao; NAO prova toda anomalia: a patologia Q8/Vulkan tem
+CAUSA PROPRIA JA LOCALIZADA E CORRIGIDA LOCALMENTE nesta rodada (E2a-E2m:
+kernel Vulkan Q8_0 lendo os quants do peso sem sinal; patch aritmetico
+passa canarios + tensor real; ver "PLACAR DO FIX" em E2m). O que ainda NAO
+existe e' a lib de PRODUTO construida/deployada com esse fix — o app segue
+na 172c662a (so reset).
+A3. API real de reset (llama.h da revisao): llama_get_memory(:570),
+llama_memory_clear(mem,bool data)(:727), llama_memory_seq_rm(:736).
+Escolha: llama_memory_clear(llama_get_memory(g_ctx), true) no inicio de cada
+generate, sob o MESMO g_mutex da inferencia/release. Menor custo seguro;
+recriar contexto seria correto mas custa realloc/grafo sem necessidade; nao
+recarregar pesos por pedido como correcao definitiva.
+A4. Ownership: g_mutex protege g_model/g_ctx/erros/stats; generate, loadModel,
+releaseModel e leitores tomam o lock. Reset dentro de generate apos validar
+g_model/g_ctx, antes de tokenizar. Sampler preserva RAII manual existente;
+nenhum retorno precoce pos-reset deixa stale silencioso; stats refletem so o
+pedido atual. Falha deixa contexto pronto (proximo generate limpa de novo).
+  ESCLARECIMENTO (reconciliacao com C4, pedido do parecer): sao dois escopos
+  distintos, sem contradicao — (i) na UI atual, os stats so aparecem no
+  sucesso (o ramo de erro mostra "Erro na traducao" e nem le lastStats());
+  (ii) na API nativa, apos um pedido FALHO o `lastStats()` continuaria
+  devolvendo os stats do pedido ANTERIOR (g_last_stats so e' escrita no
+  sucesso e nao e' limpa nos caminhos de erro). Fica registrado como
+  higiene separada, sem alteracao nesta rodada (C4).
+A5. Diff de produto (working tree, NAO commitado):
+- app/src/main/cpp/llama-jni/llama_jni.cpp: +13 linhas (bloco de reset no
+  inicio do try de generate, sob g_mutex; erro "Contexto sem memoria para
+  novo pedido." se mem==null). EOG/limite/sampler inalterados.
+- app/src/main/java/br/gov/sp/pcsp/launcher/HyMt2RequestIsolation.kt (NOVO,
+  seam puro com KDoc): contrato testavel reset->prefill->decode.
+- app/src/test/.../HyMt2RequestIsolationTest.kt (NOVO): 2 testes.
+- MODULE-MAP.md: +1 linha (HyMt2RequestIsolation.kt). Arquivo existe em
+  disco; check-module-map acusa "inexistente" porque a fonte da verdade e
+  o indice do Git e o arquivo ainda nao esta rastreado (commit PROIBIDO
+  neste prompt) — pendencia formal, nao divergencia de conteudo.
+- docs/hymt2-request-isolation-design.md (NOVO): design curto (contrato,
+  ownership, estados, API, testes, ativacao/reversao).
+
+B. REGRESSAO RED/GREEN/GATES/TESTES NATIVOS E RETORNOS
+B1. RED (TDD, Iron Law): teste JVM escrito antes do seam. Execucao:
+  :app:testDebugUnitTest --tests HyMt2RequestIsolationTest -> EXIT=1,
+  "Unresolved reference 'HyMt2RequestIsolation'" (feature ausente, nao typo).
+B2. GREEN (JVM): seam minimo implementado; reexecucao -> EXIT=0.
+  XML: TEST-br.gov.sp.pcsp.launcher.HyMt2RequestIsolationTest.xml:
+  tests=2 failures=0 errors=0 skipped=0.
+  RECLASSIFICACAO (parecer rodada 2): o seam Kotlin + seus 2 testes sao
+  ESPECIFICACAO do contrato (fake), NAO regressao do produto — o caminho
+  produto (JNI) nao os chama. Nao contam como prova anti-regressao do fix.
+B3. REGRESSAO NATIVA REAL (caminho de produto):
+  Helper extraido para app/src/main/cpp/llama-jni/hymt2_request_reset.h
+  (mesmo codigo no `generate` e no teste; sem duplicacao) e teste de host
+  native-dependencies/harness/hymt2_reset_test.cpp, compilado com Zig 0.16.0
+  contra os headers REAIS da revisao (llama.h + ggml), stubs so para as duas
+  funcoes de runtime com modelo de memoria fiel ao contrato documentado.
+  Resultado: 17 passaram, 0 falharam, EXIT=0.
+  Mutacao (clear removido temporariamente): 10 passaram, 7 FALHARAM,
+  EXIT=1; restaurado -> 17/17 EXIT=0. O teste fica vermelho sem o reset.
+  Limite honesto: stubs implementam o contrato documentado; o comportamento
+  interno do `llama_memory_clear` real e coberto pela evidencia no alvo
+  (com lib corrigida, apos C3).
+  (Toolchain: o caso "g++ morre sem saida" era PATH sem /c/msys64/mingw64/bin
+  — o cc1plus nao acha DLLs do toolchain (ex.: libmpfr-6.dll). Com o PATH
+  corrigido o g++ compila e executa: refeito 17/17 EXIT=0 e mutacao 10/7
+  EXIT=1 (nat_test_host.txt / nat_test_mutacao.txt, com hashes). Zig local
+  tambem compila. Limite de ambiente, resolvido.)
+B4. Gates (exit codes guardados, sem pipe que engole codigo):
+  :app:testDebugUnitTest (focal) EXIT=0; SUITE COMPLETA EXIT=0 — TOTAL
+  tests=534 failures=0 errors=0 skipped=0 (contado por script sobre os XMLs);
+  :app:lintDebug EXIT=0; :app:assembleDebug EXIT=0.
+  BUILD NATIVO LOCAL (permitido, sem instalar): ninja sig_llama no projeto
+  configurado native-dependencies/build/llama/arm64-v8a -> [18/18] Linking,
+  EXIT_NINJA=0, 0 FAILED/error (só warnings pre-existentes do ggml-opencl). Artefato:
+  libsig_llama.so, 95508496 bytes,
+  sha256=172c662a7934038ac06abc7ab60e35ea7609875438547a80f722e5e76026ef99.
+  A string "Contexto sem memoria para novo pedido." esta presente no .so
+  (prova de que o artefato carrega a correcao).
+  assembleDebug NAO compila nativos por desenho — nao alegado como prova JNI.
+B5. Map-check: o gate real (scripts/check-module-map.ps1) da EXIT=1 porque
+  HyMt2RequestIsolation.kt existe em disco mas nao esta no indice do Git
+  (fonte da verdade do checker) e commit e PROIBIDO neste prompt —
+  pendencia de staging, nao divergencia de conteudo.
+  Validacao em snapshot isolado (temp-index): PASS — "MODULE-MAP.md cobre
+  os 91 fontes de producao, todos com KDoc" (mapcheck_iso.log). O vermelho
+  do gate real e' so o arquivo nao rastreado.
+
+C. BIBLIOTECA INSTALADA EFETIVA/HASH/APROVACAO/ROLLBACK
+C1. Procedencia medida HOJE no aparelho (serial explicito USB 3B15BD00FVE00000;
+  leitura PRE-deploy — estado final em C3):
+  app versionCode=68 versionName=1.505; prefs texto_settings.xml:
+  backend=VULKAN, threads=6 (lido, NAO escrito);
+  lib efetiva no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so
+  sha256=31f6df15bf9b4fbdf073adf033eac55f353b4240e7894ec1d12469163516d2c2
+  (= v9 conhecido); modelo Q4_K_M no aparelho
+  /sdcard/.../hymt2_models/Hy-MT2-1.8B-q4_k_m.gguf
+  sha256=c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+  (= produto; tamanho medido no aparelho: 1133080544 bytes).
+  Q4 oficial: Hy-MT2-1.8B-Q4_K_M-OFFICIAL.gguf, 1133080448 bytes
+  (arquivo distinto do produto; nenhuma troca feita).
+  Q8_0: Hy-MT2-1.8B-Q8_0.gguf
+  sha256=5c3fe0b1408a5ceb0143184ef247b11b579c525f4b02b060e6c851bb76fef1a4
+  (= oficial; tamanho medido: 1908528192 bytes).
+  Q4 oficial dc5f44...: arquivo OFFICIAL presente no aparelho (1133080448
+  bytes, 96 bytes a menos que o produto); nao e o modelo ativo e nenhuma
+  troca foi feita.
+C2. Loader: NativeDependencyManager.COMPONENT_VERSION="9"; installedRoot =
+  noBackupFilesDir/ROOT_NAME/"$VERSION-$abi"; activateIfInstalled registra
+  libDir no classloader (linhas 205-228). APK pode usar v9 externa mesmo com
+  JNI local novo — por isso a Secao E exigia prova de carga: feita em C3
+  (lib corrigida instalada com autorizacao, hash lido de volta e traducoes
+  funcionais com a lib nova), depois da qual a Secao E foi executada.
+C3. PEDIDO UNICO DE AUTORIZACAO DE DEPLOY (artefato/hash/escopo/reversao):
+  AUTORIZADO pelo usuario (deploy exato com backup integral e rollback).
+  - Artefato: libsig_llama.so reconstruida do fonte com o fix (A5) via
+    projeto CMake oficial (ninja sig_llama, NDK 27.2.12479018), SEM publicar
+    ZIP remoto e SEM reinstalar APK. 95508496 bytes,
+    sha256=172c662a7934038ac06abc7ab60e35ea7609875438547a80f722e5e76026ef99.
+    Compatibilidade verificada: NEEDED identicos a v9 (libandroid, liblog,
+    libvulkan, libm, libdl, libc); os 3 entry points JNI
+    (generate/loadModel/releaseModel) DEFINIDOS em ambos; generate +84 bytes
+    (= bloco de reset). Nao se presume .so unico compativel: checado.
+  - Backup ANTES: tar integral de 9-arm64-v8a (22 entradas) copiado para o
+    PC; lib interna confere 31f6df15... byte a byte. Nao apagado.
+  - Tentativa stdin direta (`run-as ... cat > destino`) CORROMPEU o arquivo
+    (gravou 5440 bytes, hash c2643165...): framework de transferencia nao
+    binario-segura. RESTAURACAO IMEDIATA do backup (cp via /data/local/tmp,
+    que run-as LE mas nao escreve) -> readback 31f6df15..., 30657536 B,
+    perms 600. App estava com force-stop e NAO foi relancado com o arquivo
+    corrompido (nenhum crash).
+  - Via funcional: push (shell) para /data/local/tmp + `run-as cp` + chmod
+    600. Instalacao: readback
+    sha256=172c662a7934038ac06abc7ab60e35ea7609875438547a80f722e5e76026ef99,
+    95508496 B, perms 600. App relancado (PID novo); prova de carga no
+    processo = traducao funcional com isolamento (abaixo) + hash do arquivo.
+  - Reversao (se necessaria): restaurar o arquivo exato do backup,
+    relancar e revalidar; nada apagado (artefatos preservados/movidos).
+  - Sem APK/pesos/publish; backend padrao inalterado.
+C4. AUDITORIA STATS/ERROS (achado separado, SEM alterar):
+  g_last_stats so e escrita no sucesso; todos os retornos de erro chamam
+  set_error mas NAO limpam g_last_stats. Logo apos um pedido com falha,
+  lastStats() devolveria os stats do pedido anterior. No fluxo atual da UI
+  isso NAO e observavel (o ramo de erro le lastError e mostra "Erro na
+  traducao", sem ler stats) — registrado como achado de higiene, sem
+  mudanca (nao alterar stats/EOG/template/sampler desnecessariamente).
+  EOG: generate usa `token == eos` (llama_vocab_eos) e nao
+  llama_vocab_is_eog; se o modelo tiver outros tokens EOG, a geracao pode ir
+  ate max_out (4096) — anotado como achado separado, sem misturar causa
+  (o Q8 fresco de 4096 tokens pode ter outra origem; nao afirmado).
+
+D. SMOKE/LONGO->CURTO/A->B->A SEM RELOAD
+D1. Estado: EXECUTADO com a lib corrigida instalada. Smoke Q4 curto fresco,
+  longo->curto warm (sem reload) e bateria Q4 12/12 concluidos; Q8 curto
+  fresco = patologia (E2). O caso A->B->A nao foi re-executado com a lib
+  corrigida (o longo->curto warm cobre o mesmo contrato de reset; A->B->A
+  ficou como especificacao JVM + teste nativo host). HISTORICO retificado:
+  a pendencia "USB saiu antes" valeu ate 01/10 ~9h; com o adb wireless
+  (100.108.27.64:35371) o D3 foi executado e esta fechado.
+D1b. Baseline com a biblioteca ANTIGA (v9, com bug): smoke Q4_K_M curto
+  Vulkan executado para validar o driver ponta a ponta. Nao e prova de
+  correcao.
+  - Tentativa 1 (instrumento sem entrada de texto: run() ia direto ao
+    Traduzir com o campo vazio; status "Digite o texto para traduzir." por
+    420 s -> TIMEOUT): INVALIDA por defeito de instrumento, app sem culpa.
+    Preservada como evidencia (diretorio .../010251/).
+  - Correcao aplicada: run() agora aplica a fonte via `am start --es
+    extra_texto` (metodo provado do driver anterior), confere o campo por
+    igualdade + config (modelo/backend) por rotulo, e so entao fixa a
+    baseline de log; ROOT com exist_ok=True (colisao de segundo nao aborta;
+    unicidade continua garantida por case_dir com exist_ok=False).
+  - Tentativa 2 (JA COM A LIB CORRIGIDA INSTALADA, readback 172c662a...;
+    processo novo pos force-stop — nao e baseline antiga):
+    Q4_K_M curto Vulkan: CONCLUIDO. Fonte e8b35290... (409 ch,
+    campo_confere=true); 142 tokens; total 9.3 s / geracao 4.1 s /
+    34.3 tok/s / load 2.2 s; backend efetivo "GPU Vulkan (Vulkan / Vulkan0)".
+    output_sha256=084f12f4b98b3d2a7b66395f1dab249e87696b899a097139283c81f8ba8a2d00
+    = IDENTICO ao output_sha256 do Q4_K_M curto CPU r1 de referencia
+    (runs.csv). Prova funcional de carga da lib no processo + paridade de
+    saida neste caso. (received_chars=null no parse: lacuna do parser; a
+    fonte foi verificada por igualdade do campo.)
+  - Em curso quando este relatorio foi atualizado: longo->curto sem reload
+    (warm) para provar isolamento; depois Q8 curto fresco 409 chars.
+  - RESULTADO longo->curto (lib corrigida, sem reload: recarga_ocorreu=False,
+    model_load_s=None): LONGO 693 tokens CONCLUIDO; CURTO seguinte 142 tokens
+    CONCLUIDO com output_sha256=084f12f4... IDENTICO ao curto fresco e a
+    referencia CPU — SEM contaminacao do texto longo. Isolamento provado no
+    aparelho com a lib corrigida.
+D2. Instrumento (novo; nao reusa driver antigo como correto):
+  C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/hymt2_battery_vulkan.py
+  - Vacinas: IDs/pastas unicos + journal por caso; fonte+hash ANTES de
+    Traduzir (am start --es extra_texto apenas na fase de preparo, com o
+    campo conferido por igualdade antes de fixar a baseline); sem intent
+    depois de acionar; viewport com scroll; BACK so com teclado aberto;
+    baseline de log por diferenca; estados PREPARADO/BACKEND_OK/MODELO_OK/
+    FONTE_APLICADA/INICIADO/CONCLUIDO/ERRO/OBSERVACAO_PERDIDA/TIMEOUT;
+    deadlines VK 420/600/900/1500; PSS antes/depois; rc!=0 ao falhar;
+    paths via repr(as_posix).
+  - CORRECAO do conflito entre D2 e E1: o toggle de backend passa a ser
+    aplicado SOMENTE no primeiro caso de cada bloco (cold,
+    fresh_toggle=True); os casos warm rodam SEM toggle (fresh_toggle=False)
+    para provar o reset com o contexto ja carregado. Antes o "oposto-e-volta"
+    rodava em todo caso.
+  - Suite sintetica do instrumento: 27/27 no host (test_hymt2_instrument.py
+    com HYM_SERIAL definido; EXIT=0) antes do 1o run em campo.
+  - PRECISAO de ferramenta: o g++/MSYS2 precisa de /c/msys64/mingw64/bin no
+    PATH (DLLs do toolchain, ex.: libmpfr-6.dll); sem isso ele falha EM
+    SILENCIO (EXIT=1, sem diagnostico) ao executar o cc1plus.
+
+D3. HARNESS DE RUNTIME DO RESET (EXECUTADO no alvo, USB wireless
+  100.108.27.64:35371, 01/10): 8/8 PASSARAM, RC=0.
+  - Pedido A: pos_max=25 (= esperado: 18 tokens de A + 8 passos);
+  - apos o helper real: pos_max=pos_min=-1 (memoria VAZIA, lido pela API);
+  - pedido B apos o reset: IDENTICO ao B de contexto fresco (0 de 8 tokens
+    diferentes) => zero heranca de KV/posicao;
+  - controle negativo SEM reset: B divergiu em 6 de 8 tokens (o teste TEM
+    poder de deteccao).
+  Evidencia: logs-hymt2-contexto-rodada1/runtime_reset.txt (binario
+  arm64-v8a/hymt2_reset_rt, sha no manifesto). Fecha a pendencia (1).
+  CONFIGURACAO REAL DO HARNESS (pedido do parecer): o teste cria o modelo
+  com `n_gpu_layers = 0` (fonte: hymt2_reset_runtime_test.cpp, mparams) —
+  ou seja, TODOS os 8 cheques rodaram em CPU. O log confirma: "CPU compute
+  buffer size = 243.97 MiB" e "OpenCL compute buffer size is 0.0000 MiB";
+  a linha do device Vulkan/OpenCL no log vem apenas da enumeracao de
+  backends do ggml_backend_load_all (llama_backend_init), NAO e' prova de
+  uso de GPU. A prova de reset vale para o caminho CPU (a API de memoria e'
+  a mesma; o alcance backend-explicito fica registrado). OpenCL nao foi
+  reaberto: nenhuma mudanca de escopo.
+
+E. MATRIZ GPU24 OU BLOQUEIO Q8 (EVIDENCIA E CAUSA LIMITADA)
+E1. Estado: EXECUTADA parcialmente. Q4_K_M 12/12 CONCLUIDO (detalhe em E3);
+  Q8_0 BLOQUEADO (E2) — longos Q8 nao executados por decisao. Placar:
+  12 executados + 12 nao (Q8 bloqueado), NAO 24 sucessos. Instrumento:
+  fontes 409/952/2335/4924 (e8b35290.../2115fd95.../6991a631.../b20256db...),
+  3 repeticoes por tamanho; cold = 1o do bloco com toggle / warm = sem
+  toggle; sem mudar modelo/backend durante a tarefa; sem recarga forcada.
+E2. Ramo Q8: BLOQUEADO com evidencia em contexto limpo (lib corrigida).
+  Q8_0 curto fresco (409 chars, campo_confere=true, recarga com load 4.3 s):
+  gerou 4096 tokens em 209.6 s (geracao 202.8 s, 20.2 tok/s), backend
+  "GPU Vulkan (Vulkan / Vulkan0)". Saida: 26.299 chars de sopa degenerada
+  ("假设你是一个翻译专家" repetido), output_sha256=2448e2e2... = IDENTICO
+  ao anomalo anterior com a lib antiga. Repetiu em contexto limpo (fresh
+  load + reset da lib corrigida) => NAO era so contexto acumulado.
+E2a. CAUSA LOCALIZADA E MEDIDA (fora do app, com controle): o kernel de
+  mul_mat do backend Vulkan para Q8_0 devolve resultado Grosseiramente
+  errado no Adreno 840, enquanto Q4_K no MESMO caminho esta correto.
+  Evidencia (mulmm_probe, mesmo build/llama do app; uploads bit-exatos;
+  veredito por config):
+    - Q8_0 SINTETICO (d fp16 exata): rmse_rel (FORMULA: RMSE(VK-f64) /
+      RMS_cpu, ambos sobre as primeiras 256 colunas x n_rows; NAO e' "por
+      cento", e' fator) = 3.64/4.48/4.30/4.30 em n_rows 1/8/64/512 — ou
+      seja, erro de 364%..448% do RMS do sinal; max_abs ate 342 — CPU x f64
+      = 0.003. Todas as 4 configs = VULKAN_GROSSEIRO.
+    - Q8_0 REAL (blk.0.attn_q.weight do Hy-MT2-1.8B-Q8_0.gguf): VK x f64
+      rmse_rel = 5.73/6.83/6.65/6.64, max_abs ate 10.3; CPU x f64 = 0.003.
+      4/4 VULKAN_GROSSEIRO.
+    - CONTROLE Q4_K_M (blk.0.attn_q.weight do Q4_K_M-OFFICIAL.gguf): CPU OK
+      (0.4%) e Vulkan OK (5e-7 a 0.7%) — 2 AMBOS_OK + 2 atencao leve; nenhum
+      suspeito. Prova que o metodo mede certo e que o Vulkan em geral funciona.
+    - CONTROLE Q4_0 (blk.0.attn_q.weight do Hy-MT2-1.8B-Q4_0.gguf): Vulkan OK
+      (f64: 1.0e-7 em n_rows=1; 0.6% em n_rows=64; corr VKxCPU = 1.0000).
+  => o defeito e' ESPECIFICO do caminho Q8_0 no backend Vulkan desta
+  revisao/driver (nao e' "Vulkan quebrado", nao e' X, nao e' EOG/sampler:
+  o produto do mul_mat ja sai errado). Tipos quantizados medidos no mesmo
+  caminho: Q8_0 ERRADO; Q4_K OK; Q4_0 OK. Explica a sopa degenerada do app
+  Q8: as ativacoes do modelo inteiro saem erradas. Longos Q8 NAO executados.
+  Limite 4096 = PATOLOGICO (marcado patologico_limite), nao sucesso. CPU Q8
+  completou normalmente (CPU esta correta neste teste).
+E2e. MECANISMO DOS CANARIOS ANALITICOS (prova da classe do defeito; 19 casos,
+  esperado matematico exato, sem sampler/modelo/EOG; rodados NO APARELHO com
+  o mulmm_probe_v3 — evidencia mulmm_probe_v3_canary.txt):
+    caso (W)               esperado        CPU          Vulkan        VK
+    qs=0, d=1                    0              0              0      OK
+    qs=+1, d=1                2048        2047.88           2048      OK
+    qs=-1, d=1               -2048       -2047.88      +522240      ERR
+    qs=-128, d=1           -262144      -262128.0      +262144      ERR
+    qs=+127, d=1            260096          260080       260096      OK
+    qs=+1, d=2^-6               32          31.998           32      OK
+    alternado +1/-1, d=1         0              0      +262144      ERR
+    pico/posicao/rampa/blocos    -             ok             ok      OK
+  IDENTIDADE ARITMETICA EXATA (a leitura e' SEM SINAL, tudo o mais correto):
+    qs=-1   -> VK +522240 = 2048 x 255   (0xFF lido como 255, nao como -1);
+    qs=-128 -> VK +262144 = 2048 x 128   (0x80 lido como 128);
+    alternado -> +262144 = 64 blocos x (16x1 + 16x255).
+  Escala (d fp16), stride de bloco (34 B), posicao dentro do bloco e
+  contagem de blocos estao CORRETOS (todos os casos nao-negativos passam,
+  inclusive onehot/rampa/blocos com d por bloco). Logo: o defeito e'
+  assinatura de dados — os quants Q8_0 chegam ao produto como uint8
+  (0..255) em vez de int8 (-128..127) no caminho Vulkan. (Correlacao
+  negativa anterior NAO e' prova de indices trocados — o parecer esta
+  correto; ela so descrevia sintoma. Esta secao e' a prova positiva.)
+E2f. AUDITORIA DO REPRODUCER (pedido do parecer, ANTES de qualquer patch):
+  - Decoder Q8_0 INDEPENDENTE escrito a mao (bits fp16 + int8 com sinal,
+    bloco de 34 B) e conferido contra a dequantizacao da ggml: no sintetico
+    0/4.194.304 difs; NO TENSOR REAL o cross-check ACUSOU 12.935/4.194.304
+    difs (max 0.00386) — investigado: o bug era do MEU decoder (fp16
+    subnormal com expoente 1 a menos, fator 2), nao da ggml. Corrigido
+    (127-14-shift) e revalidado; a licao fica: cross-check independente
+    pegou um erro real que passaria despercebido.
+  - FORMULA explicitada no proprio probe: rmse_rel = RMSE(sub)/RMS_cpu(sub),
+    sub = primeiras 256 colunas x n_rows, ambos no MESMO subconjunto; os
+    valores 3.64/4.48 etc. sao FATOR (364%-448%), nao "por cento".
+  - Dumps para replay offline: HYM_DUMP=<dir> salva W.bin/X.bin/out.bin por
+    config (operandos e saidas) — disponivel para reproducao sem aparelho.
+  - Dimensoes GGUF: offset = data_offset + tensor_offset (API gguf.h),
+    ne=[2048,2048], 4.456.448 B conferidos contra nbytes do tensor.
+E2i. CANARIOS ESTENDIDOS (magnitude pequena para nao saturar fp16;
+  discriminam "byte sem sinal (255)" x "saturado (127)" x "correto"):
+  - VEC (n_rows=1): mix8minus (2040x+1 e 8x-1; esperado 2032) -> VK = 4080
+    = 2040 + 8x255 -> CONFirma byte-sem-sinal (255), descartando saturacao
+    (3056) e correto (2032).
+  - MM (n_rows>=16): mix8minus -> VK = 2048 (= 2048x1) -> assinatura
+    DIFERENTE do vec e que NAO bate com unsigned(4080) nem com os outros
+    modelos simples testados: o caminho MM tem comportamento proprio ainda
+    a explicar (MECANISMO PENDENTE no MM; so o vec esta fechado).
+  - O lado B e' quantizado com escala fp16 COM sinal, entao o canal de sinal
+    do B nao depende da leitura byte a byte; o caso alt_x (X alternado) fica
+    registrado no log para auditoria.
+E2j. CADEIA DE COMPILACAO DOS SHADERS (auditado):
+  - mul_mat_vecq.comp declara `#extension GL_EXT_integer_dot_product : require`;
+  - o teste de feature do CMake (feature-tests/integer_dot.comp) resultou
+    VAZIO (HAVE_DOTPROD nao suportado) -> GGML_VULKAN_INTEGER_DOT_GLSLC_SUPPORT
+    NAO definido -> as variantes MMQ `_q8_1` nao sao geradas;
+  - mesmo assim os shaders compilam com o glslc do NDK 27.2.12479018;
+  - o codigo Q8_0 (repack/pack32/dotPacked4x8EXT) e' IDENTICO ao upstream
+    llama.cpp (conferido contra o master) -> nao e' modificacao do fork.
+E2k. PATCH EXPERIMENTAL (local, SEM deploy) — caminho VEC:
+  - arquivo: ggml-vulkan/vulkan-shaders/mul_mat_vecq_funcs.glsl; backup
+    integral em scratch/vkdbg/mul_mat_vecq_funcs.glsl.orig (sha no log);
+  - edicao 1: `repack` do Q8_0 passa a fazer XOR 0x80808080 (enviesa cada
+    byte por +128, de modo que a leitura UNSIGNED fique exata);
+  - edicao 2: `mmvq_dot_product` proprio do Q8_0 acumula tambem
+    dot(0x01010101, cache_b_qs[i]) e subtrai 128*soma(q_B):
+    identidade dot(A^0x80, B) - 128*dot(1, B) = dot(A_com_sinal, B);
+  - escopo SOMENTE vec/Q8_0; reset/template/FA/KV/sampler intactos;
+  - RED (antes): 4080 no mix8minus e 522240 no qs=-1; GREEN esperado:
+    2032 e -2048. Build do alvo ggml-vulkan + probe v3dbg em andamento.
+  - PITFALL registrado: editar o .glsl NAO dispara a regeneracao dos
+    shaders no ninja (dependencia nao rastreada) — o primeiro rebuild deu
+    probe BYTE-IDENTICO (sha 2576a96e...) e o teste nao valia. Corrigido
+    apagando os *.comp.cpp gerados e reconstruindo; a verificacao passou a
+    incluir "o sha do probe TEM de mudar" antes de qualquer push.
+  - SEGUNDO PITFALL (arquivo errado): as variantes `mul_mat_vec_q8_0_*` NAO
+    vem do `mul_mat_vecq_funcs.glsl` — o grafo do ninja mostra que quem as
+    gera e' `mul_mat_vec.comp` (includes: mul_mat_vec_base.glsl +
+    dequant_funcs.glsl). O patch no arquivo errado foi REVERTIDO (backup) e
+    o alvo correto passou a ser `dequant_funcs.glsl` (Q8_0:
+    `dequantize`/`dequantize4`, onde `unpack8()` entrega u8 e a conversao
+    para i8vec2 perde o sinal).
+E2l. PATCH v2 (arquivo correto) — RESULTADO: **GREEN NO CAMINHO VEC**.
+  - `dequant_funcs.glsl`: helper `sig_s8(uint)` = (u & 0xFF) e, se >= 128,
+    u-256 — conversao por ARITMETICA de float, independente da convencao
+    (funciona se o byte chegar assinado OU sem sinal); aplicado em
+    `dequantize` e `dequantize4` do Q8_0.
+  - RED (antes): canary qs=-1 = 522240; alternado = 262144; mix8minus = 4080;
+    Q8_0 real rmse_rel = 5.79 (VULKAN_GROSSEIRO).
+  - GREEN (depois; evidencia patch_dequant_green.txt):
+      qs=-1 = -2048 OK; alternado = 0 OK; mix8minus = 2032 OK; TODOS os
+      canarios vec = CPU=OK VK=OK; Q8_0 REAL (blk.0.attn_q.weight, n_rows=1)
+      rmse_rel = 1.18e-07 (AMBOS_OK) — de errado 5.79x para precisao de
+      float; sha do probe mudou (2576a96e -> 4afc31ab) antes do push.
+  - CONTROLES sem regressao: Q4_K_M e Q4_0 continuam AMBOS_OK (n_rows=1) e
+    VULKAN_ATENCAO leve (n_rows=64) — identicos ao estado pre-patch.
+E2m. MM (n_rows>=16, `matmul_q8_0_f32_f16acc_s`) — RESULTADO: **GREEN**.
+  Mesmo defeito de sinal encontrado e corrigido em `mul_mm_funcs.glsl` (branch
+  DATA_A_Q8_0, `unpack8->i8vec2`), com helper local `sig_mm_s8` (o shader do
+  mm nao inclui dequant_funcs.glsl). Evidencia patch_mm_green.txt:
+    - canary 64 (MM): qs=-1 = -2048 OK (era 65504); alternado = 0 OK (era
+      65504); mix8minus = 2032 OK (era 2048); qs=+1/-128/rampa OK.
+    - Q8_0 REAL (n_rows=64): VKxf64 rmse_rel = 0.00659 (0.66%) ->
+      VULKAN_ATENCAO (era 6.65 = 665%). LEITURA CORRETA: 0.66% e' erro
+      MEDIDO NA AMOSTRA contra a referencia f64, no patamar dos controles
+      Q4 no mesmo n_rows (0.0005-0.007) — tolerancia aceitavel
+      RESTRITAMENTE por comparacao com os controles, NAO norma universal;
+      o residuo e' do acumulador FP16 da variante, nao de sinalizacao.
+    - canary 64 `qs127_d1` (esperado 260096) satura em 65504 e `blocks_d`
+      da 301 vs 316: LIMITES REAIS do acumulador fp16 (valores > 65504
+      saturam; ~1e-3 de precisao) — registrados como teste de LIMITE
+      FP16 deliberado, nao escondidos; nao sao defeito de sinal.
+  - VEC permanece GREEN apos o patch do MM (sem regressao cruzada);
+  - CONTROLES Q4_K/Q4_0 inalterados (AMBOS_OK em n_rows=1; ATENCAO leve em
+    64) — sha do probe mudou (4afc31ab -> novo) antes do push.
+PLACAR DO FIX (local, NAO deployado): os DOIS caminhos Q8_0 do Vulkan
+  (vec e mm) passam a bater com a referencia independente no teste de kernel
+  (sintetico + tensor real), com controles intactos. Falta, para virar
+  produto: build do libsig_llama.so/APK + hash novo + autorizacao + rollback;
+  depois smoke Q8 no app (fresco + warm + fim/qualidade) e, se aprovado, a
+  bateria Q8 (4 tamanhos x 3 reps).
+E2o. MATRIZ DE REGRESSAO NO ALVO (mesma familia de probe/config; entrada identica
+  sintetica; RED = lib ORIGINAL, GREEN = lib patcheada). Evidencia:
+  logs-hymt2-contexto-rodada1/patch_matrix_green.txt (+ logs RED anteriores).
+  - BYTES256 vec (n_rows=1): VK **256/256 OK em d=1, 2^-6, -1 e 0** (floats
+    exatos; cobre todos os valores de byte e o sinal).
+  - BYTES256 MM (n_rows=64): VK 13-18/256 — os 238-243 "erros" sao de
+    PRECISAO do acumulador fp16 (|valores| ~>2048; ex. byte=3: esperado
+    6144, VK 7508). d=0 passa 256/256. Registrado como LIMITE FP16, nao
+    como falha de sinal.
+  - Q8 SINTETICO: n_rows 1/8 = AMBOS_OK (VKxf64 1.03e-07 / 1.05e-07);
+    16/64/512 = VULKAN_ATENCAO 0.0067 (0.67%) — patamar fp16.
+    [RED equivalente (lib original): 3.64/4.48/4.30/4.30]
+  - Q8 REAL (blk.0.attn_q.weight): 1/8 = AMBOS_OK (1.18e-07 / 1.08e-07);
+    16/64/512 = VULKAN_ATENCAO 0.0064-0.0066. [RED: 5.73/6.83/6.65/6.64]
+  - CONTROLES (n_rows=1 -> 64): Q4_K produto c4bf (5.2e-07 OK -> 0.0067
+    ATENCAO); Q4_K OFFICIAL (igual); Q4_0 (1.05e-07 OK -> 0.0063 ATENCAO);
+    Q6_K blk.0.attn_v.weight (1.02e-07 OK -> 0.0065 ATENCAO) — TODOS no
+    mesmo patamar fp16 do mm, sem regressao; nada acima do baseline.
+  - LIMITE DO INSTRUMENTO registrado: tensor com ne0 != 2048 devolve
+    MEDICAO INVALIDA (probe fixo em ne0=2048) — ocorrido com
+    blk.0.ffn_down.weight [6144,2048]; refeito com attn_v Q6_K [2048,512].
+  - TOLERANCIA: fixada ANTES (1e-2 rel para OK; 5e-3-5e-2 para atencao),
+    sem alargar para passar; o patamar 0.6-0.7% do mm e' o MESMO dos
+    controles Q4/Q6 no mesmo n_rows (fp16 por desenho).
+  - LIB DE PRODUTO CONSTRUIDA (local, NAO instalada): libsig_llama.so
+    sha256 9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53,
+    95.613.928 B (172c: 95.508.496 B). ELF64 AArch64 DYN; NEEDED identicos a
+    172c (libandroid/liblog/libvulkan/libm/libdl/libc); JNI generate/
+    loadModel/releaseModel DEFINIDOS; string do reset presente; backup da
+    172c preservado (scratch/libsig_llama_172c_backup.so) e o original
+    publicado 31f6df15... intacto no manifesto. Evidencia:
+    logs-hymt2-contexto-rodada1/lib_produto_build.txt.
+  - VACINA DE BUILD DOS SHADERS: blob gerado corresponde ao patch nas DUAS
+    variantes (vec: 2a71714a patched vs 63bdcc67 original; mm: 29f8eeda vs
+    839f1a31) e BUILD == PATCHED em ambas — evidencia shader_blob_regressao.txt.
+  - BYTES256 (teste permanente no probe): 256 bytes x 4 escalas (1, 2^-6, -1,
+    0) com esperado analitico; HOST CPU 256/256 OK nas 4 escalas; NO ALVO
+    executado na ETAPA 3 (ver E2o) — nao e' mais bloqueio.
+  - CONSENTIMENTO PEDIDO (item 5): substituicao da .so no alvo exige UMA
+    aprovacao nova (a de 172c NAO cobre o hash novo). VERIFICACOES
+    INDEPENDENTES FEITAS ANTES DO PEDIDO (item D):
+      sha256 completo relido = 9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53;
+      tamanho 95613928 B (2 leituras independentes conferem);
+      GATE NATIVO DO ARTEFATO 8/8 EXIT=0 (gate_lib_produto.txt): assinatura
+      do reset presente; os 3 entry points JNI presentes; string sem
+      segredo; sem texto de patch (entra compilado no SPIR-V); sem marcador
+      de debug do backend;
+      ELF64 AArch64 DYN; NEEDED = libandroid/liblog/libvulkan/libm/libdl/libc
+      (identicos a 172c);
+      rollback disponivel: backup da 172c (95508496 B, hash conferido) e o
+      original publicado v9 31f6df15... preservados;
+      APK NOVO NAO E' NECESSARIO — o APK instalado consome a .so externa;
+      falta substituir apenas o arquivo da biblioteca.
+    ESCOPO: force-stop do app; substituicao SOMENTE de
+    no_backup/native_dependencies/9-arm64-v8a/lib/libsig_llama.so; push+cp
+    seguro (NUNCA stdin); hash/tamanho no destino ANTES do restart; processo
+    novo com /proc/PID/maps quando acessivel; rollback = restaurar 172c (ou
+    31f6) com readback. Nada de publish/ZIP/R2/bump de VERSION/NPU/OpenCL/
+    Whisper/backend padrao/commit/push. Se build/hash mudar antes do pedido,
+    o pedido e' ATUALIZADO e re-submetido.
+E2p. CANARIO MM — CONTROLE CAUSAL DE PRECISAO (item B do parecer).
+  **EXECUTADO NO ALVO (01/10, wireless :43505, probe arm64 sha
+  8fdbb8f40d413939643958508fee3b245a65a38bd0dbb83e93b9966eb4271bbd; mesmo
+  hash local e no device, readback conferido). Evidencia:
+  logs-hymt2-contexto-rodada1/prec_causal_mm.txt.**
+  Metodo: MESMO grafo e MESMOS operandos (W uniforme de byte fixo, d=2^-6,
+  X=ones, ne0=2048, ne1=8, n_rows=64) em tres CONDICOES — CPU, Vulkan
+  DEFAULT (f16acc) e Vulkan com GGML_PREC_F32 (f32acc). Escalas
+  bem-condicionadas: |soma| <= 2048, longe de 65504 — overflow NAO pode
+  ser a causa. Esperado ANALITICO independente; replay local em f16 e f32.
+  RESULTADOS (erro relativo ao esperado analitico):
+    byte  1 (esp 32.0)      : DEF +0.0000 | F32ACC +0.0000 | replayFP16 32.0
+    byte  3 (esp 96.0)      : DEF +21.3125 | F32ACC +0.0000 | replayFP16 117.3125
+    byte  5 (esp 160.0)     : DEF -19.1250 | F32ACC +0.0000 | replayFP16 140.875
+    byte 32 (esp 1024.0)    : DEF +0.0000 | F32ACC +0.0000 | replayFP16 1024.0
+    byte 64 (esp 2048.0)    : DEF +0.0000 | F32ACC +0.0000 | replayFP16 2048.0
+    byte -64 (esp -2048.0)  : DEF +0.0000 | F32ACC +0.0000 | replayFP16 -2048.0
+  VEREDITO CAUSAL (o que o parecer exigia provar, e' provado):
+    (1) F32ACC ELIMINA o erro; DEFAULT mantem -> o residuo do MM e'
+        ACUMULACAO EM FP16 (nao indice, nao lanes, nao reducao, nao
+        signedness — o sinal ja esta correto aqui apos o patch);
+    (2) o replay FP16-sequencial reproduz o valor do GPU TERT A TERT
+        (117.3125 e 140.875): o padrao e' compativel com arredondamento a
+        16 bits por etapa. Isto NAO afirma que a ordem da GPU seja a
+        sequencial do replay — apenas que o numero medido e' o que o
+        arredondamento fp16 produz;
+    (3) os "243/238 erros" do bytes256 MM sao o MESMO fenomeno em escala que
+        satura o fp16 (ex.: b=3 d=1: esp 6144 -> 7508), e nao uma falha de
+        sinalizacao. d=0 e |.| pequeno passam 256/256.
+  CONSEQUENCIA DE PRODUTO (registrada; NAO aplicada): o Q8_0 no caminho MM
+  fica com ~0.6-0.7% de erro relativo por desenho do acumulador, o mesmo
+  dos controles Q4_K/Q4_0/Q6_K no mesmo n_rows. Se for exigida precisao de
+  decima, a opcao e' o f32acc — porem isso e' mudanca de PRODUTO (custo de
+  desempenho) e depende de decisao, nao de iniciativa do executor.
+E2r. DEPLOY DA 9698670c (AUTORIZADO pelo usuario em 01/10) — **INSTALADO E
+  VERIFICADO** (evidence deploy_9698670c.txt; sem regressao de preferencias):
+  - Pre-check: app forcado a parar (pidof vazio); hash/tamanho ANTERIORES no
+    destino lidos (172c662a..., 95508496 B).
+  - Backup da 172c no proprio aparelho: /data/local/tmp/v9_172c_rollback.so
+    com hash 172c662a... e 95508496 B (conferido — rollback disponivel).
+  - Push BINARIO (nunca stdin): 95.613.928 B a 13.9 MB/s em 6.5 s.
+  - Hash/tamanho no DEVICE antes de instalar: 9698670c... / 95613928 B.
+  - Instalacao: run-as cp + chmod 600; READBACK no destino
+    9698670c460cec2f6e517a7a2019ec7ae80548ffd779484277a3831e806e9c53 /
+    95613928 B — casa com o artefato.
+  - App relancado (PID 31172). A lib so e' mapeada no primeiro pedido; o
+    maps nao a lista ainda porque o teste ainda NAO rodou.
+  - PENDENTE no aparelho: destravar a TELA (keyguard ativo) para rodar o
+    smoke Q8 + bateria Q8 4x3; nada foi feito no keyguard (sem PIN, sem
+    dados pessoais). Prefs intactas (VULKAN/6).
+  - Rollback documentado: restaurar /data/local/tmp/v9_172c_rollback.so
+    (ou 31f6 original preservado no PC) com readback do hash.
+E2q. VACINA DE DEPENDENCIA DE BUILD (item C) — RESOLVIDA, com evidencia:
+  logs-hymt2-contexto-rodada1/build_dep_vacina.txt e, agora, TESTE
+  AUTOMATIZADO PERMANENTE no repo:
+  native-dependencies/harness/check_shader_dep.sh — altera (touch) um .glsl,
+  roda ninja e EXIGE que o .comp.cpp e o .spv da variante Q8_0 sejam
+  regenerados; se nao, FAIL. Execucao real: **PASS, EXIT=0** nos dois
+  shaders (evidencia check_shader_dep.txt).
+  - O depfile gerado pelo proprio build (transformado via cmake gccdepfile)
+    LISTA os includes: mul_mat_vec.comp.cpp depende de mul_mat_vec.comp +
+    dequant_funcs.glsl + types.glsl + mul_mat_vec_iface/base.glsl.
+  - Teste real: `touch dequant_funcs.glsl` + `ninja ggml-vulkan` =>
+    REGENEROU mul_mat_vec.comp.cpp (18:14:15 -> 18:24:13), recompilou o .o,
+    relinkou a lib, e o blob ficou em 2a71714a (== PATCHED).
+  - CONCLUSAO: a dependencia FUNCIONA; o falso GREEN anterior vinha de
+    apagar o .comp.cpp gerado e de um script de verificacao com nome de
+    arquivo errado (ja registrados).
+E2n2. LINHA DO TEMPO (sem contradicao; o "bloqueado/offline" e' historico):
+  - ETAPA 1 (ate 01/10 ~14h, USB + wireless :35371): auditoria, canarios,
+    patches LOCAIS, build do backend. Biblioteca de produto NAO existia;
+    aparelho = lib 172c662a.
+  - ETAPA 2 (01/10 ~15h, wireless :36479): matriz no alvo ABORTADA —
+    aparelho offline no push (adb: failed to read copy response: EOF /
+    device offline; porta recusando 10061). Probe v5 (sha f08938ab..., com
+    bytes256) NAO chegou ao aparelho. Nenhum resultado obtido nessa etapa.
+  - ETAPA 3 (01/10 ~18-21h, wireless :39267): matriz EXECUTADA com o MESMO
+    probe v5 (f08938ab...) — resultados em E2o; smoke Q6_K refeito com
+    attn_v [2048,512] (o ffn_down [6144,2048] deu INVALIDA por DIMENSAO do
+    instrumento, ne0 fixo em 2048 — nao por defeito de kernel).
+  - A biblioteca 9698670c foi construida localmente e NUNCA instalada; a lib
+    no aparelho segue 172c662a (readback em :39267 confere).
+  - HISTORICO rotulado: "relink apenas libggml-vulkan.a" e "MECANISMO
+    PENDENTE no MM" (E2i/E2m anteriores) descrevem os estados INTERMEDIOS
+    antes do GREEN do vec/mm; o estado vigente e' E2o.
+  - CONSENTIMENTO: o pedido completo (artefato, verificacoes independentes,
+    escopo e rollback) esta' na secao E2n de consolidate — duplicar aqui
+    apenas reintroduziria risco de divergencia; a unica versao que vale e' a
+    de E2n, ja com o gate 8/8 executado.
+  - o alvo relinkado e' apenas libggml-vulkan.a (para o probe); a
+    libsig_llama.so 172c662a e' preservada; a fonte do shader fica com o
+    patch localmente (reversao pelo backup) — nada commitado/publicado.
+E2h. DISPATCH EFETIVAMENTE OBSERVADO (pedido do parecer; backend Vulkan
+  recompilado so para log, GGML_VULKAN_DEBUG, em lib local separada — a
+  arvore do app nao foi alterada; evidencia mulmm_probe_v3dbg.txt):
+    n_rows=1  -> 20x `mul_mat_vec_q8_0_f32_f32`   (kernel VEC/DMMV)
+    n_rows=64 -> 20x `matmul_q8_0_f32_f16acc_s`   (kernel MATMUL mm,
+                 variante com acumulador FP16 — o "_f16acc" no nome bate
+                 com a saturacao em 65504 = maximo do fp16 vista nos
+                 canarios de n_rows=64)
+  Descritores do dispatch (n_rows=1): bindings com 17408 B para W
+  (512 blocos x 34 B = layout GGUF Q8_0 CORRETO), 8192 B para X (1 linha
+  F32) — ou seja, o layout/offset/binding estao certos; o defeito esta na
+  leitura dos quants (vec) e no acumulador (mm).
+  CONCLUSAO POR CAMINHO (agora observada, nao inferida):
+    - VEC  (mul_mat_vec_q8_0_f32_f32, n_rows 1..8): quants do peso lidos
+      SEM SINAL (q -> q+256; 522240 = 2048x255 no caso qs=-1);
+    - MM   (matmul_q8_0_f32_f16acc_s, n_rows >= 16): TAMBEM le sem sinal
+      (caso alt_d1 com esperado 0 deu 65504, que so se explica pelo +262144
+      da leitura sem sinal) E alem disso acumula em FP16 (satura em 65504;
+      blocks_d 301 vs 316 = perda de precisao fp16 em dados pequenos).
+  ESCADA DE n_rows (mesma W, caso qs=-1; evidencia no log):
+    n_rows=1/2/4/8  -> mul_mat_vec_q8_0_f32_f32 -> 522240 (sem sinal)
+    n_rows=16/64    -> matmul_q8_0_f32_f16acc_s -> 65504 (saturacao fp16)
+    caso X negativo (B side) = -2048 OK em TODA a escada => o lado B/ativo
+    esta correto; o defeito e' do lado A (pesos Q8_0).
+  AUDITORIA DO DECODER FECHADA: com o decoder independente CORRIGIDO, o
+  tensor real Q8_0 da 0/4.194.304 difs (max=0) contra a ggml — a referencia
+  f64 usada nas medicoes e' independente e validada.
+E2g. SINTOMA POR CORRELACAO (descritivo; NAO e' prova de mecanismo) e
+  hipotese descartada:
+  VK x CPU corr = -0.49 (synth, n_rows=1) e -0.21 (real Q8, n_rows=1);
+  razao mediana ~1.1 e -0.12 — a saida do Vulkan NAO e' uma versao
+  escalada da correta: e' DESCORRELACIONADA (sintoma de dados trocados;
+  o mecanismo virou prova positiva nos canarios E2e — leitura sem sinal). Amostras synth (CPU | VK): 8.36|53.4,
+  -8.34|75.3, -4.03|92.9, 60.0|56.7 — VK preso numa faixa ~50-120
+  independente do valor esperado. Real (CPU | VK): -0.36|2.03, 0.47|0.98,
+  0.32|1.23 — VK tambem fora. Evidencia: mulmm_probe.txt + mulmm_probe2.txt.
+  HIPOTESE DESCARTADA com teste: `GGML_VK_DISABLE_F16=1` NAO corrige (synth:
+  VKxf64 3.64/4.30 — identico; real: 5.73/6.65 — identico). LEITURA
+  CORRETA (separando os dois erros): o teste descarta que o erro de
+  SINALIZACAO venha do acumulador — ele independe da variante de acumulacao;
+  o acumulador FP16 tem efeito PROPRIO e separado (saturacao acima de 65504
+  e ~1e-3 de precisao), depois demonstrado nos canarios de limite (E2m).
+  Evidencia: mulmm_probe_f16off.txt.
+E2d. IMPLICACAO DE PRODUTO (registrada, NAO aplicada — nenhuma mudanca de
+  codigo sem aprovacao): `HyMt2ModelSupport.supportsGpu()` libera GPU para
+  qualquer arquivo que nao contenha "1.25Bit"; logo o app HOJE oferece
+  Q8_0 + Vulkan, combinacao que este teste mostra estar quebrada (kernel
+  Vulkan Q8_0). Opcoes: (a) bloquear/avisar Q8_0 na GPU (rota CPU, que
+  funciona — CPU Q8 completou 12/12 na bateria anterior) ou (b) corrigir o
+  kernel Q8_0 do backend Vulkan do fork. CONTROLES medidos agora (mesmo
+  caminho): Q4_K_M OK e Q4_0 OK — so o Q8_0 esta quebrado (E2a).
+E2b. DISCRIMINADOR: `mulmm_probe`
+  (native-dependencies/harness/mulmm_probe.cpp + arm64-v8a/mulmm_probe) —
+  mul_mat quantizado CPU x Vulkan em DOIS modos: (1) `synthq8` W Q8_0
+  SINTETICO determinista (escala fp16 exata 2^-6) com dupla checagem do
+  gerador contra a dequantizacao da PROPRIA ggml (0 difs em 4.194.304); (2)
+  `gguf <modelo.gguf> <tensor>` com o tensor REAL do GGUF lido pelo offset
+  (gguf.h), qualquer tipo quantizado (Q8_0, Q4_K, Q4_0 medidos). Mesmo grafo
+  nos dois backends, uploads conferidos byte a byte, referencia f64 nas
+  primeiras 256 colunas; n_rows em {1,8,64,512} cobre decode (mul_mat_vec) e
+  prefill (mul_mat). A 2a compilacao adicionou correlacao VKxCPU, razao
+  mediana e amostras (usada nos diagnosticos E2c). Binarios: 1a versao
+  69.225.368 B sha b66981ec... (rodada principal); 2a 69.305.128 B sha
+  a1c9c968... (diagnosticos + Q4_0). Ambas no manifesto.
+E3. Contagens duras (computadas por script, nao manual):
+  runs.csv da referencia CPU: 24 linhas (Q4_K_M 12 + Q8_0 12), todas
+  CONCLUIDO. Medianas internal_total_s CPU (computadas): Q4 curto 11.9
+  (11.0-12.2), medio 21.7, longo 50.8, mais_longo 117.2; Q8 curto 10.9,
+  medio 18.5, longo 45.5, mais_longo 106.2.
+  BATERIA VULKAN Q4 COM LIB CORRIGIDA (hymt2-vulkan-20261001-013544):
+  12/12 CONCLUIDO (blocos por modelo, cold 1o de cada bloco com toggle,
+  warm sem toggle; 3 recargas = exatamente os 3 colds). Tokens deterministicos
+  por tamanho: 142/293/693/1474. Outputs deterministicos por tamanho (3/3
+  idem). Medianas: curto total 7.9/gen 3.8; medio 12.1/8.0; longo 28.6/20.4;
+  mais_longo 63.8/48.2.
+  QUALIDADE (auditoria por tokens invariantes + leitura):
+  curto e medio BYTE-IDENTICOS a referencia CPU (herdam a revisao);
+  longo e mais_longo DIFERENTES do CPU mas com 100% dos numeros preservados,
+  sem perda de nomes proprios e negacoes preservadas (11 e 20 ocorrencias);
+  leitura integral coerente. Sem erro factual critico observado em nenhum
+  dos 4 tamanhos. CPU nao e gabarito; comparacao independente.
+  Q8: 1 curto fresco com lib corrigida = PATOLOGICO (E2); longos Q8 NAO
+  executados. Placar GPU: Q4 12/12 aprovado na amostra; Q8 BLOQUEADO.
+E3b. QUALIDADE Q4 — TABELA POR TAMANHO (termo/fato, script; NAO e' a
+  afirmacao "sem erro factual" — e' cobertura medida + itens para revisao
+  humana). Fonte: script qualidade_q4.py sobre corpus x saida Vulkan r1
+  (logs-hymt2-contexto-rodada1/qualidade_q4.csv). Tamanhos curto/medio
+  sao BYTE-IDENTICOS a saida CPU r1 (herdam a revisao ja feita); longo e
+  mais_longo diferem do CPU (kernels/ordens de acumulacao diferentes entre
+  backends — DETERMINISMO observado NA AMOSTRA: as 3 repeticoes de cada
+  tamanho produziram saidas GPU identicas; "diferir do CPU" nao e' prova
+  de nao-determinismo) e exigem revisao humana propria.
+    tamanho     numeros_fonte/faltando   negacoes_EN->PT   nomes_fonte/faltando
+    curto             7/0                    3->3                5/1
+    medio             9/0                    6->6                9/3
+    longo            15/0                   12->13              16/4
+    mais_longo       29/0                   22->25              29/8
+  Leitura: (a) EXECUCAO: 12/12 CONCLUIDO (E3); (b) COBERTURA DE NUMEROS:
+  100% preservados nos 4 tamanhos (0 faltando de 7/9/15/29); (c) NEGACAO:
+  paridade (3->3, 6->6, 12->13, 22->25; excedente PT plausivel, sem perda
+  observada); (d) FIDELIDADE LEXICAL: itens 'faltando' sao em parte
+  traducoes legitimas (Chairperson->presidente etc.) e parte falsos
+  positivos (End/Two/Driver/Team em titulo/frase) — LISTA PARA REVISAO
+  HUMANA, nao veredito automatico. Limitacao: sem revisao humana completa
+  e sem controle termico; saidas longo/mais_longo = rascunho revisavel.
+
+F. QUALIDADE/TEMPO/MEMORIA COMPARADOS (LIMITES)
+F1. Referencia CPU24 existente (computada acima + report.json do diretorio
+  final): restauration e agregados disponiveis; semantic_review.json existe
+  mas termos automaticos nao sao veredito de qualidade (revisao humana
+  obrigatoria). Uso humano revision mandatory: qualidade exige leitura
+  integral das saidas distintas contra fatos do corpus (modalidade,
+  negacao, agentes, atribuicao, numeros/unidades/datas/prazos, selos,
+  parentesco, safety), por modelo, sem consenso CPU=verdade.
+F2. Tempos: total interno/log, load, prefill/gen quando houver evidencia
+  real; espera de observacao/poll separada; resumo mediana/min/max/n por
+  grupo via Python; warm GPU vs cold CPU total NAO sera comparado como
+  vantagem pura (cold/warm separados; subset cold comparavel quando preciso).
+F3. Memoria: PSS antes/depois por run (nao pico; sem meminfo a cada poll);
+  buffers de modelo/compute separados, sem somar VRAM duplicada; PSS varia
+  com mapping/cache. Sem controle termico (rotulado).
+F4. Instrumento antigo NAO assumido correto: usb_hym_complete6.py e
+  patch-exec com replaces sobre instrument.py alheio; caso_hymt2.py tem
+  SERIAL default wireless antigo e PREV/ROOT hardcoded — inspecionados e
+  NAO reutilizados como corretos; o instrumento novo acima os substitui.
+
+G. CORPUS/LOGS/JSON/CSV/MANIFESTOS SHA COMPLETOS/TOTAIS POR SCRIPT
+- Corpus (final 20260930-233117/corpus.json): curto 409 e8b35290...,
+  medio 952 2115fd95..., longo 2335 6991a631..., mais_longo 4924 b20256db...
+  (verificado por --lista do instrumento novo).
+- Referencia CPU: .../hymt2-cpu-final-20260930-233117/{corpus.json,
+  results.json, runs.csv (24), report.json, relatorio.md, manifesto.json,
+  semantic_review.json}; continuacao: .../hymt2-cpu-continuacao-corrigida-...;
+  pareada: .../hymt2-cpu-paired-...; Q8 fresco: .../hymt2-usb-20260930-222010/
+  (01_Q8_0_curto_vulkan_r1 com baseline_log/output/record/source/task_log/
+  ui_*.xml + report.json/report.csv).
+- Novos desta rodada: docs/hymt2-request-isolation-design.md;
+  HyMt2RequestIsolation.kt + HyMt2RequestIsolationTest.kt (ESPECIFICACAO do
+  contrato em fake; nao prova anti-regressao do produto);
+  app/src/main/cpp/llama-jni/hymt2_request_reset.h (helper real usado pelo
+  generate) + native-dependencies/harness/hymt2_reset_test.cpp (17/17 host,
+  mutacao 7 falhas); MODULE-MAP.md (+1 linha); instrumento novo em scratch
+  (path real acima); logs de gate em
+  docs/vulkan-hymt2-fusion-round/logs-hymt2-contexto-rodada1/
+  (gate_unit.log, gate_lint.log, gate_asm.log, gate_unit_full.log,
+  tdd_red.log, tdd_green.log + XML do teste JVM).
+- Manifesto SHA completo: gerado por script AGORA (ver G2 abaixo); nao
+  apos a GPU. Hashes citados sao lidos dos artefatos, nao inventados.
+- Totais por script: unit suite 534/0/0/0; RED JVM EXIT=1; GREEN JVM EXIT=0;
+  teste nativo host 17/17 EXIT=0, mutacao EXIT=1 (7 falhas); ninja sig_llama
+  EXIT=0; focal EXIT=0; lint EXIT=0; asm EXIT=0; full EXIT=0; map-check EXIT=1
+  (arquivo novo ainda nao rastreado; commit proibido).
+
+G2. MANIFESTO desta entrega (gerado por script, SHA-256 completos):
+  docs/vulkan-hymt2-fusion-round/logs-hymt2-contexto-rodada1/MANIFESTO.json
+  (81 entradas; regenerado apos a bateria). Inclui: gates/logs da rodada;
+  nat_test_host.txt e nat_test_mutacao.txt (build+execucao+mutacao, com
+  hash dos fontes e dos executaveis); build_reset_rt.log (build cross do
+  harness de runtime); bateria/ (12 casos Vulkan Q4 com record.json/
+  journal.jsonl/output.txt de cada + results.json/plan.json) e smokes/
+  (5 execucoes avulsas: Q4 fresco, longo->curto, Q8 patologico e a
+  tentativa invalida do instrumento); fontes do helper/teste/harness de
+  runtime; binarios de host e do alvo; sig9_backup.tar (120.074.240 B;
+  hash integral no manifesto) e as copias v9 device/restore.
+
+H. DECISAO POR MODELO, PREFERENCIAS, PENDENCIAS, SEM PUBLISH
+- Bug KV: CORRIGIDO no fonte (A5) + REGRESSAO DA CHAMADA pelo teste nativo
+  do helper (B3: 17/17 host, mutacao 7 falhas) + ISOLAMENTO PROVADO NO
+  APARELHO com a lib corrigida (longo->curto sem reload, saida identica
+  ao fresco e a referencia CPU). Biblioteca corrigida CONSTRUIDA (hash
+  172c662a...), INSTALADA com autorizacao e PROVADA no processo.
+- Vulkan Q4: 12/12 CONCLUIDO — EXECUCAO aprovada na amostra (4 tamanhos x
+  3 reps), sem generalizar outros aparelhos; FIDELIDADE PARCIAL: numeros
+  100% preservados, negacao em paridade, porem itens lexicais pendentes de
+  revisao humana (E3b) e erros conhecidos a catalogar — nao e' "qualidade
+  aprovada" integral. A matriz Q4 rodou na lib ANTIGA (so-reset).
+  Vulkan Q8: causa localizada e CORRIGIDA LOCALMENTE (E2a-E2m) — probe
+  verde nos dois caminhos; app segue SEM o fix (lib 172c662a so-reset).
+  Placar GPU: Q4 completo (execucao) + Q8 com fix de probe, nao deployado.
+- Preferencias: iniciais backend=VULKAN threads=6; finais lidas de volta
+  (UI: Q4_K_M/Vulkan/Portugues/6 thr, app ocioso) — NADA a restaurar.
+- Pendencias precisas: (1) HARNESS DE RUNTIME NO ALVO: EXECUTADO — 8/8,
+  RC=0 (D3; seq_pos_max/min reais lidos: 25 -> -1/-1; B pos-reset == B
+  fresco; controle negativo divergiu 6/8); (2) CAUSA DA PATOLOGIA Q8:
+  LOCALIZADA E MEDIDA (E2a) — kernel mul_mat Q8_0 do Vulkan errado no
+  Adreno 840 (4x-7x fora), com controle Q4_K OK; (3) snapshot isolado do
+  map-check ja EXECUTADO (PASS 91 fontes); (4) relatorio final com anexos
+  reais (este).
+- Estacao de trabalho: USB wireless usado 100.108.27.64:35371 (CPH2747
+  confirmado por getprop antes de qualquer comando; PJA110 nao tocado). O
+  app segue com a lib corrigida instalada (readback 172c662a...) e prefs
+  finais = iniciais.
+- Nada de commit/publicacao. Pedido aqui e corrigir contexto e validar GPU,
+  nao promover Vulkan nem garantir tradutor sem erros.

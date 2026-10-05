@@ -1,0 +1,98 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F8: ATIVACAO EXECUTADA, PERFIL REAL E PROBE
+Data: 03/10/2026. Repo: D:/Projetos/SIG (NADA commitado; WIP preservado).
+Base: consentimento explicito do usuario para (1) ativar profA2/profB no device em
+modo temporario com backup/readback/rollback e (2) executar o probe nativo.
+Aparelho: CPH2747 @100.108.27.64:39599; backup/stok 9698670c CONFERIDO antes;
+ROLLBACK CONCLUIDO ao final (readback + limpeza + UI restaurada).
+
+================================================================================
+ESTADOS
+================================================================================
+[CCE] Prova de lifetime NATIVA executada no device: PASS 16/16 (rc=0)
+[CCE] Piloto profA2: perfil real de prefill/decode obtido (gating verificado)
+[CCE] Piloto profB3: profiling CL por op obtido (CSV integro; trace truncado)
+[CCE] Rollback concluido (9698670c + UI Q4_K_M+Vulkan + chaves zero + limpeza)
+[CANDIDATO] P1 medida: lm_head `result_output` (20% do kernel do decode)
+[PENDENTE: consentimento] A/B do candidato P1; instrumentacao host (P2)
+
+================================================================================
+1. PROBE NATIVO DE LIFETIME — EXECUTADO NO DEVICE
+================================================================================
+1a. Primeira execucao (probe v2 5e86f0e7) FALHOU corretamente em 1 caso: o shape
+    sintetico nao engatava o transpose — investigacao revelou o GATE REAL:
+    use_adreno_kernels exige ne0>=512 E ne1>=512 (compilador >=E031 38.11;
+    senao 128/128), alem de ne0%32==0, ne1%4==0, ne2==ne3==1, elems<128M.
+1b. Probe v3 (cf53c1d3) corrigido e reexecutado: PASS 16/16, rc=0 —
+    - igualdade EXATA byte a byte (contrato canonico do get_tensor) nos 7 casos;
+    - TRANSPOSE comprovado pelo contador diag: tr_delta=2 (Q8_0), 6 (Q4_K);
+    - controles (Q8_0 abaixo do threshold; F32) com tr_delta=0;
+    - determinismo 2x identico; ciclo free/re-init estavel.
+1c. Evidencia: logs-rodada-opencl/probe_execucao_v3.txt (e v2 preservado).
+
+================================================================================
+2. PILOTO PROFA2 — PRIMEIRO PERFIL REAL (llama_perf) DE PREFILL/DECODE
+================================================================================
+2a. Gating verificado no device: prop=0 -> SEM linha "Perfil llama" (stock);
+    prop=1 -> linha presente; shas identicos ao baseline nos 4 runs
+    (Q4 084f12f4; Q8 d36a3315). no_perf=false so' com a prop (correcao F7).
+2b. Numeros (OpenCL, corpus curto, 1 geracao por processo):
+    Q4: load=4962ms | PREFILL=226ms (119 tok; 527 tok/s) | DECODE=8397ms (142 tok; 16.9 tok/s)
+    Q8: load=5212ms | PREFILL=250ms (119 tok; 476 tok/s) | DECODE=8704ms (142 tok; 16.3 tok/s)
+2c. Leitura: PREFILL e' ~200-250ms (nao e' gargalo); DECODE e' o custo dominante.
+    Comparacao matched: no Vulkan curto o decode (Desempenho do app) era ~4.8s
+    (~30 tok/s) => OpenCL ~1.7x mais lento no decode; prefill comparavel/rapido.
+
+================================================================================
+3. PILOTO PROFB3 — PROFILING POR OP (CSV integro; 100.352 kernels)
+================================================================================
+3a. Geracao: cl_profiling.csv 7.212.669 B (sha256 c45bc0f6c2472ec6f0f5fcb9deea51c4971f8248f7475f3a59bf8567a494c3d3)
+    + cl_trace.json 46.768.756 B (sha256 71884f1b0e9e6a328995566515e978e3a597288ce389521f2eee68b08ea86899
+    — TRUNCADO: o app foi morto no meio do ultimo write; CSV e' a fonte primaria).
+    Protocolo: write por lote (2048 kernels) — necessario porque o contexto OpenCL
+    e' SINGLETON refcounted e o free() do app NAO ocorre no reload (o flush
+    original so' no free nunca escreveria); correcao aplicada (profB3 4718741e).
+3b. Separacao de fases pelos recorrentes (CSV; ~141 chamadas = por token):
+    DECODE: 99.674 kernels / 141 tokens = 707 kernels/token;
+      exec total 3.662 ms (~26,0 ms/token) vs WALL de decode 59,1 ms/token
+      => RESIDUAL host/gaps/sampler/readback = ~33,2 ms/token (56% do decode!).
+    LOAD/PREFILL (kernels <100 chamadas): apenas 202 ms de exec (load+prefill
+      quase nao aparecem no tempo de kernel).
+3c. Top kernels do decode (soma ms | n | media ms):
+    result_output | kernel_mul_mv_q6_K_f32_flat | 733,9 | 141 | 5,205  <- 20,0% do kernel do decode
+    ffn_out-6     | kernel_gemv_noshuffle_q6_K_f32 | 25,9 | 141 | 0,184
+    ffn_out-31    | idem | 25,6 | 141 | 0,182  (≈26 camadas ffn_out a ~0,18ms/token)
+3d. Candidatos por evidencia (NAO tudo-GEMV; medido):
+    P1 = `result_output` (lm_head, mul_mv_q6_K_f32_flat): maior kernel unico —
+         5,205 ms/token, 20% do tempo de kernel do decode. Candidato: A/B do
+         VARIANTE (flat vs noshuffle) e/ou config de workgroup no MESMO artefato,
+         via gating da escolha (use_flat_gemv_for_large_m_q6_K), com sha/quality.
+    P2 = RESIDUAL host/gaps (~33 ms/token; 56%) — o MAIOR bucket, porem NAO
+         localizado por op: regra do parecer manda INSTRUMENTAR o host
+         (enqueue/wait/readback/sampler por segmento) ANTES de tunar GEMV.
+    Observacao: 707 kernels/token e' o vetor estrutural do custo host; fusao/
+    reducao de dispatches e' trabalho profundo (nao e' o candidato unico agora).
+
+================================================================================
+4. SEGURANCA E REVERSAO (protocolo executado)
+================================================================================
+4a. Antes: backup/stock 9698670c conferido (sha no device); deploys profA2/
+    profB2/profB3 com readback por sha a cada troca.
+4b. Depois: rollback para 9698670c (readback OK), prop debug.sig.hymt2.prof=0,
+    UI restaurada (Q4_K_M + GPU (Vulkan)), artefatos temporarios removidos do
+    device (cl_profiling.csv/cl_trace.json/binarios em /data/local/tmp).
+4c. Nada de release/pack/R2/commit; WIP local preservado.
+
+================================================================================
+5. ENTREGA/HASHES E PROXIMOS PASSOS
+================================================================================
+5a. Artefatos: profA2 cbd1a033... | profB2 a5fe393d... | profB3 4718741e...
+    (95.955.040 / 95.936.040 / 95.936.184 B); probe v3 cf53c1d3...; CSV/trace
+    com sha acima; logs novos em logs-rodada-opencl/ (probe_execucao*,
+    profA2_pilot2.log, profB3_pilot.log, profB3_top_ops.txt,
+    profB3_decode_from_csv.txt, f8_perfil_piloto_a2.txt, deploy/rollback).
+5b. Proximos (com consentimento): (i) A/B do P1 (lm_head) no mesmo artefato;
+    (ii) instrumentacao do host (P2) se o A/B nao bastar; expansao do piloto
+    para mais_longo/reps quando a captura estiver validada (captura ja validada
+    no curto).
+5c. Manifesto regenerado apos esta entrega (contagem no rodape do
+    MANIFESTO-OPENCL.json; verificacao Python count/size/dedupe).

@@ -1,0 +1,133 @@
+================================================================================
+RETIFICACAO DE ESTABILIDADE  (o achado mais importante desta serie)
+================================================================================
+
+O que eu escrevi no relatorio original:
+
+  - secao 3.4: "Dado que descarta (ii) e sustenta (i)/(iii): o resultado e'
+    ESTAVEL entre execucoes e independente de quantizacao, threads e tamanho
+    de entrada."
+  - lista de hipoteses: "D. Sincronizacao — CANDIDATA DESCARTADA por
+    estabilidade (3/3 execucoes = 4.096 tokens, seria nao-deterministico)."
+
+AMBAS AS AFIRMACOES ESTAO ERRADAS.
+
+--------------------------------------------------------------------------------
+1. O DADO QUE FALTAVA
+--------------------------------------------------------------------------------
+O relatorio nunca teve o TEXTO que o Vulkan produz. Eu tinha a contagem de
+tokens, e olhei so para ela. Capturei o texto agora (botao SALVAR), e ele
+muda o diagnostico.
+
+Mesmos parametros em todas: Hy-MT-2 1.8B Q4_K_M, 6 threads, Vulkan,
+OnePlus 15 (Adreno 840), mesmo texto de entrada.
+
+  exec | tokens | tok/s | saida produzida
+  -----+--------+-------+----------------------------------------
+    1  |    6   |  0,5  | 6" no more than
+    2  |    7   |  0,6  | CFR 4" not even
+    3  |   12   |  1,0  | 4 you no one more than any other than
+    4  |   ...  |  ...  | (ver exp0c_distribuicao.txt)
+    5  |   ...  |  ...  | (ver exp0c_distribuicao.txt)
+
+  NENHUMA execucao repete a anterior. Nenhuma produz portugues. Todas sao
+  fragmentos em INGLES, sem relacao com o texto de entrada, com aspas
+  orfas (6", 4") e tokens soltos.
+
+--------------------------------------------------------------------------------
+2. OS DADOS ANTIGOS JA CONTRAVIAM ISSO — EU NAO VI
+--------------------------------------------------------------------------------
+Reextraindo TODOS os 14 registros Vulkan do jsonl (fiz antes apenas leitura
+das 3 execucoes de uma janela):
+
+  tokens | tok/s | threads
+  -------+-------+--------
+   4096  | 19,1  |   6
+   4096  | 25,4  |   6
+   4096  | 20,0  |   6
+   4096  | 17,3  |   1
+   4096  | 18,0  |   2
+     11  |  1,2  |   4     <-- COLAPSO
+     40  |  4,7  |   6     <-- COLAPSO
+   4096  | 21,1  |   8
+     16  |  3,7  |  12     <-- COLAPSO
+   4096  | 16,7  |   6
+   4096  | 20,6  |   6
+   4096  | 23,0  |   6
+   4096  | 23,1  |   1     (cfg dizia OpenCL — contaminado)
+   4096  | 20,0  |  12
+
+  Havia QUATRO execucoes de colapso (11, 16, 40 tokens) entre os 14
+  registros. Eu as reportei como "3 colapsos" e as tratei como excecao,
+  quando sao o MESMO defeito das novas.
+
+  Os dois modos coexistem no mesmo aparelho, com o mesmo modelo e o mesmo
+  numero de threads:
+    MODO A — loop: 4.096 tokens a 16,7-25,4 tok/s
+    MODO B — colapso: 6 a 40 tokens a 0,5-4,7 tok/s
+
+--------------------------------------------------------------------------------
+3. O QUE ISSO SIGNIFICA PARA O DIAGNOSTICO
+--------------------------------------------------------------------------------
+O defeito e' NAO-DETERMINISTICO. Isso muda a leitura de tudo:
+
+  ANTES (errado): "o sampler trava em loop, logits systematicamente corrompidos,
+  sem componentes de sincronizacao envolvidos porque o resultado e' estavel."
+
+  AGORA: ha DOIS modos de falha, e a nao-determinacao e' a pista mais forte
+  disponivel. Ela e' a assinatura classica de:
+    - barreira ausente entre compute e transfer
+    - sincronizacao de subgroup incompleta (subgroup_size=64 neste aparelho)
+    - leitura de buffer antes da conclusao da escrita
+    - reutilizacao de buffer enquanto ainda em uso (lifetime)
+
+  A hipotese (ii) — "race condition de subgroups" — que eu DESCARTEI por
+  estabilidade, e' justamente a mais consistente com o que agora medimos.
+  Nao-determinismo nao e' ruido: e' o sintoma.
+
+  Observacao relevante: o modo A (loop) e' rapido (17-25 tok/s) e o modo B
+  (colapso) e' lento (0,5-4,7 tok/s). Isso sugere que sao manifestations
+  do mesmo problema em graus diferentes — a corrupcao dos logits e' sempre
+  presente; quando o sampler consegue sair do caso degenerado, ele repete
+  ate o limite; quando nao, ele colapsa logo.
+
+--------------------------------------------------------------------------------
+4. POR QUE AS EXECUCOES ANTIGAS DAVAM 4.096 E AS NOVAS DÃO 6-12
+--------------------------------------------------------------------------------
+Hipotese (ainda a confirmar): as execucoes antigas que davam 4.096 nao
+tinham o backend realmente aplicado no momento da geracao. O logcat
+reportava o estado de uma carga anterior. Ja registrei um bug assim antes
+("logcat mente sobre o backend") e o driver ganhou verificacao de config
+por dump de tela — mas o registro de 23,1 tok/s com cfg=OpenCL mostra que
+a contaminacao ainda ocorria em parte da bateria.
+
+Isso NAO invalida os achados do relatorio (que se apoiam nas capabilities
+medidas por probe, no offload 33/33, e no contraste com OpenCL). Invalida
+apenas a afirmacao de ESTABILIDADE.
+
+--------------------------------------------------------------------------------
+5. O QUE MUDAR NO DIAGNOSTICO
+--------------------------------------------------------------------------------
+  - HIPOTESE D (sincronizacao): de DESCARTADA para PRIORITARIA. E' o item D
+    do roteiro do especialista (barriers, visibilidade host/device,
+    reutilizacao de buffer, lifetime).
+  - HIPOTESE (i) e (iii) — specializacao de pipeline e layout std430 do
+    bloco K: continuam possiveis, mas explicam melhor o MODO A (loop) do que
+    o MODO B (colapso). Um bug deterministico de layout produziria sempre
+    lixo parecido; aqui o lixo muda a cada execucao.
+  - O EXP-1 (mesmo modelo em F16) ganha mais peso: se F16 tambem for
+    nao-determinista, o problema e' de sincronizacao/infraestrutura e nao
+    do caminho de quantizacao.
+
+--------------------------------------------------------------------------------
+6. CONFISSAO DE METODO
+--------------------------------------------------------------------------------
+A falha aqui foi a mesma que eu apontei mais cedo nesta serie (o numero "12"
+inventado): aceitei um padrao sem conferir a base inteira. "3/3 = 4096" era
+verdade, mas era 3 de 14, e as 11 restantes diziam outra coisa. A regra que
+estou aplicando, e que deve valer para todo o resto do diagnostico:
+
+  NENHUMA AFIRMAPACAO DE PADRAO SEM UM REGISTRO QUE CONTABILIZE TODAS AS
+  EXECUCOES, NAO SO AS QUE CONFIRMAM.
+
+  auditar_doc.py existe para isso e foi construido depois deste erro.

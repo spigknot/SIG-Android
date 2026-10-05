@@ -1,0 +1,328 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 11 (29/09/2026)
+Hy-MT2 1.8B / llama.cpp / Vulkan / Adreno 840 / CPH2747
+================================================================================
+Responde ao "PROMPT AO AGENTE — CONTINUACAO APOS A RODADA 10" de 29/09 19:53.
+Segui a ORDEM IMEDIATA: (1) preservar e corrigir devices/robustez, (2)
+confirmar mapa de offload e procedencia, (3-5) bloqueados por indisponibilidade
+do aparelho (erro concreto abaixo), (6) entrega sem commit/publicacao — cumprido
+(HEAD 080e804, 82 itens WIP preexistentes intactos).
+
+ESTADOS (§10): CCE = CONCLUIDO COM EVIDENCIA / PARCIAL / PENDENTE /
+INVALIDADO / BLOQUEADO
+
+  A. devices corrigido ..... CCE   (contrato lido, 3 sites, teste
+                                    permanente 24/24, binario 87/87)
+  B. mapa de offload ....... PARCIAL (fonte+biblioteca identificados;
+                                    execucao do --log-debug BLOQUEADA)
+  C. replay sequencial ..... BLOQUEADO (CPH2747 offline; script pronto)
+  D. execucoes 0/1/2/33 .... BLOQUEADO (idem)
+  E. replay local saida .... PENDENTE (condicionado a D; nao iniciado)
+  F. sampler/benchmark ..... PARCIAL (sampler CCE; benchmark: 9 CPU
+                                    preservados, 9 Vulkan INVALIDADOS e
+                                    pendentes de repeticao com v6)
+  G. contagens/manifestos .. CCE   (gerados por script)
+
+--------------------------------------------------------------------------------
+A. O DEFEITO devices — CORRIGIDO EM 3 SITES COM TESTE PERMANENTE (§2)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+A.1 CONTRATO (§2.1), lido no header e no percurso:
+  llama.h (llama_model_params.devices): "NULL-terminated list of devices to
+  use for offloading (if NULL, all available devices are used)".
+  Percurso real em llama.cpp:
+    :155  while (params.devices[n_devs]) n_devs++;        (split TENSOR)
+    :173  for (dev = params.devices; *dev; ++dev) push    (split padrao)
+  A expressao antiga `mp.devices = sel ? &sel : NULL` passava o ENDERECO de
+  UMA variavel: o segundo elemento nao era garantido — o loop lia memoria apos
+  a variavel (comportamento indefinido: parava por acaso, ou empurrava um
+  "device" de lixo de pilha). Confirmado: a especialista achou certo; o padrao
+  era meu e voltou num executavel novo.
+
+A.2 CORRECOES (helper compartilhado, nao 3 correcoes avulsas):
+  device_list.h (NOVO): template ListaDevices<Dev> com buf[8] TERMINADO
+  (add() reserva slot p/ terminador; overflow RECUSADO, nunca silencioso;
+  valida() confere terminador exatamente em buf[n] e ausencia de lixo depois),
+  + funcoes puras config_coerente(backend, n_gpu) e encontrar_indice(nomes).
+  Sites corrigidos:
+    llama_harness.cpp:221  (o defeito ERA NO HARNESS DO BENCHMARK — ver F.2)
+    layer_diff.cpp:70      (v1)
+    layer_diff_v2.cpp:68   (v2)
+  Em todos: lista validada ANTES de passar ao modelo; falha => rc!=0, nunca
+  carga com lista invalida. CPU explicita: devices=NULL + n_gpu_layers=0 =>
+  i_gpu_start = n_layer_all+1 (todos os layers CPU) — e config_coerente()
+  recusa cpu+n_gpu>0 e vulkan+n_gpu=0 ANTES da carga (§2.2, checagem dupla:
+  parse + carga).
+
+A.3 TESTE PERMANENTE (§2.3): 24 checks em harness_args_test.cpp, rodando
+  COM PONTEIROS SINTETICOS (sem backend) — o percurso identico ao do llama.cpp
+  e' re-executado no teste:
+    nova vazia valida; 3 itens => percurso conta exatamente 3; add(nullptr)
+    recusado; 7 itens cabem (CAP-1); 8o RECUSADO e lista valida; selecao
+    "Vulkan" acha indice 1; "OpenCL" INDISPONIVEL => -1 (nunca device por
+    acaso); string vazia => -1; lista nula => -1; coerencia (cpu+0 ok,
+    cpu+33 recusado, vulkan+33 ok, vulkan+0 recusado, backend vazio/nulo).
+  Saida: logs-rodada11/testes/harness_args_test-saida.txt —
+    87 passaram, 0 falharam, RC=0, executado no aparelho (PJA110, CPU puro).
+  Decomposicao GERADA POR SCRIPT da execucao (§9):
+    24 device_list + 16 logica do loop + 7 penalidade + 3 rejeicao + 37 parser
+    = 87 = total declarado pelo binario.
+
+A.4 ESCOPO DOS RESULTADOS AFETADOS (§2.4) — nao reivindico causa, so confianca:
+  * layer_diff_v2 da rodada 10 (runs GPU com &sel): INVALIDADO ate repeticao.
+    CPU (sel=nullptr => devices=NULL) nao passava pelo ramo defeituoso.
+  * BENCHMARK rodada 10, runs VULKAN (9 de 18): INVALIDADOS ate repeticao
+    com v6 (ver F.2 — o v5 tinha o MESMO defeito). Runs CPU (9): intactos
+    (ramo defeituoso nao executa para backend=cpu).
+  * Runs Vulkan da rodada 9 (r9b_*): mesmo v3 com o mesmo padrao -> tambem
+    atingidos (declarado aqui; a rodada 9 ja foi superada pela 10).
+  O defeito NAO e' apontado como origem de nenhum valor observado: UB
+  invalida a confianca, nao identifica a manifestacao concreta.
+
+--------------------------------------------------------------------------------
+B. MAPA REAL DE OFFLOAD — OUTPUT PRIMEIRO (§3)
+--------------------------------------------------------------------------------
+Estado: PARCIAL (fonte e biblioteca IDENTIFICADOS; a execucao com --log-debug
+que provaria a atribuicao por camada no aparelho esta BLOQUEADA)
+
+B.1 FONTE: app/src/main/cpp/llama/src/llama-model.cpp
+  1318  i_gpu_start = max(n_layer_all + 1 - n_gpu_layers, 0);
+  1319  act_gpu_layers = devices.empty() ? 0 : min(n_gpu_layers, n_layer_all+1);
+  1322  se il < i_gpu_start || (il-i_gpu_start) >= act_gpu_layers => CPU
+  1334  camada de ENTRADA (embedding) fica SEMPRE em CPU (regra explicita)
+  1336  blocos repetidos: il = 0..n_layer_all-1
+  1343  output: get_layer_buft_list(n_layer_all) — atribuido como "layer" extra
+  Com n_layer_all = 32 (32 blocos) e o output contando como 1 layer (33 total):
+    n_gpu=0  i_gpu_start=33 => NENHUM layer na GPU (tudo CPU)
+    n_gpu=1  i_gpu_start=32 => blocos 0..31 < 32 => CPU; so o OUTPUT (il=32)
+             satisfaz 32>=32 e 0<1 => GPU. NENHUM BLOCO TRANSFORMER.
+    n_gpu=2  i_gpu_start=31 => bloco 31 + output na GPU
+    n_gpu=33 i_gpu_start=0  => todos os blocos + output
+  CONCLUSAO: com n_gpu=1 a inversao (se reproduzir) implica o CAMINHO DE
+  SAIDA (ativacao final, normalizacao final, projecao de vocabulario,
+  conversoes, transferencias, selecao da linha de logits) — nao o bloco 1.
+  A conclusao da rodada 10 ("nasceu no 1o contorno CPU/GPU, bloco 1") foi
+  RETIRADA: o que eu varri comparava LOGITS FINAIS de colocacoes diferentes,
+  nao observou o bloco 1 nem propagacao camada a camada (§3.1/3.2).
+  Captura da entrada do bloco 1: NAO CRIADA (§3.4) — nao e' o experimento
+  discriminante sustentado por este mapa.
+
+B.2 PROCEDENCIA DA BIBLIOTECA (§3):
+  libllama.a (build/llama/arm64-v8a/llama-build/src): mtime 25/09 17:21,
+  POSTERIOR a ultima edicao de llama-model.cpp (24/09 14:06).
+  Varredura binaria da .a: as strings "load_tensors: layer %3d assigned to
+  device %s" e "offloading output layer to GPU" ESTAO presentes no arquivo
+  vinculado — isso prova que o CODIGO AQUELE DAQUELE LOG pertence ao arquivo,
+  e NAO que a formula exata (i_gpu_start) foi compilada: strings iguais podem
+  coexistir com regras diferentes. [RETIFICADO §5 rodada 12: a frase "o mapa
+  da fonte esta na biblioteca" foi retirada — insustentavel so por strings. A
+  confirmacao real da formula e' o debug runtime por configuracao (--log-debug,
+  linha "layer N assigned to device"), PENDENTE de execucao no CPH2747 (§B).]
+  Associacao da biblioteca aos binarios: build_harness.sh linka
+  $B/src/libllama.a do build de 25/09 (mesmo caminho nos scripts de todos os
+  binarios); hash completo no manifesto da rodada 11.
+  PENDENTE (exigencia de §3): a ATRIBUICAO REAL executada (linhas por camada
+  no log) — o v6 ja recebeu --log-debug (callback agora encaminha
+  GGML_LOG_LEVEL_DEBUG com marca LLAMA_LOG_D|); a execucao espera o aparelho.
+
+--------------------------------------------------------------------------------
+C. REPLAY SEQUENCIAL L[342] (§4) — BLOQUEADO POR APARELHO
+--------------------------------------------------------------------------------
+Estado: BLOQUEADO (erro concreto e tentativas em C.3)
+
+C.1 INSTRUMENTO CORRIGIDO E PRONTO (nao e' mais uma proposta):
+  O replay sequencial e' feito pelo PROPRIO harness validado (v6) — ele ja
+  tem o protocolo do controle original: prefill do prompt em fatias de
+  n_batch + 1 llama_decode por ID do prefixo comum, dump ANTES de consumir a
+  escolha. Correcoes da §4/§5 aplicadas no v6:
+    --dump-passo N   grava SO L[N] (-1 = todos, comportamento antigo)
+                     L[342] e' capturado antes de consumir o id 342;
+    --log-debug      ativa linhas DEBUG do llama (atribuicao layer->device);
+    gravar_dump      checa snprintf (caminho truncado => recusa), fwrite
+                     (escrito != esperado => remove o parcial, rc no log),
+                     fclose, entrada invalida => nenhum dump;
+    ctx_cfg/ctx_flags no log: n_ctx/n_batch/n_ubatch/threads/FA/swa/op_offload
+                     (fronteiras registradas no MESMO arquivo do dump, §4.2);
+    build no log:    data/hora da compilacao + SHA no manifesto (§4.2).
+  Script de execucao pronto: logs-rodada11/scripts/replay11.sh —
+  4 runs (cpu0, gpu1, gpu2, gpu33), log proprio + dump proprio por run,
+  contrato L[k] preservado, sem renomear arquivos antigos (§4.5 preservado
+  dos protocolos anteriores). O protocolo em LOTES (layer_diff_v2) fica
+  preservado como EXPERIMENTO DIFERENTE identificado (§4.3) — nao usado
+  como localizacao do mesmo caso.
+
+C.2 CONTROLE DO §4.4 (quando executar): o replay cpu0 com v6 sera comparado
+  contra o harness validado da rodada 8/10 na MESMA entrada/configuracao —
+  nao apenas argmax igual: hash completo do dump + margem assinada do par
+  3415/16990 + max_abs/RMSE entre dumps (§6). O alvo de referencia e'
+  reproduzir a margem CPU original do controle: +0.030470.
+
+C.3 BLOQUEIO — ERRO CONCRETO E TENTATIVAS (§10 exige erro, nao "aparelho
+  indisponivel" sem evidencia):
+  O CPH2747 saiu do wireless durante a rodada 11. Tentativas feitas:
+    adb connect 100.108.27.64:43511  x3  ->  rc do so: "cannot connect ...
+      Nenhuma conexao podia ser feita porque o destino a recusou ativamente
+      (10061)"   [porta anterior, agora fechada]
+    adb mdns services -> "List of discovered mdns services" VAZIO (aparelho
+      nao anuncia a porta nova)
+    adb connect 100.108.27.64:5555     ->  10061 (recusada)
+  A porta do debug sem fio do OnePlus muda a cada reativacao; sem o anuncio
+  mDNS a porta nova nao e' descobrivel do PC. O aparelho USB disponivel
+  (PJA110) NAO e' o alvo e nao tem o modelo (verificado: hymt2_app.gguf
+  inexistente la) — copiar o modelo de produto para um aparelho nao-alvo
+  para medir Adreno 840 nao produziria evidencia do caso.
+  DESBLOQUEIO: reativar debug sem fio no CPH2747 (ou colar a porta nova).
+
+--------------------------------------------------------------------------------
+D. EXECUCOES MINIMAS 0/1/2/33 (§6) — BLOQUEADO
+--------------------------------------------------------------------------------
+Estado: BLOQUEADO (mesmo erro de C.3). Quando destravado, roda o replay11.sh:
+  cpu0 (referencia) / gpu1 (output apenas) / gpu2 (ultimo bloco+output) /
+  gpu33 (full) — SEM repetir 4/8/16 (matriz nao ampliada, §6).
+  Registrara por run: margens assinadas do MESMO par 3415/16990, max_abs,
+  RMSE, finitude, SHA-256 completo do dump, configuracao integral (ctx_cfg),
+  rc, e atribuicao layer->device do proprio log (--log-debug).
+  Se dumps iguais entre 2 e 33 persistirem: verificarei que sao arquivos
+  INDEPENDENTES de runs diferentes (paths novos, run_id proprio, dumps
+  gravados apos o decode com rc=0, dispositivos/camadas efetivos impressos)
+  antes de qualquer conclusao — nao concluirei identidade de todos os tensores
+  intermediarios (§6, §3.2).
+
+--------------------------------------------------------------------------------
+E. REPLAY LOCAL NO CAMINHO DE SAIDA (§7) — PENDENTE
+--------------------------------------------------------------------------------
+Estado: PENDENTE (condicionado: so se D executar e o output-only reproduzir
+a inversao com o instrumento corrigido; §7.6: se nao reproduzir, sigo o mapa
+observado sem forcar a hipotese da projecao).
+Nao foi iniciado nesta rodada porque C/D estao bloqueados. O plano minimo,
+quando liberado: (1) localizar o limite exato entre ativacao dos blocos e
+caminho de saida no grafo real (tensores nomeados no fonte, nao inventados);
+(2) capturar operandos com lifetime/sync validados NO CONTROLE CURTO antes do
+caso focal; (3) referencia local com operandos congelados; (4) se a
+instrumentacao alterar a inversao, registro e reduzo (CHECK_RESULTS fora do
+benchmark).
+
+--------------------------------------------------------------------------------
+F. SAMPLER E BENCHMARK — PRESERVADOS/PARCIALMENTE INVALIDADOS, COM JUSTIFICATIVA
+--------------------------------------------------------------------------------
+Estado: PARCIAL
+
+F.1 SAMPLER: PRESERVADO (§8.1). Testes diretos (10/10, penalties contra a
+  libllama.a) e integracao (PASS, auto-accept de sample()) intactos — nada
+  desta rodada os tocou. Quanto a "identidade historica de bibliotecas": a
+  RENUNCIA e' formal — mtime + .a unico nao provam o vinculo historico, e o
+  controle teacher de 3 passos NAO valida a semantica de sampler de binarios
+  antigos. Declarado, nao afirmo o contrario.
+
+F.2 BENCHMARK (§8.2 — verifiquei ANTES de decidir, como pedido):
+  O harness de benchmark da rodada 10 (v5) COMPARTILHAVA o defeito: linha
+  221 do backup (backup-rodada11/llama_harness.cpp) =
+  "mparams.devices = &device_efetivo", no ramo `backend != cpu`.
+  Consequencia:
+    9 runs CPU   -> ramo nao executa (devices NULL, n_gpu=0) => PRESERVADOS.
+    9 runs VULKAN -> ramo executa com lista nao-terminada => INVALIDADOS ate
+                    repeticao com v6 (UB: confianca invalidada, nao causa
+                    de valor apontada).
+  Os artefatos/config dos 18 sao integros (logs completos, RC=0, CSV/JSON por
+  script) — mas integridade de artefato nao corrige UB no caminho de carga.
+  Repeticao dos 9 Vulkan com v6: PENDENTE (mesmo bloqueio de C.3; script
+  bench10.sh ja adaptavel para receber o binario v6).
+  A separacao executavel focal x executavel de benchmark (§8.2) e' real:
+  layer_diff_v2* (focal) e llama_harness (benchmark) sao binarios distintos
+  com fontes distintas.
+
+F.3 RATIOS (§8.3): mantidos, nao propus corte por tamanho. CONCLUSAO
+  LIMITADA: curto Vulkan pior no total (1,55x), medio/longo melhor no
+  conjunto medido, aparelho/processo novo.
+
+F.4 RETIFICACAO ja aplicada no relatorio da rodada 10 (§8.4): a frase
+  "dispersao 10,0 da rodada 8 — por instrumentacao" foi substituida por
+  [RETIFICADO §8.4]: sem logs antigos, com sampler/config mudados e sem
+  A/B causal, so se afirma que a nova bateria teve menor dispersao.
+
+F.5 RESIDUO DOS 18 RUNS (§8.5), calculado POR SCRIPT do CSV (por run, sem
+  somar medianas): total - (5 fases) - (3 fases de passo):
+    curto/cpu    mediana 2,2%   curto/vulkan 1,3%
+    medio/cpu    0,8%           medio/vulkan 1,5%
+    longo/cpu    0,5%           longo/vulkan 1,3%
+    global: mediana 1,3% | min 0,5% | max 2,9% (18 de 18)
+  O residual NAO foi atribuido a strings/logging por exclusao — e' apenas
+  "nao discriminado" (cronometros existentes: carga/ctx/tok/prefill/geracao/
+  logits/sampler/detok; o resto nao tem cronometro proprio).
+
+F.6 REPETIBILIDADE E QUALIDADE (§8.6): 3/3 = repetibilidade OBSERVADA nas
+  execucoes, nao determinismo universal. rota/viagem = GENERALIZACAO (perda
+  de especificidade), nao literalidade; erros grammaticais nao sao erros
+  factuais. Ambas as correcoes ja refletidas no relatorio da rodada 10.
+
+--------------------------------------------------------------------------------
+G. CONTAGENS, MANIFESTOS, ALTERACOES (§9, §11.G)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+G.1 CONTAGENS GERADAS POR SCRIPT (nunca reescritas de memoria):
+  Rodada 10 (regerada do arquivo de saida): 63 =
+    37 parser + 7 penalidade + 3 rejeicao + 16 logica.
+    As decomposicoes CONTRADITORIAS do relatorio 10 ("44+7+16=67",
+    "16+44+2=62") foram CORRIGIDAS no proprio TXT da rodada 10 com marcacao
+    §9 — os 44 ja incluiam os 7; a aritmetica nao fechava.
+  Rodada 11 (da execucao, arquivo anexo): 87 =
+    24 device_list + 16 logica + 7 penalidade + 3 rejeicao + 37 parser,
+    == total declarado pelo binario (87/0, RC=0).
+  Nenhum teste antigo foi removido; nada substituido.
+
+G.2 MANIFESTOS (o proprio manifesto declara se conta a si — nao conta):
+  logs-rodada11/MANIFESTO-RODADA11.txt        2 arquivos internos
+  logs-rodada11/MANIFESTO-FONTES-BINARIOS.txt 18 artefatos (fontes, v6, backup)
+  logs-rodada10/MANIFESTO-RODADA10.txt        31 arquivos (regenerado)
+  Diferenca local x anexo: anexaveis desta entrega = os TXTs + os manifestos
+  + a saida de testes; os binarios (94-107 MB) e o backup permanecem LOCAIS,
+  referenciados por SHA-256 (não afirmo anexo que nao acompanha, §10).
+
+G.3 BACKUP PRE-EDICAO (§1.2): backup-rodada11/ com MANIFESTO-BACKUP.txt de
+  13 entradas SHA-256 completas = 8 fontes COPIADAS na pasta (llama_harness,
+  args, loop, testes, layer_diff x2, sampler x2) + 5 binarios da rodada 10
+  (v4, v5, layer_diff_v2, sampler_*x2) referenciados por SHA no manifesto
+  (nao duplicados — 107 MB cada; permanecem em arm64-v8a intactos).
+  Nenhum controle sobrescrito (pf/v2/v3/v4/v5 com os SHA originais).
+
+G.4 ALTERACOES DESTA RODADA vs WIP (nenhum WIP tocado):
+  NOVO   native-dependencies/harness/device_list.h         (helper + 24 testes)
+  ALTER  native-dependencies/harness/llama_harness.cpp     (devices, coerencia,
+         --dump-passo, --log-debug, gravar_dump robusto, ctx_cfg/build no log)
+  ALTER  native-dependencies/harness/harness_args.h        (+2 opcoes)
+  ALTER  native-dependencies/harness/harness_args_test.cpp (+24 checks,
+         autossuficiencia do arquivo de modelo)
+  ALTER  native-dependencies/harness/layer_diff.cpp        (devices)
+  ALTER  native-dependencies/harness/layer_diff_v2.cpp     (devices)
+  NOVO   arm64-v8a/llama_harness_v6  106.9xx.xxx B
+          sha 97e092e719f99129b33f2da43f758c3cddacb76af02b9003fdbb8423ccff9280
+  (SHA-256 completos de todos em MANIFESTO-FONTES-BINARIOS.txt)
+
+G.5 COMANDOS E RETORNOS:
+  build_args_test.sh (x2) ......... EXIT=0
+  build_harness.sh (x2) ........... EXIT=0 (v6)
+  ./harness_args_test (PJA110) ... 87 passaram, 0 falharam, RC=0
+    [nota: a 1a execucao deu 3 falhas — m.gguf inexistente no aparelho limpo
+     (dependencia oculta de teste); CORRIGIDO: teste agora cria o arquivo.
+     A falha era de ambiente, nao de regressao — as 3 ocorrencias apontavam
+     exatamente para o parse que exige o modelo.]
+  NADA commitado; nenhum APK; nenhuma publicacao; fixtures/Whisper/OpenCL
+  intocados; HEAD 080e804 com 82 itens WIP.
+
+--------------------------------------------------------------------------------
+PERGUNTAS / DESBLOQUEIO
+--------------------------------------------------------------------------------
+1. CPH2747: reativar debug sem fio OU colar a porta nova -> destrava C, D,
+   E (7.5) e a repeticao dos 9 runs Vulkan do benchmark (F.2). Esse e' o
+   unico bloqueio desta rodada; todo o instrumento ja esta pronto e testado.
+2. Nenhuma outra decisao sua e' necessaria ate la: nao toquei produto, nao
+   commitei, nao ampliei matriz.
+
+================================================================================
+FIM — PROMPT-RELATORIO-RODADA11 (29/09/2026)
+Anexos: logs-rodada11/ (manifestos + saida de testes 87/87 + replay11.sh)
+Referencias: backup-rodada11/, logs-rodada10/ (regenerado), TXT rodada 10
+(corrigido em §8.4/§9).
+================================================================================

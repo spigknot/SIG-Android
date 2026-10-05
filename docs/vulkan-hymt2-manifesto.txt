@@ -1,0 +1,25 @@
+IDENTIDADE EXATA DO CASO (item 2 do formato do especialista)
+============================================================
+  Modelo                 Hy-MT2 1.8B (Tencent)
+  Arquivo testado        Hy-MT2-1.8B-Q4_K_M.gguf
+  Tamanho                1.133.080.448 bytes
+  Origem                 https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main/Hy-MT2-1.8B-Q4_K_M.gguf
+  Backend testado        ggml-vulkan (llama.cpp, fork SIG)
+  Backend de controle    ggml-opencl, CPU
+  Aparelho               OnePlus 15 (CPH2747)
+  GPU                    Adreno (TM) 840
+  Driver                 canoe / Android 16
+  vulkan                 1.0.0 (conforme probe)
+  subgroup_size          64
+  Modelo de diagnostico  Hy-MT2-1.8B F16 (convertido de BF16)
+  F16 tamanho            3.587.533.760 bytes
+  F16 validacao          0 Inf, 0 NaN, max|x| 3,32812 identico ao BF16
+  Fork                   SIG, sobre llama.cpp (revisao base 95887577)
+  Patch local            SIG_VULKAN_NO_CRASH=1 (anti-crash) + probe SIGVK (diagnostico)
+
+HASHES DOS ARTEFATOS LOCAIS (primeiros 16 chars do sha256)
+============================================================
+  GGUF F16 ( diagnostico)    7d5c9fb23f9d1761
+  safetensors BF16 (origem)  29e9117a44c79f81
+  log de captura             0113c1ec317390d0
+  resultados da matriz       a8e38670d82def2c

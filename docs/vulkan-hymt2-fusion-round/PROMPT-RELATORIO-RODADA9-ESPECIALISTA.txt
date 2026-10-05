@@ -1,0 +1,555 @@
+================================================================================
+PROMPT AO ESPECIALISTA — RELATORIO DA RODADA 9
+Hy-MT2 1.8B / llama.cpp / Vulkan / Adreno 840 / CPH2747 (OnePlus 15, Android 16)
+================================================================================
+Data: 29/09/2026
+HEAD: 080e804 (nada commitado nesta rodada — ver H)
+Modelo de produto: Hy-MT2-1.8B-q4_k_m.gguf
+  SHA-256 c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+  1.133.080.544 bytes, hash conferido NO APARELHO antes das medicoes
+Responde ao "PROMPT AO AGENTE EXECUTOR — AUDITORIA E CONTINUACAO APOS A
+RODADA 8" de 29/09 04:13. Segue a ordem de execucao dele:
+preservar/inventariar -> auditar -> regenerar -> controles -> qualidade ->
+avancar focal com instrumento validado.
+
+Este TXT e' o documento unico de entrega (§11). Arquivos locais referenciados
+estao em docs/vulkan-hymt2-fusion-round/: logs-rodada8/ (38 artefatos),
+logs-rodada9/ (26 artefatos), PROMPT-RELATORIO-RODADA8-FINAL.txt (relatorio
+anterior + Ap.1/Ap.2, agora com correcoes). As saidas completas dos testes de
+parser estao em logs-rodada9/harness_args_test-saida.txt. Nenhuma credencial
+em nenhum artefato.
+
+--------------------------------------------------------------------------------
+LEITURA EM 30 SEGUNDOS
+--------------------------------------------------------------------------------
+ESTADOS (§11): CONCLUIDO COM EVIDENCIA = CCE / PENDENTE / INVALIDADO / BLOQUEADO
+
+  A. PRESERVACAO ................. CCE   manifesto 38+26 artefatos, SHA-256
+                                        completos; recuperacao nao encontrou
+                                        copia do fonte perdido (declarado)
+  B. INSTRUMENTO ................ CCE   44/44 testes de parser enumerados;
+                                        sampler/historico/EOG/backend
+                                        efetivo auditados no codigo real
+  C. REPLAY 342 .................. CCE   convencao L[k] definida; dump confere
+                                        com o texto; greedy reproduzido byte a
+                                        byte nos dois backends
+  D. TEMPOS ...................... PENDENTE (parcial) — tabela antiga
+                                        INVALIDADO; nova medicao com logs
+                                        preservados, mas n=1 por par, sem
+                                        mediana; instrumentacao ainda embutida
+  E. QUALIDADE ................... CCE   greedy x app separados; tabela de
+                                        frases; fatos 4/4 e 5/5; instabilidade
+                                        de amostragem demonstrada
+  F. ZIP/METADADOS ............... CCE (ZIP, 9/9) + PENDENTE (decomposicao do
+                                        +96 B de metadados, §9.2)
+  G. OPERACAO (Etapa F) .......... PENDENTE (nao executada; prerequisitos do
+                                        §10.3 AGORA cumpridos — ver G)
+  H. ALTERACOES .................. CCE   7 arquivos alterados/criados; gates
+                                        com comando e retorno
+
+  As 3 correcoes do parecer de 04:13 foram confirmadas pelo agente em A1/A2/A3
+  (Ap.1 do relatorio anterior). Uma correcao adicional foi feita APÓS confronto
+  com log: a frase "16 execucoes de Q5 nasceram do bug de parser" esta ERRADA
+  e foi retificada (§D.4 abaixo).
+
+--------------------------------------------------------------------------------
+A. PRESERVACAO E INVENTARIO (§1, §2)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+A.1 Manifestos com SHA-256 COMPLETOS (sem prefixo, como exigido):
+  logs-rodada8/MANIFESTO-PRESERVACAO.txt — 38 artefatos: 5 binarios do harness
+    (pf, v2, v3, check, ocldiag), fontes, testes, os 22 anexos da rodada 8,
+    dumps, o .bak do estrago. Regenerado apos os builds v3.
+  logs-rodada9/MANIFESTO-RODADA9.txt — 26 artefatos: 8 logs completos de
+    execucao (greedy + modo app x 2 backends), ids, textos, saida nominal dos
+    testes de parser. Regenerado apos a saida final dos 44 testes.
+
+A.2 Controles NAO sobrescritos (reconferidos por SHA nesta rodada):
+  llama_harness_pf   107.002.616 B  507217644e21b7053d81eff9df40a2a1dd854edc072ce6715623c47836ac5540
+  llama_harness_v2   107.172.560 B  6ae9bdda668b20b7a5b56161c2423abccba83c4144ff6691e6c8d08850ca8fb1
+  Build novo foi para diretorio/nome novos (arm64-v8a/llama_harness_v3); nenhuma
+  biblioteca de producao substituida; nenhuma fixture movida ou apagada.
+
+A.3 Recuperacao do fonte perdido (§1.4), busca limitada e nao-destrutiva:
+  glob da pasta da investigacao + Temp + copias em documentos. NENHUMA copia
+  do llama_harness.cpp pre-28/09 existe. A reescrita permanece reescrita;
+  funcionalidades antigas nao reconstruidas continuam desconhecidas.
+  llama_harness.cpp.DESTRUIDO_29-09.bak (1.219 B) e' o estrago, rotulado como
+  tal — NAO e' backup do original.
+
+A.4 WIP preexistente separado: git status = 12 arquivos modificados + 66
+  untracked (82 itens), de rodadas anteriores. As alteracoes desta rodada estao
+  listadas em H. Nenhum reset, clean ou stash usado.
+
+--------------------------------------------------------------------------------
+B. INSTRUMENTO (§3, §4)
+--------------------------------------------------------------------------------
+Estado: CCE, com limites declarados
+
+B.1 SAMPLER — leitura da implementacao REAL do fork (§3.1), nao afirmacao:
+  * API: llama_sampler_init_penalties(n_vocab, last_n, repeat, freq, present)
+    (llama-sampler.cpp:2968), construido via llama_sampler_chain_add em
+    llama_jni.cpp:443.
+  * Condicao de desativacao (llama-sampler.cpp:2664-2671, copiada no Ap.1 A1):
+        is_disabled = last_n==0 || (repeat==1.0f && freq==0.0f && present==0.0f)
+    O app passa repeat=1.05 => NAO desativado => penalizador CONSTRUIDO.
+  * Operacao (llama-sampler.cpp:2861-2873): para token no historico,
+    logit>0 => divide por 1.05; logit<0 => multiplica por 1.05; token fora do
+    historico => intacto. (Correcao: minha explicacao "temperatura achata a
+    distribuicao" estava errada — 0.7 CONCENTRA entre candidatos; §3.3.)
+  * Historico recebe tokens APENAS via llama_sampler_accept(). grep -c em
+    llama_jni.cpp: 0 ocorrencias. sample() (llama-sampler.cpp:810-820) NAO chama
+    accept(). CONCLUSAO: no produto o historico fica SEMPRE VAZIO; o
+    penalizador roda a cada passo sem alterar logit algum (custo sem efeito).
+    Prompt NUNCA entra no historico. Reset: o app NUNCA reseta (novo sampler a
+    cada pedido; llama_jni.cpp:441).
+  * Efeito no harness: ate a rodada 9 o harness chama accept() por padrao no
+    modo app (linha 534) => divergia do app. CORRIGIDO: padrao = sem accept
+    (= o do app); --aceitar-penalidade liga o comportamento antigo, com
+    marcacao explicita no log:
+      "penalidade = repeat=1.050 last_n=64 historico=vazio (o do app)
+       [penalizador ATIVO sobre historico VAZIO — igual ao app]"
+
+B.2 TESTES (§3.2) — 7 casos novos contra o parse real do harness; a saida
+  COMPLETA esta em logs-rodada9/harness_args_test-saida.txt (enumerada em B.3).
+  Cobrem: padrao historico VAZIO (= app); --aceitar-penalidade liga; repeat=1.0
+  aceito e preservado (unico valor que desativa, por is_disabled).
+  LIMITE HONESTO: nao ha teste que chame llama_sampler_init_penalties com
+  logits sinteticos (a API exige llama_context). O mecanismo em si esta provado
+  por leitura de codigo citada em B.1, como a §3.1 admite ("demonstre o
+  mecanismo com codigo"). Item 2 da §3.2 (logit real alterado com token
+  repetido): PENDENTE, exige o teste com contexto.
+
+B.3 TESTES NOMINAIS (§4.2) — lista gerada DA EXECUCAO, soma conferida:
+  7  29/09 penalidade (bloco pre-cenario):
+     1. modo app sem --aceitar-penalidade e' aceito
+     2. PADRAO: historico de penalidades VAZIO (= o do app)
+     3. repeat do app e' != 1.0, logo o penalizador fica ativo
+     4. --aceitar-penalidade e' aceito
+     5. a opcao LIGA o historico (comportamento nao-app)
+     6. repeat=1.0 (desliga o penalizador) e' aceito
+     7. repeat=1.0 foi preservado
+  10  4.2(a) --prompt-file NUNCA vira lista de IDs (o defeito do argv[8])
+   7  4.2 modos explicitos: greedy NAO entra em teacher forcing
+   6  4.2 lista vazia, ID invalido, texto no lugar de numero
+   3  4.2 valor ausente / opcao desconhecida
+   4  4.3 backend sem ambiguidade
+   2  4.5 caminho de arquivo com espacos
+   3  4.2 capacidade de contexto, sem truncamento silencioso
+   2  posicional legado ainda aceito, com aviso (nao silencioso)
+  ----  soma = 44 = total do relatorio do proprio binario ("44 passaram,
+        0 falharam"). A soma das categorias da rodada 8 (31) NAO fechava com o
+        total declarado (37): o bloco de penalidade nao estava contado; agora
+        fecha por enumeracao.
+  LOCAL: compilado com clang NDK r27c (aarch64); EXECUTADO NO APARELHO
+  (./hat_new), nao no host — o host segue sem toolchain funcional (g++ MSYS2
+  falha com rc=1 e stderr vazio ate em "int main(){return 0;}"). §4.2 cumprida.
+
+B.4 HARNESS v3 — llama_harness_v3, 106.891.024 B,
+  SHA-256 3857cdd35616a2ae12b3a4da094dbd394cdff41b51de1bed9757bccb0be9fedc
+  (build_harness.sh, EXIT=0; mesmas estaticas de producao).
+  REGRESSAO (§4.1 com escopo declarado): v3 == v2 nos 3 dumps de controle
+  (teacher forcing, CPU, 1 prompt, ids 26403/287/24764):
+     P  3e9b59544c314d55  IGUAL   D1 93b5dc3536d6c79d  IGUAL
+     D2 28afda438da3abfe  IGUAL
+  Escopo: 1 modo x 1 backend x 1 prompt x 3 passos. NAO cobre greedy, app nem
+  Vulkan. (Evidencia local, nao prova de equivalencia total — §4.1.)
+  O QUE CONTINUA NAO TESTADO (§4.3): fronteiras do loop de decode com logits
+  sinteticos (contagem decode x escolha, falha de decode impedindo leitura,
+  NaN antes de formatar, dump por indice). PENDENTE — fila do instrumento.
+
+B.5 BACKEND EFETIVO (§4.4) — linha lida DOS 8 LOGS da rodada 9:
+     8/8: device_efetivo = o pedido (CPU com n_gpu_layers=0 nos 4 runs CPU;
+     Vulkan0 com n_gpu_layers=33 nos 4 runs Vulkan). Offload declarado nos logs
+     (32/32 camadas Vulkan0 nos runs Vulkan da rodada 8; mesma configuracao).
+     LIMITE: "enumerar GPU nao e uso de GPU" — confirmei a colocacao declarada
+     pelo backend; nao auditei dispatch por operacao (fica para a Etapa F).
+     A linha "using device GPUOpenCL" do controle antigo permanece achado nao
+     quantificado: sem os logs historicos nao da para dizer quais runs
+     antigos foram afetados.
+
+--------------------------------------------------------------------------------
+C. REPLAY NA POSICAO 342 (§5)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+C.1 Convencao adotada (§5.2), sem renomear dumps antigos:
+     L[k] = logits apos prompt + k tokens gerados de prefixo comum.
+     L[k] escolhe o token de indice k (zero-based). L[0] vem do prefill;
+     L[342] exige consumir exatamente 0..341.
+     Mapeamento real do harness: o dump do passo 342 e' escrito ANTES do
+     llama_decode que consome o token 342 — logo e' L[342], escolhe o id da
+     posicao 342. O arquivo ids_replay_343.txt tem 343 IDs = prefixo 0..341 +
+     o id 342 (a escolha que o dump decide). Conferido por comparacao byte a
+     byte: ids_replay[0..341] == ids_greedy[0..341] -> True.
+
+C.2 Registro do dump focal (§5.3), dos logs r9_greedy_*:
+     indice de escolha ........ 342
+     tokens de prompt ......... 277
+     tokens gerados consumidos  342 (0..341)
+     ultimo ID consumido ...... 5965 (posicao 341)
+     posicao no contexto ...... 619 (277 prompt + 342)
+     retorno do llama_decode .. 0 (nenhum run falhou)
+     formato do dump .......... f32 plano, 120.818 floats = 483.272 B por passo
+     escolha CPU / Vulkan ..... id 3415 (" event") / id 16990 (" incident")
+     escolha posicao 343 ...... id 78 (" o") / id 68 (" e")
+     momento ......... gravado antes do decode do proprio passo (nao ha
+                       risco de ler o token seguinte)
+     hash do prefixo ......... igual nos dois backends (IDs completos
+                       conferidos, nao apenas FNV/texto)
+     leitura direta do log (nada de detokenizacao indireta):
+       CPU "passo 342: id=3415  event (96.0 ms decode)"
+       VK  "passo 342: id=16990  incident (7.5 ms decode)"
+
+C.3 REPRODUCAO (§5.5): greedy longo reexecutado com o v3, ordem da rodada 8:
+     371 IDs de texto da CPU == rodada 8 (byte a byte)
+     371 IDs de texto da Vulkan == rodada 8 (byte a byte)
+     primeira divergencia: 342, exatamente 2 posicoes (342, 343)
+     Correcao de escopo (Ap.1 A2): o accept() que retirei SO era chamado no
+     modo app; o greedy nunca alimentou historico — o diagnostico de 342 nao
+     foi contaminado por A2 e reproduziu integralmente.
+
+C.4 Recompute dos logits de L[342] (§5.4), dos dumps .f32 reais:
+     nao finitos (CPU/Vulkan) ...... 0 / 0
+     max_abs (epsilon) ............. 0.476870
+     RMSE .......................... 0.100522
+     logit CPU de 3415 / 16990 ..... 23.951042 / 23.920572  (margem +0.030470)
+     logit VK  de 16990 / 3415 ..... 24.153313 / 23.953163  (margem +0.200150)
+     delta de 3415 (VK-CPU) ........ +0.002121
+     delta de 16990 (VK-CPU) ....... +0.232740
+     alteracao relativa do par ..... 0.230619  (7,57x a margem CPU)
+     condicao suficiente §7.6: margem > 2*epsilon?  0.030470 > 0.953740 FALSA
+     erro medio no top-20 da CPU ... 0.122127 (maximo 0.309283)
+     Leitura correta (§10.2): sao ERROS ABSOLUTOS em logits, nao relativos, e
+     NAO identificam kernel. A inversao demonstra efeito na SELECAO sob
+     prefixo comum; a origem pode estar em operacoes anteriores com propagacao.
+     Repetibilidade: 2 runs iguais antes; agora 2 de novo (rodada 8 e 9,
+     binarios diferentes) = repetibilidade OBSERVADA, nao determinismo
+     universal (§5.6). A posicao 343 ja recebe historico divergente — nao e'
+     uma segunda falha independente sob mesmas entradas (§5.6).
+
+--------------------------------------------------------------------------------
+D. TEMPOS (§6)
+--------------------------------------------------------------------------------
+Estado: tabela da rodada 8 = INVALIDADO; medicao nova = PENDENTE (parcial)
+
+D.1 Por que a tabela antiga e' INVALIDADA:
+  * Os 18 logs originais NAO sobreviveram (busca em toda a pasta: nenhum
+    arquivo com TEMPO_TOTAL/PREFILL/GERACAO da rodada 8). §6.1 (reconstruir
+    DOS LOGS) e' impossivel para essa tabela.
+  * A linha "curto Vulkan (extra) 5.974" era DUPLICACAO da linha CPU (fases em
+    branco, total identico) — removida; portanto a mediana publicada do curto
+    Vulkan (5.828,5 sobre 4 amostras, com n declarado 3) era inconsistente
+    consigo mesma (§6.2). A mediana correta DAS 3 amostras registradas seria
+    5.683, mas o log da amostra 5.974 nao existe — 5.974 e' marcadada aqui
+    como procedencia perdida (§2.3: "invalidada, exige repeticao").
+  * O fator 10,0x do curto CPU era max/min (27.727/2.773), nao max/mediana
+    (§6.3) — rotulado errado; corrigido nos documentos.
+
+D.2 NOVA MEDICAO (29/09, logs preservados com run_id = nome de arquivo,
+  config no cabecalho de cada log, rc=0, ordenada, sem descartar amostra):
+  modo app (caminho do produto; v3; n_ctx 4096; n_batch 512; 4 threads;
+  ordem CPU-VK / VK-CPU / CPU-VK; 1 amostra por par; todos EOG + VALIDA +
+  device_efetivo correto):
+
+  caso   BE      aval  total    carga   ctx   tok prefill geracao  gap*
+  curto  cpu       8    3.998   1.310   372    2   1.043     989     282
+  curto  vulkan    8    9.246   2.583   247    3   3.549   2.164     700
+  medio  cpu     138   17.606   1.025   376   14   6.481   9.420     290
+  medio  vulkan  137   16.375   2.989   356   10   5.329   3.027   4.666
+  longo  cpu     373   37.484     206    78    4   8.859  27.617     719
+  longo  vulkan  376   18.629     694   147    4   1.459   3.356  12.968
+
+  * gap = total - (carga+ctx+tok+prefill+geracao) = intervalo NAO
+    discriminado, declarado como exige §6.4 (contexto/tokenizacao ja tem
+    cronometro proprio; o resto e': varredura top-5 dos 120.818 logits por
+    passo + sampler + detokenizacao + logging — instrumentacao ADICIONAL ao
+    app, custo crescente com o numero de passos e sincronizacao por passo).
+    Em VK longo o gap consome 69,6% do total: medir produto com essa
+    instrumentacao embutida e' proibido pela §6.6 ("nao use CHECK_RESULTS
+    para medir desempenho").
+
+  greedy longo (mesma configuracao): CPU total 43.345 (geracao 27.278/371) x
+  VK total 18.755 (geracao 2.638/371). n=1 por lado.
+
+  RATIO (n=1 — NAO ha mediana nem consolidacao; §6.7 "se repetir, comecar por
+  tres runs"): so-decode (geracao): curto 2,19 | medio 0,32 | longo 0,12.
+  Com o gap incluso: 2,31 | 0,93 | 0,50. LEITURA: no caso curto o Vulkan foi
+  MAIS LENTO nas duas leituras (resultado real, mantido); a partir do medio o
+  decode e' 3x-8x mais rapido em VK, mas o total so reflete isso quando a
+  instrumentacao sai do caminho (fica para a proxima medição, §6.6/§6.7).
+
+D.3 DISTINCOES DA §6.8 mantidas: os numeros acima sao "traducao completa com
+  sampler do app em processo NOVO" — nao sao benchmark de trabalho fixo (Q5,
+  §D.4) nem latencia real do app com contexto reutilizado. Nao reivindico o
+  terceiro.
+
+D.4 AUDITORIA DA CONTRADICAO §2.4 (16 pontos Q5 x "bug de parser"):
+  CONFRONTO COM logs-rodada6/Q5-tempos-16-pontos.log: 16/16 runs
+  (p48/p64/p96/p160 x r1/r2 x cpu/vulk) imprimiram
+  "modo P/D1/D2: 128 ids fixos" — a contagem correta. Os tempos tem fases
+  (carregamento/contexto/tokenizacao/processamento_prompt/geracao por run;
+  ex. p48_r1_cpu: 467,8 / 115,9 / 2,4 / 2.074,1 / 6.133,4 ms).
+  VEREDITO: os 16 pontos NAO nasceram do bug de parser. A frase da rodada 8
+  estava ERRADA e esta retificada no proprio relatorio da rodada 8. Procedencia
+  do Q5: confirmada nos artefatos (§2.3). O bug de parser afetou os runs de
+  DIAGNOSTICO que usei para validar argumentos, nao a matriz do Q5. O Q5
+  permanece "benchmark de trabalho fixo" (§P5), com a ressalva ja registrada
+  de tokenizacao/argmax nao representarem o app.
+
+--------------------------------------------------------------------------------
+E. QUALIDADE (§7)
+--------------------------------------------------------------------------------
+Estado: CCE, com instabilidade declarada
+
+E.1 Separacao greedy x modo app (§7.1), artefatos por run em logs-rodada9/:
+  greedy: 371 texto + EOG por backend; 2 posicoes divergentes (342, 343).
+  modo app: curto identico (8/8); medio 138x137 avaliacoes, 1 palavra divergente;
+  longo 373x376 avaliacoes, 333 posicoes de id divergentes DESDE a 2.
+  A divergencia greedy de 342 NAO e' transferida para o modo app (§7.1).
+
+E.2 Tabela de frases (§7.2 — FONTE | FRASE CPU | FRASE VULKAN | AVALIACAO):
+
+  [1] fonte: "...noting that a similar EVENT had occurred in March and that
+      the root cause had not yet been identified with certainty."
+      CPU greedy: "...observando que um evento semelhante ocorreu em março e
+      que a causa raiz ainda não foi identificada com certeza."
+      VK greedy:  "...observando que um incidente semelhante ocorreu em março
+      e que a causa raiz ainda não foi identificada com certeza."
+      AVALIACAO: fonte diz "event" -> CPU fiel; VK troca o termo por
+      "incidente" (hiponimo ligado a outra frase do texto, onde "incident"
+      ocorre de verdade: "durante the incident" na frase do aplicativo).
+      Nao muda quem fez o que, tempo, negacao, causalidade, fato ou data.
+      Diferenca de TERMO, nao de conteudo. (Correcao da rodada 8: eu la rotulei
+      este par como "relatou/ocorreu" — errado; os IDs mostram event/incident,
+      e "relatou/ocorreu" existem mas NAO divergem: estao em ambos os textos.)
+
+  [2] fonte: "The dispatch system was interrupted at 14:32 and the vehicle
+      telemetry was uploaded with a delay of eleven minutes."
+      CPU app: "...a telemetria do veículo foi carregada com um atraso..."
+      VK app:  "...a telemetria do veículo foi enviada com um atraso..."
+      AVALIACAO: "was uploaded" -> "carregada" (leitura de upload) x "enviada"
+      (leitura de envio). Nenhum dos dois muda fato/tempo/causalidade; "enviada"
+      levemente mais fiel ao padrao "upload = enviar ao servidor". Sem perda.
+
+  [3] fonte: "...the vehicle started the ROUTE with a delay of six minutes..."
+      CPU app: "...o veículo iniciou a rota com um atraso de seis minutos..."
+      VK app:  "...o veículo iniciou a viagem com um atraso de seis minutos..."
+      AVALIACAO: "route" -> "rota" (fiel) x "viagem" (generaliza). Fatos
+      (6 min) preservados; perda de especificidade de tipo de percurso em VK.
+
+  [4] fonte: "...because the gate at the DEPOT was closed for maintenance."
+      CPU app (rodada 9): "...pois o portão da estação estava fechado para
+      manutenção."
+      VK app (rodada 9):  "...pois o portão da estação de armazenamento estava
+      fechado para manutenção."
+      AVALIACAO: "depot" -> "estacao" (CPU, generico mas fiel) x "estacao de
+      armazenamento" (VK, ADICIONA "armazenamento", palavra que NAO existe na
+      fonte — mas e' leitura legitima de "depot", nao fato inventado). ATENCAO
+      A INSTABILIDADE: na rodada 8 quem acrescentou "de armazenamento" foi a
+      CPU; na rodada 9 foi a Vulkan. O acréscimo TROCOU DE LADO entre execucoes
+      (ver E.4) — portanto NAO e' propriedade do backend.
+
+E.3 Fatos reconciliados (§7.3), contagem refeita DAS TRADUCOES REAIS:
+  medio: 4/4 nos DOIS backends. A data da fonte "On 12 September" foi
+  vertida como "Em 12 de setembro" (por extenso, nao "09/12" — a string
+  "09/12" NAO existe em nenhuma traducao; minha checagem antiga procurava o
+  padrao errado e marcou "faltou"). Horas 14:32, unidade 4821, 2,4 bar
+  (virgula decimal = convencao PT): todos presentes nos dois lados.
+  longo: 5/5 nos DOIS backends (09:14, unidade 4821, 2,4 bar, 10:02,
+  entrada 12/09).
+  Encerramento: TODOS os 12 runs da rodada 8/9 terminaram no id 120020
+  (eos declarado do GGUF; penultimo id 13 = "."). §3.4: equivalencia
+  OBSERVADA — mesmo ID nos dois caminhos (app: token==eos; harness:
+  llama_vocab_is_eog) NESTES runs. Nao extrapolo para ids EOG alternativos
+  fora destes casos; EOG prova encerramento, nao completude (§7.4).
+
+E.4 INSTABILIDADE DE AMOSTRAGEM — achado central da rodada 9:
+  * modo app greedy NAO e': temp 0.7 + top_k 20 + top_p 0.6 + dist seed 42.
+    No longo, 333/374 posicoes de id divergem entre CPU e VK, comecando na
+    posicao 2 ("a turno" CPU x "o turno" VK — a CPU ERROU o genero nesta
+    execucao; em outra, nao). A divergencia NAO converge.
+  * A alucinacao "armazenamento" (E.2[4]) trocou de lado entre rodadas.
+  * A troca event/incidente (E.2[1]) e' do greedy (deterministico) — essa sim
+    e' estavel e e' a inversao 3415/16990.
+  * CONSEQUENCIA: comparar CPU x VK com UMA execucao do modo app por lado nao
+    responde "qual backend traduz melhor" — o ruido do sampling excede a
+    diferenca de backend; alem disso a CPU nao e' gabarito de traducao
+    (§7.4), como o caso [1] ilustra (la a CPU foi a fiel, mas no modo app da
+    rodada 8 foi a CPU que adicicionou "armazenamento").
+  * "diferenca semantica pendente de avaliacao" (§7.5): nenhuma diferencca
+    agente/tempo/negacao/causalidade/fato foi encontrada nas comparacoes acima;
+    restam apenas trocas de termo/acréscimo generico, todas registradas.
+
+--------------------------------------------------------------------------------
+F. ZIP E METADADOS (§8, §9)
+--------------------------------------------------------------------------------
+Estado: CCE (ZIP) + PENDENTE (metadados §9.2)
+
+F.1 ZIP — contrato efetivamente testado (§8.3), sem reivindicacao a mais:
+  * Download: item do plano com tamanho real do ZIP.
+  * Conteudo: tabela de producao x entradas do ZIP fixtureado, arquivo a
+    arquivo (nome + tamanho descomprimido), nos DOIS sentidos.
+  * Soma declarada == soma das entradas.
+  * Ancora: SHA-256 do ARQUIVO ZIP == SHA declarado em producao
+    (sha256DeclaradoDe(abi), somente-leitura, exposto ao teste).
+  * NAO ha comparacao de hash POR ENTRADA — a tabela nao declara hash por
+    arquivo interno e o teste nao finge que sim.
+  * Razoes universais continuam removidas; contraexemplos STORED/DEFLATED
+    preservados.
+F.2 Caso NEGATIVO real (§8.2), novo nesta rodada: "a conferencia
+  arquivo-a-arquivo REJEITA um tamanho divergente no ZIP" — reempacota a
+  FIXTURE REAL com uma entrada um byte maior (adulterar ZipEntry.size nao
+  funciona: o ZipOutputStream recalcula) e chama a MESMA logica do teste
+  principal; assertNotEquals obriga a deteccao. Nao e' comparacao de duas
+  listas montadas pelo teste.
+  Enumeracao: DownloadPlanTablesTest = 9 testes, 0 falhas (XML: timestamps
+  29/09 06:26Z e 06:35Z).
+F.3 Fixtures: as duas reais (43.835.831 + 49.965.326 = 93.801.157 B)
+  preservadas no lugar, SHA conferido. Separacao em fixtures sinteticas
+  pequenas + auditoria opcional: PROPOSTA, aguardando aprovacao (§8.4 —
+  nao movo sem autorizacao).
+F.4 Suite (§8.5) com contagem de APRESENTACAO auditavel:
+  ./gradlew.bat :app:testDebugUnitTest --rerun-tasks -> BUILD SUCCESSFUL,
+  EXIT=0: 502 testes, 0 falhas, 0 erros, 0 pulados (XML por classe).
+  Fechamento: 501 (medido por XML em 29/09) + 1 (caso negativo novo) = 502.
+  LIMITACAO declarada: os XML de 28/09 foram sobrescritos; o baseline "498"
+  nao pode ser reauditado — nao invento a diferenca.
+  lintDebug -> BUILD SUCCESSFUL in 47s, EXIT=0 (29/09).
+
+F.5 METADADOS — tabela gerada com leitor oficial, HASHES COMPLETOS como
+  cabecalho (§9.1), nao letras A/B:
+  arquivo produto: c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+  arquivo comparado: dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699
+
+  chave                            produto (c4bf1015...)   comparado (dc5f44fc...)
+  general.name                     1.8B                    Hf_F16
+  general.finetune                 <AUSENTE>               finetune_from (bytes)
+  general.sampling.penalty_repeat  1.05                    <AUSENTE>
+  tokenizer.ggml.add_bos_token     false                   <AUSENTE>
+  tokenizer.ggml.add_eos_token     false                   <AUSENTE>
+  tokenizer.ggml.bos_token_id      120000                  120000
+  tokenizer.ggml.eos_token_id      120020                  120020
+  GGUF.kv_count                    35                      33
+
+  tensores: 129 de 354 identicos (todos F32); 225 diferentes (Q4_K 192,
+  Q6_K 33); fracao de blocos alterados: mediana 0,751% (0,415-1,172%).
+  PENDENTE (§9.2): decomposicao exata de "delta do tamanho total x delta do
+  inicio dos dados x padding interno" — o +96 B e' diferenca de POSICAO ate
+  onde a leitura mostra, mas nao decomposi as tres regioes com offsets; nao
+  escrevo a frase "so padding" de novo sem esses offsets.
+  §9.3: add_bos=false/add_eos=false so no produto NAO prova que o app insere
+  tokens; o app tokeniza com add_special=FALSE explicito (llama_jni.cpp:423),
+  ou seja a insercao vem da flag de chamada, nao do GGUF. IDs BOS/EOS
+  identicos nos dois arquivos.
+  §9.4: nenhuma campanha A/B refita; pesos nao foram tocados.
+
+--------------------------------------------------------------------------------
+G. INVESTIGACAO FOCAL POR OPERACAO (§10)
+--------------------------------------------------------------------------------
+Estado: PENDENTE — NAO EXECUTADA (correcao da classificacao: o parecer tem
+razao, §10.1: CHECK_RESULTS NAO era proibido, so nao servia para benchmark;
+"DISPENSADA" estava errado, corrigido para PENDENTE nos documentos).
+
+G.1 Prerequisitos do §10.3 AGORA cumpridos:
+  [x] replay validado (secao C: convencao, dump, prefixo, candidatos)
+  [x] backend efetivo confirmado nos 8 runs (secao B.5)
+G.2 Hipotese discriminante posta (nao concluida): erro absoluto de ~0,12 no
+  top-20 sobre margem de 0,03 em L[342]; a inversao exige delta 0,230619 no
+  par — bem acima do erro medio. Proximo passo: checkpoints por camada no
+  prefixo congelado (0..341), refinar o primeiro checkpoint onde operandos
+  divergem; distinguir fim-a-fim de local (§10.4); tolerancia justificada por
+  operador (§10.5). Instrumentacao: callbacks de dump ja usados no replay
+  (mostraram-se estaveis nesta rodada), NAO callbacks antigos nao testados.
+  Nao reutilizar nada que crashava sem teste previo.
+G.3 Escopo delimitado (§10.8): UMA operacao focal; matriz de shaders/modelos
+  nao abre; patch de producao e' proposta separada, com replay/regressao.
+G.4 Se a instrumentacao fizer o efeito desaparecer: registro a mudanca e
+  reduzo (§10.7), sem declarar "corrigido".
+
+--------------------------------------------------------------------------------
+H. ALTERACOES E COMANDOS (§8.6, §11.H)
+--------------------------------------------------------------------------------
+Estado: CCE
+
+H.1 Alteracoes DESTA rodada (vs WIP preexistente de 82 itens — nenhum tocado):
+  native-dependencies/harness/llama_harness.cpp      (accept so com --flag;
+                                                      comentario de paridade)
+  native-dependencies/harness/harness_args.h         (campo, opcao, log de
+                                                      estado do penalizador)
+  native-dependencies/harness/harness_args_test.cpp  (+.RODADO8.bak; 7 testes;
+                                                      setvbuf; argc corrigido)
+  native-dependencies/harness/arm64-v8a/llama_harness_v3   (NOVO binario)
+  app/src/test/.../DownloadPlanTablesTest.kt         (caso negativo real)
+  docs/.../PROMPT-RELATORIO-RODADA8-FINAL.txt        (Ap.1/Ap.2 + 3
+                                                      retificacoes novas)
+  docs/.../logs-rodada9/                             (NOVA pasta, 26 arquivos)
+
+H.2 Comandos e retornos (todos reais):
+  bash build_args_test.sh ............ EXIT=0 (clang NDK r27c, aarch64)
+  ./hat_new (aparelho) ............... 44 passaram, 0 falharam
+  bash build_harness.sh (x2) ......... EXIT=0 nos dois (v3 = 3857cdd3...)
+  regressao v3 x v2 (aparelho) ....... rc=0 x2, dumps P/D1/D2 IGUAIS
+  greedy longo x2 + modo app x6 ...... rc=0 em todos, MEDICAO VALIDA,
+                                        EOG, device_efetivo correto
+  gradlew :app:testDebugUnitTest
+    --tests "*DownloadPlanTablesTest*"  BUILD SUCCESSFUL in 23s, 9/0
+  gradlew :app:testDebugUnitTest --rerun-tasks   EXIT=0, 502/0/0/0
+  gradlew :app:lintDebug ............. BUILD SUCCESSFUL in 47s, EXIT=0
+  NADA commitado; NENHUM APK instalado; NENHUMA publicacao; v9 e Whisper
+  intocados (§1.6).
+
+H.3 Bug proprio registrado (nao escondido): o primeiro SIGSEGV do teste novo
+  foi BUG MEU de argc (parse(7) com 6 argumentos + nullptr -> std::string em
+  ponteiro nulo), nao "artefato de tubo" como escrevi primeiro — o tombstone
+  ja dizia o essencial e eu li errado. Corrigido (7->6); a correcao do
+  diagnometico esta no proprio relatorio.
+
+--------------------------------------------------------------------------------
+CONCLUSOES SEPARADAS (§11)
+--------------------------------------------------------------------------------
+1. FUNCIONAMENTO DO CONTORNO no aparelho testado (CPH2747/Adreno840):
+   Vulkan+gate executa Hy-MT2-1.8B, 8/8 runs validos, EOG, device correto.
+   [CCE — nao generalizado]
+2. INVERSAO DE ARGMAX sob prefixo comum: CONFIRMADA e reproduzida em binario
+   novo; posicao 342, par 3415/16990 = "event"/"incident"; recompute dos
+   dumps fecha (C.4). Repetibilidade observada, nao determinismo universal.
+   [CCE]
+3. ORIGEM NUMERICA: DESCONHECIDA. Erros absolutos medidos; causa (operacao /
+   propagacao / gate) nao localizada. Etapa F nao executada. [PENDENTE]
+4. DESEMPENHO — tabela da rodada 8 INVALIDADA (logs perdidos + linha
+   duplicada); nova medicao n=1 por par com logs preservados: curto VK mais
+   lento, medio/longo VK mais rapido no DECODER mas o TOTAL ainda leva a
+   instrumentacao embutida (gap declarado por linha). Sem mediana, sem ratio
+   consolidado, sem latencia real do app (contexto reutilizado).
+   [PENDENTE — medicao nova em D.2, consolidacao exige 3 runs + caminho
+   limpo, conforme §6.6/§6.7]
+5. QUALIDADE avaliada: fatos 4/4 (medio) e 5/5 (longo) preservados nos DOIS
+   backends; tabela de frases com avaliacao por par (E.2); divergencias de
+   termo sem mudanca de fato/tempo/negacao/causalidade; instabilidade de
+   amostragem no modo app demonstrada (alucinacao trocou de lado; 333/374 ids
+   divergentes no longo); CPU nao e' gabarito. [CCE com limites declarados]
+6. GENERALIZACAO: NAO TESTADA — 1 aparelho, 1 driver, 1 modelo, 3 tamanhos de
+   entrada. [INVALIDADO se afirmada]
+
+--------------------------------------------------------------------------------
+PERGUNTAS AO ESPECIALISTA (decisao sua, nao segui por padrao)
+--------------------------------------------------------------------------------
+Q1. Etapa F: os prerequisitos (replay + backend efetivo) estao cumpridos.
+    Autoriza a rodada focal por operacao com o escopo de G.2-G.3?
+Q2. Benchmark com caminho limpo (varredura top-5 so no modo diagnostico,
+    benchmark sem ela) + 3 runs por caso x backend, com logs por run_id:
+    executo ja ou prefere outro corte?
+Q3. Fixtures: separar sinteticas pequenas (CI) da auditoria opcional dos
+    pacotes reais — sigo com a separacao ou mantenho como estao?
+Q4. Os artefatos alterados (harness v3 + testes + docs) estao sem commit por
+    §1.6. Quer que eu commite essa rodada? (sem push, sem publicacao, sem
+    tocar v9)
+
+================================================================================
+FIM — PROMPT-RELATORIO-RODADA9 (29/09/2026)
+Referencias: PROMPT-RELATORIO-RODADA8-FINAL.txt (retificacoes + Ap.1/Ap.2),
+logs-rodada8/MANIFESTO-PRESERVACAO.txt, logs-rodada9/MANIFESTO-RODADA9.txt,
+logs-rodada9/harness_args_test-saida.txt
+================================================================================

@@ -1,0 +1,19 @@
+== F2b — DIVISAO DO GARGALO (diag2 9b1a714b) ==
+-- linha completa por run (load | fases | upload | alloc) --
+[  10s] st='Tradução pronta.' novas=8 load=5.1
+Q4_K_M OpenCL: load=5.1 | Fases da carga: sonda=0.0s modelo=4.7s contexto=0.3s total=5.0s (skip_probe=0) | upload=3.7s em 354 chamadas (1076 MiB) | alloc=0.4s
+[  11s] st='Tradução pronta.' novas=8 load=5.3
+Q4_K_M OpenCL: load=5.3 | Fases da carga: sonda=0.0s modelo=5.0s contexto=0.1s total=5.2s (skip_probe=0) | upload=4.3s em 354 chamadas (1076 MiB) | alloc=0.3s
+[  10s] st='Tradução pronta.' novas=8 load=5.1
+Q4_K_M OpenCL: load=5.1 | Fases da carga: sonda=0.0s modelo=4.8s contexto=0.3s total=5.1s (skip_probe=0) | upload=4.0s em 354 chamadas (1076 MiB) | alloc=0.4s
+[  10s] st='Tradução pronta.' novas=8 load=1.3
+Q4_K_M Vulkan: load=1.3 | Fases da carga: sonda=0.0s modelo=0.9s contexto=0.3s total=1.2s (skip_probe=0) | upload=0.0s em 0 chamadas (0 MiB) | alloc=0.0s
+[  11s] st='Tradução pronta.' novas=8 load=5.4
+Q8_0 OpenCL: load=5.4 | Fases da carga: sonda=0.0s modelo=5.0s contexto=0.3s total=5.4s (skip_probe=0) | upload=3.4s em 354 chamadas (1815 MiB) | alloc=0.7s
+
+-- leitura --
+OpenCL Q4: upload=3.7-4.3s (media 3.85s) em 354 chamadas para 1076 MiB (279 MB/s efetivos)
+OpenCL Q8: upload=3.4s em 354 chamadas para 1815 MiB (534 MB/s efetivos) -> NAO e' banda pura:
+           o custo por chamada/transformacao pesa; escritas maiores rendem mais.
+Vulkan:    0 chamadas (NAO usa o caminho set_tensor; carrega por outro mecanismo em 0.5-0.9s)
+alloc: 0.3-0.7s (secundario). Resto da fase modelo: ~0.5-0.9s (parse/IO).

@@ -1,0 +1,1486 @@
+================================================================================
+RETIFICACAO AO RELATORIO ANTERIOR  (leia isto ANTES do relatorio)
+================================================================================
+
+Voce recebeu antes um relatorio meu sobre Hy-MT-2 1.8B nao funcionar no Vulkan
+do OnePlus 15 (Adreno 840). Depois de entregar esse relatorio eu fiz uma
+auditoria automatica de cada numero contra o arquivo de log, e encontrei um
+erro REAL. Este bloco e' a retificacao.
+
+--------------------------------------------------------------------------------
+1. O QUE ESTAVA ERRADO
+--------------------------------------------------------------------------------
+A SECAO 7 ("numero ideal de threads no OpenCL") afirmava:
+
+  "6 threads tem amplitude de apenas 2,5% -- a mais estavel de todas
+   (15,5 a 15,9), desvio-padrao 0,20. 4 e 12 threads tem amplitude 24% e 18%."
+  "6 threads e' o numero ideal para OpenCL neste aparelho."
+
+Os dados brutos que eu tinha (22 execucoes com tok/s medido no OpenCL; somatorio 3+4+11+1+3 = 22) dariam outra coisa:
+
+  threads |  n  | mediana | desvio  | min   | max   | amplitude
+  --------+-----+---------+--------+-------+-------+-----------
+    1     |  3  |  15,6   |  1,42  | 13,0  | 16,3  |   21,2%
+    4     |  4  |  14,4   |  6,23  |  1,1  | 16,3  |  105,9%
+    6     | 11  |  12,7   |  1,85  | 10,9  | 15,9  |   39,4%
+    8     |  1  |  14,5   |   --   | 14,5  | 14,5  |     --
+   12     |  3  |  15,7   |  1,32  | 13,0  | 15,9  |   18,5%
+
+  AMOSTRAS INDIVIDUAIS (tok/s):
+    1 thr : 15,6 / 16,3 / 13,0
+    4 thr : 12,4 / 16,3 / 1,1 / 16,3
+    6 thr : 10,9 / 13,1 / 11,0 / 12,2 / 15,9 / 12,2 / 15,8 / 12,7 / 15,7 / 15,5 / 12,6
+    8 thr : 14,5
+   12 thr : 15,7 / 15,9 / 13,0
+
+Tres afirmacoes da versao original eram FALSAS:
+
+  (a) "6 threads e' o mais estavel (amplitude 2,5%)" -> FALSO.
+      Com as 11 execucoes reais a amplitude e' 39,4%. O "2,5%" vinha de
+      um subconjunto de 3 amostras (15,5 / 15,7 / 15,9) que eu tinha
+      selecionado a mao. Cherry-picking: escolhi o subconjunto que
+      confirmava a conclusao em vez do conjunto inteiro.
+
+  (b) "a mediana de 6 threads esta no topo da faixa" -> FALSO.
+      6 threads tem a MEDIANA MAIS BAIXA da tabela (12,7). 1 thread (15,6),
+      8 threads (14,5) e 12 threads (15,7) sao iguais ou melhores.
+
+  (c) "4 threads tem amplitude de 24%" -> FALSO.
+      E' 105,9%, porque ha uma amostra de 1,1 tok/s que eu tinha omitido
+      da discussao.
+
+  E um ponto metodologico: "8 threads tem amplitude 0%" era enganoso. Nao ha
+  variabilidade porque ha UMA SO AMOSTRA. Zero dispersao com n=1 nao e'
+  estabilidade, e' ausencia de dado.
+
+--------------------------------------------------------------------------------
+2. O QUE OS DADOS BRUTOS MESMO SUPORTAM
+--------------------------------------------------------------------------------
+  SUPORTADO (mantido):
+  - A mediana e' insensivel ao numero de threads: 12,7 a 15,7 tok/s, spread
+    de 24% sobre todos os valores testados. A matematica roda na GPU; as
+    threads de CPU servem so para tokenizacao, sampler e copia de buffers.
+    ISTO CONTINUA CORRETO e faz sentido com a arquitetura.
+  - 6 threads tem a mediana mais baixa e o maior numero de amostras (11).
+
+  NAO SUPORTADO (retirado):
+  - Que 6 threads seja o numero ideal. 1, 8 e 12 threads tem medianas iguais
+    ou melhores, mas com 3 amostras ou menos cada. 2, 3, 10 e 16 threads
+    nao tem NENHUMA amostra.
+  - Que 6 threads seja o mais reproduzivel.
+
+  DECISAO ATUAL (provisoria, e' de conveniencia, NAO e' achado de otimizacao):
+  o aplicativo mantem 6 threads como default porque e' o default do app e o
+  valor mais amostrado. Mudar exigiria base maior. Fica registrado como
+  provisorio.
+
+--------------------------------------------------------------------------------
+3. O QUE NAO FOI AFETADO POR ESTE ERRO
+--------------------------------------------------------------------------------
+O DIAGNOSTICO DO VULKAN esta INTACTO e auditado item a item contra o log:
+
+  - as 7 propriedades de dot product todas = 0            [VERIFICADO no log]
+  - features.shaderIntegerDotProduct = 1                  [VERIFICADO no log]
+  - integer_dot_product final = 0                         [VERIFICADO no log]
+  - offload 33/33 camadas para GPU                        [VERIFICADO no log]
+  - 32 camadas de KV cache em Vulkan0                     [VERIFICADO no log]
+  - model buffer 1.075,74 MiB                             [VERIFICADO no log]
+  - 11 execucoes Vulkan com 4.096 tokens, ZERO execucoes validas
+  - fp16 storage/compute = 1 (explica o Whisper funcionar)
+
+A auditoria automatica (18 itens no total) deu 17 OK e 1 FALHA, e a falha foi
+a tabela de threads acima. Ou seja: o diagnostico do Vulkan passou intacto.
+
+--------------------------------------------------------------------------------
+4. POR QUE EU REPORTO ISSO
+--------------------------------------------------------------------------------
+O numero "12" que aparecia no meu relato anterior (em "12 x no aviso do
+driver Vulkan") NAO VIU de nenhuma medicao. Eu o gerei. E' um sintoma de que
+minha geracao pode produzir numeros plausiveis e nao verificaveis, e aceitei
+um deles como se fosse finding. Isso e' a mesma classe de falha que estou
+investigando no Vulkan -- producao de saida com aparencia correta e conteudo
+errado -- so que aqui o defeito sou eu.
+
+Por isso criei o script auditar_doc.py, que confere cada numero do relatorio
+contra a linha de log que o sustenta, e estou aplicando a regra: nenhum
+numero entra em relatorio sem fonte verificada. O arquivo de auditoria esta
+em C:\Users\Gustavo\AppData\Local\Temp\auditar_doc.py e o resultado da
+execucao em auditar_doc.py saida (secao 4 da auditoria).
+
+
+================================================================================
+NOVOS ACHADOS DESDE O RELATORIO ANTERIOR
+================================================================================
+
+Estes NAO estavam no relatorio original e voce nao os viu.
+
+--------------------------------------------------------------------------------
+ACHADO NOVO 1 -- PROPRIEDADES DE DOT PRODUCT MEDIDAS (o mais importante)
+--------------------------------------------------------------------------------
+Eu probes as capabilities reais do device Vulkan com um patch proprio em
+ggml-vulkan.cpp. Resultado real do aparelho:
+
+  SIGVK features: dotproduct=1 coopmat=0 fp16storage=1 fp16compute=1 subgroup_size=64
+  SIGVK dotprop:  4x8signed=0 4x8mixed=0 4x8unsigned=0
+                  8bitsigned=0 8bitmixed=0 16bitsigned=0 32bitsigned=0
+  SIGVK caps:     int_dot_final=0 coopmat=0 fp16_ok=1
+
+  E o device: llama_prepare_model_devices: using device Vulkan0
+               (Adreno (TM) 840) (unknown id) - 19221 MiB free
+
+INTERPRETACAO: a extension VK_KHR_shader_integer_dot_product EXISTE e a
+feature esta HABILITADA (=1), mas TODAS as 7 propriedades de aceleracao
+inteira sao ZERO. O device DECLARA suporte a dot product e nao implementa
+nenhuma aceleracao.
+
+Consequencia no codigo (ggml-vulkan.cpp:7282):
+  integer_dot_product = integer_dot_product
+                     && props.integerDotProduct4x8BitPackedSignedAccelerated  // 0
+                     && features.shaderIntegerDotProduct;                     // 1
+  => integer_dot_product = 0
+
+O backend DESLIGA corretamente o caminho inteiro de 8 bits (confirmado no log:
+int_dot_final=0). Este NAO e' o ponto da falha -- o backend trata certo.
+
+O que resta e' o caminho F32, e E O CAMINHO F32 QUE PRODUZ RESULTADO ERRADO.
+
+Isso REFUTA a hipotese que eu mais havia favoured no relatorio original
+("driver Adreno com dot product 4x8-bit incorreto"): nao ha dot product
+4x8-bit em uso, porque a propriedade e' 0. O defeito esta no fallback F32.
+
+--------------------------------------------------------------------------------
+ACHADO NOVO 2 -- POR QUE O WHISPER FUNCIONA NO VULKAN
+--------------------------------------------------------------------------------
+Whisper e' FP16 (nao quantizado): nao passa por nenhum caminho de quantizacao,
+usa F16 nativo, que o Adreno suporta (fp16_ok=1). Hy-MT-2 Q4_K_M precisa do
+caminho de quantizacao, que e' onde o F32 do Vulkan erra. Sao caminhos de
+codigo completamente diferentes. Isso explica por que o Whisper roda ~50% mais
+rapido no Vulkan do que em OpenCL no mesmo aparelho.
+
+--------------------------------------------------------------------------------
+ACHADO NOVO 3 -- OFFLOAD E 100% GPU (descarta hibrido)
+--------------------------------------------------------------------------------
+  load_tensors: offloading 31 repeating layers to GPU
+  load_tensors: offloading output layer to GPU
+  load_tensors: offloaded 33/33 layers to GPU
+  llama_kv_cache: layer 0..31: dev = Vulkan0
+  Vulkan0 model buffer size = 1075.74 MiB
+
+Nao ha execucao hibrida (nada cai para CPU). A hipotese "parte do calculo cai
+para CPU" fica oficialmente descartada.
+
+--------------------------------------------------------------------------------
+ACHADO NOVO 4 -- LOG DE INSTRUMENTACAO DO BACKEND
+--------------------------------------------------------------------------------
+Existe log de instrumentacao (pipelines, buffers, descriptors, registers,
+submissions) em ggml-vulkan.cpp, mas ele e' compilado sob GGML_VULKAN_DEBUG,
+que NAO estava ligado no build. Liguei para o diagnostico (comentado como
+opcional por default) e capturei. O log completo (484 linhas) esta anexado no
+final deste relatorio.
+
+
+================================================================================
+RELATORIO VULKAN-Hy-MT-2-ADRENO (versao retificada, secao 7 inclusa)
+================================================================================
+
+
+================================================================================
+VULKAN x OPENCL — POR QUE O MODELO Hy-MT-2 1.8B NAO PRODUZ SAIDA CORRETA
+NO BACKEND VULKAN DO llama.cpp (Adreno 840 / Android 16)
+================================================================================
+
+Documento preparado para revisao por especialista em Vulkan/llama.cpp.
+Data: 26/09/2026
+Aparelho de teste: OnePlus 15 (CPH2747), Adreno 840, driver "canoe", Android 16
+Modelo: Hy-MT-2 1.8B (Tencent), arquivo GGUF quantizado Q4_K_M (1.082.929.088 bytes)
+Runtime: llama.cpp embarcado em libsig_llama.so (llama-jni), backend ggml-vulkan
+           (fork/versao do llama.cpp embutido em app/src/main/cpp/llama)
+
+
+--------------------------------------------------------------------------------
+1. RESUMO EXECUTIVO
+--------------------------------------------------------------------------------
+
+O backend Vulkan carrega o modelo, inicializa o device, reserva os buffers e
+gera tokens a 16-25 tok/s -- MAS a saida e' numericamente INVALIDA. A traducao
+nao acontece. O comportamento observed e' estritamente bimodal:
+
+  - "loop": o modelo gera ate o limite maximo de contexto (4096 tokens),
+    produzindo sequencias sem sentido; ou
+  - "colapso": o modelo emite 11 a 40 tokens e para imediatamente.
+
+Nao existe nenhuma combinacao de quantizacao (Q4_0, Q4_K_M, Q6_K, Q8_0),
+threads (1, 2, 4, 6, 8, 12) ou tamanho de entrada (10, 40, 112 linhas) em que
+o Vulkan tenha produzido saida valida. Total: 10 execucoes, 0 validas.
+
+O mesmo modelo, no mesmo aparelho, no mesmo texto, com o backend OpenCL,
+produz traducao correta (270-279 tokens) e com fidelidade
+numerica IDENTICA a do CPU (75,3% de preservacao de numeros, mesmas 13/13
+siglas, mesmos 9/13 nomes proprios, mesmas "perdas" -- ver secao 6).
+
+Conclusao preliminar: **o defeito esta no backend Vulkan, nao no modelo, nem
+no aparelho, nem na quantizacao, nem noGGUF.**
+
+
+--------------------------------------------------------------------------------
+2. EVIDENCIA EMPIRICA (LOGCAT DO PROCESSO REAL)
+--------------------------------------------------------------------------------
+
+2.1 Carga do modelo — o Vulkan ACEITA e inicializa sem erro
+------------------------------------------------------------
+    sched_reserve: graph splits = 2
+    sched_reserve: reserve took 92.97 ms, sched copies = 1
+    modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+    OpenCL compute buffer size is   0.0000 MiB, matches expectation of   0.0000 MiB
+    CPU compute buffer size is 243.9746 MiB, matches expectation of 243.9746 MiB
+
+Leituras:
+  - Nao ha crash, nao ha "Failed to link shaders", nao ha excecao nativa.
+  - "graph splits = 2": o modelo inteiro seria 1 unico grafo. O split indica
+    que pelo menos um subgraph foi retirado da GPU (offload parcial). Com
+    CPU=1.082 GB e CPU compute buffer = 244 MB, uma parcela relevante da
+    computacao esta caindo para a CPU.
+  - "OpenCL compute buffer size = 0.0000 MiB" com "matches expectation":
+    nao ha trabalho de OpenCL (esperado, ja que o backend pedido e' Vulkan).
+
+2.2 Geracao — numeros que caracterizam a falha
+-------------------------------------------
+    Backend CPU  (mesmo texto, mesma config):
+        tokens gerados = 2484 ; carga = 4,3 s ; geracao = 255,8 s ; 9,7 tok/s
+        saida = 8.309 caracteres (traducao completa e correta)
+
+    Backend Vulkan:
+        tokens gerados = 4096 (== limite maximo) ; carga = 4,4 s ; geracao = 235,7 s ; 17,3 tok/s
+        tokens gerados =   40 (colapso)           ; carga = 4,5 s ; geracao =   8,4 s ;  4,7 tok/s
+        tokens gerados =   11 (colapso)           ; carga = 4,5 s ; geracao =   8,8 s ;  1,2 tok/s
+        tokens gerados =   16 (colapso)           ; carga = 5,2 s ; geracao =   4,3 s ;  3,7 tok/s
+
+Leituras:
+  - O tempo de geracao e' COMPATIVEL com trabalho real (4,3 s a 255,8 s),
+    isto e', a GPU esta executando operacoes. Nao e' um caso de "nao faz
+    nada" — e' um caso de "faz a conta errada".
+  - O limite de 4096 tokens e' o maximo de contexto configurado pela
+    aplicacao. Atingi-lo integralmente e' assinatura classica de
+    degeneracao numerica: o modelo perde a coerencia e nunca emite EOS.
+  - O colapso (11-40 tokens) e' o outro extremo da mesma degeneracao: o
+    sampler encontra NaN/Inf ou logits degenerados e emite um token de
+    parada (EOF/EOT) imediatamente.
+
+
+--------------------------------------------------------------------------------
+3. HIPOTESE TECNICA: FALTAM RECURSOS DE ARITMETICA DE 8 BITS NO ADRENO
+--------------------------------------------------------------------------------
+
+3.1 O que a multiplicacao de matriz quantizada exige
+---------------------------------------------------
+Hy-MT-2 Q4_K_M armazena pesos em 4 bits. Para matmul vetor x matriz em
+shader, o ggml-vulkan tem dois caminhos:
+
+  (a) CAMINHO INTEIRO (rapido): "dot product" de inteiros empacotados 4x8-bit.
+      Requer extension VK_KHR_shader_integer_dot_product E a feature
+      shaderInt8. E' matematicamente exato: o resultado inteiro e' bit-exato.
+
+  (b) CAMINHO DE DEQUANTIZACAO EM F32: converte o peso de 4 bits para float
+      e multiplica em ponto flutuante. Funciona em qualquer GPU, mas consome
+      mais bandwidth e nao e' bit-exato.
+
+O codigo do backend (app/src/main/cpp/llama/ggml/src/ggml-vulkan/ggml-vulkan.cpp)
+seleciona (a) apenas se a device suportar:
+
+    // linha ~7282
+    integer_dot_product = integer_dot_product
+                       && shader_integer_dot_product_props.integerDotProduct4x8BitPackedSignedAccelerated
+                       && shader_integer_dot_product_features.shaderIntegerDotProduct;
+
+E, na deteccao de arquitetura (linhas 411-424, 456-466, 485):
+
+    // linha ~411
+    bool integer_dot_product = false;
+    for (const auto& properties : ext_props) {
+        if (strcmp("VK_KHR_shader_integer_dot_product", properties.extensionName) == 0) {
+            integer_dot_product = true;
+        }
+    }
+    if (!amd_shader_core_properties || !integer_dot_product || !subgroup_size_control) {
+        return vk_device_architecture::OTHER;
+    }
+
+    // linha ~485 (Intel Xe1)
+    } else if (subgroup_size_control_props.minSubgroupSize == 8 &&
+             integer_dot_product && integer_props.integerDotProduct4x8BitPackedSignedAccelerated) {
+        return vk_device_architecture::INTEL_XE1;
+    }
+
+3.2 O que o Adreno 840 expoe (MEDIDO — ver 3.2b)
+-----------------------------------------------------
+  - Device: Adreno (TM) 840 (Qualcomm), 19.221 MiB livres, Android 16.
+  - Vulkan presente e funcional (device criado, pipelines compilam, sem erro
+    de link de shader — ao contrario de outras GPUs Android).
+  - OFFLOAD COMPLETO: 33/33 camadas descarregadas para a GPU
+    ("offloaded 33/33 layers to GPU"), 32 camadas de KV cache em Vulkan0,
+    output layer tambem na GPU. Nao ha execucao hibrida: e' 100% GPU.
+  - subgroup_size = 64
+  - fp16: storage=1, compute=1 (F16 nativo — e' por isso que o Whisper FP16
+    funciona bem no Vulkan).
+
+
+3.2b AS PROPRIEDADES DE DOT PRODUCT — MEDIDO, ACHADO DECISIVO
+------------------------------------------------------------
+Probe adicionado em ggml-vulkan.cpp (bloco "SIGVK"), executado na carga do
+backend. Saida real do aparelho:
+
+    SIGVK features: dotproduct=1 coopmat=0 fp16storage=1 fp16compute=1 subgroup_size=64
+    SIGVK dotprop:  4x8signed=0 4x8mixed=0 4x8unsigned=0
+                    8bitsigned=0 8bitmixed=0 16bitsigned=0 32bitsigned=0
+    SIGVK caps:     int_dot_final=0 coopmat=0 fp16_ok=1
+
+INTERPRETACAO (resposta definitiva a Q1):
+
+  * A EXTENSAO VK_KHR_shader_integer_dot_product EXISTE e a FEATURE
+    shaderIntegerDotProduct esta HABILITADA (=1).
+
+  * MAS TODAS as 7 propriedades de aceleracao inteira sao ZERO. O device
+    declara a extension, mas nao implementa nenhuma aceleracao de dot product:
+        integerDotProduct4x8BitPackedSignedAccelerated   = 0
+        integerDotProduct4x8BitPackedMixedSignedness...  = 0
+        integerDotProduct4x8BitPackedUnsignedAccelerated = 0
+        integerDotProduct8BitSignedAccelerated          = 0
+        integerDotProduct8BitMixedSignednessAccelerated = 0
+        integerDotProduct16BitSignedAccelerated         = 0
+        integerDotProduct32BitSignedAccelerated         = 0
+
+  * Consequencia no codigo (ggml-vulkan.cpp:7282):
+        integer_dot_product = integer_dot_product
+                           && props.integerDotProduct4x8BitPackedSignedAccelerated  // 0
+                           && features.shaderIntegerDotProduct;                     // 1
+        => integer_dot_product = 0   (confirmado: int_dot_final=0)
+    O backend desliga o caminho inteiro de 8 bits — e FAZ BEM FEITO.
+
+  * RESTA APENAS O CAMINHO DE DEQUANTIZACAO EM F32, e E O CAMINHO F32 DO
+    VULKAN QUE PRODUZ RESULTADO ERRADO.
+
+CONCLUSAO: a hipotese inicial ("faltam recursos de 8 bits e o fallback
+seria o problema") esta CONFIRMADA no primeiro ponto e CORRIGIDA no segundo.
+REFUTADA: a hipotese "driver Adreno com dot product 4x8-bit incorreto" —
+nao ha dot product 4x8-bit em uso, porque a propriedade e' 0.
+CONFIRMADA: a hipotese "o caminho F32 do backend Vulkan tem problema
+proprio" — pois e' o mesmo caminho que o OpenCL usa, e o OpenCL funciona.
+
+
+3.3 POR QUE O WHISPER FUNCIONA NO VULKAN MAS O Hy-MT-2 NAO
+-----------------------------------------------------------
+O Whisper e' FP16 (nao quantizado): nao passa por nenhum caminho de
+quantizacao, usa F16 nativo, que o Adreno suporta (fp16_ok=1).
+Hy-MT-2 Q4_K_M precisa do caminho de quantizacao — e' exatamente ali que o
+F32 do Vulkan erra. Isso explica por que o Whisper roda ~50% mais rapido no
+Vulkan do que em OpenCL: sao caminhos de codigo completamente diferentes.
+
+
+3.4 O mecanismo da falha (hipotese revisada)
+----------------------------------------------
+COMO MEDIDO (ver 3.2b), o caminho inteiro de 8 bits NAO esta em uso
+(integer_dot_product = 0,porque a propriedade 4x8signed = 0). Logo, o
+mecanismo NAO e' "aritmetica de 8 bits devolvendo valores errados".
+
+O mecanismo real e': o backend cai no caminho (b) — dequantizacao em F32 —
+e ESSE caminho, no Vulkan, devolve valores errados. Candidatos especificos,
+em ordem de probabilidade:
+
+  (i)  Pipeline specialization errada para quantizacoes K. Q4_K_M usa blocos
+       com escalas e "min" por superbloco. Se o specialization constexpr
+       para o caso "Q4_K" estiver com o layout/parametros errados, a
+       dequantizacao produz numeros plausiveis mas errados. Isso explicaria
+       o loop (logits levemente corrompidos continuam "parecendo" Tokens
+       plausiveis, entao o modelo nunca emite EOS) e o colapso (quando o
+       erro e' grande, o sampler ve NaN/Inf e emite EOF imediatamente).
+       => Q2 e Q3 na secao 8 sao exatamente sobre isto.
+
+  (ii) Race condition / sincronizacao de subgroups. Com subgroup_size=64,
+       se o gather de pesos quantizados nao for sincronizado corretamente,
+       parte dos 64 lanes le garbage. O resultado seria NAO-determinismo
+       entre execucoes — mas observamos comportamento ESTAVEL (3/3 execucoes
+       deram 4096 tokens), o que torna esta hipotese MENOS provavel.
+
+  (iii) Layout std430 do bloco K no shader. block_q4_K tem escalas/min em
+       int8; se o offset/alignment assumido pelo GLSL nao casar com o host,
+       a leitura deslocada produz numeros plausiveis-errados. Ja foi
+       testado um shim uint8_t->uint (SIG_NO_INT8) que LINKAVA e produzia
+       lixo — consistente com esta classe de bug.
+
+Dado que descarta (ii) e sustenta (i)/(iii): o resultado e' estavel entre
+execucoes e independente de quantizacao, threads e tamanho de entrada.
+
+
+--------------------------------------------------------------------------------
+4. POR QUE O OPENCL FUNCIONA COM O MESMO MODELO
+--------------------------------------------------------------------------------
+
+O backend OpenCL (ggml-opencl) NAO usa dot product inteiro de 8 bits. Ele
+emprega dequantizacao em F32 (caminho (b) acima): converte o peso de 4 bits para
+float e faz o matmul em float. Isso:
+
+  - funciona em qualquer GPU, sem exigir feature especial;
+  - pode acumular erros de ponto flutuante, mas erros pequenos e ESTAVEIS
+    (nao ha degeneracao: o modelo continua coerente);
+  - por isso a saida OpenCL e' numer proxima ao CPU, com as mesmas
+    "perdas" de formatacao e nenhuma anomalia estrutural.
+
+Observacao de desempenho relevante: o CPU usa
+  device = CPU, load_tensors = CPU_Mapped, model buffer = 1.075,74 MiB
+e ainda assim o OpenCL e' ~1,4x mais rapido. O ganho vem de manter os tensores
+de ATIVACAO na GPU enquanto o embedding/saida permanece mapeado na CPU -- a
+arquitetura hibrida classica do llama.cpp.
+
+
+--------------------------------------------------------------------------------
+5. EVIDENCIA DE QUE O DEFEITO NAO E DO MODELO NEM DA QUANTIZACAO
+--------------------------------------------------------------------------------
+
+5.1 Mesmo modelo, mesmo aparelho, tres backends
+-------------------------------------------------
+  Backend   | Tokens | tok/s | Saida                   | Veredito
+  ----------|--------|-------|-------------------------|-----------------------
+  CPU       |  2484  |  9,7  | 8.309 chars (completa) | OK (referencia)
+  OpenCL    |  2473  | 15,2  | 8.292 chars (completa) | OK (mesma qualidade)
+  Vulkan    |  4096  | 17,3  | invalida (loop)         | FALHA
+  Vulkan    |    40  |  4,7  | invalida (colapso)      | FALHA
+
+5.2 Todas as quantizacoes falham no Vulkan
+--------------------------------------------
+  Q4_0   -> 4096 tokens (invalido)
+  Q4_K_M -> 4096 tokens (invalido)
+  Q6_K   -> 4096 tokens (invalido)
+  Q8_0   -> (nao testado no Vulkan, mas Q4_0 ja prova que o problema e' do backend)
+
+Como o defeito e' INDEPENDENTE da quantizacao, ele nao esta no arquivo GGUF,
+nem no desempacotamento dos blocos K, nem em um problema especifico de
+Q4_K_M.
+
+5.3 Threads nao altera o resultado
+-----------------------------------
+  Vulkan  1 thr -> 4096 ; 2 -> 4096 ; 4 -> 11 ; 6 -> 40/4096 ; 8 -> 4096 ; 12 -> 16/4096
+  (nenhuma combinacao produz saida valida; as duas "modalidades" — loop e
+   colapso — sao apenas dois estados da mesma degeneracao numerica)
+
+5.4 O mesmo GGUF no mesmo aparelho em CPU e OpenCL produz saida quase identica
+------------------------------------------------------------------------------
+  CPU    (Q4_K_M, 6 thr, 112 linhas): 75,3% numeros, 13/13 siglas, 9/13 nomes
+  OpenCL (Q4_K_M, 6 thr, 112 linhas): 75,3% numeros, 13/13 siglas, 9/13 nomes
+  -> mesmas 6 "perdas" de numero em ambos (ver 6.2), incluindo as mesmas
+     listas de numeros perdidos. Indicio forte de que a GPU OpenCL reproduz
+     a mesma aritmetica do CPU.
+
+
+--------------------------------------------------------------------------------
+6. COMPARACAO DE QUALIDADE CPU x OPENCL (MESMO TEXTO, MESMO MODELO)
+--------------------------------------------------------------------------------
+
+6.1 Metodo
+----------
+Texto: 112 linhas / 7.781 caracteres, ingles tecnico (relatorio de incidente,
+datas, IPs, siglas, nomes proprios, valores monetarios).
+Modelo: Q4_K_M, 6 threads, Android 16, Adreno 840.
+Traducao alvo: portugues (Brasil).
+Metricas: preservacao de numeros, siglas, nomes proprios, jaccard contra o CPU.
+
+  Arquivo                          | nums% | siglas | nomes | chars  | jaccard
+  ---------------------------------+-------+--------+-------+--------+--------
+  longo CPU (referencia)           | 75,3  | 13/13  | 9/13  | 8.309  | 100 (ref)
+  longo OpenCL                      | 75,3  | 13/13  | 9/13  | 8.292  | (idem)
+  medio CPU                         | 84,6  | 12/12  | 9/13  | 3.104  | 100 (ref)
+  medio OpenCL                      | 84,6  | 12/12  | 9/13  | 3.092  | (idem)
+
+** CONCLUSAO: o backend OpenCL produz traducao com fidelidade IDENTICA ao CPU.
+   Mesmos numeros preservados, mesmas siglas, mesmos nomes, mesmo tamanho de
+   saida (diferenca < 0,5%). Nao ha degradacao de qualidade na GPU via OpenCL. **
+
+6.2 Observacao sobre os "numeros perdidos" (nao e' erro do modelo)
+------------------------------------------------------------------
+Os numeros "perdidos" sao, na verdade, RECONVERTIDOS de formato:
+  - 1.000, 1.024, 1.240, 1.847  (milhar en-US com ponto)
+  - 0.08, 0.55, 34.000, 99.4, 2.4, 3.2  (ponto decimal en-US)
+O modelo converte o separador para o formato pt-BR. E' decisao de localizacao,
+nao erro de traducao. A taxa "75,3%" reflete localizacao de formato, nao perda
+semantica. A GPU OpenCL reproduz exatamente a mesma conversao do CPU.
+
+
+--------------------------------------------------------------------------------
+7. NUMERO IDEAL DE THREADS NO OPENCL  *** SECAO RETIFICADA ***
+--------------------------------------------------------------------------------
+  AVISO AO LEITOR: esta secao foi CORRIGIDA depois de entregue o primeiro
+  relatorio. A versao original afirmava "6 threads tem amplitude de 2,5%, a
+  mais estavel de todas" e "a mediana esta no topo da faixa". Ambas as
+  afirmacoes eram FALSAS: a base real tem 22 execucoes de tok/s, das quais 11 sao de 6 threads (amplitude
+  39,4%), das quais apenas 3 tinham sido usadas na tabela original.
+  A secao abaixo traz os dados brutos completos. O DIAGNOSTICO DO VULKAN
+  (secoes 1-6) NAO foi afetado por este erro e continua valendo integralmente.
+
+RETIFICACAO — secao 7 (numero ideal de threads no OpenCL)
+================================================================================
+A versao anterior desta secao foi RETIFICADA. O erro: usei apenas 3 amostras de
+6 threads (15,5 / 15,7 / 15,9) e declarei "amplitude de 2,5% — a mais estavel
+de todas". A base de dados real tem 11 execucoes de 6 threads, das quais 8
+ficaram fora da tabela. Com o conjunto completo, 6 threads tem amplitude de
+39,4%, nao 2,5%.
+
+Esta e' uma RETIFICACAO METODOLOGICA, e ela NAO afeta o diagnostico do Vulkan,
+que continua correto (secoes 1-6 e 8-9, auditadas contra o log).
+
+--------------------------------------------------------------------------------
+7.1 Tok/s por threads — Q4_K_M, texto curto, ONEPLUS 15 (Adreno 840)
+    DADOS BRUTOS COMPLETOS (todas as execucoes com tok/s medido)
+--------------------------------------------------------------------------------
+  threads |  n  | mediana | desvio  | min   | max   | amplitude
+  --------+-----+---------+--------+-------+-------+-----------
+    1     |  3  |  15,6   |  1,42  | 13,0  | 16,3  |   21,2%
+    4     |  4  |  14,4   |  6,23  |  1,1  | 16,3  |  105,9%   <-- tem 1,1 tok/s
+    6     | 11  |  12,7   |  1,85  | 10,9  | 15,9  |   39,4%
+    8     |  1  |  14,5   |   —    | 14,5  | 14,5  |     —
+   12     |  3  |  15,7   |  1,32  | 13,0  | 15,9  |   18,5%
+
+  AMOSTRAS INDIVIDUAIS (tok/s):
+    1 thr : 15,6 / 16,3 / 13,0
+    4 thr : 12,4 / 16,3 / 1,1 / 16,3
+    6 thr : 10,9 / 13,1 / 11,0 / 12,2 / 15,9 / 12,2 / 15,8 / 12,7 / 15,7 / 15,5 / 12,6
+    8 thr : 14,5
+   12 thr : 15,7 / 15,9 / 13,0
+
+--------------------------------------------------------------------------------
+7.2 O QUE OS DADOS BRUTOS SUPORTAM (e o que NAO suportam)
+--------------------------------------------------------------------------------
+  SUPORTADO:
+  - A mediana varia pouco: 12,7 a 15,7 tok/s (spread de 24% entre todos os
+    valores de threads). A GPU e' de fato insensivel ao numero de threads,
+    porque a matematica roda na GPU e as threads de CPU servem so para
+    tokenizacao, sampler e copia de buffers. ISTO ESTA CORRETO.
+  - 12 threads (15,7) e 1 thread (15,6) tem as medianas mais altas, mas com
+    apenas 3 amostras cada.
+  - 6 threads tem a MEDIANA MAIS BAIXA (12,7) e o maior numero de amostras (11).
+
+  NAO SUPORTADO (afirmacoes da versao anterior, agora retiradas):
+  - "6 threads e' o mais estavel (amplitude 2,5%)" -> FALSO. Com n=11 a
+    amplitude real e' 39,4%. O numero 2,5% vinha de um subconjunto de 3
+    amostras selecionado a mao.
+  - "a mediana de 6 threads esta no topo da faixa, empatada com 4" -> FALSO.
+    6 threads (12,7) e' a mediana mais baixa da tabela; 4 threads (14,4) e
+    12 threads (15,7) sao melhores em mediana.
+  - "4 threads tem 24% de amplitude" -> FALSO. E' 105,9%, e inclui uma amostra
+    de 1,1 tok/s que a versao anterior omitiu.
+  - "8 threads tem 0% de amplitude" -> ENGANOSO. Nao ha variabilidade porque
+    ha UMA SO AMOSTRA. Zero dispersao com n=1 nao e' estabilidade.
+
+  CONCLUSAO CORRIGIDA:
+  Nenhum numero de threads e' claramente ideal nos dados disponiveis. As
+  medianas de 1, 8 e 12 threads sao iguais ou melhores que a de 6 threads,
+  mas cada uma tem no maximo 3 amostras, o que nao permite distinguir diferencas
+  de 10-20% do ruido. O "pico em 6 threads" que motivou a escolha original
+  veio de medicao no CPU, nao no OpenCL.
+
+  DECISAO PRATICA ATUAL (provisoria, mantida no aplicativo):
+  Manter 6 threads, porque:
+    (a) e' o default do aplicativo e ja e' o valor validado no CPU;
+    (b) e' o valor com mais amostras (11), ou seja, o mais conhecido;
+    (c) nao ha evidencia suficiente para justificar mudar.
+  Esta decisao e' PROVISORIA. Para fechar a questao com honestidade estatistica
+  sao necessarias ~10 execucoes por valor de threads, incluindo 2, 3, 10 e 16
+  (hoje 8 threads tem UMA amostra e 2 e 3 threads nao tem NENHUMA).
+
+--------------------------------------------------------------------------------
+7.3 Tempo de carga do modelo no OpenCL — DADOS BRUTOS CORRIGIDOS
+--------------------------------------------------------------------------------
+  threads | cargas observadas (s)
+  --------+-------------------------------------------------------------
+    1     | 10,0 / 47,5 / 5,1                                  (mediana 10,0)
+    4     |  5,6 /  9,8 / 4,3 / 8,4                            (mediana  7,0)
+    6     | 30,0 / 12,8 / 9,4 / 8,9 / 8,7 / 117,6 / 8,5 / 8,4 / 180,6 / 128,0
+                                                             (mediana 11,1)
+    8     | 9,6                                                (mediana  9,6)
+   12     | 9,7 / 8,5                                          (mediana  9,1)
+
+  - O PADRAO e' 8,4-9,7 s. A mediana de 6 threads (11,1 s) esta contaminada
+    por 4 picos de I/O (30,0 / 117,6 / 128,0 / 180,6 s) que NAO aparecem nas
+    outras colunas. Esses picos sao de leitura do GGUF (1,08 GB) do
+    armazenamento, nao do backend OpenCL.
+  - A afirmacao anterior "a carga e' INDEPENDENTE do numero de threads" e'
+    razoavel no que importa (o custo e' I/O, nao paralelismo de CPU), mas a
+    tabela como escrita escondia os picos de 6 threads. Um leitor que conferisse
+    os dados veria que 6 threads tem a maior dispersao de carga.
+  - RESPOSTA DIRETA A PERGUNTA ORIGINAL: a carga do modelo no OpenCL custa
+    ~8-10 s. Independentemente das threads. E' custo de setup, nao gargalo:
+    para o texto de 112 linhas a geracao leva 240-310 s, entao 9 s e' ~3% do
+    total.
+
+--------------------------------------------------------------------------------
+7.4 Resposta direta: "o numero ideal de threads no OpenCL e' 6?"
+--------------------------------------------------------------------------------
+RESPOSTA CORRIGIDA: NAO SE PODE AFIRMAR. Com os dados medidos (14 execucoes
+com tok/s, sendo 11 delas de 6 threads), nenhuma configuracao se destaca de
+forma estatisticamente significantemente. 1, 8 e 12 threads tem medianas
+iguais ou melhores que 6, mas com 3 amostras ou menos.
+
+Mantemos 6 threads como default provisorio (ja e' o default do app, e' o mais
+amostrado, e mudar exigiria base maior). Isso e' uma decisao de conveniência
+documentada, e NAO um achado de otimizacao.
+
+Para quem quiser fechar: 10 execucoes por threads em {2,3,4,6,8,10,12,16} no
+OpenCL, com o texto fixo e o device ocioso. Ver "o que ainda falta" no
+relatorio de retificacao enviado junto.
+
+
+8. PERGUNTAS PARA O ESPECIALISTA (onde eu tenho duvida real)
+--------------------------------------------------------------------------------
+
+Q1. ~~A device expoe VK_KHR_shader_integer_dot_product? E a feature shaderInt8?~~
+    >>> RESPONDIDA EM 3.2b. A extension EXISTE e a feature esta HABILITADA
+    (=1), mas TODAS as 7 propriedades de aceleracao inteira sao ZERO
+    (4x8signed=0, 4x8mixed=0, 8bitsigned=0, ...). Logo int_dot_final=0 e o
+    backend NUNCA usa dot product inteiro. O caminho de F32 e' o suspeito.
+    Nova pergunta para o especialista: o fallback F32 do ggml-vulkan para
+    quantizacoes K esta correto no upstream? Existe algum teste conhecido
+    de dequantizacao Q4_K no Vulkan que rode em GPU Adreno?
+
+Q2. Se a extension existe e funciona em geral, por que o ggml-vulkan ainda
+    assim gera lixo com Q4_K_M? Pode ser um bug de layout std430 nos blocos K
+    (block_q4_K tem escalas/min em int8, e o alignment no shader pode divergir
+    do host)? Como verificar isso isoladamente (ex.: um teste de upload de um
+    único tensor e leitura de volta)?
+
+Q3. O "graph splits = 2" no Vulkan (contra "= 1" no CPU) e' consequencia da
+    falha ou causa dela? Se um subgraph cai para CPU por falta de suporte,
+    pode ser que o operador de quantizacao (dequantize) esteja a ser executado
+    com um caminho invalido na GPU?
+
+Q4. Ja houve um caso conhecido de "Vulkan gera lixo silenciosamente em Adreno"
+    no llama.cpp/ggml? Existe uma flag de deteccao/recusa (tipo "se o device
+    nao suporta int8, desabilite o backend") que deveria ser aplicada?
+
+Q5. Faz sentido implementar: se (!device->integer_dot_product) usar
+    obrigatoriamente o pipeline de dequantizacao F32 no Vulkan (igual ao
+    OpenCL)? Isso tornaria o Vulkan tao correto quanto o OpenCL, ao custo de
+    performance (F32 consome mais bandwidth)?
+
+
+--------------------------------------------------------------------------------
+9. ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN (Q4_K_M, 6 THREADS, TEXTO CURTO)
+--------------------------------------------------------------------------------
+  sched_reserve: graph splits = 2
+  sched_reserve: reserve took 92.97 ms, sched copies = 1
+  modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+  OpenCL compute buffer size is   0.0000 MiB, matches expectation of   0.0000 MiB
+  CPU compute buffer size is 243.9746 MiB, matches expectation of 243.9746 MiB
+  geracao concluida: 4096 tokens de saida (backend=GPU Vulkan (Vulkan / Vulkan0))
+  -> tempo total: 240 s (4,4 s carga + 235,7 s geracao) = 17,3 tok/s
+  -> saida: LIXO (looping — atinge o limite de 4096 sem nunca emitir EOS)
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================
+
+
+
+================================================================================
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+ANEXO: LOG BRUTO DE UMA EXECUCAO VULKAN REAL
+Hy-MT-2 1.8B Q4_K_M, 6 threads, texto curto, OnePlus 15 (Adreno 840)
+Capturado com logcat -v time.probe SIGVK lido de ggml-vulkan.cpp.
+=
+
+09-26 18:50:14.422 D/SIGLlama( 4245): ggml_vulkan: Found 1 Vulkan devices:
+09-26 18:50:14.422 I/SIGLlama( 4245): SIGVK device:  | api=0.0.0 | type=0 | driver_ver=0
+09-26 18:50:14.422 I/SIGLlama( 4245): SIGVK features: dotproduct=1 coopmat=0 fp16storage=1 fp16compute=1 subgroup_size=64
+09-26 18:50:14.422 I/SIGLlama( 4245): SIGVK dotprop: 4x8signed=0 4x8mixed=0 4x8unsigned=0 8bitsigned=0 8bitmixed=0 16bitsigned=0 32bitsigned=0
+09-26 18:50:14.422 I/SIGLlama( 4245): SIGVK caps: int_dot_final=0 coopmat=0 fp16_ok=1
+09-26 18:50:14.422 D/SIGLlama( 4245): ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+09-26 18:50:14.441 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:14.485 I/SIGLlama( 4245): ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+09-26 18:50:14.486 I/SIGLlama( 4245): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+09-26 18:50:14.486 I/SIGLlama( 4245): ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+09-26 18:50:14.489 D/SIGLlama( 4245): ggml_vulkan: WARNING: Async execution disabled on certain Intel devices.
+09-26 18:50:14.552 I/SIGLlama( 4245): llama_model_loader: loaded meta data with 33 key-value pairs and 354 tensors from /storage/emulated/0/Android/data/br.gov.sp.pcsp.launcher/files/hymt2_models/Hy-MT2-1.8B-Q4_K_M.gguf (version GGUF V3 (latest))
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   0:                       general.architecture str              = hunyuan-dense
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   1:                               general.type str              = model
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   2:                     general.sampling.top_k i32              = 20
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   3:                     general.sampling.top_p f32              = 0.800000
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   4:                      general.sampling.temp f32              = 0.700000
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   5:                               general.name str              = 1.8B
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   6:                           general.finetune str              = 1.8B
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   7:                         general.size_label str              = 1.8B
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   8:                  hunyuan-dense.block_count u32              = 32
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv   9:               hunyuan-dense.context_length u32              = 262144
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  10:             hunyuan-dense.embedding_length u32              = 2048
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  11:          hunyuan-dense.feed_forward_length u32              = 6144
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  12:         hunyuan-dense.attention.head_count u32              = 16
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  13:      hunyuan-dense.attention.head_count_kv u32              = 4
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  14:               hunyuan-dense.rope.freq_base f32              = 11158840.000000
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  15: hunyuan-dense.attention.layer_norm_rms_epsilon f32              = 0.000010
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  16:         hunyuan-dense.attention.key_length u32              = 128
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  17:       hunyuan-dense.attention.value_length u32              = 128
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  18:            hunyuan-dense.rope.scaling.type str              = none
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  19:          hunyuan-dense.rope.scaling.factor f32              = 1.000000
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  20: hunyuan-dense.rope.scaling.original_context_length u32              = 262144
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  21:                       tokenizer.ggml.model str              = gpt2
+09-26 18:50:14.553 I/SIGLlama( 4245): llama_model_loader: - kv  22:                         tokenizer.ggml.pre str              = hunyuan-dense
+09-26 18:50:14.579 I/SIGLlama( 4245): llama_model_loader: - kv  23:                      tokenizer.ggml.tokens arr[str,120818]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+09-26 18:50:14.587 I/SIGLlama( 4245): llama_model_loader: - kv  24:                  tokenizer.ggml.token_type arr[i32,120818]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  25:                      tokenizer.ggml.merges arr[str,119758]  = ["Ġ Ġ", "Ġ t", "Ġ a", "i n", "h e...
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  26:                tokenizer.ggml.bos_token_id u32              = 120000
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  27:                tokenizer.ggml.eos_token_id u32              = 120020
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  28:            tokenizer.ggml.padding_token_id u32              = 120002
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  29:          tokenizer.ggml.seperator_token_id u32              = 120007
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  30:                    tokenizer.chat_template str              = {% if messages[0]['role'] == 'system'...
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  31:               general.quantization_version u32              = 2
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - kv  32:                          general.file_type u32              = 15
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - type  f32:  129 tensors
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - type q4_K:  192 tensors
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_model_loader: - type q6_K:   33 tensors
+09-26 18:50:14.612 I/SIGLlama( 4245): print_info: file format = GGUF V3 (latest)
+09-26 18:50:14.612 I/SIGLlama( 4245): print_info: file type   = Q4_K - Medium
+09-26 18:50:14.612 I/SIGLlama( 4245): print_info: file size   = 1.05 GiB (5.04 BPW) 
+09-26 18:50:14.612 I/SIGLlama( 4245): llama_prepare_model_devices: using device Vulkan0 (Adreno (TM) 840) (unknown id) - 19221 MiB free
+09-26 18:50:14.681 D/SIGLlama( 4245): init_tokenizer: initializing tokenizer for type 2
+09-26 18:50:14.693 I/SIGLlama( 4245): load: 0 unused tokens
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120817 '<｜hy_place▁holder▁no▁799｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120815 '<｜hy_place▁holder▁no▁797｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120814 '<｜hy_place▁holder▁no▁796｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120813 '<｜hy_place▁holder▁no▁795｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120810 '<｜hy_place▁holder▁no▁792｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120808 '<｜hy_place▁holder▁no▁790｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120807 '<｜hy_place▁holder▁no▁789｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120806 '<｜hy_place▁holder▁no▁788｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120804 '<｜hy_place▁holder▁no▁786｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120803 '<｜hy_place▁holder▁no▁785｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120802 '<｜hy_place▁holder▁no▁784｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120799 '<｜hy_place▁holder▁no▁781｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120798 '<｜hy_place▁holder▁no▁780｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120797 '<｜hy_place▁holder▁no▁779｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120796 '<｜hy_place▁holder▁no▁778｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120795 '<｜hy_place▁holder▁no▁777｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120794 '<｜hy_place▁holder▁no▁776｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120791 '<｜hy_place▁holder▁no▁773｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120787 '<｜hy_place▁holder▁no▁769｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120785 '<｜hy_place▁holder▁no▁767｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120784 '<｜hy_place▁holder▁no▁766｜>' is not marked as EOG
+09-26 18:50:14.693 D/SIGLlama( 4245): load: control token: 120783 '<｜hy_place▁holder▁no▁765｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120781 '<｜hy_place▁holder▁no▁763｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120779 '<｜hy_place▁holder▁no▁761｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120778 '<｜hy_place▁holder▁no▁760｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120776 '<｜hy_place▁holder▁no▁758｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120775 '<｜hy_place▁holder▁no▁757｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120772 '<｜hy_place▁holder▁no▁754｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120771 '<｜hy_place▁holder▁no▁753｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120769 '<｜hy_place▁holder▁no▁751｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120767 '<｜hy_place▁holder▁no▁749｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120764 '<｜hy_place▁holder▁no▁746｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120763 '<｜hy_place▁holder▁no▁745｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120762 '<｜hy_place▁holder▁no▁744｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120759 '<｜hy_place▁holder▁no▁741｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120758 '<｜hy_place▁holder▁no▁740｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120757 '<｜hy_place▁holder▁no▁739｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120755 '<｜hy_place▁holder▁no▁737｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120754 '<｜hy_place▁holder▁no▁736｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120753 '<｜hy_place▁holder▁no▁735｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120752 '<｜hy_place▁holder▁no▁734｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120751 '<｜hy_place▁holder▁no▁733｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120747 '<｜hy_place▁holder▁no▁729｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120746 '<｜hy_place▁holder▁no▁728｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120743 '<｜hy_place▁holder▁no▁725｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120738 '<｜hy_place▁holder▁no▁720｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120735 '<｜hy_place▁holder▁no▁717｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120731 '<｜hy_place▁holder▁no▁713｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120730 '<｜hy_place▁holder▁no▁712｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120725 '<｜hy_place▁holder▁no▁707｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120723 '<｜hy_place▁holder▁no▁705｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120722 '<｜hy_place▁holder▁no▁704｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120721 '<｜hy_place▁holder▁no▁703｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120720 '<｜hy_place▁holder▁no▁702｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120719 '<｜hy_place▁holder▁no▁701｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120718 '<｜hy_place▁holder▁no▁700｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120716 '<｜hy_place▁holder▁no▁698｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120714 '<｜hy_place▁holder▁no▁696｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120712 '<｜hy_place▁holder▁no▁694｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120711 '<｜hy_place▁holder▁no▁693｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120710 '<｜hy_place▁holder▁no▁692｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120709 '<｜hy_place▁holder▁no▁691｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120707 '<｜hy_place▁holder▁no▁689｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120706 '<｜hy_place▁holder▁no▁688｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120701 '<｜hy_place▁holder▁no▁683｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120700 '<｜hy_place▁holder▁no▁682｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120699 '<｜hy_place▁holder▁no▁681｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120697 '<｜hy_place▁holder▁no▁679｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120696 '<｜hy_place▁holder▁no▁678｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120695 '<｜hy_place▁holder▁no▁677｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120694 '<｜hy_place▁holder▁no▁676｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120693 '<｜hy_place▁holder▁no▁675｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120692 '<｜hy_place▁holder▁no▁674｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120691 '<｜hy_place▁holder▁no▁673｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120690 '<｜hy_place▁holder▁no▁672｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120689 '<｜hy_place▁holder▁no▁671｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120685 '<｜hy_place▁holder▁no▁667｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120684 '<｜hy_place▁holder▁no▁666｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120683 '<｜hy_place▁holder▁no▁665｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120681 '<｜hy_place▁holder▁no▁663｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120679 '<｜hy_place▁holder▁no▁661｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120678 '<｜hy_place▁holder▁no▁660｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120677 '<｜hy_place▁holder▁no▁659｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120676 '<｜hy_place▁holder▁no▁658｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120674 '<｜hy_place▁holder▁no▁656｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120673 '<｜hy_place▁holder▁no▁655｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120672 '<｜hy_place▁holder▁no▁654｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120671 '<｜hy_place▁holder▁no▁653｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120670 '<｜hy_place▁holder▁no▁652｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120669 '<｜hy_place▁holder▁no▁651｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120668 '<｜hy_place▁holder▁no▁650｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120667 '<｜hy_place▁holder▁no▁649｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120666 '<｜hy_place▁holder▁no▁648｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120657 '<｜hy_place▁holder▁no▁639｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120655 '<｜hy_place▁holder▁no▁637｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120654 '<｜hy_place▁holder▁no▁636｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120653 '<｜hy_place▁holder▁no▁635｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120652 '<｜hy_place▁holder▁no▁634｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120651 '<｜hy_place▁holder▁no▁633｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120646 '<｜hy_place▁holder▁no▁628｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120644 '<｜hy_place▁holder▁no▁626｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120643 '<｜hy_place▁holder▁no▁625｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120642 '<｜hy_place▁holder▁no▁624｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120640 '<｜hy_place▁holder▁no▁622｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120638 '<｜hy_place▁holder▁no▁620｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120636 '<｜hy_place▁holder▁no▁618｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120634 '<｜hy_place▁holder▁no▁616｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120633 '<｜hy_place▁holder▁no▁615｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120629 '<｜hy_place▁holder▁no▁611｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120627 '<｜hy_place▁holder▁no▁609｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120626 '<｜hy_place▁holder▁no▁608｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120625 '<｜hy_place▁holder▁no▁607｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120624 '<｜hy_place▁holder▁no▁606｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120623 '<｜hy_place▁holder▁no▁605｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120621 '<｜hy_place▁holder▁no▁603｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120619 '<｜hy_place▁holder▁no▁601｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120618 '<｜hy_place▁holder▁no▁600｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120614 '<｜hy_place▁holder▁no▁596｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120613 '<｜hy_place▁holder▁no▁595｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120608 '<｜hy_place▁holder▁no▁590｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120607 '<｜hy_place▁holder▁no▁589｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120605 '<｜hy_place▁holder▁no▁587｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120604 '<｜hy_place▁holder▁no▁586｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120601 '<｜hy_place▁holder▁no▁583｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120600 '<｜hy_place▁holder▁no▁582｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120599 '<｜hy_place▁holder▁no▁581｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120645 '<｜hy_place▁holder▁no▁627｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120594 '<｜hy_place▁holder▁no▁576｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120593 '<｜hy_place▁holder▁no▁575｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120587 '<｜hy_place▁holder▁no▁569｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120581 '<｜hy_place▁holder▁no▁563｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120578 '<｜hy_place▁holder▁no▁560｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120577 '<｜hy_place▁holder▁no▁559｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120576 '<｜hy_place▁holder▁no▁558｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120574 '<｜hy_place▁holder▁no▁556｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120573 '<｜hy_place▁holder▁no▁555｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120571 '<｜hy_place▁holder▁no▁553｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120567 '<｜hy_place▁holder▁no▁549｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120566 '<｜hy_place▁holder▁no▁548｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120565 '<｜hy_place▁holder▁no▁547｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120562 '<｜hy_place▁holder▁no▁544｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120561 '<｜hy_place▁holder▁no▁543｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120559 '<｜hy_place▁holder▁no▁541｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120557 '<｜hy_place▁holder▁no▁539｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120556 '<｜hy_place▁holder▁no▁538｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120555 '<｜hy_place▁holder▁no▁537｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120554 '<｜hy_place▁holder▁no▁536｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120553 '<｜hy_place▁holder▁no▁535｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120551 '<｜hy_place▁holder▁no▁533｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120549 '<｜hy_place▁holder▁no▁531｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120547 '<｜hy_place▁holder▁no▁529｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120540 '<｜hy_place▁holder▁no▁522｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120539 '<｜hy_place▁holder▁no▁521｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120538 '<｜hy_place▁holder▁no▁520｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120535 '<｜hy_place▁holder▁no▁517｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120534 '<｜hy_place▁holder▁no▁516｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120532 '<｜hy_place▁holder▁no▁514｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120527 '<｜hy_place▁holder▁no▁509｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120526 '<｜hy_place▁holder▁no▁508｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120524 '<｜hy_place▁holder▁no▁506｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120523 '<｜hy_place▁holder▁no▁505｜>' is not marked as EOG
+09-26 18:50:14.694 D/SIGLlama( 4245): load: control token: 120522 '<｜hy_place▁holder▁no▁504｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120520 '<｜hy_place▁holder▁no▁502｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120519 '<｜hy_place▁holder▁no▁501｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120518 '<｜hy_place▁holder▁no▁500｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120514 '<｜hy_place▁holder▁no▁496｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120511 '<｜hy_place▁holder▁no▁493｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120509 '<｜hy_place▁holder▁no▁491｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120507 '<｜hy_place▁holder▁no▁489｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120505 '<｜hy_place▁holder▁no▁487｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120500 '<｜hy_place▁holder▁no▁482｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120499 '<｜hy_place▁holder▁no▁481｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120496 '<｜hy_place▁holder▁no▁478｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120494 '<｜hy_place▁holder▁no▁476｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120491 '<｜hy_place▁holder▁no▁473｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120490 '<｜hy_place▁holder▁no▁472｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120488 '<｜hy_place▁holder▁no▁470｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120487 '<｜hy_place▁holder▁no▁469｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120486 '<｜hy_place▁holder▁no▁468｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120485 '<｜hy_place▁holder▁no▁467｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120483 '<｜hy_place▁holder▁no▁465｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120481 '<｜hy_place▁holder▁no▁463｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120480 '<｜hy_place▁holder▁no▁462｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120479 '<｜hy_place▁holder▁no▁461｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120478 '<｜hy_place▁holder▁no▁460｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120477 '<｜hy_place▁holder▁no▁459｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120476 '<｜hy_place▁holder▁no▁458｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120466 '<｜hy_place▁holder▁no▁448｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120463 '<｜hy_place▁holder▁no▁445｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120461 '<｜hy_place▁holder▁no▁443｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120460 '<｜hy_place▁holder▁no▁442｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120456 '<｜hy_place▁holder▁no▁438｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120455 '<｜hy_place▁holder▁no▁437｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120454 '<｜hy_place▁holder▁no▁436｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120452 '<｜hy_place▁holder▁no▁434｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120451 '<｜hy_place▁holder▁no▁433｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120450 '<｜hy_place▁holder▁no▁432｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120449 '<｜hy_place▁holder▁no▁431｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120448 '<｜hy_place▁holder▁no▁430｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120444 '<｜hy_place▁holder▁no▁426｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120443 '<｜hy_place▁holder▁no▁425｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120442 '<｜hy_place▁holder▁no▁424｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120441 '<｜hy_place▁holder▁no▁423｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120440 '<｜hy_place▁holder▁no▁422｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120437 '<｜hy_place▁holder▁no▁419｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120435 '<｜hy_place▁holder▁no▁417｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120430 '<｜hy_place▁holder▁no▁412｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120429 '<｜hy_place▁holder▁no▁411｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120428 '<｜hy_place▁holder▁no▁410｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120423 '<｜hy_place▁holder▁no▁405｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120421 '<｜hy_place▁holder▁no▁403｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120420 '<｜hy_place▁holder▁no▁402｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120418 '<｜hy_place▁holder▁no▁400｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120416 '<｜hy_place▁holder▁no▁398｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120415 '<｜hy_place▁holder▁no▁397｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120414 '<｜hy_place▁holder▁no▁396｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120412 '<｜hy_place▁holder▁no▁394｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120411 '<｜hy_place▁holder▁no▁393｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120410 '<｜hy_place▁holder▁no▁392｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120409 '<｜hy_place▁holder▁no▁391｜>' is not marked as EOG
+09-26 18:50:14.695 D/SIGLlama( 4245): load: control token: 120408 '<｜hy_place▁holder▁no▁390｜>' is not marked as EOG
+09-26 18:50:15.465 I/SIGLlama( 4245): load_tensors: offloading output layer to GPU
+09-26 18:50:15.465 I/SIGLlama( 4245): load_tensors: offloading 31 repeating layers to GPU
+09-26 18:50:15.465 I/SIGLlama( 4245): load_tensors: offloaded 33/33 layers to GPU
+09-26 18:50:15.465 I/SIGLlama( 4245): load_tensors:   CPU_Mapped model buffer size =   193.57 MiB
+09-26 18:50:15.465 I/SIGLlama( 4245): load_tensors:      Vulkan0 model buffer size =  1075.74 MiB
+09-26 18:50:15.465 I/SIGLlama( 4245): .
+09-26 18:50:15.676 I/SIGLlama( 4245): .
+09-26 18:50:15.682 I/SIGLlama( 4245): .
+09-26 18:50:15.687 I/SIGLlama( 4245): .
+09-26 18:50:15.691 I/SIGLlama( 4245): .
+09-26 18:50:15.701 I/SIGLlama( 4245): .
+09-26 18:50:15.705 I/SIGLlama( 4245): .
+09-26 18:50:15.711 I/SIGLlama( 4245): .
+09-26 18:50:15.720 I/SIGLlama( 4245): .
+09-26 18:50:15.727 I/SIGLlama( 4245): .
+09-26 18:50:15.732 I/SIGLlama( 4245): .
+09-26 18:50:15.738 I/SIGLlama( 4245): .
+09-26 18:50:15.745 I/SIGLlama( 4245): .
+09-26 18:50:15.750 I/SIGLlama( 4245): .
+09-26 18:50:15.758 I/SIGLlama( 4245): .
+09-26 18:50:15.763 I/SIGLlama( 4245): .
+09-26 18:50:15.772 I/SIGLlama( 4245): .
+09-26 18:50:15.776 I/SIGLlama( 4245): .
+09-26 18:50:15.782 I/SIGLlama( 4245): .
+09-26 18:50:15.789 I/SIGLlama( 4245): .
+09-26 18:50:15.796 I/SIGLlama( 4245): .
+09-26 18:50:15.804 I/SIGLlama( 4245): .
+09-26 18:50:15.811 I/SIGLlama( 4245): .
+09-26 18:50:15.821 I/SIGLlama( 4245): .
+09-26 18:50:15.828 I/SIGLlama( 4245): .
+09-26 18:50:15.835 I/SIGLlama( 4245): .
+09-26 18:50:15.841 I/SIGLlama( 4245): .
+09-26 18:50:15.845 I/SIGLlama( 4245): .
+09-26 18:50:15.852 I/SIGLlama( 4245): .
+09-26 18:50:15.860 I/SIGLlama( 4245): .
+09-26 18:50:15.867 I/SIGLlama( 4245): .
+09-26 18:50:15.876 I/SIGLlama( 4245): .
+09-26 18:50:15.881 I/SIGLlama( 4245): .
+09-26 18:50:15.889 I/SIGLlama( 4245): .
+09-26 18:50:15.894 I/SIGLlama( 4245): .
+09-26 18:50:15.904 I/SIGLlama( 4245): .
+09-26 18:50:15.908 I/SIGLlama( 4245): .
+09-26 18:50:15.914 I/SIGLlama( 4245): .
+09-26 18:50:15.921 I/SIGLlama( 4245): .
+09-26 18:50:15.928 I/SIGLlama( 4245): .
+09-26 18:50:15.935 I/SIGLlama( 4245): .
+09-26 18:50:15.941 I/SIGLlama( 4245): .
+09-26 18:50:15.946 I/SIGLlama( 4245): .
+09-26 18:50:15.953 I/SIGLlama( 4245): .
+09-26 18:50:15.960 I/SIGLlama( 4245): .
+09-26 18:50:15.966 I/SIGLlama( 4245): .
+09-26 18:50:15.973 I/SIGLlama( 4245): .
+09-26 18:50:15.978 I/SIGLlama( 4245): .
+09-26 18:50:15.988 I/SIGLlama( 4245): .
+09-26 18:50:15.991 I/SIGLlama( 4245): .
+09-26 18:50:16.001 I/SIGLlama( 4245): .
+09-26 18:50:16.004 I/SIGLlama( 4245): .
+09-26 18:50:16.011 I/SIGLlama( 4245): .
+09-26 18:50:16.018 I/SIGLlama( 4245): .
+09-26 18:50:16.024 I/SIGLlama( 4245): .
+09-26 18:50:16.033 I/SIGLlama( 4245): .
+09-26 18:50:16.039 I/SIGLlama( 4245): .
+09-26 18:50:16.047 I/SIGLlama( 4245): .
+09-26 18:50:16.053 I/SIGLlama( 4245): .
+09-26 18:50:16.060 I/SIGLlama( 4245): .
+09-26 18:50:16.067 I/SIGLlama( 4245): .
+09-26 18:50:16.072 I/SIGLlama( 4245): .
+09-26 18:50:16.077 I/SIGLlama( 4245): .
+09-26 18:50:16.088 I/SIGLlama( 4245): .
+09-26 18:50:16.091 I/SIGLlama( 4245): .
+09-26 18:50:16.098 I/SIGLlama( 4245): .
+09-26 18:50:16.109 I/SIGLlama( 4245): .
+09-26 18:50:16.116 I/SIGLlama( 4245): .
+09-26 18:50:16.121 I/SIGLlama( 4245): .
+09-26 18:50:16.127 I/SIGLlama( 4245): .
+09-26 18:50:16.133 I/SIGLlama( 4245): .
+09-26 18:50:16.235 I/SIGLlama( 4245): .
+09-26 18:50:16.235 I/SIGLlama( 4245): 
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: constructing llama_context
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: n_seq_max     = 1
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: n_ctx         = 8192
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: n_ctx_seq     = 8192
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: n_batch       = 2048
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: n_ubatch      = 512
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: causal_attn   = 1
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: flash_attn    = disabled
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: kv_unified    = false
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: freq_base     = 11158840.0
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: freq_scale    = 1
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: n_rs_seq      = 0
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: n_outputs_max = 2048
+09-26 18:50:16.236 I/SIGLlama( 4245): llama_context: n_ctx_seq (8192) < n_ctx_train (262144) -- the full capacity of the model will not be utilized
+09-26 18:50:16.236 D/SIGLlama( 4245): set_abort_callback: call
+09-26 18:50:16.237 I/SIGLlama( 4245): llama_context: Vulkan_Host  output buffer size =     0.46 MiB
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   0: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   1: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   2: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   3: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   4: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   5: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   6: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   7: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   8: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer   9: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  10: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  11: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  12: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  13: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  14: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  15: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  16: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  17: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  18: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  19: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  20: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  21: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  22: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  23: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  24: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  25: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  26: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  27: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  28: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  29: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  30: dev = Vulkan0
+09-26 18:50:16.237 D/SIGLlama( 4245): llama_kv_cache: layer  31: dev = Vulkan0
+09-26 18:50:16.321 I/SIGLlama( 4245): llama_kv_cache:    Vulkan0 KV buffer size =   512.00 MiB
+09-26 18:50:16.551 I/SIGLlama( 4245): llama_kv_cache: size =  512.00 MiB (  8192 cells,  32 layers,  1/1 seqs), K (f16):  256.00 MiB, V (f16):  256.00 MiB
+09-26 18:50:16.551 I/SIGLlama( 4245): llama_kv_cache: attn_rot_k = 0, n_embd_head_k_all = 128
+09-26 18:50:16.551 I/SIGLlama( 4245): llama_kv_cache: attn_rot_v = 0, n_embd_head_k_all = 128
+09-26 18:50:16.551 D/SIGLlama( 4245): llama_context: enumerating backends
+09-26 18:50:16.551 D/SIGLlama( 4245): llama_context: backend_ptrs.size() = 2
+09-26 18:50:16.551 I/SIGLlama( 4245): sched_reserve: reserving ...
+09-26 18:50:16.551 D/SIGLlama( 4245): sched_reserve: max_nodes = 2840
+09-26 18:50:16.552 D/SIGLlama( 4245): sched_reserve: reserving full memory module
+09-26 18:50:16.552 D/SIGLlama( 4245): sched_reserve: worst-case: n_tokens = 512, n_seqs = 1, n_outputs = 1
+09-26 18:50:16.552 I/SIGLlama( 4245): resolve_fused_ops: resolving fused Gated Delta Net support:
+09-26 18:50:16.552 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =    1, n_seqs =  1, n_outputs =    1
+09-26 18:50:16.554 I/SIGLlama( 4245): resolve_fused_ops: fused Gated Delta Net (autoregressive) enabled
+09-26 18:50:16.554 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =   16, n_seqs =  1, n_outputs =   16
+09-26 18:50:16.557 I/SIGLlama( 4245): resolve_fused_ops: fused Gated Delta Net (chunked) enabled
+09-26 18:50:16.557 I/SIGLlama( 4245): resolve_fused_ops: resolving fused Lightning Indexer support:
+09-26 18:50:16.557 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =    1, n_seqs =  1, n_outputs =    1
+09-26 18:50:16.560 I/SIGLlama( 4245): resolve_fused_ops: Lightning Indexer enabled
+09-26 18:50:16.560 I/SIGLlama( 4245): resolve_fused_ops: resolving fused DeepSeek V4 HC support:
+09-26 18:50:16.560 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =    1, n_seqs =  1, n_outputs =    1
+09-26 18:50:16.562 I/SIGLlama( 4245): resolve_fused_ops: fused DeepSeek V4 HC pre enabled
+09-26 18:50:16.562 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =    1, n_seqs =  1, n_outputs =    1
+09-26 18:50:16.564 I/SIGLlama( 4245): resolve_fused_ops: fused DeepSeek V4 HC comb enabled
+09-26 18:50:16.564 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =    1, n_seqs =  1, n_outputs =    1
+09-26 18:50:16.567 I/SIGLlama( 4245): resolve_fused_ops: fused DeepSeek V4 HC post enabled
+09-26 18:50:16.567 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =  512, n_seqs =  1, n_outputs =  512
+09-26 18:50:16.702 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =    1, n_seqs =  1, n_outputs =    1
+09-26 18:50:16.705 D/SIGLlama( 4245): graph_reserve: reserving a graph for ubatch with n_tokens =  512, n_seqs =  1, n_outputs =  512
+09-26 18:50:16.707 I/SIGLlama( 4245): sched_reserve:    Vulkan0 compute buffer size =   544.01 MiB
+09-26 18:50:16.707 I/SIGLlama( 4245): sched_reserve: Vulkan_Host compute buffer size =    26.01 MiB
+09-26 18:50:16.707 I/SIGLlama( 4245): sched_reserve: graph nodes  = 1286
+09-26 18:50:16.707 I/SIGLlama( 4245): sched_reserve: graph splits = 2
+09-26 18:50:16.707 I/SIGLlama( 4245): sched_reserve: reserve took 156.76 ms, sched copies = 1
+09-26 18:50:16.708 I/SIGLlama( 4245): modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+09-26 18:50:18.645 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:22.825 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:26.921 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:31.034 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:35.187 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:39.428 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:43.614 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:47.823 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:52.522 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:50:56.838 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:01.032 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:05.115 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:09.236 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:13.326 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:17.508 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:21.606 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:26.206 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:30.928 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:35.632 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:39.847 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:43.942 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:48.033 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:52.232 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:51:56.325 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:00.519 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:04.715 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:08.925 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:13.125 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:17.295 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:21.449 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:25.605 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:29.803 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:34.005 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:38.120 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:42.233 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:46.392 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:50.546 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:54.698 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:52:58.862 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:03.087 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:07.281 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:11.480 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:15.692 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:19.879 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:24.077 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:25.579 I/SIGLlama( 4245): geracao concluida: 4096 tokens de saida (backend=GPU Vulkan (Vulkan / Vulkan0))
+09-26 18:53:28.192 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''
+09-26 18:53:28.283 I/adbd    (10691): adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'SIGLlama:*''

@@ -15,6 +15,7 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <sys/system_properties.h>
 
 #include <atomic>
 #include <cctype>
@@ -28,6 +29,7 @@
 
 #include "llama.h"
 #include "ggml-backend.h"
+#include "hymt2_request_reset.h"
 
 #define LOG_TAG "SIGLlama"
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -40,9 +42,62 @@ static llama_model * g_model = nullptr;
 static llama_context * g_ctx = nullptr;
 static std::string g_last_error;
 static std::string g_backend_desc = "CPU";
+// DIAG rodada OpenCL (02/10): tempos por fase da carga + chave de runtime
+// debug.sig.hymt2.skip_probe (default 0 = comportamento de producao, com
+// sonda; 1 = pula a sonda p/ A/B controlado). Remover quando a rodada fechar.
+static bool g_skip_probe = false;
+static double g_probe_s = 0.0, g_model_s = 0.0, g_ctx_s = 0.0;
+
+// Contadores do backend OpenCL (ggml-opencl.cpp): upload/alocacao na carga.
+extern "C" double ggml_opencl_diag_set_s(void);
+extern "C" long long ggml_opencl_diag_set_calls(void);
+extern "C" long long ggml_opencl_diag_set_bytes(void);
+extern "C" double ggml_opencl_diag_alloc_s(void);
+extern "C" double ggml_opencl_diag_enq_s(void);
+extern "C" long long ggml_opencl_diag_enq_calls(void);
+extern "C" int ggml_opencl_diag_nb(void);
+extern "C" int ggml_opencl_diag_tnb(void);
+extern "C" int ggml_opencl_diag_dfr(void);
+extern "C" double ggml_opencl_diag_tr_s(void);
+extern "C" long long ggml_opencl_diag_tr_calls(void);
+extern "C" double ggml_opencl_diag_sb_s(void);
+extern "C" long long ggml_opencl_diag_sb_calls(void);
+extern "C" void ggml_opencl_diag_reset(void);
+
 static std::mutex g_summary_mutex;
 static std::string g_load_summary;   // linhas de memória/splits do último carregamento
 static std::string g_last_stats;     // "N tokens em X s (Y tokens/s)" da última geração
+// PROF (F9): segmentos de host do loop de geracao (sample/decode/detok).
+// Opt-in: debug.sig.hymt2.hostprof=1 (default 0 = stock; sem clock no loop).
+static bool g_hostprof = false;
+static long long g_hp_sample_us = 0, g_hp_decode_us = 0, g_hp_detok_us = 0;
+
+// PROF (F10): fases internas do decode (libllama) — opt-in decprof.
+extern "C" void sig_prof_set_enabled(int on);
+extern "C" void sig_prof_reset(void);
+extern "C" long long sig_prof_prep_us(void);
+extern "C" long long sig_prof_build_us(void);
+extern "C" long long sig_prof_compute_us(void);
+extern "C" long long sig_prof_total_us(void);
+extern "C" long long sig_prof_calls(void);
+extern "C" long long sig_prof_ubatches(void);
+
+// PROF (F12): micro-instrumento do backend OpenCL (graph_compute x enqueue).
+extern "C" void sig_sched_set_enabled(int on);
+extern "C" void sig_sched_reset(void);
+extern "C" void sig_sched_perop_reset(void);
+extern "C" long long sig_opencl_shim_calls(void);
+extern "C" long long sig_opencl_dlsym_calls(void);
+extern "C" void sig_opencl_counters_reset(void);
+extern "C" long long sig_sched_graph_us(void);
+extern "C" long long sig_sched_enq_us(void);
+extern "C" long long sig_sched_nodes(void);
+extern "C" long long sig_sched_enq_n(void);
+extern "C" long long sig_sched_perop_us(int op);
+extern "C" long long sig_sched_perop_n(int op);
+extern "C" const char * ggml_op_name(enum ggml_op op);
+static bool g_schedprof = false;
+static bool g_clcount  = false;
 
 /** Acrescenta uma linha qualquer ao resumo (ex.: VRAM do device). */
 static void summary_append_line(const std::string & line) {
@@ -262,16 +317,27 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
             env->ReleaseStringUTFChars(modelPath, path);
             return JNI_FALSE;
         }
-        // Sonda de inicialização: detecta driver ausente/quebrado ANTES de
-        // carregar os pesos (igual ao can_initialize_gpu_backend do whisper).
-        ggml_backend_t probe = ggml_backend_dev_init(dev, nullptr);
-        if (probe == nullptr) {
-            set_error("nao consegui inicializar " + std::string(backend_label(backendKind)) +
-                      ": " + device_name + "\n\ndiagnostico:\n" + backend_diagnostics());
-            env->ReleaseStringUTFChars(modelPath, path);
-            return JNI_FALSE;
+        // DIAG (rodada OpenCL): le a chave de runtime e mede a fase da sonda.
+        {
+            char prop_skip[16] = {0};
+            __system_property_get("debug.sig.hymt2.skip_probe", prop_skip);
+            g_skip_probe = (prop_skip[0] == '1');
         }
-        ggml_backend_free(probe);
+        auto t_probe0 = std::chrono::steady_clock::now();
+        if (!g_skip_probe) {
+            // Sonda de inicialização: detecta driver ausente/quebrado ANTES de
+            // carregar os pesos (igual ao can_initialize_gpu_backend do whisper).
+            ggml_backend_t probe = ggml_backend_dev_init(dev, nullptr);
+            if (probe == nullptr) {
+                set_error("nao consegui inicializar " + std::string(backend_label(backendKind)) +
+                          ": " + device_name + "\n\ndiagnostico:\n" + backend_diagnostics());
+                env->ReleaseStringUTFChars(modelPath, path);
+                return JNI_FALSE;
+            }
+            ggml_backend_free(probe);
+        }
+        g_probe_s = std::chrono::duration<double>(
+                        std::chrono::steady_clock::now() - t_probe0).count();
         static ggml_backend_dev_t devices[2] = { nullptr, nullptr };
         devices[0] = dev;
         devices[1] = nullptr;
@@ -286,6 +352,8 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
     // try/catch: o driver Adreno pode LANCAR (vk::SystemError) ao criar um shader —
     // sem catch isso vira SIGABRT e mata o app (visto no Ace 2 Pro, 25/09).
     llama_model * model = nullptr;
+    ggml_opencl_diag_reset();   // DIAG: zera contadores de upload/alocacao
+    auto t_load0 = std::chrono::steady_clock::now();
     try {
         model = llama_model_load_from_file(path, lparams);
     } catch (const std::exception & e) {
@@ -304,6 +372,8 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
         set_error("Falha ao carregar o modelo GGUF (arquivo corrompido ou formato nao suportado).");
         return JNI_FALSE;
     }
+    g_model_s = std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - t_load0).count();
 
     if (gpu_dev != nullptr) {
         size_t livre = 0, total = 0;
@@ -324,11 +394,20 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
     if (backendKind != 0) {
         cparams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
     }
+
+    // PROF (F6): medicao de perf do llama (no_perf=false) SOMENTE quando
+    // debug.sig.hymt2.prof=1; default = stock (no_perf=true, sem contadores).
+    {
+        char vprof[8] = {0};
+        __system_property_get("debug.sig.hymt2.prof", vprof);
+        cparams.no_perf = !(vprof[0] == '1');
+    }
     if (nThreads > 0) {
         cparams.n_threads = nThreads;
         cparams.n_threads_batch = nThreads;
     }
     llama_context * ctx = nullptr;
+    auto t_ctx0 = std::chrono::steady_clock::now();
     try {
         ctx = llama_init_from_model(model, cparams);
     } catch (const std::exception & e) {
@@ -347,6 +426,8 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
         set_error("Falha ao criar o contexto de inferencia.");
         return JNI_FALSE;
     }
+    g_ctx_s = std::chrono::duration<double>(
+                  std::chrono::steady_clock::now() - t_ctx0).count();
 
     if (g_ctx != nullptr) llama_free(g_ctx);
     if (g_model != nullptr) llama_model_free(g_model);
@@ -356,6 +437,27 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
     g_last_error.clear();
     LOGI("modelo carregado: backend=%s n_ctx=%u n_threads=%d",
          used_desc.c_str(), cparams.n_ctx, llama_n_threads(ctx));
+    // DIAG (rodada OpenCL): fases da carga no resumo do app (visivel no log)
+    // e no logcat. total = sonda + modelo + contexto (mesma fronteira do timer
+    // do app "Modelo carregado em Ls", que ainda inclui ~estes 3 passos).
+    {
+        char fases[420];
+        snprintf(fases, sizeof(fases),
+                 "Fases da carga: sonda=%.1fs modelo=%.1fs contexto=%.1fs total=%.1fs (skip_probe=%d) "
+                 "| upload=%.1fs em %lld chamadas (%.0f MiB) [enqueue=%.1fs/%lld; subbuf=%.1fs/%lld; tr=%.1fs/%lld; cpu=%.1fs; nb=%d; tnb=%d; dfr=%d] | alloc=%.1fs",
+                 g_probe_s, g_model_s, g_ctx_s,
+                 g_probe_s + g_model_s + g_ctx_s, g_skip_probe ? 1 : 0,
+                 ggml_opencl_diag_set_s(), ggml_opencl_diag_set_calls(),
+                 ggml_opencl_diag_set_bytes() / 1048576.0,
+                 ggml_opencl_diag_enq_s(), ggml_opencl_diag_enq_calls(),
+                 ggml_opencl_diag_sb_s(), ggml_opencl_diag_sb_calls(),
+                 ggml_opencl_diag_tr_s(), ggml_opencl_diag_tr_calls(),
+                 ggml_opencl_diag_set_s() - ggml_opencl_diag_enq_s() - ggml_opencl_diag_sb_s() - ggml_opencl_diag_tr_s(),
+                 ggml_opencl_diag_nb(), ggml_opencl_diag_tnb(), ggml_opencl_diag_dfr(),
+                 ggml_opencl_diag_alloc_s());
+        summary_append_line(fases);
+        LOGI("%s", fases);
+    }
     return JNI_TRUE;
 }
 
@@ -404,6 +506,18 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
     // try/catch: no Vulkan o driver pode lancar (vk::SystemError na criacao de
     // pipeline) durante a primeira decodificacao — sem catch vira SIGABRT.
     try {
+    // Isolamento de pedidos: o contexto é reutilizado entre traduções (sem
+    // recarga de pesos), então a memória KV/posição do pedido anterior deve
+    // ser limpa aqui — sob o MESMO g_mutex que protege inferência e release.
+    // Sem isso, llama_batch_get_one(pos=null) continua de seq_pos_max+1 e o
+    // pedido novo observa o anterior. Modelo/pesos permanecem carregados.
+    {
+        std::string reset_error;
+        if (!hymt2_begin_fresh_request(g_ctx, &reset_error)) {
+            set_error(reset_error);
+            return nullptr;
+        }
+    }
     const char * prompt_chars = env->GetStringUTFChars(prompt, nullptr);
     if (prompt_chars == nullptr) {
         set_error("Prompt invalido.");
@@ -458,6 +572,23 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
         return llama_decode(g_ctx, batch) == 0;
     };
 
+    // F17: schedprof habilitado/resetado ANTES do prefill => o snapshot pos-
+    // prefill captura a fase PREFILL de verdade (antes, o reset pos-prefill
+    // zerava tudo e [prefill] saia 0 por construcao).
+    {
+        char vs[8] = {0};
+        __system_property_get("debug.sig.hymt2.schedprof", vs);
+        const int on = (vs[0] == '1') ? 1 : 0;
+        g_schedprof = (on != 0);
+        sig_sched_set_enabled(on);
+        if (on) sig_sched_reset();
+    }
+    {
+        char vc[8] = {0};
+        __system_property_get("debug.sig.hymt2.clcount", vc);
+        g_clcount = (vc[0] == '1');
+        if (g_clcount) sig_opencl_counters_reset();
+    }
     int32_t n_batch = (int32_t) llama_n_batch(g_ctx);
     for (int32_t i = 0; i < n_prompt; i += n_batch) {
         int32_t chunk = n_prompt - i < n_batch ? n_prompt - i : n_batch;
@@ -468,12 +599,41 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
         }
     }
 
+    // PROF (F12): snapshot das contagens do backend apos o PREFILL — o delta
+    // ate' o fim da geracao = fase DECODE (loop) separada do prefill.
+    long long sig_pref_graph = 0, sig_pref_enq = 0, sig_pref_nodes = 0, sig_pref_enq_n = 0;
+    if (g_schedprof) {
+        sig_pref_graph = sig_sched_graph_us(); sig_pref_enq = sig_sched_enq_us();
+        sig_pref_nodes = sig_sched_nodes();     sig_pref_enq_n = sig_sched_enq_n();
+    }
+    if (g_schedprof) sig_sched_perop_reset();   // topops mede apenas a fase decode
+
     std::vector<char> piece(512);
     llama_token token = 0;
     int32_t n_out = 0;
+    {
+        char vh[8] = {0};
+        __system_property_get("debug.sig.hymt2.hostprof", vh);
+        g_hostprof = (vh[0] == '1');
+        g_hp_sample_us = g_hp_decode_us = g_hp_detok_us = 0;
+    }
+    {
+        char vd[8] = {0};
+        __system_property_get("debug.sig.hymt2.decprof", vd);
+        const int on = (vd[0] == '1') ? 1 : 0;
+        sig_prof_set_enabled(on);
+        if (on) sig_prof_reset();
+    }
     const auto geracao_inicio = std::chrono::steady_clock::now();
     for (int32_t i = 0; i < max_out; ++i) {
+        std::chrono::steady_clock::time_point hp0, hp1;
+        if (g_hostprof) hp0 = std::chrono::steady_clock::now();
         token = llama_sampler_sample(smpl, g_ctx, -1);
+        if (g_hostprof) {
+            hp1 = std::chrono::steady_clock::now();
+            g_hp_sample_us += std::chrono::duration_cast<std::chrono::microseconds>(hp1 - hp0).count();
+            hp0 = hp1;
+        }
         if (token == eos) break;
 
         int32_t n = llama_token_to_piece(vocab, token, piece.data(), (int32_t) piece.size(), 0, true);
@@ -487,10 +647,19 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
         }
         ++n_out;
 
+        if (g_hostprof) {
+            hp1 = std::chrono::steady_clock::now();
+            g_hp_detok_us += std::chrono::duration_cast<std::chrono::microseconds>(hp1 - hp0).count();
+            hp0 = hp1;
+        }
         if (!decode_tokens(&token, 1)) {
             llama_sampler_free(smpl);
             set_error("Falha ao decodificar o texto gerado.");
             return nullptr;
+        }
+        if (g_hostprof) {
+            hp1 = std::chrono::steady_clock::now();
+            g_hp_decode_us += std::chrono::duration_cast<std::chrono::microseconds>(hp1 - hp0).count();
         }
     }
 
@@ -504,6 +673,93 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
         snprintf(stats, sizeof(stats), "%d tokens em %.1f s (%.1f tokens/s)",
                  n_out, ms / 1000.0, tps);
         g_last_stats = stats;
+    }
+    // PROF (F6): perfil llama (prefill x decode) — gated por debug.sig.hymt2.prof
+    // (default 0 = stock). Contadores acumulam por contexto; o protocolo de medicao
+    // usa processo novo por run (leitura limpa).
+    {
+        char vp[8] = {0};
+        __system_property_get("debug.sig.hymt2.prof", vp);
+        if (vp[0] == '1') {
+            const llama_perf_context_data pd = llama_perf_context(g_ctx);
+            char perf[240];
+            snprintf(perf, sizeof(perf),
+                     "Perfil llama: load=%.0fms prefill=%.0fms (%d tok; %.2f tok/s) "
+                     "decode=%.0fms (%d tok; %.2f tok/s)",
+                     pd.t_load_ms, pd.t_p_eval_ms, pd.n_p_eval,
+                     pd.t_p_eval_ms > 0 ? pd.n_p_eval * 1000.0 / pd.t_p_eval_ms : 0.0,
+                     pd.t_eval_ms, pd.n_eval,
+                     pd.t_eval_ms > 0 ? pd.n_eval * 1000.0 / pd.t_eval_ms : 0.0);
+            summary_append_line(perf);
+            LOGI("%s", perf);
+        }
+    }
+    // PROF (F9): segmentos de HOST do loop (exclusivos: sample+detok+decode;
+    // GPU/device NUNCA comparado direto ao host — relatorio separado).
+    if (g_hostprof) {
+        const long long tot_us = g_hp_sample_us + g_hp_decode_us + g_hp_detok_us;
+        char hp[220];
+        snprintf(hp, sizeof(hp),
+                 "Host loop: sample=%.0fms detok=%.0fms decode_host=%.0fms | soma_segmentos=%.0fms (n=%d)",
+                 g_hp_sample_us / 1000.0, g_hp_detok_us / 1000.0, g_hp_decode_us / 1000.0,
+                 tot_us / 1000.0, n_out);
+        summary_append_line(hp);
+        LOGI("%s", hp);
+    }
+    // PROF (F10): fases internas do decode() — aninhadas: prep cobre as reservas
+    // antes do loop; build/compute por ubatch dentro de total; residual explicito.
+    if (sig_prof_calls() > 0) {
+        const long long prep = sig_prof_prep_us(), build = sig_prof_build_us();
+        const long long comp = sig_prof_compute_us(), tot = sig_prof_total_us();
+        char dp[240];
+        snprintf(dp, sizeof(dp),
+                 "Decode fases: prep=%.0fms build=%.0fms compute=%.0fms residual=%.0fms | total=%.0fms calls=%lld ubatches=%lld",
+                 prep / 1000.0, build / 1000.0, comp / 1000.0,
+                 (tot - prep - build - comp) / 1000.0, tot / 1000.0,
+                 sig_prof_calls(), sig_prof_ubatches());
+        summary_append_line(dp);
+        LOGI("%s", dp);
+    }
+    // PROF (F12): micro-split do backend OpenCL (grafo x enqueue por op).
+    if (g_clcount) {
+        char cc[160];
+        snprintf(cc, sizeof(cc), "OCL/shim: chamadas=%lld dlsym=%lld (pedido inteiro)",
+                 sig_opencl_shim_calls(), sig_opencl_dlsym_calls());
+        summary_append_line(cc); LOGI("%s", cc);
+    }
+    if (g_schedprof) {
+        const long long g_ = sig_sched_graph_us(), e_ = sig_sched_enq_us();
+        const long long n_ = sig_sched_nodes(),   en_ = sig_sched_enq_n();
+        char sp[300];
+        snprintf(sp, sizeof(sp),
+                 "Sched/OCL[prefill]: graph=%.0fms nodes=%lld enq=%.0fms (n=%lld)",
+                 sig_pref_graph / 1000.0, sig_pref_nodes, sig_pref_enq / 1000.0, sig_pref_enq_n);
+        summary_append_line(sp); LOGI("%s", sp);
+        snprintf(sp, sizeof(sp),
+                 "Sched/OCL[decode]: graph=%.0fms nodes=%lld enq=%.0fms (n=%lld) setup=%.0fms",
+                 (g_ - sig_pref_graph) / 1000.0, n_ - sig_pref_nodes,
+                 (e_ - sig_pref_enq) / 1000.0, en_ - sig_pref_enq_n,
+                 ((g_ - sig_pref_graph) - (e_ - sig_pref_enq)) / 1000.0);
+        summary_append_line(sp); LOGI("%s", sp);
+        // top-6 ops por tempo de NO (setup) acumulado (fase decode; reset por request)
+        char tp[380] = "Sched/OCL[topops]:";
+        int seen[6]; int nseen = 0;
+        for (int r = 0; r < 6; ++r) {
+            int best = -1; long long bv = 0;
+            for (int o = 0; o < 128; ++o) {
+                bool skip = false;
+                for (int k = 0; k < nseen; ++k) if (seen[k] == o) { skip = true; break; }
+                if (skip) continue;
+                if (sig_sched_perop_us(o) > bv) { bv = sig_sched_perop_us(o); best = o; }
+            }
+            if (best < 0 || bv <= 0) break;
+            seen[nseen++] = best;
+            char frag[72];
+            snprintf(frag, sizeof(frag), " %s=%.0fms/%lld",
+                     ggml_op_name((enum ggml_op) best), bv / 1000.0, sig_sched_perop_n(best));
+            strncat(tp, frag, sizeof(tp) - strlen(tp) - 1);
+        }
+        summary_append_line(tp); LOGI("%s", tp);
     }
     LOGI("geracao concluida: %d tokens de saida (backend=%s)", n_out, g_backend_desc.c_str());
     return env->NewStringUTF(result.c_str());

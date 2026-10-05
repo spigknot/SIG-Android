@@ -1,0 +1,131 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F9: MATCHED SAME-RUN, HOST INSTRUMENTADO
+Data: 03/10/2026. Repo: D:/Projetos/SIG (NADA commitado).
+Base: "PROMPT AO EXECUTOR — APOS F8: VALIDAR PERFIL E LOCALIZAR CUSTO HOST".
+Consentimento: usuario liberou o aparelho ("celular no adb, pode continuar") para
+a continuacao da ativacao temporaria (profH) — backup/readback/rollback aplicados.
+Aparelho: CPH2747 via USB 3B15BD00FVE00000 (wireless caiu 2x; USB estavel).
+
+================================================================================
+ESTADOS
+================================================================================
+[CCE] Host instrumentado (profH a072cdc6, opt-in hostprof) e EXECUTADO no device
+[CCE] Perfil MATCHED same-run/mesmo artefato: OCL x VK, curto x mais_longo,
+      com saidas CANONICAS por backend (sha conferido em todos)
+[CCE] Retificacoes A/E aplicadas (residual virou BOUND; P1 = teto teorico)
+[CCE] Auditoria do CSV/trace (completo-por-lote / truncado declarados)
+[CCE] Rollback concluido (9698670c + UI Q4_K_M+Vulkan+Portugues; chaves zero)
+[PENDENTE: consentimento] proxima instrumentacao (dentro do llama_decode) se
+      quisermos separar dispatch x wait x GPU sem o CL profiling
+
+================================================================================
+A. RETIFICACOES APLICADAS
+================================================================================
+A1. A comparacao Vulkan agora e' MATCHED de verdade: MESMO artefato (profH),
+    MESMA fronteira (llama_perf), MESMA sessao/protocolo, saidas canonicas
+    conferidas por backend. O "1,7x" anterior (fronteiras diferentes) fica
+    SUPERADO por: curto OCL 18,8 t/s vs VK 44,3 t/s; longo OCL 18,7 vs VK 31,5.
+A2. O residual de 56% (F8) era ESTIMATIVA ENTRE EXECUCOES e esta' ainda
+    contaminado: o run profB3 (mesmo run do CSV) mostrou decode=15.805ms com o
+    CL profiling LIGADO vs 7.555-8.397ms desligado => o profiling infla o wall
+    (~1,9x). O CSV deixa de ser "particao" e passa a BOUND: exec de kernel
+    medida SOB instrumentacao; o wall limpo e' o do profH.
+A3. Prefill: corrigido o "so' curto" — medido TAMBEM no mais_longo: OCL 1.579ms
+    (942 tok; 596 t/s) vs VK 16.952ms (56 t/s) => OCL prefill ~10x mais rapido;
+    prefill segue pequeno vs decode em AMBOS os backends.
+A4. Host do loop (NOVO, same-run): `Host loop: sample=Xms detok=Yms
+    decode_host=Zms | soma_segmentos=Wms (n)`. Segmentos EXCLUSIVOS (sample,
+    detok, decode sao sequenciais; sem aninhamento). O "decode_host" = a chamada
+    llama_decode inteira (dispatch + GPU + wait) — NAO e' tempo so' de host;
+    a separacao GPU/host exige a instrumentacao interna (pendencia D2).
+A5. P1 (E do parecer): aceito integralmente — 733,9ms e' 20% do TEMPO DE KERNEL,
+    nao da latencia; 5,2ms de 59,1ms/token => <9% do wall; eliminacao = limite
+    teorico; reducao 50% => teto ~4,4% do wall. Prioridade real = o custo maior.
+
+================================================================================
+B. VALIDACAO DE FASES E INTEGRIDADE
+================================================================================
+B1. CSV (parser real): 100.352 linhas, 6 campos em TODAS, ultimo byte LF, ultima
+    linha completa => arquivo = ULTIMA ESCRITA DE LOTE COMPLETA. Declarado:
+    escrita por lote (>=2048 kernels) => cauda <=2047 kernels apos o ultimo
+    flush NAO esta' no arquivo (parcial no tail, documentado). Trace: TRUNCADO
+    no meio (kill), declarado parcial; CSV = fonte primaria.
+B2. Recorrencia ~141: mantida como classificacao INFERIDA (nomes de op podem
+    repetir entre fases); a confirmacao vem do same-run: n=142 tokens no Perfil
+    vs 142 chamadas de result_output; a convencao 142 stats vs 141 chamadas
+    observada em F8 era o ultimo token (EOG) sem op de saida — explicado por
+    contagem efetiva, nao por erro.
+B3. Singleton/refcount: lifetime final REAL nao depende mais do free (write por
+    lote, FLUSH FINAL explicito em cada lote cheio; sem waits por kernel, sem
+    recriar contexto). Nao foi adicionado wait por op (o custo do CL profiling
+    E' o preco do trace; quantificado: ~1,9x no wall).
+B4. Impacto do profiling medido (OFF/ON, builds distintas, mesmo protocolo):
+    decode OCL curto 7.555ms (profH, OFF) vs 15.805ms (profB3, ON).
+
+================================================================================
+C. PROBE NATIVO (v2 falha x v3 PASS — separados)
+================================================================================
+C1. v2 (5e86f0e7): FALHOU em 1 caso porque o shape nao atingia o gate real
+    (ne0>=512 E ne1>=512) — comportamento correto do teste; recompilado.
+C2. v3 (cf53c1d3): PASS 16/16 rc=0. Tabela por caso (shape|tipo|esperado|
+    tr_delta|igualdade|rc):  q8_0 2048x512 tr=2 | q8_0 4096x512 tr=2 |
+    q8_0 2048x1024 tr=2 | q4_K 2048x512 tr=6 | q4_K 4096x1024 tr=6 |
+    ctrl q8_0 2048x64 tr=0 | ctrl f32 2048x80 tr=0 — TODOS com igualdade EXATA
+    no readback e determinismo 2x; ciclo free/re-init estavel.
+C3. Escopo: 16 casos validados NESTE target (Adreno 840/OpenCL 3.0) — nao
+    Android-wide. O contador prova o CAMINHO do transpose, nao o guard
+    non-blocking por si; a variante efetiva do guard (in-order -> non-blocking)
+    foi a dos build de teste (fila IN-ORDER confirmada; mesma mecanica do
+    artefato aceito F3b). Teste reproduzivel no repo (harness + runner +
+    mutacao do helper real no teste de host).
+
+================================================================================
+D. PRIORIDADE TECNICA (corrigida) E O QUE FOI MEDIDO
+================================================================================
+D1. Corrigido: NAO se condiciona mais o host a falha do P1. O host foi medido
+    DIRETO (profH):
+      curto OCL: sample=110ms(0,77ms/tok; 1,4%) detok~0 decode_host=7.554ms
+      longo OCL: sample=1.113ms(0,75ms/tok; 1,4%) detok=1ms decode_host=79.626ms
+      curto VK : sample=101ms(0,71ms/tok; 3,2%) detok~0 decode_host=3.204ms
+      longo VK : sample=4.192ms(2,84ms/tok; 9,0%) detok=2ms decode_host=46.752ms
+    => fora do llama_decode, o loop so' gasta ~1,5-5% (sample) + detok~0. O
+    custo esta' DENTRO do llama_decode (dispatch+GPU+wait) — a separacao fina
+    (enqueue x wait x exec) exige instrumentacao INTERNA do backend/JNI
+    (proximo passo, consentimento).
+D2. Proximo instrumento proposto (local, leve): timers em volta de (a) montagem
+    do grafo, (b) submit por nos, (c) espera de conclusao; clock host; relatar
+    inclusivo/exclusivo; sem wait adicional; default OFF.
+D3. P1 (lm_head) como experimento secundario: ja inspecionado o gating
+    (use_flat_gemv_for_large_m_q6_K, ne[1]>=32768 -> flat; senao noshuffle);
+    preparavel localmente com probe numerico independente dos shapes reais
+    (logits finitos, tolerancias) + A/B alternado no MESMO artefato — NAO
+    executado (prioridade = residual maior, acima).
+
+================================================================================
+E. TABELA FINAL MATCHED (same artefato profH; mesma sessao; saidas canonicas)
+================================================================================
+run       | load  | prefill                | decode                 | sample/tok | sha saida
+Q4 curto OCL | 5.791 |   223ms (119t; 533 t/s)|  7.555ms (142t; 18,8 t/s)| 0,77ms | 084f12f4 (canonico)
+Q4 longo OCL | 6.323 | 1.579ms (942t; 596 t/s)| 79.633ms (1485t; 18,7 t/s)| 0,75ms | 4d51e74f (canonico)
+Q4 curto VK  | 5.692 | 3.561ms (119t;  33 t/s)|  3.204ms (142t; 44,3 t/s)| 0,71ms | 084f12f4 (canonico)
+Q4 longo VK  |18.087 |16.952ms (942t;  56 t/s)| 46.731ms (1474t; 31,5 t/s)| 2,84ms | 5f80d9b9 (=historico VK)
+Q8 curto OCL |  n/d  |   n/d                  |   n/d                  |  n/d   | d36a3315 (canonico, journal)
+Observacao honesta: o CURTO gera saida identica nos 3 backends; no LONGO cada
+backend tem o seu canonico (contagem de tokens difere: 1485 OCL vs 1474 VK) —
+comparacao de QUALIDADE entre backends no longo exige revisao manual, nao sha.
+
+================================================================================
+F. EXECUCAO (consentimento recebido + protocolo) E G
+--------------------------------------------------------------------------------
+F1. Consentimento registrado (mensagem do usuario: liberou o celular no adb).
+    Deploy profH (USB) com readback; props {prof=1, hostprof=1}; 8 runs
+    (contagens: 5 validos canonicos + 1 sem linha Perfil [Q8] + 2 refusados por
+    env do instrumento [parcialmente refeitos]; tentativas totais 10, invalidos
+    de protocolo 3, todos preservados). rollback12 + limpeza + UI restaurada.
+G1. Artefatos/logs: profH a072cdc6... (95.965.144 B); logs novos em
+    logs-rodada-opencl/: profH_ciclo.log, profH_ciclo2.log, profH_ciclo_pt.log,
+    profH_ciclo_pt2.log, f9_profiling_matched.txt, deploy_profH*.txt,
+    rollback12_9698670c.txt; fontes profH/backups em scratch.
+G2. Manifesto regenerado (count/exist/size/sha/dedupe por Python; 0 erros).
+G3. Causalidade: carga F3b validada na amostra; perfil de inferencia agora com
+    MATCHED same-run e host medido; a separacao GPU-vs-host DENTRO do
+    llama_decode segue PENDENTE de instrumentacao interna (proximo passo).

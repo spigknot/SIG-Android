@@ -1,0 +1,113 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F15: DESIGN DO SEAM (dlsym/op) + VACINAS
+Data: 04/10/2026. Repo: D:/Projetos/SIG (NADA commitado). Local apenas; nada ativado.
+Base: parecer "DESIGN LOCAL FOCADO, SEM CONFUNDIR REGIAO COM CAUSA".
+
+================================================================================
+A. RETIFICACOES (item 1 do parecer)
+================================================================================
+A1. Top-6 run1 = 91,92% do graph (sustentado); "610" era a SOMA APROXIMADA das
+    chamadas do TOP-6, NAO o total de ops/token; nodes=182470 inclui demais nos,
+    prefill e nos sem exec/views.
+A2. O reset-por-request NAO separa prefill/decode: na profS2/3 o reset roda
+    DEPOIS do prefill (ordem no JNI) => a linha [prefill] sai 0 por construcao e
+    o prefill nao e' capturado. Correcao simples mapeada (mover o reset para
+    ANTES do decode do prompt) para o proximo build; tratado como LACUNA ate' la.
+A3. Q8: saida canonica NAO substitui numeros topops ausentes — o Q8 segue
+    PENDENTE de linha sched/topops (lacuna declarada).
+A4. F14 dizia "setup 84%" uniforme: os valores reais sao 76,16% (run1) e 83,05%
+    (run2) — corrigido. Per-op timing INCLUI o enqueue do op: nao chamar os
+    2733ms do MUL_MAT de "setup exclusivo"; a reconciliacao por-op
+    (op_total/enqueue/restante) fica como pendencia de instrumentacao (nao
+    inferida).
+A5. Custo remanescente pode incluir clSetKernelArg bloqueante, copies/sync/
+    subbuffers/alloc/config/bookkeeping/IO — nao se afirma "CPU config puro";
+    nao se exclui kernel-GPU lento apenas por regioes de host. Sem
+    "diagnostico FINAL": a conclusao e' "rotas dominantes localizadas; causa
+    precisa e ganho de cache ainda nao demonstrados".
+A6. Variacao enqueue 1543 vs 984ms entre runs = registrada; overhead de
+    profiler matched OFF/ON existe para schedprof (F13: ~ruido) e fica como
+    LACUNA para as demais instrumentacoes ligadas nos dois bracos (prof/
+    hostprof/decprof sempre ON no piloto).
+
+================================================================================
+B. DESIGN — O SEAM ENCONTRADO (evidencia de CODIGO + numeros)
+================================================================================
+B1. MECANISMO (nao eliminacao): `android-opencl-loader.cpp` implementa TODAS as
+    funcoes CL como shims dlsym — e `load_opencl_fn<Fn>(name)` faz
+    `dlerror(); dlsym(handle, name);` a CADA chamada, SEM cache (citacao do
+    codigo preservada no relatorio). O backend OpenCL chama o shim para TODO
+    clSetKernelArg/clEnqueueNDRangeKernel/etc.
+B2. CONTAS DA REGIAO (das rotas medidas; ordem de grandeza):
+    - RMS_NORM: ~8 clSetKernelArg + 1 enqueue + checks por op;
+    - MUL_MAT: selecao de kernel + ~6-10 setargs + config + enqueue;
+    - ~610 ops/token medidas (top6) => ~6.000 chamadas via shim/token;
+    - o `setup` medido (~39ms/token; 76-84% do graph) e' COMPATIVEL em ordem de
+      grandeza com ~6.000 dlsym (~3-6us cada) — HIPOTESE quantitativamente
+      sustentada, ainda NAO medida item a item (pendencia de medicao direta).
+B3. SEAM PROPOSTO (unico; imutavel; puro): cache do SIMBOLO no proprio
+    `load_opencl_fn` — `static Fn cached` POR INSTANCIACAO (Fn distinto por
+    funcao CL => 1 resolucao por simbolo por processo). Justificativa de
+    ownership/lifetime: o handle e' `dlopen` process-lifetime (nunca fechado);
+    nao ha invalidacao (reload/free/context/shape/strides nao mudam simbolos);
+    falhas NAO sao cacheadas (retry/relato identicos); corrida dupla-benigna
+    (mesmo valor) em multithread; fallback = comportamento original.
+B4. DESCARTES (nao fazer): (i) cache de ARGS de kernel em kernels
+    compartilhados (estado mutavel; exigiria prova de validade por contexto/
+    buffer/lifetime/concorrencia — REJEITADO por ora); (ii) omitir setargs por
+    "identidade" de shape (sem prova); (iii) fusao ampla de ops / fastmath /
+    sampler como atalho (fora de escopo); (iv) cache de handles de buffer por
+    endereco (handle reciclado nao valida identidade).
+B5. GANHO ESPERADO: nao prometido; o A/B quantifica. Teto teorico = parcela do
+    dlsym dentro do setup (a medicao direta do custo de dlsym no device e' uma
+    das pendencias; o A/B loadercache vs 9698670c e' o teste decisivo).
+
+================================================================================
+C. TESTES REAIS EXECUTADOS (local; comandos/rc)
+================================================================================
+C1. Cache do loader — RED/GREEN + MUTACAO (fixtures no repo):
+    native-dependencies/harness/fixtures/loader_cache/ + run_loader_cache_test.sh
+    RESULTADO: RED (loader ORIG) = 4 dlsym p/ 2+2 chamadas; GREEN (PATCHED) =
+    2 dlsym (1/simbolo); MUTACAO (cache desligado) = detectada; exit 0.
+C2. Artefato do A/B: `libsig_llama_loadercache.so` sha256
+    290a6a0ba0c5be4fb68b97473051a21af9021d6f7c560aa5836b379b89bcc7e1
+    (95.924.464 B) — WIP + loader patch (sem outras mudancas nesta rodada).
+    Ninja rc=0. Default de produto INALTERADO (artefato isolado).
+
+================================================================================
+D. VACINA F13 (incidente + gate fail-closed; item 4 do parecer)
+================================================================================
+D1. RESUMO DO INCIDENTE (sem inventar): no rollback do profS2, o PUSH falhou
+    ("failed to read copy response: EOF") e o comando seguinte executou `cp` de
+    um arquivo de 0 bytes SOBRE a lib (cp de vazio trunca o destino) => lib com
+    0 bytes. ALVO ATINGIDO: libsig_llama.so do app (nao o aparelho todo).
+    DETECCAO: readback pos-cp (sha e3b0c44... = vazio). RECUPERACAO: copia
+    valida rb13 (95.613.928 B) preservada no device foi recopiada; readback OK;
+    app abriu; UI restaurada. DADOS AFETADOS: nenhum dado de usuario/modelo;
+    metricas daquele rollback INVaLIDAS (o run pos-recuperacao validou de novo).
+D2. GATE FAIL-CLOSED (novo, no repo): `native-dependencies/harness/safe_deploy.sh`
+    — aborta ANTES de tocar o destino se: fonte ausente/<1MB/sha errado; push
+    rc!=0; tmp do device divergente (size/sha) — e exige readback exato apos o
+    cp. Testes mock (sem device): `safe_deploy_test.sh` — 5/5 PASS, incluindo a
+    REPRODUCAO do caso "push truncado" que BLOQUEIA o cp (vacina ativa) e o
+    caso "sha divergente no destino" detectado no readback.
+D3. Backups mantidos (rb11..rb15 no device + copias locais); nenhum foi apagado.
+
+================================================================================
+E. PEDIDO DE CONSENTIMENTO (unico, para o A/B do seam)
+================================================================================
+Ativar TEMPORARIAMENTE o `loadercache` (via safe_deploy.sh — o proprio gate —
+com readback; rollback para 9698670c pelo mesmo protocolo) e rodar o A/B:
+- Q4 curto OCL: 9698670c x loadercache alternado (2+2) — decode/prefill/graph/
+  enq/setup quando aplicavel + saidas fullhash;
+- depois Q4 mais_longo (1+1) e Q8 curto (1+1) nas rotas afetadas.
+Criterios: numerico/quality/lifetime OK => manter medicao; qualquer falha =>
+interromper e reverter. Sem fastmath/EOG/sampler; sem repetir baseline24.
+
+================================================================================
+F. ESTADO
+================================================================================
+- Device: 9698670c + UI Q4_K_M/Vulkan/Portugues (segundo o executor; conferir no
+  proximo precheck). WIP preservado; manifesto regenerado por Python.
+- Pendencias: (i) A/B do loadercache (consentimento); (ii) medicao direta do
+  custo dlsym no device; (iii) fix da ordem do reset (prefill) para o proximo
+  build; (iv) Q8 topops; (v) reconciliacao por-op (op_total/enqueue/restante).

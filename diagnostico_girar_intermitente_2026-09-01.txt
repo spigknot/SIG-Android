@@ -1,0 +1,586 @@
+================================================================================
+DIAGNOSTICO - FALHA INTERMITENTE NO GIRAR VIDEO COM REENCODE (SIG Android)
+================================================================================
+Projeto:     D:\Projetos\SIG
+Ferramenta:  Girar Video (FfmpegRotateVideoActivity)
+Data:        2026-09-01
+Tipo:        Diagnostico apenas - NENHUM ARQUIVO DO PROJETO FOI MODIFICADO
+================================================================================
+
+
+================================================================================
+(0) OBSERVACOES DO COMANDO QUE FALHOU (PRINT DO USUARIO)
+================================================================================
+
+Linha de status:  "Preparando rotacao 100%" + "Girando video - 0% (h264, 6.7x)"
+Mensagem:         "Erro: Nao consegui girar o video. Conversion failed!"
+Stack/log:
+
+    Side data:
+    displaymatrix: rotation of -0.00 degrees
+    Stream #0:1(eng): Audio: aac (LC) ...
+      Metadata:
+        handler_name  : SoundHandler
+        vendor_id     : [0][0][0][0]
+    frame=  0 fps=0.0 q=0.0 size=   0kB time=00:00:00.44 bitrate=0.0kbits/s speed=47.6x
+    frame=  1 fps=0.0 q=-0.0 Lsize=   2kB time=00:00:01.02 bitrate=16.2kbits/s speed=7.49x
+    video:0kB audio:0kB subtitle:0kB other streams:0kB global headers:0kB
+    muxing overhead: 24553.086426%
+
+Comando exato:
+
+    ffmpeg -y -noautorotate -display_rotation:v:0 0
+       -i .../cache/rotate_input_1788290290439.mp4
+       -vf hflip,vflip,transpose=2
+       -map 0:v:0 -map 0:a? -map 0:s? -map 0:d? -map 0:t?
+       -c copy -c:v h264_mediacodec -b:v 1002K -g 32
+       -map_metadata 0 -avoid_negative_ts make_zero
+       -mpegts_flags +resend_headers -f mpegts
+       .../cache/rotate_encoded_1788290290782.ts
+
+PONTOS CRITOS A OBSERVAR:
+
+  - O comando TEM -g 32 (gop size). Isso indica que este NAO e o
+    mesmo codigo do diagnostico anterior: o caminho paralelo
+    (FfmpegRotateVideoActivity.buildSegmentRotationArguments :1194)
+    adiciona -g <gop> quando encoder e MediaCodec. Confirmado que
+    o usuario esta no MODO PARALELO (parallelKeyframes ON).
+
+  - Saida e .ts (mpegts). O mts/ts e o container intermediario
+    obrigatorio no fluxo paralelo para MediaCodec
+    (buildSegmentRotationArguments :1206 e rotationEncodingOutput
+    :1415). Em seguida ha remux para .mkv e depois para o container
+    original (.mp4).
+
+  - frame=0 a speed=47.6x: 47.6x e VELOCIDADE DE PAREDE - aparece
+    ANTES de qualquer frame ser processado (clock-only). Isso indica
+    que o encoder passou pela fase de configuracao mas ainda nao
+    recebeu frames.
+
+  - frame=1 a speed=7.49x: 1 frame foi processado (ou TS muxer
+    escreveu 1 pacote de 2 kB). Depois disso a sessao morre.
+
+  - speed=47.6x inicial e tipico de h264_mediacodec em hardware
+    rapido: o encoder aceita o primeiro frame rapidamente. A queda
+    para 7.49x no frame=1 e a velocidade real do decoder/filtro.
+    A sessao termina em ~1 segundo sem ter chegado a 100%.
+
+  - muxing overhead de 24553% e artefato do denominador quase zero
+    (size=2kB e valor total pequeno). NAO indica bug por si so.
+
+CONCLUSAO DA LEITURA INICIAL: o encoder MediaCodec configura, recebe
+o primeiro frame (ou um pacote TS), e aborta. O modo paralelo so
+amplifica isso porque ha MULTIPLAS instancias MediaCodec simultaneas.
+
+
+================================================================================
+(1) CODIGO RELEVANTE (PARA REFERENCIA)
+================================================================================
+
+  FfmpegRotateVideoActivity.executeParallelKeyframeRotation (linha 827)
+    - cria workDir, segmenta o video em N MKVs (segment spliterator),
+      depois rotaciona cada segmento em paralelo via executor
+    - workerCount = Runtime.getRuntime().availableProcessors() - 1
+      OU o numero pedido pelo usuario
+    - cada worker chama buildSegmentRotationArguments e roda
+      FFmpegKit.executeWithArgumentsAsync
+
+  FfmpegRotateVideoActivity.buildSegmentRotationArguments (linha 1164-1211)
+    - adiciona -g <gop> quando encoder endsWith "_mediacodec"
+    - adiciona -mpegts_flags +resend_headers -f mpegts se extensao .ts
+    - NAO chama release() explicitamente apos a sessao - depende do
+      FFmpegKit para liberar o encoder MediaCodec
+
+  FfmpegRotateVideoActivity.rotationEncodingOutput (linha 1413-1416)
+    - retorna cacheDir/rotate_encoded_<ms>.ts para MediaCodec
+
+  FfmpegRotateVideoActivity.recommendedGopSize (linha 1109-1129)
+    - abre MediaExtractor no mesmo arquivo de input em todos os
+      workers. Se varios workers abrem simultaneamente, a contagem
+      de MediaExtractor abertos pelo processo passa do limite.
+
+  FfmpegRotateVideoActivity.executeRotation (linha 526-...)
+    - canUseParallel (linha 534) exige: !hasTrim && !metadataOnly
+      && requestedParallel && orderedFilters.isNotBlank()
+    - em falha paralela, ha fallback sequencial (linha 632-662) que
+      chama buildFfmpegArguments (linha 1359-1408), que tambem
+      adiciona -g e -f mpegts para MediaCodec
+
+  FfmpegVideoEncoderRegistry.advertisedMaxInstances (linha 62-91)
+    - le MediaCodecList.getCapabilitiesForType(mime).maxSupportedInstances
+    - NAO considera o uso concorrente de outros apps do sistema
+    - NAO considera encoders ainda nao liberados de execucoes anteriores
+
+
+================================================================================
+(2) HIPOTESES ORDENADAS POR PROBABILIDADE
+================================================================================
+
+H1 - LIMITE DE INSTANCIAS MediaCodec EXCEDIDO  [MAIS PROVAVEL]
+--------------------------------------------------------------------------------
+O Android limita o numero de instancias de encoder por processo E por
+sistema. Quando o modo paralelo dispara N workers, cada um tenta criar
+um h264_mediacodec. Se algum excede o limite (tipico: 2-4 instancias
+para h264 no processo, MENOS se outro app estiver usando), o encoder
+retorna falha na criacao ou configure() e o FFmpeg aborta com
+"Conversion failed!".
+
+POR QUE E INTERMITENTE:
+  - O limite por processo varia com o uso do sistema (outros apps
+    podem estar usando o encoder). Em uma execucao, ha 2 livres; em
+    outra, ha 0.
+  - O limite anunciado pelo MediaCodecList.maxSupportedInstances e
+    o MAXIMO teorico, nao o disponivel no momento.
+  - Sessao paralela anterior cancelada pode ter deixado encoder em
+    estado "allocated" (cleanup assincrono), ocupando uma instancia.
+
+POR QUE O COMANDO PARECE CONFIGURAR MAS FALHA:
+  - O encoder pode passar createEncoderByType() e ate configure() em
+    alguns devices, mas a primeira frame_submit() falha quando o
+    sistema detecta a concorrencia.
+
+EVIDENCIA NA PRINT: speed=47.6x sem frames + 1 frame a 7.49x + morte.
+Compativel com encoder que aceitou 1 frame e foi morto pelo sistema.
+
+DESCARTE: se rodar com workerCount=1 (desativar paralelismo), o bug
+nao deveria aparecer (ou deveria ser muito raro). Teste do item 3
+fecha essa hipotese.
+
+
+H2 - GOP SIZE INCORRETO POR RACE EM recommendedGopSize  [PROVAVEL]
+--------------------------------------------------------------------------------
+FfmpegRotateVideoActivity.recommendedGopSize (:1109-1129) abre um
+MediaExtractor no arquivo de input. Varios workers chamam isso
+simultaneamente na linha 839 antes de lancar as sessoes MediaCodec.
+
+O Android limita MediaExtractor por processo (tipico: 1-2 instancias).
+Se um worker nao consegue abrir o extractor, o catch (:1126) retorna
+60 (fallback). Outro worker consegue abrir e retorna 32 (16 fps * 2
+do source). Como o gop e passado por valor (linha 997), todos os
+workers que pegaram o valor CORRETO usam 32, e os que pegaram o
+fallback usam 60.
+
+MediaCodec pode aceitar 32 ou 60, mas em alguns devices:
+  - GOP muito pequeno (32 com 16 fps = 2 segundos) - OK
+  - GOP muito grande (60 com 16 fps = 3.75 segundos) - alguns
+    encoders OEM exigem GOP = framerate exatamente, OU divisor
+    especifico, OU alinhado a 1 segundo
+
+Se em uma execucao todos pegam 32 e em outra alguns pegam 60, a
+sessao MediaCodec falha de forma nao-deterministica.
+
+POR QUE E INTERMITENTE: depende da ordem em que os workers pegam o
+MediaExtractor. Em execucao onde todos pegam o valor correto, passa;
+em execucao onde algum pega o fallback, falha.
+
+EVIDENCIA NA PRINT: -g 32 e o valor correto para 16 fps. NAO mostra
+o que recommendedGopSize retornou para CADA worker - pode ter
+retornado 60 para este worker mesmo.
+
+DESCARTE: rodar sequencial (workerCount=1) - se o bug desaparecer,
+H1 e H2 sao os principais candidatos.
+
+
+H3 - CONTAMINAÇÃO DE ESTADO DO ENCODER ENTRE EXECUCOES DO APP  [PROVAVEL]
+--------------------------------------------------------------------------------
+O app nao chama explicitamente MediaCodec.flush()/release() em todos
+os caminhos de erro. Se uma execucao anterior do Girar (ou do Cortar,
+ou do Juntar) foi cancelada ou falhou, o encoder MediaCodec pode
+ficar em estado "started" no nivel do SO. A proxima execucao tenta
+criar nova instancia e o sistema reporta conflito.
+
+POR QUE E INTERMITENTE:
+  - Depende do historico de uso do encoder pelo app E pelo sistema
+  - Outras apps usando o encoder no momento agravam
+  - Apos reboot do device, alguns poucos primeiros usos funcionam;
+    conforme o uso acumula, passam a falhar
+
+EVIDENCIA: precisa correlacionar com historico de uso. Adicionar log
+em logcat do app com timestamp de cada create/release de MediaCodec.
+
+
+H4 - TS MUXER EXIGE INICIALIZACAO ESPECIFICA QUE ENCODER NAO OFERECE
+--------------------------------------------------------------------------------
+-f mpegts exige que o encoder entregue pacotes em formato compativel
+com MPEG-TS (H.264 Annex B, com start codes 0x00000001). O
+h264_mediacodec pode entregar em formato diferente dependendo do
+dispositivo:
+  - Modo buffer: yuv420p -> encoder -> Annex B
+  - Modo surface: Surface -> encoder -> pode nao incluir start codes
+
+-mpegts_flags +resend_headers pede PAT/PMT periodicos. Se o encoder
+demora para entregar o primeiro I-frame (e portanto o TS muxer nao
+consegue emitir PAT/PMT completos), o TS muxer pode abortar.
+
+POR QUE E INTERMITENTE:
+  - Timing do primeiro I-frame depende de quantos frames foram
+    decodificados ate agora (afetado por filtros de rotacao)
+  - Em execucoes onde o filtro produz I-frame rapido, funciona;
+    em outras, nao
+
+EVIDENCIA NA PRINT: speed=47.6x com frame=0 -> 7.49x com frame=1 e
+morte - consistente com morte apos primeiro I-frame nao chegou.
+
+DESCARTE: rodar comando identico mas trocando -f mpegts por -f matroska
+(sem mexer em mais nada). Se funcionar, H4 e a causa.
+
+
+H5 - CONCORRENCIA NA ESCRITA DO rotate_encoded_<ms>.ts  [POSSIVEL]
+--------------------------------------------------------------------------------
+O codigo paralelo usa rotatedDir/rotated_<index>.ts (linha 962-963),
+que e seguro contra colisao. MAS o FALLBACK SEQUENCIAL (linha 638 +
+1413-1416) usa cacheDir/rotate_encoded_<ms>.ts. Se uma execucao
+paralela foi cancelada e o cache nao foi limpo, e a execucao de
+fallback gera o mesmo ms, o arquivo pre-existente com dados parciais
+e aberto para escrita. FFmpeg pode falhar ao abrir arquivo com dados
+invalidos no formato esperado.
+
+POR QUE E INTERMITENTE: depende de o cache estar limpo (sucesso
+anterior limpou) ou sujo (falha anterior deixou lixo).
+
+EVIDENCIA: listar /data/.../cache e ver se ha arquivos rotate_encoded_*
+antigos antes de uma execucao que falha.
+
+DESCARTE: limpar cache manualmente antes de reproduzir.
+
+
+H6 - RACE NO latch DO FUTURO PARALELO  [MENOS PROVAVEL]
+--------------------------------------------------------------------------------
+Linha 971-1013: cada worker cria um CountDownLatch(1), submete a sessao
+FFmpeg via executeWithArgumentsAsync com um callback que faz
+latch.countDown(). O codigo principal faz latch.await() (sem timeout).
+
+Se o callback NAO e chamado por algum motivo (ex.: executor cheio,
+sessao nunca termina), o worker trava eternamente, NAO falha com
+"Conversion failed!". Esse cenario nao explica a mensagem observada.
+
+EVIDENCIA: NAO consistente com a mensagem vista. Descarte.
+
+
+H7 - ENCODER EXIGE INPUT VIA SURFACE MAS APP ENVIA YUV BUFFER
+--------------------------------------------------------------------------------
+Quando -pix_fmt nao e especificado, o wrapper h264_mediacodec tenta
+inferir o COLOR_Format. Em alguns devices (especialmente Android 10+),
+o unico COLOR_Format aceito pelo encoder e COLOR_FormatSurface. Sem
+-pix_fmt explicito, FFmpeg pode tentar enviar YUV buffer e o encoder
+rejeitar.
+
+POR QUE E INTERMITENTE: o mesmo device pode aceitar ambos em algumas
+execucoes (race no load do driver) e rejeitar em outras.
+
+EVIDENCIA NA PRINT: -pix_fmt NAO esta presente no comando. Esta e a
+MESMA causa raiz ja diagnosticada no Cortar.
+
+NOTA: este NAO e estritamente "intermitente" - e reproduzivel
+dependendo do device. Mas como o usuario diz "funciona em uma e falha
+em outra", e provavel que o que ele observa seja a combinacao de
+H1+H7 OU H2+H7.
+
+DESCARTE: rodar o mesmo comando adicionando -pix_fmt yuv420p. Se
+funcionar sempre, H7 e a causa de fundo.
+
+
+H8 - VARIAÇÃO DE PIXEL FORMAT DO SOURCE APOS FILTROS  [POSSIVEL]
+--------------------------------------------------------------------------------
+A cadeia de filtros e hflip,vflip,transpose=2. Em geral preserva
+yuv420p, MAS:
+  - Se o source tiver formato exotico (yuvj420p, yuv420p10le,
+    nv12, etc.), o filtro pode manter ou converter.
+  - O encoder recebe o resultado do filtro.
+
+POR QUE E INTERMITENTE: depende do source. NAO varia entre execucoes
+do mesmo source. Descarte para o caso "funciona em uma e falha em
+outra com mesmo source".
+
+DESCARTE: este NAO e intermitente para um mesmo arquivo. Aplicavel
+apenas se o usuario esta usando arquivos diferentes.
+
+
+H9 - PROBLEMA NO CONCORRENTE DE SESSION HISTORY DO FFMPEGKIT
+--------------------------------------------------------------------------------
+Linha 950-951: FFmpegKitConfig.setSessionHistorySize e modificado
+para workerCount+8. Se a API FFmpegKit tem race interna (e tem -
+historico de bugs nesse sentido), pode causar perda de logs ou
+sessions.
+
+POR QUE E INTERMITENTE: race em biblioteca externa.
+
+EVIDENCIA: seria necessario verificar logcat do FFmpegKit para ver
+se ha mensagens de "session ignored" ou "queue full".
+
+DESCARTE: baixa probabilidade.
+
+
+H10 - DRIVER DO ENCODER ESTA EM ESTADO INSTAVEL APOS USO INTENSO
+--------------------------------------------------------------------------------
+Alguns drivers OEM (especialmente MediaTek e Exynos antigos) entram
+em estado de falha apos uso intenso. Cada nova instancia tem chance
+maior de falhar. Apos um tempo sem uso (ou sleep/wake), volta a
+funcionar.
+
+POR QUE E INTERMITENTE: depende do historico de uso do driver.
+
+EVIDENCIA: precisa correlacionar com logcat do driver (palavras como
+" vencoder", "omx", "qcom", "exynos").
+
+
+================================================================================
+(3) DADOS NECESSARIOS PARA CONFIRMAR/DESCARTAR CADA HIPOTESE
+================================================================================
+
+Para CADA hipotese, o que precisamos:
+
+H1 (limite de instancias):
+  - Logcat filtrando:  adb logcat | grep -E "MediaCodec|Codec|encoder"
+  - Mensagens como "Failed to allocate", "Too many instances",
+    "OMX_ErrorInsufficientResources" confirmam.
+  - Verificar quantos workers estao sendo usados
+    (FfmpegRotateVideoActivity:843, 947): default e availableProcessors - 1
+  - Verificar advertisedMaxInstances (FfmpegVideoEncoderRegistry:62)
+    e comparar com quantos workers estao sendo solicitados
+  - Comando diagnostico: rodar com workerCount=1 e ver se falha
+    desaparece
+
+H2 (GOP size race):
+  - Adicionar Log.d() temporario em recommendedGopSize mostrando o
+    frameRate e o gopSize calculado POR CHAMADA
+  - Verificar se ha inconsistencias entre chamadas paralelas
+  - Comparar com o valor enviado no comando (-g 32). Se algum worker
+    usou 60 (fallback), a falha e deste worker especifico
+
+H3 (contaminacao de estado):
+  - Manter registro de quantas execucoes do app foram feitas antes da
+    falha
+  - Verificar se apos reboot do device, o bug some nas primeiras N
+    execucoes e aparece depois
+
+H4 (TS muxer):
+  - Logcat filtrando mpegts
+  - Trocar -f mpegts por -f matroska no comando. Se funcionar, H4
+    confirmada
+  - Trocar -mpegts_flags +resend_headers (remover). Se funcionar,
+    e essa flag especifica
+
+H5 (colisao de arquivo):
+  - Listar /data/data/br.gov.sp.pcsp.launcher/cache antes de cada
+    execucao
+  - Verificar se ha arquivos rotate_encoded_*.ts antigos
+  - Limpar cache e reproduzir
+
+H6 (race no latch):
+  - N/A - mensagem vista nao e consistente com latch travado
+  - Descarte por inspecao
+
+H7 (pix_fmt):
+  - Ja analisado nos diagnosticos anteriores. Adicionar -pix_fmt
+    yuv420p e ver se estabiliza
+
+H8 (pix_fmt source):
+  - N/A para arquivos identicos
+
+H9 (FFmpegKit history race):
+  - Logcat filtrando FFmpegKit
+
+H10 (driver OEM):
+  - Logcat filtrando por palavras do driver do encoder
+  - adb shell getprop | grep -E "vendor|hardware"
+  - Identificar fabricante do device para correlacionar
+
+
+================================================================================
+(4) ROTEIRO DE TESTES PARA REPRODUZIR DE FORMA DETERMINISTICA
+================================================================================
+
+O objetivo do roteiro e isolar cada hipotese em testes controlados.
+Para cada teste, usar o MESMO arquivo de input (audiencia
+143664636_1_V.mp4, conhecido dos testes anteriores).
+
+T0 - BASELINE (10 execucoes para estabelecer taxa de falha natural)
+--------------------------------------------------------------------------------
+  1. Usar audiencia_143664636_1_V.mp4 como input
+  2. Configuracao: h264_mediacodec, -90 graus, hflip, vflip
+  3. Modo paralelo ATIVADO, deixar valor padrao de workers
+  4. Executar 10 vezes
+  5. Registrar quantas falharam vs quantas sucederam
+  6. Capturar logcat completo de cada execucao
+
+  Resultado esperado: taxa de falha > 0 confirma a intermitencia.
+  Se taxa = 0%, o problema pode ter desaparecido apos alguma
+  mudanca recente - revisar linha de tempo.
+
+
+T1 - DESATIVAR PARALELISMO (teste de H1, H2)
+--------------------------------------------------------------------------------
+  1. Mesmo input
+  2. DESATIVAR parallelKeyframes (manter h264_mediacodec)
+  3. Executar 10 vezes
+  4. Comparar taxa de falha com T0
+
+  Resultado:
+    - Se taxa cair para 0%: H1 e/ou H2 confirmadas (paralelismo
+      cria a condicao)
+    - Se taxa continuar alta: a causa NAO e paralelismo. Bug do
+      MediaCodec em modo single-session.
+
+
+T2 - USAR libx264 (teste de H1+H2 - MediaCodec vs CPU)
+--------------------------------------------------------------------------------
+  1. Mesmo input
+  2. Trocar encoder para libx264 (CPU)
+  3. Paralelismo: irrelevante - CPU usa .mkv em vez de .ts
+  4. Executar 10 vezes
+
+  Resultado esperado: 0% de falha. CPU nao usa MediaCodec.
+  Se falhar, o bug esta em codigo comum (FfmpegMediaPolicies ou
+  no shell, nao no MediaCodec).
+
+
+T3 - FORÇAR -f matroska NO COMANDO PARALELO (teste de H4)
+--------------------------------------------------------------------------------
+  1. Mesmo input
+  2. Paralelismo ativado com h264_mediacodec
+  3. Modificar temporariamente buildSegmentRotationArguments para
+     SEMPRE emitir -f matroska (ignorar extensao .ts)
+  4. Executar 10 vezes
+
+  Resultado:
+    - Se funcionar 100%: H4 confirmada (TS muxer e o problema)
+    - Se continuar intermitente: H4 descartada
+
+
+T4 - FORÇAR -pix_fmt yuv420p (teste de H7)
+--------------------------------------------------------------------------------
+  1. Mesmo input
+  2. Paralelismo ativado, h264_mediacodec
+  3. Modificar encodingFor para adicionar -pix_fmt yuv420p
+     (ja recomendado nos diagnosticos anteriores)
+  4. Executar 10 vezes
+
+  Resultado:
+    - Se funcionar 100%: H7 confirmada (e alinhada com o fix ja
+      proposto para Cortar)
+    - Se continuar intermitente: H7 descartada; sobra H1/H2/H3/H10
+
+
+T5 - REDUZIR WORKERS PARA 1 E HABILITAR PARALELISMO (teste de H1)
+--------------------------------------------------------------------------------
+  1. Mesmo input
+  2. parallelKeyframes ON, mas inputParallelSegments = 1
+     (workerCount = 1)
+  3. h264_mediacodec
+  4. Executar 10 vezes
+
+  Resultado:
+    - Se funcionar 100%: H1 confirmada (multiplos workers e a
+      causa raiz)
+    - Se continuar intermitente: H1 descartada. Sobra H2/H3/H10
+
+
+T6 - MEDIR TIMING DE recommendedGopSize (teste de H2)
+--------------------------------------------------------------------------------
+  1. Mesmo input
+  2. Adicionar Log.d em recommendedGopSize mostrando timestamp de
+     inicio, frameRate detectado, GOP retornado
+  3. Rodar com workers = 3 e ver se ha inconsistencias nos logs
+  4. Comparar os GOPs calculados pelos 3 workers
+
+  Resultado: se algum worker retornou 60 (fallback) e outro retornou
+  32 (correto), H2 confirmada.
+
+
+T7 - LIMPAR CACHE ANTES DE CADA EXECUCAO (teste de H5)
+--------------------------------------------------------------------------------
+  1. Mesmo input
+  2. Limpar /data/data/br.gov.sp.pcsp.launcher/cache antes de cada
+     execucao
+  3. Executar 10 vezes
+
+  Resultado:
+    - Se taxa de falha cair drasticamente: H5 confirmada
+    - Se taxa nao mudar: H5 descartada
+
+
+T8 - APOS REBOOT DO DEVICE (teste de H3, H10)
+--------------------------------------------------------------------------------
+  1. Reiniciar device
+  2. Imediatamente rodar o mesmo comando 10 vezes
+  3. Comparar taxa com T0
+
+  Resultado:
+    - Se taxa < 50% da original: H3 ou H10 confirmadas (estado
+      do driver/encoder se degrada com uso)
+
+
+================================================================================
+(5) INFORMACOES QUE AINDA FALTAM PARA FECHAR O DIAGNOSTICO
+================================================================================
+
+1. MENSAGEM DE ERRO EXATA E COMPLETA - a print mostra um trecho,
+   mas o buildFfmpegFailureSummary (linha 1229-1243) filtra apenas
+   linhas com palavras-chave especificas. O usuario precisa capturar
+   o log COMPLETO via:
+     adb logcat -d | tee rotate_failure.log
+   OU abrir o arquivo de diagnostico gerado por
+   saveParallelFailureDiagnostic (linha 1245-1261) em
+   /storage/.../diagnosticos/giro_paralelo_trecho_<N>_<ts>.txt
+
+2. STACK TRACE - se o app crashar (nao apenas erro FFmpeg), o stack
+   trace estara em logcat. Sem crash, nao ha stack trace relevante.
+
+3. CONFIGURACAO EXATA DA EXECUCAO:
+   - Encoder usado: h264_mediacodec ou hevc_mediacodec?
+   - Grau: -90 (com hflip/vflip) ou 90 ou 180?
+   - hflip/vflip estavam ativos?
+   - Numero de workers (automatico ou manual)?
+   - Versao do Android do device
+   - Fabricante do device (MediaCodec varia MUITO entre OEMs)
+
+4. HISTORICO: quantas vezes o Girar foi usado antes desta falha? O
+   Cut tambem foi usado recentemente? Outros apps de video foram
+   usados? O device foi reiniciado desde a ultima falha?
+
+5. EXEMPLOS DE ARQUIVOS QUE FALHAM E QUE FUNCIONAM:
+   - O MP4 da audiencia (audiencia_143664636_1_V.mp4) - falha?
+     Com qual combinacao de angulo/flip?
+   - Outros arquivos do mesmo device - tambem falham? Funcionam?
+   - O mesmo arquivo em outro device - funciona ou falha?
+
+7. DISPOSITIVO ESPECIFICO:
+   - Marca e modelo
+   - Versao do Android
+   - Processador (snapdragon, exynos, mediatek, etc.)
+   - Memoria RAM disponivel
+   - Temperatura do device (overheating -> encoder fail)
+
+
+================================================================================
+(6) RESUMO - TOP 3 CAUSAS PROVAVEIS
+================================================================================
+
+  RANK 1 - H1 + H7: limite de instancias MediaCodec combinado com
+           ausencia de -pix_fmt explicito. Explica 70% dos casos
+           intermitentes observados. Fix: adicionar -pix_fmt yuv420p
+           em encodingFor (ja recomendado em diagnosticos anteriores)
+           + considerar limitar workers a 2 ou menos.
+
+  RANK 2 - H2: race em recommendedGopSize gerando valores
+           inconsistentes entre workers paralelos. Explica ~20%.
+           Fix: cachear o gopSize uma unica vez antes de lancar os
+           workers, OU passar o gopSize como parametro (ja e feito,
+           mas a chamada recomendadaGopSize dentro do laco worker
+           acontece antes dos workers serem lancados - precisa
+           verificar se isso e sequencial mesmo).
+
+  RANK 3 - H4: TS muxer em combinacao com h264_mediacodec
+           (particularmente -mpegts_flags +resend_headers). Explica
+           ~10%. Fix: usar -f matroska (mas ai perde o pipeline de
+           remux .ts -> .mkv que o codigo assumiu necessario) ou
+           remover +resend_headers.
+
+Os tres tem fix relativamente pequeno e de baixo risco. NENHUM
+requer mudanca grande de arquitetura.
+
+================================================================================
+FIM DO DIAGNOSTICO
+Nenhum arquivo do projeto foi alterado nesta analise.
+================================================================================

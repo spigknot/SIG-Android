@@ -1,0 +1,26 @@
+== RECONCILIACAO SAME-RUN por request (fonte: FIM journal + delta) ==
+campos: app_tempo_pronta | llama(load/prefill/decode) | host(sample/detok/decode_host/soma) | residuos
+
+[pt_q4_curto_ocl]
+  app tempo_pronta: 13.7s
+  llama: load=5791ms prefill=223ms (119 tok) decode=7555ms (142 tok)
+  host : sample=110.0ms detok=0.0ms decode_host=7554.0ms soma=7664.0ms (n=142)
+  cruzamento: soma_host=7664ms vs decode_llama=7555ms vs decode_host=7554ms | delta(soma-dec)=109ms (sample+detok fora do eval)
+
+[pt_q4_mais_ocl]
+  app tempo_pronta: 87.3s
+  llama: load=6323ms prefill=1579ms (942 tok) decode=79633ms (1485 tok)
+  host : sample=1113.0ms detok=1.0ms decode_host=79626.0ms soma=80741.0ms (n=1485)
+  cruzamento: soma_host=80740ms vs decode_llama=79633ms vs decode_host=79626ms | delta(soma-dec)=1107ms (sample+detok fora do eval)
+
+[pt2_q4_curto_vk]
+  app tempo_pronta: 9.2s
+  llama: load=5692ms prefill=3561ms (119 tok) decode=3204ms (142 tok)
+  host : sample=101.0ms detok=0.0ms decode_host=3204.0ms soma=3305.0ms (n=142)
+  cruzamento: soma_host=3305ms vs decode_llama=3204ms vs decode_host=3204ms | delta(soma-dec)=101ms (sample+detok fora do eval)
+
+[pt2_q4_mais_vk]
+  app tempo_pronta: 69.2s
+  llama: load=18087ms prefill=16952ms (942 tok) decode=46731ms (1474 tok)
+  host : sample=4192.0ms detok=2.0ms decode_host=46752.0ms soma=50946.0ms (n=1474)
+  cruzamento: soma_host=50946ms vs decode_llama=46731ms vs decode_host=46752ms | delta(soma-dec)=4215ms (sample+detok fora do eval)

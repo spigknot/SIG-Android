@@ -1,0 +1,5 @@
+== INTERFERENCIA NA TELA — 02/10 ~23:2x ==
+Durante o aceite Q8 (4o run, mais_longo), o WhatsApp assumiu o foreground:
+mCurrentFocus=com.whatsapp/com.whatsapp.Conversation (topResumedActivity idem).
+Instrumento morto educadamente (proc_2b9224bc87b0 kill); sem toques apos a deteccao.
+Runs preservados: curto/medio/longo (verificados por sha abaixo); mais_longo nao completou.

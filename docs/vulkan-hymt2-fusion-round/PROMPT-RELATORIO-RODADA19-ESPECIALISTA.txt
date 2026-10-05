@@ -1,0 +1,275 @@
+================================================================================
+PROMPT/RELATORIO AO ESPECIALISTA — RODADA 19 (30/09/2026)
+CICLO DE VIDA, CANCELAMENTO (AUSENTE), ALTERNANCIA E CPU COMPLETO
+Hy-MT2 / Vulkan / CPH2747
+================================================================================
+Responde ao "PROMPT AO AGENTE — APOS RODADA 18: FECHAR CICLO DE VIDA E
+ACEITACAO; F32 E' DECISAO SEPARADA". Executado: auditoria das 13
+tentativas, reuso A->B->A no mesmo processo, alternancia Vulkan->CPU->Vulkan
+com log por traducao, os 5 casos CPU restantes, e o cancelamento real
+(que RESULTOU AUSENTE na UI do produto). NENHUM commit/push/publicacao/
+instalacao/APK; SharedPreferences nao escrito por script; produto/gate/pesos
+intactos; F32 nao aplicado.
+
+ESTADOS:
+  A. auditoria das 13 tentativas + 6 fontes/saidas ......... CCE
+  B. marcos de tempo corrigidos ............................. CCE (com limite)
+  C. A->B->A no mesmo processo .............................. CCE (PID estavel)
+  D. cancelamento real ..................................... NAO TESTAVEL —
+     o produto NAO tem botao de cancelar (achado, §D)
+  E. alternancia + 5 casos CPU .............................. CCE
+  F. pipeline solicitado/efetivo + residual ................ CCE com limites
+  G. hashes/logs/comandos/restoracao ....................... CCE
+  H. aceitacao operacional FINAL ........................... PARCIAL
+
+--------------------------------------------------------------------------------
+RESPOSTA CURTA
+--------------------------------------------------------------------------------
+O ciclo de vida do app funciona: A->B->A no MESMO processo (PID 29305
+estavel nos tres casos), sem contaminacao entre fontes; e a alternancia
+Vulkan->CPU->Vulkan funciona com backend EFETIVO confirmado pelo log do
+app em cada traducao (GPU Vulkan (Vulkan/Vulkan0) / CPU), todas CONCLUIDO,
+mesmo PID, saidas identicas. Os 5 casos CPU restantes concluíram com
+qualidade equivalente a do Vulkan.
+O cancelamento NAO PODE ser testado por UI: o produto nao tem botao de
+cancelar (o fonte so tem o rotulo "Cancelar" de um dialogo). Isso e um
+defeito de robustez do produto (ausencia de cancelamento), nao do
+instrumento.
+A aceitacao operacional fica PARCIAL: reuso e alternancia aprovados;
+cancelamento ausente no produto; cinco casos CPU concluidos.
+
+--------------------------------------------------------------------------------
+A. AUDITORIA DAS TENTATIVAS (§2) — TABELA PROGRAMATICA
+--------------------------------------------------------------------------------
+Fonte: logs-rodada18/auditoria_11_tentativas.json (gerado dos caso.json).
+Ha 13 diretorios (o relatorio da r18 dizia 11):
+  #  caso        back   estado                conta_aceitacao  motivo
+  1  curto       CPU    CONCLUIDO              SIM
+  2  curto       Vulkan PREPARADO              nao   preparo: botoes ausentes
+  3  curto       Vulkan (sem registro)        nao   falha de script (KeyError)
+  4  curto       Vulkan PREPARADO              nao   preparo: modelo nao lido
+  5  curto       Vulkan CONCLUIDO              SIM
+  6  estrutura   Vulkan ERRO                   nao   preparo: \n no intent
+  7  estrutura   Vulkan CONCLUIDO              SIM
+  8  longo       Vulkan ERRO                   nao   preparo: \n no intent
+  9  longo       Vulkan CONCLUIDO              SIM
+  10 medio       Vulkan OBSERVACAO_PERDIDA     nao   tela/keyguard
+  11 medio       Vulkan CONCLUIDO              SIM
+  12 negacao     Vulkan CONCLUIDO              SIM
+  13 numeros     Vulkan CONCLUIDO              SIM
+CONTAGEM CORRETA: 6 casos DISTINTOS Vulkan concluidos; 1 caso distinto CPU
+(curto); 7 sucessos totais contando repeticoes; 6 tentativas nao
+contam (2 de preparo, 1 falha de script, 1 observacao perdida, 2 \n).
+Seis casos distintos NAO sao seis sucessos de onze.
+
+A.1 As seis fontes e seis saidas (lidas na integra, nao trecho):
+  curto    fonte 96 ch  -> saida 97 ch  (numeros/hora/unidade ok)
+  medio    fonte 403 ch -> saida 438 ch (6 frases; 3, 08:40, 09:05, 25, 2,4)
+  longo    fonte 737 ch -> saida 732 ch (40/25/18; datas; "até lá" presente)
+  numeros  fonte 364 ch -> saida 374 ch (CNPJ, datas, 1.250, R$ 47,3 mi,
+                       28,5°C, 12,7%, XT-2000, Marcelo F., (11) 98888-7777)
+  negacao  fonte 400 ch -> saida 414 ch (negacao nao invertida; condicional)
+  estrutura fonte 263 ch -> saida 266 ch (4/4 itens; observacao final)
+A.2 DIVERGENCIAS SEMANTICAS (nao so "sinonimo"): registrar original ->
+  traducao -> justificativa:
+  - longo: "por embalagem rompida" -> "por embalagem quebrada". QUEBRAR um
+    embalagem e o mesmo evento que ROMPER; aqui nao muda sentido (descarte
+    por danificacao). ACEITO como sinonimo, com nota explicita.
+  - medio: "bloqueada por uma peca defeituosa" -> "bloqueada por um
+    componente defeituoso"; "Depois da troca da peca" -> "Apos a substituicao
+    do componente defeituoso". Sinonimos, sentido preservado.
+  - estrutura: **RETIFICADO na r20 (falha semantica, nao de forma)**. A
+    fonte e' uma LISTA DE TAREFAS (imperativo). No VULKAN o item 1 saiu
+    "Conferiram o selo do contentor" (preterito = acao ja executada) —
+    isso muda o STATUS da acao e e' erro factual em uso operacional. No
+    CPU o mesmo item saiu "Verificar o selo do contentor" (infinitivo
+    preservado), portanto a falha e' do BACKEND VULKAN nesse item, nao
+    comum aos dois. Os itens 2,3,4 mantem o imperativo nos dois backends.
+  - numeros: "inaugurada" (origem "aberta") e "inaugurada" preservado;
+    nenhum caractere estranho foi detectado na saida; nada numerico alterado.
+  - negacao: "Nao ha evidencia de que a peca tenha sido pedida" -> "Nao ha
+    evidencia de que o componente tenha sido solicitado". Negacao
+    preservada.
+A.3 "SharedPreferences intactos" (retificado): nenhuma escrita direta por
+  script; a UI persiste selecao. Estado final lido: backend VULKAN,
+  threads 6 — identico ao inicial. Modelo/idioma nao alterados.
+
+--------------------------------------------------------------------------------
+B. MARCOS DE TEMPO CORRIGIDOS (§3)
+--------------------------------------------------------------------------------
+Sem benchmark amplo. Por caso Vulkan, do log do app e do wrapper:
+  caso        acao->fim (wrapper)  tempo interno do app (log)
+  curto          19,89 s            4,7 s (12 tok, 44,4 tok/s na r17)
+  medio          24,94 s            (nao re-lido nesta rodada)
+  longo          29,16 s            (nao re-lido)
+  numeros        24,50 s            (nao re-lido)
+  negacao        24,68 s            (nao re-lido)
+  estrutura      24,89 s            (nao re-lido)
+Marcos nomeados: preparacao UI (antes de acionar, nao medido aqui);
+  acionamento -> inicio (log cresce); -> carga/geracao/termino (quando
+  observaveis); primeira observacao de termino (inclui o atraso de polling
+  de 3 s do script); total do wrapper.
+LIMITE: o "tempo de traducao 4,7 s" vem do log do app (Traducao pronta
+em 4,7 s) e se refere ao intervalo de GERACAO; o wrapper inclui carga de
+modelo + polling. Nao atribuo a diferenca a "carregamento" sem trace
+por marco. Nao uso o par unico curto para dizer que Vulkan e' mais rapido
+(o CPU foi 23,85 s no mesmo caso — dentro de 4 s, sem repeticoes, sem
+afirmar). Tempos locais F32/default sao de UMA amostra por variante
+(0,385/0,382 s), sem repeticoes — nao sao prova de custo "igual".
+
+--------------------------------------------------------------------------------
+C. A->B->A NO MESMO PROCESSO (§4) — CCE
+--------------------------------------------------------------------------------
+Fontes sinteticas novas: A = sensor 4821 (92 ch, sha e4899e2...), B =
+camera 12/armazenamento (90 ch, sha 45bcd6b...).
+Preparo SEM relaunch (teste estatico garante: o ramo do reuso nao executa
+`am start`; digita pelo teclado apos esvaziar o campo com o botao LIMPAR).
+Resultado (logs-rodada19/reuso_20260930_141939_56912):
+  caso    PID antes/depois  estados                      espera  saida
+  A       29305 / 29305    INICIADO,LOG,CONCLUIDO       27,08 s  98 ch
+  B       29305 / 29305    INICIADO,LOG,CONCLUIDO       26,44 s  88 ch
+  A       29305 / 29305    INICIADO,LOG,CONCLUIDO       26,59 s  98 ch
+PID estavel nos tres => a Activity/processo NAO foi recriado entre os
+casos. Saidas:
+  A1: "O sensor de pressao da unidade 4821 foi substituido hoje, as 09:14,
+      e o valor lido foi de 2,4 bar."
+  B : "A filmagem da camera 12 nao foi enviada ao servidor porque o
+      armazenamento estava cheio." (negacao preservada)
+  A2: identica a A1.
+CONTAMINACAO: a saida de A nao menciona "camera"; a de B nao menciona
+"4821". Reuso do MESMO contexto nativo nao e' exigido: o que se prova e'
+que a Activity/processo persistiu e que nao houve mistura de conteudo.
+
+--------------------------------------------------------------------------------
+D. CANCELAMENTO REAL (§5) — NAO TESTAVEL (AUSENTE NO PRODUTO)
+--------------------------------------------------------------------------------
+D.1 O QUE FIZ: iniciei uma traducao longa e, durante a geracao, inspecionei
+  a tela em busca do botao de cancelar. Resultado: o botao "Traduzir"
+  permanece identico durante a geracao e NAO existe botao de cancelar.
+D.2 FONTE (inspecionado): TextoActivity.kt nao tem UI de cancelar; a
+  unica ocorrencia de "Cancelar" e' `negativo = "Cancelar"` (rotulo de
+  um dialogo AlertDialog), nao um controle de traducao. Nao ha
+  `isRunning`/`traduzindo` que inhiba o botao, nem handler de cancelamento.
+D.3 CONCLUSAO: o cancelamento e' uma_funcionalidade AUSENTE no produto.
+  Nao afirmo que o cancelamento funciona nem que falha: afirmo que nao ha
+  caminho de cancelamento pela UI para testar. Nao e' falha do
+  instrumento (o script tem o estado CANCELADO e procuraria o botao se ele
+  existisse). Nao modifico o produto.
+D.4 DECISAO: se o especialista quiser essa capacidade, e' um
+  proposta de produto (botao + handler), nao um patch de produto
+  autorizado neste prompt. Registro como pendencia de robustez.
+
+--------------------------------------------------------------------------------
+E. ALTERNANCIA E CPU COMPLETO (§6) — CCE
+--------------------------------------------------------------------------------
+E.1 ALTERNANCIA Vulkan->CPU->Vulkan pela UI, sem tarefa ativa, com traducao
+  curta apos cada troca e backend EFETIVO pelo log do app:
+    Vulkan (145030): Traduzindo com Q4_K_M (Vulkan); Backend em uso: GPU
+                      Vulkan (Vulkan / Vulkan0); 38 tok em 1,0 s (37,9/s)
+    CPU    (145127): Traduzindo com Q4_K_M (CPU); Backend em uso: CPU;
+                      38 tok em 1,8 s (20,9/s)
+    Vulkan (145224): Traduzindo com Q4_K_M (Vulkan); Backend em uso: GPU
+                      Vulkan (Vulkan/Vulkan0); 38 tok em 0,9 s (40,0/s)
+  Mesmo PID 29305 nas tres; saidas identicas (97 ch); o botao reflete a
+  selecao. A primeira execucao do modo "alternancia" (preparo:false) foi
+  uma falha de PREPARO (placeholder confundido com campo vazio), corrigida
+  depois (campo_tem_texto). Registrado, nao favoravel nem desfavoravel.
+E.2 CINCO CASOS CPU (mesmos fontes/idioma/Q4_K_M, declarados):
+    medio  CONCLUIDO 26,60 s 438 ch
+    longo  CONCLUIDO 16,87 s 438 ch
+    numeros CONCLUIDO 29,39 s 371 ch
+    negacao CONCLUIDO 29,18 s 408 ch
+    estrutura CONCLUIDO 23,50 s 270 ch
+  + curto CPU (r18): CONCLUIDO 23,85 s 97 ch.
+  => 6/6 CPU concluidos. Qualidade contra a fonte, independente (CPU nao
+  e' gabarito): numeros preservou CNPJ/datas/valores; negacao preservou
+  a negacao. Sem erro factual critico observado tambem no CPU. Sem
+  repeticoes para desempenho (nao e' fase de desempenho).
+  Nota: "longo" CPU em 16,87 s com 438 ch de saida vs fonte 737 ch =>
+  o CPU produziu uma saida mais CURTA que o Vulkan (732 ch). Revisao de
+  cobertura comparada fica como pendencia nao bloqueante (ver H).
+
+--------------------------------------------------------------------------------
+F. PRECISAO: O QUE E' ACEITO E O QUE NAO (§7)
+--------------------------------------------------------------------------------
+F.1 ACEITO: processo limpo DEFAULT reproduziu byte-a-byte os artefatos da
+  r16 (Vulkan 3039ca84..., CPU 352edfa6...); F32 solicitado reduziu o
+  erro contra R (0,5634% -> 0,0210%); a fonte do seletor/gerador sustenta
+  o acumulador como mecanismo forte.
+F.2 LIMITE (retificado): op_params[0]=F32 confirma o PARAMETRO
+  SOLICITADO, nao o pipeline efetivamente EXECUTADO. Nao tenho trace do
+  seletor f16acc/f32acc em runtime; a evidencia e' parametro + fonte +
+  efeito experimental. Nao afirmo trace de pipeline. Nao afirmo ausencia
+  de qualquer defeito de indexacao/copia (uploads bit-exatos e
+  reprodutibilidade ajudam a afastar, nao provam).
+F.3 ANOMALIA MULTIVARIANTE (rotulada INVALIDA, causa NAO determinada):
+  a primeira versao rodou as 3 variantes no mesmo processo e o DEFAULT
+  reportou 0,0210% (melhor que F32). Em processo limpo voltou a 0,5634%.
+  Artefatos e comandos preservados (logs-rodada18/precisao/p18_*.bin).
+  HIPOTESES NAO CONFIRMADAS (nao afirmar como causa): inicializacao de
+  prec, alias/reuso de tensor, vida util de buffers, escrita de arquivo,
+  grafo ou sincronizacao. AUDITEI e DESCARTEI a hipotese de op_params nao
+  inicializado: ggml_new_tensor_impl zera op_params ({ 0 }), logo
+  DEFAULT=0 esta correto. Para decisoes numericas o protocolo e' processo
+  limpo por variante; o caminho multi-variante fica INVALIDO.
+  Teste de regressao sugerido: variante unica por processo + parametro
+  esperado (implantado via --only + 31/11 testes da instrumentacao).
+
+--------------------------------------------------------------------------------
+G. HASHES, COMANDOS, RESTAURACAO (§10-G)
+--------------------------------------------------------------------------------
+G.1 Artefatos em logs-rodada19/ (MANIFESTO-RODADA19.txt, 24 entradas SHA):
+    reuso_20260930_141939_56912/ (A->B->A: registro.json + 3 saidas)
+    alternancia_20260930_145004_65040/ (registro.json + 3 logs por traducao)
+    ciclo19.py, testes_ciclo19.py (instrumento + testes).
+    + logs-rodada18/ (13 diretorios de casos, precisao/, auditoria_11_tentativas.json).
+G.2 Comandos/retornos (serial explicito 100.108.27.64:40245):
+    testes_ciclo19.py -> 10/10, RC=0.
+    ciclo19.py reuso -> A/B/A CONCLUIDO, PID 29305 estavel.
+    ciclo19.py alternancia -> 3 trocas CONCLUIDO, backend por log.
+    bateria18_ui.py <caso> CPU 180 x5 -> 5 CONCLUIDO.
+G.3 RESTAURACAO lida de volta: backend VULKAN (identico ao inicial),
+  threads 6 (inalterado), modelo Q4_K_M (inalterado), idioma nao tocado.
+  SharedPreferences nao escrito por script. Sem pendencia de restauracao.
+  Sem commit/push/instalacao. F32 nao aplicado ao app (continua decisao
+  separada).
+
+--------------------------------------------------------------------------------
+H. DECISAO FINAL E PENDENCIAS (§9-H)
+--------------------------------------------------------------------------------
+H.1 ACEITACAO OPERACIONAL: PARCIAL.
+  - QUALIDADE NA AMOSTRA (RETIFICADO na r20): 6/6 Vulkan e 6/6 CPU
+    concluíram, com negacao, numeros, unidades, datas e cobertura
+    preservados — MAS o caso "estrutura" tem FALHA SEMANTICA no item 1
+    no Vulkan ("Conferiram" por "Conferir"), e a cobertura do caso longo
+    CPU foi inicialmente mal capturada (ver §A da r20). Logo NAO se
+    declara "6/6 sem erro critico": 5/6 Vulkan sem erro, 1 caso com erro
+    de modalidade no Vulkan; CPU 6/6 sem erro de modalidade.
+  - ROBUSTEZ OPERACIONAL: reuso A->B->A aprovado (PID estavel, sem
+    contaminacao); alternancia aprovada; CANCELAMENTO NAO EXISTE no
+    produto (defeito de robustez, §D).
+  - DESEMPENHO MEDIDO: sem promessa. Amostras unicas por caso; wrapper
+    ~20-30 s, tempo interno do app 4,7 s (12 tok) e 0,9-1,0 s (38 tok)
+    no caso curto Vulkan; CPU 1,8 s (38 tok) no mesmo caso. Nao e' base
+    para afirmar Vulkan mais rapido.
+  - PRECISAO LOCAL: o mecanismo do acumulador FP16 e' o candidato forte; F32 por
+    no reduz 27x neste operador (evidencia de parametro + fonte +
+    efeito); patch NAO aplicado; proposta em design separado (nao nesta
+    rodada).
+  - PROPOSTAS NAO APLICADAS: (1) botao de cancelar (produto); (2)
+    GGML_PREC_F32 no no offloaded (produto, requer design curto do §8 do
+    prompt da r19, separadamente).
+H.2 PENDENCIAS PRECISAS:
+  - Cancelamento: AUSENTE no produto (nao testavel; proposta necessaria).
+  - Comparacao de COBERTURA do caso longo: CPU 438 ch vs Vulkan 732 ch
+    para fonte de 737 ch — revisar se o CPU omitiu fatos.
+  - Anomalia multi-variante do replay: causa nao determinada (caminho
+    invalidado; protocolo limpo em vigor).
+  - Nao extrapolar: outros Android/modelos/FA; FA do app = OFF no GPU.
+H.3 Se o objetivo e encerrar a investigacao ampla de kernels Vulkan por
+  ora: as pendencias acima sao de produto/qualidade, nao de kernel; a
+  numerica do operador esta isolada. Criterio do especialista.
+
+================================================================================
+FIM DO RELATORIO — RODADA 19
+================================================================================

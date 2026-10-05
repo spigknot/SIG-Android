@@ -1,0 +1,2615 @@
+commit 85b889fc53f7af6f6d9281b7ffc2478f217f4f9f
+Author: Gustavo Almeida <spigknot@gmail.com>
+Date:   Mon Aug 31 09:36:50 2026 -0300
+
+    fix: alinhar ferramentas FFmpeg às opções da interface
+
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt
+index 9469f7a..1c775a1 100644
+--- a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCleanAudioActivity.kt
+@@ -167,13 +167,31 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
+         status.text = ""
+     }
+ 
+-    private fun cleanSelectedAudio() {
++    private fun cleanSelectedAudio(strongConfirmed: Boolean = false) {
+         val uri = selectedUri ?: return
+         if (!hasSigStorageAccess()) {
+             requestSigStorageAccess()
+             status.text = "Libere o acesso a todos os arquivos para salvar na pasta SIG."
+             return
+         }
++        val audioTracks = inspectAudioSource(uri)?.trackCount ?: 0
++        if (audioTracks != 1) {
++            status.text = "O arquivo precisa ter exatamente uma faixa de áudio."
++            return
++        }
++        if (selectedMode == CleanMode.STRONG && !strongConfirmed) {
++            val mediaDuration = readDuration(uri)
++            val estimate = if (mediaDuration > 0L) {
++                " Estimativa conservadora: ${formatTime(mediaDuration * 2)} a ${formatTime(mediaDuration * 6)}."
++            } else ""
++            AlertDialog.Builder(this)
++                .setTitle("Limpeza forte")
++                .setMessage("Este modo é bem mais lento e pode alterar um pouco a voz.$estimate Deseja continuar?")
++                .setNegativeButton("Cancelar", null)
++                .setPositiveButton("Continuar") { _, _ -> cleanSelectedAudio(strongConfirmed = true) }
++                .show()
++            return
++        }
+         clearOutputResult()
+         clearTerminal()
+         val jobFilterMode = selectedMode
+@@ -187,13 +205,15 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
+                 val outputName = buildOutputName(selectedName)
+                 outputFile = File(cacheDir, "clean_${System.currentTimeMillis()}_$outputName")
+                 val duration = readDuration(inputFile).coerceAtLeast(1L)
++                val sourceProfile = inspectAudioSource(inputFile)
++                    ?: error("Não foi possível identificar os parâmetros do áudio.")
+                 val startedAt = SystemClock.elapsedRealtime()
+-                val args = buildFfmpegArguments(inputFile, outputFile, jobFilterMode)
+-                appendTerminal("ffmpeg ${args.joinToString(" ")}")
++                val args = buildFfmpegArguments(inputFile, outputFile, jobFilterMode, sourceProfile)
++                appendTerminal(FfmpegMediaPolicies.formatCommand(args.asIterable()))
+                 
+                 val tracker = FfmpegTaskTracker(status, listOf("Preparando áudio", "Limpando áudio"))
+                 tracker.completeCurrentTask()
+-                tracker.setTaskEncoder(1, "pcm_s16le")
++                tracker.setTaskEncoder(1, sourceProfile.pcmEncoder)
+                 tracker.startTask(1)
+                 
+                 val session = executeFfmpegWithProgress(args, duration, tracker)
+@@ -240,7 +260,9 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
+     private fun buildFfmpegArguments(
+         inputFile: File,
+         outputFile: File,
+-        mode: CleanMode = selectedMode
++        mode: CleanMode = selectedMode,
++        sourceProfile: AudioSourceProfile = inspectAudioSource(inputFile)
++            ?: AudioSourceProfile(1, 48000, 2, "pcm_s16le")
+     ): Array<String> {
+         return arrayOf(
+             "-y",
+@@ -248,14 +270,58 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
+             "-vn",
+             "-map", "0:a:0",
+             "-af", mode.filter,
+-            "-c:a", "pcm_s16le",
+-            "-ar", "16000",
+-            "-ac", "1",
++            "-c:a", sourceProfile.pcmEncoder,
++            "-ar", sourceProfile.sampleRate.toString(),
++            "-ac", sourceProfile.channels.toString(),
++            "-avoid_negative_ts", "make_zero",
+             "-f", "wav",
+             outputFile.absolutePath
+         )
+     }
+ 
++    private fun inspectAudioSource(uri: Uri): AudioSourceProfile? {
++        val extractor = android.media.MediaExtractor()
++        return try {
++            extractor.setDataSource(this, uri, null)
++            audioSourceProfile(extractor)
++        } catch (_: Throwable) {
++            null
++        } finally {
++            extractor.release()
++        }
++    }
++
++    private fun inspectAudioSource(file: File): AudioSourceProfile? {
++        val extractor = android.media.MediaExtractor()
++        return try {
++            extractor.setDataSource(file.absolutePath)
++            audioSourceProfile(extractor)
++        } catch (_: Throwable) {
++            null
++        } finally {
++            extractor.release()
++        }
++    }
++
++    private fun audioSourceProfile(extractor: android.media.MediaExtractor): AudioSourceProfile? {
++        val formats = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }
++        val audioFormats = formats.filter {
++            it.getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
++        }
++        val format = audioFormats.singleOrNull() ?: return AudioSourceProfile(audioFormats.size, 48000, 2, "pcm_s16le")
++        val sampleRate = runCatching { format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE) }.getOrDefault(48000)
++        val channels = runCatching { format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT) }.getOrDefault(2)
++        val pcmEncoding = runCatching { format.getInteger(android.media.MediaFormat.KEY_PCM_ENCODING) }.getOrNull()
++        val encoder = when (pcmEncoding) {
++            3 -> "pcm_u8"
++            4 -> "pcm_f32le"
++            21 -> "pcm_s24le"
++            22 -> "pcm_s32le"
++            else -> "pcm_s16le"
++        }
++        return AudioSourceProfile(1, sampleRate, channels, encoder)
++    }
++
+     private fun saveTempOutputToUri(treeUri: Uri) {
+         val source = tempOutputFile ?: return
+         val destDir = DocumentFile.fromTreeUri(this, treeUri)
+@@ -309,6 +375,8 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
+     }
+ 
+     private fun executeFfmpegWithProgress(arguments: Array<String>, durationMs: Long, tracker: FfmpegTaskTracker): FFmpegSession {
++        FfmpegCommandPresenter.show(status, arguments.asIterable())
++        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
+         val latch = CountDownLatch(1)
+         val sessionRef = AtomicReference<FFmpegSession>()
+         val startedAt = SystemClock.elapsedRealtime()
+@@ -464,6 +532,18 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
+         }
+     }
+ 
++    private fun readDuration(uri: Uri): Long {
++        val retriever = android.media.MediaMetadataRetriever()
++        return try {
++            retriever.setDataSource(this, uri)
++            retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
++        } catch (_: Exception) {
++            0L
++        } finally {
++            retriever.release()
++        }
++    }
++
+     private fun formatTime(ms: Long): String {
+         val totalSeconds = ms / 1000
+         val milliseconds = ms % 1000
+@@ -502,6 +582,13 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
+         STRONG("forte", "anlmdn=s=0.00003:p=0.002:r=0.002")
+     }
+ 
++    private data class AudioSourceProfile(
++        val trackCount: Int,
++        val sampleRate: Int,
++        val channels: Int,
++        val pcmEncoder: String
++    )
++
+     companion object {
+         private const val TAG = "FfmpegCleanAudio"
+         private const val REQUEST_PICK_AUDIO = 9301
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCommandPresenter.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCommandPresenter.kt
+new file mode 100644
+index 0000000..0a30810
+--- /dev/null
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCommandPresenter.kt
+@@ -0,0 +1,29 @@
++package br.gov.sp.pcsp.launcher
++
++import android.graphics.Color
++import android.view.View
++import android.view.ViewGroup
++import android.widget.TextView
++
++/** Keeps the exact command available to the user in every FFmpeg tool. */
++internal object FfmpegCommandPresenter {
++    private const val COMMAND_VIEW_TAG = "sig_ffmpeg_command"
++
++    fun show(anchor: TextView, arguments: Iterable<String>) {
++        val command = FfmpegMediaPolicies.formatCommand(arguments)
++        anchor.post {
++            val parent = anchor.parent as? ViewGroup ?: return@post
++            val existing = parent.findViewWithTag<TextView>(COMMAND_VIEW_TAG)
++            val commandView = existing ?: TextView(anchor.context).apply {
++                tag = COMMAND_VIEW_TAG
++                setTextColor(Color.parseColor("#FFB8C7D9"))
++                textSize = 11f
++                setTextIsSelectable(true)
++                setPadding(anchor.paddingLeft, 8, anchor.paddingRight, 12)
++                parent.addView(this, parent.indexOfChild(anchor) + 1)
++            }
++            commandView.text = command
++            commandView.visibility = View.VISIBLE
++        }
++    }
++}
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt
+index 5ce3a01..bf000b3 100644
+--- a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegCutActivity.kt
+@@ -398,13 +398,13 @@ class FfmpegCutActivity : AppCompatActivity() {
+     private fun loadSelectedMedia(uri: Uri) {
+         selectedUri = uri
+         selectedName = queryDisplayName(uri) ?: "arquivo"
+-        var mime = contentResolver.getType(uri).orEmpty()
++        var mime = detectMediaMime(uri)
+         if (mime.isEmpty()) {
+             val extension = selectedName.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
+             mime = when (extension) {
+                 "mp4", "mkv", "mov", "avi", "webm", "3gp", "m4v" -> "video/$extension"
+                 "mp3", "wav", "m4a", "aac", "ogg", "opus", "flac" -> "audio/$extension"
+-                else -> "video/mp4"
++                else -> "application/octet-stream"
+             }
+         }
+         selectedMime = mime
+@@ -469,7 +469,24 @@ class FfmpegCutActivity : AppCompatActivity() {
+         
+     }
+ 
+-    private fun cutSelectedMedia() {
++    private fun detectMediaMime(uri: Uri): String {
++        val extractor = android.media.MediaExtractor()
++        return try {
++            extractor.setDataSource(this, uri, null)
++            val trackMimes = (0 until extractor.trackCount).mapNotNull { index ->
++                extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
++            }
++            trackMimes.firstOrNull { it.startsWith("video/") }
++                ?: trackMimes.firstOrNull { it.startsWith("audio/") }
++                ?: contentResolver.getType(uri).orEmpty()
++        } catch (_: Throwable) {
++            contentResolver.getType(uri).orEmpty()
++        } finally {
++            extractor.release()
++        }
++    }
++
++    private fun cutSelectedMedia(codecChoiceConfirmed: Boolean = false) {
+         val uri = selectedUri ?: return
+         var startMs = parseTime(inputFrom.text.toString())
+         var endMs = parseTime(inputTo.text.toString())
+@@ -488,6 +505,26 @@ class FfmpegCutActivity : AppCompatActivity() {
+             status.text = "Nenhum encoder de vídeo compatível está disponível."
+             return
+         }
++        if (jobMime.startsWith("video/") && !codecChoiceConfirmed && jobEncoder != null) {
++            val sourceCodec = detectVideoCodecFamily(uri)
++            if (sourceCodec in setOf("h264", "hevc") && jobEncoder.codecFamily != sourceCodec) {
++                val compatible = availableVideoEncoders.firstOrNull { it.codecFamily == sourceCodec }
++                val dialog = AlertDialog.Builder(this)
++                    .setTitle("O encoder escolhido exige recodificação completa")
++                    .setMessage("A origem usa ${sourceCodec.orEmpty().uppercase(Locale.ROOT)}, mas o encoder selecionado é ${jobEncoder.shortName}. Você pode manter sua escolha ou usar um encoder compatível para copiar o trecho central sem perdas.")
++                    .setPositiveButton("Manter ${jobEncoder.shortName}") { _, _ -> cutSelectedMedia(true) }
++                    .setNegativeButton("Cancelar", null)
++                if (compatible != null) {
++                    dialog.setNeutralButton("Usar ${compatible.shortName}") { _, _ ->
++                        selectedVideoEncoder = compatible
++                        updateVideoEncoderButton()
++                        cutSelectedMedia(true)
++                    }
++                }
++                dialog.show()
++                return
++            }
++        }
+ 
+         val producedMime = currentOutputMime()
+         clearOutputResult()
+@@ -602,19 +639,23 @@ class FfmpegCutActivity : AppCompatActivity() {
+             args.addAll(rotationInputArguments(rotationDegrees))
+         }
+         args += listOf(
+-            "-i", inputFile.absolutePath,
+             "-ss", formatSeconds(startMs),
++            "-i", inputFile.absolutePath,
+             "-t", String.format(Locale.US, "%.3f", duration)
+         )
+         val streamBitrates = detectStreamBitrates(inputFile)
+         if (mime.startsWith("video/")) {
+             val enc = encoder ?: error("Encoder de vídeo indisponível")
+-            args.addAll(listOf("-map", "0:v:0?", "-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0"))
++            args.addAll(listOf(
++                "-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?",
++                "-map_metadata", "0", "-map_chapters", "0", "-c", "copy"
++            ))
+             args.addAll(videoEncodingArguments(enc, streamBitrates.video ?: FALLBACK_VIDEO_BITRATE, quality))
+-            args.addAll(listOf("-c:a", "aac", "-b:a", streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE, "-movflags", "+faststart", "-avoid_negative_ts", "make_zero"))
++            args.addAll(listOf("-avoid_negative_ts", "make_zero"))
+         } else {
+-            args.addAll(listOf("-map", "0:a:0?", "-map_metadata", "0", "-map_chapters", "0", "-vn"))
++            args.addAll(listOf("-map", "0:a?", "-map_metadata", "0", "-map_chapters", "0", "-vn"))
+             args.addAll(preciseAudioEncoderArguments(selectedName, streamBitrates.audio ?: FALLBACK_AUDIO_BITRATE))
++            args.addAll(listOf("-avoid_negative_ts", "make_zero"))
+         }
+         args.add(outputFile.absolutePath)
+         return args.toTypedArray()
+@@ -631,10 +672,10 @@ class FfmpegCutActivity : AppCompatActivity() {
+     ): CutExecutionResult {
+         val actualEncoder = encoder ?: return CutExecutionResult(false, false, "Encoder de vídeo indisponível")
+         tracker.appendTasks(listOf("Analisando codec e orientação"))
+-        val isH264 = isH264Video(inputFile)
++        val sourceCodec = detectVideoCodecFamily(inputFile)
+         val rotationDegrees = detectMetadataRotation(inputFile)
+         tracker.completeCurrentTask()
+-        if (!isH264 || actualEncoder.codecFamily != "h264") {
++        if (sourceCodec !in setOf("h264", "hevc") || actualEncoder.codecFamily != sourceCodec) {
+             return executeFullPrecisionFallback(inputFile, outputFile, startMs, endMs, rotationDegrees, tracker, actualEncoder, quality)
+         }
+ 
+@@ -653,7 +694,7 @@ class FfmpegCutActivity : AppCompatActivity() {
+         try {
+             val tasks = mutableListOf<String>()
+             if (startKeyframe > startMs) tasks += "Recodificando borda inicial"
+-            tasks += "Copiando trecho central sem reencodar"
++            tasks += "Copiando vídeo do trecho central sem reencodar"
+             if (endKeyframe < endMs) tasks += "Recodificando borda final"
+             tasks += "Juntando trechos e preservando orientação"
+             val taskOffset = tracker.taskCount()
+@@ -661,8 +702,6 @@ class FfmpegCutActivity : AppCompatActivity() {
+             tasks.forEachIndexed { index, task ->
+                 if (task.startsWith("Recodificando")) {
+                     tracker.setTaskEncoder(taskOffset + index, actualEncoder.shortName)
+-                } else if (task == "Copiando trecho central sem reencodar" && bitrates.audio != null) {
+-                    tracker.setTaskEncoder(taskOffset + index, "aac")
+                 }
+             }
+ 
+@@ -689,7 +728,7 @@ class FfmpegCutActivity : AppCompatActivity() {
+             }
+ 
+             if (startKeyframe > startMs) {
+-                val startPiece = File(workDir, "start.ts")
++                val startPiece = File(workDir, "start.mkv")
+                 runPiece(
+                     buildHybridEdgeArguments(inputFile, startPiece, startMs, startKeyframe, bitrates, seekAccurately = true, encoder = actualEncoder, quality = quality),
+                     startKeyframe - startMs,
+@@ -697,7 +736,7 @@ class FfmpegCutActivity : AppCompatActivity() {
+                 )?.let { return it }
+             }
+ 
+-            val bodyPiece = File(workDir, "body.ts")
++            val bodyPiece = File(workDir, "body.mkv")
+             runPiece(
+                 buildHybridBodyArguments(inputFile, bodyPiece, startKeyframe, endKeyframe, bitrates),
+                 endKeyframe - startKeyframe,
+@@ -705,9 +744,9 @@ class FfmpegCutActivity : AppCompatActivity() {
+             )?.let { return it }
+ 
+             if (endKeyframe < endMs) {
+-                val endPiece = File(workDir, "end.ts")
++                val endPiece = File(workDir, "end.mkv")
+                 runPiece(
+-                    buildHybridEdgeArguments(inputFile, endPiece, endKeyframe, endMs, bitrates, seekAccurately = false, encoder = actualEncoder, quality = quality),
++                    buildHybridEdgeArguments(inputFile, endPiece, endKeyframe, endMs, bitrates, seekAccurately = true, encoder = actualEncoder, quality = quality),
+                     endMs - endKeyframe,
+                     endPiece
+                 )?.let { return it }
+@@ -716,13 +755,12 @@ class FfmpegCutActivity : AppCompatActivity() {
+             val concatList = File(workDir, "parts.txt")
+             concatList.writeText(pieces.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" }, Charsets.UTF_8)
+             val concatArguments = mutableListOf(
+-                    "-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0",
+-                )
+-            concatArguments.addAll(rotationInputArguments(rotationDegrees))
++                "-y", "-fflags", "+genpts", "-f", "concat", "-safe", "0"
++            )
+             concatArguments += listOf(
+-                "-i", concatList.absolutePath,
+-                "-c", "copy", "-bsf:a", "aac_adtstoasc",
+-                "-avoid_negative_ts", "make_zero", "-movflags", "+faststart"
++                "-display_rotation:v:0", rotationDegrees.toString(), "-i", concatList.absolutePath,
++                "-map", "0", "-map_metadata", "0", "-map_chapters", "0", "-c", "copy",
++                "-avoid_negative_ts", "make_zero"
+             )
+             concatArguments += outputFile.absolutePath
+             val concatSession = executeFfmpegWithProgress(
+@@ -803,13 +841,12 @@ class FfmpegCutActivity : AppCompatActivity() {
+         if (seekAccurately) args += listOf("-ss", formatSeconds(startMs))
+         args += listOf(
+             "-t", String.format(Locale.US, "%.3f", duration),
+-            "-map", "0:v:0?", "-map", "0:a:0?"
++            "-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?",
++            "-map_metadata", "0", "-map_chapters", "0", "-c", "copy"
+         )
+         args += videoEncodingArguments(encoder, bitrates.video ?: FALLBACK_VIDEO_BITRATE, quality)
+         args += listOf(
+-            "-c:a", "aac", "-b:a", bitrates.audio ?: FALLBACK_AUDIO_BITRATE,
+-            "-avoid_negative_ts", "make_zero", "-mpegts_flags", "+resend_headers",
+-            "-f", "mpegts", outputFile.absolutePath
++            "-avoid_negative_ts", "make_zero", "-f", "matroska", outputFile.absolutePath
+         )
+         return args.toTypedArray()
+     }
+@@ -823,13 +860,11 @@ class FfmpegCutActivity : AppCompatActivity() {
+     ): Array<String> {
+         val duration = (endMs - startMs) / 1000.0
+         return arrayOf(
+-            "-y", "-ss", formatSeconds(startMs), "-noautorotate", "-i", inputFile.absolutePath,
++            "-y", "-noautorotate", "-i", inputFile.absolutePath, "-ss", formatSeconds(startMs),
+             "-t", String.format(Locale.US, "%.3f", duration),
+-            "-map", "0:v:0?", "-map", "0:a:0?",
+-            "-c:v", "copy", "-bsf:v", "h264_mp4toannexb",
+-            "-c:a", "aac", "-b:a", bitrates.audio ?: FALLBACK_AUDIO_BITRATE,
+-            "-avoid_negative_ts", "make_zero", "-mpegts_flags", "+resend_headers",
+-            "-f", "mpegts", outputFile.absolutePath
++            "-map", "0:v:0?", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?",
++            "-map_metadata", "0", "-map_chapters", "0", "-c", "copy",
++            "-avoid_negative_ts", "make_zero", "-f", "matroska", outputFile.absolutePath
+         )
+     }
+ 
+@@ -856,15 +891,41 @@ class FfmpegCutActivity : AppCompatActivity() {
+         return keyframes.distinct().sorted()
+     }
+ 
+-    private fun isH264Video(inputFile: File): Boolean {
++    private fun detectVideoCodecFamily(inputFile: File): String? {
++        val extractor = android.media.MediaExtractor()
++        return try {
++            extractor.setDataSource(inputFile.absolutePath)
++            val mime = (0 until extractor.trackCount).asSequence().mapNotNull { index ->
++                extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
++            }.firstOrNull { it.startsWith("video/") }
++            when (mime) {
++                "video/avc" -> "h264"
++                "video/hevc" -> "hevc"
++                else -> mime?.substringAfter('/')
++            }
++        } catch (_: Throwable) {
++            null
++        } finally {
++            extractor.release()
++        }
++    }
++
++    private fun detectVideoCodecFamily(uri: Uri): String? {
++        val extractor = android.media.MediaExtractor()
+         return try {
+-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", inputFile.absolutePath))
+-            session.allLogsAsString.orEmpty()
+-                .lineSequence()
+-                .firstOrNull { it.contains("Video:", ignoreCase = true) }
+-                ?.contains("h264", ignoreCase = true) == true
++            extractor.setDataSource(this, uri, null)
++            val mime = (0 until extractor.trackCount).asSequence().mapNotNull { index ->
++                extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)
++            }.firstOrNull { it.startsWith("video/") }
++            when (mime) {
++                "video/avc" -> "h264"
++                "video/hevc" -> "hevc"
++                else -> mime?.substringAfter('/')
++            }
+         } catch (_: Throwable) {
+-            false
++            null
++        } finally {
++            extractor.release()
+         }
+     }
+ 
+@@ -900,25 +961,16 @@ class FfmpegCutActivity : AppCompatActivity() {
+     private fun preciseAudioEncoderArguments(name: String, bitrate: String): List<String> {
+         return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+             "wav" -> listOf("-c:a", "pcm_s16le")
++            "flac" -> listOf("-c:a", "flac")
+             "mp3" -> listOf("-c:a", "libmp3lame", "-b:a", bitrate)
+-            "m4a", "aac" -> listOf("-c:a", "aac", "-b:a", bitrate)
+             "ogg" -> listOf("-c:a", "libvorbis", "-b:a", bitrate)
+-            "opus" -> listOf("-c:a", "libopus", "-b:a", bitrate)
+-            "flac" -> listOf("-c:a", "flac")
++            "opus" -> listOf("-c:a", "libopus", "-b:a", bitrate, "-vbr", "on", "-application", "audio")
+             else -> listOf("-c:a", "aac", "-b:a", bitrate)
+         }
+     }
+ 
+     private fun preciseAudioEncoderName(name: String): String {
+-        return when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
+-            "wav" -> "pcm_s16le"
+-            "mp3" -> "libmp3lame"
+-            "m4a", "aac" -> "aac"
+-            "ogg" -> "libvorbis"
+-            "opus" -> "libopus"
+-            "flac" -> "flac"
+-            else -> "aac"
+-        }
++        return preciseAudioEncoderArguments(name, FALLBACK_AUDIO_BITRATE).getOrNull(1) ?: "áudio"
+     }
+ 
+     private fun detectStreamBitrates(inputFile: File): StreamBitrates {
+@@ -1116,14 +1168,14 @@ class FfmpegCutActivity : AppCompatActivity() {
+ 
+     private fun buildOutputName(name: String): String {
+         val dotIndex = name.lastIndexOf('.')
+-        if (dotIndex <= 0) return "${name}_cortado"
+-        val extension = if (selectedMime.startsWith("video/")) ".mp4" else name.substring(dotIndex)
++        if (dotIndex <= 0) return if (selectedMime.startsWith("video/")) "${name}_cortado.mkv" else "${name}_cortado"
++        val extension = if (selectedMime.startsWith("video/")) ".mkv" else name.substring(dotIndex)
+         return "${name.substring(0, dotIndex)}_cortado$extension"
+     }
+ 
+     private fun currentOutputMime(): String {
+         return if (selectedMime.startsWith("video/")) {
+-            "video/mp4"
++            "video/x-matroska"
+         } else {
+             selectedMime.ifBlank { "application/octet-stream" }
+         }
+@@ -1180,6 +1232,8 @@ class FfmpegCutActivity : AppCompatActivity() {
+     }
+ 
+     private fun executeFfmpegWithProgress(arguments: Array<String>, expectedDurationMs: Long, tracker: FfmpegTaskTracker): FFmpegSession {
++        FfmpegCommandPresenter.show(status, arguments.asIterable())
++        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
+         val latch = CountDownLatch(1)
+         val sessionRef = AtomicReference<FFmpegSession>()
+         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt
+index c530b60..824d18c 100644
+--- a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegExtractAudioActivity.kt
+@@ -41,6 +41,7 @@ import android.graphics.SurfaceTexture
+ import android.view.Surface
+ import android.view.TextureView
+ import androidx.appcompat.app.AppCompatActivity
++import androidx.appcompat.app.AlertDialog
+ import androidx.core.content.FileProvider
+ import androidx.documentfile.provider.DocumentFile
+ import com.arthenica.ffmpegkit.FFmpegKit
+@@ -99,6 +100,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+     private val selectedVideos = mutableListOf<SelectedVideo>()
+     private val outputItems = mutableListOf<OutputItem>()
+     private val terminalLines = StringBuilder()
++    private val selectedAudioTracks = mutableMapOf<String, Int>()
+     private var selectedOutputFolder: DocumentFile? = null
+     private var zipFile: File? = null
+     private var sourcePopup: PopupWindow? = null
+@@ -145,9 +147,10 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+     }
+     private var outputPreset = AudioPreset.NONE
+     private var outputExtension = AudioExtension.WAV
+-    private var sampleRate = 16000
+-    private var channels = 1
++    private var sampleRate = 48000
++    private var channels = 2
+     private var bitrate = "128k"
++    private var savedCustomSettings = AudioSettings(AudioExtension.WAV, 48000, 2, "128k")
+     private var refreshingOutputSettings = false
+     private var isProcessing = false
+     @Volatile private var currentSessionId: Long? = null
+@@ -738,8 +741,19 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+             status.text = "Confira os tempos de início e fim."
+             return
+         }
++        selectedVideos.firstOrNull { audioTrackCount(it.uri) == 0 }?.let { media ->
++            status.text = "${media.name} não possui faixa de áudio."
++            return
++        }
++        selectedVideos.firstOrNull {
++            audioTrackCount(it.uri) > 1 && selectedAudioTracks[it.uri.toString()] == null
++        }?.let { media ->
++            requestAudioTrack(media.uri, media.name) { extractSelectedAudio() }
++            return
++        }
+ 
+         val jobVideos = selectedVideos.toList()
++        val jobAudioTracks = jobVideos.associate { it.uri.toString() to (selectedAudioTracks[it.uri.toString()] ?: 0) }
+         val processingStartMs = SystemClock.elapsedRealtime()
+         val jobSettings = currentAudioSettings()
+         val jobOutputMime = jobSettings.extension.mime
+@@ -767,17 +781,18 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+ 
+                 try {
+                     val inputFile = copyUriToCache(video.uri, video.name)
+-                    appendTerminalAudioInfo("original: ${describeAudioFile(inputFile)}")
+                     val outputName = buildOutputName(video.name, usedNames, jobSettings.extension)
+                     val tempOutput = File(cacheDir, "audio_${System.currentTimeMillis()}_$outputName")
+                     val trimStartMs = if (trimSingleMedia) startMs ?: 0L else 0L
+                     val trimEndMs = if (trimSingleMedia) endMs else null
+                     val expectedDuration = trimEndMs?.let { it - trimStartMs } ?: readDuration(video.uri)
+                     totalDurationMs += expectedDuration
+-                    tracker.setTaskEncoder(index, audioEncoderForExtension(jobSettings.extension))
++                    val audioTrack = jobAudioTracks[video.uri.toString()] ?: 0
++                    val copyAudio = canCopyAudioWithoutConversion(inputFile, trimStartMs, trimEndMs, jobSettings, audioTrack)
++                    tracker.setTaskEncoder(index, if (copyAudio) "cópia sem perdas" else audioEncoderForExtension(jobSettings.extension))
+                     tracker.startTask(index)
+                     val session = executeFfmpegWithProgress(
+-                        buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs, jobSettings),
++                        buildFfmpegArguments(inputFile, tempOutput, trimStartMs, trimEndMs, jobSettings, copyAudio, audioTrack),
+                         expectedDuration,
+                         tracker
+                     )
+@@ -795,7 +810,6 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+                         continue
+                     }
+                     tracker.completeCurrentTask()
+-                    appendTerminalAudioInfo("gerado: ${describeAudioFile(tempOutput)}")
+                     tempOutputFiles.add(tempOutput)
+                     results.add(OutputItem(Uri.fromFile(tempOutput), outputName, jobOutputMime))
+                 } catch (e: Exception) {
+@@ -840,24 +854,27 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+         outputFile: File,
+         startMs: Long,
+         endMs: Long?,
+-        settings: AudioSettings = currentAudioSettings()
++        settings: AudioSettings = currentAudioSettings(),
++        copyAudio: Boolean = false,
++        audioTrack: Int = 0
+     ): Array<String> {
+         val args = mutableListOf("-y")
+-        if (endMs != null) {
++        val inputDuration = readDuration(inputFile)
++        val hasStartTrim = startMs > 0L
++        val hasEndTrim = endMs != null && inputDuration > 0L && endMs < inputDuration - 250L
++        if (hasStartTrim) {
+             args.addAll(listOf("-ss", formatSeconds(startMs)))
+         }
+         args.addAll(listOf("-i", inputFile.absolutePath))
+-        if (endMs != null) {
+-            args.addAll(listOf("-t", formatSeconds(endMs - startMs)))
+-        }
+-        args.addAll(
+-            listOf(
+-                "-vn",
+-                "-map", "0:a:0",
+-                "-ar", settings.sampleRate.toString(),
+-                "-ac", settings.channels.toString()
+-            )
+-        )
++        if (hasEndTrim) {
++            args.addAll(listOf("-t", formatSeconds(requireNotNull(endMs) - startMs)))
++        }
++        args.addAll(listOf("-vn", "-map", "0:a:$audioTrack", "-map_metadata", "0"))
++        if (copyAudio) {
++            args.addAll(listOf("-c:a", "copy", "-avoid_negative_ts", "make_zero", outputFile.absolutePath))
++            return args.toTypedArray()
++        }
++        args.addAll(listOf("-ar", settings.sampleRate.toString(), "-ac", settings.channels.toString()))
+         when (settings.extension) {
+             AudioExtension.WAV -> {
+                 args.addAll(listOf("-c:a", "pcm_s16le", "-f", "wav"))
+@@ -877,19 +894,110 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+             AudioExtension.OPUS -> {
+                 args.addAll(listOf(
+                     "-c:a", "libopus",
+-                    "-application", "voip",
++                    "-application", "audio",
+                     "-b:a", settings.bitrate,
+-                    "-vbr", "off"
++                    "-vbr", "on"
+                 ))
+             }
+             AudioExtension.FLAC -> {
+                 args.addAll(listOf("-c:a", "flac"))
+             }
+         }
+-        args.add(outputFile.absolutePath)
++        args.addAll(listOf("-avoid_negative_ts", "make_zero", outputFile.absolutePath))
+         return args.toTypedArray()
+     }
+ 
++    private fun audioTrackCount(uri: Uri): Int {
++        val extractor = MediaExtractor()
++        return try {
++            extractor.setDataSource(this, uri, null)
++            (0 until extractor.trackCount).count { index ->
++                extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
++            }
++        } catch (_: Throwable) {
++            0
++        } finally {
++            extractor.release()
++        }
++    }
++
++    private fun requestAudioTrack(uri: Uri, name: String, onSelected: () -> Unit) {
++        val labels = audioTrackLabels(uri)
++        if (labels.isEmpty()) {
++            status.text = "$name não possui faixa de áudio."
++            return
++        }
++        AlertDialog.Builder(this)
++            .setTitle("Escolha a faixa de áudio de $name")
++            .setSingleChoiceItems(labels.toTypedArray(), 0) { dialog, which ->
++                selectedAudioTracks[uri.toString()] = which
++                dialog.dismiss()
++                onSelected()
++            }
++            .setNegativeButton("Cancelar", null)
++            .show()
++    }
++
++    private fun audioTrackLabels(uri: Uri): List<String> {
++        val extractor = MediaExtractor()
++        return try {
++            extractor.setDataSource(this, uri, null)
++            var audioOrdinal = 0
++            (0 until extractor.trackCount).mapNotNull { index ->
++                val format = extractor.getTrackFormat(index)
++                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
++                if (!mime.startsWith("audio/")) return@mapNotNull null
++                audioOrdinal += 1
++                val language = format.getString(MediaFormat.KEY_LANGUAGE)?.takeIf { it.isNotBlank() }
++                val channels = runCatching { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }.getOrNull()
++                buildString {
++                    append("Faixa ").append(audioOrdinal).append(" — ").append(mime.substringAfter('/').uppercase(Locale.ROOT))
++                    language?.let { append(" · ").append(it) }
++                    channels?.let { append(" · ").append(it).append(" canal(is)") }
++                }
++            }
++        } catch (_: Throwable) {
++            emptyList()
++        } finally {
++            extractor.release()
++        }
++    }
++
++    private fun canCopyAudioWithoutConversion(
++        inputFile: File,
++        startMs: Long,
++        endMs: Long?,
++        settings: AudioSettings,
++        audioTrack: Int = 0
++    ): Boolean {
++        val duration = readDuration(inputFile)
++        if (startMs > 0L || (endMs != null && duration > 0L && endMs < duration - 250L)) return false
++        val extractor = MediaExtractor()
++        return try {
++            extractor.setDataSource(inputFile.absolutePath)
++            val format = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }.filter {
++                it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
++            }.getOrNull(audioTrack) ?: return false
++            val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
++            val sourceRate = runCatching { format.getInteger(MediaFormat.KEY_SAMPLE_RATE) }.getOrNull()
++            val sourceChannels = runCatching { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }.getOrNull()
++            val compatibleExtension = when (mime) {
++                "audio/mpeg" -> settings.extension == AudioExtension.MP3
++                "audio/mp4a-latm", "audio/aac" -> settings.extension in setOf(AudioExtension.M4A, AudioExtension.AAC)
++                "audio/opus" -> settings.extension == AudioExtension.OPUS
++                "audio/vorbis" -> settings.extension == AudioExtension.OGG
++                "audio/flac" -> settings.extension == AudioExtension.FLAC
++                "audio/raw" -> settings.extension == AudioExtension.WAV
++                else -> false
++            }
++            compatibleExtension && sourceRate == settings.sampleRate && sourceChannels == settings.channels
++        } catch (_: Throwable) {
++            false
++        } finally {
++            extractor.release()
++        }
++    }
++
+     private fun saveTempOutputsToUri(treeUri: Uri) {
+         val destDir = DocumentFile.fromTreeUri(this, treeUri)
+         if (destDir == null || !destDir.isDirectory) {
+@@ -988,23 +1096,37 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+     }
+ 
+     private fun setTranscriptionStandard(enabled: Boolean) {
+-        outputPreset = if (enabled) AudioPreset.LOCAL else AudioPreset.NONE
+         if (enabled) {
++            if (outputPreset == AudioPreset.NONE) savedCustomSettings = AudioSettings(outputExtension, sampleRate, channels, bitrate)
++            outputPreset = AudioPreset.LOCAL
+             outputExtension = AudioExtension.WAV
+             sampleRate = 16000
+             channels = 1
+             bitrate = "256k"
++        } else if (outputPreset == AudioPreset.LOCAL) {
++            outputPreset = AudioPreset.NONE
++            outputExtension = savedCustomSettings.extension
++            sampleRate = savedCustomSettings.sampleRate
++            channels = savedCustomSettings.channels
++            bitrate = savedCustomSettings.bitrate
+         }
+         refreshOutputSettingsUi()
+     }
+ 
+     private fun setCompactStandard(enabled: Boolean) {
+-        outputPreset = if (enabled) AudioPreset.COMPACT else AudioPreset.NONE
+         if (enabled) {
++            if (outputPreset == AudioPreset.NONE) savedCustomSettings = AudioSettings(outputExtension, sampleRate, channels, bitrate)
++            outputPreset = AudioPreset.COMPACT
+             outputExtension = AudioExtension.OGG
+             sampleRate = 16000
+             channels = 1
+             bitrate = "32k"
++        } else if (outputPreset == AudioPreset.COMPACT) {
++            outputPreset = AudioPreset.NONE
++            outputExtension = savedCustomSettings.extension
++            sampleRate = savedCustomSettings.sampleRate
++            channels = savedCustomSettings.channels
++            bitrate = savedCustomSettings.bitrate
+         }
+         refreshOutputSettingsUi()
+     }
+@@ -1123,7 +1245,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+             return
+         }
+         PopupMenu(this, buttonBitrate).apply {
+-            listOf("24k", "32k", "48k", "64k", "96k", "128k", "192k", "256k").forEach { menu.add(it) }
++            listOf("32k", "48k", "64k", "96k", "128k", "192k", "256k").forEach { menu.add(it) }
+             setOnMenuItemClickListener { item ->
+                 bitrate = item.title.toString()
+                 refreshOutputSettingsUi()
+@@ -1441,6 +1563,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+         expectedDurationMs: Long,
+         tracker: FfmpegTaskTracker
+     ): FFmpegSession {
++        FfmpegCommandPresenter.show(status, arguments.asIterable())
++        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
+         val latch = CountDownLatch(1)
+         val sessionRef = AtomicReference<FFmpegSession>()
+         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
+@@ -1566,7 +1690,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
+                     .orEmpty()
+             }
+             val bitrate = Regex("""(\d+(?:\.\d+)?)\s*kb/s""", RegexOption.IGNORE_CASE)
+-                .find(logs)
++                .find(audioLine)
+                 ?.groupValues
+                 ?.getOrNull(1)
+                 ?.let { "${it.removeSuffix(".0")}k" }
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt
+index 2f0c810..d904b79 100644
+--- a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegInsertAudioActivity.kt
+@@ -1,10 +1,13 @@
+ package br.gov.sp.pcsp.launcher
+ 
+ import android.app.Activity
++import android.app.AlertDialog
+ import android.app.DownloadManager
+ import android.content.ActivityNotFoundException
+ import android.content.Intent
+ import android.media.MediaMetadataRetriever
++import android.media.MediaExtractor
++import android.media.MediaFormat
+ import android.media.MediaPlayer
+ import android.net.Uri
+ import android.os.Build
+@@ -66,6 +69,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+     private val handler = Handler(Looper.getMainLooper())
+     private var mainAudio: AudioSource? = null
+     private var insertedAudio: AudioSource? = null
++    private val selectedAudioTracks = mutableMapOf<String, Int>()
+     private var insertionMs = 0L
+     private var compositePositionMs = 0L
+     private var mainPlayer: MediaPlayer? = null
+@@ -253,7 +257,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+         timeline.configure(main.name, main.durationMs, inserted?.name, inserted?.durationMs ?: 0L, insertionMs)
+         timeline.setCurrent(compositePositionMs)
+         timeline.isEnabled = true
+-        if (!inputTime.hasFocus()) inputTime.setText(formatTime(compositeToMainTime(compositePositionMs)))
++        if (!inputTime.hasFocus()) inputTime.setText(formatTime(insertionMs))
+     }
+ 
+     private fun preparePlayers() {
+@@ -357,7 +361,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+         }
+         compositePositionMs = compositePositionMs.coerceIn(0L, compositeDurationMs())
+         timeline.setCurrent(compositePositionMs)
+-        if (!inputTime.hasFocus()) inputTime.setText(formatTime(compositeToMainTime(compositePositionMs)))
+     }
+ 
+     private fun startInsertedSegment() {
+@@ -385,7 +388,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+     private fun finishPlayback() {
+         compositePositionMs = compositeDurationMs()
+         timeline.setCurrent(compositePositionMs)
+-        if (!inputTime.hasFocus()) inputTime.setText(formatTime(mainAudio?.durationMs ?: 0L))
+         pausePlayersOnly()
+         activeSegment = Segment.NONE
+         updatePlayButton(false)
+@@ -396,7 +398,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+         val wasPlaying = isPlaying()
+         finishTimeEditing()
+         compositePositionMs = positionMs.coerceIn(0L, compositeDurationMs())
+-        inputTime.setText(formatTime(compositeToMainTime(compositePositionMs)))
+         if (wasPlaying) startPlaybackAt(compositePositionMs) else seekPlayersForComposite(compositePositionMs)
+     }
+ 
+@@ -477,7 +478,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+     }
+ 
+     private fun updateOptionState() {
+-        val enabled = reencode.isChecked && !isProcessing
++        val enabled = !isProcessing
+         transitionButton.isEnabled = enabled
+         transitionTime.isEnabled = enabled
+         transitionButton.alpha = if (enabled) 1f else 0.4f
+@@ -487,6 +488,16 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+     private fun startInsert() {
+         val main = mainAudio ?: return
+         val inserted = insertedAudio ?: return
++        if (audioTrackCount(main.uri) == 0 || audioTrackCount(inserted.uri) == 0) {
++            status.text = "Os dois arquivos precisam possuir pelo menos uma faixa de áudio."
++            return
++        }
++        listOf(main, inserted).firstOrNull {
++            audioTrackCount(it.uri) > 1 && selectedAudioTracks[it.uri.toString()] == null
++        }?.let { source ->
++            requestAudioTrack(source) { startInsert() }
++            return
++        }
+         pausePlayback()
+         clearOutputResult()
+         val jobConfig = InsertAudioJobConfig(
+@@ -494,7 +505,9 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+             reencodeChecked = reencode.isChecked,
+             smartInsertChecked = smartInsert.isChecked,
+             selectedTransition = selectedTransition,
+-            transitionSeconds = transitionTime.text.toString().replace(',', '.').toDoubleOrNull()?.coerceIn(0.0, 5.0) ?: 0.5
++            transitionSeconds = transitionTime.text.toString().replace(',', '.').toDoubleOrNull()?.coerceIn(0.0, 5.0) ?: 0.5,
++            mainAudioTrack = selectedAudioTracks[main.uri.toString()] ?: 0,
++            insertedAudioTrack = selectedAudioTracks[inserted.uri.toString()] ?: 0
+         )
+         setProcessing(true)
+         val startedAt = SystemClock.elapsedRealtime()
+@@ -510,8 +523,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+                 temporaryInputs += insertedFile
+                 tracker.completeTask(0)
+ 
+-                val profile = detectAudioProfile(mainFile)
+-                val insertedProfile = detectAudioProfile(insertedFile)
++                val profile = detectAudioProfile(mainFile, jobConfig.mainAudioTrack)
++                val insertedProfile = detectAudioProfile(insertedFile, jobConfig.insertedAudioTrack)
+                 val rawExtension = main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
+                 val safeExtension = rawExtension.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
+                 val isWav = safeExtension == "wav"
+@@ -519,12 +532,10 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+                     audioCodecCopySafe(profile, safeExtension) &&
+                     audioCodecCopySafe(insertedProfile, safeExtension)
+                 val smartInsertViable = jobConfig.smartInsertChecked && isSmartInsertCodecSupported(profile)
+-                val fullReencode = (jobConfig.reencodeChecked && (!jobConfig.smartInsertChecked || jobConfig.selectedTransition != TRANSITION_NONE)) ||
+-                    (isWav && !canCopyDirectly) ||
+-                    (jobConfig.smartInsertChecked && !smartInsertViable) ||
+-                    // Codec sem tag no container de saida (ex.: wmav2/amr em .m4a) nao pode ser
+-                    // copiado bit-a-bit; precisa reencodar para o formato do container.
+-                    (!jobConfig.smartInsertChecked && !audioCodecCopySafe(profile, safeExtension))
++                // Insertion at an arbitrary timestamp is sample-accurate only when the
++                // three parts are decoded and rebuilt. Copy/Smart Insert used packet
++                // boundaries and could shift or drop audio, so every mode uses this path.
++                val fullReencode = true
+                 val resultFile = File(cacheDir, "insert_${System.currentTimeMillis()}_${sanitizeBase(main.name)}.$safeExtension")
+                 val encoderName = if (fullReencode || jobConfig.smartInsertChecked) encoderForProfile(safeExtension, profile) else null
+                 encoderName?.let {
+@@ -532,18 +543,10 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+                     tracker.startTask(1)
+                 }
+ 
+-                if (!fullReencode && !jobConfig.smartInsertChecked && !canCopyDirectly) {
+-                    error("Os áudios têm parâmetros incompatíveis (${profile.codec}/${profile.sampleRate}Hz/${profile.channels}ch vs ${insertedProfile.codec}/${insertedProfile.sampleRate}Hz/${insertedProfile.channels}ch). Ative 'Smart Insert' ou 'Recodificar'.")
+-                }
+-
+-                val session = when {
+-                    fullReencode -> executeWithProgress(
+-                        buildFullReencodeArguments(mainFile, insertedFile, resultFile, profile, jobConfig),
+-                        compositeDurationMs(), tracker, 1
+-                    )
+-                    jobConfig.smartInsertChecked -> executeSmartInsert(mainFile, insertedFile, resultFile, profile, tracker, jobConfig)
+-                    else -> executeCopyInsert(mainFile, insertedFile, resultFile, tracker, jobConfig)
+-                }
++                val session = executeWithProgress(
++                    buildFullReencodeArguments(mainFile, insertedFile, resultFile, profile, jobConfig),
++                    compositeDurationMs(), tracker, 1
++                )
+                 if (ReturnCode.isCancel(session.returnCode)) throw ProcessingCancelled()
+                 if (!ReturnCode.isSuccess(session.returnCode) || !resultFile.exists() || resultFile.length() == 0L) {
+                     error(ffmpegFailureMessage(session))
+@@ -552,11 +555,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+                 tracker.completeTask(2)
+                 val elapsed = SystemClock.elapsedRealtime() - startedAt
+                 val efficiency = compositeDurationMs() / elapsed.coerceAtLeast(1L).toDouble()
+-                val mode = when {
+-                    fullReencode -> "Reencodificação precisa"
+-                    jobConfig.smartInsertChecked -> "Smart Insert"
+-                    else -> "Sem reencodar"
+-                }
++                val mode = "Inserção precisa"
+                 tracker.success(
+                     "Tempo de processamento: ${formatTime(elapsed)}\n" +
+                         "Mídia processada: ${formatTime(compositeDurationMs())}\n" +
+@@ -607,22 +606,22 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+         val hasRight = mainEnd - at > 0.0
+         val useFade = jobConfig.selectedTransition == TRANSITION_FADE && effectiveFade > 0.0
+         val useCrossfade = jobConfig.selectedTransition != TRANSITION_NONE && !useFade && effectiveFade > 0.0
+-        val audioLayout = if (profile.channels == 1) "mono" else "stereo"
++        val audioLayout = FfmpegMediaPolicies.channelLayout(profile.channels)
+         val normalize = "aresample=${profile.sampleRate},aformat=sample_fmts=fltp:sample_rates=${profile.sampleRate}:channel_layouts=$audioLayout"
+         if (hasLeft) {
+             val fadeOut = if (useFade) ",afade=t=out:st=${decimal((at - effectiveFade).coerceAtLeast(0.0))}:d=${decimal(effectiveFade)}" else ""
+-            filters += "[0:a]atrim=start=0:end=${decimal(at)},$normalize$fadeOut,asetpts=PTS-STARTPTS[a0]"
++            filters += "[0:a:${jobConfig.mainAudioTrack}]atrim=start=0:end=${decimal(at)},$normalize,asetpts=PTS-STARTPTS$fadeOut[a0]"
+             labels += "a0"
+         }
+         val insertedFades = buildString {
+             if (useFade && hasLeft) append(",afade=t=in:st=0:d=${decimal(effectiveFade)}")
+             if (useFade && hasRight) append(",afade=t=out:st=${decimal((insertedEnd - effectiveFade).coerceAtLeast(0.0))}:d=${decimal(effectiveFade)}")
+         }
+-        filters += "[1:a]atrim=start=0:end=${decimal(insertedEnd)},$normalize$insertedFades,asetpts=PTS-STARTPTS[a1]"
++        filters += "[1:a:${jobConfig.insertedAudioTrack}]atrim=start=0:end=${decimal(insertedEnd)},$normalize,asetpts=PTS-STARTPTS$insertedFades[a1]"
+         labels += "a1"
+         if (hasRight) {
+             val fadeIn = if (useFade) ",afade=t=in:st=0:d=${decimal(effectiveFade)}" else ""
+-            filters += "[0:a]atrim=start=${decimal(at)}:end=${decimal(mainEnd)},$normalize$fadeIn,asetpts=PTS-STARTPTS[a2]"
++            filters += "[0:a:${jobConfig.mainAudioTrack}]atrim=start=${decimal(at)}:end=${decimal(mainEnd)},$normalize,asetpts=PTS-STARTPTS$fadeIn[a2]"
+             labels += "a2"
+         }
+         if (useCrossfade && labels.size > 1) {
+@@ -651,10 +650,56 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+         if (extension in setOf("m4a", "mp4")) {
+             args.addAll(listOf("-movflags", "+faststart"))
+         }
+-        args.add(output.absolutePath)
++        args.addAll(listOf("-avoid_negative_ts", "make_zero", output.absolutePath))
+         return args.toTypedArray()
+     }
+ 
++    private fun audioTrackCount(uri: Uri): Int {
++        val extractor = android.media.MediaExtractor()
++        return try {
++            extractor.setDataSource(this, uri, null)
++            (0 until extractor.trackCount).count { index ->
++                extractor.getTrackFormat(index).getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true
++            }
++        } catch (_: Throwable) {
++            0
++        } finally {
++            extractor.release()
++        }
++    }
++
++    private fun requestAudioTrack(source: AudioSource, onSelected: () -> Unit) {
++        val labels = audioTrackLabels(source.uri)
++        AlertDialog.Builder(this)
++            .setTitle("Escolha a faixa de ${source.name}")
++            .setSingleChoiceItems(labels.toTypedArray(), 0) { dialog, which ->
++                selectedAudioTracks[source.uri.toString()] = which
++                dialog.dismiss()
++                onSelected()
++            }
++            .setNegativeButton("Cancelar", null)
++            .show()
++    }
++
++    private fun audioTrackLabels(uri: Uri): List<String> {
++        val extractor = MediaExtractor()
++        return try {
++            extractor.setDataSource(this, uri, null)
++            var audioOrdinal = 0
++            (0 until extractor.trackCount).mapNotNull { index ->
++                val format = extractor.getTrackFormat(index)
++                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
++                if (!mime.startsWith("audio/")) return@mapNotNull null
++                audioOrdinal += 1
++                val language = format.getString(MediaFormat.KEY_LANGUAGE)?.takeIf(String::isNotBlank)
++                "Faixa $audioOrdinal — ${mime.substringAfter('/').uppercase(Locale.ROOT)}" +
++                    (language?.let { " · $it" } ?: "")
++            }
++        } finally {
++            extractor.release()
++        }
++    }
++
+     private fun audioCrossfadeCurve(transition: String = selectedTransition): String {
+         return AUDIO_TRANSITIONS.firstOrNull { it.second == transition }?.second ?: "tri"
+     }
+@@ -724,6 +769,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+     }
+ 
+     private fun executeWithProgress(args: Array<String>, durationMs: Long, tracker: FfmpegTaskTracker, taskIndex: Int): FFmpegSession {
++        FfmpegCommandPresenter.show(status, args.asIterable())
++        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(args.asIterable())}")
+         val latch = CountDownLatch(1)
+         val result = AtomicReference<FFmpegSession>()
+         val started = SystemClock.elapsedRealtime()
+@@ -743,6 +790,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+     }
+ 
+     private fun executeBlocking(args: Array<String>): FFmpegSession {
++        FfmpegCommandPresenter.show(status, args.asIterable())
++        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(args.asIterable())}")
+         val latch = CountDownLatch(1)
+         val result = AtomicReference<FFmpegSession>()
+         val session = FFmpegKit.executeWithArgumentsAsync(args, { completed ->
+@@ -755,17 +804,23 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+         return result.get() ?: session
+     }
+ 
+-    private fun detectAudioProfile(file: File): AudioProfile {
++    private fun detectAudioProfile(file: File, audioTrack: Int = 0): AudioProfile {
++        val extractor = MediaExtractor()
+         return try {
+-            val session = FFmpegKit.executeWithArguments(arrayOf("-hide_banner", "-i", file.absolutePath))
+-            val audioLine = session.allLogsAsString.orEmpty().lines().firstOrNull { it.contains("Audio:", true) }.orEmpty()
+-            val sampleRate = Regex("""(\d+)\s*Hz""", RegexOption.IGNORE_CASE).find(audioLine)?.groupValues?.get(1)?.toIntOrNull() ?: 48000
+-            val channels = if (audioLine.contains("mono", true)) 1 else 2
+-            val bitrate = Regex("""(\d+)\s*kb/s""", RegexOption.IGNORE_CASE).find(audioLine)?.groupValues?.get(1)?.let { "${it}k" } ?: "192k"
+-            val codec = Regex("""Audio:\s*([a-zA-Z0-9_-]+)""").find(audioLine)?.groupValues?.get(1)?.lowercase(Locale.ROOT) ?: "aac"
++            extractor.setDataSource(file.absolutePath)
++            val format = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }
++                .filter { it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
++                .getOrNull(audioTrack) ?: return AudioProfile(48000, 2, "192k", "aac")
++            val sampleRate = runCatching { format.getInteger(MediaFormat.KEY_SAMPLE_RATE) }.getOrDefault(48000)
++            val channels = runCatching { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }.getOrDefault(2)
++            val bitrate = runCatching { format.getInteger(MediaFormat.KEY_BIT_RATE) }.getOrNull()
++                ?.let { "${(it / 1000).coerceAtLeast(1)}k" } ?: "192k"
++            val codec = format.getString(MediaFormat.KEY_MIME)?.substringAfter('/')?.lowercase(Locale.ROOT) ?: "aac"
+             AudioProfile(sampleRate, channels, bitrate, codec)
+         } catch (_: Throwable) {
+             AudioProfile(48000, 2, "192k", "aac")
++        } finally {
++            extractor.release()
+         }
+     }
+ 
+@@ -789,8 +844,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+             executeButton.setBackgroundResource(R.drawable.ffmpeg_outline_green_button_bg)
+             executeButton.contentDescription = "Inserir áudio"
+         }
+-        reencode.isEnabled = !processing
+-        smartInsert.isEnabled = !processing
++        reencode.isEnabled = false
++        smartInsert.isEnabled = false
+         selectInsert.isEnabled = !processing && mainAudio != null
+         selectOutputFolder.isEnabled = !processing
+         findViewById<View>(R.id.button_select_main_audio).isEnabled = !processing
+@@ -1058,7 +1113,9 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+         val reencodeChecked: Boolean,
+         val smartInsertChecked: Boolean,
+         val selectedTransition: String,
+-        val transitionSeconds: Double
++        val transitionSeconds: Double,
++        val mainAudioTrack: Int = 0,
++        val insertedAudioTrack: Int = 0
+     )
+     private enum class Segment { NONE, MAIN_BEFORE, INSERTED, MAIN_AFTER }
+     private class ProcessingCancelled : RuntimeException()
+@@ -1072,32 +1129,32 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
+         private const val TRANSITION_NONE = "none"
+         private const val TRANSITION_FADE = "fade"
+         private val AUDIO_TRANSITIONS = listOf(
+-            "No transition" to TRANSITION_NONE,
+-            "Fade in/out" to TRANSITION_FADE,
+-            "Linear slope (tri)" to "tri",
+-            "Quarter sine wave (qsin)" to "qsin",
+-            "Exponential sine wave (esin)" to "esin",
+-            "Half sine wave (hsin)" to "hsin",
+-            "Logarithmic (log)" to "log",
+-            "Inverted parabola (ipar)" to "ipar",
+-            "Quadratic (qua)" to "qua",
+-            "Cubic (cub)" to "cub",
+-            "Square root (squ)" to "squ",
+-            "Cubic root (cbr)" to "cbr",
+-            "Parabola (par)" to "par",
+-            "Exponential (exp)" to "exp",
+-            "Inverted quarter sine wave (iqsin)" to "iqsin",
+-            "Inverted half sine wave (ihsin)" to "ihsin",
+-            "Double-exponential seat (dese)" to "dese",
+-            "Double-exponential sigmoid (desi)" to "desi",
+-            "Logistic sigmoid (losi)" to "losi",
+-            "Sine cardinal function (sinc)" to "sinc",
+-            "Inverted sine cardinal function (isinc)" to "isinc",
+-            "Quartic (quat)" to "quat",
+-            "Quartic root (quatr)" to "quatr",
+-            "Squared quarter sine wave (qsin2)" to "qsin2",
+-            "Squared half sine wave (hsin2)" to "hsin2",
+-            "No fade (nofade)" to "nofade"
++            "Sem transição" to TRANSITION_NONE,
++            "Fade de entrada/saída" to TRANSITION_FADE,
++            "Curva linear" to "tri",
++            "Seno de quarto de onda" to "qsin",
++            "Seno exponencial" to "esin",
++            "Seno de meia onda" to "hsin",
++            "Logarítmica" to "log",
++            "Parábola invertida" to "ipar",
++            "Quadrática" to "qua",
++            "Cúbica" to "cub",
++            "Raiz quadrada" to "squ",
++            "Raiz cúbica" to "cbr",
++            "Parábola" to "par",
++            "Exponencial" to "exp",
++            "Seno de quarto invertido" to "iqsin",
++            "Seno de meia onda invertido" to "ihsin",
++            "Assento exponencial duplo" to "dese",
++            "Sigmoide exponencial dupla" to "desi",
++            "Sigmoide logística" to "losi",
++            "Função seno cardinal" to "sinc",
++            "Seno cardinal invertido" to "isinc",
++            "Quártica" to "quat",
++            "Raiz quártica" to "quatr",
++            "Seno de quarto ao quadrado" to "qsin2",
++            "Seno de meia onda ao quadrado" to "hsin2",
++            "Sem fade" to "nofade"
+         )
+         private val SUPPORTED_COPY_EXTENSIONS = setOf("m4a", "aac", "mp3", "wav", "flac", "ogg", "opus")
+     }
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+index b6a17b2..d091d53 100644
+--- a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt
+@@ -92,6 +92,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+ 
+     private val handler = Handler(Looper.getMainLooper())
+     private val clips = mutableListOf<JoinClip>()
++    private val selectedAudioTracks = mutableMapOf<String, Int>()
+     private val tempOutputFiles = mutableListOf<File>()
+     private var tempSmartJoinDiagnosticFile: File? = null
+     private var selectedTransition = TRANSITION_FADE_IN_OUT
+@@ -105,6 +106,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+     private var availableVideoEncoders: List<FfmpegVideoEncoder> = emptyList()
+     private var selectedVideoEncoder: FfmpegVideoEncoder? = null
+     private var selectedVideoQuality = FfmpegVideoQuality.default
++    private var processingVideoQuality = FfmpegVideoQuality.default
+     private var updatingJoinModeChecks = false
+     private var resultPreviewPlayer: MediaPlayer? = null
+     private var resultPreviewSurface: Surface? = null
+@@ -403,6 +405,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+     }
+ 
+     private fun updateReencodeControls() {
++        checkSmartJoin.isChecked = false
++        checkSmartJoin.isEnabled = false
+         val transitionEnabled = (checkReencode.isChecked || checkSmartJoin.isChecked) && !isProcessing
+         val enabled = transitionEnabled
+         buttonTransition.isEnabled = enabled
+@@ -514,19 +518,29 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+ 
+     private fun showSmartJoinHelp() {
+         AlertDialog.Builder(this)
+-            .setMessage("Tenta copiar a maior parte dos vídeos e reencodar apenas os trechos próximos à transição.\n\nAntes de começar, o app faz um teste curto com o encoder escolhido. Se ele falhar, testa alternativas compatíveis e oferece as opções de continuar com outro encoder, fazer Reencode Completo ou cancelar.\n\nVantagem: acelera muito o processo. Desvantagem: pode gerar pequenos bugs no vídeo.")
++            .setMessage("O Smart Join está temporariamente indisponível. Use Reencode Completo para preservar todo o conteúdo com cortes e transições precisos.")
+             .setPositiveButton("OK", null)
+             .show()
+     }
+ 
+     private fun startJoin() {
+         if (clips.size < 2) return
++        clips.firstOrNull {
++            audioTrackCount(it.uri) > 1 && selectedAudioTracks[it.uri.toString()] == null
++        }?.let { clip ->
++            requestAudioTrack(clip) { startJoin() }
++            return
++        }
+         val audioOnly = currentJoinIsAudio()
+-        val reencodeChecked = checkReencode.isChecked
+-        val smartJoinChecked = checkSmartJoin.isChecked
++        val hasSelectedMultitrackAudio = clips.any { audioTrackCount(it.uri) > 1 }
++        // Smart Join now uses the same precise full-reencode pipeline. The former
++        // partial-copy implementation could skip content between non-aligned keyframes.
++        val reencodeChecked = checkReencode.isChecked || checkSmartJoin.isChecked
++        val smartJoinChecked = false
+         val isFadeInOut = isFadeInOutTransition()
+         val transitionSeconds = safeTransitionSeconds()
+         val originalEncoder = selectedVideoEncoder
++        processingVideoQuality = selectedVideoQuality
+         if (!audioOnly && (reencodeChecked || smartJoinChecked) && originalEncoder == null) {
+             status.text = "Nenhum encoder de vídeo compatível está disponível."
+             return
+@@ -544,12 +558,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+                     copiedInputs += copyUriToCache(clip.uri, "join_input_${index}_${clip.name}")
+                 }
+                 updateStep("Preparar arquivos de entrada", 100, StepState.DONE)
+-                val audioNeedsNormalization = audioOnly && !audioInputsAreCopyCompatible(copiedInputs)
++                validateSupportedStreamTopology(copiedInputs, audioOnly)?.let { reason ->
++                    throw IllegalArgumentException(reason)
++                }
++                val firstAudioExtension = clips.firstOrNull()?.name?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
++                val audioNeedsNormalization = audioOnly &&
++                    (!audioInputsAreCopyCompatible(copiedInputs) || firstAudioExtension == "mp3" || hasSelectedMultitrackAudio)
+                 val audioWillStandardizeToWav = audioNeedsNormalization &&
+                     !reencodeChecked && !smartJoinChecked
+                 val outputName = buildJoinedOutputName(forceAudioStandardization = audioWillStandardizeToWav)
+                 val tempOutput = File(cacheDir, "join_${System.currentTimeMillis()}_$outputName")
+-                val sourceProfile = detectOutputProfile(copiedInputs.firstOrNull(), clips.firstOrNull())
++                val sourceProfile = detectAggregateOutputProfile(copiedInputs)
+                 val fastEncoderCompatible = originalEncoder != null &&
+                     SmartJoinPlanner.normalizeCodecFamily(originalEncoder.codecFamily) ==
+                     SmartJoinPlanner.normalizeCodecFamily(sourceProfile.videoCodec)
+@@ -701,11 +720,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+                         )
+                     }
+                 } else {
+-                    if (!audioOnly && (!smartJoinInputsCompatible || directConcatOrientationMismatch)) {
++                    if (!audioOnly && (!smartJoinInputsCompatible || directConcatOrientationMismatch || hasSelectedMultitrackAudio)) {
+                         JoinExecutionResult(
+                             success = false,
+                             cancelled = false,
+-                            failureMessage = "Vídeos com resoluções, codecs ou orientações diferentes não podem ser unidos diretamente sem reencodar. Ative 'Recodificar' ou 'Smart Join'."
++                            failureMessage = "Vídeos com perfis diferentes ou uma faixa de áudio escolhida não podem ser unidos diretamente. Ative 'Recodificar'."
+                         )
+                     } else {
+                         val session = executeFfmpegWithProgress(
+@@ -1045,7 +1064,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         val encoderName = when {
+             !normalize -> null
+             forceNormalization && !requestedReencode -> "pcm_s16le"
+-            else -> "aac"
++            else -> audioEncoderForOutput(outputFile, profile)
+         }
+         val session = executeFfmpegWithProgress(arguments, totalDurationMs(), label, encoderName)
+         return JoinExecutionResult(
+@@ -1079,10 +1098,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+                 }
+             }
+             parts += buildString {
+-                append("[$index:a]")
++                append("[${audioInputLabel(index)}]")
+                 append(normalizeFilter)
++                append(",asetpts=PTS-STARTPTS")
+                 fades.forEach { append(',').append(it) }
+-                append(",asetpts=PTS-STARTPTS[a$index]")
++                append("[a$index]")
+             }
+         }
+         if (withTransition && isFadeInOutTransition()) {
+@@ -1109,23 +1129,46 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         if (standardizeToWav) {
+             args += listOf(
+                 "-c:a", "pcm_s16le",
+-                "-ar", "16000",
+-                "-ac", "1",
++                "-ar", profile.audioSampleRate.toString(),
++                "-ac", profile.audioChannels.toString(),
++                "-avoid_negative_ts", "make_zero",
+                 outputFile.absolutePath
+             )
+         } else {
++            val encoder = audioEncoderForOutput(outputFile, profile)
+             args += listOf(
+-                "-c:a", "aac",
+-                "-b:a", profile.audioBitrate,
++                "-c:a", encoder,
+                 "-ar", profile.audioSampleRate.toString(),
+-                "-ac", profile.audioChannels.toString(),
+-                "-movflags", "+faststart",
+-                outputFile.absolutePath
++                "-ac", profile.audioChannels.toString()
+             )
++            if (encoder !in setOf("flac", "pcm_s16le", "alac")) {
++                args += listOf("-b:a", profile.audioBitrate)
++            }
++            args += listOf("-avoid_negative_ts", "make_zero", outputFile.absolutePath)
+         }
+         return args.toTypedArray()
+     }
+ 
++    private fun audioEncoderForOutput(outputFile: File, profile: OutputProfile): String {
++        val codec = profile.audioCodec?.lowercase(Locale.ROOT)
++        return when (outputFile.extension.lowercase(Locale.ROOT)) {
++            "wav" -> "pcm_s16le"
++            "flac" -> "flac"
++            "mp3" -> "libmp3lame"
++            "opus" -> "libopus"
++            "ogg" -> if (codec == "opus") "libopus" else "libvorbis"
++            "m4a", "mp4", "aac" -> "aac"
++            else -> when (codec) {
++                "flac" -> "flac"
++                "mp3" -> "libmp3lame"
++                "opus" -> "libopus"
++                "vorbis" -> "libvorbis"
++                "ac3" -> "ac3"
++                else -> "aac"
++            }
++        }
++    }
++
+     private fun executeFadeInOutReencodeJoin(
+         inputs: List<File>,
+         outputFile: File,
+@@ -1153,9 +1196,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+             "-f", "concat",
+             "-safe", "0",
+             "-i", listFile.absolutePath,
+-            "-c", "copy"
++            "-map", "0", "-map_metadata", "0", "-map_chapters", "0",
++            "-c", "copy", "-avoid_negative_ts", "make_zero"
+         )
+-        if (!currentJoinIsAudio()) args += listOf("-movflags", "+faststart")
+         args += outputFile.absolutePath
+         return args.toTypedArray()
+     }
+@@ -1470,29 +1513,46 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+     }
+ 
+     private fun buildReencodeArguments(inputs: List<File>, outputFile: File, withTransition: Boolean): Array<String> {
+-        val outputProfile = displayOrientedReencodeProfile(detectOutputProfile(inputs.firstOrNull(), clips.firstOrNull()))
++        val outputProfile = displayOrientedReencodeProfile(detectAggregateOutputProfile(inputs))
+         val transitionSeconds = if (withTransition) safeTransitionSeconds() else 0.0
+         val filter = buildFilterComplex(outputProfile, transitionSeconds)
+         val args = mutableListOf("-y")
+         inputs.forEach { input -> args.addAll(listOf("-i", input.absolutePath)) }
+         args.addAll(listOf("-filter_complex", filter, "-map", "[vout]", "-map", "[aout]"))
+         args.addAll(videoEncodingArguments(outputProfile, constrained = true))
+-        args.addAll(listOf("-r", outputProfile.fps, "-c:a", "aac", "-b:a", outputProfile.audioBitrate, "-ar", outputProfile.audioSampleRate.toString(), "-ac", outputProfile.audioChannels.toString(), "-movflags", "+faststart", outputFile.absolutePath))
++        args.addAll(listOf("-r", outputProfile.fps))
++        args.addAll(audioEncodingArguments(outputProfile))
++        args.addAll(listOf("-ar", outputProfile.audioSampleRate.toString(), "-ac", outputProfile.audioChannels.toString(), "-avoid_negative_ts", "make_zero", outputFile.absolutePath))
+         return args.toTypedArray()
+     }
+ 
+     private fun buildFadeInOutReencodeArguments(inputs: List<File>, outputFile: File): Array<String> {
+-        val outputProfile = displayOrientedReencodeProfile(detectOutputProfile(inputs.firstOrNull(), clips.firstOrNull()))
++        val outputProfile = displayOrientedReencodeProfile(detectAggregateOutputProfile(inputs))
+         val transitionSeconds = safeTransitionSeconds()
+         val filter = buildFadeInOutFilterComplex(outputProfile, transitionSeconds)
+         val args = mutableListOf("-y")
+         inputs.forEach { input -> args.addAll(listOf("-i", input.absolutePath)) }
+         args.addAll(listOf("-filter_complex", filter, "-map", "[vout]", "-map", "[aout]"))
+         args.addAll(videoEncodingArguments(outputProfile, constrained = true))
+-        args.addAll(listOf("-r", outputProfile.fps, "-c:a", "aac", "-b:a", outputProfile.audioBitrate, "-ar", outputProfile.audioSampleRate.toString(), "-ac", outputProfile.audioChannels.toString(), "-movflags", "+faststart", outputFile.absolutePath))
++        args.addAll(listOf("-r", outputProfile.fps))
++        args.addAll(audioEncodingArguments(outputProfile))
++        args.addAll(listOf("-ar", outputProfile.audioSampleRate.toString(), "-ac", outputProfile.audioChannels.toString(), "-avoid_negative_ts", "make_zero", outputFile.absolutePath))
+         return args.toTypedArray()
+     }
+ 
++    private fun audioEncodingArguments(profile: OutputProfile): List<String> {
++        val encoder = when (profile.audioCodec?.lowercase(Locale.ROOT)) {
++            "opus" -> "libopus"
++            "vorbis" -> "libvorbis"
++            "flac" -> "flac"
++            "mp3" -> "libmp3lame"
++            "ac3" -> "ac3"
++            else -> "aac"
++        }
++        return if (encoder == "flac") listOf("-c:a", encoder)
++        else listOf("-c:a", encoder, "-b:a", profile.audioBitrate)
++    }
++
+     private fun buildFadeInOutFilterComplex(profile: OutputProfile, transitionSeconds: Double): String {
+         val targetWidth = profile.width
+         val targetHeight = profile.height
+@@ -1511,8 +1571,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+             val videoFilter = buildString {
+                 append("[$index:v]")
+                 append(videoFillFrameFilter(targetWidth, targetHeight, profile.fps, hasMixedOrientations()))
++                append(",setpts=PTS-STARTPTS")
+                 videoFades.forEach { append(',').append(it) }
+-                append(",setpts=PTS-STARTPTS[v$index]")
++                append("[v$index]")
+             }
+             parts += videoFilter
+ 
+@@ -1523,18 +1584,19 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+             }
+             val audioFilter = if (clip.hasAudio) {
+                 buildString {
+-                    append("[$index:a]")
++                    append("[${audioInputLabel(index)}]")
+                     append("aresample=${profile.audioSampleRate},")
+                     append("aformat=sample_fmts=fltp:sample_rates=${profile.audioSampleRate}:channel_layouts=${profile.audioLayout}")
++                    append(",asetpts=PTS-STARTPTS")
+                     audioFadeFilters.forEach { append(',').append(it) }
+-                    append(",asetpts=PTS-STARTPTS[a$index]")
++                    append("[a$index]")
+                 }
+             } else {
+                 buildString {
+                     append("anullsrc=channel_layout=${profile.audioLayout}:sample_rate=${profile.audioSampleRate},")
+-                    append("atrim=0:${formatDecimal(clipSeconds)}")
++                    append("atrim=0:${formatDecimal(clipSeconds)},asetpts=N/SR/TB")
+                     audioFadeFilters.forEach { append(',').append(it) }
+-                    append(",asetpts=N/SR/TB[a$index]")
++                    append("[a$index]")
+                 }
+             }
+             parts += audioFilter
+@@ -1551,7 +1613,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         clips.forEachIndexed { index, clip ->
+             parts += "[$index:v]${videoFillFrameFilter(targetWidth, targetHeight, profile.fps, hasMixedOrientations())}[v$index]"
+             parts += if (clip.hasAudio) {
+-                "[$index:a]aresample=${profile.audioSampleRate},aformat=sample_fmts=fltp:sample_rates=${profile.audioSampleRate}:channel_layouts=${profile.audioLayout}[a$index]"
++                "[${audioInputLabel(index)}]aresample=${profile.audioSampleRate},aformat=sample_fmts=fltp:sample_rates=${profile.audioSampleRate}:channel_layouts=${profile.audioLayout}[a$index]"
+             } else {
+                 "anullsrc=channel_layout=${profile.audioLayout}:sample_rate=${profile.audioSampleRate},atrim=0:${clip.durationMs / 1000.0},asetpts=N/SR/TB[a$index]"
+             }
+@@ -1580,15 +1642,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         return parts.joinToString(";")
+     }
+ 
+-    private fun videoFillFrameFilter(width: Int, height: Int, fps: String, letterbox: Boolean = false): String {
+-        return if (letterbox) {
+-            // Orientacoes mistas: preserva o frame inteiro com barras (nao corta conteudo).
+-            "scale=$width:$height:force_original_aspect_ratio=decrease," +
+-                "pad=$width:$height:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=$fps,format=yuv420p"
+-        } else {
+-            "scale=$width:$height:force_original_aspect_ratio=increase," +
+-                "crop=$width:$height,setsar=1,fps=$fps,format=yuv420p"
+-        }
++    private fun videoFillFrameFilter(width: Int, height: Int, fps: String, letterbox: Boolean = true): String {
++        return "scale=$width:$height:force_original_aspect_ratio=decrease," +
++            "pad=$width:$height:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=$fps,format=yuv420p"
+     }
+ 
+     private fun hasMixedOrientations(): Boolean {
+@@ -1632,6 +1688,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         taskLabel: String,
+         encoderName: String? = null
+     ): FFmpegSession {
++        FfmpegCommandPresenter.show(status, arguments.asIterable())
++        Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
+         val latch = CountDownLatch(1)
+         val sessionRef = AtomicReference<FFmpegSession>()
+         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
+@@ -1665,6 +1723,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         latch.await()
+         currentSessionId = null
+         val completedSession = sessionRef.get() ?: session
++        arguments.firstOrNull { argument ->
++            File(argument).name.startsWith("join_list_")
++        }?.let { listPath -> runCatching { File(listPath).delete() } }
+         when {
+             ReturnCode.isSuccess(completedSession.returnCode) -> updateStep(
+                 taskLabel,
+@@ -1755,7 +1816,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+             setJoinEnabled(clips.size >= 2)
+         }
+         checkReencode.isEnabled = !processing
+-        checkSmartJoin.isEnabled = !processing
++        checkSmartJoin.isChecked = false
++        checkSmartJoin.isEnabled = false
+         timeline.isEnabled = !processing
+         buttonSelectOutputFolder.isEnabled = !processing
+         buttonSelectVideos.isEnabled = !processing
+@@ -1796,7 +1858,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         }
+         try {
+             val outputName = lastOutputName.ifBlank { tempFile.name }
+-            val outputMime = if (currentJoinIsAudio()) audioMimeType(outputName) else "video/mp4"
++            val outputMime = if (currentJoinIsAudio()) audioMimeType(outputName) else "video/x-matroska"
+             val document = destDir.createFile(outputMime, outputName)
+             if (document == null) {
+                 status.text = "Erro ao criar arquivo na pasta selecionada."
+@@ -1842,7 +1904,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         val uri = lastOutputUri ?: return
+         try {
+             startActivity(Intent(Intent.ACTION_VIEW).apply {
+-            setDataAndType(uri, if (currentJoinIsAudio()) audioMimeType(lastOutputName) else "video/mp4")
++            setDataAndType(uri, if (currentJoinIsAudio()) audioMimeType(lastOutputName) else "video/x-matroska")
+                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+             })
+         } catch (_: ActivityNotFoundException) {
+@@ -1871,7 +1933,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         val uri = lastOutputUri ?: return
+         try {
+             startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+-                type = if (currentJoinIsAudio()) audioMimeType(lastOutputName) else "video/mp4"
++                type = if (currentJoinIsAudio()) audioMimeType(lastOutputName) else "video/x-matroska"
+                 putExtra(Intent.EXTRA_STREAM, uri)
+                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+             }, "Compartilhar arquivo"))
+@@ -2323,34 +2385,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         }
+     }
+ 
+-    private fun configureFadeProcessingPlan(taskLabels: List<String>) {
+-        val applyPlan = {
+-            val preparation = processingSteps.firstOrNull { it.label == "Preparar arquivos de entrada" }
+-                ?: ProcessingStep("Preparar arquivos de entrada", 100, StepState.DONE)
+-            val save = processingSteps.firstOrNull { it.label == "Preparar arquivo para salvar" }
+-                ?: ProcessingStep("Preparar arquivo para salvar")
+-            val completedOrActiveSteps = processingSteps.filter {
+-                it.label != "Preparar arquivos de entrada" && it.label != "Preparar arquivo para salvar"
+-            }
+-            processingSteps.clear()
+-            processingSteps += preparation
+-            processingSteps += completedOrActiveSteps
+-            taskLabels.forEach { processingSteps += ProcessingStep(it) }
+-            processingSteps += save
+-            renderProcessingSteps()
+-        }
+-        if (Looper.myLooper() == Looper.getMainLooper()) {
+-            applyPlan()
+-        } else {
+-            val latch = CountDownLatch(1)
+-            runOnUiThread {
+-                applyPlan()
+-                latch.countDown()
+-            }
+-            latch.await()
+-        }
+-    }
+-
+     private fun isFadeInOutTransition(): Boolean = selectedTransition == TRANSITION_FADE_IN_OUT
+ 
+     private fun audioCrossfadeCurve(): String {
+@@ -2358,7 +2392,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+     }
+ 
+     private fun xfadeTransitionName(): String {
+-        return if (isFadeInOutTransition()) "fade" else selectedTransition
++        return if (isFadeInOutTransition()) "fade" else VIDEO_TRANSITION_VALUES[selectedTransition] ?: "fade"
+     }
+ 
+     private fun shouldUseOrientationSafeReencode(): Boolean {
+@@ -2534,10 +2568,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         }
+         val extension = if (currentJoinIsAudio()) {
+             if (forceAudioStandardization) "wav"
+-            else if (checkReencode.isChecked || checkSmartJoin.isChecked) "m4a"
++            else if (checkReencode.isChecked || checkSmartJoin.isChecked) {
++                clips.firstOrNull()?.name?.substringAfterLast('.', "m4a")?.lowercase(Locale.ROOT)
++                    ?.takeIf { it in setOf("wav", "flac", "mp3", "ogg", "opus", "m4a", "aac") }
++                    ?: "m4a"
++            }
+             else clips.firstOrNull()?.name?.substringAfterLast('.', "m4a")?.lowercase(Locale.ROOT) ?: "m4a"
+         } else {
+-            "mp4"
++            "mkv"
+         }
+         return "$baseName.$extension"
+     }
+@@ -2558,6 +2596,79 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         }
+     }
+ 
++    private fun validateSupportedStreamTopology(inputs: List<File>, audioOnly: Boolean): String? {
++        inputs.forEachIndexed { index, file ->
++            val extractor = MediaExtractor()
++            try {
++                extractor.setDataSource(file.absolutePath)
++                val mimes = (0 until extractor.trackCount).mapNotNull { track ->
++                    extractor.getTrackFormat(track).getString(MediaFormat.KEY_MIME)
++                }
++                val audioCount = mimes.count { it.startsWith("audio/") }
++                val videoCount = mimes.count { it.startsWith("video/") }
++                val subtitleCount = mimes.count {
++                    it.startsWith("text/") || it.contains("subtitle", ignoreCase = true) ||
++                        it.contains("subrip", ignoreCase = true) || it.contains("ass", ignoreCase = true) ||
++                        it.contains("ssa", ignoreCase = true) || it.contains("vtt", ignoreCase = true) ||
++                        it.contains("ttml", ignoreCase = true)
++                }
++                if (audioOnly && audioCount < 1) {
++                    return "O arquivo ${index + 1} precisa ter pelo menos uma faixa de áudio."
++                }
++                if (!audioOnly && (videoCount != 1 || subtitleCount > 0)) {
++                    return "O arquivo ${index + 1} precisa ter uma faixa de vídeo e não pode conter legendas no modo com transições."
++                }
++            } catch (error: Throwable) {
++                return "Não foi possível validar as faixas do arquivo ${index + 1}: ${error.message.orEmpty()}"
++            } finally {
++                extractor.release()
++            }
++        }
++        return null
++    }
++
++    private fun audioInputLabel(inputIndex: Int): String {
++        val clip = clips.getOrNull(inputIndex)
++        val track = clip?.let { selectedAudioTracks[it.uri.toString()] } ?: 0
++        return FfmpegMediaPolicies.audioStreamSpecifier(inputIndex, track)
++    }
++
++    private fun audioTrackCount(uri: Uri): Int = audioTrackLabels(uri).size
++
++    private fun requestAudioTrack(clip: JoinClip, onSelected: () -> Unit) {
++        val labels = audioTrackLabels(clip.uri)
++        AlertDialog.Builder(this)
++            .setTitle("Escolha a faixa de ${clip.name}")
++            .setSingleChoiceItems(labels.toTypedArray(), 0) { dialog, which ->
++                selectedAudioTracks[clip.uri.toString()] = which
++                dialog.dismiss()
++                onSelected()
++            }
++            .setNegativeButton("Cancelar", null)
++            .show()
++    }
++
++    private fun audioTrackLabels(uri: Uri): List<String> {
++        val extractor = MediaExtractor()
++        return try {
++            extractor.setDataSource(this, uri, null)
++            var audioOrdinal = 0
++            (0 until extractor.trackCount).mapNotNull { index ->
++                val format = extractor.getTrackFormat(index)
++                val mime = format.getString(MediaFormat.KEY_MIME).orEmpty()
++                if (!mime.startsWith("audio/")) return@mapNotNull null
++                audioOrdinal += 1
++                val language = format.getString(MediaFormat.KEY_LANGUAGE)?.takeIf(String::isNotBlank)
++                "Faixa $audioOrdinal — ${mime.substringAfter('/').uppercase(Locale.ROOT)}" +
++                    (language?.let { " · $it" } ?: "")
++            }
++        } catch (_: Throwable) {
++            emptyList()
++        } finally {
++            extractor.release()
++        }
++    }
++
+     private fun inspectAudioInput(file: File): AudioInputProfile? {
+         val extractor = MediaExtractor()
+         return try {
+@@ -2669,7 +2780,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+                 ?: FALLBACK_VIDEO_BITRATE
+             val audioSampleRate = parseAudioSampleRate(audioLine) ?: 48000
+             val audioChannels = parseAudioChannels(audioLine)
+-            val audioLayout = if (audioChannels == 1) "mono" else "stereo"
++            val audioLayout = FfmpegMediaPolicies.channelLayout(audioChannels)
+ 
+             val pixFmt = parsePixFmt(videoLine)
+             val sar = parseSar(videoLine)
+@@ -2717,13 +2828,67 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         }
+     }
+ 
+-    private fun bestVideoBitrate(inputFile: File, logs: String, videoLine: String): String? {
+-        val candidates = listOfNotNull(
+-            parseBitrateKbpsFromText(videoLine),
+-            detectContainerBitrateKbps(inputFile),
+-            parseBitrateKbpsFromText(logs)
++    private fun detectAggregateOutputProfile(inputs: List<File>): OutputProfile {
++        val profiles = inputs.mapIndexed { index, input ->
++            val clip = clips.getOrNull(index)
++            applySelectedAudioProfile(input, clip, detectOutputProfile(input, clip))
++        }
++        val first = profiles.firstOrNull() ?: return detectOutputProfile(null, clips.firstOrNull())
++        val fps = profiles.maxOf { it.fps.toDoubleOrNull() ?: 30.0 }
++        fun kbps(value: String, fallback: Int): Int {
++            val amount = Regex("""(\d+(?:\.\d+)?)""").find(value)?.value?.toDoubleOrNull() ?: return fallback
++            return when {
++                value.endsWith("M", ignoreCase = true) -> (amount * 1000.0).toInt()
++                value.endsWith("k", ignoreCase = true) -> amount.toInt()
++                else -> (amount / 1000.0).toInt().coerceAtLeast(1)
++            }
++        }
++        val videoBitrateKbps = profiles.maxOf { kbps(it.videoBitrate, 15_000) }
++        val audioBitrateKbps = profiles.maxOf { kbps(it.audioBitrate, 192) }
++        val channels = profiles.maxOf { it.audioChannels }.coerceAtLeast(1)
++        val videoBitrate = "${videoBitrateKbps}k"
++        return first.copy(
++            width = makeEven(profiles.maxOf { it.width }).coerceAtLeast(2),
++            height = makeEven(profiles.maxOf { it.height }).coerceAtLeast(2),
++            fps = formatFrameRate(fps),
++            videoBitrate = videoBitrate,
++            videoBufferSize = bufferSizeFor(videoBitrate),
++            audioSampleRate = profiles.maxOf { it.audioSampleRate },
++            audioChannels = channels,
++            audioLayout = FfmpegMediaPolicies.channelLayout(channels),
++            audioBitrate = "${audioBitrateKbps}k"
+         )
+-        return candidates.maxOrNull()?.let { "${it.coerceAtLeast(1)}k" }
++    }
++
++    private fun applySelectedAudioProfile(input: File, clip: JoinClip?, profile: OutputProfile): OutputProfile {
++        val selectedTrack = clip?.let { selectedAudioTracks[it.uri.toString()] } ?: 0
++        val extractor = MediaExtractor()
++        return try {
++            extractor.setDataSource(input.absolutePath)
++            val format = (0 until extractor.trackCount).map { extractor.getTrackFormat(it) }
++                .filter { it.getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
++                .getOrNull(selectedTrack) ?: return profile
++            val sampleRate = runCatching { format.getInteger(MediaFormat.KEY_SAMPLE_RATE) }.getOrDefault(profile.audioSampleRate)
++            val channels = runCatching { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) }.getOrDefault(profile.audioChannels)
++            val bitrate = runCatching { format.getInteger(MediaFormat.KEY_BIT_RATE) }.getOrNull()
++                ?.let { "${(it / 1000).coerceAtLeast(1)}k" } ?: profile.audioBitrate
++            val codec = format.getString(MediaFormat.KEY_MIME)?.substringAfter('/') ?: profile.audioCodec
++            profile.copy(
++                audioSampleRate = sampleRate,
++                audioChannels = channels,
++                audioLayout = FfmpegMediaPolicies.channelLayout(channels),
++                audioBitrate = bitrate,
++                audioCodec = codec
++            )
++        } catch (_: Throwable) {
++            profile
++        } finally {
++            extractor.release()
++        }
++    }
++
++    private fun bestVideoBitrate(inputFile: File, logs: String, videoLine: String): String? {
++        return parseBitrateKbpsFromText(videoLine)?.let { "${it.coerceAtLeast(1)}k" }
+     }
+ 
+     private fun detectContainerBitrateKbps(inputFile: File): Int? {
+@@ -2830,7 +2995,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         encoderOverride: FfmpegVideoEncoder? = null
+     ): List<String> {
+         val encoder = encoderOverride ?: requireVideoEncoder()
+-        val settings = encoder.encodingFor(selectedVideoQuality, profile.videoBitrate)
++        val settings = encoder.encodingFor(processingVideoQuality, profile.videoBitrate)
+         val targetBitrate = settings.targetBitrate ?: return settings.arguments
+         return buildList {
+             addAll(settings.arguments)
+@@ -2862,7 +3027,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+     }
+ 
+     private fun parseVideoProfile(videoLine: String): String? {
+-        return Regex("""Video:\s*[a-zA-Z0-9_-]+\s*\(([^)]+)\)""").find(videoLine)?.groupValues?.get(1)?.trim()?.takeIf { it.isNotBlank() }
++        return FfmpegMediaPolicies.parseKnownVideoProfile(videoLine)
+     }
+ 
+     private fun detectAudioCodec(audioLine: String): String? {
+@@ -2904,11 +3069,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+     }
+ 
+     private fun parseAudioChannels(audioLine: String): Int {
+-        return when {
+-            audioLine.contains("mono", ignoreCase = true) -> 1
+-            audioLine.contains("stereo", ignoreCase = true) -> 2
+-            else -> 2
+-        }
++        return FfmpegMediaPolicies.parseAudioChannelCount(audioLine) ?: 2
+     }
+ 
+     private fun bufferSizeFor(bitrate: String): String {
+@@ -3022,30 +3183,36 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
+         private const val FALLBACK_VIDEO_BITRATE = "15M"
+         private const val DEFAULT_VIDEO_CODEC = "h264"
+         private const val TRANSITION_FADE_IN_OUT = "Fade in/out"
+-        private const val TRANSITION_NONE = "none"
+-        private const val TRANSITION_DEFAULT_VIDEO = "fade"
++        private const val TRANSITION_NONE = "Sem transição"
++        private const val TRANSITION_DEFAULT_VIDEO = "Dissolver"
+         private const val SMART_JOIN_VALIDATION_LABEL = "Validando encoders do Smart Join"
+         private const val SMART_JOIN_PREFLIGHT_MAX_SECONDS = 1.0
+         private const val TAG = "FfmpegJoinVideos"
+         private val TRANSITIONS = listOf(
+             TRANSITION_FADE_IN_OUT,
+-            "fade",
+-            "dissolve",
+-            "wipeleft",
+-            "wiperight",
+-            "slideleft",
+-            "slideright",
+-            "smoothleft",
+-            "smoothright",
+-            "circleopen",
+-            "circleclose"
++            "Dissolver", "Dissolução suave", "Varredura para a esquerda",
++            "Varredura para a direita", "Deslizar para a esquerda",
++            "Deslizar para a direita", "Suave para a esquerda",
++            "Suave para a direita", "Círculo abrindo", "Círculo fechando"
++        )
++        private val VIDEO_TRANSITION_VALUES = linkedMapOf(
++            "Dissolver" to "fade",
++            "Dissolução suave" to "dissolve",
++            "Varredura para a esquerda" to "wipeleft",
++            "Varredura para a direita" to "wiperight",
++            "Deslizar para a esquerda" to "slideleft",
++            "Deslizar para a direita" to "slideright",
++            "Suave para a esquerda" to "smoothleft",
++            "Suave para a direita" to "smoothright",
++            "Círculo abrindo" to "circleopen",
++            "Círculo fechando" to "circleclose"
+         )
+         private val AUDIO_TRANSITIONS = linkedMapOf(
+             TRANSITION_FADE_IN_OUT to null,
+-            "Linear slope (tri)" to "tri",
+-            "Exponential (exp)" to "exp",
+-            "Logarithmic (log)" to "log",
+-            "Sem transição" to TRANSITION_NONE
++            "Curva linear" to "tri",
++            "Curva exponencial" to "exp",
++            "Curva logarítmica" to "log",
++            TRANSITION_NONE to TRANSITION_NONE
+         )
+     }
+ }
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegMediaPolicies.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegMediaPolicies.kt
+new file mode 100644
+index 0000000..42b1294
+--- /dev/null
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegMediaPolicies.kt
+@@ -0,0 +1,122 @@
++package br.gov.sp.pcsp.launcher
++
++import java.util.Locale
++
++internal object FfmpegMediaPolicies {
++    fun usesMetadataCopyCommand(metadataOnly: Boolean): Boolean = metadataOnly
++
++    fun metadataRotationCopyArguments(
++        inputPath: String,
++        outputPath: String,
++        currentCounterClockwise: Int,
++        requestedClockwise: Int
++    ): Array<String> = arrayOf(
++        "-y",
++        "-display_rotation:v:0",
++        metadataRotationAfterClockwiseRequest(currentCounterClockwise, requestedClockwise).toString(),
++        "-i", inputPath,
++        "-map", "0",
++        "-c", "copy",
++        outputPath
++    )
++
++    fun audioStreamSpecifier(inputIndex: Int, audioTrackIndex: Int): String =
++        "$inputIndex:a:${audioTrackIndex.coerceAtLeast(0)}"
++
++    fun normalizeRightAngle(degrees: Int): Int {
++        val normalized = ((degrees % 360) + 360) % 360
++        return when (normalized) {
++            0 -> 0
++            90 -> 90
++            180 -> 180
++            270 -> -90
++            else -> {
++                val rounded = ((normalized + 45) / 90 * 90) % 360
++                when (rounded) {
++                    90 -> 90
++                    180 -> 180
++                    270 -> -90
++                    else -> 0
++                }
++            }
++        }
++    }
++
++    /** FFmpeg display rotation is counter-clockwise; the SIG UI is clockwise. */
++    fun metadataRotationAfterClockwiseRequest(currentCounterClockwise: Int, requestedClockwise: Int): Int =
++        normalizeRightAngle(currentCounterClockwise - requestedClockwise)
++
++    /** Materializes an existing FFmpeg counter-clockwise display rotation into pixels. */
++    fun physicalRotationFilters(counterClockwiseDegrees: Int): List<String> =
++        when (normalizeRightAngle(counterClockwiseDegrees)) {
++            -90 -> listOf("transpose=1")
++            90 -> listOf("transpose=2")
++            180 -> listOf("hflip", "vflip")
++            else -> emptyList()
++        }
++
++    fun parseAudioChannelCount(audioLine: String, fallback: Int = 2): Int {
++        val text = audioLine.lowercase(Locale.ROOT)
++        Regex("""\b(\d+)\s*channels?\b""").find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()?.let {
++            if (it > 0) return it
++        }
++        return when {
++            Regex("""\b7\.1(?:\([^)]*\))?\b""").containsMatchIn(text) -> 8
++            Regex("""\b6\.1(?:\([^)]*\))?\b""").containsMatchIn(text) -> 7
++            Regex("""\b5\.1(?:\([^)]*\))?\b""").containsMatchIn(text) -> 6
++            Regex("""\b4\.1(?:\([^)]*\))?\b""").containsMatchIn(text) -> 5
++            Regex("""\bquad\b|\b4\.0\b""").containsMatchIn(text) -> 4
++            Regex("""\b2\.1\b""").containsMatchIn(text) -> 3
++            "stereo" in text -> 2
++            "mono" in text -> 1
++            else -> fallback.coerceAtLeast(1)
++        }
++    }
++
++    fun channelLayout(channels: Int): String = when (channels) {
++        1 -> "mono"
++        2 -> "stereo"
++        3 -> "2.1"
++        4 -> "quad"
++        5 -> "4.1"
++        6 -> "5.1"
++        7 -> "6.1"
++        8 -> "7.1"
++        else -> "stereo"
++    }
++
++    fun parseKnownVideoProfile(videoLine: String): String? {
++        val profile = Regex(
++            """\b(Constrained Baseline|Baseline|Main|Extended|High 4:4:4 Predictive|High 4:2:2|High 10|High)\b""",
++            RegexOption.IGNORE_CASE
++        ).find(videoLine)?.groupValues?.getOrNull(1) ?: return null
++        return profile.lowercase(Locale.ROOT)
++            .split(' ')
++            .joinToString(" ") { token -> token.replaceFirstChar { it.titlecase(Locale.ROOT) } }
++    }
++
++    fun videoMimeForName(name: String): String = when (name.substringAfterLast('.', "").lowercase(Locale.ROOT)) {
++        "mkv" -> "video/x-matroska"
++        "webm" -> "video/webm"
++        "mov" -> "video/quicktime"
++        "avi" -> "video/x-msvideo"
++        else -> "video/mp4"
++    }
++
++    fun safeContainerExtension(name: String): String =
++        name.substringAfterLast('.', "").lowercase(Locale.ROOT)
++            .takeIf { it in setOf("mp4", "m4v", "mov", "mkv", "webm", "avi") }
++            ?: "mkv"
++
++    fun formatCommand(arguments: Iterable<String>): String = buildString {
++        append("ffmpeg")
++        arguments.forEach { argument ->
++            append(' ')
++            if (argument.isNotEmpty() && argument.none(Char::isWhitespace) && '"' !in argument) {
++                append(argument)
++            } else {
++                append('"').append(argument.replace("\\", "\\\\").replace("\"", "\\\"")).append('"')
++            }
++        }
++    }
++}
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt
+index fa0dcbf..b686613 100644
+--- a/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegRotateVideoActivity.kt
+@@ -118,6 +118,11 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+     private var selectedCodec: FfmpegVideoEncoder? = null
+     private var selectedVideoQuality = FfmpegVideoQuality.default
+     private var availableCodecs: List<FfmpegVideoEncoder> = emptyList()
++    private var savedFlipHorizontal = false
++    private var savedFlipVertical = false
++    private var savedTrimStartMs: Long? = null
++    private var savedTrimEndMs: Long? = null
++    private var metadataModeWasActive = false
+ 
+     private val progressTicker = object : Runnable {
+         override fun run() {
+@@ -279,7 +284,13 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+             recordRotationSelection()
+             applyPreviewTransform()
+         }
+-        metadataRotation.setOnCheckedChangeListener { _, _ ->
++        metadataRotation.isChecked = getSharedPreferences(ROTATE_PREFS, MODE_PRIVATE)
++            .getBoolean(PREF_METADATA_ROTATION, false)
++        metadataRotation.setOnCheckedChangeListener { _, checked ->
++            getSharedPreferences(ROTATE_PREFS, MODE_PRIVATE)
++                .edit()
++                .putBoolean(PREF_METADATA_ROTATION, checked)
++                .apply()
+             updateMetadataModeState()
+             applyPreviewTransform()
+         }
+@@ -292,7 +303,6 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+             applyPreviewTransform()
+         }
+         parallelKeyframes.setOnCheckedChangeListener { _, _ -> updateMetadataModeState() }
+-        metadataRotation.isChecked = true
+         updateMetadataModeState()
+     }
+ 
+@@ -476,6 +486,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         val orderedFilters = buildOrderedFilters()
+         val canUseParallel = !hasTrim && !metadataOnly && requestedParallel && orderedFilters.isNotBlank()
+         val encoder = selectedCodec ?: FfmpegVideoEncoder("h264_mediacodec", "h264")
++        val quality = selectedVideoQuality
+ 
+         if (requestedParallel && hasTrim) {
+             Toast.makeText(
+@@ -483,6 +494,12 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+                 "Processamento paralelo ignorado: corte (trim) requer processamento sequencial.",
+                 Toast.LENGTH_SHORT
+             ).show()
++        } else if (requestedParallel && orderedFilters.isBlank()) {
++            Toast.makeText(
++                this,
++                "Processamento paralelo ignorado: não há transformação física para dividir em trechos.",
++                Toast.LENGTH_SHORT
++            ).show()
+         }
+ 
+         setProcessing(true)
+@@ -493,7 +510,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+             try {
+                 val currentInputFile = copyUriToCache(uri, selectedName)
+                 inputFile = currentInputFile
+-                val outputName = buildOutputName(selectedName)
++                val outputName = buildOutputName(selectedName, metadataOnly)
+                 val currentTempOutput = File(cacheDir, "rotate_${System.currentTimeMillis()}_$outputName")
+                 tempOutput = currentTempOutput
+                 
+@@ -516,14 +533,39 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+                     tracker.startTask(1)
+                 }
+                 val result = if (canUseParallel) {
+-                    executeParallelKeyframeRotation(currentInputFile, currentTempOutput, encoder, tracker)
++                    val parallelResult = executeParallelKeyframeRotation(currentInputFile, currentTempOutput, encoder, quality, tracker)
++                    if (!parallelResult.success && !parallelResult.cancelled) {
++                        currentTempOutput.delete()
++                        tracker.appendTasks(listOf("Fallback sequencial"))
++                        val fallbackIndex = tracker.taskCount() - 1
++                        tracker.setTaskEncoder(fallbackIndex, encoder.shortName)
++                        tracker.startTask(fallbackIndex)
++                        val fallback = executeFfmpegWithProgress(
++                            buildFfmpegArguments(
++                                currentInputFile, currentTempOutput, degrees,
++                                encoder = encoder, metadataOnly = false,
++                                startMs = startMs, endMs = endMs,
++                                filters = orderedFilters, quality = quality
++                            ),
++                            tracker
++                        )
++                        if (ReturnCode.isSuccess(fallback.returnCode)) tracker.completeTask(fallbackIndex, encoder.shortName)
++                        RotationExecutionResult(
++                            success = ReturnCode.isSuccess(fallback.returnCode) && currentTempOutput.exists() && currentTempOutput.length() > 0L,
++                            cancelled = ReturnCode.isCancel(fallback.returnCode),
++                            failureMessage = fallback.allLogsAsString.orEmpty().lines().takeLast(3).joinToString(" ").take(120),
++                            encoderInfo = "${encoder.ffmpegName}\nFallback sequencial"
++                        )
++                    } else {
++                        parallelResult
++                    }
+                 } else {
+                     val session = executeFfmpegWithProgress(
+                         buildFfmpegArguments(
+                             currentInputFile, currentTempOutput, degrees,
+                             encoder = encoder, metadataOnly = metadataOnly,
+                             startMs = startMs, endMs = endMs,
+-                            filters = orderedFilters
++                            filters = orderedFilters, quality = quality
+                         ),
+                         tracker
+                     )
+@@ -588,6 +630,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+     }
+ 
+     private fun executeFfmpegWithProgress(arguments: Array<String>, tracker: FfmpegTaskTracker): FFmpegSession {
++        FfmpegCommandPresenter.show(status, arguments.asIterable())
++        Log.i(TAG, FfmpegMediaPolicies.formatCommand(arguments.asIterable()))
+         val latch = CountDownLatch(1)
+         val sessionRef = AtomicReference<FFmpegSession>()
+         val safeDuration = durationMs.coerceAtLeast(1L)
+@@ -620,6 +664,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         taskIndex: Int,
+         expectedDurationMs: Long
+     ): FFmpegSession {
++        FfmpegCommandPresenter.show(status, arguments.asIterable())
++        Log.i(TAG, FfmpegMediaPolicies.formatCommand(arguments.asIterable()))
+         val latch = CountDownLatch(1)
+         val sessionRef = AtomicReference<FFmpegSession>()
+         val safeDuration = expectedDurationMs.coerceAtLeast(1L)
+@@ -647,6 +693,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         inputFile: File,
+         outputFile: File,
+         encoder: FfmpegVideoEncoder,
++        quality: FfmpegVideoQuality,
+         tracker: FfmpegTaskTracker
+     ): RotationExecutionResult {
+         parallelProcessing = true
+@@ -654,8 +701,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         val segmentDir = File(workDir, "segments").apply { mkdirs() }
+         val rotatedDir = File(workDir, "rotated").apply { mkdirs() }
+         val videoBitrate = detectVideoBitrate(inputFile)
+-        val audioBitrate = detectAudioBitrate(inputFile)
+         val videoGopSize = recommendedGopSize(inputFile)
++        val sourceRotationFilters = FfmpegMediaPolicies.physicalRotationFilters(detectCurrentMetadataRotation(inputFile))
+         var previousSessionHistorySize: Int? = null
+         try {
+             val defaultWorkerCount = Runtime.getRuntime().availableProcessors().minus(1).coerceAtLeast(1)
+@@ -682,19 +729,21 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+             }
+ 
+             val splitTaskIndex = 0
+-            val segmentPattern = File(segmentDir, "part_%05d.mp4").absolutePath
++            val segmentPattern = File(segmentDir, "part_%05d.mkv").absolutePath
+             val splitSession = if (splitPoints.isNotEmpty()) {
+                 val times = splitPoints.sorted().joinToString(",") { String.format(Locale.US, "%.3f", it) }
+                 executeFfmpegWithIndexedProgress(
+                     arrayOf(
+                         "-y",
++                        "-noautorotate",
++                        "-display_rotation:v:0", "0",
+                         "-i", inputFile.absolutePath,
+                         "-map", "0",
+                         "-c", "copy",
+                         "-f", "segment",
+                         "-segment_times", times,
+                         "-reset_timestamps", "1",
+-                        "-segment_format", "mp4",
++                        "-segment_format", "matroska",
+                         "-avoid_negative_ts", "make_zero",
+                         segmentPattern
+                     ),
+@@ -706,13 +755,15 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+                 executeFfmpegWithIndexedProgress(
+                     arrayOf(
+                         "-y",
++                        "-noautorotate",
++                        "-display_rotation:v:0", "0",
+                         "-i", inputFile.absolutePath,
+                         "-map", "0",
+                         "-c", "copy",
+                         "-f", "segment",
+                         "-segment_time", String.format(Locale.US, "%.1f", (durationMs / 1000.0) / targetSegmentCount.toDouble()),
+                         "-reset_timestamps", "1",
+-                        "-segment_format", "mp4",
++                        "-segment_format", "matroska",
+                         "-avoid_negative_ts", "make_zero",
+                         segmentPattern
+                     ),
+@@ -736,12 +787,15 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+             // O retorno bem-sucedido e a referencia definitiva para fechar esta etapa visual.
+             tracker.completeTask(splitTaskIndex)
+ 
+-            val segments = segmentDir.listFiles { file -> file.extension.equals("mp4", ignoreCase = true) }
++            val segments = segmentDir.listFiles { file -> file.extension.equals("mkv", ignoreCase = true) }
+                 ?.sortedBy { it.name }
+                 .orEmpty()
+             if (segments.isEmpty()) {
+                 return RotationExecutionResult(false, false, "Nenhum trecho foi gerado.", encoder.ffmpegName)
+             }
++            if (segments.size < targetSegmentCount) {
++                tracker.setLiveStatus("Paralelo ajustado: ${segments.size} trecho(s) utilizável(is).")
++            }
+ 
+             val segmentTasks = segments.mapIndexed { i, _ -> "Girando trecho ${i + 1}" }
+             tracker.appendTasks(segmentTasks)
+@@ -752,7 +806,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+                 tracker.setTaskEncoder(segmentTaskOffset + index, encoder.shortName)
+             }
+             
+-            val filters = buildOrderedFilters()
++            val filters = (sourceRotationFilters + buildOrderedFilters().split(',').filter { it.isNotBlank() }).joinToString(",")
+             // Um valor manual controla tanto a divisao quanto o total de trechos codificados juntos.
+             // Sem valor manual, preservamos o padrao seguro de usar todos os nucleos menos um.
+             val workerCount = minOf(requestedSegmentCount ?: defaultWorkerCount, segments.size).coerceAtLeast(1)
+@@ -770,7 +824,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+             val startedAt = SystemClock.elapsedRealtime()
+ 
+             val futures = segments.mapIndexed { index, segment ->
+-                val chunkOutput = File(rotatedDir, "rotated_${index.toString().padStart(5, '0')}.mp4")
++                val chunkOutput = File(rotatedDir, "rotated_${index.toString().padStart(5, '0')}.mkv")
+                 executor.submit {
+                     try {
+                         // Algumas sessoes nao emitem estatisticas antes de concluir, sobretudo
+@@ -804,8 +858,11 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+                             )
+                         }
+ 
++                        val segmentArguments = buildSegmentRotationArguments(segment, chunkOutput, filters, encoder, quality, videoBitrate, videoGopSize).toTypedArray()
++                        FfmpegCommandPresenter.show(status, segmentArguments.asIterable())
++                        Log.i(TAG, FfmpegMediaPolicies.formatCommand(segmentArguments.asIterable()))
+                         FFmpegKit.executeWithArgumentsAsync(
+-                            buildSegmentRotationArguments(segment, chunkOutput, filters, encoder, videoBitrate, audioBitrate, videoGopSize).toTypedArray(),
++                            segmentArguments,
+                             { s ->
+                                 finalSession = s
+                                 latch.countDown()
+@@ -856,7 +913,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+                 return RotationExecutionResult(false, false, failures.firstOrNull().orEmpty(), encoder.ffmpegName)
+             }
+ 
+-            val rotatedSegments = rotatedDir.listFiles { file -> file.extension.equals("mp4", ignoreCase = true) }
++            val rotatedSegments = rotatedDir.listFiles { file -> file.extension.equals("mkv", ignoreCase = true) }
+                 ?.sortedBy { it.name }
+                 .orEmpty()
+             if (rotatedSegments.size != segments.size) {
+@@ -875,9 +932,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+                     "-safe", "0",
+                     "-i", listFile.absolutePath,
+                     "-c", "copy",
+-                    "-map_metadata", "-1",
+-                    "-metadata:s:v:0", "rotate=0",
+-                    "-movflags", "+faststart",
++                    "-map_metadata", "0",
++                    "-avoid_negative_ts", "make_zero",
+                     outputFile.absolutePath
+                 ),
+                 tracker,
+@@ -973,8 +1029,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         outputFile: File,
+         filters: String,
+         encoder: FfmpegVideoEncoder,
++        quality: FfmpegVideoQuality,
+         videoBitrate: String,
+-        audioBitrate: String,
+         gopSize: Int
+     ): List<String> {
+         return mutableListOf(
+@@ -986,23 +1042,28 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+             // de decodificacao/filtro. O MediaCodec continua no hardware.
+             "-threads", "1",
+             "-filter_threads", "1",
++            "-noautorotate",
++            "-display_rotation:v:0", "0",
+             "-i", inputFile.absolutePath,
+             "-map", "0:v:0",
+             "-map", "0:a?",
++            "-map", "0:s?",
++            "-map", "0:d?",
++            "-map", "0:t?",
+             "-vf", filters
+         ).apply {
+-            addAll(videoEncodingArguments(encoder, videoBitrate))
++            addAll(videoEncodingArguments(encoder, quality, videoBitrate))
+             if (encoder.ffmpegName.endsWith("_mediacodec")) {
+                 addAll(listOf("-g", gopSize.toString()))
+             }
+             addAll(
+                 listOf(
+-                    // Reencoda o audio para AAC em todos os segmentos para que o concat
+-                    // final com -c copy seja valido em MP4 (codec de audio consistente).
+-                    "-c:a", "aac", "-b:a", audioBitrate,
+-                    "-ar", "48000", "-ac", "2",
+-                    "-map_metadata", "-1",
+-                    "-movflags", "+faststart",
++                    "-c:a", "copy",
++                    "-c:s", "copy",
++                    "-c:d", "copy",
++                    "-c:t", "copy",
++                    "-map_metadata", "0",
++                    "-avoid_negative_ts", "make_zero",
+                     outputFile.absolutePath
+                 )
+             )
+@@ -1143,8 +1204,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         }
+     }
+ 
+-    private fun videoEncodingArguments(encoder: FfmpegVideoEncoder, sourceBitrate: String): List<String> {
+-        val settings = encoder.encodingFor(selectedVideoQuality, sourceBitrate)
++    private fun videoEncodingArguments(encoder: FfmpegVideoEncoder, quality: FfmpegVideoQuality, sourceBitrate: String): List<String> {
++        val settings = encoder.encodingFor(quality, sourceBitrate)
+         return settings.arguments + settings.targetBitrate.orEmpty().takeIf { it.isNotBlank() }
+             ?.let { listOf("-b:v", it) }
+             .orEmpty()
+@@ -1160,43 +1221,40 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         metadataOnly: Boolean,
+         startMs: Long = 0L,
+         endMs: Long = durationMs,
+-        filters: String = buildOrderedFilters()
++        filters: String = buildOrderedFilters(),
++        quality: FfmpegVideoQuality = selectedVideoQuality
+     ): Array<String> {
+         val hasTrim = startMs > 0L || endMs < durationMs
+         val trimDurationMs = (endMs - startMs).coerceAtLeast(1L)
+-        if (metadataOnly) {
++        if (FfmpegMediaPolicies.usesMetadataCopyCommand(metadataOnly)) {
+             val currentMetadataDegrees = detectCurrentMetadataRotation(inputFile)
+-            val metadataDegrees = normalizeMetadataDegrees(currentMetadataDegrees + degrees)
+-            val args = mutableListOf("-y")
+-            if (metadataDegrees != 0) {
+-                args.addAll(listOf("-display_rotation:v:0", metadataDegrees.toString()))
+-            }
+-            args.addAll(
+-                listOf(
+-                    "-i", inputFile.absolutePath,
+-                    "-map", "0",
+-                    "-c", "copy",
+-                    outputFile.absolutePath
+-                )
++            return FfmpegMediaPolicies.metadataRotationCopyArguments(
++                inputPath = inputFile.absolutePath,
++                outputPath = outputFile.absolutePath,
++                currentCounterClockwise = currentMetadataDegrees,
++                requestedClockwise = degrees
+             )
+-            return args.toTypedArray()
+         }
+ 
+         val videoBitrate = detectVideoBitrate(inputFile)
++        val sourceRotationFilters = FfmpegMediaPolicies.physicalRotationFilters(detectCurrentMetadataRotation(inputFile))
++        val requestedFilters = filters.split(',').filter { it.isNotBlank() }
++        val physicalFilters = (sourceRotationFilters + requestedFilters).joinToString(",")
+ 
+         val args = mutableListOf("-y")
+         if (hasTrim) args.addAll(listOf("-ss", formatFfmpegTime(startMs)))
+-        args.addAll(listOf("-i", inputFile.absolutePath))
++        args.addAll(listOf("-noautorotate", "-display_rotation:v:0", "0", "-i", inputFile.absolutePath))
+         if (hasTrim) args.addAll(listOf("-t", formatFfmpegTime(trimDurationMs)))
+-        if (filters.isNotEmpty()) {
+-            args.addAll(listOf("-vf", filters))
++        if (physicalFilters.isNotEmpty()) {
++            args.addAll(listOf("-vf", physicalFilters))
+         }
+-        args.addAll(videoEncodingArguments(encoder, videoBitrate))
++        args.addAll(listOf("-map", "0:v:0", "-map", "0:a?", "-map", "0:s?", "-map", "0:d?", "-map", "0:t?"))
++        args.addAll(listOf("-c", "copy"))
++        args.addAll(videoEncodingArguments(encoder, quality, videoBitrate))
+         args.addAll(
+             listOf(
+-                "-c:a", if (hasTrim) "aac" else "copy",
+-                "-map_metadata", "-1",
+-                "-metadata:s:v:0", "rotate=0"
++                "-map_metadata", "0",
++                "-avoid_negative_ts", "make_zero"
+             )
+         )
+         args.add(outputFile.absolutePath)
+@@ -1307,12 +1365,29 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+ 
+     private fun updateMetadataModeState() {
+         val metadataOnly = metadataRotation.isChecked
+-        if (metadataOnly) {
++        if (metadataOnly && !metadataModeWasActive) {
++            savedFlipHorizontal = flipHorizontal.isChecked
++            savedFlipVertical = flipVertical.isChecked
++            savedTrimStartMs = timeline.getStartMs()
++            savedTrimEndMs = timeline.getEndMs()
+             flipHorizontal.isChecked = false
+             flipVertical.isChecked = false
+             transformOrder.remove(TransformOp.HFLIP)
+             transformOrder.remove(TransformOp.VFLIP)
++        } else if (!metadataOnly && metadataModeWasActive) {
++            flipHorizontal.isChecked = savedFlipHorizontal
++            flipVertical.isChecked = savedFlipVertical
++            val restoreStart = savedTrimStartMs
++            val restoreEnd = savedTrimEndMs
++            if (restoreStart != null && restoreEnd != null && restoreEnd > restoreStart) {
++                timeline.setStart(restoreStart)
++                timeline.setEnd(restoreEnd)
++                updateTimeFields(restoreStart, restoreEnd)
++            }
++            savedTrimStartMs = null
++            savedTrimEndMs = null
+         }
++        metadataModeWasActive = metadataOnly
+         flipHorizontal.isEnabled = !metadataOnly
+         flipVertical.isEnabled = !metadataOnly
+         parallelKeyframes.isEnabled = !metadataOnly
+@@ -1339,15 +1414,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+ 
+     }
+ 
+-    private fun normalizeMetadataDegrees(degrees: Int): Int {
+-        val normalized = ((degrees % 360) + 360) % 360
+-        return when (normalized) {
+-            90 -> 90
+-            180 -> 180
+-            270 -> -90
+-            else -> 0
+-        }
+-    }
++    private fun normalizeMetadataDegrees(degrees: Int): Int = FfmpegMediaPolicies.normalizeRightAngle(degrees)
+ 
+     private fun detectCurrentMetadataRotation(inputFile: File): Int {
+         return try {
+@@ -1375,7 +1442,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+             ?.groupValues
+             ?.getOrNull(1)
+             ?.toIntOrNull()
+-            ?.let { normalizeMetadataDegrees(it) }
++            ?.let { normalizeMetadataDegrees(-it) }
+     }
+ 
+     private fun readDegrees(): Int {
+@@ -1492,7 +1559,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+                 val outputName = pendingOutputName(tempFile)
+                 var document: DocumentFile? = null
+                 try {
+-                    document = destDir.createFile("video/mp4", outputName)
++                    document = destDir.createFile(FfmpegMediaPolicies.videoMimeForName(outputName), outputName)
+                         ?: throw IllegalStateException("não consegui criar o arquivo de destino")
+                     val copied = copyLargeFileToDocument(tempFile, document, outputName)
+                     val expected = tempFile.length()
+@@ -1617,7 +1684,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+     private fun shareOutputFile() {
+         val uri = lastOutputUri ?: return
+         val intent = Intent(Intent.ACTION_SEND).apply {
+-            type = "video/mp4"
++            type = FfmpegMediaPolicies.videoMimeForName(lastOutputName)
+             putExtra(Intent.EXTRA_STREAM, uri)
+             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+         }
+@@ -1751,10 +1818,11 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         return inputFile
+     }
+ 
+-    private fun buildOutputName(name: String): String {
++    private fun buildOutputName(name: String, metadataOnly: Boolean): String {
+         val base = name.substringBeforeLast('.', name).ifBlank { "video" }
+             .replace(Regex("""[\\/:*?"<>|]"""), "_")
+-        return "${base}_girado.mp4"
++        val extension = if (metadataOnly) FfmpegMediaPolicies.safeContainerExtension(name) else "mkv"
++        return "${base}_girado.$extension"
+     }
+ 
+     private fun sigOutputDir(): File {
+@@ -1773,7 +1841,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         val uri = lastOutputUri ?: return
+         try {
+             startActivity(Intent(Intent.ACTION_VIEW).apply {
+-                setDataAndType(uri, "video/mp4")
++                setDataAndType(uri, FfmpegMediaPolicies.videoMimeForName(lastOutputName))
+                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+             })
+         } catch (_: ActivityNotFoundException) {
+@@ -1815,6 +1883,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
+         private const val FALLBACK_VIDEO_BITRATE = "15M"
+         private const val FALLBACK_AUDIO_BITRATE = "128k"
+         private const val TAG = "FfmpegRotateVideo"
++        private const val ROTATE_PREFS = "ffmpeg_rotate_preferences"
++        private const val PREF_METADATA_ROTATION = "metadata_rotation"
+         private val PROGRESS_OUT_TIME_REGEX = Regex("out_time=([0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?)")
+     }
+ 
+diff --git a/app/src/main/res/layout/activity_ffmpeg_insert_audio.xml b/app/src/main/res/layout/activity_ffmpeg_insert_audio.xml
+index 841eea3..8385b35 100644
+--- a/app/src/main/res/layout/activity_ffmpeg_insert_audio.xml
++++ b/app/src/main/res/layout/activity_ffmpeg_insert_audio.xml
+@@ -252,7 +252,9 @@
+                         android:layout_width="wrap_content"
+                         android:layout_height="wrap_content"
+                         android:buttonTint="#FFFFFFFF"
+-                        android:text="Reencodar"
++                        android:checked="true"
++                        android:enabled="false"
++                        android:text="Reencodar (preciso)"
+                         android:textColor="#FFFFFFFF"
+                         android:textSize="13sp" />
+ 
+@@ -264,7 +266,8 @@
+                         android:buttonTint="#FFFFFFFF"
+                         android:text="Smart Insert"
+                         android:textColor="#FFFFFFFF"
+-                        android:textSize="13sp" />
++                        android:textSize="13sp"
++                        android:visibility="gone" />
+                 </LinearLayout>
+ 
+                 <ImageButton
+diff --git a/app/src/main/res/layout/activity_ffmpeg_join_videos.xml b/app/src/main/res/layout/activity_ffmpeg_join_videos.xml
+index 24632f1..da4f36b 100644
+--- a/app/src/main/res/layout/activity_ffmpeg_join_videos.xml
++++ b/app/src/main/res/layout/activity_ffmpeg_join_videos.xml
+@@ -369,7 +369,7 @@
+                         android:layout_width="wrap_content"
+                         android:layout_height="wrap_content"
+                         android:buttonTint="#FFFFFFFF"
+-                        android:text="SmartJoin (Experimental)"
++            android:text="SmartJoin (indisponível)"
+                         android:textColor="#FFFFFFFF"
+                         android:textSize="13sp" />
+ 
+diff --git a/app/src/main/res/layout/activity_ffmpeg_rotate_video.xml b/app/src/main/res/layout/activity_ffmpeg_rotate_video.xml
+index a24d9bb..5e4fe51 100644
+--- a/app/src/main/res/layout/activity_ffmpeg_rotate_video.xml
++++ b/app/src/main/res/layout/activity_ffmpeg_rotate_video.xml
+@@ -418,7 +418,7 @@
+                             android:layout_width="wrap_content"
+                             android:layout_height="wrap_content"
+                             android:buttonTint="#FFFFFFFF"
+-                            android:checked="true"
++                            android:checked="false"
+                             android:text="Girar pelos metadados"
+                             android:textColor="#FFFFFFFF"
+                             android:textSize="13sp" />
+diff --git a/app/src/test/java/br/gov/sp/pcsp/launcher/FfmpegMediaPoliciesTest.kt b/app/src/test/java/br/gov/sp/pcsp/launcher/FfmpegMediaPoliciesTest.kt
+new file mode 100644
+index 0000000..ec2586b
+--- /dev/null
++++ b/app/src/test/java/br/gov/sp/pcsp/launcher/FfmpegMediaPoliciesTest.kt
+@@ -0,0 +1,70 @@
++package br.gov.sp.pcsp.launcher
++
++import org.junit.Assert.assertEquals
++import org.junit.Assert.assertFalse
++import org.junit.Assert.assertNull
++import org.junit.Assert.assertTrue
++import org.junit.Test
++
++class FfmpegMediaPoliciesTest {
++    @Test
++    fun metadataModeAlwaysUsesCopyCommandRegardlessOfPreviousUiState() {
++        assertTrue(FfmpegMediaPolicies.usesMetadataCopyCommand(true))
++        assertFalse(FfmpegMediaPolicies.usesMetadataCopyCommand(false))
++        assertEquals(
++            listOf("-y", "-display_rotation:v:0", "0", "-i", "in.mkv", "-map", "0", "-c", "copy", "out.mkv"),
++            FfmpegMediaPolicies.metadataRotationCopyArguments("in.mkv", "out.mkv", 90, 90).toList()
++        )
++        assertEquals(
++            "-90",
++            FfmpegMediaPolicies.metadataRotationCopyArguments("in", "out", 0, 90)[2]
++        )
++    }
++
++    @Test
++    fun selectedAudioTrackProducesExplicitFfmpegSpecifier() {
++        assertEquals("0:a:0", FfmpegMediaPolicies.audioStreamSpecifier(0, 0))
++        assertEquals("2:a:3", FfmpegMediaPolicies.audioStreamSpecifier(2, 3))
++    }
++    @Test
++    fun metadataRotationConvertsClockwiseUiToCounterClockwiseFfmpeg() {
++        assertEquals(-90, FfmpegMediaPolicies.metadataRotationAfterClockwiseRequest(0, 90))
++        assertEquals(180, FfmpegMediaPolicies.metadataRotationAfterClockwiseRequest(-90, 90))
++        assertEquals(0, FfmpegMediaPolicies.metadataRotationAfterClockwiseRequest(90, 90))
++        assertEquals(0, FfmpegMediaPolicies.metadataRotationAfterClockwiseRequest(180, 180))
++    }
++
++    @Test
++    fun arbitraryRotationRoundsToNearestRightAngle() {
++        assertEquals(90, FfmpegMediaPolicies.normalizeRightAngle(46))
++        assertEquals(-90, FfmpegMediaPolicies.normalizeRightAngle(271))
++        assertEquals(0, FfmpegMediaPolicies.normalizeRightAngle(359))
++    }
++
++    @Test
++    fun physicalFiltersMaterializeDisplayRotation() {
++        assertEquals(listOf("transpose=1"), FfmpegMediaPolicies.physicalRotationFilters(-90))
++        assertEquals(listOf("transpose=2"), FfmpegMediaPolicies.physicalRotationFilters(90))
++        assertEquals(listOf("hflip", "vflip"), FfmpegMediaPolicies.physicalRotationFilters(180))
++    }
++
++    @Test
++    fun channelParserSupportsMultichannelLayouts() {
++        assertEquals(1, FfmpegMediaPolicies.parseAudioChannelCount("Audio: pcm, 16000 Hz, mono"))
++        assertEquals(2, FfmpegMediaPolicies.parseAudioChannelCount("Audio: aac, 48000 Hz, stereo"))
++        assertEquals(6, FfmpegMediaPolicies.parseAudioChannelCount("Audio: aac, 48000 Hz, 5.1, fltp"))
++        assertEquals(8, FfmpegMediaPolicies.parseAudioChannelCount("Audio: eac3, 48000 Hz, 7.1(side)"))
++        assertEquals(12, FfmpegMediaPolicies.parseAudioChannelCount("Audio: pcm, 48000 Hz, 12 channels"))
++    }
++
++    @Test
++    fun videoProfileParserDoesNotTreatCodecTagAsProfile() {
++        assertEquals("High", FfmpegMediaPolicies.parseKnownVideoProfile("Video: h264 (High) (avc1 / 0x31637661)"))
++        assertNull(FfmpegMediaPolicies.parseKnownVideoProfile("Video: h264 (avc1 / 0x31637661)"))
++    }
++
++    @Test
++    fun commandFormatterQuotesArgumentsWithSpaces() {
++        assertEquals("ffmpeg -i \"a b.mp4\" -c copy", FfmpegMediaPolicies.formatCommand(listOf("-i", "a b.mp4", "-c", "copy")))
++    }
++}

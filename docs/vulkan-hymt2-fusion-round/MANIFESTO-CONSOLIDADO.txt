@@ -1,0 +1,21 @@
+INDICE DE EVIDENCIAS — CONSOLIDADO VULKAN CPH2747 (30/09/2026)
+gerado por SCRIPT (hashlib sha256, contagem exata) — 17 entradas
+todos os caminhos relativos a docs/vulkan-hymt2-fusion-round/
+====================================================================================================
+ad5921fced6c856986fb9a96e403a913ea6a12852c8defc6b8aa3aab4ee1e497       15149  RELATORIO-CONSOLIDADO-VULKAN-CPH2747.md
+cc219eb9ff599d4f76784aad2833a3f27b2eb76a5d4949270cb068fbc0e27258       29119  logs-rodada20/MANIFESTO-RODADA20.txt
+9528815477cf5bafa56a3f0e2220e9a47622e7c8b2d1e9a9e178d32e80284dfb         263  logs-rodada20/estrutura.txt
+7ef97e8caa3268e608abfbd5345a4c2ee78449f986c3a5c491f0d68dfde375f9         737  logs-rodada20/longo.txt
+93a3cefb9ff434b9afa5a3637b5f62859f9897521a6ba0841e262427f083694c       20256  logs-rodada20/ui_curto_CPU.xml
+52b439268c3b7472b629cf5c5c6b857570b9c921db9fa78076d87465fe07c78d       19432  logs-rodada20/ui_curto_Vulkan.xml
+3a50d6b255a927966a3f6861e341b6d161362064153fec37a6a12788d475f473       21930  logs-rodada20/ui_estrutura_CPU.xml
+a9599b7c7bc77379a7e446d964fcead0d2706d39541e7917470ab821bab869ad       23137  logs-rodada20/ui_estrutura_Vulkan.xml
+c4a03bc83ad151342a722635b31eb5eb9a2add77eded937861d6516ba3b4e6bb       15353  logs-rodada20/ui_longo_CPU.xml
+3a34f1016d72ec8ce11af16bc31f55d38e0b8a4494c0048fd5cbecdede23d971       23853  logs-rodada20/ui_longo_Vulkan.xml
+cbf560df9a3a8f02fba5b4b2ae25a5c6d22430062076768c6d6942f69b45240a       14634  logs-rodada21/bateria18_ui.py
+907af0374ec8dbade8478f0a23e5fae475b12d36e9ebb28c523359869b540051       13214  logs-rodada21/ciclo19.py
+1b85d3d89bdee4c7e4707d16c61f38a5c84fc07dd79cd62149272d508001fdb7        3795  logs-rodada21/gerar_indice22.py
+1e025548d2707cac42d0987cc47c8c442bb355d0d6a7d1fbdcb545a0555eb342        5883  logs-rodada21/testes_bateria18.py
+3719158a314e1a55973180fdd46e284fc128b387783cff0c2f675d8f81529886        1558  logs-rodada21/testes_ciclo19.py
+e45098103f4f626482c5746418651ee16d1ffd97a693e6e023a8c93c3a6b32a6        5657  logs-rodada21/testes_vacina21.py
+bfa4f9ece81b6a50d098d3fb52c79ad948e80f0dbc2339e9b8416e59be617170        2857  logs-rodada21/vacina_instrumento.diff

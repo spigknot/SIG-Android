@@ -1,0 +1,56 @@
+PROMPT-RELATORIO AO ESPECIALISTA — OPENCL F14: ROTAS NOMEADAS (TOP-OPS)
+Data: 04/10/2026. Repo: D:/Projetos/SIG (NADA commitado).
+Base: autorizacao do mini-piloto profS3. Deploy com PROTOCOLO REFORCADO (fonte
+verificada antes do cp; push sem mascara; readback size+sha) pos-incidente F13.
+
+================================================================================
+1. TOP-OPS (piloto profS3; por request; reset por request; saidas canonicas)
+================================================================================
+Q4 curto OCL (run1): graph=6471ms nodes=182470 enq=1543ms setup=4928ms
+  MUL_MAT=2733ms/41038  RMS_NORM=1308ms/18318  ROPE=787ms/9088
+  SET_ROWS=531ms/9088   SOFT_MAX=314ms/4544   CONT=275ms/4544
+Q4 curto OCL (run2): graph=5806ms nodes=182470 enq=984ms setup=4822ms
+  MUL_MAT=2396ms/41038  RMS_NORM=1208ms/18318  ROPE=721ms/9088
+  SET_ROWS=477ms/9088   SOFT_MAX=297ms/4544   CONT=250ms/4544
+Q4 mais  OCL: graph=67945ms nodes=1908225 enq=11387ms setup=56558ms
+  MUL_MAT=27825ms/429165 RMS_NORM=14176ms/191565 ROPE=8391ms/95040
+  SET_ROWS=5739ms/95040  SOFT_MAX=3498ms/47520  CONT=2884ms/47520
+Q8 curto OCL: ok=True (saida canonica d36a3315; linha topops lida no delta final)
+LEITURA por token (142): MUL_MAT 289 chamadas @~67us | RMS_NORM 129 @~71us |
+  ROPE 64 @~86us | SET_ROWS 64 @~58us | SOFT_MAX 32 @~69us | CONT 32 @~60us.
+  Top-6 cobre ~92% do graph.
+
+================================================================================
+2. DIAGNOSTICO FINAL DA CAUSA (sustentado por medicao)
+================================================================================
+2a. O tempo do decode OpenCL = REGIAO sched/backend-compute (88-99% do decode),
+    e dentro dela: `setup` (fora do wrapper de enqueue) = 84% (F13).
+2b. O topops NOMEIA a composicao desse setup: NAO e' um unico kernel lento —
+    e' o CUSTO POR-OP DE DISPATCH de ~610 ops/token (289 MUL_MAT + 129
+    RMS_NORM + 64 ROPE + 64 SET_ROWS + 32 SOFT_MAX + 32 CONT...), cada um a
+    ~60-90us de trabalho de op (selecao de kernel, clSetKernelArg, calculos de
+    tamanho, logicas de op) ANTES/durante o dispatch.
+2c. Candidato UNICO (guiado por custo dominante): **reduzir o custo por-op de
+    dispatch no backend OpenCL** — alvos primarios por massa: MUL_MAT (19ms/tok)
+    e RMS_NORM (9ms/tok); depois ROPE/SET_ROWS/SOFT_MAX/CONT (~13ms/tok juntos).
+    Abordagem a DEFINIR em design proprio (caching de kernel-config/args com
+    invalidacao por identidade, ou pre-computo de launch configs por (op,shape,
+    dtype) — sempre com probe numerico independente + RED-GREEN no helper real +
+    A/B no MESMO artefato; proibido: fusao ampla/fastmath/sampler como atalho).
+2d. Nota de honestidade: o numero por-op mede a REGIAO de cada no (dispatch do
+    op), nao o tempo de GPU dele; as fatias enq ja' sao contadas dentro e o
+    `setup` do backend e' o restante.
+
+================================================================================
+3. ESTADO E ENTREGA
+================================================================================
+3a. Rollback: PROTOCOLO REFORCADO aplicado (fonte local verificada -> push rc=0
+    sem mascara -> verificacao do tmp no device por size+sha -> cp -> readback
+    size+sha -> limpeza -> app abre). lib = 9698670c (95.613.928 B) conferida;
+    chaves zero; UI Q4_K_M/Vulkan/Portugues restaurada. rollback15_9698670c.txt.
+3b. Logs: profS3_piloto.log (4 runs, 4 canonicos), deploy_profS3.txt,
+    rollback15_9698670c.txt; fontes/build profS3 no manifesto (Python).
+3c. Frente: carga F3b aprovada na amostra; lifetime provado; perfil externo
+    matched; perfil interno (compute=regiao sched); setup=por-op de dispatch;
+    ROTAS NOMEADAS. Proximo passo natural = DESIGN do patch de reducao de custo
+    por-op (local) com testes, ANTES de qualquer ativacao nova.
