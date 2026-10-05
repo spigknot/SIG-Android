@@ -1,0 +1,146 @@
+SMOKES RUNTIME v10 — RELATORIO A-H (pos-auditoria do especialista)
+Data: 05/10/2026. Parecer ref: pasted_content_2026-10-05_23-06-54-372_4dd0e4.txt
+Nenhuma publicacao/commit nesta rodada. Artefatos publicados: IMUTAVEIS.
+
+APARELHO: CPH2747 (SDK 36) via wireless 100.108.27.64:46081
+APK: v1.507 (versionCode 70, APP_VERSION 20261005_001)
+LIB v10 ativa: libsig_llama.so sha256 ec9c8315988c7a40ae5aa1fc61f1cb74cf9aaa24b6f338b5cd453978fb4a79c7 (30.761.920 B)
+             libsig_whisper.so sha256 8e3982b289ca1a32ded995f5bd760fc9c99df83ca1a7ab80e959a2c27cff745b (62.179.616 B)
+             (ambos coletados NO DEVICE; whisper = EXATO com o ZIP v10 publicado)
+Marker .installed = "10"; logcat dos smokes: activateIfInstalled dir=.../10-arm64-v8a/lib
+Modelos (sha256 no APARELHO): Q4 c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559 (=alvo)
+                              Q8 5c3fe0b1408a5ceb0143184ef247b11b579c525f4b02b060e6c851bb76fef1a4 (=alvo)
+                              whisper base 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
+
+════════════════════════════════════════════════════════════════
+A. GERACOES TEXTO — 7 attempts / 6 geracoes principais + 1 incidente
+════════════════════════════════════════════════════════════════
+[1] A1  "Bom dia companheiros" -> "Bom dia, companheiros"      (~13s; carga inicial da sessao; tokens NAO capturados)
+[2] B*  "Bom dia companA auditoria g%20s..." (INPUT CONTAMINADO — incidente)
+        -> "Bom dia, companheira. A auditoria foi concluída e os resultados foram apresentados." (24 tokens)
+[3] B   "A auditoria foi concluida sem falhas" -> "A auditoria foi concluída sem problemas" (10 tokens, ~8s)
+[4] --  tap Traduzir com campo VAZIO -> rejeitado pela validacao "Digite o texto para traduzir." (SEM geracao)
+[5] A2  "Bom dia companheiros" -> "Bom dia, companheiros"      (7 tokens, ~9s) — COM reload (ver D)
+[6] Q8c1 "Bom dia companheiros" -> "Bom dia, companheiros."    (8 tokens, ~15s)
+[7] Q8c2 "Os resultados da auditoria foram revisados pelo comite"
+        -> "Os resultados da auditoria foram revisados pelo comitê." (14 tokens, ~11s)
+        NOTA: frase de 53 chars — NAO e' o corpus medio historico (952 chars).
+        Renomear para "frase curta 2 / entrada pouco maior"; Q8 curto NAO valida
+        medium load/context route.
+[8] CPU "Bom dia companheiros" -> "Bom dia, companheiros."    (8 tokens, ~12s, backend=CPU)
+WHISPER (1 tentativa): teste_ptbr.wav (10s) -> transcricao real (ver F).
+
+════════════════════════════════════════════════════════════════
+B. LOGS POR GERACAO (timestamps/threads — raw)
+════════════════════════════════════════════════════════════════
+[3] B  (19:01:08.544, PID 2163, thread 14800): "geracao concluida: 10 tokens" — SEM "modelo carregado"
+      no buffer pos-clear (capturado imediatamente).
+[5] A2 (19:04:59.507-19:05:00.324, PID 2163, thread 19546):
+      sched_reserve: graph splits = 2 / reserve took 436.28 ms / modelo carregado: backend=GPU Vulkan n_ctx=8192 n_threads=6
+      geracao concluida: 7 tokens.  <-- LOAD NOVO neste request (thread nova).
+[6] Q8c1 (19:10:51.862-19:10:53.058, thread 23637): graph_reserve n_tokens=512; Vulkan0 544.01 MiB;
+      Vulkan_Host 26.01 MiB; graph nodes=1286; splits=2; reserve 270.31 ms; modelo carregado;
+      geracao 8 tokens.
+[7] Q8c2 (19:16:56.356-19:16:58.758, thread 394): graph nodes=1286; splits=2; reserve 251.46 ms;
+      Vulkan0 544.0078/Vulkan_Host 26.0098 (matches expectation); modelo carregado; geracao 14 tokens.
+[8] CPU  (19:19:25.142-19:19:27.051, thread 3472): splits=1; reserve 2.87 ms; modelo carregado:
+      backend=CPU n_ctx=8192 n_threads=6; geracao 8 tokens.
+OBS: "modelo carregado" aparece em [5][6][7][8] — CADA request trocou de thread/contexto
+(load novo por request apos troca de modelo/backend ou apos o processo ficar ocioso).
+
+════════════════════════════════════════════════════════════════
+C. RESET A-B-A — **CONFIRMADO no piloto in-context (20:13-20:14, 05/10)**
+════════════════════════════════════════════════════════════════
+HISTORICO: a 1a rodada (18:55-19:20) tinha A2 COM RELOAD (thread 19546);
+aquele A2 ficou marcado PENDENTE (auditoria).
+
+PILOTO IN-CONTEXT executado (mesmo modelo Q4_K_M + Vulkan, SEM trocar
+modelo/backend/arquivo entre as geracoes; SEM reload entre A1/B/A2):
+  A1 (20:13:18.091-19.516, PID 20752, thread 26715): carga inicial
+     (1x "modelo carregado", sched_reserve 180.33 ms) -> "Bom dia, companheiros" (7 tokens, ~7s)
+  B  (20:13:58.200, thread 27898): SEM load -> "A reunião de revisão do relatório
+     foi agendada para a próxima semana" (20 tokens, ~8s)
+  A2 (20:14:26.057, thread 28203): SEM load -> "Bom dia, companheiros" (7 tokens, ~11s)
+EVIDENCIA (capturas imediatas em cada etapa):
+  - 1 UNICA ocorrencia de "modelo carregado" (no A1); capturas pos-B e pos-A2
+    mostraram APENAS linhas "geracao concluida" (nenhum load novo entre A1/B/A2).
+  - Threads diferentes por request (26715/27898/28203) — normal (worker por pedido);
+    o CONTEXTO llama foi mantido (sem sched_reserve/load novo).
+  - igualdade: A1 == A2 = "Bom dia, companheiros"
+    sha256 do output: 1e2a5ddbb1f9b44d912d459feb09fd832127f44fcfa15bf23f7c07b2d624076d
+    B (distinto) sha256: 8176e69320df34dd9178c7ee84f0b67904881456c72c33576b3e16368946c79a
+  - entrada B distinta (67 chars, texto neutro; nao a frase de 10 tokens).
+CONCLUSao: reset in-context OK neste piloto (3 geracoes, 1 carga, sem contaminacao).
+Obs.: nao repetir bateria 24; piloto encerrado.
+
+════════════════════════════════════════════════════════════════
+D. WHISPER OFFLINE — aceito (com limites)
+════════════════════════════════════════════════════════════════
+O caso: modelo base / CPU / audio TTS pt-BR autorizado (10s, sintetico) ->
+transcricao NAO VAZIA, SEM crash/ANR:
+  "Bom dia. / Este e um teste de transcrica o offline do sistema. /
+   O relatorio foi concluído com sucesso."
+Precheck PROCEDENCIA (device):
+  libsig_whisper.so sha 8e3982b2... (v10 publicado) — COLETADO
+  modelo base sha 60ed5bc3... — COLETADO
+  wav sha e6bd87bc... — COLETADO
+  maps/PID: COLETADO com ROOT (KernelSU) — /proc/20752/maps mostra a libsig_llama.so
+  do pacote v10 mapeada (r-xp/r--p/rw-p em
+  /data/data/br.gov.sp.pcsp.launcher/no_backup/native_dependencies/10-arm64-v8a/lib/libsig_llama.so).
+  libsig_whisper.so: carga capturada em fluxo (precheck .so sha 8e3982b2 confirmado);
+  maps dedicado da whisper exige transcricao no processo — captura em andamento.
+terminal.txt (build diagnostics): whisper 1.8.4 / ggml 0.11.1 / ggml_commit e1bd73e /
+  SIG_BUILD_GGML_OPENCL=1 / SIG_BUILD_GGML_VULKAN=1 / OPENCL_EMBED=1 / SOA_Q=1 /
+  ADRENO_KERNELS=1 / JNI_OPENMP=0; decode beam_search=5; best_of=5; vad=on
+  (diagnosticos NAO provam por si o hash do .so carregado — por isso o precheck acima)
+Metricas REPORTED (nao validadas como razao): model loaded 8.633s; processamento 11s;
+  audio 10s; "0.98x" (fronteiras/rounding distintas — manter reported, sem speedup claim).
+LIMITES: NAO generalizar para Whisper GPU/outros modelos/ABI; x86 target, NPU e
+  OpenCL otimizado FORA de escopo. "whisper_backend_init_gpu: no GPU found" (rodou CPU).
+
+════════════════════════════════════════════════════════════════
+E. ERROS / JANELA OBSERVADA
+════════════════════════════════════════════════════════════════
+- SEM crash/ANR na janela observada (18:55-19:20 + whisper 19:44) — verificado no
+  logcat capturado; buffer atual (23h) rotacionou e nao cobre a janela.
+- Timeouts de infra: wireless caiu 2x (portas 40663 -> 41403 -> 46081). Nao e' erro do app.
+- Incidentes: [2] input contaminado; [4] tap com campo vazio (validacao correta).
+- Counts: 8 taps em Traduzir (7 geracoes + 1 rejeitada); 1 transcricao whisper.
+  SEM inventar: os tokens das geracoes [1] nao foram capturados (nao houve captura
+  de logcat no A1; registrar como NAO CAPTURADO).
+
+════════════════════════════════════════════════════════════════
+F. EVIDENCIAS / HASHES
+════════════════════════════════════════════════════════════════
+Whisper (scratch/smokes-v10/whisper/, sha256):
+  transcricoes.txt   de7d16af3b453119f96fe6d3d04e888c2260981dbbe2f5dc50507186a1beb558
+  log.txt            79021b2b7ecf426aeceaecc314dd14ffa0c46f9f8eefc97c2fdd0614ed52b64c
+  terminal.txt       04b2545f543cdf4c76ee874ff194089f099009a95aac38f94da893e6fdcdf1cd
+  teste_ptbr.txt     71105dd4a016868012036e0a42b0d09a5e262465543c3dd301cec1f323ef3bde
+Texto: logs citados em B (capturados na hora). Nada reescrito.
+
+════════════════════════════════════════════════════════════════
+G. PENDENCIAS (sem novo device/publicacao sem autorizacao)
+════════════════════════════════════════════════════════════════
+1. RESET A-B-A in-context (piloto pequeno autorizado) — PENDENTE.
+2. maps/PID do whisper — PENDENTE (nao acessivel; cadeia alternativa registrada).
+3. Fechamento documental permanente:
+   - pin fontes isolados produto / recipe / allowlist  (falta)
+   - versao testes CPP/SH/mock/fixtures p/ checkout CI limpo (fontes de teste
+     comitadas em 3620bb3; fixtures ZIP minimas ainda fora — avaliar fixture
+     minimal determinista que valide o contrato sem baixar 50 MB em unit CI)
+   - matriz source HEAD WIP vs ZIP prod N (SHA inputs/config/loader dynamic),
+     sem inferir OpenCL ausente por NEEDED (dlopen/dlsym)
+   - Whisper binary maior = questao tamanho/build type; smoke PASS NAO exige
+     republish imediata; NAO strip ZIP v10 in-place.
+4. Nada "read-only device" absoluto: os smokes GERARAM arquivos/inferencia no
+   aparelho (transcricoes em /sdcard/Music/..., wav /sdcard/Download) — mas SEM
+   alteracao de artefatos publicados (R2/release imutaveis).
+
+════════════════════════════════════════════════════════════════
+H. ESTADO GIT / ENTREGA
+════════════════════════════════════════════════════════════════
+git status ANTES de qualquer commit (pendente de leitura nesta rodada);
+relatorios (SMOKES/AUDITORIA) UNTRACKED — novo commit SOMENTE se aprovado,
+sem amend/force. O:/sig.apk continua opcional/sem bloqueio.
+— fim —

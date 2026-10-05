@@ -1,0 +1,225 @@
+AUDITORIA POS-RELEASE 20261005_001 — FECHAMENTO V2 (refinada)
+Data: 05/10/2026.
+Parecer: pasted_content_2026-10-05_20-49-36-328_7f0288.txt.
+AUTORIZACAO: NENHUMA para device/alteracoes/publicacao/commit/push.
+AUDITORIA READ-ONLY — nada alterado/republicado/reescrito.
+Commits 022b1d6/65504c1 permanecem.
+
+════════════════════════════════════════════════════════════════
+PONTO 1 — CORRECAO DA INTERPRETACAO OPENCL (o especialista tem razao)
+════════════════════════════════════════════════════════════════
+MINHA ANALISE ANTERIOR ERA INSUFICIENTE. Corrigido:
+
+  * "NEEDED sem libOpenCL.so nao prova backend OpenCL ausente":
+    CORRETO — o loader usa dlopen/dlsym justamente para carregar
+    dinamicamente. Ausencia de NEEDED nao prova ausencia de backend.
+  * "Lib stripada pode remover simbolos: ausencia de exports diag
+    nao prova ausencia de codigo": CORRETO — a libsig_llama v10
+    esta STRIPADA (sem .symtab), entao a ausencia de exports
+    ggml_opencl_diag/sig_sched NAO prova que o codigo OpenCL esta
+    ausente (pode estar compilado mas sem exports).
+  * "Distinguir backend OpenCL baseline vs otimizacoes F3b/cache e
+    instrumentacao": CORRETO — o HEAD tem o baseline OpenCL +
+    cache/instrumentacao; o produto distribuido e' o build do
+    svr11 (isolado, allowlist). Nao da para afirmar "cache/diag
+    nao distribuidos" SO com strings(71) + NEEDED.
+  * "HEAD WIP instrumentado nao fonte produto 1:1": CORRETO —
+    o HEAD e' o WIP consolidado (Vulkan/reset + OpenCL do
+    executor), NAO e' a receita 1:1 do produto.
+
+PROVA DE BINARIO (elf, arm64):
+  * libsig_llama v10 (30.761.920 B, sha ec9c8315...):
+    - STRIPADA: secoes [7]..[26], SEM .debug_* nem .symtab
+      (so .comment/.shstrtab).
+    - NEEDED: libandroid, liblog, libvulkan, libm, libdl, libc
+      (NAO libOpenCL.so — mas dlopen/dlsym pode carregar OpenCL
+      em runtime; NEEDED ausente nao prova backend ausente).
+    - text: 30.648.746 B.
+  * libsig_whisper v10 (62.179.616 B, sha 8e3982b2...):
+    - NAO STRIPADA: tem .debug_loc/.debug_abbrev/.debug_info/
+      .debug_ranges/.debug_str/.debug_line + .symtab.
+      (.debug_str 5,87 MB, .debug_info 7,5 MB, .symtab 569 KB).
+    - text: 36.079.321 B.
+
+VACINA (registrar, nao aplicar — sem autorizacao):
+  * Pinzar no repo: allowlist patch + source hash + build recipe,
+    baselines, configurar recipe que reproduza o build PRODUTO
+    SEM diagnostico, para TODAS as ABIs.
+  * Nada de compilar o HEAD e substituir libs silenciosamente.
+  * Usar fonte isolada + full hash + recipe/flags + call paths
+    para afirmar que cache/diag nao sao distribuidos.
+
+════════════════════════════════════════════════════════════════
+PONTO 2 — WHISPER — PRIORIDADE REAL (corrigido com prova ELF)
+════════════════════════════════════════════════════════════════
+CORRECAO DA CORRECAO: o delta +26.014.224 B NAO e' codigo.
+  * MINHA alegacao "-992 B": ERRO (primeira analise).
+  * MINHA alegacao "+26 MB de codigo diferente": ERRO (segunda).
+  * VERDADE (prova ELF llvm-size + readelf -S):
+    - whisper v9: text 36.080.334 B (stripado, sem .debug)
+    - whisper v10: text 36.079.321 B (NAO stripado, com .debug)
+    - DELTA DE CODIGO (text): -1.013 B — CODIGO PRATICAMENTE
+      IDENTICO.
+    - Os +26.014.224 B SAO DEBUG SYMBOLS (.debug_* ~25 MB +
+      .symtab ~569 KB) que o v10 manteve e o v9 stripou.
+  * CAUSA: v10 e' build cxx DEBUG do Gradle (nao-stripado);
+    v9 e' release STRIPADO. "Todos libs stripados" NAO PROCEDe
+    (s libsig_llama foi stripada; whisper NAO).
+  * Size + Debug symbols NAO provam causa exclusiva — precisa
+    comparar ELF sections (.debug/symtab/strip) + build flags +
+    NEEDED + API exports + input sources + toolchain (FEITO aqui:
+    readelf -S + llvm-size + NEEDED + sha per-file).
+  * CONTRATO/METADADOS A CORRIGIR: o manifest/contrato declara
+    whisper v10 como "stripado" — NAO e'. Docs precisam dizer
+    "libsig_whisper v10 = build cxx Debug, NAO stripada (+26 MB
+    de debug info; codigo ~idêntico ao v9)".
+  * NAO stripar o ZIP publicado in-place para remediar (imutavel).
+
+SMOKE WHISPER OFFLINE (pedido, NAO executado — sem autorizacao):
+  * OFFLINE NAO exige chave API (o especialista corrigiu: nao
+    pedir API key por habito; usar audio sintetico/publico/
+    aprovado + modelo Whisper LOCAL autorizado + janela CPH2747
+    idle; sem mic real/dados de producao).
+  * Rota offline real: app/callers/device/backend; precheck
+    model hash/path/actual lib v10 maps PID.
+  * Resultado: nao vazio, sem crash/ANR/linkfail, diagnosticos
+    redigidos, input/output esperado vs actual, performance
+    apenas limite aceitavel (nao speedup claim).
+  * Log: latencia/model/threads/backend + hashes.
+  * Nao afirmar "v9 equivalence" sem bytes/runtime.
+  * SE FALHA REAL: preservar log/cause/analyze class/ABI/JNI/
+    build flags + fornecer rollback PLANO APK v9/pacote v9 como
+    CONJUNTO CONSISTENTE (trocar so o .so whisper pode invalidar
+    o contrato do pacote verificado).
+  * NAO modificar o v10 no R2 (mesmo nome/hash — imutavel);
+    corrigir com NOVA versao Native + APK manifest/gates/test
+    consent.
+  * SE somente Debug size + smoke PASS: risco tamanho/
+    documentacao, SEM necessidade emergencial de republish.
+
+ROLLBACK DISPONIVEL (conjunto consistente):
+  * libsig_whisper v9: 36.165.392 B, sha b85d2add... (R2, HTTP 200)
+  * libsig_llama v9: 30.657.536 B, sha 31f6df15... (R2, HTTP 200)
+  * pacote v9 ZIP: arm64 43.835.831 B sha 5a98e6dd... /
+    x86_64 49.965.326 B sha 1152378... (R2, HTTP 200)
+  * lib stock 9698670c... (95.613.928 B) em
+    C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/
+    libsig_llama_9698670c_ROLLBACK.so
+
+════════════════════════════════════════════════════════════════
+PONTO 3 — TESTES REPRODUZIVEIS
+════════════════════════════════════════════════════════════════
+VERIFICADO:
+  * 532 JUnit SEPARAR do native host harness: a ausencia do
+    harness NAO prova que todos os 532 dependem dele, MAS os
+    testes de ZIP fixtures (DownloadPlanTablesTest) requerem as
+    fixtures hoje ignoradas -> podem quebrar num clone/CI limpo.
+  * DownloadPlanTablesTest usa javaClass.classLoader.getResource-
+    AsStream("native-deps/$nome") (linha 94) — depende de
+    app/src/test/resources/native-deps/ (NAO versionado).
+  * Fonte Windows paridade CI tambem depende do repo Windows:
+    documentar setup fixture/source authoritative e validar CI
+    isolado.
+VERIFICADO NO DISCO (native-dependencies/harness/ — NAO versionado):
+  * boundary14.cpp, boundary18_prec.cpp, check_shader_content.sh,
+    check_shader_dep.sh, gate_lib_produto.cpp, harness_args.h,
+    harness_args_test.cpp, harness_dump.h, harness_loop.h,
+    host-mulmm_probe.exe, build_transpose_lifetime_probe.sh,
+    fixtures/, device_list.h, arm64-v8a/, backup-rodada10/11...
+  * Fontes CPP/SH/headers/mock presentes no disco, NAO no git.
+PLANO (nao executado — sem autorizacao):
+  * Versionar nominalmente: CPP/SH/headers/mock/fontes reset/
+    Q8/loader/safe_deploy + fixture minimal determinista e
+    licenciada.
+  * Evitar baixar ZIP production 50 MB em unit CI se fixture
+    pequena valida contrato (numerical runtime probe != mock
+    fixture).
+  * Excecoes ESPECIFICAS no .gitignore para fontes; outputs
+    binarios ignorados.
+  * Helper REAL ligado GREEN/mutation, CI runner/toolchain real
+    e comandos docs.
+  * Gate harness Quiet/module-map/Android suite; novos commits
+    somente aprovados, NUNCA amend pushed/force.
+
+════════════════════════════════════════════════════════════════
+PONTO 4 — RUNTIME NOVO BUILD ENXUTO (apos consentimento exato)
+════════════════════════════════════════════════════════════════
+  * CPH2747 serial FRESH explicito, APK vc70/lib ec9c8315/maps/
+    model sha, backups escopo permitido.
+  * Q4 Vulkan A-B-A curto/outro medio sem reload para reset.
+  * Q8 Vulkan curto + medio canarios numericos/hashes se
+    fixtures existem.
+  * CPU controle curto.
+  * Whisper OFFLINE curto (audio aprovado + modelo local).
+  * SEM repetir 24 bateria.
+  * Output: full hash/cobertura revisao quando nao identico ao
+    config baseline; erros finite/timeouts/ANR/exit info; retry
+    fase conhecida.
+  * Novo build Q8 correto exige ESSA amostra (nao smoke 8 tokens
+    Q4 historico).
+  * x86: emulador se disponivel/autorizado ou declarar target
+    pendente; nao bloquear preparo arm64 por device inexistente.
+
+════════════════════════════════════════════════════════════════
+PONTO 5 — FECHAMENTO / DoD
+════════════════════════════════════════════════════════════════
+  * Auditoria A-H: separar DOCUMENTADO vs verificado externo vs
+    usuario runtime. Tabela criterio/estado(CCE-PARCIAL-PENDENTE-
+    BLOQUEADO)/comando/rc/hash/evidence-path.
+  * Lib whisper v10: source provenance + source product manifest.
+  * Clean checkout tests.
+  * Runtime new build: Q8/reset/CPU/Whisper.
+  * raw attempt counts Python.
+  * Hash readback ZIP manifest: SHA + exist + size + dedupe +
+    exact metadata.
+  * NENHUMA alegacao "arvore limpa" enquanto houver untracked
+    (o relatorio/auditoria estao untracked).
+  * Pedido: autorizado NOVO commit de relatorio/testes, NAO
+    force history.
+  * O: opcional, sem bloqueio.
+  * NAO abrir backpressure/fusao nem default backend change.
+  * Artefato publicado continua existente; NAO deletar por
+    lacuna doc.
+  * SO com falha concreta: definir remediacao CONJUNTO e
+    autorizacao de publicacao.
+
+════════════════════════════════════════════════════════════════
+TABELA DE ESTADO (criterio / estado / prova)
+════════════════════════════════════════════════════════════════
+Install/download/activation/inferencia Q4 Vulkan ... CCE
+  (smoke 8 tokens, SIGLlama GPU Vulkan, lib ec9c8315 no device)
+Gates unit/lint/assemble (532/0/0/0) ............... CCE
+verify-native-dependencies v10 ..................... CCE (exit 0)
+Commit+push (022b1d6/65504c1) ...................... CCE
+Release GitHub 20261005_001 (SHA 6c76b99c conferido) CCE
+Pacote v10 no R2 (readback 200, SHA idêntico) ...... CCE
+Proveniencia/escopo (matriz HEAD vs ZIP vs APK) ...... PARCIAL
+  (HEAD tem OpenCL; artefato nao prova 1:1; recipe nao pinzada)
+Whisper (delta codigo, causa, contrato) .............. PARCIAL
+  (prova ELF: codigo ~identico, +26MB debug symbols;
+   contrato diz "stripado" mas whisper NAO e')
+Testes reproduziveis (harness/fixtures versionados) .. PENDENTE
+  (fontes no disco, nao no git; CI limpo nao reproduz)
+Runtime novo build (Q8 A-B-A, reset, CPU, Whisper) ... PENDENTE
+  (sem autorizacao device; nao executado)
+x86_64 target ....................................... PENDENTE
+  (compilado, nao testado em target)
+OpenCL (patch separado, instrumentacao no HEAD) ...... BLOQUEADO
+
+NAO E' DoD funcional COMPLETA: validacoes do novo build
+(Q8/reset/CPU/Whisper) PENDENTES. Distribuicao publica
+existente (release 20261005_001 + pacote v10) NAO apagada
+por lacunas documentais.
+
+════════════════════════════════════════════════════════════════
+NADA ALTERADO — AUDITORIA READ-ONLY
+════════════════════════════════════════════════════════════════
+Sem autorizacao para device/alteracoes/publicacao/commit/push:
+  * Commits 022b1d6/65504c1 INALTERADOS.
+  * APK/pacote v10 mantidos publicos (imutaveis).
+  * Nenhum smoke/novo build executado.
+  * Historico NAO reescrito (o amend incidente ja estava feito;
+    registrado como incidente, nao desfeito).
+  * Relatorio/auditoria untracked PRESERVADOS.
+
+— fim —
