@@ -50,14 +50,15 @@ aparelho (autorizado pelo usuario; wireless/USB indisponiveis no momento).
 | x86_64 | 31.874.632 | b89ba7d10b9e4d96931327e36c57a66c84e140be506535b655d3e02e53a07e93 |
 Rollback (estado encontrado aprovado): v10 arm64 ec9c8315... (30.761.920 B).
 
-## FASE 5 — Piloto no aparelho — AGUARDANDO CONEXAO
-Plano (autorizado; ~15-25 min):
-1. Precheck fresh (package/lib maps/APK version).
-2. safe_deploy candidato (fail-closed + readback).
-3. Q4 curto + Q8 curto (backend/model/maps/libhash + output hash).
-4. A/B: rollback v10 -> Q4c+Q8c (controle); comparar.
-5. Restaurar estado aprovado + readback.
-Rollback: v10 ec9c8315 (30.761.920 B) — estado encontrado aprovado.
+## FASE 5 — Piloto no aparelho — CONCLUIDA (essencial; ver PILOTO-OPENCL-2026-10-06.md)
+- Precheck fresh OK (wireless 41257; APK v1.507; v10 ec9c8315 no device).
+- safe_deploy CANDIDATO (596aba0e) OK + maps comprovando a lib carregada.
+- Q4 curto: candidato "Bom dia, companheiros" (7t, ~10s) | v10 idem (7t, ~9s).
+- Q8 curto: candidato "Bom dia, companheiros." (8t, ~14s) | v10 idem (8t, ~10s).
+- OUTPUTS IDENTICOS candidato vs v10; sem crash/ANR; rollback v10 OK.
+- Estado final do device = v10 (estado encontrado restaurado).
+- LIMITACAO: "Q4 mais longo" nao executado (UI nao aceitou input longo via
+  adb nesta sessao); ganho de performance pendente de janela propria.
 
 ## APROVACOES (usuario, 06/10)
 1. Incorporar F3b+cache no produto local (guard v2 + cache sempre ON) — SIM.
