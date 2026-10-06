@@ -1,0 +1,180 @@
+PROMPT-RELATORIO AO ESPECIALISTA — ACABAMENTO OPENCL (F3b/guard + loadercache)
+CICLO v11: consolidacao no produto + piloto + medicao + release publicada
+Data: 06/10/2026. Repo: D:/Projetos/SIG (HEAD 1a16468). Isolado: D:/ocl1.
+
+════════════════════════════════════════════════════════════════
+1. SUMARIO EXECUTIVO
+════════════════════════════════════════════════════════════════
+- Objetivo cumprido: F3b (transposes non-blocking com guard) + loadercache
+  (cache de simbolos OpenCL) consolidados no PRODUTO MINIMO, validados
+  (host + piloto no CPH2747), medidos (ganho confirmado) e publicados.
+- Zero instrumentacao no artefato (grep=0); guard v2 SEM cache; loader SEM
+  chaves/contadores (cache SEMPRE ON); A/B OFF nao existe no produto.
+- RELEASE v11 publicada (20261006_001): R2 (readback OK; v9/v10 preservados),
+  GitHub (Latest; SHA do asset == local), O:\sig.apk. APK vc71/1.508.
+- Medicao longa (59 tokens): candidato 26.0 t/s vs v10 17.8 t/s (logcat,
+  fronteiras iguais) = +46%; app reportou 28.5 t/s. n=1 por build (declarado).
+- Testes host: guard GREEN 5/5 + mutacao; loader RED 4 / GREEN 2 /
+  endurecimento A-F / mutacao. Gates Android: 541 testes 0 falhas + lint +
+  assemble. verify-native-dependencies v11 ACEITO.
+
+════════════════════════════════════════════════════════════════
+2. AUTORIZACOES (usuario, verbatim resumido)
+════════════════════════════════════════════════════════════════
+- "Sim — incorporar os dois no produto local (guard v2 sem cache +
+  loadercache sempre ON no artefato)" (D1).
+- "Sim — piloto enxuto com backup/rollback ao estado encontrado
+  (v10 ec9c8315)" (D2).
+- "Sim — commitar/push agora (commit novo, sem force/amend)" (D3).
+- "Sim — release só depois do piloto aceito e com autorização à parte" (D4)
+  + depois: "autorizo tudo" (release executada).
+- Default da UI preservado: Q4_K_M + Vulkan (nao alterado).
+
+════════════════════════════════════════════════════════════════
+3. FASE 1 — INVENTARIO E DESIGN
+════════════════════════════════════════════════════════════════
+- Repo limpo no inicio (HEAD e521a0a); v10/release imutaveis; WIP alheio: nada.
+- Design: docs/opencl-hymt2/DESIGN-ACABAMENTO-OPENCL-2026-10-06.md
+  - ALLOWLIST: guard F3b v2 (sem cache) + chamada no transpose_2d; wrappers
+    clGetCommandQueueInfo/clGetEventInfo/clGetMemObjectInfo; loadercache
+    produto (atomico, falhas nao cacheadas, sempre ON).
+  - DENYLIST (deltas): sig_sched/hostprof/decprof/clcount/topops/paths CSV/
+    debug.sig.hymt2.* — NAO fonte baseline inteira.
+  - MATRIZ baseline-produto x HEAD x candidato (no doc).
+- Worktree isolado CURTO novo: D:/ocl1 (baseline e1bd73e + vulkan-reset v10
+  patch + candidato OpenCL). D:/svr11 preservado.
+
+════════════════════════════════════════════════════════════════
+4. FASE 2 — F3b/GUARD (patch minimo)
+════════════════════════════════════════════════════════════════
+- sig_transpose_guard.h: guard v2 (consulta CL_QUEUE_PROPERTIES POR CHAMADA;
+  so habilita non-blocking com fila IN-ORDER confirmada; erro => BLOQUEANTE
+  fail-safe; sem cache de resultado — elimina a classe "cache do 1o queue").
+  sha256 4dd93679fba83ce85f939c7415fec8a391a989089fde6c948180ea93fbad13fc.
+- ggml-opencl.cpp: include + 1 linha no transpose_2d:
+  `if (blocking && sig_transpose_can_skip_wait(backend_ctx->queue)) blocking = false;`
+- Cobertura de callers: transpose_2d_as_8b/as_16b chamam transpose_2d (mesmo
+  guard); upload/repack e lifecycle NAO alterados pelo patch (sem contadores).
+- Evidencia de compilacao: objeto ggml-opencl.cpp.o PRE-STRIP referencia
+  `clGetCommandQueueInfo` (U — resolvido pelo wrapper do loader) e contem
+  transpose_2d; binario final sem strings de diag.
+- Testes (host, mock CL): transpose_guard_test GREEN 5/5 PASS (in-order->fast,
+  ooo->blocking, erro->blocking, sem estado velho, consulta por chamada) +
+  MUTACAO detectada (mutante "return true" falha 2 checks). Runner:
+  native-dependencies/tests/run_transpose_guard_test.sh (g++ MSYS2;
+  PATH + CXX exigidos — pitfall registrado).
+
+════════════════════════════════════════════════════════════════
+5. FASE 3 — LOADERCACHE (produto)
+════════════════════════════════════════════════════════════════
+- load_opencl_fn (produto): cache static std::atomic<Fn> por instanciacao
+  (1 por simbolo), publicacao acquire/release; FALHAS nunca cacheadas;
+  null seguro para ausente; handle dlopen de lifetime do processo (sem
+  dlclose neste arquivo) => "1 dlsym por simbolo por processo" valido.
+  SEM chave debug, SEM contadores (grep debug.sig.hymt2 = 0 no candidato).
+- Wrappers adicionados: clGetCommandQueueInfo + clGetEventInfo (guard) +
+  clGetMemObjectInfo (uso ja existente do fusion-round).
+- Testes versionados em native-dependencies/tests/loader/ (6 arquivos):
+  fake_dlfcn + loader_cache_test + loader_hardening_test + loader_ORIG/
+  PATCHED + runner (paths ajustados para o novo diretorio). Resultado:
+  RED 4 (ORIG: dlsym por chamada) / GREEN 2 (PATCHED: 1/simbolo) /
+  ENDURECIMENTO A-F (transitoria/ausente/concorrencia 8x200/chave OFF-ON) /
+  MUTACAO detectada.
+- Loader do CANDIDATO compilado no harness host: dlsym=2 para 2 simbolos OK
+  (cache sempre ON; o teste usa EXPECT_DLSYM=2).
+
+════════════════════════════════════════════════════════════════
+6. FASE 4 — BUILD REAL (2 ABIs)
+════════════════════════════════════════════════════════════════
+- Comando oficial (cmake SDK 3.22.1 + NDK 27.2.12479018 + ninja + zig host):
+  CONFIGURE_RC=0 / BUILD_RC=0 nos DOIS ABIs (657/657 acoes cada).
+- ELF arm64: ELF64 AArch64; NEEDED libandroid/liblog/libvulkan/libm/libdl/
+  libc; 9 JNI symbols; 0 diag. x86_64 idem (X86-64).
+- STRIP llvm-strip --strip-unneeded:
+  arm64: 95.882.056 -> 30.764.464 (sha 596aba0e9813f516cb68117e9b8f26fe40458010cf86fb118f7c80fac13200d9)
+  x86_64: 93.062.976 -> 31.874.632 (sha b89ba7d10b9e4d96931327e36c57a66c84e140be506535b655d3e02e53a07e93)
+  (v10 arm64: 30.761.920 — delta +2.544 B do guard/cache/wrappers.)
+- Vulkan/reset preservado (patch v10 aplicado como base; checks no ELF).
+
+════════════════════════════════════════════════════════════════
+7. FASE 5 — PILOTO NO CPH2747 (autorizado; feito e restaurado)
+════════════════════════════════════════════════════════════════
+- Precheck: wireless fresco (41257); APK 1.507; v10 ec9c8315 no device;
+  PJA110 presente no adb — NUNCA tocado (serial explicito).
+- Backup do estado (readback ec9c8315) + safe_deploy CANDIDATO (fail-closed:
+  push->tmp->cp->readback) OK.
+- Smokes CURTOS (OpenCL):
+  Q4: candidato "Bom dia, companheiros" (7t, ~10s) | v10 idem (7t, ~9s).
+  Q8: candidato "Bom dia, companheiros." (8t, ~14s) | v10 idem (8t, ~10s).
+  -> OUTPUTS IDENTICOS entre builds; sem crash/ANR.
+- maps/PID (root): lib carregada = 10-arm64-v8a/lib/libsig_llama.so sha
+  596aba0e... (r-xp/r--p/rw-p) — o CANDIDATO comprovado em runtime.
+- MEDICAO LONGA (texto 221 chars, mesmo nos 2 builds; texto:
+  "Senhor delegado, informo que a diligencia foi cumprida integralmente..."):
+    v10: decode 3.32 s (59 tokens) = 17.8 t/s [logcat]
+    candidato: decode 2.27 s (59 tokens) = 26.0 t/s [logcat];
+               app "Desempenho: 59 tokens em 2.1 s (28.5 tokens/s)"
+    => GANHO +46% (fronteiras iguais) — coerente com F20 (+16..+53%).
+    n=1 por build (janela de >=3 reps NAO executada — declarado).
+- Rollback (safe_deploy do backup) -> v10 restaurado (readback exato =
+  estado encontrado). Nada permanente no device.
+- INCIDENTE DE INSTRUMENTACAO: `adb shell input text` com texto longo na UI
+  do Texto ficou instavel (digitos baguncados/estado de campo); retry apos
+  force-stop+reopen funcionou; registrado como pitfall operacional.
+
+════════════════════════════════════════════════════════════════
+8. FASE 6/7 — PACOTES v11, APK E PUBLICACAO
+════════════════════════════════════════════════════════════════
+- Script build-android-native-dependencies.ps1 -Version 11: rodou; ATENCAO —
+  o script RE-LINKA o llama a cada execucao (reconfigure+link) e o link sai
+  UNSTRIPPED; correcao aplicada: re-strip apos o script + RECONSTRUCAO do
+  ZIP substituindo a entry lib/libsig_llama.so e atualizando o manifest.json
+  interno (script Python); recompressao deflate nivel 6 (o Fastest do .NET
+  deixava +14 MB). Resultado: ZIPs v11 MENORES que o v10 com libs strippadas:
+    arm64:  43.878.781 B sha256 66eecc516d17d28e29f8b908abaad59e18b22be15a17c22097ac9dcd0d65ea40
+    x86_64: 50.006.445 B sha256 cfdc828af8726ca6fd32f03ed0e8386f6044110cbcaa9dd60c27a001f3033169
+- Conteudo v11 (por ABI, 18 entries): whisper STRRIPADA 36.168.384/36.744.576
+  (corrige a questao do v10); llama 30.764.464/31.874.632; omp 961.440/
+  956.344; npu_probe 948.912/916.480 (estes = v9 exato); onnx 23.990.744/
+  38.473.056; libav* do AAR; silero; manifest.json 3.193/3.190.
+- verify-native-dependencies.ps1 -Version 11: ACEITO exit 0
+  (+ arm64-v8a OK 43.878.781; + x86_64 OK 50.006.445).
+- NativeDependencyManager.kt: COMPONENT_VERSION 11; URLs/sha/tamanhos v11;
+  conteudoPorAbi descomprimido v11. Fixtures do teste official -> v11.
+  AppUpdateChecker 20261006_001; versionCode 71 / versionName 1.508.
+- Gates: testDebugUnitTest 541/0/0/0 + lintDebug + assembleDebug —
+  BUILD SUCCESSFUL; APK 8.117.682 B sha b04abd6041d3dffce18b42ee0ec49597ba9da2c0464a93ac8dcfe8ad4f051186;
+  0 .so no APK (contrato).
+- Repo: commits d929d08 (patch+testes+design), 10373a8 (status),
+  69e5c9f (piloto), e360ca4 (v11 contrato+bumps+UPDATE.md),
+  1a16468 (medicao+release doc) — push OK, SEM force/amend.
+- R2: upload_native_deps.py 11 — PUBLICACAO OK; readback publico:
+  v11 arm64/x86_64 HTTP 200 com SHA IDENTICO; v9/v10 HTTP 200 PRESERVADOS.
+- GitHub: Release 20261006_001 (Latest) asset sig.apk — SHA do asset ==
+  build local (b04abd60...). Historico preservado (20261005_001 abaixo).
+- O:\sig.apk copiado (sha conferido; unidade montada desta vez).
+- UPDATE.md: 2 pitfalls novos (script re-linka unstripped; compressao n6).
+
+════════════════════════════════════════════════════════════════
+9. LIMITACOES DECLARADAS (honestidade)
+════════════════════════════════════════════════════════════════
+- Medicao de performance: n=1 por build (janela instavel; sem >=3 reps).
+- x86_64: buildado/verificado por SHA, SEM teste de runtime (sem emulador).
+- Smokes curtos: granularidade de poll (~3-4 s) — numeros finos so via logcat.
+- Q8 curto candidato (~14s) ligeiramente maior que v10 (~10s) nessa amostra
+  (curtos dominados por load; sem significado no decode).
+- O "A/B no MESMO artefato" (chave runtime) nao existe no produto por
+  desenho (cache sempre ON; A/B OFF fica em artefato de diagnostico separado
+  se necessario) — o A/B feito foi entre builds (v10 vs candidato).
+
+════════════════════════════════════════════════════════════════
+10. ESTADO ATUAL E PROXIMOS (com autorizacao)
+════════════════════════════════════════════════════════════════
+- v11 PUBLICA e distribuivel; v10 preservado (rollback de pacote disponivel);
+  device no v10 (estado encontrado).
+- Frentes futuras possiveis (todas exigem nova aprovacao):
+  a) Janela de >=3 reps da medicao longa (Q4/Q8) em temperatura controlada;
+  b) piloto x86_64 (emulador) — declarar antes de afirmar cobertura;
+  c) backpressure/kernels: NAO tocados neste ciclo (fora do escopo).
+- Nada mais pendente do escopo autorizado nesta rodada.
+— fim —
