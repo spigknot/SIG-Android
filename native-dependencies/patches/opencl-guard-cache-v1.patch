@@ -1,0 +1,134 @@
+diff --git a/app/src/main/cpp/android-opencl-loader.cpp b/app/src/main/cpp/android-opencl-loader.cpp
+index 99277d0..ad5ab0d 100644
+--- a/app/src/main/cpp/android-opencl-loader.cpp
++++ b/app/src/main/cpp/android-opencl-loader.cpp
+@@ -6,6 +6,7 @@
+ #include <CL/cl_function_types.h>
+ #include <dlfcn.h>
+ 
++#include <atomic>
+ #include <mutex>
+ #include <string>
+ #include <utility>
+@@ -61,6 +62,17 @@ void * opencl_handle() {
+ 
+ template <typename Fn>
+ Fn load_opencl_fn(const char * name) {
++    // SIG (F17, produto minimo): cache de simbolos do shim OpenCL.
++    // - publicacao ATOMICA (nenhum ponteiro parcial observavel);
++    // - FALHAS nunca cacheadas (retry a cada chamada; primeiro acesso antes do
++    //   driver disponivel NAO envenena o cache);
++    // - handle dlopen de lifetime do processo (sem dlclose neste arquivo) =>
++    //   "1 resolucao por simbolo por processo" e' valido; null seguro para
++    //   simbolo ausente (erro + log, sem crash).
++    // Produto: cache SEMPRE ativo (sem chaves de debug/contadores).
++    static std::atomic<Fn> cached{nullptr};
++    Fn hit = cached.load(std::memory_order_acquire);
++    if (hit != nullptr) return hit;
+     void * handle = opencl_handle();
+     if (handle == nullptr) return nullptr;
+     dlerror();
+@@ -69,8 +81,11 @@ Fn load_opencl_fn(const char * name) {
+         const char * error = dlerror();
+         set_opencl_loader_error(std::string("OpenCL carregou, mas faltou símbolo ") +
+                                 name + ": " + (error != nullptr ? error : "falha desconhecida"));
++        return nullptr;
+     }
+-    return reinterpret_cast<Fn>(symbol);
++    Fn fn = reinterpret_cast<Fn>(symbol);
++    cached.store(fn, std::memory_order_release);
++    return fn;
+ }
+ 
+ } // namespace
+@@ -354,6 +369,31 @@ extern "C" CL_API_ENTRY cl_int CL_API_CALL clReleaseEvent(cl_event event) {
+     return fn ? fn(event) : OPENCL_MISSING_ERROR;
+ }
+ 
++extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetCommandQueueInfo(
++        cl_command_queue command_queue, cl_command_queue_info param_name,
++        size_t param_value_size, void * param_value, size_t * param_value_size_ret) {
++    auto fn = OPENCL_FN(clGetCommandQueueInfo);
++    return fn ? fn(command_queue, param_name, param_value_size, param_value, param_value_size_ret)
++              : OPENCL_MISSING_ERROR;
++}
++
++extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetEventInfo(
++        cl_event event, cl_event_info param_name, size_t param_value_size,
++        void * param_value, size_t * param_value_size_ret) {
++    auto fn = OPENCL_FN(clGetEventInfo);
++    return fn ? fn(event, param_name, param_value_size, param_value, param_value_size_ret)
++              : OPENCL_MISSING_ERROR;
++}
++
++// SIG (fusion-round 27/09, item 4): o backend precisava de clGetMemObjectInfo
++// para diagnosticar o CL_INVALID_MEM_OBJECT — mesmo padrao dos demais.
++extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetMemObjectInfo(
++        cl_mem memobj, cl_mem_info param_name, size_t param_value_size,
++        void * param_value, size_t * param_value_size_ret) {
++    auto fn = OPENCL_FN(clGetMemObjectInfo);
++    return fn ? fn(memobj, param_name, param_value_size, param_value, param_value_size_ret) : OPENCL_MISSING_ERROR;
++}
++
+ extern "C" CL_API_ENTRY cl_int CL_API_CALL clGetEventProfilingInfo(
+         cl_event event, cl_profiling_info param_name, size_t param_value_size,
+         void * param_value, size_t * param_value_size_ret) {
+diff --git a/app/src/main/cpp/llama/ggml/src/ggml-opencl/ggml-opencl.cpp b/app/src/main/cpp/llama/ggml/src/ggml-opencl/ggml-opencl.cpp
+index fc0fce0..1c7e9e3 100644
+--- a/app/src/main/cpp/llama/ggml/src/ggml-opencl/ggml-opencl.cpp
++++ b/app/src/main/cpp/llama/ggml/src/ggml-opencl/ggml-opencl.cpp
+@@ -46,6 +46,9 @@ typedef const void * (*get_adreno_bin_kernel_func_t)(
+ #include <memory>
+ #include <charconv>
+ #include <mutex>
++#include <atomic>
++
++#include "sig_transpose_guard.h"   // guard F3b (testavel; ver native-dependencies/tests/transpose_guard_test.cpp)
+ #include <regex>
+ #include <set>
+ #include <unordered_set>
+@@ -6042,6 +6045,7 @@ static vowarning: in the working copy of 'app/src/main/cpp/llama/ggml/src/ggml-opencl/sig_transpose_guard.h', LF will be replaced by CRLF the next time Git touches it
+id transpose_2d(
+     bool blocking = true,
+     bool auto_local = false // let driver pick local size for non-uniform workgroups
+ ) {
++    if (blocking && sig_transpose_can_skip_wait(backend_ctx->queue)) blocking = false;  // F3b (prod)
+     static ggml_cl_buffer buf;
+ 
+     cl_event evt;
+diff --git a/app/src/main/cpp/llama/ggml/src/ggml-opencl/sig_transpose_guard.h b/app/src/main/cpp/llama/ggml/src/ggml-opencl/sig_transpose_guard.h
+new file mode 100644
+index 0000000..9bf2138
+--- /dev/null
++++ b/app/src/main/cpp/llama/ggml/src/ggml-opencl/sig_transpose_guard.h
+@@ -0,0 +1,30 @@
++// Guard do F3b (transposes non-blocking) — SEPARADO para teste nativo local.
++// Habilita non-blocking SOMENTE com fila IN-ORDER confirmada por consulta;
++// qualquer incerteza (erro da consulta) => modo BLOQUEANTE (fail-safe).
++//
++// Sem cache: a consulta custa ~microssegundos e roda 1x por transpose
++// (~672 por carga => ~1-3ms total, desprezivel vs 1.2s economizado); a
++// ausencia de cache elimina a classe de bug de "cache por primeiro queue"
++// (fila recriada com propriedades diferentes herdaria resultado velho).
++// Teste: native-dependencies/harness/transpose_guard_test.cpp (RED-GREEN).
++#pragma once
++#include <atomic>
++
++// impl parametrizada para o teste (injeta a consulta); o consumidor usa a
++// variante abaixo com o clGetCommandQueueInfo real (loader/plataforma).
++static inline bool sig_transpose_guard_impl(
++        cl_command_queue q,
++        cl_int (*query)(cl_command_queue, cl_command_queue_info, size_t, void *, size_t *)) {
++    cl_command_queue_properties props = 0;
++    cl_int rc = query(q, CL_QUEUE_PROPERTIES, sizeof(props), &props, NULL);
++    int ooo = (rc == CL_SUCCESS)
++                  ? ((props & CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE) ? 1 : 0)
++                  : -1;
++    return ((ooo == 0) ? 1 : 0) == 1;  // so' habilita com IN-ORDER confirmado
++}
++
++#ifndef SIG_TRANSPOSE_GUARD_TEST
++static bool sig_transpose_can_skip_wait(cl_command_queue q) {
++    return sig_transpose_guard_impl(q, clGetCommandQueueInfo);
++}
++#endif

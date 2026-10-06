@@ -1,0 +1,38 @@
+MANIFEST — CANDIDATO OPENCL v1 (F3b/guard + loadercache) — 2026-10-06
+Status: CANDIDATO local (aprovado pelo usuario para incorporacao no produto
+local; NAO publicado; NAO commitado nas fontes do repo vivo — patch versionado).
+
+BASELINE: e1bd73e31ba18bd36cdb65542a512fd8933901ca
+PATCH: opencl-guard-cache-v1.patch (aplicar APOS o vulkan-reset-v10.patch)
+  sha256: 8f170a43b2b7f1e1ed0dd96d9b065df2723ddb2667ff3bb9bb35961c85d2a5bb
+
+CONTEUDO (3 arquivos):
+  1. sig_transpose_guard.h (NOVO) — guard F3b v2 SEM cache; consulta
+     CL_QUEUE_PROPERTIES; erro => bloqueante (fail-safe).
+     sha256 do arquivo final: 4dd93679fba83ce85f939c7415fec8a391a989089fde6c948180ea93fbad13fc
+  2. ggml-opencl.cpp — include do guard + 1 linha no transpose_2d:
+     `if (blocking && sig_transpose_can_skip_wait(backend_ctx->queue)) blocking = false;`
+  3. android-opencl-loader.cpp — cache de simbolo atomic (acquire/release),
+     falhas nunca cacheadas, null seguro; SEMPRE ATIVO (sem chaves/contadores
+     no produto); wrappers clGetCommandQueueInfo + clGetEventInfo +
+     clGetMemObjectInfo.
+
+DENYLIST (ausente do candidato; grep = 0): sig_sched/hostprof/decprof/clcount/
+topops/debug.sig.hymt2/g_sig_shim_calls/g_sig_dlsym_calls.
+
+TESTES (host, mock, sem device):
+  native-dependencies/tests/transpose_guard_test.cpp + runner (GREEN 5/5 +
+  mutacao detectada). native-dependencies/tests/loader/ (fake_dlfcn +
+  loader_cache_test + loader_hardening_test + loader_ORIG/PATCHED + runner):
+  RED 4 / GREEN 2 / endurecimento A-F / mutacao detectada.
+
+RECIPE DE BUILD do llama-jni (por ABI):
+  cmake -S app/src/main/cpp/llama-jni -B native-dependencies/build/llama/<abi>
+    -G Ninja -DCMAKE_MAKE_PROGRAM=<sdk>/cmake/3.22.1/bin/ninja.exe
+    -DCMAKE_TOOLCHAIN_FILE=<sdk>/ndk/27.2.12479018/build/cmake/android.toolchain.cmake
+    -DANDROID_ABI=<abi> -DANDROID_PLATFORM=android-24 -DCMAKE_BUILD_TYPE=Release
+    -DSIG_ZIG_EXE=<root>/.tools/zig-0.16.0/zig.exe
+  cmake --build <build> -j 8
+
+LIMITES: source hash nao prova bytes; a prova do candidato e' o ELF do .so
+buildado + os testes + o piloto. Nada publicado/republicado.

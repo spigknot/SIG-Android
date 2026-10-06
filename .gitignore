@@ -68,6 +68,12 @@ native-dependencies/build/
 # contem so CPP/SH/H/fixtures minimas — binarios/logs continuam fora).
 !native-dependencies/tests/
 !native-dependencies/tests/**
+# Dentro de tests/, binarios e logs gerados pelos runners continuam FORA
+# (a negacao acima re-incluiria tudo; estas regras vem depois e vencem):
+native-dependencies/tests/**/*.exe
+native-dependencies/tests/**/*.o
+native-dependencies/tests/**/*.log
+native-dependencies/tests/**/*.out
 # Artefatos de rodada OpenCL (preserva .txt/.md de relatorio)
 docs/opencl-hymt2/logs-rodada-opencl/*
 !docs/opencl-hymt2/logs-rodada-opencl/*.txt
