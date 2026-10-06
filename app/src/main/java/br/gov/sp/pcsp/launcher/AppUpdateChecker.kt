@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 object AppUpdateChecker {
 
     /** Versão deste APK — atualizar junto com a release (formato YYYYMMDD_NNN). */
-    const val APP_VERSION = "20261005_001"
+    const val APP_VERSION = "20261006_001"
 
     private const val RELEASES_URL = "https://api.github.com/repos/spigknot/SIG-Android/releases/latest"
     private const val APK_ASSET_NAME = "sig.apk"

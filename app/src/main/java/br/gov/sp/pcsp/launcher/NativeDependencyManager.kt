@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
  */
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "10"
+    const val COMPONENT_VERSION = "11"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
     private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
@@ -29,14 +29,14 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v10-arm64-v8a.zip",
-            "19373b869acda07c92cd7df6a6d5b29aeb1ebb21640534f175873d462e288398",
-            48_455_121L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v11-arm64-v8a.zip",
+            "66eecc516d17d28e29f8b908abaad59e18b22be15a17c22097ac9dcd0d65ea40",
+            43_878_781L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v10-x86_64.zip",
-            "be70ce098c913dfc6b36fd0713b7db3bdb697785eb037673ced76689f2bd1349",
-            54_971_818L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v11-x86_64.zip",
+            "cfdc828af8726ca6fd32f03ed0e8386f6044110cbcaa9dd60c27a001f3033169",
+            50_006_445L
         )
     )
 
@@ -84,13 +84,13 @@ object NativeDependencyManager {
      */
     private val conteudoPorAbi = mapOf(
         "arm64-v8a" to listOf(
-            "lib/libsig_whisper.so" to 62_179_616L,
-            "lib/libsig_llama.so" to 30_761_920L,
+            "lib/libsig_whisper.so" to 36_168_384L,
+            "lib/libsig_llama.so" to 30_764_464L,
             "lib/libonnxruntime.so" to 23_990_744L,
             "lib/libavcodec.so" to 15_143_992L,
             "lib/libavfilter.so" to 4_241_064L,
             "lib/libavformat.so" to 3_987_320L,
-            "lib/libomp.so" to 1_229_304L,
+            "lib/libomp.so" to 961_440L,
             "lib/libc++_shared.so" to 1_027_408L,
             "lib/libsig_npu_probe.so" to 948_912L,
             "models/ggml-silero-v6.2.0.bin" to 885_098L,
@@ -101,18 +101,18 @@ object NativeDependencyManager {
             "lib/libswresample.so" to 101_136L,
             "lib/libavdevice.so" to 63_192L,
             "lib/libffmpegkit_abidetect.so" to 30_392L,
-            "manifest.json" to 2_833L,
+            "manifest.json" to 3_193L,
         ),
         "x86_64" to listOf(
             // Mesmo conjunto de libs do arm64, com os tamanhos reais deste
             // artefato (medidos no central directory do ZIP publicado).
-            "lib/libsig_whisper.so" to 62_337_856L,
+            "lib/libsig_whisper.so" to 36_744_576L,
             "lib/libonnxruntime.so" to 38_473_056L,
-            "lib/libsig_llama.so" to 31_872_504L,
+            "lib/libsig_llama.so" to 31_874_632L,
             "lib/libavcodec.so" to 19_066_072L,
             "lib/libavfilter.so" to 5_164_008L,
             "lib/libavformat.so" to 4_017_488L,
-            "lib/libomp.so" to 1_158_008L,
+            "lib/libomp.so" to 956_344L,
             "lib/libc++_shared.so" to 1_045_960L,
             "lib/libswscale.so" to 947_960L,
             "lib/libsig_npu_probe.so" to 916_480L,
@@ -123,7 +123,7 @@ object NativeDependencyManager {
             "lib/libonnxruntime4j_jni.so" to 100_032L,
             "lib/libavdevice.so" to 63_504L,
             "lib/libffmpegkit_abidetect.so" to 43_248L,
-            "manifest.json" to 2_830L,
+            "manifest.json" to 3_190L,
         ),
     )
 

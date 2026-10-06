@@ -22,8 +22,8 @@ import org.junit.Test
 class NativeDepsOfficialFixturesTest {
 
     private val fixturesPorAbi = listOf(
-        "arm64-v8a" to "sig-android-dependencies-v10-arm64-v8a.zip",
-        "x86_64" to "sig-android-dependencies-v10-x86_64.zip",
+        "arm64-v8a" to "sig-android-dependencies-v11-arm64-v8a.zip",
+        "x86_64" to "sig-android-dependencies-v11-x86_64.zip",
     )
 
     private fun fixtureBytes(nome: String): ByteArray? =
