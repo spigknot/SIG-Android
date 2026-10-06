@@ -50,19 +50,41 @@ com backup/rollback ao estado ENCONTRADO = v10 ec9c8315).
 - A/lib candidata comprovada no maps (sha) durante os smokes 3/4.
 - Rollback readback exato; estado final = v10 (estado encontrado aprovado).
 
+## MEDICAO LONGA (executada em retry — campo reiniciado; texto de 221 chars)
+Texto: "Senhor delegado, informo que a diligencia foi cumprida integralmente e
+o relatorio circunstanciado sera encaminhado apos a revisao final do setor
+competente, com todas as oitivas ja transcritas e anexadas ao procedimento."
+Mesmo texto nos DOIS builds; frontiers iguais (modelo carregado -> geracao).
+
+| Build | Decode (logcat) | Tok/s (logcat) | App "Desempenho" |
+|---|---|---|---|
+| v10 (sem cache) | 3.32 s (59 tokens) | 17.8 t/s | (nao capturado) |
+| CANDIDATO (cache ON) | 2.27 s (59 tokens) | 26.0 t/s | 59 tokens em 2.1 s (28.5 t/s) |
+GANHO no decode: +46% (logcat, fronteiras iguais) / +60% vs 17.8 pela
+contagem do app. Faixa coerente com o F20 stock (+16..+53%). Sem speedup
+claim universal: amostra n=1 do pedido longo (janela nao repetida 3x).
+O app tambem reportou: modelo carregado em 3.9s; backend GPU OpenCL;
+59 tokens de saida.
+
 ## LIMITACOES DECLARADAS
-- "Q4 mais longo" NAO executado: a UI do Texto (campo de entrada) parou de
-  aceitar input de texto via `adb shell input text` apos as primeiras rodadas
-  (multiplas tentativas com quoting/UI realocada produziram texto baguncado;
-  limpeza e redigitacao nao convergiram). Medicao de performance longa fica
-  para janela proprio (ideal 3 reps, conforme o desenho). Os smokes CURTOS
-  nao distinguem o ganho do cache (esperado: ganho aparece em pedidos longos).
-- Tempos sao de poll (~3s de granularidade) — nao usar como medida fina de
-  performance; residentes para "nao quebrou / saida igual".
+- Pedido longo: n=1 por build (janela propria para >=3 reps nao executada).
+- Tempos de poll (~3-4s) para os smokes curtos — usar os numeros do logcat
+  (frontiers iguais) para qualquer leitura de performance.
 - x86_64 nao testado em runtime (sem emulador autorizado).
 
 ## STATUS DE ACEITE (amostra)
 - Candidato OpenCL (guard+cache) CARREGA, RODA (Q4/Q8), NAO QUEBRA e mantem a
   saida identica ao v10 nesta amostra — ACEITO na amostra minima.
-- Ganho de performance nao medido aqui (curtos) — pendente janela propria.
-- Estado do device restaurado ao encontrado (v10); nada permanente.
+- Medicao longa: candidato 26.0 t/s vs v10 17.8 t/s (logcat; +46%) / 28.5 t/s
+  pelo app — ganho confirmado nesta amostra (n=1).
+- Estado do device restaurado ao encontrado (v10 ec9c8315); nada permanente.
+
+## RELEASE v11 — PUBLICADA (20261006_001)
+- Pacote: ZIPs v11 (libs strippadas, guard+cache, 0 diag) no R2 — arm64
+  43.878.781 B sha 66eecc51...; x86_64 50.006.445 B sha cfdc828a...;
+  readback HTTP 200 identico; v9/v10 preservados.
+- GitHub Release 20261006_001 (Latest) asset sig.apk sha b04abd60...;
+  SHA do asset == build local; O:\sig.apk copiado (sha conferido).
+- Repo: commit e360ca4 (COMPONENT_VERSION 11 + bumps + fixtures v11) push OK.
+- APK: versionCode 71 / versionName 1.508 / APP_VERSION 20261006_001;
+  541 testes 0 falhas; verify v11 ACEITO.
