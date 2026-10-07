@@ -25,8 +25,12 @@ jobs:
           # foojay (link expirado -> HTTP 400) e o gate falha por infra.
           # O setup-java abaixo instala o JetBrains 21 direto, satisfazendo o
           # criterio sem depender do resolvador de toolchain.
+          # token: as requests de resolucao/download usam a API do GitHub;
+          # sem autenticacao o IP compartilhado do runner toma rate limit
+          # (erro visto no run 37650685773).
           distribution: jetbrains
           java-version: '21'
+          token: ${{ github.token }}
           cache: gradle
 
       - name: Validate harness contracts
