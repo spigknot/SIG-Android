@@ -1,0 +1,73 @@
+ORDENS AO EXECUTOR — SMART RODADA 4: SEPARAR VALIDACAO DE BENCHMARK E FECHAR CORPUS MEDIO
+======================================================================================
+
+PARECER
+Aceito como avanco funcional as duas rotas Smart no probe, no escopo CURTO: token ponte corrigido, texto completo, A-B-A e matriz com build SIG relatados. Isso NAO equivale ao produto pronto nem ao ganho util demonstrado.
+O especialista leu DADOS-CONSOLIDADOS.txt e run_bridge atual (probe.cpp:400-509). Nao rodou device nesta analise. As observacoes de fonte devem ser conciliadas com SHA do APK efetivamente testado.
+
+DESCOBERTA CRITICA ANTES DE BENCHMARK
+A geracao Smart atual (timer tg em 475, gen_ms em 505) inclui em CADA passo:
+1. decode no destino;
+2. sampling no destino;
+3. decode adicional na origem para espelho (487-490);
+4. sampling adicional na origem e comparacao.
+Portanto gen_ms NAO mede a rota de produto NPU prefill->GPU decode: mede execucao DUPLA de decode para validacao. A origem continua gerando na NPU durante a fase GPU. Comparar isso com backend puro sem espelho seria benchmark injusto e potencial causa de aquecimento/memoria/submissao adicional. Nao atribuir numeros lentos a throttling sem separar esse efeito.
+
+PRIORIDADE
+1. Separar modo VALIDACAO de modo BENCHMARK usando a MESMA implementacao real do handoff.
+2. Fechar validacao curto+medio em build SIG pinado para AS DUAS rotas.
+3. Rodar matched intercalado pequeno com BENCHMARK sem espelho e condicao termica controlada.
+4. Entregar dados de decisao antes integracao/menu/release. Nao reabrir pesquisa KV: a matriz corrigida nao sustenta essa causa.
+
+A. DOIS MODOS EXPLICITOS, SEM DIVERGIR O CODIGO REAL
+VALIDACAO: teacher forcing na origem e destino, logits/argmax comparados; timings rotulados 'diagnostico com espelho', nunca performance produto.
+BENCHMARK: prefill na NPU, export/import, ponte, decode SOMENTE na GPU escolhida. Sampler/origem nao roda apos ponte, salvo controle fora da janela medido separadamente. Peso/contexto origem podem continuar residentes se esse for contrato de sessao, custo memoria integral informado.
+Reusar funcao/contrato e artefato unico com flag explicita; nao compilar dois caminhos substantivamente diferentes para favorecer performance. Aprovacao de validacao deve vincular build/modelo/config/corpus antes habilitar benchmark. Registrar modo no identity line e output por tentativa.
+Mutante BENCHMARK com decode inesperado na origem depois ponte -> contador/gate deve detectar antes aceitar medicao. Trace por fase/backend/posicoes exige zero replay e ausencia do espelho dentro benchmark.
+Opcional validacao offline de token stream/logits depois do benchmark em execucao separada, jamais dentro wall do pedido. Nao subtrair aritmeticamente tempo do espelho do total para inventar wall de produto; medir de fato.
+
+B. GATES AINDA A FECHAR NO run_bridge
+- rcS!=0 no espelho (488-495) hoje e ignorado: ABORTAR validacao com causa nominal. Passos comparados incompletos nao podem virar sucesso.
+- Sampler compartilhado entre origem/destino recebe duas amostragens: greedy diagnosticamente pode tolerar, sampler com penalties/RNG nao. Samplers separados e equivalentes no espelho; sampler de produto UNICO no benchmark, sem accept duplicado.
+- top1 igual nao demonstra logits numericos iguais nem margem. Registrar finite, top-k/margem e medidas de erro toleradas para prefixos curtos selecionados, nao dump vocab gigante. Preservar tolerancias realistas crossbackend; argmax isolado diferente nao prova layout errado.
+- EOG em tok1 linha445 devolve ok=true/saida vazia sem import nem verificacao destino. Rotular 'EOG imediato/sem handoff executado' e rejeitar como sucesso de traducao nao vazia/Smart validation. Se request legitimamente admite vazio, resultado separado, nao prova Smart completo.
+- cap: tok1 ja emitido antes loop, mas loop i<cap pode emitir cap tokens adicionais (total cap+1). Definir cap TOTAL de tokens de resposta, incluindo ponte; nenhum token emitido alem cap. Verificar cap=1/2/limite, EOG, nenhum decode extra apos terminal conforme contrato. Gatear contadores com tokens realmente emitidos/consumidos, nao apenas numeros sinteticos.
+- Export got<65536 e heuristica para prompt31, nao prova integridade generica. Validar limites realistas e retorno size/read segundo API/pin; truncamento em tamanho maior que64KiB tambem deve falhar. Nao declarar buffer valido apenas por ultrapassar limiar.
+- 'SMART-ACEITO' de puro v11 com saida sorry48 e contraditorio: ACEITO pode significar executado ou baselinenumerica, mas nao qualidade. Separar execucao/EOG/limite/numerica/qualidade em campos. DADOS-CONSOLIDADOS deve preservar falha sem classificar texto degenerado como sucesso completo.
+Testes/mutantes especificos para esses casos, sem reexecutar todos antigos se nao houve impacto.
+
+C. TTFT E STREAMING REAL
+O fonte atual adiciona tok1 a r.texto antes import, mas pp1_ms inicia depois import e eh preenchido apos tok2 E o espelho. Portanto pp1 nao e primeiro token de resposta nem simples latenciaGPU: inclui diagnostico ate segunda piece.
+Nomear todas as fronteiras: request_start, prefill_done, tok1_ready, tok1_delivered, export/import begin/end, tok2_ready/delivered, last_piece_delivered, EOG/finish.
+Adicionar texto em std::string interno nao prova token visivel ao usuario. Se JNI so retorna NewStringUTF ao fim, tok1_ready e latencia INTERNA, sem streamingUI. Conferir mecanismo callback/observer/UI real do probe antes declarar 'emitido antes import' como TTFT visivel. Se sem streaming, registrar first_token_ready e resposta_entregue; nao inventar visibilidade.
+Medir pausa ponte->segunda piece na arquitetura candidata, wall completo, TTFT-ready/visible conforme disponivel e tempo ate EOG. Precisao sub-ms quando relevante. Load/context separado de warmrequest; coldrequest e wall real nao soma timers arbitrarios.
+
+D. BUILD / CAUSALIDADE VULKAN
+Matriz mostra v11 upstream puro errado e v12 SIG correto. Isso comprova nesta amostra que falha antecedia o handoff e build SIG resolve; rejeitar tese anterior KVlayout como causa comprovada.
+NAO prova qual workaround individual causou correcao, pois trocaram fork inteiro e multiplas libs/configs. Escrever: 'causa localizada no build/backend upstream; patchset SIG restaura corretude'. Workarounds Adreno sao forte hipotese apoiada no historico; isolamento individual requer A/B de patches equivalentes, nao prioridade agora.
+Congelar v12/probe por manifesto completo: fontes/pin/patchset/toolchain/flags/8libs/skel/APK/bindings e hashes. Reconciliar 8 libs substituidas vs7 verificadas: listar exatamente elemento nao verificado e conferir skel/npuprobe se aplicavel. Exigir maps/runtimeidentity dos arquivos realmente carregados.
+Atualizar HANDOFF-CONTRACT sem afirmacoes universais de transportabilidade: suporte testado neste modelo/config/arch/build. API28 prototipo nao e libproduto minSDK24; produto loader OpenCL proprio e empacotamento separados. Sem portar DT_NEEDEDvendor incondicional ao SIG como sucesso.
+
+E. PROTOCOLO MATCHED — CURTO E MEDIO PRIMEIRO
+Modelo c4bf imutavel, mesmo build v12 corrigido, prompt de produto/template/tokenizacao e config pinados. Corpus EN->PT curto e medio com hashes; resposta completa/EOG/nao repeticao. Curto 'Bom dia' nao representa custo de traducao real longa.
+Modos: CPU, OpenCL, Vulkan, HTP, Smart OpenCL, Smart Vulkan. Todos sem espelho na janela benchmark. Comecar poucas repeticoes intercaladas de warmrequests; iniciar sessao/model/context antes janela e explicar custo residente. Coldload separado, reusar context como produto quando permitido e reset request a cada run.
+Nao recarregar dois modelos por runSmart enquanto puro reusa1 e chamar warmmatched. Se arquitetura continua descarregando por request, medir cold e rotular assim; refatorar lifecycle de probe se necessario para representar sessao corretamente.
+Planejar equilibrio de ordem/backends e pausa baseada em thermalobserved, nao corrida por horas. CPU/HTP picoRAM e GPUmemory registrar minimo observavel, LMK/processes e erros. No runone ausente/endlogperdido = failtransport/observacaoperdida, nunca resultado inventado.
+Chamar 'throttling' apenas com sensores/status/counters/controles relevantes; diferenca 8x nao prova mecanismo termico sozinha. Cooler/tela/stayon/foreground/rede documentados. Evitar diagnosticos dentro janela. Registrar deviceidle real se citar Doze; tela apagada nao prova Doze. Restaurar stayon valor anterior EXATO e verificar readback ao terminar, inclusive erro.
+Preferir USB se conectado permitido. Nao matar apps/ajustar governor/root/thermalbypass. Teste medio que nao cabe n_batch128 precisa chunks com posicoes/logitsultimo corretos; n_ctx/hash/config e limite claro. Nao usar falha decode por batch oversize como inviabilidade Smart.
+CSV por tentativa: identity, modo, corpus,nprompt,nemitidos,nconsumidos,stop,load/preparation,warm/cold,prefill,export/import/alloc/sync,tokenready/visible,gap1->2,wall,memoria/sensores,status. Agregar em script mediana/dispersao e denominadores exclusivos. Ganho só se repetivel acima variabilidade e sem regressao; declarar scope curto/medio.
+Comparar cada Smart com respectiva GPU inteira, tambem CPU/NPU. Nada de ranking usando gen_ms espelhado antigo. Se Smart perder no curto mas ganhar no medio, reportar faixa; nao escolher CPU em silencio mantendo Smart explicito.
+Se dados medio justificarem, um longo aprovado para validar escala/memoria depois; nao grid amplo.
+
+F. ENTREGA E LIMITES
+Formato A-H em docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA4.txt:
+A identity/autorizacoes/build/preserve;
+B validacao vsbenchmark e mutante origemextra;
+C gates/cap/EOG/sampler/integridadereturns;
+D corretude curto+medio/ABA ambas rotas;
+E patchset/provenance e contrato atualizado;
+F matched SEM espelho +cold/warm/memoria e beneficio;
+G hooks/F2/CI snapshot/WhisperNAOtestado e distribucao probe versusSIG;
+H decisao por rota/pendencias/escopo proximo.
+Manifesto completo/exits/reconciliacao em docs/npu-hymt2/smart-rodada4/. Nao declarar meta produto completa: dualSmart funcionalcurto e marco, mas menu/integracao/pacote/performance/compatibilidade continuam pendentes. Meta/menu ja decididos pelo usuario; dados definem condicoes de habilitacao e valor, nao rediscutir os nomes como se ainda sem requisito.
+Sem alteracao SIGprincipal/Whisper/UI/default/modelo/R2/release nesta rodada. WIPalheio intacto. Nao repetir escolha abstrata 'pesquisar ou medir'; executar prioridades acima e pedir somente autorizacao realmente faltante.

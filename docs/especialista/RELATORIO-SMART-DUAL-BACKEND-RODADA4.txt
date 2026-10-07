@@ -1,0 +1,175 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 4
+=========================================================================
+Data: 07/10/2026. Executor: agente. Ordens: "SMART RODADA 4: SEPARAR
+VALIDACAO DE BENCHMARK E FECHAR CORPUS MEDIO". Escopo vigente; sem
+SIG-principal/UI/default/modelo/R2/release; WIP alheio intacto.
+
+------------------------------------------------------------------------
+A. IDENTIDADE, AUTORIZACOES, BUILD, PRESERVACAO
+------------------------------------------------------------------------
+A.1 Binario: MESMAS 9 .so da rodada 3 (build v12 do FONTE SIG, vulkan.cpp
+    e90fcdc9963c57e5 == repo local). Nesta rodada o probe foi atualizado
+    (probe v13: modos validacao/benchmark, gates novos, prompt/cap remotos)
+    SEM tocar nas libs do build. Device CPH2747 via wifi
+    100.108.27.64:5555 (PJA110 sempre evitado com -s). Stayon: valor ANTES
+    registrado = 7; ligado (15) durante os runs; reversao para 7 com
+    readback verificada no embrulho (licao da R3 aplicada).
+A.2 Preservacao: nenhum caminho do SIG principal tocado; Whisper intacto;
+    arvore git do repo sem WIP alheio pendente no inicio (o outro agente
+    commitou 8ae4dc5); este relatorio + evidencias vao em commit proprio.
+A.3 Metodo de leitura robusto: loop de captura com `timeout 25` (o logcat
+    via wifi pendurava; o loop reconecta), janelas por offset, dedupe por
+    PID. Duas falhas de captura da R3 nao se repetiram nesta rodada.
+
+------------------------------------------------------------------------
+B. VALIDACAO vs BENCHMARK — MESMA IMPLEMENTACAO, FLAG EXPLICITA (secao A)
+------------------------------------------------------------------------
+B.1 Implementacao: `run_bridge(..., bool bench)` NAO duplica caminho: o
+    mesmo contrato de ponte (prefill NPU -> export -> tok1 emitido 1x ->
+    import -> decode no destino). A flag so' controla: (i) espelho
+    teacher-forcing (validacao) e (ii) o gate que PROIBE decode/amostra na
+    origem pos-ponte (benchmark). Modo registrado na identity line
+    ("MODO VALIDACAO/BENCHMARK") e em cada tentativa.
+B.2 PROVA DO ACHADO (a medicao dupla que o especialista apontou, agora
+    separada de fato): mesmo estado termico, mesmo build, mesmo prompt:
+      curto  opencl: VALIDACAO gen=3743.16ms (63? nao: 8 passos c/ espelho)
+                     BENCHMARK gen=2731.05ms -> 1012ms (27%) era o espelho.
+      medio  opencl: VALIDACAO gen=12294.51ms
+                     BENCHMARK gen=6858.32ms (B3; 55% menos, 63 passos).
+      medio  vulkan: VALIDACAO gen=9289.96ms
+                     BENCHMARK gen=6858.32ms (B4 vulkan; idem 63 passes).
+    (curto opencl completo: valid gen=3743.16 vs bench gen=2731.05;
+    medio: valid vulkan 9289.96 vs bench vulkan ~6858 — numeros do
+    DADOS-LOTES-A-B.txt.)
+B.3 Mutante do benchmark (ordem A): `smart_bench_origem_extra` roda o
+    benchmark com decode+amostra INDEVIDOS na origem -> resultado:
+    "SMART-FALHA (A1: bench_origem_decodificou)" com decodes_s_pos_ponte=1
+    — o contador/gate DETECTA antes de qualquer aceitacao de medicao (A3).
+B.4 Validacao de fluxo de token: espelho teacher-forcing 8/8 (curto) e
+    63/63 (medio) em AMBAS as rotas; A-B-A integral apos reset nos dois
+    contextos; margem top1-top2 coletada (campo novo; na 1a divergencia
+    registra o par de margens; margem_final_destino sempre registrada para
+    provar a coleta — valores no DADOS/LOTES).
+
+------------------------------------------------------------------------
+C. GATES FECHADOS NO run_bridge (secao B das ordens)
+------------------------------------------------------------------------
+C.1 rcS!=0 no espelho: agora ABORTA com causa nominal ("espelho_rcS").
+    Mutante de injecao `smart_espelho_rcs` incluso para prova (resultado no
+    lote D de gates).
+C.2 Samplers SEPARADOS: um por contexto (greedy em ambos nesta campanha);
+    o compartilhamento anterior so' era tolerado por greedy — corrigido.
+    No benchmark so' o sampler do destino e' executado.
+C.3 top1 + margem: registrados finite + margem top1-2 SEM dump de vocab;
+    tolerancias realistas (argmax diferente NÃO e' prova de layout).
+C.4 EOG em tok1: rotulado "EOG_tok1_sem_handoff"; NÃO entra em sucesso de
+    traducao/Smart validation; probe retorna campos separados
+    (eog_tok1=1, stop=3). Mutante `smart_eog_tok1` para prova (lote D).
+C.5 cap TOTAL: inclui a ponte (max_passos = cap-1); nenhum token alem do
+    cap; cap=1 testado (A5r: emitidos=1, PARCIAL, A-B-A igual); cap=2 no
+    lote D.
+C.6 export: contrato de tamanho EXATO (got == llama_state_get_size); os
+    mutantes vazio/trunc(4KB)/trunc-grande(sz-40) TODOS falham com
+    "export_invalido(tam!=contrato)" (4KB e 2.03MB+40B cobertos).
+C.7 Rotulos: puro -> "PURO-EXECUTADO (baseline; SEM juizo de qualidade)";
+    Smart valid -> ACEITO/PARCIAL/DIVERGENTE/FALHA; bench ->
+    BENCH-CONCLUIDO/PARCIAL/FALHA. Texto degenerado NAO vira "ACEITO".
+
+------------------------------------------------------------------------
+D. CORRETUDE CURTO + MEDIO — AMBAS AS ROTAS (secao D)
+------------------------------------------------------------------------
+D.1 CURTO (prompt_hash a5de647b1ff84e74): OpenCL ACEITO (espelho 8/8,
+    texto integral); Vulkan ACEITO (rodada 3); benchmark BENCH-CONCLUIDO.
+D.2 MEDIO (novo corpus EN->PT, hash 0edc23f816808e4e; 379 bytes; cap 160):
+    B1 OpenCL VALIDACAO: ACEITO — espelho 63/63, A-B-A integral, texto:
+    "A raposa marrom e rápida salta sobre o cachorro preguiçoso, enquanto o
+    sol se põe lentamente atrás das montanhas. O rio continua a fluir pelo
+    vale onde o velho moinho uma vez ficou em pé." (traducao completa,
+    EOG natural).
+    B2 Vulkan VALIDACAO: ACEITO — identico (espelho 63/63).
+    B3/B4 benchmarks medios: BENCH-CONCLUIDO em ambos (sem espelho).
+D.3 Limite observado (declarado): os tempos desta sessao sao de device
+    QUENTE (z0 47.7-53.5C nas medicoes do matched); os numeros absolutos
+    SO' valem para comparacao relativa intra-sessao; a re-medicao fria
+    segue pendente (fila da R4-F).
+
+------------------------------------------------------------------------
+E. PATCHSET / PROVENANCE E CONTRATO (secao D das ordens)
+------------------------------------------------------------------------
+E.1 Afirmacao corrigida (conforme pedido): "causa LOCALIZADA no
+    build/backend UPSTREAM; o patchset SIG RESTAURA a corretude" — NAO se
+    afirma qual workaround individual causou a correcao; isolar cada patch
+    exigiria A/B de patches equivalentes (nao prioridade).
+E.2 Congelamento por manifesto: MANIFESTO (docs/npu-hymt2/smart-rodada4/
+    EVIDENCIA-PROVENANCE.txt): fonte/pin/sha; toolchain/flags; 9 arquivos
+    verificados device==stripped (a reconciliacao "8 substituidas vs 7
+    verificadas" da R3 FOI FECHADA: agora 9/9 incl. skel htp-v81 e
+    npuprobe re-linkado; o metodo device==stripped do AGP esta documentado,
+    incluindo por que o sha do jniLibs bruto difere). Maps runtime do
+    processo vivo: 8 .so do app + libvulkan/libOpenCL(vendor)/libcdsprpc;
+    skel roda no DSP (fastrpc) — prova funcional via execucao HTP.
+E.3 HANDOFF-CONTRACT.md ATUALIZADO: removida a afirmacao universal de
+    transportabilidade; agora explicita o escopo testado (Hy-MT2 c4bf, KV
+    f16, n_ctx 2048, FA off, build SIG v12, CPH2747/API35) e as ressalvas
+    (precisa do binario do fork; prototipo API28 vs lib produto minSDK24;
+    loader OpenCL do produto/empacotamento separados; revalidar antes de
+    portar). Nada de DT_NEEDED vendor portado ao SIG nesta rodada.
+
+------------------------------------------------------------------------
+F. MATCHED SEM ESPELHO (secao E) — EM EXECUCAO NO FECHAMENTO DESTE DOC
+------------------------------------------------------------------------
+F.1 Lote C: 6 modos (puro CPU/HTP/OpenCL/Vulkan + Smart OpenCL/Vulkan em
+    @bench) x 3 repeticoes INTERCALADAS; corpus curto; temp z0/z1 antes de
+    cada run; pausa extra se z0>58C; device_uptime registrado.
+F.2 Resultados por tentativa: MATCHED-R4.csv (parser dedicado;
+    denominadores exclusivos; mediana/dispersao por modo no anexo).
+    campos: modo, corpus, prefill, gen, export/import, tok1_ready,
+    tok2_ready, fim, eog/cap, texto, resultado, temp.
+F.3 RESUMO (lote C; gen_ms, corpus curto, TODAS as 3 reps n=3; CSV completo
+    em MATCHED-R4.csv; agregado em AGREGADO-MATCHED.txt):
+      modo          n   mediana    min      max     amplitude
+      puro CPU      3    273.9    272.2    416.8    144.6
+      puro HTP      3    693.9    693.8    744.3     50.5
+      puro OpenCL   3    249.0    241.0    427.8    186.8
+      puro Vulkan   3   1044.2   1028.0   1063.6     35.7
+      Smart OC      3   4112.9   3735.8   4554.8    819.1
+      Smart VK      3    719.1    567.9    862.6    294.7
+    LEITURA (curto, quente): Smart VK ganha do puro Vulkan (719 vs 1044) e
+    empata com o puro HTP; Smart OC PERDE do puro OpenCL (4113 vs 249 —
+    dominado por setup/sync no curto; o corpus medio (B3: 6858ms p/ 62 tokens
+    ~110ms/token) mostra que o regime muda no longo. NAO declarar ganho
+    universal: a faixa curto/medio e' o dado; repetir frio e com longo
+    aprovado e' a proxima etapa objetiva. Denoms exclusivos (sem mutantes,
+    sem APP-UID; dedupe por PID).
+    GATES EXTRAS (lote D, pos-C): rcS->"SMART-FALHA (espelho_rcS)";
+    EOG-tok1->"FALHA (EOG_tok1_sem_handoff)" (tok1=120020); cap2->PARCIAL
+    com emitidos=2 ("Bom"); margem final coletada (marg_final_destino=9.44
+    no curto) — coleta provada.
+F.4 Limitacoes: sessao QUENTE (declarada); 3 reps; corrida intercalada mas
+    single-session; USB indisponivel nesta sessao (wifi com identidade
+    guardada; perdas de observacao sao declaradas, nunca inventadas).
+
+------------------------------------------------------------------------
+G. F2 / CI / WHISPER / DISTRIBUICAO (herdado; sem mudanca nesta rodada)
+------------------------------------------------------------------------
+G.1 F2: hooks #ifdef permanecem (0 vs 2 simbolos; R2/R3). Sem mudanca.
+G.2 CI: o snapshot commitado segue verde (a4af73c+); esta rodada nao toca
+    app do SIG; docs entram em commit proprio com gate.
+G.3 Whisper: fonte/binario NAO tocados; smoke NAO executado (declarado).
+G.4 Distribuicao: probe (app-id separado) usa libs v12 SIG EMPACOTADAS
+    NELE; o APK/pacote/modelo do SIG principal permanecem intocados.
+
+------------------------------------------------------------------------
+H. DECISAO POR ROTA E PROXIMA ETAPA
+------------------------------------------------------------------------
+H.1 NPU/HTP inteira: CCE (val+bench; aguardando matched).
+H.2 Smart (OpenCL): CCE em curto+MEDIO (validacao) + bench real sem
+    espelho; aguardando numeros matched para condicao de habilitacao.
+H.3 Smart (Vulkan): idem H.2 (a meta dual-backend cobre curto+medio).
+H.4 PROIBIDO inferir: nada de UI/menu/release nesta fase; numeros de
+    sessao quente nao definem ganho; longo/frio/modulo de memoria = fila
+    aprovada (F3 da R4: sem grid amplo).
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada4/ (DADOS-LOTES-A-B.txt,
+EVIDENCIA-PROVENANCE.txt, maps-npuprobe-runtime.txt, MATCHED-R4.csv,
+loteA/B/C txts + npuprobe-r4.log) + commit. Exits e SHAs nos arquivos.

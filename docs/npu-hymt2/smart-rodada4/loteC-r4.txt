@@ -1,0 +1,240 @@
+=== LOTE C R4 matched (20:40:43Z) ===
+device_uptime_s=102847.42
+===== REPETICAO 1 =====
+--- [R1-cpu] gatilho=smart:puro:cpu temp_z0=53500 temp_z1=56200
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:cpu'
+    SMART iniciando rota=puro:cpu com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:cpu' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=cpu (CPU)
+    puro: ok=1 pieces=8 prefill=1253.32ms gen=416.80ms pp1=0.51ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (cpu; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:cpu)
+    SMARTv2 rota='puro:cpu' mutante=(none)
+--- [R1-htp] gatilho=smart:puro:htp temp_z0=48800 temp_z1=48400
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:htp'
+    SMART iniciando rota=puro:htp com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:htp' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=htp (HTP0)
+    puro: ok=1 pieces=8 prefill=833.61ms gen=693.88ms pp1=0.32ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (htp; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:htp)
+    SMARTv2 rota='puro:htp' mutante=(none)
+--- [R1-opencl] gatilho=smart:puro:opencl temp_z0=48800 temp_z1=48800
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:opencl'
+    SMART iniciando rota=puro:opencl com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:opencl' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=opencl (GPUOpenCL)
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:opencl'
+    SMART iniciando rota=puro:opencl com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:opencl' mutante=(none)
+--- [R1-vulkan] gatilho=smart:puro:vulkan temp_z0=47700 temp_z1=47300
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:vulkan'
+    SMART iniciando rota=puro:vulkan com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:vulkan' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=vulkan (Vulkan0)
+    puro: ok=1 pieces=8 prefill=637.73ms gen=1063.64ms pp1=549.53ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (vulkan; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:vulkan)
+    SMARTv2 rota='puro:vulkan' mutante=(none)
+--- [R1-smart-oc] gatilho=smart:opencl@bench temp_z0=48400 temp_z1=48000
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1458.80ms export=0.16ms(2032789B) import=3.61ms gen=4112.86ms
+    A1 texto: Bom dia, como você está?
+    RESULTADO: BENCH-CONCLUIDO (htp->opencl; sem espelho; decode origem pos-ponte=0; A-B-A texto igual)
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1458.80ms export=0.16ms(2032789B) import=3.61ms gen=4112.86ms
+--- [R1-smart-vk] gatilho=smart:vulkan@bench temp_z0=47700 temp_z1=47300
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=816.30ms export=0.10ms(2032789B) import=1.89ms gen=862.56ms
+    A1 texto: Bom dia, como você está?
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+===== REPETICAO 2 =====
+--- [R2-cpu] gatilho=smart:puro:cpu temp_z0=48000 temp_z1=47700
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:cpu'
+    SMART iniciando rota=puro:cpu com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:cpu' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=cpu (CPU)
+    puro: ok=1 pieces=8 prefill=642.35ms gen=273.88ms pp1=0.33ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (cpu; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:cpu)
+    SMARTv2 rota='puro:cpu' mutante=(none)
+--- [R2-htp] gatilho=smart:puro:htp temp_z0=48800 temp_z1=48800
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:htp'
+    SMART iniciando rota=puro:htp com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:htp' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=htp (HTP0)
+    puro: ok=1 pieces=8 prefill=828.46ms gen=693.81ms pp1=0.29ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (htp; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:htp)
+    SMARTv2 rota='puro:htp' mutante=(none)
+--- [R2-opencl] gatilho=smart:puro:opencl temp_z0=46100 temp_z1=46500
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:opencl'
+    SMART iniciando rota=puro:opencl com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:opencl' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=opencl (GPUOpenCL)
+    puro: ok=1 pieces=8 prefill=3863.97ms gen=427.79ms pp1=1.15ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (opencl; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:opencl)
+    SMARTv2 rota='puro:opencl' mutante=(none)
+--- [R2-vulkan] gatilho=smart:puro:vulkan temp_z0=45700 temp_z1=44900
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:vulkan'
+    SMART iniciando rota=puro:vulkan com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:vulkan' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=vulkan (Vulkan0)
+    puro: ok=1 pieces=8 prefill=619.82ms gen=1044.20ms pp1=560.80ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (vulkan; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:vulkan)
+    SMARTv2 rota='puro:vulkan' mutante=(none)
+--- [R2-smart-oc] gatilho=smart:opencl@bench temp_z0=46900 temp_z1=46100
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1363.14ms export=0.16ms(2032789B) import=4.13ms gen=3735.75ms
+    A1 texto: Bom dia, como você está?
+    RESULTADO: BENCH-CONCLUIDO (htp->opencl; sem espelho; decode origem pos-ponte=0; A-B-A texto igual)
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1363.14ms export=0.16ms(2032789B) import=4.13ms gen=3735.75ms
+--- [R2-smart-vk] gatilho=smart:vulkan@bench temp_z0=46100 temp_z1=46500
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=803.67ms export=0.10ms(2032789B) import=1.86ms gen=719.13ms
+    A1 texto: Bom dia, como você está?
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+===== REPETICAO 3 =====
+--- [R3-cpu] gatilho=smart:puro:cpu temp_z0=46900 temp_z1=46100
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:cpu'
+    SMART iniciando rota=puro:cpu com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:cpu' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=cpu (CPU)
+    puro: ok=1 pieces=8 prefill=636.84ms gen=272.22ms pp1=0.35ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (cpu; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:cpu)
+    SMARTv2 rota='puro:cpu' mutante=(none)
+--- [R3-htp] gatilho=smart:puro:htp temp_z0=50000 temp_z1=48800
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:htp'
+    SMART iniciando rota=puro:htp com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:htp' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=htp (HTP0)
+    puro: ok=1 pieces=8 prefill=838.68ms gen=744.33ms pp1=0.35ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: PURO-EXECUTADO (htp; baseline; SEM juizo de qualidade — usar texto/stop)
+    SMART (puro:htp)
+    SMARTv2 rota='puro:htp' mutante=(none)
+--- [R3-opencl] gatilho=smart:puro:opencl temp_z0=47700 temp_z1=46500
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:opencl'
+    SMART iniciando rota=puro:opencl com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:opencl' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=opencl (GPUOpenCL)
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:opencl'
+    SMART iniciando rota=puro:opencl com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:opencl' mutante=(none)
+--- [R3-vulkan] gatilho=smart:puro:vulkan temp_z0=45700 temp_z1=44900
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:vulkan'
+    SMART iniciando rota=puro:vulkan com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:vulkan' mutante=(none)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PURO: origem=(nenhuma) | destino=vulkan (Vulkan0)
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    AUTO-GATILHO='smart:puro:vulkan'
+    SMART iniciando rota=puro:vulkan com /data/local/tmp/hymt2_app.gguf
+    SMARTv2 rota='puro:vulkan' mutante=(none)
+--- [R3-smart-oc] gatilho=smart:opencl@bench temp_z0=44900 temp_z1=44600
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1429.20ms export=0.27ms(2032789B) import=5.07ms gen=4554.81ms
+    A1 texto: Bom dia, como você está?
+    RESULTADO: BENCH-CONCLUIDO (htp->opencl; sem espelho; decode origem pos-ponte=0; A-B-A texto igual)
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1429.20ms export=0.27ms(2032789B) import=5.07ms gen=4554.81ms
+--- [R3-smart-vk] gatilho=smart:vulkan@bench temp_z0=48800 temp_z1=48800
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=803.73ms export=0.09ms(2032789B) import=1.85ms gen=567.89ms
+    A1 texto: Bom dia, como você está?
+    RESULTADO: BENCH-CONCLUIDO (htp->vulkan; sem espelho; decode origem pos-ponte=0; A-B-A texto igual)
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=803.73ms export=0.09ms(2032789B) import=1.85ms gen=567.89ms
+LOTE_C_DONE

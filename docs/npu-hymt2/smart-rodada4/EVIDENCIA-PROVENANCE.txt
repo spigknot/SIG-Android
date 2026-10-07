@@ -1,0 +1,34 @@
+EVIDENCIA DE PROVENANCE — RODADA 4 (ordem E:"congelar por manifesto")
+=====================================================================
+FONTE: /root/sig-smart/llama (SIG vendor) — ggml-vulkan.cpp sha256
+e90fcdc9963c57e5 == repo local D:/Projetos/SIG/app/src/main/cpp/llama.
+Build v12: STANDALONE=OFF, platform-28, glslc NDK, PREBUILT_LIB_DIR=android_aarch64,
+headers sig-smart; CFG_OK/BUILD_OK (logs no servidor /workspace/cfg12.log).
+
+RECONCILIACAO SHA256 COMPLETA (device == stripped do AGP, 9/9):
+  arquivo                sha256(24)                 onde
+  libllama.so            49f444dcc9e4203c7a01055e   /data/app/.../lib/arm64
+  libggml.so             5d09895751dec10d18164ee7
+  libggml-base.so        4f4f2fc77a060beb017ecce6
+  libggml-cpu.so         6f6aaa4644fc294c5b92c766
+  libggml-hexagon.so     83b1b5be6f1e7acbdbd36851
+  libggml-htp-v81.so     23b7d161f5a4513add0e36fc   (skel; enviado a DSP pela sessao fastrpc)
+  libggml-opencl.so      6d35540ab0999df962f04fac
+  libggml-vulkan.so      07a2832a3e5f142c8fa9f89d
+  libnpuprobe.so         16877348dc680ba3f7805ef1   (re-linkado no PC com os importados v12)
+  (o sha do jniLibs BRUTO difere: o AGP STRIPA no empacotamento; a comparacao
+  valida e' device == stripped_native_libs — metodologia registrada.)
+Build ID do vulkan (do .so do build): 791ec20767d8737142d3902b669ba9901d8dc2ae
+
+MAPS RUNTIME (processo vivo, captura atomica pid+maps; 3876 linhas):
+  carregados do app: libllama, libggml, libggml-base, libggml-cpu,
+  libggml-hexagon, libggml-opencl, libggml-vulkan, libnpuprobe (8/8 do app).
+  sistema/vendor relevantes: /system/lib64/libvulkan.so,
+  /vendor/lib64/libOpenCL.so (+libOpenCL_adreno), /vendor/lib64/libcdsprpc.so.
+  (skel htp-v81 nao aparece no maps UVM: roda no DSP remoto via fastrpc —
+  prova funcional: P4/Smart executam na HTP; binario conferido por sha.)
+Exit codes de todos os passos nos logs dos lotes (A/B/C) e build logs.
+
+LIMITE DECLARADO: este probe/estas libs NAO sao o produto: minSDK24 da lib
+de produto, loader OpenCL proprio do SIG e empacotamento nativo sao caminhos
+separados (nao alterados nesta rodada).

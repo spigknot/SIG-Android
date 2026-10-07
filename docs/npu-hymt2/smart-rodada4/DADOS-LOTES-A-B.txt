@@ -1,0 +1,230 @@
+===== LOTE A (curto, gates) =====
+
+--- [A1-valid-opencl] gatilho=smart:opencl mut=none
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=8
+   A1 tempos: prefill=1318.59ms export=0.11ms(2032789B) import=10.54ms gen=3743.16ms
+   A1 espelho: passos=8 iguais=8 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=6823.9 tok1_ready=6840.1 import_done=6850.7 tok2_ready=9250.0 fim=10593.8 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=a5de647b1ff84e74
+   A1 texto: Bom dia, como você está?
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+   A2: ok=1 texto igual ao A1: SIM
+   RESULTADO: SMART-ACEITO (htp->opencl; A-B-A integral; espelho 8/8)
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=8
+   A1 tempos: prefill=1318.59ms export=0.11ms(2032789B) import=10.54ms gen=3743.16ms
+   A1 espelho: passos=8 iguais=8 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=6823.9 tok1_ready=6840.1 import_done=6850.7 tok2_ready=9250.0 fim=10593.8 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=a5de647b1ff84e74
+   A1 texto: Bom dia, como você está?
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+
+--- [A2-bench-opencl] gatilho=smart:opencl@bench mut=none
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+   A1 tempos: prefill=1581.36ms export=0.12ms(2032789B) import=10.40ms gen=2731.05ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=5978.4 tok1_ready=5994.5 import_done=6004.9 tok2_ready=8441.1 fim=8736.0 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=a5de647b1ff84e74
+   A1 texto: Bom dia, como você está?
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+   A2: ok=1 texto igual ao A1: SIM
+   RESULTADO: BENCH-CONCLUIDO (htp->opencl; sem espelho; decode origem pos-ponte=0; A-B-A texto igual)
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+   A1 tempos: prefill=1581.36ms export=0.12ms(2032789B) import=10.40ms gen=2731.05ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=5978.4 tok1_ready=5994.5 import_done=6004.9 tok2_ready=8441.1 fim=8736.0 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=a5de647b1ff84e74
+   A1 texto: Bom dia, como você está?
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+
+--- [A3-bench-mut-origem] gatilho=smart:opencl@bench mut=smart_bench_origem_extra
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   A1: ok=0 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/1 emitidos=1 consumidos=1 decodes_s_pos_ponte=1
+   A1 tempos: prefill=881.34ms export=0.10ms(2032789B) import=3.65ms gen=0.00ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=5217.5 tok1_ready=5228.5 import_done=5232.1 tok2_ready=6863.8 fim=6944.8 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=a5de647b1ff84e74
+   A1 texto: B
+   RESULTADO: SMART-FALHA (A1: bench_origem_decodificou)
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   A1: ok=0 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/1 emitidos=1 consumidos=1 decodes_s_pos_ponte=1
+   A1 tempos: prefill=881.34ms export=0.10ms(2032789B) import=3.65ms gen=0.00ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=5217.5 tok1_ready=5228.5 import_done=5232.1 tok2_ready=6863.8 fim=6944.8 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=a5de647b1ff84e74
+   A1 texto: B
+   RESULTADO: SMART-FALHA (A1: bench_origem_decodificou)
+   A1: ok=0 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/1 emitidos=1 consumidos=1 decodes_s_pos_ponte=1
+   A1 tempos: prefill=881.34ms export=0.10ms(2032789B) import=3.65ms gen=0.00ms
+
+--- [A4-valid-export-grande] gatilho=smart:opencl mut=smart_export_trunc_grande
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   A1: ok=0 cap=0 eog_tok1=0 tok1=-1 amostrados(s/d)=0/0 emitidos=0 consumidos=0 decodes_s_pos_ponte=0
+   A1 tempos: prefill=1480.37ms export=0.12ms(0B) import=0.00ms gen=0.00ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=6166.1 tok1_ready=-100016653.3 import_done=-100016653.3 tok2_ready=-100016653.3 fim=-100016653.3 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=a5de647b1ff84e74
+   A1 texto:
+   RESULTADO: SMART-FALHA (A1: export_invalido(tam!=contrato))
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   A1: ok=0 cap=0 eog_tok1=0 tok1=-1 amostrados(s/d)=0/0 emitidos=0 consumidos=0 decodes_s_pos_ponte=0
+   A1 tempos: prefill=1480.37ms export=0.12ms(0B) import=0.00ms gen=0.00ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=6166.1 tok1_ready=-100016653.3 import_done=-100016653.3 tok2_ready=-100016653.3 fim=-100016653.3 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=a5de647b1ff84e74
+   A1 texto:
+   RESULTADO: SMART-FALHA (A1: export_invalido(tam!=contrato))
+
+--- [A5-valid-cap1] gatilho=smart:opencl mut=smart_cap1
+
+===== LOTE B (medio + cap) =====
+
+--- [A5r-cap1] gatilho=smart:opencl mut=smart_cap1 temp_zone0=43400
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   A1: ok=1 cap=1 eog_tok1=0 tok1=32 amostrados(s/d)=1/0 emitidos=1 consumidos=0 decodes_s_pos_ponte=0
+   A1 tempos: prefill=1997.42ms export=0.24ms(3802585B) import=6.20ms gen=0.00ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=5769.4 tok1_ready=5799.0 import_done=5805.2 tok2_ready=-100243113.2 fim=5805.2 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=0edc23f816808e4e
+   A1 texto: A
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+   A2: ok=1 texto igual ao A1: SIM
+   RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   A1: ok=1 cap=1 eog_tok1=0 tok1=32 amostrados(s/d)=1/0 emitidos=1 consumidos=0 decodes_s_pos_ponte=0
+   A1 tempos: prefill=1997.42ms export=0.24ms(3802585B) import=6.20ms gen=0.00ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=5769.4 tok1_ready=5799.0 import_done=5805.2 tok2_ready=-100243113.2 fim=5805.2 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=0edc23f816808e4e
+
+--- [B1-medio-valid-opencl] gatilho=smart:opencl mut=none temp_zone0=45700
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   A1: ok=1 cap=0 eog_tok1=0 tok1=32 amostrados(s/d)=64/63 emitidos=63 consumidos=63 decodes_s_pos_ponte=63
+   A1 tempos: prefill=2455.41ms export=0.21ms(3802585B) import=4.07ms gen=12294.51ms
+   A1 espelho: passos=63 iguais=63 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=5660.6 tok1_ready=5697.7 import_done=5701.8 tok2_ready=9241.7 fim=17996.3 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=0edc23f816808e4e
+   A1 texto: A raposa marrom e rápida salta sobre o cachorro preguiçoso, enquanto o sol se põe lentamente atrás das montanhas. O rio continua a fluir pelo vale onde o velho moinho uma vez ficou em pé.
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+   A2: ok=1 texto igual ao A1: SIM
+   RESULTADO: SMART-ACEITO (htp->opencl; A-B-A integral; espelho 63/63)
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+
+--- [B2-medio-valid-vulkan] gatilho=smart:vulkan mut=none temp_zone0=48000
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   A1: ok=1 cap=0 eog_tok1=0 tok1=32 amostrados(s/d)=64/63 emitidos=63 consumidos=63 decodes_s_pos_ponte=63
+   A1 tempos: prefill=1566.52ms export=0.33ms(3802585B) import=2.03ms gen=9289.96ms
+   A1 espelho: passos=63 iguais=63 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=2365.7 tok1_ready=2410.3 import_done=2412.3 tok2_ready=3384.3 fim=11702.3 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=0edc23f816808e4e
+   A1 texto: A raposa marrom e rápida salta sobre o cachorro preguiçoso, enquanto o sol se põe lentamente atrás das montanhas. O rio continua a fluir pelo vale onde o velho moinho uma vez ficou em pé.
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+   A2: ok=1 texto igual ao A1: SIM
+   RESULTADO: SMART-ACEITO (htp->vulkan; A-B-A integral; espelho 63/63)
+   MODO VALIDACAO (espelho teacher-forcing)
+   MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+   prompt: ARQUIVO (len=379)
+
+--- [B3-medio-bench-opencl] gatilho=smart:opencl@bench mut=none temp_zone0=48800
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   A1: ok=1 cap=0 eog_tok1=0 tok1=32 amostrados(s/d)=1/63 emitidos=63 consumidos=63 decodes_s_pos_ponte=0
+   A1 tempos: prefill=2588.96ms export=0.19ms(3802585B) import=5.04ms gen=6858.32ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=8690.1 tok1_ready=8734.6 import_done=8739.6 tok2_ready=12581.4 fim=15597.9 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=0edc23f816808e4e
+   A1 texto: A raposa marrom e rápida salta sobre o cachorro preguiçoso, enquanto o sol se põe lentamente atrás das montanhas. O rio continua a fluir pelo vale onde o velho moinho uma vez ficou em pé.
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+   A2: ok=1 texto igual ao A1: SIM
+   RESULTADO: BENCH-CONCLUIDO (htp->opencl; sem espelho; decode origem pos-ponte=0; A-B-A texto igual)
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+
+--- [B4-medio-bench-vulkan] gatilho=smart:vulkan@bench mut=none temp_zone0=46900
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=vulkan (Vulkan0)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   A1: ok=1 cap=0 eog_tok1=0 tok1=32 amostrados(s/d)=1/63 emitidos=63 consumidos=63 decodes_s_pos_ponte=0
+   A1 tempos: prefill=2588.96ms export=0.19ms(3802585B) import=5.04ms gen=6858.32ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=8690.1 tok1_ready=8734.6 import_done=8739.6 tok2_ready=12581.4 fim=15597.9 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=0edc23f816808e4e
+   A1 texto: A raposa marrom e rápida salta sobre o cachorro preguiçoso, enquanto o sol se põe lentamente atrás das montanhas. O rio continua a fluir pelo vale onde o velho moinho uma vez ficou em pé.
+   reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+   A2: ok=1 texto igual ao A1: SIM
+   RESULTADO: BENCH-CONCLUIDO (htp->opencl; sem espelho; decode origem pos-ponte=0; A-B-A texto igual)
+   MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+   MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+   prompt: ARQUIVO (len=379)
+   cap: ARQUIVO = 160
+   A1: ok=1 cap=0 eog_tok1=0 tok1=32 amostrados(s/d)=1/63 emitidos=63 consumidos=63 decodes_s_pos_ponte=0
+   A1 tempos: prefill=2588.96ms export=0.19ms(3802585B) import=5.04ms gen=6858.32ms
+   A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+   A1 fronteiras(ms desde request): prefill_done=8690.1 tok1_ready=8734.6 import_done=8739.6 tok2_ready=12581.4 fim=15597.9 (INTERNAS; sem streaming de UI no probe)
+   A1 prompt_hash=0edc23f816808e4e
+

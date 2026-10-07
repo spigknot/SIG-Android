@@ -1,0 +1,9 @@
+AGREGADO MATCHED R4 (gen_ms, corpus curto, sessao QUENTE; lote C)
+
+modo          n   mediana       min       max amplitude
+puro CPU      3     273.9     272.2     416.8     144.6
+puro HTP      3     693.9     693.8     744.3      50.5
+puro OpenCL   3     249.0     241.0     427.8     186.8
+puro Vulkan   3    1044.2    1028.0    1063.6      35.7
+Smart OC      3    4112.9    3735.8    4554.8     819.1
+Smart VK      3     719.1     567.9     862.6     294.7

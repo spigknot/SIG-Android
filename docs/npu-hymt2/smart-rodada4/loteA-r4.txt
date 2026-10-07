@@ -1,0 +1,93 @@
+=== LOTE A R4 (20:24:42Z) ===
+--- [A1-valid-opencl] gatilho=smart:opencl mut=none
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=8
+    A1 tempos: prefill=1318.59ms export=0.11ms(2032789B) import=10.54ms gen=3743.16ms
+    A1 espelho: passos=8 iguais=8 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+    A1 fronteiras(ms desde request): prefill_done=6823.9 tok1_ready=6840.1 import_done=6850.7 tok2_ready=9250.0 fim=10593.8 (INTERNAS; sem streaming de UI no probe)
+    A1 prompt_hash=a5de647b1ff84e74
+    A1 texto: Bom dia, como você está?
+    reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+    A2: ok=1 texto igual ao A1: SIM
+    RESULTADO: SMART-ACEITO (htp->opencl; A-B-A integral; espelho 8/8)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=8
+    A1 tempos: prefill=1318.59ms export=0.11ms(2032789B) import=10.54ms gen=3743.16ms
+    A1 espelho: passos=8 iguais=8 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+    A1 fronteiras(ms desde request): prefill_done=6823.9 tok1_ready=6840.1 import_done=6850.7 tok2_ready=9250.0 fim=10593.8 (INTERNAS; sem streaming de UI no probe)
+    A1 prompt_hash=a5de647b1ff84e74
+    A1 texto: Bom dia, como você está?
+    reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+--- [A2-bench-opencl] gatilho=smart:opencl@bench mut=none
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1581.36ms export=0.12ms(2032789B) import=10.40ms gen=2731.05ms
+    A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+    A1 fronteiras(ms desde request): prefill_done=5978.4 tok1_ready=5994.5 import_done=6004.9 tok2_ready=8441.1 fim=8736.0 (INTERNAS; sem streaming de UI no probe)
+    A1 prompt_hash=a5de647b1ff84e74
+    A1 texto: Bom dia, como você está?
+    reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+    A2: ok=1 texto igual ao A1: SIM
+    RESULTADO: BENCH-CONCLUIDO (htp->opencl; sem espelho; decode origem pos-ponte=0; A-B-A texto igual)
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1581.36ms export=0.12ms(2032789B) import=10.40ms gen=2731.05ms
+    A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+    A1 fronteiras(ms desde request): prefill_done=5978.4 tok1_ready=5994.5 import_done=6004.9 tok2_ready=8441.1 fim=8736.0 (INTERNAS; sem streaming de UI no probe)
+    A1 prompt_hash=a5de647b1ff84e74
+    A1 texto: Bom dia, como você está?
+    reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+--- [A3-bench-mut-origem] gatilho=smart:opencl@bench mut=smart_bench_origem_extra
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=0 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/1 emitidos=1 consumidos=1 decodes_s_pos_ponte=1
+    A1 tempos: prefill=881.34ms export=0.10ms(2032789B) import=3.65ms gen=0.00ms
+    A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+    A1 fronteiras(ms desde request): prefill_done=5217.5 tok1_ready=5228.5 import_done=5232.1 tok2_ready=6863.8 fim=6944.8 (INTERNAS; sem streaming de UI no probe)
+    A1 prompt_hash=a5de647b1ff84e74
+    A1 texto: B
+    RESULTADO: SMART-FALHA (A1: bench_origem_decodificou)
+    MODO BENCHMARK (@bench; sem espelho; decode so no destino)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=0 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/1 emitidos=1 consumidos=1 decodes_s_pos_ponte=1
+    A1 tempos: prefill=881.34ms export=0.10ms(2032789B) import=3.65ms gen=0.00ms
+    A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+    A1 fronteiras(ms desde request): prefill_done=5217.5 tok1_ready=5228.5 import_done=5232.1 tok2_ready=6863.8 fim=6944.8 (INTERNAS; sem streaming de UI no probe)
+    A1 prompt_hash=a5de647b1ff84e74
+    A1 texto: B
+    RESULTADO: SMART-FALHA (A1: bench_origem_decodificou)
+    A1: ok=0 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/1 emitidos=1 consumidos=1 decodes_s_pos_ponte=1
+    A1 tempos: prefill=881.34ms export=0.10ms(2032789B) import=3.65ms gen=0.00ms
+--- [A4-valid-export-grande] gatilho=smart:opencl mut=smart_export_trunc_grande
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=0 cap=0 eog_tok1=0 tok1=-1 amostrados(s/d)=0/0 emitidos=0 consumidos=0 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1480.37ms export=0.12ms(0B) import=0.00ms gen=0.00ms
+    A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+    A1 fronteiras(ms desde request): prefill_done=6166.1 tok1_ready=-100016653.3 import_done=-100016653.3 tok2_ready=-100016653.3 fim=-100016653.3 (INTERNAS; sem streaming de UI no probe)
+    A1 prompt_hash=a5de647b1ff84e74
+    A1 texto: 
+    RESULTADO: SMART-FALHA (A1: export_invalido(tam!=contrato))
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=0 cap=0 eog_tok1=0 tok1=-1 amostrados(s/d)=0/0 emitidos=0 consumidos=0 decodes_s_pos_ponte=0
+    A1 tempos: prefill=1480.37ms export=0.12ms(0B) import=0.00ms gen=0.00ms
+    A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000
+    A1 fronteiras(ms desde request): prefill_done=6166.1 tok1_ready=-100016653.3 import_done=-100016653.3 tok2_ready=-100016653.3 fim=-100016653.3 (INTERNAS; sem streaming de UI no probe)
+    A1 prompt_hash=a5de647b1ff84e74
+    A1 texto: 
+    RESULTADO: SMART-FALHA (A1: export_invalido(tam!=contrato))
+--- [A5-valid-cap1] gatilho=smart:opencl mut=smart_cap1
+LOTE_A_DONE

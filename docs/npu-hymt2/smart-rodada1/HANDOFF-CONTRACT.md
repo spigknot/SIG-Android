@@ -16,7 +16,16 @@ cada afirmacao abaixo vem de leitura de codigo com arquivo/linha.
   `llama_io_read_host` (import) que copiam os tensores do KV via
   `ggml_backend_tensor_get/set` (llama-context.cpp:2603/2655) — ou seja, e'
   um FORMATO HOST agnostico de backend. **O handoff HTP -> Vulkan (e -> OpenCL)
-  e transportavel** com as APIs existentes.
+  MOSTROU-SE transportavel no ESCOPO TESTADO (rodadas 1-4)**: Hy-MT2-1.8B
+  c4bf, KV f16, n_ctx 2048, FA desligado nos dois lados, build do FONTE SIG
+  (v12; workarounds Adreno 0x5143 — ver rodadas 3/4), device CPH2747
+  (Android 15/API35), app-uid de prova. NAO e' afirmacao universal:
+  (a) o binario do backend PRECISA ser o do fork SIG (o upstream degenerava —
+  causa demonstrada na rodada 3); (b) o prototipo linka em API28 enquanto a
+  lib de produto segue minSDK24; (c) o loader OpenCL do produto e o
+  empacotamento nativo sao SEPARADOS deste probe e nao foram alterados.
+  Revalidar (matriz puro/src:dst) antes de portar para outra combinacao de
+  backend/modelo/quantizacao.
 - O que o estado contem (L3197-3215): (1) `arch` do modelo (string);
   (2) `memory->state_write(io)` = o KV (metadados de cells/posicoes/seq_ids
   + os tensores K/V da memoria).

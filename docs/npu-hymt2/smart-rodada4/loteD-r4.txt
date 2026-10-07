@@ -1,0 +1,37 @@
+=== LOTE D R4 gates extras (21:01:45Z) ===
+--- install probe v13e ---
+INSTALL_RC=0
+Success
+--- [D1-mut-rcs-espelho] gatilho=smart:opencl mut=smart_espelho_rcs
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=0 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/1 emitidos=1 consumidos=1 decodes_s_pos_ponte=1
+    A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000 marg_final_destino=9.4413
+    A1 texto: B
+    RESULTADO: SMART-FALHA (A1: espelho_rcS)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+--- [D2-mut-eog-tok1] gatilho=smart:opencl mut=smart_eog_tok1
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=0 cap=0 eog_tok1=1 tok1=120020 amostrados(s/d)=1/0 emitidos=0 consumidos=0 decodes_s_pos_ponte=0
+    A1 espelho: passos=0 iguais=0 div_pos=-1 div_marg(d/s)=-1.000/-1.000 marg_final_destino=-1.0000
+    A1 texto: 
+    RESULTADO: SMART-FALHA (A1: EOG_tok1_sem_handoff)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+--- [D3-mut-cap2] gatilho=smart:opencl mut=smart_cap2
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
+    A1: ok=1 cap=1 eog_tok1=0 tok1=33 amostrados(s/d)=2/1 emitidos=2 consumidos=1 decodes_s_pos_ponte=1
+    A1 espelho: passos=1 iguais=1 div_pos=-1 div_marg(d/s)=-1.000/-1.000 marg_final_destino=9.4413
+    A1 texto: Bom
+    RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+    MODO VALIDACAO (espelho teacher-forcing)
+    MODO PONTE: origem=htp | destino=opencl (GPUOpenCL)
