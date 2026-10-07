@@ -1527,7 +1527,7 @@ class WhisperActivity : AppCompatActivity() {
             aoConfirmar = {
                 downloadFile(
                     label = "VAD Silero",
-                    url = VAD_MODEL_URL,
+                    urls = listOf(VAD_MODEL_URL, VAD_MODEL_URL_ALTERNATIVA),
                     destination = destino,
                     onSuccess = onReady
                 )
@@ -1535,55 +1535,76 @@ class WhisperActivity : AppCompatActivity() {
         )
     }
 
-    private fun downloadFile(label: String, url: String, destination: File, onSuccess: () -> Unit) {
+    /** Baixa [urls] em ordem (primaria = R2; alternativa = HuggingFace) para
+     *  [destination]. Usado pelo VAD Silero: se a fonte primaria estiver
+     *  indisponivel, a alternativa assume sem intervencao do usuario. */
+    private fun downloadFile(label: String, urls: List<String>, destination: File, onSuccess: () -> Unit) {
         Thread {
-            try {
-                destination.parentFile?.mkdirs()
-                val temp = File(destination.parentFile, "${destination.name}.download")
-                URL(url).openConnection().apply {
-                    connectTimeout = 15000
-                    readTimeout = 30000
-                }.let { connection ->
-                    val total = connection.contentLengthLong
-                    connection.getInputStream().use { input ->
-                        FileOutputStream(temp).use { output ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            var copied = 0L
-                            var lastUi = 0L
-                            while (true) {
-                                val read = input.read(buffer)
-                                if (read < 0) break
-                                output.write(buffer, 0, read)
-                                copied += read
-                                val now = SystemClock.elapsedRealtime()
-                                if (now - lastUi > 500L) {
-                                    lastUi = now
-                                    val progressText = if (total > 0L) {
-                                        val percent = (copied * 100L / total).coerceIn(0L, 100L)
-                                        "$label: baixando $percent%"
-                                    } else {
-                                        "$label: baixando ${copied / 1048576L} MB"
-                                    }
-                                    runOnUiThread { status.text = progressText }
-                                }
-                            }
-                        }
-                    }
+            var ultimaFalha: Throwable? = null
+            var sucesso = false
+            for (url in urls) {
+                try {
+                    baixarUmaFonte(label, url, destination)
+                    sucesso = true
+                    break
+                } catch (e: Throwable) {
+                    ultimaFalha = e
+                    Log.w(TAG, "Fonte indisponivel ($url): ${e.message ?: "falha"}")
                 }
-                if (destination.exists()) destination.delete()
-                if (!temp.renameTo(destination)) {
-                    temp.copyTo(destination, overwrite = true)
-                    temp.delete()
-                }
+            }
+            if (sucesso) {
                 runOnUiThread {
                     status.text = "$label pronto."
                     onSuccess()
                 }
-            } catch (e: Throwable) {
-                Log.e(TAG, "Download failed", e)
-                runOnUiThread { status.text = "Erro ao baixar $label: ${e.message ?: "falha inesperada"}" }
+            } else {
+                val erro = ultimaFalha
+                Log.e(TAG, "Download failed", erro)
+                runOnUiThread { status.text = "Erro ao baixar $label: ${erro?.message ?: "falha inesperada"}" }
             }
         }.start()
+    }
+
+    /** Baixa UMA fonte para [destination] (via temporario .download). Lanca
+     *  excecao em falha — o chamador decide se tenta a proxima fonte. */
+    private fun baixarUmaFonte(label: String, url: String, destination: File) {
+        destination.parentFile?.mkdirs()
+        val temp = File(destination.parentFile, "${destination.name}.download")
+        URL(url).openConnection().apply {
+            connectTimeout = 15000
+            readTimeout = 30000
+        }.let { connection ->
+            val total = connection.contentLengthLong
+            connection.getInputStream().use { input ->
+                FileOutputStream(temp).use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var copied = 0L
+                    var lastUi = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        output.write(buffer, 0, read)
+                        copied += read
+                        val now = SystemClock.elapsedRealtime()
+                        if (now - lastUi > 500L) {
+                            lastUi = now
+                            val progressText = if (total > 0L) {
+                                val percent = (copied * 100L / total).coerceIn(0L, 100L)
+                                "$label: baixando $percent%"
+                            } else {
+                                "$label: baixando ${copied / 1048576L} MB"
+                            }
+                            runOnUiThread { status.text = progressText }
+                        }
+                    }
+                }
+            }
+        }
+        if (destination.exists()) destination.delete()
+        if (!temp.renameTo(destination)) {
+            temp.copyTo(destination, overwrite = true)
+            temp.delete()
+        }
     }
 
     /**
@@ -2548,7 +2569,10 @@ class WhisperActivity : AppCompatActivity() {
         private const val WHISPER_OUTPUT_FOLDER = "Whisper"
         private const val GLOBAL_LOG_NAME = "whisper_log.txt"
         private const val VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
-        private const val VAD_MODEL_URL = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
+        /** Primario: espelho no R2 (mesma pasta dos modelos do Whisper).
+         *  Alternativa: HuggingFace (origem) — usada se o R2 falhar. */
+        private const val VAD_MODEL_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/whisper/ggml-silero-v6.2.0.bin"
+        private const val VAD_MODEL_URL_ALTERNATIVA = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
         /** Tamanho real do VAD publicado (HEAD no HuggingFace, 25/09/2026). */
         private const val VAD_MODEL_BYTES = 885_098L
         private const val MODEL_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/whisper"

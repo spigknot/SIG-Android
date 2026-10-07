@@ -1,0 +1,35 @@
+{
+  "data": "2026-10-06 ~12:17-12:30",
+  "operador": "usuario (UI)",
+  "modelo": "Q4_K_M c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559",
+  "metodo": "tk/s reportado pela UI do app",
+  "vulkan": {
+    "curtas": [
+      39.1,
+      39.1,
+      35.3
+    ],
+    "medias": [
+      40.1,
+      38.4
+    ]
+  },
+  "opencl": {
+    "curtas": [
+      25.4,
+      26.6,
+      25.6
+    ]
+  },
+  "cpu_app": null,
+  "refs_cli": {
+    "htp": {
+      "pp64": 1165.7,
+      "tg32": 26.2
+    },
+    "cpu": {
+      "pp64": 271.8,
+      "tg32": 37.7
+    }
+  }
+}

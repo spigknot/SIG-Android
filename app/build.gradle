@@ -79,6 +79,8 @@ android {
         targetSdk 35
         versionCode 71
         versionName "1.508"
+        // R6/VACINA: teste instrumentado de contrato de locks (ANR).
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         if (buildNativeComponents) {
             ndk {
@@ -165,5 +167,9 @@ dependencies {
     testImplementation("com.squareup.okhttp3:mockwebserver:4.10.0")
     // org.json real no JVM dos testes unitários (o stub do Android não é mockado).
     testImplementation("org.json:json:20240303")
+    // R6/VACINA (ANR): teste instrumentado do contrato de nao-bloqueio dos
+    // getters de UI (roda apenas via connectedAndroidTest, no device).
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 
 }

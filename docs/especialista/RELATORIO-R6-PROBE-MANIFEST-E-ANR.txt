@@ -1,0 +1,240 @@
+RELATORIO R6 — PROBE MANIFEST/DLERROR E FECHAMENTO ANR
+=======================================================
+Data: 07/10/2026 (dia). Executor: agente. Base: parecer R6 do especialista
+(que leu, com verificacoes independentes limitadas: AndroidManifest.xml do
+probe, busca em probe.cpp linhas 51/54, busca no source JNI atual).
+Regras mantidas: nenhum commit/publicacao/installer/alteracao de device sem
+aprovacao especifica do usuario; SIG publicado (v11/1.508) e Whisper intactos;
+sem tocar no PJA110; sem governador/thermal-bypass/root/SELinux changes.
+
+========================================================================
+A. SUMARIO EXECUTIVO
+========================================================================
+A.1 Os 2 apontamentos do R6 foram CONFIRMADOS COMO DEFEITOS REAIS do probe R5:
+    (a) AndroidManifest do probe SEM <uses-native-library> com targetSdk 34
+        => a libcdsprpc.so nem pertencia ao namespace do linker do app;
+    (b) bug no teste de erro: "(dlerror() ? dlerror() : ...)" lê o erro DUAS
+        vezes (o getter consome) => o "(null)" reportado era artefato do
+        codigo, NAO evidencia de "assinatura de namespace bionic".
+    => O veredito R5 "BLOQUEIO AMBIENTAL PROVADO" esta RETIFICADO (prematuro).
+       Os docs R5 (RELATORIO-ANR-E-APP-UID-NPU.txt e PROMPT-ESPECIALISTA-R5)
+       receberam nota de retificacao; este R6 e a entrega reconciliada.
+A.2 Correcoes JA APLICADAS no probe (build/verificacao no PC; SEM install):
+    - manifest: <uses-native-library android:name="libcdsprpc.so"
+      android:required="false"/> (confirmado no APK final via aapt2 xmltree);
+    - teste de erro: helper com dlerror() limpo, leitura UNICA, copia para
+      std::string imediata, + controle negativo (lib fake) e positivo (liblog);
+    - APK novo: sha256 ae2a488a76746def90eafca8a685eaacace9d4c352254083e6c907b95d405adf
+      (2.967.319 B), targetSdk 34 confirmado; EXECUTADO no device em 07/10
+      (autorizacao do usuario) — RESULTADO: APP-UID OK (secao C.7).
+A.3 ANR: auditoria de locks COMPLETA e 3 data races reais corrigidas
+    (clear sem lock no generate; 3 leituras de g_backend_desc na worker;
+    getters com NewStringUTF dentro do lock). Contratos documentados no
+    codigo (cache de threads; politica de stats). Vacina preparada: funcao
+    de teste na lib + teste instrumentado (AnrUiLockContractTest) que FALHA
+    se alguem regredir os getters para g_mutex; checker de idempotencia do
+    patch (check-anr-fix.sh). Rebuild+gates em execucao no fechamento deste
+    relatorio (resultado na secao F).
+
+========================================================================
+B. RETIFICACOES FORMAIS (do veredito R5)
+========================================================================
+B.1 [RET-1] O probe R5 estava com manifest INCOMPLETO (sem opt-in vendor).
+    Consequencia: dlopen(libcdsprpc.so) falhar era o comportamento ESPERADO
+    da config errada; nada sobre "politica OEM" ou "whitelist" podia ser
+    concluido daquele resultado.
+B.2 [RET-2] O "(null)" do dlerror era BUG DO PROPRIO TESTE (dupla leitura).
+    O erro real do dlopen NUNCA foi capturado. (O handle NULL em si e' fato;
+    o motivo nao.) A expressao existia em 2 linhas (51/54) conforme apontado.
+B.3 [RET-3] "Controle liblog OK" continua valido (o probe rodava; system
+    public NDK lib abre sem opt-in vendor) — mas ele nao provava nada sobre
+    vendor rules; era apenas sanity do proprio probe. Reformulado.
+B.4 [RET-4] RESOLVIDO pelo teste corrigido: nao ha "bloqueio de app" — a
+    diferenca R5 era o opt-in ausente no manifest. App-UID normal carrega o
+    driver, registra HTP0, abre sessao e computa (C.5).
+B.5 Consequencia operacional: probe NAO concluido; NPU NAO arquivada;
+    repeticao do teste por camadas com a config correta (secao C/E).
+
+========================================================================
+C. PROBE — MANIFEST (fatos verificados, docs oficiais)
+========================================================================
+C.1 Fato bruto pre-correcao (conferido pelo executor nas fontes):
+    - probe/src/main/AndroidManifest.xml: SEM uses-native-library;
+    - build.gradle do probe: compileSdk 34 / minSdk 24 / targetSdk 34.
+    Doc aplicavel: developer.android.com/guide/topics/manifest/
+    uses-native-library-element + compat change
+    ENFORCE_NATIVE_SHARED_LIBRARY_DEPENDENCIES (ChangeID 142191088): app
+    targetSdk >= 31 precisa DECLARAR a lib publica do vendor para ela entrar
+    no namespace do linker. libcdsprpc constar em /vendor/etc/
+    public.libraries.txt (verificado no device, read-only) NAO basta sem
+    opt-in.
+C.2 Correcao aplicada (fonte):
+    <uses-native-library android:name="libcdsprpc.so" android:required="false"/>
+    (dentro de <application>). required=false = elegibilidade graciosa;
+    nao bloqueia install em device sem a lib. NAO foram adicionadas
+    adsprpc/sdsprpc (somente rotas reais documentadas; nao listar privadas).
+C.3 Verificacao no APK final (aapt2 dump xmltree):
+    E: uses-native-library (line=22)
+      A: android:name="libcdsprpc.so"
+      A: android:required=false
+    + targetSdkVersion=34, minSdkVersion=24, package br.gov.sp.pcsp.npuprobe.
+    APK: ae2a488a... (sha256 completo em A.2), 2.967.319 bytes.
+C.4 Build config do probe mantida (mesmas fontes e libs pinadas; sem
+    targetSdk lowering, sem disable de compat change, sem root bypass):
+    libs probe-min (ggml base/cpu/hexagon/ggml sem OpenCL/Vulkan) +
+    skel libggml-htp-v81.so; hashes em docs/npu-hymt2/rodada4/
+    probe-insumos-sha256.json (rodada anterior) + APK acima.
+C.5 EXECUTADO em 07/10 (autorizado pelo usuario) — RESULTADO: APP-UID OK:
+    Device USB 3B15BD00FVE00000; clear uninstall anterior; install do APK
+    corrigido (ae2a488a...); 2 execucoes independentes (09:54 e 09:57),
+    reprodutiveis. Log integro: docs/npu-hymt2/rodada4/probe-r6-run.log
+    (sha256 042caef43ad7287dae3a5fd1a81dac51930655ee9f4700bcec62b7ac59adf997).
+    P1 (dlopen): controle-sistema (liblog)=OK | negativo-fake
+      (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library
+      "libnaoexiste_xyz.so" not found [captura single OK] | cdsprpc por NOME
+      =OK | cdsprpc por path absoluto=OK.
+    P2 (registro+sessao): [ggml-hex] Loading driver libcdsprpc.so; registry
+      ndev 1; Arch v81 DMA64; device 0: HTP0 (phys=0, virt=0, domain=cdsp:3);
+      dev[0] HTP0, dev[1] CPU; dev_init(HTP0)=42-48ms -> SESSAO ABERTA
+      (session-id 0, domain-id 3, uri file:///libggml-htp-v81.so; hwinfo
+      threads 8 / hvx 8 / hmx 1 / vtcm 8 MB).
+    P3 (op numerica REAL): graph_compute(MUL_MAT 64x64)=0.9ms status=0;
+      c[0]=128.000000 (esperado 128.0) -> "APP-UID OK: sessao HTP + op
+      executado com resultado correto".
+    NOTA: FASTRPC_GET_DOMAINS query failed (0x14) -> fallback para domains
+      estaticos CDSP (funcionou; nao impeditivo). load_all_from_path segue sem
+      achar ggml_backend_init (build sem GGML_BACKEND_DL) mas o registro
+      ocorre pelos construtores estaticos — comportamento normal deste build.
+    P4 (peso produto no app): NAO executado (fora da autorizacao desta rodada).
+    >> VEREDITO R5 REFUTADO: era o manifest sem uses-native-library. Com o
+       opt-in, um app normal (UID nao-root) ABRE SESSAO HTP E EXECUTA OP no
+       DSP. O "bloqueio OEM" NAO EXISTE neste device.
+
+C.6 Nota de acuracia declarada (consta no parecer e e' aceita): declaracao
+    no manifest e' PRECONDICAO, nao garantia — politicas de namespace/
+    FastRPC do vendor podem ainda bloquear; o teste corrigido e' que vai
+    dizer.
+
+========================================================================
+D. DLERROR — BUG E CORRECAO
+========================================================================
+D.1 Bug (R5): "(dlerror() ? dlerror() : ...)" — a primeira chamada retorna
+    e CONSOME o erro; a segunda retorna NULL => mensagem "(null)" artificial
+    (e possivel propagacao de const char* NULL). Nenhuma conclusao valida
+    sobre o erro real podia sair dali.
+D.2 Correcao (feita):
+    dlerror();                      // limpa estado
+    void * h = dlopen(name, RTLD_NOW);
+    if (!h) { const char * e = dlerror();           // leitura UNICA
+              std::string msg = e ? e : "(vazio apos limpeza)"; ... }
+    + controle NEGATIVO: lib fake deve produzir erro NAO-nulo capturado
+    (sanity do parser); + controle positivo liblog.
+D.3 Estado: codigo corrigido no probe (build OK, APK assinado acima);
+    execucao no device pendente de autorizacao (junto do C.5).
+
+========================================================================
+E. ANR — AUDITORIA E FECHAMENTO (parecer R6 secao 4)
+========================================================================
+E.1 Lock map (source atual; apos correcoes desta rodada):
+    - g_mutex: loadModel, releaseModel, generate (+1 na funcao de teste).
+    - g_ui_mutex (novo; ordem g_mutex -> g_ui_mutex, SEM caminho inverso):
+      set_error; bloco do load (backend_desc+clear); bloco de stats do
+      generate; clear pos-geracao; helper ui_copy_backend_desc; getters
+      (copia) lastError/backendDescription/lastStats.
+    - g_threads_cache: atomico; getter non-block (sem lock algum).
+E.2 DATA RACES REAIS encontradas na auditoria (e corrigidas):
+    (a) generate(): "g_last_error.clear()" fora do g_ui_mutex (race com
+        NewStringUTF do getter na thread UI) -> agora sob lock (bloco);
+    (b) LOGI pos-geracao lia g_backend_desc sem lock -> agora via
+        ui_copy_backend_desc();
+    (c) catch (x2) concatenavam g_backend_desc sem lock -> idem (b).
+    Metodo: mapa completo de ocorrencias (grep dirigido) + leitura integral
+    dos fluxos load/generate/getters; correcoes minimas, sem mudar semantica.
+E.3 Contratos documentados no codigo (pedido R6):
+    - g_threads_cache: 0 = indisponivel (sem load/em andamento/apos release);
+      N>=1 = threads do contexto carregado; load: store(0) antes de trocar
+      g_ctx e store(N) apos sucesso; release: store(0) antes do free;
+      getter NUNCA bloqueia.
+    - g_last_stats: politica explicita — permanece o ultimo valor valido
+      (geracao concluida); erro/cancelamento nao apaga nem atualiza; UI so
+      exibe apos sucesso.
+    - Getters de UI: copia sob lock (holding = copia de string/metadata);
+      NewStringUTF FORA da regiao (feito nos 4 getters).
+    - g_ctx: lock removido? NAO — permanece sob g_mutex como antes (nao
+      removemos trava; apenas separamos a de UI).
+E.4 Vacina (testes permanentes) CRIADA:
+    - llama_jni.cpp: export de teste sigTestHoldGmutex(ms) (segura o lock
+      principal; NAO usar no app; documentado);
+    - HyMt2Native.kt: external correspondente (KDoc TEST-ONLY);
+    - app/src/androidTest/.../AnrUiLockContractTest.kt: worker segura o lock
+      2000ms; main chama os 4 getters e mede; asserta < 500ms. MUTACAO
+      conhecida (getters voltarem a usar g_mutex) => teste bloqueia ~1,8s e
+      FALHA (evidencia de que o teste pega a regressao).
+    - docs/npu-hymt2/rodada4/check-anr-fix.sh: checker de invariantes do
+      patch (contagens de locks/help/copy-out; aborta se divergir) — a
+      vacina de IDEMPOTENCIA do patch (o incidente do deadlock R5 nasceu de
+      aplicacao dupla; os patches desta rodada foram aplicados com
+      assert de ocorrencia UNICA).
+    - Execucao do androidTest no device: PENDENTE de autorizacao (instala
+      test APK; roda via :app:connectedDebugAndroidTest).
+E.5 Itens do parecer R6 que NAO foram feitos nesta rodada (declarados):
+    - E2E de UI com APK do patch (status "Traduzindo..."): requer install do
+      APK com aprovacao; fonte pronto, gates ok (build R5 + gates R6);
+    - "smokes Q4/Q8 Vulkan/CPU/OCL pequenos": nao executados (fora do escopo
+      aprovado ate agora; requerem device);
+    - "slowload mock seam": o equivalente REAL foi implementado via
+      sigTestHoldGmutex + androidTest (sem mock desconectado);
+    - testes host-side do parser dlerror: o controle negativo embutido no
+      probe cobre o caso no proprio alvo real.
+
+========================================================================
+F. GATES E ESTADO DO BUILD (resultado no fechamento)
+========================================================================
+F.1 Rebuild libsig_llama.so (llama_jni v2: auditoria + funcao de teste):
+    LIB_RC=0 | sha256 33105846c72df8888ca926c5d183a1d396e63ba4fa329f53a5b05f27c6238996
+    | 96277976 bytes (a versao com fix R5 era c7aacfc5...; a de teste R6 difere
+    pela auditoria + funcao sigTestHoldGmutex — NAO instalada no device).
+F.2 Gates (todos RC=0): testDebugUnitTest=0 | lintDebug=0 | assembleDebug=0 |
+    assembleDebugAndroidTest=0 (o teste instrumentado novo COMPILA, incl.
+    deps androidx.test adicionadas ao build.gradle).
+    check-anr-fix.sh: PASS (8/8 invariantes). Nota de processo: a primeira
+    execucao acusou 2 "FAIL" que eram contagem errada DO PROPRIO checker
+    (esperava 4 getters e o threadCount nao usa copia — usa atomic); o
+    codigo estava correto; checker ajustado e repassado.
+F.3 Artefatos: C:/llama-npu/rodada2/logs/r6-build.log + r6-test.log
+    (preservados com todos os RCs).
+
+========================================================================
+G. ESTADO DEVICE / REPO / APROVACOES
+========================================================================
+G.1 Device: lib do SIG com fix R5 ATIVA (sha c7aacfc5...) + backup v11
+    (596aba0e...) em /data/local/tmp e no PC. Decisao manter/restaurar =
+    USUARIO (nao tocado nesta rodada). O fix NAO e' duravel: re-validacao do
+    pacote pode reinstalar o v11 (comportamento observado).
+G.2 Repo: WIP nao commitado = llama_jni.cpp (R5+R6), TextoActivity.kt (R5),
+    HyMt2Native.kt (externo de teste), build.gradle (runner+deps androidTest),
+    AnrUiLockContractTest.kt (novo), docs desta campanha. NADA commitado/
+    publicado.
+G.3 Probe: C:/npu-probe (fora do repo); APK novo verificado; nada instalado
+    no device nesta rodada.
+G.4 Adocao oficial do fix (quando aprovada) exige, conforme fluxo oficial:
+    commit autorizado + pacote nativo NOVO p/ todas ABIs + manifest/hash/
+    tamanho do APK + gates + readback em runtime — nunca sobrescrever o
+    pacote v11 publicado mantendo hash.
+
+========================================================================
+H. PENDENCIAS / PROXIMOS PASSOS (com aprovacoes do usuario)
+========================================================================
+H.1 [aprovacao A] FEITO (07/10): probe corrigido executado; APP-UID OK
+    (2 runs; log e sha em C.5). P4 continua pendente de autorizacao.
+H.2 [aprovacao B] Rodar o androidTest de contrato (connectedDebugAndroidTest)
+    no device com o APK debug atual → evidencia da vacina do ANR.
+H.3 [aprovacao C] Aceite do fix ANR (fonte pronto): commit + (futuro)
+    pacote/APK com os gates completos; inclui o teste de UI do status.
+H.4 [aprovacao D] Decisao: manter lib com fix no device / restaurar v11.
+H.5 Sugestao de prioridade (aceita do parecer R6): fechar o ANR (A.3/E.3/E.4
+    ja prontos) e o probe-corrigido EM PARALELO, isolados; NAO habilitar NPU
+    como default; NAO lengthen thermal soak; nao alterar Whisper.
+========================================================================
+FIM. Documento reconciliado; nenhuma afirmacao de sucesso sem evidencia
+listada; itens pendentes explicitamente marcados PENDENTE/aguardando aval.

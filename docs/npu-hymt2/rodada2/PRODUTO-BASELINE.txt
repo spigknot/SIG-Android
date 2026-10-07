@@ -1,0 +1,40 @@
+# PRODUTO-BASELINE.txt — medicao com o app SIG v11 (operado pelo usuario)
+Data: 06/10/2026 ~12:17-12:30. Modelo: Q4_K_M (hash c4bf1015...) — MESMO peso.
+Metodo: valores de geracao (tk/s) reportados pela UI do app pelo usuario.
+Nenhuma alteracao no app (somente operacao normal + leitura).
+
+## Vulkan (default do app)
+| run | tk/s |
+|-----|------|
+| curta 1 | 39,1 |
+| curta 2 | 39,1 |
+| curta 3 | 35,3 |
+| media 1 | 40,1 |
+| media 2 | 38,4 |
+(media 38,4; min 35,3; max 40,1)
+
+## OpenCL (app)
+| run | tk/s |
+|-----|------|
+| curta 1 | 25,4 |
+| curta 2 | 26,6 |
+| curta 3 | 25,6 |
+(media 25,9)
+
+## CPU (app)
+[pendente - aguardando bloco do usuario]
+
+## Referencias CLI (mesmo peso Q4_K_M, bench 05:52)
+| backend | pp64 | tg32 |
+|---------|------|------|
+| HTP0    | 1165,7 | 26,2 |
+| CPU     |  271,8 | 37,7 |
+
+## Analise preliminar
+- DECODE: Vulkan (app) ~38,4 > CPU-CLI 37,7 > HTP 26,2 ~= OpenCL (app) 25,9.
+  => no decode, o pipeline atual do app (Vulkan) JA E MELHOR que o HTP CLI.
+- PREFILL: HTP domina no CLI (1165,7 vs 271,8 CPU); o prefill do app
+  nao e exposto na UI (nao medido nesta sessao).
+- Implicacao: para traducao (decode-dominante), o HTP agregaria apenas em
+  prompts longos (prefill); nos curtos, Vulkan segue vencedor. Bate com o
+  break-even por workload ja documentado.

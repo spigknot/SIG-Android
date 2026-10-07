@@ -1,0 +1,109 @@
+warning: in the working copy of 'app/src/main/cpp/llama-jni/llama_jni.cpp', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'app/src/main/java/br/gov/sp/pcsp/launcher/TextoActivity.kt', LF will be replaced by CRLF the next time Git touches it
+diff --git a/app/src/main/cpp/llama-jni/llama_jni.cpp b/app/src/main/cpp/llama-jni/llama_jni.cpp
+index c632cbb..0aadbf0 100644
+--- a/app/src/main/cpp/llama-jni/llama_jni.cpp
++++ b/app/src/main/cpp/llama-jni/llama_jni.cpp
+@@ -184,7 +184,10 @@ static void cerr_drain() {
+ 
+ static void set_error(const std::string & message) {
+     cerr_drain();  // o diagnóstico do driver (std::cerr) vem junto do erro
+-    g_last_error = message;
++    {
++        std::lock_guard<std::mutex> lock(g_ui_mutex);
++        g_last_error = message;
++    }
+     LOGE("%s", message.c_str());
+ }
+ 
+@@ -431,10 +434,15 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
+ 
+     if (g_ctx != nullptr) llama_free(g_ctx);
+     if (g_model != nullptr) llama_model_free(g_model);
++    g_threads_cache.store(0);
+     g_model = model;
+     g_ctx = ctx;
+-    g_backend_desc = used_desc;
+-    g_last_error.clear();
++    g_threads_cache.store(llama_n_threads(ctx));
++    {
++        std::lock_guard<std::mutex> lock(g_ui_mutex);
++        g_backend_desc = used_desc;
++        g_last_error.clear();
++    }
+     LOGI("modelo carregado: backend=%s n_ctx=%u n_threads=%d",
+          used_desc.c_str(), cparams.n_ctx, llama_n_threads(ctx));
+     // DIAG (rodada OpenCL): fases da carga no resumo do app (visivel no log)
+@@ -464,6 +472,7 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
+ extern "C" JNIEXPORT void JNICALL
+ Java_br_gov_sp_pcsp_launcher_HyMt2Native_releaseModel(JNIEnv *, jobject) {
+     std::lock_guard<std::mutex> lock(g_mutex);
++    g_threads_cache.store(0);
+     if (g_ctx != nullptr) {
+         llama_free(g_ctx);
+         g_ctx = nullptr;
+@@ -476,13 +485,13 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_releaseModel(JNIEnv *, jobject) {
+ 
+ extern "C" JNIEXPORT jstring JNICALL
+ Java_br_gov_sp_pcsp_launcher_HyMt2Native_lastError(JNIEnv * env, jobject) {
+-    std::lock_guard<std::mutex> lock(g_mutex);
++    std::lock_guard<std::mutex> lock(g_ui_mutex);
+     return env->NewStringUTF(g_last_error.c_str());
+ }
+ 
+ extern "C" JNIEXPORT jstring JNICALL
+ Java_br_gov_sp_pcsp_launcher_HyMt2Native_backendDescription(JNIEnv * env, jobject) {
+-    std::lock_guard<std::mutex> lock(g_mutex);
++    std::lock_guard<std::mutex> lock(g_ui_mutex);
+     return env->NewStringUTF(g_backend_desc.c_str());
+ }
+ 
+@@ -672,7 +681,13 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
+         char stats[160];
+         snprintf(stats, sizeof(stats), "%d tokens em %.1f s (%.1f tokens/s)",
+                  n_out, ms / 1000.0, tps);
+-        g_last_stats = stats;
++        {
++            std::lock_guard<std::mutex> lock(g_ui_mutex);
++            {
++            std::lock_guard<std::mutex> lock(g_ui_mutex);
++            g_last_stats = stats;
++        }
++        }
+     }
+     // PROF (F6): perfil llama (prefill x decode) — gated por debug.sig.hymt2.prof
+     // (default 0 = stock). Contadores acumulam por contexto; o protocolo de medicao
+@@ -780,15 +795,13 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadSummary(JNIEnv * env, jobject) {
+ 
+ extern "C" JNIEXPORT jstring JNICALL
+ Java_br_gov_sp_pcsp_launcher_HyMt2Native_lastStats(JNIEnv * env, jobject) {
+-    std::lock_guard<std::mutex> lock(g_mutex);
++    std::lock_guard<std::mutex> lock(g_ui_mutex);
+     return env->NewStringUTF(g_last_stats.c_str());
+ }
+ 
+ extern "C" JNIEXPORT jstring JNICALL
+ Java_br_gov_sp_pcsp_launcher_HyMt2Native_threadCount(JNIEnv * env, jobject) {
+-    std::lock_guard<std::mutex> lock(g_mutex);
+-    if (g_ctx == nullptr) {
+-        return env->NewStringUTF("0");
+-    }
+-    return env->NewStringUTF(std::to_string(llama_n_threads(g_ctx)).c_str());
++    // ANR FIX: cache atomico (sem g_mutex) - main thread nao espera load/generate.
++    const int n = g_threads_cache.load();
++    return env->NewStringUTF(std::to_string(n).c_str());
+ }
+diff --git a/app/src/main/java/br/gov/sp/pcsp/launcher/TextoActivity.kt b/app/src/main/java/br/gov/sp/pcsp/launcher/TextoActivity.kt
+index 81a71fc..bfdedcc 100644
+--- a/app/src/main/java/br/gov/sp/pcsp/launcher/TextoActivity.kt
++++ b/app/src/main/java/br/gov/sp/pcsp/launcher/TextoActivity.kt
+@@ -669,6 +669,9 @@ class TextoActivity : AppCompatActivity() {
+                         )
+                         appendLog("Backend em uso: $backendInUse")
+                         appendLog("Threads: ${threadsEmUso()}")
++                        // UX FIX (rodada ANR/UI): fim da fase de carga - antes o rotulo
++                        // "Carregando modelo..." permanecia ate o fim da traducao.
++                        status.text = "Traduzindo..."
+                         val resumo = resumoDeMemoria()
+                         if (resumo.isNotBlank()) {
+                             appendLog(

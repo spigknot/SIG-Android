@@ -1,0 +1,111 @@
+name: Espelhar modelos (HuggingFace -> R2)
+
+# Rode manualmente em: Actions -> "Espelhar modelos (HuggingFace -> R2)" -> Run workflow.
+#
+# Por que existe: o app baixa alguns modelos do HuggingFace (Q4_K_M padrao do
+# Hy-MT2, Q6_K, 1.25bit e o VAD do Whisper). Para padronizar TUDO no R2 sem
+# usar a banda do PC de casa, este workflow baixa dos runners do GitHub e
+# envia ao R2 (Cloudflare) — a banda e' a do GitHub.
+#
+# Secrets necessarios (configurar UMA vez; ver README no fim desta mensagem
+# do job). NUNCA colar valores no repositorio:
+#   R2_ACCESS_KEY_ID     -> chave S3 do R2 (Access Key ID)
+#   R2_SECRET_ACCESS_KEY -> chave S3 do R2 (Secret Access Key)
+#   R2_ENDPOINT          -> https://<accountid>.r2.cloudflarestorage.com
+#   R2_BUCKET            -> bucket publico usado pelos modelos
+#
+# Os SHA-256 sao PINADOS: se o upstream do HF mudar, o job FALHA e nao
+# publica bytes diferentes dos ja revisados (os hashes abaixo foram
+# conferidos nos arquivos em 07/10/2026).
+
+on:
+  workflow_dispatch:
+    inputs:
+      conjunto:
+        description: "O que espelhar"
+        required: true
+        default: "hymt2-completar"
+        type: choice
+        options:
+          - hymt2-completar
+          - silero-vad
+          - tudo
+
+jobs:
+  espelhar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Baixar do HuggingFace + verificar SHA-256
+        run: |
+          set -euo pipefail
+          CONJ="${{ inputs.conjunto }}"
+          mkdir -p out/hymt2 out/whisper
+
+          if [ "$CONJ" = "hymt2-completar" ] || [ "$CONJ" = "tudo" ]; then
+            curl -fL --retry 3 -o out/hymt2/Hy-MT2-1.8B-Q4_K_M.gguf \
+              "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main/Hy-MT2-1.8B-Q4_K_M.gguf"
+            curl -fL --retry 3 -o out/hymt2/Hy-MT2-1.8B-Q6_K.gguf \
+              "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main/Hy-MT2-1.8B-Q6_K.gguf"
+            curl -fL --retry 3 -o out/hymt2/Hy-MT2-1.8B-1.25Bit.gguf \
+              "https://huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF/resolve/main/Hy-MT2-1.8B-1.25Bit.gguf"
+            cd out
+            sha256sum -c <<'HASHES'
+          dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699  hymt2/Hy-MT2-1.8B-Q4_K_M.gguf
+          d98fe604dec1f28f58f80d7d560f7177e584d3b8e5835862687660e5ff97cb40  hymt2/Hy-MT2-1.8B-Q6_K.gguf
+          cc497fe8f033b52b3b8b00a7669e9661435432f9d4cd43f7ed24400c01507a93  hymt2/Hy-MT2-1.8B-1.25Bit.gguf
+          HASHES
+            cd ..
+          fi
+
+          if [ "$CONJ" = "silero-vad" ] || [ "$CONJ" = "tudo" ]; then
+            curl -fL --retry 3 -o out/whisper/ggml-silero-v6.2.0.bin \
+              "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
+            cd out
+            sha256sum -c <<'HASHES'
+          2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987  whisper/ggml-silero-v6.2.0.bin
+          HASHES
+            cd ..
+          fi
+
+          echo "=== tamanhos ==="
+          find out -type f -exec ls -la {} \;
+
+      - name: Instalar rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Enviar ao R2
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          rclone config create r2 s3 \
+            provider=Cloudflare \
+            access_key_id="$R2_ACCESS_KEY_ID" \
+            secret_access_key="$R2_SECRET_ACCESS_KEY" \
+            endpoint="${{ secrets.R2_ENDPOINT }}" \
+            acl=private --non-interactive
+          if [ -d out/hymt2 ]; then
+            rclone copy out/hymt2 "r2:${{ secrets.R2_BUCKET }}/models/hymt2" --checksum -v
+          fi
+          if [ -d out/whisper ]; then
+            rclone copy out/whisper "r2:${{ secrets.R2_BUCKET }}/models/whisper" --checksum -v
+          fi
+
+      - name: Conferir no R2 (read-back)
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          rclone config create r2 s3 \
+            provider=Cloudflare \
+            access_key_id="$R2_ACCESS_KEY_ID" \
+            secret_access_key="$R2_SECRET_ACCESS_KEY" \
+            endpoint="${{ secrets.R2_ENDPOINT }}" \
+            acl=private --non-interactive
+          echo "=== modelos/hymt2 ==="
+          rclone ls "r2:${{ secrets.R2_BUCKET }}/models/hymt2"
+          echo "=== models/whisper (silero) ==="
+          rclone ls "r2:${{ secrets.R2_BUCKET }}/models/whisper" | grep -i silero || true

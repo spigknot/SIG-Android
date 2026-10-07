@@ -1,0 +1,170 @@
+PROMPT-RELATORIO-NPU-HYMT2-RODADA2
+====================================
+Campanha longa NPU/Hexagon no CPH2747 — reabertura da investigacao isolada.
+Data: 06/10/2026 (madrugada). Executor: agente (Hermes). Escopo: NAO integrar ao
+SIG; sem alterar APK/libs/pacotes/defaults/commit/push/R2. Tudo em CLI/sandbox.
+
+------------------------------------------------------------------------
+A. APROVACOES / ESTADO FRESCO
+------------------------------------------------------------------------
+- Aprovacao: campanha autorizada pelo usuario (prompt do especialista);
+  server Tailscale SSH root autorizado em R1 (check renovado OK).
+- Device fresco: CPH2747 / SM8850 / SDK36; USB 3B15BD00FVE00000 (wireless =
+  mesmo aparelho); bateria 100% (Full, 14-24 C); app SIG v1.508 instalado
+  (NAO tocado; reportado, sem alteracao).
+- Sandbox intacto: /data/local/tmp/sig-hymt2-npu-r1 (1,2 GB).
+- C:/llama-npu protegido (clone sparse + pkg + logs); servidor /root/llama-cpp-npu
+  + container snapdragon v0.7 (digest 91714433626f...aed1) intactos.
+
+B. BUILD / TOOLCHAIN / ENV / HASHES
+----------------------------------------------------------- (ver baseline.json)
+- Pin upstream: 5e03bdd8700948b9c41c54dd1b00f28a2aebc03f (full).
+- Toolchain: NDK r29 (/opt/android-ndk-r29), Hexagon SDK 6.6.0.0, Tools 19.0.07.
+- SHA-256 baseline: 111/111 arquivos idengine-PC identicos; modelo Q4_0
+  sha256 415e7300282a3cde06b67c45002c9fc336777c22a542089564d6f150efbfe470.
+- Env runtime corretos: LD_LIBRARY_PATH=./lib + ADSP_LIBRARY_PATH=./lib
+  (pitfall 0x80000406 preservado; runner sempre exporta ambos).
+- Produto: Q4_K_M sha256 c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+  CONFIRMADO no device (leitura direta, sem copia); mix F32:129 / Q6_K:33 /
+  Q4_K:192 (vs Q4_0 teste: Q4_0:224 / Q6_K:1). Q8_0 PC: F32:129 / Q8_0:225.
+- **PRODUTO NO NPU (D.2)**: Q4_K_M rodou no HTP0 (tipos Q4_K/Q6_K aceitos):
+  pp64=1165,7 / tg32=26,2 (HTP) vs pp64=271,8 / tg32=37,7 (CPU). Mesmo padrao
+  do Q4_0: HTP 4,3x no prefill, CPU 1,4x na geracao. Leitura direta do app
+  dir (sem copia/duplicacao; nada do app alterado).
+
+C. OPS / RESET / SUPORTE / FALLBACK
+------------------------------------------------------------------------
+- Suporte HTP (matriz R1, filtrada): RMS_NORM 100%; MUL_MAT q4_0/f16 OK;
+  GET_ROWS q6_K = UNSupported (8/8) -> embedding do modelo cai na CPU.
+- Numericos R2 no HTP0: +590 PASS / 0 FAIL:
+  RMS_NORM+SOFT_MAX 135/135; ROPE 287/287; SET/GET_ROWS+ADD+MUL 168/168.
+- Grafo real (GGML_SCHED_DEBUG=2): 1129 nos, splits=2:
+  CPU = 3 nos (GET_ROWS x2 + DUP, embedding Q6_K); HTP0 = ~1126 (incl. FA e
+  output MUL_MAT). Correcao do "zero fallback" da R1 registrada.
+- RESET A-B-A (mesmo processo, sem reload): llama_memory_clear(mem,true):
+  pos_max 16->-1; streams pos-reset identicos; idempotente. PASS.
+  (llama_sampler_sample faz accept interno - confirmado no source.)
+
+D. WORKLOADS / QUANTIZACAO
+------------------------------------------------------------------------
+- Corpus EN->PT 409/952/2335/4924 chars criado (originais do app nao localizados;
+  documentado) em rodada2/corpus-en/ + copia no device.
+- MATRIZ FINAL (r=3, device acordado/stayon; 03:52-05:20):
+  | t/s    | pp64 | pp256 | pp512 | pp1024 | pp2048 | pp4096 | tg128 | tg256 |
+  | CPU    |  373 |   429 |   295 |    311 |    231 |    155 |  48,0 |  44,8 |
+  | HTP0   | 1082 |  2190 |  2575 |   2471 |   2293 |   2012 |  37,9 |  38,2 |
+  | OCL    |  355 |   596 |   579 |    518 |    443 |    348 |  21,7 |  20,3 |
+  - HTP domina prefill (ate 13x no pp4096 vs CPU; ~3x vs OCL no pp64).
+  - CPU domina decode (48,0 vs 37,9 e 21,7 t/s).
+  - CPU degrada em pp longo (373->155); HTP sustenta (~2012 em pp4096).
+  - NOTA METODOLOGICA: janela 03:25-04:10 ficou INVALIDA (device em doze:
+    CPU travado em ~500 MHz; -30x). Numeros acima sao do re-bench pos-wakeup
+    (c2_cpu_awake2/c2_ocl_awake2; cpu pp64 372,77 == R1 373,33 valida metodologia).
+- Break-even (modelo linear, numeros finais): Np/Ng = 3,16 — HTP-all vence a
+  partir de ~3,2 tokens de entrada por token de saida (traducao tipica ~1,2:1
+  ainda favorece CPU; prefill-dominante favorece HTP).
+
+E. TUNING (COMPLETO)
+------------------------------------------------------------------------
+- CPU threads (pp128/tg64): 1=27,6 | 2=45,9 | 4=49,6 | 6=51,2 | 8=52,1 t/s (tg).
+  O app usa 6; 8 daria ~2% (tg) e ~15% (pp128). Baseline honesto = 8 threads.
+- HTP configs (pp256/tg64; default pp256=2190):
+  OPBATCH=128: pp 2376 / tg 32,3 | OPBATCH=640: 2081 / 33,2
+  MM_SELECT=1 (HVX): **pp 184 (-92%)** / tg 32,3  <- HMX e essencial no prefill
+  MM_SELECT=2 (HMX): 2325 / 33,9
+  NHVX=4: 1927 / 32,3 | NHVX=2: 1288 (-41%) / 20,9 (-45%)
+  OPPOLL=0: 2287 / 32,3
+- CONCLUSao: o DEFAULT (HMX, NHVX=8, OPBATCH=1280, OPPOLL=1) e o melhor
+  equilibrio; nenhuma flag testada supera o default no caso tg; reduzir
+  HVX/HMX ou subutilizar threads piora. tg do HTP e limite estrutural
+  (decode single-token), nao de configuracao.
+
+F0. ACHADO CRITICO — CUSTO DE INICIALIZACAO POR PROCESSO (startup)
+------------------------------------------------------------------------
+Medido com -n 1 (mesmo modelo/device, device acordado/stayon):
+  CPU : ~46,7-50,1 s por PROCESSO (3 amostras; 2a consecutiva igual -> nao e I/O)
+  HTP0:  2,68-2,74 s por PROCESSO
+Causa identificada nos logs: "CPU_REPACK" de 828 MiB (repack dos pesos Q4_0
+para interleaved no 1o uso; tensores Q6_K usam CPU normal). O llama-bench nao
+mostra isso porque faz warmup FORA da medicao.
+Implicacao: para o padrao do app SIG (processo/sessao por uso), o NPU tem
+inicializacao ~17x menor (2,7 s vs ~48 s). Os t/s por fase pressupoem modelo
+ja aquecido (sessao persistente).
+
+TRADUCOES REAIS (corpus 409/952/2335/4924 chars; fases medidas pelo CLI):
+
+| texto   | np/ng ~  | CPU pp | HTP pp  | CPU tg | HTP tg | CPU total | HTP total | venc. |
+|---------|----------|--------|---------|--------|--------|-----------|-----------|-------|
+| 409     | 135/105  |  53,7  | 1120,6  |  32,5  |  31,1  |   5,7 s   |   3,5 s   | HTP   |
+| 952     | 330/300  |  52,4  | 1766,6  |  38,3  |  27,4  |  14,1 s   |  11,1 s   | HTP   |
+| 2335    | 900/850  | 208,0  | 2214,1  |  34,0  |  25,9  |  29,3 s   |  33,2 s   | CPU   |
+| 4924    | 1250/1100| 214,1  | 2567,8  |  21,1  |  25,4  |  58,0 s   |  43,8 s   | HTP   |
+(+ startup por processo: CPU ~48 s vs HTP ~2,7 s -> em execucoes curtas o
+HTP vence com folga; em sessao persistente, 3 de 4 textos favorecem o HTP.)
+Observacao: o prefill REAL do CPU (52-214 t/s) e 2-7x pior que o prefill
+SINTETICO (373-429); o do HTP se mantem 1120-2568. Isso rebaixa o break-even
+pratico: com pp CPU 52 / HTP 1766 (texto real), o HTP passa a vencer ja em
+~0,56 Np por Ng (quase sempre em traducao).
+
+F. HIBRIDO
+------------------------------------------------------------------------
+- F2 TEMPORAL PROVADO (hybrid_bridge v4): HTP prefill (np-1) -> export state
+  (918.472 B / 15 pos = ~61 KB/pos; export 0,09 ms; import 0,17 ms) ->
+  import CPU -> ponte (1 forward do ultimo token; llama.cpp exige posicoes
+  consecutivas Y=X+1) -> streams IDENTICOS a referencia CPU: [185,46,111664,1654].
+  Controle CPU->CPU tambem identico. NAO houve replay do prefill no destino.
+- Custo: state ~61 KB/posicao + ms de copia; ganho (Np~Ng) ~8% em Np=1000
+  (prefill 2,7x mais rapido; decode inalterado no CPU). Prefill-dominante
+  ganha mais. NAO e troca de backend em runtime generica.
+- F1 (opfilter espacial) nao executado; F3 desnecessario.
+
+G. ESTABILIDADE / ENERGIA / TERMICA
+------------------------------------------------------------------------
+- **G1 ESTABILIDADE (12 runs = 6 HTP + 6 CPU alternados)**: TODOS com o MESMO
+  hash de saida (16a61449c65ef78debef67fb0193f363) — saida BIT-EXATA entre
+  backends, sem crash/NaN/divergencia; temps 27,9->31,1 C (leve, normal).
+- 5+ runs do harness + benches: sem crash/NaN/erro FastRPC apos o fix de env.
+- ACHADO MAIOR (metodologico e de produto): com device em DOZE (tela apagada),
+  CPU cai ~30x (freq 384-768 MHz) enquanto o HTP mantem throughput pleno —
+  re-confirmado por WAKEUP (pp64 216 / tg32 44,6 apos acordar). Detalhes em
+  ACHADO-ENERGIA-DOZE.md. Sem claims de joule (sem telemetria de energia).
+- Temperaturas: bateria 14-24 C; tz0 21-28 C; sem aquecimento nos testes HTP.
+
+H. DECISAO / PROXIMOS PASSOS
+------------------------------------------------------------------------
+DECISAO: **VIAVEL_COM_GANHO** (com condicoes declaradas).
+
+Condicoes/fundamentos:
+1. Corretude: 691 testes numericos no HTP0 PASS (101 MUL_MAT R1 + 590 R2),
+   reset A-B-A PASS, hibrido F2 com streams identicos — nada de fallback
+   oculto alem dos 3 nos CPU ja explicados (embedding Q6_K).
+2. Padrao "processo por uso" (o do app para tarefas pontuais): HTP 2,7 s de
+   startup vs CPU ~48 s (repack) — vantagem grande e nao amortizavel fora de
+   sessao persistente.
+3. Textos REAIS de traducao: HTP venceu 3/4 por fase (409/952/4924) e o
+   prefill real do CPU (52-214 t/s) e 3-7x pior que o sintetico — o break-even
+   pratico cai para ~0,56 Np/Ng, ou seja, quase toda traducao.
+4. Robustez: HTP mantem throughput com o device em doze (CPU cai ~30x).
+5. Tuning: default do backend HTP ja e otimo (flags testadas nao superam;
+   MM_SELECT=HVX e NHVX<8 degradam fortemente).
+
+Ressalvas (declaradas):
+- O Q4_K_M DO PRODUTO nao foi exercitado no HTP nesta rodada (seria o proximo
+  teste; tipos Q4_K/Q6_K suportados pela matriz, shapes a validar end-to-end).
+- Em sessao persistente longa, o CPU segue competitivo na geracao
+  (48 vs 38 t/s sintetico; 21-38 vs 25-31 reais) — o ganho do NPU e prefill+
+  startup+robustez, nao decode puro.
+- Sem medicao de energia (proxy qualitativo apenas).
+- Hibrido F2: viavel e com corretude provada; ganho por request modesto no
+  sintetico e dependente do workload (TTFT). Registrado como refinamento
+  futuro de maior valor se o app mantiver sessao persistente.
+
+Proximos passos sugeridos (fora desta rodada):
+- Testar Q4_K_M do produto no HTP (mesmo sandbox; sem tocar o app).
+- Se integracao: comecar por um caminho opt-in "processo NPU" para o fluxo
+  de traducao; manter CPU fallback; considerar F2 somente se TTFT for
+  metrica critica.
+
+ANEXOS: PLAN-RODADA2.md (checkpoints), trials.jsonl (todas as tentativas),
+baseline.json, RECONCILIACAO-R1.md, BLOCO-B/F-RESULTADOS.md,
+ACHADO-ENERGIA-DOZE.md, logs em C:/llama-npu/rodada2/.

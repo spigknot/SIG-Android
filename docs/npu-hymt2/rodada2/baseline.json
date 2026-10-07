@@ -1,0 +1,66 @@
+{
+  "rodada": 2,
+  "fase": "A-baseline",
+  "hora": "2026-10-06T03:07-03:00",
+  "device": {
+    "serial_usb": "3B15BD00FVE00000",
+    "modelo": "CPH2747",
+    "soc": "SM8850",
+    "sdk": 36,
+    "app_version": "1.508 (versionCode 71)"
+  },
+  "pin_upstream": {
+    "commit_full": "5e03bdd8700948b9c41c54dd1b00f28a2aebc03f",
+    "commit_short": "5e03bdd",
+    "local": "C:/llama-npu/llama.cpp",
+    "servidor": "/root/llama-cpp-npu"
+  },
+  "container": {
+    "imagem": "ghcr.io/snapdragon-toolchain/arm64-android:v0.7",
+    "digest": "sha256:91714433626f0d94a926538a1e46ec43756c5b8e3262b91b95df1e812940aed1"
+  },
+  "toolchain": {
+    "ndk": "/opt/android-ndk-r29",
+    "hexagon_sdk": "6.6.0.0",
+    "tools": "19.0.07"
+  },
+  "modelo_sha256": "415e7300282a3cde06b67c45002c9fc336777c22a542089564d6f150efbfe470",
+  "modelo_bytes": 1076850528,
+  "modelo_gguf": {
+    "tensor_mix": {
+      "f32": 129,
+      "q4_0": 224,
+      "q6_K": 1
+    },
+    "total_tensores": 354,
+    "ctx_train_loader": "?"
+  },
+  "splits_reais": {
+    "nos_total": 1129,
+    "splits": 2,
+    "cpu_nodes": [
+      "node#0 GET_ROWS (embd)",
+      "node#1 GET_ROWS (node_1)",
+      "node#2 DUP"
+    ],
+    "htp0_nodes_aprox": 1126,
+    "causa": "GET_ROWS(token_embd.weight Q6_K) nao suportado no HTP -> 3 nos na CPU"
+  },
+  "env_runtime": {
+    "LD_LIBRARY_PATH": "./lib",
+    "ADSP_LIBRARY_PATH": "./lib",
+    "device": "HTP0",
+    "ngl": 99
+  },
+  "hashes": {
+    "device_file": "C:/llama-npu/rodada2/raw/hashes-device.txt",
+    "pc_file": "C:/llama-npu/rodada2/raw/hashes-pc-pkg.txt",
+    "modelo": "415e7300282a3cde06b67c45002c9fc336777c22a542089564d6f150efbfe470"
+  },
+  "protocolo": {
+    "runner": "docs/npu-hymt2/rodada2/runner2.py",
+    "timeouts_child_owned": true,
+    "telemetria": "battery temp/capacity + tz0",
+    "jsonl": "docs/npu-hymt2/rodada2/trials.jsonl"
+  }
+}

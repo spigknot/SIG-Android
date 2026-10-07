@@ -1,0 +1,144 @@
+PARECER-RESULTADOS-NPU-COMPARACAO-PRODUTO
+==========================================
+Resposta ao parecer R3+: retificacoes reconciliadas, produto comparado
+(app SIG v11) e decisao final. Data: 06/10/2026. Escopo ISOLADO (sem deploy/
+commit/APK/libs/defaults). Autorizacoes do usuario nesta fase: (A) usar o app
+para MEDIR, sem alterar (operado pelo usuario); (1 rodada de estabilidade NPU).
+
+------------------------------------------------------------------------
+A. RETIFICACOES E RECONCILIACOES (todas com evidencia)
+------------------------------------------------------------------------
+- A1 Q4_K_M: bench sintetico (d2_q4km_*) e e2e CLI (c1f_*) executados; e2e do
+  APP executado nesta fase (ver C). Denominadores honestos: MUL_MAT q4_K =
+  103 pass / 50 skip; q6_K = 55 pass / 7 skip (casos suportados, nao "modelo
+  inteiro"). Grafo Q4_K_M: NAO mapeado por nos (R2 mapeou o Q4_0); o fallback
+  Q4_0 (3 nos CPU) NAO deve ser extrapolado ao produto.
+- A2 lifecycle: g_ctx/g_model estaticos reusados (llama_jni.cpp L41-42/432-435);
+  "processo por uso" nao e contrato; 48s repack e especifico do CLI.
+- A3 doze: rotulado "background degradation (tela apagada)"; causa mecanistica
+  NAO capturada na janela; dumpsys formal coletado (r3-dumpsys.txt). O claim
+  antigo "HTP imune a doze" e RETIRADO (a observacao de tela-apagada era so
+  correlacao; sem medicao causal).
+- A4 F2 ganho: ESTIMADO (projecao); export/import medidos em 15..1033 posicoes.
+- A5 totais traducao: derivados (np/pp+ng/tg) marcados; walls medidos em tabela
+  separada (trials).
+- A6 corpus novo com SHA-256 (RETIFICACOES-R2.md A6).
+- A7 tuning: "melhor entre os testados" (nao "limite estrutural").
+- A8 hash G1 era MD5 -> recapturado SHA-256 (G2): identico HTP/CPU.
+- Reconciliacao de tentativas (EXCLUSIVA, trials-reconciled.csv):
+  73 attempts: 51 validos / 10 invalid_harness_bug / 4 background_degradation /
+  4 fail_operational / 2 superseded / 2 fail_transport. (53+3 da contagem
+  anterior era pre-R3; o total correto e 73 com categorias exclusivas.)
+  Nenhuma tentativa com binario errado conta como resultado valido.
+- Tailscale/LMK: CAUSA RAIZ IDENTIFICADA nesta fase (contribuicao do usuario):
+  os testes pesados (modelo + contexto no device com RAM ja saturada por apps)
+  disparam o LMK do Android, que MATA o processo do Tailscale em background —
+  por isso a conexao wireless caia repetidamente durante os testes. O USB
+  elimina a dependencia. (Antes rotulado "indeterminada"; agora causal via
+  observacao direta do usuario + logs de LMK do full2.) stayon sera revertido.
+
+------------------------------------------------------------------------
+B. VACINA DO BUG DE HARNESS (obrigatoria — FEITA E TESTADA)
+------------------------------------------------------------------------
+- hybrid_bridge_v5: gate_ctx() verifica ANTES de medir que o ctx usado
+  corresponde ao backend exigido pelo modo; identity line imprime harness/
+  mode/expect/ctx_used/exec_size/mtime.
+- Deploy com verificacao: sha256 local vs remoto (readback) + mv atomico +
+  chmod (b64a09...->b2bd9c80...; ver logs).
+- RED-GREEN executado no device:
+  * GREEN (modo htp): "[gate] mode_htp_cpu OK: ctx=HTP0 (esperado HTP0)" +
+    identity + timings.
+  * RED (--mutant-swap): {"gate":"FAIL","reason":"ctx_backend_mismatch",
+    "expected":"HTP0","got":"CPU"} -> aborta ANTES de medir (exit 3).
+- Correcao de harness da 1a rodada htp-all (usava ctx CPU) foi detectada,
+  descartada e refeita (ver D do relatorio R3).
+
+------------------------------------------------------------------------
+C. PRODUTO — COMPARACAO (app SIG v11, operado pelo usuario; Q4_K_M c4bf1015)
+------------------------------------------------------------------------
+Configuracoes documentadas (logcat SIGLlama): n_ctx=8192, n_threads=6,
+backend por run (Vulkan0/OpenGPU/CPU), FA/KV defaults do app, mesmo peso.
+
+### PRIMEIRA traducao apos carregar o modelo (numeros lidos pelo usuario no
+### log da PROPRIA UI do app — precisao do app, sem estimativa):
+| backend | Traducao pronta (TOTAL) | decode (UI) | RESIDUAL (TOTAL-decode) |
+|---------|------------------------|-------------|-------------------------|
+| Vulkan  | 10,6 s | 145 tk em 4,2 s | 6,4 s |
+| OpenCL  | 10,5 s | 143 tk em 6,2 s | 4,3 s |
+| CPU     | 16,9 s | 141 tk em 11,4 s | 5,5 s |
+RETIFICACAO (parecer): "prefill(diff)" era NOME INDEVIDO. O residual = TOTAL - decode
+inclui load + prefill + tokenizacao + template + sampler + sync + scheduling + logs.
+Os loads do logcat (~1,4/~4,0/~0,4 s) sao do MESMO fluxo mas de OUTRAS execucoes;
+subtrai-los para "isolar prefill" e ARITMETICA TAUTOLOGICA, nao medicao causal.
+O residual Vulkan (6,4 s) e consistente com prefill lento, mas a ATRIBUICAO por
+componente exige instrumentacao (bordas host) — pendente com o build de diagnostico.
+Tambem: nao extrapolar "segunda traducao 9,2/6,5" (nao medido); warm requer n3
+pareado no mesmo g_ctx (a medir, se autorizado). Nao recomendar default OpenCL/NPU
+por projecao: a projecao ~6,9 s do HTP-whole NAO foi medida no app.
+
+### Decode em regime (Vulkan 5 runs): 35,3-43,1 (media 38,4); OpenCL ~25,9; CPU ~20,9.
+### ACHADO DE UX: a UI exibe "Carregando modelo..." desde o load ATE O FINAL da
+### traducao (TextoActivity.kt:607/634/715 - sem retorno a "Traduzindo..."),
+### fazendo load+prefill+decode parecerem todos "carregamento". O usuario
+### reportou espontaneamente que "o que mais incomoda e o carregamento" -
+### decomposicao mostra que o VILAO REAL e o PREFILL do Vulkan (~5,0 s),
+### nao o load (~1,4 s).
+- Profiling detalhado do app (F6, debug.sig.hymt2.prof): INDISPONIVEL no pacote
+  v11 instalado (0 strings no .so do zip; evidencia: sha256 do zip v11 e grep).
+  Rebuild do pacote NAO autorizado => prefill/decode do app ficam no teto acima.
+- ANR DESCOBERTO (bug de UX do app): main thread bloqueia no g_mutex via
+  HyMt2Native.threadCount() (TextoActivity.kt:671) durante load/geracao; com
+  interacao do usuario >5s => "Input dispatching timed out" => Force finishing
+  da TextoActivity (3 ocorrencias: 12:25:24, 12:30:09, 12:37:50). Reproduzivel
+  e documentado; NAO corrigido (fora de escopo).
+
+------------------------------------------------------------------------
+D. LEITURA FINAL (totais por traducao; TUDO agora medido pelo app + CLI)
+------------------------------------------------------------------------
+- Primeira traducao (com load): Vulkan 10,6s | OpenCL 10,5s | CPU 16,9s |
+  HTP-whole projetado ~6,9s (1,3 load + 0,07 prefill + 5,5 decode @26,2) =>
+  NPU economizaria ~3,7 s por traducao cold (o prefill do Vulkan vira ~0).
+- Traducoes seguintes (sem load): Vulkan ~9,2s (5,0+4,2) | OpenCL ~6,5s
+  (0,3+6,2) | HTP ~5,6s => NPU menor; OpenCL 2o lugar.
+- O usuario sente a espera = prefill do Vulkan (~40 t/s; o PIOR dos backends).
+- OpenCL tem o MELHOR prefill do app (~600 t/s) com decode menor; mitigacao
+  imediata possivel sem NPU (trocar o backend default e avaliar decode).
+- HTP CLI mantem prefill 1120-2568 t/s e decode 26,2: menor tempo total nos
+  dois casos de teste, ANTES mesmo de considerar robustez (imune a doze).
+
+------------------------------------------------------------------------
+E. ESTABILIDADE / ENERGIA (autorizado)
+------------------------------------------------------------------------
+- EST-1 (15 iters HTP): bateria 36,4-36,7 C estavel; tz0 39,9->64,3->54,6 C;
+  Generation 27,6-38,5 t/s sem degradacao; 0 erros.
+- EST-2 (soak --ignore-eos -n2500): 7 iteracoes completas (rc=0) + iter8 SEM rc
+  (causa desconhecida; nao ha ExitInfo/log provando thermal ou LMK — rotulado).
+  AUDITORIA TZ0 (read-only): tz0 = "cpullc-0-0" = sensor de cluster de CPU (nao
+  do NPU!); unidades = miligraus. Pico 99,3 C no sensor de CPU durante o soak
+  (a CPU faz o loop host: sample/detok/submissao) + bateria 44,5 C.
+  THROTTLE observado: 28,5 -> 21,4 t/s (-25%) — causa primaria provavel CPU-side,
+  nao atribuida ao DSP sem prova. NAO classificar como "estabilidade PASS";
+  nao inventar limite numerico de seguranca; encerrado por criterio do plano.
+- EST-1 (15 iters, config especifica): bateria 36,4-36,7 C; tz0 pico 64,3 C.
+  Valido APENAS para aquela config/janela; sem promessa de "app termicamente
+  tranquilo" em geral; energia NAO medida (sem joules).
+
+------------------------------------------------------------------------
+F. DECISAO (sem integrar)
+------------------------------------------------------------------------
+VIAVEL_COM_GANHO_NA_CLI; PRODUTO_COMPARACAO executada (com teto declarado);
+veredito de produto: o NPU seria o MELHOR candidato a default de prefill
+(25-60x vs Vulkan), mas a integracao exige: pacote com backend hexagon
+(o v11 nao o tem), capabilities check, fallback explicito, e testes com UID
+de app (nao root/adb). NENHUMA alteracao feita. Proximos passos propostos no
+design (sem editar app): opt-in NPU + mitigacao imediata OpenCL para prefill.
+
+------------------------------------------------------------------------
+G. MANIFESTO
+------------------------------------------------------------------------
+- Novos: RETIFICACOES-R2.md, trials-reconciled.csv, PRODUTO-BASELINE(-v2).txt,
+  produto-baseline.json, ESTABILIDADE-NPU.txt, prod-logcat(.full/full2).txt,
+  r3-dumpsys.txt, hybrid_bridge_v5 (gate), este relatorio.
+- SHA-chave: zip v11 arm64 66eecc516d17d28e29f8b908abaad59e18b22be15a17c22097ac9dcd0d65ea40
+  (sem bloco F6); binario harness com gate b2bd9c80fe5855e1fab75e0d1985b7af672d88afff5f83aa45713d7a90bc3a5c.
+- Nenhum arquivo do SIG/app alterado; stayon revertido; sandbox mantido.

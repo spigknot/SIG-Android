@@ -53,15 +53,20 @@ class TextoActivity : AppCompatActivity() {
     private var translating = false
     private var logCounter = 0
 
-    /** Modelos oficiais Hy-MT2 (GGUF). URLs diretos do HuggingFace; o Q4_0
-     *  (produzido a partir do Q8_0) fica no R2, na base dos modelos do Whisper. */
+    /** Modelos oficiais Hy-MT2 (GGUF). O R2 (Cloudflare) e' a fonte PRIMARIA
+     *  (mais rapido e sem rate limit); o HuggingFace entra como alternativa
+     *  (fallback) quando o espelho existir. O Q4_0 (produzido a partir do
+     *  Q8_0) so existe no R2; o 1.25bit so existe no HuggingFace. */
     private data class HyMt2Model(
         val label: String,
         val fileName: String,
         val file: File,
+        /** Fonte primaria (R2). */
         val downloadUrl: String,
         /** Tamanho real publicado (medido no R2/HuggingFace em 25/09/2026). */
-        val bytes: Long
+        val bytes: Long,
+        /** Espelho oficial (HuggingFace) usado se a fonte primaria falhar. */
+        val downloadUrlAlternativa: String? = null
     )
 
     private enum class HyMt2Backend(val label: String, val shortLabel: String, val nativeKind: Int) {
@@ -176,8 +181,11 @@ class TextoActivity : AppCompatActivity() {
      * (~3,7 GB), inviável para celular.
      *
      * Só entram no menu os que EXISTEM de verdade: o repo oficial do HF publica
-     * apenas Q4_K_M, Q6_K e Q8_0 (Q4_K_S, Q5_0 e Q5_K_M dão 404 —asurei). O
-     * Q4_0 e o Q8_0 ficam no R2, que é mais rápido e não depende do HF. */
+     * apenas Q4_K_M, Q6_K e Q8_0 (Q4_K_S, Q5_0 e Q5_K_M dão 404 — asurei).
+     * Fontes: R2 = PRIMARIO (mais rápido, sem rate limit; espelho feito pelo
+     * workflow .github/workflows/mirror-models-to-r2.yml), HuggingFace =
+     * alternativa/fallback. O Q4_0 (produzido do Q8_0) e o 1.25bit (repo
+     * separado no HF) têm fonte única e são marcados como tal. */
     /** Só para o EXPERIMENTO 1 do diagnóstico Vulkan (docs/vulkan-hymt2-plano-experimentos.txt).
      *
      * O modelo F16 (não quantizado) é uma ferramenta de DIAGNÓSTICO: separa
@@ -209,8 +217,11 @@ class TextoActivity : AppCompatActivity() {
         val hf = "https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/resolve/main"
         fun r2Model(label: String, file: String, bytes: Long) =
             HyMt2Model(label, file, File(dir, file), "$r2/$file", bytes)
-        fun hfModel(label: String, file: String, bytes: Long) =
-            HyMt2Model(label, file, File(dir, file), "$hf/$file", bytes)
+        /** Espelhado: primario no R2, alternativa no HuggingFace (mesmo nome
+         *  de arquivo nos dois). E' o padrao dos modelos oficiais do Hy-MT2. */
+        fun espelhado(label: String, file: String, bytes: Long) =
+            HyMt2Model(label, file, File(dir, file), "$r2/$file", bytes,
+                downloadUrlAlternativa = "$hf/$file")
         // ⚠️ A ORDEM IMPORTA: o primeiro da lista é o modelo inicial do app.
         // MEDIDO (OnePlus 15, 112 linhas, 6 threads, CPU — ver
         // docs/relatorio-benchmark-qualidade-texto-hymt2.md):
@@ -221,16 +232,18 @@ class TextoActivity : AppCompatActivity() {
         //   1.25bit= TRUNCA a saída (728 vs 2.458 tokens) e perde 38% dos números
         //            → só serve para frase curta, por isso fica no fim.
         return listOf(
-            hfModel("Q4_K_M", "Hy-MT2-1.8B-Q4_K_M.gguf", 1_133_080_448L),
-            r2Model("Q8_0", "Hy-MT2-1.8B-Q8_0.gguf", 1_908_528_192L),
+            espelhado("Q4_K_M", "Hy-MT2-1.8B-Q4_K_M.gguf", 1_133_080_448L),
+            espelhado("Q8_0", "Hy-MT2-1.8B-Q8_0.gguf", 1_908_528_192L),
             r2Model("Q4_0", "Hy-MT2-1.8B-Q4_0.gguf", 1_076_850_528L),
-            hfModel("Q6_K", "Hy-MT2-1.8B-Q6_K.gguf", 1_474_785_120L),
+            espelhado("Q6_K", "Hy-MT2-1.8B-Q6_K.gguf", 1_474_785_120L),
             HyMt2Model(
                 "1.25bit",
                 "Hy-MT2-1.8B-1.25Bit.gguf",
                 File(dir, "Hy-MT2-1.8B-1.25Bit.gguf"),
-                "https://huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF/resolve/main/Hy-MT2-1.8B-1.25Bit.gguf",
-                461_860_800L
+                "$r2/Hy-MT2-1.8B-1.25Bit.gguf",
+                461_860_800L,
+                downloadUrlAlternativa =
+                    "https://huggingface.co/tencent/Hy-MT2-1.8B-1.25Bit-GGUF/resolve/main/Hy-MT2-1.8B-1.25Bit.gguf"
             )
         ) + listOfNotNull(diagnosticoF16())
     }
@@ -302,52 +315,76 @@ class TextoActivity : AppCompatActivity() {
                 // como se fosse o modelo — daí "Preparando download" longo e barra
                 // que não anda. Aqui resolvemos o redirect e, se a resposta não for
                 // 200, falamos na hora com o motivo real.
-                var url = URL(model.downloadUrl)
-                var tentativas = 0
-                var http: java.net.HttpURLConnection? = null
-                while (tentativas < 5) {
-                    val conn = url.openConnection() as java.net.HttpURLConnection
-                    conn.connectTimeout = 20000
-                    conn.readTimeout = 120000
-                    conn.instanceFollowRedirects = false
-                    val code = conn.responseCode
-                    if (code == java.net.HttpURLConnection.HTTP_MOVED_PERM ||
-                        code == java.net.HttpURLConnection.HTTP_MOVED_TEMP ||
-                        code == java.net.HttpURLConnection.HTTP_SEE_OTHER ||
-                        code == 307 || code == 308
-                    ) {
-                        val destino = conn.getHeaderField("Location")
-                        if (destino.isNullOrBlank()) {
-                            conn.disconnect()
+                // Fonte primaria = R2 (Cloudflare); alternativa = HuggingFace.
+                // A alternativa e' usada quando o R2 ainda nao tem o arquivo
+                // espelhado ou esta indisponivel — o download nunca regride.
+                val fontes = listOfNotNull(model.downloadUrl, model.downloadUrlAlternativa)
+                var ultimaFalha: Throwable? = null
+                var conexaoEscolhida: java.net.HttpURLConnection? = null
+                for (fonte in fontes) {
+                    try {
+                        var url = URL(fonte)
+                        var tentativas = 0
+                        var http: java.net.HttpURLConnection? = null
+                        while (tentativas < 5) {
+                            val c = url.openConnection() as java.net.HttpURLConnection
+                            c.connectTimeout = 20000
+                            c.readTimeout = 120000
+                            c.instanceFollowRedirects = false
+                            val code = c.responseCode
+                            if (code == java.net.HttpURLConnection.HTTP_MOVED_PERM ||
+                                code == java.net.HttpURLConnection.HTTP_MOVED_TEMP ||
+                                code == java.net.HttpURLConnection.HTTP_SEE_OTHER ||
+                                code == 307 || code == 308
+                            ) {
+                                val destino = c.getHeaderField("Location")
+                                if (destino.isNullOrBlank()) {
+                                    c.disconnect()
+                                    throw IllegalStateException(
+                                        "O servidor mandou redirecionar sem destino (HTTP $code)."
+                                    )
+                                }
+                                url = URL(URL(fonte), destino)
+                                c.disconnect()
+                                tentativas++
+                                continue
+                            }
+                            http = c
+                            break
+                        }
+                        if (http == null) {
+                            throw IllegalStateException("Não foi possível resolver o endereço do modelo.")
+                        }
+                        if (http.responseCode != 200) {
+                            val code = http.responseCode
+                            val motivo = runCatching { http.errorStream?.bufferedReader()?.readText() }
+                                .getOrNull()?.trim()?.take(120).orEmpty()
+                            http.disconnect()
                             throw IllegalStateException(
-                                "O servidor mandou redirecionar sem destino (HTTP $code)."
+                                when (code) {
+                                    404 -> "Este modelo não existe no repositório (HTTP 404)."
+                                    403 -> "Sem permissão para baixar este modelo (HTTP 403)."
+                                    else -> "O servidor respondeu HTTP $code. $motivo"
+                                }
                             )
                         }
-                        url = URL(URL(model.downloadUrl), destino)
-                        conn.disconnect()
-                        tentativas++
-                        continue
+                        if (fonte != model.downloadUrl) {
+                            Log.i(TAG, "Fonte primaria indisponivel; usando alternativa: $fonte")
+                        }
+                        conexaoEscolhida = http
+                        break
+                    } catch (e: Throwable) {
+                        ultimaFalha = e
+                        Log.w(TAG, "Fonte indisponivel ($fonte): ${e.message ?: "falha"}")
                     }
-                    http = conn
-                    break
-                }
-                if (http == null) {
-                    throw IllegalStateException("Não foi possível resolver o endereço do modelo.")
                 }
                 // HttpURLConnection não implementa Closeable: disconnect() no finally.
-                val conn: java.net.HttpURLConnection = http
+                val conn: java.net.HttpURLConnection =
+                    conexaoEscolhida ?: throw (ultimaFalha ?: IllegalStateException("Download falhou."))
                 try {
                     val code = conn.responseCode
                     if (code != 200) {
-                        val motivo = runCatching { conn.errorStream?.bufferedReader()?.readText() }
-                            .getOrNull()?.trim()?.take(120).orEmpty()
-                        throw IllegalStateException(
-                            when (code) {
-                                404 -> "Este modelo não existe no repositório (HTTP 404)."
-                                403 -> "Sem permissão para baixar este modelo (HTTP 403)."
-                                else -> "O servidor respondeu HTTP $code. $motivo"
-                            }
-                        )
+                        throw IllegalStateException("O servidor respondeu HTTP $code.")
                     }
                     val total = conn.contentLengthLong
                     conn.getInputStream().use { input ->
@@ -669,6 +706,9 @@ class TextoActivity : AppCompatActivity() {
                         )
                         appendLog("Backend em uso: $backendInUse")
                         appendLog("Threads: ${threadsEmUso()}")
+                        // UX FIX (rodada ANR/UI): fim da fase de carga - antes o rotulo
+                        // "Carregando modelo..." permanecia ate o fim da traducao.
+                        status.text = "Traduzindo..."
                         val resumo = resumoDeMemoria()
                         if (resumo.isNotBlank()) {
                             appendLog(

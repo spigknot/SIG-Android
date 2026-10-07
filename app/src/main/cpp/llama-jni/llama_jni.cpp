@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <iostream>
 #include <mutex>
+#include <thread>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -42,6 +43,17 @@ static llama_model * g_model = nullptr;
 static llama_context * g_ctx = nullptr;
 static std::string g_last_error;
 static std::string g_backend_desc = "CPU";
+// ANR FIX (rodada ANR/UI): dados de UI protegidos por mutex DEDICADO, para a main
+// thread nunca esperar no g_mutex (segurado por load/generate). Ordem de locks:
+// g_mutex -> g_ui_mutex (nunca inversa). Getter de threads usa cache atomico.
+// CONTRATO do g_threads_cache (getter non-block da UI):
+//   0  = contexto indisponivel (sem load / load em andamento / apos release);
+//   N>=1 = threads do contexto carregado.
+// load: store(0) ANTES de trocar g_model/g_ctx, store(N) apos sucesso — a UI
+// nunca ve valor de um contexto que nao esta mais ativo; release: store(0)
+// antes do free. O getter NAO bloqueia em nenhum estado.
+static std::mutex g_ui_mutex;
+static std::atomic<int> g_threads_cache{0};
 // DIAG rodada OpenCL (02/10): tempos por fase da carga + chave de runtime
 // debug.sig.hymt2.skip_probe (default 0 = comportamento de producao, com
 // sonda; 1 = pula a sonda p/ A/B controlado). Remover quando a rodada fechar.
@@ -66,7 +78,10 @@ extern "C" void ggml_opencl_diag_reset(void);
 
 static std::mutex g_summary_mutex;
 static std::string g_load_summary;   // linhas de memória/splits do último carregamento
-static std::string g_last_stats;     // "N tokens em X s (Y tokens/s)" da última geração
+// Ultima geracao CONCLUIDA com sucesso (R6, politica explicita): permanece com
+// o ultimo valor valido ate' a proxima geracao concluida — erro/cancelamento
+// NAO apaga nem atualiza; a UI so exibe apos sucesso. Protegido por g_ui_mutex.
+static std::string g_last_stats;
 // PROF (F9): segmentos de host do loop de geracao (sample/decode/detok).
 // Opt-in: debug.sig.hymt2.hostprof=1 (default 0 = stock; sem clock no loop).
 static bool g_hostprof = false;
@@ -184,8 +199,19 @@ static void cerr_drain() {
 
 static void set_error(const std::string & message) {
     cerr_drain();  // o diagnóstico do driver (std::cerr) vem junto do erro
-    g_last_error = message;
+    {
+        std::lock_guard<std::mutex> lock(g_ui_mutex);
+        g_last_error = message;
+    }
     LOGE("%s", message.c_str());
+}
+
+// R6 (auditoria ANR): leitura do estado de UI SEMPRE por copia sob g_ui_mutex.
+// O lock segura apenas a copia — NewStringUTF/log ficam FORA da regiao.
+// Ordem de locks: g_mutex -> g_ui_mutex (nunca inversa).
+static std::string ui_copy_backend_desc() {
+    std::lock_guard<std::mutex> lock(g_ui_mutex);
+    return g_backend_desc;
 }
 
 static const char * backend_label(int kind) {
@@ -431,10 +457,15 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
 
     if (g_ctx != nullptr) llama_free(g_ctx);
     if (g_model != nullptr) llama_model_free(g_model);
+    g_threads_cache.store(0);
     g_model = model;
     g_ctx = ctx;
-    g_backend_desc = used_desc;
-    g_last_error.clear();
+    g_threads_cache.store(llama_n_threads(ctx));
+    {
+        std::lock_guard<std::mutex> lock(g_ui_mutex);
+        g_backend_desc = used_desc;
+        g_last_error.clear();
+    }
     LOGI("modelo carregado: backend=%s n_ctx=%u n_threads=%d",
          used_desc.c_str(), cparams.n_ctx, llama_n_threads(ctx));
     // DIAG (rodada OpenCL): fases da carga no resumo do app (visivel no log)
@@ -464,6 +495,7 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
 extern "C" JNIEXPORT void JNICALL
 Java_br_gov_sp_pcsp_launcher_HyMt2Native_releaseModel(JNIEnv *, jobject) {
     std::lock_guard<std::mutex> lock(g_mutex);
+    g_threads_cache.store(0);
     if (g_ctx != nullptr) {
         llama_free(g_ctx);
         g_ctx = nullptr;
@@ -476,14 +508,22 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_releaseModel(JNIEnv *, jobject) {
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_br_gov_sp_pcsp_launcher_HyMt2Native_lastError(JNIEnv * env, jobject) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return env->NewStringUTF(g_last_error.c_str());
+    std::string copy;
+    {
+        std::lock_guard<std::mutex> lock(g_ui_mutex);
+        copy = g_last_error;
+    }
+    return env->NewStringUTF(copy.c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_br_gov_sp_pcsp_launcher_HyMt2Native_backendDescription(JNIEnv * env, jobject) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return env->NewStringUTF(g_backend_desc.c_str());
+    std::string copy;
+    {
+        std::lock_guard<std::mutex> lock(g_ui_mutex);
+        copy = g_backend_desc;
+    }
+    return env->NewStringUTF(copy.c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -664,7 +704,12 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
     }
 
     llama_sampler_free(smpl);
-    g_last_error.clear();
+    {
+        // R6: clear sob g_ui_mutex (lastError le sob o mesmo lock; clear sem
+        // lock era data race com NewStringUTF na thread de UI).
+        std::lock_guard<std::mutex> lock(g_ui_mutex);
+        g_last_error.clear();
+    }
     {
         const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now() - geracao_inicio).count();
@@ -672,7 +717,10 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
         char stats[160];
         snprintf(stats, sizeof(stats), "%d tokens em %.1f s (%.1f tokens/s)",
                  n_out, ms / 1000.0, tps);
-        g_last_stats = stats;
+        {
+            std::lock_guard<std::mutex> lock(g_ui_mutex);
+            g_last_stats = stats;
+        }
     }
     // PROF (F6): perfil llama (prefill x decode) — gated por debug.sig.hymt2.prof
     // (default 0 = stock). Contadores acumulam por contexto; o protocolo de medicao
@@ -761,13 +809,13 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
         }
         summary_append_line(tp); LOGI("%s", tp);
     }
-    LOGI("geracao concluida: %d tokens de saida (backend=%s)", n_out, g_backend_desc.c_str());
+    LOGI("geracao concluida: %d tokens de saida (backend=%s)", n_out, ui_copy_backend_desc().c_str());
     return env->NewStringUTF(result.c_str());
     } catch (const std::exception & e) {
-        set_error(std::string("Excecao na inferencia (") + g_backend_desc + "): " + e.what());
+        set_error(std::string("Excecao na inferencia (") + ui_copy_backend_desc() + "): " + e.what());
         return nullptr;
     } catch (...) {
-        set_error(std::string("Excecao desconhecida na inferencia (") + g_backend_desc + ").");
+        set_error(std::string("Excecao desconhecida na inferencia (") + ui_copy_backend_desc() + ").");
         return nullptr;
     }
 }
@@ -780,15 +828,26 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadSummary(JNIEnv * env, jobject) {
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_br_gov_sp_pcsp_launcher_HyMt2Native_lastStats(JNIEnv * env, jobject) {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    return env->NewStringUTF(g_last_stats.c_str());
+    std::string copy;
+    {
+        std::lock_guard<std::mutex> lock(g_ui_mutex);
+        copy = g_last_stats;
+    }
+    return env->NewStringUTF(copy.c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_br_gov_sp_pcsp_launcher_HyMt2Native_threadCount(JNIEnv * env, jobject) {
+    // ANR FIX: cache atomico (sem g_mutex) - main thread nao espera load/generate.
+    const int n = g_threads_cache.load();
+    return env->NewStringUTF(std::to_string(n).c_str());
+}
+
+// R6/VACINA (TESTE APENAS): segura o lock principal pelo tempo pedido, para o
+// teste instrumentado (AnrUiLockContractTest) validar que os getters de UI
+// respondem SEM bloquear com load/geracao "em andamento". Nao usar no app.
+extern "C" JNIEXPORT void JNICALL
+Java_br_gov_sp_pcsp_launcher_HyMt2Native_sigTestHoldGmutex(JNIEnv *, jobject, jlong ms) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (g_ctx == nullptr) {
-        return env->NewStringUTF("0");
-    }
-    return env->NewStringUTF(std::to_string(llama_n_threads(g_ctx)).c_str());
+    if (ms > 0) std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }

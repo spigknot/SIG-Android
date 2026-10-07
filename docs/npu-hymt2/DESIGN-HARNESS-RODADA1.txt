@@ -1,0 +1,64 @@
+DESIGN DO HARNESS NPU/HEXAGON — RODADA 1 (build no servidor)
+Data: 06/10/2026. Servidor: tailnet 'servidor' (Linux x86_64, 36 cores, 22 GB,
+133 GB livres, docker 29.1.3).
+
+════════════════════════════════════════════════════════════════
+1. FLUXO DE BUILD (caminho OFICIAL, sem instalar nada no PC)
+════════════════════════════════════════════════════════════════
+No servidor:
+  1) git clone --depth 1 llama.cpp -> /root/llama-cpp-npu (pin: conferir
+     commit == 5e03bdd do master; registrar o hash REAL clonado).
+  2) docker pull ghcr.io/snapdragon-toolchain/arm64-android:v0.7 (oficial;
+     inclui NDK r28b + OpenCL SDK + Hexagon SDK 6.6.0.0).
+  3) Build dentro do container:
+       docker run --rm --platform linux/amd64 -u root \
+         --volume /root/llama-cpp-npu:/workspace \
+         ghcr.io/snapdragon-toolchain/arm64-android:v0.7 bash -c '
+           cd /workspace
+           cp docs/backend/snapdragon/CMakeUserPresets.json .
+           cmake --preset arm64-android-snapdragon-release -B build-snapdragon
+           cmake --build build-snapdragon -j 20
+           cmake --install build-snapdragon --prefix pkg-android/llama.cpp'
+  4) Saida esperada: pkg-android/llama.cpp/{lib,bin} com libggml-hexagon.so,
+     libggml-htp-v73/v75/v79/v81.so, llama-cli, llama-bench, e (se o preset
+     gerar) test-backend-ops.
+  5) scp do pacote de volta ao PC (dezenas de MB).
+
+2. PRIMEIRO ENVIO AO DEVICE (avisar ANTES: caminho/tamanho/executaveis/limite)
+════════════════════════════════════════════════════════════════
+  - Destino: /data/local/tmp/sig-hymt2-npu-r1/ (sandbox proprio; nada do app).
+  - Conteudo: package do servidor (bins+libs ~50-150 MB estimado).
+  - Modelo: Q4_0 do host D:/Projetos/modelos (1.077 MB) para os primeiros
+    smokes (tipos Q4_0+Q6_K+F32); Q4_K_M do PRODUTO fica no app (copia via
+    run-as somente se o teste exigir; avisar).
+  - NAO colocar /vendor/lib64 no LD_LIBRARY_PATH (licao do issue 27677).
+
+3. TESTES (ordem do plano)
+════════════════════════════════════════════════════════════════
+  3.1 Enumeracao de device: llama-cli/list-devices ou bin equivalente
+      (registrar HTP description/arch/session domain/linker/FastRPC real).
+  3.2 Sessao HTP: rodar com --device HTP0 (ou nome real descoberto) e capturar
+      a linha "new session" + hwinfo; CPU controle com backend CPU (baseline).
+  3.3 test-backend-ops (se disponivel no build): MUL_MAT + RMS_NORM/ROPE/
+      SOFTMAX/GET_ROWS/SET_ROWS/ADD/MUL com shapes reais (decode N=1 e
+      prefill N>1) e tolerancias; reportar suportado/nao + erros.
+  3.4 llama-cli com o modelo Q4_0 (mesmo prompt/template/seed/temp), saida
+      finita/nao-vazia; comparar com CPU.
+  3.5 A-B-A de reset no MESMO contexto (sem reload) se a sessao for estavel.
+  3.6 Medicao CURTA (n=3 se janela estavel): CPU vs HTP (mesmo peso/runtime);
+     depois OpenCL (v11) como comparacao entre-runtime LABELED.
+
+4. WATCHDOGS/STOP (do plano)
+════════════════════════════════════════════════════════════════
+  - timeout por comando adb; nenhum push sem checksum; home/ANR/FastRPC error/
+    NaN/garbage/temperatura -> parar e capturar; sem matar processos de outros;
+    cleanup apenas do sandbox criado (inventariado).
+  - Battery 100% (carregada); manter plugado; temperatura inicial/final
+    registradas.
+
+5. LIMITES ATUAIS (declarar)
+════════════════════════════════════════════════════════════════
+  - Expectativa do issue 27677 (mesmo device): OpenCL pode GANHAR do HTP
+    (11,14 vs 6,66 t/s com Qwen3-8B Q4_K_M) — resultado negativo e aceitavel.
+  - x86_64 do device: nao aplicavel (build hexagon e arm64).
+  - Nada do produto sera alterado; nada publicado; sem root/SELinux bypass.

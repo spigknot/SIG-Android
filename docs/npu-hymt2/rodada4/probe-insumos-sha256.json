@@ -1,0 +1,11 @@
+{
+  "jniLibs/libggml-base.so": "bd35f99eb1929b1ddf9ac6085b6bee640f8e63455e573287d2eace080cabe64e",
+  "jniLibs/libggml-cpu.so": "79b981de6fc447e15c52e7cae4849ba3cdc376b8bb9b6a0344ba05d6092c8284",
+  "jniLibs/libggml-hexagon.so": "6aa9972bb35fc0ad2e2d6a3a83a8d47a076c2d35ec5104927bb9a480394f187d",
+  "jniLibs/libggml-htp-v81.so": "0f1e135733ad41b8c45a4c07659bf879a9da5dcef3c218cf836195942be044eb",
+  "jniLibs/libggml.so": "6a2f3eed9d32c6ffbd16267a053f915540d1f9316d96f41fb444abddc6175a35",
+  "cpp/ggml.h": "12ee71f99db7db9b353bc02b1fbb57c344ee17c01ac5fb7952b41a637a747ea9",
+  "cpp/ggml-backend.h": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+  "cpp/ggml-alloc.h": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+  "cpp/ggml-hexagon.h": "b2c12bac390f14707b16bdd27c8c75ce4f075ed509c729ee28fd4f03b17e7375"
+}

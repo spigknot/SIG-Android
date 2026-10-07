@@ -1,0 +1,135 @@
+========================================================================
+RELATORIO — RODADA 1 — INVESTIGACAO NPU/HEXAGON (Hy-MT2-1.8B) — CPH2747
+========================================================================
+Data: 06/10/2026 (madrugada). Autor: agente executivo (Hermes).
+Escopo: investigacao ISOLADA (nada do app SIG foi alterado; nada publicado).
+
+------------------------------------------------------------------------
+1. SUMARIO EXECUTIVO
+------------------------------------------------------------------------
+VIABILIDADE TECNICA: SIM. O Hy-MT2-1.8B Q4_0 roda com corretude no backend
+Hexagon (HTP) do llama.cpp upstream (5e03bdd) neste CPH2747:
+  - device HTP0 registrado; sessao aberta no dominio CDSP nsp1000;
+  - arch Hexagon v81; hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB;
+  - 101/101 testes numericos MUL_MAT(q4_0) vs CPU: OK;
+  - geracao real: "Good morning, how are you?" -> "Bom dia, como voce esta?"
+    (modelo residindo no DSP: 1035 MiB no HTP0; host so 217 MiB).
+DESEMPENHO (bench pp64/tg32, r=3, mesmo modelo Q4_0):
+  CPU      : pp 373,33 t/s | tg 47,34 t/s
+  HTP0/NPU : pp 1015,65 t/s (2,7x CPU; 3,1x OpenCL) | tg 26,87 t/s
+  OpenCL   : pp 329,00 t/s | tg 20,12 t/s
+LEITURA: o HTP DOMINA o prefill; na GERACAO o CPU ganha (para este modelo
+pequeno, o Oryon e muito forte). Para traducao (geracao domina o tempo
+total), o ganho liquido do HTP nao se confirma nesta rodada — resultado
+NEGATIVO-PARCIAL legitimo, sem crash, sem NaN, sem fallback oculto.
+
+------------------------------------------------------------------------
+2. TUDO QUE FOI FEITO (cronologico)
+------------------------------------------------------------------------
+2.1 Descobertas de caminho (toolchain):
+  - SDKs publicos no GitHub (snapdragon-toolchain): hexagon-sdk v6.6.0.0
+    amd64-lnx (694 MB) SEM login Qualcomm; variante wos (Windows-ARM) nao
+    serve host x86_64.
+  - build.py --no-docker no Windows forca preset Windows-ARM; host Windows
+    x86_64 NAO builda para Android por esse caminho.
+2.2 Build REAL no SERVIDOR (Linux) via Docker (autorizado como opcao A1):
+  - servidor: Linux x86_64, 36 cores, 22 GB RAM, docker 29.1.3;
+  - clone: /root/llama-cpp-npu @ 5e03bdd (pin identico ao PC);
+  - container: ghcr.io/snapdragon-toolchain/arm64-android:v0.7
+    (digest sha256:91714433...aed1);
+  - toolchain interna: NDK r29 (/opt/android-ndk-r29), Hexagon SDK 6.6.0.0,
+    Tools 19.0.07; configure OK ("Including OpenCL backend"+"Hexagon");
+  - build: 643/643 OK (BUILD_RC=0) -> llama-cli, llama-bench,
+    test-backend-ops, llama-server etc.;
+  - install: pkg-android/llama.cpp (276 MB; ELF ARM aarch64/Android 34).
+2.3 Envio ao device (sandbox /data/local/tmp/sig-hymt2-npu-r1; sem tocar o app):
+  - pacote 276 MB (bin+lib) verificado (ls remoto);
+  - modelo Q4_0 1.077.360.192 B push -> md5 IDENTICO 8325a8db7aa0c23e896810b5cb054ef0.
+2.4 Testes:
+  - T1: llama-cli --list-devices -> GPUOpenCL (Adreno 840) + HTP0 (Hexagon);
+  - T2 (falha): test-backend-ops sem ADSP_LIBRARY_PATH ->
+    "failed to open session ... error 0x80000406" e crash (uncaught);
+  - FIX (causa raiz): o run.py oficial exporta ADSP_LIBRARY_PATH=./lib
+    (o SKEL libggml-htp-v81.so eh procurado pelo DSP nesse path).
+    Com AMBAS as envs: sessao abre (hwinfo+op batching);
+  - T3: test-backend-ops support (matriz 21.454 linhas) + test numerico
+    MUL_MAT type_a=q4_0 -> 101/101 PASS;
+  - T4: geracao real no HTP0 com prova de rota (memory breakdown; buffers
+    DSP mapeados; zero fallback);
+  - T5: bench CPU vs HTP0 vs GPUOpenCL (números da secao 1).
+2.5 Artefatos/evidencias (PC): C:/llama-npu/logs/{support-htp0.log,
+    gen-htp0.log, gen-htp0-v.log (9,8 MB verbose), lc-help.txt};
+    build-npu-harness.sh / push-harness-to-device.sh / t1..t3 scripts;
+    docs no repo: docs/npu-hymt2/*.
+
+------------------------------------------------------------------------
+3. TABELA DE PROVAS (5 de 5 distintas)
+------------------------------------------------------------------------
+  P1 NPU REGISTRADA      : OK  (HTP0 na lista de devices; v81; DMA64)
+  P2 SESSAO HTP ABERTA   : OK  (nsp1000:1000; hwinfo threads8/hvx8/hmx1/vtcm8MB)
+  P3 KERNEL EXECUTADO    : OK  (101/101 MUL_MAT q4_0 + execucao da geracao;
+                                buffers 1.071.644.672 B mapeados no DSP)
+  P4 MODELO GERANDO CERTO: OK  ("Bom dia, como voce esta?"; sem NaN; saida
+                                coerente; files q4_0 token_embd q6_k embutido)
+  P5 DESEMPENHO UTIL     : PARCIAL/NEGATIVO (prefill 2,7x melhor; geracao
+                                0,57x do CPU; CPU domina o tempo total)
+
+------------------------------------------------------------------------
+4. ESTABILIDADE OBSERVADA (na janela)
+------------------------------------------------------------------------
+  - 5 execucoes de harness (support, test, 3x geracao, 3x bench) sem crash
+    apos o fix; sessao unica; release ordenado ("cleaning up before exit",
+    unmapped/release ref de todos os buffers).
+  - NAO exercitado nesta rodada: A-B-A de reset no mesmo contexto,
+    reconexao/queda do DSP, long-run (>poucos minutos), temperatura/bateria
+    (device carregado 100%, sem telemetria de energia).
+  - 1 falha real encontrada e resolvida: falta de ADSP_LIBRARY_PATH
+    (0x80000406) — documentada como pitfall.
+
+------------------------------------------------------------------------
+5. LIMITES / UNKNOWNS
+------------------------------------------------------------------------
+  - Energia/temperatura: nao medidos (possivel vantagem do NPU nao capturada).
+  - So o modelo Q4_0 de teste; Q4_K_M "do produto" nao foi testado.
+  - So shapes do benchmark; nenhum smoke com o fluxo do APP (Texto on-device).
+  - Tuning nao tentado: threads/VTCM/batch; op-offload parcial; prefill
+    grande (n>64).
+  - OpenCL aqui = comparativo entre-runtime (o app usa Vulkan; nao medido
+    nesta rodada).
+  - x86_64: N/A (hexagon e arm64).
+  - Teste de longa duracao/estabilidade termica: pendente.
+
+------------------------------------------------------------------------
+6. RECOMENDACAO (3 caminhos)
+------------------------------------------------------------------------
+  CAMINHO A — NAO integrar agora (recomendado):
+    Para traducao (geracao-dominante), o HTP nao supera o CPU neste modelo.
+    Nada muda no produto; manter o pacote atual (Vulkan/reset v10) como esta.
+  CAMINHO B — Aprofundar investigacao (barato, sem produto):
+    (a) medir energia/temperatura (NPU pode poupar bateria);
+    (b) tuning (threads/vtcm/batch; op-offload parcial);
+    (c) bench com Q4_K_M e prompts maiores; A-B-A de reconexao;
+    (d) comparar com Vulkan real do app (o build do servidor nao inclui Vulkan).
+  CAMINHO C — Integrar apenas o prefill (arquitetural, caro):
+    Exigiria fluxo hibrido prefill-HTP/decode-CPU (nao suportado como receita);
+    so faria sentido se perfil de uso for prefill-heavy (nao e o caso do SIG).
+  -> Sugestao: registrar como "viabilidade provada, ganho liquido nao
+     comprovado"; decidir B conforme interesse.
+
+------------------------------------------------------------------------
+7. CUSTOS/ELEGIBILIDADE
+------------------------------------------------------------------------
+  - Nada publicado; nada commitado; app intocado; sandbox no device mantido
+    (276 MB pacote + 1.077 MB modelo) para rodadas futuras.
+  - Servidor: clone+container+build (uso modesto; containers do usuario
+    intocados). PC: C:/llama-npu (clone+logs+pkgs).
+========================================================================
+
+------------------------------------------------------------------------
+8. DECISAO DO USUARIO (06/10/2026)
+------------------------------------------------------------------------
+CAMINHO A — ENCERRAR. Viabilidade tecnica provada (5 provas), ganho
+liquido nao comprovado para o fluxo de traducao. NADA sera integrado ao
+app; nenhum caminho do produto muda. Sandbox do device e artefatos do
+servidor/PC permanecem para consulta (limpeza sob pedido).
+Rodada 1 formalmente concluida.

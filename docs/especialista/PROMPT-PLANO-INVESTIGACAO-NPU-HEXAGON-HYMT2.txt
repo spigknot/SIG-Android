@@ -1,0 +1,127 @@
+PROMPT AO AGENTE EXECUTOR — INVESTIGACAO NPU/HEXAGON PARA HY-MT2-1.8B NO SIG ANDROID
+
+MISSAO
+Investigar com diligencias REAIS se o Hy-MT2-1.8B pode usar a NPU Qualcomm do telefone CPH2747, com corretude, estabilidade e vantagem util. Entregar prova de viabilidade ou bloqueio comprovado, codigo/harness experimental reproduzivel e recomendacao de integracao. O telefone estara disponivel. Esta e uma INVESTIGACAO ISOLADA, nao uma release nem migracao automatica do app.
+
+PRINCIPIOS
+- Comecar pelo backend Hexagon do llama.cpp upstream atual, verificando sua revisao real. QNN/QAIRT/HTP e plano alternativo, nao exigir converter tudo antes verificar rota GGUF.
+- Separar NPU registrada, sessao HTP aberta, kernel realmente executado, modelo gerando corretamente e desempenho util: sao cinco provas distintas.
+- Nao chamar DSP/HVX/HMX genericos de tensor-NPU acelerada sem identificar a rota executada. Nome 'GPU' nos logs pode designar device HTP por abstracao llama; registrar device/driver real.
+- NPU pode perder para CPU/GPU. Resultado negativo honesto vale mais que fallback silencioso ou velocidade com texto errado.
+- Aproveitar v11 OpenCL e Vulkan/reset corretos; nao reabrir estas frentes, nao mexer no Whisper para habilitar NPU.
+
+AUTORIZACAO/SCOPE
+Usuario solicitou investigacao com acesso ao telefone: descobrir hardware/runtime, preparar builds/harness isolados e testar temporariamente via ADB em diretorio proprio, sem alterar app publicado, e o escopo deste plano. Avisar antes do primeiro envio o caminho, tamanho, executavel e limite. Validar telefone/idle antes executar. Nao pedir nova aprovacao para cada comando de leitura ou repeticao normal dentro deste escopo.
+Exigem permissao ADICIONAL: instalar/reinstalar APK, substituir libs do SIG, alterar pacote/apk/manifest do produto, desbloquearbootloader/root/SELinux/systemvendor, aceitar licencas/termos em nome do usuario, criarcontas/autenticar, downloads muito grandes quando espaco/orcamento nao definido, instalar Docker/WSL/globalSDK que modifiqueambiente, commit/push, publicarR2/GitHub, mudarbackenddefault, testes com mic/audio/documentos reais, mudancas permanentes energia/thermal. Se SDK exigirlogin usar ferramentaautorizada/vault, nunca pedirsenha/chatnemlercredenciaisrepo.
+Nao apagar arquivos do usuario/modelos/backups. Cleanup somente arquivos temporarios criados pela investigacao, inventariados, sem rm-rf amplo. Copiar vendorlibs se necessario apenas para sandbox local com fundamento/licenca; NUNCA modificarvendor nem distribuí-las publicamente sem direito. Sem bypass de assinaturaDSP/permissoes Android.
+
+ENTREGA/DIRETORIOS
+Todos prompts/pareceres entregaveis: D:/Projetos/SIG/docs/especialista/. Relatorio final TXT nesse diretorio, com secao A-H e anexos reais. Design/evidencias da investigacao: criar docs/npu-hymt2/ (nomes proprios explicitos) se permitido como documentacao; builds grandes/cloneSDK/logsvolumosos em scratch Hermes ou diretorio isoladoCURTO fora fontesprod. Nao sobrescrever evidencias antigas. Antes commit futuro distinguir arquivosrelevantes fontes vs artefatos .so/.gguf/ZIP gigantes.
+
+0. CONTEXTO A PRESERVAR
+Repo D:/Projetos/SIG. Ler AGENTS.md, MODULE-MAP.md, UPDATE.md, native-dependencies/README.md. Skills sig-android-dev, llama-cpp, windows-hermes-tooling, context-efficiency relevantes. Historicos de setembro nos skills sao ANTERIORES aos fixes: Vulkan/resetv10 aceito na amostra; OpenCLF3b/cachev11 consolidado. Nao assumir textos 'Vulkan incorreto' ou 'contexto nunca resetado' como estado atual.
+Releasev11relatada 20261006_001/APKvc71/1.508: libllamaarm64 596aba0e9813f516cb68117e9b8f26fe40458010cf86fb118f7c80fac13200d9. Nao presumir essa e instalada: relatorioanterior restaurou devicev10 ec9c8315988c7a40ae5aa1fc61f1cb74cf9aaa24b6f338b5cd453978fb4a79c7. Freshprecheck decide; registrar antes/depois. v10/v11publicados IMUTAVEIS.
+CPH2747/OnePlus15/Android16/Adreno840 historico. USBserial3B15BD00FVE00000, verificarfresh. PJA110/1164a04 e OUTRO TELEFONE: nao tocar. Portaswireless mudam, preferirUSB; nunca cmdadb sem -s serialexato em ambiente multidevice.
+ModeloprodutoQ4_K_M c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559, 1.133.080.544B. Q8_0 5c3fe0b1408a5ceb0143184ef247b11b579c525f4b02b060e6c851bb76fef1a4, 1.908.528.192B. Q4Tencentoficialdc5f44 diferenteNAOsubstituir. Modelo1.25bitSTQ42cpuonly nao escolher paraNPU semkernelverificado.
+
+1. PESQUISA ATUAL PINADA — NAO INVENTAR CAPACIDADES
+Fontes iniciais consultadas pelo especialista (revalidar no executor e pincommit):
+- https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/README.md
+- https://github.com/ggml-org/llama.cpp/blob/master/docs/build.md#hexagon
+- https://github.com/ggml-org/llama.cpp/issues/27677
+README descreve GGML_HEXAGON, scripts/snapdragon/build.py/run.py, toolchaincontainer ghcr.io/snapdragon-toolchain/arm64-android:v0.7, HexagonSDK/presets, backendsHTP. Sao exemplos do upstream mutavel, NAO comandos autorizados cegamente nem garantiasHyMT2.
+Issue27677 relata EXATAMENTE CPH2747/SM8850/Hexagonv81, erro de sessao com /vendor/lib64 em LD_LIBRARY_PATH. Isso e uma pista de altovalor, nao prova nossa causa/config. Coletar reproducaominima emsandbox, resolverloadernamespace compaths minimais; nao copiarlista inteira vendorlibs cegamente. Atenção futuro wrapperrun.py/build.py pode usar todosdevices/push porpadrao: revisar antesexecutar!
+1.1 Identificar commitupstream fixo comhashFULL/docs na mesma revisao; licença/status experimental/issuesabertos/fixesrelevantes. RegistrarURL/commit/linhasdos fatos, nao resultados externos como nossos.
+1.2 Inspecionar support_op/supportedtypes/repack/layouttensor no ggml-hexagon REAL pinado. Matriz precisaoQ4_0,Q4_K,Q6_K,Q8_0,F16/F32 e ativacoes, op/shapes/strides para prefill e decode. Revalidar listasreddit: nao afirmar tipos suportados pela reputacao.
+1.3 Validar arquitetura HyMT2 no upstream, tokenizer/chattemplate/RoPE/KV/EOG support. O forkSIG temalteracoes proprias STQ/Vulkan/reset: diff estrutural, nao atualizarggmlsharedwhisper.
+SAIDA: tabela FATO documental/HIPOTESE/RESULTADO nosso + commit/docs pins e matrizsupport.
+
+2. PRECHECK HOST/DEVICE E RISCO OPERACIONAL
+2.1 Host: gitstatus/branch/HEAD, processosbuild concorrentes, diskspace/RAM/toolchainNDK/cmake/ninja/python/Docker/WSL/HexagonSDK/QNNQAIRT existentes. Nao ler.env/r2_config/chaves. Ler manifests relevantessomente.
+2.2 ADBdevices identificar serialCPH2747; comandosread-only -s SERIAL shellgetprop fabricante/model/sdk/ro.soc.model/platform/arch e fingerprint/driver quando pertinente. Nao usernameassumehostnameWindows. RegistrarUSB/wirelessused/PIDruns.
+2.3 Ler DSP/HTPruntime disponibilidade via propriedades/libs acessiveis, FastRPCdevice/devnames/permissoes/namespace, vendorskeleton/skelarchitectures/runtimeversions; lerdenyeds comoevidencia, naoenforçar root. chip/Hexagonv81 ainda precisa confirmaçãoREAL. Bibliotecaskelv81existente ouDSPquery supportnaoeigualmodeloexecuta.
+2.4 Battery/temperatura/thermalstatus/freeRAM/disk, activityidle e usuário informoutelefonefree. Nao iniciarthermalalert/batterycritical. Thresholdoperacionaldocumentado e cooldown, sembypass/governor/thermalservice mudanças. ColetarApplicationExitInfo/logcat apenasjanelaprogramaproprio efiltrar dadossensíveis.
+2.5 RegistrarAPK/pacotenativo/path/modelsha atuais semalterar. Modelospastasapp podem naoacessiveis adbshell: run-as autorizado/arquivoexternoexistente sóconformepermissoes, nao extraçãodadosappprivadosampla/rootnovonecessario. Se sómodeloemarea privada e harnessshell nao pode ler, pedir via permitida explicitamente.
+2.6 Planejar sandbox /data/local/tmp/sig-hymt2-npu-<idproprio> sem substituirmodeloprod; hostisolatedcurto. Checkspace antesclonecontainer/modelcopies. Arquivosinput/outputnonproductionpinned.
+SAIDA: preflightJSONtxt comscopes/permdenyed/espaco/propriedades/restorebaseline e blockerconcreto sefaltadeacesso.
+
+3. INVENTARIO QNN/HEXAGON EXISTENTE NO SIG
+Localizar nao adivinhar definitions/usages de app/src/main/cpp/npu_probe_jni.cpp, QairtDependencyManager.kt, GraniteNarEngine.kt e CMakeggml Hexagon. Estescomponents podemter caminhoNPU diferente e probes existentes, não provamHyMT2 suporte. Nao mexerWhisper fontes apesar ggml-hexagon laexistir. Lerbuildmanifest/backend NPU menuHyMt2Native.kt/TextoActivity eJNIselecaodev: NPUainda nao implementada produto.
+Traçarsonda real: podeabrirsessao/chamarQNNHTP ouapenasdetectarlibs? QualSDK/skelarquitetura? Registrar resultado porcamada. Nao confundir libQnnHtp.so/onnxruntimeQNN presentes combackendGGUF habilitado.
+SAIDA: reutilizavel vs investigacaoseparada, semnativemainCMakealterado.
+
+4. BUILD EXPERIMENTAL UPSTREAM HEXAGON
+4.1 Clone/worktreeisolado outsideprod comcommitpin, dependencias e licencesverificadas. Modificacoes emexperimento local somente; cachefresh/builddircurto.
+4.2 Ler build.py/run.py --help/argumentos REAIS e code antesuso. --pushautomatic podefaltarserial: preferirbuildONLY e transferlocalmanual -s explicit. Executáveis atuais podemser llama-cli/llama-completion e não llama-appfork: descobrirtargets, não copiarcomandosantigosinvalidos.
+4.3 Toolchainpreferida oficialcontainerpreset seDocker JAfuncionando; verificarimagemdigest/license/SDK e hostWindowsneeds. READMEconsultadoexemplo preset arm64-android-snapdragon-release; flags são GGML_HEXAGON=ON e eventualmenteGGML_OPENCL=ON. HexagonSDK e AndroidNDKupstreampodem diferirNDK27.2produto: pinabstração ABI/APIscompat, naoimplicitamentetrocarSDKglobal.
+4.4 Se Docker/SDKausente, avaliar nativecrossbuildSDKexistente/WSLjádisponivel/oudownloadSDKlicenciado. Pedir permissão hostinstall/licencadownloadpesado se necessário; retornar tamanhorequisitos/planoalternativo. Nao instalarwsldockerreboot escondido. Não compilarstub que simulaNPU e reportarpass.
+4.5 Build ferramentasggmlbackendoptest/bench/cli+harness customminimo conforme targetsreais, hostlibs e DSPskelsarchitecturecorreta. Signing/access de DSP seguirfluxodocumentado, unsignedskelmayfail honest. ELFhostarm64Android vs DSPELF nao misturar; NEEDED/rpath/ADSPpath auditados.
+4.6 Publicacaozero: manifestSHAfullsizes/sourcecommit/config/toolchain/containersdigest, logconfig/buildrc,numerosactions. Enviarapenasnecessários sandbox verifiedSHA/size (no gigmodel copies se modelojaaccessible). Não reusar.soSIGnemoverwritenative_dependencies/11.
+SAIDA: artifactrealcomlogbuild e recipe ou blockercomando/rc/SDK/license/alternativareal.
+
+5. PRIMEIRA PROVA: SESSAO E KERNEL REAL NPU
+5.1 Executarenumeracaodevices doc--help, registrarHTPdescription/archsessiondomain/linker/FastRPCversion real. HTP0/HTP0:0exemplos naoassumirnames; escolherexplicitbackenddescoberto. CPUcontrole--device none/explicitCPUsemGPU (n_gpu_layers0naoasseguratodofallbackconfigmodern).
+5.2 Se sessaoerro AEE/FastRPC: rawrc/systemerr/logpath, símbolofaltante, assinaturaarchitecture wrong, namespace/shellcontext/blockpolicy; pesquisarcorreçãopinado. Issue/vendorLDpathprobarA/Bambient isolated minimally, restoreenv childonly. Nãoinventarsignificadohexcode semincludedheader. Archqueryfallbackv73 default nao 'v73detectado'.
+5.3 Numericops synthetic nonproductiontest-backend-ops filters descobertos: MUL_MAT puisRMS_NORM/ROPE/SOFTMAX/SET_ROWS/GET_ROWS/ADD/MUL e attentionKVops usadosHyMT2 segundo trace. ShapesreaisM/K/N dosGGUF, decodeN1 e prefillN>1, strideview/bounds. Counterexechtp/cycles/skelcalls/reference finiteerrors ajuda prova não fallbackCPU.
+5.4 CompareCPUref porop, thresholdsjustificados (abserr/relerrmax/RMS/cosine conformeop), negativos int8/scalebits sequant. Layout/repackdeterministicnãoéprova reference. Supported=false deve fallbackvisivel seguro, nunca lixo. Falhas conservarraw/probeSHA e mutation/checkfixturehelpersquandohouvercodigo novo.
+5.5 Separar HVXthreads/HMXmatrixhardware/HTPgeneric onde logs/counters comprovarem; númeroHVXthreadsnao igualcoresCPU. Nao claimtensorNPUbackend se runtimeUsaDSPonly semexplicitar.
+SAIDA: device sessionopen + kernelscorrect REAL ou blockedlinhacausa; parar modelo se numericcriticalfalha.
+
+6. GGUF HY-MT2: COMPATIBILIDADE E QUANTIZACAO
+6.1 LerGGUFmetadata/tabletypes semalterar: arquitetura/hash/params/tokenizer/template/numlayers/dims/contexto/vocab/tensors/dtypesmix (Q4_K_M podeconterQ6_Klmhead!). ArquivoQ8_0podeconteroutros tipos. Suporte nao decidido pelo sufixoarquivo.
+6.2 TentaroriginaisQ4produto eQ8 seoperatorssupported, emprocessexperimento, memorybudget e limitecurtoprimeiro. Registraroffloadedlayers/tensors/residentweights/CPU/GPUfallback/split/unsupported. Nao permitirdeviceCPUauto e declararNPU por UIflag.
+6.3 SeQ4_K_Mincompatível, criarlinhaseparadaQ4_0/ou supportedtypenominalvalidado. NAO substituiroriginais ou recompressoverwrite. Preferircheckpointaltoqualityoriginal ouGGUFaltoqualitylicensed; quantizacaodeQ4paraQ4_0perdequalidade e constitui requantização: evitar; Q8->Q4seúnicodisponivel rotular e medirCPUbaselineESSAMESMA conversao. Downloadcheckpointgigante exigepermissão/budget/licença. Modeloversao/tensor/tokenizer/checkpointcompat com HyMT2autorizado.
+6.4 Definir duas perguntas: viabilidadepesoGGUFATUAL vs viabilidadeHyMT2varianteNPU. Sevarianteprecisãotrocou, não speedupbackendpuro; compararCPU/GPU/NPU doMESMOpeso emmesmoupstreambuild paracausalidade eprodv11comparacaoendtoend como segunda linha.
+6.5 Contexto8192/appparamsn_batch2048/FAsettings conferircurrentsource; harnessinitialsmallcontextse necessário é SMOKE escalonado, nao otimização/regressaoproduct equivalente. Explicitarerroscapacidadememory e quantização ativacoes/caches. Nao reduzircontextoprincipal parafalsobeneficiofinal. Upstreamtemplatedifferent/stopping samplerdefaultdifferent devemfixar porconfigs reais lidas.
+SAIDA: matrizGGUFtype/op/route/time/error eartefatoconversionhashprovenancequalitylabeled oubloqueiomodelshape.
+
+7. GERACAO E CORRECAO SEM UI APP
+7.1 HarnessCLI/vinculoliboutrosprocessos independente app, corpus sinteticotranslationEN->PT aprovado disponívelhistorico409/952/2335/4924chars; leroriginais/hashes, nao inventartextos. Primeirocasocurto e saída finita/nonempty/bounded/timeoutsEOGcorrect. EntradasjáPT curtascomo'Bomdia'naoprovatraduçãocomplexa.
+7.2 Fixmesmoprompt/modeltokenizer/chattemplate/idioma/seed/temp/sampler/EOG/max/context/threadsbaseline; registrarconfigs e backendbindingsreal. Nao duplaaccept: verificar llama_sampler_sample aceita internamente noprojeto pinado. Resetmemory APIrevisãoreal soblock eperfresetdistinct; A-B-A no MESMOcontexto semreload porpedido parafunctionteste.
+7.3 OutputdivergenceGPUvCPU normal? Avaliar numericalops/logits/cosineerro comparáveis e qualidade vocab/numeros/negacoes/nomes/prazos. Hashigual amostraforte, hashdiferentenão falhaautomatica. Não forçarNPUa imitarCPU quantização se refmatematicamelhor explicarsystematically. NoNaN/Inf/looplimitetoken/maxcontext/repeatedoldtext.
+7.4 DocumentarroutesprefillNPUdecodeNPU, ouNPU+CPU/OpenCLfallback. CPUgraphsplitcountsnaoprovaquaisops fallback: assignments/bytes/transfers porphase. NPUvirtualsessionsnao sãoNPUsfisicas; começar1sessao, semmultisessiontuning semnecessidade real.
+7.5 Repetirprocessreset/load warmcold econtextfree/reinitcurto sefirstsmokePASS. Hostthreadloader/enqueue/lifetime safe; failure paths preserveallocatedresourcecleanup semuserfilesdelete.
+SAIDA: smokeHyMT2NPUcorreto e A-B-A/memoryreported/unsupportedvisible ou falhasclassificadas.
+
+8. MEDICAO ENXUTA E HONESTA
+8.1 Aposcorretude, escolhermatrizpequenaCPU/Vulkan/OpenCL/Hexagon conforme suportenomes eweights REALMENTEequal. UpstreamCPUcontrols paraisolarmodel/runtime; produçãoSIGv11comparação interruntime labeled, preservarconfig. Não compararCPUhistorico aNPUfreshcomtemperaturadiferente.
+8.2 Curto+medio primeiro (n3sejanelaestavel), mais_longo depois njustificado safe; ordemrotacionada/paired, temperaturas/battery/alimentacao/threadsettings todosarm. n1pilot nao conclusão definitiva. Nenhuma24baterianecessariaatéviability.
+8.3 Porrequestevents/PID/fullmodel/libhash; load (processcold!=diskcold), graphcompilation/JIT firstcost, prefilltokens/time, firsttokenlatency, decodeelapsed/token count, samplerwall, total tarefa. TimerstatsllamacomsemanticaAPI pinada; não misturarmediana load/mixedtaps. Need syncatboundaryprofilingdefaultONmayperturb, no waitsperopinventados.
+8.4 MedirmemoriahostPSS/rss+DSPRuntimemapped/allocated/reporteddynamic sepossível; NPUsharedDDRnao reduçãoRAMgarantida. Não PSSbaixo=>economiareal. PerfprofilingGGML_HEXAGON_PROFILE doREADMEperop/cycles ativarSÓdiagnosticobuild econtroleOFF/ON nmesmogrun, efeitos medidos, deviceclockhost separados, sumsGPU/NPUs overlapnãosomarparticaocega.
+8.5 Energia/aquecimento: bateriaproc/thermalobservacao não joules/token. Se contadorpowerreliable disponível sinal/calibração idlebaseline e duração longaadequada, reportmetricaactualnãoperfeita isolacaoSoC. Do contrário qualificar temperatura/descargacomproxy, semspeedupefficiencypromessa.
+8.6 Criterioganha endtoend semqualityloss, custo loadamortizavel/perrequest, estabilidade/acessoruntime/appcontext. NPUonlyprefill pode utilhybrid mas custos crossbackend/KVtransfer podem anularganho: medir separados antesproporhybridproduto.
+SAIDA: CSVJSONoriginal/rawscripts statsPythonmediana/minmax/n comdedupe einvalidattemptscategorias, não 'NPUmaisrapida'porlogsinit.
+
+9. PLANO B — QNN/QAIRT SOMENTE SE HEXAGON BLOQUEADO OU INADEQUADO
+9.1 PrioridadecorrigircausaconcretaHexagon safe; nãoforkshoppingindefinido. Estabelecer limites porfase/candidate2tentativasfundamentadas, devolverblockerquandoSDK/APIproibido semstallpromessa.
+9.2 LevantarqualversaoSDK/HTPskel/licençadisponivel/modelconverterdevicetarget efontesoriginaisHyMT2/tokenizermetadata. QNNgraphbuilder vsONNXRuntimeQNN EPvsGenie não equivalentes: definiruma rota fundamentada porrequiredops.
+9.3 Expor explicitcacheKVdynamicshape/attention/RoPE/context/qprecisionfloatquant/embedding/logitouts/pre fill+decodegraphs, calibrationdatasintetico semprodução, numerics/ram/contextbinarygeneration porchip. FormatoW4A16/W8A16 não equivalenteGGUFQ4_K_M; modeloaccuracybaseline convertersprecisam medir.
+9.4 ExigeGPU/CPUfallback? logsEPAssigned/HTPbackendactual, no silentlyCPUforunsupported; NPUFP16supportverificarREALSDK/chip, não assumirfloatprecision. Contextbinportsigned/unsignedruntime/versioncompat licenciada, no-skelsfromrandomdevice.
+9.5 Gerarsmallprojection opcontrol primeiro e previewgraph partesHyMT2, texto completo somenteviabilidadechecks. Nao treinarfullmodel/convertergiganteovernight semapprovaldisk/calibration plan. SDKdownload/logintermos/barreira retornar ao usuário, não credguess.
+SAIDA: alternativascombudget/riscos/preconditions e nextconcreteaction ou build/probeQNNreal; não inventar outputs.
+
+10. DECISAO INTEGRACAO (DESIGN SOMENTE, PRODUTO NAO ALTERAR AGORA)
+Classificar: VIAVEL_COM_GANHO / VIAVEL_SEM_GANHO / PARCIAL_HIBRIDO / BLOQUEADO_NO_AMBIENTE / NUMERICAMENTE_INCORRETO / NAO_SUPORTADO_QUANT/MODELO. Causacomoapropriado, não blanket'NPUimpossível'porSDKfaltando.
+Seviavel propordesignnrepo: backendselectorJNI/pipelineGGUFmigrationscope, libsHTP/skelsSDKlicenserelease/perABIdevicecapabilitychecks/modelstypesUI/downloadsize/contextcompat/logcorrelations/reset/perrequestcleanup. Nao removersafetyfixturesCPU/Vulkan/OpenCL/STQnoGPU. UpdateupstreamafetaWhisperggmlglobal? isolamentoDLL/namessymbols/versionedruntime evitarcollision, novosABIdeclaredfallback e NPUitemhabilitado sócapabilitymodelo/sessao.
+Definirgate rollout fallbackerrocomconsentimento NPUnaosilentCPU, nãomodelswapnemdefaultbackendtroca, testdocsMODULE-MAP/KDoc e JNI/nativerunnerCI. APKZIPnativeversionpublicationfuture explicitapproval. SDK/skelsdistributionlicençae dependencies manifest real; HTPexperimental suporte firmware-specific, nãoAndroidwide.
+Seviavelsemganho exporreutilityconsumo/aquecimento seMEDIDO, não justificarinvestimentosembeneficioconcreto.
+
+11. RISCOS/STOP E AUTOMACAO
+Requestwatchdog/chamadasADB/readhardtimeout echildownPID tracking, host ctrlabort; detect home/sessionabort/FastRPCerror/NaN/nonemptygarbage/temperaturealert/OOMfatal->capturestopcooldown. DriverANR/logrottated maintainfilteredlogcapturetimely. Não matarprocessos'app/outrosadbglobais' para liberarharness se nãoownscope. Danglingresources/dspqueue mayrequirednextsessionerror, documentarprocessreinit instead rebootusersempermission.
+Saidaerrorc preserve stderrredacted/exitcodes, logsarquivoapósbuild efilter15-30lines. Nao pipelineengoleexit, nofakebackendresponse/stubpass. Unitmocksdisclose como mocks. Invalidcaptures contar separado de errosmodelo/NPU para não'0erro'emfailedtrial.
+Rodar preflight verificador que falha antesdeviceerrado/pushfailed/shaerrado/modelmissingconfig diferente. REDGREEN dos helpers/scriptparser/watchdog que criar, versionaveis quando autorizados.
+
+12. ENTREGA A-H COMPLETA
+A: scope/aprovacoes/pinnedrefs/deviceactual/hostSDK/tracepipeline.
+B: buildrecipe hashes/lib/skels/toolchainfiles/containerdigest/ABI/readback sandbox ecommittechnicaldiff.
+C: session/kernelsnumerics tabelasshape/dtype/error/actualHTP/CPUGPUfallback, referencia e tolerancias.
+D: HyMT2GGUFmetadata/quantmix/modelconversionsprovenance/chattemplate/config/outputqualidade/resetcontextproof.
+E: tabela performance/memory/temp/energia limites fronteiras/overhead/medianas/n/dedupe, SAME-RUNTIMEweights vsprodcomparison labeled.
+F: incidentes SDKsigning/permissions/mapping/DMA/unsupported/automation, vaccinaformalizada e limitations/read-onlynot claimnodatasideeffects.
+G: decisao e plano integrar ou blockedalternativaQNN/tradeoffs licenca/maintenance/instrumentacao e prioridadesumcandidato.
+H: arquivo checklistCCE/PARCIAL/PENDENTE/BLOQUEADO porcriterio, artefatosanexadosactualpaths, restoreestadoactual, nextactionand approvalifneeded.
+Relatoriofinal em D:/Projetos/SIG/docs/especialista/PROMPT-RELATORIO-NPU-HYMT2-RODADA1.txt; anexarlogsoriginais oubundleemdocs/npu-hymt2/logs-rodada1/ com manifestFULLSHA/exist/size/dedupe/countverificadoPython; logsSDKfilesproprietariosnão publicar semdireito. Não nomearkernelexecutado se sósessãoloadcheck.
+Nenhumcommit/push/installprod/publication sempedido. Repo v11/backenddefault/Whisper devem permanecer inalterados. Relatarantesdepoishash/pathdevice appnatives econfiguser se touched dentroautorizacao, semfalsa promessa restauração nãoreadback.
+
+ORDEM EFICIENTE
+Documentacao e chipruntime -> toolchainisolado -> sessionHTP -> numericopreal -> GGUFtypesHyMT2 -> geracaocorreta/reset -> n3quandoestávelcomparacao -> designintegracao. Seetapapredecessor falha, diligenciafundamentada oubloqueioclaro, nao continuarbenchmarklixo. Pergunta principal: funciona corretamente, onde roda de fato, vale a pena e o que exige integrar? Entregar resultado real, não apenas um plano de comandos.

@@ -1,0 +1,56 @@
+MATRIZ DE SUPORTE — FASE 1 (llama.cpp pinado + ggml-hexagon x HyMT2)
+Data: 06/10/2026. Pin: llama.cpp @ 5e03bdd ("hexagon: ssm-conv updates #29971")
+Clonado em C:/llama-npu/llama.cpp (sparse: docs/backend/snapdragon, ggml-hexagon,
+scripts/snapdragon, src). Fonte da verdade: codigo real, nao README.
+
+════════════════════════════════════════════════════════════════
+1. ggml-hexagon — TIPOS SUPORTADOS (FATO: ggml-hexagon.cpp)
+════════════════════════════════════════════════════════════════
+is_repack_type (l.277-281): Q4_0, Q4_1, Q8_0, IQ4_NL, MXFP4, Q6_K,
+Q4_K, Q5_K, Q3_K, Q2_K.
+mul_mat (l.6486-6497): dst F32 + src1 F32/F16 + src0:
+  {Q4_0, Q4_1, Q8_0, IQ4_NL, MXFP4, Q4_K, Q5_K, Q6_K, Q3_K, Q2_K}
+  exige contiguo e nao-permutado.
+=> HyMT2 Q4_K_M (Q4_K + lm_head/token_embd Q6_K) e Q8_0: TIPOS OK.
+
+2. ggml-hexagon — OPS (FATO: to_htp_op l.7411+ e supports_op l.8473+)
+════════════════════════════════════════════════════════════════
+Core transformador presentes: MUL_MAT, MUL_MAT_ID, ADD/MUL/SUB/DIV,
+RMS_NORM/NORM/L2_NORM, ROPE, SOFT_MAX, FLASH_ATTN_EXT, UNARY (SILU/GELU/
+TANH/SIGMOID/NEG/EXP/SOFTPLUS/ABS/RELU/STEP), GLU (SWIGLU/GEGLU variantes),
+GET_ROWS/SET_ROWS, CPY/CONT, CONCAT, SCALE, CLAMP, SUM/SUM_ROWS, ARGMAX,
+TOP_K, ARGSORT, POOL_1D/2D, SSM_CONV, GATED_DELTA_NET, REPEAT, CUMSUM,
+FILL, PAD, IM2COL, ROLL, DIAG/TRI/SOLVE_TRI.
+NONE/RESHAPE/VIEW/PERMUTE/TRANSPOSE: aceitos (triviais).
+Filtro runtime: GGML_HEXAGON_OPFILTER (regex) rejeita op se casar (nao usar
+em produto; ferramenta de diagnostico).
+=> Todos os ops de um decoder transformer denso (estilo Llama) existem.
+
+3. HyMT2 no upstream (FATO: src/llama-arch.cpp, src/models/)
+════════════════════════════════════════════════════════════════
+- Arquitetura 'hunyuan-dense' REGISTRADA (llama-arch.cpp l.123) e implementada
+  (src/models/hunyuan-dense.cpp -> graph reusado de hunyuan-vl; familia
+  hunyuan-moe/hunyuan-vl tambem presentes). O llama.cpp upstream CARREGA
+  o HyMT2.
+- GGUF real (Q4_0 local, D:/Projetos/modelos): general.architecture=
+  hunyuan-dense; 354 tensores; mistura: Q4_0 (224), Q6_K (1 = token_embd),
+  F32 (normas/relacionados). Familia confirma o mix esperado do Q4_K_M
+  (Q4_K + Q6_K no lm_head/emb).
+- O fork SIG (produto) adiciona STQ/Vulkan/reset — diff estrutural, NAO
+  reaproveitar aqui (o harness usa o upstream pinado, nao o fork).
+
+4. BLOCKER / GATES
+════════════════════════════════════════════════════════════════
+- Toolchain (rota A): Docker+WSL2 ausentes no host; o build oficial exige o
+  container snapdragon (traz Hexagon SDK 6.6.0.0 + NDK r28b). AGUARDANDO
+  decisao do usuario (instalar Docker/WSL2 OU seguir rota B/QNN).
+- Sem o container NAO ha como compilar libggml-hexagon/libggml-htp-v81
+  (os skels DSP dependem do hexagon-clang do SDK).
+- Device lado: fastrpc/HAL/v81 presentes (ver PREFLIGHT-RODADA1); bateria a
+  carregar antes dos benchmarks.
+
+5. PENDENCIAS DESTA MATRIZ (a completar com o toolchain)
+════════════════════════════════════════════════════════════════
+- Numeros reais de tolerancias por op (test-backend-ops) — rodar no build.
+- Shapes do prefill (n_tokens>1) vs decode (n=1) para o graph do hunyuan.
+- Comportamento do ROPE (base freq do HyMT2), KV cache (dtypes).

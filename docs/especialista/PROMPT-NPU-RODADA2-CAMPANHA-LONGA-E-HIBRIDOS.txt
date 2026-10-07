@@ -1,0 +1,94 @@
+PROMPT AO EXECUTOR — NPU HY-MT2 RODADA 2: CAMPANHA LONGA, TUNING E VIABILIDADE HIBRIDA
+
+MISSAO E NOVA DIRECAO
+O usuario agora pede aproveitar varias horas do agente/telefone para aprofundar a investigacao, inclusive NPU+CPU/GPU se fizer sentido. Este pedido REABRE a investigacao ISOLADA apesar da decisao historica 'CAMINHO A ENCERRAR' no relatorio R1; nao significa integrar NPU ao SIG. Planejar e executar trabalho real com checkpoints, nao apenas produzir propostas. Prioridades: evidencia correta, benchmarks representativos, tuning pequeno guiado por dados e experimento hibrido se tecnicamente seguro. Ganho negativo e resultado valido. Nao usar as horas para repetir testes redundantes.
+
+LIMITES
+Manter SIG publicado v11/20261006_001, Whisper e backendpadrao intactos. Sem alterar APK/libsinstalledapp/nativepackages/defaults/commit/push/R2/GitHub. Uso autorizado dentro da investigacao: harness/sandbox temporarios existentes no telefone, PC C:/llama-npu e servidor ja usado sob permissoes/licencas vigentes; builds/patches no forkexperimental, pequenos modelos/probes sinteticos, bench/outputnonproduction. Nao criar custos/contas/downloads multigigabyte, root/bootloader/SELinux/governor/thermal/SDKglobais ou tocarcontainers/projetos alheios. NovoAPIcredential/login/licença nao herdado: pediraprovação se necessario. Nao iniciarougeraraudio/mic/reaisproducaodados. Documentar alcanceanteslongrun e garantir usuarioidle. Se telefoneusarpararconformeinterferencia, nao insistir.
+Temporariosantigosforamlimpos nesta tarefa: nao presumir D:/svr11/ocl1outputs existem. PROTEGIDOS C:/llama-npu e docs/npu-hymt2; modelosoriginaisnecessarios manter. Outputsnewvolume/disk verificarantes; D:espacoreduzido usarC:/sandbox ouservidor. Semdeletebackups/modelos indiscriminados.
+
+CONTEXTO E RESULTADO R1
+Backend upstream5e03bdd (pinFULLcommitreal), server/root/llama-cpp-npu, container ghcr.io/snapdragon-toolchain/arm64-android:v0.7 e digestreal; NDKr29/HexagonSDK6.6.0.0 Tools19.0.07; deviceCPH2747Hexagonv81 CDSPnsp1000 threads8/hvx8/hmx1/vtcm8MB. Revalidar factsdevice/session/driver/binários e fontepin, nao assumir nomeSKUporv81.
+Sandboxdevice /data/local/tmp/sig-hymt2-npu-r1 pacote276MB/modelQ4_0 1.077.360.192B. ADSP_LIBRARY_PATH=./lib E LD_LIBRARY_PATH paths corretos childenv descobertos, nao exportpathvendorglobal. Primeiroerro0x80000406foiresolvido porpathskel. Preservarpitfall e transformar em preflightfailclosed e timeout.
+BenchR1 pp64/tg32/r3: CPUpp373.33/tg47.34, HTPpp1015.65/tg26.87, OCLpp329/tg20.12. Sao benchmarks deste Q4_0/upstream, NAO comparacao appprodutoQ4_K_MVulkan. Semthermalenergytelemetry, resetnaotestado, inputENcurtissimo. NPUresidency1035MiBhost217MiB nao provaeconomiarealtotalRAM nemzerofallback: inspect assignments/operationcounters.
+Q4produto c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559; Q8 5c3fe0b1408a5ceb0143184ef247b11b579c525f4b02b060e6c851bb76fef1a4. Q4_0R1 sóMD5 relatado: gerarSHA256FULLnoPC/device, GGUFmetadata/tokenizer/tensor-mix/origem. q6_kembedding coexistem: tensorresidente e tipo unsupported podeoperacaoCPU legitimamente, declarar. BackendHTPnemtensormap provatodosopsNPU.
+Releaseatualv11naov10, deviceatual podev10restored: reportar fresh, nada alterarproduto.
+
+ENTREGA E GESTAO DE TEMPO
+Todos prompts/pareceres/relatoriofinal: D:/Projetos/SIG/docs/especialista/. Documentos/loteJSON/CSVredigido em docs/npu-hymt2/rodada2/; logsgrandes/bináriosC:/llama-npu/rodada2/ousandboxserver. Não versionarbinarios.SDKproprietarylogs publicablenão automático.
+Criar PLAN-RODADA2.md com blocos/criterios. Checkpointapos cada bloco, JSONlinhaPORtentativaappend, statsPythoncontagemdedupe/médiasmedianas,n/dispersion. Salvarconfigs/paths/commit/lib/skel/modelhash/temps/PID/timefronteira e outputhash. Copiarlogsparciais seinterrupcao, relatorio PARCIAL nao 'CCE'tudoplanefinished. Assimaproveitarhoras semperderprogresso.
+Ordem: sanearR1 e baseline -> reset/opcorrect -> workloadmaisrepresentativo -> tuningbounded -> hybridfeasibility -> hybridprototype/measure -> stabilitybestcandidate -> report. Sequadroumblocked continuartrabalhosindependentes úteis, nãopassarhoras SDKloopcego.
+
+BLOCO A — PRECHECK E R1 VALIDACAO
+1. Carregarskills llama-cpp/sig-android-dev/context-efficiency/windows-hermes-tooling; lerrefs atuaisupstreamdocnoPIN/docs/backend/snapdragon/README.md, build.py/run.py helpcode e targetflags. Sintaxesflags/deviceoverride nos exemplos NAO garantidas: consultar --help/config/parser e implementarcomvaloresreais.
+2. FreshADBserialCPH2747explicit cada cmd; PJA110 outrodeviceNAOtocar. PreferUSBseconectado, wirelessporta46081 ouqualquerhistoriconaoconfiar. Precheckidle/diskRAM/batterytemps/thermalstatus/appstate. ProvararquivosSHA beforeexec in sandbox e noinputinjectionapp; tudoCLIindependent.
+3. FonteupstreamFULLcommit/modelSHA/loglibskel/buildmanifesttrace. Definircountercallsbackends/graphsplits/nodes/bytescopies e derivedthresholds. Ler support-opmatrix21454linhasfiltradaperarquitetura/types/ops/shapes necessários, naoinjetarloggigantecontexto.
+4. ReconciliarR1 '5execucoes' versus support+test+3gen+3bench contagem, 'zero fallback' versusQ6_Kembd mixed econditions; obterrawexecIDs ouretificarcomlimites. 101MULMATPASS comprovatestetipoquant, não todosmodelops.
+5. Preflightscriptdetectskels/envpath/devicewrong/modelhashfailure/sdkvars e abortantesrun. Childownedtimeout/exitcapture cadaADBpoll, watchdogpedido overall, stdoutstderredacted. Semprocessexternokills/reboot, sem rm-rfroot.
+SAIDA: baseline JSONfiles/hash/env/proofscopes e oneprobeRTpass.
+
+BLOCO B — CORRETUDE, RESET E MODOS REAIS
+1. Numericops noHTPpinado: subsetHyMT2RMS_NORM/ROPE/attentionsoftmax/SET_ROWS/KV/ADD/MUL/MULMATsupportedactualfilters; realshapeprefillN64/256/942-ish versusdecodeN1, tiposGGUFactual. CPUnumericalref finite/absrelative/cosine/errorjustified; unsupporteddocumentedfallbacksafe. HistoriquinhoMULMAT101nãorepetirfullsemcausa, completarrotasnaotestadas.
+2. HarnessREAL C++linkupstream comrequest reset llama_memory_clearAPIrevisao sobcontexto, configsstocktokenizer/template/sampler/EOG; sampler_sampleacceptinternoverificadoantesmanualaccept. SamedebugprofileAPIreset diferente deKVreset.
+3. A-B-A mesmo contextmodelPIDsemreload, textoBdistinctmediumcorpus fixo e times/copystate/properties. Include newcontext vsresetsecondrequest reference, KVpos before/after/seq/tokenlimiterror, cleanup/free/reinit. Nãofix 'trocarbackend' emteste poismascarabug.
+4. Sehandoffhybrid usesKVformat, esteharnesscorreto e prerequisito. Outputlogits finite etokenstream; seedfix ao comparar, nuncaweights changed unlabeled.
+SAIDA: resetPASSverificado e scopegraphfallback real. Se numericcriticalfalha, parar benchmarkafetadoetriage, não tuningganhosemcorretude.
+
+BLOCO C — WORKLOADS REPRESENTATIVOS E CONTROLES
+1. Corpusapphistórico EN->PT409/952/2335/4924chars lerarquivooriginais/hash; corpuscurtoQ4noSIG differentQ4_0weight upstream comparar sóMESMOmodeloem todosbackends. Syntheticprompt64/256/512/1024/2048/4096tokens apenasbenchpp outputsfixed, REALtranslation seperate. Não textoautoridade produção.
+2. Primeiro CPU/NPUpp64tg32repeat n3validaR1 comtelemetry/config, depois pp256/1024 e tg128/256 pararessaltardegradedlongcontext. Não produtoctxreducaooculta: contexto orçamentoexistingparams documented8192finaltarget, beginlowcontextsmoke declarado não equivalent speedup.
+3. CLI tradução curto/medio/longo noCPUHTP eOCLsameupstreambuild configurações iguais. Vulkanupstream sóse flags toolchain ja disponíveis/configbuildcompat e suficientehoras; não usarappUI diferentepesohistoricalcomo causalbackendtest. ComparacaoSIGv11Q4_K_Mseparada rotuloentrepeso/entre-runtime, acessoappsomente leitura sepermitidonoscope de appsemalteracao.
+4. Rotacionar pairedordemtemperatura/alimentacao ewarm/cold separadas; statesprocesscold!==diskcold. PrefillTokensdecodeTokensrealframe stats, wallfirsttoken/outputend/toplogical total. n3casosbase eexpandirondevarianceimportante, não combinacaocompletaexplosiva.
+5. Break-evenideal dosR1pp/tg: cerca9.5tokensentrada por1tokenoutput paraNPUall superarCPUall (excluiload/copies, linearidade NÃOvalidada). Usar apenashipotesequaisworkloadsscan; scriptcalculate local dosmeans atualizados. pp64/tg32nãoextrapolarpara4K. Muitastraducoes ratio~1 favorecemCPUtg, prefill-onlybenefitdependedhandoff.
+6. Qualidadecomparar números/negacoes/prazos/nomes, repetition/max/EOG, outputhash/humancoverageerrosexisting. MétricaTPScontraoutputdifferenttokens não equivalente latencia tarefa.
+SAIDA: matrizvalidcounts/pp/tg/TTFT/total/Qqualitytemps e candidatosworkloads parahibrido.
+
+BLOCO D — QUANTIZACAO E PRODUTO ATUAL
+1. InspecionartabletypesoriginalQ4_K_M eQ8 noPC oudevicesemduplicargigse espaçoinsuficiente. HTPsupport_oppertypes +tensorsnotusedMULMATembedding; checarloadlayers/ops maiscomplexas.
+2. TentarQ4_K_Mcurto supported e seunsupported logsassignment e safefallback, não claimallNPU. Q8curtocasoallowed budgetmemory; U8runtimeissupported?fontereal. Se unsupportednegligivel custo, mixedpipeline staticHTP/CPUmedeendtoendincltransfers.
+3. Não quantizartudoautomático:Q4_0R1remain baseline. Outravariant supportedQ8/IQ4 sósepesosjáavailable/originalpermitido e ganhohipoteserelevant; no reqquantQ4->Q4_0semrotulo. Q8->Q4cpu comparação sameweights novo necessário. Download<budget/existingSDK sóauthorized; no gigOriginalcheckpoint hidden.
+SAIDA: compatibilidadepesoproduto/variant/fallbackimpact e recomendacaoformatosmaintenancetools.
+
+BLOCO E — TUNING BOUNDED, NAO GRID INFINITO
+1. DescobrirflagsENVactualupstreampinada threadsHTP/HVX/HMX/VTCM/batch/backendparallel ecapabilities. Não 'configurar8MBVTCM' se sóreportedhardware; VTCMreserved/runtimeavai não hardsetunsafe. DevArch v81/DMA/signature não mexer.
+2. CPUTHREADScontrolcritical: app6threads vsR1benchmarkauto. Medir1/2/4/6/8 (secorespermitvaluesautomatic ontdecreality), prefill/tg curto eidentifybest eenergyproxy; heterogenidadeOryonbig/little eOSschedule considerarsemcpuset/rootchange. UseCPUfastestproperbaseline, nao enfraquecerparaNPUganhar.
+3. NPUthreadconfigsSUPPORTEDselected e batch2-3sizesdocumentados, umparamporvez, representativespp1024/tg128. Tirar configDominated/invalid sem fullmatrix. Batch/ubatch/contextsettingscontrolCPU & GPUasfairpossible, FAunchanged ondequirks.
+4. Op-offloadPARTIALstaticexemploembedding/headCPU etransformerlayersHTP via --tensoroverride se parseractualsupports/numeric. Suchsetting STATIC spatialhybrid, nao prefillHTPdecodeCPUtemporal; graphassignments/perphase copiedbytes provewhatdeployed. Max2-3configsderivadasdominantcost sembruteforcelayersall.
+5. ProfHTPdiag optinperop/cyclesoffonoverheadquantifySmall, hostsubmit/readbackwaitseparateexcldup. CPUspectrumgeneralized noMLpowerclaim. Fixprofileroverhead can mislead queuebackpressure.
+SAIDA: shortlistmax2-3configsprofilingscope e improvementsnegativeincluded. Não misturarkernelpatchbatchingdeep como tarefaaccidental.
+
+BLOCO F — PREFILL NPU + DECODE CPU/GPU: PRIMEIRO PROVAR VIABILIDADE
+Esta e uma boa frente de investigacao, NAO promessa que poderátrocarbackendemruntimefacilmente. Planejar3rotasemordemdebaixo risco:
+F1. HibridoESPACIAL: graph/tensorsdistributedCPUHTP (op-fallback) compathsassignment e transfercost. PodeusarNPUpp eCPUops mas não tudoCPUtg. Labelcorreto.
+F2. HibridoTEMPORAL porestado export/import: contextoHTPfazprefill, transfereKV/samplernexttokenstate para contextoCPUouOpenCL/Vulkan econtinua geração SEMreprocessarprompt. Sóse APIstate suporta crossbackenddtype/layout e positionalmetadata. Inspecionar llama_state_* tokens/seq vsfullstate, backendserialization functions e KVtensorformats. Save/load sucesso NÃOprova compatKVlogits.
+F3. HibridoTEMPORAL noMESMOcontexto customexperimental, schedulerrouteperphase, backendmigrationmaterialweights/kv buffers/state async hazards. Maiorcusto/risk; implementar sóseF2impossíveleinterfacesmostramchangepequeno testável, semupdateproduto/Whisperoudeepmultidayredesign. Senãoentregarfeasibilitydoc e ampliarbench/stability útilremaininghours.
+
+F2 PROTOCOLO OBRIGATORIO
+1. Fonteharnessforkisolado comAPItypesreais. CPUCPUexportimportcontrol = groundtruth serialization e firstlogitsoutput atlastprompt. Mesmo GGUF/template/config ctx/KVdtype (k/v types), flashattention/settingscompatible, seqIDs/RoPEpositions/rng/samplerstate; não salvarestadoincompleto e fingircontinuedgeneracao.
+2. HTPprefill -> export fullstate/KV -> CPUcontextsameweight -> import -> same-next-logitsfinite/shape/top-k/distribution/referencewithinjustifiedtolerance. Prompttokensnão replaynoCPU. Verify countersn_p_eval CPU0 (ouexplicitprimeirobridgeforwardnecessario explicado), KVpositionslastseq matches, generatedfirsttoken sourcecorrect. Needone decodefirsttoken CPUmaycount1 normal, notfullprompt. Estadoexportinc_logits maybe notportable seeAPIreal. ReusingHTPlogits tosamplefirsttoken possible butflowreportexplicit.
+3. SeKVisincompatible detectfailreturn/precondition e não forcecopybyteintootherlayout. CPUCPUtestnegativecorruptmetadata/bounds ajudamflags. Cadacontextdifferentbuffers?graphctxgeneration/sync handoff afinal callrealnaiveasynccopycompletion incltiming; never waitremovedblind.
+4. WarmCPUweightsresidentalready? zwei contextduplicatesweightsmemory,mmap pages sharedvsGPUcopy? Countmemorycost/load2ndctx/netusefulbudget separately. TransferKVbytes/time/export/import/alloc/sync/contextcreate/weightsreupload/firsttoken overhead medidos, not 'gratuitohandoff'. LongpromptKVsize can killbenefit; tensorNPUoffloadlinear pinayoutNPUweightsDSPhostRAMtotal actual.
+5. BenchCPUallvsHTPallvsHTP->CPU mesmosweights/rngconfigs, steady-stateprefill/generationhandoff inclusive endtoend; n3short+pp1024 translationlong ifgood. ComparehybridsetupcoldTOTAL separatelyfromwarmmanyrequestamortization.
+6. SeCPUvariantviavel, repetirHTP->OpenCL e eventualmenteVulkancombackendbuildexisting dentro orçamento. GPUcontexts serializationlayoutmixedcrossbackend énovacorretude proofmandatory. Não gastarhoras compileVulkanSDKmissingatécomprovadoHTP->CPUuseful.
+7. Casoexport/importrepromptCPUnecessario: rotular 'duplicacao de prefill/pipelinecontrole', NÃO hibridobenefit. PipelineprefillHTPCPUreplaysemuseKVresultado temdobrocusto eikä cumprirgoal.
+8. Firsttokenlogits thenfull generationquality/resetA-B-Acontextspaired, reload/free safety, handofffailedcleanupfallbackCPUwholeprefillonlyifexplicit recovery invalidtrialclass; nada silentCPUbenchmark.
+F3 CRITERIOS: prototypeslocalroutephasehook matchesalloperationcompute backend support, KVtensorownershipswitch explicit, memorymigrationtime counters, concurrencyherding/modelgraphcacheinvalidacao. Noaliasdanglingbuffers/nakedqueuechange. If notsmallscope skipprototype labelARQUITETURAL_GRANDE blockers plan next userapproval.
+SAIDA: hybridpossivelAPI? correctnessproof?netgain?memory? caso blockedexactAPI/layout, nao especulacao'receita nãosuporta' seminspecao.
+
+BLOCO G — ESTABILIDADE, ENERGIA E TERMICA DOS MELHORES
+1. ExecutarstabilityONLYconfigbestcorrectCPUbaseline+NPU+hybridseviavel; seriesrequests short/medium+longcombaselinehashcorrectness/resets/differentinputs, limitedelapsed~20-40minporconfig epausaseguras. Telefone nãoqueimarparaserviço. ThresholdalertOS/batterycritical/disconnectuser useabort; soak não endurancecrashhuntingirracional.
+2. Temp/battery/thermalstatus e cpufreqexposedpermissionsreading only. CPU/HTP/GPUPSSRSS/driverDSPallocated+mapped count; no 'host217MiBlogoNPUlowRAM'. Pagesaliasduplosnot summedphysical withoutcounters.
+3. Charger100% impedeestimarbateria useful: semdesligarcaboUSBadb perderaccess, proporwirelessseestável/usechargerknownlimitapproved; reportproxytemporalqualitativenotJoule. Sómeasureenergyifvalidsensorunits/integratingidlebaseline/timeinstrumentoverhead, USBpowernotchipalone. Não claimbatterysavingporarchitecturealone.
+4. Simular disconnectadbcontrol hostcancel ownedrequest e restartprocess/sessãoHTP semphysicaldeviceunstablesemuserapproval; checks cleanup/refcount/skelmemory depoisseries. Não matarDSPservices/vendordaemons/rootthermald.
+5. Errorsrc/FastRPC/NaN/driver/GPUfallback/sessionleak trackedpertrial; old sessionexceptionfixpreflightreturnsdiagnostic failnoncrash inrunner. Unitregressionpermanentsemauthcommit automatic.
+SAIDA: stabilitywindow/noerrorobservadolimits; heatingproxycomparable/econclusionunknownlegit.
+
+BLOCO H — RELATORIO E CHECKPOINT FINAL
+Entregar TXT em D:/Projetos/SIG/docs/especialista/PROMPT-RELATORIO-NPU-HYMT2-RODADA2.txt comA-H:
+Aaprovacoes/freshhardware/software/runtimepin; Bbuild/toolchain/env/modelmetadatahash; Cops/reset/supported/fallbackcorrectness; Dworkloadmatrixquant/performance; Etuningparamactual/Cpuoptimal; Fhybridspatial/temporalAPIs/logits/KV/netlatency/memory/limites; Gstabilitythermalenergyobservations/incidentsvaccinas; Hdecisao/arquiteturaintegraçãoopcional/risk/nextactions.
+TabelaCCE/PARCIAL/PENDENTE/BLOQUEADO porcriterion. RawtrialJSONCSV/dedupecountsPython e data scriptcalculation compareTPSpercentvslatencyreduction correctly, invalidnoomission e n3statsafirmadoonlycountactual. LogsFULLSHAexist-size-dedupecountmanifest, arquivosanexadosactuallypathsgiven. No fabricated outputs/modelcacheNPUhiddenfallback.
+FINALDECISAO: VIAVEL_COM_GANHO / VIAVEL_SEM_GANHO / HIBRIDO_PROMISSOR_COM_GANHO / HIBRIDO_SEM_GANHO / API_INCOMPATIVEL / QUANT_NAO_SUPORTADA / BLOQUEIOAMBIENTE. SeNPUpp2.7xmasgeneracaolenta, isso nãofinalnegativo sehybridTTFT/gpucombinedbenefitactual; poroutroladousageSIGtranslationgenerationdominate needsendtoendrepresentative.
+Registrarhardwarex86runtimeNAappchangesnil/sourceexperimentaloutputsforaapp/phone sandboxleftdiskamount e recoverybaselineconfirmed. Não apagarartefatos necessáriosenquantoagenteaproveitahoras; resumirquaisdispensáveislimpezafutura userdecide.
+
+REGRAS DE FOCO/ORCAMENTO DE HORAS
+Ao terminar cada blocoresumircheckpointreal e seguirao próximo útil sem perguntar detalhesbaixo risco. SeSDK/QNNroute não necessaria poisHexagonfunciona, não abrirmodelconversiongigante. Umahipotese bloqueada duasprovasfundamentadas -> registrar e continuarbench/tuning/hybridoutro independente. Não maratonamediana n50, não explorarparamrandom. Prioridadepareada korrekt resets, promptsmaiores, CPUthreadscontrol, APIhandoffKVeumhibridoprototype seviável, entaostability. Sehorasacabarem garantirrelatorioresultsparcial checkpoint e safeprocesscleanupsemprodchanges, não promessa continuarsemtools. Proximaintegraçãoproduto serádecisãohumanafutura.

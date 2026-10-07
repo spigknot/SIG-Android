@@ -1,0 +1,33 @@
+# ESTABILIDADE-NPU.txt — rodadas de estabilidade (autorizadas)
+
+## EST-1 (12:44:13-12:45:13, 15 iteracoes, geracao curta por iteracao)
+Nota: -st parou no EOG (cada iteracao = traducao curta completa ~1,5s, nao os
+3000 tokens pedidos no -n); iterações de ~4-5s incluem load+prefill+decode.
+| metrica | faixa |
+|---------|-------|
+| battery temp | 36,4-36,7 C (estavel) |
+| tz0 | 39,9 -> 64,3 (pico) -> 54,6 C |
+| Generation | 27,6-38,5 t/s (estavel em todo o range termico) |
+| Prompt | 173,8-252,3 t/s |
+| erros | 0 (15/15 rc=0) |
+
+## EST-2 (soak: --ignore-eos -n 2500 x12 iters; carga contínua)
+Iniciada 12:53:47; interrompida na iter8 (13:05:50, sem rc — parada externa
+provável: gestão térmica do sistema ou LMK; 7/7 iterações completas com rc=0).
+| iter | battery C | tz0 C | Generation |
+|------|-----------|-------|------------|
+| 1 | 34,6 | 39,9 | 28,5 |
+| 2 | 34,9 | 86,1 | 27,9 |
+| 3 | 37,5 | 81,0 | 25,7 |
+| 4 | 40,5 | 91,1 | 26,3 |
+| 5 | 42,1 | 98,1 | 23,7 |
+| 6 | 43,3 | 95,0 | 25,4 |
+| 7 | 43,5 | 97,3 | 21,4 |
+| 8 | 44,5 | 99,3 | (interrompida) |
+Achados:
+- tz0 salta de ~40 C para 81-99 C sob carga NPU contínua; bateria sobe 10 C.
+- THROTTLE TÉRMICO observado: 28,5 -> 21,4 t/s (-25%) ao longo de ~13 min.
+- 0 crashes/NaN; recuperacao rapida pos-parada (34,7/40,7 C).
+- Uso intermitente (traducoes) = termicamente tranquilo (EST-1: 36-37 C).
+- Encerramento SEM rc na iter8: causa externa provavel (thermal/LMK) — o device
+  NAO desligou; nenhum processo pendurado; nenhum dado perdido alem da iter8.

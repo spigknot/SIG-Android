@@ -1,0 +1,180 @@
+[AVISO: secao C4 parcialmente RETIFICADA em 07/10 — ver nota ao fim de C4 e RELATORIO-R6]
+RELATORIO-ANR-E-APP-UID-NPU.txt
+===============================
+Resposta ao parecer R4 ("NPU pos comparacao: prioridade ANR, metricas corretas
+e app-UID"). Data: 07/10/2026 (sessao noturna autonoma autorizada pelo usuario:
+"te autorizo desde ja a fazer tudo que achar necessario"). Escopo: fix do ANR
+aplicado em fonte+build de teste, probe app-UID NOVO criado/buildado/testado,
+relatorios retificados. SEM release/commit/push/default change.
+
+------------------------------------------------------------------------
+A. RETIFICACOES (parecer R4 item 1 — aplicadas em 06-07/10)
+------------------------------------------------------------------------
+A1. "prefill (diff)" -> RENOMEADO para RESIDUAL (TOTAL - decode = load +
+    prefill + tokenizacao + template + sampler + sync + scheduling + logs).
+    A subtracao de loads de OUTRAS execucoes era tautologica; a atribuicao
+    causal do residual Vulkan a "prefill" fica PENDENTE de instrumentacao.
+    Nao recomendar default OpenCL/NPU por projecao; nao "segunda traducao
+    9,2/6,5" (nao medido; warm requer n3 pareado).
+A2. Claim "HTP imune a doze" RETIRADO (observacao de tela apagada = correlacao,
+    sem medicao causal; A3 mantem-se "background degradation").
+A3. EST-2: NAO classificado como "estabilidade PASS". Iter8 SEM rc (causa
+    desconhecida; sem ExitInfo/log provando thermal vs LMK). Sem limites
+    numericos inventados de seguranca.
+A4. TZ0 AUDITADO (read-only, 07/10): tz0 = "cpullc-0-0" = sensor de CLUSTER DE
+    CPU (nao do NPU); unidades = miligraus (30200 = 30,2 C). O pico 99,3 C do
+    soak foi no sensor de CPU (loop host de sample/detok/submissao); throttle
+    de -25% provavelmente CPU-side; NAO atribuido ao DSP sem prova.
+    (Zonas vizinhas: qmx-0-* ~30 C idle; cpu-0-0-0 31,8 C.)
+
+------------------------------------------------------------------------
+B. ANR — ROOT CAUSE + FIX (parecer R4 item 2)
+------------------------------------------------------------------------
+B1. Stack exato (log 12:30:09): main thread em HyMt2Native.threadCount (JNI)
+    <- TextoActivity.translate$lambda$57$lambda$53 (TextoActivity.kt:671) <- main.
+    "Input dispatching timed out (Waited 5s)" -> Force finishing -> kill.
+B2. Auditoria completa: loadModel/generate seguram o g_mutex por TODA a
+    operacao; QUATRO getters chamados na main thread pegavam o MESMO lock:
+    threadCount (L671 pos-load), lastStats (L710 pos-generate), lastError,
+    backendDescription. Mecanismo: o bloco runOnUiThread pos-load executou
+    ENQUANTO o generate (worker) ja segurava o lock => main presa por toda a
+    geracao => qualquer toque => ANR. 3 ocorrencias reproduzidas (12:25/12:30/12:37).
+B3. FIX APLICADO (diff anexo: docs/npu-hymt2/rodada4/anr-fix.diff):
+    - g_mutex INTACTO (semantica preservada; ordem g_mutex->g_ui_mutex).
+    - Novo g_ui_mutex protege g_last_error/g_backend_desc/g_last_stats.
+    - threadCount: std::atomic<int> g_threads_cache (store no load/release;
+      getter le sem lock).
+    - TextoActivity: status "Traduzindo..." no fim do load (UI deixa de exibir
+      "Carregando modelo..." ate o fim da traducao).
+B4. RED-GREEN (EXECUTADO):
+    - RED (v1.508): 3 ANRs no cenario "tocar durante load/geracao" — logs +
+      traces (/data/anr/anr_30021_2026-10-06-12-37-49-463 etc.) preservados.
+    - INCIDENTE (transparencia): o 1o build do fix continha um lock_guard
+      DUPLICADO (erro de patch remoto por line-endings mistos) -> deadlock no
+      generate. DETECTADO pelo thread-dump (SIGQUIT -> /data/anr/trace_00):
+      worker presa em Java_..._generate+3104 -> std::mutex::lock (addr2line:
+      lock_guard ctor; objdump: dois locks seguidos de g_ui_mutex). Corrigido
+      (6 locks), recompilado, strip, hot-swap (sha+inode verificados).
+    - GREEN (lib corrigida): 10 taps durante DUAS geracoes -> PID 7055 estavel,
+      0 ANR/Input-dispatching/Force-finishing; traducoes completaram:
+      "Traducao pronta em 4.2s" e "2.3s" (42 tok a 37.8/37.1 t/s).
+      UI log completo capturado (itens 10-14 no dump).
+
+------------------------------------------------------------------------
+C. APP-UID PROBE (parecer R4 item 4)
+------------------------------------------------------------------------
+C1. Artefato: projeto Android NOVO em C:/npu-probe (fora do repo SIG) —
+    package br.gov.sp.pcsp.npuprobe (ID distinto; NAO reinstala/altera o SIG).
+    JNI proprio (probe.cpp) chama a API publica ggml:
+    load_all_from_path(nativeLibDir) -> dev_by_name("HTP0") -> dev_init
+    (ABRE SESSAO) -> MUL_MAT 64x64x64 f32 sintetico -> tensor_get c[0]=128.
+    ADSP_LIBRARY_PATH setado para o nativeLibraryDir (skel).
+C2. Libs usadas (do pacote/upstream, SEM GGUF gigante): libggml.so, libggml-base.so,
+    libggml-hexagon.so, libggml-htp-v81.so, libggml-cpu.so (copia no jniLibs).
+C3. FullSHA dos insumos: [preencher: sha256 das 5 libs + headers pin].
+C4. RESULTADO FINAL DO PROBE app-UID (02:10-02:30) — BLOQUEIO AMBIENTAL:
+    App de teste (br.gov.sp.pcsp.npuprobe, UID normal 10488, sem root) rodou no
+    device com JNI proprio + libs ggml do build probe-min (sem OpenCL, so
+    hexagon/cpu/base; NEEDED limpas). Resultados:
+    | teste                                        | resultado |
+    |----------------------------------------------|-----------|
+    | probe roda no app-UID (JNI, logcat)          | OK        |
+    | controle dlopen("liblog.so")                 | OK (probe valido) |
+    | dlopen("libcdsprpc.so") por NOME             | FALHOU (dlerror null = bloqueio de namespace) |
+    | dlopen("/vendor/lib64/libcdsprpc.so") path   | FALHOU    |
+    | backend hexagon registra device HTP0         | NAO (construtor falha no driver) |
+    | devices visiveis ao app                      | apenas CPU |
+    EVIDENCIA-CHAVE: libcdsprpc.so ESTA em /vendor/etc/public.libraries.txt
+    (verificado read-only) e MESMO ASSIM o app-UID nao a carrega; o dlopen
+    retorna NULL sem dlerror (assinatura de bloqueio de namespace do bionic).
+    No ADB shell (root/ksu) o mesmo dlopen funciona — todos os testes HTP das
+    rodadas R1-R4 rodaram por essa via.
+    CONCLUSAO: neste CPH2747/ColorOS, o acesso FastRPC/DSP DIRETO nao e
+    elegivel a apps normais; integracao NPU no app exigiria mecanismo OEM
+    (whitelist/assinatura/sistema) ou caminho suportado do fabricante. A
+    viabilidade CLI (shell) permanece valida; a elegibilidade APP-UID fica
+    como BLOQUEIO AMBIENTAL COMPROVADO (com controle positivo).
+
+    *** RETIFICACAO (07/10, apos parecer R6) — ESTE VEREDITO ESTAVA PREMATURO ***
+    Dois defeitos do proprio probe invalidam a conclusao acima:
+    (1) o manifest do probe NAO declarava <uses-native-library
+        android:name="libcdsprpc.so"> — apps targetSdk 31+ (o probe e 34)
+        exigem opt-in explicito para acessar lib publica do vendor
+        (ENFORCE_NATIVE_SHARED_LIBRARY_DEPENDENCIES); sem isso o linker
+        mantem a lib fora do namespace do app;
+    (2) o teste de erro tinha bug: "(dlerror() ? dlerror() : ...)" consumia
+        o erro na PRIMEIRA chamada — o NULL exibido era artefato do codigo,
+        nao captura do erro real; "assinatura de namespace" era leitura
+        invalida do artefato.
+    CORRECOES JA FEITAS (07/10): captura com dlerror() limpo + leitura unica
+    em std::string + controle negativo (lib fake); manifest com
+    uses-native-library required=false (confirmado no APK final via aapt2).
+    O novo teste NO DEVICE aguarda autorizacao do usuario.
+    STATUS: PRECONDICAO CORRIGIDA — REPETIR TESTE (nao e' bloqueio comprovado).
+
+C4b. Progresso do probe no device (02:10-02:20):
+    - APK instalado OK (Streamed Install; package separado nao toca o SIG).
+    - Iteracoes de dlopen/cadeia de dependencias (ACHADO TECNICO relevante):
+      1) libggml.so (upstream) tem DT_NEEDED de libggml-opencl.so -> crash 1;
+      2) libggml-opencl.so tem DT_NEEDED de libOpenCL.so (vendor) -> crash 2;
+      3) libOpenCL.so do device tem NEEDED de libcutils.so (nao publica para
+         apps) -> crash 3; copiar a cadeia vendor para dentro do APK NAO e o
+         caminho;
+      4) stub libOpenCL.so (sem versoes de simbolo) NAO satisfaz a VERNEED do
+         libggml-opencl.so -> crash 4 ("cannot find libOpenCL.so from verneed").
+    - CONCLUSAO DE INTEGRACAO: o OpenCL deve entrar do MESMO modo do app SIG
+      (build proprio com loader/estatico, como android-opencl-loader.cpp) e
+      NAO como dependencia vendor dinamica; um runtime NPU de produto deve
+      evitar DT_NEEDED de vendor chain (ou incluir loader proprio).
+    - FIX em andamento: build "probe-min" no servidor com GGML_OPENCL=OFF e
+      GGML_VULKAN=OFF (so ggml-base/cpu/hexagon/htp + ggml): remove a NEEDED
+      do opencl; probe passa a depender apenas de libggml*.so do nosso build.
+    - Resultado final do probe HTP (sessao app-UID) sera anexado assim que o
+      build-min for deployado (mesma noite).
+C5. Licencas/namespace: jniLibs no APK (extractNativeLibs=true); FastRPC via
+    libcdsprpc.so (vendor, linker namespace do app); sem root/privileged.
+
+------------------------------------------------------------------------
+D. TEMPERATURAS E ESTABILIDADE (parecer R4 item 3)
+------------------------------------------------------------------------
+- Auditoria de unidades/rotulos: ver A4. EST-1 (config especifica): bateria
+  36,4-36,7 C; tz0(cpullc CPU) pico 64,3 C. EST-2: bateria ate 44,5 C; tz0 ate
+  99,3 C; throttle -25%; 7 iter rc=0 + 1 sem rc (causa desconhecida).
+- Contagens n/erros por rodada (Python): [anexar script+saida].
+- Nao repetir soak; sem novos testes de carga continua nesta rodada.
+
+------------------------------------------------------------------------
+E. MEDICOES POS-FIX (parecer R4 item 5)
+------------------------------------------------------------------------
+E1. E2E ANR (GREEN): CONCLUIDO — ver B4. Metodo: hot-swap da lib no app
+    dir (app force-stopped; backup da original em /data/local/tmp;
+    sha256+inode conferidos; SELinux context preservado), reabertura via
+    am start --es extra_texto, taps via input tap. Resultados: seção B4.
+E2. Instrumentacao de bordas host: NAO aplicada nesta rodada (exige build de
+    diagnostico aprovado; default OFF/protocolo OFF-ON) — pendente.
+E3. Numeros CLI/HTP permanecem LABELS INDEPENDENTES ate validacao app-UID.
+
+------------------------------------------------------------------------
+F. ESTADO DO APP/DEVICE (inalterado + restore)
+------------------------------------------------------------------------
+- SIG v1.508 no device: NAO desinstalado. Hot-swap da lib para o teste E2E
+  foi feito com BACKUP e RESTAURACAO (sha confere). stayon revertido (false).
+- Device: sem alteracoes de settings persistentes; cooler externo (usuario).
+- [preencher: sha256 da lib original restaurada + verificacao final]
+
+------------------------------------------------------------------------
+G. DOCUMENTOS/SCRIPTS NOVOS
+------------------------------------------------------------------------
+- docs/npu-hymt2/rodada4/: PLANO-NOITE.md, ANR-ROOT-CAUSE.md, anr-fix.diff
+- C:/npu-probe/ (projeto probe; NAO no repo)
+- C:/llama-npu/rodada2/logs/: build-*.log, e2e*.log
+- anexos: [logs relevantes embutidos]
+
+------------------------------------------------------------------------
+H. PEDIDOS DE DECISAO (formulario)
+------------------------------------------------------------------------
+1. Fix ANR: aprovar o diff (aplicado localmente) para commit? [ ]
+2. Status UI ("Traduzindo..." pos-load): aprovar? [ ]
+3. Probe app-UID: resultado [ver E/C] — seguir para probe-com-modelo-curto? [ ]
+4. Build de diagnostico (instrumentacao host, default OFF): autorizar? [ ]
+5. Proximos passos: [ ]

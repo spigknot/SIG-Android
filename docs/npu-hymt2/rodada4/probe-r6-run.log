@@ -1,0 +1,45 @@
+--------- beginning of main
+10-07 09:57:30.195  1818  1818 I NpuProbe: nativeLibraryDir=/data/app/~~ojmqnZrIWQwUHgFNn8zZCw==/br.gov.sp.pcsp.npuprobe-KbGmqfK-meg0nonmYGsH2g==/lib/arm64
+10-07 09:57:30.195  1818  1818 I NpuProbe: libdir=/data/app/~~ojmqnZrIWQwUHgFNn8zZCw==/br.gov.sp.pcsp.npuprobe-KbGmqfK-meg0nonmYGsH2g==/lib/arm64
+10-07 09:57:30.195  1818  1818 I NpuProbe: build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 09:57:30.195  1818  1818 I NpuProbe: controle-sistema (liblog.so)=OK
+10-07 09:57:30.196  1818  1818 I NpuProbe: negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 09:57:30.197  1818  1818 I NpuProbe: cdsprpc-nome (libcdsprpc.so)=OK
+10-07 09:57:30.198  1818  1818 I NpuProbe: cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 09:57:30.198  1818  1818 I NpuProbe: ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 09:57:30.199  1818  1818 I NpuProbe: [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 09:57:30.200  1818  1818 I NpuProbe: [ggml] ggml-hex: FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+10-07 09:57:30.200  1818  1818 I NpuProbe: [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 09:57:30.200  1818  1818 I NpuProbe: [ggml] ggml-hex: Hexagon Arch version v81, DMA64 enabled
+10-07 09:57:30.200  1818  1818 I NpuProbe: [ggml] ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+10-07 09:57:30.200  1818  1818 I NpuProbe: load_all_from_path=2ms
+10-07 09:57:30.200  1818  1818 I NpuProbe: [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~ojmqnZrIWQwUHgFNn8zZCw==/br.gov.sp.pcsp.npuprobe-KbGmqfK-meg0nonmYGsH2g==/lib/arm64/libggml-hexagon.so
+10-07 09:57:30.200  1818  1818 I NpuProbe: load(hexagon direto)=FALHOU em 0ms
+10-07 09:57:30.201  1818  1818 I NpuProbe: devices=2
+10-07 09:57:30.201  1818  1818 I NpuProbe:   dev[0] HTP0 (Hexagon)
+10-07 09:57:30.201  1818  1818 I NpuProbe:   dev[1] CPU (CPU)
+10-07 09:57:30.201  1818  1818 I NpuProbe: [ggml] ggml-hex: HTP0 allocating new session : domain 3 phys-idx 0 virt-idx 0
+10-07 09:57:30.234  1818  1818 I NpuProbe: [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 09:57:30.234  1818  1818 I NpuProbe: [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5fe8880
+10-07 09:57:30.239  1818  1818 I NpuProbe: [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 8192 n-ops 1280 vmem 3311845376
+10-07 09:57:30.243  1818  1818 I NpuProbe: dev_init(HTP0)=42ms -> SESSAO ABERTA
+10-07 09:57:30.244  1818  1818 I NpuProbe: graph_compute(MUL_MAT 64x64)=0.8ms status=0
+10-07 09:57:30.244  1818  1818 I NpuProbe: c[0]=128.000000 (esperado 128.0)
+10-07 09:57:30.244  1818  1818 I NpuProbe: RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 09:57:30.245  1818  1818 I NpuProbe: REPORT:
+10-07 09:57:30.245  1818  1818 I NpuProbe: libdir=/data/app/~~ojmqnZrIWQwUHgFNn8zZCw==/br.gov.sp.pcsp.npuprobe-KbGmqfK-meg0nonmYGsH2g==/lib/arm64
+10-07 09:57:30.245  1818  1818 I NpuProbe: build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 09:57:30.245  1818  1818 I NpuProbe: controle-sistema (liblog.so)=OK
+10-07 09:57:30.245  1818  1818 I NpuProbe: negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 09:57:30.245  1818  1818 I NpuProbe: cdsprpc-nome (libcdsprpc.so)=OK
+10-07 09:57:30.245  1818  1818 I NpuProbe: cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 09:57:30.245  1818  1818 I NpuProbe: ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 09:57:30.245  1818  1818 I NpuProbe: load_all_from_path=2ms
+10-07 09:57:30.245  1818  1818 I NpuProbe: load(hexagon direto)=FALHOU em 0ms
+10-07 09:57:30.245  1818  1818 I NpuProbe: devices=2
+10-07 09:57:30.245  1818  1818 I NpuProbe:   dev[0] HTP0 (Hexagon)
+10-07 09:57:30.245  1818  1818 I NpuProbe:   dev[1] CPU (CPU)
+10-07 09:57:30.245  1818  1818 I NpuProbe: dev_init(HTP0)=42ms -> SESSAO ABERTA
+10-07 09:57:30.245  1818  1818 I NpuProbe: graph_compute(MUL_MAT 64x64)=0.8ms status=0
+10-07 09:57:30.245  1818  1818 I NpuProbe: c[0]=128.000000 (esperado 128.0)
+10-07 09:57:30.245  1818  1818 I NpuProbe: RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto

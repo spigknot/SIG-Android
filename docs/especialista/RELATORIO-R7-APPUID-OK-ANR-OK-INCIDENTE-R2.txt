@@ -1,0 +1,178 @@
+RELATORIO R7 — APP-UID OK, TESTE ANR EXECUTADO, INCIDENTE E RESTAURACAO,
+E PADRONIZACAO DOS MODELOS NO R2
+=====================================================================
+Data: 07/10/2026. Executor: agente (sessao do dia, autorizada pelo usuario).
+Complementa: R6 + ADENDO R7. Regras mantidas: SIG publicado/Whisper intactos;
+sem root/governor/thermal changes; nenhuma chave em repo; PJA110 nao alvo.
+
+========================================================================
+A. SUMARIO EXECUTIVO (delta desde R6/Adendo)
+========================================================================
+A.1 PROBE APP-UID: CORRIGIDO E APROVADO — "APP-UID OK" (2 execucoes).
+    Era o <uses-native-library> ausente (exatamente o apontado no R6); com
+    ele: dlopen do driver OK, HTP0 registrado, SESSAO ABERTA (42-48ms) e
+    MUL_MAT 64x64 no DSP com c[0]=128 correto (0.9ms). O veredito R5
+    ("bloqueio OEM") esta REFUTADO. (Detalhe: ADENDO R7 + log
+    docs/npu-hymt2/rodada4/probe-r6-run.log, sha 042caef4...)
+A.2 ANR: VACINA EXECUTADA NO DEVICE — PASSOU.
+    "am instrument ... AnrUiLockContractTest" -> OK (1 test), Time 2.105s.
+    O teste segura o lock principal por 2s (sigTestHoldGmutex) e exige os 4
+    getters de UI em <500ms: a regressao conhecida (getters voltando a
+    g_mutex) FALHA o teste. Auditoria de data races do R6 permanece aplicada.
+A.3 INCIDENTE E RESTAURACAO (transparencia total, secao D):
+    O `connectedDebugAndroidTest` (sem ANDROID_SERIAL) rodou nos DOIS
+    aparelhos conectados e o ciclo do Gradle DESINSTALOU o app do CPH2747
+    (dados internos + modelos foram apagados). Restauracao completa feita NA
+    MESMA SESSAO: app reinstalado, pacote nativo remontado DO R2 com a lib
+    do fix, modelo Q4_K_M produto (c4bf1015) reposto do PC e VISIVEL ao app
+    (teste instrumentado: exists=true, canRead=true; manager ativo:
+    activateIfInstalled OK no native_debug.txt).
+A.4 PADRONIZACAO R2 (decisao do usuario): todos os modelos no R2, com
+    espelhamento feito FORA da banda local (GitHub Actions; secao E).
+
+========================================================================
+B. PROBE APP-UID — RESULTADO FINAL
+========================================================================
+B.1 Pre-condicao corrigida: manifest do probe com <uses-native-library
+    android:name="libcdsprpc.so" android:required="false"/> (verificado no
+    APK via aapt2; targetSdk 34). dlerror com captura UNICA + controle
+    negativo (lib fake) e positivo (liblog).
+B.2 Execucao (07/10 09:54 e 09:57; 2 runs identicos):
+    - controle-sistema (liblog.so)=OK
+    - negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library
+      "libnaoexiste_xyz.so" not found   [captura confiavel]
+    - cdsprpc-nome (libcdsprpc.so)=OK | cdsprpc-abs=OK
+    - [ggml-hex] Loading driver libcdsprpc.so; FASTRPC_GET_DOMAINS failed
+      (0x14) -> fallback estatico CDSP (funcional)
+    - registry ndev 1; Arch v81 DMA64; device 0: HTP0 (domain=cdsp:3)
+    - dev_init(HTP0)=42-48ms -> SESSAO ABERTA (hwinfo threads 8/hvx 8/hmx 1/
+      vtcm 8MB; session-id 0; uri file:///libggml-htp-v81.so)
+    - graph_compute(MUL_MAT 64x64)=0.9ms status=0; c[0]=128.000000
+    - RESULTADO: APP-UID OK
+B.3 P4 (peso produto no mini-app) NAO executado — segue pendente de
+    autorizacao; P1-P3 cobertos pelo probe.
+
+========================================================================
+C. ANR — FECHAMENTO
+========================================================================
+C.1 Fonte (auditado no R6, mantido): g_ui_mutex + g_threads_cache atomico;
+    getters com copy-out (NewStringUTF fora do lock); clear/stats protegidos;
+    leitura de backend_desc via ui_copy_backend_desc(); contratos doc.
+C.2 VACINA PERMANENTE (executada e PASSOU no CPH2747):
+    - lib: export de teste sigTestHoldGmutex(ms) (TEST-ONLY);
+    - androidTest AnrUiLockContractTest: hold 2000ms + 4 getters <500ms =>
+      OK (1 test);
+    - checker de invariantes do patch (check-anr-fix.sh): PASS 8/8;
+    - mutacao coberta: regressao para g_mutex nos getters faz o teste
+      falhar por timeout (a regressao nao passa).
+C.3 Gates R6: LIB_RC=0, TESTS_RC=0, LINT_RC=0, ANDTEST_BUILD_RC=0,
+    BUILD_RC=0. Gates R7 (apos padronizacao R2): ver secao F.
+
+========================================================================
+D. INCIDENTE — CAUSA, DANO, RESTAURACAO (transparencia integral)
+========================================================================
+D.1 Causa raiz: `./gradlew :app:connectedDebugAndroidTest` SEM fixar
+    ANDROID_SERIAL. Os DOIS aparelhos estavam conectados (USB): o job rodou
+    tambem no PJA110 (nao-alvo; nada persistiu nele — o Gradle desinstalou
+    o que instalou) e, no CPH2747, o ciclo do Gradle desinstalou o app no
+    cleanup — apagando /data/data/... inteiro (configs) e o modelo do
+    external files dir. O teste tambem FALHOU nos dois aparelhos naquele
+    momento (UnsatisfiedLinkError — a lib no app dir era a v11 sem o
+    simbolo de teste, pois o app acabara de ser reinstalado pelo proprio
+    gradle). [Licao/vacina: TODO comando de device fixa o serial; o teste
+    passou depois via `am instrument` manual, com a lib v2 no app dir.]
+D.2 Dano: configs/chaves do app (SharedPreferences) perdidas SEM backup
+    (uninstall apaga /data/data). Modelo Q4_K_M perdido no device. App
+    v1.508 removido.
+D.3 Restauracao executada (tudo verificado):
+    - App reinstalado (build atual, mesma assinatura debug; update limpo).
+    - Pacote nativo remontado do ZIP OFICIAL do R2 (sha 66eecc51...):
+      16 requiredLibraries + silero + manifest + marker ".installed"="11",
+      com a LIB DO FIX (sha 33105846... = llama_jni v2) no lugar da v11.
+      Owner/contexto SELinux do app aplicados; dirs intermediarios criados
+      COMO O APP (run-as) para o contexto correto; validado pelo proprio
+      app ("activateIfInstalled: dir=...11-arm64-v8a/lib" no
+      native_debug.txt).
+    - Modelo Q4_K_M PRODUTO (c4bf1015...; o mesmo da campanha, achado em
+      docs/vulkan-hymt2-fusion-round/logs-rodada13/hymt2_app.gguf no PC)
+      reposto em files/hymt2_models/Hy-MT2-1.8B-Q4_K_M.gguf (perms 660,
+      ext_data_rw). O app o VE (teste instrumentado: exists=true,
+      len=1133080544, canRead=true). NAO foi usado o oficial dc5f44 (regra
+      "nao substituir o produto pelo oficial" preservada).
+    - Probe npuprobe: desinstalado (limpeza). Test APK: desinstalado.
+    - PJA110: nada persistiu (verificado: package ausente).
+D.4 Perdas remanescentes: somente as configs/chaves do app (usuario
+    reconfigura; sem caminho tecnico de recuperacao) + logs/historicos
+    internos do app. Modelos outros (Q6_K etc) o app baixa quando quiser.
+
+========================================================================
+E. PADRONIZACAO DOS MODELOS NO R2 (decisao do usuario)
+========================================================================
+E.1 Estado: a maioria JA estava no R2 (Whisper, Granite 5.0-turbo/4.1-nar,
+    Qairt, Hy-MT2 Q4_0/Q8_0, pacote nativo, PromptStore). Faltavam 4
+    arquivos (fonte HuggingFace): Q4_K_M (default do menu!), Q6_K, 1.25bit
+    e o VAD silero.
+E.2 Espelhamento SEM usar a banda local: workflow NOVO
+    ".github/workflows/mirror-models-to-r2.yml" (GitHub Actions;
+    workflow_dispatch): baixa do HF nos runners do GitHub, VERIFICA SHA-256
+    PINADO dos 4 arquivos e envia via rclone ao R2
+    (models/hymt2/... e models/whisper/ggml-silero-v6.2.0.bin).
+    Secrets (configurados pelo usuario no repo): R2_ACCESS_KEY_ID,
+    R2_SECRET_ACCESS_KEY, R2_ENDPOINT, R2_BUCKET.
+    SHAs pinados: Q4_K_M dc5f44fc...; Q6_K d98fe604...; 1.25bit
+    cc497fe8...; silero 2aa269b7...
+    Licencas: Hy-MT2 = Apache 2.0 (redistribuicao permitida; manter
+    atribuicao); silero VAD = MIT. Custo: ~3,06 GB adicionais.
+E.3 Codigo (app) atualizado COM FALLBACK seguro (commita ja, funciona mesmo
+    antes do espelhamento concluir):
+    - TextoActivity: helper "espelhado()" (R2 primario + HF alternativa)
+      para Q4_K_M, Q8_0 e Q6_K; 1.25bit ganhou primario R2 + alternativa HF
+      (unica fonte onde os nomes divergem); Q4_0 permanece R2 puro (nao
+      existe no HF). Downloader tenta as fontes em ordem; a alternativa so
+      e' usada se a primaria falhar (404/erro de rede), com log claro.
+    - WhisperActivity: VAD com primario no R2 (models/whisper/...) e
+      alternativa HF; downloadFile refatorado para lista de fontes
+      (baixarUmaFonte extraido).
+E.4 Pendente (apos o usuario rodar o workflow): conferir no R2 e, se
+    desejado, remover as notas de "alternativa" (o fallback pode ficar como
+    robustez permanente).
+
+========================================================================
+F. ESTADO DO REPO/COMMIT (desta rodada)
+========================================================================
+F.1 Arquivos NOSSOS (commit desta rodada):
+    - app/src/main/cpp/llama-jni/llama_jni.cpp (fix ANR R5 + auditoria R6)
+    - app/src/main/java/.../TextoActivity.kt (status + padronizacao R2)
+    - app/src/main/java/.../WhisperActivity.kt (VAD R2 + fallback)
+    - app/src/main/java/.../HyMt2Native.kt (extern de teste)
+    - app/build.gradle (runner + deps androidTest)
+    - app/src/androidTest/.../AnrUiLockContractTest.kt (novo)
+    - .github/workflows/mirror-models-to-r2.yml (novo)
+    - docs/npu-hymt2/ e docs/especialista/ (campanha; relatorios)
+F.2 WIP ALHEIO (smartjoin/ffmpeg, OUTRO agente ativo): NAO tocado e NAO
+    incluido no commit (MODULE-MAP.md, FfmpegJoinVideosActivity.kt,
+    FfmpegOutputRemuxer.kt/Test, SmartJoinPlanner.kt/Test,
+    SmartJoinTimingTest.kt, docs/smartjoin-*.md).
+F.3 Gates R7 (pos-padronizacao): ver resultado no fechamento (test/lint/
+    assemble; logs em C:/llama-npu/rodada2/logs/r7-*.log).
+
+========================================================================
+G. LIMITES E UNKNOWNS (declarados)
+========================================================================
+- O espelhamento R2 depende do workflow rodar (secrets do usuario); ate
+  la, os 4 arquivos usam a alternativa HF automaticamente (por design).
+- P4 do probe (peso no mini-app) pendente; performance em app-UID nao
+  medida (so CLI ate agora).
+- O incidente NAO teve como recuperar configs do app.
+- Testes de tradução final pelo usuario (UI) recomendados apos a
+  restauracao; a prova tecnica (exists/canRead + manager) esta registrada.
+
+========================================================================
+H. PENDENCIAS / PROXIMOS PASSOS (com o usuario)
+========================================================================
+H.1 Usuario: configurar os 4 secrets + rodar o workflow "Espelhar modelos".
+H.2 Apos o workflow: conferir os arquivos no R2 (posso revalidar as URLs).
+H.3 Decisoes de produto pendentes do R6/R7: adocao oficial do fix ANR
+    (pos-commit), P4 do probe, eventuais proximos testes.
+========================================================================
+FIM. Nenhuma afirmacao sem evidencia listada acima.

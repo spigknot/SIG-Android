@@ -1,0 +1,61 @@
+ADENDO R7 — RESULTADO DO PROBE CORRIGIDO: APP-UID OK (VEREDITO R5 REFUTADO)
+==========================================================================
+Data: 07/10/2026, 09:54-09:57 (2 execucoes independentes, reprodutiveis).
+Execucao autorizada pelo usuario. Device CPH2747, USB 3B15BD00FVE00000, app
+de teste br.gov.sp.pcsp.npuprobe (UID nao-root), APK corrigido
+sha256 ae2a488a76746def90eafca8a685eaacace9d4c352254083e6c907b95d405adf com
+<uses-native-library android:name="libcdsprpc.so" android:required="false"/>
+(confirmado no APK via aapt2; targetSdk 34).
+
+1. RESULTADO (log integro: docs/npu-hymt2/rodada4/probe-r6-run.log,
+   sha256 042caef43ad7287dae3a5fd1a81dac51930655ee9f4700bcec62b7ac59adf997)
+   P1 dlopen (captura single de dlerror):
+     controle-sistema (liblog.so)=OK
+     negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library
+       "libnaoexiste_xyz.so" not found        [controle NEGATIVO ok]
+     cdsprpc-nome (libcdsprpc.so)=OK
+     cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+   P2 registro + sessao:
+     [ggml-hex] Loading driver libcdsprpc.so
+     [ggml-hex] FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+     [ggml-hex] Hexagon Arch v81, DMA64; device 0: HTP0 (phys=0,virt=0,domain=cdsp:3)
+     dev[0] HTP0 (Hexagon); dev[1] CPU (CPU)
+     dev_init(HTP0)=42-48ms -> SESSAO ABERTA (session-id 0, domain-id 3,
+       uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke...;
+       hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB)
+   P3 op numerica REAL:
+     graph_compute(MUL_MAT 64x64)=0.9ms status=0
+     c[0]=128.000000 (esperado 128.0)
+     RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+
+2. LEITURA
+   - O veredito R5 ("bloqueio ambiental/OEM", "assinatura bionic") esta
+     REFUTADO. A causa era exatamente a apontada no R6: opt-in
+     <uses-native-library> ausente (targetSdk>=31, ENFORCE_NATIVE_SHARED_
+     LIBRARY_DEPENDENCIES). Com o opt-in, um app UID normal carrega o driver
+     FastRPC, registra HTP0, abre sessao no CDSP e executa operacao com
+     resultado correto.
+   - Controle negativo funcionando: a captura de erro agora e' confiavel.
+
+3. IMPLICACOES PARA A ESTRATEGIA (para avaliacao do especialista)
+   - A rota NPU/Hexagon via app normal NESTE device esta ABERTA (sem OEM/
+     whitelist/root). A questao deixa de ser "elegibilidade bloqueada" e
+     volta a ser engenharia: build/libs no pacote, performance (break-even
+     9,50 Np/Ng medido em CLI), fallback, e as cautelas de sempre.
+   - Nada muda no SIG publicado: nenhuma integracao feita; decisao
+     usuario/especialista sobre aprofundar P4 (peso produto no mini-app).
+
+4. NOTAS TECNICAS
+   - FASTRPC_GET_DOMAINS query failed (0x14): fallback para domains staticos
+     CDSP — funcional (nao impeditivo). Registrar como observacao.
+   - load_all_from_path nao encontra ggml_backend_init (build sem
+     GGML_BACKEND_DL); o registro do backend ocorre nos construtores
+     estaticos das libs NEEDED — comportamento normal, nao e' erro.
+   - Skel v81 (libggml-htp-v81.so) presente no libdir do APK; a sessao o
+     carregou do app (uri file:///libggml-htp-v81.so).
+
+5. PENDENTE (com autorizacao)
+   - P4: peso produto Hy-MT2 curto no mini-app (se desejado).
+   - Demais itens do RELATORIO-R6 (ANR: androidTest no device executando
+     nesta sequencia; commit do fix aguardando revisao do usuario).
+==========================================================================

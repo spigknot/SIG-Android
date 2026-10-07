@@ -1,0 +1,44 @@
+# PRODUTO-BASELINE-v2.txt — comparacao de backends do app (operacao pelo usuario)
+Data: 06/10/2026 12:17-12:40. Modelo Q4_K_M (c4bf1015...) — MESMO peso em todos.
+Metodo: tk/s de DECODE reportados pela UI (g_last_stats = n_out/tempo do loop de
+geracao, SEM prefill/load — semantica confirmada no fonte do JNI, linha 627-675);
+tokens/backends/loads extraidos do logcat (tag SIGLlama); prefill ESTIMADO por
+diferenca (intervalo load->geracao concluida menos decode; n=2-3 por backend).
+
+## Resultados (decode tk/s da UI)
+| backend | r1 | r2 | r3 | r4 | r5 | media |
+|---------|----|----|----|----|----|-------|
+| Vulkan  | 39,1 | 39,1 | 35,3 | 40,1 | 38,4 | 38,4 |
+| Vulkan (rodada 2, pos-ANR) | 43,1 (curta) | 42,0 (media) | | | | |
+| OpenCL  | 25,4 | 26,6 | 25,6 | 23,3 | | 25,2 |
+| CPU     | 21,9 | 17,0 | 21,7 | 23,1 | | 20,9 |
+
+## Logcat SIGLlama (tokens/backend/loads; PIDs 30021/22764)
+- Vulkan: geracoes 145 tk (curta) / 204 tk (media); load ~1,4 s.
+- OpenCL: geracoes 143 tk; load ~4-7 s (mantem 1075,85 MiB na GPU).
+- CPU: geracoes 141 tk; load ~0,4 s; offload 0/33 (CPU_Mapped 1075,74 MiB).
+- ANRs: 12:25:24 e 12:37:50 e 12:30:09 — "Input dispatching timed out (Waited 5s)"
+  -> Force finishing TextoActivity; causa: main thread bloqueada em
+  HyMt2Native.threadCount() (g_mutex) durante load/geracao (TextoActivity.kt:671).
+
+## Prefill estimado (intervalo pos-load menos decode; rotular ESTIMADO)
+| backend | intervalo | decode | prefill est. | taxa est. |
+|---------|-----------|--------|--------------|-----------|
+| Vulkan curta | 6,93 s | 3,36 s | ~3,57 s | ~40 t/s |
+| Vulkan media | 22,33 s | 4,86 s | <=10-17 s (inclui setup do usuario) | 20-45 t/s |
+| OpenCL curta | 6,38 s | 6,14 s | ~0,24 s | ~600 t/s |
+
+## Teto de medicao do produto (limitacao declarada)
+- O pacote nativo v11 instalado NAO tem o bloco de profiling (F6): o binario
+  libsig_llama.so do zip v11 (sha256 66eecc516d17d28e29f8b908abaad59e18b22be15a17c22097ac9dcd0d65ea40)
+  nao contem as strings "Perfil llama"/"debug.sig.hymt2.prof" (0 ocorrencias).
+  => prefill/decode do APP so com rebuild do pacote (NAO autorizado nesta missao).
+  A flag debug.sig.hymt2.prof=1 foi ATIVADA e depois REVERTIDA (nao tem efeito no v11).
+
+## Leitura preliminar (com o prefill estimado)
+- Total curta: Vulkan ~6,9 s (3,6 prefill + 3,4 decode) vs OpenCL ~6,4 s (0,2+6,1)
+  vs HTP-CLI-whole ~5,6 s (0,13+5,5 @decode 26,2) -> HTP menor total.
+- Total media (204 tk saida): Vulkan ~10,4 s vs HTP-whole ~7,9 s -> HTP menor.
+- O gargalo percebido pelo usuario ("prefill chato de esperar") = prefill do Vulkan
+  (~40 t/s), o PIOR dos backends; OpenCL tem o melhor prefill do app (~600 t/s).
+- Decode: Vulkan 38-43 e o melhor; HTP 26,2 empata com OpenCL (23-27).

@@ -1,0 +1,161 @@
+PROMPT-RELATORIO-NPU-HYMT2-RODADA3
+====================================
+Consolidacao pos-parecer: retificacoes R2, peso produto e hibrido expandido.
+Data: 06/10/2026. Escopo ISOLADO (sem deploy/commit/APK/libs/defaults).
+Device: CPH2747 via wireless/Tailscale (porta reativada; queda de rede
+recuperada as 08:34). Base: parecer do especialista + dados R2 auditados.
+
+------------------------------------------------------------------------
+A. RETIFICACOES OBRIGATORIAS (pos-auditoria)
+------------------------------------------------------------------------
+A1. Q4_K_M produto: BENCH sintetico pp64/tg32 EXECUTADO (d2_q4km_htp/cpu,
+    05:52; modelo lido direto do app dir; hash c4bf1015...) — HTP pp64=1165,7
+    /tg32=26,2 vs CPU 271,8/37,7. TRADUCAO e2e NAO havia sido executada; frase
+    da secao H do relatorio R2 estava contraditoria -> retificada. Nesta R3 a
+    e2e foi EXECUTADA (secao C abaixo).
+A2. "Processo por uso" NAO e o contrato do SIG (confirmado no source):
+    app/src/main/cpp/llama-jni/llama_jni.cpp: g_model/g_ctx ESTATICOS (L41-42),
+    loadModel mantem/reusa (L432-435), unload libera (L467-473), cada request
+    usa hymt2_begin_fresh_request (L516) no MESMO g_ctx (L631). O custo CLI de
+    ~48 s (repack CPU Q4_0 upstream) NAO e baseline do app; o app amortiza o
+    load em sessao. O app usa fork proprio + backend de produto (Vulkan) —
+    numeros upstream NAO se transferem automaticamente.
+A3. Doze: rotulo corrigido para "degradacao com tela apagada/background
+    (mecanismo exato nao capturado na janela)". dumpsys formal coletado AGORA
+    (r3-dumpsys.txt): mState=ACTIVE, mLightState=ACTIVE, mStayOn=false,
+    sem carga USB, temps tz0-3 = 27,1-28,3 C. Carregando 100% nao e prova de
+    Doze (nao usado como tal).
+A4. F2 ganho "~8% Np1000" = ESTIMADO (projecao do modelo linear), NAO medido.
+    Export/import medidos em 15 posicoes (0,09/0,17 ms) — sem extrapolacao
+    linear. "~61 KB/pos" e o tamanho serializado observado (918.472/15),
+    inclui metadata fixa — reportado como faixa, nao constante.
+A5. Totais das traducoes = DERIVADOS (np/pp+ng/tg; np/ng aproximados). Walls
+    medidos constam na tabela ao lado dos derivados (secao C).
+A6. Corpus R2 e NOVO (originais historicos nao localizados): SHA-256 dos 4
+    arquivos registrados no RETIFICACOES-R2.md (A6). Break-even apresentado
+    por caso com premissas explicitas (nao "ratio unico").
+A7. Tuning: "limite estrutural" -> "melhor entre os testados"; comparacoes
+    tg sempre no MESMO comprimento de campo (tg64 vs tg64; tg128 vs tg128).
+A8. O hash do G1 e MD5 (32 hex, script usa md5sum) de TEXTO de resposta —
+    nao SHA-256, nao byte-equal de tensores. Reclassificado como "mesmo token
+    stream/texto entre backends (12/12 runs)". Recaptura SHA-256 em G2
+    (secao C).
+
+------------------------------------------------------------------------
+B. DADOS READ-ONLY RECONSOLIDADOS
+------------------------------------------------------------------------
+- trials.jsonl: 53 tentativas; classes por ATTEMPT: 47 VALID / 5 INVALID_DOZE
+  (c2_cpu_ext, c2_ocl_ext, c2_cpu_recheck 03:59, c2_cpu_recheck2 04:24,
+  c2_cpu_ext_awake) / 1 SUPERSEDED_OUTPUT_LOST (c2_ocl_ext_awake —
+  output perdido na queda do waker; rerodado como awake2). 3 runs C3 com
+  wall<1 s (erro --no-cnv) = FAIL_OPERATIONAL.
+- trials-valid.csv (47 linhas) gerado; matriz device-acordado (03:52/05:08+)
+  sobrepoe a janela doze 03:25-05:07 por ATTEMPT (nao por intervalo).
+- Fallback conhecido: 3 nos CPU no grafo do Q4_0 (GET_ROWS x2 + DUP do
+  embedding Q6_K; GET_ROWS q6_K unsupported 8/8). NAO presumir o mesmo para
+  outros modelos/contextos — e o unico caso observado.
+
+------------------------------------------------------------------------
+C. TESTES R3 (device) — resultados
+------------------------------------------------------------------------
+C3. Numericos MUL_MAT no HTP0: q4_K = 103/103 PASS; q6_K = 55/55 PASS
+    (casos nao-suportados pulados: 50 q4_K / 7 q6_K). Os tipos de peso do
+    PRODUTO tem suporte real no HTP (shapes do teste padrao).
+C1. Q4_K_M produto e2e (traducao real; corpus R2 pinado; temp 0, seed 42, -st):
+    short-409  HTP : Prompt  981,6 | Gen 26,7 t/s (wall 8,9 s)   [08:47 R3]
+    medium-952 HTP : Prompt 1832,3 | Gen 27,2 t/s (wall 15,0 s)  [08:40]
+    short-409  CPU : Prompt   33,5 | Gen 35,5 t/s (USB; stayon)  [08:55]
+    medium-952 CPU : Prompt  128,0 | Gen 19,0 t/s (USB; stayon)  [08:56]
+    (1a rodada CPU foi descartada por throttle de tela apagada, freq 537 MHz;
+     refeita com USB + svc power stayon usb.)
+D. Hibrido v5 — MATRIZ COMPLETA (Q4_0; ngen=64; USB; harness corrigido):
+    | np   | modo    | prefill   | gen      | wall    | export/import | n_p_eval dst | state |
+    |------|---------|-----------|----------|---------|---------------|--------------|-------|
+    | 132  | HTP-all |   76,0 ms | 1659,0ms | 3,67 s  | —             | 132          | —     |
+    | 132  | CPU-all |  843,8 ms | 2002,0ms | 4,40 s  | —             | 132          | —     |
+    | 132  | HTP->CPU|   85,6 ms | 1760,6ms | 3,93 s  | 0,68/1,48 ms  | **1**        | 8,6MB |
+    | 528  | HTP-all |  231,7 ms | 1832,9ms | 4,01 s  | —             | 528          | —     |
+    | 528  | CPU-all | 2520,7 ms | 2246,6ms | 6,17 s  | —             | 528          | —     |
+    | 528  | HTP->CPU|  238,5 ms | 2114,2ms | 4,47 s  | 3,95/4,42 ms  | **1**        | 34,5MB|
+    | 1034 | HTP-all |  436,3 ms | 1970,5ms | 4,24 s  | —             | 1034         | —     |
+    | 1034 | CPU-all | 5615,9 ms | 2678,1ms | 9,74 s  | —             | 1034         | —     |
+    | 1034 | HTP->CPU|  434,8 ms | 2421,7ms | 5,01 s  | 7,09/6,92 ms  | **1**        | 67,7MB|
+
+    ACHADOS:
+    - n_p_eval_dst=1 em TODOS os hibridos: o destino avalia SOMENTE a ponte
+      (sem replay do prompt) — criterio do parecer ATENDIDO.
+    - Export/import escalam ~linear (0,7/1,5 ms p/ 8,6MB; 7/7 ms p/ 67,7MB —
+      ~5-10 GB/s de copia); state ~65,5 KB/posicao consistente (131/527/1033
+      posicoes), incluindo metadata fixa.
+    - STREAMS IDENTICOS entre os modos quando o prompt e o mesmo (greedy).
+    - **O HTP-all ganha de TODOS** (3,67/4,01/4,24 s vs hybrid 3,93/4,47/5,01
+      vs CPU 4,40/6,17/9,74): com o decode no NPU funcional (tg 32-39 t/s,
+      >= CPU neste harness de processo unico), o hibrido agrega apenas o
+      custo do 2o modelo/ctx/transferencia. Prefill HTP = prefill do hibrido
+      (mesmo 76-436 ms) e gen HTP <= gen CPU.
+    - Portanto: (a) a viabilidade do HIBRIDO (API/corretude) esta PROVADA, mas
+      (b) para este modelo/device o value path e NPU WHOLE, nao o hibrido;
+      o hibrido so faria sentido se o decode do NPU fosse proibitivo em
+      contexto/qualidade futuros (nao e o caso hoje).
+    - Correcao de harness registrada: a 1a rodada do modo htp-all usava o ctx
+      CPU por bug do harness (numeros descartados; refeitos com cRun correto).
+      Incidentes R3 (rede/waker/permissao/versao de binario) no PLAN-RODADA3.
+C2. Baseline do app SIG v11 (Vulkan) NAO executado — fora do escopo autorizado
+    (acesso/harness do app exigiria intervencao no produto; registrado como
+    pendencia condicionada a autorizacao explicita do usuario).
+G2. Consistencia SHA-256 (substitui o MD5 do G1):
+    HTP: 3e16ae75014a262ad9381a02045afd8d05d944b105077e47b360656fd838f033
+    CPU: 3e16ae75014a262ad9381a02045afd8d05d944b105077e47b360656fd838f033
+    -> saida textual IDENTICA entre backends (SHA-256 de verdade, agora).
+
+------------------------------------------------------------------------
+D. HIBRIDO — DESIGN/ESTADO
+------------------------------------------------------------------------
+(ver secao C quando os numeros chegarem; v5 mede por fase: loads, ctxs,
+prefill, export/import, bridge, gen, wall, n_p_eval do destino)
+
+------------------------------------------------------------------------
+E. DECISAO (final, sem integrar)
+------------------------------------------------------------------------
+VEREDITO: **VIAVEL_COM_GANHO — value path = NPU WHOLE** (nao o hibrido).
+1. Q4_K_M do produto (peso REAL, hash c4bf1015...):
+   - Suporte: MUL_MAT q4_K 103/103 e q6_K 55/55 no HTP; bench 1165,7/26,2 (HTP)
+     vs 271,8/37,7 (CPU); e2e traducao: prefill 981,6-1832,3 t/s (HTP).
+   - CPU e2e (mesma condicao USB/stayon): 33,5-128 t/s prefill — o prefill
+     real do CPU segue ORDENS abaixo do HTP (fator 10-30x nos textos reais).
+2. Comparativo por processo (D): HTP-all vence CPU-all em todos os Np
+   (3,67/4,01/4,24 s vs 4,40/6,17/9,74 s) e vence tambem o hibrido
+   (3,93/4,47/5,01 s). O decode NPU (32-39 t/s) e competitivo; o prefill e
+   10x. O hibrido HTP->CPU esta PROVADO viavel (n_p_eval_dst=1, streams
+   identicos) mas nao agrega valor com o decode NPU funcional.
+3. Lifecycle: o app reusa g_ctx (A2) — startup NAO e gargalo do app; ainda
+   assim o NPU tem load ~1,3 s vs repack CPU ~48 s quando cada execucao for
+   processo novo (CLI).
+4. Limites declarados: contexto/config do app (Vulkan, KV dtype, FA) nao
+   reproduzidos; numeros sao do build upstream. Nenhuma alteracao no SIG.
+
+RECOMENDACAO: opcao opt-in "NPU whole" com capabilities check + fallback
+explicito (nunca CPU silencioso); sem mudanca de default; integracao = decisao
+humana futura (fora do escopo autorizado). O hibrido fica como refinamento
+arquivado (API ok) caso o decode NPU se torne proibitivo.
+
+------------------------------------------------------------------------
+F. MANIFESTO
+------------------------------------------------------------------------
+- Docs novos: RETIFICACOES-R2.md, trials-valid.csv (47 validos), r3-dumpsys.txt,
+  PLAN-RODADA3.md, hybrid_bridge_v5.cpp (v5 corrigido: n_batch dinamico +
+  modo htp no ctx correto; sha local apos fix), r3-tests.sh, r3-resume.sh,
+  r3-final.sh, r3-final-d.sh, g2-sha256.sh, este relatorio.
+- Logs/evidencias: C:/llama-npu/rodada2/logs/ (c3_mulmat_*, c1f_*, c1_q4km_*,
+  d_v5*_*, g2_*, r3-device-run*.sh, device r3-device-results{,2}.txt).
+- HASHes-chave desta rodada:
+  * Q4_K_M produto: c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+  * Consistencia G2 (SHA-256 de saida): 3e16ae75014a262ad9381a02045afd8d05d944b105077e47b360656fd838f033
+  * Corpus R2 (novos): short 961ccbfd..., medium b49d92d0..., long 0e86a9be..., xlong 2c09913c... (full em RETIFICACOES-R2.md)
+- Incidentes R3 (preservados): queda Tailscale (app morto pelo Android ->
+  adotado USB); script device-side v2 morto no meio (provavel LMK);
+  push sobrescreveu binario sem chmod; binario corrigido nao chegou durante
+  quedas (rodou o antigo -> aborts np512 rc=134); bug do harness htp-all
+  (usava ctx CPU) corrigido e refeito.
+- Nenhuma alteracao no SIG/APK/libs/defaults; sandbox, servidor e C:/llama-npu
+  mantidos. stayon USB revertido ao fim.

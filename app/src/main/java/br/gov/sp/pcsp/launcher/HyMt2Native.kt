@@ -45,4 +45,10 @@ object HyMt2Native {
     /** Threads de CPU em uso pelo contexto (ex.: "8"). */
     external fun threadCount(): String
     external fun systemInfo(): String
+
+    /** TESTE APENAS (R6): segura o lock interno pelo tempo pedido, para o
+     *  teste instrumentado (AnrUiLockContractTest) validar que os getters de
+     *  UI respondem sem bloquear com load/geração "em andamento".
+     *  Nunca chamar do app. */
+    external fun sigTestHoldGmutex(ms: Long)
 }

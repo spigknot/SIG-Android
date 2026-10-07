@@ -1,0 +1,196 @@
+PREFLIGHT — INVESTIGACAO NPU/HEXAGON HY-MT2 (RODADA 1)
+Data: 06/10/2026. Escopo: investigacao isolada autorizada pelo usuario
+(descobrir hardware/runtime; builds/harness isolados; teste temporario via ADB
+em diretorio proprio; SEM alterar app publicado).
+
+════════════════════════════════════════════════════════════════
+A. HOST (D:/Projetos/SIG @ 6a8b4cb; nada alterado alem de leitura)
+════════════════════════════════════════════════════════════════
+- git: HEAD 6a8b4cb (limpo; unico untracked = docs/especialista/, do proprio
+  especialista).
+- Docker: AUSENTE. WSL: binario existe mas SEM distro instalada ("O Subsistema
+  do Windows para Linux nao esta instalado").
+- QAIRT 2.49.0.260730 PRESENTE em D:/Projetos/qairt (5,8 GB): libs aarch64-
+  android, skels V81 (Stub/Skel), e bin/ com x86_64-windows-msvc + aarch64-
+  windows-msvc (qnn-context-binary-generator.exe etc.) e x86_64-linux-clang
+  (qnn-onnx-converter, qnn-net-run...). NAO contem o Hexagon SDK (o ggml-
+  hexagon compila skels com Hexagon SDK 6.6.0.0 — vem no container oficial).
+- NDK 27.2.12479018 (o toolchain oficial do snapdragon usa NDK r28b INTERNO do
+  container; nao substituir o do produto).
+- Espaco: C: 157 GB livres; D: 19 GB livres (builds/clones grandes -> C:).
+- python 3.11 (Hermes venv), git, ninja/cmake do SDK Android 3.22.1.
+
+════════════════════════════════════════════════════════════════
+B. DEVICE (CPH2747 via wireless 100.108.27.64:41257; USB ausente)
+════════════════════════════════════════════════════════════════
+- Identidade: CPH2747 / SM8850 / platform canoe / Android 16 (SDK 36) /
+  build OnePlus/CPH2747/OP611FL1:16/BP2A.250605.015.
+- Hexagon: skels/QNN do vendor em /odm (libQnnHtp.so, libQnnSystem.so,
+  libQnnHtpV81*Skel/Stub em /odm/lib64, /odm/lib/rfsa/adsp, aiframe/camera) ->
+  arquitetura v81 (EXATA do issue 27677).
+- FastRPC: /dev/fastrpc-cdsp (crw-rw-r-- system system), /dev/fastrpc-nsp1000,
+  /dev/fastrpc-adsp-secure; daemons vendor.cdsprpcd/adsprpcd/dspservice
+  RUNNING; HAL vendor.qti.hardware.dsp.IDspService/default PRESENTE (o fallback
+  que faz a sessao funcionar p/ uid de app/shell — ver issue 27677).
+- SIG no device: no_backup/qairt/v1 deployado (libQnnHtp/Gpu/Prepare/System +
+  skels+stubs V73/V75/V79/V81; manual-vendor-libs.disabled/). Modelos na area
+  privada do app (hymt2_models/: Q4_K_M 1.133.080.544 B sha c4bf1015...,
+  Q8_0 1.908.528.192 B sha 5c3fe0b1...) — leitura deve respeitar permissoes.
+- Energia: bateria 14% / 30,8 C  -> CARREGAR ANTES DE QUALQUER BENCH (o phone
+  deve ficar plugado; nada de teste em 14%).
+- Espaco /data: 524 GB livres.
+- APK atual: v1.507 (vc70) — lib llama no device = v10 ec9c8315 (estado
+  encontrado pos-piloto; NAO presumir v11 instalada).
+
+════════════════════════════════════════════════════════════════
+C. PESQUISA PINADA (revalidada nesta rodada)
+════════════════════════════════════════════════════════════════
+- docs/backend/snapdragon/README.md (master): build oficial via Docker
+  ghcr.io/snapdragon-toolchain/arm64-android:v0.7 (inclui NDK r28b + OpenCL SDK
+  + Hexagon SDK 6.6.0.0); preset arm64-android-snapdragon-release
+  (GGML_HEXAGON=ON, GGML_OPENCL=ON); instalacao gera libggml-hexagon.so +
+  libggml-htp-v73/v75/v79/v81.so; run.py --target adb --push; NPU aparece como
+  device "GPU" para -ngl (ex.: HTP0:0); envs GGML_HEXAGON_DEVICES/VERBOSE/
+  PROFILE/OPFILTER/NHVX/DMA64. Ultimo commit do doc: 0c3626e (21/09/2026,
+  64-bit DMA overhaul). FATO documental; comandos a revalidar no codigo real.
+- Issue 27677 (MESMO CPH2747/SM8850/v81): o erro de sessao era do ambiente
+  Termux + /vendor/lib64 no LD_LIBRARY_PATH quebrando o fallback HAL do
+  FastRPC; com push para /data/local/tmp e execucao como uid shell (2000) AMBOS
+  os backends funcionam (HTP0 new session, _dom=cdsp; hwinfo v81: threads 8,
+  hvx 8, hmx 1, vtcm 8 MB). MORAL OPERACIONAL: NAO colocar /vendor/lib64 no
+  LD_LIBRARY_PATH no nosso harness.
+- Comentario no mesmo issue (hardware measurements do MESMO device, Qwen3-8B
+  Q4_K_M, ngl=99, t8, tg16): Adreno 840 OpenCL 11,14 tok/s > HTP0 dspqueue
+  6,66 tok/s > CPU 5,10 tok/s. => HIPOTESE FORTE: no CPH2747 o HTP pode PERDER
+  para o OpenCL neste tipo de workload; resultado negativo honesto e aceitavel.
+
+════════════════════════════════════════════════════════════════
+D. INVENTARIO DO SIG (nao presumir capacidades)
+════════════════════════════════════════════════════════════════
+- npu_probe_jni.cpp: sonda por dlopen (libQnnSystem/libQnnHtp + stubs
+  V79/V75/V73/V69/V68) + dlsym QnnInterface_getProviders; NAO cobre v81 no
+  probe (gap cosmético). Nao abre sessao nem executa kernel — so deteccao.
+- QairtDependencyManager.kt: baixa QAIRT do R2 (v1), System.loadLibrary
+  ("cdsprpc") publicado pelo vendor + <uses-native-library> no Manifest,
+  ADSP_LIBRARY_PATH via Os.setenv, System.load das libs baixadas.
+- docs/qairt-status.md (29/08): QNN HTP v81 FUNCIONOU sem root para o Granite
+  (ORT QNN EP): HTP_STUB_OK/HTP_LIBS_OK v81, sessao NPU criada, inferencia
+  real (HTP_INFERENCE_PROGRESS 100) com transcricao correta; entrypoint
+  QairtSmokeTestActivity (debug). GPU QNN EP: nao funcionou (6020). NAR 4.1:
+  CPU OK; NPU estrita rejeitada (nos no CPU EP) — historico a revisar conforme
+  o prompt (nao reabrir; contexto).
+- Menu NPU do app: NAO implementado no produto (HyMt2Native backendKind 3 =
+  "NPU nao implementada"). Nada a alterar agora.
+- Whisper/ggml do whisper NAO serao tocados.
+
+════════════════════════════════════════════════════════════════
+E. TOOLCHAIN — ESTADO E BLOCKER CONCRETO
+════════════════════════════════════════════════════════════════
+- Rota A (llama.cpp ggml-hexagon, preferida pelo plano): requer Docker +
+  container snapdragon (que embute Hexagon SDK 6.6.0.0 + NDK r28b).
+  BLOCKER ATUAL: Docker e WSL2 ausentes no host -> precisa INSTALACAO
+  (download pesado / permissao adicional).
+- Rota B (QNN/QAIRT, plano alternativo): QAIRT 2.49 JA no host (Windows tools
+  incl.); device JA tem o stack v81 do SIG funcionando; SEM Docker.
+  Caminho: converter HyMT2 p/ ONNX/QNN (modelo original/ONNX necessario;
+  GGUF nao converte direto) -> qnn-context-binary-generator -> deploy parcial.
+  Trabalhoso porem sem toolchain nova. Avaliar apenas se A bloquear (o plano
+  pede priorizar A).
+- Rota C (ORT QNN EP, infra do SIG): existente para Granite via ONNX; mesmo
+  requisito de conversao do HyMT2 p/ ONNX.
+
+════════════════════════════════════════════════════════════════
+F. RESTORE/BASELINE
+════════════════════════════════════════════════════════════════
+- Nada criado/alterado no device ate agora (somente leitura).
+- Nada alterado no repo; nenhum arquivo novo fora deste doc (a criar:
+  docs/npu-hymt2/ — documentacao, commit futuro somente com pedido).
+- Primeiro envio ao device (quando houver binario): avisar caminho
+  (/data/local/tmp/sig-hymt2-npu-r1/), tamanho (~dezenas de MB bins+libs; +
+  modelo se necessario copia), executaveis (llama-cli/llama-bench + libs
+  ggml-hexagon) e limite antes de qualquer push.
+
+════════════════════════════════════════════════════════════════
+G. TOOLCHAIN — DESCOBERTAS NOVAS (caminhos alternativos reais)
+════════════════════════════════════════════════════════════════
+- SDKs PUBLICOS no GitHub (org snapdragon-toolchain, SEM login Qualcomm):
+  hexagon-sdk v6.6.0.0 — 'hexagon-sdk-v6.6.0.0-amd64-lnx.tar.xz' (694 MB,
+  Linux amd64) e '...-arm64-wos.tar.xz' (858 MB, Windows-ARM — NAO serve num
+  host x86_64 como o nosso).
+- build.py --no-docker: no Windows host o script forca preset 'windows' —
+  NAO produz binario Android; o caminho Android exige ambiente Linux.
+- SERVIDOR DA TAILNET: 'servidor' (100.70.207.12) e LINUX e esta ACTIVE
+  (tambem 'avare', Linux, idle). Tailscale SSH presente: user 'root' e
+  PERMITIDO mas pede 'additional check' (autenticacao via browser); outros
+  users bloqueados pela tailnet policy.
+  => OPCAO NOVA: build no SERVIDOR (sem instalar NADA no PC): baixar o SDK
+  Linux (694 MB) + NDK + clonar o llama.cpp no servidor, buildar e trazer o
+  pacote pronto (bins+libs, dezenas de MB) — push ao device sai do PC.
+- Rota B (QNN/QAIRT): segue sem toolchain nova (QAIRT 2.49 no host + stack
+  v81 ja no device), mas exige conversao do modelo (GGUF nao -> QNN direto).
+
+OPCOES PARA DECISAO:
+  A1) SERVIDOR (recomendada): autorizar o check SSH root no link do Tailscale
+      + downloads ~2 GB e build ~30-60 min LA; zero instalacao local.
+  A2) WSL2 + Ubuntu no PC + SDK manual (downloads ~2 GB; pode pedir reboot).
+  A3) Docker Desktop + WSL2 (oficial; ~4-7 GB; pode pedir reboot).
+  B)  Rota B/QNN sem build novo (conversao de modelo; mais analise nossa).
+
+════════════════════════════════════════════════════════════════
+H. PEDIDO DE APROVACAO (agrupado — atualizado)
+════════════════════════════════════════════════════════════════
+1) Toolchain: escolher A1 (servidor) / A2 / A3 / B.  Para A1: abrir
+   https://login.tailscale.com/a/l1ad6f6d63384c8 e aprovar; depois libero o
+   restante (verifico ferramentas do servidor, baixo SDK/NDK e buildo).
+2) Telefone: carregar (bateria 14%) e manter plugado durante os benchmarks.
+3) Primeiro envio ao device: aviso com caminho (/data/local/tmp/
+   sig-hymt2-npu-r1/), tamanho (~dezenas de MB bins+libs; + modelo se preciso
+   copia) e executaveis — hoje nada a enviar.
+
+
+════════════════════════════════════════════════════════════════
+I. PROGRESSO DO TOOLCHAIN (servidor) — atualizado 06/10
+════════════════════════════════════════════════════════════════
+- SSH root@servidor: AUTORIZADO pelo usuario (check Tailscale aprovado);
+  servidor Linux x86_64 36 cores / 22 GB / 133 GB livres; docker 29.1.3.
+- Clone: /root/llama-cpp-npu @ 5e03bdd (RC=0; mesmo pin do PC).
+- Pull: ghcr.io/snapdragon-toolchain/arm64-android:v0.7 OK
+  (digest sha256:91714433626f0d94a926538a1e46ec43756c5b8e3262b91b95df1e812940aed1).
+- CONFIGURE OK no container: NDK=/opt/android-ndk-r29; HSDK=/opt/hexagon/6.6.0.0;
+  TOOLS=/opt/hexagon/6.6.0.0/tools/HEXAGON_Tools/19.0.07; "Including OpenCL
+  backend" + "Including Hexagon backend"; ggml 0.26.0 @ 5e03bdd; build dir
+  /workspace/build-snapdragon.
+- BUILD: em andamento (cmake --build -j20, background; script
+  docs/npu-hymt2/build-npu-harness.sh).
+- Proximo: install (pkg-android) -> scp de volta -> AVISO antes do primeiro
+  push ao device -> testes do DESIGN-HARNESS-RODADA1.
+- Nada alterado no PC (so docs/npu-hymt2/); nada enviado ao device ainda.
+
+
+════════════════════════════════════════════════════════════════
+J. RESULTADO FINAL DA RODADA 1 (06/10/2026) — 5 PROVAS
+════════════════════════════════════════════════════════════════
+P1 NPU registrada       : OK  (HTP0; Arch v81; DMA64)
+P2 Sessao HTP aberta    : OK  (nsp1000; threads 8, hvx 8, hmx 1, vtcm 8 MB)
+P3 Kernel executado     : OK  (101/101 MUL_MAT q4_0; buffers no DSP)
+P4 Modelo gerando certo : OK  ("Bom dia, como voce esta?"; 1035 MiB no HTP)
+P5 Desempenho util      : PARCIAL — pp 1015,65 t/s (2,7x CPU; 3,1x OpenCL)
+                          vs tg 26,87 t/s (CPU 47,34; OpenCL 20,12).
+                          Para traducao (geracao-dominante): ganho liquido
+                          NAO comprovado. Sem crash/NaN/fallback oculto.
+
+FIX CRITICO descoberto: exportar ADSP_LIBRARY_PATH=./lib (alem de
+LD_LIBRARY_PATH) — sem isso: "failed to open session ... 0x80000406".
+(Origem: run.py oficial.)
+
+Evidencias PC: C:/llama-npu/logs/support-htp0.log (3,4 MB),
+gen-htp0-v.log (9,8 MB, verbose com rota HTP), gen-htp0.log, lc-help.txt.
+Device sandbox: /data/local/tmp/sig-hymt2-npu-r1 (1,2 GB: 276 MB pacote +
+1,0 GB modelo Q4_0 md5 8325a8db... + logs). Bateria 100%, sem aquecimento
+(24,2 C bateria / 27,9 C tz0 pos-benches).
+
+DECISAO PENDENTE (usuario/especialista): CAMINHO A (nao integrar agora),
+B (aprofundar: energia/tuning/Q4_K_M/Vulkan), ou C (hibrido prefill/decode).
+Relatorio completo: docs/npu-hymt2/RELATORIO-RODADA1.txt
+
+DECISAO: CAMINHO A (encerrar; nao integrar). Rodada 1 concluida (06/10).
