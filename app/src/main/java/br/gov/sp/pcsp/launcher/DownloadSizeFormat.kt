@@ -1,5 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
+import java.util.Locale
+
 /**
  * Formatação e detalhamento dos tamanhos de download (seam PURO, sem Android).
  *
@@ -50,7 +52,10 @@ object DownloadSizeFormat {
             unidade++
         }
         // >= 100 GB não é caso de download do SIG, mas não pode estourar o array.
-        return "%.1f %s".format(valor, UNIDADES[unidade])
+        // Locale EXPLÍCITO (pt-BR): o separador decimal não pode depender do
+        // locale da máquina/CI (no CI en-US saía "4.9 GB" e quebrava os testes;
+        // no aparelho o produto é em português). Fix do gate do CI 07/10.
+        return String.format(Locale.forLanguageTag("pt-BR"), "%.1f %s", valor, UNIDADES[unidade])
     }
 
     /**

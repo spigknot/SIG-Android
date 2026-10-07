@@ -158,6 +158,20 @@ class DownloadSizeFormatTest {
     }
 
     @Test
+    fun `legivel independe do locale da maquina`() {
+        // VACINA (gate do CI 07/10): no runner en-US o separador decimal saia
+        // "." ("4.9 GB") e os testes de log quebravam; o produto e' pt-BR e o
+        // formato NAO pode depender do locale da maquina/CI.
+        val original = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.US)
+            assertEquals("4,9 GB", DownloadSizeFormat.legivel(4_900_000_000L))
+        } finally {
+            java.util.Locale.setDefault(original)
+        }
+    }
+
+    @Test
     fun `completo quando todos os arquivos ja estao no aparelho`() {
         val plano = DownloadSizeFormat.Plano(
             "x",
