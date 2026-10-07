@@ -20,18 +20,22 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          # O gradle/gradle-daemon-jvm.properties pede toolchainVendor=JETBRAINS
-          # com Java 21; sem o JDK correspondente o Gradle tenta baixar do
-          # foojay (link expirado -> HTTP 400) e o gate falha por infra.
-          # O setup-java abaixo instala o JetBrains 21 direto, satisfazendo o
-          # criterio sem depender do resolvador de toolchain.
-          # token: as requests de resolucao/download usam a API do GitHub;
-          # sem autenticacao o IP compartilhado do runner toma rate limit
-          # (erro visto no run 37650685773).
-          distribution: jetbrains
+          # JDK 21 via temurin (API adoptium estavel). O critério de toolchain
+          # do repositorio (gradle-daemon-jvm.properties, toolchainVendor=
+          # JETBRAINS) e neutralizado no step seguinte SO no runner: o resolver
+          # foojay esta com link expirado (HTTP 400) e a API deles aplica rate
+          # limit no IP compartilhado (runs 37650685773 / 37651278251).
+          distribution: temurin
           java-version: '21'
-          token: ${{ github.token }}
           cache: gradle
+
+      - name: Neutraliza criterio de daemon do CI (usa o JDK 21 do runner)
+        shell: pwsh
+        run: |
+          # Remove o criterio SO no runner (arquivo segue versionado local).
+          Remove-Item gradle/gradle-daemon-jvm.properties -Force -ErrorAction SilentlyContinue
+          Write-Output "criterio de daemon removido no CI; java -version:"
+          java -version
 
       - name: Validate harness contracts
         shell: pwsh
