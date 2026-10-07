@@ -8,6 +8,46 @@ import org.junit.Test
 
 class SmartJoinPlannerTest {
 
+    @Test fun invalidNumbersAreRejected() {
+        for (seconds in listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0)) {
+            assertFalse(SmartJoinPlanner.plan(listOf(source(6.0), source(6.0)), seconds, true).canSmartJoin)
+        }
+        assertFalse(SmartJoinPlanner.plan(listOf(source(Double.NaN)), 0.0, true).canSmartJoin)
+    }
+
+    @Test fun emptyCopyDoesNotPermitFullReencode() {
+        val plan = SmartJoinPlanner.plan(List(3) { source(3.0, keyframes = listOf(0.0)) }, .5, true)
+        assertFalse(plan.hasUsefulCopy)
+    }
+
+    @Test fun subFrameTransitionIsExplicitlyNormalizedToZero() {
+        val plan = SmartJoinPlanner.plan(listOf(source(6.0), source(6.0)), .0015, false)
+        assertEquals(0.0, plan.transitionSeconds, 0.0)
+        assertTrue(plan.junctions.isEmpty())
+        assertEquals(12.0, plan.expectedDurationSeconds(listOf(6.0, 6.0)), 0.0)
+    }
+
+    @Test fun outgoingBodyStopsBeforeCraLeadingPictures() {
+        val src = source(6.0, keyframes = listOf(0.0, 2.0, 4.0)).copy(safeCopyEnds = mapOf(4.0 to 3.92))
+        val plan = SmartJoinPlanner.plan(listOf(src, src), .5, true)
+        assertEquals(3.92, plan.clips[0].bodyEndSeconds, 1e-9)
+        assertEquals(3.92, plan.junctions[0].outgoingBridgeStartSeconds, 1e-9)
+    }
+
+    @Test fun uiTransitionLimitCannotOverlapMiddleClip() {
+        assertEquals(5.9, SmartJoinPlanner.maximumTransitionSeconds(listOf(6.0, 6.0)), 1e-9)
+        val maximum = SmartJoinPlanner.maximumTransitionSeconds(listOf(6.0, 6.0, 6.0))
+        assertEquals(2.9, maximum, 1e-9)
+        assertTrue(SmartJoinPlanner.plan(List(3) { source(6.0) }, maximum, true).canSmartJoin)
+    }
+
+    @Test fun subFrameThresholdUsesDominantProfileRatherThanFirstClip() {
+        val sources = listOf(source(6.0, profile(fps = 25.0)), source(6.0, profile(fps = 60.0)), source(6.0, profile(fps = 60.0)))
+        val plan = SmartJoinPlanner.plan(sources, .015, true)
+        assertEquals(60.0, plan.targetProfile.fps, 0.0)
+        assertEquals(.015, plan.transitionSeconds, 0.0)
+    }
+
     private fun profile(
         codec: String = "h264",
         width: Int = 1920,

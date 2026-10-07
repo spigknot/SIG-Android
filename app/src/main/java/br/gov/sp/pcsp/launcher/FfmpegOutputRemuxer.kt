@@ -62,16 +62,17 @@ object FfmpegOutputRemuxer {
         inputPath: String,
         outputPath: String,
         isHevc: Boolean,
-        isMovContainer: Boolean
+        isMovContainer: Boolean,
+        preserveInBandHevc: Boolean = false
     ): Array<String> = buildList {
         addAll(listOf("-y", "-hide_banner", "-loglevel", "error"))
         addAll(listOf("-i", inputPath))
         addAll(listOf("-map", "0:v:0", "-map", "0:a?"))
         addAll(listOf("-c", "copy"))
         addAll(listOf("-map_metadata", "0"))
-        // MP4 exige a tag hvc1 para HEVC (o padrao hev1 nao abre em
-        // varios players/iOS). Nao aplicar a tag ao Matroska/AVI.
-        if (isHevc && isMovContainer) addAll(listOf("-tag:v", "hvc1"))
+        // SmartJoin repete VPS/SPS/PPS dentro do stream; hvc1 não permite
+        // essa troca de parâmetros. Outros pipelines mantêm a tag anterior.
+        if (isHevc && isMovContainer) addAll(listOf("-tag:v", if (preserveInBandHevc) "hev1" else "hvc1"))
         // moov no inicio (reproducao progressiva) apenas nos containers
         // da familia MOV; Matroska/AVI nao usam esse atom.
         if (isMovContainer) addAll(listOf("-movflags", "+faststart"))
@@ -95,6 +96,7 @@ object FfmpegOutputRemuxer {
     fun remuxToOriginalContainer(
         inputFile: File,
         originalExtension: String,
+        preserveInBandHevc: Boolean = false,
         onCommand: ((Array<String>) -> Unit)? = null
     ): RemuxResult {
         val extension = originalExtension.lowercase(Locale.ROOT)
@@ -115,7 +117,7 @@ object FfmpegOutputRemuxer {
 
         val isHevc = detectHevc(inputFile)
         val isMovContainer = extension in setOf("mp4", "mov", "m4v", "3gp", "3g2")
-        val args = remuxArguments(inputFile.absolutePath, output.absolutePath, isHevc, isMovContainer)
+        val args = remuxArguments(inputFile.absolutePath, output.absolutePath, isHevc, isMovContainer, preserveInBandHevc)
 
         onCommand?.invoke(args)
         val session = FFmpegKit.executeWithArguments(args)

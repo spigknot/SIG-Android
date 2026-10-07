@@ -51,7 +51,7 @@ também é bloqueado.
 | `FfmpegCutActivity.kt` | Cortar vídeo. |
 | `FfmpegJoinVideosActivity.kt` | Juntar vídeos. |
 | `FfmpegExtractAudioActivity.kt` | Extrair áudio. |
-| `FfmpegInsertAudioActivity.kt` | Inserir áudio em vídeo. |
+| `FfmpegInsertAudioActivity.kt` | Inserir áudio em áudio, seleção de faixas e prévia com os efeitos escolhidos. |
 | `FfmpegRotateVideoActivity.kt` | Girar vídeo. |
 | `FfmpegCleanAudioActivity.kt` | Limpar/melhorar áudio. |
 | `TextoActivity.kt` | Ferramenta Texto: tradução Hy-MT2 no aparelho (modelos, backend, log). |
@@ -101,7 +101,11 @@ também é bloqueado.
 | `FfmpegCutModes.kt` | Modos de corte (SmartCut/Reencode/Cópia) e despacho com motivo. |
 | `FfmpegPreviewSelection.kt` | Geometria do player: zoom, deslocamento e seleção de área (crop). |
 | `FfmpegVideoQuality.kt` | Modelos de qualidade/bitrate de vídeo e áudio. |
-| `SmartJoinPlanner.kt` | Plano da junção inteligente (clipes, alvo, compatibilidade). |
+| `SmartJoinPlanner.kt` | Plano da junção inteligente, GOP aberto, contagem de quadros e validação temporal. |
+| `SmartInsertPlanner.kt` | Plano por amostras, fronteiras de pacotes e filtros da inserção/prévia de áudio. |
+| `SmartInsertPipeline.kt` | Cópia parcial PCM/ALAC/FLAC, compatibilização e validação da inserção. |
+| `SmartInsertWave.kt` | Montagem WAV/RF64 em limites de amostras por cópia de bytes PCM. |
+| `SmartInsertFlac.kt` | Remontagem de headers, CRCs e metadados FLAC sem recodificar subframes copiados. |
 | `RequestModelLabel.kt` | Rótulo curto do modelo usado numa requisição. |
 | `ServiceEndpoints.kt` | Endpoints oficiais embutidos no app. |
 | `LittleEndianIo.kt` | Leitura/escrita little-endian (WAV/pacotes). |

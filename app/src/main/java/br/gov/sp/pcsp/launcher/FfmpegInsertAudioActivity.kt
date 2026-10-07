@@ -31,6 +31,10 @@ import androidx.core.content.FileProvider
 import androidx.core.widget.doAfterTextChanged
 import androidx.documentfile.provider.DocumentFile
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFprobeKit
+import org.json.JSONObject
+import java.util.UUID
+import kotlin.math.roundToLong
 import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
@@ -39,7 +43,7 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicReference
 
-/** Tela de insercao de audio em video (UI + orquestracao FFmpeg). */
+/** Tela de inserção de áudio, seleção de faixas e prévia com os mesmos filtros da exportação. */
 
 class FfmpegInsertAudioActivity : AppCompatActivity() {
 
@@ -77,16 +81,23 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     private val selectedAudioTracks = mutableMapOf<String, Int>()
     private var insertionMs = 0L
     private var compositePositionMs = 0L
-    private var mainPlayer: MediaPlayer? = null
-    private var insertedPlayer: MediaPlayer? = null
-    private var mainPrepared = false
-    private var insertedPrepared = false
-    private var activeSegment = Segment.NONE
+    private var filteredPreviewPlayer: MediaPlayer? = null
+    private var filteredPreviewFile: File? = null
+    private var filteredPreviewPlan: SmartInsertPlanner.Render? = null
+    private var filteredPreviewKey: String? = null
+    private var filteredPreviewReady = false
+    @Volatile private var previewGeneration = 0L
+    @Volatile private var previewRendering = false
     private var playbackSpeed = 1f
     private val speedSteps = floatArrayOf(0.25f, 0.5f, 1f, 2f, 4f)
     private var selectedTransition = TRANSITION_NONE
     private var isProcessing = false
-    private var currentSessionId: Long? = null
+    @Volatile private var selectionGeneration = 0L
+    @Volatile private var selectionSessionId: Long? = null
+    @Volatile private var processingCancelled = false
+    @Volatile private var previewCancelled = false
+    @Volatile private var previewSessionId: Long? = null
+    @Volatile private var currentSessionId: Long? = null
     private var lastOutputFile: File? = null
     private var lastOutputUri: Uri? = null
     private var lastOutputName = ""
@@ -121,22 +132,18 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         insertHint = findViewById(R.id.text_insert_hint)
         smartInsertCheck.setOnCheckedChangeListener { _, marcado ->
             smartInsertEnabled = marcado
-            insertHint.text = if (marcado) {
-                "Smart Insert (experimental): copia o corpo do áudio principal no codec original e " +
-                    "reencoda só o trecho inserido. O ponto de corte fica aproximado ao frame/pacote; " +
-                    "sem transição, nada é reencodado além do inserido."
-            } else {
-                "A inserção usa recodificação precisa para respeitar exatamente o ponto e as transições escolhidas."
-            }
+            stopFilteredPreview()
+            updateInsertHint()
+            refreshCommandPreview()
         }
         smartInsertHelp.setOnClickListener {
             AlertDialog.Builder(this)
                 .setMessage(
-                    "Smart Insert (experimental): preserva o corpo do áudio principal (copiado no " +
-                        "codec original) e reencoda apenas o trecho inserido.\n\n" +
-                        "Como é cópia, o ponto de corte fica aproximado ao frame/pacote do codec — não " +
-                        "tem a precisão de amostra do modo normal (em AAC/MP3 a aproximação é maior " +
-                        "que em WAV). É o caminho do SIG Windows, e vale para qualquer formato."
+                    "Smart Insert (experimental): cortes precisos com cópia do principal em PCM/WAV, ALAC/M4A e FLAC nativo. " +
+                        "Somente o inserido e, quando necessário, a pequena emenda são recodificados.\n\n" +
+                        "As curvas suavizam apenas o áudio inserido, sem reduzir a duração total. Zero segundo e Sem transição não aplicam efeito.\n\n" +
+                        "AAC, MP3, Opus, Vorbis e outros formatos sem emendas confiáveis usam recodificação contínua com aviso, mantendo o efeito selecionado. " +
+                        "Recodificar áudio costuma ser leve."
                 )
                 .setPositiveButton("OK", null)
                 .show()
@@ -155,8 +162,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         arrowInputOutput = findViewById(R.id.arrow_input_output)
 
         val exitHandler = installCancelAndExitGuard(
-            isTaskRunning = { isProcessing },
-            cancelTask = { cancelProcessing() }
+            isTaskRunning = { isProcessing || previewRendering },
+            cancelTask = { if(isProcessing)cancelProcessing() else stopFilteredPreview() }
         )
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { exitHandler() }
         findViewById<View>(R.id.button_select_main_audio).setOnClickListener { openAudioPicker(REQUEST_MAIN_AUDIO) }
@@ -184,7 +191,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
         inputTime.setOnFocusChangeListener { _, hasFocus -> if (!hasFocus) applyTypedInsertionTime() }
         inputTime.doAfterTextChanged { refreshCommandPreview() }
-        transitionTime.doAfterTextChanged { refreshCommandPreview() }
+        transitionTime.doAfterTextChanged { stopFilteredPreview();refreshCommandPreview() }
         updateOptionState()
         updateSpeedButtons()
         refreshCommandPreview()
@@ -244,58 +251,91 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
 
     private fun loadAudio(uri: Uri, primary: Boolean, flags: Int) {
         try {
-            if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            if (flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+                contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: SecurityException) { }
+        val version=++selectionGeneration
+        selectionSessionId?.let { FFmpegKit.cancel(it) }
+        pausePlayback();stopFilteredPreview()
+        status.text="Lendo faixas e duração do áudio..."
+        executeButton.isEnabled=false
+        Thread {
+            var cached: File?=null
+            try {
+                val name=MediaUriSupport.queryDisplayName(contentResolver,uri) ?: "audio"
+                val file=copyUriToCache(uri,name,"insert_selected") {
+                    if(version!=selectionGeneration)throw ProcessingCancelled()
+                }
+                cached=file
+                val latch=CountDownLatch(1)
+                val session=FFprobeKit.executeWithArgumentsAsync(arrayOf("-v","error","-show_streams","-show_format","-of","json",file.absolutePath)) { latch.countDown() }
+                selectionSessionId=session.sessionId
+                if(version!=selectionGeneration)FFmpegKit.cancel(session.sessionId)
+                latch.await()
+                if(version!=selectionGeneration)throw ProcessingCancelled()
+                check(ReturnCode.isSuccess(session.returnCode)) { "Não foi possível ler o áudio selecionado." }
+                val info=JSONObject(session.output)
+                val array=info.getJSONArray("streams")
+                val count=(0 until array.length()).count { array.getJSONObject(it).optString("codec_type")=="audio" }
+                check(count>0) { "O arquivo não contém faixas de áudio." }
+                val tracks=(0 until count).map { SmartInsertPlanner.readAudio(info,it) }
+                val source=AudioSource(uri,name,(tracks.first().duration*1000).roundToLong(),file,tracks)
+                runOnUiThread {
+                    if(version!=selectionGeneration || isDestroyed || isProcessing) {
+                        file.delete()
+                    } else {
+                        clearOutputResult();pausePlayback();stopFilteredPreview()
+                        if(primary) {
+                            mainAudio?.let { selectedAudioTracks.remove(trackKey(it)) }
+                            insertedAudio?.let { selectedAudioTracks.remove(trackKey(it)) }
+                            mainAudio?.cachedFile?.delete();insertedAudio?.cachedFile?.delete()
+                            mainAudio=source;insertedAudio=null;insertionMs=0;compositePositionMs=0
+                            mainName.text=source.name;insertName.visibility=View.GONE
+                            selectInsert.isEnabled=true;selectInsert.alpha=1f
+                            options.visibility=View.GONE;arrowInputOutput.visibility=View.GONE;selectOutputFolder.visibility=View.GONE
+                        } else {
+                            val main=mainAudio
+                            if(main==null) { file.delete();return@runOnUiThread }
+                            insertedAudio?.let { selectedAudioTracks.remove(trackKey(it)) }
+                            insertedAudio?.cachedFile?.delete()
+                            insertionMs=compositeToMainTime(compositePositionMs).coerceIn(0L,main.durationMs)
+                            insertedAudio=source;compositePositionMs=insertionMs
+                            insertName.text="Inserir: ${source.name}";insertName.visibility=View.VISIBLE
+                            options.visibility=View.VISIBLE;arrowInputOutput.visibility=View.VISIBLE;selectOutputFolder.visibility=View.VISIBLE
+                        }
+                        configureTimeline();preparePlayers();updateInsertHint();refreshCommandPreview()
+                        executeButton.isEnabled=true
+                    }
+                }
+                cached=null
+            } catch (_: ProcessingCancelled) {
+                // Uma seleção mais recente ou a saída da tela descartou esta leitura.
+            } catch(error: Throwable) {
+                Log.e(TAG,"Could not read audio",error)
+                runOnUiThread { if(version==selectionGeneration && !isDestroyed) {
+                    executeButton.isEnabled=true;status.text=error.message ?: "Não consegui ler o áudio."
+                } }
+            } finally {
+                cached?.delete()
+                if(version==selectionGeneration)selectionSessionId=null
             }
-        } catch (_: SecurityException) {
-        }
-        val source = readAudioSource(uri) ?: return
-        clearOutputResult()
-        pausePlayback()
-        if (primary) {
-            mainAudio = source
-            insertedAudio = null
-            insertionMs = 0L
-            compositePositionMs = 0L
-            mainName.text = source.name
-            insertName.visibility = View.GONE
-            selectInsert.isEnabled = true
-            selectInsert.alpha = 1f
-            options.visibility = View.GONE
-            arrowInputOutput.visibility = View.GONE
-            selectOutputFolder.visibility = View.GONE
-        } else {
-            val main = mainAudio ?: return
-            insertionMs = compositeToMainTime(compositePositionMs).coerceIn(0L, main.durationMs)
-            insertedAudio = source
-            compositePositionMs = insertionMs
-            insertName.text = "Inserir: ${source.name}"
-            insertName.visibility = View.VISIBLE
-            options.visibility = View.VISIBLE
-            arrowInputOutput.visibility = View.VISIBLE
-            selectOutputFolder.visibility = View.VISIBLE
-        }
-        configureTimeline()
-        preparePlayers()
-        refreshCommandPreview()
+        }.start()
     }
 
-    private fun readAudioSource(uri: Uri): AudioSource? {
-        val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "audio"
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(this, uri)
-            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                ?.toLongOrNull()?.takeIf { it > 0L } ?: error("duração indisponível")
-            val hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
-            if (!hasAudio) error("arquivo sem faixa de áudio")
-            AudioSource(uri, name, duration)
-        } catch (error: Throwable) {
-            Log.e(TAG, "Could not read $name", error)
-            Toast.makeText(this, "Não consegui ler $name como áudio.", Toast.LENGTH_LONG).show()
-            null
-        } finally {
-            retriever.release()
+    private fun updateInsertHint() {
+        if(!::insertHint.isInitialized)return
+        val source=mainAudio
+        val track=source?.let { selectedAudioTracks[trackKey(it)] } ?: 0
+        val audio=source?.nativeAudio?.getOrNull(track)
+        val extension=source?.name?.substringAfterLast('.',"")?.lowercase(Locale.ROOT).orEmpty()
+        insertHint.text=if(!smartInsertEnabled) {
+            "Inserção precisa: recodificação contínua respeitando o ponto e o efeito escolhidos."
+        } else if(audio!=null && SmartInsertPlanner.canCopy(audio,extension)) {
+            if(audio.codec in SmartInsertPlanner.pcmCodecs)
+                "Smart Insert: copia o principal por amostras e trata somente o inserido. Sem efeito e com PCM compatível, ambos são copiados."
+            else "Smart Insert: copia o principal; recodifica somente o inserido e a pequena emenda do corte."
+        } else {
+            "Smart Insert: ${audio?.codec?.uppercase(Locale.ROOT) ?: "este formato"} usa recodificação contínua para evitar erros nas emendas, mantendo o efeito escolhido. Recodificar áudio costuma ser leve."
         }
     }
 
@@ -308,159 +348,145 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         if (!inputTime.hasFocus()) inputTime.setText(formatTime(insertionMs))
     }
 
-    private fun preparePlayers() {
-        releasePlayers()
-        val main = mainAudio ?: return
-        mainPrepared = false
-        insertedPrepared = insertedAudio == null
-        mainPlayer = createPlayer(main, true)
-        insertedAudio?.let { insertedPlayer = createPlayer(it, false) }
-    }
-
-    private fun createPlayer(source: AudioSource, primary: Boolean): MediaPlayer {
-        return MediaPlayer().apply {
-            setDataSource(this@FfmpegInsertAudioActivity, source.uri)
-            setOnPreparedListener {
-                if (primary) mainPrepared = true else insertedPrepared = true
-                applyPlaybackSpeed(it)
-            }
-            setOnCompletionListener {
-                when {
-                    !primary -> startMainAfterInsertion()
-                    activeSegment == Segment.MAIN_BEFORE && insertedAudio != null -> startInsertedSegment()
-                    activeSegment == Segment.MAIN_AFTER || insertedAudio == null -> finishPlayback()
-                }
-            }
-            setOnErrorListener { _, _, _ ->
-                status.text = "Não consegui reproduzir ${source.name}."
-                pausePlayback()
-                true
-            }
-            prepareAsync()
-        }
-    }
+    private fun preparePlayers() { stopFilteredPreview() }
 
     private fun togglePlayback() {
-        if (isPlaying()) {
-            finishTimeEditing()
-            pausePlayback()
-            return
-        }
+        if(previewRendering) { stopFilteredPreview();return }
+        if(isPlaying()) { finishTimeEditing();pausePlayback();return }
         finishTimeEditing()
-        if (!mainPrepared || !insertedPrepared) {
-            Toast.makeText(this, "O áudio ainda está sendo preparado.", Toast.LENGTH_SHORT).show()
-            return
-        }
-        if (compositePositionMs >= compositeDurationMs()) compositePositionMs = 0L
-        startPlaybackAt(compositePositionMs)
+        val main=mainAudio ?: return
+        listOfNotNull(main,insertedAudio).firstOrNull {
+            audioTrackCount(it.uri)>1 && selectedAudioTracks[trackKey(it)]==null
+        }?.let { source -> requestAudioTrack(source) { togglePlayback() };return }
+        if(compositePositionMs>=compositeDurationMs())compositePositionMs=0
+        startFilteredPreview()
     }
 
-    private fun startPlaybackAt(positionMs: Long) {
-        pausePlayersOnly()
-        val inserted = insertedAudio
-        when {
-            inserted == null -> {
-                activeSegment = Segment.MAIN_AFTER
-                seekPlayer(mainPlayer, positionMs)
-                mainPlayer?.start()
-            }
-            positionMs < insertionMs -> {
-                activeSegment = Segment.MAIN_BEFORE
-                seekPlayer(mainPlayer, positionMs)
-                mainPlayer?.start()
-            }
-            positionMs < insertionMs + inserted.durationMs -> {
-                activeSegment = Segment.INSERTED
-                seekPlayer(insertedPlayer, positionMs - insertionMs)
-                insertedPlayer?.start()
-            }
-            else -> {
-                activeSegment = Segment.MAIN_AFTER
-                seekPlayer(mainPlayer, positionMs - inserted.durationMs)
-                mainPlayer?.start()
-            }
+    private fun startFilteredPreview() {
+        val main=mainAudio ?: return
+        val inserted=insertedAudio
+        val options=try { selectedOptions() } catch(error: IllegalStateException) { status.text=error.message;return }
+        val key=listOf(main.cachedFile?.absolutePath,inserted?.cachedFile?.absolutePath,options).toString()
+        if(filteredPreviewKey==key && filteredPreviewPlayer!=null && filteredPreviewReady) {
+            startFilteredPlayer();return
         }
+        stopFilteredPreview()
+        val version=previewGeneration
+        previewCancelled=false;previewRendering=true
+        status.text="Preparando prévia com a faixa e o efeito selecionados..."
         updatePlayButton(true)
+        Thread {
+            val work=File(cacheDir,"insert_preview_${UUID.randomUUID()}")
+            val temporary=mutableListOf<File>()
+            var retained=false
+            fun checkCancelled() { if(previewCancelled || version!=previewGeneration)throw ProcessingCancelled() }
+            try {
+                check(work.mkdirs()) { "Não foi possível criar a prévia." }
+                fun input(source: AudioSource): File = source.cachedFile?.takeIf { it.isFile }
+                    ?: copyUriToCache(source.uri,source.name,"insert_preview_input",::checkCancelled).also { temporary+=it }
+                val pipeline=SmartInsertPipeline(
+                    execute={ args,_ ->
+                        checkCancelled()
+                        val latch=CountDownLatch(1)
+                        val session=FFmpegKit.executeWithArgumentsAsync(args) { latch.countDown() }
+                        previewSessionId=session.sessionId
+                        if(previewCancelled || version!=previewGeneration)FFmpegKit.cancel(session.sessionId)
+                        try {
+                            latch.await();checkCancelled()
+                            if(ReturnCode.isCancel(session.returnCode))throw ProcessingCancelled()
+                            check(ReturnCode.isSuccess(session.returnCode)) { ffmpegFailureMessage(session) }
+                        } finally { if(previewSessionId==session.sessionId)previewSessionId=null }
+                    },
+                    probe={ args -> checkCancelled();probeInsert(args,true).also { checkCancelled() } },
+                    cancelled=::checkCancelled
+                )
+                val output=File(work,"preview.wav")
+                val result=if(inserted==null)pipeline.singlePreview(input(main),output,options.mainTrack)
+                    else pipeline.run(input(main),input(inserted),output,options,preview=true)
+                checkCancelled()
+                runOnUiThread {
+                    if(version!=previewGeneration || previewCancelled || isDestroyed || isProcessing) {
+                        work.deleteRecursively()
+                    } else {
+                        filteredPreviewFile=output;filteredPreviewPlan=result.plan;filteredPreviewKey=key
+                        mainAudio=mainAudio?.copy(durationMs=(result.plan.main*1000.0/result.audio.rate).roundToLong())
+                        if(inserted!=null)insertedAudio=insertedAudio?.copy(durationMs=(result.plan.inserted*1000.0/result.audio.rate).roundToLong())
+                        configureTimeline()
+                        val player=MediaPlayer()
+                        filteredPreviewPlayer=player
+                        try {
+                            player.setDataSource(output.absolutePath)
+                            player.setOnPreparedListener {
+                                if(version==previewGeneration && !previewCancelled) {
+                                    previewRendering=false;filteredPreviewReady=true;applyPlaybackSpeed(it);startFilteredPlayer()
+                                }
+                            }
+                            player.setOnCompletionListener { finishPlayback() }
+                            player.setOnErrorListener { _,_,_ ->
+                                status.text="Não foi possível reproduzir a prévia.";stopFilteredPreview();true
+                            }
+                            player.prepareAsync()
+                        } catch(error: Throwable) { stopFilteredPreview();status.text=error.message }
+                    }
+                }
+                retained=true
+            } catch(_: ProcessingCancelled) { }
+            catch(error: Throwable) {
+                Log.e(TAG,"Filtered preview failed",error)
+                runOnUiThread { if(version==previewGeneration && !isDestroyed) {
+                    previewRendering=false;updatePlayButton(false);status.text=error.message ?: "Não foi possível preparar a prévia."
+                } }
+            } finally { temporary.forEach { it.delete() };if(!retained)work.deleteRecursively() }
+        }.start()
+    }
+
+    private fun startFilteredPlayer() {
+        val player=filteredPreviewPlayer ?: return
+        val plan=filteredPreviewPlan ?: return
+        if(!filteredPreviewReady)return
+        val sample=SmartInsertPlanner.sampleCount(compositePositionMs/1000.0,plan.rate)
+        seekPlayer(player,(plan.outputPosition(sample)*1000.0/plan.rate).roundToLong())
+        player.start();updatePlayButton(true)
+        handler.removeCallbacks(playbackTicker);handler.post(playbackTicker)
+    }
+
+    private fun stopFilteredPreview() {
+        previewCancelled=true;previewGeneration++
+        previewSessionId?.let { FFmpegKit.cancel(it) }
+        previewRendering=false
+        filteredPreviewPlayer?.release();filteredPreviewPlayer=null;filteredPreviewReady=false
+        filteredPreviewFile?.parentFile?.takeIf { it.parentFile==cacheDir && it.name.startsWith("insert_preview_") }?.deleteRecursively()
+        filteredPreviewFile=null;filteredPreviewPlan=null;filteredPreviewKey=null
         handler.removeCallbacks(playbackTicker)
-        handler.post(playbackTicker)
+        if(::playPause.isInitialized)updatePlayButton(false)
     }
 
     private fun updateCompositePlaybackPosition() {
-        val main = mainAudio ?: return
-        val inserted = insertedAudio
-        when (activeSegment) {
-            Segment.MAIN_BEFORE -> {
-                val position = mainPlayer?.currentPosition?.toLong() ?: 0L
-                if (inserted != null && position >= insertionMs) {
-                    startInsertedSegment()
-                    return
-                }
-                compositePositionMs = position.coerceIn(0L, main.durationMs)
-            }
-            Segment.INSERTED -> {
-                val position = insertedPlayer?.currentPosition?.toLong() ?: 0L
-                compositePositionMs = insertionMs + position.coerceIn(0L, inserted?.durationMs ?: 0L)
-            }
-            Segment.MAIN_AFTER -> {
-                val position = mainPlayer?.currentPosition?.toLong() ?: 0L
-                compositePositionMs = position + (inserted?.durationMs ?: 0L)
-            }
-            Segment.NONE -> return
-        }
-        compositePositionMs = compositePositionMs.coerceIn(0L, compositeDurationMs())
+        val player=filteredPreviewPlayer ?: return
+        val plan=filteredPreviewPlan ?: return
+        if(!filteredPreviewReady)return
+        val sample=SmartInsertPlanner.sampleCount(player.currentPosition/1000.0,plan.rate)
+        compositePositionMs=(plan.compositePosition(sample)*1000.0/plan.rate).roundToLong().coerceIn(0,compositeDurationMs())
         timeline.setCurrent(compositePositionMs)
-    }
-
-    private fun startInsertedSegment() {
-        mainPlayer?.pause()
-        activeSegment = Segment.INSERTED
-        seekPlayer(insertedPlayer, 0L)
-        insertedPlayer?.start()
-        compositePositionMs = insertionMs
-    }
-
-    private fun startMainAfterInsertion() {
-        insertedPlayer?.pause()
-        if (insertionMs >= (mainAudio?.durationMs ?: 0L)) {
-            finishPlayback()
-            return
-        }
-        activeSegment = Segment.MAIN_AFTER
-        seekPlayer(mainPlayer, insertionMs)
-        mainPlayer?.start()
-        compositePositionMs = insertionMs + (insertedAudio?.durationMs ?: 0L)
-        handler.removeCallbacks(playbackTicker)
-        handler.post(playbackTicker)
     }
 
     private fun finishPlayback() {
-        compositePositionMs = compositeDurationMs()
-        timeline.setCurrent(compositePositionMs)
-        pausePlayersOnly()
-        activeSegment = Segment.NONE
-        updatePlayButton(false)
-        handler.removeCallbacks(playbackTicker)
+        compositePositionMs=compositeDurationMs();timeline.setCurrent(compositePositionMs)
+        pausePlayersOnly();updatePlayButton(false);handler.removeCallbacks(playbackTicker)
     }
 
     private fun seekComposite(positionMs: Long) {
-        val wasPlaying = isPlaying()
         finishTimeEditing()
-        compositePositionMs = positionMs.coerceIn(0L, compositeDurationMs())
-        if (wasPlaying) startPlaybackAt(compositePositionMs) else seekPlayersForComposite(compositePositionMs)
-    }
-
-    private fun finishTimeEditing() {
-        if (inputTime.hasFocus()) inputTime.clearFocus()
-    }
-
-    private fun seekPlayersForComposite(positionMs: Long) {
-        val inserted = insertedAudio
-        when {
-            inserted == null || positionMs < insertionMs -> seekPlayer(mainPlayer, positionMs)
-            positionMs < insertionMs + inserted.durationMs -> seekPlayer(insertedPlayer, positionMs - insertionMs)
-            else -> seekPlayer(mainPlayer, positionMs - inserted.durationMs)
+        compositePositionMs=positionMs.coerceIn(0,compositeDurationMs())
+        val plan=filteredPreviewPlan
+        if(plan!=null && filteredPreviewReady) {
+            val sample=SmartInsertPlanner.sampleCount(compositePositionMs/1000.0,plan.rate)
+            seekPlayer(filteredPreviewPlayer,(plan.outputPosition(sample)*1000.0/plan.rate).roundToLong())
         }
+        timeline.setCurrent(compositePositionMs)
     }
+
+    private fun finishTimeEditing() { if(inputTime.hasFocus())inputTime.clearFocus() }
 
     private fun applyTypedInsertionTime() {
         val main = mainAudio ?: return
@@ -468,11 +494,13 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             inputTime.setText(formatTime(insertionMs))
             return
         }
+        val next=parsed.coerceIn(0L,main.durationMs)
+        if(next!=insertionMs)stopFilteredPreview()
         pausePlayback()
-        insertionMs = parsed.coerceIn(0L, main.durationMs)
+        insertionMs = next
         compositePositionMs = insertionMs
         configureTimeline()
-        seekPlayersForComposite(compositePositionMs)
+        timeline.setCurrent(compositePositionMs)
     }
 
     private fun compositeToMainTime(positionMs: Long): Long {
@@ -491,10 +519,9 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         finishTimeEditing()
         val index = speedSteps.indexOfFirst { kotlin.math.abs(it - playbackSpeed) < 0.01f }.let { if (it >= 0) it else 2 }
         playbackSpeed = speedSteps[(index + direction).coerceIn(0, speedSteps.lastIndex)]
-        applyPlaybackSpeed(mainPlayer)
-        applyPlaybackSpeed(insertedPlayer)
+        applyPlaybackSpeed(filteredPreviewPlayer)
         updateSpeedButtons()
-        if (wasPlaying) startPlaybackAt(compositePositionMs)
+        if (wasPlaying) startFilteredPlayer() else pausePlayersOnly()
     }
 
     private fun applyPlaybackSpeed(player: MediaPlayer?) {
@@ -516,6 +543,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             AUDIO_TRANSITIONS.forEach { (label, _) -> menu.add(label) }
             setOnMenuItemClickListener {
                 val label = it.title.toString()
+                stopFilteredPreview()
                 selectedTransition = AUDIO_TRANSITIONS.firstOrNull { option -> option.first == label }?.second
                     ?: TRANSITION_NONE
                 transitionButton.text = "Transição: $label"
@@ -534,235 +562,139 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         transitionTime.alpha = if (enabled) 1f else 0.4f
     }
 
+    private fun selectedOptions(): SmartInsertPipeline.Options {
+        val seconds = if (selectedTransition == TRANSITION_NONE) 0.0 else
+            transitionTime.text.toString().replace(',', '.').toDoubleOrNull()
+                ?.takeIf { it.isFinite() && it >= 0 } ?: error("Tempo de transição inválido.")
+        return SmartInsertPipeline.Options(insertionMs / 1000.0, seconds, selectedTransition, smartInsertEnabled,
+            mainAudio?.let { selectedAudioTracks[trackKey(it)] } ?: 0,
+            insertedAudio?.let { selectedAudioTracks[trackKey(it)] } ?: 0)
+    }
+
+    private fun trackKey(source: AudioSource): String = source.cachedFile?.absolutePath ?: source.uri.toString()
+
     private fun startInsert() {
         val main = mainAudio ?: return
         val inserted = insertedAudio ?: return
-        if (audioTrackCount(main.uri) == 0 || audioTrackCount(inserted.uri) == 0) {
-            status.text = "Os dois arquivos precisam possuir pelo menos uma faixa de áudio."
-            return
-        }
         listOf(main, inserted).firstOrNull {
-            audioTrackCount(it.uri) > 1 && selectedAudioTracks[it.uri.toString()] == null
-        }?.let { source ->
-            requestAudioTrack(source) { startInsert() }
-            return
+            audioTrackCount(it.uri) > 1 && selectedAudioTracks[trackKey(it)] == null
+        }?.let { source -> requestAudioTrack(source) { startInsert() }; return }
+        val options = try { selectedOptions() } catch (error: IllegalStateException) {
+            status.text = error.message; return
         }
+        stopFilteredPreview()
         pausePlayback()
-        clearOutputResult()
-        val jobConfig = InsertAudioJobConfig(
-            insertionMs = insertionMs,
-            selectedTransition = selectedTransition,
-            transitionSeconds = transitionTime.text.toString().replace(',', '.').toDoubleOrNull()?.coerceIn(0.0, 5.0) ?: 0.5,
-            smartInsert = smartInsertEnabled,
-            mainAudioTrack = selectedAudioTracks[main.uri.toString()] ?: 0,
-            insertedAudioTrack = selectedAudioTracks[inserted.uri.toString()] ?: 0
-        )
+        processingCancelled = false
         setProcessing(true)
         val startedAt = SystemClock.elapsedRealtime()
-        val tracker = FfmpegTaskTracker(status, listOf("Preparando arquivos", "Inserindo áudio", "Preparando arquivo para salvar"))
+        val tracker = FfmpegTaskTracker(status, listOf("Preparando arquivos", "Inserindo áudio", "Validando arquivo para salvar"))
         Thread {
-            val temporaryInputs = mutableListOf<File>()
+            val inputs = mutableListOf<File>()
+            var resultFile: File? = null
             try {
-                tracker.setTaskProgress(0, 0)
-                val mainFile = copyUriToCache(main.uri, main.name, "insert_main")
-                temporaryInputs += mainFile
-                tracker.setTaskProgress(0, 50)
-                val insertedFile = copyUriToCache(inserted.uri, inserted.name, "insert_secondary")
-                temporaryInputs += insertedFile
+                val mainFile = cachedInput(main, "insert_main", inputs)
+                val insertedFile = cachedInput(inserted, "insert_secondary", inputs)
+                checkInsertCancellation()
                 tracker.completeTask(0)
-
-                val profile = detectAudioProfile(mainFile, jobConfig.mainAudioTrack)
-                val rawExtension = main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
-                val safeExtension = rawExtension.takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
-                val resultFile = File(cacheDir, "insert_${System.currentTimeMillis()}_${sanitizeBase(main.name)}.$safeExtension")
-                val encoderName = encoderForProfile(safeExtension, profile)
-                tracker.setTaskEncoder(1, encoderName)
+                val extension = main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
+                    .takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
+                val output = File(cacheDir,"insert_${UUID.randomUUID()}.$extension")
+                resultFile = output
                 tracker.startTask(1)
-
-                // Smart Insert (experimental, igual ao SIG Windows): só quando o
-                // codec da fonte cabe na saída WAV/PCM — é o que permite copiar o
-                // corpo do principal em vez de reencodar tudo.
-                val smartRequested = jobConfig.smartInsert
-                val smartPossible = smartRequested &&
-                    FfmpegMediaPolicies.insertSmartCanPreserveCodec(profile.codec)
-                if (smartRequested && !smartPossible) {
-                    tracker.appendTasks(
-                        listOf(
-                            "Smart Insert não preserva o codec '${profile.codec}' na saída: usando a inserção precisa."
-                        )
-                    )
-                    tracker.completeCurrentTask()
-                }
-                val session = if (smartPossible) {
-                    runSmartInsert(mainFile, insertedFile, resultFile, profile, jobConfig, tracker)
-                } else {
-                    executeWithProgress(
-                        buildFullReencodeArguments(mainFile, insertedFile, resultFile, profile, jobConfig),
-                        compositeDurationMs(), tracker, 1
-                    )
-                }
-                if (ReturnCode.isCancel(session.returnCode)) throw ProcessingCancelled()
-                if (!ReturnCode.isSuccess(session.returnCode) || !resultFile.exists() || resultFile.length() == 0L) {
-                    error(ffmpegFailureMessage(session))
-                }
-                tracker.completeTask(1)
-                tracker.completeTask(2)
-                val elapsed = SystemClock.elapsedRealtime() - startedAt
-                val efficiency = compositeDurationMs() / elapsed.coerceAtLeast(1L).toDouble()
-                val mode = if (smartPossible) "Smart Insert (experimental)" else "Inserção precisa"
-                tracker.success(
-                    "Tempo de processamento: ${formatTime(elapsed)}\n" +
-                        "Mídia processada: ${formatTime(compositeDurationMs())}\n" +
-                        "Eficiência: ${String.format(Locale.US, "%.2fx", efficiency)}\n" +
-                        "Modo: $mode"
+                val pipeline = SmartInsertPipeline(
+                    execute = { args, duration ->
+                        checkInsertCancellation()
+                        val session = executeWithProgress(args,(duration*1000).roundToLong(),tracker,1)
+                        checkInsertCancellation()
+                        if (ReturnCode.isCancel(session.returnCode)) throw ProcessingCancelled()
+                        check(ReturnCode.isSuccess(session.returnCode)) { ffmpegFailureMessage(session) }
+                    },
+                    probe = { args -> probeInsert(args) },
+                    cancelled = { checkInsertCancellation() },
+                    log = { message -> Log.i(TAG,message); runOnUiThread { insertHint.text = message } },
+                    packetProbe = { args -> probeInsertOutput(args) }
                 )
+                val result = pipeline.run(mainFile,insertedFile,output,options)
+                checkInsertCancellation()
+                tracker.setTaskEncoder(1,result.audio.encoder)
+                tracker.completeTask(1);tracker.completeTask(2)
+                val elapsed = SystemClock.elapsedRealtime()-startedAt
+                val mediaMs = (result.plan.total*1000.0/result.audio.rate).roundToLong()
+                val mode = if (result.partial) "Smart Insert (cópia parcial)" else if (options.smart)
+                    "Smart Insert (compatibilização contínua)" else "Inserção precisa"
+                tracker.success("Tempo de processamento: ${formatTime(elapsed)}\n" +
+                    "Mídia processada: ${formatTime(mediaMs)}\n" +
+                    "Eficiência: ${String.format(Locale.US,"%.2fx",mediaMs/elapsed.coerceAtLeast(1L).toDouble())}\nModo: $mode")
                 runOnUiThread {
                     setProcessing(false)
-                    lastOutputFile = resultFile
-                    lastOutputName = "${sanitizeBase(main.name)}_com_audio.$safeExtension"
-                    outputName.text = lastOutputName
-                    outputName.visibility = View.VISIBLE
-                    outputActions.visibility = View.VISIBLE
-                    saveButton.visibility = View.VISIBLE
-                    openFolderButton.visibility = View.GONE
-                    shareButton.visibility = View.GONE
-                    // Estatisticas fora do status (apos os botoes), para o
-                    // usuario ver Salvar/Compartilhar logo apos os passos.
-                    val statsText = tracker.successMessageOrEmpty()
-                    if (statsText.isNotBlank()) {
-                        outputStats.text = "Estatísticas:\n$statsText"
+                    if (processingCancelled || isDestroyed) {
+                        output.delete();tracker.fail("Operação cancelada.")
+                    } else {
+                        lastOutputFile?.takeIf { it != output }?.delete()
+                        lastOutputFile = output;lastOutputUri = null;finalOutputDirUri = null
+                        lastOutputName = "${sanitizeBase(main.name)}_com_audio.$extension"
+                        outputName.text = lastOutputName;outputName.visibility = View.VISIBLE
+                        outputActions.visibility = View.VISIBLE;saveButton.visibility = View.VISIBLE
+                        openFolderButton.visibility = View.GONE;shareButton.visibility = View.GONE
+                        outputStats.text = "Estatísticas:\n${tracker.successMessageOrEmpty()}"
                         outputStats.visibility = View.VISIBLE
+                        scroll.post { scroll.smoothScrollTo(0,outputActions.bottom) }
                     }
-                    scroll.post { scroll.smoothScrollTo(0, outputActions.bottom) }
                 }
             } catch (_: ProcessingCancelled) {
-                runOnUiThread {
-                    setProcessing(false)
-                    tracker.fail("Operação cancelada.")
-                }
+                resultFile?.delete()
+                runOnUiThread { setProcessing(false);tracker.fail("Operação cancelada.") }
             } catch (error: Throwable) {
-                Log.e(TAG, "Audio insertion failed", error)
-                runOnUiThread {
-                    setProcessing(false)
-                    tracker.fail(error.message ?: "Falha inesperada")
-                }
-            } finally {
-                temporaryInputs.forEach { it.delete() }
-            }
+                resultFile?.delete()
+                Log.e(TAG,"Audio insertion failed",error)
+                runOnUiThread { setProcessing(false);tracker.fail(error.message ?: "Falha inesperada") }
+            } finally { inputs.forEach { it.delete() } }
         }.start()
     }
 
-    /**
-     * Smart Insert (portado do SIG Windows): peças [principal antes] + [inserido
-     * reencodado com o fade] + [principal depois], com o corpo COPIADO, e um
-     * concat final. Experimental por desenho: a cópia aproxima o ponto ao
-     * frame/pacote do codec.
-     */
-    private fun runSmartInsert(
-        main: File,
-        inserted: File,
-        output: File,
-        profile: AudioProfile,
-        jobConfig: InsertAudioJobConfig,
-        tracker: FfmpegTaskTracker
-    ): FFmpegSession {
-        val at = jobConfig.insertionMs / 1000.0
-        val insertedDur = (insertedAudio?.durationMs ?: 1L) / 1000.0
-        val mainDur = (mainAudio?.durationMs ?: 1L) / 1000.0
-        val work = File(cacheDir, "smart_insert_${System.currentTimeMillis()}")
-        work.mkdirs()
-        val pieces = mutableListOf<File>()
-        val extension = output.extension.lowercase(Locale.ROOT).ifEmpty { "m4a" }
-        val encoder = encoderForProfile(extension, profile)
-        val bitrate = profile.bitrate.takeIf { encoder !in setOf("flac", "alac", "pcm_s16le") }
+    private fun cachedInput(source: AudioSource, prefix: String, temporary: MutableList<File>): File =
+        source.cachedFile?.takeIf { it.isFile } ?: copyUriToCache(source.uri,source.name,prefix) { checkInsertCancellation() }.also { temporary += it }
+
+    private fun checkInsertCancellation() { if (processingCancelled) throw ProcessingCancelled() }
+
+    private fun probeInsert(args: Array<String>, preview: Boolean = false): JSONObject = JSONObject(probeInsertOutput(args,preview))
+
+    private fun probeInsertOutput(args: Array<String>, preview: Boolean = false): String {
+        fun checkCancelled() {
+            if (preview) { if (previewCancelled) throw ProcessingCancelled() } else checkInsertCancellation()
+        }
+        checkCancelled()
+        val latch=CountDownLatch(1)
+        val session=FFprobeKit.executeWithArgumentsAsync(args) { latch.countDown() }
+        if (preview) previewSessionId=session.sessionId else currentSessionId=session.sessionId
         try {
-            if (at > 0.001) {
-                val left = File(work, "000.$extension")
-                val s = executeWithProgress(
-                    FfmpegMediaPolicies.insertSmartLeftArguments(main.absolutePath, left.absolutePath, at),
-                    (at * 1000).toLong(), tracker, 1
-                )
-                if (ReturnCode.isCancel(s.returnCode)) throw ProcessingCancelled()
-                if (!ReturnCode.isSuccess(s.returnCode) || !left.exists() || left.length() == 0L) {
-                    error(ffmpegFailureMessage(s))
-                }
-                pieces += left
-            }
-            val middle = File(work, String.format(Locale.US, "%03d.$extension", pieces.size))
-            val fadeCurve = audioCrossfadeCurve(jobConfig.selectedTransition)
-                .takeIf { jobConfig.selectedTransition !in setOf(TRANSITION_NONE, TRANSITION_FADE) }
-            val s2 = executeWithProgress(
-                FfmpegMediaPolicies.insertSmartMiddleArguments(
-                    inserted.absolutePath, middle.absolutePath, insertedDur,
-                    profile.sampleRate, profile.channels, encoder, bitrate,
-                    jobConfig.transitionSeconds, fadeCurve
-                ),
-                (insertedDur * 1000).toLong(), tracker, 1
-            )
-            if (ReturnCode.isCancel(s2.returnCode)) throw ProcessingCancelled()
-            if (!ReturnCode.isSuccess(s2.returnCode) || !middle.exists() || middle.length() == 0L) {
-                error(ffmpegFailureMessage(s2))
-            }
-            pieces += middle
-            if (at < mainDur - 0.001) {
-                val right = File(work, String.format(Locale.US, "%03d.$extension", pieces.size))
-                val s3 = executeWithProgress(
-                    FfmpegMediaPolicies.insertSmartRightArguments(main.absolutePath, right.absolutePath, at),
-                    ((mainDur - at) * 1000).toLong(), tracker, 1
-                )
-                if (ReturnCode.isCancel(s3.returnCode)) throw ProcessingCancelled()
-                if (!ReturnCode.isSuccess(s3.returnCode) || !right.exists() || right.length() == 0L) {
-                    error(ffmpegFailureMessage(s3))
-                }
-                pieces += right
-            }
-            val list = File(work, "lista.txt")
-            list.writeText(pieces.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" })
-            val s4 = executeWithProgress(
-                FfmpegMediaPolicies.insertSmartConcatArguments(list.absolutePath, output.absolutePath),
-                compositeDurationMs(), tracker, 1
-            )
-            return s4
+            if ((preview && previewCancelled) || (!preview && processingCancelled)) FFmpegKit.cancel(session.sessionId)
+            latch.await();checkCancelled()
+            check(ReturnCode.isSuccess(session.returnCode)) { "Não foi possível analisar a faixa de áudio selecionada." }
+            return session.output
         } finally {
-            work.deleteRecursively()
+            if(preview && previewSessionId==session.sessionId)previewSessionId=null
+            if(!preview && currentSessionId==session.sessionId)currentSessionId=null
         }
     }
 
     private fun buildFullReencodeArguments(main: File, inserted: File, output: File, profile: AudioProfile, jobConfig: InsertAudioJobConfig): Array<String> {
-        val at = jobConfig.insertionMs / 1000.0
-        val mainEnd = (mainAudio?.durationMs ?: 1L) / 1000.0
-        val insertedEnd = (insertedAudio?.durationMs ?: 1L) / 1000.0
-        val audioLayout = FfmpegMediaPolicies.channelLayout(profile.channels)
-        val normalize = "aresample=${profile.sampleRate},aformat=sample_fmts=fltp:sample_rates=${profile.sampleRate}:channel_layouts=$audioLayout"
-        val filter = FfmpegMediaPolicies.insertAudioFilterComplex(
-            mainInputSpecifier = FfmpegMediaPolicies.audioFilterInputSpecifier(0, jobConfig.mainAudioTrack),
-            insertedInputSpecifier = FfmpegMediaPolicies.audioFilterInputSpecifier(1, jobConfig.insertedAudioTrack),
-            mainDurationSeconds = mainEnd,
-            insertedDurationSeconds = insertedEnd,
-            insertionSeconds = at,
-            normalizeFilter = normalize,
-            requestedTransitionSeconds = jobConfig.transitionSeconds,
-            fadeInOut = jobConfig.selectedTransition == TRANSITION_FADE,
-            crossfadeCurve = audioCrossfadeCurve(jobConfig.selectedTransition).takeIf {
-                jobConfig.selectedTransition !in setOf(TRANSITION_NONE, TRANSITION_FADE)
-            }
-        )
-        val extension = output.extension.lowercase(Locale.ROOT)
-        val encoder = encoderForProfile(extension, profile)
-        return FfmpegMediaPolicies.insertAudioCommandArguments(
-            mainInputPath = main.absolutePath,
-            insertedInputPath = inserted.absolutePath,
-            outputPath = output.absolutePath,
-            filterComplex = filter,
-            encoder = encoder,
-            sampleRate = profile.sampleRate,
-            channels = profile.channels,
-            bitrate = profile.bitrate.takeIf { encoder !in setOf("flac", "pcm_s16le", "alac") },
-            fastStart = extension in setOf("m4a", "mp4")
-        )
+        val rate=profile.sampleRate
+        val encoder=encoderForProfile(output.extension,profile)
+        val codec=when(encoder) { "libmp3lame" -> "mp3"; "libopus" -> "opus"; "libvorbis" -> "vorbis"; else -> encoder }
+        val audio=SmartInsertPlanner.Audio(codec,rate,profile.channels,FfmpegMediaPolicies.channelLayout(profile.channels),
+            SmartInsertPlanner.sampleCount((mainAudio?.durationMs ?: 1000L)/1000.0,rate),"",0,profile.bitrate,jobConfig.mainAudioTrack)
+        val plan=SmartInsertPlanner.render(audio.samples,
+            SmartInsertPlanner.sampleCount((insertedAudio?.durationMs ?: 1000L)/1000.0,rate),
+            SmartInsertPlanner.sampleCount(jobConfig.insertionMs/1000.0,rate),rate,
+            if(jobConfig.selectedTransition==TRANSITION_NONE)0.0 else jobConfig.transitionSeconds,
+            jobConfig.selectedTransition,jobConfig.smartInsert)
+        return SmartInsertPipeline({ _,_ -> }, { JSONObject() }).continuousArguments(main,inserted,output,audio,plan,
+            jobConfig.mainAudioTrack,jobConfig.insertedAudioTrack)
     }
 
     private fun audioTrackCount(uri: Uri): Int {
+        listOfNotNull(mainAudio,insertedAudio).firstOrNull { it.uri==uri }?.nativeAudio?.takeIf { it.isNotEmpty() }?.let { return it.size }
         val extractor = android.media.MediaExtractor()
         return try {
             extractor.setDataSource(this, uri, null)
@@ -781,7 +713,13 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle("Escolha a faixa de ${source.name}")
             .setSingleChoiceItems(labels.toTypedArray(), 0) { dialog, which ->
-                selectedAudioTracks[source.uri.toString()] = which
+                selectedAudioTracks[trackKey(source)] = which
+                stopFilteredPreview()
+                source.nativeAudio.getOrNull(which)?.let { audio ->
+                    if(mainAudio?.let { trackKey(it)==trackKey(source) }==true) { mainAudio=mainAudio?.copy(durationMs=(audio.duration*1000).roundToLong());insertionMs=insertionMs.coerceIn(0,mainAudio!!.durationMs) }
+                    else insertedAudio=insertedAudio?.copy(durationMs=(audio.duration*1000).roundToLong())
+                    configureTimeline();updateInsertHint()
+                }
                 dialog.dismiss()
                 onSelected()
             }
@@ -790,6 +728,9 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun audioTrackLabels(uri: Uri): List<String> {
+        listOfNotNull(mainAudio,insertedAudio).firstOrNull { it.uri==uri }?.nativeAudio?.takeIf { it.isNotEmpty() }?.let { tracks ->
+            return tracks.mapIndexed { index,audio -> "Faixa ${index+1} — ${audio.codec.uppercase(Locale.ROOT)} · ${audio.channels} canal(is) · ${audio.rate} Hz" }
+        }
         val extractor = MediaExtractor()
         return try {
             extractor.setDataSource(this, uri, null)
@@ -828,6 +769,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             tracker.setTaskProgress(taskIndex, percent, String.format(Locale.US, "%.2fx", speed))
         })
         currentSessionId = session.sessionId
+        if (processingCancelled) FFmpegKit.cancel(session.sessionId)
         latch.await()
         currentSessionId = null
         val completed = result.get() ?: session
@@ -863,6 +805,9 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun detectAudioProfile(uri: Uri, audioTrack: Int = 0): AudioProfile {
+        listOfNotNull(mainAudio,insertedAudio).firstOrNull { it.uri==uri }?.nativeAudio?.getOrNull(audioTrack)?.let {
+            return AudioProfile(it.rate,it.channels,it.bitrate,it.codec,it.codec.takeIf { c -> c in SmartInsertPlanner.pcmCodecs } ?: "pcm_s16le")
+        }
         val extractor = MediaExtractor()
         return try {
             extractor.setDataSource(this, uri, null)
@@ -897,8 +842,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         if (isProcessing || !::status.isInitialized) return
         val main = mainAudio
         val inserted = insertedAudio
-        val mainTrack = main?.let { selectedAudioTracks[it.uri.toString()] } ?: 0
-        val insertedTrack = inserted?.let { selectedAudioTracks[it.uri.toString()] } ?: 0
+        val mainTrack = main?.let { selectedAudioTracks[trackKey(it)] } ?: 0
+        val insertedTrack = inserted?.let { selectedAudioTracks[trackKey(it)] } ?: 0
         val profile = main?.let { detectAudioProfile(it.uri, mainTrack) }
             ?: AudioProfile(48000, 2, "192k", "aac")
         val mainExtension = main?.name?.substringAfterLast('.', "m4a")
@@ -908,10 +853,12 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 ?.coerceIn(0L, main?.durationMs ?: Long.MAX_VALUE) ?: insertionMs,
             selectedTransition = selectedTransition,
             transitionSeconds = transitionTime.text?.toString().orEmpty().replace(',', '.')
-                .toDoubleOrNull()?.coerceIn(0.0, 5.0) ?: 0.5,
+                .toDoubleOrNull() ?: 0.5,
+            smartInsert = smartInsertEnabled,
             mainAudioTrack = mainTrack,
             insertedAudioTrack = insertedTrack
         )
+        if(selectedTransition!=TRANSITION_NONE && (!jobConfig.transitionSeconds.isFinite() || jobConfig.transitionSeconds<0)) { status.text="Tempo de transição inválido.";return }
         val arguments = buildFullReencodeArguments(
             File(main?.name ?: "input.ext"),
             File(inserted?.name ?: "input2.ext"),
@@ -954,8 +901,9 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun cancelProcessing() {
+        processingCancelled = true
         status.text = "Cancelando..."
-        currentSessionId?.let { FFmpegKit.cancel(it) } ?: FFmpegKit.cancel()
+        currentSessionId?.let { FFmpegKit.cancel(it) }
     }
 
     private fun saveOutputToUri(treeUri: Uri) {
@@ -1022,12 +970,21 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun copyUriToCache(uri: Uri, displayName: String, prefix: String): File {
-        val extension = displayName.substringAfterLast('.', "audio")
-        return File(cacheDir, "${prefix}_${System.nanoTime()}.$extension").also { file ->
-            contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(file).use { input.copyTo(it) } }
-                ?: error("Não consegui abrir $displayName")
-        }
+    private fun copyUriToCache(uri: Uri, displayName: String, prefix: String, checkCancelled: () -> Unit = {}): File {
+        val extension=displayName.substringAfterLast('.',"audio").takeIf { it.matches(Regex("[A-Za-z0-9]{1,8}")) } ?: "audio"
+        val file=File(cacheDir,"${prefix}_${UUID.randomUUID()}.$extension")
+        try {
+            contentResolver.openInputStream(uri)?.use { input -> FileOutputStream(file).use { output ->
+                val buffer=ByteArray(1 shl 20)
+                while(true) {
+                    checkCancelled()
+                    val count=input.read(buffer)
+                    if(count<0)break
+                    output.write(buffer,0,count)
+                }
+            } } ?: error("Não consegui abrir $displayName")
+            return file
+        } catch(error: Throwable) { file.delete();throw error }
     }
 
     private fun clearOutputResult() {
@@ -1042,19 +999,13 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
 
     private fun pausePlayback() {
         pausePlayersOnly()
-        activeSegment = Segment.NONE
         handler.removeCallbacks(playbackTicker)
         updatePlayButton(false)
     }
 
-    private fun pausePlayersOnly() {
-        try { if (mainPlayer?.isPlaying == true) mainPlayer?.pause() } catch (_: Throwable) {}
-        try { if (insertedPlayer?.isPlaying == true) insertedPlayer?.pause() } catch (_: Throwable) {}
-    }
+    private fun pausePlayersOnly() { try { filteredPreviewPlayer?.pause() } catch(_: Throwable) { } }
 
-    private fun isPlaying(): Boolean = try {
-        mainPlayer?.isPlaying == true || insertedPlayer?.isPlaying == true
-    } catch (_: Throwable) { false }
+    private fun isPlaying(): Boolean = try { filteredPreviewReady && filteredPreviewPlayer?.isPlaying==true } catch(_: Throwable) { false }
 
     private fun updatePlayButton(playing: Boolean) {
         playPause.setImageResource(if (playing) R.drawable.ic_ffmpeg_pause else R.drawable.ic_ffmpeg_play)
@@ -1069,25 +1020,19 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
     }
 
-    private fun releasePlayers() {
-        handler.removeCallbacks(playbackTicker)
-        mainPlayer?.release()
-        insertedPlayer?.release()
-        mainPlayer = null
-        insertedPlayer = null
-        mainPrepared = false
-        insertedPrepared = false
-        activeSegment = Segment.NONE
-        updatePlayButton(false)
-    }
+    private fun releasePlayers() { stopFilteredPreview() }
 
     override fun onPause() {
-        pausePlayback()
+        if(previewRendering)stopFilteredPreview() else pausePlayback()
         super.onPause()
     }
 
     override fun onDestroy() {
+        selectionGeneration++
+        selectionSessionId?.let { FFmpegKit.cancel(it) }
+        if(isProcessing)cancelProcessing()
         releasePlayers()
+        mainAudio?.cachedFile?.delete();insertedAudio?.cachedFile?.delete()
         super.onDestroy()
     }
 
@@ -1101,7 +1046,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 3 -> parts[0].toDouble() * 3600 + parts[1].toDouble() * 60 + parts[2].toDouble()
                 else -> return null
             }
-            (seconds * 1000.0).toLong().coerceAtLeast(0L)
+            if (!seconds.isFinite() || seconds < 0 || seconds > Long.MAX_VALUE / 1000.0) return null
+            (seconds * 1000.0).roundToLong()
         } catch (_: NumberFormatException) {
             null
         }
@@ -1152,7 +1098,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         else -> "audio/mp4"
     }
 
-    private data class AudioSource(val uri: Uri, val name: String, val durationMs: Long)
+    private data class AudioSource(val uri: Uri, val name: String, val durationMs: Long,
+        val cachedFile: File? = null, val nativeAudio: List<SmartInsertPlanner.Audio> = emptyList())
     private data class AudioProfile(
         val sampleRate: Int,
         val channels: Int,
@@ -1168,7 +1115,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         val mainAudioTrack: Int = 0,
         val insertedAudioTrack: Int = 0
     )
-    private enum class Segment { NONE, MAIN_BEFORE, INSERTED, MAIN_AFTER }
     private class ProcessingCancelled : RuntimeException()
 
     companion object {
@@ -1207,6 +1153,6 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
             "Seno de meia onda ao quadrado" to "hsin2",
             "Sem fade" to "nofade"
         )
-        private val SUPPORTED_COPY_EXTENSIONS = setOf("m4a", "aac", "mp3", "wav", "flac", "ogg", "opus")
+        private val SUPPORTED_COPY_EXTENSIONS = setOf("m4a", "aac", "mp3", "wav", "flac", "ogg", "opus", "wma")
     }
 }

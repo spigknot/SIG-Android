@@ -2,6 +2,7 @@ package br.gov.sp.pcsp.launcher
 
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * Planejador puro do SmartJoin.
@@ -33,7 +34,8 @@ internal object SmartJoinPlanner {
     data class Source(
         val durationSeconds: Double,
         val profile: VideoProfile,
-        val keyframesSeconds: List<Double>
+        val keyframesSeconds: List<Double>,
+        val safeCopyEnds: Map<Double, Double> = emptyMap()
     )
 
     data class ClipPlan(
@@ -68,6 +70,9 @@ internal object SmartJoinPlanner {
         val canSmartJoin: Boolean
             get() = ineligibilityReason == null
 
+        val hasUsefulCopy: Boolean
+            get() = clips.any { it.copyVideo && it.bodyDurationSeconds > EPSILON_SECONDS }
+
         fun expectedDurationSeconds(sourceDurationSeconds: List<Double>): Double {
             val total = sourceDurationSeconds.sum()
             return if (fadeInOut) total else total - transitionSeconds * junctions.size
@@ -80,9 +85,16 @@ internal object SmartJoinPlanner {
         fadeInOut: Boolean
     ): Plan {
         require(sources.isNotEmpty()) { "SmartJoin precisa de ao menos um clipe." }
-        val safeTransition = transitionSeconds.coerceAtLeast(0.0)
         val targetIndex = chooseTargetIndex(sources)
         val target = sources[targetIndex].profile
+        val invalid = !transitionSeconds.isFinite() || transitionSeconds < 0.0 || sources.any {
+            !it.durationSeconds.isFinite() || it.durationSeconds <= 0.0 ||
+                !it.profile.fps.isFinite() || it.profile.fps <= 0.0 ||
+                it.keyframesSeconds.any { key -> !key.isFinite() }
+        }
+        if (invalid) return rejectedPlan(sources, targetIndex, 0.0, fadeInOut, "Duração, framerate ou transição inválida.")
+        // Efeitos menores que meio quadro não são representáveis nesse framerate.
+        val safeTransition = if (transitionSeconds < 0.5 / target.fps) 0.0 else transitionSeconds
 
         val unsupportedReason = when {
             normalizeCodec(target.codecFamily) !in supportedCodecs ->
@@ -134,7 +146,7 @@ internal object SmartJoinPlanner {
             val bodyEnd = if (safeTransition <= EPSILON_SECONDS || index == sources.lastIndex) {
                 source.durationSeconds
             } else {
-                previousKeyframe(source.keyframesSeconds, desiredEnd)
+                previousKeyframe(source.keyframesSeconds, desiredEnd)?.let { source.safeCopyEnds[it] ?: it }
             }
             if (bodyStart == null || bodyEnd == null || bodyStart > bodyEnd + EPSILON_SECONDS) return null
             return ClipPlan(index, true, bodyStart, bodyEnd)
@@ -193,6 +205,14 @@ internal object SmartJoinPlanner {
                 }
             }.thenByDescending { it }
         ) ?: 0
+    }
+
+    fun maximumTransitionSeconds(durations: List<Double>): Double {
+        if (durations.isEmpty() || durations.any { !it.isFinite() || it <= 0.0 }) return 0.0
+        val edge = durations.minOrNull()!! - 0.1
+        val middle = if (durations.size > 2) durations.drop(1).dropLast(1).minOrNull()!! / 2.0 - 0.1
+            else Double.POSITIVE_INFINITY
+        return minOf(edge, middle).coerceAtLeast(0.0)
     }
 
     fun videoIncompatibility(base: VideoProfile, candidate: VideoProfile): String? {
@@ -260,4 +280,60 @@ internal object SmartJoinPlanner {
 
     private fun normalizeOptional(value: String?): String? =
         value?.trim()?.lowercase(Locale.ROOT)?.takeIf { it.isNotEmpty() }
+}
+
+/** Regras de quadros, GOP aberto e continuidade da linha temporal do SmartJoin. */
+internal object SmartJoinTiming {
+    data class Packet(val pts: Double, val dts: Double, val duration: Double, val key: Boolean)
+    data class Video(
+        val packets: List<Packet>, val origin: Double, val seekOffset: Double,
+        val duration: Double, val fps: String
+    ) {
+        val times = packets.map { it.pts - origin }.sorted()
+        val keys = packets.filter { it.key }.map { it.pts - origin }
+        val safeEnds: Map<Double, Double> = groups().associate { (key, group) ->
+            key to group.minOf { it.pts - origin }
+        }
+        private fun groups(): List<Pair<Double, List<Packet>>> {
+            val indices = packets.indices.filter { packets[it].key }
+            return indices.mapIndexed { i, start ->
+                (packets[start].pts - origin) to packets.subList(start, indices.getOrNull(i + 1) ?: packets.size)
+            }
+        }
+        fun leading(start: Double): Int = groups().firstOrNull { abs(it.first - start) < 0.00001 }
+            ?.second?.count { it.pts - origin < start - 0.00001 } ?: 0
+        fun delay(start: Double): Double = packets.firstOrNull { it.key && abs(it.pts - origin - start) < 0.00001 }
+            ?.let { (it.pts - it.dts).coerceAtLeast(0.0) } ?: 0.0
+        fun count(start: Double, end: Double): Int = times.count { it >= start - 0.00001 && it < end - 0.00001 }
+    }
+    fun fps(value: String): Double {
+        val parts = value.split('/')
+        return if (parts.size == 2) (parts[0].toDoubleOrNull() ?: 0.0) / (parts[1].toDoubleOrNull() ?: 0.0)
+        else value.toDoubleOrNull() ?: 0.0
+    }
+    /** Arredondamento acumulado impede que cada emenda acrescente meio quadro. */
+    class Frames(private val fps: Double) {
+        private var seconds = 0.0
+        private var allocated = 0
+        fun next(duration: Double, copied: Int? = null): Int {
+            seconds += duration
+            val count = copied ?: ((seconds * fps).roundToInt() - allocated)
+            allocated += count
+            return count
+        }
+        val total: Int get() = allocated
+    }
+    fun validate(video: Video, expected: Double, frames: Int, rate: Double) {
+        require(expected.isFinite() && expected > 0.0 && rate.isFinite() && rate > 0.0)
+        check(video.times.size == frames) { "Vídeo com ${video.times.size} quadros; esperado $frames." }
+        check(video.times.isNotEmpty()) { "Vídeo sem quadros." }
+        val tick = 1.0 / rate
+        check(abs(video.origin) < tick * 1.1) { "Início do vídeo deslocado." }
+        check(abs(video.times.first()) < tick * 1.1) { "Início do vídeo deslocado." }
+        check(abs(video.times.last() + tick - expected) <= tick * 1.1) { "Duração do vídeo diferente da solicitada." }
+        check(video.times.zipWithNext().all { (a, b) -> b - a > 0.000001 && b - a <= tick * 1.5 }) {
+            "Quadros ausentes, duplicados ou lacuna na linha temporal."
+        }
+        check(video.packets.zipWithNext().all { (a, b) -> b.dts > a.dts }) { "DTS do vídeo fora de ordem." }
+    }
 }

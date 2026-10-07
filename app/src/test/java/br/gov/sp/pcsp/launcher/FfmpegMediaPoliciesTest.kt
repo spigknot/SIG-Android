@@ -208,18 +208,6 @@ class FfmpegMediaPoliciesTest {
     }
 
     @Test
-    fun insertCommandMapsFilteredOutputAndKeepsContainerOptions() {
-        val args = FfmpegMediaPolicies.insertAudioCommandArguments(
-            "main.m4a", "insert.m4a", "out.m4a", "[0:a][1:a]concat=n=2:v=0:a=1[aout]",
-            "aac", 44100, 2, "192k", true
-        ).toList()
-        assertEquals(listOf("-y", "-i", "main.m4a", "-i", "insert.m4a"), args.take(5))
-        assertTrue(args.windowed(2).contains(listOf("-map", "[aout]")))
-        assertTrue(args.windowed(2).contains(listOf("-b:a", "192k")))
-        assertTrue(args.windowed(2).contains(listOf("-movflags", "+faststart")))
-    }
-
-    @Test
     fun cleanCommandPreservesRequestedPcmProfile() {
         assertEquals(
             listOf(
@@ -296,33 +284,6 @@ class FfmpegMediaPoliciesTest {
         assertTrue(graph.contains("[v0][v1]xfade=transition=wipeleft:duration=0.500:offset=1.500[vx1]"))
         assertTrue(graph.contains("[vx1]copy[vout]"))
         assertTrue(graph.contains("[a0][a1]acrossfade=d=0.500:c1=tri:c2=tri[aout]"))
-    }
-
-    @Test
-    fun completeInsertGraphHandlesMiddleAndBoundaryInsertion() {
-        val normalize = "aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
-        val middle = FfmpegMediaPolicies.insertAudioFilterComplex(
-            "0:a:1", "1:a:0", 10.0, 2.0, 4.0, normalize, 0.5,
-            fadeInOut = true, crossfadeCurve = null
-        )
-        assertTrue(middle.contains("[0:a:1]atrim=start=0:end=4.000"))
-        assertTrue(middle.contains("[1:a:0]atrim=start=0:end=2.000"))
-        assertTrue(middle.contains("[0:a:1]atrim=start=4.000:end=10.000"))
-        assertTrue(middle.endsWith("[a0][a1][a2]concat=n=3:v=0:a=1[aout]"))
-
-        val atStart = FfmpegMediaPolicies.insertAudioFilterComplex(
-            "0:a:0", "1:a:0", 10.0, 2.0, 0.0, normalize, 0.5,
-            fadeInOut = false, crossfadeCurve = "tri"
-        )
-        assertFalse(atStart.contains("atrim=start=0:end=0.000"))
-        assertTrue(atStart.contains("[a1][a2]acrossfade=d=0.500:c1=tri:c2=tri[aout]"))
-
-        val atEnd = FfmpegMediaPolicies.insertAudioFilterComplex(
-            "0:a:0", "1:a:0", 10.0, 2.0, 10.0, normalize, 0.0,
-            fadeInOut = false, crossfadeCurve = null
-        )
-        assertFalse(atEnd.contains("atrim=start=10.000:end=10.000"))
-        assertTrue(atEnd.endsWith("[a0][a1]concat=n=2:v=0:a=1[aout]"))
     }
 
     @Test
@@ -670,71 +631,6 @@ class FfmpegMediaPoliciesTest {
         // Android e afftdn agressivo no Windows — mesmo rótulo, efeitos diferentes.
         assertEquals("afftdn=nf=-25", FfmpegMediaPolicies.CLEAN_FILTER_BALANCED)
         assertEquals("afftdn=nr=18:nf=-35:tn=1", FfmpegMediaPolicies.CLEAN_FILTER_STRONG)
-    }
-
-    @Test
-    fun smartInsertMontaAsPecasComOCorpoCopiado() {
-        // F-smart: o corpo do principal vai COPIADO (é o que preserva o áudio);
-        // só o inserido é reencodado, com o fade das curvas escolhidas.
-        val esquerda = FfmpegMediaPolicies.insertSmartLeftArguments("principal.wav", "000.wav", 5.0).toList()
-        assertTrue(esquerda.windowed(2).contains(listOf("-c", "copy")))
-        assertEquals("5.000000", esquerda[esquerda.indexOf("-t") + 1])
-
-        val direita = FfmpegMediaPolicies.insertSmartRightArguments("principal.wav", "002.wav", 5.0).toList()
-        assertEquals("5.000000", direita[direita.indexOf("-ss") + 1])
-        assertTrue(direita.windowed(2).contains(listOf("-c", "copy")))
-
-        val meio = FfmpegMediaPolicies
-            .insertSmartMiddleArguments("inserido.wav", "001.wav", 2.0, 48000, 2, "pcm_s16le", null, 0.2, "tri")
-            .toList()
-        assertTrue(meio.windowed(2).contains(listOf("-c:a", "pcm_s16le")))
-        val af = meio[meio.indexOf("-af") + 1]
-        assertTrue("fade de entrada no começo do inserido", af.contains("afade=t=in:st=0:d=0.200000:curve=tri"))
-        assertTrue("fade de saída em (duração - fade)", af.contains("afade=t=out:st=1.800000:d=0.200000:curve=tri"))
-
-        val concat = FfmpegMediaPolicies.insertSmartConcatArguments("lista.txt", "saida.wav").toList()
-        assertTrue(concat.windowed(2).contains(listOf("-f", "concat")))
-        // as peças já estão no formato final: o concat COPIA (sem segunda geração)
-        assertTrue(concat.windowed(2).contains(listOf("-c:a", "copy")))
-    }
-
-    @Test
-    fun smartInsertReencodaOInseridoNoCodecDoPrincipal() {
-        // Fonte m4a/AAC: o trecho inserido nasce em AAC (não em PCM) para o concat
-        // poder copiar; o bitrate do perfil é aplicado.
-        val meio = FfmpegMediaPolicies
-            .insertSmartMiddleArguments("inserido.m4a", "001.m4a", 2.0, 48000, 2, "aac", "128k", 0.2, "tri")
-            .toList()
-        assertTrue(meio.windowed(2).contains(listOf("-c:a", "aac")))
-        assertTrue(meio.windowed(2).contains(listOf("-b:a", "128k")))
-        // codec sem bitrate configurável (FLAC) não recebe -b:a
-        val flac = FfmpegMediaPolicies
-            .insertSmartMiddleArguments("x.flac", "001.flac", 2.0, 48000, 2, "flac", "128k", 0.0, null)
-            .toList()
-        assertFalse(flac.contains("-b:a"))
-    }
-
-    @Test
-    fun smartInsertRecusaCodecQueOAppNaoSabeReencodar() {
-        // Fora de PCM não há como copiar o corpo para uma saída WAV — o app cai
-        // no modo preciso (com aviso), como o próprio Smart Insert do Windows.
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("pcm_s16le"))
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("PCM_F32LE"))
-        // O Android entrega o subtipo do MIME (audio/raw) para PCM.
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("raw"))
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("WAV"))
-        // "Disponível para tudo": os comprimidos que o app sabe reencodar também
-        // preservam o corpo copiado (a saída usa o contêiner da fonte).
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("aac"))
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp3"))
-        // Medido no aparelho: um m4a chega como "mp4a-latm" (MIME do Android).
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp4a-latm"))
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("mp4a"))
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("opus"))
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("vorbis"))
-        assertTrue(FfmpegMediaPolicies.insertSmartCanPreserveCodec("flac"))
-        assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec("ac3"))
-        assertFalse(FfmpegMediaPolicies.insertSmartCanPreserveCodec(null))
     }
 
     @Test

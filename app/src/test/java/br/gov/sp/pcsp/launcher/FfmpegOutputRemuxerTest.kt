@@ -9,6 +9,11 @@ import org.junit.Test
 
 class FfmpegOutputRemuxerTest {
 
+    @Test fun hybridHevcPreservesInBandParameterSetsInMov() {
+        val args = FfmpegOutputRemuxer.remuxArguments("input.mp4", "output.mov", true, true, true).toList()
+        assertEquals("hev1", args[args.indexOf("-tag:v") + 1])
+    }
+
     @Test
     fun mediaCodecReencodeUsesMp4IntermediateOnlyWhenReencoding() {
         assertEquals(
