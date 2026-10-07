@@ -1,0 +1,197 @@
+=== BATERIA PILOTO R5 (21:32:36Z) ===
+--- sensores (thermalservice, identificados) ---
+	Temperature{mValue=45.5, mType=2, mName=battery, mStatus=0}
+	Temperature{mValue=99.6, mType=0, mName=CPU0, mStatus=0}
+	Temperature{mValue=99.6, mType=0, mName=CPU1, mStatus=0}
+	Temperature{mValue=99.6, mType=0, mName=CPU2, mStatus=0}
+	Temperature{mValue=99.6, mType=0, mName=CPU3, mStatus=0}
+	Temperature{mValue=99.6, mType=0, mName=CPU4, mStatus=0}
+	Temperature{mValue=99.6, mType=0, mName=CPU5, mStatus=0}
+	Temperature{mValue=99.6, mType=0, mName=CPU6, mStatus=0}
+--- thermal zones ---
+z0=41800
+
+z1=41800
+
+z2=41800
+
+z3=41800
+
+
+=== [S1-puros-cpu-htp] rotas: puro:cpu\npuro:htp\npuro:cpu\npuro:htp\npuro:cpu\npuro:htp\n ===
+    mem0:  | temp_z0_antes=41500
+    SESS[0] puro:cpu puro: ok=1 pieces=8 prefill=926.92ms gen=512.26ms pp1=0.45ms wall=1439.6ms
+    SESS[0] puro:cpu puro texto: Bom dia, como você está?
+    SESS[0] puro:cpu RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[0] puro:cpu lifecycle: load=242ms (0=WARM nesta sessao)
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1568.95ms gen=1614.66ms pp1=0.44ms wall=3183.9ms
+    SESS[1] puro:htp puro texto: Bom dia, como você está?
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[1] puro:htp lifecycle: load=191ms (0=WARM nesta sessao)
+    SESS[2] puro:cpu puro: ok=1 pieces=8 prefill=892.34ms gen=514.00ms pp1=0.11ms wall=1406.8ms
+    SESS[2] puro:cpu puro texto: Bom dia, como você está?
+    SESS[2] puro:cpu RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[2] puro:cpu lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1425.27ms gen=1154.13ms pp1=0.43ms wall=2579.7ms
+    SESS[3] puro:htp puro texto: Bom dia, como você está?
+    SESS[3] puro:htp RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[3] puro:htp lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[4] puro:cpu puro: ok=1 pieces=8 prefill=894.10ms gen=533.48ms pp1=0.12ms wall=1428.2ms
+    SESS[4] puro:cpu puro texto: Bom dia, como você está?
+    SESS[4] puro:cpu RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[4] puro:cpu lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[5] puro:htp puro: ok=1 pieces=8 prefill=1417.14ms gen=1095.12ms pp1=0.43ms wall=2512.6ms
+    SESS[5] puro:htp puro texto: Bom dia, como você está?
+    SESS[5] puro:htp RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[5] puro:htp lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[0] puro:cpu puro: ok=1 pieces=8 prefill=926.92ms gen=512.26ms pp1=0.45ms wall=1439.6ms
+    SESS[0] puro:cpu puro texto: Bom dia, como você está?
+    SESS[0] puro:cpu RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[0] puro:cpu lifecycle: load=242ms (0=WARM nesta sessao)
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1568.95ms gen=1614.66ms pp1=0.44ms wall=3183.9ms
+    SESS[1] puro:htp puro texto: Bom dia, como você está?
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[1] puro:htp lifecycle: load=191ms (0=WARM nesta sessao)
+    SESS[2] puro:cpu puro: ok=1 pieces=8 prefill=892.34ms gen=514.00ms pp1=0.11ms wall=1406.8ms
+    SESS[2] puro:cpu puro texto: Bom dia, como você está?
+    SESS[2] puro:cpu RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[2] puro:cpu lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1425.27ms gen=1154.13ms pp1=0.43ms wall=2579.7ms
+    SESS[3] puro:htp puro texto: Bom dia, como você está?
+    SESS[3] puro:htp RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[3] puro:htp lifecycle: load=0ms (0=WARM nesta sessao)
+    mem1:         TOTAL    67888    37556    15156       83   203376    61641    22646    38994 | temp_z0_depois=48000
+
+=== [S2-puros-ocl-vk] rotas: puro:opencl\npuro:vulkan\npuro:opencl\npuro:vulkan\npuro:opencl\npuro:vulkan\n ===
+    mem0:         TOTAL    73410    37600    20336       40   209956    61629    22722    38906 | temp_z0_antes=47300
+    SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2570.52ms gen=334.52ms pp1=0.30ms wall=2905.8ms
+    SESS[0] puro:opencl puro texto: Bom dia, como você está?
+    SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[0] puro:opencl lifecycle: load=4795ms (0=WARM nesta sessao)
+    SESS[1] puro:vulkan puro: ok=1 pieces=8 prefill=993.57ms gen=966.01ms pp1=519.28ms wall=1959.9ms
+    SESS[1] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[1] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[1] puro:vulkan lifecycle: load=1502ms (0=WARM nesta sessao)
+    SESS[2] puro:opencl puro: ok=1 pieces=8 prefill=124.66ms gen=340.30ms pp1=1.10ms wall=466.3ms
+    SESS[2] puro:opencl puro texto: Bom dia, como você está?
+    SESS[2] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[2] puro:opencl lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[3] puro:vulkan puro: ok=1 pieces=8 prefill=46.29ms gen=750.40ms pp1=555.57ms wall=797.6ms
+    SESS[3] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[3] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[3] puro:vulkan lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[4] puro:opencl puro: ok=1 pieces=8 prefill=125.23ms gen=301.65ms pp1=1.35ms wall=428.4ms
+    SESS[4] puro:opencl puro texto: Bom dia, como você está?
+    SESS[4] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[4] puro:opencl lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[5] puro:vulkan puro: ok=1 pieces=8 prefill=17.10ms gen=779.87ms pp1=581.09ms wall=797.8ms
+    SESS[5] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[5] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[5] puro:vulkan lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2570.52ms gen=334.52ms pp1=0.30ms wall=2905.8ms
+    SESS[0] puro:opencl puro texto: Bom dia, como você está?
+    SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[0] puro:opencl lifecycle: load=4795ms (0=WARM nesta sessao)
+    SESS[1] puro:vulkan puro: ok=1 pieces=8 prefill=993.57ms gen=966.01ms pp1=519.28ms wall=1959.9ms
+    SESS[1] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[1] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[1] puro:vulkan lifecycle: load=1502ms (0=WARM nesta sessao)
+    SESS[2] puro:opencl puro: ok=1 pieces=8 prefill=124.66ms gen=340.30ms pp1=1.10ms wall=466.3ms
+    SESS[2] puro:opencl puro texto: Bom dia, como você está?
+    SESS[2] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[2] puro:opencl lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[3] puro:vulkan puro: ok=1 pieces=8 prefill=46.29ms gen=750.40ms pp1=555.57ms wall=797.6ms
+    SESS[3] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[3] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[3] puro:vulkan lifecycle: load=0ms (0=WARM nesta sessao)
+    mem1:         TOTAL   194377   123352    44540    13947   292488   114857    37643    77213 | temp_z0_depois=45700
+
+=== [S3-smart-oc-warm] rotas: opencl@bench\nopencl@bench\nopencl@bench\n ===
+    mem0:         TOTAL   128382    51668    49900    13777   228028   114853    37659    77193 | temp_z0_antes=45300
+    SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2570.52ms gen=334.52ms pp1=0.30ms wall=2905.8ms
+    SESS[0] puro:opencl puro texto: Bom dia, como você está?
+    SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[0] puro:opencl lifecycle: load=4795ms (0=WARM nesta sessao)
+    SESS[1] puro:vulkan puro: ok=1 pieces=8 prefill=993.57ms gen=966.01ms pp1=519.28ms wall=1959.9ms
+    SESS[1] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[1] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[1] puro:vulkan lifecycle: load=1502ms (0=WARM nesta sessao)
+    SESS[2] puro:opencl puro: ok=1 pieces=8 prefill=124.66ms gen=340.30ms pp1=1.10ms wall=466.3ms
+    SESS[2] puro:opencl puro texto: Bom dia, como você está?
+    SESS[2] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[2] puro:opencl lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[3] puro:vulkan puro: ok=1 pieces=8 prefill=46.29ms gen=750.40ms pp1=555.57ms wall=797.6ms
+    SESS[3] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[3] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[3] puro:vulkan lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[4] puro:opencl puro: ok=1 pieces=8 prefill=125.23ms gen=301.65ms pp1=1.35ms wall=428.4ms
+    SESS[4] puro:opencl puro texto: Bom dia, como você está?
+    SESS[4] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[4] puro:opencl lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[5] puro:vulkan puro: ok=1 pieces=8 prefill=17.10ms gen=779.87ms pp1=581.09ms wall=797.8ms
+    SESS[5] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[5] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[5] puro:vulkan lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2570.52ms gen=334.52ms pp1=0.30ms wall=2905.8ms
+    SESS[0] puro:opencl puro texto: Bom dia, como você está?
+    SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[0] puro:opencl lifecycle: load=4795ms (0=WARM nesta sessao)
+    SESS[1] puro:vulkan puro: ok=1 pieces=8 prefill=993.57ms gen=966.01ms pp1=519.28ms wall=1959.9ms
+    SESS[1] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[1] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[1] puro:vulkan lifecycle: load=1502ms (0=WARM nesta sessao)
+    SESS[2] puro:opencl puro: ok=1 pieces=8 prefill=124.66ms gen=340.30ms pp1=1.10ms wall=466.3ms
+    SESS[2] puro:opencl puro texto: Bom dia, como você está?
+    SESS[2] puro:opencl RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[2] puro:opencl lifecycle: load=0ms (0=WARM nesta sessao)
+    SESS[3] puro:vulkan puro: ok=1 pieces=8 prefill=46.29ms gen=750.40ms pp1=555.57ms wall=797.6ms
+    SESS[3] puro:vulkan puro texto: Bom dia, como você está?
+    SESS[3] puro:vulkan RESULTADO: PURO-EXECUTADO (baseline; sem juizo de qualidade)
+    SESS[3] puro:vulkan lifecycle: load=0ms (0=WARM nesta sessao)
+    mem1:         TOTAL   114455    52180    30528    11983   236168   108741    38604    70136 | temp_z0_depois=50000
+
+=== [S4-smart-vk-warm] rotas: vulkan@bench\nvulkan@bench\nvulkan@bench\n ===
+    mem0:         TOTAL   119991    54324    35648     9916   244860   108729    38690    70038 | temp_z0_antes=48400
+    SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    SESS[0] vulkan tempos: prefill=1341.73ms export=0.12ms(2032789B) import=1.85ms gen=806.07ms
+    SESS[0] vulkan fronteiras(ms desde request): prefill_done=1342.1 tok1_ready=1358.4 import_done=1360.2 tok2_ready=2008.6 fim=2166.3 wall=2166.3 (INTERNAS; sem streaming UI)
+    SESS[0] vulkan texto: Bom dia, como você está?
+    SESS[0] vulkan RESULTADO: BENCH-CONCLUIDO (sessao)
+    SESS[0] vulkan lifecycle: load_dst=796ms load_src=204ms (0=WARM nesta sessao)
+    SESS[1] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    SESS[1] vulkan tempos: prefill=1436.27ms export=0.11ms(2032789B) import=1.88ms gen=184.54ms
+    SESS[1] vulkan fronteiras(ms desde request): prefill_done=1436.6 tok1_ready=1452.8 import_done=1454.7 tok2_ready=1487.0 fim=1639.3 wall=1639.3 (INTERNAS; sem streaming UI)
+    SESS[1] vulkan texto: Bom dia, como você está?
+    SESS[1] vulkan RESULTADO: BENCH-CONCLUIDO (sessao)
+    SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM nesta sessao)
+    SESS[2] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    SESS[2] vulkan tempos: prefill=1412.17ms export=0.12ms(2032789B) import=1.85ms gen=178.57ms
+    SESS[2] vulkan fronteiras(ms desde request): prefill_done=1412.5 tok1_ready=1428.7 import_done=1430.5 tok2_ready=1459.4 fim=1609.1 wall=1609.1 (INTERNAS; sem streaming UI)
+    SESS[2] vulkan texto: Bom dia, como você está?
+    SESS[2] vulkan RESULTADO: BENCH-CONCLUIDO (sessao)
+    SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM nesta sessao)
+    SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    SESS[0] vulkan tempos: prefill=1341.73ms export=0.12ms(2032789B) import=1.85ms gen=806.07ms
+    SESS[0] vulkan fronteiras(ms desde request): prefill_done=1342.1 tok1_ready=1358.4 import_done=1360.2 tok2_ready=2008.6 fim=2166.3 wall=2166.3 (INTERNAS; sem streaming UI)
+    SESS[0] vulkan texto: Bom dia, como você está?
+    SESS[0] vulkan RESULTADO: BENCH-CONCLUIDO (sessao)
+    SESS[0] vulkan lifecycle: load_dst=796ms load_src=204ms (0=WARM nesta sessao)
+    SESS[1] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    SESS[1] vulkan tempos: prefill=1436.27ms export=0.11ms(2032789B) import=1.88ms gen=184.54ms
+    SESS[1] vulkan fronteiras(ms desde request): prefill_done=1436.6 tok1_ready=1452.8 import_done=1454.7 tok2_ready=1487.0 fim=1639.3 wall=1639.3 (INTERNAS; sem streaming UI)
+    SESS[1] vulkan texto: Bom dia, como você está?
+    SESS[1] vulkan RESULTADO: BENCH-CONCLUIDO (sessao)
+    SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM nesta sessao)
+    SESS[2] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    SESS[2] vulkan tempos: prefill=1412.17ms export=0.12ms(2032789B) import=1.85ms gen=178.57ms
+    SESS[2] vulkan fronteiras(ms desde request): prefill_done=1412.5 tok1_ready=1428.7 import_done=1430.5 tok2_ready=1459.4 fim=1609.1 wall=1609.1 (INTERNAS; sem streaming UI)
+    SESS[2] vulkan texto: Bom dia, como você está?
+    SESS[2] vulkan RESULTADO: BENCH-CONCLUIDO (sessao)
+    SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM nesta sessao)
+    SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=1/8 emitidos=8 consumidos=8 decodes_s_pos_ponte=0
+    SESS[0] vulkan tempos: prefill=1341.73ms export=0.12ms(2032789B) import=1.85ms gen=806.07ms
+    SESS[0] vulkan fronteiras(ms desde request): prefill_done=1342.1 tok1_ready=1358.4 import_done=1360.2 tok2_ready=2008.6 fim=2166.3 wall=2166.3 (INTERNAS; sem streaming UI)
+    SESS[0] vulkan texto: Bom dia, como você está?
+    mem1:         TOTAL   165983   108724    38240       83   300332    82089    24029    58059 | temp_z0_depois=45700
+
+BATERIA_R5_DONE

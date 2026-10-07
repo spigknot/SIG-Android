@@ -1,0 +1,51 @@
+ORDENS AO EXECUTOR — POS SMART RODADA 4: FECHAR WALL, LIFECYCLE E ANOMALIA OPENCL
+================================================================================
+
+BASE
+O especialista encontrou e leu o arquivo mais recente de docs/especialista: RELATORIO-SMART-DUAL-BACKEND-RODADA4.txt. Leu tambem MATCHED-R4.csv e localizou simbolos no probe.cpp atual. Nao reexecutou aparelho nesta analise.
+Reconhece progresso: benchmark sem espelho, gates adicionais, dualSmart curto e corpus novo63tokens aceitos em validacao. Meta/menu seis opcoes continua confirmada. Sem autorizar UI/produto/R2/release por esta resposta.
+
+1. CORRIGIR LEITURA DO MATCHED
+A tabela do relatorio e mediana de gen_ms, NAO wall total. 'Smart VK ganha' so pode se referir a esse intervalo particular; criterio de produto exige pedido completo, handoff e cold/warm adequados.
+Recalculo em Python por tentativa, exclusivamente lote C (18 tentativas, 3 por modo), do subtotal prefill+gen:
+CPU: 916.23ms
+HTP: 1527.49ms
+OpenCL: 4313.55ms
+Vulkan: 1664.02ms
+Smart OpenCL: 5571.66ms
+Smart Vulkan: 1522.80ms
+Estes valores NAO sao wall: excluem export/import/preparo/load e outros intervalos. Nao somar medianas de fases; agregado acima e mediana dos subtotais por tentativa. Nao declarar vantagem Smart Vulkan sobre NPU por 'empata gen' ou ganho completo sobre Vulkan usando apenas essas fases.
+Sessao quente/intercalada nao garante matched relativo valido: configuracao residente, aquecimento e backendwarmup podem variar sistematicamente por modo. Pode servir diagnostico exploratorio; nao promover a beneficio comprovado.
+
+2. CSV NAO CONTEM O QUE O RELATORIO AFIRMA
+MATCHED-R4.csv atual tem apenas pid,hora,rota,modo_probe,mut,prefill_ms,gen_ms,texto,resultado. Nao contem corpus, export/import, tok1/tok2, wall, temp ou stop/eog como campos separados. Texto medio truncado e resultado tambem truncado em linhas; preservar logs integrais e hashes, parser nao e evidencia completa de resposta.
+Entregar schema novo CSV/JSONL com run_id unico, build/model/promptSHA completos, corpus, mode, variante valid/bench, lifecyclecoldwarm, tokens/stop/rc, phase timestamps, wall request/finish, tokenready/visible quando aplicavel, gap1->2, load/context, export/import, mem/sensors. PID sozinho nao e ID unico no Android: pode haver varios requests por PID ou reutilizacao. Dedupe REPORT por attempt/request/phase, nao pid sozinho.
+Reconciliar tamanho de corpus chamado 'medio' (379bytes) com historico corpus952chars/2335chars. Novo texto63tokens valida escopo maior que saudacao, nao corpus medio historico automaticamente. Identificar texto fonte integral/hash, quantidade prompt/output e cap. Usar nomes por tamanho real, sem substituir corpus aprovado por menor silenciosamente.
+B2 reporta 55% menos entre12294.51 e6858.32 mas outros trechos cruzam valores Vulkan/OpenCL. Regerar percentuais/tabelas por script usando mesmo modo/corpus/build e afirmar apenas diferenca observada: runs separadas nao isolam custo causal do espelho em condicao termica variavel.
+
+3. LIFECYCLE E BASELINE OPENCL ANOMALO
+Smart OpenCL gen de varios segundos para resposta8tokens, puro OpenCL prefill~4s e gen~0.25s: isso merece investigacao curta antes bateria longa. Nao atribuir setup/sync/thermal como causa sem fronteiras.
+Auditar se cada tentativa carrega/descarrega modelos/contextos, como pure/Smart aquece kernels, runtime OpenCL e buffers, memoria de dois modelos, sync/readback e eventownership. Benchmark warm deve manter sessao/contexts como produto, com reset de request; cold e caso separado. Se modelo descarregado por tentativa, rotular processo-frio e nao inferir desempenho amortizado do SIG.
+Provar loadercache/F3b guard do produto efetivamente presentes/ativos na lib do probe; fonte SIG sozinho nao prova flags de build e loader. Manifest probevendor libOpenCL DT_NEEDED nao e mesmo caminho loader do produto. Nao comparar direto produto v11comprobe e generalizar vantagem/regressao.
+Instrumentacao leve separada: identificar primeira execucaoGPU apos import, restante decode por token e sincronizacoes/preparo. Profile diagnostico nao entra matched. Examinar quantas posicoes/contextstate importado vs alocado, dtype/KV/FA, fallback e GPUplace real. Se houver defeito classificar invalidharnessbackend, preservar tentativa, corrigir/testar antes benchmark.
+Nao reabrir VulkanKVlayout: atual evidencia buildSIGfuncional valida caminho nesta config, sem portabilidade universal.
+
+4. PROXIMA BATERIA ENXUTA
+Antes device: congelar snapshot de probe/src/APK/libs/flags/hash, provar cold/warmrequest timers e reader schema com fixtures; wrapperserial e antidestructivepreservado.
+Device frio: registrar sensores identificados/thermalstatus/statusidle, cooldown seguro e limites. Frio termico e diferente de coldload. Verificar SDK real: contrato API35 vs historicoAndroid16SDK36 precisa corrigir por getprop, sem normalizar dado inconsistente por palpite.
+Nao matar apps/governor/root/bypass. Restore stayonvalor anteriorEXATOreadbackfinally; wifi autorizado comidentityguard/logsondevice seUSBindisponivel. Perda de log invalida medicao sem inventar conclusao.
+Piloto3reps de warmrequests, ordem balanceada/intercalada com condicao termica admitida antes cada run, CPU/HTP/OpenCL/Vulkan/Smarts. Represet context e sampler; mesmasconfig/model/prompt. Medir wall e tokenready, pausa aposponte, EOGfinal e memoria2contexts. Cap limita saida sem alterar processoCPU/GPUmatched. Novocorpus fonte maior aprovado (mediohistorico se disponivel; SHA e tokenbudget) quando curto passar.
+Nao exigir reproduzir toda matrizfuncional a cada round sem mudanca relevante. Validar medio maior/ABA ambasSmart primeiro; cap/batchchunk corretos e posicao de ultimo logit. Um longo somente se memoria/curto/mediojustify, semgrid.
+Criteriohabilitacao: beneficio wall/TTFT repetivel acima variabilidade, custo mem seguro, estabilidade; ou rotular opcaoexperimental com limitacoes mediante decisao usuario. Se Smart OC continua lento, entregar resultado negativo honesto e candidato causaevidencia; meta dual nao obriga fabricar ganho. Nunca fallbackautomaticoCPU/HTP sobrotuloSmartexplicito.
+
+5. ENTREGA
+RELATORIO-SMART-DUAL-BACKEND-RODADA5.txt em docs/especialista, formato A-H:
+A snapshot/aprovacoes/dadospreservados;
+B schema/gates/corpusidentidade/dedupe;
+C lifecyclecoldwarm e fronteiras wall/token;
+D OpenCLanomaly observado/hipotese/rootcause;
+E corretude medioreal e ABA;
+F matched wall/TTFT/cold/warm/mem e variabilidade por modo;
+G CI/F2/Whispernaotestado/probe!=SIG;
+H decisao porrota e proximaetapa.
+Logs/CSV/JSONLmanifestcomfullSHAs em docs/npu-hymt2/smart-rodada5/. Contar attemptsclassesexclusivas por script e nunca denominar gen_ms como tempo total. Nenhuma UI/release/SIGprincipalalterado nesta rodada sem escopo especifico; WIPoutrosagentes preservado.

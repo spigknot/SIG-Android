@@ -1,0 +1,157 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 5
+=========================================================================
+Data: 07/10/2026. Executor: agente. Ordens: "POS SMART RODADA 4: FECHAR
+WALL, LIFECYCLE E ANOMALIA OPENCL". Escopo vigente; SEM UI/produto/R2/
+release; WIP alheio preservado; nada do SIG principal alterado.
+
+RESUMO EXECUTIVO: (1) recalc por script CONFERE 6/6 com os subtotais do
+especialista (mediana dos subtotais prefill+gen); (2) schema novo JSONL
+(run_id por request); (3) SESSION MODE implementado e medido: contextos
+vivos + reset de request — ISSO SEPARA COLD DE WARM e REVELA O PONTO:
+o "gen caro" do OpenCL era JIT/LOADER de processo frio; warm: puro OC
+4.9s->0.43s (6.7x), Smart OC 4.35s->1.89s (2.3x); (4) auditoria de
+flags/loader: o probe != produto (loader OpenCL proprio do SIG e
+SIG_VULKAN_NO_CRASH ausentes no build do probe); (5) SDK CORRIGIDO:
+device e' Android 16 / SDK 36 (getprop), nao API35 como escrito antes.
+
+------------------------------------------------------------------------
+A. SNAPSHOT, APROVACOES, DADOS PRESERVADOS
+------------------------------------------------------------------------
+A.1 Probe v14c (session mode + prints de lifecycle/wall). libs: MESMO
+    build v12 SIG (manifesto rodada 4; sha 9/9). Device CPH2747 wifi
+    (PSS ids documentados); getprop: sdk=36, release=16, OPlus V16.1.0,
+    abi arm64-v8a. CORRECAO: relatorios anteriores diziam Android15/API35
+    — errado; nao normalizar, corrigido por getprop (ordem R5-4).
+A.2 Stayon: valor antes=7 registrado; ligado(15); AO FINAL revertido
+    para 7 com readback=7 confirmado (e registrado). Wifi autorizado com
+    identidade guardada; perda de log invalida medicao (regra mantida:
+    loop de captura com timeout+pull, sem inventar).
+A.3 Snapshot congelado: probe source (sha por commit do repo do probe),
+    APK, 9 libs, flags do build-smart12b (script em smart-rodada4/),
+    JSONL/CSV e logs completos em smart-rodada5/. Nada do SIG principal
+    alterado.
+
+------------------------------------------------------------------------
+B. SCHEMA, GATES, CORPUS, DEDUPE (secao 2 das ordens)
+------------------------------------------------------------------------
+B.1 Schema novo ENTREGUE: docs/npu-hymt2/smart-rodada5/WARM-R5.jsonl —
+    run_id = <pid>.<idx> (idx do request na sessao; PID sozinho NAO e' id
+    unico — corrigido), com variant (valid/bench/puro), lifecycle
+    (cold/warm por load do backend), phase timestamps (prefill_done/
+    tok1_ready/import_done/tok2_ready/fim, ms desde request), wall,
+    tokens/consumidos/decodes_origem_pos_ponte, export/import bytes,
+    texto INTEGRAL (sem truncar), promptSHA e meta (build/libs/device).
+    Sensores+zona termica por sessao no cabecalho JSONL.
+B.2 Recalculo por SCRIPT (RECALCULO-R5.txt): mediana dos subtotais
+    prefill+gen do lote C: cpu 916.23, htp 1527.49, eocl 4313.55,
+    evulkan 1664.02, eSmartOC 5571.66, eSmartVK 1522.80 -> CONFERE 6/6
+    com o recalc do especialista. Os valores NAO sao wall (declarado);
+    nao somar medianas de fases (respeitado). Deltas do espelho por
+    script: curto OC 27.0%; medio OC 44.2%; medio VK 70.9% (diferenca
+    observada; runs separadas nao isolam causalidade em termica variavel).
+B.3 Corpus: o texto novo (379 bytes, 63 tokens de saida) e' "corpus curto
+    estendido R5"; NAO substitui o corpus medio historico (952/2335
+    chars — nao localizado nos materiais desta sessao; declarado, nao
+    improvisado). Nomes por tamanho real adotados. Cap=160 declarado.
+
+------------------------------------------------------------------------
+C. LIFECYCLE COLD vs WARM E FRONTEIRAS WALL
+------------------------------------------------------------------------
+C.1 GAP DECLARADO: o probe ANTES desta rodada era PROCESSO-FRIO por
+    tentativa (o runner faz force-stop entre runs -> load+jit a cada
+    run!). O lote C do R4 e' portanto "processo-frio" e NAO representa o
+    produto (que mantem sessao). SESSION MODE implementado nesta rodada:
+    1 load por backend por sessao; reset de request (memory_clear) entre
+    runs; load fora do wall.
+C.2 EFEITO MEDIDO (wall total do request; curto):
+      S2 puros: OC cold 2905.8 -> warm 466.3/428.4ms; VK cold 1959.9 ->
+        warm 797.6/797.8ms;
+      S3 Smart OC: cold 4350.7 -> warm 1907.0/1889.2ms;
+      S4 Smart VK: cold 2166.3 -> warm 1639.3/1609.1ms;
+      S1 puros: CPU cold 1439.6 -> warm 1406.8/1428.2 (estavel);
+        HTP cold 3183.9 -> warm 2579.7/2512.6 (device esquentando na
+        bateria: z0 41.5->48.0C; nenhuma conclusao termica alem disso).
+    Leitura: warm reduz MUITO OC (6.7x) e menos VK (2.5x); CPU estavel.
+C.3 Fronteiras nomeadas no JSONL (prefill_done/tok1_ready/import_done/
+    tok2_ready/fim/wall). "token ready" e' INTERNO (o probe retorna string
+    ao fim; sem streaming de UI — declarado, nao inventamos visibilidade).
+    Pausa pos-ponte = tok2_ready - import_done (campo calculavel).
+
+------------------------------------------------------------------------
+D. ANOMALIA OPENCL: OBSERVADO, HIPOTESE, CAUSA (secao 3)
+------------------------------------------------------------------------
+D.1 OBSERVADO (R4): Smart OC gen de segundos para 8 tokens; puro OC
+    prefill~4s e gen~0.25s. Nao atribuir a uma causa sem fronteiras
+    (feito).
+D.2 INVESTIGACAO: (a) lifecycle: cada run do R4 era processo novo ->
+    jit/loader+alocacao a frio; (b) SESSION MODE separa: OC cold
+    wall=2906ms (load 4795ms fora do wall; jit dos kernels no 1o uso
+    REAL) -> warm 428-466ms; Smart OC cold 4351 -> warm 1889.
+D.3 CAUSA OBSERVADA: custo dominante do OC no curto = warmup do backend
+    (jit/loader) + setup do primeiro decode pos-import; NAO ha defeito
+    de harness que invalide (gates Ok; correto em todas as rodadas).
+    Diferenca do produto: o SIG tem LOADER PROPRIO (android-opencl-
+    loader.cpp com cache) enquanto o probe usa o loader default do ggml
+    via DT_NEEDED libOpenCL — logo o custo de jit do PROBE e' pior que o
+    do produto; numeros de produto NAO podem ser inferidos deste probe
+    sem nota. SIG_VULKAN_NO_CRASH=1 (define do produto, no ggml-vulkan)
+    tambem NAO estava no build do probe. Registrado como limite.
+D.4 Nao reabrir KVlayout (respeitado; evidencia R3/R4 mantida).
+
+------------------------------------------------------------------------
+E. CORRETUDE NO MEDIO REAL E A-B-A
+------------------------------------------------------------------------
+E.1 Herdado do R4 (revisado): medio novo (63 tokens) ACEITO em validacao
+    nas DUAS rotas (espelho 63/63, A-B-A integral, texto integral PT
+    correto); benchmarks medios ok (sem espelho). Nada aqui mudou nesta
+    rodada; o teste de corretude WARM no medio entra na proxima bateria
+    (fila aprovada de R5-4: primeiro validar medio maior/ABA nas duas
+    rotas warm, depois bateria).
+
+------------------------------------------------------------------------
+F. MATCHED WALL/TTFT WARM — DADOS DA BATERIA PILOTO (secao 4)
+------------------------------------------------------------------------
+F.1 Piloto 3 reps WARM (mesma sessao, ordem intercalada, reset de
+    request) entregue no JSONL; tempos wall (curto):
+      puro CPU: ~1.41-1.44s | puro HTP: ~2.51-3.18s | puro OC: 0.43-0.47s
+      (warm) | puro VK: 0.80s (warm) | Smart OC: 1.89-1.91s (warm) |
+      Smart VK: 1.61-1.64s (warm).
+    Leitura (curto, warm, 2-3 reps, 1 sessao): puros GPU lideram o
+    curto; Smart VK ~ empata CPU; Smart OC perde para puros GPU mas ganha
+    do HTP puro. NAO declarar ganho de produto: falta o corpus MEDIO warm
+    (onde o prefill do HTP deve pesar) e a condicao fria controlada.
+F.2 Memoria: dumpsys meminfo TOTAL por sessao capturado (valores no
+    JSONL cabecalho; leitura limitada ao campo TOTAL — limitacao
+    declarada; sem LMK nos runs).
+F.3 Variabilidade/limitacoes: 3 reps; sessao unica; z0 41.5-48C durante
+    a bateria; sem USB; denominadores exclusivos por run_id; nada de
+    inventar.
+
+------------------------------------------------------------------------
+G. F2 / CI / WHISPER / PROBE != SIG
+------------------------------------------------------------------------
+G.1 F2/CI: inalterados nesta rodada (R2/R3). Whisper: NAO testado
+    (declarado; fonte/binario intactos).
+G.2 Probe vs produto: documentado em D.3 (loader OCL proprio vs default;
+    SIG_VULKAN_NO_CRASH ausente; pipeline do produto e' Zig-based; API28
+    do prototipo vs minSDK24 do produto). Nenhuma generalizacao direta
+    produto<->probe autorizada por esta rodada.
+
+------------------------------------------------------------------------
+H. DECISAO POR ROTA E PROXIMA ETAPA
+------------------------------------------------------------------------
+H.1 Smart OpenCL: funcional+correto; warm muda a leitura (1.9s vs 4.4s
+    frio); ainda sem ganho claro vs puros GPU no CURTO warm; candidato a
+    ganho no MEDIO (prefill HTP) — medir antes de qualquer decisao.
+H.2 Smart Vulkan: idem; warm 1.6s; empata CPU no curto warm.
+H.3 NPU/HTP puro: warm ~2.5-3.2s no curto (gen HTP e' o gargalo).
+H.4 Proxima etapa objetiva (fila aprovada): (1) bateria WARM com o
+    corpus medio (63 tokens: validacao ABA ambas rotas + matched wall/
+    TTFT); (2) condicao fria controlada com sensores (cooldown);
+    (3) somente entao consolidar criterio de habilitacao wall/TTFT
+    repetivel; nada de UI/release sem escopo especifico.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada5/ (WARM-R5.jsonl, RECALCULO-R5.txt,
+npuprobe-r5.log, bateria-r5.txt, parse/jsonl scripts, manifest). Exit
+codes e SHAs nos arquivos. Nenhuma afirmacao sem evidencia; pendencias
+explicitas.

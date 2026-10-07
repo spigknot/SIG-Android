@@ -1,0 +1,39 @@
+RECALCULO R5 (por script; fonte: npuprobe-r4.log)
+
+== 1) Lote C: subtotal prefill+gen por tentativa (3 reps/modo) ==
+rota             hora           prefill       gen   subtotal
+puro:cpu         17:41:43.095   1253.32    416.80    1670.12
+puro:htp         17:42:44.720    833.61    693.88    1527.49
+puro:opencl      17:43:56.834   4184.26    241.03    4425.29
+puro:vulkan      17:44:57.698    637.73   1063.64    1701.37
+opencl@bench     17:45:57.810   1458.80   4112.86    5571.66
+vulkan@bench     17:47:06.354    816.30    862.56    1678.86
+puro:cpu         17:48:11.607    642.35    273.88     916.23
+puro:htp         17:49:11.324    828.46    693.81    1522.27
+puro:opencl      17:50:15.747   3863.97    427.79    4291.76
+puro:vulkan      17:51:15.332    619.82   1044.20    1664.02
+opencl@bench     17:52:15.808   1363.14   3735.75    5098.89
+vulkan@bench     17:53:21.104    803.67    719.13    1522.80
+puro:cpu         17:54:26.795    636.84    272.22     909.06
+puro:htp         17:55:26.786    838.68    744.33    1583.01
+puro:opencl      17:56:27.179   4064.55    249.00    4313.55
+puro:vulkan      17:57:27.459    630.20   1027.98    1658.18
+opencl@bench     17:58:28.154   1429.20   4554.81    5984.01
+vulkan@bench     17:59:33.701    803.73    567.89    1371.62
+
+MEDIANA DOS SUBTOTAIS (comparacao com o recalc do especialista):
+  puro:cpu         n=3 mediana=916.23  ref=916.23  -> CONFERE
+  puro:htp         n=3 mediana=1527.49  ref=1527.49  -> CONFERE
+  puro:opencl      n=3 mediana=4313.55  ref=4313.55  -> CONFERE
+  puro:vulkan      n=3 mediana=1664.02  ref=1664.02  -> CONFERE
+  opencl@bench     n=3 mediana=5571.66  ref=5571.66  -> CONFERE
+  vulkan@bench     n=3 mediana=1522.80  ref=1522.80  -> CONFERE
+  RESULTADO: TODOS CONFEREM (6/6)
+
+== 2) Delta do espelho (validacao - benchmark), mesmo modo/corpus ==
+  curto opencl (8 tok): valid=3743.16 bench=2731.05 delta=1012.11ms (27.0% do valid)
+  medio opencl (63 tok): valid=12294.51 bench=6858.32 delta=5436.19ms (44.2% do valid)
+  medio vulkan (63 tok): valid=9289.96 bench=2702.21 delta=6587.75ms (70.9% do valid)
+
+NOTA: runs separadas nao isolam custo causal do espelho em condicao
+termica variavel (declarado); os deltas sao DIFERENCA OBSERVADA.
