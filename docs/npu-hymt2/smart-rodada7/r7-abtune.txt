@@ -1,0 +1,44 @@
+=== R7 A/B tune (23:18:54Z) ===
+=== [T1-mmselect2] tune='GGML_HEXAGON_MM_SELECT=2\n' ===
+    TUNE: GGML_HEXAGON_MM_SELECT=2
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=812.12ms gen=701.86ms pp1=0.32ms wall=1514.3ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1176.39ms gen=859.20ms pp1=0.15ms wall=2036.0ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1365.24ms gen=816.39ms pp1=0.21ms wall=2182.1ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1420.00ms gen=837.85ms pp1=0.21ms wall=2258.3ms
+    TUNE: GGML_HEXAGON_MM_SELECT=2
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=812.12ms gen=701.86ms pp1=0.32ms wall=1514.3ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1176.39ms gen=859.20ms pp1=0.15ms wall=2036.0ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1365.24ms gen=816.39ms pp1=0.21ms wall=2182.1ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1420.00ms gen=837.85ms pp1=0.21ms wall=2258.3ms
+    TUNE: GGML_HEXAGON_MM_SELECT=2
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=812.12ms gen=701.86ms pp1=0.32ms wall=1514.3ms
+    JSON: 4 reqs -> C:/llama-npu/rodada2/logs/t1-mm2.jsonl
+=== [T2-padrao] tune='' ===
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=822.52ms gen=673.15ms pp1=0.34ms wall=1495.9ms
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=822.52ms gen=673.15ms pp1=0.34ms wall=1495.9ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1173.81ms gen=863.70ms pp1=0.67ms wall=2037.9ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1339.59ms gen=775.46ms pp1=0.20ms wall=2115.5ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1339.33ms gen=770.20ms pp1=0.20ms wall=2110.0ms
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=822.52ms gen=673.15ms pp1=0.34ms wall=1495.9ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1173.81ms gen=863.70ms pp1=0.67ms wall=2037.9ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1339.59ms gen=775.46ms pp1=0.20ms wall=2115.5ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1339.33ms gen=770.20ms pp1=0.20ms wall=2110.0ms
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=822.52ms gen=673.15ms pp1=0.34ms wall=1495.9ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1173.81ms gen=863.70ms pp1=0.67ms wall=2037.9ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1339.59ms gen=775.46ms pp1=0.20ms wall=2115.5ms
+    JSON: 4 reqs -> C:/llama-npu/rodada2/logs/t2-padrao.jsonl
+=== [T3-mmselect2-r2] tune='GGML_HEXAGON_MM_SELECT=2\n' ===
+    TUNE: GGML_HEXAGON_MM_SELECT=2
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=807.58ms gen=723.92ms pp1=0.33ms wall=1531.8ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1194.09ms gen=859.97ms pp1=0.15ms wall=2054.4ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1300.95ms gen=824.95ms pp1=0.20ms wall=2126.3ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1242.05ms gen=851.97ms pp1=0.15ms wall=2094.5ms
+    TUNE: GGML_HEXAGON_MM_SELECT=2
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=807.58ms gen=723.92ms pp1=0.33ms wall=1531.8ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1194.09ms gen=859.97ms pp1=0.15ms wall=2054.4ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1300.95ms gen=824.95ms pp1=0.20ms wall=2126.3ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1242.05ms gen=851.97ms pp1=0.15ms wall=2094.5ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1339.33ms gen=770.20ms pp1=0.20ms wall=2110.0ms
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=822.52ms gen=673.15ms pp1=0.34ms wall=1495.9ms
+    JSON: 4 reqs -> C:/llama-npu/rodada2/logs/t3-mm2.jsonl
+R7_ABTUNE_DONE

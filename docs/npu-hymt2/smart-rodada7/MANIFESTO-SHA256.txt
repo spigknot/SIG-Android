@@ -1,0 +1,30 @@
+MANIFESTO SHA-256 — smart-rodada7 (07/10/2026)
+
+COHORTS (sha16):
+  v12 SIG (baseline, RESTAURADO): ggml 0fa02e2a/ base c8987c2b/ cpu 03831fd1/
+    hexagon dc88db2d/ skel 0a4ec5b7/ opencl 78c9d17f/ vulkan 32663543/ llama 6682f6f3
+  v11 upstream (controle): ggml 2a14758b/ base 10b01f81/ cpu b4b3154b/
+    hexagon 5ea660c1/ skel 0f1e1357/ opencl b721e306/ vulkan acb35eb8/ llama a1497f70
+PROVA CCE (mesma janela): v12 prefill 811-1420ms / wall 1496-2116ms;
+  v11 prefill 72-104ms / wall 300-352ms; Smart OC (v11) 453-520ms vs puro OC 520-535ms;
+  tune MM_SELECT/NHVX/OPBATCH/OPQUEUE: sem efeito (t1..t6 JSONs).
+STAYON: valor atual 7 (definido na R3; original do usuario NAO capturado — PENDENTE DECISAO).
+
+90aa8f03d079c455b86839cf46adef5f8fd0aed6036f49230242651b69e24da3  npuprobe-r7.log  (387816 B)
+7c150f7031f94dccdd4c9b6b1d20cf6ce873f3c63dfa16651ab37f6a58914e0c  r7-abtune.sh  (1928 B)
+baf8c898616bee0128a04adf00d998b000a75322713bf3308371b3e1b8100703  r7-abtune.txt  (3544 B)
+ce3b5c0500fe09df984bd933e07296e51d0d9db61a51b5e37173c77795831064  r7-abtune2.sh  (1907 B)
+4e0e9ed7491313c4b7183b43ed51ae33828d257bb4509b2e3df8b6dd52460ad2  r7-abtune2.txt  (2563 B)
+a4349e356a899006aa614cb920f31166831f155455ad5318429d67ab4110b49f  r7-controle.sh  (1040 B)
+e94fafcbba2f28382b22aef71ebeeb5cec1cb9a58309fd4abab71dea6b79e163  r7-focais.sh  (2042 B)
+3154063a796319369a61142d5e7187a87a0dcf3cec4f693ab1123a5851bbb393  r7-focais.txt  (5509 B)
+beb89ea04294248cad31e021acf579e2f0ad2727fb649e3611ebe3977c012e4d  r7-restaura.sh  (689 B)
+bd2d5873653fc3762fd0d65f464ea55b57d68e9432812f68e52fcd23871cfbf2  t1-mm2.jsonl  (1881 B)
+124f602868227885c7c5025dfe0dc5dd429fbcd9151beb36a91b0d1899810ae1  t2-padrao.jsonl  (1881 B)
+c2552f868362748106cd1ec075edb45d61a719189dd45f45329d7cc86f8e46b4  t3-mm2.jsonl  (1881 B)
+aec1a39450c40e66b654079c6d3777b3f7b131db576b59771b05c62d19d73d1a  t4-nhvx8.jsonl  (1881 B)
+72a4a2dcf8b354990de80eada091f94b0cd8a108bfdd1cae2a4b79848105218b  t5-nhvx4.jsonl  (1881 B)
+835f72d983b15938799e02f95b3f7e8b0377861229c64cfa6024c3b38c5bd029  t6-combo.jsonl  (1882 B)
+059d3501af52455f185e00f878f15ba4a15c5fe5dfd6eac9675b426448cba304  valida-schema.py  (2893 B)
+
+eeac4ac1f2dcba96d8b2d63ad2dc6b96007dbfe8704dbf819b776870a5fbf3f3  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA7.txt (11054 B)

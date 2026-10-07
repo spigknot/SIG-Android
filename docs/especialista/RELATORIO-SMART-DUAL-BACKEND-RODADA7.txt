@@ -1,0 +1,173 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 7
+=========================================================================
+Data: 07/10/2026 (noite). Executor: agente. Ordens: "POS SMART R6: A/B
+COERENTE DO HTP, SEM MAIS SWAP ABI". Sem UI/produto/R2/release; nada do
+SIG principal alterado; WIP alheio preservado.
+RESUMO EXECUTIVO: **CAUSA DO PREFILL HTP ESTABELECIDA com controle
+pareado**: mesmo probe/device/janela/comando: cohort UPSTREAM (v11)
+prefill 72-104ms e wall 300-352ms vs cohort SIG (v12) prefill 812-1419ms
+e wall 1495-2115ms (~11-18x / ~5-6x) — a regressao esta' no BINARIO do
+backend hexagon do SIG, NAO em flags de runtime (mm_select/nhvx/opbatch/
+opqueue testados: zero efeito). E, com o HTP rapido, o **Smart OpenCL
+VENCE o puro OpenCL no curto por ~10% (452-520ms vs 520-535ms) e o ganho
+cresce com o corpus** — primeiro ganho real medido da campanha Smart.
+Solucao de arquivo: candidato B = corrigir/portar o hexagon no SIG (fila
+pagante agora). Swap de .so permanece PROIBIDO (ABI); cohorts completos.
+
+-----------------------------------------------------------------------
+A. SNAPSHOT, SERIAL, CONFIG, TEMP, RESTORE
+-----------------------------------------------------------------------
+A.1 Device CPH2747 via wifi (USB indisponivel nesta sessao — declarado);
+getprop sdk=36/Android16. Keep-awake ativo (KEYCODE_WAKEUP/20s) +
+wakefulness verificado (Awake) ANTES de cada bateria; snapshots de estado
+no inicio/fim. Device descarregando (~40-45%) durante a noite.
+A.2 SNAPSHOTS de libs por fase (cohorts):
+    v12 SIG (baseline A): ggml 0fa02e2a/ base c8987c2b/ cpu 03831fd1/
+    hexagon dc88db2d/ skel 0a4ec5b7/ opencl 78c9d17f/ vulkan 32663543/
+    llama 6682f6f3 (backup em r7-backup-v12-full/; RESTAURADO ao fim).
+    v11 upstream (controle): ggml 2a14758b/ base 10b01f81/ cpu b4b3154b/
+    hexagon 5ea660c1/ skel 0f1e1357/ opencl b721e306/ vulkan acb35eb8/
+    llama a1497f70 (= sha do libllama ORIGINAL do probe).
+A.3 STAYON: pendencia historica reconhecida (o "permaneceu 7" da R6 nao
+    fecha a restauracao). O valor ATUAL e' 7 (definido pelo agente na R3
+    apos o uso; o valor de fabrica/estado do usuario ANTES nao foi
+    capturado na epoca). ACAO PENDENTE DE DECISAO DO USUARIO (nao
+    presumir 0): manter 7 (telas acesas plugado) ou outro valor? Nenhuma
+    alteracao nesta rodada (readbacks: 7).
+
+-----------------------------------------------------------------------
+B. TESTES DA SESSAO REALMENTE EXECUTADOS + SCHEMA/IDENTIDADE
+-----------------------------------------------------------------------
+B.1 O que o R6 listou como "testes de gate na sessao" NAO havia sido
+    executado (falha de relato corrigida). Nesta rodada executados na
+    SESSAO real (r7-focais, alvo separado) — 7/7 com gate correto:
+      F1 cap1  -> BENCH-PARCIAL (nao aceito)
+      F2 cap2  -> BENCH-PARCIAL
+      F3 eog_tok1 -> BENCH-FALHA:EOG_tok1_sem_handoff
+      F4 import_falha -> BENCH-FALHA:import_falhou
+      F5 source_extra -> BENCH-FALHA:origem_decodificou
+      F6 alias-role vulkan:vulkan (roles dst/src2 distintos!) ->
+         BENCH-CONCLUIDO (roundtrip real com 2 contextos)
+      F7 sessao de 1 request -> BENCH-CONCLUIDO
+    Nenhum aceito falso; log integral em r7-focais.txt.
+B.2 Fixture de CONTRATO offline entregue e rodada sobre os JSONLs do R6:
+    valida-schema.py — 24/24 PASS (invariantes I1-I8: bench=>dec_s==0;
+    cap=>PARCIAL; eog=>stop3; ok=false sem veredito positivo; wall>0;
+    texto; alias exige loads dos 2 roles). Fixture versionada no repo.
+B.3 JSON nativo: campos pedidos ADICIONADOS no R6 (prefill/export/import/
+    gen/wall/reset/fronteiras/loads/texto integral/dec_s/stop/cap/eog) e
+    PENDENTES de enriquecimento declarados (flags/n_ctx/n_batch/n_ubatch/
+    seed/corpusSHA/libs identity no payload — na fila junto do candidato B;
+    hoje constam no manifesto/scripts). Identidade libs: por SHA no
+    manifesto (nao dentro do JSON — limitacao declarada).
+
+-----------------------------------------------------------------------
+C. CORPUS FULL SHA / PROVENANCE (reconciliacao pedida)
+-----------------------------------------------------------------------
+C.1 RECONCILIADO: existe UM texto: medium-952.txt, 952 bytes, sha256
+    b49d92d0a2c6708fd92c785b0acb9718... — as DUAS copias (ci-check e
+    repo docs/npu-hymt2/rodada2/corpus-en/) sao IDENTICAS (diff vazio!).
+    O texto TERMINA em "...after about forty minutes, an." — "an." e' o
+    FINAL REAL; o "could not av" citado no R6 era leitura PARCIAL (meio do
+    texto: "could not av[oid]"); retificado. prompt-medium-952.txt
+    (1036B) idem disponivel. Nao reparado (truncamento na fonte).
+C.2 PROVA HISTORICA do corpus no HTP (bonus): os logs c3_medium-952_HTP0
+    (06/out, madrugada) registram "[ Prompt: 1766.6 t/s | Generation: 27.4
+    t/s ]" — o MESMO corpus ja' rodou no HTP a 1766 t/s (a era upstream);
+    CPU: 52.4/38.3 t/s. Comparacao ns/same-workload disponivel.
+
+-----------------------------------------------------------------------
+D. DIFF ESTATICO / CONFIG HTP / FALLBACK
+-----------------------------------------------------------------------
+D.1 O vendor SIG GGML-HEXAGON e' um TREE DISTINTO do upstream (todos os
+    .c diferem; headers removidos; CMake/htp diferentes) — nao e' flag.
+D.2 Parametros EFETIVOS extraidos (defaults do fonte SIG): opt_nhmx=1;
+    opt_mm_select=3 (SIG) vs 2 (upstream); opt_opbatch 1024 vs 1280;
+    opt_opqueue 16 vs 32; opt_nhvx=0 ambos. ACHADO CRITICO: o SIG chama
+    htp_iface_start(handle, dev_id, queue_id, opt_nhvx(0!), opt_nhmx, vmem)
+    ENQUANTO o upstream passa this->n_threads REAL (max do hardware).
+D.3 TESTES de CORRECAO MINIMA por env (mesmo APK; tune remoto injetado
+    antes do backend load — mecanismo novo e limpo): MM_SELECT=2: sem
+    efeito (812-1420 vs 811-1419). NHVX=8: sem efeito. NHVX=4: sem
+    efeito. COMBO NHVX+OPBATCH+OPQUEUE (igual upstream): sem efeito.
+    CONCLUSAO PARCIAL: as opcoes de runtime NAO reproduzem a diferenca; a
+    causa esta' no CODIGO/BINARIO do subconjunto hexagon (as duas versoes
+    divergem semanticamente), nao em flags ajustaveis.
+D.4 Fallback/verbose: profiling leve NAO executado nesta janela (fila;
+    nao bloqueia a causa ja' estabelecida por cohort comparativo).
+
+-----------------------------------------------------------------------
+E. BUILD COHORTS A/B/CONTROLE — PROVA DE CAUSA (o caro da rodada)
+-----------------------------------------------------------------------
+E.1 COHORT COMPARISON executado (o metodo pedido; NUNCA swap parcial):
+    A) cohort SIG v12 (baseline) — mesma janela: prefill 811.7-1419.5ms,
+       wall 1495.9-2115.5ms (puro:htp, 3 sessoes, 12 reqs).
+    B) correcao minima por env (D.3): SEM efeito (4 combos).
+    C) CONTROLE upstream v11 (cohort COMPLETO, 8 libs + skel, sha A.2):
+       prefill 72.15-104.18ms; wall 300.4-352.1ms (4 reqs, janela COLADA
+       a' do A: T2 23:18-23:25 vs C 23:33-23:36).
+    DIFERENCA: ~11-18x prefill / ~5-6x wall no MESMO app/probe/comando/
+    device/janela de energia. **CAUSA ESTABELECIDA (CCE)**: regressao no
+    BINARIO do backend hexagon do cohort SIG; upstream restaure.
+E.2 Smarts com o CONTROLE (ensaio do ganho, mesma sessao): Smart OC
+    (htp->opencl bench): wall 452.9/493.2/519.6ms (prefill 69.4-102.6;
+    export 0.9-1.7ms; import 15.4-30.5ms; gen 328.6-357.0) VS puro OpenCL
+    NA MESMA SESSAO: wall 520.4-534.8ms (prefill 161.9-164.6). **Smart
+    VENCE o puro por ~10% no curto (consistente nos 3 vs 3); o ganho
+    cresce com o corpus (o prefill e' ~30% do wall curto)**. Smart VK com
+    o controle NAO faz sentido (o vulkan v11 nao tem o patchset; destino
+    quebrado!) — o Smart VK candidato so' no cohort B (SIG core+hexagon
+    corrigido).
+E.3 Swap parcial: NAO usado (proibido; a licao do R6). Cohorts completos
+    com backup/restore/bindings compilados juntos (probe relinkado a cada
+    cohort — BUILD_RC=0 em todos).
+
+-----------------------------------------------------------------------
+F. ENSAIO MINIMO MATCHED HTP + ESTADOS (curto; com np/config/wall)
+-----------------------------------------------------------------------
+F.1 puro:htp np=31: v12=811-1420ms (prefill domina) vs v11=300-352ms
+    (wall completo!). np/n_tokens registrados por request no JSONL.
+F.2 Estados: awake mantido com keep-awake + verificado pre-run; Doze
+    medido no R6 (displays/clocks) — DESTA vez snapshots por sessao
+    (wakefulness + temps 13 zonas: 55-63C durante baterias); "GPU
+    residente" NAO re-testado nesta janela com o confounder controlado
+    (fila — ordem explicita: GPU context residente SEM compute).
+F.3 Focais da sessao (B.1) — ver r7-focais.txt: todos os gates seguraram
+    (nenhum aceito falso; resultados por mutante no log).
+
+-----------------------------------------------------------------------
+G. CORRETUDE DUAL-SMART MAIOR / PRESERVACAO
+-----------------------------------------------------------------------
+G.1 Corpus 952: NAO executado nesta rodada (a) a ordem R7 permite
+    corretude no 952 mesmo com HTP lento, MAS o achado E mudou a janela:
+    a proxima rodada roda o 952 na condicao CORRETA (candidato B com o
+    hexagon corrigido) para nao comparar contra uma config em transicao;
+    (b) declarado explicitamente — nao foi executado (nao reivindicado).
+G.2 Core/GPU/Whisper: nenhum patchset GPU removido; vulkan SIG v12
+    intacto (restaurado); Whisper intocado (nao testado). F2/CI: sem
+    mudancas nesta rodada.
+
+-----------------------------------------------------------------------
+H. DECISAO POR ROTA (criterio sem generalizacao)
+-----------------------------------------------------------------------
+H.1 CCE HTP: causa = binario hexagon SIG; upstream rapido; flags SEM
+    efeito. Caminho pagante: candidato B = MESMO core SIG com o tree
+    hexagon corrigido/oportado (allowlist) OU base upstream-compativel +
+    patchset GPU do SIG como allowlist (experimento terceiro) — NAO
+    decidir por hack; seguir a ordem E do R7 (builds controlados).
+H.2 Smart OC: **PRIMEIRO GANHO MEDIDO (~10% curto, condicao controle)**
+    — revalidar no cohort B (SIG-corrected) + corpus 952 (onde deve
+    crescer) + matched 3 reps 6 modos.
+H.3 Smart VK: pendente do cohort B (destino precisa do patchset SIG).
+H.4 NPU pura: 300-352ms wall no HTP rapido (era ~1.5-2.3s no SIG!).
+H.5 Proximo passo objetivo: build do candidato B (hexagon do upstream?
+    fusao dos patches SIG? — na ordem E: "candidato B preferencial: MESMO
+    core SIG com correcao/minimo conjunto Hexagon identificado da
+    auditoria" — a auditoria D.2 nao achou flag; o proximo estudo = o
+    diff SEMANTICO funcional (o que difere em htp/ ops?) e o teste do
+    port do tree upstream sobre o core SIG (compatibilidade!). Sem UI.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada7/ (r7-abtune txt, t1/t2/t4/t5/t6/
+ctrl JSONLs, npuprobe-r7.log, r7-focais, valida-schema.py, scripts,
+sha cohorts) + manifesto full SHA. Exits/denominadores nos arquivos.
+Nenhuma afirmacao sem evidencia; o R6 foi retificado onde errou.

@@ -1,0 +1,53 @@
+ORDENS AO EXECUTOR — POS SMART R6: A/B COERENTE DO HTP, SEM MAIS SWAP ABI
+================================================================================
+
+PARECER / PRIORIDADE
+Especialista leu RELATORIO-SMART-DUAL-BACKEND-RODADA6.txt e localizou no fonte SIG opt_nhmx/opt_mm_select/opt_opbatch/opt_opqueue em ggml-hexagon.cpp. Nao executou aparelho nem auditou todos os logs R6. Reconhece schema nativo, roles separados e novo warm como progresso. Ganho util continua negativo na amostra curta. Proxima tarefa e diagnostico/build controlado, nao repetir outra bateria quente nem habilitar UI.
+Meta dualSmart permanece; manter c4bf e defaultVulkan, app separado. Nao atualizar Whisper, trocar vendor inteiro, ou mexer no SIG principal. Publicacao/upload/versionamento/commit/deploy seguem aprovacoes especificas vigentes, nao ampliadas pelo parecer.
+
+1. RETIFICAR CAUSALIDADE / ESTADOS
+- Timeline v11 rapido -> v12 lento torna mudanca de build HIPOTESE FORTE. Nao prova causa backend Hexagon isolada: trocaram core/flags/ABI/config e janelas de energia. Nao afirmar 'regressao nasceu comprovadamente em arquivo X'.
+- mWakefulness=Dozing e estado power/display. NAO prova Doze/device-idle. Capturar dumpsys deviceidle mState/mLightState e distinguir display power, background, idle e app focus. CPU clock idle768MHz nao e clock DSP/HTP nem frequencia durante execucao; nao atribuir fator2x da NPU a esse dado sem controles.
+- Bateria descarregando a45%, saver0, ThermalStatus0 sao contexto, nao defeito automaticamente. Frio termico e diferente de carga bateria e coldstartmodelo. Comparar sob mesma condicao permitida, sem governor/root/bypass.
+- 'GPU residente PIORA' deve ser observado na amostra, nao causal isolado: PF3 tambem e Smart compute/handoff e janela distinta. Fazer prefillHTP com contextoGPU residente MAS sem executarGPU e comparar com solo sob condicao equivalente.
+- Avaliacao de VALOR nao esta bloqueada matematicamente para todo workload ate restaurar90ms: o resultado curto e negativo; prefill varia com nprompt/batch. Pendenciar performanceotimizada e valido, nao exigir target arbitrario90ms antes qualquer corretude maior.
+
+2. PRIMEIRO: FECHAR RUNNER E CONTRATOS SEM DEVICE PESADO
+Sessao mutantes NAO executada segundo B3 ('mantem FAIL?'). Nao chamala testeexecutado. Rodar testes focais reais cap1/2/stop/import/sourceextra e aliasroles na sessao, em alvo separado. Fixfixtureofflinecontrato antesdevice; gatevalidbench/sourcezero/stopcompleto/selfcontextdistinto.
+JSONnativo precisa flags/model/corpus fullSHA/seed/params/nthreads_batch/FAtypes/n_ctx/n_batch/n_ubatch e identidade libs reais. src!=dst SAMEbackend deve significar contextsDISTINTOS por role, assert IDs.
+Reset fora wall e camposproprios aceitos desde que pedidoTotalInclReset reportado e igualmente delimitado todosmodos; coldloadmodel+context incluirfronteiraexternareal. Nenhuma soma medianas para total. Memoriahost/GPU/DSP com limites da observabilidade explicitos.
+Provenance corpus952: ultimo arquivo queespecialistaleu terminava 'an.', enquanto R6 diz 'could not av' e SHA distinto. Nao tratar como mesmatextorecuperado sem reconciliação: entregar pathabsoluto+fullSHA+UTF8len/hash e comparar copia fonte/prompt/destinoprobe. Se duas variantes, nomearhash e escolherexplicitamente, semreparar. Escolher textocompleto novo sepreferido, rotularNOVO; nao gasto horas arqueologia. Cap/batchchunks corretos eoutputintegral.
+
+3. DIAGNOSTICO ESTATICO E CONFIG ANTES REBUILD GRANDIOSO
+Mapear pin real v11upstream e vendorSIG v12 e diferencas core/backends/CMake. Todosarquivosdiff nao comprova 'distribuicaocompletamentediferente': comparar gitblobs/normalizacao lineendings/semanticdiff, manifestsflags e datas.
+Extrair parametros efetivos HTP em ambos: HMX/HVX, mm_select/fa_select, opbatch/opqueue, prof/tracing/locks/sync, n_threads_batch, perfprofile/sessionpower, arquitetura/skelversao. No SIGggml-hexagon.cpp ha opt_nhmx1, opt_mm_select3, opt_opbatch1024, opt_opqueue16; rastrear getenvdefaults e aplicacao em source, nao assumirvalor runtime.
+Confirmar modelo/grafoHTP real, fallbacknodes/placement e shapes/batch. Se compilerflags/perfmode/defaults divergentes causam fallbackHVX/CPU, testar correcao MINIMA na copiaisolada antes portardo backendinteiro. Profilingdiagnostico fora benchmark. Firmware/clockDSP inacessivel declarar; naoCPUproxy.
+
+4. A/B COERENTE: ORDEM DE MENOR RISCO
+NUNCA trocar so libggml-hexagon/skel entre ABIcohorts de coredivergente. Falha D3 comprova incompatibilidade desse swap, nao lento/backendcausa. Rebuild FULLCOHORT host+skel+binding+APK completoisolado, comhashreadbackmaps.
+Baseline A: vendorSIG atual, config congelada, Vulkanpatchset intacto. Candidato B preferencial: MESMOcoreSIG com correcao/minimo conjuntoHexagon identificadoda auditoria. Só se necessario portartreeHexagonupstream e dependenciascoreexplicitallowlist, registrar APIchanges e docsdesign. Incompativelcore => nao adaptar porhacksemprova; escolherbasecompatível com patchesSIGGPUallowlist como experimento terceiro, nunca novo defaultsource de produto.
+Controleupstream COMPLETOsemSmartVulkan pode reproduzir prefillhistorico mesmoapp/mesmo prompt/config/energia, sem arrancar VulkanpatchesdoforkSIG. Nao e candidato produto; referencia etiologia doHTP. Verificargreedy/EOG/reset/finite para cadabuild.
+Toolchaincontainer/compiler/platformflags iguais quando possivel; fatorquenaopossível igualar registrado. Nao chamaABisolado se multiplasmudancas; chamarcohortcomparison. Ate8nodeslogtempo/backendprofilelight somenteparalocalizar, no matched.
+Builds em servidor/caminhocurto semoverwriteartifactsanteriores; poucasvariantes com manifest. Whisper fonte/binaryexterno intocado. Sem modelosduplicadosdesnecessariosnemcleansemaprovação.
+
+5. MINIENSAIO CONCLUSIVO, NAO CAMPANHA DE HORAS
+Alvo normalapp-id separado aprovado e serialUSB3B15BD00FVE00000 preferencial; sewifi aprovadaidentidadeguard ebufferlogsdevice. Backup/prodprotected semuninstallSIG/pmclear. PJA110 foraescopo.
+Awakeforegroundcondicao sustentadasegura, limites temperatura/tempo designados e state snapshots DURANTEjanelacurta; KEYCODE_WAKEUP cad20s pode nao garantirestado duranteeveryrun. Nao confundir Doze e tela. RestoreconfigtemporariaaoEXATOvalorprevio+readback finally: 'stayonpermaneceu7semalterarrodada' nao fecha pendenciahistorica de restauracao; registrarquemdefiniu/valororiginal disponivel e pedir decisao se perdido, nao presumir0.
+Protocolo A-B-A de builds ou equivalente intercalacao segura com recompilacao e instalacaoAPPseparada semdadosusuario, mesma corpus/config; minimo repeticoeswarm suficientes detectar diferençagrosseira. Baseline controleantes/depois, condicaomesma; thermalmaxnumrequestsbounded. Nao esperar mesma90ms sepromptnp31vs15/paramsdiferentes. Colocarrealnp tokens exact nosdados e comparar ns/sameworkload.
+HTPsolo vs HTPprefillcomGPUcontextRESIDENTESEMcompute controlar confounders. coldmodel/context e first-usekernelparalle separado. Depois candidateganho correcao comprovada->revalidarHTPfullABA/mutantgates, Vulkanpuro/roundtrip/HTP->Vulkan e HTP->OpenCL curtos. Revalidarcorecompatnumerics e evitarretrocederworkaroundsGPU aceitos.
+
+6. CORPUS MAIOR E MEDIDAS: NAO POSTERGAR INDEFINIDAMENTE
+Com gates/lifecycle/estados corretos e memoria segura, uma prova de CORRETUDE no952 identificado pode rodar mesmo seHTPcontinuarlento: nao workloadsoak nembenchmarkpromocao. Provarchunksbatch128, prompt/positions/EOG/outputcompleto/resetABA ambosSmart. Timeoutseguro ecapexplit, seerro abort.
+Perfmatched maior depoiscontroleruntime/configaceitos. Medir6modeswarm intercalados/de residencyequivalente em blocos equilibrados;3repsiniciais quando seguro, totalswallreset/memory evariability. CandidateBnaoganho=>resultadonegativoaceito; não afirmar ganhoSmartestimando substituirprefill por90ms. Nao integrar UIateusuario aceitarcriteriossuporteexperimental ou beneficio demonstrado.
+
+7. ENTREGA/CRITERIO FINAL DESTA RODADA
+RELATORIO-SMART-DUAL-BACKEND-RODADA7.txt docs/especialista, A-H:
+A snapshot/serial/config/temp/restore;
+B sessao testes REALMENTEexecutados e schemaidentity;
+C corpusFULLSHAprovtext;
+D staticdiffconfigHTP e fallbackroute real;
+E buildcohortsA/B/base/control provecausaoulimite;
+F ensaiominimo matchedHTP comnp/config/wall/estado,memory;
+G corretudedualSmart maiorseexecutada + coreGPU/Whisperpreservacao;
+H decision: causaCCEcorrigida ouPARCIAL/BLOQUEADOcomobjetoeproximopasso, sem perguntasabstratasdeordenacao.
+Manifest logs docs/npu-hymt2/smart-rodada7/ fullSHA/exits/countsexclusivos porrun/session; nunca reporte testcase design como executado. Predicado de ganho por route antesproduct; semUI/publish/SIGprincipalmodificado nesta rodada salvo aprovacaoexplicitadonovoescopo.

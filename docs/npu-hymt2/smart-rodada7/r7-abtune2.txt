@@ -1,0 +1,38 @@
+=== R7 A/B tune2 (NHVX) (23:22:41Z) ===
+=== [T4-nhvx8] tune='GGML_HEXAGON_NHVX=8\n' ===
+    TUNE: GGML_HEXAGON_NHVX=8
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=815.65ms gen=720.87ms pp1=0.33ms wall=1536.8ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1179.60ms gen=851.81ms pp1=0.14ms wall=2031.9ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1341.71ms gen=875.45ms pp1=0.55ms wall=2217.7ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1336.28ms gen=766.54ms pp1=0.55ms wall=2103.3ms
+    TUNE: GGML_HEXAGON_NHVX=8
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=815.65ms gen=720.87ms pp1=0.33ms wall=1536.8ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1179.60ms gen=851.81ms pp1=0.14ms wall=2031.9ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1341.71ms gen=875.45ms pp1=0.55ms wall=2217.7ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1336.28ms gen=766.54ms pp1=0.55ms wall=2103.3ms
+    JSON: 4 reqs
+=== [T5-nhvx4] tune='GGML_HEXAGON_NHVX=4\n' ===
+    TUNE: GGML_HEXAGON_NHVX=4
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=818.00ms gen=693.87ms pp1=0.34ms wall=1512.2ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1181.95ms gen=831.66ms pp1=0.15ms wall=2014.0ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1317.73ms gen=819.12ms pp1=0.14ms wall=2137.3ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1338.28ms gen=760.09ms pp1=0.20ms wall=2098.8ms
+    TUNE: GGML_HEXAGON_NHVX=4
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=818.00ms gen=693.87ms pp1=0.34ms wall=1512.2ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1181.95ms gen=831.66ms pp1=0.15ms wall=2014.0ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1317.73ms gen=819.12ms pp1=0.14ms wall=2137.3ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1338.28ms gen=760.09ms pp1=0.20ms wall=2098.8ms
+    JSON: 4 reqs
+=== [T6-nhvx8-combo] tune='GGML_HEXAGON_NHVX=8\nGGML_HEXAGON_OPBATCH=1280\nGGML_HEXAGON_OPQUEUE=32\n' ===
+    TUNE: GGML_HEXAGON_NHVX=8
+    TUNE: GGML_HEXAGON_OPBATCH=1280
+    TUNE: GGML_HEXAGON_OPQUEUE=32
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=871.44ms gen=703.87ms pp1=0.36ms wall=1575.7ms
+    TUNE: GGML_HEXAGON_NHVX=8
+    TUNE: GGML_HEXAGON_OPBATCH=1280
+    TUNE: GGML_HEXAGON_OPQUEUE=32
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=871.44ms gen=703.87ms pp1=0.36ms wall=1575.7ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1338.62ms gen=924.60ms pp1=0.15ms wall=2263.7ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1402.84ms gen=941.50ms pp1=0.15ms wall=2344.8ms
+    JSON: 4 reqs
+R7_ABTUNE2_DONE

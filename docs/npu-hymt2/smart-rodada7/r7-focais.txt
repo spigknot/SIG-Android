@@ -1,0 +1,79 @@
+=== R7 FOCAIS NA SESSAO (23:31:42Z) ===
+--- [F1-sess-cap1] mut=smart_cap1
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    SESS[0] opencl bench: ok=1 cap=1 eog_tok1=0 tok1=33 emitidos=1 consumidos=0 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-PARCIAL
+    SESS[1] opencl bench: ok=1 cap=1 eog_tok1=0 tok1=33 emitidos=1 consumidos=0 dec_s=0
+    SESS[1] opencl@bench RESULTADO: BENCH-PARCIAL
+    SESS[0] opencl bench: ok=1 cap=1 eog_tok1=0 tok1=33 emitidos=1 consumidos=0 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-PARCIAL
+    SESS[1] opencl bench: ok=1 cap=1 eog_tok1=0 tok1=33 emitidos=1 consumidos=0 dec_s=0
+    SESS[1] opencl@bench RESULTADO: BENCH-PARCIAL
+--- [F2-sess-cap2] mut=smart_cap2
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    SESS[0] opencl bench: ok=1 cap=1 eog_tok1=0 tok1=33 emitidos=2 consumidos=1 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-PARCIAL
+    SESS[1] opencl bench: ok=1 cap=1 eog_tok1=0 tok1=33 emitidos=2 consumidos=1 dec_s=0
+    SESS[1] opencl@bench RESULTADO: BENCH-PARCIAL
+    SESS[0] opencl bench: ok=1 cap=1 eog_tok1=0 tok1=33 emitidos=2 consumidos=1 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-PARCIAL
+--- [F3-sess-eogtok1] mut=smart_eog_tok1
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    SESS[0] opencl bench: ok=0 cap=0 eog_tok1=1 tok1=120020 emitidos=0 consumidos=0 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-FALHA:EOG_tok1_sem_handoff
+    SESS[1] opencl bench: ok=0 cap=0 eog_tok1=1 tok1=120020 emitidos=0 consumidos=0 dec_s=0
+    SESS[1] opencl@bench RESULTADO: BENCH-FALHA:EOG_tok1_sem_handoff
+    SESS[0] opencl bench: ok=0 cap=0 eog_tok1=1 tok1=120020 emitidos=0 consumidos=0 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-FALHA:EOG_tok1_sem_handoff
+    SESS[1] opencl bench: ok=0 cap=0 eog_tok1=1 tok1=120020 emitidos=0 consumidos=0 dec_s=0
+    SESS[1] opencl@bench RESULTADO: BENCH-FALHA:EOG_tok1_sem_handoff
+--- [F4-sess-import] mut=smart_import_falha
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    SESS[0] opencl bench: ok=0 cap=0 eog_tok1=0 tok1=33 emitidos=1 consumidos=0 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-FALHA:import_falhou
+    SESS[1] opencl bench: ok=0 cap=0 eog_tok1=0 tok1=33 emitidos=1 consumidos=0 dec_s=0
+    SESS[1] opencl@bench RESULTADO: BENCH-FALHA:import_falhou
+    SESS[0] opencl bench: ok=0 cap=0 eog_tok1=0 tok1=33 emitidos=1 consumidos=0 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-FALHA:import_falhou
+    SESS[1] opencl bench: ok=0 cap=0 eog_tok1=0 tok1=33 emitidos=1 consumidos=0 dec_s=0
+    SESS[1] opencl@bench RESULTADO: BENCH-FALHA:import_falhou
+--- [F5-sess-srcx] mut=smart_bench_origem_extra
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    SESS[0] opencl bench: ok=0 cap=0 eog_tok1=0 tok1=33 emitidos=1 consumidos=1 dec_s=1
+    SESS[0] opencl@bench RESULTADO: BENCH-FALHA:origem_decodificou
+    SESS[1] opencl bench: ok=0 cap=0 eog_tok1=0 tok1=33 emitidos=1 consumidos=1 dec_s=1
+    SESS[1] opencl@bench RESULTADO: BENCH-FALHA:origem_decodificou
+    SESS[0] opencl bench: ok=0 cap=0 eog_tok1=0 tok1=33 emitidos=1 consumidos=1 dec_s=1
+    SESS[0] opencl@bench RESULTADO: BENCH-FALHA:origem_decodificou
+--- [F6-sess-alias] mut=none
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    SESS[0] vulkan:vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] vulkan:vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[1] vulkan:vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[1] vulkan:vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[0] vulkan:vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] vulkan:vulkan@bench RESULTADO: BENCH-CONCLUIDO
+--- [F7-sess-cut] mut=none
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+    SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+R7_FOCAIS_DONE
