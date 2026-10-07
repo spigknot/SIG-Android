@@ -37,7 +37,8 @@ B.2 PROVA DO ACHADO (a medicao dupla que o especialista apontou, agora
       medio  opencl: VALIDACAO gen=12294.51ms
                      BENCHMARK gen=6858.32ms (B3; 55% menos, 63 passos).
       medio  vulkan: VALIDACAO gen=9289.96ms
-                     BENCHMARK gen=6858.32ms (B4 vulkan; idem 63 passes).
+                     BENCHMARK gen=2702.21ms (B4 vulkan; 63 passos) — o espelho
+                     custava 6588ms (71%!) no medio vulkan.
     (curto opencl completo: valid gen=3743.16 vs bench gen=2731.05;
     medio: valid vulkan 9289.96 vs bench vulkan ~6858 — numeros do
     DADOS-LOTES-A-B.txt.)
@@ -136,8 +137,9 @@ F.3 RESUMO (lote C; gen_ms, corpus curto, TODAS as 3 reps n=3; CSV completo
       Smart VK      3    719.1    567.9    862.6    294.7
     LEITURA (curto, quente): Smart VK ganha do puro Vulkan (719 vs 1044) e
     empata com o puro HTP; Smart OC PERDE do puro OpenCL (4113 vs 249 —
-    dominado por setup/sync no curto; o corpus medio (B3: 6858ms p/ 62 tokens
-    ~110ms/token) mostra que o regime muda no longo. NAO declarar ganho
+    dominado por setup/sync no curto; o corpus medio (B3 OC-bench:
+    6858ms p/ 62 tokens ~110ms/token; B4 VK-bench: 2702ms) mostra que o
+    regime muda no longo. NAO declarar ganho
     universal: a faixa curto/medio e' o dado; repetir frio e com longo
     aprovado e' a proxima etapa objetiva. Denoms exclusivos (sem mutantes,
     sem APP-UID; dedupe por PID).
