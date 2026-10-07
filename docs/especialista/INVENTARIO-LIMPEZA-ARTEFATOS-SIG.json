@@ -1,0 +1,630 @@
+[
+  {
+    "root": "D:/svr10",
+    "bytes": 1212432782,
+    "top_groups": [
+      [
+        "native-dependencies",
+        685106727
+      ],
+      [
+        ".tools",
+        362376850
+      ],
+      [
+        "app",
+        107442037
+      ],
+      [
+        "tools",
+        55958263
+      ],
+      [
+        "release-preparation",
+        626339
+      ],
+      [
+        "docs",
+        617291
+      ],
+      [
+        "(root files)",
+        116203
+      ],
+      [
+        "scripts",
+        68493
+      ],
+      [
+        "relatorio_better_harness",
+        68108
+      ],
+      [
+        "gradle",
+        45175
+      ],
+      [
+        "release",
+        5509
+      ],
+      [
+        ".github",
+        1169
+      ],
+      [
+        ".githooks",
+        618
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 177108480,
+        "path": "D:\\svr10\\.tools\\zig-0.16.0\\zig.exe"
+      },
+      {
+        "bytes": 95577776,
+        "path": "D:\\svr10\\native-dependencies\\build\\llama\\arm64-v8a\\libsig_llama.so"
+      },
+      {
+        "bytes": 93912806,
+        "path": "D:\\svr10\\native-dependencies\\build\\llama\\arm64-v8a\\llama-build\\src\\libllama.a"
+      },
+      {
+        "bytes": 92513406,
+        "path": "D:\\svr10\\native-dependencies\\build\\llama\\arm64-v8a\\llama-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 66152708,
+        "path": "D:\\svr10\\native-dependencies\\build\\llama\\arm64-v8a\\llama-build\\ggml\\src\\ggml-vulkan\\libggml-vulkan.a"
+      },
+      {
+        "bytes": 55682231,
+        "path": "D:\\svr10\\tools\\qairt\\package\\sig-qairt-arm64-v8a-v1.zip"
+      }
+    ]
+  },
+  {
+    "root": "D:/svr11",
+    "bytes": 2922434446,
+    "top_groups": [
+      [
+        "native-dependencies",
+        1319938904
+      ],
+      [
+        "app",
+        1180325927
+      ],
+      [
+        ".tools",
+        362376850
+      ],
+      [
+        "tools",
+        55958263
+      ],
+      [
+        ".gradle",
+        2777246
+      ],
+      [
+        "docs",
+        621903
+      ],
+      [
+        "build",
+        129668
+      ],
+      [
+        "(root files)",
+        116613
+      ],
+      [
+        "scripts",
+        68493
+      ],
+      [
+        "relatorio_better_harness",
+        68108
+      ],
+      [
+        "gradle",
+        45175
+      ],
+      [
+        "release",
+        5509
+      ],
+      [
+        ".github",
+        1169
+      ],
+      [
+        ".githooks",
+        618
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 177108480,
+        "path": "D:\\svr11\\.tools\\zig-0.16.0\\zig.exe"
+      },
+      {
+        "bytes": 93912806,
+        "path": "D:\\svr11\\native-dependencies\\build\\llama\\arm64-v8a\\llama-build\\src\\libllama.a"
+      },
+      {
+        "bytes": 92513406,
+        "path": "D:\\svr11\\native-dependencies\\build\\llama\\arm64-v8a\\llama-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 92513406,
+        "path": "D:\\svr11\\native-dependencies\\build\\llama\\x86_64\\llama-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91809070,
+        "path": "D:\\svr11\\native-dependencies\\build\\llama\\x86_64\\llama-build\\src\\libllama.a"
+      },
+      {
+        "bytes": 91029220,
+        "path": "D:\\svr11\\app\\.cxx\\Debug\\3m16j1s2\\arm64-v8a\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91029220,
+        "path": "D:\\svr11\\app\\.cxx\\Debug\\3m16j1s2\\x86_64\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 66160668,
+        "path": "D:\\svr11\\native-dependencies\\build\\llama\\arm64-v8a\\llama-build\\ggml\\src\\ggml-vulkan\\libggml-vulkan.a"
+      }
+    ]
+  },
+  {
+    "root": "D:/ocl1",
+    "bytes": 3384764249,
+    "top_groups": [
+      [
+        "native-dependencies",
+        1407201814
+      ],
+      [
+        "app",
+        1229548657
+      ],
+      [
+        ".tools",
+        459594589
+      ],
+      [
+        "build",
+        229902975
+      ],
+      [
+        "tools",
+        55958263
+      ],
+      [
+        ".gradle",
+        1422691
+      ],
+      [
+        "docs",
+        617291
+      ],
+      [
+        "(root files)",
+        328897
+      ],
+      [
+        "scripts",
+        68493
+      ],
+      [
+        "relatorio_better_harness",
+        68108
+      ],
+      [
+        "gradle",
+        45175
+      ],
+      [
+        "release",
+        5509
+      ],
+      [
+        ".github",
+        1169
+      ],
+      [
+        ".githooks",
+        618
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 177108480,
+        "path": "D:\\ocl1\\.tools\\zig-0.16.0\\zig.exe"
+      },
+      {
+        "bytes": 97217739,
+        "path": "D:\\ocl1\\.tools\\downloads\\zig-x86_64-windows-0.16.0.zip"
+      },
+      {
+        "bytes": 95882056,
+        "path": "D:\\ocl1\\native-dependencies\\build\\llama\\arm64-v8a\\libsig_llama.so.debug.bak"
+      },
+      {
+        "bytes": 93909510,
+        "path": "D:\\ocl1\\native-dependencies\\build\\llama\\arm64-v8a\\llama-build\\src\\libllama.a"
+      },
+      {
+        "bytes": 93062976,
+        "path": "D:\\ocl1\\native-dependencies\\build\\llama\\x86_64\\libsig_llama.so.debug.bak"
+      },
+      {
+        "bytes": 92513406,
+        "path": "D:\\ocl1\\native-dependencies\\build\\llama\\arm64-v8a\\llama-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 92513406,
+        "path": "D:\\ocl1\\native-dependencies\\build\\llama\\x86_64\\llama-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91805638,
+        "path": "D:\\ocl1\\native-dependencies\\build\\llama\\x86_64\\llama-build\\src\\libllama.a"
+      }
+    ]
+  },
+  {
+    "root": "D:/sigclean",
+    "bytes": 202942937,
+    "top_groups": [
+      [
+        "app",
+        140323589
+      ],
+      [
+        "tools",
+        55958263
+      ],
+      [
+        "docs",
+        2593930
+      ],
+      [
+        ".gradle",
+        1482071
+      ],
+      [
+        "native-dependencies",
+        1193852
+      ],
+      [
+        "(root files)",
+        1070479
+      ],
+      [
+        "build",
+        129643
+      ],
+      [
+        "scripts",
+        70531
+      ],
+      [
+        "relatorio_better_harness",
+        68108
+      ],
+      [
+        "gradle",
+        45175
+      ],
+      [
+        "release",
+        5509
+      ],
+      [
+        ".github",
+        1169
+      ],
+      [
+        ".githooks",
+        618
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 55682231,
+        "path": "D:\\sigclean\\tools\\qairt\\package\\sig-qairt-arm64-v8a-v1.zip"
+      }
+    ]
+  },
+  {
+    "root": "C:/Users/Gustavo/AppData/Local/hermes/cache/scratch",
+    "bytes": 1911179883,
+    "top_groups": [
+      [
+        "sig-vulkan-reset-release",
+        1526658749
+      ],
+      [
+        "(root files)",
+        172056903
+      ],
+      [
+        "opencl-cand",
+        93401016
+      ],
+      [
+        "v9audit",
+        66822928
+      ],
+      [
+        "onnxplain",
+        51897836
+      ],
+      [
+        "whisper_test",
+        331118
+      ],
+      [
+        "smokes-v10",
+        11333
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 177108480,
+        "path": "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\sig-vulkan-reset-release\\.tools\\zig-0.16.0\\zig.exe"
+      },
+      {
+        "bytes": 171960320,
+        "path": "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\sig-head.tar"
+      },
+      {
+        "bytes": 91029220,
+        "path": "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\sig-vulkan-reset-release\\app\\.cxx\\Debug\\1zn1l5s5\\arm64-v8a\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91029220,
+        "path": "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\sig-vulkan-reset-release\\app\\.cxx\\Debug\\1zn1l5s5\\x86_64\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 62497656,
+        "path": "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\sig-vulkan-reset-release\\app\\build\\intermediates\\cxx\\Debug\\1zn1l5s5\\obj\\x86_64\\libsig_whisper.so"
+      },
+      {
+        "bytes": 62338088,
+        "path": "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\sig-vulkan-reset-release\\app\\build\\intermediates\\cxx\\Debug\\1zn1l5s5\\obj\\arm64-v8a\\libsig_whisper.so"
+      },
+      {
+        "bytes": 55682231,
+        "path": "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\sig-vulkan-reset-release\\tools\\qairt\\package\\sig-qairt-arm64-v8a-v1.zip"
+      },
+      {
+        "bytes": 51897836,
+        "path": "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\onnxplain\\onnxruntime-android-1.29.0.aar"
+      }
+    ]
+  },
+  {
+    "root": "D:/Projetos/SIG/native-dependencies",
+    "bytes": 8649192785,
+    "top_groups": [
+      [
+        "harness",
+        4056416901
+      ],
+      [
+        "build",
+        3856290571
+      ],
+      [
+        "diag-norm",
+        734945930
+      ],
+      [
+        "silero",
+        885098
+      ],
+      [
+        "tests",
+        629688
+      ],
+      [
+        "patches",
+        22317
+      ],
+      [
+        "(root files)",
+        2280
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 107436600,
+        "path": "D:\\Projetos\\SIG\\native-dependencies\\harness\\arm64-v8a\\llama_harness_check"
+      },
+      {
+        "bytes": 107172560,
+        "path": "D:\\Projetos\\SIG\\native-dependencies\\harness\\arm64-v8a\\llama_harness_v2"
+      },
+      {
+        "bytes": 107002616,
+        "path": "D:\\Projetos\\SIG\\native-dependencies\\harness\\arm64-v8a\\llama_harness_pf"
+      },
+      {
+        "bytes": 106995056,
+        "path": "D:\\Projetos\\SIG\\native-dependencies\\harness\\arm64-v8a\\llama_harness_v12"
+      },
+      {
+        "bytes": 106994880,
+        "path": "D:\\Projetos\\SIG\\native-dependencies\\harness\\arm64-v8a\\llama_harness_v11f"
+      },
+      {
+        "bytes": 106994744,
+        "path": "D:\\Projetos\\SIG\\native-dependencies\\harness\\arm64-v8a\\llama_harness_v11e"
+      },
+      {
+        "bytes": 106993968,
+        "path": "D:\\Projetos\\SIG\\native-dependencies\\harness\\arm64-v8a\\llama_harness_v11d"
+      },
+      {
+        "bytes": 106993736,
+        "path": "D:\\Projetos\\SIG\\native-dependencies\\harness\\arm64-v8a\\llama_harness_v11c"
+      }
+    ]
+  },
+  {
+    "root": "D:/Projetos/SIG/docs",
+    "bytes": 1854168544,
+    "top_groups": [
+      [
+        "vulkan-hymt2-fusion-round",
+        1265798180
+      ],
+      [
+        "opencl-hymt2",
+        587036048
+      ],
+      [
+        "(root files)",
+        1275531
+      ],
+      [
+        "validacao",
+        33690
+      ],
+      [
+        "npu-hymt2",
+        9431
+      ],
+      [
+        "validation",
+        5502
+      ],
+      [
+        "vulkan-hymt2-rodada2",
+        5100
+      ],
+      [
+        "vulkan-hymt2-traducoes",
+        3892
+      ],
+      [
+        "agents",
+        1170
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 1133080544,
+        "path": "D:\\Projetos\\SIG\\docs\\vulkan-hymt2-fusion-round\\logs-rodada13\\hymt2_app.gguf"
+      },
+      {
+        "bytes": 96257840,
+        "path": "D:\\Projetos\\SIG\\docs\\opencl-hymt2\\logs-rodada-opencl\\libsig_llama_f17.so"
+      },
+      {
+        "bytes": 95981248,
+        "path": "D:\\Projetos\\SIG\\docs\\opencl-hymt2\\logs-rodada-opencl\\libsig_llama_profD.so"
+      },
+      {
+        "bytes": 95924464,
+        "path": "D:\\Projetos\\SIG\\docs\\opencl-hymt2\\logs-rodada-opencl\\libsig_llama_loadercache.so"
+      },
+      {
+        "bytes": 95915984,
+        "path": "D:\\Projetos\\SIG\\docs\\opencl-hymt2\\logs-rodada-opencl\\libsig_llama_profS3.so"
+      },
+      {
+        "bytes": 95902120,
+        "path": "D:\\Projetos\\SIG\\docs\\opencl-hymt2\\logs-rodada-opencl\\libsig_llama_profS2.so"
+      },
+      {
+        "bytes": 95894848,
+        "path": "D:\\Projetos\\SIG\\docs\\opencl-hymt2\\logs-rodada-opencl\\libsig_llama_profS.so"
+      }
+    ]
+  },
+  {
+    "root": "D:/Projetos/SIG/app/build",
+    "bytes": 173174621,
+    "top_groups": [
+      [
+        "intermediates",
+        140917296
+      ],
+      [
+        "outputs",
+        16295525
+      ],
+      [
+        "reports",
+        6564412
+      ],
+      [
+        "kotlin",
+        4775366
+      ],
+      [
+        "tmp",
+        4458831
+      ],
+      [
+        "test-results",
+        162777
+      ],
+      [
+        "generated",
+        414
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 50006445,
+        "path": "D:\\Projetos\\SIG\\app\\build\\intermediates\\java_res\\debugUnitTest\\processDebugUnitTestJavaRes\\out\\native-deps\\sig-android-dependencies-v11-x86_64.zip"
+      }
+    ]
+  },
+  {
+    "root": "D:/Projetos/SIG/app/.cxx",
+    "bytes": 2156413894,
+    "top_groups": [
+      [
+        "Debug",
+        2155790662
+      ],
+      [
+        "tools",
+        623232
+      ]
+    ],
+    "large_files": [
+      {
+        "bytes": 91029220,
+        "path": "D:\\Projetos\\SIG\\app\\.cxx\\Debug\\1p5o4334\\arm64-v8a\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91029220,
+        "path": "D:\\Projetos\\SIG\\app\\.cxx\\Debug\\1p5o4334\\x86_64\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91029220,
+        "path": "D:\\Projetos\\SIG\\app\\.cxx\\Debug\\6n5b4kx5\\arm64-v8a\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91029220,
+        "path": "D:\\Projetos\\SIG\\app\\.cxx\\Debug\\6n5b4kx5\\x86_64\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91029220,
+        "path": "D:\\Projetos\\SIG\\app\\.cxx\\Debug\\76o4g2sm\\arm64-v8a\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      },
+      {
+        "bytes": 91029220,
+        "path": "D:\\Projetos\\SIG\\app\\.cxx\\Debug\\76o4g2sm\\x86_64\\whisper-build\\ggml\\src\\ggml-vulkan\\mul_mm.comp.cpp"
+      }
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+RECONCILIACAO DE TENTATIVAS — 2026-10-07 (dedupe por PID)
+
+P4v2 A-B-A HTP: pids=['3809'] -> 1 tentativa(s) valida(s), status SUCESSO
+SMART stream: pids=['1327', '2286'] -> 2 tentativas (rota por pid)
+  - vulkan(1327): executado; comparacao DIVERGENTE (gate de corretude barrou)
+  - opencl(2286): executado; comparacao IGUAIS (CCE: handoff correto)
+  - (fora do stream) vulkan#1 pid 30034: executado, divergente; cpu pid 30249: IGUAIS (controle)
+Mutantes: 8 execucoes unicas, todas com FALHA reportada (esperado)
+  por mutante: cap_trunc=1, cpu_ctx=1, decode_rc=1, prefill_rc=1, reset_bad=1, template_bad=1, tokenize_fail=1, zero_resp=1
+
+NOTA: linhas duplicadas nos reports do app sao o padrao linha+REPORT (mesma
+tentativa), NAO execucoes independentes; o dedupe por PID acima as neutraliza.

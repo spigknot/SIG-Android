@@ -1,0 +1,4 @@
+10-07 15:18:17.301 25114 25805 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): reset_bad
+10-07 15:18:19.765 25114 25805 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: reset1_falhou reset2_falhou 
+10-07 15:18:19.766 25114 25805 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): reset_bad
+10-07 15:18:19.766 25114 25805 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: reset1_falhou reset2_falhou 

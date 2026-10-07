@@ -1,0 +1,28 @@
+=== MATRIZ VULKAN [build v11b] (19:33:34Z) ===
+[A-puro-vulkan] rota=puro:vulkan
+    -> RESULTADO: SMART-ACEITO (puro vulkan; baseline de numerica)
+    texto: puro texto:  sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry you""""""""""""""""""""، sorry sorry sorry
+[B-vulkan-vulkan] rota=vulkan:vulkan
+    -> RESULTADO: SMART-PARCIAL (cap atingido; A-B-A diferente)
+    texto: Binary file (standard input) matches
+    A1 espelho: passos=48 iguais=48 div_pos=-1
+[C-cpu-vulkan] rota=cpu:vulkan
+    -> RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+    texto: A1 texto: Bear
+    A1 espelho: passos=48 iguais=24 div_pos=1
+[D-htp-cpu] rota=htp:cpu
+    -> RESULTADO: SMART-ACEITO (htp->cpu; A-B-A integral; espelho 8/8)
+    texto: A1 texto: Bom dia, como você está?
+    A1 espelho: passos=8 iguais=8 div_pos=-1
+[E-vulkan-cpu] rota=vulkan:cpu
+    -> RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+    texto: A1 texto:  sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry
+    A1 espelho: passos=48 iguais=22 div_pos=23
+[F-puro-opencl] rota=puro:opencl
+    -> RESULTADO: SMART-ACEITO (puro opencl; baseline de numerica)
+    texto: puro texto: Bom dia, como você está?
+[G-htp-opencl] rota=opencl
+    -> RESULTADO: SMART-ACEITO (htp->opencl; A-B-A integral; espelho 8/8)
+    texto: A1 texto: Bom dia, como você está?
+    A1 espelho: passos=8 iguais=8 div_pos=-1
+MATRIZ_v11b_DONE

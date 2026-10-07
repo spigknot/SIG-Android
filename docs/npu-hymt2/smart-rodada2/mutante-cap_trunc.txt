@@ -1,0 +1,4 @@
+10-07 15:17:51.200 24875 25499 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): cap_trunc
+10-07 15:17:53.764 24875 25499 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: cap_atingido(parcial) 
+10-07 15:17:53.764 24875 25499 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): cap_trunc
+10-07 15:17:53.764 24875 25499 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: cap_atingido(parcial) 

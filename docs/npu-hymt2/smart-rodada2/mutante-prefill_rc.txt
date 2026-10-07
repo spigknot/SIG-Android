@@ -1,0 +1,4 @@
+10-07 15:15:53.502 22292 23393 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): prefill_rc
+10-07 15:15:55.410 22292 23393 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: A1_erro(prefill_rc) B_erro A2_erro 
+10-07 15:15:55.410 22292 23393 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): prefill_rc
+10-07 15:15:55.410 22292 23393 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: A1_erro(prefill_rc) B_erro A2_erro 

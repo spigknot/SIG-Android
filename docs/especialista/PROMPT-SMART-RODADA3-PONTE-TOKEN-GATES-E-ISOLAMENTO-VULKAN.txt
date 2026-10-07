@@ -1,0 +1,76 @@
+ORDENS AO EXECUTOR — SMART RODADA 3: CORRIGIR PONTE, GATEAR HANDOFF E ISOLAR VULKAN
+=============================================================================
+
+PARECER DO ESPECIALISTA
+Avancos reconhecidos: P4v2 A-B-A e mutantes relatados, hooks por flag nativa, CI destravado e prototipo que transfere estado entre HTP e OpenCL. Nao integrar produto/publicar nesta rodada. Meta dual Smart intacta; c4bf e default Vulkan preservados.
+Especialista leu runSmart atual de C:/npu-probe/app/src/main/cpp/probe.cpp:374-540, smart-runs-2026-10-07.log e HANDOFF-CONTRACT.md. Nao reexecutou aparelho nem conferiu todos os anexos/hashes. Conferir se fonte lido e o mesmo implantado; se nao, entregar diff/SHA do codigo do APK testado antes reproduzir conclusoes.
+
+DECISAO DE PRIORIDADE
+Antes do matched, terminar gate de corretude do Smart. Em paralelo, analise offline do Vulkan e atualizacao do contrato. Entao matched OpenCL com poucos runs intercalados e controles do Vulkan em app separado. Nao escolher entre matched e pesquisa como atividades mutuamente exclusivas. Usar autorizacoes vigentes documentadas; nao inferir nova autorizacao de deploy SIG principal/R2/release.
+
+1. BUG CONCRETO: PRIMEIRO TOKEN DA RESPOSTA OMITIDO
+runSmart amostra tok1 na origem (480), mas inicia loop decodificando tok1 no destino (497) e so emite o token amostrado DEPOIS (499-503). tok1 NAO foi adicionado a s_gpu nem ao streaming. Isso explica a resposta 'om dia...' em vez de 'Bom dia...' como hipotese diretamente sustentada pelo fluxo; provar token_to_piece(tok1) no log e teste.
+Corrigir contrato: tok1 e PRIMEIRO token de SAIDA do pedido, salvo EOG. Emitir/contar/registrar esse token exatamente UMA vez; seu consumo no destino produz logits do token seguinte. EOG em tok1 encerra conforme politica sem decode adicional indevido. Definir contadores de tokens amostrados/emitidos/consumidos e posicoes. max_tokens inclui tok1. Preservar sampler accept segundo implementacao real, sem accept duplicado.
+Criar teste permanente com ponte textual identificavel e mutante que omite/duplica tok1: ambos devem falhar. Conferir resposta inteira, nao substring ou so tok2. Exigir texto completo PT correto; 'om dia...' NAO e traducao completa correta.
+
+2. GATE FAIL-CLOSED DO SMART (P4v2 NAO COBRE runSmart)
+Fonte atual:
+- prefill rc!=0 linha469 apenas imprime e continua;
+- export got==0 linha477 imprime e continua;
+- import rd nao e validado (484-485);
+- pos_max so e impresso (489), nao imposto;
+- decode destino error so break;
+- rc_orig da comparacao nao bloqueia sampler;
+- rota desconhecida vira Vulkan pela expressao ternaria (390);
+- termino sempre 'EXECUTADO', sem resultado estruturado de aceitacao.
+Separar resultado executado de valido. Erros devem ABORTAR caminho dependente e devolver status FAIL ao runner; RAII/cleanup limitado garantido.
+Validar enum da rota, backend/contexto efetivo, parametros modelo/build/KV/FA/layout e seqIDs, export tamanho/limites/consumo completo import segundo contrato real da API, posicoes, finite logits e stop_reason. Uma importacao parcial ou estado errado NAO pode gerar benchmark valido.
+Reusar request/token_to_piece/EOG/timeout/cancel/resultados robustos do P4v2; buffer256 com retorno negativo e EOS-unico nao sao aceitaveis. Cap atingido vira PARCIAL, nunca resposta completa. Reset ambos + sampler e validar A-B-A de Smart no mesmo par de contextos.
+Mutantes em alvo separado: rota invalida, backend CPU errado, prefill/decode erro, export vazio/truncado, import falha, posicao errada, ponte omitida/duplicada, cap, reset incorreto -> todos detectados antes SUCESSO. Dados simulados de mutante nao contam performance NPU.
+
+3. CORRETUDE: IGUALDADE DE UM TOKEN E INDICIO, NAO PROVA COMPLETA
+Comparacao atual e token seguinte a tok1, apenas uma amostra, usando MESMO sampler depois de toda geracao GPU. Greedy hoje nao depende de historico, mas esse controle quebra ao usar sampler de produto com penalties/random state. Separar sampler de referencia e destino com estados equivalentes, sem contaminacao pelo run anterior.
+Comparar prefixos multiplos sob teacher forcing: mesmos tokens/posicoes consumidos, logits finitos, top-k e medidas de erro com tolerancias predefinidas. Nao exigir igualdade bit-a-bit por backend, nem atribuir todo greedy diferente a KV corrompido: argmax pode trocar por margem pequena. Em caso de diferenca, registrar margem e erro vs baseline puro do proprio destino.
+Depois greedy completo, traducao curta/media e A-B-A em dois contextos. Explicar desvio sem ocultar falha. Validacao de suporte OpenCL passa de INDICIO PROMISSOR para CCE de corretude somente apos esses testes; beneficio ainda outra camada.
+Provar sem replay integral por trace real de decode/faixas token/posicoes, nao somente 'por construcao'. Forcar falha antes medir se contexto/backend nao for o esperado.
+
+4. VULKAN: BLOQUEIO OBSERVADO, CAUSA AINDA NAO ISOLADA
+HTP->CPU/OpenCL funciona parcialmente e HTP->Vulkan diverge: NAO basta para provar causa raiz 'layout KV Vulkan'. FA desligado em ambos reduz uma hipotese; nao prova independencia de todos os efeitos FA/layout ou exclui kernels, flags, sincronizacao, patches do fork, sampler e harness.
+Nao escrever conversor KV ate inspecionar e testar necessidade concreta. Transporte host tensor_get/set nao implica representacao canonica portavel entre backends. Atualizar HANDOFF-CONTRACT: remover afirmacao incondicional 'transportavel HTP->Vulkan' e ganho baseado em comparar prefill184 com decode25-60.
+Matriz minima, mesmo binario/model/config/prompt:
+A. Vulkan puro, sem export/import -> baseline de numerica e saida.
+B. Vulkan->Vulkan, contexts separados -> teste do roundtrip.
+C. CPU->Vulkan -> discrimina origem HTP versus destino/import.
+D. HTP->CPU/OpenCL -> controles com harness CORRIGIDO.
+E. Vulkan->CPU (quando memoria/tempo seguros) -> ajuda localizar escrita/export vs leitura/compute.
+Nao precisa grande corpus/grid para localizar primeira falha: curto e prefixo controlado suficientes no inicio. Nao tocar defaultproduto nem libs principal.
+Auditar source/build runtime identico: pin e patchset Q8 signedness, workaround Qualcomm 0x5143 de fusoes, reset, OpenCL guard/cache e flags shader. Log 'upstream-pkg' enquanto relato diz fork SIG deve ser esclarecido por manifesto completo/DT_NEEDED/loadedmaps/buildID, nao string antiga. Vulkan encontrado/linkado nao prova kernel correto nem preservacao dos patches aceitos.
+Comparar dimensoes/ne/nb/dtype, transposicao V, strides, FA efetivo no runtime, seq cells, tamanho serialized e payload K/V por camada/posicoes. Teste tensor_get/set roundtrip com fixture controlada, sincronizacao/export/import conforme API real. Hash byte bruto diferente no backend pode ser layout legitimo; comparar vista LOGICA decodificada quando layout diferir.
+Se Vulkan puro ja falha, corrigir build/backend isolado antes culpar import. Se Vulkan roundtrip falha, examinar leitura/escrita/compute. Se so CPU/HTP->Vulkan falha com puro/roundtrip corretos, incompatibilidade crossbackend torna-se hipotese forte; isolar tensor/camada e formalizar reproducer. Cada explicacao precisa teste RED/GREEN, nao conversao presumida.
+
+5. METRICAS MATCHED APOS GATE
+Concordo com prioridade de dados OpenCL antes grande investimento no Vulkan, mas medicao vem DEPOIS da ponte/gates corretos.
+Run OpenCL puro, Smart OpenCL, NPU inteiro, CPU no mesmo build/peso/prompt/config, curto e medio; P4 CPU A-B-A pode ser coberto por controle explicitamente equivalente e logado. Repeticoes intercaladas, poucas inicialmente. Registrar tempos cold e warm separadamente; custo 2 modelos/contexts, export/import/allocation/synchronization e memoria pico/LMK.
+request->first_visible_token deve incluir prefill/handoff segundo ponto de emissao documentado. Se tok1 emitido pela NPU antes handoff, TTFT pode cair mas medir tambem pausa tok1->tok2 e wall completo; nao atrasar/adiantar emissao artificialmente para favorecer metricas. Pos-prefill e cold nao misturar.
+Sem confirmar doze por tela apagada/auto-gatilho; am start pode ativar Activity, stayon altera condicao. Registrar deviceidle/foreground/stayon/energia/tela/sensores em snapshots relevantes. Preferir USB aprovado; wifi permitido somente mesmo aparelho/identidade guardada e com perda de observacao declarada, nao resultado perdido inventado. Reverter stayon para valor anterior EXATO, nao default presumido.
+Benchmark nao pode depender de prompt/token_budget hardcoded31/24 para corpus medio; limites context/timeout claros. Token rate separa ponte emitida por HTP de execucoes de decode GPU.
+Relatar variabilidade/medianas e beneficio wall/TTFT observado vs OpenCL inteiro. Sem prometer vantagem universal ou habilitar UI so porque transferencia levou poucos ms.
+
+6. OUTROS CHECKPOINTS
+- P4v2 reset/mutantes positivos relatados: manter como avanco. CPU referencia/medio ainda pendentes; H.1 CCE por camada de smoke/reset, nao contrato inteiro.
+- F2 nm ausencia de exports/hooks por flag e avanço; testes instrumentados handshake/mutante devem indicar SHA da lib realmente usada e execucao, nao somente desenho e compilacao.
+- CI success do commit e evidencia para AQUELE snapshot, nao working tree atual com WIP. Bloqueio local alheio registrado sem mexer no outro agente; build/prova da nova lib continua separada.
+- Comparacao de pesos com primeira divergencia dentro payload fortalece pesos diferentes; origem exata/requantizacao independente e provenance ainda exigem receita/fonte, metadata Hf_F16 nao prova processo. Manter c4bf.
+- Whisper fonte/binario nao tocados e smoke NAO executado: explicitar em vez de garantia de nao-regressao universal.
+
+7. ENTREGA
+TXT A-H docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA3.txt e logs docs/npu-hymt2/smart-rodada3/:
+A. Identidade/aprovacoes/build/sourceAPK/snapshot e preservacao.
+B. Ponte tok1, gates/mutantes e refatoracao request com testes reais.
+C. P4 CPU/HTP medio/referencia e A-B-A; limite observado.
+D. Smart OpenCL prefixos/logits/greedycompleto/ABA e estado CCE ou PARCIAL.
+E. Matriz Vulkan puro/roundtrip/crossbackend e causa raiz OBSERVADA versus HIPOTESE.
+F. Matched valido, cold/warm/TTFT/pausa/wall/memoria e decision util.
+G. F2/CI/Whisper/libproduto vsprobe e distribucao real (sem UI/release).
+H. Decisao por rota e proxima etapa objetiva.
+Manifesto full SHA caminhos/tamanhos; reconciliar tentativas em script com classes exclusivas e deduplicar REPORT. Registrar todos exit codes. Nao declarar OpenCL corretude plena com token unico nem Vulkan KVcausa isolada sem matriz. Se nada bloqueia, seguir prioridades sem nova pergunta abstrata de ordenacao.

@@ -1,0 +1,68 @@
+{
+  "manifest": "D:\\Projetos\\SIG\\docs\\especialista\\RELATORIO-LIMPEZA-SIG-READONLY.json",
+  "logical_bytes_removed": 12657542163,
+  "deleted_files": 41332,
+  "status_counts": {
+    "deleted": 41332,
+    "skipped": 12
+  },
+  "path_groups_bytes": {
+    "D:/svr10": 537679116,
+    "D:/sigclean": 5667580,
+    "D:/Projetos/SIG/native-dependencies": 6724601350,
+    "D:/Projetos/SIG/app/build": 41181534,
+    "D:/Projetos/SIG/app/.cxx": 1334679230,
+    "D:/Projetos/SIG/build": 91335472,
+    "C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/sig-vulkan-reset-release": 685215113,
+    "D:/svr11": 1480771481,
+    "D:/ocl1": 1756411287
+  },
+  "empty_leaf_dirs_removed": 335,
+  "removed_targets_still_present": [],
+  "protected_verification": [
+    {
+      "root": "D:/Projetos/SIG/docs/especialista",
+      "baseline_files": 7,
+      "changed_or_missing": []
+    },
+    {
+      "root": "D:/Projetos/SIG/docs/npu-hymt2",
+      "baseline_files": 2,
+      "changed_or_missing": []
+    },
+    {
+      "root": "C:/llama-npu",
+      "baseline_files": 524,
+      "changed_or_missing": []
+    }
+  ],
+  "git_status_unchanged": false,
+  "git_tracked_status_unchanged": true,
+  "A_deleted_files": 26043,
+  "A_logical_bytes_removed": 9342514045,
+  "git_status_change_explanation": "Only new untracked cleanup logs and concurrently created NPU documentation; tracked status unchanged.",
+  "completion_limits": "12 old diagnostic BINs skipped for process-root references; original GGUF, ZIP packages, shared SDKs, unique sources and registered worktrees preserved. No server/device access.",
+  "process_hits": [
+    {
+      "pid": 86688,
+      "name": "bash.exe",
+      "root": "D:/Projetos/SIG/docs"
+    },
+    {
+      "pid": 64692,
+      "name": "bash.exe",
+      "root": "D:/Projetos/SIG/docs"
+    }
+  ],
+  "models_preserved": [
+    {
+      "path": "D:/Projetos/SIG/docs/vulkan-hymt2-fusion-round/logs-rodada13/hymt2_app.gguf",
+      "type": "file",
+      "bytes": 1133080544,
+      "files_count": 1,
+      "class": "C",
+      "reason": "modelo/grafo: duplicidade e uso ativo não comprovados; preservar"
+    }
+  ],
+  "worktree_leftovers": "Registered worktrees preserved; no force removal, unique sources untouched. ZIP packages preserved pending provenance/fixture review."
+}

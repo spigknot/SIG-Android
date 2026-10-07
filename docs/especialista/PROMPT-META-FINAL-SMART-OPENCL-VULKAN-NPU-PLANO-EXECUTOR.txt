@@ -1,0 +1,155 @@
+ORDENS CONSOLIDADAS AO AGENTE EXECUTOR
+META FINAL: SMART (OPENCL), SMART (VULKAN), CPU, GPU (OPENCL), GPU (VULKAN), NPU
+================================================================================
+
+0. OBJETIVO E AUTORIDADE
+O usuario confirmou que as DUAS rotas Smart sao a meta final. Este roteiro consolida as orientacoes tecnicas anteriores e substitui a proposta de Smart generico. O especialista coordena; o executor implementa e verifica. Nao confundir objetivo desejado com viabilidade ja demonstrada.
+
+Menu final desejado, nesta ordem:
+1. Smart (OpenCL): prefill na NPU/HTP -> geracao na GPU OpenCL.
+2. Smart (Vulkan): prefill na NPU/HTP -> geracao na GPU Vulkan.
+3. CPU.
+4. GPU (OpenCL).
+5. GPU (Vulkan).
+6. NPU: prefill e geracao predominantemente no HTP, com ops nao suportadas explicitadas.
+
+Nao adicionar Smart generico/automatico. NPU->CPU pode servir de controle de pesquisa, mas NAO satisfaz Smart. Nao trocar automaticamente modelo, destino GPU ou backend mantendo rotulo enganoso. Vulkan continua default atual; mudar default exige decisao separada.
+
+O pedido atual autoriza gerar estas ordens. Ao executar, verificar as autorizacoes vigentes do usuario para patches locais, probe/device e integracao. Se faltar autorizacao de uma etapa com efeito externo, pedir um formulario agrupado com alvos e riscos exatos. Nao usar este documento como autorizacao para commit/push, release, upload R2, hot-swap da biblioteca do SIG principal ou instalacao de APK sobre ele. Investigar/testar em projeto e app-id separados conforme autorizacao de device. Nunca uninstall/pm clear do SIG principal; jamais contornar hashes/gates.
+
+1. ESTADO BASE: O QUE SABEMOS E O QUE NAO SABEMOS
+- R6/R8 relatam app-UID normal com driver, sessao DSP e MUL_MAT correto: a tese de bloqueio OEM do probe antigo foi refutada.
+- P4 (Hy-MT2 completo em app normal) ainda precisa evidencia. CLI/shell nao substitui essa prova.
+- NPU domina prefill nos benchmarks historicos; isso NAO prova ganho total do Smart.
+- NPU->CPU, export/import isolados e projecoes nao provam NPU->OpenCL/Vulkan.
+- Fork de produto tem STQ, Q8 Vulkan, workaround Qualcomm, reset de pedidos e OpenCL F3b/guard/loadercache. Nao substituir integralmente pelo upstream para obter HTP.
+- Fix ANR foi commitado e testado experimentalmente; fonte publicada nao equivale ao fix distribuido no ZIP/APK publico.
+- Incidente apagou dados/configuracoes/chaves do app. Repor APK/pacote/modelo foi restauracao PARCIAL, nao integral.
+Conferir tudo no estado fresco: repositorio, aparelho, APK, pacote nativo e libs realmente mapeadas pelo processo. Nao reutilizar hashes abreviados como manifesto.
+
+2. FASE ZERO — SEGURANCA, SNAPSHOT E DESIGN
+Antes de qualquer escrita/device:
+- Ler AGENTS.md, MODULE-MAP.md, UPDATE.md, scripts oficiais e instrucoes locais.
+- git status/branch/log fresco; preservar WIP smartjoin/ffmpeg e outros agentes. Coordenar ownership; nao movimentar nem restaurar arquivos alheios por iniciativa ampla.
+- Inventariar espaco/RAM no host/servidor/device; planejar poucos builds isolados em caminho curto. Preservar C:/llama-npu e evidencias existentes; sem limpeza/descarte sem aprovacao.
+- Criar docs/npu-hymt2/DESIGN-SMART-DUAL-BACKEND.md, com fases, riscos, APIs reais rastreadas e criterios de entrada/saida.
+- Dispositivo permitido: USB serial 3B15BD00FVE00000, identidade esperada CPH2747. PJA110/1164a04 fora do escopo. Conferir identidade real; divergencia bloqueia.
+- Wrapper fail-closed: todos os comandos adb passam -s explicito; validar alvo/package antes de operar. Fixar ANDROID_SERIAL nao demonstra que Gradle deixou de executar cleanup destrutivo.
+- Nao rodar connectedDebugAndroidTest contra o SIG principal sem auditar o ciclo AGP e garantir preservacao dos dados. Preferir app-id de probe separado ou emulador descartavel para testes pertinentes.
+- Formalizar testes offline do wrapper: serial ausente, errado, outro aparelho, destino ambiguo, uninstall/clear de package protegido e hash de deploy divergente devem bloquear ANTES da acao.
+- Backup nao e promessa: registrar o que pode ser recuperado, testar quando aplicavel e reconhecer limites de dados privados. Nao extrair/exibir credenciais. Nunca pedir chaves em chat.
+SAIDA: design + allowlist de caminhos/package/serial + guard testado + snapshot.
+
+3. FASE 1 — IDENTIDADE DO MODELO E INTEGRIDADE DO DOWNLOAD
+Manter como referencia primaria desta campanha o Q4_K_M produto:
+c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+Tamanho historico: 1133080544 bytes; conferir arquivo real.
+O workflow R2 espelhou o Tencent oficial:
+dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699
+Tamanho reportado: 1133080448 bytes.
+
+Nao presumir equivalencia por tamanho parecido ou por nome. Ler GGUF metadata/tokenizer/template/tabela de tensores e comparar hashes dos payloads por tensor quando disponiveis. Separar diferenca de metadata de diferenca de pesos. Nao autorizar migracao de produto por conclusao do executor: entregar comparacao e decisao pendente ao usuario.
+Mapear URL primaria/fallback/cache/import/modelo existente. Ambos os mirrors de um modelo pinado devem entregar os mesmos bytes esperados; falha de hash nao pode virar aceita apenas por nome/tamanho.
+Verificar SHA-256 dos quatro objetos espelhados via leitura publica completa no runner/servidor, sem baixar gigabytes pelo PC limitado. HTTP 200 e Content-Length nao bastam; rclone ls tambem nao. Reusar workflow aprovado apenas no escopo permitido; nao sobrescrever objetos/versoes publicados. Se sem autorizacao de job remoto, preparar procedimento e registrar pendencia.
+Nao modificar nem apagar o c4bf do aparelho. Investigar acesso ao modelo pelo probe via SAF/permissao documentada ou copia autorizada fora dos dados do SIG. Sem root/bypass para provar app-UID.
+SAIDA: tabela de identidade/proveniencia e baselines pinados; bloqueio explicito para promocao se identidade nao resolvida. A pesquisa com c4bf pode seguir sem migracao.
+
+4. FASE 2 — VACINA ANR E INFRA CONFIAVEL
+Auditar fix atual, lock order g_mutex -> g_ui_mutex, atomics, copy-out de strings e todas as leituras/escritas dos estados compartilhados. Preservar g_mutex da inferencia; nunca substitui-lo por ausencia de sincronizacao.
+No teste atual, Thread.sleep(200) depois de worker.start NAO garante lock adquirido. Trocar por sinal real emitido DEPOIS da aquisicao. Timeout de prontidao deve falhar, nao passar sem medir. Manter lock preso durante todos os getters; cleanup em finally, liberacao limitada e join com assert.
+Mutacao deliberada em copia de teste: getter volta a usar g_mutex -> teste deve detectar bloqueio; GREEN do codigo correto. Testar trabalhador atrasado para eliminar falso positivo. Nao deixar teste preso indefinidamente em thread principal.
+Hook sigTestHoldGmutex deve ser restrito a variante NATIVA de teste, com binding compativel. DEBUG nao basta: o APK de produto pode ser debug. Verificar export/simbolos e caminhos de chamada do artefato real de distribuicao; flag de teste OFF em todas as libs publicaveis. Nao usar stub no-op para obter teste verde.
+Corrigir CI JDK 21 se autorizado, com base nos logs/config reais; setup-java e toolchain devem concordar. Nao desabilitar gates nem rotular qualquer erro como infraestrutura.
+Executar gates locais relevantes e testes de contrato em alvo separado seguro. Registrar CI separadamente.
+SAIDA: vacina deterministica, mutante detectado, test-hooks ausentes no candidato produto e guards device funcionando.
+
+5. FASE 3 — P4: MODELO COMPLETO EM APP NORMAL
+Reusar probe corrigido (uses-native-library libcdsprpc.so, required=false; captura unica de dlerror; controles positivo/negativo). Confirmar declaracao no APK e UID/runtime efetivos.
+Carregar c4bf completo em app-id separado, sem usar permissao root para runtime. HTP registro -> sessao -> grafo real -> geracao -> reset no mesmo processo.
+Registrar bibliotecas e builds por SHA, arch, skel, driver, grafo/fallback por backend, prompt/template/tokenizer e parametros reais. Caminho ADSP_LIBRARY_PATH/skel no app exige projeto correto; export do shell nao prova env do app.
+Comecar corpus curto, depois medio. Completude, EOG, finite logits, traducao nao vazia/correta, nenhuma resposta anterior contaminando pedido novo. Testar A-B-A no mesmo contexto com sampler reiniciado segundo contrato real do fork; nao aceitar dupla chamada accept se sample ja a faz.
+Medir cold/warm load, prefill, primeiro token e geracao, host/DSP memory quando observavel. Sem atribuir sensor de CPU ao NPU, nem alegar energia em joules sem medicao.
+Timeouts finitos, cancelamento e limite de memoria conservador. Sem --ignore-eos/soak extremo/root/governor/thermal bypass. USB elimina dependencia de Tailscale, nao elimina LMK.
+SAIDA: P4 aprovado com evidencia por camada ou bloqueio preciso. Se falhar, resolver causa antes ensaiar Smart.
+
+6. FASE 4 — ARQUITETURA DO HANDOFF: INVESTIGAR ANTES DE IMPLEMENTAR
+Rastrear APIs de state/KV/memory/scheduler no pin upstream e no fork SIG. Registrar definicoes, usages e invariantes; nao inventar API de troca de backend em contexto existente.
+Comparar duas estrategias, sem assumir qual funciona:
+A. Dois contextos compatíveis + export/import de estado ou KV entre backends.
+B. Mesmo contexto com roteamento por fase, se APIs/layout/lifetime permitirem.
+Documentar: peso residente/repack, KV dtype/layout/flash-attention, positions/seqIDs, RoPE, tamanho contexto, sincronizacao, fences/readback, buffers, ownership e reset.
+O estado serializado pode ser dependente de versao/arquitetura/config. Igual nome do modelo nao prova compatibilidade de estado. Compartilhar pesos entre contextos so se loader/backend realmente suportar; nao contar memoria duas vezes ou omiti-la.
+Definir primeiro token: logits finais do prefill de origem -> sampler -> token a consumir no destino na posicao correta. Se import nao trouxer logits, explicar ponte minima necessaria e comparar contra referencia. Reprocessar integralmente o prompt na GPU NAO e Smart aceito. Recomputation pequena eventual deve ser explicitada, contada e testada; evitar duplicar ultimo token ou avancar posicao indevida.
+O controle HTP->CPU pode validar infraestrutura, mas resultado nao deve entrar como Smart (GPU).
+Escolher uma estrategia minima e reversivel. Priorizar primeiro NPU->Vulkan por ser o default de produto atual; depois NPU->OpenCL. Inverter ordem se auditoria mostrar bloqueio objetivo da primeira ou reutilizacao mais segura na segunda, registrando razao. Nao retirar nenhuma das metas sem informar.
+SAIDA: contrato do handoff + prototipo isolado por rota, sem UI fake.
+
+7. FASE 5 — CORRETUDE SMART, ROTAS INDEPENDENTES
+Criar harness com identidade de backend/contexto ANTES de medir. Mutante que usa CPU ou contexto errado deve abortar antes de produzir benchmark valido. Hash local/remoto e leitura de volta do arquivo exato apos deploy.
+Para CADA rota Smart:
+- Provar prefill HTP e geracao no destino escolhido, com op placements/traces suficientes. Registro de devices nao prova execucao.
+- Provar que tokens do prompt nao foram integralmente reexecutados no destino; registrar contadores/faixas de posicao por fase.
+- Verificar KV posicoes/seqIDs apos import e continuidade dos tokens gerados.
+- Comparar logits em prefixos controlados/teacher forcing, com tolerancias documentadas baseadas no baseline CPU/GPU. Exigir finite, comportamento EOG coerente e tokens/saida auditados. Igualdade bit a bit crossbackend nao e requisito presumido, e texto identico sozinho nao valida tensor/KV.
+- Usar greedy para diagnostico e sampler de produto com seed/config registrados para comportamento final; nao ocultar a mudanca de sampler.
+- Testar A-B-A, prompt vazio/rejeitado, limite de contexto, cancelamento durante prefill/handoff/decode, falha de sessao, destino indisponivel, troca de backend e unload.
+- Falha nao pode deixar estado stale/reutilizado parcialmente nem segurar getters/UI. Limpeza correta de ambos os contextos e sampler.
+- Uma rota aprovada nao habilita a outra. NPU inteira tem sua propria aceitacao.
+SAIDA: testes permanentes RED/GREEN e mapa de suporte por modelo/dispositivo/rota.
+
+8. FASE 6 — DESEMPENHO END-TO-END, SEM GRID INUTIL
+Usar MESMO peso c4bf, corpus pinado, tokenizacao, configuracoes e fronteiras. Nao comparar upstream puro com produto sem declarar diferencas de build. Sempre que possivel usar build candidato unico com modos distintos.
+Piloto: curto e medio em CPU, OpenCL, Vulkan, NPU, Smart OpenCL, Smart Vulkan — apenas modos que passaram corretude. Repeticoes intercaladas por modo para reduzir viés de aquecimento; registrar invalidados sem apaga-los. Comecar com poucas repeticoes, ampliar somente se resultado justificar.
+Depois longo aprovado para as rotas promissoras. Medir separadamente:
+- cold load e preparo/repack de ambos os contextos;
+- prefill;
+- export/transfer/import e ponte de logits/token;
+- TTFT (inicio do pedido -> primeiro token visivel);
+- geracao posterior;
+- wall inicio -> ultimo token/termino;
+- memoria pico/residente, erros/LMK, temperatura de sensores identificados.
+Explicar fases sobrepostas e nao somar timers aninhados como se fossem independentes. 'Residual' nao e prefill medido. Token throughput denomina claramente intervalo e quantidade.
+Comparar Smart Vulkan com Vulkan inteiro; Smart OpenCL com OpenCL inteiro; tambem CPU e NPU para contextualizar. Ganho de prefill que perde no handoff/decode/load nao e sucesso total.
+Antes da bateria de decisao, fixar no design criterio conservador: beneficio de wall/TTFT repetivel acima da variabilidade medida, sem regressao de corretude/estabilidade e memoria segura. Separar beneficio em prompts longos de perda em curtos. Nao prometer vantagem universal. Se o beneficio exigir manutencao de dois contextos, incluir custo inicial e memoria em sessao amortizada.
+Nao ajustar parametros por modo so para favorecer um e chamar matched; tuning adicional e tabela separada.
+SAIDA: CSV/JSON por tentativa, medianas/dispersao e decisao por rota. Projecoes nunca rotuladas MEDIDO.
+
+9. FASE 7 — INTEGRACAO LOCAL NO PRODUTO, APOS PROVAS E ESCOPO APROVADO
+Integrar minimamente o backend Hexagon necessario no fork, preservando STQ e patches aceitos. Auditar dependencia vendor DT_NEEDED, loader OpenCL, namespaces, skels/arquiteturas, compatibilidade NDK/ABI, page alignment 16KB, licencas e tamanho do pacote. Nao compilar llama/whisper ggml no mesmo projeto nem atualizar whisper.cpp para resolver HTP.
+Devices nao-Qualcomm ou sem runtime compativel devem continuar abrindo e usando CPU/GPU suportados; a ausencia do NPU nao pode quebrar dlopen de toda a lib. Tratamento de discovery/session failures recuperavel. Arquitetura v81 testada nao autoriza prometer outras arquiteturas.
+Criar seam puro de capabilities/politica Smart, logica de estados/cancel/reset e selecao. Activity conserva UI, sem crescer com regras complexas. Fonte nova exige KDoc e MODULE-MAP.
+IDs persistidos estaveis; nao renumerar CPU/OpenCL/Vulkan/NPU existentes. Acrescentar dois IDs Smart distintos, com tests de migracao/persistencia. Selecionar Smart nao altera idioma/threads/modelo/defaults existentes.
+Menu com as seis entradas previstas. Cada Smart habilitado SOMENTE quando a rota estiver suportada/validada para modelo/dispositivo; mostrar motivo de indisponibilidade. Se apenas uma funcionar, nao apresentar a outra como funcionando nem fabricar fallback; informar meta parcial ao usuario.
+Ajuda: 'NPU processa o prompt; GPU gera a resposta'. Logs mostram solicitado/efetivo, modelo SHA, prefill backend, decode backend, transferencia, fallback por op e resultado.
+Fallback de rota: inicialmente erro claro com possibilidade de usuario escolher outro backend. Se futuramente aprovado fallback automatico, informar antes/na execucao a rota real; jamais rotulo Smart com CPU/NPU inteira oculta. Nao usar tamanho de prompt para ignorar NPU em silencio dentro dessas duas opcoes explicitas.
+SAIDA: implementacao local testavel e gates reais, ainda sem release automatica.
+
+10. FASE 8 — ACEITACAO E PREPARACAO DE ARTEFATOS
+Rodar :app:testDebugUnitTest, :app:lintDebug e :app:assembleDebug; preservar exit code e logs. Build APK rapido nao recompila libs: build nativo oficial/candidato e obrigatorio quando fonte JNI/backend mudou.
+Testes focais: selecao/persistencia/capabilities/fallback, handoff/reset, race/getters, numerica e carga em nao-HTP. Fazer smoke Whisper/VAD em alvo aprovado seguro, especialmente pelas mudancas anteriores no downloader e se binario mudou. Comparar fonte/build/hashes da lib Whisper; 'fonte intocado' nao prova mesmo binario.
+Validar duas ABIs exigidas pelo produto; HTP deve ser condicional ao suporte real, sem simular NPU x86_64. Compilacao/contrato x86 sem runtime deve ser rotulado NAO TESTADO EM RUNTIME. Garantir hooks de teste ausentes no pacote distribuivel.
+Nova lib JNI/fixANR/NPU requer versao nativa nova se promovida; nunca sobrescrever ZIP v11 imutavel. Atualizar contratos de hash/tamanho/componentes conforme UPDATE.md e verificar-native-dependencies antes promocao. APK que usa novos IDs nao pode receber biblioteca antiga incompatível sem checagem de versao/capabilities e mensagem clara.
+Separar preparacao local, instalacao no SIG principal, commit/push e publicacao. Apresentar objetos/versionamento/diff/smoke/rollback antes pedir aprovacao. Nenhuma destas etapas externas e autorizada automaticamente por 'meta final'. Nao force/amend/--no-verify.
+
+11. TRABALHO UTIL E CRITERIOS DE PARADA
+Avancar nas fases independentes permitidas sem repetir bateria antiga inteira. Se P4/transfer falhar, localizar causa e documentar reproducer/teste; nao rodar tuning por horas em caminho incorreto.
+Se uma rota exigir grande refactor ou duplicacao de pesos inviavel, fazer checkpoint de design com estimativa e alternativa real; nao substituir Smart por processamento sequencial do prompt inteiro duas vezes.
+Se memoria/temperatura/degradacao invalida controles, parar workload, registrar sensor/causa observada e retomar so em condicao segura. Nao matar apps do usuario para maquiar resultado.
+Se permissao faltar, completar design/testes offline e pedir somente a decisao realmente bloqueante. Nao aguardar inerte nem executar conditional sem autorizacao.
+
+12. ENTREGA OBRIGATORIA AO ESPECIALISTA
+Em docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA1.txt, formato A-H:
+A. Escopo/autorizacoes/estado fresco e identidade de artefatos.
+B. Protecao de dados e vacinas do incidente/ANR.
+C. Modelo c4bf vs dc5f e integridade/proveniencia R2.
+D. P4 app-UID completo: evidencias por camada e fallback real.
+E. Handoff Smart Vulkan e Smart OpenCL: contrato, corretude, reset e falhas.
+F. Medicoes matched por tentativa, estatistica e custos completos.
+G. Integracao/gates/pacote/Whisper/default e situacao REAL de distribuicao.
+H. Conclusao por rota: CCE, PARCIAL, PENDENTE ou BLOQUEADO, criterio usado e proxima decisao.
+
+Logs/evidencias em docs/npu-hymt2/<rodada-smart>/ com manifesto SHA-256 completo, tamanho e caminho real. Se logs grandes ficarem fora do repo, entregar caminho/manifesto e anexos disponiveis; nao afirmar anexo ausente. Contar/deduplicar/reconciliar tentativas em script: validos, invalidos, superseded e falhas exclusivos; todos os exits por script, nenhum denominador inventado.
+Distinguir OBSERVADO, MEDIDO, DERIVADO, HIPOTESE e NAO EXECUTADO. Runtime probe nao e release. Fonte commitada nao e lib distribuida. TTFT menor nao e necessariamente wall menor.
+
+ACEITACAO FINAL
+Meta completa somente quando AS DUAS rotas Smart funcionarem em app normal, com peso/config pinados, handoff correto sem replay integral, estado/reset/cancel seguros, beneficio util demonstrado no escopo declarado, menu honesto com IDs estaveis, gates/artefatos verificados e preservacao de CPU/GPU/NPU/Whisper/dados. Se uma rota nao passar, entregar resultado parcial honesto e nao declarar a meta completa.

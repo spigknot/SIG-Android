@@ -1,0 +1,5 @@
+=== LOTE2 mutantes Smart (19:18:52Z) ===
+[smart_ponte_omitida | smart:opencl] => RESULTADO: SMART-FALHA (A1: ponte_tok1_emissoes!=1)
+[smart_ponte_dup | smart:opencl] => RESULTADO: SMART-FALHA (A1: ponte_tok1_emissoes!=1)
+[smart_cap | smart:opencl] => RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+LOTE2_DONE

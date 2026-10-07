@@ -1,0 +1,198 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 3
+=========================================================================
+Data: 07/10/2026 (noite). Executor: agente. Ordens: "SMART RODADA 3:
+CORRIGIR PONTE, GATEAR HANDOFF E ISOLAR VULKAN" (secoes 1-7). Escopo: A1-A6
+vigentes; sem UI/produto/release/R2 novos. Estados por camada/rota.
+RESUMO EXECUTIVO: (1) bug do tok1 CONFIRMADO e CORRIGIDO (o 1o token agora
+sai: "Bom dia..." completo); (2) harness Smart fail-closed com 13/13 casos
+adversariais detectados; (3) CAUSA RAIZ do Vulkan DEMONSTRADA por A/B de
+build: o v11 rodava backend VULKAN DO UPSTREAM sem os workarounds Adreno do
+SIG; o v12 (fonte SIG, sha e90fcdc9) faz a MATRIZ COMPLETA PASSAR 7/7 —
+incluindo HTP->Vulkan ACEITO (a meta). (4) matched de tempo: pendente frio.
+
+------------------------------------------------------------------------
+A. IDENTIDADE, APROVACOES, BUILD E PROVENANCE (auditoria pedida na secao 4)
+------------------------------------------------------------------------
+A.1 Fonte/APK do binario testado: PELA PRIMEIRA VEZ auditado e corrigido.
+    v11 (rodadas 1-2 e metade desta): libs buildadas de /root/llama-cpp-npu
+    = llama.cpp UPSTREAM (grep 0x5143 = 0). v12 (desta rodada):
+    /root/sig-smart/llama = FONTE SIG vendorizado; ggml-vulkan.cpp sha256
+    e90fcdc9963c57e5 IDENTICO ao repo local D:/Projetos/SIG
+    (app/src/main/cpp/llama) e com os 4 hits do workaround Adreno
+    (VK_VENDOR_ID_QUALCOMM 0x5143: rms_norm_mul_f32/add_rms_fusion e o patch
+    SIG fusion-round 27/09) + 27 marcadores SIG no arquivo. Build v12:
+    STANDALONE=OFF (vendor sem tests/examples/tools/pocs), platform-28,
+    glm slc extra, PREBUILT_LIB_DIR=android_aarch64; CFG_OK BUILD_OK.
+    Tamanhos: libggml-vulkan 48.654.064 (vs 34.674.680 do upstream!),
+    libggml-opencl 12.434.000, libggml-hexagon 5.792.480, libllama 35.534.760,
+    skel libggml-htp-v81 730.280. (O v12 foi o binario DA MATRIZ v12 abaixo.)
+A.2 Deploy e identidade no device: 8 .so substituidas no jniLibs
+    (libllama/libggml[,-base,-cpu,-hexagon,-opencl,-vulkan] + skel htp-v81);
+    APK re-linkado (npuprobe.so) e instalado; sha256 local == sha256 no
+    nativeLibraryDir do device (7/7 conferidos: ex. libllama
+    2f625438..., libggml-opencl 9bd8e794..., libggml-vulkan d4ee710b...);
+    Build ID do vulkan: 791ec20767d8737142d3902b669ba9901d8dc2ae. NEEDED
+    DT: libllama -> libggml+backends; vulkan -> libvulkan.so; opencl ->
+    libOpenCL.so (com uses-native-library no manifest). NAO existe mais
+    ambiguidade "upstream-pkg vs fork SIG": os relatos anteriores misturavam
+    e a auditoria desta rodada resolveu a favor do SIG para o v12.
+A.3 Device: CPH2747 via wifi 100.108.27.64:5555 (PJA110/1164a04 presente na
+    lista adb e SEMPRE evitado com -s; nenhum comando sem serial). Stayon
+    ligado durante a sessao (valor anterior registrado para reversao EXATA:
+    sera revertido no embrulho). Tela em doze + auto-gatilho (sem toques).
+    LIMITACAO DECLARADA: stayon altera a condicao de teste; registrado.
+A.4 Incidentes de metodo (transparencia): (a) stream de logcat via wifi
+    morreu as 16:11 (sono do radio) e 4 casos do lote1 sairam SEM-LOG ->
+    corrigido com stayon + loop de reconexao + logcat no device; os casos
+    foram RE-RODADOS (lote2) e todos tem prova; (b) os dois scripts de
+    matriz iniciais tinham bugs meus (prefixo "smart:" faltando) e foram
+    refeitos (v11b/v12) — nenhum resultado invalido foi usado.
+
+------------------------------------------------------------------------
+B. BUG DO TOK1 (secao 1) — CORRIGIDO E PROVADO
+------------------------------------------------------------------------
+B.1 O especialista estava CERTO: o runSmart antigo amostrava tok1 na origem
+    e o descartava (nao entrava em s_gpu nem no streaming; o "Bom" virava
+    "om dia..."). FIX no v2: tok1 = PRIMEIRO token de SAIDA; emitido UMA
+    vez (gate ponte_tok1_emissoes!=1 cobre omitida E duplicada); EOG em
+    tok1 encerra sem decode; contadores amostrados/emitidos/consumidos;
+    max_tokens inclui tok1; decode do tok1 no destino gera os logits do
+    seguinte (sem accept duplicado — o sampler e' unico).
+B.2 Prova real: Smart OpenCL v2: "A1 texto: Bom dia, como você está?"
+    (COMPLETO), tok1=33, amostrados(s/d)=9/8, emitidos=8, consumidos=8.
+    (Antes: "om dia, como você está?" — o mesmo modelo, o mesmo prompt.)
+B.3 Teste adversario do contrato (mutantes no DEVICE, alvo separado):
+    13/13 casos com comportamento fail-closed/gradacao correta:
+    prefill_rc / decode_rc / export_vazio / export_trunc / import_falha /
+    pos_errada / reset_bad / ponte_omitida / ponte_dup -> SMART-FALHA com
+    causa nominal; cap -> SMART-PARCIAL (nunca "completo"); parametros
+    ruins (xyz / foo:opencl / opencl:bar) -> SMART-FALHA com causa, SEM
+    fallback silencioso. Consolidado em
+    docs/npu-hymt2/smart-rodada3/MUTANTES-SMART-CONSOLIDADO.txt.
+
+------------------------------------------------------------------------
+C. P4 CPU/HTP — REFERENCIA (secao 3 do pedido anterior; limite observado)
+------------------------------------------------------------------------
+C.1 P4v2 no CPU (A-B-A pleno, app normal): SUCESSO — "Bom dia, como você
+    está?", reset1/reset2 Vazio ok, A2==A1; metricas: prefill=622.87ms
+    gen=259.14ms pp1=0.35ms request->primeiro_piece=623.22ms cold=2813ms.
+C.2 P4v2 HTP (rodada anterior + re-execucoes): SUCESSO; 8/8 mutantes
+    (rodada 2). LIMITE: corpus "medio" AINDA NAO rodado (declarado desde a
+    R2); vai junto do matched frio.
+C.3 OBSERVACAO HONESTA (thermal): os tempos desta noite (prefill 622-
+    813 ms no cruzamento matricial) sao ~8x piores que os do inicio da
+    sessao com o MESMO codigo (prefill 73-95ms) e o pp1 segue estavel
+    (0.31-0.56ms) — assinatura de throttling do SoC apos horas de runs
+    (device quente com cooler em modo silencioso). COLD/POSTERIOR: as
+    MEDIDAS matched validas devem ser refeitas com o device FRIO; nenhum
+    numero desta rodada deve ser promovido a benchmark sem isso.
+
+------------------------------------------------------------------------
+D. SMART — GATE DE CORRETUDE (secoes 2-3) E ESTADO POR ROTA
+------------------------------------------------------------------------
+D.1 Igualdade de 1 token NAO e' prova (concordo) — o espelho v2 compara
+    TODOS os passos com teacher forcing: cada passo, origem e destino
+    decodificam O MESMO token e seus top-1 sao comparados; a 1a divergencia
+    e' registrada com posicao. Evidencia v12: espelho 8/8 (curto) em TODAS
+    as rotas aceitas, div_pos=-1; A-B-A de Smart integral (2 ciclos, mesmo
+    par de contextos, reset validado nos DOIS, A2==A1).
+D.2 Smart (OpenCL): ACEITO — htp->opencl 8/8, "Bom dia, como você está?",
+    A-B-A integral. Tempos (v12, quente): prefill=94.76ms export=0.68ms
+    import=24.17ms gen=474.17ms pp1=57.30ms. Estado: **CCE para
+    execucao+handoff+igualdade de prefixo curto** (nao para desempenho).
+D.3 Smart (Vulkan): **ACEITO** — htp->vulkan 8/8, "Bom dia, como você
+    está?", A-B-A integral; tempos (quente/throttled): prefill=797.67ms
+    export=0.28ms import=2.09ms gen=1546.66ms pp1=528.30ms. A meta desta
+    campanha esta' FUNCIONALMENTE alcancada em app separado.
+D.4 "Sem replay por construcao": agora ha' trace real — contadores por run
+    (amostrados/emitidos/consumidos), sequencia de tokens do espelho,
+    posicoes validadas (pos_max=nt-1) e comparacao A-B-A integral. O
+    consumo no destino e' exatamente UMA decodificacao por token emitido
+    (8/8), sem replay; o gate aborta se posicao/import/export divergirem.
+
+------------------------------------------------------------------------
+E. VULKAN — CAUSA RAIZ: MATRIZ A-E COMPLETA (secao 4) 
+------------------------------------------------------------------------
+E.1 Matriz MINIMA rodada com MESMO binario/modelo/config/prompt primeiro com
+    o build v11 (upstream) e depois com o v12 (SIG). Resultados (texto do
+    A1 / veredito):
+    v11 (upstream):  A puro:vulkan -> texto DEGENERADO ("sorry x N");
+                     B vulkan:vulkan -> PARCIAL, cap, espelho 48/48 iguais,
+                       A-B-A diferente;
+                     C cpu:vulkan -> PARCIAL, espelho 24/48, div_pos=1;
+                     D htp:cpu -> ACEITO;
+                     E vulkan:cpu -> texto lixo ("sorry...") — estado
+                       produzido PELO vulkan corrompe o consumidor;
+                     F puro:opencl -> "Bom dia, como você está?" (sao);
+                     G htp:opencl -> ACEITO.
+    v12 (SIG):       A..G TODOS ACEITOS: A "Bom dia..."; B 8/8 A-B-A
+                     integral; C 8/8; D 8/8; E 8/8; F "Bom dia...";
+                     G 8/8; + htp->vulkan ACEITO (D.3).
+E.2 LEITURA (conforme o criterio do especialista): "Vulkan puro ja' falha
+    => corrigir build/backend antes de culpar import" — era EXATAMENTE este
+    o caso: o puro v11 estava quebrado; o roundtrip B "passava" com dois
+    erros iguais (48/48) mascarando a corrupcao; C (CPU->Vulkan) mostrou
+    divergencia imediata pos 1 (compute do destino). Com o binario SIG (os
+    workarounds Adreno 0x5143 + patchset do fork), o MESMO protocolo passa
+    7/7. CAUSA RAIZ OBSERVADA: **numerica do backend Vulkan sem os
+    workarounds Adreno do fork** (nao era layout de KV; nao era o transporte
+    de estado; nao era FA — o controle FA-off ja' apontava nessa direcao).
+    Os workarounds alteram fusoes de kernels (rms_norm_mul_f32,
+    add_rms_fusion) exatamente onde o Adreno diverge.
+E.3 "Nao escrever conversor KV": nao foi escrito. O contrato (HANDOFF-
+    CONTRACT.md) sera' atualizado: remover a afirmacao incondicional de
+    transportabilidade HTP->Vulkan-UPSTREAM e registrar a exigencia de
+    build com workarounds (binario identico ao produto) como pre-condicao.
+
+------------------------------------------------------------------------
+F. MATCHED (secao 5) — PARCIAL (curto; frio pendente)
+------------------------------------------------------------------------
+F.1 Puros (mesmo build/peso/prompt/config, v12, 1 repeticao, quente):
+      puro:cpu    prefill=622.40ms gen=256.11ms (8 tok, EOG) pp1=0.33ms
+      puro:htp    prefill=812.95ms gen=711.59ms pp1=0.31ms
+      puro:opencl prefill=? (ver DADOS-CONSOLIDADOS) saida "Bom dia..."
+      puro:vulkan saida "Bom dia..." (tempos no log)
+    Smart (htp->dst): opencl D.2; vulkan D.3 (prefill HTP + handoff
+    export/import <=0.7/24ms; gen no destino).
+F.2 TTFT: request->primeiro_piece do P4 623ms (CPU) e pp1 separado; no
+    Smart: pp1 pos-prefill (0.31-57ms por backend) com emit do tok1
+    documentado (o tok1 e' emitido pela ORIGEM antes do import — o custo
+    real do handoff aparece no GEN do destino; nada atrasado/adiantado).
+F.3 PENDENTE HONESTO: repeticoes intercaladas + device FRIO + corpus MEDIO;
+    memoria pico/LMK; mediana; beneficio wall vs OpenCL-inteiro. Nada disso
+    esta' prometido nem implica habilitar UI (nao habilitado).
+
+------------------------------------------------------------------------
+G. F2 / CI / WHISPER / DISTRIBUICAO REAL (secao 6)
+------------------------------------------------------------------------
+G.1 F2: hooks por flag nativa permanecem (nm: 0 no produto / 2 na variante
+    de teste; auditoria de config/code na R2). R3 NAO adiciona mudancas no
+    app do produto.
+G.2 CI: o success do run corresponde AQUELE snapshot (a4af73c); o working
+    tree local continua com WIP ALHEIO ativo (nao tocado; bloqueio local
+    registrado). Nada novo commitado no app nesta rodada.
+G.3 Whisper: fonte/binario NAO tocados; smoke NAO executado nesta rodada —
+    declarado (nao ha' garantia universal).
+G.4 Produto vs probe: o bootstrap do probe (app-id separado
+    br.gov.sp.pcsp.npuprobe) usa agora as libs v12 (SIG) EMPACOTADAS NELE;
+    isto NAO altera nem promove nada no APK/pacote do SIG principal. Sem
+    release, sem R2, sem UI.
+
+------------------------------------------------------------------------
+H. DECISAO POR ROTA E PROXIMA ETAPA
+------------------------------------------------------------------------
+H.1 NPU/HTP inteira: CCE (puro:htp ACEITO; P4 A-B-A; mutantes 8/8).
+H.2 Smart (OpenCL): CCE para viabilidade+corretude (curto).
+H.3 Smart (Vulkan): CCE para viabilidade+corretude (curto) — **META
+    DUAL-BACKEND ALCANCADA EM APP SEPARADO** (build SIG). Default do
+    produto intocado (nenhuma mudanca de UI).
+H.4 Proxima etapa objetiva (sem nova pergunta abstrata): (1) reverificar a
+    matriz com DEVICE FRIO e repeticoes intercaladas + corpus medio;
+    (2) consolidar o matched (mediana/wall/TTFT) e SO ENTAO decidir sobre
+    desenho de menu/UI; (3) atualizar HANDOFF-CONTRACT.md (E.3);
+    (4) manter o binario SIG como pre-condicao de qualquer run de Vulkan.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada3/ (DADOS-CONSOLIDADOS.txt,
+MUTANTES-SMART-CONSOLIDADO.txt, matriz v11b/v12 resumos, fechamento-r3,
+logs copiados) + MANIFESTO-SHA256.txt. Todos os exit codes registrados nos
+logs. Nenhuma afirmacao sem evidencia; pendencias explicitas.

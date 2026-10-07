@@ -1,0 +1,72 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND, POS RODADA 1
+====================================================================
+
+PARECER
+Avanco real: modelo completo carregou e produziu uma traducao em app normal com HTP selecionado. A saida em ingles e correta para o prompt observado PT->EN; nao e o mesmo exemplo EN->PT da R1. Elegibilidade de app normal aceita como avanco de viabilidade, nao como aceitacao completa de P4/reset/desempenho. Meta final permanece Smart (OpenCL), Smart (Vulkan), CPU, GPU (OpenCL), GPU (Vulkan), NPU. Default Vulkan preservado.
+
+O especialista leu p4-run2.log, o bloco runP4 atual de C:/npu-probe/app/src/main/cpp/probe.cpp (147-274) e comparacao-c4bf-vs-dc5f-v2.log. Nao reexecutou device nem auditou todos os demais anexos nesta resposta.
+
+PRIORIDADE DECIDIDA
+Nao escolher entre F2 e F4 como tarefas mutuamente exclusivas:
+1. Endurecer harness P4 e terminar F2.
+2. Em paralelo, escrever contrato F4 e auditar APIs/compatibilidade SEM device.
+3. Repetir P4 curto/medio com reset A-B-A pleno em app separado.
+4. So depois medir prototipo NPU->Vulkan, seguido de NPU->OpenCL.
+Nao precisa repetir campanha longa nem parar design por causa do acabamento de teste. Nao integrar UI/produto ainda. Executar no escopo autorizado pelo usuario (A1-A6 registrar verbatim/alvos); novas publicacoes/deploy SIG principal continuam condicionais a esse escopo, nao inferir ampliacao do especialista.
+
+A. RETIFICACOES OBRIGATORIAS
+- P4: smoke app-UID positivo; contrato completo/reset A-B-A e workload produto PARCIAIS. Limpar memoria com retorno void, sem validação de posicoes e sem segunda resposta valida, nao prova reset correto.
+- 'Restaurado integralmente (dados perdidos)' e contraditorio: RESTAURACAO PARCIAL. Chaves/configs nao recuperadas permanecem perdas. Serial evita alvo errado, nao cleanup destrutivo contra alvo certo.
+- 'Nenhuma regressao introduzida': substituir por 'rotas produto nao alteradas/testadas nesta fase' conforme evidencia. Fork buildado precisa provas, build/link nao prova runtime Vulkan/Whisper.
+- 225 payloads diferentes demonstram pesos diferentes nos arquivos comparados; mesma familia/quantizacoes independentes e origem exata exigem provenance, nao somente metadata/normas iguais. Manter c4bf e nao migrar dc5f.
+- Comparador diz hash 'com alignment': assegurar exclusao do padding nos hashes de conteudo antes chamar todos os 225 pesos diferentes. Conferir tensor nbytes pelo layout quantizado real. Se diferenca restrita a padding em algum tensor, separar categoria.
+- CI 2 falhas nao sao 'ambiente' ate root cause demonstrada; anexar nomes/XML/stack e causa reproduzida.
+
+B. BUGS DO HARNESS P4 A CORRIGIR ANTES NOVO VEREDITO
+O fonte atual imprime P4 OK incondicionalmente ao fim:
+- rc do prefill (213-216) nao bloqueia sampler em erro.
+- decode error dentro do loop imprime e break, mas termina como OK.
+- segundo pedido com zero tokens/saida vazia tambem termina OK.
+- nao ha terceira execucao A nem assert comparando A1/A2.
+Implementar resultado estruturado e fail-closed: sucesso requer TODAS as provas obrigatorias; erros devolvem status nao-sucesso ao runner/UI. Verificar prefill/decode/sampler/logits/template/tokenize/resultados; nenhum erro pode virar benchmark valido. Distinguir smoke, reset e benchmark com status separados.
+Testes offline/mutacoes: injetar prefill rc!=0, decode rc!=0, template invalido, tokenizer failure, zero resposta, truncamento por cap, reset insuficiente e contexto CPU errado -> cada um deve falhar antes declarar sucesso. Nao simular dados de runtime como evidencia de NPU.
+
+C. PROMPT, SAMPLER E RESET
+Criar funcao de request unica para A/B/A, aplicando MESMO contrato de template/tokenizacao em todos. P2 cru (243) nao diagnostica por si so bug de reset; corrigir e retestar sem afirmar causa antes evidencia.
+Usar prompt de traducao do seam HyMt2Translator/model card para workload produto, registrando prompt final/token IDs/hash/idioma. Chat template do GGUF e diagnostico distinto; nao trocar silenciosamente entre os dois contratos nem aplicar template duas vezes.
+Registrar EOG via API real llama_vocab_is_eog quando disponivel no pin; comparar so llama_vocab_eos pode ignorar outros tokens terminais. Confirmar assinatura no fonte. Reiniciar sampler/historico por request segundo contrato do fork; verificar accept interno antes introduzir accept explicito.
+Checar token_to_piece: retorno negativo indica buffer insuficiente, nao ignorar piece e continuar contador. Redimensionar com limite seguro e validar retorno; registrar quantidade emitida versus consumida/contexto e EOG.
+Limite 24 tokens serve smoke curto, nao validacao de corpus medio. Definir cap seguro adequado a cada corpus, timeout e stop_reason: EOG, cancel, timeout, limit, error. Cap atingido nao conta traducao completa.
+Antes/depois reset: pos_min/pos_max/seqIDs conforme APIs reais, memoria limpa e sampler reiniciado. A1->clear->B->clear->A2 no MESMO ctx/modelo; A1/A2 greedy comparados integralmente e B nao vazia. Referencia CPU com mesmo prompt/config. Se output diferir, localizar e nao maquiar com reload.
+
+D. METRICAS E ROTA EFETIVA
+ttft=0ms atual (228) mede desde tg, iniciado DEPOIS do prefill; primeiro token ja tem logits prontos. Nao e TTFT pedido->primeiro token. Renomear como latencia_pos_prefill_primeiro_piece_ms e adicionar request_start -> first_visible_piece, mais cold-start se for incluir load. Preservar precisao sub-ms nos logs, sem arredondar a zero e chamar instantaneo.
+Prefill do probe com 15 tokens nao fundamenta ganho esperado do Smart. Nao comparar com GPU 25-60 tok/s de geracao: prefill e decode sao fases distintas. Capturar CPU/OpenCL/Vulkan prefill matched e custo handoff antes estimar qualquer ganho.
+Ler sincronizacao real do llama_decode no pin/route e exigir fronteira medida apos conclusao efetiva. Contador n_gen atual e incrementado antes decode; definir claramente se mede tokens emitidos, consumidos ou execucoes de decode, para evitar off-by-one/EOG invisivel.
+Log HTP selecionado e load completo sao indicios, mas P4 precisa placement real do grafo/fallback e memoria quando observavel; nao afirmar 'pesos no DSP' somente pelo arquivo ter 1,13GB e devices array. Anexar linhas de backend/session/model tensor placement e nodes CPU/HTP no run. Logs repetidos no REPORT final sao DUPLICACAO da mesma tentativa, nao segunda execucao independente.
+
+E. F2: FECHAR AGORA SEM TOCAR DADOS DO SIG
+Sinal real pos-aquisicao de g_mutex; wait deadline e cleanup bounded; testar worker atrasado. GREEN getter nonblocking e RED mutante getter g_mutex. Nao Thread.sleep como garantia.
+Restricao do hook por flag NATIVA EXPLICITA de teste, nao apenas debug: produto distribui APK debug. Conferir binding/export e lib produto OFF, test lib ON. Anexar comandos/hashes/resultado nm adequado com stripping considerado, mais auditar config/code para excluir hooks, nao somente simbolos ocultos.
+Executar instrumentacao em target autorizado seguro; am instrument manual nao deve ser seguido de install/uninstall do SIG para preparar alvo. Guard offline9/9 conservar e auditar cobertura real para comandos indiretos/Gradle/package destrutivo. Serial fixo em todos.
+
+F. F4 EM PARALELO: CONTRATO E PRIMEIRO PROTOTIPO
+Comparar dois contextos export/import e mesmo contexto roteado. Inspecionar implementacao, nao apenas declaracoes de llama.h. Mesmo fork/pin/model/config para ambos contextos; state version/layout/FA/seq/KVtypes/pos/RoPE/logits/sync/lifetime/repack e memoria de pesos devem ser explicitados.
+Provar continuidade do primeiro token e ausencia de replay integral do prompt. Se logits nao serializam, planejar ponte minima validada; nao duplicar ultimo token. Ensaios CPU->CPU / HTP->CPU so controle, NAO Smart final.
+Priorizar NPU->Vulkan. Verificar lib candidata realmente contem runtime Vulkan funcional (presente no link nao basta), loader OpenCL do fork e preservacao Q8/reset/F3b/cache. Nao colidir ggml com Whisper nem atualizar Whisper para encaixar Hexagon.
+Build isolado com manifest/pin/flags/SHA e parametros. Arquitetura v73 gerada nao implica suporte testado, e 93,5MB nao e tamanho final do pacote stripado.
+Prototipo medido no probe separado apos P4 gate; se strategy impossivel, reportar incompatibilidade e alternativa concreta. Nao iniciar grid de tuning nem UI fake.
+
+G. CI E GATES
+Entregar as duas falhas nominais, total/exclusive pass/fail/skip, stack e reproducao na worktree do commit. Preservar WIP alheio; nao alterar teste SmartJoin/Ffmpeg so para CI passar. Corrigir causa minima ou reportar baseline preexistente com reproducer. JDK runner destravado e progresso, nao CI verde.
+Gates atuais precisam hash/commit/wip timestamp da execucao; r7b antigo nao cobre automaticamente novos patches. Build rapido Android nao prova compilacao da lib fork nova. Nenhuma release nesta rodada sem objeto/aprovacao correspondente.
+
+H. PROXIMA ENTREGA
+docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA2.txt A-H e logs em docs/npu-hymt2/smart-rodada2/:
+1. P4 fail-closed/mutantes, A-B-A pleno e matched CPU/HTP curto/medio.
+2. F2 deterministico e hook ausente no candidato publicavel.
+3. Contrato handoff e prototipo Vulkan (OpenCL design/next se ainda nao testado).
+4. CI duas falhas identificadas/resolvidas ou bloqueadas com causa.
+5. Reconciliacao de tentativas deduplicada, full SHA manifest e exits por script.
+Estados: CCE/PARCIAL/PENDENTE/BLOQUEADO por camada e rota, sem P4 total enquanto segunda resposta/ABA ausente.
+Nao pedir escolha abstrata 'F2 ou F4'; executar prioridades acima dentro do escopo autorizado. Pedir somente decisao realmente necessaria de side effect ou migracao do modelo. c4bf permanece referencia e meta dual Smart permanece intacta.

@@ -1,0 +1,396 @@
+--------- beginning of main
+10-07 15:30:26.604 I/NpuProbe( 1327): nativeLibraryDir=/data/app/~~AQ7w2lkg2KWRUinilKTQiw==/br.gov.sp.pcsp.npuprobe-8kTa9UhYkr-6OIg8-SmAsw==/lib/arm64
+10-07 15:30:26.606 I/NpuProbe( 1327): libdir=/data/app/~~AQ7w2lkg2KWRUinilKTQiw==/br.gov.sp.pcsp.npuprobe-8kTa9UhYkr-6OIg8-SmAsw==/lib/arm64
+10-07 15:30:26.606 I/NpuProbe( 1327): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 15:30:26.606 I/NpuProbe( 1327): controle-sistema (liblog.so)=OK
+10-07 15:30:26.606 I/NpuProbe( 1327): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 15:30:26.608 I/NpuProbe( 1327): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 15:30:26.608 I/NpuProbe( 1327): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 15:30:26.609 I/NpuProbe( 1327): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 15:30:26.610 I/NpuProbe( 1327): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 15:30:26.611 I/NpuProbe( 1327): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 15:30:26.621 I/NpuProbe( 1327): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 15:30:26.622 I/NpuProbe( 1327): [ggml] 
+10-07 15:30:26.622 I/NpuProbe( 1327): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 15:30:26.622 I/NpuProbe( 1327): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 15:30:26.622 I/NpuProbe( 1327): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 15:30:26.623 I/NpuProbe( 1327): [ggml] ggml-hex: FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+10-07 15:30:26.623 I/NpuProbe( 1327): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 15:30:26.623 I/NpuProbe( 1327): [ggml] ggml-hex: Hexagon Arch version v81, DMA64 enabled
+10-07 15:30:26.623 I/NpuProbe( 1327): [ggml] ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+10-07 15:30:26.624 I/NpuProbe( 1327): load_all_from_path=15ms
+10-07 15:30:26.624 I/NpuProbe( 1327): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~AQ7w2lkg2KWRUinilKTQiw==/br.gov.sp.pcsp.npuprobe-8kTa9UhYkr-6OIg8-SmAsw==/lib/arm64/libggml-hexagon.so
+10-07 15:30:26.624 I/NpuProbe( 1327): load(hexagon direto)=FALHOU em 0ms
+10-07 15:30:26.624 I/NpuProbe( 1327): devices=4
+10-07 15:30:26.624 I/NpuProbe( 1327):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 15:30:26.624 I/NpuProbe( 1327):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 15:30:26.624 I/NpuProbe( 1327):   dev[2] HTP0 (Hexagon)
+10-07 15:30:26.624 I/NpuProbe( 1327):   dev[3] CPU (CPU)
+10-07 15:30:26.624 I/NpuProbe( 1327): [ggml] ggml-hex: HTP0 allocating new session : domain 3 phys-idx 0 virt-idx 0
+10-07 15:30:26.656 I/NpuProbe( 1327): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 15:30:26.657 I/NpuProbe( 1327): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d4b50c80
+10-07 15:30:26.662 I/NpuProbe( 1327): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 8192 n-ops 1280 vmem 3311845376
+10-07 15:30:26.666 I/NpuProbe( 1327): dev_init(HTP0)=41ms -> SESSAO ABERTA
+10-07 15:30:26.667 I/NpuProbe( 1327): graph_compute(MUL_MAT 64x64)=0.9ms status=0
+10-07 15:30:26.667 I/NpuProbe( 1327): c[0]=128.000000 (esperado 128.0)
+10-07 15:30:26.667 I/NpuProbe( 1327): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 15:30:26.668 I/NpuProbe( 1327): REPORT:
+10-07 15:30:26.668 I/NpuProbe( 1327): libdir=/data/app/~~AQ7w2lkg2KWRUinilKTQiw==/br.gov.sp.pcsp.npuprobe-8kTa9UhYkr-6OIg8-SmAsw==/lib/arm64
+10-07 15:30:26.668 I/NpuProbe( 1327): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 15:30:26.668 I/NpuProbe( 1327): controle-sistema (liblog.so)=OK
+10-07 15:30:26.668 I/NpuProbe( 1327): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 15:30:26.668 I/NpuProbe( 1327): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 15:30:26.668 I/NpuProbe( 1327): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 15:30:26.668 I/NpuProbe( 1327): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 15:30:26.668 I/NpuProbe( 1327): load_all_from_path=15ms
+10-07 15:30:26.668 I/NpuProbe( 1327): load(hexagon direto)=FALHOU em 0ms
+10-07 15:30:26.668 I/NpuProbe( 1327): devices=4
+10-07 15:30:26.668 I/NpuProbe( 1327):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 15:30:26.668 I/NpuProbe( 1327):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 15:30:26.668 I/NpuProbe( 1327):   dev[2] HTP0 (Hexagon)
+10-07 15:30:26.668 I/NpuProbe( 1327):   dev[3] CPU (CPU)
+10-07 15:30:26.668 I/NpuProbe( 1327): dev_init(HTP0)=41ms -> SESSAO ABERTA
+10-07 15:30:26.668 I/NpuProbe( 1327): graph_compute(MUL_MAT 64x64)=0.9ms status=0
+10-07 15:30:26.668 I/NpuProbe( 1327): c[0]=128.000000 (esperado 128.0)
+10-07 15:30:26.668 I/NpuProbe( 1327): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 15:30:26.670 I/NpuProbe( 1327): AUTO-GATILHO='smart:vulkan'
+10-07 15:30:26.671 I/NpuProbe( 1327): SMART iniciando rota=vulkan com /data/local/tmp/hymt2_app.gguf
+10-07 15:30:26.671 I/NpuProbe( 1327): SMART modelo=/data/local/tmp/hymt2_app.gguf rota=vulkan
+10-07 15:30:26.671 I/NpuProbe( 1327): origem: HTP0 (Hexagon) | destino: Vulkan0 (Adreno (TM) 840)
+10-07 15:30:28.496 I/NpuProbe( 1327): load(origem)=1824ms
+10-07 15:30:29.367 I/NpuProbe( 1327): load(destino)=871ms
+10-07 15:30:29.388 I/NpuProbe( 1327): ctx(origem)=20ms
+10-07 15:30:29.548 I/NpuProbe( 1327): ctx(destino)=160ms
+10-07 15:30:29.548 I/NpuProbe( 1327): prompt_tokens=31
+10-07 15:30:29.636 I/NpuProbe( 1327): prefill_htp: 31 tok em 88ms (351.3 tok/s) rc=0
+10-07 15:30:29.648 I/NpuProbe( 1327): export: 2032797B em 1ms
+10-07 15:30:29.651 I/NpuProbe( 1327): import: 2032797B em 3ms
+10-07 15:30:29.651 I/NpuProbe( 1327): pos_max(destino)=30 (esperado 30)
+10-07 15:30:30.732 I/NpuProbe( 1327): smart_geracao: 24 tok em 1081ms (22.2 tok/s) ttft=474ms
+10-07 15:30:30.732 I/NpuProbe( 1327): saida_smart: ear
+10-07 15:30:30.732 I/NpuProbe( 1327): - 
+10-07 15:30:30.732 I/NpuProbe( 1327): “Meat
+10-07 15:30:30.732 I/NpuProbe( 1327): “Hob
+10-07 15:30:30.732 I/NpuProbe( 1327): “Hob
+10-07 15:30:30.732 I/NpuProbe( 1327): “Hob
+10-07 15:30:30.732 I/NpuProbe( 1327): “Hob
+10-07 15:30:30.758 I/NpuProbe( 1327): comparacao: token_destino=910 vs token_origem=310 -> DIVERGENTES (investigar!) (rc_orig=0)
+10-07 15:30:30.762 I/NpuProbe( 1327): reset: dois contextos limpos
+10-07 15:30:30.800 I/NpuProbe( 1327): RESULTADO: SMART vulkan EXECUTADO (ver metricas e comparacao acima)
+10-07 15:30:30.813 I/NpuProbe( 1327): SMART REPORT:
+10-07 15:30:30.813 I/NpuProbe( 1327): SMART (vulkan)
+10-07 15:30:30.813 I/NpuProbe( 1327): 
+10-07 15:30:30.813 I/NpuProbe( 1327): SMART modelo=/data/local/tmp/hymt2_app.gguf rota=vulkan
+10-07 15:30:30.813 I/NpuProbe( 1327): origem: HTP0 (Hexagon) | destino: Vulkan0 (Adreno (TM) 840)
+10-07 15:30:30.813 I/NpuProbe( 1327): load(origem)=1824ms
+10-07 15:30:30.813 I/NpuProbe( 1327): load(destino)=871ms
+10-07 15:30:30.813 I/NpuProbe( 1327): ctx(origem)=20ms
+10-07 15:30:30.813 I/NpuProbe( 1327): ctx(destino)=160ms
+10-07 15:30:30.813 I/NpuProbe( 1327): prompt_tokens=31
+10-07 15:30:30.813 I/NpuProbe( 1327): prefill_htp: 31 tok em 88ms (351.3 tok/s) rc=0
+10-07 15:30:30.813 I/NpuProbe( 1327): export: 2032797B em 1ms
+10-07 15:30:30.813 I/NpuProbe( 1327): import: 2032797B em 3ms
+10-07 15:30:30.813 I/NpuProbe( 1327): pos_max(destino)=30 (esperado 30)
+10-07 15:30:30.813 I/NpuProbe( 1327): smart_geracao: 24 tok em 1081ms (22.2 tok/s) ttft=474ms
+10-07 15:30:30.813 I/NpuProbe( 1327): saida_smart: ear
+10-07 15:30:30.813 I/NpuProbe( 1327): - 
+10-07 15:30:30.813 I/NpuProbe( 1327): “Meat
+10-07 15:30:30.813 I/NpuProbe( 1327): “Hob
+10-07 15:30:30.813 I/NpuProbe( 1327): “Hob
+10-07 15:30:30.813 I/NpuProbe( 1327): “Hob
+10-07 15:30:30.813 I/NpuProbe( 1327): “Hob
+10-07 15:30:30.813 I/NpuProbe( 1327): comparacao: token_destino=910 vs token_origem=310 -> DIVERGENTES (investigar!) (rc_orig=0)
+10-07 15:30:30.813 I/NpuProbe( 1327): reset: dois contextos limpos
+10-07 15:30:30.813 I/NpuProbe( 1327): RESULTADO: SMART vulkan EXECUTADO (ver metricas e comparacao acima)
+10-07 15:32:13.219 I/NpuProbe( 2286): nativeLibraryDir=/data/app/~~AQ7w2lkg2KWRUinilKTQiw==/br.gov.sp.pcsp.npuprobe-8kTa9UhYkr-6OIg8-SmAsw==/lib/arm64
+10-07 15:32:13.219 I/NpuProbe( 2286): libdir=/data/app/~~AQ7w2lkg2KWRUinilKTQiw==/br.gov.sp.pcsp.npuprobe-8kTa9UhYkr-6OIg8-SmAsw==/lib/arm64
+10-07 15:32:13.219 I/NpuProbe( 2286): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 15:32:13.219 I/NpuProbe( 2286): controle-sistema (liblog.so)=OK
+10-07 15:32:13.220 I/NpuProbe( 2286): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 15:32:13.221 I/NpuProbe( 2286): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 15:32:13.221 I/NpuProbe( 2286): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 15:32:13.222 I/NpuProbe( 2286): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 15:32:13.234 I/NpuProbe( 2286): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 15:32:13.234 I/NpuProbe( 2286): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 15:32:13.251 I/NpuProbe( 2286): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 15:32:13.252 I/NpuProbe( 2286): [ggml] 
+10-07 15:32:13.252 I/NpuProbe( 2286): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 15:32:13.252 I/NpuProbe( 2286): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 15:32:13.252 I/NpuProbe( 2286): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 15:32:13.254 I/NpuProbe( 2286): [ggml] ggml-hex: FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+10-07 15:32:13.254 I/NpuProbe( 2286): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 15:32:13.254 I/NpuProbe( 2286): [ggml] ggml-hex: Hexagon Arch version v81, DMA64 enabled
+10-07 15:32:13.254 I/NpuProbe( 2286): [ggml] ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+10-07 15:32:13.257 I/NpuProbe( 2286): load_all_from_path=35ms
+10-07 15:32:13.257 I/NpuProbe( 2286): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~AQ7w2lkg2KWRUinilKTQiw==/br.gov.sp.pcsp.npuprobe-8kTa9UhYkr-6OIg8-SmAsw==/lib/arm64/libggml-hexagon.so
+10-07 15:32:13.257 I/NpuProbe( 2286): load(hexagon direto)=FALHOU em 0ms
+10-07 15:32:13.257 I/NpuProbe( 2286): devices=4
+10-07 15:32:13.257 I/NpuProbe( 2286):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 15:32:13.257 I/NpuProbe( 2286):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 15:32:13.257 I/NpuProbe( 2286):   dev[2] HTP0 (Hexagon)
+10-07 15:32:13.257 I/NpuProbe( 2286):   dev[3] CPU (CPU)
+10-07 15:32:13.257 I/NpuProbe( 2286): [ggml] ggml-hex: HTP0 allocating new session : domain 3 phys-idx 0 virt-idx 0
+10-07 15:32:13.293 I/NpuProbe( 2286): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 15:32:13.293 I/NpuProbe( 2286): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077cfe212c0
+10-07 15:32:13.302 I/NpuProbe( 2286): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 8192 n-ops 1280 vmem 3311845376
+10-07 15:32:13.305 I/NpuProbe( 2286): dev_init(HTP0)=48ms -> SESSAO ABERTA
+10-07 15:32:13.306 I/NpuProbe( 2286): graph_compute(MUL_MAT 64x64)=0.9ms status=0
+10-07 15:32:13.306 I/NpuProbe( 2286): c[0]=128.000000 (esperado 128.0)
+10-07 15:32:13.306 I/NpuProbe( 2286): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 15:32:13.307 I/NpuProbe( 2286): REPORT:
+10-07 15:32:13.307 I/NpuProbe( 2286): libdir=/data/app/~~AQ7w2lkg2KWRUinilKTQiw==/br.gov.sp.pcsp.npuprobe-8kTa9UhYkr-6OIg8-SmAsw==/lib/arm64
+10-07 15:32:13.307 I/NpuProbe( 2286): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 15:32:13.307 I/NpuProbe( 2286): controle-sistema (liblog.so)=OK
+10-07 15:32:13.307 I/NpuProbe( 2286): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 15:32:13.307 I/NpuProbe( 2286): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 15:32:13.307 I/NpuProbe( 2286): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 15:32:13.307 I/NpuProbe( 2286): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 15:32:13.307 I/NpuProbe( 2286): load_all_from_path=35ms
+10-07 15:32:13.307 I/NpuProbe( 2286): load(hexagon direto)=FALHOU em 0ms
+10-07 15:32:13.307 I/NpuProbe( 2286): devices=4
+10-07 15:32:13.307 I/NpuProbe( 2286):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 15:32:13.307 I/NpuProbe( 2286):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 15:32:13.307 I/NpuProbe( 2286):   dev[2] HTP0 (Hexagon)
+10-07 15:32:13.307 I/NpuProbe( 2286):   dev[3] CPU (CPU)
+10-07 15:32:13.307 I/NpuProbe( 2286): dev_init(HTP0)=48ms -> SESSAO ABERTA
+10-07 15:32:13.307 I/NpuProbe( 2286): graph_compute(MUL_MAT 64x64)=0.9ms status=0
+10-07 15:32:13.307 I/NpuProbe( 2286): c[0]=128.000000 (esperado 128.0)
+10-07 15:32:13.307 I/NpuProbe( 2286): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 15:32:13.307 I/NpuProbe( 2286): AUTO-GATILHO='smart:opencl'
+10-07 15:32:13.307 I/NpuProbe( 2286): SMART iniciando rota=opencl com /data/local/tmp/hymt2_app.gguf
+10-07 15:32:13.308 I/NpuProbe( 2286): SMART modelo=/data/local/tmp/hymt2_app.gguf rota=opencl
+10-07 15:32:13.308 I/NpuProbe( 2286): origem: HTP0 (Hexagon) | destino: GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 15:32:15.090 I/NpuProbe( 2286): load(origem)=1781ms
+10-07 15:32:15.233 I/NpuProbe( 2286): [ggml] ggml_opencl: kernel cache enabled at '/data/user/0/br.gov.sp.pcsp.npuprobe/cache/llama.cpp/cl-cache'
+10-07 15:32:15.233 I/NpuProbe( 2286): [ggml] ggml_opencl: loading OpenCL kernels
+10-07 15:32:15.269 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:15.278 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:15.288 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:15.297 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:15.304 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:15.311 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:15.347 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:15.994 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.004 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.012 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.030 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.059 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.082 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.091 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.106 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.121 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.138 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.160 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.215 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.270 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.368 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.391 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.415 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.438 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.470 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.498 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.526 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.553 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.582 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.607 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.661 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.696 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.715 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.732 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.750 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.789 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.805 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.890 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.909 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.943 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.957 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:16.970 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.009 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.252 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.267 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.281 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.305 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.332 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.400 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.426 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.448 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.488 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.529 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.572 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.614 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.651 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.691 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.732 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.774 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.814 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.857 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.957 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.973 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.992 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:17.999 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.028 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.038 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.096 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.104 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.112 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.125 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.138 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.153 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.168 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.183 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.192 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.200 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.213 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.228 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.240 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.251 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.259 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.270 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.279 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.292 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.309 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.322 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.336 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.348 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.361 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.437 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.452 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.467 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.492 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.501 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.643 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.693 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.746 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.799 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.810 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:18.839 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.375 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.387 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.453 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.476 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.494 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.518 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.581 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.596 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.610 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.713 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.871 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.913 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.913 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.954 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:19.995 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.012 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.043 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.059 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.217 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.235 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.419 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.474 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.493 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.546 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.565 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.654 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.740 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.796 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.813 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.866 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:20.952 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:21.132 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:21.275 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:21.375 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:21.462 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:21.488 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:21.749 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:21.835 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.117 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.151 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.186 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.224 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.244 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.391 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.422 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.452 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.471 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.619 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.758 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.785 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.937 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:22.963 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.114 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.152 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.306 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.408 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.506 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.603 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.925 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.956 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:23.983 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.141 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.168 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.322 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.427 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.479 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.636 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.645 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.662 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:24.824 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:25.037 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:25.705 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:25.741 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:25.777 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:25.986 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:26.030 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:26.049 I/NpuProbe( 2286): [ggml] .
+10-07 15:32:26.049 I/NpuProbe( 2286): [ggml] 
+10-07 15:32:30.261 I/NpuProbe( 2286): load(destino)=15171ms
+10-07 15:32:30.281 I/NpuProbe( 2286): ctx(origem)=20ms
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: OpenCL device: QUALCOMM Adreno(TM) 840
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: subgroup shuffle support: true
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: device FP16 support: true
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: khr dot product support: true
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: mem base addr align: 128
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: global mem size: 7555 MB
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: device max workgroup size: 1024
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: SVM fine grain system support: false
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: SVM atomics support: true
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-07 15:32:30.281 I/NpuProbe( 2286): [ggml] ggml_opencl: Adreno xmem F16xF32 GEMM enabled (temporary weight prepack)
+10-07 15:32:30.312 I/NpuProbe( 2286): ctx(destino)=32ms
+10-07 15:32:30.313 I/NpuProbe( 2286): prompt_tokens=31
+10-07 15:32:30.408 I/NpuProbe( 2286): prefill_htp: 31 tok em 95ms (326.0 tok/s) rc=0
+10-07 15:32:30.443 I/NpuProbe( 2286): export: 2032797B em 1ms
+10-07 15:32:30.473 I/NpuProbe( 2286): import: 2032797B em 30ms
+10-07 15:32:30.473 I/NpuProbe( 2286): pos_max(destino)=30 (esperado 30)
+10-07 15:32:30.765 I/NpuProbe( 2286): smart_geracao: 7 tok em 291ms (24.0 tok/s) ttft=52ms
+10-07 15:32:30.765 I/NpuProbe( 2286): saida_smart: om dia, como você está?
+10-07 15:32:30.791 I/NpuProbe( 2286): comparacao: token_destino=310 vs token_origem=310 -> IGUAIS (handoff correto) (rc_orig=0)
+10-07 15:32:30.799 I/NpuProbe( 2286): reset: dois contextos limpos
+10-07 15:32:30.968 I/NpuProbe( 2286): RESULTADO: SMART opencl EXECUTADO (ver metricas e comparacao acima)
+10-07 15:32:30.977 I/NpuProbe( 2286): SMART REPORT:
+10-07 15:32:30.977 I/NpuProbe( 2286): SMART (opencl)
+10-07 15:32:30.977 I/NpuProbe( 2286): 
+10-07 15:32:30.977 I/NpuProbe( 2286): SMART modelo=/data/local/tmp/hymt2_app.gguf rota=opencl
+10-07 15:32:30.977 I/NpuProbe( 2286): origem: HTP0 (Hexagon) | destino: GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 15:32:30.977 I/NpuProbe( 2286): load(origem)=1781ms
+10-07 15:32:30.977 I/NpuProbe( 2286): load(destino)=15171ms
+10-07 15:32:30.977 I/NpuProbe( 2286): ctx(origem)=20ms
+10-07 15:32:30.977 I/NpuProbe( 2286): ctx(destino)=32ms
+10-07 15:32:30.977 I/NpuProbe( 2286): prompt_tokens=31
+10-07 15:32:30.977 I/NpuProbe( 2286): prefill_htp: 31 tok em 95ms (326.0 tok/s) rc=0
+10-07 15:32:30.977 I/NpuProbe( 2286): export: 2032797B em 1ms
+10-07 15:32:30.977 I/NpuProbe( 2286): import: 2032797B em 30ms
+10-07 15:32:30.977 I/NpuProbe( 2286): pos_max(destino)=30 (esperado 30)
+10-07 15:32:30.977 I/NpuProbe( 2286): smart_geracao: 7 tok em 291ms (24.0 tok/s) ttft=52ms
+10-07 15:32:30.977 I/NpuProbe( 2286): saida_smart: om dia, como você está?
+10-07 15:32:30.977 I/NpuProbe( 2286): comparacao: token_destino=310 vs token_origem=310 -> IGUAIS (handoff correto) (rc_orig=0)
+10-07 15:32:30.977 I/NpuProbe( 2286): reset: dois contextos limpos
+10-07 15:32:30.977 I/NpuProbe( 2286): RESULTADO: SMART opencl EXECUTADO (ver metricas e comparacao acima)

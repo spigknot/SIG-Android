@@ -1,0 +1,9 @@
+=== SUITE DE MUTANTES (fail-closed do P4v2) ===
+DETECTADO prefill_rc: FALHA reportada como esperado
+DETECTADO decode_rc: FALHA reportada como esperado
+DETECTADO template_bad: FALHA reportada como esperado
+DETECTADO tokenize_fail: FALHA reportada como esperado
+DETECTADO zero_resp: FALHA reportada como esperado
+DETECTADO cap_trunc: FALHA reportada como esperado
+DETECTADO reset_bad: FALHA reportada como esperado
+DETECTADO cpu_ctx: FALHA reportada como esperado

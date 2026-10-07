@@ -1,0 +1,4 @@
+10-07 15:18:41.952 25513 26120 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): cpu_ctx
+10-07 15:18:41.953 25513 26120 I NpuProbe: RESULTADO: P4v2 FALHA (device efetivo != pedido)
+10-07 15:18:41.953 25513 26120 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): cpu_ctx
+10-07 15:18:41.953 25513 26120 I NpuProbe: RESULTADO: P4v2 FALHA (device efetivo != pedido)

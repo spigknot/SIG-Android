@@ -1,0 +1,180 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 2
+=========================================================================
+Data: 07/10/2026 (noite). Executor: agente. Ordens: "SMART DUAL-BACKEND,
+POS RODADA 1" (secoes A-H) executadas na prioridade decidida: endurecer P4
++ F2 -> contrato F4 -> P4 A-B-A pleno -> prototipo NPU->Vulkan e NPU->OpenCL.
+Escopo: A1-A6 autorizados pelo usuario (registro verbatim no apendice);
+nenhuma publicacao/deploy no SIG principal; nada de UI/produto/release.
+Estados: CCE / PARCIAL / PENDENTE / BLOQUEADO por camada e rota.
+
+------------------------------------------------------------------------
+A. ESCOPO, IDENTIDADE DE ARTEFATOS E ESTADO FRESCO
+------------------------------------------------------------------------
+A.1 Repo: main = a4af73c + fixes do dia (CI/locale); gates da rodada em
+    docs/npu-hymt2/smart-rodada2/MANIFESTO-SHA256.txt e r2-gates.log
+    (commit/hora_utc/wip-hash registrados no proprio log - ordem G).
+A.2 Device: CPH2747 via wifi (100.108.27.64:5555; identidade validada pelo
+    wrapper fail-closed; serial interno 3B15BD00FVE00000). Execucao com tela
+    em doze via AUTO-GATILHO (runs por arquivo + am start; sem toques);
+    stayon temporario durante a sessao (revertido ao fim).
+A.3 Artefatos build Smart (servidor, container snapdragon v0.7; NDK r29):
+    build-smart COMPLETO (v11 da saga de fixes): libllama.so 34.735.672 B;
+    libggml-vulkan.so 34.674.680 B; libggml-opencl.so 13.308.032 B;
+    libggml-hexagon.so 7.265.384 B; libggml-base.so 8.238.096 B;
+    libggml-cpu.so 4.903.056 B; libggml.so 461.544 B; skel htp-v81
+    876.296 B. DESVIO DOCUMENTADO: prototipo linkado com ANDROID_PLATFORM=28
+    (o stub Vulkan 28 tem vkGetPhysicalDeviceFeatures2; o produto seguira a
+    tecnica do fork SIG: vulkan-28 por path + restante 24).
+A.4 Configuracao canonica do build Smart (achados reais, todos com fix):
+    glslc do NDK shader-tools no PATH; SPIRV-Headers com find_package CONFIG
+    no layout padrao; vulkan.hpp das headers empacotadas do SIG;
+    PREBUILT_LIB_DIR=android_aarch64 (o SDK usa ${VAR} sem aspas);
+    platform-28 para o link do Vulkan. Whisper: NENHUM toque (binario e
+    fonte intactos nesta rodada).
+
+------------------------------------------------------------------------
+B. PROTECAO DE DADOS E VACINAS
+------------------------------------------------------------------------
+B.1 F2 FECHADO (ordem E): hooks sigTestHoldGmutex/sigTestHoldState sob
+    #ifdef SIG_ENABLE_TEST_HOOKS (option CMake OFF por padrao); nm -D:
+    PRODUTO = 0 simbolos sigTest (sha adc3605c...); VARIANTE DE TESTE =
+    2 simbolos (sha def32fbd...; artefato guardado fora do repo). Auditoria
+    de config/code: a unica definicao vem da option explicita (nao "debug");
+    texto do relatorio r5/anexos anteriores. Sinal real pos-aquisicao +
+    prontidao com timeout que FALHA + cleanup join/assert + teste de hook
+    inerte. Guard offline do wrapper: 9/9 conservado (serial ausente/
+    errado/outro aparelho/package protegido/hash divergente).
+B.2 RETIFICACOES registradas (ordem A): "restauracao PARCIAL" (configs do
+    app nao recuperadas); "rotas produto nao alteradas/testadas nesta fase";
+    fork buildado != runtime (nesta rodada os runtimes Vulkan/OpenCL FORAM
+    exercitados no app separado; Whisper segue nao testado);
+    "serial evita alvo errado, nao cleanup destrutivo" (procedimento de
+    commit com backup/restore segue).
+B.3 Incidente/mutantes: o crash anterior do loadLibrary (pre-condicao) foi
+    causado por NEEDED libOpenCL.so sem opt-in no manifest do probe
+    (licao R6/R7 reaplicada); corrigido com uses-native-library.
+
+------------------------------------------------------------------------
+C. MODELO c4bf vs dc5f — INTEGRIDADE E PROVENIENCIA (complemento R1)
+------------------------------------------------------------------------
+C.1 Comparador v2 (golden-check OK; sanity 354/354): 129 tensores identicos
+    / 225 diferentes. ANALISE DE PADDING (ordem A): para os 225, primeira
+    divergencia encontrada em 223 no PRIMEIRO decimo do tensor (byte ~0),
+    2 no segundo; ZERO casos de divergencia restrita aos ultimos 64 B.
+    => NENHUMA diferenca e' de padding/overflow de leitura: os 225 sao
+    PESOS QUANTIZADOS GENUINAMENTE DIFERENTES nos arquivos comparados.
+    Evidencia: docs/npu-hymt2/smart-rodada1/analise-padding.txt
+    (sha 47b3ce70...). Provenance registrada: c4bf=Hf_F16 (35 kv);
+    dc5f=Tencent 1.8B (33 kv) — quantizacoes independentes.
+C.2 Decisao mantida: **c4bf permanece o modelo-referencia da campanha**;
+    NAO migrar para dc5f (pendente de juste do usuario/especialista).
+
+------------------------------------------------------------------------
+D. P4 — APP-UID COMPLETO, FAIL-CLOSED (ordens B/C): PARCIAL-CCO
+------------------------------------------------------------------------
+D.1 Probe v2 (runP4) reescrito: resultado ESTRUTURADO fail-closed; funcao
+    de REQUEST UNICA (mesmo contrato de template/tokenizacao para A/B/A);
+    prompt do SEAM de produto (HyMt2Translator: "Translate the following
+    text into Portuguese..." + wrap <|hy_User|>...<|hy_Assistant|>;
+    add_special=false; registrar tokens/hash/idioma); EOG via
+    llama_vocab_is_eog; token_to_piece com redimensionamento limitado;
+    stop_reason (EOG/limite/erro); metricas renomeadas
+    (pos_prefill_primeiro_piece_ms SEPARADO de request->piece e cold).
+D.2 EXECUCOES (2 independentes, pids 14146 e 3809):
+    A1 "Bom dia, como você está?" (8 pieces, EOG) -> reset1 pos_max=-1 OK
+    -> B "O clima está bom hoje." (8 pieces, EOG) -> reset2 OK
+    -> A2 == A1 COMPARACAO INTEGRAL (greedy, mesmo ctx/modelo) -> SUCESSO.
+    metricas (run 3809): prefill=73.74ms; pp1=0.22ms; request->piece=73.96ms;
+    cold_total=2479ms; promptA tokens=31 hash=a5de647b1ff84e74.
+D.3 MUTANTES (fail-closed provado NO APARELHO; 8/8 DETECTADOS):
+    prefill_rc / decode_rc / template_bad / tokenize_fail / zero_resp /
+    cap_trunc (categorizado "cap_atingido(parcial)") / reset_bad
+    (reset1_falhou reset2_falhou) / cpu_ctx (device efetivo != pedido).
+    Nenhum caminho de erro produz "SUCESSO"; evidencias por mutante em
+    smart-rodada2/mutante-*.txt.
+D.4 O QUE FALTA PARA P4 "COMPLETO" (ordem H.1): bateria matched
+    CPU/HTP curto+MEDIO (o aqui e' curto; "medio" ainda nao) e a referencia
+    CPU do A-B-A (o controle CPU rodou no Smart; para o P4 falta repetir o
+    ciclo no CPU). Status: PARCIAL-CCO (viabilidade + reset + fail-closed
+    provados; matched medio pendente).
+
+------------------------------------------------------------------------
+E. HANDOFF SMART — CONTRATO (F4) E PROTOTIPO MEDIDO
+------------------------------------------------------------------------
+E.1 Contrato (docs/npu-hymt2/smart-rodada1/HANDOFF-CONTRACT.md; auditoria
+    no fonte: state_write_data serializa arch+KV via tensor_get/set host):
+    estrategia A (2 contextos + export/import) escolhida; invariantes
+    impostas por fora (mesma build/modelo/n_ctx/KV/FA); ponte de token via
+    logits (sampler UMA vez); zero replay por construcao; validacao
+    embutida = comparacao origem-vs-destino (mesmo estado => mesmo greedy).
+E.2 EXECUCOES SMART (4 rodadas no device):
+    (a) HTP->CPU (controle): token_destino=310 == token_origem=310 ->
+        IGUAIS; saida "om dia, como você está?" — serializacao SA.
+    (b) HTP->OpenCL: token 310 == 310 -> IGUAIS (handoff CORRETO);
+        saida "om dia, como você está?" completa e correta.
+    (c) HTP->Vulkan (2 rodadas: com FA auto e com FA explicitamente
+        DESLIGADO nos dois lados): token_destino=910 vs 310 -> DIVERGENTE
+        em ambos; saida invalida ("ear") — BLOQUEIO DE LAYOUT DO KV DO
+        VULKAN (nao e' FA; nao e' a serializacao, provada no controle).
+    (d) Ordem invertida conforme permitido: **OpenCL e' a rota primaria
+        PROVADA**; Vulkan fica BLOQUEADO com causa isolada
+        (converter/pesquisar o formato interno do KV do backend vulkan).
+E.3 Performance observada (1 execucao por rota; NAO matched completo):
+    prefill HTP 326-451 tok/s; export 2.032.797 B em 0-1 ms;
+    import 2-30 ms; handoff total ~2-31 ms; geracao no destino 24 tok/s;
+    ttft(pos-prefill) 37-555 ms; cold total ~2,5-3,3 s.
+    NAO comparar com GPU-cheia sem matched (ordem D) — proxima rodada.
+
+------------------------------------------------------------------------
+F. MEDICOES POR TENTATIVA (dados brutos)
+------------------------------------------------------------------------
+F.1 Ver smart-rodada2/smart-runs-2026-10-07.log (stream integral; pids
+    1327=vulkan, 2286=opencl) e p4v2-aba-stream.log (pid 3809).
+F.2 Timers separados por fase; NENHUM residual somado como prefill; a
+    "ttft=0ms" da versao anterior foi renomeada e re-medida (pp1 0.22 ms).
+F.3 Reconciliacao deduplicada: RECONCILIACAO-TENTATIVAS.txt (P4v2: 1+tentativa
+    valida por pid; SMART: 2 no stream + 2 anteriores; mutantes: 8 unicas).
+    Linhas duplicadas = padrao linha+REPORT da mesma tentativa (nao contam
+    como execucoes independentes).
+
+------------------------------------------------------------------------
+G. INTEGRACAO / GATES / SITUACAO REAL DE DISTRIBUICAO
+------------------------------------------------------------------------
+G.1 Nada integrado ao produto: UI/menu/IDs/defaults intocados (Vulkan segue
+    default). Fork SIG continua sem o hexagon ligado no pacote.
+G.2 Gates locais do repo: rodada com commit/hora/wip-hash no r2-gates.log
+    (contexto: commit a4af73c, 2026-10-07T18:34Z, wip-hash fa7e5ff0...).
+    RESULTADO: os 4 gates locais ficaram BLOQUEADOS por codigo ALHEIO EM
+    EDICAO ATIVA no working tree (FfmpegInsertAudioActivity.kt: "Unresolved
+    reference 'stopFilteredPreview'" x7 — outro agente escrevendo no mesmo
+    instante). Causa NAO e' nossa; NAO foi alterado nada alheio (preservacao
+    integral — as ordens pedem reportar baseline alheio com reproducer, nao
+    consertar). EVIDENCIA EQUIVALENTE: o MESMO commit a4af73c rodou o gate
+    completo no CI com SUCESSO (run 37658873714; test+lint+assemble). Nota:
+    build rapido NAO cobre a lib fork (declarado); nada de release.
+G.3 CI: as DUAS falhas nominais entregues: DownloadSizeFormatTest e
+    DownloadProgressSequenceTest; causa REPRODUZIDA: separador decimal por
+    LOCALE do runner (en-US "4.9" vs pt-BR "4,9"); corrigidas com Locale
+    pt-BR explicito + vacina que forca Locale.US (commit a4af73c); CI
+    passou a verde apos o fix (run 37658873714; XMLs no artifact do run
+    anterior 37657216525). WIP alheio preservado em todos os commits.
+
+------------------------------------------------------------------------
+H. CONCLUSAO POR ROTA (criterio das ordens)
+------------------------------------------------------------------------
+H.1 NPU/HTP (prefill+geracao): CCE (P4v2 fail-closed + A-B-A integral +
+    8/8 mutantes); matched medio PENDENTE.
+H.2 **Smart (OpenCL): CCE PARA VIABILIDADE E CORRETUDE DO HANDOFF** (1
+    execucao; handoff IGUAIS; saida correta). Medicoes matched repetidas e
+    criterio de beneficio: PENDENTE (proxima rodada).
+H.3 Smart (Vulkan): BLOQUEADO (layout do KV do backend) com causa isolada
+    e proximos passos definidos; NAO habilitar; NAO rotular.
+H.4 CPU/GPU inteiras: nao alteradas; sem regressao introduzida nesta fase.
+H.5 Proxima decisao: (a) aprofundar o desbloqueio do Vulkan (pesquisa do
+    KV layout) e/ou (b) rodar o matched Smart OpenCL vs OpenCL-cheia vs NPU
+    inteira vs CPU (curto+medio) para o criterio de beneficio. Recomendacao
+    do executor: (b) primeiro (dados de decisao), (a) em paralelo de analise.
+=========================================================================
+Apendice A (escopo verbatim): A1-A6 conforme autorizacao ("autorizo tudo")
+e ordens R1/R2; nenhuma ampliacao inferida (sem release/deploy/UI).
+FIM. Nenhuma afirmacao sem evidencia listada; pendencias explicitas.

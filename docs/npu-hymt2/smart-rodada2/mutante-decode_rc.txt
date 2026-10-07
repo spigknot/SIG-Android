@@ -1,0 +1,4 @@
+10-07 15:16:17.256 22786 23728 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): decode_rc
+10-07 15:16:19.238 22786 23728 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: A1_erro(decode_rc) B_erro A2_erro 
+10-07 15:16:19.238 22786 23728 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): decode_rc
+10-07 15:16:19.238 22786 23728 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: A1_erro(decode_rc) B_erro A2_erro 

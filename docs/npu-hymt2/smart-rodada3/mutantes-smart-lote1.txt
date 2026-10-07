@@ -1,0 +1,15 @@
+=== MUTANTES SMART v2 (19:07:30Z) ===
+smart_prefill_rc => DETECTADO | RESULTADO: SMART-FALHA (A1: prefill_rc)
+smart_decode_rc => DETECTADO | RESULTADO: SMART-FALHA (A1: decode_rc)
+smart_export_vazio => DETECTADO | 10-07 16:09:07.364 I/NpuProbe( 1189): RESULTADO: SMART-FALHA (A1: export_invalido)
+smart_export_trunc => DETECTADO | 10-07 16:09:54.462 I/NpuProbe( 4585): RESULTADO: SMART-FALHA (A1: export_invalido)
+smart_import_falha => DETECTADO | 10-07 16:10:43.156 I/NpuProbe( 4912): RESULTADO: SMART-FALHA (A1: import_falhou)
+smart_pos_errada => DETECTADO | 10-07 16:11:33.573 I/NpuProbe( 5499): RESULTADO: SMART-FALHA (A1: pos_errada)
+smart_ponte_omitida => SEM-LOG (investigar) | 
+smart_ponte_dup => SEM-LOG (investigar) | 
+smart_cap => SEM-LOG (investigar) | 
+smart_reset_bad => SEM-LOG (investigar) | 
+param[smart:xyz] => SEM-LOG (investigar) | 
+param[smart:foo:opencl] => SEM-LOG (investigar) | 
+param[smart:opencl:bar] => SEM-LOG (investigar) | 
+MUTANTES_SMART_DONE

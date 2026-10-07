@@ -1,0 +1,28 @@
+=== MATRIZ VULKAN [build v12] (19:42:01Z) ===
+[A-puro-vulkan] rota=puro:vulkan
+    -> RESULTADO: SMART-ACEITO (puro vulkan; baseline de numerica)
+    texto: puro texto: Bom dia, como você está?
+[B-vulkan-vulkan] rota=vulkan:vulkan
+    -> RESULTADO: SMART-ACEITO (vulkan->vulkan; A-B-A integral; espelho 8/8)
+    texto: A1 texto: Bom dia, como você está?
+    A1 espelho: passos=8 iguais=8 div_pos=-1
+[C-cpu-vulkan] rota=cpu:vulkan
+    -> RESULTADO: SMART-ACEITO (cpu->vulkan; A-B-A integral; espelho 8/8)
+    texto: A1 texto: Bom dia, como você está?
+    A1 espelho: passos=8 iguais=8 div_pos=-1
+[D-htp-cpu] rota=htp:cpu
+    -> RESULTADO: SMART-ACEITO (htp->cpu; A-B-A integral; espelho 8/8)
+    texto: A1 texto: Bom dia, como você está?
+    A1 espelho: passos=8 iguais=8 div_pos=-1
+[E-vulkan-cpu] rota=vulkan:cpu
+    -> RESULTADO: SMART-ACEITO (vulkan->cpu; A-B-A integral; espelho 8/8)
+    texto: A1 texto: Bom dia, como você está?
+    A1 espelho: passos=8 iguais=8 div_pos=-1
+[F-puro-opencl] rota=puro:opencl
+    -> RESULTADO: SMART-ACEITO (puro opencl; baseline de numerica)
+    texto: puro texto: Bom dia, como você está?
+[G-htp-opencl] rota=opencl
+    -> RESULTADO: SMART-ACEITO (htp->opencl; A-B-A integral; espelho 8/8)
+    texto: A1 texto: Bom dia, como você está?
+    A1 espelho: passos=8 iguais=8 div_pos=-1
+MATRIZ_v12_DONE

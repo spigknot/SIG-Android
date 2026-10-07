@@ -1,0 +1,4 @@
+10-07 15:16:40.843 23433 24145 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): template_bad
+10-07 15:16:45.637 23433 24145 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: template_invalido cap_atingido(parcial) 
+10-07 15:16:45.637 23433 24145 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): template_bad
+10-07 15:16:45.637 23433 24145 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: template_invalido cap_atingido(parcial) 

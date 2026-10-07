@@ -1,0 +1,23 @@
+=== FECHAMENTO R3 (19:50:50Z) ===
+--- [P4-CPU-ABA] gatilho=p4:cpu ---
+    metricas: pos_prefill_primeiro_piece=0.35ms | requestA1->primeiro_piece=623.22ms | cold_total=2813ms
+    RESULTADO: P4v2 SUCESSO (template+A1+reset1+B+reset2+A2 + A-B-A integral)
+    A1: ok=1 stop=0 pieces=8 decodes=8 prefill=622.87ms gen=259.14ms pp1=0.35ms
+    A1 texto: Bom dia, como você está?
+    metricas: pos_prefill_primeiro_piece=0.35ms | requestA1->primeiro_piece=623.22ms | cold_total=2813ms
+    RESULTADO: P4v2 SUCESSO (template+A1+reset1+B+reset2+A2 + A-B-A integral)
+--- [PURO-HTP] gatilho=smart:puro:htp ---
+    puro: ok=1 pieces=8 prefill=812.95ms gen=711.59ms pp1=0.31ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: SMART-ACEITO (puro htp; baseline de numerica)
+    puro: ok=1 pieces=8 prefill=812.95ms gen=711.59ms pp1=0.31ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: SMART-ACEITO (puro htp; baseline de numerica)
+--- [PURO-CPU] gatilho=smart:puro:cpu ---
+    puro: ok=1 pieces=8 prefill=622.40ms gen=256.11ms pp1=0.33ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: SMART-ACEITO (puro cpu; baseline de numerica)
+    puro: ok=1 pieces=8 prefill=622.40ms gen=256.11ms pp1=0.33ms
+    puro texto: Bom dia, como você está?
+    RESULTADO: SMART-ACEITO (puro cpu; baseline de numerica)
+FECHAMENTO_R3_DONE

@@ -1,0 +1,57 @@
+INVENTÁRIO READ-ONLY — NENHUM ARQUIVO EXCLUÍDO
+Protegido integralmente: D:/Projetos/SIG/docs/especialista
+Manifesto: D:/Projetos/SIG/docs/especialista/RELATORIO-LIMPEZA-SIG-READONLY.json
+Totais em bytes; arquivos únicos, sem sobreposição.
+{"inventory_bytes_nonoverlap": 23411314968, "inventory_files_nonoverlap": 168436, "A_bytes": 9342514045, "A_files": 26043, "C_generated_bytes": 3807098165, "C_generated_files": 15284, "C_model_bytes": 1244117209, "C_model_files": 24}
+
+RAÍZES (inclui fora do projeto):
+D:/svr10 | 1212432782 bytes | 25867 arquivos | fora=True | worktree=False | referência ativa=False
+D:/svr11 | 2922434446 bytes | 34956 arquivos | fora=True | worktree=True | referência ativa=False
+D:/ocl1 | 3384764249 bytes | 34695 arquivos | fora=True | worktree=True | referência ativa=False
+D:/sigclean | 202942937 bytes | 5518 arquivos | fora=True | worktree=False | referência ativa=False
+D:/svr-clean | 165211126 bytes | 3912 arquivos | fora=True | worktree=True | referência ativa=False
+D:/Projetos/SIG/native-dependencies | 8649192785 bytes | 13746 arquivos | fora=False | worktree=False | referência ativa=False
+D:/Projetos/SIG/docs | 1854168544 bytes | 890 arquivos | fora=False | worktree=False | referência ativa=True
+D:/Projetos/SIG/app/build | 173174621 bytes | 1997 arquivos | fora=False | worktree=False | referência ativa=False
+D:/Projetos/SIG/app/.cxx | 2156413894 bytes | 14141 arquivos | fora=False | worktree=False | referência ativa=False
+D:/Projetos/SIG/build | 755342296 bytes | 147 arquivos | fora=False | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/aceite_min_f20.py | 7776 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/allowlist_vulkan_reset.diff | 26309 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/diagnose_sig_short.py | 1332 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/f20.log | 10126 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/f20b.log | 1393 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/f20b_q4l.py | 4592 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/f20c.log | 520 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/f20c_final.py | 5543 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/f20_assembler.py | 6659 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/f20_tabela.py | 2042 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/llama_jni_full.diff | 18895 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/native-deps-bkp | 0 bytes | 0 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/onnxplain | 51897836 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/opencl-cand | 93401016 bytes | 3 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/prepare_sig_short.py | 743 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r2-readback | 0 bytes | 0 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/sig-head.tar | 171960320 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/sig-vulkan-reset-release | 1531122736 bytes | 30456 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/smokes-v10 | 11333 bytes | 5 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/unificado_final.py | 9362 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/v9audit | 66822928 bytes | 2 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/whisper_test | 331118 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/Desktop/hymt2 | 8171602 bytes | 2083 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/Desktop/sig-linux.zip | 1113939 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+C:/Users/Gustavo/Desktop/sig-v9-debug.apk | 10309168 bytes | 1 arquivos | fora=True | worktree=False | referência ativa=False
+
+A: somente arquivos binários gerados listados explicitamente no JSON; aprovação e rechecagem obrigatórias.
+B: nenhum modelo liberado; deduplicação/proveniência ainda não comprovada.
+C: modelos/grafos, worktrees registrados, caminhos ativos/incertos e fontes únicas preservados.
+Não remover diretórios inteiros. Não remover SDKs, caches globais, fontes, testes, fixtures, logs ou docs/especialista.
+Processos: somente PID/nome/caminhos candidatos, sem commandlines sensíveis.
+Fontes fora do repo para revisão: 3225; lista no JSON.
+Worktrees: usar git worktree remove sem --force somente após status e revisão.
+Outros projetos históricos: apenas descoberta; fora da allowlist.
+
+PERGUNTAS PARA APROVAÇÃO:
+Aprovar somente allowlist A, após nova checagem de processos?
+Conversão NPU/QNN terminou? Qual pasta/modelo/grafo deve continuar ativo?
+Worktrees ocl1/svr11/svr-clean podem ser arquivados/removidos oficialmente após revisão de código único?
+Quais cópias Desktop/hymt2 são descartáveis? Modelos permanecem preservados até comprovação de duplicidade.

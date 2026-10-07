@@ -1,0 +1,33 @@
+MUTANTES E PARAMETROS DO SMART v2 — CONSOLIDADO (ordem R3 secao 2)
+=====================================================================
+Build: v11 (libs em uso; provenance auditada — ver secao de auditoria)
+Metodo: p4-mutante.txt + gatilho p4-auto.txt; leitura por janela; loop de
+captura anti-wifi (npuprobe-all.log); classes EXCLUSIVAS por resultado.
+Dedupe: padrao linha+REPORT do app neutralizado por (pid, resultado).
+=====================================================================
+
+MUTACOES INTERNAS (codigo injeta a anomalia; o gate DEVE detectar):
+  smart_prefill_rc    pid=31929*  -> SMART-FALHA (A1: prefill_rc)          DETECTADO
+  smart_decode_rc     pid=31929*  -> SMART-FALHA (A1: decode_rc)           DETECTADO
+  smart_export_vazio  pid=1189    -> SMART-FALHA (A1: export_invalido)     DETECTADO
+  smart_export_trunc  pid=4585    -> SMART-FALHA (A1: export_invalido)     DETECTADO
+  smart_import_falha  pid=4912    -> SMART-FALHA (A1: import_falhou)       DETECTADO
+  smart_pos_errada    pid=5499    -> SMART-FALHA (A1: pos_errada)          DETECTADO
+  smart_ponte_omitida pid=12986   -> SMART-FALHA (ponte_tok1_emissoes!=1) DETECTADO
+  smart_ponte_dup     pid=13525   -> SMART-FALHA (ponte_tok1_emissoes!=1) DETECTADO
+  smart_cap           pid=14541   -> SMART-PARCIAL (cap; A-B-A igual)      DETECTADO
+  smart_reset_bad     pid=9567    -> SMART-FALHA (reset)                   DETECTADO
+  (*primeiros dois do lote1, capturados no stream pre-wifi; demais no loop)
+
+PARAMETROS INVALIDOS (rota/device inexistente; sem fallback silencioso):
+  smart:xyz           pid=10926   -> SMART-FALHA (destino 'xyz' indisponivel)  REJEITADO
+  smart:foo:opencl    pid=11799   -> SMART-FALHA (origem 'foo' indisponivel)   REJEITADO
+  smart:opencl:bar    pid=12546   -> SMART-FALHA (destino 'bar' indisponivel)  REJEITADO
+
+TOTAL: 13/13 casos com comportamento fail-closed ou de gradacao correta.
+Nenhum erro produziu SMART-ACEITO. Cap nunca virou "completo".
+=====================================================================
+Notas de metodo (falhas de captura no lote1): o stream via wifi morreu as
+16:11 (sono do radio) deixando 4 casos SEM-LOG no primeiro script; o loop
+de reconexao + stayon eliminou a perda e os casos foram re-rodados com
+janela por offset (lote2 + leitura do loop). Nenhum caso ficou sem prova.

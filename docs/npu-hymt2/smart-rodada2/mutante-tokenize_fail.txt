@@ -1,0 +1,4 @@
+10-07 15:17:04.282 23748 24819 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): tokenize_fail
+10-07 15:17:05.888 23748 24819 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: A1_erro(tokenize) B_erro A2_erro 
+10-07 15:17:05.888 23748 24819 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): tokenize_fail
+10-07 15:17:05.888 23748 24819 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: A1_erro(tokenize) B_erro A2_erro 

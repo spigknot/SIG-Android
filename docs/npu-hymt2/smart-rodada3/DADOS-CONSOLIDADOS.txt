@@ -1,0 +1,162 @@
+DADOS CONSOLIDADOS — RODADA 3 (dedupe por pid; linha+REPORT neutralizado; APP-UID filtrado)
+
+pid=2931  rota=cpu:vulkan  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (cpu->vulkan; A-B-A integral; espelho 8/8)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=595.29ms export=0.09ms import=1.90ms gen=853.57ms pp1=459.90ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=3606  rota=htp:cpu  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (htp->cpu; A-B-A integral; espelho 8/8)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=810.10ms export=0.10ms import=1.92ms gen=894.63ms pp1=112.93ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=4112  rota=vulkan:cpu  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (vulkan->cpu; A-B-A integral; espelho 8/8)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=622.92ms export=563.12ms import=1.92ms gen=625.03ms pp1=245.15ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=4911  rota=puro:opencl  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (puro opencl; baseline de numerica)
+   puro: puro: ok=1 pieces=8 prefill=1715.14ms gen=294.72ms pp1=0.09ms
+   texto: Bom dia, como você está?
+
+pid=6824  rota=puro:cpu  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (puro cpu; baseline de numerica)
+   puro: puro: ok=1 pieces=8 prefill=622.40ms gen=256.11ms pp1=0.33ms
+   texto: Bom dia, como você está?
+
+pid=9567  rota=opencl  mut=smart_reset_bad
+   resultado: RESULTADO: SMART-FALHA (reset)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=94.70ms export=0.70ms import=20.69ms gen=511.36ms pp1=53.42ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+
+pid=10926  rota=xyz  mut=(none)
+   resultado: RESULTADO: SMART-FALHA (destino 'xyz' indisponivel) — erro explicito, sem fallback
+
+pid=11799  rota=foo:opencl  mut=(none)
+   resultado: RESULTADO: SMART-FALHA (origem 'foo' indisponivel)
+
+pid=12546  rota=opencl:bar  mut=(none)
+   resultado: RESULTADO: SMART-FALHA (destino 'bar' indisponivel) — erro explicito, sem fallback
+
+pid=12986  rota=opencl  mut=smart_ponte_omitida
+   resultado: RESULTADO: SMART-FALHA (A1: ponte_tok1_emissoes!=1)
+   contadores: A1: ok=0 cap=0 tok1=33 amostrados(s/d)=1/0 emitidos=0 consumidos=0
+   tempos: prefill=90.62ms export=0.69ms import=0.00ms gen=0.00ms pp1=-1.00ms
+   espelho: passos=0 iguais=0 div_pos=-1
+
+pid=13525  rota=opencl  mut=smart_ponte_dup
+   resultado: RESULTADO: SMART-FALHA (A1: ponte_tok1_emissoes!=1)
+   contadores: A1: ok=0 cap=0 tok1=33 amostrados(s/d)=1/0 emitidos=0 consumidos=0
+   tempos: prefill=93.99ms export=0.61ms import=0.00ms gen=0.00ms pp1=-1.00ms
+   espelho: passos=0 iguais=0 div_pos=-1
+   texto: BB
+
+pid=14541  rota=opencl  mut=smart_cap
+   resultado: RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+   contadores: A1: ok=1 cap=1 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=95.32ms export=0.56ms import=18.82ms gen=487.40ms pp1=54.45ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=16735  rota=opencl  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (htp->opencl; A-B-A integral; espelho 8/8)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=843.33ms export=0.10ms import=9.10ms gen=2701.61ms pp1=1683.64ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=17757  rota=vulkan  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (htp->vulkan; A-B-A integral; espelho 8/8)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=797.67ms export=0.28ms import=2.09ms gen=1546.66ms pp1=528.30ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=18145  rota=P4:cpu  mut=None
+   resultado: RESULTADO: P4v2 SUCESSO (template+A1+reset1+B+reset2+A2 + A-B-A integral)
+   contadores: A1: ok=1 stop=0 pieces=8 decodes=8 prefill=622.87ms gen=259.14ms pp1=0.35ms
+   texto: Bom dia, como você está?
+   A2: ok=1 pieces=8 | A-B-A: A1==A2 (comparacao integral ok)
+
+pid=26183  rota=puro:vulkan  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (puro vulkan; baseline de numerica)
+   puro: puro: ok=1 pieces=48 prefill=789.62ms gen=1867.24ms pp1=569.71ms
+   texto: sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry you""""""""""""""""""""، sorry sorry sorry
+
+pid=26592  rota=vulkan:vulkan  mut=(none)
+   resultado: RESULTADO: SMART-PARCIAL (cap atingido; A-B-A diferente)
+   contadores: A1: ok=1 cap=1 tok1=29605 amostrados(s/d)=49/48 emitidos=49 consumidos=48
+   tempos: prefill=835.51ms export=2471.00ms import=4.54ms gen=2625.25ms pp1=100.06ms
+   espelho: passos=48 iguais=48 div_pos=-1
+   texto: sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry you"""""""""""""""""""�等与 sorry sorry sorr
+   A2: ok=1 texto igual ao A1: NAO
+
+pid=27521  rota=cpu:vulkan  mut=(none)
+   resultado: RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+   contadores: A1: ok=1 cap=1 tok1=33 amostrados(s/d)=49/48 emitidos=49 consumidos=48
+   tempos: prefill=618.57ms export=0.68ms import=3.14ms gen=3368.41ms pp1=492.06ms
+   espelho: passos=48 iguais=24 div_pos=1
+   texto: Bear
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=27990  rota=htp:cpu  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (htp->cpu; A-B-A integral; espelho 8/8)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=91.29ms export=0.61ms import=2.10ms gen=525.46ms pp1=68.52ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=28554  rota=puro:htp  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (puro htp; baseline de numerica)
+   puro: puro: ok=1 pieces=8 prefill=812.95ms gen=711.59ms pp1=0.31ms
+   texto: Bom dia, como você está?
+
+pid=28756  rota=vulkan:cpu  mut=(none)
+   resultado: RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+   contadores: A1: ok=1 cap=1 tok1=29605 amostrados(s/d)=49/48 emitidos=49 consumidos=48
+   tempos: prefill=775.57ms export=4806.16ms import=9.80ms gen=3282.64ms pp1=110.90ms
+   espelho: passos=48 iguais=22 div_pos=23
+   texto: sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry sorry 
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=29705  rota=puro:opencl  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (puro opencl; baseline de numerica)
+   puro: puro: ok=1 pieces=8 prefill=159.47ms gen=266.31ms pp1=0.39ms
+   texto: Bom dia, como você está?
+
+pid=30263  rota=opencl  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (htp->opencl; A-B-A integral; espelho 8/8)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=91.25ms export=0.78ms import=21.61ms gen=581.46ms pp1=58.81ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM
+
+pid=31094  rota=puro:vulkan  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (puro vulkan; baseline de numerica)
+   puro: puro: ok=1 pieces=8 prefill=642.88ms gen=910.20ms pp1=554.89ms
+   texto: Bom dia, como você está?
+
+pid=31645  rota=vulkan:vulkan  mut=(none)
+   resultado: RESULTADO: SMART-ACEITO (vulkan->vulkan; A-B-A integral; espelho 8/8)
+   contadores: A1: ok=1 cap=0 tok1=33 amostrados(s/d)=9/8 emitidos=8 consumidos=8
+   tempos: prefill=632.47ms export=567.41ms import=2.09ms gen=542.69ms pp1=229.25ms
+   espelho: passos=8 iguais=8 div_pos=-1
+   texto: Bom dia, como você está?
+   A2: ok=1 texto igual ao A1: SIM

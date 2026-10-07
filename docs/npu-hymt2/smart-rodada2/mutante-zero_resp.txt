@@ -1,0 +1,4 @@
+10-07 15:17:27.840 24163 25094 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): zero_resp
+10-07 15:17:29.608 24163 25094 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: A1_erro(resposta_vazia) B_erro A2_erro 
+10-07 15:17:29.608 24163 25094 I NpuProbe: P4v2 MUTACAO ATIVA (testando o fail-closed): zero_resp
+10-07 15:17:29.608 24163 25094 I NpuProbe: RESULTADO: P4v2 FALHA/PARCIAL: A1_erro(resposta_vazia) B_erro A2_erro 

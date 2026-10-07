@@ -1,0 +1,18 @@
+PARECER AO EXECUTOR — CICLO v11 OPENCL: CONSOLIDADO, FECHAMENTO DE ARTEFATO FINAL
+
+Base relatorio enviado. Especialista verificou gitlog (6a8b4cb/1a16468/e360ca4), gitstatusshort vazio e metadataGitHubasset8117682B/digestb04abd6041d3dffce18b42ee0ec49597ba9da2c0464a93ac8dcfe8ad4f051186. Nao baixouZIPs/R2 nemtestoudevice independentemente. Semautorizacao nova runtime/republicacao/commit/device.
+
+Aceitar consolidacaofontes/minimoprodutoF3bguard/cache como relatada, defaultVulkanpreservado. Ganho26vs17.8tok/s e piloto promissor n1entrebuilds, nao promessa causalrobusta nem texto 'longo' historico4924chars: 221chars/59tokens e caso maior que frases, ainda curto. Fronteiralogcat explicitar tempo inicio/fimqueue/sampler; app2.1s versuslogcat2.27s nao métricas intercambiaveis. Nao nova pesquisa/paralelismo agora.
+
+1. WHISPER mudou nesta release
+Whisperstripada/recompilada36.168.384 vsv9 36.165.392, v10unstripped62.179.616. Diagnostico 'stripapenas' comprovar sections/text/JNI/NEEDED/inputorigem, nao size. SmokeWhisperv10 não valida automaticamente v11ZIPentry. Pedido autorizado pequeno smokeWhisperofflineaudioTTSaprovado/modelbaseCPU libv11mapsPID/fullsha: semAPIkeys/micproducao, outputnonempty/semantic/noANR. Não reclamarquebrou semevidencia; preservarv11publishedimmutable.
+2. Igualdade piloto vs final
+Scriptpack RE-LINKAa.so depoispiloto. Verificar fullSHAentryZIPfinalarm64 versus candidato596aba0e9813f516cb68117e9b8f26fe40458010cf86fb118f7c80fac13200d9; prestrip diferenças nãoargumento semhashfinal. Se finaligual, pilotoruntimevalidalibllamaentry; sediferentevalidarsmokesfinaltargetminimos. RepackPython produtor e stripworkflow devemserversionados/pinados e verifyinclmanifestperfile/duplicates/path/size/SHA, nao apenasshaZIPexternal. ControlesCPU/VK/Reset novos? Se naoexecutados declarar, pequenossharedloader-initregressions justificados poisOpenCLdispatcherdiscoveryshared; v10resetfonntepreservada masloaderdelta requer controle.
+3. DownloadAPK/pacote publicados
+Relatorio devicev10restored, nao mostra installAPK1.508/downloadactivate11. IssoNAObloqueia'transferenciaspublicadas' mas fluxoNEWruntimefinal ainda não medido. Pedirjanelaautorizada installAPKseparado preservandodados/cert/backups e download11/activate/hashmaps/outputQ4/Q8OpenCL + CPU/VKcontrolecurto/Whisper e A-B-A seconfigs/loaderchanged. Seusuario naoquiser, estadoPENDENTEfinal-runtime não 'nenhumapendencia'. Semteste24/n3mandatory.
+4. Loaderconcorrencia
+Atomic publication alone nao asseguraEXATAMENTE1dlsym/symbol concurrent firstcalls: threads podemduplicarlookup beforeCAS/store. Isso pode serseguro corretude ebaixooverheadinit; retificargarantiaou inspecionarserializeinitializer/helperREAL/testfirstcallbarrier. Nullfailnãocacheada devecontinuar. Sem 'otimizarcall_once' porpolitica mantendo transientretrysemraceerrors.
+5. Recipe automatica
+Pitfall scriptrelink/unstripped precisa vacina em scriptgeneratorisolado/testesstaging e finalELFsectionsinspection; docsapenas nao impedemrepetir. PropostacorrecaoLOCALnoupload automaticamente. Preservar depsWIP, striprequiredexports/R2hashimmutavel. Compressaon6tradeofftam/CPUdocumentado, criteriozipcorrectness não bitreproducibility absoluto.
+
+EntregaTXT A-H: estado PUBLICADO vs runtimefinalvalidado, exacthashentrypilotcomparison, Whisperv11smoke/pendente, controleCPU/VK/actualpackageAPK install, recipe/testpermanent, countersn/scopesperf, SHAlogsmanifesttotaisPython. Nenhum batching/kernelparallelism/defaultchange semnovopedido. Prioridade finalizarcontrolefinalproduto semtransformaremnovacampanha. v11consolidacaoconcluida; performanceamostral e runtimenewpackage precisaescopohonesto.
