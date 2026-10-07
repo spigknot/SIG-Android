@@ -1,0 +1,31 @@
+--------- beginning of main
+10-07 13:50:01.134 31257  5065 I NpuProbe: P4 iniciando com /data/local/tmp/hymt2_app.gguf
+10-07 13:50:01.134 31257  5065 I NpuProbe: P4 modelo=/data/local/tmp/hymt2_app.gguf
+10-07 13:50:01.134 31257  5065 I NpuProbe: P4 libdir=/data/app/~~lHvpVkgT-ZJ0zCD84eKakg==/br.gov.sp.pcsp.npuprobe-v6a10e2fLXh9LOdriCWu9Q==/lib/arm64
+10-07 13:50:01.135 31257  5065 I NpuProbe: backend_init=0ms
+10-07 13:50:01.135 31257  5065 I NpuProbe: device alvo: HTP0 (Hexagon)
+10-07 13:50:03.902 31257  5065 I NpuProbe: load=2767ms
+10-07 13:50:03.943 31257  5065 I NpuProbe: ctx=41ms
+10-07 13:50:03.944 31257  5065 I NpuProbe: prompt_tokens=15
+10-07 13:50:04.026 31257  5065 I NpuProbe: prefill: 15 tok em 81ms (184.5 tok/s) rc=0
+10-07 13:50:04.195 31257  5065 I NpuProbe: geracao: 7 tokens em 170ms (41.3 tok/s) ttft=0ms
+10-07 13:50:04.195 31257  5065 I NpuProbe: saida: Good morning, how are you?
+10-07 13:50:04.197 31257  5065 I NpuProbe: reset=1.9ms
+10-07 13:50:04.253 31257  5065 I NpuProbe: segunda_geracao: 0 tokens rc=0 saida: 
+10-07 13:50:04.269 31257  5065 I NpuProbe: RESULTADO: P4 OK (modelo completo carregado, gerado e resetado em app normal)
+10-07 13:50:04.269 31257  5065 I NpuProbe: P4 REPORT:
+10-07 13:50:04.269 31257  5065 I NpuProbe: P4 (/data/local/tmp/hymt2_app.gguf)
+10-07 13:50:04.269 31257  5065 I NpuProbe: 
+10-07 13:50:04.269 31257  5065 I NpuProbe: P4 modelo=/data/local/tmp/hymt2_app.gguf
+10-07 13:50:04.269 31257  5065 I NpuProbe: P4 libdir=/data/app/~~lHvpVkgT-ZJ0zCD84eKakg==/br.gov.sp.pcsp.npuprobe-v6a10e2fLXh9LOdriCWu9Q==/lib/arm64
+10-07 13:50:04.269 31257  5065 I NpuProbe: backend_init=0ms
+10-07 13:50:04.269 31257  5065 I NpuProbe: device alvo: HTP0 (Hexagon)
+10-07 13:50:04.269 31257  5065 I NpuProbe: load=2767ms
+10-07 13:50:04.269 31257  5065 I NpuProbe: ctx=41ms
+10-07 13:50:04.269 31257  5065 I NpuProbe: prompt_tokens=15
+10-07 13:50:04.269 31257  5065 I NpuProbe: prefill: 15 tok em 81ms (184.5 tok/s) rc=0
+10-07 13:50:04.269 31257  5065 I NpuProbe: geracao: 7 tokens em 170ms (41.3 tok/s) ttft=0ms
+10-07 13:50:04.269 31257  5065 I NpuProbe: saida: Good morning, how are you?
+10-07 13:50:04.269 31257  5065 I NpuProbe: reset=1.9ms
+10-07 13:50:04.269 31257  5065 I NpuProbe: segunda_geracao: 0 tokens rc=0 saida: 
+10-07 13:50:04.269 31257  5065 I NpuProbe: RESULTADO: P4 OK (modelo completo carregado, gerado e resetado em app normal)
