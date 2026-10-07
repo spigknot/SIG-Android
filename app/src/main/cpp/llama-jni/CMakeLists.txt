@@ -139,6 +139,15 @@ endif()
 
 add_library(sig_llama SHARED llama_jni.cpp)
 
+# Hooks de teste (sigTestHoldGmutex/sigTestHoldState): OFF por padrao — a lib
+# publicavel NAO os exporta (verificar com nm -D). Habilite SO na variante de
+# teste:  cmake -DSIG_ENABLE_TEST_HOOKS=ON ...
+option(SIG_ENABLE_TEST_HOOKS "Exporta hooks de teste da vacina ANR (TESTE APENAS)" OFF)
+if (SIG_ENABLE_TEST_HOOKS)
+    target_compile_definitions(sig_llama PRIVATE SIG_ENABLE_TEST_HOOKS)
+    message(STATUS "sig_llama: HOOKS DE TESTE habilitados (variante de teste!)")
+endif()
+
 target_include_directories(sig_llama PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/../llama/include
         ${CMAKE_CURRENT_SOURCE_DIR}/../llama/ggml/include)

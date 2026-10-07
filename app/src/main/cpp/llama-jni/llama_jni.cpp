@@ -846,8 +846,29 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_threadCount(JNIEnv * env, jobject) {
 // R6/VACINA (TESTE APENAS): segura o lock principal pelo tempo pedido, para o
 // teste instrumentado (AnrUiLockContractTest) validar que os getters de UI
 // respondem SEM bloquear com load/geracao "em andamento". Nao usar no app.
+#ifdef SIG_ENABLE_TEST_HOOKS
+// ==========================================================================
+// VACINA / HOOKS DE TESTE — presentes SOMENTE na variante de teste
+// (configure com -DSIG_ENABLE_TEST_HOOKS=ON). A lib publicavel NAO exporta
+// estes simbolos; verificar com: nm -D libsig_llama.so | grep sigTest
+// (esperado: vazio na lib de produto).
+// ==========================================================================
+// Estado do hold: 0 = livre; 1 = lock de inferencia ADQUIRIDO (segurando).
+// O teste de contrato espera o estado==1 (sinal REAL pos-aquisicao) antes
+// de medir os getters — elimina o falso positivo do "sleep cego".
+static std::atomic<int> g_test_hold_state{0};
+
 extern "C" JNIEXPORT void JNICALL
 Java_br_gov_sp_pcsp_launcher_HyMt2Native_sigTestHoldGmutex(JNIEnv *, jobject, jlong ms) {
+    const long long limite_ms = ms <= 0 ? 0 : (ms > 5000 ? 5000 : ms);   // liberacao limitada
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (ms > 0) std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    g_test_hold_state.store(1);                 // sinal DEPOIS de adquirir
+    if (limite_ms > 0) std::this_thread::sleep_for(std::chrono::milliseconds(limite_ms));
+    g_test_hold_state.store(0);                 // ao liberar
 }
+
+extern "C" JNIEXPORT jint JNICALL
+Java_br_gov_sp_pcsp_launcher_HyMt2Native_sigTestHoldState(JNIEnv *, jobject) {
+    return g_test_hold_state.load();
+}
+#endif  // SIG_ENABLE_TEST_HOOKS

@@ -1,0 +1,145 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 1 (parcial controlado)
+=====================================================================
+Data: 07/10/2026. Executor: agente. Autorizacoes: "autorizo tudo" (A1-A6 do
+formulario) + meta Smart (adendos do usuario + ordens consolidadas).
+Formato A-H das ordens. Estado: Fases 0, 1 e 3 CONCLUIDAS; F2 local pendente
+de acabamento; F4+ a seguir. Distincao OBSERVADO/MEDIDO/DERIVADO/PENDENTE.
+
+------------------------------------------------------------------------
+A. ESCOPO, AUTORIZACOES E ESTADO FRESCO / IDENTIDADE DE ARTEFATOS
+------------------------------------------------------------------------
+A.1 Repo: main = 05d1a647bb81 (depois estendido pelo commit do fix de CI);
+    WIP de outro agente (smartjoin/ffmpeg) intocado e preservado byte a byte
+    (procedimento com backup+SHA em cada commit; nada alheio foi commitado).
+A.2 Device alvo: CPH2747, USB 3B15BD00FVE00000 (identidade validada pelo
+    wrapper fail-closed; PJA110/1164a04 fora do escopo; nada persistiu nele).
+A.3 Probe: br.gov.sp.pcsp.npuprobe (app-id separado, UID normal 10554),
+    manifest com <uses-native-library libcdsprpc.so required=false>,
+    targetSdk 34, libs probe-min (sem cadeia vendor) + libllama (build
+    probe-min do servidor, 35.721.440 B).
+A.4 Wrapper: docs/npu-hymt2/smart/sig-adb.sh + suite offline 9/9
+    (serial ausente/outro aparelho/modelo divergente/uninstall·clear
+    protegido/hash divergente BLOQUEIAM antes da acao).
+A.5 Hosts: PC (C: 155G livres; D: 26G), servidor tailnet (36 cores; NDK r29
+    + Hexagon SDK 6.6 no container snapdragon). Builds pesados no servidor.
+
+------------------------------------------------------------------------
+B. PROTECAO DE DADOS E VACINAS (ANR + incidente)
+------------------------------------------------------------------------
+B.1 Incidente do uninstall (R7-D): app do SIG no CPH foi desinstalado por um
+    ciclo do Gradle sem serial fixo; restaurado integralmente (dados
+    internos perdidos: configs do usuario). VACINA: wrapper fail-closed com
+    serial obrigatorio + identidade validada (acima) + `am instrument`
+    manual no lugar do connectedAndroidTest para testes focais.
+B.2 ANR: fix no repo (g_ui_mutex + atomics + copy-out) commitado; vacina
+    executada no aparelho (AnrUiLockContractTest OK 1 test). Item F2
+    pendente de acabamento conforme ordens: (a) trocar Thread.sleep(200)
+    por sinal real pos-aquisicao do lock; (b) hook sigTestHoldGmutex
+    restrito a variante nativa de TESTE (#ifdef; simbolo ausente na lib
+    publicavel, verificado por nm). Nao executado ainda nesta rodada.
+
+------------------------------------------------------------------------
+C. MODELO c4bf vs dc5f — INTEGRIDADE E PROVENIENCIA (Fase 1) — CONCLUIDA
+------------------------------------------------------------------------
+C.1 Comparacao GGUF completa local (parser v2 com golden-check: soma dos
+    tensores + offset == tamanho EXATO nos dois arquivos; sanity 354/354):
+    - c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+      (1.133.080.544 B; general.name="Hf_F16"; 35 kv) — O MODELO PRODUTO.
+    - dc5f44fcf1fa496ee7ad725982c0c8c553a4de00259b53af84c4b89fb0c06699
+      (1.133.080.448 B; general.name="1.8B"; +general.finetune; 33 kv).
+    - Estrutura identica (354 tensores, 0 difs de shape/tipo).
+    - Payloads: 129 tensores IDENTICOS bit-a-bit / 225 DIVERGEM.
+    Leitura: os nao-quantizados (normas etc.) sao iguais -> mesma familia;
+    os quantizados divergem -> DUAS QUANTIZACOES Q4_K_M INDEPENDENTES
+    (fontes diferentes, como o metadata indica). NAO sao o mesmo arquivo.
+C.2 Objetos do R2 verificados por LEITURA COMPLETA nos runners (workflow
+    verify-r2-models.yml, run 37650870995 SUCCESS): Q4_K_M=dc5f44fc...,
+    Q6_K=d98fe604..., 1.25bit=cc497fe8..., silero=2aa269b7... — 4/4 com
+    SHA-256 exato e Content-Length exato. Nenhum byte pela rede local.
+C.3 DECISAO PENDENTE (como as ordens exigem): migracao de produto
+    c4bf -> dc5f NAO autorizada por conclusao do executor. O c4bf segue
+    como referencia primaria da campanha; nenhum byte do c4bf foi alterado
+    no aparelho.
+C.4 Evidencias: docs/npu-hymt2/smart-rodada1/comparacao-c4bf-vs-dc5f-v2.log
+    (sha 3c0d74df...) + comparacao-tensores-diferentes.txt (225 nomes;
+    sha c4c9b472...).
+
+------------------------------------------------------------------------
+D. P4 — MODELO COMPLETO EM APP NORMAL (Fase 3) — CONCLUIDA
+------------------------------------------------------------------------
+D.1 Probe estendido (runP4): llama_model_load_from_file com
+    llama_model_params.devices = {HTP0, NULL} + n_gpu_layers=999; contexto
+    (n_ctx 2048); chat template DO PROPRIO MODELO; prefill; geração greedy
+    (ate 24 tokens); llama_memory_clear; segundo pedido (A-B-A parcial).
+D.2 RESULTADO (MEDIDO, app UID 10554 sem root; log integral
+    docs/npu-hymt2/smart-rodada1/p4-run2.log, sha 5ee4dd76...):
+      backend_init = 0ms
+      device alvo  = HTP0 (Hexagon)
+      load         = 2767ms      (1,13 GB -> pesos no DSP)
+      ctx          = 41ms
+      prefill      = 15 tok em 81ms  (184,5 tok/s)  rc=0
+      geracao      = 7 tokens em 170ms (41,3 tok/s) ttft=0ms
+      reset        = 1,9ms
+      SAIDA        = "Good morning, how are you?"   (traducao CORRETA;
+                     mesmo exemplo promptado na R1 via CLI)
+      segunda_geracao = 0 tokens (pendencia pequena: aplicar o chat
+                     template tambem no 2o pedido antes do A-B-A pleno)
+D.3 Incidente de percurso (transparencia): primeiro run crashou
+    (tombstone_30): llama_model_params.devices exige ARRAY TERMINADO EM
+    NULL; &htp solto causou SIGSEGV em ggml_backend_dev_get_props. Fix de
+    2 linhas; re-run limpo. Registrado como pitfall da campanha.
+D.4 Leitura: o pre-requisito das ordens ("P4 app-UID completo") esta
+    CUMPRIDO com evidencia por camada (load->sessao->prefill->geracao->
+    reset) e saida correta. O prefill in-app (184,5 tok/s) e' a base do
+    ganho esperado do Smart (a GPU entrega 25-60 tok/s no mesmo papel).
+
+------------------------------------------------------------------------
+E. HANDOFF SMART (Vulkan/OpenCL) — Fase 4 — A EXECUTAR (design)
+------------------------------------------------------------------------
+E.1 APIs alvo rastreadas no fork (app/src/main/cpp/llama/include/llama.h):
+    llama_state_get_size/get_data/set_data + llama_state_seq_* (802+);
+    llama_memory_clear/seq_rm/cp/add/div/pos_min/pos_max/can_shift (570..793);
+    sampler chain e logits; sync a confirmar no pin.
+E.2 Estrategias a comparar (sem presumir): A) dois contextos + export/import
+    de estado; B) contexto unico com roteamento por fase.
+E.3 Ordem: NPU->Vulkan primeiro (default atual), depois NPU->OpenCL.
+    Controle HTP->CPU so como infraestrutura (nunca rotulado Smart).
+E.4 PENDENTE: contrato escrito + prototipo isolado por rota (proxima fase).
+
+------------------------------------------------------------------------
+F. MEDICOES (Fase 6) — PARCIAL
+------------------------------------------------------------------------
+F.1 P4 (mesmo peso c4bf, prompt curto): ver D.2. Timers por fase medidos e
+    separados; nada somado como "residual".
+F.2 Pendente: bateria matched Smart vs GPU inteira vs NPU inteira vs CPU
+    (repeticoes intercaladas; cold/warm; memoria/temperatura; TTFT/wall).
+
+------------------------------------------------------------------------
+G. INTEGRACAO/GATES/ARTEFATOS — PARCIAL
+------------------------------------------------------------------------
+G.1 FORK com Hexagon BUILDADO no servidor (MEDIDO): libsig_llama.so
+    93.549.936 B com GGML_HEXAGON=ON + OpenCL (Vulkan presente no link);
+    skels libggml-htp-v81.so (730.280 B) e v73 (645.096 B) gerados; o
+    configure exigiu HEXAGON_SDK_ROOT/HEXAGON_TOOLS_ROOT como VARIAVEIS
+    CMake (preset upstream como referencia) — impedancia fork/upstream
+    documentada. Ainda NAO integrado ao produto (F7 futura).
+G.2 CI: destravado (era infra): setup-java temurin 21 + neutralizacao do
+    gradle-daemon-jvm.properties SO no runner; o gate Android agora RODA
+    (541 testes). Restam 2 testes falhando no runner (ambiente) —
+    investigacao em curso (worktree do commit: os candidatos
+    SmartJoin/Ffmpeg PASSAM; rodando a suite completa para identificar).
+G.3 Gates locais do repo (estado atual do working tree): verdes na ultima
+    execucao (r7b logs). Whisper: intocado nesta campanha ate agora.
+
+------------------------------------------------------------------------
+H. CONCLUSAO POR ROTA (criterio das ordens)
+------------------------------------------------------------------------
+H.1 NPU (HTP) para prefill+geracao: PROVADO em app normal (D.2) — CCE para
+    a camada de viabilidade; medicao de produto ainda pendente.
+H.2 Smart (Vulkan): PENDENTE (F4/F5: contrato + prototipo).
+H.3 Smart (OpenCL): PENDENTE.
+H.4 CPU/GPU (OpenCL/Vulkan): inalterados; nenhuma regressao introduzida.
+H.5 Proxima decisao pedida: (a) seguir F4 (investigacao do handoff; sem
+    device); (b) acabamento F2 (latch/hook); ou (c) ordenar prioridade.
+========================================================================
+FIM. Nenhuma afirmacao sem evidencia listada; pendencias explicitas.

@@ -46,9 +46,14 @@ object HyMt2Native {
     external fun threadCount(): String
     external fun systemInfo(): String
 
-    /** TESTE APENAS (R6): segura o lock interno pelo tempo pedido, para o
+    /** TESTE APENAS (R6/F2): segura o lock interno pelo tempo pedido, para o
      *  teste instrumentado (AnrUiLockContractTest) validar que os getters de
      *  UI respondem sem bloquear com load/geração "em andamento".
-     *  Nunca chamar do app. */
+     *  Presente SOMENTE na variante de teste da lib (nos produtos os símbolos
+     *  não existem — o teste detecta e não mede). Nunca chamar do app. */
     external fun sigTestHoldGmutex(ms: Long)
+
+    /** TESTE APENAS (F2): estado do hold — 0 = livre, 1 = lock adquirido
+     *  (segurando). Sinal REAL pós-aquisição usado pela prontidão do teste. */
+    external fun sigTestHoldState(): Int
 }
