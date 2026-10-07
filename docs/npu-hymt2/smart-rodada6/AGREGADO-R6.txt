@@ -1,0 +1,11 @@
+AGREGADO R6 (warm real: loads=0; wall_ms)
+
+fonte                  rota                n   mediana       min       max
+g1-cpu-htp.jsonl       puro:cpu            3    1560.0    1187.9    1582.3
+g1-cpu-htp.jsonl       puro:htp            3    3023.4    2766.1    3809.5
+g2-ocl-vk.jsonl        puro:opencl         3     532.0     454.5     561.4
+g2-ocl-vk.jsonl        puro:vulkan         3     792.0     780.2     794.1
+g3-smart-oc.jsonl      opencl@bench        3    1646.0    1430.8    1781.3
+g4-smart-vk.jsonl      vulkan@bench        3    1525.4    1117.7    1758.7
+pf1-htp.jsonl          puro:htp            3    3305.8    3218.7    4198.7
+pf3-bridge.jsonl       htp:opencl@bench    3    2812.0    2618.1    2878.0

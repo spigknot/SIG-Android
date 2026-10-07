@@ -1,0 +1,1924 @@
+--------- beginning of main
+10-07 19:12:23.849 I/NpuProbe(20210): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.849 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.849 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.853 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:12:23.887 I/NpuProbe(20210): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:12:23.888 I/NpuProbe(20210): [ggml] 
+10-07 19:12:23.888 I/NpuProbe(20210): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c4a00
+10-07 19:12:23.942 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:12:23.948 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.948 I/NpuProbe(20210): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:12:23.948 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.948 I/NpuProbe(20210): devices=4
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.948 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.949 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.949 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.949 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.951 I/NpuProbe(20210): REPORT:
+10-07 19:12:23.951 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.951 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.951 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.951 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.951 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.951 I/NpuProbe(20210): devices=4
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.951 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.951 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.951 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.951 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.952 I/NpuProbe(20210): AUTO-GATILHO='smart:sessao'
+10-07 19:12:23.952 I/NpuProbe(20210): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:12:23.952 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:23.954 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+--------- beginning of main
+10-07 19:12:23.849 I/NpuProbe(20210): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.849 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.849 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.853 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:12:23.887 I/NpuProbe(20210): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:12:23.888 I/NpuProbe(20210): [ggml] 
+10-07 19:12:23.888 I/NpuProbe(20210): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c4a00
+10-07 19:12:23.942 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:12:23.948 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.948 I/NpuProbe(20210): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:12:23.948 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.948 I/NpuProbe(20210): devices=4
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.948 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.949 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.949 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.949 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.951 I/NpuProbe(20210): REPORT:
+10-07 19:12:23.951 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.951 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.951 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.951 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.951 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.951 I/NpuProbe(20210): devices=4
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.951 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.951 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.951 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.951 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.952 I/NpuProbe(20210): AUTO-GATILHO='smart:sessao'
+10-07 19:12:23.952 I/NpuProbe(20210): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:12:23.952 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:23.954 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.821 I/NpuProbe(20210): SESSAO(6538b67): fim (4 requests)
+10-07 19:12:51.822 I/NpuProbe(20210): SMART REPORT:
+10-07 19:12:51.822 I/NpuProbe(20210): SMART (sessao)
+10-07 19:12:51.822 I/NpuProbe(20210): 
+10-07 19:12:51.822 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:51.822 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESSAO(6538b67): fim (4 requests)
+--------- beginning of main
+10-07 19:12:23.849 I/NpuProbe(20210): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.849 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.849 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.853 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:12:23.887 I/NpuProbe(20210): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:12:23.888 I/NpuProbe(20210): [ggml] 
+10-07 19:12:23.888 I/NpuProbe(20210): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c4a00
+10-07 19:12:23.942 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:12:23.948 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.948 I/NpuProbe(20210): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:12:23.948 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.948 I/NpuProbe(20210): devices=4
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.948 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.949 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.949 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.949 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.951 I/NpuProbe(20210): REPORT:
+10-07 19:12:23.951 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.951 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.951 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.951 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.951 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.951 I/NpuProbe(20210): devices=4
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.951 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.951 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.951 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.951 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.952 I/NpuProbe(20210): AUTO-GATILHO='smart:sessao'
+10-07 19:12:23.952 I/NpuProbe(20210): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:12:23.952 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:23.954 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.821 I/NpuProbe(20210): SESSAO(6538b67): fim (4 requests)
+10-07 19:12:51.822 I/NpuProbe(20210): SMART REPORT:
+10-07 19:12:51.822 I/NpuProbe(20210): SMART (sessao)
+10-07 19:12:51.822 I/NpuProbe(20210): 
+10-07 19:12:51.822 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:51.822 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESSAO(6538b67): fim (4 requests)
+10-07 19:13:20.947 I/NpuProbe(25138): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:20.947 I/NpuProbe(25138): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:20.947 I/NpuProbe(25138): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:13:20.948 I/NpuProbe(25138): controle-sistema (liblog.so)=OK
+10-07 19:13:20.948 I/NpuProbe(25138): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:13:20.949 I/NpuProbe(25138): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:13:20.951 I/NpuProbe(25138): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:13:20.951 I/NpuProbe(25138): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:13:20.952 I/NpuProbe(25138): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:13:20.953 I/NpuProbe(25138): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:13:20.963 I/NpuProbe(25138): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] 
+10-07 19:13:20.964 I/NpuProbe(25138): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:13:20.999 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:13:20.999 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c8840
+10-07 19:13:21.003 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:13:21.010 I/NpuProbe(25138): load_all_from_path=59ms
+10-07 19:13:21.011 I/NpuProbe(25138): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:13:21.011 I/NpuProbe(25138): load(hexagon direto)=FALHOU em 1ms
+10-07 19:13:21.011 I/NpuProbe(25138): devices=4
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[2] HTP0 (Hexagon)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[3] CPU (CPU)
+10-07 19:13:21.011 I/NpuProbe(25138): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:13:21.012 I/NpuProbe(25138): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:13:21.012 I/NpuProbe(25138): c[0]=128.000000 (esperado 128.0)
+10-07 19:13:21.012 I/NpuProbe(25138): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:13:21.013 I/NpuProbe(25138): REPORT:
+10-07 19:13:21.013 I/NpuProbe(25138): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:21.013 I/NpuProbe(25138): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:13:21.013 I/NpuProbe(25138): controle-sistema (liblog.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:13:21.013 I/NpuProbe(25138): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:13:21.013 I/NpuProbe(25138): load_all_from_path=59ms
+10-07 19:13:21.013 I/NpuProbe(25138): load(hexagon direto)=FALHOU em 1ms
+10-07 19:13:21.013 I/NpuProbe(25138): devices=4
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[2] HTP0 (Hexagon)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[3] CPU (CPU)
+10-07 19:13:21.013 I/NpuProbe(25138): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:13:21.013 I/NpuProbe(25138): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:13:21.013 I/NpuProbe(25138): c[0]=128.000000 (esperado 128.0)
+10-07 19:13:21.013 I/NpuProbe(25138): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:13:21.013 I/NpuProbe(25138): AUTO-GATILHO='smart:sessao'
+10-07 19:13:21.014 I/NpuProbe(25138): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:13:21.014 I/NpuProbe(25138): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:13:21.015 I/NpuProbe(25138): SESSAO(6540edc): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: subgroup shuffle support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device FP16 support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: khr dot product support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: mem base addr align: 128
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: global mem size: 7555 MB
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max workgroup size: 1024
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM fine grain system support: false
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM atomics support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-07 19:13:29.957 I/NpuProbe(25138): [ggml] ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+10-07 19:13:29.957 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa prepass f16
+10-07 19:13:30.053 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16
+10-07 19:13:32.672 I/NpuProbe(25138): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 DK=128 DV=128 per-kernel max 128 < required 256; skipping registration (will fall back)
+10-07 19:13:32.672 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+10-07 19:13:33.701 I/NpuProbe(25138): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 (g8) DK=128 DV=128 per-kernel max 128 < required 192; skipping registration (will fall back)
+10-07 19:13:33.701 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 c8 NSG2
+10-07 19:13:34.021 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+10-07 19:13:34.461 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 split
+--------- beginning of main
+10-07 19:12:23.849 I/NpuProbe(20210): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.849 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.849 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.853 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:12:23.887 I/NpuProbe(20210): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:12:23.888 I/NpuProbe(20210): [ggml] 
+10-07 19:12:23.888 I/NpuProbe(20210): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c4a00
+10-07 19:12:23.942 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:12:23.948 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.948 I/NpuProbe(20210): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:12:23.948 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.948 I/NpuProbe(20210): devices=4
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.948 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.949 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.949 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.949 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.951 I/NpuProbe(20210): REPORT:
+10-07 19:12:23.951 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.951 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.951 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.951 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.951 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.951 I/NpuProbe(20210): devices=4
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.951 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.951 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.951 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.951 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.952 I/NpuProbe(20210): AUTO-GATILHO='smart:sessao'
+10-07 19:12:23.952 I/NpuProbe(20210): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:12:23.952 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:23.954 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.821 I/NpuProbe(20210): SESSAO(6538b67): fim (4 requests)
+10-07 19:12:51.822 I/NpuProbe(20210): SMART REPORT:
+10-07 19:12:51.822 I/NpuProbe(20210): SMART (sessao)
+10-07 19:12:51.822 I/NpuProbe(20210): 
+10-07 19:12:51.822 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:51.822 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESSAO(6538b67): fim (4 requests)
+10-07 19:13:20.947 I/NpuProbe(25138): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:20.947 I/NpuProbe(25138): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:20.947 I/NpuProbe(25138): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:13:20.948 I/NpuProbe(25138): controle-sistema (liblog.so)=OK
+10-07 19:13:20.948 I/NpuProbe(25138): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:13:20.949 I/NpuProbe(25138): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:13:20.951 I/NpuProbe(25138): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:13:20.951 I/NpuProbe(25138): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:13:20.952 I/NpuProbe(25138): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:13:20.953 I/NpuProbe(25138): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:13:20.963 I/NpuProbe(25138): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] 
+10-07 19:13:20.964 I/NpuProbe(25138): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:13:20.999 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:13:20.999 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c8840
+10-07 19:13:21.003 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:13:21.010 I/NpuProbe(25138): load_all_from_path=59ms
+10-07 19:13:21.011 I/NpuProbe(25138): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:13:21.011 I/NpuProbe(25138): load(hexagon direto)=FALHOU em 1ms
+10-07 19:13:21.011 I/NpuProbe(25138): devices=4
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[2] HTP0 (Hexagon)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[3] CPU (CPU)
+10-07 19:13:21.011 I/NpuProbe(25138): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:13:21.012 I/NpuProbe(25138): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:13:21.012 I/NpuProbe(25138): c[0]=128.000000 (esperado 128.0)
+10-07 19:13:21.012 I/NpuProbe(25138): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:13:21.013 I/NpuProbe(25138): REPORT:
+10-07 19:13:21.013 I/NpuProbe(25138): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:21.013 I/NpuProbe(25138): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:13:21.013 I/NpuProbe(25138): controle-sistema (liblog.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:13:21.013 I/NpuProbe(25138): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:13:21.013 I/NpuProbe(25138): load_all_from_path=59ms
+10-07 19:13:21.013 I/NpuProbe(25138): load(hexagon direto)=FALHOU em 1ms
+10-07 19:13:21.013 I/NpuProbe(25138): devices=4
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[2] HTP0 (Hexagon)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[3] CPU (CPU)
+10-07 19:13:21.013 I/NpuProbe(25138): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:13:21.013 I/NpuProbe(25138): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:13:21.013 I/NpuProbe(25138): c[0]=128.000000 (esperado 128.0)
+10-07 19:13:21.013 I/NpuProbe(25138): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:13:21.013 I/NpuProbe(25138): AUTO-GATILHO='smart:sessao'
+10-07 19:13:21.014 I/NpuProbe(25138): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:13:21.014 I/NpuProbe(25138): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:13:21.015 I/NpuProbe(25138): SESSAO(6540edc): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: subgroup shuffle support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device FP16 support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: khr dot product support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: mem base addr align: 128
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: global mem size: 7555 MB
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max workgroup size: 1024
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM fine grain system support: false
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM atomics support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-07 19:13:29.957 I/NpuProbe(25138): [ggml] ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+10-07 19:13:29.957 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa prepass f16
+10-07 19:13:30.053 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16
+10-07 19:13:32.672 I/NpuProbe(25138): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 DK=128 DV=128 per-kernel max 128 < required 256; skipping registration (will fall back)
+10-07 19:13:32.672 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+10-07 19:13:33.701 I/NpuProbe(25138): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 (g8) DK=128 DV=128 per-kernel max 128 < required 192; skipping registration (will fall back)
+10-07 19:13:33.701 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 c8 NSG2
+10-07 19:13:34.021 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+10-07 19:13:34.461 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 split
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl tempos: prefill=1981.92ms export=0.12ms(2032789B) import=11.32ms gen=4139.02ms
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl fronteiras(ms): prefdone=1982.7 tok1r=1998.9 impdone=2010.3 tok2r=5824.2 fim=6149.3 wall=6149.3 reset=12.16
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl lifecycle: load_dst=4870ms load_src=243ms (0=WARM)
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl tempos: prefill=2344.38ms export=0.12ms(2032789B) import=8.49ms gen=507.53ms
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl fronteiras(ms): prefdone=2345.8 tok1r=2362.0 impdone=2370.5 tok2r=2399.6 fim=2878.0 wall=2878.0 reset=5.13
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl tempos: prefill=2273.18ms export=0.11ms(2032789B) import=10.37ms gen=317.70ms
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl fronteiras(ms): prefdone=2273.8 tok1r=2290.1 impdone=2300.4 tok2r=2353.8 fim=2618.1 wall=2618.1 reset=10.73
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl tempos: prefill=2450.19ms export=0.12ms(2032789B) import=27.13ms gen=317.33ms
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl fronteiras(ms): prefdone=2451.4 tok1r=2467.6 impdone=2494.7 tok2r=2524.1 fim=2812.0 wall=2812.0 reset=10.80
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESSAO(6540edc): fim (4 requests)
+10-07 19:13:54.785 I/NpuProbe(25138): SMART REPORT:
+10-07 19:13:54.785 I/NpuProbe(25138): SMART (sessao)
+10-07 19:13:54.785 I/NpuProbe(25138): 
+10-07 19:13:54.785 I/NpuProbe(25138): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:13:54.785 I/NpuProbe(25138): SESSAO(6540edc): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl tempos: prefill=1981.92ms export=0.12ms(2032789B) import=11.32ms gen=4139.02ms
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl fronteiras(ms): prefdone=1982.7 tok1r=1998.9 impdone=2010.3 tok2r=5824.2 fim=6149.3 wall=6149.3 reset=12.16
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl lifecycle: load_dst=4870ms load_src=243ms (0=WARM)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl tempos: prefill=2344.38ms export=0.12ms(2032789B) import=8.49ms gen=507.53ms
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl fronteiras(ms): prefdone=2345.8 tok1r=2362.0 impdone=2370.5 tok2r=2399.6 fim=2878.0 wall=2878.0 reset=5.13
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl tempos: prefill=2273.18ms export=0.11ms(2032789B) import=10.37ms gen=317.70ms
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl fronteiras(ms): prefdone=2273.8 tok1r=2290.1 impdone=2300.4 tok2r=2353.8 fim=2618.1 wall=2618.1 reset=10.73
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl tempos: prefill=2450.19ms export=0.12ms(2032789B) import=27.13ms gen=317.33ms
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl fronteiras(ms): prefdone=2451.4 tok1r=2467.6 impdone=2494.7 tok2r=2524.1 fim=2812.0 wall=2812.0 reset=10.80
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESSAO(6540edc): fim (4 requests)
+--------- beginning of main
+10-07 19:12:23.849 I/NpuProbe(20210): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.849 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.849 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.849 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.853 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.854 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:12:23.857 I/NpuProbe(20210): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:12:23.887 I/NpuProbe(20210): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:12:23.888 I/NpuProbe(20210): [ggml] 
+10-07 19:12:23.888 I/NpuProbe(20210): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:12:23.889 I/NpuProbe(20210): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:12:23.897 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:12:23.938 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c4a00
+10-07 19:12:23.942 I/NpuProbe(20210): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:12:23.948 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.948 I/NpuProbe(20210): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:12:23.948 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.948 I/NpuProbe(20210): devices=4
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.948 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.948 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.949 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.949 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.949 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.951 I/NpuProbe(20210): REPORT:
+10-07 19:12:23.951 I/NpuProbe(20210): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:12:23.951 I/NpuProbe(20210): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:12:23.951 I/NpuProbe(20210): controle-sistema (liblog.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:12:23.951 I/NpuProbe(20210): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:12:23.951 I/NpuProbe(20210): load_all_from_path=93ms
+10-07 19:12:23.951 I/NpuProbe(20210): load(hexagon direto)=FALHOU em 0ms
+10-07 19:12:23.951 I/NpuProbe(20210): devices=4
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[2] HTP0 (Hexagon)
+10-07 19:12:23.951 I/NpuProbe(20210):   dev[3] CPU (CPU)
+10-07 19:12:23.951 I/NpuProbe(20210): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:12:23.951 I/NpuProbe(20210): graph_compute(MUL_MAT 64x64)=0.7ms status=0
+10-07 19:12:23.951 I/NpuProbe(20210): c[0]=128.000000 (esperado 128.0)
+10-07 19:12:23.951 I/NpuProbe(20210): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:12:23.952 I/NpuProbe(20210): AUTO-GATILHO='smart:sessao'
+10-07 19:12:23.952 I/NpuProbe(20210): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:12:23.952 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:23.954 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:32.261 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:42.360 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+10-07 19:12:46.937 I/NpuProbe(20210): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+10-07 19:12:51.730 I/NpuProbe(20210): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.821 I/NpuProbe(20210): SESSAO(6538b67): fim (4 requests)
+10-07 19:12:51.822 I/NpuProbe(20210): SMART REPORT:
+10-07 19:12:51.822 I/NpuProbe(20210): SMART (sessao)
+10-07 19:12:51.822 I/NpuProbe(20210): 
+10-07 19:12:51.822 I/NpuProbe(20210): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:12:51.822 I/NpuProbe(20210): SESSAO(6538b67): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+10-07 19:12:51.822 I/NpuProbe(20210): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:12:51.822 I/NpuProbe(20210): SESSAO(6538b67): fim (4 requests)
+10-07 19:13:20.947 I/NpuProbe(25138): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:20.947 I/NpuProbe(25138): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:20.947 I/NpuProbe(25138): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:13:20.948 I/NpuProbe(25138): controle-sistema (liblog.so)=OK
+10-07 19:13:20.948 I/NpuProbe(25138): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:13:20.949 I/NpuProbe(25138): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:13:20.951 I/NpuProbe(25138): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:13:20.951 I/NpuProbe(25138): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:13:20.952 I/NpuProbe(25138): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:13:20.953 I/NpuProbe(25138): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:13:20.963 I/NpuProbe(25138): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] 
+10-07 19:13:20.964 I/NpuProbe(25138): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:13:20.964 I/NpuProbe(25138): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:13:20.965 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:13:20.999 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:13:20.999 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c8840
+10-07 19:13:21.003 I/NpuProbe(25138): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:13:21.010 I/NpuProbe(25138): load_all_from_path=59ms
+10-07 19:13:21.011 I/NpuProbe(25138): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:13:21.011 I/NpuProbe(25138): load(hexagon direto)=FALHOU em 1ms
+10-07 19:13:21.011 I/NpuProbe(25138): devices=4
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[2] HTP0 (Hexagon)
+10-07 19:13:21.011 I/NpuProbe(25138):   dev[3] CPU (CPU)
+10-07 19:13:21.011 I/NpuProbe(25138): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:13:21.012 I/NpuProbe(25138): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:13:21.012 I/NpuProbe(25138): c[0]=128.000000 (esperado 128.0)
+10-07 19:13:21.012 I/NpuProbe(25138): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:13:21.013 I/NpuProbe(25138): REPORT:
+10-07 19:13:21.013 I/NpuProbe(25138): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:13:21.013 I/NpuProbe(25138): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:13:21.013 I/NpuProbe(25138): controle-sistema (liblog.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:13:21.013 I/NpuProbe(25138): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:13:21.013 I/NpuProbe(25138): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:13:21.013 I/NpuProbe(25138): load_all_from_path=59ms
+10-07 19:13:21.013 I/NpuProbe(25138): load(hexagon direto)=FALHOU em 1ms
+10-07 19:13:21.013 I/NpuProbe(25138): devices=4
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[2] HTP0 (Hexagon)
+10-07 19:13:21.013 I/NpuProbe(25138):   dev[3] CPU (CPU)
+10-07 19:13:21.013 I/NpuProbe(25138): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:13:21.013 I/NpuProbe(25138): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:13:21.013 I/NpuProbe(25138): c[0]=128.000000 (esperado 128.0)
+10-07 19:13:21.013 I/NpuProbe(25138): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:13:21.013 I/NpuProbe(25138): AUTO-GATILHO='smart:sessao'
+10-07 19:13:21.014 I/NpuProbe(25138): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:13:21.014 I/NpuProbe(25138): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:13:21.015 I/NpuProbe(25138): SESSAO(6540edc): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: subgroup shuffle support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device FP16 support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: khr dot product support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: mem base addr align: 128
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: global mem size: 7555 MB
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: device max workgroup size: 1024
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM fine grain system support: false
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: SVM atomics support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-07 19:13:25.828 I/NpuProbe(25138): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-07 19:13:29.957 I/NpuProbe(25138): [ggml] ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+10-07 19:13:29.957 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa prepass f16
+10-07 19:13:30.053 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16
+10-07 19:13:32.672 I/NpuProbe(25138): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 DK=128 DV=128 per-kernel max 128 < required 256; skipping registration (will fall back)
+10-07 19:13:32.672 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+10-07 19:13:33.701 I/NpuProbe(25138): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 (g8) DK=128 DV=128 per-kernel max 128 < required 192; skipping registration (will fall back)
+10-07 19:13:33.701 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 c8 NSG2
+10-07 19:13:34.021 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+10-07 19:13:34.461 I/NpuProbe(25138): [ggml] ggml_opencl: compiling fa f32_f16 split
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl tempos: prefill=1981.92ms export=0.12ms(2032789B) import=11.32ms gen=4139.02ms
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl fronteiras(ms): prefdone=1982.7 tok1r=1998.9 impdone=2010.3 tok2r=5824.2 fim=6149.3 wall=6149.3 reset=12.16
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl lifecycle: load_dst=4870ms load_src=243ms (0=WARM)
+10-07 19:13:36.569 I/NpuProbe(25138): SESS[0] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl tempos: prefill=2344.38ms export=0.12ms(2032789B) import=8.49ms gen=507.53ms
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl fronteiras(ms): prefdone=2345.8 tok1r=2362.0 impdone=2370.5 tok2r=2399.6 fim=2878.0 wall=2878.0 reset=5.13
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:42.461 I/NpuProbe(25138): SESS[1] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl tempos: prefill=2273.18ms export=0.11ms(2032789B) import=10.37ms gen=317.70ms
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl fronteiras(ms): prefdone=2273.8 tok1r=2290.1 impdone=2300.4 tok2r=2353.8 fim=2618.1 wall=2618.1 reset=10.73
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:47.552 I/NpuProbe(25138): SESS[2] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl tempos: prefill=2450.19ms export=0.12ms(2032789B) import=27.13ms gen=317.33ms
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl fronteiras(ms): prefdone=2451.4 tok1r=2467.6 impdone=2494.7 tok2r=2524.1 fim=2812.0 wall=2812.0 reset=10.80
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:54.593 I/NpuProbe(25138): SESS[3] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESSAO(6540edc): fim (4 requests)
+10-07 19:13:54.785 I/NpuProbe(25138): SMART REPORT:
+10-07 19:13:54.785 I/NpuProbe(25138): SMART (sessao)
+10-07 19:13:54.785 I/NpuProbe(25138): 
+10-07 19:13:54.785 I/NpuProbe(25138): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:13:54.785 I/NpuProbe(25138): SESSAO(6540edc): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl tempos: prefill=1981.92ms export=0.12ms(2032789B) import=11.32ms gen=4139.02ms
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl fronteiras(ms): prefdone=1982.7 tok1r=1998.9 impdone=2010.3 tok2r=5824.2 fim=6149.3 wall=6149.3 reset=12.16
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl lifecycle: load_dst=4870ms load_src=243ms (0=WARM)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[0] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl tempos: prefill=2344.38ms export=0.12ms(2032789B) import=8.49ms gen=507.53ms
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl fronteiras(ms): prefdone=2345.8 tok1r=2362.0 impdone=2370.5 tok2r=2399.6 fim=2878.0 wall=2878.0 reset=5.13
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[1] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl tempos: prefill=2273.18ms export=0.11ms(2032789B) import=10.37ms gen=317.70ms
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl fronteiras(ms): prefdone=2273.8 tok1r=2290.1 impdone=2300.4 tok2r=2353.8 fim=2618.1 wall=2618.1 reset=10.73
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[2] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl tempos: prefill=2450.19ms export=0.12ms(2032789B) import=27.13ms gen=317.33ms
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl fronteiras(ms): prefdone=2451.4 tok1r=2467.6 impdone=2494.7 tok2r=2524.1 fim=2812.0 wall=2812.0 reset=10.80
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl texto_len=26 (integral no JSON)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:13:54.785 I/NpuProbe(25138): SESS[3] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:13:54.785 I/NpuProbe(25138): SESSAO(6540edc): fim (4 requests)
+--------- beginning of main
+10-07 19:19:51.522 I/NpuProbe(18307): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:19:51.523 I/NpuProbe(18307): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:19:51.523 I/NpuProbe(18307): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:19:51.523 I/NpuProbe(18307): controle-sistema (liblog.so)=OK
+10-07 19:19:51.523 I/NpuProbe(18307): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:19:51.526 I/NpuProbe(18307): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:19:51.527 I/NpuProbe(18307): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:19:51.527 I/NpuProbe(18307): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:19:51.551 I/NpuProbe(18307): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:19:51.552 I/NpuProbe(18307): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:19:51.563 I/NpuProbe(18307): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:19:51.564 I/NpuProbe(18307): [ggml] 
+10-07 19:19:51.564 I/NpuProbe(18307): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:19:51.564 I/NpuProbe(18307): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:19:51.564 I/NpuProbe(18307): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:19:51.567 I/NpuProbe(18307): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:19:51.567 I/NpuProbe(18307): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:19:51.567 I/NpuProbe(18307): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:19:51.611 I/NpuProbe(18307): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:19:51.612 I/NpuProbe(18307): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53fcf80
+10-07 19:19:51.618 I/NpuProbe(18307): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:19:51.626 I/NpuProbe(18307): load_all_from_path=98ms
+10-07 19:19:51.626 I/NpuProbe(18307): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:19:51.626 I/NpuProbe(18307): load(hexagon direto)=FALHOU em 0ms
+10-07 19:19:51.626 I/NpuProbe(18307): devices=4
+10-07 19:19:51.626 I/NpuProbe(18307):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:19:51.626 I/NpuProbe(18307):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:19:51.626 I/NpuProbe(18307):   dev[2] HTP0 (Hexagon)
+10-07 19:19:51.626 I/NpuProbe(18307):   dev[3] CPU (CPU)
+10-07 19:19:51.626 I/NpuProbe(18307): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:19:51.628 I/NpuProbe(18307): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:19:51.628 I/NpuProbe(18307): c[0]=128.000000 (esperado 128.0)
+10-07 19:19:51.628 I/NpuProbe(18307): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:19:51.629 I/NpuProbe(18307): REPORT:
+10-07 19:19:51.629 I/NpuProbe(18307): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:19:51.629 I/NpuProbe(18307): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:19:51.629 I/NpuProbe(18307): controle-sistema (liblog.so)=OK
+10-07 19:19:51.629 I/NpuProbe(18307): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:19:51.629 I/NpuProbe(18307): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:19:51.629 I/NpuProbe(18307): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:19:51.629 I/NpuProbe(18307): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:19:51.629 I/NpuProbe(18307): load_all_from_path=98ms
+10-07 19:19:51.629 I/NpuProbe(18307): load(hexagon direto)=FALHOU em 0ms
+10-07 19:19:51.629 I/NpuProbe(18307): devices=4
+10-07 19:19:51.629 I/NpuProbe(18307):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:19:51.629 I/NpuProbe(18307):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:19:51.629 I/NpuProbe(18307):   dev[2] HTP0 (Hexagon)
+10-07 19:19:51.629 I/NpuProbe(18307):   dev[3] CPU (CPU)
+10-07 19:19:51.629 I/NpuProbe(18307): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:19:51.629 I/NpuProbe(18307): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:19:51.629 I/NpuProbe(18307): c[0]=128.000000 (esperado 128.0)
+10-07 19:19:51.629 I/NpuProbe(18307): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:19:51.630 I/NpuProbe(18307): AUTO-GATILHO='smart:sessao'
+10-07 19:19:51.630 I/NpuProbe(18307): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:19:51.630 I/NpuProbe(18307): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:19:51.633 I/NpuProbe(18307): SESSAO(6588b84): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:19:55.397 I/NpuProbe(18307): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=1095.25ms gen=1671.37ms pp1=0.43ms wall=2766.9ms
+10-07 19:19:55.397 I/NpuProbe(18307): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:19:55.397 I/NpuProbe(18307): SESS[0] puro:htp lifecycle: load=575ms reset=1.89ms wall=2766.9ms
+10-07 19:19:55.397 I/NpuProbe(18307): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+--------- beginning of main
+10-07 19:19:51.522 I/NpuProbe(18307): nativeLibraryDir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:19:51.523 I/NpuProbe(18307): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:19:51.523 I/NpuProbe(18307): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:19:51.523 I/NpuProbe(18307): controle-sistema (liblog.so)=OK
+10-07 19:19:51.523 I/NpuProbe(18307): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:19:51.526 I/NpuProbe(18307): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:19:51.527 I/NpuProbe(18307): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:19:51.527 I/NpuProbe(18307): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:19:51.551 I/NpuProbe(18307): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:19:51.552 I/NpuProbe(18307): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:19:51.563 I/NpuProbe(18307): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:19:51.564 I/NpuProbe(18307): [ggml] 
+10-07 19:19:51.564 I/NpuProbe(18307): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:19:51.564 I/NpuProbe(18307): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:19:51.564 I/NpuProbe(18307): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:19:51.567 I/NpuProbe(18307): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:19:51.567 I/NpuProbe(18307): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:19:51.567 I/NpuProbe(18307): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:19:51.611 I/NpuProbe(18307): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:19:51.612 I/NpuProbe(18307): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53fcf80
+10-07 19:19:51.618 I/NpuProbe(18307): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:19:51.626 I/NpuProbe(18307): load_all_from_path=98ms
+10-07 19:19:51.626 I/NpuProbe(18307): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64/libggml-hexagon.so
+10-07 19:19:51.626 I/NpuProbe(18307): load(hexagon direto)=FALHOU em 0ms
+10-07 19:19:51.626 I/NpuProbe(18307): devices=4
+10-07 19:19:51.626 I/NpuProbe(18307):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:19:51.626 I/NpuProbe(18307):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:19:51.626 I/NpuProbe(18307):   dev[2] HTP0 (Hexagon)
+10-07 19:19:51.626 I/NpuProbe(18307):   dev[3] CPU (CPU)
+10-07 19:19:51.626 I/NpuProbe(18307): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:19:51.628 I/NpuProbe(18307): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:19:51.628 I/NpuProbe(18307): c[0]=128.000000 (esperado 128.0)
+10-07 19:19:51.628 I/NpuProbe(18307): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:19:51.629 I/NpuProbe(18307): REPORT:
+10-07 19:19:51.629 I/NpuProbe(18307): libdir=/data/app/~~iujOQuNMHD2DVCvyt1gfww==/br.gov.sp.pcsp.npuprobe-3my91nFltGR7yYMA3K5hBA==/lib/arm64
+10-07 19:19:51.629 I/NpuProbe(18307): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:19:51.629 I/NpuProbe(18307): controle-sistema (liblog.so)=OK
+10-07 19:19:51.629 I/NpuProbe(18307): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:19:51.629 I/NpuProbe(18307): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:19:51.629 I/NpuProbe(18307): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:19:51.629 I/NpuProbe(18307): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:19:51.629 I/NpuProbe(18307): load_all_from_path=98ms
+10-07 19:19:51.629 I/NpuProbe(18307): load(hexagon direto)=FALHOU em 0ms
+10-07 19:19:51.629 I/NpuProbe(18307): devices=4
+10-07 19:19:51.629 I/NpuProbe(18307):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:19:51.629 I/NpuProbe(18307):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:19:51.629 I/NpuProbe(18307):   dev[2] HTP0 (Hexagon)
+10-07 19:19:51.629 I/NpuProbe(18307):   dev[3] CPU (CPU)
+10-07 19:19:51.629 I/NpuProbe(18307): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:19:51.629 I/NpuProbe(18307): graph_compute(MUL_MAT 64x64)=0.6ms status=0
+10-07 19:19:51.629 I/NpuProbe(18307): c[0]=128.000000 (esperado 128.0)
+10-07 19:19:51.629 I/NpuProbe(18307): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:19:51.630 I/NpuProbe(18307): AUTO-GATILHO='smart:sessao'
+10-07 19:19:51.630 I/NpuProbe(18307): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:19:51.630 I/NpuProbe(18307): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:19:51.633 I/NpuProbe(18307): SESSAO(6588b84): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:19:55.397 I/NpuProbe(18307): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=1095.25ms gen=1671.37ms pp1=0.43ms wall=2766.9ms
+10-07 19:19:55.397 I/NpuProbe(18307): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:19:55.397 I/NpuProbe(18307): SESS[0] puro:htp lifecycle: load=575ms reset=1.89ms wall=2766.9ms
+10-07 19:19:55.397 I/NpuProbe(18307): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:19:58.034 I/NpuProbe(18307): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1102.69ms gen=1530.95ms pp1=0.11ms wall=2634.3ms
+10-07 19:19:58.034 I/NpuProbe(18307): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:19:58.034 I/NpuProbe(18307): SESS[1] puro:htp lifecycle: load=0ms reset=2.19ms wall=2634.3ms
+10-07 19:19:58.034 I/NpuProbe(18307): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:20:00.789 I/NpuProbe(18307): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1166.22ms gen=1586.19ms pp1=0.17ms wall=2753.0ms
+10-07 19:20:00.789 I/NpuProbe(18307): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:20:00.789 I/NpuProbe(18307): SESS[2] puro:htp lifecycle: load=0ms reset=2.07ms wall=2753.0ms
+10-07 19:20:00.789 I/NpuProbe(18307): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:20:03.384 I/NpuProbe(18307): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1186.20ms gen=1405.83ms pp1=0.18ms wall=2592.8ms
+10-07 19:20:03.384 I/NpuProbe(18307): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:20:03.384 I/NpuProbe(18307): SESS[3] puro:htp lifecycle: load=0ms reset=2.18ms wall=2592.8ms
+10-07 19:20:03.384 I/NpuProbe(18307): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:20:03.457 I/NpuProbe(18307): SESSAO(6588b84): fim (4 requests)
+10-07 19:20:03.457 I/NpuProbe(18307): SMART REPORT:
+10-07 19:20:03.457 I/NpuProbe(18307): SMART (sessao)
+10-07 19:20:03.457 I/NpuProbe(18307): 
+10-07 19:20:03.457 I/NpuProbe(18307): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:20:03.457 I/NpuProbe(18307): SESSAO(6588b84): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[0] puro:htp puro: ok=1 pieces=8 prefill=1095.25ms gen=1671.37ms pp1=0.43ms wall=2766.9ms
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[0] puro:htp lifecycle: load=575ms reset=1.89ms wall=2766.9ms
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1102.69ms gen=1530.95ms pp1=0.11ms wall=2634.3ms
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[1] puro:htp lifecycle: load=0ms reset=2.19ms wall=2634.3ms
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1166.22ms gen=1586.19ms pp1=0.17ms wall=2753.0ms
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[2] puro:htp lifecycle: load=0ms reset=2.07ms wall=2753.0ms
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1186.20ms gen=1405.83ms pp1=0.18ms wall=2592.8ms
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[3] puro:htp lifecycle: load=0ms reset=2.18ms wall=2592.8ms
+10-07 19:20:03.457 I/NpuProbe(18307): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:20:03.457 I/NpuProbe(18307): SESSAO(6588b84): fim (4 requests)
+--------- beginning of main
+10-07 19:25:36.591 I/NpuProbe(21964): nativeLibraryDir=/data/app/~~GIqIkzbwZgfQ7t90pH9Oug==/br.gov.sp.pcsp.npuprobe-Y0rvuZG8RiPciCdP5a4tQA==/lib/arm64
+10-07 19:25:36.591 I/NpuProbe(21964): libdir=/data/app/~~GIqIkzbwZgfQ7t90pH9Oug==/br.gov.sp.pcsp.npuprobe-Y0rvuZG8RiPciCdP5a4tQA==/lib/arm64
+10-07 19:25:36.591 I/NpuProbe(21964): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:25:36.591 I/NpuProbe(21964): controle-sistema (liblog.so)=OK
+10-07 19:25:36.591 I/NpuProbe(21964): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:25:36.593 I/NpuProbe(21964): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:25:36.594 I/NpuProbe(21964): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:25:36.594 I/NpuProbe(21964): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:25:36.595 I/NpuProbe(21964): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:25:36.596 I/NpuProbe(21964): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:25:36.637 I/NpuProbe(21964): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:25:36.638 I/NpuProbe(21964): [ggml] 
+10-07 19:25:36.638 I/NpuProbe(21964): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:25:36.638 I/NpuProbe(21964): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:25:36.638 I/NpuProbe(21964): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:25:36.640 I/NpuProbe(21964): [ggml] ggml-hex: FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+10-07 19:25:36.640 I/NpuProbe(21964): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:25:36.640 I/NpuProbe(21964): [ggml] ggml-hex: Hexagon Arch version v81, DMA64 enabled
+10-07 19:25:36.640 I/NpuProbe(21964): [ggml] ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+10-07 19:25:36.642 I/NpuProbe(21964): load_all_from_path=48ms
+10-07 19:25:36.643 I/NpuProbe(21964): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~GIqIkzbwZgfQ7t90pH9Oug==/br.gov.sp.pcsp.npuprobe-Y0rvuZG8RiPciCdP5a4tQA==/lib/arm64/libggml-hexagon.so
+10-07 19:25:36.643 I/NpuProbe(21964): load(hexagon direto)=FALHOU em 0ms
+10-07 19:25:36.643 I/NpuProbe(21964): devices=4
+10-07 19:25:36.643 I/NpuProbe(21964):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:25:36.643 I/NpuProbe(21964):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:25:36.643 I/NpuProbe(21964):   dev[2] HTP0 (Hexagon)
+10-07 19:25:36.643 I/NpuProbe(21964):   dev[3] CPU (CPU)
+10-07 19:25:36.643 I/NpuProbe(21964): [ggml] ggml-hex: HTP0 allocating new session : domain 3 phys-idx 0 virt-idx 0
+10-07 19:25:36.677 I/NpuProbe(21964): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:25:36.678 I/NpuProbe(21964): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d521ba80
+10-07 19:25:36.687 I/NpuProbe(21964): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 8192 n-ops 1280 vmem 3311845376
+10-07 19:25:36.691 I/NpuProbe(21964): dev_init(HTP0)=49ms -> SESSAO ABERTA
+--------- beginning of main
+10-07 19:25:36.591 I/NpuProbe(21964): nativeLibraryDir=/data/app/~~GIqIkzbwZgfQ7t90pH9Oug==/br.gov.sp.pcsp.npuprobe-Y0rvuZG8RiPciCdP5a4tQA==/lib/arm64
+10-07 19:25:36.591 I/NpuProbe(21964): libdir=/data/app/~~GIqIkzbwZgfQ7t90pH9Oug==/br.gov.sp.pcsp.npuprobe-Y0rvuZG8RiPciCdP5a4tQA==/lib/arm64
+10-07 19:25:36.591 I/NpuProbe(21964): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:25:36.591 I/NpuProbe(21964): controle-sistema (liblog.so)=OK
+10-07 19:25:36.591 I/NpuProbe(21964): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:25:36.593 I/NpuProbe(21964): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:25:36.594 I/NpuProbe(21964): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:25:36.594 I/NpuProbe(21964): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:25:36.595 I/NpuProbe(21964): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:25:36.596 I/NpuProbe(21964): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:25:36.637 I/NpuProbe(21964): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:25:36.638 I/NpuProbe(21964): [ggml] 
+10-07 19:25:36.638 I/NpuProbe(21964): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:25:36.638 I/NpuProbe(21964): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:25:36.638 I/NpuProbe(21964): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:25:36.640 I/NpuProbe(21964): [ggml] ggml-hex: FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+10-07 19:25:36.640 I/NpuProbe(21964): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:25:36.640 I/NpuProbe(21964): [ggml] ggml-hex: Hexagon Arch version v81, DMA64 enabled
+10-07 19:25:36.640 I/NpuProbe(21964): [ggml] ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+10-07 19:25:36.642 I/NpuProbe(21964): load_all_from_path=48ms
+10-07 19:25:36.643 I/NpuProbe(21964): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~GIqIkzbwZgfQ7t90pH9Oug==/br.gov.sp.pcsp.npuprobe-Y0rvuZG8RiPciCdP5a4tQA==/lib/arm64/libggml-hexagon.so
+10-07 19:25:36.643 I/NpuProbe(21964): load(hexagon direto)=FALHOU em 0ms
+10-07 19:25:36.643 I/NpuProbe(21964): devices=4
+10-07 19:25:36.643 I/NpuProbe(21964):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:25:36.643 I/NpuProbe(21964):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:25:36.643 I/NpuProbe(21964):   dev[2] HTP0 (Hexagon)
+10-07 19:25:36.643 I/NpuProbe(21964):   dev[3] CPU (CPU)
+10-07 19:25:36.643 I/NpuProbe(21964): [ggml] ggml-hex: HTP0 allocating new session : domain 3 phys-idx 0 virt-idx 0
+10-07 19:25:36.677 I/NpuProbe(21964): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:25:36.678 I/NpuProbe(21964): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d521ba80
+10-07 19:25:36.687 I/NpuProbe(21964): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 8192 n-ops 1280 vmem 3311845376
+10-07 19:25:36.691 I/NpuProbe(21964): dev_init(HTP0)=49ms -> SESSAO ABERTA
+--------- beginning of main
+10-07 19:27:02.814 I/NpuProbe(20764): nativeLibraryDir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:27:02.814 I/NpuProbe(20764): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:27:02.814 I/NpuProbe(20764): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:27:02.814 I/NpuProbe(20764): controle-sistema (liblog.so)=OK
+10-07 19:27:02.814 I/NpuProbe(20764): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:27:02.815 I/NpuProbe(20764): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:27:02.816 I/NpuProbe(20764): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:27:02.816 I/NpuProbe(20764): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:27:02.819 I/NpuProbe(20764): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:27:02.819 I/NpuProbe(20764): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:27:02.829 I/NpuProbe(20764): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:27:02.829 I/NpuProbe(20764): [ggml] 
+10-07 19:27:02.829 I/NpuProbe(20764): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:27:02.829 I/NpuProbe(20764): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:27:02.829 I/NpuProbe(20764): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:27:02.831 I/NpuProbe(20764): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:27:02.831 I/NpuProbe(20764): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:27:02.831 I/NpuProbe(20764): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:27:02.870 I/NpuProbe(20764): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:27:02.871 I/NpuProbe(20764): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5faa940
+10-07 19:27:02.874 I/NpuProbe(20764): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:27:02.879 I/NpuProbe(20764): load_all_from_path=63ms
+10-07 19:27:02.879 I/NpuProbe(20764): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64/libggml-hexagon.so
+10-07 19:27:02.880 I/NpuProbe(20764): load(hexagon direto)=FALHOU em 0ms
+10-07 19:27:02.880 I/NpuProbe(20764): devices=4
+10-07 19:27:02.880 I/NpuProbe(20764):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:27:02.880 I/NpuProbe(20764):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:27:02.880 I/NpuProbe(20764):   dev[2] HTP0 (Hexagon)
+10-07 19:27:02.880 I/NpuProbe(20764):   dev[3] CPU (CPU)
+10-07 19:27:02.880 I/NpuProbe(20764): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:27:02.882 I/NpuProbe(20764): graph_compute(MUL_MAT 64x64)=1.9ms status=0
+10-07 19:27:02.882 I/NpuProbe(20764): c[0]=128.000000 (esperado 128.0)
+10-07 19:27:02.882 I/NpuProbe(20764): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:27:02.883 I/NpuProbe(20764): REPORT:
+10-07 19:27:02.883 I/NpuProbe(20764): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:27:02.883 I/NpuProbe(20764): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:27:02.883 I/NpuProbe(20764): controle-sistema (liblog.so)=OK
+10-07 19:27:02.883 I/NpuProbe(20764): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:27:02.883 I/NpuProbe(20764): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:27:02.883 I/NpuProbe(20764): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:27:02.883 I/NpuProbe(20764): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:27:02.883 I/NpuProbe(20764): load_all_from_path=63ms
+10-07 19:27:02.883 I/NpuProbe(20764): load(hexagon direto)=FALHOU em 0ms
+10-07 19:27:02.883 I/NpuProbe(20764): devices=4
+10-07 19:27:02.883 I/NpuProbe(20764):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:27:02.883 I/NpuProbe(20764):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:27:02.883 I/NpuProbe(20764):   dev[2] HTP0 (Hexagon)
+10-07 19:27:02.883 I/NpuProbe(20764):   dev[3] CPU (CPU)
+10-07 19:27:02.883 I/NpuProbe(20764): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:27:02.883 I/NpuProbe(20764): graph_compute(MUL_MAT 64x64)=1.9ms status=0
+10-07 19:27:02.883 I/NpuProbe(20764): c[0]=128.000000 (esperado 128.0)
+10-07 19:27:02.883 I/NpuProbe(20764): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:27:02.884 I/NpuProbe(20764): AUTO-GATILHO='smart:sessao'
+10-07 19:27:02.884 I/NpuProbe(20764): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:27:02.884 I/NpuProbe(20764): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:27:02.889 I/NpuProbe(20764): SESSAO(65eb166): 8 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:27:07.247 I/NpuProbe(20764): SESS[0] puro:cpu puro: ok=1 pieces=8 prefill=1525.12ms gen=349.63ms pp1=0.46ms wall=1875.2ms
+10-07 19:27:07.248 I/NpuProbe(20764): SESS[0] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:07.248 I/NpuProbe(20764): SESS[0] puro:cpu lifecycle: load=1274ms reset=1.95ms wall=1875.2ms
+10-07 19:27:07.248 I/NpuProbe(20764): SESS[0] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:10.279 I/NpuProbe(20764): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1126.28ms gen=1699.41ms pp1=0.42ms wall=2826.0ms
+10-07 19:27:10.279 I/NpuProbe(20764): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:10.279 I/NpuProbe(20764): SESS[1] puro:htp lifecycle: load=203ms reset=1.91ms wall=2826.0ms
+10-07 19:27:10.279 I/NpuProbe(20764): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:11.469 I/NpuProbe(20764): SESS[2] puro:cpu puro: ok=1 pieces=8 prefill=796.61ms gen=390.52ms pp1=0.17ms wall=1187.9ms
+10-07 19:27:11.470 I/NpuProbe(20764): SESS[2] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:11.470 I/NpuProbe(20764): SESS[2] puro:cpu lifecycle: load=0ms reset=2.59ms wall=1187.9ms
+10-07 19:27:11.470 I/NpuProbe(20764): SESS[2] puro:cpu RESULTADO: PURO-EXECUTADO
+--------- beginning of main
+10-07 19:27:02.814 I/NpuProbe(20764): nativeLibraryDir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:27:02.814 I/NpuProbe(20764): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:27:02.814 I/NpuProbe(20764): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:27:02.814 I/NpuProbe(20764): controle-sistema (liblog.so)=OK
+10-07 19:27:02.814 I/NpuProbe(20764): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:27:02.815 I/NpuProbe(20764): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:27:02.816 I/NpuProbe(20764): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:27:02.816 I/NpuProbe(20764): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:27:02.819 I/NpuProbe(20764): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:27:02.819 I/NpuProbe(20764): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:27:02.829 I/NpuProbe(20764): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:27:02.829 I/NpuProbe(20764): [ggml] 
+10-07 19:27:02.829 I/NpuProbe(20764): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:27:02.829 I/NpuProbe(20764): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:27:02.829 I/NpuProbe(20764): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:27:02.831 I/NpuProbe(20764): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:27:02.831 I/NpuProbe(20764): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:27:02.831 I/NpuProbe(20764): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:27:02.870 I/NpuProbe(20764): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:27:02.871 I/NpuProbe(20764): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5faa940
+10-07 19:27:02.874 I/NpuProbe(20764): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:27:02.879 I/NpuProbe(20764): load_all_from_path=63ms
+10-07 19:27:02.879 I/NpuProbe(20764): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64/libggml-hexagon.so
+10-07 19:27:02.880 I/NpuProbe(20764): load(hexagon direto)=FALHOU em 0ms
+10-07 19:27:02.880 I/NpuProbe(20764): devices=4
+10-07 19:27:02.880 I/NpuProbe(20764):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:27:02.880 I/NpuProbe(20764):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:27:02.880 I/NpuProbe(20764):   dev[2] HTP0 (Hexagon)
+10-07 19:27:02.880 I/NpuProbe(20764):   dev[3] CPU (CPU)
+10-07 19:27:02.880 I/NpuProbe(20764): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:27:02.882 I/NpuProbe(20764): graph_compute(MUL_MAT 64x64)=1.9ms status=0
+10-07 19:27:02.882 I/NpuProbe(20764): c[0]=128.000000 (esperado 128.0)
+10-07 19:27:02.882 I/NpuProbe(20764): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:27:02.883 I/NpuProbe(20764): REPORT:
+10-07 19:27:02.883 I/NpuProbe(20764): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:27:02.883 I/NpuProbe(20764): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:27:02.883 I/NpuProbe(20764): controle-sistema (liblog.so)=OK
+10-07 19:27:02.883 I/NpuProbe(20764): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:27:02.883 I/NpuProbe(20764): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:27:02.883 I/NpuProbe(20764): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:27:02.883 I/NpuProbe(20764): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:27:02.883 I/NpuProbe(20764): load_all_from_path=63ms
+10-07 19:27:02.883 I/NpuProbe(20764): load(hexagon direto)=FALHOU em 0ms
+10-07 19:27:02.883 I/NpuProbe(20764): devices=4
+10-07 19:27:02.883 I/NpuProbe(20764):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:27:02.883 I/NpuProbe(20764):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:27:02.883 I/NpuProbe(20764):   dev[2] HTP0 (Hexagon)
+10-07 19:27:02.883 I/NpuProbe(20764):   dev[3] CPU (CPU)
+10-07 19:27:02.883 I/NpuProbe(20764): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:27:02.883 I/NpuProbe(20764): graph_compute(MUL_MAT 64x64)=1.9ms status=0
+10-07 19:27:02.883 I/NpuProbe(20764): c[0]=128.000000 (esperado 128.0)
+10-07 19:27:02.883 I/NpuProbe(20764): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:27:02.884 I/NpuProbe(20764): AUTO-GATILHO='smart:sessao'
+10-07 19:27:02.884 I/NpuProbe(20764): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:27:02.884 I/NpuProbe(20764): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:27:02.889 I/NpuProbe(20764): SESSAO(65eb166): 8 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:27:07.247 I/NpuProbe(20764): SESS[0] puro:cpu puro: ok=1 pieces=8 prefill=1525.12ms gen=349.63ms pp1=0.46ms wall=1875.2ms
+10-07 19:27:07.248 I/NpuProbe(20764): SESS[0] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:07.248 I/NpuProbe(20764): SESS[0] puro:cpu lifecycle: load=1274ms reset=1.95ms wall=1875.2ms
+10-07 19:27:07.248 I/NpuProbe(20764): SESS[0] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:10.279 I/NpuProbe(20764): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1126.28ms gen=1699.41ms pp1=0.42ms wall=2826.0ms
+10-07 19:27:10.279 I/NpuProbe(20764): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:10.279 I/NpuProbe(20764): SESS[1] puro:htp lifecycle: load=203ms reset=1.91ms wall=2826.0ms
+10-07 19:27:10.279 I/NpuProbe(20764): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:11.469 I/NpuProbe(20764): SESS[2] puro:cpu puro: ok=1 pieces=8 prefill=796.61ms gen=390.52ms pp1=0.17ms wall=1187.9ms
+10-07 19:27:11.470 I/NpuProbe(20764): SESS[2] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:11.470 I/NpuProbe(20764): SESS[2] puro:cpu lifecycle: load=0ms reset=2.59ms wall=1187.9ms
+10-07 19:27:11.470 I/NpuProbe(20764): SESS[2] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:14.238 I/NpuProbe(20764): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1158.45ms gen=1607.20ms pp1=0.52ms wall=2766.1ms
+10-07 19:27:14.238 I/NpuProbe(20764): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:14.238 I/NpuProbe(20764): SESS[3] puro:htp lifecycle: load=0ms reset=1.88ms wall=2766.1ms
+10-07 19:27:14.238 I/NpuProbe(20764): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:15.822 I/NpuProbe(20764): SESS[4] puro:cpu puro: ok=1 pieces=8 prefill=1119.02ms gen=462.74ms pp1=0.18ms wall=1582.3ms
+10-07 19:27:15.822 I/NpuProbe(20764): SESS[4] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:15.822 I/NpuProbe(20764): SESS[4] puro:cpu lifecycle: load=0ms reset=2.08ms wall=1582.3ms
+10-07 19:27:15.822 I/NpuProbe(20764): SESS[4] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:18.848 I/NpuProbe(20764): SESS[5] puro:htp puro: ok=1 pieces=8 prefill=1402.31ms gen=1620.78ms pp1=0.47ms wall=3023.4ms
+10-07 19:27:18.848 I/NpuProbe(20764): SESS[5] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:18.848 I/NpuProbe(20764): SESS[5] puro:htp lifecycle: load=0ms reset=2.05ms wall=3023.4ms
+10-07 19:27:18.848 I/NpuProbe(20764): SESS[5] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:20.411 I/NpuProbe(20764): SESS[6] puro:cpu puro: ok=1 pieces=8 prefill=1033.48ms gen=525.59ms pp1=0.11ms wall=1560.0ms
+10-07 19:27:20.411 I/NpuProbe(20764): SESS[6] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:20.411 I/NpuProbe(20764): SESS[6] puro:cpu lifecycle: load=0ms reset=2.61ms wall=1560.0ms
+10-07 19:27:20.411 I/NpuProbe(20764): SESS[6] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:26.940 I/NpuProbe(20764): SESS[7] puro:htp puro: ok=1 pieces=8 prefill=2024.97ms gen=1784.25ms pp1=0.66ms wall=3809.5ms
+10-07 19:27:26.940 I/NpuProbe(20764): SESS[7] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:26.940 I/NpuProbe(20764): SESS[7] puro:htp lifecycle: load=0ms reset=1.94ms wall=3809.5ms
+10-07 19:27:26.940 I/NpuProbe(20764): SESS[7] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESSAO(65eb166): fim (8 requests)
+10-07 19:27:27.045 I/NpuProbe(20764): SMART REPORT:
+10-07 19:27:27.045 I/NpuProbe(20764): SMART (sessao)
+10-07 19:27:27.045 I/NpuProbe(20764): 
+10-07 19:27:27.045 I/NpuProbe(20764): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:27:27.045 I/NpuProbe(20764): SESSAO(65eb166): 8 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[0] puro:cpu puro: ok=1 pieces=8 prefill=1525.12ms gen=349.63ms pp1=0.46ms wall=1875.2ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[0] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[0] puro:cpu lifecycle: load=1274ms reset=1.95ms wall=1875.2ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[0] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1126.28ms gen=1699.41ms pp1=0.42ms wall=2826.0ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[1] puro:htp lifecycle: load=203ms reset=1.91ms wall=2826.0ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[2] puro:cpu puro: ok=1 pieces=8 prefill=796.61ms gen=390.52ms pp1=0.17ms wall=1187.9ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[2] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[2] puro:cpu lifecycle: load=0ms reset=2.59ms wall=1187.9ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[2] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1158.45ms gen=1607.20ms pp1=0.52ms wall=2766.1ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[3] puro:htp lifecycle: load=0ms reset=1.88ms wall=2766.1ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[4] puro:cpu puro: ok=1 pieces=8 prefill=1119.02ms gen=462.74ms pp1=0.18ms wall=1582.3ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[4] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[4] puro:cpu lifecycle: load=0ms reset=2.08ms wall=1582.3ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[4] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[5] puro:htp puro: ok=1 pieces=8 prefill=1402.31ms gen=1620.78ms pp1=0.47ms wall=3023.4ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[5] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[5] puro:htp lifecycle: load=0ms reset=2.05ms wall=3023.4ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[5] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[6] puro:cpu puro: ok=1 pieces=8 prefill=1033.48ms gen=525.59ms pp1=0.11ms wall=1560.0ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[6] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[6] puro:cpu lifecycle: load=0ms reset=2.61ms wall=1560.0ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[6] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[7] puro:htp puro: ok=1 pieces=8 prefill=2024.97ms gen=1784.25ms pp1=0.66ms wall=3809.5ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[7] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[7] puro:htp lifecycle: load=0ms reset=1.94ms wall=3809.5ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[7] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESSAO(65eb166): fim (8 requests)
+--------- beginning of main
+10-07 19:27:26.940 I/NpuProbe(20764): SESS[7] puro:htp puro: ok=1 pieces=8 prefill=2024.97ms gen=1784.25ms pp1=0.66ms wall=3809.5ms
+10-07 19:27:26.940 I/NpuProbe(20764): SESS[7] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:26.940 I/NpuProbe(20764): SESS[7] puro:htp lifecycle: load=0ms reset=1.94ms wall=3809.5ms
+10-07 19:27:26.940 I/NpuProbe(20764): SESS[7] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESSAO(65eb166): fim (8 requests)
+10-07 19:27:27.045 I/NpuProbe(20764): SMART REPORT:
+10-07 19:27:27.045 I/NpuProbe(20764): SMART (sessao)
+10-07 19:27:27.045 I/NpuProbe(20764): 
+10-07 19:27:27.045 I/NpuProbe(20764): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:27:27.045 I/NpuProbe(20764): SESSAO(65eb166): 8 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[0] puro:cpu puro: ok=1 pieces=8 prefill=1525.12ms gen=349.63ms pp1=0.46ms wall=1875.2ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[0] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[0] puro:cpu lifecycle: load=1274ms reset=1.95ms wall=1875.2ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[0] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1126.28ms gen=1699.41ms pp1=0.42ms wall=2826.0ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[1] puro:htp lifecycle: load=203ms reset=1.91ms wall=2826.0ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[2] puro:cpu puro: ok=1 pieces=8 prefill=796.61ms gen=390.52ms pp1=0.17ms wall=1187.9ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[2] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[2] puro:cpu lifecycle: load=0ms reset=2.59ms wall=1187.9ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[2] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1158.45ms gen=1607.20ms pp1=0.52ms wall=2766.1ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[3] puro:htp lifecycle: load=0ms reset=1.88ms wall=2766.1ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[4] puro:cpu puro: ok=1 pieces=8 prefill=1119.02ms gen=462.74ms pp1=0.18ms wall=1582.3ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[4] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[4] puro:cpu lifecycle: load=0ms reset=2.08ms wall=1582.3ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[4] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[5] puro:htp puro: ok=1 pieces=8 prefill=1402.31ms gen=1620.78ms pp1=0.47ms wall=3023.4ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[5] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[5] puro:htp lifecycle: load=0ms reset=2.05ms wall=3023.4ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[5] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[6] puro:cpu puro: ok=1 pieces=8 prefill=1033.48ms gen=525.59ms pp1=0.11ms wall=1560.0ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[6] puro:cpu puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[6] puro:cpu lifecycle: load=0ms reset=2.61ms wall=1560.0ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[6] puro:cpu RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[7] puro:htp puro: ok=1 pieces=8 prefill=2024.97ms gen=1784.25ms pp1=0.66ms wall=3809.5ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[7] puro:htp puro texto_len=26 (integral no JSON)
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[7] puro:htp lifecycle: load=0ms reset=1.94ms wall=3809.5ms
+10-07 19:27:27.045 I/NpuProbe(20764): SESS[7] puro:htp RESULTADO: PURO-EXECUTADO
+10-07 19:27:27.045 I/NpuProbe(20764): SESSAO(65eb166): fim (8 requests)
+--------- beginning of main
+10-07 19:28:24.432 I/NpuProbe(23028): nativeLibraryDir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:28:24.434 I/NpuProbe(23028): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:28:24.434 I/NpuProbe(23028): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:28:24.436 I/NpuProbe(23028): controle-sistema (liblog.so)=OK
+10-07 19:28:24.437 I/NpuProbe(23028): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:28:24.437 I/NpuProbe(23028): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:28:24.438 I/NpuProbe(23028): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:28:24.438 I/NpuProbe(23028): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:28:24.448 I/NpuProbe(23028): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:28:24.448 I/NpuProbe(23028): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:28:24.455 I/NpuProbe(23028): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:28:24.455 I/NpuProbe(23028): [ggml] 
+10-07 19:28:24.455 I/NpuProbe(23028): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:28:24.456 I/NpuProbe(23028): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:28:24.456 I/NpuProbe(23028): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:28:24.457 I/NpuProbe(23028): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:28:24.457 I/NpuProbe(23028): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:28:24.457 I/NpuProbe(23028): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:28:24.497 I/NpuProbe(23028): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:28:24.497 I/NpuProbe(23028): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000076de5306c0
+10-07 19:28:24.507 I/NpuProbe(23028): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:28:24.515 I/NpuProbe(23028): load_all_from_path=76ms
+10-07 19:28:24.515 I/NpuProbe(23028): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64/libggml-hexagon.so
+10-07 19:28:24.515 I/NpuProbe(23028): load(hexagon direto)=FALHOU em 0ms
+10-07 19:28:24.515 I/NpuProbe(23028): devices=4
+10-07 19:28:24.515 I/NpuProbe(23028):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:28:24.515 I/NpuProbe(23028):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:28:24.515 I/NpuProbe(23028):   dev[2] HTP0 (Hexagon)
+10-07 19:28:24.515 I/NpuProbe(23028):   dev[3] CPU (CPU)
+10-07 19:28:24.515 I/NpuProbe(23028): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:28:24.517 I/NpuProbe(23028): graph_compute(MUL_MAT 64x64)=0.8ms status=0
+10-07 19:28:24.518 I/NpuProbe(23028): c[0]=128.000000 (esperado 128.0)
+10-07 19:28:24.518 I/NpuProbe(23028): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:28:24.519 I/NpuProbe(23028): REPORT:
+10-07 19:28:24.519 I/NpuProbe(23028): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:28:24.519 I/NpuProbe(23028): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:28:24.519 I/NpuProbe(23028): controle-sistema (liblog.so)=OK
+10-07 19:28:24.519 I/NpuProbe(23028): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:28:24.519 I/NpuProbe(23028): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:28:24.519 I/NpuProbe(23028): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:28:24.519 I/NpuProbe(23028): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:28:24.519 I/NpuProbe(23028): load_all_from_path=76ms
+10-07 19:28:24.519 I/NpuProbe(23028): load(hexagon direto)=FALHOU em 0ms
+10-07 19:28:24.519 I/NpuProbe(23028): devices=4
+10-07 19:28:24.519 I/NpuProbe(23028):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:28:24.519 I/NpuProbe(23028):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:28:24.519 I/NpuProbe(23028):   dev[2] HTP0 (Hexagon)
+10-07 19:28:24.519 I/NpuProbe(23028):   dev[3] CPU (CPU)
+10-07 19:28:24.519 I/NpuProbe(23028): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:28:24.519 I/NpuProbe(23028): graph_compute(MUL_MAT 64x64)=0.8ms status=0
+10-07 19:28:24.519 I/NpuProbe(23028): c[0]=128.000000 (esperado 128.0)
+10-07 19:28:24.519 I/NpuProbe(23028): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:28:24.520 I/NpuProbe(23028): AUTO-GATILHO='smart:sessao'
+10-07 19:28:24.521 I/NpuProbe(23028): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:28:24.521 I/NpuProbe(23028): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:28:24.527 I/NpuProbe(23028): SESSAO(65fd29d): 8 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: subgroup shuffle support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: device FP16 support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: khr dot product support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: mem base addr align: 128
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: global mem size: 7555 MB
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: device max workgroup size: 1024
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: SVM fine grain system support: false
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: SVM atomics support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-07 19:28:30.124 I/NpuProbe(23028): [ggml] ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+10-07 19:28:30.124 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa prepass f16
+10-07 19:28:30.194 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16
+10-07 19:28:30.844 I/NpuProbe(23028): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 DK=128 DV=128 per-kernel max 128 < required 256; skipping registration (will fall back)
+10-07 19:28:30.844 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+10-07 19:28:31.167 I/NpuProbe(23028): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 (g8) DK=128 DV=128 per-kernel max 128 < required 192; skipping registration (will fall back)
+10-07 19:28:31.167 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16 c8 NSG2
+10-07 19:28:31.382 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+10-07 19:28:31.695 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16 split
+10-07 19:28:32.645 I/NpuProbe(23028): SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2184.04ms gen=339.27ms pp1=0.18ms wall=2524.0ms
+10-07 19:28:32.645 I/NpuProbe(23028): SESS[0] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:32.645 I/NpuProbe(23028): SESS[0] puro:opencl lifecycle: load=4880ms reset=2.67ms wall=2524.0ms
+10-07 19:28:32.646 I/NpuProbe(23028): SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO
+--------- beginning of main
+10-07 19:28:24.432 I/NpuProbe(23028): nativeLibraryDir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:28:24.434 I/NpuProbe(23028): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:28:24.434 I/NpuProbe(23028): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:28:24.436 I/NpuProbe(23028): controle-sistema (liblog.so)=OK
+10-07 19:28:24.437 I/NpuProbe(23028): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:28:24.437 I/NpuProbe(23028): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:28:24.438 I/NpuProbe(23028): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:28:24.438 I/NpuProbe(23028): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:28:24.448 I/NpuProbe(23028): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:28:24.448 I/NpuProbe(23028): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:28:24.455 I/NpuProbe(23028): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:28:24.455 I/NpuProbe(23028): [ggml] 
+10-07 19:28:24.455 I/NpuProbe(23028): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:28:24.456 I/NpuProbe(23028): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:28:24.456 I/NpuProbe(23028): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:28:24.457 I/NpuProbe(23028): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:28:24.457 I/NpuProbe(23028): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:28:24.457 I/NpuProbe(23028): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:28:24.497 I/NpuProbe(23028): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:28:24.497 I/NpuProbe(23028): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000076de5306c0
+10-07 19:28:24.507 I/NpuProbe(23028): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:28:24.515 I/NpuProbe(23028): load_all_from_path=76ms
+10-07 19:28:24.515 I/NpuProbe(23028): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64/libggml-hexagon.so
+10-07 19:28:24.515 I/NpuProbe(23028): load(hexagon direto)=FALHOU em 0ms
+10-07 19:28:24.515 I/NpuProbe(23028): devices=4
+10-07 19:28:24.515 I/NpuProbe(23028):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:28:24.515 I/NpuProbe(23028):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:28:24.515 I/NpuProbe(23028):   dev[2] HTP0 (Hexagon)
+10-07 19:28:24.515 I/NpuProbe(23028):   dev[3] CPU (CPU)
+10-07 19:28:24.515 I/NpuProbe(23028): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:28:24.517 I/NpuProbe(23028): graph_compute(MUL_MAT 64x64)=0.8ms status=0
+10-07 19:28:24.518 I/NpuProbe(23028): c[0]=128.000000 (esperado 128.0)
+10-07 19:28:24.518 I/NpuProbe(23028): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:28:24.519 I/NpuProbe(23028): REPORT:
+10-07 19:28:24.519 I/NpuProbe(23028): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:28:24.519 I/NpuProbe(23028): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:28:24.519 I/NpuProbe(23028): controle-sistema (liblog.so)=OK
+10-07 19:28:24.519 I/NpuProbe(23028): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:28:24.519 I/NpuProbe(23028): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:28:24.519 I/NpuProbe(23028): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:28:24.519 I/NpuProbe(23028): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:28:24.519 I/NpuProbe(23028): load_all_from_path=76ms
+10-07 19:28:24.519 I/NpuProbe(23028): load(hexagon direto)=FALHOU em 0ms
+10-07 19:28:24.519 I/NpuProbe(23028): devices=4
+10-07 19:28:24.519 I/NpuProbe(23028):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:28:24.519 I/NpuProbe(23028):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:28:24.519 I/NpuProbe(23028):   dev[2] HTP0 (Hexagon)
+10-07 19:28:24.519 I/NpuProbe(23028):   dev[3] CPU (CPU)
+10-07 19:28:24.519 I/NpuProbe(23028): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:28:24.519 I/NpuProbe(23028): graph_compute(MUL_MAT 64x64)=0.8ms status=0
+10-07 19:28:24.519 I/NpuProbe(23028): c[0]=128.000000 (esperado 128.0)
+10-07 19:28:24.519 I/NpuProbe(23028): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:28:24.520 I/NpuProbe(23028): AUTO-GATILHO='smart:sessao'
+10-07 19:28:24.521 I/NpuProbe(23028): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:28:24.521 I/NpuProbe(23028): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:28:24.527 I/NpuProbe(23028): SESSAO(65fd29d): 8 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: subgroup shuffle support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: device FP16 support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: khr dot product support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: mem base addr align: 128
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: global mem size: 7555 MB
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: device max workgroup size: 1024
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: SVM fine grain system support: false
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: SVM atomics support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-07 19:28:30.081 I/NpuProbe(23028): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-07 19:28:30.124 I/NpuProbe(23028): [ggml] ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+10-07 19:28:30.124 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa prepass f16
+10-07 19:28:30.194 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16
+10-07 19:28:30.844 I/NpuProbe(23028): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 DK=128 DV=128 per-kernel max 128 < required 256; skipping registration (will fall back)
+10-07 19:28:30.844 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+10-07 19:28:31.167 I/NpuProbe(23028): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 (g8) DK=128 DV=128 per-kernel max 128 < required 192; skipping registration (will fall back)
+10-07 19:28:31.167 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16 c8 NSG2
+10-07 19:28:31.382 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+10-07 19:28:31.695 I/NpuProbe(23028): [ggml] ggml_opencl: compiling fa f32_f16 split
+10-07 19:28:32.645 I/NpuProbe(23028): SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2184.04ms gen=339.27ms pp1=0.18ms wall=2524.0ms
+10-07 19:28:32.645 I/NpuProbe(23028): SESS[0] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:32.645 I/NpuProbe(23028): SESS[0] puro:opencl lifecycle: load=4880ms reset=2.67ms wall=2524.0ms
+10-07 19:28:32.646 I/NpuProbe(23028): SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO
+10-07 19:28:36.156 I/NpuProbe(23028): SESS[1] puro:vulkan puro: ok=1 pieces=8 prefill=1143.82ms gen=1026.59ms pp1=479.01ms wall=2170.8ms
+10-07 19:28:36.156 I/NpuProbe(23028): SESS[1] puro:vulkan puro texto_len=26 (integral no JSON)
+10-07 19:28:36.156 I/NpuProbe(23028): SESS[1] puro:vulkan lifecycle: load=1337ms reset=2.54ms wall=2170.8ms
+10-07 19:28:36.156 I/NpuProbe(23028): SESS[1] puro:vulkan RESULTADO: PURO-EXECUTADO
+10-07 19:28:36.721 I/NpuProbe(23028): SESS[2] puro:opencl puro: ok=1 pieces=8 prefill=126.00ms gen=433.80ms pp1=1.11ms wall=561.4ms
+10-07 19:28:36.721 I/NpuProbe(23028): SESS[2] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:36.721 I/NpuProbe(23028): SESS[2] puro:opencl lifecycle: load=0ms reset=3.59ms wall=561.4ms
+10-07 19:28:36.721 I/NpuProbe(23028): SESS[2] puro:opencl RESULTADO: PURO-EXECUTADO
+10-07 19:28:37.523 I/NpuProbe(23028): SESS[3] puro:vulkan puro: ok=1 pieces=8 prefill=72.01ms gen=719.57ms pp1=531.09ms wall=794.1ms
+10-07 19:28:37.523 I/NpuProbe(23028): SESS[3] puro:vulkan puro texto_len=26 (integral no JSON)
+10-07 19:28:37.523 I/NpuProbe(23028): SESS[3] puro:vulkan lifecycle: load=0ms reset=7.30ms wall=794.1ms
+10-07 19:28:37.523 I/NpuProbe(23028): SESS[3] puro:vulkan RESULTADO: PURO-EXECUTADO
+10-07 19:28:38.058 I/NpuProbe(23028): SESS[4] puro:opencl puro: ok=1 pieces=8 prefill=125.80ms gen=404.55ms pp1=1.30ms wall=532.0ms
+10-07 19:28:38.058 I/NpuProbe(23028): SESS[4] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:38.058 I/NpuProbe(23028): SESS[4] puro:opencl lifecycle: load=0ms reset=2.92ms wall=532.0ms
+10-07 19:28:38.058 I/NpuProbe(23028): SESS[4] puro:opencl RESULTADO: PURO-EXECUTADO
+10-07 19:28:38.846 I/NpuProbe(23028): SESS[5] puro:vulkan puro: ok=1 pieces=8 prefill=40.25ms gen=737.69ms pp1=563.30ms wall=780.2ms
+10-07 19:28:38.846 I/NpuProbe(23028): SESS[5] puro:vulkan puro texto_len=26 (integral no JSON)
+10-07 19:28:38.846 I/NpuProbe(23028): SESS[5] puro:vulkan lifecycle: load=0ms reset=7.74ms wall=780.2ms
+10-07 19:28:38.846 I/NpuProbe(23028): SESS[5] puro:vulkan RESULTADO: PURO-EXECUTADO
+10-07 19:28:39.303 I/NpuProbe(23028): SESS[6] puro:opencl puro: ok=1 pieces=8 prefill=123.04ms gen=330.93ms pp1=1.44ms wall=454.5ms
+10-07 19:28:39.303 I/NpuProbe(23028): SESS[6] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:39.303 I/NpuProbe(23028): SESS[6] puro:opencl lifecycle: load=0ms reset=2.49ms wall=454.5ms
+10-07 19:28:39.304 I/NpuProbe(23028): SESS[6] puro:opencl RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.098 I/NpuProbe(23028): SESS[7] puro:vulkan puro: ok=1 pieces=8 prefill=19.14ms gen=772.36ms pp1=577.48ms wall=792.0ms
+10-07 19:28:40.098 I/NpuProbe(23028): SESS[7] puro:vulkan puro texto_len=26 (integral no JSON)
+10-07 19:28:40.098 I/NpuProbe(23028): SESS[7] puro:vulkan lifecycle: load=0ms reset=2.20ms wall=792.0ms
+10-07 19:28:40.098 I/NpuProbe(23028): SESS[7] puro:vulkan RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESSAO(65fd29d): fim (8 requests)
+10-07 19:28:40.388 I/NpuProbe(23028): SMART REPORT:
+10-07 19:28:40.388 I/NpuProbe(23028): SMART (sessao)
+10-07 19:28:40.388 I/NpuProbe(23028): 
+10-07 19:28:40.388 I/NpuProbe(23028): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:28:40.388 I/NpuProbe(23028): SESSAO(65fd29d): 8 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2184.04ms gen=339.27ms pp1=0.18ms wall=2524.0ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[0] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[0] puro:opencl lifecycle: load=4880ms reset=2.67ms wall=2524.0ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[1] puro:vulkan puro: ok=1 pieces=8 prefill=1143.82ms gen=1026.59ms pp1=479.01ms wall=2170.8ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[1] puro:vulkan puro texto_len=26 (integral no JSON)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[1] puro:vulkan lifecycle: load=1337ms reset=2.54ms wall=2170.8ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[1] puro:vulkan RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[2] puro:opencl puro: ok=1 pieces=8 prefill=126.00ms gen=433.80ms pp1=1.11ms wall=561.4ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[2] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[2] puro:opencl lifecycle: load=0ms reset=3.59ms wall=561.4ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[2] puro:opencl RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[3] puro:vulkan puro: ok=1 pieces=8 prefill=72.01ms gen=719.57ms pp1=531.09ms wall=794.1ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[3] puro:vulkan puro texto_len=26 (integral no JSON)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[3] puro:vulkan lifecycle: load=0ms reset=7.30ms wall=794.1ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[3] puro:vulkan RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[4] puro:opencl puro: ok=1 pieces=8 prefill=125.80ms gen=404.55ms pp1=1.30ms wall=532.0ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[4] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[4] puro:opencl lifecycle: load=0ms reset=2.92ms wall=532.0ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[4] puro:opencl RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[5] puro:vulkan puro: ok=1 pieces=8 prefill=40.25ms gen=737.69ms pp1=563.30ms wall=780.2ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[5] puro:vulkan puro texto_len=26 (integral no JSON)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[5] puro:vulkan lifecycle: load=0ms reset=7.74ms wall=780.2ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[5] puro:vulkan RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[6] puro:opencl puro: ok=1 pieces=8 prefill=123.04ms gen=330.93ms pp1=1.44ms wall=454.5ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[6] puro:opencl puro texto_len=26 (integral no JSON)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[6] puro:opencl lifecycle: load=0ms reset=2.49ms wall=454.5ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[6] puro:opencl RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[7] puro:vulkan puro: ok=1 pieces=8 prefill=19.14ms gen=772.36ms pp1=577.48ms wall=792.0ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[7] puro:vulkan puro texto_len=26 (integral no JSON)
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[7] puro:vulkan lifecycle: load=0ms reset=2.20ms wall=792.0ms
+10-07 19:28:40.388 I/NpuProbe(23028): SESS[7] puro:vulkan RESULTADO: PURO-EXECUTADO
+10-07 19:28:40.388 I/NpuProbe(23028): SESSAO(65fd29d): fim (8 requests)
+--------- beginning of main
+10-07 19:29:31.540 I/NpuProbe(13957): nativeLibraryDir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:29:31.540 I/NpuProbe(13957): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:29:31.540 I/NpuProbe(13957): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:29:31.540 I/NpuProbe(13957): controle-sistema (liblog.so)=OK
+10-07 19:29:31.540 I/NpuProbe(13957): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:29:31.545 I/NpuProbe(13957): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:29:31.546 I/NpuProbe(13957): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:29:31.546 I/NpuProbe(13957): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:29:31.547 I/NpuProbe(13957): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:29:31.548 I/NpuProbe(13957): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:29:31.559 I/NpuProbe(13957): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:29:31.560 I/NpuProbe(13957): [ggml] 
+10-07 19:29:31.560 I/NpuProbe(13957): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:29:31.560 I/NpuProbe(13957): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:29:31.560 I/NpuProbe(13957): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:29:31.565 I/NpuProbe(13957): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:29:31.565 I/NpuProbe(13957): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:29:31.565 I/NpuProbe(13957): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:29:31.599 I/NpuProbe(13957): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:29:31.600 I/NpuProbe(13957): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077cffd3340
+10-07 19:29:31.605 I/NpuProbe(13957): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:29:31.610 I/NpuProbe(13957): load_all_from_path=64ms
+10-07 19:29:31.610 I/NpuProbe(13957): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64/libggml-hexagon.so
+10-07 19:29:31.610 I/NpuProbe(13957): load(hexagon direto)=FALHOU em 0ms
+10-07 19:29:31.610 I/NpuProbe(13957): devices=4
+10-07 19:29:31.610 I/NpuProbe(13957):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:29:31.610 I/NpuProbe(13957):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:29:31.610 I/NpuProbe(13957):   dev[2] HTP0 (Hexagon)
+10-07 19:29:31.610 I/NpuProbe(13957):   dev[3] CPU (CPU)
+10-07 19:29:31.610 I/NpuProbe(13957): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:29:31.612 I/NpuProbe(13957): graph_compute(MUL_MAT 64x64)=0.5ms status=0
+10-07 19:29:31.612 I/NpuProbe(13957): c[0]=128.000000 (esperado 128.0)
+10-07 19:29:31.612 I/NpuProbe(13957): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:29:31.613 I/NpuProbe(13957): REPORT:
+10-07 19:29:31.613 I/NpuProbe(13957): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:29:31.613 I/NpuProbe(13957): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:29:31.613 I/NpuProbe(13957): controle-sistema (liblog.so)=OK
+10-07 19:29:31.613 I/NpuProbe(13957): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:29:31.613 I/NpuProbe(13957): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:29:31.613 I/NpuProbe(13957): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:29:31.613 I/NpuProbe(13957): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:29:31.613 I/NpuProbe(13957): load_all_from_path=64ms
+10-07 19:29:31.613 I/NpuProbe(13957): load(hexagon direto)=FALHOU em 0ms
+10-07 19:29:31.613 I/NpuProbe(13957): devices=4
+10-07 19:29:31.613 I/NpuProbe(13957):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:29:31.613 I/NpuProbe(13957):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:29:31.613 I/NpuProbe(13957):   dev[2] HTP0 (Hexagon)
+10-07 19:29:31.613 I/NpuProbe(13957):   dev[3] CPU (CPU)
+10-07 19:29:31.613 I/NpuProbe(13957): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:29:31.613 I/NpuProbe(13957): graph_compute(MUL_MAT 64x64)=0.5ms status=0
+10-07 19:29:31.613 I/NpuProbe(13957): c[0]=128.000000 (esperado 128.0)
+10-07 19:29:31.613 I/NpuProbe(13957): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:29:31.613 I/NpuProbe(13957): AUTO-GATILHO='smart:sessao'
+10-07 19:29:31.613 I/NpuProbe(13957): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:29:31.613 I/NpuProbe(13957): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:29:31.615 I/NpuProbe(13957): SESSAO(660ca38): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: subgroup shuffle support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: device FP16 support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: khr dot product support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: mem base addr align: 128
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: global mem size: 7555 MB
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: device max workgroup size: 1024
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: SVM fine grain system support: false
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: SVM atomics support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-07 19:29:36.808 I/NpuProbe(13957): [ggml] ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+10-07 19:29:36.808 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa prepass f16
+10-07 19:29:36.901 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16
+10-07 19:29:37.895 I/NpuProbe(13957): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 DK=128 DV=128 per-kernel max 128 < required 256; skipping registration (will fall back)
+10-07 19:29:37.896 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+10-07 19:29:38.364 I/NpuProbe(13957): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 (g8) DK=128 DV=128 per-kernel max 128 < required 192; skipping registration (will fall back)
+10-07 19:29:38.364 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16 c8 NSG2
+10-07 19:29:38.676 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+10-07 19:29:39.145 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16 split
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl tempos: prefill=1191.69ms export=0.14ms(2032789B) import=10.69ms gen=3365.72ms
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl fronteiras(ms): prefdone=1192.1 tok1r=1209.3 impdone=1220.0 tok2r=4319.0 fim=4585.7 wall=4585.7 reset=12.33
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl texto_len=26 (integral no JSON)
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl lifecycle: load_dst=3694ms load_src=263ms (0=WARM)
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl tempos: prefill=1307.73ms export=0.11ms(2032789B) import=3.33ms gen=317.56ms
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl fronteiras(ms): prefdone=1308.7 tok1r=1325.1 impdone=1328.4 tok2r=1377.8 fim=1646.0 wall=1646.0 reset=5.18
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl texto_len=26 (integral no JSON)
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl tempos: prefill=1430.94ms export=0.12ms(2032789B) import=3.03ms gen=329.97ms
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl fronteiras(ms): prefdone=1431.9 tok1r=1448.3 impdone=1451.3 tok2r=1496.3 fim=1781.3 wall=1781.3 reset=5.32
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl texto_len=26 (integral no JSON)
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl tempos: prefill=1167.35ms export=0.12ms(2032789B) import=8.62ms gen=237.59ms
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl fronteiras(ms): prefdone=1168.0 tok1r=1184.6 impdone=1193.2 tok2r=1222.7 fim=1430.8 wall=1430.8 reset=5.12
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.389 I/NpuProbe(13957): SESSAO(660ca38): fim (4 requests)
+10-07 19:29:45.391 I/NpuProbe(13957): SMART REPORT:
+10-07 19:29:45.391 I/NpuProbe(13957): SMART (sessao)
+10-07 19:29:45.391 I/NpuProbe(13957): 
+10-07 19:29:45.391 I/NpuProbe(13957): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:29:45.391 I/NpuProbe(13957): SESSAO(660ca38): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl tempos: prefill=1191.69ms export=0.14ms(2032789B) import=10.69ms gen=3365.72ms
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl fronteiras(ms): prefdone=1192.1 tok1r=1209.3 impdone=1220.0 tok2r=4319.0 fim=4585.7 wall=4585.7 reset=12.33
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl lifecycle: load_dst=3694ms load_src=263ms (0=WARM)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl tempos: prefill=1307.73ms export=0.11ms(2032789B) import=3.33ms gen=317.56ms
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl fronteiras(ms): prefdone=1308.7 tok1r=1325.1 impdone=1328.4 tok2r=1377.8 fim=1646.0 wall=1646.0 reset=5.18
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl tempos: prefill=1430.94ms export=0.12ms(2032789B) import=3.03ms gen=329.97ms
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl fronteiras(ms): prefdone=1431.9 tok1r=1448.3 impdone=1451.3 tok2r=1496.3 fim=1781.3 wall=1781.3 reset=5.32
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl tempos: prefill=1167.35ms export=0.12ms(2032789B) import=8.62ms gen=237.59ms
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl fronteiras(ms): prefdone=1168.0 tok1r=1184.6 impdone=1193.2 tok2r=1222.7 fim=1430.8 wall=1430.8 reset=5.12
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.391 I/NpuProbe(13957): SESSAO(660ca38): fim (4 requests)
+--------- beginning of main
+10-07 19:29:31.540 I/NpuProbe(13957): nativeLibraryDir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:29:31.540 I/NpuProbe(13957): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:29:31.540 I/NpuProbe(13957): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:29:31.540 I/NpuProbe(13957): controle-sistema (liblog.so)=OK
+10-07 19:29:31.540 I/NpuProbe(13957): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:29:31.545 I/NpuProbe(13957): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:29:31.546 I/NpuProbe(13957): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:29:31.546 I/NpuProbe(13957): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:29:31.547 I/NpuProbe(13957): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:29:31.548 I/NpuProbe(13957): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:29:31.559 I/NpuProbe(13957): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:29:31.560 I/NpuProbe(13957): [ggml] 
+10-07 19:29:31.560 I/NpuProbe(13957): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:29:31.560 I/NpuProbe(13957): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:29:31.560 I/NpuProbe(13957): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:29:31.565 I/NpuProbe(13957): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:29:31.565 I/NpuProbe(13957): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:29:31.565 I/NpuProbe(13957): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:29:31.599 I/NpuProbe(13957): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:29:31.600 I/NpuProbe(13957): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077cffd3340
+10-07 19:29:31.605 I/NpuProbe(13957): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:29:31.610 I/NpuProbe(13957): load_all_from_path=64ms
+10-07 19:29:31.610 I/NpuProbe(13957): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64/libggml-hexagon.so
+10-07 19:29:31.610 I/NpuProbe(13957): load(hexagon direto)=FALHOU em 0ms
+10-07 19:29:31.610 I/NpuProbe(13957): devices=4
+10-07 19:29:31.610 I/NpuProbe(13957):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:29:31.610 I/NpuProbe(13957):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:29:31.610 I/NpuProbe(13957):   dev[2] HTP0 (Hexagon)
+10-07 19:29:31.610 I/NpuProbe(13957):   dev[3] CPU (CPU)
+10-07 19:29:31.610 I/NpuProbe(13957): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:29:31.612 I/NpuProbe(13957): graph_compute(MUL_MAT 64x64)=0.5ms status=0
+10-07 19:29:31.612 I/NpuProbe(13957): c[0]=128.000000 (esperado 128.0)
+10-07 19:29:31.612 I/NpuProbe(13957): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:29:31.613 I/NpuProbe(13957): REPORT:
+10-07 19:29:31.613 I/NpuProbe(13957): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:29:31.613 I/NpuProbe(13957): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:29:31.613 I/NpuProbe(13957): controle-sistema (liblog.so)=OK
+10-07 19:29:31.613 I/NpuProbe(13957): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:29:31.613 I/NpuProbe(13957): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:29:31.613 I/NpuProbe(13957): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:29:31.613 I/NpuProbe(13957): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:29:31.613 I/NpuProbe(13957): load_all_from_path=64ms
+10-07 19:29:31.613 I/NpuProbe(13957): load(hexagon direto)=FALHOU em 0ms
+10-07 19:29:31.613 I/NpuProbe(13957): devices=4
+10-07 19:29:31.613 I/NpuProbe(13957):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:29:31.613 I/NpuProbe(13957):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:29:31.613 I/NpuProbe(13957):   dev[2] HTP0 (Hexagon)
+10-07 19:29:31.613 I/NpuProbe(13957):   dev[3] CPU (CPU)
+10-07 19:29:31.613 I/NpuProbe(13957): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:29:31.613 I/NpuProbe(13957): graph_compute(MUL_MAT 64x64)=0.5ms status=0
+10-07 19:29:31.613 I/NpuProbe(13957): c[0]=128.000000 (esperado 128.0)
+10-07 19:29:31.613 I/NpuProbe(13957): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:29:31.613 I/NpuProbe(13957): AUTO-GATILHO='smart:sessao'
+10-07 19:29:31.613 I/NpuProbe(13957): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:29:31.613 I/NpuProbe(13957): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:29:31.615 I/NpuProbe(13957): SESSAO(660ca38): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: subgroup shuffle support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: device FP16 support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: khr dot product support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: mem base addr align: 128
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: global mem size: 7555 MB
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: device max workgroup size: 1024
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: SVM fine grain system support: false
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: SVM atomics support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-07 19:29:35.244 I/NpuProbe(13957): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-07 19:29:36.808 I/NpuProbe(13957): [ggml] ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+10-07 19:29:36.808 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa prepass f16
+10-07 19:29:36.901 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16
+10-07 19:29:37.895 I/NpuProbe(13957): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 DK=128 DV=128 per-kernel max 128 < required 256; skipping registration (will fall back)
+10-07 19:29:37.896 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+10-07 19:29:38.364 I/NpuProbe(13957): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 (g8) DK=128 DV=128 per-kernel max 128 < required 192; skipping registration (will fall back)
+10-07 19:29:38.364 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16 c8 NSG2
+10-07 19:29:38.676 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+10-07 19:29:39.145 I/NpuProbe(13957): [ggml] ggml_opencl: compiling fa f32_f16 split
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl tempos: prefill=1191.69ms export=0.14ms(2032789B) import=10.69ms gen=3365.72ms
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl fronteiras(ms): prefdone=1192.1 tok1r=1209.3 impdone=1220.0 tok2r=4319.0 fim=4585.7 wall=4585.7 reset=12.33
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl texto_len=26 (integral no JSON)
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl lifecycle: load_dst=3694ms load_src=263ms (0=WARM)
+10-07 19:29:40.221 I/NpuProbe(13957): SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl tempos: prefill=1307.73ms export=0.11ms(2032789B) import=3.33ms gen=317.56ms
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl fronteiras(ms): prefdone=1308.7 tok1r=1325.1 impdone=1328.4 tok2r=1377.8 fim=1646.0 wall=1646.0 reset=5.18
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl texto_len=26 (integral no JSON)
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:41.925 I/NpuProbe(13957): SESS[1] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl tempos: prefill=1430.94ms export=0.12ms(2032789B) import=3.03ms gen=329.97ms
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl fronteiras(ms): prefdone=1431.9 tok1r=1448.3 impdone=1451.3 tok2r=1496.3 fim=1781.3 wall=1781.3 reset=5.32
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl texto_len=26 (integral no JSON)
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:43.757 I/NpuProbe(13957): SESS[2] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl tempos: prefill=1167.35ms export=0.12ms(2032789B) import=8.62ms gen=237.59ms
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl fronteiras(ms): prefdone=1168.0 tok1r=1184.6 impdone=1193.2 tok2r=1222.7 fim=1430.8 wall=1430.8 reset=5.12
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:45.213 I/NpuProbe(13957): SESS[3] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.389 I/NpuProbe(13957): SESSAO(660ca38): fim (4 requests)
+10-07 19:29:45.391 I/NpuProbe(13957): SMART REPORT:
+10-07 19:29:45.391 I/NpuProbe(13957): SMART (sessao)
+10-07 19:29:45.391 I/NpuProbe(13957): 
+10-07 19:29:45.391 I/NpuProbe(13957): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:29:45.391 I/NpuProbe(13957): SESSAO(660ca38): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl tempos: prefill=1191.69ms export=0.14ms(2032789B) import=10.69ms gen=3365.72ms
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl fronteiras(ms): prefdone=1192.1 tok1r=1209.3 impdone=1220.0 tok2r=4319.0 fim=4585.7 wall=4585.7 reset=12.33
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl lifecycle: load_dst=3694ms load_src=263ms (0=WARM)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl tempos: prefill=1307.73ms export=0.11ms(2032789B) import=3.33ms gen=317.56ms
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl fronteiras(ms): prefdone=1308.7 tok1r=1325.1 impdone=1328.4 tok2r=1377.8 fim=1646.0 wall=1646.0 reset=5.18
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[1] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl tempos: prefill=1430.94ms export=0.12ms(2032789B) import=3.03ms gen=329.97ms
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl fronteiras(ms): prefdone=1431.9 tok1r=1448.3 impdone=1451.3 tok2r=1496.3 fim=1781.3 wall=1781.3 reset=5.32
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[2] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl tempos: prefill=1167.35ms export=0.12ms(2032789B) import=8.62ms gen=237.59ms
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl fronteiras(ms): prefdone=1168.0 tok1r=1184.6 impdone=1193.2 tok2r=1222.7 fim=1430.8 wall=1430.8 reset=5.12
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl texto_len=26 (integral no JSON)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:29:45.391 I/NpuProbe(13957): SESS[3] opencl@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:29:45.391 I/NpuProbe(13957): SESSAO(660ca38): fim (4 requests)
+--------- beginning of main
+10-07 19:30:57.663 I/NpuProbe(14796): nativeLibraryDir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:30:57.663 I/NpuProbe(14796): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:30:57.663 I/NpuProbe(14796): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:30:57.663 I/NpuProbe(14796): controle-sistema (liblog.so)=OK
+10-07 19:30:57.663 I/NpuProbe(14796): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:30:57.663 I/NpuProbe(14796): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:30:57.664 I/NpuProbe(14796): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:30:57.665 I/NpuProbe(14796): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:30:57.666 I/NpuProbe(14796): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-07 19:30:57.666 I/NpuProbe(14796): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-07 19:30:57.675 I/NpuProbe(14796): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-07 19:30:57.676 I/NpuProbe(14796): [ggml] 
+10-07 19:30:57.676 I/NpuProbe(14796): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:30:57.676 I/NpuProbe(14796): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-07 19:30:57.676 I/NpuProbe(14796): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-07 19:30:57.677 I/NpuProbe(14796): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-07 19:30:57.677 I/NpuProbe(14796): [ggml] ggml-hex: Hexagon Arch version v81
+10-07 19:30:57.677 I/NpuProbe(14796): [ggml] ggml-hex: HTP0 allocating new session
+10-07 19:30:57.709 I/NpuProbe(14796): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-07 19:30:57.709 I/NpuProbe(14796): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5fb57c0
+10-07 19:30:57.713 I/NpuProbe(14796): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-07 19:30:57.718 I/NpuProbe(14796): load_all_from_path=53ms
+10-07 19:30:57.718 I/NpuProbe(14796): [ggml] load_backend: failed to find ggml_backend_init in /data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64/libggml-hexagon.so
+10-07 19:30:57.718 I/NpuProbe(14796): load(hexagon direto)=FALHOU em 0ms
+10-07 19:30:57.718 I/NpuProbe(14796): devices=4
+10-07 19:30:57.718 I/NpuProbe(14796):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:30:57.718 I/NpuProbe(14796):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:30:57.718 I/NpuProbe(14796):   dev[2] HTP0 (Hexagon)
+10-07 19:30:57.718 I/NpuProbe(14796):   dev[3] CPU (CPU)
+10-07 19:30:57.718 I/NpuProbe(14796): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:30:57.719 I/NpuProbe(14796): graph_compute(MUL_MAT 64x64)=0.5ms status=0
+10-07 19:30:57.719 I/NpuProbe(14796): c[0]=128.000000 (esperado 128.0)
+10-07 19:30:57.719 I/NpuProbe(14796): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:30:57.720 I/NpuProbe(14796): REPORT:
+10-07 19:30:57.720 I/NpuProbe(14796): libdir=/data/app/~~Cuy8-k6N-BHUBNPjLsjMXw==/br.gov.sp.pcsp.npuprobe-FXN7e35P-wwLt1Azl7sbGQ==/lib/arm64
+10-07 19:30:57.720 I/NpuProbe(14796): build=llama.cpp-upstream-pkg (v11-libs) + probe R4
+10-07 19:30:57.720 I/NpuProbe(14796): controle-sistema (liblog.so)=OK
+10-07 19:30:57.720 I/NpuProbe(14796): negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed: library "libnaoexiste_xyz.so" not found
+10-07 19:30:57.720 I/NpuProbe(14796): cdsprpc-nome (libcdsprpc.so)=OK
+10-07 19:30:57.720 I/NpuProbe(14796): cdsprpc-abs (/vendor/lib64/libcdsprpc.so)=OK
+10-07 19:30:57.720 I/NpuProbe(14796): ADSP_LIBRARY_PATH=libdir (setenv)
+10-07 19:30:57.720 I/NpuProbe(14796): load_all_from_path=53ms
+10-07 19:30:57.720 I/NpuProbe(14796): load(hexagon direto)=FALHOU em 0ms
+10-07 19:30:57.720 I/NpuProbe(14796): devices=4
+10-07 19:30:57.720 I/NpuProbe(14796):   dev[0] Vulkan0 (Adreno (TM) 840)
+10-07 19:30:57.720 I/NpuProbe(14796):   dev[1] GPUOpenCL (QUALCOMM Adreno(TM) 840)
+10-07 19:30:57.720 I/NpuProbe(14796):   dev[2] HTP0 (Hexagon)
+10-07 19:30:57.720 I/NpuProbe(14796):   dev[3] CPU (CPU)
+10-07 19:30:57.720 I/NpuProbe(14796): dev_init(HTP0)=0ms -> SESSAO ABERTA
+10-07 19:30:57.720 I/NpuProbe(14796): graph_compute(MUL_MAT 64x64)=0.5ms status=0
+10-07 19:30:57.720 I/NpuProbe(14796): c[0]=128.000000 (esperado 128.0)
+10-07 19:30:57.720 I/NpuProbe(14796): RESULTADO: APP-UID OK: sessao HTP + op executado com resultado correto
+10-07 19:30:57.720 I/NpuProbe(14796): AUTO-GATILHO='smart:sessao'
+10-07 19:30:57.720 I/NpuProbe(14796): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-07 19:30:57.720 I/NpuProbe(14796): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:30:57.721 I/NpuProbe(14796): SESSAO(6621a93): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan tempos: prefill=828.55ms export=0.12ms(2032789B) import=2.38ms gen=729.77ms
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan fronteiras(ms): prefdone=828.8 tok1r=839.8 impdone=842.2 tok2r=1373.3 fim=1571.9 wall=1571.9 reset=4.25
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan lifecycle: load_dst=650ms load_src=176ms (0=WARM)
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan tempos: prefill=906.90ms export=0.18ms(2032789B) import=2.72ms gen=187.35ms
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan fronteiras(ms): prefdone=907.3 tok1r=927.6 impdone=930.3 tok2r=954.6 fim=1117.7 wall=1117.7 reset=4.90
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan tempos: prefill=1265.59ms export=0.10ms(2032789B) import=2.13ms gen=246.07ms
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan fronteiras(ms): prefdone=1266.0 tok1r=1277.2 impdone=1279.4 tok2r=1307.2 fim=1525.4 wall=1525.4 reset=4.25
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+--------- beginning of main
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan tempos: prefill=828.55ms export=0.12ms(2032789B) import=2.38ms gen=729.77ms
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan fronteiras(ms): prefdone=828.8 tok1r=839.8 impdone=842.2 tok2r=1373.3 fim=1571.9 wall=1571.9 reset=4.25
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan lifecycle: load_dst=650ms load_src=176ms (0=WARM)
+10-07 19:31:00.136 I/NpuProbe(14796): SESS[0] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan tempos: prefill=906.90ms export=0.18ms(2032789B) import=2.72ms gen=187.35ms
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan fronteiras(ms): prefdone=907.3 tok1r=927.6 impdone=930.3 tok2r=954.6 fim=1117.7 wall=1117.7 reset=4.90
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:31:01.274 I/NpuProbe(14796): SESS[1] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan tempos: prefill=1265.59ms export=0.10ms(2032789B) import=2.13ms gen=246.07ms
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan fronteiras(ms): prefdone=1266.0 tok1r=1277.2 impdone=1279.4 tok2r=1307.2 fim=1525.4 wall=1525.4 reset=4.25
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:31:02.814 I/NpuProbe(14796): SESS[2] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:04.594 I/NpuProbe(14796): SESS[3] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:04.594 I/NpuProbe(14796): SESS[3] vulkan tempos: prefill=1555.11ms export=0.17ms(2032789B) import=2.30ms gen=177.44ms
+10-07 19:31:04.594 I/NpuProbe(14796): SESS[3] vulkan fronteiras(ms): prefdone=1555.4 tok1r=1579.0 impdone=1581.3 tok2r=1604.4 fim=1758.7 wall=1758.7 reset=3.78
+10-07 19:31:04.594 I/NpuProbe(14796): SESS[3] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:04.594 I/NpuProbe(14796): SESS[3] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:31:04.594 I/NpuProbe(14796): SESS[3] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:04.753 I/NpuProbe(14796): SESSAO(6621a93): fim (4 requests)
+10-07 19:31:04.753 I/NpuProbe(14796): SMART REPORT:
+10-07 19:31:04.753 I/NpuProbe(14796): SMART (sessao)
+10-07 19:31:04.753 I/NpuProbe(14796): 
+10-07 19:31:04.753 I/NpuProbe(14796): SMARTv2 rota='sessao' mutante=(none)
+10-07 19:31:04.753 I/NpuProbe(14796): SESSAO(6621a93): 4 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[0] vulkan tempos: prefill=828.55ms export=0.12ms(2032789B) import=2.38ms gen=729.77ms
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[0] vulkan fronteiras(ms): prefdone=828.8 tok1r=839.8 impdone=842.2 tok2r=1373.3 fim=1571.9 wall=1571.9 reset=4.25
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[0] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[0] vulkan lifecycle: load_dst=650ms load_src=176ms (0=WARM)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[0] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[1] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[1] vulkan tempos: prefill=906.90ms export=0.18ms(2032789B) import=2.72ms gen=187.35ms
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[1] vulkan fronteiras(ms): prefdone=907.3 tok1r=927.6 impdone=930.3 tok2r=954.6 fim=1117.7 wall=1117.7 reset=4.90
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[1] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[1] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[2] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[2] vulkan tempos: prefill=1265.59ms export=0.10ms(2032789B) import=2.13ms gen=246.07ms
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[2] vulkan fronteiras(ms): prefdone=1266.0 tok1r=1277.2 impdone=1279.4 tok2r=1307.2 fim=1525.4 wall=1525.4 reset=4.25
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[2] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[2] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[3] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[3] vulkan tempos: prefill=1555.11ms export=0.17ms(2032789B) import=2.30ms gen=177.44ms
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[3] vulkan fronteiras(ms): prefdone=1555.4 tok1r=1579.0 impdone=1581.3 tok2r=1604.4 fim=1758.7 wall=1758.7 reset=3.78
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[3] vulkan texto_len=26 (integral no JSON)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[3] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-07 19:31:04.753 I/NpuProbe(14796): SESS[3] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+10-07 19:31:04.753 I/NpuProbe(14796): SESSAO(6621a93): fim (4 requests)

@@ -1,0 +1,23 @@
+MANIFESTO SHA-256 — smart-rodada6 (07/10/2026)
+
+A/B hexagon: backup v12 (hexagon dc88db2d7c2e5237, skel 0a4ec5b7ac18a940) RESTAURADO;
+v11 tentado (5ea660c193e01479 / 0f1e135733ad41b8) e revertido (ABI inviavel).
+
+daaa67840d508b179f0484f9cfd3d0b26b2dd137e27c2feff322cb94a15f2807  ADENDO-CORRECOES-R5.txt  (2634 B)
+b24953a494e35da90acf555e3ffcd25fb73185076357a2abbfb7e32de2f7319c  AGREGADO-R6.txt  (718 B)
+3db3917c0114ebc857bde4c9decb9b12303ccd7e336dff77acd7a71da25f5bcb  SESSOES-R6.jsonl  (17794 B)
+84fb1761d2af5deb4e5ca4c24e35250aebf12ca5adeaeabe38173af70c647476  ab-r6-deploy.sh  (769 B)
+67f59328583ba0b8f370f5db00a830631c904bc8c2c6d318ba62108794798f72  consolida-r6.py  (2282 B)
+8872fedebd5bb9866a3e63296f0c67e5aa4719e97beca83e9f663e9c6c7bd32c  g1-cpu-htp.jsonl  (3768 B)
+86ee345cd0b6f722da00f6608712539762da239c69a31731cfb376d4dce957e3  g2-ocl-vk.jsonl  (3770 B)
+a1a9adf9e95127767f2876921402f95533804d9f8e58a24a19d0e9cb80f74b26  g3-smart-oc.jsonl  (1976 B)
+399b4af54d4e56081673ca2ef26facc794d54a2261d9a81fef7a69ba317ff473  g4-smart-vk.jsonl  (1963 B)
+d413b04d5cf05d386a8ba4568013db2239b3386ac840785347d11c6593af02bd  npuprobe-r6.log  (189660 B)
+3c883d3687aafd72baae57b98b171c8e616317abc70c254287be3a0fc37aa808  pf-r6.sh  (2329 B)
+194040e51ae288f75de5f629a3a524ec7f40bcb2a101b268529ac211fe0a713e  pf-r6.txt  (6338 B)
+d27e88835426ba586b9054edc3713d05a7f8a802ff72c46d9d1ec0b70a579b07  pf1-htp.jsonl  (1886 B)
+62cd55eb15b169fcd3c6dfcfc193a46c3f6a030e9cc7de6b15c0c0ffdb4d34c5  pf3-bridge.jsonl  (1996 B)
+18137cf4a0cf3e4deabc22d28d0a08dd2f59fa1006e4f3f8a89e6bf719cf8e7d  sess-r6.sh  (2508 B)
+dff370d1b55518ab185eee674a8051fee480b8a09bb569f949bc1938f890b69c  sess-r6.txt  (14567 B)
+
+9316f711f2ae08ec2a1d886f543c8b08836d2aa78e2fea270a4d8e23ee6c7124  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA6.txt (11474 B)

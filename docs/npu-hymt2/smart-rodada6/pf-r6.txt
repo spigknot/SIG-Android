@@ -1,0 +1,95 @@
+=== PF-R6 microcontrole prefill (22:11:24Z) ===
+Thermal Status: 0
+	Temperature{mValue=45.5, mType=2, mName=battery, mStatus=0}
+	Temperature{mValue=99.6, mType=0, mName=CPU0, mStatus=0}
+
+=== [PF1-htp-solo] rotas: puro:htp\npuro:htp\npuro:htp\npuro:htp\n ===
+ANTES: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=:
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+    SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+    SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+    SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+    SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+    SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+    SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+    SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+    SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+    SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+    SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+    SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+    SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+    SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+    SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+    SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+    SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+    SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+DEPOIS: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=:
+    JSON: 4 requests -> C:/llama-npu/rodada2/logs/pf1-htp.jsonl
+
+=== [PF3-htp-com-res-ocl] rotas: htp:opencl@bench\nhtp:opencl@bench\nhtp:opencl@bench\nhtp:opencl@bench\n ===
+ANTES: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=:
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+    SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+    SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+    SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+    SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+    SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+    SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+    SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=2253.38ms gen=1436.06ms pp1=0.44ms wall=3689.8ms
+    SESS[0] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[0] puro:htp lifecycle: load=975ms reset=1.95ms wall=3689.8ms
+    SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=2380.70ms gen=1817.66ms pp1=0.45ms wall=4198.7ms
+    SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[1] puro:htp lifecycle: load=0ms reset=1.93ms wall=4198.7ms
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1396.33ms gen=1822.08ms pp1=0.11ms wall=3218.7ms
+    SESS[2] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[2] puro:htp lifecycle: load=0ms reset=1.88ms wall=3218.7ms
+    SESS[2] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1388.93ms gen=1916.58ms pp1=0.11ms wall=3305.8ms
+    SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[3] puro:htp lifecycle: load=0ms reset=1.91ms wall=3305.8ms
+    SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[0] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] htp:opencl tempos: prefill=1981.92ms export=0.12ms(2032789B) import=11.32ms gen=4139.02ms
+    SESS[0] htp:opencl fronteiras(ms): prefdone=1982.7 tok1r=1998.9 impdone=2010.3 tok2r=5824.2 fim=6149.3 wall=6149.3 reset=12.16
+    SESS[0] htp:opencl texto_len=26 (integral no JSON)
+    SESS[0] htp:opencl lifecycle: load_dst=4870ms load_src=243ms (0=WARM)
+    SESS[0] htp:opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[1] htp:opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[1] htp:opencl tempos: prefill=2344.38ms export=0.12ms(2032789B) import=8.49ms gen=507.53ms
+DEPOIS: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=: t=:
+    JSON: 4 requests -> C:/llama-npu/rodada2/logs/pf3-bridge.jsonl
+PF_R6_DONE

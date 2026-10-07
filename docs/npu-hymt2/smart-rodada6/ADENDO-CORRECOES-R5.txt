@@ -1,0 +1,47 @@
+ADENDO DE CORRECOES AO RELATORIO R5 — emitido junto com o R6
+=========================================================================
+Atendendo a ordem "corregirR5label/ratios/temperaturareps/variant".
+
+1. RATIO cold->warm do OpenCL. A primeira pagina do R5 dizia "4.9s->0.43s
+   (6.7x)": ERRADO — 4.795s era o LOAD (fora do wall). Correto, por
+   script sobre WARM-R5.jsonl:
+     puro OpenCL: wall cold 2905.8ms -> warm 428.4ms = 6.78x
+     puro Vulkan: wall cold 1959.9ms -> warm 797.6ms = 2.46x
+     Smart OC:    wall cold 4350.7ms -> warm 1889.2ms = 2.30x
+     Smart VK:    wall cold 2166.3ms -> warm 1609.1ms = 1.35x
+   Nenhuma soma inventada; load excluido do wall e reportado em campo
+   proprio (load_dst/load_src).
+
+2. VARIANT no WARM-R5.jsonl. Os requests Smart de bench foram rotulados
+   'variant=valid' por defeito do parser (a rota impressa perdeu o
+   sufixo @bench no run_sessao). Os RESULTADOS e decodes_s_pos_ponte
+   estavam corretos (BENCH-CONCLUIDO com 0). Correcao: o schema nativo
+   R6 mantem '@bench' na rota e rotula por flag do FONTE; o R5 fica
+   registrado com esta retificacao (nenhum benchmark aceito sem gate:
+   bench exige decodes_s_pos_ponte==0 + sem cap/div).
+
+3. "Smart VK empata CPU". RETIRADO: nao houve teste de equivalencia.
+   Numeros warm (mediana wall, 2 amostras/modo): CPU 1417.50; HTP
+   2546.15; OpenCL 447.35; Vulkan 797.70; Smart OC 1898.10; Smart VK
+   1624.20. Leitura correta: nesta amostra AMBAS as Smart PERDEM para as
+   GPUs puras; nenhuma frase de ganho de produto.
+
+4. TEMPERATURA/reps. O max (48C) reportado referia-se ao zone0
+   (cpullc-0-0, cluster little); a bateria cobre 13 zonas; o cabecalho
+   S3 chegou a 50C em zona identificada. S1..S4 foram GRUPOS SEPARADOS
+   (nao matched intercalado de 6 modos): puros CPU/HTP intercalados
+   entre si, puros GPU entre si, Smarts em PIDs/janelas proprias; 1
+   first-use + 2 warm por modo (nao 3 warm). O R6 substitui por sessoes
+   com 1 cold + 3 WARM por modo em grupos <=2 modelos, sensores por
+   sessao.
+
+5. "Nao ha defeito de harness". RETIRADO. Declaracao correta: o
+   first-use e' maior; a origem causal exata (loader vs jit de kernels
+   vs alocacao/caches) NAO esta isolada; o loader-cache do SIG evita
+   dlsym por chamada — compilacao de kernels e' outro mecanismo.
+   Instrumentacao direta limitada; sem repetir campanha longa.
+
+6. Tempestividade: as correcoes 1-3 foram aplicadas ao arquivo
+   WARM-R5.jsonl quando possivel sem perder o dado bruto (o R5 mantem-se
+   como emitido; este adendo e' a versao corrigida das LEITURAS).
+=========================================================================

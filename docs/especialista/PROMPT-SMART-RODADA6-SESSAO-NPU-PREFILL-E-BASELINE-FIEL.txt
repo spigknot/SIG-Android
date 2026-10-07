@@ -1,0 +1,68 @@
+ORDENS AO EXECUTOR — SMART RODADA 6: SESSAO CORRETA, NPU PREFILL E BASELINE FIEL
+============================================================================
+
+PARECER / DECISAO
+Especialista leu RELATORIO-SMART-DUAL-BACKEND-RODADA5.txt, WARM-R5.jsonl e run_sessao atual probe.cpp:586-705. Nao executou aparelho nesta analise. Corretude dualSmart permanece progresso aceito no escopo demonstrado, mas ganho util ainda NAO provado. Prioridade agora: corrigir inconsistencias do runner/schema e localizar prefill HTP anomalo; depois corpus maior e bateria fiel, sem UI/release.
+
+1. RESULTADO WARM REAL E LIMITES
+Recalculo em Python exclusivamente lifecycle=warm, duas amostras por modo:
+CPU mediana wall=1417.50ms
+HTP=2546.15ms
+OpenCL=447.35ms
+Vulkan=797.70ms
+Smart OpenCL=1898.10ms
+Smart Vulkan=1624.20ms
+Logo nesta amostra ambas Smart perdem para GPU pura. 'Smart VK empata CPU' nao e empate demonstrado por teste de equivalencia; medianas observadas acima. Nao usar frases ganho de produto.
+As sessoes S1..S4 sao grupos separados; purosCPU/HTP intercalados entre si e purosGPU entre si, mas Smart OC e VK em outros PIDs/janelas. NAO matched intercalado de seis modos, nem3warmreps: cada grupo tem1firstuse+2warm. Header sensorS3 chega50C, fora do max48C reportado. Temperaturas por sessao nao provam equivalencia em cada run.
+Corrigir resumo cold OC: primeira pagina diz4.9->0.43 e6.7x, mas4.795 ehLOADfora wall; firstrequestwall2.9058, warm428.4, ratio6.78x. Separar tempos e denominadores script; nenhuma soma inventada.
+
+2. CAUSA OPENCL: WARMUP OBSERVADO, JIT/LOADER ESPECIFICO HIPOTESE
+WarmrequestGPU cai de fato. Nao demonstra que loader SIGcache reduz JIT, nem que custo total se deve ao loader/JIT isolados. Loadercache evita lookup dlsym por chamada; compilacao de kernels e mecanismo diferente. F3b/guard/cache devem ser constatados porflags/caminho do build e instrumentacao direta limitada.
+NAO declarar 'nao ha defeito de harness' somente porque gates passam: fonte/run_sessao e JSON ainda tem discrepancias abaixo. Dizer 'firstuse maior, origem causal exata nao isolada'. Nao repetir campanha de horas para diagnosticar uma fronteira.
+
+3. CORRIGIR SESSAO / SCHEMA UMA VEZ COM TESTES PERMANENTES
+WARM-R5.jsonl rotula Smart como variant=valid, embora resultadoBENCH-CONCLUIDO e decodeorigemposponte=0. Fonte run_sessao recebe boolbench de @bench, imprime valid/bench e resultado conformeflag. Reconciliar parser/routefile/source/APK por hashes; se parsererrado, retificar; se fonte divergeAPK, entregarartifactsource realmente implantado. Nenhum benchmark aceito sem gate: variantbench/decodesorigemzero/stopcompleto congruentes.
+Run_sessao linha694 ignora B.cap/eog/div no resultado B.ok -> BENCH-CONCLUIDO; validar stop/maxcap e capparcial anteslabel. Nao regredir gates de runSmart antigo no modo novo. Testar cap1/2/eog imediato/decodeorigemextra e failimport na SESSAO real, nao so no handler antigo.
+Campos faltando noJSON: puretextointegral/stopcorpusfullSHA/buildflagsfullSHAs; loadcontext nao armazenado; lifecyclecold/warm confundido com primeira carga. Gerar structuredJSON nativamente com requests em vez de parserfrágil de labels truncados. Se parser mantido, fixtures com sessões/rotas/cap/erro garantem mesma semantics.
+Fonte imprime textos %.120s/%.160s (672/692); isto trunca corpus maior e NAO entrega texto integral. Salvar saida integral em arquivo do probe/readback/hash ou payloadJSON, logs curtos sao so resumo.
+Run_id PID.idx pode colidir entre sessoes/restartcapturas; adicionar session_id estavelunique+requestcounter e identidadeAPK, dedupe REPORT porIDfase nao PID.
+Lifecycle: first-use-kernels, coldmodel/context e warmmodel/context separados. wall atual exclui load E resetmem (666->667,680->682). Medir reset/preparation separadamente e custo requestcomplete consistente. product pode zerarKVgrande; excluir silent nao justo. Campos requestreceived/resetstart/resetdone/tokenize/prefill/handoff/EOG/resultready e coldloadreal incluindoctx. Se callbackUI ausente manter readyinterno, naovisivel.
+Gate para alias origem=destino (Vulkan->Vulkan etc): cacheporbackend devolveMESMO ctx paraambos; selfimport nao valida roundtripdoiscontexts. Usar rolekeys/contextdistinctness quando modo exigecontextsseparados, preservar controles antigos corretos. Impor asserts de identityparaevitar falsecontrol.
+
+4. PREFILL NPU: GARGALO ATUAL, NAO PROMESSA FUTURA
+Dadoswarm: OpenCL puro prefillmed124.945ms; Smart OC HTPprefillmed1520.565ms. DecodeGPUwarmSmartOC332-368ms eh proximo de pureOC302-340ms. O atrasoSmartwarm nestaamostra concentraNPU-prefill, NAO handoffms nemgenGPU.
+Antes testar longo, explicar por que prefillHTP31tokenswarmpassou de~74-95ms antigas para~1.4-1.5s atual. Causas a investigar com controles, nao afirmar:
+- Runtime/placementrealHTP vs CPUfallback/tensores/grafo/domain/session/repack;
+- n_threads_batch/configsched/nsession/powerprofileHVX/HMX/batchingdefaults build/flags;
+- memoriaresidentedoiscontexts/caches/thermal/powerstate e tempoidle/suspend;
+- erros de fronteira/sync/primeiraexecucao/diagnostico callback.
+Log pin/modelSHA e fullconfig/runtime fa/types/n_ctx/threads/threads_batch; confirmarpreloadpesosDSP via backendlogs, modeloffload999 nao prova sozinho todasops.
+Microcontrole curto: HTP puro solo vs HTP prefillcomGPUresidentesemcompute; GPU puro solo vs comHTPresidentsemcompute. Mesmoprompt/reset/build/condicaoadmitida com pocasreps. Registrar memoria e DSPstatus realobservavel. Nao fecharoutrappsdo usuário nem ajustar governor/thermal. Sensores/statusfreq se acessiveissemroot; inacessivel declarar.
+Se potenciaHTPprofile ajustada via APIpublicdocumentada, registrarbaseline/alteracaoescopo/teste; nao mudar defaults silenciosamente. Semtuninggrid atecausaprecisa. Esteeh diagnostico curto, nao reabrir suporteKV.
+
+5. CORPUS HISTORICO LOCALIZADO PELO ESPECIALISTA
+Arquivo encontrado no PC:
+C:/llama-npu/ci-check/docs/npu-hymt2/rodada2/corpus-en/medium-952.txt
+Prompt correspondente:
+C:/llama-npu/ci-check/docs/npu-hymt2/rodada2/corpus-en/prompt-medium-952.txt
+Nao usar checkout como confiabilidade presumida: lertexto e calcularfullSHA/tamanho/provenance, comparar registrohistorico. Texto952termina 'an.' (fonteoriginaltruncada); registrar essa limitacao, nao completar/reparar escondido. Pode usar como corpustechnico identificado, ou novocorpuscompleto aprovado claramenteNOVO. Procurar outros textos nospathsadjacentes se necessario, semscanmodelgigabytes.
+R5E/H ainda chamam63tokens 'medio' aposBrenomearcurtoestendido. Padronizarnomes porbytes/ntokens; nao fingir quecorpusmaior foi executado.
+Validar corpus~952chars ou maior em ambasrotas warm ABA, CPU/HTPreference, fulloutput/EOGfinite/teacherforcefora benchmark; ajustarchunksbatch128 comtokenpos/logitsultimo; captimeoutbounded. Não realizar workloadmaior seHTPcurtoanomal/aquecimento ainda invalida.
+
+6. BASELINE FIEL AO PRODUTO ANTES DECISAO
+Buildprobe != produto (loaderOpenCL, SIG_VULKAN_NO_CRASH, API28 vs24, pipeline). Reproduzirflagspertinentesem candidatoisolado, auditar variantes reais e configs/invariants. Nao pordefine cegamente: lerCMake/fontedefinicao/efeito/testes existentes. Preservar minimalvendorloader namespace appUID e ambos backends; sem Whispermodificacoes.
+Nao comparar v12antigo comprodutoestimado para escolhermenu. Designgoalja aprovado; habilitacao optin dependeprovadevalor/estabilidade/memoria. Prepararcandidato fielsemdeployprincipal; sebuildchangeafetoucore/flags, revalidarcurto/ABAantesbateria.
+Bateria final pequena, warmtermicamentecontrolada, balancearordemblocos por modo e grupos com mesmosriscosmemoria; nao manter6modelresidentes artificialmente seprodutousa1ou2. Sessaoexplicitaresidency/counts e PSS/graphics/DSP quando disponivel. MemTOTALstringheaders nao equivale pico/dspmem; parsecolunasunits e timestamps enquanto model/context vivo, naoantescleanupdepoiscomoresultado.
+Quando baselinecorreto eHTPresolvido, matchedshort+largercorpus3warmreps porroutecontroltermicosensorrun. coldstart separado ectxload/reset included. SeSmartcontinualento entregarNEGATIVO honesto/experimental pendente, nao integracaopara cumprirnomemeta.
+
+7. ENTREGA
+RELATORIO-SMART-DUAL-BACKEND-RODADA6.txt em docs/especialista A-H, logs docs/npu-hymt2/smart-rodada6/:
+A identities/aprovacoes/residency;
+B testsessao/schema/gatesstopvariant/selfctx;
+C fontecorpusSHAfulltexto;
+D NPU-prefillmicrocontrole e causaevidencia/hipotese;
+E fidelidadeflagsloaderprodutoisolado;
+F corretude maior/ABA ewallmatchedvalidosecondicoes;
+G F2/CI/Whispernaotestado/probe!=produto;
+H decisionporrota comgaincriterionsemgeneralizar.
+FullSHAmanifest, exits e denomsexclusivosporID; corregirR5labelratios/temperaturareps/variant. Continuar pesquisaSEMdeploySIGprincipal/UI/R2/release salvo escoponovoexpresso. Nao demander novaordenacaoabstrata: seguir prioridades. Finaljob exige resultados e não sóplano.

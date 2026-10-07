@@ -1,0 +1,302 @@
+=== SESS-R6 matched (22:26:04Z) ===
+
+=== [G1-cpu-htp] ===
+ANTES: t=42200
+ t=41800
+ t=41800
+ t=41800
+ t=41800
+ t=42600
+ t=43400
+ t=43400
+ t=44200
+ t=43000
+ t=42600
+ t=43800
+ t=44200
+ 
+    SESS[0] puro:cpu puro: ok=1 pieces=8 prefill=1525.12ms gen=349.63ms pp1=0.46ms wall=1875.2ms
+    SESS[0] puro:cpu puro texto_len=26 (integral no JSON)
+    SESS[0] puro:cpu lifecycle: load=1274ms reset=1.95ms wall=1875.2ms
+    SESS[0] puro:cpu RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1126.28ms gen=1699.41ms pp1=0.42ms wall=2826.0ms
+    SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[1] puro:htp lifecycle: load=203ms reset=1.91ms wall=2826.0ms
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[2] puro:cpu puro: ok=1 pieces=8 prefill=796.61ms gen=390.52ms pp1=0.17ms wall=1187.9ms
+    SESS[2] puro:cpu puro texto_len=26 (integral no JSON)
+    SESS[2] puro:cpu lifecycle: load=0ms reset=2.59ms wall=1187.9ms
+    SESS[2] puro:cpu RESULTADO: PURO-EXECUTADO
+    SESS[0] puro:cpu puro: ok=1 pieces=8 prefill=1525.12ms gen=349.63ms pp1=0.46ms wall=1875.2ms
+    SESS[0] puro:cpu puro texto_len=26 (integral no JSON)
+    SESS[0] puro:cpu lifecycle: load=1274ms reset=1.95ms wall=1875.2ms
+    SESS[0] puro:cpu RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1126.28ms gen=1699.41ms pp1=0.42ms wall=2826.0ms
+    SESS[1] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[1] puro:htp lifecycle: load=203ms reset=1.91ms wall=2826.0ms
+    SESS[1] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[2] puro:cpu puro: ok=1 pieces=8 prefill=796.61ms gen=390.52ms pp1=0.17ms wall=1187.9ms
+    SESS[2] puro:cpu puro texto_len=26 (integral no JSON)
+    SESS[2] puro:cpu lifecycle: load=0ms reset=2.59ms wall=1187.9ms
+    SESS[2] puro:cpu RESULTADO: PURO-EXECUTADO
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1158.45ms gen=1607.20ms pp1=0.52ms wall=2766.1ms
+    SESS[3] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[3] puro:htp lifecycle: load=0ms reset=1.88ms wall=2766.1ms
+    SESS[3] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[4] puro:cpu puro: ok=1 pieces=8 prefill=1119.02ms gen=462.74ms pp1=0.18ms wall=1582.3ms
+    SESS[4] puro:cpu puro texto_len=26 (integral no JSON)
+    SESS[4] puro:cpu lifecycle: load=0ms reset=2.08ms wall=1582.3ms
+    SESS[4] puro:cpu RESULTADO: PURO-EXECUTADO
+    SESS[5] puro:htp puro: ok=1 pieces=8 prefill=1402.31ms gen=1620.78ms pp1=0.47ms wall=3023.4ms
+    SESS[5] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[5] puro:htp lifecycle: load=0ms reset=2.05ms wall=3023.4ms
+    SESS[5] puro:htp RESULTADO: PURO-EXECUTADO
+    SESS[6] puro:cpu puro: ok=1 pieces=8 prefill=1033.48ms gen=525.59ms pp1=0.11ms wall=1560.0ms
+    SESS[6] puro:cpu puro texto_len=26 (integral no JSON)
+    SESS[6] puro:cpu lifecycle: load=0ms reset=2.61ms wall=1560.0ms
+    SESS[6] puro:cpu RESULTADO: PURO-EXECUTADO
+    SESS[7] puro:htp puro: ok=1 pieces=8 prefill=2024.97ms gen=1784.25ms pp1=0.66ms wall=3809.5ms
+    SESS[7] puro:htp puro texto_len=26 (integral no JSON)
+    SESS[7] puro:htp lifecycle: load=0ms reset=1.94ms wall=3809.5ms
+    SESS[7] puro:htp RESULTADO: PURO-EXECUTADO
+DEPOIS: t=46900
+ t=46900
+ t=46100
+ t=46100
+ t=46500
+ t=47700
+ t=47700
+ t=47300
+ t=47700
+ t=48400
+ t=48800
+ t=47700
+ t=47700
+ 
+    JSON: 8 requests -> C:/llama-npu/rodada2/logs/g1-cpu-htp.jsonl
+
+=== [G2-ocl-vk] ===
+ANTES: t=45300
+ t=45300
+ t=45300
+ t=45300
+ t=45300
+ t=46100
+ t=46100
+ t=45700
+ t=46100
+ t=46500
+ t=46500
+ t=46500
+ t=46100
+ 
+    SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2184.04ms gen=339.27ms pp1=0.18ms wall=2524.0ms
+    SESS[0] puro:opencl puro texto_len=26 (integral no JSON)
+    SESS[0] puro:opencl lifecycle: load=4880ms reset=2.67ms wall=2524.0ms
+    SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO
+    SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2184.04ms gen=339.27ms pp1=0.18ms wall=2524.0ms
+    SESS[0] puro:opencl puro texto_len=26 (integral no JSON)
+    SESS[0] puro:opencl lifecycle: load=4880ms reset=2.67ms wall=2524.0ms
+    SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:vulkan puro: ok=1 pieces=8 prefill=1143.82ms gen=1026.59ms pp1=479.01ms wall=2170.8ms
+    SESS[1] puro:vulkan puro texto_len=26 (integral no JSON)
+    SESS[1] puro:vulkan lifecycle: load=1337ms reset=2.54ms wall=2170.8ms
+    SESS[1] puro:vulkan RESULTADO: PURO-EXECUTADO
+    SESS[2] puro:opencl puro: ok=1 pieces=8 prefill=126.00ms gen=433.80ms pp1=1.11ms wall=561.4ms
+    SESS[2] puro:opencl puro texto_len=26 (integral no JSON)
+    SESS[2] puro:opencl lifecycle: load=0ms reset=3.59ms wall=561.4ms
+    SESS[2] puro:opencl RESULTADO: PURO-EXECUTADO
+    SESS[3] puro:vulkan puro: ok=1 pieces=8 prefill=72.01ms gen=719.57ms pp1=531.09ms wall=794.1ms
+    SESS[3] puro:vulkan puro texto_len=26 (integral no JSON)
+    SESS[3] puro:vulkan lifecycle: load=0ms reset=7.30ms wall=794.1ms
+    SESS[3] puro:vulkan RESULTADO: PURO-EXECUTADO
+    SESS[4] puro:opencl puro: ok=1 pieces=8 prefill=125.80ms gen=404.55ms pp1=1.30ms wall=532.0ms
+    SESS[4] puro:opencl puro texto_len=26 (integral no JSON)
+    SESS[4] puro:opencl lifecycle: load=0ms reset=2.92ms wall=532.0ms
+    SESS[4] puro:opencl RESULTADO: PURO-EXECUTADO
+    SESS[5] puro:vulkan puro: ok=1 pieces=8 prefill=40.25ms gen=737.69ms pp1=563.30ms wall=780.2ms
+    SESS[5] puro:vulkan puro texto_len=26 (integral no JSON)
+    SESS[5] puro:vulkan lifecycle: load=0ms reset=7.74ms wall=780.2ms
+    SESS[5] puro:vulkan RESULTADO: PURO-EXECUTADO
+    SESS[6] puro:opencl puro: ok=1 pieces=8 prefill=123.04ms gen=330.93ms pp1=1.44ms wall=454.5ms
+    SESS[6] puro:opencl puro texto_len=26 (integral no JSON)
+    SESS[6] puro:opencl lifecycle: load=0ms reset=2.49ms wall=454.5ms
+    SESS[6] puro:opencl RESULTADO: PURO-EXECUTADO
+    SESS[7] puro:vulkan puro: ok=1 pieces=8 prefill=19.14ms gen=772.36ms pp1=577.48ms wall=792.0ms
+    SESS[7] puro:vulkan puro texto_len=26 (integral no JSON)
+    SESS[7] puro:vulkan lifecycle: load=0ms reset=2.20ms wall=792.0ms
+    SESS[7] puro:vulkan RESULTADO: PURO-EXECUTADO
+    SESS[0] puro:opencl puro: ok=1 pieces=8 prefill=2184.04ms gen=339.27ms pp1=0.18ms wall=2524.0ms
+    SESS[0] puro:opencl puro texto_len=26 (integral no JSON)
+    SESS[0] puro:opencl lifecycle: load=4880ms reset=2.67ms wall=2524.0ms
+    SESS[0] puro:opencl RESULTADO: PURO-EXECUTADO
+    SESS[1] puro:vulkan puro: ok=1 pieces=8 prefill=1143.82ms gen=1026.59ms pp1=479.01ms wall=2170.8ms
+    SESS[1] puro:vulkan puro texto_len=26 (integral no JSON)
+    SESS[1] puro:vulkan lifecycle: load=1337ms reset=2.54ms wall=2170.8ms
+    SESS[1] puro:vulkan RESULTADO: PURO-EXECUTADO
+DEPOIS: t=49200
+ t=49200
+ t=49200
+ t=49200
+ t=49200
+ t=50000
+ t=50800
+ t=50000
+ t=50800
+ t=51200
+ t=50800
+ t=51200
+ t=50800
+ 
+    JSON: 8 requests -> C:/llama-npu/rodada2/logs/g2-ocl-vk.jsonl
+
+=== [G3-smart-oc] ===
+ANTES: t=47300
+ t=46900
+ t=47300
+ t=47300
+ t=47300
+ t=48000
+ t=48000
+ t=47700
+ t=48000
+ t=48400
+ t=48400
+ t=48000
+ t=48000
+ 
+    SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] opencl tempos: prefill=1191.69ms export=0.14ms(2032789B) import=10.69ms gen=3365.72ms
+    SESS[0] opencl fronteiras(ms): prefdone=1192.1 tok1r=1209.3 impdone=1220.0 tok2r=4319.0 fim=4585.7 wall=4585.7 reset=12.33
+    SESS[0] opencl texto_len=26 (integral no JSON)
+    SESS[0] opencl lifecycle: load_dst=3694ms load_src=263ms (0=WARM)
+    SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[1] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[1] opencl tempos: prefill=1307.73ms export=0.11ms(2032789B) import=3.33ms gen=317.56ms
+    SESS[1] opencl fronteiras(ms): prefdone=1308.7 tok1r=1325.1 impdone=1328.4 tok2r=1377.8 fim=1646.0 wall=1646.0 reset=5.18
+    SESS[1] opencl texto_len=26 (integral no JSON)
+    SESS[1] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[1] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[2] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[2] opencl tempos: prefill=1430.94ms export=0.12ms(2032789B) import=3.03ms gen=329.97ms
+    SESS[2] opencl fronteiras(ms): prefdone=1431.9 tok1r=1448.3 impdone=1451.3 tok2r=1496.3 fim=1781.3 wall=1781.3 reset=5.32
+    SESS[2] opencl texto_len=26 (integral no JSON)
+    SESS[2] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[2] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[3] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[3] opencl tempos: prefill=1167.35ms export=0.12ms(2032789B) import=8.62ms gen=237.59ms
+    SESS[3] opencl fronteiras(ms): prefdone=1168.0 tok1r=1184.6 impdone=1193.2 tok2r=1222.7 fim=1430.8 wall=1430.8 reset=5.12
+    SESS[3] opencl texto_len=26 (integral no JSON)
+    SESS[3] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[3] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[0] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] opencl tempos: prefill=1191.69ms export=0.14ms(2032789B) import=10.69ms gen=3365.72ms
+    SESS[0] opencl fronteiras(ms): prefdone=1192.1 tok1r=1209.3 impdone=1220.0 tok2r=4319.0 fim=4585.7 wall=4585.7 reset=12.33
+    SESS[0] opencl texto_len=26 (integral no JSON)
+    SESS[0] opencl lifecycle: load_dst=3694ms load_src=263ms (0=WARM)
+    SESS[0] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[1] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[1] opencl tempos: prefill=1307.73ms export=0.11ms(2032789B) import=3.33ms gen=317.56ms
+    SESS[1] opencl fronteiras(ms): prefdone=1308.7 tok1r=1325.1 impdone=1328.4 tok2r=1377.8 fim=1646.0 wall=1646.0 reset=5.18
+    SESS[1] opencl texto_len=26 (integral no JSON)
+    SESS[1] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[1] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[2] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[2] opencl tempos: prefill=1430.94ms export=0.12ms(2032789B) import=3.03ms gen=329.97ms
+    SESS[2] opencl fronteiras(ms): prefdone=1431.9 tok1r=1448.3 impdone=1451.3 tok2r=1496.3 fim=1781.3 wall=1781.3 reset=5.32
+    SESS[2] opencl texto_len=26 (integral no JSON)
+    SESS[2] opencl lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[2] opencl@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[3] opencl bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[3] opencl tempos: prefill=1167.35ms export=0.12ms(2032789B) import=8.62ms gen=237.59ms
+DEPOIS: t=61200
+ t=61600
+ t=59300
+ t=59300
+ t=59700
+ t=61600
+ t=63200
+ t=60800
+ t=61600
+ t=62000
+ t=62000
+ t=60500
+ t=61600
+ 
+    JSON: 4 requests -> C:/llama-npu/rodada2/logs/g3-smart-oc.jsonl
+
+=== [G4-smart-vk] ===
+ANTES: t=55000
+ t=54600
+ t=54300
+ t=54600
+ t=54600
+ t=55400
+ t=55800
+ t=55000
+ t=55400
+ t=56600
+ t=56600
+ t=55000
+ t=55000
+ 
+    SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] vulkan tempos: prefill=828.55ms export=0.12ms(2032789B) import=2.38ms gen=729.77ms
+    SESS[0] vulkan fronteiras(ms): prefdone=828.8 tok1r=839.8 impdone=842.2 tok2r=1373.3 fim=1571.9 wall=1571.9 reset=4.25
+    SESS[0] vulkan texto_len=26 (integral no JSON)
+    SESS[0] vulkan lifecycle: load_dst=650ms load_src=176ms (0=WARM)
+    SESS[0] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[1] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[1] vulkan tempos: prefill=906.90ms export=0.18ms(2032789B) import=2.72ms gen=187.35ms
+    SESS[1] vulkan fronteiras(ms): prefdone=907.3 tok1r=927.6 impdone=930.3 tok2r=954.6 fim=1117.7 wall=1117.7 reset=4.90
+    SESS[1] vulkan texto_len=26 (integral no JSON)
+    SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[1] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[2] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[2] vulkan tempos: prefill=1265.59ms export=0.10ms(2032789B) import=2.13ms gen=246.07ms
+    SESS[2] vulkan fronteiras(ms): prefdone=1266.0 tok1r=1277.2 impdone=1279.4 tok2r=1307.2 fim=1525.4 wall=1525.4 reset=4.25
+    SESS[2] vulkan texto_len=26 (integral no JSON)
+    SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[2] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] vulkan tempos: prefill=828.55ms export=0.12ms(2032789B) import=2.38ms gen=729.77ms
+    SESS[0] vulkan fronteiras(ms): prefdone=828.8 tok1r=839.8 impdone=842.2 tok2r=1373.3 fim=1571.9 wall=1571.9 reset=4.25
+    SESS[0] vulkan texto_len=26 (integral no JSON)
+    SESS[0] vulkan lifecycle: load_dst=650ms load_src=176ms (0=WARM)
+    SESS[0] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[1] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[1] vulkan tempos: prefill=906.90ms export=0.18ms(2032789B) import=2.72ms gen=187.35ms
+    SESS[1] vulkan fronteiras(ms): prefdone=907.3 tok1r=927.6 impdone=930.3 tok2r=954.6 fim=1117.7 wall=1117.7 reset=4.90
+    SESS[1] vulkan texto_len=26 (integral no JSON)
+    SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[1] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[2] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[2] vulkan tempos: prefill=1265.59ms export=0.10ms(2032789B) import=2.13ms gen=246.07ms
+    SESS[2] vulkan fronteiras(ms): prefdone=1266.0 tok1r=1277.2 impdone=1279.4 tok2r=1307.2 fim=1525.4 wall=1525.4 reset=4.25
+    SESS[2] vulkan texto_len=26 (integral no JSON)
+    SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[2] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[3] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[3] vulkan tempos: prefill=1555.11ms export=0.17ms(2032789B) import=2.30ms gen=177.44ms
+    SESS[3] vulkan fronteiras(ms): prefdone=1555.4 tok1r=1579.0 impdone=1581.3 tok2r=1604.4 fim=1758.7 wall=1758.7 reset=3.78
+    SESS[3] vulkan texto_len=26 (integral no JSON)
+    SESS[3] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+    SESS[3] vulkan@bench RESULTADO: BENCH-CONCLUIDO
+    SESS[0] vulkan bench: ok=1 cap=0 eog_tok1=0 tok1=33 emitidos=8 consumidos=8 dec_s=0
+    SESS[0] vulkan tempos: prefill=828.55ms export=0.12ms(2032789B) import=2.38ms gen=729.77ms
+DEPOIS: t=45700
+ t=46100
+ t=46100
+ t=46100
+ t=46100
+ t=47300
+ t=46900
+ t=46500
+ t=47300
+ t=47700
+ t=47700
+ t=47300
+ t=46900
+ 
+    JSON: 4 requests -> C:/llama-npu/rodada2/logs/g4-smart-vk.jsonl
+SESS_R6_DONE
