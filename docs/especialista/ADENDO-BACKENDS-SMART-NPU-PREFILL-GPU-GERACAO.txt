@@ -1,0 +1,27 @@
+ADENDO DE REQUISITO — BACKENDS HY-MT2: SMART SEPARADO DA NPU
+
+Determinacao explicita do usuario:
+Se conseguirmos um esquema hibrido de prefill NPU + geracao GPU, incluir essa opcao SEPARADAMENTE. Menu pretendido: Smart, CPU, GPU (OpenCL), GPU (Vulkan), NPU.
+
+SEMANTICA OBRIGATORIA
+- Smart: NPU/HTP processa o prompt (prefill) e GPU gera os tokens. O esquema deve fazer handoff correto de estado/KV, sem repetir integralmente o prompt na GPU e sem apresentar NPU+CPU como NPU+GPU.
+- CPU: caminho CPU explicitamente selecionado.
+- GPU (OpenCL): backend OpenCL explicitamente selecionado.
+- GPU (Vulkan): backend Vulkan explicitamente selecionado.
+- NPU: caminho predominantemente NPU/HTP para prefill e geracao, com eventuais operacoes CPU nao suportadas visiveis no diagnostico. Nao sinonimo de Smart.
+
+CONDICOES E ESCOPO
+Este adendo formaliza requisito de produto; nao e ordem para implementar/publicar agora nem mudar default. Smart fica condicionado a viabilidade, corretude, estabilidade e ganho util medidos em NPU->GPU. O teste HTP->CPU anterior NAO atende a esse requisito. Preservar menu/enum/IDs persistidos existentes: novos IDs sem renumerar backendKind dos antigos; tracar contratos Java/JNI/modelcapability/config antes design.
+
+PROXIMA INVESTIGACAO SMART
+1. Fechar seguranca/dados, modelo exato e probe P4 app-UID antes alterar produto.
+2. Investigar HTP->OpenCL e HTP->Vulkan separadamente em harness isolado. API export/import, KV dtype/layout/RoPE/seqIDs/logits e ponte de token precisam ser validados, nao presumidos pelo HTP->CPU.
+3. Demonstrar zero replay do prompt no destino (ou ponte pequena explicitamente explicada), numerica/outputs corretos, reset A-B-A, sincronizacao e lifetime seguros.
+4. Medir latencia completa fria/aquecida, custo de segundo contexto/pesos, transferencias/state memory, TTFT e geracao no MESMO modelo/config. Comparar Smart candidato com NPU inteira e GPU inteira. Ganho so prefill nao prova vantagem total.
+5. Selecionar GPU do Smart com criterio documentado a partir dos resultados. Usuario ainda nao definiu OpenCL ou Vulkan como destino fixo; nao escolher silenciosamente em produto. Design pode propor GPU fixa ou selecao de capacidade, mas Smart nao e seletor generico automatico de qualquer backend.
+6. Se GPU indisponivel/handoff falhar, mostrar erro/fallback explicito conforme politica aprovada; nao executar NPU inteira ou CPU em silencio mantendo rotulo Smart.
+7. UI/logs devem mostrar rota efetiva, ex.: Smart — prefill NPU -> geracao Vulkan/OpenCL. Habilitacao exige dispositivo/modelo/runtime compativeis; mostrar motivo de indisponibilidade. Nao esconder exigencias de memoria nem trocar modelo automaticamente.
+8. Nao tornar Smart padrao sem autorizacao separada. Se hibrido nao entregar beneficio/corretude, relatar e manter opcao pendente, em vez de disponibilizar caminho falso ou inutil como sucesso.
+
+ENTREGA
+Referenciar este requisito em todos os proximos designs de NPU/Smart e relatorios. Commit/push/build/deploy/release continuam exigindo escopo aprovado. Fontes SIG/Whisper e pacote publicado permanecem intactos por este adendo.

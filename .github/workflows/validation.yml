@@ -20,8 +20,13 @@ jobs:
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: '17'
+          # O gradle/gradle-daemon-jvm.properties pede toolchainVendor=JETBRAINS
+          # com Java 21; sem o JDK correspondente o Gradle tenta baixar do
+          # foojay (link expirado -> HTTP 400) e o gate falha por infra.
+          # O setup-java abaixo instala o JetBrains 21 direto, satisfazendo o
+          # criterio sem depender do resolvador de toolchain.
+          distribution: jetbrains
+          java-version: '21'
           cache: gradle
 
       - name: Validate harness contracts

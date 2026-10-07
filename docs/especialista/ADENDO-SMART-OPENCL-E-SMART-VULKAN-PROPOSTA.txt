@@ -1,0 +1,29 @@
+PARECER DE DESIGN — SMART (OPENCL) E SMART (VULKAN)
+
+Pergunta do usuario: talvez seja interessante separar Smart (OpenCL) e Smart (Vulkan).
+Recomendacao do especialista: SIM. Separar explicita o destino da geracao e torna selecao, comparacao e diagnostico mais previsiveis. Trata-se de proposta de design; nao autoriza implementacao, deploy ou publicacao.
+
+MENU PROPOSTO
+Smart (OpenCL): prefill NPU/HTP -> geracao GPU OpenCL.
+Smart (Vulkan): prefill NPU/HTP -> geracao GPU Vulkan.
+CPU: backend CPU.
+GPU (OpenCL): backend OpenCL para a solicitacao, sem handoff Smart.
+GPU (Vulkan): backend Vulkan para a solicitacao, sem handoff Smart.
+NPU: backend predominantemente HTP em prefill e geracao, fallback por operacoes explicitado.
+
+Nesta proposta, as duas opcoes Smart substituem a opcao Smart generica; nao adicionar uma terceira Smart automatica sem requisito separado. Rotulos e IDs persistidos devem ser distintos e estaveis, sem renumerar os backends existentes.
+
+JUSTIFICATIVA E LIMITES
+- Usuario escolhe explicitamente a GPU de destino; sem politica automatica oculta.
+- Diagnostico e benchmarks identificam a rota, em vez de agrupar dois caminhos diferentes.
+- Custo: menu maior e duas rotas para validar/manter.
+- As duas rotas sao HIPOTESES DE ENGENHARIA: acesso HTP em app normal e op isolada nao provam handoff KV correto nem ganho NPU->GPU.
+- Testes HTP->CPU nao validam nenhuma delas. Sucesso de uma rota nao autoriza habilitar a outra.
+- Medir ganho total incluindo prefill, handoff, contexto/pesos adicionais, memoria, TTFT e geracao; comparar com GPU inteira e NPU inteira no mesmo modelo/configuracao.
+
+UI E CAPACIDADE
+Exibir explicacao curta: 'NPU processa o prompt; GPU gera a resposta'. Cada opcao so deve ser habilitada para dispositivo/modelo/runtime com a rota validada. Ausencia de suporte deve ter motivo visivel, nao selecao que silenciosamente vira CPU ou NPU inteira. Se somente uma rota for viavel, habilitar somente ela; documentar a outra como indisponivel/experimental conforme politica aprovada. Nao afirmar que ambas existirao antes das provas.
+Preservar Vulkan como default atual. Nao trocar default ou peso do modelo ao selecionar Smart. Politica de fallback requer decisao explicita e deve mostrar rota efetiva.
+
+DIRETRIZ AO EXECUTOR
+Manter P4 e protecao contra perda de dados como pre-requisitos. No proximo design/harness, tratar NPU->OpenCL e NPU->Vulkan como candidatos separados, validar handoff sem replay integral do prompt, reset A-B-A, corretude e estabilidade. Integrar cada candidato somente apos seus criterios de aceitacao e escopo aprovado pelo usuario. Este documento e recomendacao que detalha o requisito Smart, nao ordem para editar fontes agora.

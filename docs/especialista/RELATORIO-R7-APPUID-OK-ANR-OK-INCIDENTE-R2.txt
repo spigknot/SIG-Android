@@ -133,9 +133,18 @@ E.3 Codigo (app) atualizado COM FALLBACK seguro (commita ja, funciona mesmo
     - WhisperActivity: VAD com primario no R2 (models/whisper/...) e
       alternativa HF; downloadFile refatorado para lista de fontes
       (baixarUmaFonte extraido).
-E.4 Pendente (apos o usuario rodar o workflow): conferir no R2 e, se
-    desejado, remover as notas de "alternativa" (o fallback pode ficar como
-    robustez permanente).
+E.4 EXECUTADO (07/10, 14:46-14:48) — ESPELHAMENTO CONCLUIDO:
+    - 4 secrets configurados no repo (via script local; valores nunca
+      expostos); workflow disparado: run 37639486330, SUCESSO em 2m10s;
+    - baixou do HF, verificou os SHA-256 PINADOS e enviou ao R2 os 4:
+      Hy-MT2-1.8B-1.25Bit.gguf, Hy-MT2-1.8B-Q4_K_M.gguf,
+      Hy-MT2-1.8B-Q6_K.gguf e ggml-silero-v6.2.0.bin (evidencia: logs
+      "Copied (new)" + read-back rclone);
+    - validacao pos-run: as 4 URLs publicas respondem HTTP 200 com
+      Content-Length EXATO (1133080448 / 1474785120 / 461860800 / 885098);
+    - o bucket agora cobre o catalogo completo do Hy-MT2 (1.25Bit, Q4_0,
+      Q4_K_M, Q6_K, Q8_0) + VAD; nenhum modelo do menu depende do HF como
+      primario (o fallback permanece no codigo como robustez).
 
 ========================================================================
 F. ESTADO DO REPO/COMMIT (desta rodada)

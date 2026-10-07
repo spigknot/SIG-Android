@@ -1,0 +1,188 @@
+RELATORIO GERAL — EXECUCAO COMPLETA DAS ULTIMAS ORDENS DO ESPECIALISTA
+(corrigir probe manifest/dlerror · fechar vacina ANR · NAO arquivar NPU)
++ DILIGENCIA NOVA: MODELOS PADRONIZADOS NO R2
+=========================================================================
+Data: 07/10/2026. Executor: agente (sessao do dia; autorizacoes explicitas
+do usuario para correcoes, testes no aparelho, commit/push e espelhamento).
+Documento CONSOLIDADO: detalhes completos nos anexos ja entregues
+(RELATORIO-R6, ADENDO-R7, RELATORIO-R7, RELATORIO-R8). Regras mantidas:
+SIG publicado/Whisper intactos; sem root/governor/thermal bypass; nenhum
+segredo em repo/chat; PJA110 fora do escopo.
+
+========================================================================
+A. SUMARIO EXECUTIVO (6 resultados-chave)
+========================================================================
+A.1 Os 2 defeitos apontados no probe foram CONFIRMADOS e CORRIGIDOS
+    (manifest sem uses-native-library; dlerror lido 2x). Com a correcao, o
+    teste NO APARELHO deu "APP-UID OK": dlopen do driver OK, HTP0
+    registrado, SESSAO DSP ABERTA e MUL_MAT executado com resultado
+    correto (2 execucoes). O veredito anterior de "bloqueio OEM" esta
+    REFUTADO — a NPU e' acessivel a um app normal neste aparelho.
+A.2 ANR: auditoria de locks COMPLETA (3 data races reais corrigidas,
+    getters sem bloqueio, contratos documentados) + VACINA criada E
+    EXECUTADA no aparelho: "AnrUiLockContractTest" PASSOU (OK 1 test). A
+    regressao conhecida (getters voltando ao lock de inferencia) falha o
+    teste por timeout.
+A.3 INCIDENTE durante os testes: um comando sem serial fixo fez o ciclo de
+    teste desinstalar o app do CPH2747 (dados internos perdidos). RESTAURADO
+    integralmente na mesma sessao: app reinstalado, pacote nativo remontado
+    do R2 COM o fix, modelo Q4_K_M produto reposto (o app o ve). Unico
+    efeito remanescente: configs/chaves do app (usuario reconfigura).
+A.4 "NAO ARQUIVAR NPU" atendido: nenhum arquivamento; viabilidade CLI
+    mantida e a elegibilidade app-UID agora PROVADA.
+A.5 DILIGENCIA NOVA (determinacao do usuario): TODOS os modelos
+    padronizados no R2 — os 4 que faltavam (Hy-MT2 1.25bit, Q4_K_M, Q6_K e
+    VAD silero) foram espelhados HuggingFace->R2 via GitHub Actions (banda
+    local ~0), e o codigo do app passou a usar o R2 como fonte PRIMARIA
+    (com fallback HuggingFace). Validado: 4 URLs HTTP 200 + Content-Length
+    exato.
+A.6 Tudo publicado: commit 550ca56 na main (fix + vacina + R2 + workflow +
+    docs), com gates test/lint/assemble = 0 e o WIP de outro agente
+    (smartjoin/ffmpeg) preservado byte a byte.
+
+========================================================================
+B. AS ULTIMAS ORDENS — CHECKLIST DE CUMPRIMENTO
+========================================================================
+|| Ordem (parecer)                              || Status             ||
+|-----------------------------------------------|---------------------|
+| Nao arquivar a NPU ainda                      | ATENDIDO (nada arquivado) |
+| Corrigir dlerror (captura unica)              | FEITO (helper correto + controle negativo/positivo) |
+| Adicionar uses-native-library ao manifest     | FEITO (required=false; confirmado no APK via aapt2) |
+| Verificar no APK final a declaracao           | FEITO (E: uses-native-library name=libcdsprpc.so) |
+| Probe por camadas P1..P4                      | P1-P3 FEITOS E APROVADOS; P4 pendente de aval |
+| Retificar veredito R5 prematuro               | FEITO (notas nos docs R5 + R6/R7) |
+| Fechar vacina ANR (testes permanentes)        | FEITO (androidTest PASSOU no aparelho; checker de invariantes PASS 8/8) |
+| Auditoria de locks (todas leituras/escritas)  | FEITO (3 data races corrigidas; copy-out nos getters; contratos no codigo) |
+| Nao remover o g_mutex global nem travas       | ATENDIDO (somente separacao de escopo + atomics) |
+| Nao prolongar soak / sem ignore-eos / sem root| ATENDIDO (nenhuma dessas acoes) |
+| Entregar TXT A-H reconciliado                 | FEITO (RELATORIO-R6) + R7/R8/geral (este) |
+
+========================================================================
+C. PROBE app-UID — CORRECOES E RESULTADO (a ordem central)
+========================================================================
+C.1 Defeito 1 (manifest): o probe declarava targetSdk 34 SEM
+    <uses-native-library> — apps 31+ precisam do opt-in para lib publica
+    do vendor entrar no namespace (ENFORCE_NATIVE_SHARED_LIBRARY_
+    DEPENDENCIES). Corrigido no manifest e CONFIRMADO NO APK final via
+    aapt2 dump (name="libcdsprpc.so", required=false).
+C.2 Defeito 2 (dlerror): a expressao "(dlerror() ? dlerror() : ...)"
+    consumia o erro na 1a leitura — o NULL exibido era artefato do codigo,
+    NAO assinatura de namespace. Corrigido: dlerror() limpo antes, leitura
+    UNICA, copia imediata para std::string; controle NEGATIVO (lib fake
+    deve produzir erro nao-nulo) e positivo (liblog) embutidos.
+C.3 RESULTADO no aparelho (2 execucoes, reproduzivel; log integro anexo):
+    - controle-sistema (liblog.so)=OK
+    - negativo-fake (libnaoexiste_xyz.so)=FALHOU err=dlopen failed:
+      library "libnaoexiste_xyz.so" not found        [captura confiavel]
+    - cdsprpc-nome (libcdsprpc.so)=OK | cdsprpc-abs=OK
+    - [ggml-hex] Loading driver libcdsprpc.so; FASTRPC_GET_DOMAINS failed
+      (0x14) -> fallback estatico CDSP (funcional)
+    - registry ndev 1; Arch v81 DMA64; device 0: HTP0 (domain=cdsp:3);
+      dev[0] HTP0, dev[1] CPU
+    - dev_init(HTP0)=42-48ms -> SESSAO ABERTA (hwinfo threads 8/hvx 8/
+      hmx 1/vtcm 8MB; session-id 0; uri file:///libggml-htp-v81.so)
+    - graph_compute(MUL_MAT 64x64)=0.9ms status=0; c[0]=128.000000
+    - RESULTADO: APP-UID OK: sessao HTP + op executado com resultado
+      correto
+C.4 Leitura: a elegibilidade de app NORMAL esta provada (sem OEM, sem
+    root, sem whitelist). A questao NPU volta a ser engenharia (build no
+    pacote, perf: break-even 9,50 Np/Ng medido em CLI, fallback, risco).
+C.5 P4 (peso produto no mini-app) NAO executado — aguarda autorizacao.
+
+========================================================================
+D. ANR — AUDITORIA E VACINA (fechamento)
+========================================================================
+D.1 Fonte: g_ui_mutex dedicado (ordem g_mutex->g_ui_mutex, sem caminho
+    inverso) + cache atomico de threads (getter non-block) + getters de
+    UI com copia sob lock e NewStringUTF FORA da regiao + contratos
+    documentados (cache 0/indisponivel; politica de stats).
+D.2 Data races REAIS encontradas na auditoria e corrigidas: (a) clear()
+    do last_error fora do lock no generate; (b)(c) leituras de
+    backend_desc sem lock no log e nos catches (agora via copia protegida).
+D.3 VACINA: export de teste sigTestHoldGmutex(ms) + teste instrumentado
+    AnrUiLockContractTest (hold 2s no lock principal; exige os 4 getters
+    de UI em <500ms) + checker de invariantes do patch (check-anr-fix.sh,
+    PASS 8/8). EXECUTADO NO APARELHO: "OK (1 test)" (Time 2.105s).
+D.4 Gates: test/lint/assemble = RC 0 (repo com o patch).
+
+========================================================================
+E. INCIDENTE E RESTAURACAO (resumo; detalhe no R7-D)
+========================================================================
+E.1 Causa: `./gradlew :app:connectedDebugAndroidTest` SEM fixar
+    ANDROID_SERIAL; com 2 aparelhos conectados, o ciclo do Gradle
+    desinstalou o app do CPH2747 no cleanup (apagou dados internos e o
+    modelo do dir externo). No PJA110 nada persistiu (verificado).
+E.2 Restauracao (verificada): app reinstalado (mesma assinatura); pacote
+    nativo remontado do ZIP OFICIAL do R2 (16 libs + silero + marker),
+    COM a lib do fix (sha 33105846...) — o proprio app validou
+    (activateIfInstalled no native_debug.txt); modelo Q4_K_M PRODUTO
+    (c4bf1015...; achado no PC em logs-rodada13/hymt2_app.gguf) reposto em
+    files/hymt2_models/ e visivel ao app (teste instrumentado:
+    exists=true, len=1133080544, canRead=true). Nao foi usado o oficial
+    dc5f44 (regra "nao substituir o produto pelo oficial" preservada).
+E.3 Perdas: configs/chaves do app (sem backup possivel; usuario
+    reconfigura). Vacina de processo: todo comando de device passa a
+    fixar o serial.
+
+========================================================================
+F. DILIGENCIA NOVA — PADRONIZACAO DOS MODELOS NO R2
+========================================================================
+F.1 Decisao do usuario: "armazenar todos os modelos no R2, evitando ao
+    maximo upload do PC (conexao limitada)". Levantamento: a maioria ja
+    estava no R2 (Whisper, Granite, Qairt, Hy-MT2 Q4_0/Q8_0, pacote
+    nativo, PromptStore); FALTAVAM 4 arquivos de fonte HuggingFace:
+    Hy-MT2 Q4_K_M (o default do menu), Q6_K, 1.25bit e o VAD silero.
+F.2 Mecanismo SEM usar banda local: workflow NOVO no repo
+    (.github/workflows/mirror-models-to-r2.yml, GitHub Actions
+    workflow_dispatch) que baixa dos runners do GitHub, VERIFICA SHA-256
+    PINADO e envia ao R2 via rclone. Licencas conferidas antes (Hy-MT2 =
+    Apache 2.0; silero = MIT). (Super Slurper nativo da Cloudflare foi
+    avaliado e descartado: aceita apenas fontes S3-compatible, nao HF.)
+F.3 EXECUCAO (evidencias): 4 secrets configurados (via script local; sem
+    exposicao); workflow rodado (run 37639486330) — SUCESSO em 2m10s;
+    "Copied (new)" x4; read-back do bucket com os tamanhos corretos; e
+    validacao independente: as 4 URLs publicas HTTP 200 com
+    Content-Length EXATO (1133080448 / 1474785120 / 461860800 / 885098).
+    O bucket agora cobre o catalogo completo do Hy-MT2 (1.25bit, Q4_0,
+    Q4_K_M, Q6_K, Q8_0) + VAD. Banda local utilizada: ~0.
+F.4 Codigo do app (ja publicado): R2 = fonte PRIMARIA; HuggingFace =
+    alternativa (fallback automatico so em falha da primaria) — em
+    TextoActivity (4 modelos + downloader com fontes em ordem) e
+    WhisperActivity (VAD; downloadFile refatorado por fontes).
+
+========================================================================
+G. PUBLICACAO E ESTADO (artefatos)
+========================================================================
+G.1 Commit 550ca56 na main (push 6a8b4cb..550ca56; ls-remote confere
+    "550ca5615f7f..."). Conteudo: fix+auditoria ANR; TextoActivity/
+    WhisperActivity (R2+fallback); HyMt2Native (extern TEST-ONLY);
+    build.gradle (runner+deps); AnrUiLockContractTest; workflow do
+    espelhamento; docs da campanha (77 arquivos).
+G.2 Procedimento do commit: o gate do repo exige consistencia da arvore —
+    o WIP de OUTRO agente (smartjoin/ffmpeg) foi backupeado (sha256),
+    ausentado so na janela e DEVOLVIDO identico (hashes conferidos). O
+    push inicial travou no credential helper (pitfall conhecido) e foi
+    refeito com token do gh (sem gravar no config).
+G.3 Estado: app no CPH2747 funcional (fix ativo + modelo produto);
+    R2 completo; repo publicado. CI do repo ("SIG validation") segue
+    vermelho por INFRA (toolchain JDK 21 via foojay 400) — as etapas
+    git-diff-check e module-map-consistency PASSARAM no nosso push; o
+    problema e' anterior e nao e' do codigo (fix opcional sugerido no R8).
+G.4 Anexos desta frente: RELATORIO-R6, ADENDO-R7, RELATORIO-R7,
+    RELATORIO-R8 e este GERAL (todos em docs/especialista/); logs em
+    C:/llama-npu/rodada2/logs/ (r6-*, r7-*, probe-r6-run.log).
+
+========================================================================
+H. PENDENCIAS / DECISOES PROPOSTAS AO ESPECIALISTA
+========================================================================
+H.1 P4 do probe (peso produto no mini-app app-UID): executar? (requer
+    autorizacao; P1-P3 aprovados).
+H.2 Com a elegibilidade app-UID provada: avancar para um plano de
+    integracao NPU (build/libs no pacote, fallback, criterios de perf)
+    ou manter a NPU como trilha exploratoria? (decisao de produto).
+H.3 CI do repo: corrigir o toolchain (setup-java 21 fixo) agora ou deixar
+    para o proximo ciclo? (nao bloqueia nada localmente).
+H.4 Registro: o update local do RELATORIO-R7 (secao E.4 — espelhamento
+    executado) entra no proximo commit de docs.
+========================================================================
+FIM. Nenhuma afirmacao sem evidencia listada.

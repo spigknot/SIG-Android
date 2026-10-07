@@ -1,0 +1,12 @@
+A(c4bf): size=1133080544 data_off=5090240 alig=32 soma=1127990304 golden=OK
+B(dc5f): size=1133080448 data_off=5090144 alig=32 soma=1127990304 golden=OK
+
+== PAYLOADS (sha256 por tensor, com alignment) ==
+  ... 100/354 (iguais=36 difs=64)
+  ... 200/354 (iguais=73 difs=127)
+  ... 300/354 (iguais=110 difs=190)
+  ... 354/354 (iguais=129 difs=225)
+
+RESULTADO: comuns=354 iguais=129 diferentes=225
+VEREDITO: 225 tensores DIVERGEM
+lista completa em comparacao-tensores-diferentes.txt
