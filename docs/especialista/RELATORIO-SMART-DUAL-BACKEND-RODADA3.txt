@@ -119,10 +119,12 @@ E.1 Matriz MINIMA rodada com MESMO binario/modelo/config/prompt primeiro com
     v11 (upstream):  A puro:vulkan -> texto DEGENERADO ("sorry x N");
                      B vulkan:vulkan -> PARCIAL, cap, espelho 48/48 iguais,
                        A-B-A diferente;
-                     C cpu:vulkan -> PARCIAL, espelho 24/48, div_pos=1;
+                     C cpu:vulkan -> PARCIAL, texto degradado ("Bear"),
+                       espelho 24/48, div_pos=1;
                      D htp:cpu -> ACEITO;
-                     E vulkan:cpu -> texto lixo ("sorry...") — estado
-                       produzido PELO vulkan corrompe o consumidor;
+                     E vulkan:cpu -> PARCIAL, espelho 22/48, div_pos=23,
+                       texto "sorry x N" — estado produzido PELO vulkan
+                       corrompe o consumidor CPU;
                      F puro:opencl -> "Bom dia, como você está?" (sao);
                      G htp:opencl -> ACEITO.
     v12 (SIG):       A..G TODOS ACEITOS: A "Bom dia..."; B 8/8 A-B-A
