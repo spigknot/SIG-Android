@@ -1,0 +1,48 @@
+=== R15 GATE RED/GREEN (20:12:07Z) ===
+=== [G1-normal] rota=numeric:htp:opencl:cpu:opencl mut=none env=ausente ===
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=CALIBRACAO_PENDENTE/EOG | env_calib=-1.000 calib=- | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=CALIBRACAO_PENDENTE/EOG | env_calib=-1.000 calib=- | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=CALIBRACAO_PENDENTE/EOG | env_calib=-1.000 calib=- | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=CALIBRACAO_PENDENTE/EOG | env_calib=-1.000 calib=- | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+
+=== [G2-perturba] rota=numeric:htp:opencl:cpu:opencl mut=smart_perturba env=2.5 ===
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+
+=== [G3-refbogus] rota=numeric:htp:opencl:cpu:bogus mut=none env=2.5 ===
+  NUMGATE src=htp dst=opencl ref=cpu dst2=bogus | gate=SEM-REFERENCIA(a lacuna R13; usar dst2 p/ medir import)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=bogus | gate=SEM-REFERENCIA(a lacuna R13; usar dst2 p/ medir import)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=bogus | gate=SEM-REFERENCIA(a lacuna R13; usar dst2 p/ medir import)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=bogus | gate=SEM-REFERENCIA(a lacuna R13; usar dst2 p/ medir import)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+
+=== [G4-offset] rota=numeric:htp:opencl:cpu:opencl mut=smart_offset env=2.5 ===
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+
+=== [G5-nodst2] rota=numeric:htp:opencl mut=none env=ausente ===
+  NUMGATE src=htp dst=opencl ref=cpu dst2=- | gate=CALIBRACAO_PENDENTE/EOG | env_calib=-1.000 calib=- | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+  NUMGATE src=htp dst=opencl ref=cpu dst2=- | gate=CALIBRACAO_PENDENTE/EOG | env_calib=-1.000 calib=- | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+  NUMRES src=htp dst=opencl ref=cpu | passos=8 nchk=8 div_dst_ref=0 | invalidos=0 stop=EOG | e_dr(max/mean)=0.7710/0.5876 e_sr=0.8512/0.7085 e_ds=0.5714/0.5190 | lse0(d/s/r)=28.215/28.275/27.992 | out=7 texto_len=25
+
+R15_GATE_DONE

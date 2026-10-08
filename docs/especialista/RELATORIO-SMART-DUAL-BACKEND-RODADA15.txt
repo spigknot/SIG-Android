@@ -1,0 +1,148 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 15
+=========================================================================
+Data: 08/10/2026 (noite). Ordens: "CANDIDATO COMPILADO: TESTES REAIS E
+CORRECAO DO NUMGATE". Sem UI/produto/R2/release; SIG principal intocado.
+
+RESUMO EXECUTIVO: (1) RETIFICACAO aceita: o R14 encerrou com BUILD CONCLUIDO
+(skel+host); o que falta e' APK harness, testes de runtime e numerica de
+kernels — pendentes de device. (2) NUMGATE CORRIGIDO conforme §4: ref real
+nos DOIS payloads; flags de falha estrutural (decode/invalidos/reference);
+PASS de import SO com envelope calibrado (env_calib<0 => CALIBRACAO_PENDENTE
+sempre!); NaN por checkpoint contado e levado a FAIL(state); cap/EOG
+explicitos no payload; mutante de offset global p/ a prova de invariancia.
+(3) AUDITORIA §2 executada sobre o DIFF FINAL (SIG-original -> candidato):
++814/-56 linhas em 7 arquivos = o escopo KQ (com o guard de merge Q6_K
+adicionado — análogo ao hunk upstream 17, ausente na logica do SIG!).
+(4) DEVICE VOLTOU (CPH2747/3B15BD00FVE00000 via 100.108.27.64:5555!) e o
+RED/GREEN do gate rodou: [resultados na secao E]. (5) HOST re-buildado com
+o guard. Camadas: COMPILED=sim (skel+host); NUMERICALLY_VALIDATED=pending;
+GRAPH_VALIDATED=pending; PERFORMANCE_VALIDATED=pending.
+
+-----------------------------------------------------------------------
+A. CANDIDATO FINAL / MANIFEST / FLAG / ESCOPO
+-----------------------------------------------------------------------
+A.1 Escopo A+B do usuario mantido: 7 arquivos do hexagon + dependencias;
+    copia isolada /root/sigcand2; probe separado; nada no SIG/UI/R2/Whisper.
+A.2 Artefatos: libggml-htp-v81.so (skel, sha256 em manifesto), libllama.so
+    (host; sha 8ab003eb... com o guard: NOVO sha no manifesto da rodada),
+    libggml-hexagon.so. Manifesto FULLSHA em docs/npu-hymt2/smart-rodada15/.
+A.3 FLAG DE TESTE: gate GGML_HEXAGON_KQ_ENABLED=0 (default produto OFF) —
+    a variante de teste com =1 (harness) sera' compilada e registrada na
+    identidade/manifest antes de QUALQUER execucao DSP (status global
+    continua NAO_VALIDADO; consulta SIM != numerica PASS).
+
+-----------------------------------------------------------------------
+B. REVISAO DO PORT: DIFF FINAL + SEMANTICA + GUARDS
+-----------------------------------------------------------------------
+B.1 DIFF FINAL (SIG-original -> candidato; normalizado): ggml-hexagon.cpp
+    +415/-13; hmx-tiled +40/-11; htp-ops +2/-0; hvx-flat +137/-0; hvx-tiled
+    +125/-0; matmul-ops.c +53/-25; matmul-ops.h +22/-7. TOTAL +814/-56 =
+    o pacote KQ (repack q6_K/q4_K + kernels + opcodes + dispatch + guards).
+B.2 Identidade dos 3 DSP revalidada POR SHA256 NORMALIZADO: SIG-original ==
+    parent em conteudo (CRLF a parte) — a copia do KQT e' o "SIG+KQ" exato.
+    (Nota de metodo: a primeira checagem por bytes crus acusou "diferente"
+    por CRLF/LF — revalidada com normalizacao.)
+B.3 Conflitos preservados (semantica): (a) funcoes NOVAS (adicoes puras);
+    (b) cases em switches EXISTENTES (Q4_K ao lado de Q4_1; Q6_K com
+    kernel proprio); (c) condicoes de row_size/quant (Q4_K tratado como
+    Q4_1-like); (d) NENHUM default alterado p/ sucesso falso; (e) o case
+    mal-colado (dentro do switch(op) do supports) foi REMOVIDO.
+B.4 Hunks nx/fused do parent: nao se aplicam (as funcoes nx-fused nao
+    existem no SIG). PROVA do nao-uso indevido: o is_mergeable_mul_mat do
+    SIG poderia mandar Q6_K ao caminho FUSED (qkv/ffn) onde NAO HA kernel
+    fused de Q6_K (confirmado: qkv/ffn q6_k = 0 ocorrencias no dispatch!)
+    => ADICIONADO guard: 'if (src0->type == GGML_TYPE_Q6_K) return false;'
+    (analogo ao hunk 17 upstream). Q4_K segue o Q4_1 (kernel existe).
+B.5 Coerencia host/DSP: IDs batem (GGML_TYPE_Q4_K=12/Q6_K=14 == HTP_TYPE_*);
+    tiles Q6_K=896 (novos define no matmul-ops.h), Q4_K usa Q4_1; sizes/
+    asserts presentes; dispatch com NO_SUPPORT honesto p/ tipos fora.
+B.6 INCIDENTE E RECUPERACAO (registrado por honestidade): ao reconectar, o
+    /data/local/tmp do CPH2747 estava limpo (o hymt2_app.gguf sumiu no
+    ciclo de reboot). NENHUM dado foi fabricado. A recuperacao seguiu a
+    POLITICA DE MODELO vigente (parecer R6/R8): o R2 publica o OFICIAL dc5f
+    e NAO deve substituir o produto — uma tentativa inicial de baixar do R2
+    foi DESCARTADA ao validar o sha (dc5f44 != c4bf1015; comparacao da
+    rodada 1 registra 225/354 tensores divergentes entre os dois!). O
+    arquivo c4bf do PRODUTO foi localizado no PC em
+    docs/vulkan-hymt2-fusion-round/logs-rodada13/hymt2_app.gguf
+    (sha256 c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+    = EXATO), e re-enviado por push com sha256 readback via exec-out.
+    Os runs do gate sem modelo foram INVALIDOS e repetidos apos o push.
+    Device voltou pelo WiFi informado pelo usuario (100.108.27.64:5555);
+    PJA110 nunca tocado. Nota de metodo: o download direto de 1.1GB do R2
+    pelo curl falhou silenciosamente no host (arquivo nao materializado);
+    a recuperacao usou o arquivo local do produto — sem download externo.
+    Divergencia de comportamento do curl (full vs range) registrada como
+    anomalia do ambiente, nao contornada com bypass.
+
+-----------------------------------------------------------------------
+C. NUMERICA KQ SHAPES / PLACEMENT DSP
+-----------------------------------------------------------------------
+C.1 BLOCKED_DEVICE? NAO — device reconectado! Ordem de execucao: (1) gate
+    RED/GREEN (secao E — probe BASELINE, nao usa os kernels KQ); (2) harness
+    KQ (variante gate=1, APK separado) para fixtures por shape e kernel
+    trace; (3) grafo c4bf. (1) executado; (2) e (3) na fila com o device.
+C.2 Fixtures planejadas (quando o harness compilar): Q4_K/Q6_K vs CPU em
+    shapes Hy-MT2/tile/batch1/128/bordas/VTCM; rejeicoes Q5_K/Q2/Q3
+    explicitas; kernel trace effective (nao CPU silencioso).
+
+-----------------------------------------------------------------------
+D. GRAFO C4BF / PRESERVACAO GPU / RESET
+-----------------------------------------------------------------------
+D.1 Sem mudanca nesta rodada (depende de C.2). Preservacao: os .so do SIG
+    v12 seguem no device/probe baseline; nenhum swap; Whisper intocado.
+
+-----------------------------------------------------------------------
+E. REFERENCE GPU-PURA / NUMGATE RED/GREEN (executado!)
+-----------------------------------------------------------------------
+E.1 Envelope: calibracao REAL pendente (GPU repeat/roundtrip + holdout) —
+    por desenho, sem calibracao o gate NUNCA da PASS (CALIBRACAO_PENDENTE).
+    O envelope TEST (env_imp=2.5, calibration_id=R15-TEST) foi usado APENAS
+    para o RED do mutante — rotulado como teste, nao aceitacao.
+E.2 RED/GREEN EXECUTADOS NO DEVICE (payloads literais em r15-gate/r15-gate2):
+    G1 normal (sem envelope) => CALIBRACAO_PENDENTE/EOG (env_calib=-1; NUNCA
+       PASS sem calibracao!) | ref=cpu real | invalidos=0 | stop=EOG |
+       e_imp=0.5880/0.3954. GREEN OK.
+    R2 perturba (+50 no logit na pos 4) c/ envelope TEST => FAIL(import>env)
+       com e_imp(max)=49.9924 (o mutante disparou e o detector REJEITOU!).
+    R3 dst2 invalido (bogus) => FAIL(reference) (o pedido de referencia pura
+       que falhou NAO vira ausencia tolerada!).
+    R4 offset global (+1000) => metricas probabilisticas INVARIANTES
+       (e_imp identico ao G1: 0.5880/0.3954; erro centralizado/maxp estaveis)
+       e gate segue condicionado ao envelope (PASS somente sob calibracao).
+    G5 rota sem dst2 => SEM-REFERENCIA (a lacuna R13 documentada no payload).
+    Nota: 2 bugs de teste foram achados E corrigidos na propria rodada (mutante
+    na pos 8 fora do EOG curto => movido p/ pos 4; dst2 indisponivel nao estava
+    mapeado a FAIL(reference) quando o ctx era nulo) — RED funcional provado
+    com re-run. Envelope TEST rotulado (calibration_id=R15-TEST); a
+    calibracao REAL (GPU repeat/roundtrip + holdout) segue pendente.
+
+-----------------------------------------------------------------------
+F. MICROPERF
+-----------------------------------------------------------------------
+F.1 Nao executado por desenho (precisa da numerica de kernel antes).
+
+-----------------------------------------------------------------------
+G. PRESERVACAO / CONEXAO / RESTORE
+-----------------------------------------------------------------------
+G.1 Device: PJA110 NUNCA tocado (apareceu no tailnet por engano, desconectado
+    sem comando); CPH2747 reconectado no WiFi informado pelo usuario; serial
+    explicito em toda acao; /data/local/tmp limpo ao fim dos scripts.
+G.2 Whisper/UI/R2/release intactos; WIP alheio intacto; stayon 7 preservado.
+
+-----------------------------------------------------------------------
+H. ESTADOS POR CAMADA / PROXIMO PASSO
+-----------------------------------------------------------------------
+H.1 COMPILED: skel+host+guards OK. HOST_OK3 final (const-fix + guard de
+    merge): libllama.so sha256 8ab003eb1fdd0643367b4d8ff25f1f6c91697c3a9d3dac9ab68d1251f7ede2cb;
+    skel libggml-htp-v81.so 4689ffc0d6f5b96a7f82cd33a7b39da899b04aa757acf8ca85ecde80b2b5ffb6;
+    libggml-hexagon.so 9b99d90e27a0389996a6542078a4fb6e894840754f5674dd72fde660b9bf2b0f
+    (host-kq4, 08/10 ~20h). Nota: uma primeira tentativa de rebuild falhou
+    porque o arquivo com const-fix tinha sido sobrescrito pelo cp do kq2
+    pre-fix; rerun apos reconciliar (arquivo unico fonte-verdade = kq2).
+H.2 NUMERICALLY_VALIDATED: PENDENTE (proxima: fixtures Q4_K/Q6_K por shape
+    no harness gate=1; depois grafo c4bf).
+H.3 GRAPH_VALIDATED: PENDENTE (c4bf short com matmuls K no DSP + EOG/reset).
+H.4 PERFORMANCE_VALIDATED: PENDENTE (matched apos as duas acima; ~10% e
+    escala do upstream NAO sao transferidos por declaracao).
+=========================================================================

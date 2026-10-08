@@ -1,0 +1,22 @@
+MANIFESTO — smart-rodada15 (08/10/2026 noite)
+
+HOST_OK3: libllama.so sha256 8ab003eb1fdd0643367b4d8ff25f1f6c91697c3a9d3dac9ab68d1251f7ede2cb
+skel htp-v81: 4689ffc0d6f5b96a7f82cd33a7b39da899b04aa757acf8ca85ecde80b2b5ffb6 | libggml-hexagon: 9b99d90e27a0389996a6542078a4fb6e894840754f5674dd72fde660b9bf2b0f
+NUMGATE v2 (8 fixes §4) + RED/GREEN: G1 CALIBRACAO_PENDENTE; R2 FAIL(import>env) e_imp=49.99; R3 FAIL(reference); R4 invariante; G5 SEM-REFERENCIA.
+AUDITORIA §2: diff final +814/-56; 3 DSP == parent (sha256 normalizado); guard is_mergeable Q6_K (fused q6_k=0 kernels).
+MODELO: c4bf (sha c4bf1015...) recuperado do PC (logs-rodada13) e pushado c/ readback exec-out; R2=dc5f NAO usado (225/354 tensores divergem).
+Device: CPH2747 WiFi 100.108.27.64:5555; PJA110 intocado.
+
+a157540507c6a472fe4212c0e31a78f7db289603981a0b70441ff5d22da08dbe  GATE2-RAW.txt  (3498 B)
+7feacdb95a43ac83cb06c796855257dc6f02633431910df633616c140314cd10  NUMGATE-RAW.txt  (7534 B)
+6ee624b937907049394b2f82718327cf87225eea7ffff3a1b1cd7172b6b8713b  r15-audit2.py  (2063 B)
+51a65a874721b9bbaef31e817fc90e9b2195c27dd96c33383048fea052aee43c  r15-auditoria.py  (2735 B)
+901ff0596909b9cf671e3c8015f553e6178f50752cafd54636145e2a35402449  r15-chunks.txt  (1457 B)
+880cc402d81138dcd6b20a10e16c973a258e0b909a7ab3705e7b12354f683d3c  r15-gate.sh  (2421 B)
+3b2da61595725a0f0c6554160815b9e51ea3a681eb3f19358db7c939dd1f9a1b  r15-gate.txt  (7678 B)
+8efebbabf001884c34be819c4e4b1c40680f083049f27dc6dc17831dcc62c6f7  r15-gate2.sh  (1726 B)
+aa2667decaa760588572653e9a5f7d850a9d325daeb6c16d64062aec162fde26  r15-gate2.txt  (1900 B)
+39e5f3e787fddb13db2faf4bf49a562cc6f3744c4b15e69e0f5170ea17276950  r15-mergeguard.py  (1418 B)
+57a4764fba267f5e2cb90df8de5c33edab7ec769f770b329057212324e0cf741  r15-push.sh  (1498 B)
+
+ca54b7940c1cef03816761e6fe2e676e98787f396554a8a4cc57833d97e21f75  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA15.txt (9780 B)

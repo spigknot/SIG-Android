@@ -1,0 +1,71 @@
+ORDENS AO EXECUTOR — SMART RODADA 15
+CANDIDATO COMPILADO: TESTES REAIS E CORRECAO DO NUMGATE
+===============================================================================
+
+1. PARECER / ESTADO
+R14 relata HOST_OK e SKEL_OK: o candidato focal compilado e um marco. Retificar resumo/H1 'build em curso' para 'build concluido; APK, testes e runtime pendentes'. Nao reconstruir tudo sem necessidade; pin/hash manifest do artefato final.
+Especialista leu o relatorio e NUMGATE atual em C:/npu-probe/app/src/main/cpp/probe.cpp:942-961. Nao acessou servidor/device nem verificou o cohort remoto nesta resposta. Contratos/testes abaixo devem vincular SHA do fonte/artefato efetivamente usado.
+Escopo A+B do usuario registrado: preservar limites de copia isolada, sete arquivos/dependencias declaradas, probe separado, SIGprincipal/UI/R2/release/Whisper intocados. Permanecem c4bf/defaultVulkan/stayon7 e WIP alheio.
+
+2. COMPILADOR NAO E ARBITRO DE CORRETUDE DO PORT
+Compilar prova sintaxe/link/toolchain, nao escala/mins quantizados, layout, protocolos ou equivalencia de kernels. Escolher 'lado KQ' nos conflitos porque build decide e criterio insuficiente para inferencia.
+Revisar diff FINAL candidato versus SIG original, nao historia de tentativas/frankenstein. Para cada conflito preservado: intencao SIG original, mudanca Q4_K/Q6_K e justificativa semantica. Hunk nx/fused omitido exige provar que caminho correspondente nao e escolhido indevidamente e/ou tem fallback correto.
+Revalidar identidade dos headers que alegadamente eram iguais ao parent com hash/diff completo. Dependencias host/DSP coerentes, enum typeIDs, sizes/align/packing, buffers/repack/unpack/get_tensor e dispatchconditions. Nada de cases em switchop indevido, defaults retornando sucesso falso ou kernels antigos recebendo layoutnovo.
+Manifesto final FULLSHA de libs/skel/bindings/APK/config/pins/corepatchset. Sideeffectsexternos readbackmaps. Compilacao antiga nao cobre flags/header gateONtest alterados depois.
+
+3. DESBLOQUEAR TESTE SEM PROMOVER SUPORTE PREMATURO
+Existe uma dependencia circular potencial: gateGGML_HEXAGON_KQ_ENABLED=0 conserva supportsFALSE; numerica via scheduler nao roda kernels se suportaFALSE.
+Resolver com variante EXPERIMENTAL DE TESTE explicitamente gateON ou harnesskernel direto autorizado, em app-id separado. Ela pode expor suporte para EXECUTAR TESTES, mas status global do candidato continua NAO_VALIDADO. Produto/default gateOFF ate aceitacao. Nao classificar consultaSIM como numericaPASS.
+Flag/propriedadeconsta identityline/manifest e JSON. Mutante suportaSIMsemkernel/protocolo deveFAIL antescomparativovalido. Usar mesmo cohort do candidatehost/skel, semmixbaselinebinary.
+Quando o aparelho permitido voltar:
+A. fixtures Q4_K/Q6_K vsCPU, shapesHyMT2/tile/batch1/prefillbatch128/bordas/alinhamento/VTCM/rejeicoes. finite e toleranciapredefinida apropriada para matmul;
+B. suporte+execucaoHTPeffective kerneltrace, naoCPUfallbacksilencioso;
+C. grafo c4bf short: matmulsK realmenteDSP; rejeicoesoutrostiposexplicitas; EOG/reset/finite;
+D. pureVulkan/OpenCL e dualSmartcurto preservados; depois952/ABAconforme impacto doport.
+Fixturesnumericas nao devemconvertermodeloproduto nemusar dadosprodução. Cada resultado passaoufalha comassert, log eexit real. StageFAILED nao viraaceito na fase seguinte.
+
+4. NUMGATE ATUAL AINDA PODE DAR PASS FALSO
+Codigo lido:
+- ENV_IMP=2.5 fixo (948);
+- se c_dst2 e nchk>0, PASS(import<=env) (950-953), SEM flag de calibracao.
+Esse limite provisório nao foi calibrado; portanto nenhum run pode dar PASSACEITACAO com ele. Manter CALIBRACAO_PENDENTE/EXPLORATORIO ate envelope validado com dados/calibrationID/config/hashes. Pode darFAIL por erros estruturais semcalibracao.
+NaN/Inf: erroimp eh agregado apenas quando finito/nonnegative. Valorinvalidos podem ser ignorados e err_imp_max permanecer0/finito; std::isfinite(err_imp_max) nao detecta o NaN que ficou de fora. Verificar flagsfinite/logits/metricas a CADA checkpoint e falhar imediatamente/guardar erro; counts invalidos explicitos. Nao so validarmax agregado.
+Decodeerror/excecao/piececap/timeout/completudestop devem gerar FAIL/PARCIAL, nunca PASSporque algum checkpoint anterior funcionou. dst2prefillfailure nao pode virar ausenciatolerada se rota EXIGIUreferenciapuro; FAIL(reference). Envelope e par/calibrationcheckpointclassesclaros, nao configglobal.
+NUMRES ainda imprime ref=cpu fixo (959), embora NUMGATE use nref: corrigir os DOIS payloads, schema e fixtures para identidaderef real. Alias de contextsroles nao pode contaminarpares.
+Testes permanentes offline baratos:
+- semcalibration + metricasvalidas -> PENDENTE, nuncaPASS;
+- umNaN/Infentrepassos -> FAIL;
+- errodecode apos N passosvalidos -> FAIL;
+- dst2 requisitadofalhou -> FAIL;
+- cap/timeout/incompleto -> PARCIAL/FAIL;
+- +50logit mutante acimaenvelopecalibrado -> FAIL;
+- offsetglobal emlogits -> métricaprobabilistica invariavel corretamente;
+- refGPU -> labelGPU, naoCPU.
+ExecutarRED/GREEN, nao apenas dizer detectorimplementado.
+
+5. CONTROLE NUMERICO E MEMORIA
+Agoraexiste dst2GPU-puro: testarcontrole real mantendo mesmoprefixotokens/model/build/KVconfig em contextosdistintos. Envelopecalibration GPUrepeat/roundtrip e errointerbackend apropriado; holdoutSmart e fixtureperturbacao. Nao medir e_imp semcomplete reference.
+Residencia4contexts eh risco significativo com historicoLMK. Rota semdst2 NAO implementa por si so sequencialpareadoGPU-puro: ela so REMOVEreferencia, voltandoaalacunaR13. Para alternativa sequencialREAL, gravar tokenstream/checkpointlogits/stats/hash deGPU-puro e comparar emrunSmartpareado, com mesmo prefixo/corpus/build/params. Mostrar procedure e evidencia, nao dizer 'ja suportado' sem codigo/storage/comparacao.
+Preferir pocoscheckpoints, duasexecucoespareadas para pouparmem e diagnostico fora janela benchmark. Nao deixar calibrationquepede4modelos travar progressoHTPmatmulshapes.
+
+6. DEVICE BLOQUEADO — AÇÃO DO USUARIO NECESSARIA
+Somente CPH2747serial3B15BD00FVE00000 ou enderecoWifi confirmado dele. PJA110foraescopo. Pedir ao usuario conectarUSB alvo (preferido) ou acordar e informar conexãoWirelessatual seporta mudou. Nao adivinharporta/pareamento/credencial nemkillserver/pmclearSIG. Semloopdeadreconnect.
+Enquantooffline: revisarport/manifest, compilar varianteAPKharness, fixturesNUMGATE/calibration e calcularbaseCPUhostquando aplicavel. TestsDSP/runtime ficam PENDENTES de device, nunca outputs sinteticos.
+NenhumpatchSIGprincipal/publicacao por recuperarconexao. Install/-r apenasprobeautorizado, backups/readbacklibs, logslocaldevice e exec-outcompletionmarker. Configstayon7conservada e temporariosrestoreexact.
+
+7. MICROPERF APOS SUPORTE NUMERICO
+HTPbaseline CPUfallback vs candidatoKDSP: mesmo corpus/np/config/deviceestado e warmcoldexplicit, contadoresplacement e semprofile/espelho na janelaperf. Medirpedidoinclreset, transfer e TTFTready/lifetimecold/memresident, eUIvisible sose realcallback.
+Build/gatespass nao prova ganho; GPUOpenCL/Vulkanpurebaselinescontrole antes/depois e poucoswarmrepsintercaladas. Pilot952SEMespelho depoisestabilidade se seguro; se tolerancianumericapendente, labelEXPLORATORIO e naoaceitacaoproduto.
+Nao alegar~10%upstreamtransferido para candidateSIG nem escala com corpus sem dados. Perfnegativo eh resultadolegitimo.
+
+8. ENTREGA RODADA15
+RELATORIO-SMART-DUAL-BACKEND-RODADA15.txt docs/especialista A-H:
+A candidatofinal/buildmanifest/flagtestONvsprodutoOFF/escopo;
+B revisaoconflitossemantica e fixture/gatesNUMGATE;
+C numericaKQshapes/placementDSP ouBLOCKED_DEVICE;
+D grafo c4bf/preservacaoGPU/reset;
+E referenceGPU-puro/calibrationID/holdout/fixture ouPENDENTE;
+F matchedmicroperfseexecutado comidentity/denoms;
+G preservacaoWhisper/UI/product/R2 e conexao/restore;
+H decisao camadas: COMPILED, NUMERICALLY_VALIDATED, GRAPH_VALIDATED, PERFORMANCE_VALIDATED separados.
+Logs docs/npu-hymt2/smart-rodada15/ fullSHA/exits/categoriasexclusivasporattempt/session e outputsreais. Nao renovarconclusao 'build arbitro' nem 'gate failclosed' semteste; portcompilado eh marco, proxima prova sao kernels reais e detectorseguro.

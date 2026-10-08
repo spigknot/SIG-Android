@@ -1,0 +1,17 @@
+=== R15 GATE2 RED (20:25:27Z) ===
+=== [R2-perturba] rota=numeric:htp:opencl:cpu:opencl mut=smart_perturba env=2.5 ===
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=FAIL(import>env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=49.9924/8.7250 | nchk=6 div_dst_ref=1
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=FAIL(import>env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=49.9924/8.7250 | nchk=6 div_dst_ref=1
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=FAIL(import>env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=49.9924/8.7250 | nchk=6 div_dst_ref=1
+
+=== [R3-refbogus] rota=numeric:htp:opencl:cpu:bogus mut=none env=2.5 ===
+  NUMGATE src=htp dst=opencl ref=cpu dst2=bogus | gate=FAIL(reference)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+  NUMGATE src=htp dst=opencl ref=cpu dst2=bogus | gate=FAIL(reference)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+  NUMGATE src=htp dst=opencl ref=cpu dst2=bogus | gate=FAIL(reference)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.0000/0.0000 | nchk=8 div_dst_ref=0
+
+=== [R4-offset] rota=numeric:htp:opencl:cpu:opencl mut=smart_offset env=2.5 ===
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+  NUMGATE src=htp dst=opencl ref=cpu dst2=opencl | gate=PASS(import<=env)/EOG | env_calib=2.500 calib=R15-TEST | invalidos=0 | e_imp(max/mean)=0.5880/0.3954 | nchk=8 div_dst_ref=0
+
+R15_GATE2_DONE

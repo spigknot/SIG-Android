@@ -1,0 +1,33 @@
+chunk 0: 0-113308044
+ls: cannot access 'chunk-0.bin': No such file or directory
+chunk 1: 113308045-226616089
+ls: cannot access 'chunk-1.bin': No such file or directory
+chunk 2: 226616090-339924134
+ls: cannot access 'chunk-2.bin': No such file or directory
+chunk 3: 339924135-453232179
+ls: cannot access 'chunk-3.bin': No such file or directory
+chunk 4: 453232180-566540224
+ls: cannot access 'chunk-4.bin': No such file or directory
+chunk 5: 566540225-679848269
+ls: cannot access 'chunk-5.bin': No such file or directory
+chunk 6: 679848270-793156314
+ls: cannot access 'chunk-6.bin': No such file or directory
+chunk 7: 793156315-906464359
+ls: cannot access 'chunk-7.bin': No such file or directory
+chunk 8: 906464360-1019772404
+ls: cannot access 'chunk-8.bin': No such file or directory
+chunk 9: 1019772405-1133080447
+ls: cannot access 'chunk-9.bin': No such file or directory
+cat: chunk-0.bin: No such file or directory
+cat: chunk-1.bin: No such file or directory
+cat: chunk-2.bin: No such file or directory
+cat: chunk-3.bin: No such file or directory
+cat: chunk-4.bin: No such file or directory
+cat: chunk-5.bin: No such file or directory
+cat: chunk-6.bin: No such file or directory
+cat: chunk-7.bin: No such file or directory
+cat: chunk-8.bin: No such file or directory
+cat: chunk-9.bin: No such file or directory
+-rw-r--r-- 1 Gustavo 197121 0 out  8 16:56 hymt2_app.gguf
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+R15_DL_CHUNKS_DONE
