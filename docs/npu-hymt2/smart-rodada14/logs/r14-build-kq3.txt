@@ -1,0 +1,16 @@
+SKEL_FALHOU
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:536:13: error: use of undeclared identifier 'weight_sz_per_thread'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:545:15: error: expected ';' at end of declaration
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:545:9: error: expected ':'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:545:9: error: unexpected type name 'size_t': expected expression
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:549:36: error: use of undeclared identifier 'flat_src1_row_size'; did you mean 'flat_act_row_size'?
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:557:7: error: expected expression
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:677:23: error: use of undeclared identifier 'off'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:678:23: error: use of undeclared identifier 'off'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:679:23: error: use of undeclared identifier 'off'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:680:23: error: use of undeclared identifier 'off'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:681:23: error: use of undeclared identifier 'off'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:688:22: error: use of undeclared identifier 'off'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:693:3: error: function definition is not allowed here
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:700:133: error: function definition is not allowed here
+fatal error: too many errors emitted, stopping now [-ferror-limit=]

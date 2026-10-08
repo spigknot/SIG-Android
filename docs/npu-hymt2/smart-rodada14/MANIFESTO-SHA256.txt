@@ -1,0 +1,28 @@
+MANIFESTO — smart-rodada14 / RECONSTRUCAO (08/10/2026)
+
+PROVA: SKEL_OK (htp-v81, kernels Q4_K/Q6_K) + HOST_OK (libllama.so) na copia isolada /root/sigcand2 do servidor.
+BINARIOS: libggml-htp-v81.so 747336 B (15:09); libllama.so 35520432 B sha256=8ab003eb1fdd0643... ; libggml-hexagon.so 5816456 B.
+METODO: 3 DSP identicos ao parent => KQT copiado; htp-ops +2 opcodes; moc/moh/hexagon: ORIG+patch(fuzz, LF) + rej-apply contextual + const fix.
+PULADOS (nao aplicaveis ao SIG): hunks nx-fused do parent (is_supported_mul_mat_nx_kernel etc.); temp_buf (funcao inexistente no SIG).
+
+SCRIPTS (no repo):
+9d2d268aaec68ef4de957539cb54513b0ddf1d12225bb584c6fb9581803ddb12  hexagon.cpp.rej  (25234 B)
+56212141c002eb9974989d76aa2ca96ea28cd54112fd37052d0e1b63d7ac1842  r14-applyrej.py  (3508 B)
+72585645b75c752273e8eb098ff687ba8051a1b5c214f68e68943e365311ca7c  r14-check.py  (1303 B)
+85155b8aad356a6eea9b801ecad4a5dff5864059d4c16e338042c81fa9af57de  r14-ctx2.py  (1448 B)
+386f056e52349eeaed6524cf3bcfa0c90be2304f4bb96d98b56865d9686fabcb  r14-dry3.py  (952 B)
+50113b4506754e15078fd4b42019f8f28cd4b3cc742b1505030c20e2395a3dc5  r14-dumpfinal.py  (1632 B)
+8178a86ac6f5de68645307f8dd66ada50871efce4fb3446ef67ac1d0352e10e9  r14-faseA.py  (1654 B)
+414d3c870a1ab28265a1f45dea772e1791df7bc44ddf9bac9bc79da9c3abe4cd  r14-finalhex.py  (3275 B)
+0ee89f2f691f3aae4fb7fadd45a8a7e73c6c1cd40f8e5a815fe610a1a6970d4a  r14-fixc.py  (1529 B)
+d6deea7a07f84c43b653e5fdb7adc51cd08dc6f5cf63c06887e3e25f8e79e918  r14-medir.py  (1182 B)
+03504db27e280f123d0983d8da000ba178e46b48df1f7825cc8428b7b04caacb  r14-port-delta.sh  (985 B)
+7e5a9836235bab9a72ca38dd325532ea67bffd8c059d95a5138793b0292344ff  r14-port-merge.sh  (1687 B)
+a1225bef18c6b5fecf1851fd1f23984c5b292f985e30ab603388f3cb1852a732  r14-rebuild2.py  (2479 B)
+454902553321d36657829e13e4b6b46bde8f335e5412517522e3caf892ec523a  r14-rejapply2.py  (3212 B)
+907d0ec3c53b586072c12d03fd585b17b85d94ed032fd0470e64ec6166792614  r14-remal.py  (1014 B)
+e48e84f568755e39198ada777ec6bfd8039a5dd8e92d1de44be22c394992ab25  r14-sitios.py  (3154 B)
+011157ef3667ed40460994b12665360266c2e529545ed885caac7a31244ce9b7  r14-verdades.py  (813 B)
+900187bcbe797f590b3f9d9ff840220243814db871c2f13642a21c28c12a5515  rejs-moc.txt  (5537 B)
+
+bfe45c000b089f253e9a94ebe0b65b5d29606eac2a02c8f76850497354e1a390  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA14.txt (10650 B)

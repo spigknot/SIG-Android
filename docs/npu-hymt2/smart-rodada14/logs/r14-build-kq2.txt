@@ -1,0 +1,22 @@
+CFG_OK
+SKEL_FALHOU
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:213:14: error: duplicate case value 'HTP_TYPE_IQ4_NL'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:224:9: error: multiple default labels in one switch
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:225:14: error: duplicate case value 'HTP_TYPE_Q4_1'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:227:14: error: duplicate case value 'HTP_TYPE_Q8_0'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:229:14: error: duplicate case value 'HTP_TYPE_MXFP4'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:241:14: error: duplicate case value 'HTP_TYPE_IQ4_NL'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:252:9: error: multiple default labels in one switch
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:253:14: error: duplicate case value 'HTP_TYPE_Q4_1'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:255:14: error: duplicate case value 'HTP_TYPE_Q8_0'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:257:14: error: duplicate case value 'HTP_TYPE_MXFP4'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:296:14: error: duplicate case value 'HTP_TYPE_Q4_0'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:297:14: error: duplicate case value 'HTP_TYPE_IQ4_NL'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:305:14: error: duplicate case value 'HTP_TYPE_Q4_1'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:306:14: error: duplicate case value 'HTP_TYPE_Q8_0'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:307:14: error: duplicate case value 'HTP_TYPE_MXFP4'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:309:14: error: duplicate case value 'HTP_TYPE_F16'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:541:9: error: use of undeclared identifier 'is_fused_nx'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:551:13: error: use of undeclared identifier 'src2_sz_per_thread'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:557:13: error: use of undeclared identifier 'src2_sz_per_thread'
+fatal error: too many errors emitted, stopping now [-ferror-limit=]

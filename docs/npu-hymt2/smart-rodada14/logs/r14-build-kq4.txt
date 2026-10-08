@@ -1,0 +1,21 @@
+SKEL_FALHOU
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1430:50: error: use of undeclared identifier 'tile'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1430:56: error: use of undeclared identifier 'r1'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1433:51: error: use of undeclared identifier 'output_row0'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1433:65: error: use of undeclared identifier 'c'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1434:35: error: use of undeclared identifier 'output_row1'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1434:65: error: use of undeclared identifier 'output_row1'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1434:79: error: use of undeclared identifier 'c'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1441:5: error: extraneous closing brace ('}')
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:1442:1: error: extraneous closing brace ('}')
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:532:28: error: initializing 'HEXAGON_Vect1024' (vector of 32 'long' values) with an expression of incompatible type 'int'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:532:36: error: call to undeclared function 'unpack_q6_k_group'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:547:5: error: expected ')'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:547:5: error: expected function body after function declarator
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:547:5: error: expected parameter declarator
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:382:26: error: static declaration of 'unpack_q6_k_group' follows non-static declaration
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:452:29: error: use of undeclared identifier 'v_sum1'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:592:18: error: duplicate case value 'HTP_MM_KERNEL_HVX_QUANT_BLOCK'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:593:18: error: duplicate case value 'HTP_MM_KERNEL_HVX_QUANT_ROW'
+/workspace/ggml/src/ggml-hexagon/htp/matmul-ops.h:623:18: error: duplicate case value 'HTP_MM_KERNEL_HVX_QUANT_ROW_FLAT'
+fatal error: too many errors emitted, stopping now [-ferror-limit=]

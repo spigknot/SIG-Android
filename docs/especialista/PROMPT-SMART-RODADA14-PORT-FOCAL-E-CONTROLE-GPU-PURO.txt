@@ -1,0 +1,64 @@
+ORDENS AO EXECUTOR — SMART RODADA 14
+PORT FOCAL DEFINIDO; CONTROLE GPU-PURO E GATE NUMERICO FAIL-CLOSED
+===============================================================================
+
+1. PARECER / DECISAO TECNICA
+O pacote upstream historico Q4_K/Q6_K identificado em 1ec818809 e o caminho tecnico preferido. A estimativa ficou circunscrita aos arquivos Hexagon e seus contratos; nao e atualizacao integral do core. Manter os DOIS tipos, modelo c4bf, defaultVulkan e patches GPU SIG.
+Especialista leu DESIGN-BACKPORT-FOCAL.md e o modo numeric atual probe.cpp:827-934. Nao executou aparelho nesta analise. A coleta completa e um avanco, MAS o teste atual nao isola fidelidade do import nem tem gate numerico implementado. Corrigir isso em paralelo ao port.
+Port em copia isolada exige escopo vigente suficiente: registrar autorizacao do USUARIO para os sete arquivos e dependencias declaradas, fullbuild/teste somente probe. A recomendacao tecnica do especialista NAO substitui aprovacao de usuario para ampliar escopo. Se executor considera essa decisao ainda pendente, pedir um formulario objetivo com esse pacote, sem UI/produto/Whisper/R2/release, e trabalhar nos testes independentes enquanto aguarda.
+
+2. PORT: ORDEM SEGURA DE IMPLEMENTACAO
+Fase A: design+protocolo compartilhado/flags/guards, assertions de type IDs/structs/layout. Suporte exposto para Q4_K/Q6_K continua FALSE ate implementacao completa validada. Nao habilitar supports_op em fase mecanica sem kernels/repack.
+Fase B: kernels HVX/HMX, dispatch e hostrepack/parametros coerentes. Repack nao pode ser adiado depois de 'ativar kernel' e medir lixo. Pode compilar intermediarios, mas nenhum intermediario incompleto e candidato de inferencia aceito.
+Fase C: numerica matmul CPUvsHTP e test de suporte/placement nos shapes doHyMT2, prefill e decode, batch/tile/VTCM/alinhamento e tipos fora deescopo. Rejeicao honesta para Q5_K/Q2/Q3 se nao implementados. Nunca addcase que caiaCPU e contePASSHTP.
+Fase D: modelo c4bf real, grafoHTPmatmul e fallback remanescente documentados, output/finite/EOG/resetABA, dualSmartcurto e 952 se seguro. Preservar GPUQ4/Q8/Adrenoworkarounds/OpenCLguardcache e Whisper intocado.
+Nao aplicar cherry-pick cego: a arvore difere do parent. Mapear cada hunk e dependencia contra API SIG; ampliar allowlist somente com justificativa/escopo. Pin FULLSHA do commit e parent, nao somente prefixo. Arquivo Q6_K quantblock/tile deve ter tamanho/layout valido: doc '210 bytes/256 blocos' corrigir para unidade realmente validada do bloco de256 elementos, sem reproduzir errodescritivo em codigo.
+FULLrebuild host+skel+bindingAPK isolado, sem swaps parciais ou updatecore. Manifest hashes/readbackmaps. Sem SIGprincipalalterado/WIPoutroagente/commitpublicacao por iniciativa especialista.
+
+3. BUG METODOLOGICO DO MODO NUMERIC — NAO PROVA IMPORT FIEL
+Fonte atual:
+- faz prefill independente em src HTP, dst GPU e ref CPU (857-865);
+- SOBRESCREVE estado dst GPU com estado src (866-873);
+- compara GPU COM ESTADO IMPORTADO contra CPU-puro e HTP.
+A referencia GPU-PURA foi perdida no overwrite. Portanto e_dr~e_ds nao demonstra ausencia de erro extra do import: sao pares distintos, sem controle destino-puro equivalente. Finito/topk e uma evidencia boa, mas conclusao E3 'transferencia FIEL no envelope' e prematura.
+Controle essencial: GPU destinoPURO versus GPU destinoIMPORTADO sob mesmo prefixo/model/build/config, com tolerancia calibrada independentemente e errointerbackend adequado. Pode usar quarto contexto se memoria segura ou coleta em execucoes SEQUENCIAIS pareadas com checkpoints salvos, reduzindo residencia3/4modelos. Nao carregar quatro modelos artificialmente para produto nem ignorar LMK.
+N3 numeric:opencl:opencl:opencl e controle de roundtrip mesmaGPU, mas NAO mede sozinho erro de HTPprefill transferido. Controles separados:
+A. GPU-puro repeat: repetibilidade.
+B. GPU->GPU: serializacao/roundtrip.
+C. HTP-puro vs GPU-puro, prefixo identico: errointerbackend do prefill/compute.
+D. HTP->GPU vs GPU-puro, prefixo identico: errohandoff na mesma GPU.
+Reusar captura em pocoscheckpointsprefixos escolhidos/calibracao/holdout; nao301fulllogsnovocab nemrunslongos redundantes. Identidades doscontexts/roles distinct confirmadas.
+
+4. GATE REAL: N2 IMPLEMENTADO NAO SIGNIFICA DETECTOR IMPLEMENTADO
+No fonte lido, smart_perturba acrescenta50 ao logit0, mas depois apenas calcula/loga metricas. Nao existe ali threshold/envelope que rejeita o resultado. Decodeerror/catch apenas break e ainda imprime NUMRES; finito==false eh impresso mas nao aborta. Nao declarar 'rejeicao esperada' como garantia do codigo.
+Implementar resultado estruturado FAIL-CLOSED para numeric:
+- statuscontrole/strict/tolerado/calibracaoPENDENTE explicitos;
+- errodecode/coleta/NaNInf/import/posicao/EOGponte/cap/timeout geraFAIL/PARCIAL;
+- toleranciavalidada porcontroles/holdout, nao escolhida para fazer N1passar;
+- fixtureperturba e executada contra detectorREAL e deveFAIL; fixtureoffsetglobal-logits deve ser invariancia correta nas metricas probabilisticas;
+- numeroexpectedpassos versuscompletos, stopreason e t_end/marker antes exec-out.
+Guardar fonteRefreal no payload: NUMRES atualmente imprime ref=cpu FIXO mesmo quando rota escolheopencl. Corrigir para nref, IDs/source/config/corpus/SHA.
+No modo numeric, tok1origem e consumido antes outputmontado, texto diagnostico omite ponte. Nao tratar esse texto como outputSmartproduto; corrigir emit/contagem EOG se requer texto, ou rotular explicitamente 'prefixodiagnostico sem ponte' e usar output do requestreal paraqualidade. Diferencapos128 vsR9pos264 pode vir prefixosequencia/baseline/ponte distinta: comparar tokensconsumidos completos/hash antes dizer 'mesma divergencia'.
+Envelope estadisticas: explicar emax(mean-oversteps?) vscheckpoint emax, unidades e quantis; nao chamar 1.082 e0.782 contraditoriosseuniverse distintos, mas dar definição. 'um argmax entre301' não valida pipeline inteira.
+
+5. DEVICE FORA DA REDE: BLOCKER REAL, NAO DOZE PROVADO
+Nao atribuir adbdconnectionrefused a Doze semevidencia. Usuario/acesso device deve ser recuperado viaUSB permitido ou wifiporta/pareamentoreal, sem matarapps/reset SIG/tocarPJA110. Nao loops reconectar porhoras comstateperdido.
+Enquanto indisponivel: port/build/fixturesoffline e schema/numericgate/calculationshost podem prosseguir. N2/N3runtime ficam PENDENTES ate device voltar; nao geraroutputs fabricados nem prometer5min medidos.
+Quando conectado, serialexplicitoidentityfailclosed/logbuffer local/exec-out/marker. Nao force-stop/procedimento restore noSIGprincipal. Stayon7decididoconservar; thermal/memoria limitaexecexplicitamente.
+
+6. DADOS DE PERFORMANCE SOMENTE DEPOIS SUPORTE REAL
+ProvarmatmulHTP Q4_K/Q6_K com numericashapes/coreSIG, microperf matchedbaseline vs candidato e warmload/resetconfigsiguais. Coletarwallresetincluido e firstusekernel/coldloadseparados.
+Depois pilotoBENCH952SEMespelho/dec_s0 nasduasSmart e respectivasGPU/NPU/CPU, poucas reps intercaladas quando seguro. NumericaSmartpendente permite perfEXPLORATORIA rotulada, nao promocao produto. Nao usar Q4_0para afirmarganho produto ou removerfallback escondido sem kernel.
+Ganhos~10%curto upstream permanecem exploratorios; nao afirmarescalalonga nem candidatoSIGrápido por projeto/build.
+
+7. ENTREGA
+RELATORIO-SMART-DUAL-BACKEND-RODADA14.txt docs/especialista A-H:
+A aprovacaoescopo/identidadepins/arquivosallowlist;
+B portincrementalcoerente+build/artifacts ou blockercontrato;
+C matmulshapesnumerica/placementDSP/grafo c4bf;
+D controleGPU-PURO versusGPU-IMPORTADO e envelopegate;
+E N2detectorRED/GREEN e runtimeN3, refinactual/sourceprefixohash;
+F microperf/coldwarm/experimental952seexecutado;
+G preservacao/probe!=produto/Whispernaotestado/deviceblocker;
+H estados porcamada/proximopasso.
+Logs docs/npu-hymt2/smart-rodada14/ fullSHA/exits/categoriasexclusivas/counts e artefatos reais. Nao relatar implementacao como testeexecutado, nao transferfiel semGPU-puro, nao habilitarsuporte anteskernels. Objetivo: candidato REAL + detectorREAL, sem mais rodada apenas 'agora proximo codigo'.

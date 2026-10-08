@@ -1,0 +1,21 @@
+SKEL_FALHOU
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:859:14: error: use of undeclared identifier 'pv_out0'; did you mean 'pv_out1'?
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:871:21: error: use of undeclared identifier 'v_out1'; did you mean 'v_out0'?
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:871:50: error: use of undeclared identifier 'v_out1'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:871:58: error: use of undeclared identifier 'v_src2_1'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:873:18: error: use of undeclared identifier 'pv_out1'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:873:28: error: use of undeclared identifier 'v_out1'
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:877:9: error: expected identifier or '('
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:901:5: error: extraneous closing brace ('}')
+/workspace/ggml/src/ggml-hexagon/htp/hmx-mm-kernels-tiled.h:902:1: error: extraneous closing brace ('}')
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:124:20: error: redefinition of 'quantize_block_f32_q8_0_tiled'
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:192:13: error: redefinition of 'quantize_row_f32_q8_0_tiled'
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:203:13: error: redefinition of 'quantize_row_f32_q8_1_tiled'
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:216:26: error: redefinition of 'hvx_vec_mul_f16_f16_to_f32_lower32'
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:3:20: error: redefinition of 'quantize_block_f32_q8_1_tiled'
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:452:29: error: use of undeclared identifier 'v_sum1'
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:452:37: error: use of undeclared identifier 'v_sum0'
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:455:13: error: redefinition of 'tiled_vec_dot_q4_0_32x1'
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:923:1: error: extraneous closing brace ('}')
+/workspace/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h:925:13: error: redefinition of 'tiled_vec_dot_iq4nl_32x1'
+fatal error: too many errors emitted, stopping now [-ferror-limit=]

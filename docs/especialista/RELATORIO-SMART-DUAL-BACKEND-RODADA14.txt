@@ -1,0 +1,165 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 14
+=========================================================================
+Data: 08/10/2026. Ordens: "PORT FOCAL DEFINIDO; CONTROLE GPU-PURO E GATE
+NUMERICO FAIL-CLOSED". Sem UI/produto/R2/release; SIG principal intacto.
+
+RESUMO EXECUTIVO: (1) AUTORIZACAO DE ESCOPO REGISTRADA (formulario objetivo
+respondido pelo usuario): "A+B completas — protocolo, guardas, kernels
+HVX/HMX e repack + build isolado + numerica por shape" para os 7 arquivos do
+packet 1ec818809 e dependencias declaradas; nada aplicado ao SIG principal.
+(2) PORT FASE A+B EM ANDAMENTO NO SERVIDOR (copia isolada /root/sigcand2):
+FULLSHAs pinados (alvo 1ec81880944a63bc4aaf1abfe9a6d35c7569a757; parent
+82324fc508006de234552e701f4509c72c4fdd8d); patch aplicado via 3-way/merge;
+66 conflitos: 37 resolvidos automaticamente (adicoes KQ puras) + 29 resolvidos
+por regra documentada (KQ-side e' o bloco de destino; o build e' o arbitro);
+zero marcadores restantes. Build full-cohort host+skel em execucao (resultado
+na secao C na proxima atualizacao). (3) METODOLOGIA NUMERICA CORRIGIDA
+conforme §3: o modo numeric ganhou o QUARTO contexto (dst2 = GPU-pura, MESMO
+prefixo, SEM import) e o erro novo e_imp = dst-importado vs dst2-puro — o par
+que faltava; e o GATE FAIL-CLOSED (NUMGATE com status explicito:
+PASS/FAIL/CALIBRACAO_PENDENTE, envelope default 2.5 sobre e_imp; NaN => FAIL).
+(4) RETIFICACOES §1/§4 aceitas: 'import fiel no envelope' do R13 fica RETIRADO
+como conclusao (faltava o controle GPU-puro — agora implementado); a fixture
+smart_perturba do R13 NAO era detector (apenas media/logava) — o gate real
+acima substitui; o texto do modo numeric e' PREFIXO DIAGNOSTICO sem a ponte
+(rotulado; output de qualidade deve vir do request real).
+
+-----------------------------------------------------------------------
+A. APROVACAO/ESCOPO/PINS/ALLOWLIST
+-----------------------------------------------------------------------
+A.1 Formulario respondido (usuario): autoriza fase A+B completas em copia
+    isolada: 7 arquivos do hexagon (repack host ~377; kernels HVX/HMX ~320;
+    opcodes de protocolo; dispatch/guardas) + build host+skel+bindings+APK
+    no servidor; sem tocar SIG principal/UI/R2/release/Whisper; testes so
+    no probe isolado; nada aplicado/commitado no produto sem novo OK.
+A.2 PINS: alvo 1ec81880944a63bc4aaf1abfe9a6d35c7569a757 (2026-09-16,
+    "hexagon: Support for K-Quants Q4_K and Q6_K (#28994)"); parent
+    82324fc508006de234552e701f4509c72c4fdd8d. Delta extraido: 1418 linhas
+    (/root/kq-delta.patch; 818+/61- em 7 arquivos).
+A.3 ESTADO DO SUPORTE: os cases Q4_K/Q6_K no ggml-hexagon.cpp entram sob
+    gate de compilacao (GGML_HEXAGON_KQ_ENABLED, default 0) na fase A;
+    o suporte permanecera FALSE ate kernels+repack+dispatch completos e
+    validados numericamente (regra §2-A).
+
+-----------------------------------------------------------------------
+B. PORT INCREMENTAL — ESTADO DETALHADO
+-----------------------------------------------------------------------
+B.1 METODO (nada de cherry-pick cego): (1) o estado alvo (parent+patch) e o
+    parent puro foram materializados; (2) git merge-file por arquivo para
+    achar os pontos de contato com o SIG; (3) 'patch --merge' com fuzz
+    aplicou os hunks compativeis e marcou os demais; (4) resolucao sistematica
+    em duas fases (adicoes puras = KQ; contexto = KQ com o build como arbitro);
+    (5) revisao manual dos 66 conflitos documentada (dump completo).
+B.2 ESTRUTURA JA INTEGRADA (zero marcadores em 7/7 arquivos): opcodes
+    HTP_TYPE_Q4_K=12/Q6_K=14 (htp-ops.h); helpers is_repack_type/
+    tiled_row_size/is_hmx_weight_type (host); repackers e cases; dispatch
+    HVX (mm/mv, flat/tiled) para Q4_K(Q4_1-like) e Q6_K; dequant workers;
+    quantize f32_q8_1 para Q4_K; o gate de suporte compilavel.
+B.3 FULLREBUILD host+skel+bindings+APK em copia isolada: EXECUTANDO
+    (build-kq); nenhum swap parcial; manifest/hashes ao final.
+B.4 RECONSTRUCAO LIMPA (o merge gerava Frankenstein; reorganizado por arquivo):
+    MEDICAO-CHAVE: nos 3 headers DSP (hmx-mm-kernels-tiled.h, hvx-mm-kernels-flat.h,
+    hvx-mm-kernels-tiled.h) o SIG-hexagon e' IDENTICO ao parent (diff=0!) =>
+    o "SIG+KQ" desses arquivos e' LITERALMENTE o KQT (copia direta!).
+    htp-ops.h: SIG + 2 opcodes. matmul-ops.c/.h + ggml-hexagon.cpp: base
+    SIG ORIGINAL + patch KQ por arquivo com matching apertado (patch -l,
+    LF-normalizado; 20/25 + 9/10 + 5/23 aplicados automaticamente; rejeitos
+    resolvidos por rej-apply contextual: +4 Q4_K em src1_row_size, +4 cases
+    qkv/ffn, funcoes repack novas (~371 linhas) inseridas antes de
+    repack_tiled_q4_0, case Q6_K no switch de get_tensor, 2x flat_src1_row_size,
+    case mal-colado removido do switch(op) do supports; hunks de funcoes
+    nx-fused do parent (ausentes no SIG) corretamente PULADOS).
+    RESULTADO: **SKEL htp-v81 COMPILOU (SKEL_OK!)** — os kernels DSP com
+    Q4_K/Q6_K + protocolo + dispatch existem de verdade (nao e' "add case":
+    o build e' o arbitro e passou). Host (llama) em build no fechamento.
+    NENHUM artefato incompleto sera' candidato de inferencia (§2-B); o
+    suporte exposto segue FALSE ate a numerica por shape (gate de compilacao).
+B.5 HOST (llama): build iterativo no fechamento. 1a rodada: 2 erros de
+    assinatura (callsite passa 'const ggml_tensor *' => 'canonical fix' nas
+    2 defs _K_tiled com const); re-build em andamento. [Resultado final:
+    ver C.4 no addendum desta rodada.]
+
+-----------------------------------------------------------------------
+C. MATMUL SHAPES / NUMERICA / PLACEMENT / GRAFO
+-----------------------------------------------------------------------
+C.1 PENDENTE DO BUILD: numerica por shape (Q4_K/Q6_K CPU vs HTP) e placement
+    no grafo c4bf — a executar quando o build fechar (device ou harness
+    local onde aplicavel). O modo numeric e o "supports" do probe cobrem a
+    coleta; NAO confundir supports SIM com numerica PASS (§1).
+C.2 Rejeicao honesta: Q5_K/Q2/Q3 permanecem fora; o dispatcher retorna
+    HTP_STATUS_NO_SUPPORT para tipos nao implementados (sem fallback CPU
+    rotulado como NPU).
+C.4 ADDENDUM (fechamento): HOST_OK — o cohort completo compilou na copia
+    isolada: libggml-htp-v81.so (skel DSP, 747 KB) + libllama.so (35.5 MB) +
+    libggml-hexagon.so; sha256(prefixo) do libllama = 8ab003eb1fdd0643.
+    O candidato KQ existe como ARTEFATO REAL (nao e' "add case": kernels
+    HVX/HMX + repack + protocolo + dispatch, compilados; suporte exposto
+    ainda FALSE por gate ate a numerica por shape — regra §2 mantida).
+    Numerica por shape (CPU vs HTP) e o harness APK: proxima fase (device
+    offline; nada fabricado).
+
+-----------------------------------------------------------------------
+D. CONTROLE GPU-PURO vs GPU-IMPORTADO (o par que faltava) + GATE
+-----------------------------------------------------------------------
+D.1 IMPLEMENTADO no probe (R14): rota "numeric:SRC:DST:REF[:DST2]"; dst2 =
+    GPU-pura, mesmo prefixo, SEM import; erro novo e_imp (dst importado vs
+    dst2 puro) por checkpoint com o vetor completo (centralizado), max/mean
+    no NUMRES.
+D.2 NUMGATE fail-closed: status explicito {PASS(import<=env),
+    FAIL(import>env), FAIL(state), CALIBRACAO_PENDENTE}; PARCIAL(sem texto)
+    anexado quando aplicavel; NaN/inf => FAIL(state); o estrito NAO herda
+    'correto' por texto plausivel.
+D.3 Controles restantes (a executar): A) GPU-puro repeat
+    (numeric:opencl:opencl:opencl); B) GPU->GPU (roundtrip); C) HTP-puro vs
+    GPU-pura (numeric:htp:null?... via par src/dst puros — pelo dst2);
+    D) HTP->GPU vs GPU-pura (numeric:htp:opencl:cpu:opencl = O PAR CRITICO).
+    N2 (perturba) roda CONTRA O DETECTOR REAL (agora existente) e deve FAIL.
+D.4 MEMORIA: os runs usam no maximo 4 contextos (4o apenas quando a
+    residencia for segura; alternativa sequencial pareada ja suportada pela
+    rota sem dst2). LMK monitorado; nada de residencia artificial.
+
+-----------------------------------------------------------------------
+E. NUMERICA REAL — ESTADO
+-----------------------------------------------------------------------
+E.1 N1 (R13) mantido como dado bruto ROTULADO sem a conclusao retirada:
+    301/301 passos, div_dst_ref=1, e_dr=1,082/0,531, fin=111. O e_dr vs
+    e_ds comparados no R13 NAO isolam import (ambos pares distintos agora
+    corrigidos pelo e_imp do D.1).
+E.2 Refinamento de identidade (fila): promptSHA/nt/cap/ctx de cada run;
+    pos128 (R13) vs pos264 (R9) somente comparaveis com prefixo/stream
+    completos (hashes) — nao chamar de 'mesma divergencia' sem isso (§4).
+E.3 Numeros de envelope: DEFINIR universo (por checkpoint vs max-over-steps)
+    no DESIGN-NUMERICO quando o gate for calibrado; o default 2.5 do
+    NUMGATE e PROVISORIO e sera substituido por calibracao (repeat/roundtrip)
+    com holdout.
+
+-----------------------------------------------------------------------
+F. PERFORMANCE
+-----------------------------------------------------------------------
+F.1 Nada medido: perf somente DEPOIS de suporte real provado (matmul HTP
+    Q4_K/Q6_K + numerica aceita). Ganhos ~10% upstream permanecem
+    exploratorios (§6). Bench 952 sem espelho: NAO executado.
+
+-----------------------------------------------------------------------
+G. PRESERVACAO / PROBE != PRODUTO
+-----------------------------------------------------------------------
+G.1 SIG principal intocado (v12 restaurado desde o R12); Whisper nao tocado/
+    nao testado; WIP alheio intacto; stayon 7 preservado; PJA110 fora.
+G.2 DEVICE: fora da rede desde o N1 da R13; NAO atribuo a Doze sem evidencia
+    (fato observado: adbd recusando conexoes; WiFi recusando; USB so com o
+    PJA110 presente). Recuperacao requer o aparelho (usuario) — nenhum loop
+    de reconexao por horas (loop r13 encerrado); N2/N3 runtime ficam PENDENTE
+    at'e o device voltar; nenhum output fabricado.
+
+-----------------------------------------------------------------------
+H. DECISAO POR ROTA / PROXIMO PASSO
+-----------------------------------------------------------------------
+H.1 PORT: build em curso; proximos passos: corrigir erros de compilacao
+    (iterativo), habilitar por fase, numerica por shape, depois grafo c4bf.
+    O suporte so sobe para TRUE quando a fase C validar (regra mantida).
+H.2 NUMERICA: gate implementado; executar N3/dst2 quando o device voltar.
+H.3 DEVICE: pedir recuperacao ao usuario quando for a hora de rodar (USB
+    preferido; sem tocar PJA110).
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada14/ (scripts, dump de conflitos,
+manifesto) + log de build do servidor.
