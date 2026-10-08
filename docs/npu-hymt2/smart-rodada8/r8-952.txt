@@ -1,0 +1,69 @@
+=== R8-952 corretude (00:45:06Z) ===
+=== [952-CPU-ref] ===
+=== R8-952b Smarts (00:48:44Z) ===
+  mWakefulness=Awake
+=== [952-SmartOC] ===
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    SESSAO(6d825f3): fim (1 requests)
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    SESSAO(6d825f3): fim (1 requests)
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    SESSAO(6d825f3): fim (1 requests)
+    JSON: 1 reqs -> C:/llama-npu/rodada2/logs/r8-952-oc.jsonl
+=== [952-SmartVK] ===
+    SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] vulkan texto_len=1061 (integral no JSON)
+    SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+    SESSAO(6dfe746): fim (1 requests)
+    SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] vulkan texto_len=1061 (integral no JSON)
+    SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+    SESSAO(6dfe746): fim (1 requests)
+    SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] vulkan texto_len=1061 (integral no JSON)
+    SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+    SESSAO(6dfe746): fim (1 requests)
+    JSON: 1 reqs -> C:/llama-npu/rodada2/logs/r8-952-vk.jsonl
+R8_952B_DONE
+=== R8-952c ABA (01:07:18Z) ===
+=== [952-ABA-OC] ===
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    SESS[1] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[1] opencl texto_len=1061 (integral no JSON)
+    SESS[1] opencl RESULTADO: SMART-DIVERGENTE
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    JSON: 3 reqs
+=== [952-ABA-VK] ===
+    SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] vulkan texto_len=1061 (integral no JSON)
+    SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+    SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] vulkan texto_len=1061 (integral no JSON)
+    SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+    SESS[1] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[1] vulkan texto_len=1061 (integral no JSON)
+    SESS[1] vulkan RESULTADO: SMART-DIVERGENTE
+    SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] vulkan texto_len=1061 (integral no JSON)
+    SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+    SESS[1] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[1] vulkan texto_len=1061 (integral no JSON)
+    SESS[1] vulkan RESULTADO: SMART-DIVERGENTE
+    JSON: 3 reqs
+R8_952C_DONE

@@ -1,0 +1,40 @@
+=== R8 PREINIT RED/GREEN (00:37:21Z) ===
+=== [G1-nhvx8-verb] tune='GGML_HEXAGON_NHVX=8\nGGML_HEXAGON_VERBOSE=1\n' ===
+    runProbe PULADO (p4-auto presente; preinit do tune)
+    (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+    TUNE: GGML_HEXAGON_NHVX=8
+    TUNE: GGML_HEXAGON_VERBOSE=1
+    JSON: 4 reqs
+=== [G2-mmselect2] tune='GGML_HEXAGON_MM_SELECT=2\n' ===
+    runProbe PULADO (p4-auto presente; preinit do tune)
+    (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+    TUNE: GGML_HEXAGON_MM_SELECT=2
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=821.72ms gen=766.02ms pp1=0.33ms wall=1588.0ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1425.02ms gen=1439.77ms pp1=0.21ms wall=2865.2ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1446.01ms gen=1460.81ms pp1=0.64ms wall=2907.4ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1435.69ms gen=1782.76ms pp1=0.66ms wall=3219.1ms
+    TUNE: GGML_HEXAGON_MM_SELECT=2
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=821.72ms gen=766.02ms pp1=0.33ms wall=1588.0ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1425.02ms gen=1439.77ms pp1=0.21ms wall=2865.2ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1446.01ms gen=1460.81ms pp1=0.64ms wall=2907.4ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1435.69ms gen=1782.76ms pp1=0.66ms wall=3219.1ms
+    runProbe PULADO (p4-auto presente; preinit do tune)
+    (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+    JSON: 4 reqs
+=== [C-padrao] tune='' ===
+    runProbe PULADO (p4-auto presente; preinit do tune)
+    (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=795.50ms gen=760.26ms pp1=0.33ms wall=1556.0ms
+    runProbe PULADO (p4-auto presente; preinit do tune)
+    (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=795.50ms gen=760.26ms pp1=0.33ms wall=1556.0ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1271.09ms gen=1412.23ms pp1=0.20ms wall=2683.7ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1342.41ms gen=1555.01ms pp1=0.20ms wall=2897.9ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1345.44ms gen=1625.66ms pp1=0.20ms wall=2971.6ms
+    SESS[0] puro:htp puro: ok=1 pieces=8 prefill=795.50ms gen=760.26ms pp1=0.33ms wall=1556.0ms
+    SESS[1] puro:htp puro: ok=1 pieces=8 prefill=1271.09ms gen=1412.23ms pp1=0.20ms wall=2683.7ms
+    SESS[2] puro:htp puro: ok=1 pieces=8 prefill=1342.41ms gen=1555.01ms pp1=0.20ms wall=2897.9ms
+    SESS[3] puro:htp puro: ok=1 pieces=8 prefill=1345.44ms gen=1625.66ms pp1=0.20ms wall=2971.6ms
+    runProbe PULADO (p4-auto presente; preinit do tune)
+    JSON: 4 reqs
+R8_PREINIT_DONE

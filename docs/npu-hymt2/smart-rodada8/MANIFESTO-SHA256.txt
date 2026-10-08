@@ -1,0 +1,24 @@
+MANIFESTO SHA-256 — smart-rodada8 (08/10/2026)
+
+DEFEITO/FIX: runProbe pulado com p4-auto (preinit real); RED=LATE (R7);
+GREEN=preinit confirmado; mm2/nhvx8 retestados: sem efeito.
+CHUNKED PREFILL (v18): nt>128 em lotes de 128; 952 executado.
+952: CPU 302 tok; OC/VK 301 tok; ABA 3/3 identicos (sha 78d21dbc2420);
+OC==VK; CPU vs Smart: 1 variacao lexical valida (char 405).
+
+9c7da9ffe462fce2ac990f364cc43673fd92946e0b041bab1bad68716096f693  extrai-ctrl-r8.py  (3649 B)
+2b2eca4940493ad09a55dbafec0e45643a0b33014ee78e879a3f833e213f32e3  npuprobe-r8.log  (1545149 B)
+1c733dae402e9491b4fbae9cf6dd36ae45486b033d31de302bd7ec7903e45ec7  prompt-952-usado.txt  (1101 B)
+00de198c2dda3e800bf4759e71a5c9ddce0709b57603d064f58d7695611d9d04  r8-952-cpu.jsonl  (1514 B)
+a4b319e9797cd365451c8c48b8b5b120b57dbacc67f1ad114737fa9343d54c58  r8-952-oc-aba.jsonl  (4620 B)
+74ebdbebc27c52158687a00d6dc00a580004c74ccfc007141aa1f836f390064e  r8-952-oc.jsonl  (1544 B)
+c8d144ab12d32af7ce254ef2aa887543d7726c7a609f26c487a48d4b108d98ce  r8-952-vk-aba.jsonl  (4615 B)
+049cafab17b1155be38c2a2386244d4ad0abb4ab3ccc5ea9e87a41d98e40d16b  r8-952-vk.jsonl  (1541 B)
+f120caef2a6bb1b795081ae0909f6010baa76cb96ebaa99c43ab28981bb28944  r8-952.sh  (2075 B)
+252a7316d5cd2437b40569e9823ef6403ba35138eabf61ad16c2a07894ef3021  r8-952.txt  (3797 B)
+80d4c90a03aeecca4dc16abb23fddf197e3f8ef97a206b96348adcc4a9333f46  r8-952b.sh  (1440 B)
+01b14729265a14822cc07b77616cdab5e783483e14d2255e4cd48eaed9dff82b  r8-952c.sh  (1363 B)
+3975f52e8866d95c4136331bd177a7809b2b3fcc81de1adfbe2f85927c91ae23  r8-preinit.sh  (2038 B)
+6e4bddab6b6efea564772845dd59e6715cb6c6c56eb8cedfffb1941d53720b4c  r8-preinit.txt  (2764 B)
+
+e491f0c721b227d9c6a05690c12d9bc1d9486ac97c67697e559908b1c35aba7c  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA8.txt (13031 B)

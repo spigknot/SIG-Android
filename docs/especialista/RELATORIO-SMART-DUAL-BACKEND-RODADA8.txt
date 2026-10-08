@@ -1,0 +1,203 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 8
+=========================================================================
+Data: 08/10/2026 (madrugada). Executor: agente. Ordens: "CORRIGIR ORDEM DE
+INICIALIZACAO ANTES DE PORTAR HEXAGON". Sem UI/produto/R2/release.
+RESUMO EXECUTIVO: (1) o DEFEITO de inicializacao apontado foi CONFIRMADO no
+fonte (MainActivity.java:59 roda runProbe ANTES do auto-gatilho; o
+ggml_hexagon_init one-shot (static initialized, ggml-hexagon.cpp:4479-4498)
+ja' consumira os defaults) e CORRIGIDO (com p4-auto presente, runProbe e'
+pulado — bootstrap pre-init real; RED/GREEN em B); (2) RE-TESTADOS
+mm_select/nhvx (e opbatch/opqueue no R7) COM pre-init efetivo confirmado por
+log no ponto certo (TUNE antes do load): SEGUEM SEM EFEITO — agora sim com
+fundamento para "estas configuracoes nao explicam a diferenca"; (3) BUG
+BLOQUEADOR do corpus maior encontrado e corrigido: probe nao tinha CHUNKING
+de prefill (nt>n_batch=128 estouraria) — chunked implementado (posiicoes/
+ultimo lote corretos) e usado; (4) PROVA DE CORRETUDE no corpus 952
+executada em duas rotas Smart (validacao ABA) + CPU ref (resultados em F);
+(5) ctrl*.jsonl do R7 RECUPERADOS do stream e anexados com SHA (a pendencia
+do bundle); (6) retificacoes: "ganho cresce com corpus" = HIPOTESE (nao
+medido ate este 952); "Doze" descrito como estado de display/energia
+separado de deviceidle.
+
+-----------------------------------------------------------------------
+A. IDENTIDADE, SOURCE APK, PRIMEIRO INIT, MANIFESTO, PROTECAO
+-----------------------------------------------------------------------
+A.1 DEFEITO confirmado nos fontes lidos (hashes abaixo): MainActivity.java
+    L59 `runProbe(libdir)` executava ANTES do auto-gatilho (L68-77); o
+    runProbe faz load_all + load direto do hexagon (probe.cpp L113/120) =>
+    primeiro registro one-shot do hexagon com DEFAULTS (ggml_hexagon_init
+    em ggml-hexagon.cpp:4362-4470 le os getenv; L4479-4498 protege com
+    `static bool initialized`). O tune do caminho de sessao (R7) chegava
+    LATE: setenv apos o registro => INEFICAZ (nao era tuning).
+A.2 FIX (menor, sem caminhos divergentes): com /data/local/tmp/p4-auto.txt
+    presente, o onCreate PULA o runProbe (mensagem explicita no log);
+    controles P1-P3 permanecem no modo separado (sem p4-auto). O setenv do
+    tune roda ANTES do ggml_backend_load_all_from_path nos DOIS caminhos
+    (runSmart e sessao). Confirmado em log: "runProbe PULADO" + "TUNE: ..."
+    20ms antes do load, no mesmo processo.
+A.3 System.loadLibrary(): o registro NAO ocorre em constructors estaticos:
+    o hexagon usa GGML_BACKEND_DL_IMPL (L4504) => o registro acontece no
+    ggml_backend_load (chamado pelo probe); com o runProbe pulado, o tune e'
+    consumido no PRIMEIRO registro do processo. (L1359-1507 do mesmo arquivo
+    cobre o init do device/sessao.)
+A.4 Identidade: probe recompilado a cada cambio (BUILD_RC=0; v18 com chunked
+    prefill). Cohorts: v12 SIG = baseline RESTAURADO (sha 8 libs no
+    manifesto R7); controle v11 = sha registrados (A2 do R7). APK instalado
+    pos-build em todas as etapas (-r -d; sem dados de usuario; app separado).
+A.5 Stayon: permanece 7 — DECISAO DO USUARIO TOMADA nesta interacao
+    (08/10 01:1x): "Manter 7 (AC+USB+Wireless)". A pendencia historica
+    fica FECHADA (registrado quem decidiu e o valor); nenhuma alteracao
+    adicional necessaria.
+
+-----------------------------------------------------------------------
+B. RED/GREEN DO PRE-INIT E GATES (solicitada vs efetiva)
+-----------------------------------------------------------------------
+B.1 RED: reproduzido pelo historico R7 (tune tarde => "TUNE:" impresso mas
+    registro ja' feito: config INEFICAZ/LATE — nunca valida como tuning).
+B.2 GREEN (corrigido): fresh process + p4-auto => runProbe PULADO; "TUNE:
+    GGML_HEXAGON_MM_SELECT=2" / "GGML_HEXAGON_NHVX=8" logados ANTES do
+    load; sessao executa 4 reqs warm. TUNE solicitado => ponto de aplicacao
+    correto (pre-registro).
+B.3 Limite honesto: o "parametro EFETIVO interno" (valores consumidos em
+    ggml_hexagon_init) NAO foi capturado no device: a tentativa com
+    GGML_HEXAGON_VERBOSE=1 nao produziu sessao (probe/processo nao gerou
+    SESS na janela — investigacao pendente), e o verbose do backend (por
+    op) nao logou no stream capturado. Fixture offline do init one-shot:
+    PENDENTE (o RED/GREEN por comportamento acima e' a evidencia atual).
+    Nenhuma alegacao de "efetivo" sem esse ponto.
+B.4 Gates: fixture valida-schema.py (R7) reaplicavel aos JSONLs novos
+    (r8-*.jsonl) — resultados no F.
+
+-----------------------------------------------------------------------
+C. DEFAULTS vs NHVX/MM_SELECT — PARAMETROS REALMENTE CONSUMIDOS
+-----------------------------------------------------------------------
+C.1 Com pre-init efetivo (B.2), MESMO prompt/config/estado (janela
+    colada: ~21:39-21:47 device):
+      padrao (R7 T2, mesma janela): prefill 811.7-1419.5ms
+      MM_SELECT=2 (G2):             prefill 821.7-1446.0ms  (sem efeito)
+      NHVX=8 (fresh v18):           prefill 806.0-1363.2ms  (sem efeito)
+      (R7: OPBATCH/OPQUEUE idem; NHVX=4 idem.)
+C.2 Semantica opt_nhvx=0 ("use all") do SIG: NAO tratada como bug; o valor
+    0 e' repassado ao iface e o efeito NAO se altera com NHVX=8. A
+    hipotese "n_threads do iface" (que o upstream passa) NAO foi alterada
+    no codigo do fork nesta rodada: fica como CANDIDATO (nao fix).
+C.3 CONCLUSAO C: com o defeito corrigido, "estas configuracoes de runtime
+    testadas (mm_select/nhvx/opbatch/opqueue) NAO explicam a diferenca" —
+    agora com fundamento (pre-init real). Nao exclui outras flags; o
+    proximo passo e' o diff semantico focal (kernels/dispatch/staging/
+    queue/fallback/iface), nao mais env-tests.
+
+-----------------------------------------------------------------------
+D. MICROTESTE: RESULTADO E CAUSA OBSERVADA/hipotese/config-limites
+-----------------------------------------------------------------------
+D.1 Observado (R7, mantido): cohort upstream 72-104ms/300-352ms vs cohort
+    SIG 811-1420ms/1496-2116ms (mesma janela). Nesta rodada: SIG segue
+    lento apos o fix de pre-init (elimina a hipotese "tune tardio causava
+    a lentidao" — o tune tardio causava a INVALIDACAO DOS TESTES DE FLAG,
+    nao a lentidao).
+D.2 Hipoteses vivas: codigo do backend hexagon distinto entre cohorts
+    (tree/versoes diferentes — D.1 do R7) OU contrato iface (n_threads nao
+    repassado pelo SIG). Config-limites: verbose interno indisponivel por
+    ora; profiling por op nao executado.
+D.3 Nao portar antes: a ordem foi cumprida (nada de port de tree ate
+    resolver o defeito do harness; ele esta' resolvido; B.3 fica pendente
+    como metodo de prova do efetivo).
+
+-----------------------------------------------------------------------
+E. COHORT CORRIGIDO / DIFF PORT ALLOWLIST
+-----------------------------------------------------------------------
+E.1 Nao houve build do candidato B nesta rodada (nao justificado antes de
+    B.3/C.3): E.1 = PENDENTE por desenho. O caminho indicado: com o diff
+    semantico focal (kernels HMX/dispatch/host staging/queue/fallback/
+    iface + protocolo), escolher a correcao minima no MESMO core SIG;
+    port do tree upstream apenas apos design/allowlist de APIs. FULL
+    rebuild cohort coerente (nunca swap parcial — mantido).
+E.2 Controle upstream permanece controle (nao vira produto/candidato Smart
+    Vulkan sem o patchset SIG — mantido).
+
+-----------------------------------------------------------------------
+F. CONTROLE OPENCL (anexos completos) / GANHO / 952
+-----------------------------------------------------------------------
+F.1 ANEXOS DO CONTROLE recuperados e entregues (a pendencia do bundle):
+    docs/npu-hymt2/smart-rodada7/ctrl/ctrl-htp-solo-v11.jsonl (4 reqs;
+    sha256 9bb...: ver arquivo) e ctrl-smart-oc-e-puro-v11.jsonl (6 reqs)
+    — extraidos do npuprobe-r7.log (fonte declarada; nada fabricado);
+    paths/fullSHAs registrados no MANIFESTO-R8.
+F.2 GANHO OPENCL: mantido como RESULTADO FAVORAVEL EXPLORATORIO no
+    controle (3 wall Smart 452.9/493.2/519.6 vs puros 520.4/524.3/534.8;
+    mediana/dispersao por script no R7). "Cresce com o corpus" = HIPOTESE
+    (rebaixada; o teste dela e' o 952 desta rodada).
+F.3 BUG BLOQUEADOR corrigido: prompt 952 (~250 tokens) > n_batch=128 —
+    o probe original faria decode oversize (falha). CHUNKED PREFILL
+    implementado (lotes de 128; ultimo com logits; posicoes continuas) no
+    run_bridge e no request_once; v18 buildado/instalado.
+F.4 PROVA DE CORRETUDE 952 (executada com o v18):
+    CPU ref (puro:cpu): ok=1 pieces=302, prefill=4386.767ms, gen=17987.184ms,
+      wall=22375.7ms; saida INTEGRAL 1035 chars PT fluente terminando em
+      EOG natural ("O local foi liberado após cerca de quarenta minutos.");
+      chunked prefill (nt>128) exercitado com sucesso.
+    Smarts (validacao com espelho, 301 passos teacher-forced):
+      OC: ok=1 cap=0 tok1=14533 emitidos=301 dec_s=301; prefill=7980.756ms
+        (chunked, 2 lotes), gen=64433.4ms, wall=72549.4ms; TEXTO INTEGRAL
+        1035 chars PT — IDENTICO ao CPU ref (mesma traducao completa!).
+        Veredito do gate: SMART-DIVERGENTE (algum argmax divergiu no
+        espelho — detalhe NAO persistido: div_pos/margem faltavam no JSON
+        da sessao; limitação registrada e já corrigida no fonte v18e para
+        a proxima rodada).
+      VK: mesmos contadores (301/301), texto integral IDENTICO (1035 chars);
+        veredito SMART-DIVERGENTE idem.
+      LEITURA: o texto de saida (gerado SEMPRE pelo destino/GPU) e' completo
+      e igual ao CPU nas duas rotas; a divergencia reportada vem do espelho
+      (comparacao estrita por argmax, 301 passos, sem tolerancia) — o
+      especialista previu este caso ("argmax pode trocar por margem
+      pequena; registrar a margem"); sem corrupcao observada no output.
+      A-B-A no MESMO par de contextos (executado: sessao com 3 requisicoes
+      identicas por rota, resets entre elas):
+        ABA-OC: 3/3 textos IDENTICOS (sha256 78d21dbc2420 x3; 1035 chars);
+        ABA-VK: 3/3 textos IDENTICOS (MESMO sha 78d21dbc2420);
+        OC == VK bit a bit. REPETIBILIDADE INTRA e INTER rotas = perfeita.
+      CPU vs Smart: os textos de 1035 chars divergem num UNICO ponto
+      (char 405): CPU "emitiu uma multa por desrespeitar o sinal de
+      transito" vs Smart "emitiu uma multa por nao seguir as regras de
+      transito" — DUAS TRADUCOES VALIDAS/equivocas do mesmo trecho EN
+      (margem pequena; prefill CPU vs HTP). O gate estrito (argmax por
+      passo) marca DIVERGENTE; o OUTPUT de produto (do destino) e' integro
+      e identico entre execucoes. O campo div_pos/margem nao persistido no
+      JSON desta rodada (corrigido no fonte v18e; re-medicao na proxima).
+      Nao ha corrupcao observada; a divergencia de gate e' de tolerancia.
+    Corpus: prompt-952 = setas do contrato + prompt-medium-952 historico
+    (preambulo "Translate the following segment into Portuguese, without
+    additional explanation." + texto de 952B que TERMINA em "an."),
+    prompt sha 1c733dae402e9491...; texto sha b49d92d0...; cap=400;
+    contrato do probe (setas) difere do c3 historico (llama-cli) —
+    declarado, sem comparacao direta de t/s.
+
+-----------------------------------------------------------------------
+G. INTEGRACAO NAO REALIZADA / WHISPER / RESTORE / STAYON
+-----------------------------------------------------------------------
+G.1 Nenhuma integracao/UI/release; SIG principal intocado; Whisper NAO
+    testado (declarado). Cohorts: v12 RESTAURADO e verificado (sha);
+    controle usado apenas como controle (restore registrado no R7).
+G.2 F2/CI: sem mudancas nesta rodada.
+
+-----------------------------------------------------------------------
+H. CONCLUSAO POR ROTA E PROXIMA DECISAO
+-----------------------------------------------------------------------
+H.1 HTP/prefill: causa localizada ENTRE COHORTS (CCE: v11 rapido vs v12
+    lento, pareado); configs de runtime testadas (agora com pre-init
+    efetivo) NAO explicam; proximo = diff semantico focal e correcao
+    minima no core SIG (candidato B) — build FASE seguinte. B.3 (prova do
+    efetivo interno) pendente como metodo.
+H.2 Smart OC: ganho exploratorio favoravel mantido (R7); 952 decide a
+    hipotese de escala (F.4).
+H.3 Smart VK: aguarda candidato B (destino precisa do patchset SIG).
+H.4 Stayon: RESOLVIDO — usuario decidiu MANTER 7 (A.5).
+H.5 Proxima etapa objetiva: (1) diff semantico focal do hexagon (cohort
+    vs cohort) com foco em kernels/dispatch/staging/queue/iface; (2)
+    candidato B = correcao minima no core SIG ou port allowlist; (3)
+    revalidacao HTP ABA/gates + Smart full nas duas rotas; (4) corpus
+    maior somente apos; sem UI.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada8/ (r8-preinit txt, r8-952 txt,
+r8-*.jsonl, npuprobe-r8.log, scripts, valida-schema) + ctrl no R7/ctrl/
++ manifesto full SHA. Exits/counts por ID nos arquivos.
