@@ -1,0 +1,246 @@
+- waiting for device -
+--------- beginning of main
+10-08 11:41:33.278 I/NpuProbe(19557): nativeLibraryDir=/data/app/~~mGVbmOhSvXHdvGtNRVVp7w==/br.gov.sp.pcsp.npuprobe-yZIip-XI3PqdVL19hu54SQ==/lib/arm64
+10-08 11:41:33.278 I/NpuProbe(19557): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 11:41:33.278 I/NpuProbe(19557): REPORT:
+10-08 11:41:33.278 I/NpuProbe(19557): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 11:41:33.279 I/NpuProbe(19557): AUTO-GATILHO='smart:sessao'
+10-08 11:41:33.279 I/NpuProbe(19557): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 11:41:33.288 I/NpuProbe(19557): SMARTv2 rota='sessao' mutante=(none)
+10-08 11:41:33.290 I/NpuProbe(19557): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 11:41:33.291 I/NpuProbe(19557): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 11:41:33.350 I/NpuProbe(19557): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 11:41:33.351 I/NpuProbe(19557): [ggml] 
+10-08 11:41:33.351 I/NpuProbe(19557): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 11:41:33.351 I/NpuProbe(19557): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 11:41:33.352 I/NpuProbe(19557): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 allocating new session
+10-08 11:41:33.393 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 11:41:33.394 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c4d40
+10-08 11:41:33.398 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 11:41:33.405 I/NpuProbe(19557): SESSAO(92241cf): 3 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 11:41:33.406 I/NpuProbe(19557): PROMPT[0]: arquivo proprio (len=1101)
+--------- beginning of main
+10-08 11:41:33.278 I/NpuProbe(19557): nativeLibraryDir=/data/app/~~mGVbmOhSvXHdvGtNRVVp7w==/br.gov.sp.pcsp.npuprobe-yZIip-XI3PqdVL19hu54SQ==/lib/arm64
+10-08 11:41:33.278 I/NpuProbe(19557): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 11:41:33.278 I/NpuProbe(19557): REPORT:
+10-08 11:41:33.278 I/NpuProbe(19557): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 11:41:33.279 I/NpuProbe(19557): AUTO-GATILHO='smart:sessao'
+10-08 11:41:33.279 I/NpuProbe(19557): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 11:41:33.288 I/NpuProbe(19557): SMARTv2 rota='sessao' mutante=(none)
+10-08 11:41:33.290 I/NpuProbe(19557): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 11:41:33.291 I/NpuProbe(19557): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 11:41:33.350 I/NpuProbe(19557): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 11:41:33.351 I/NpuProbe(19557): [ggml] 
+10-08 11:41:33.351 I/NpuProbe(19557): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 11:41:33.351 I/NpuProbe(19557): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 11:41:33.352 I/NpuProbe(19557): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 allocating new session
+10-08 11:41:33.393 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 11:41:33.394 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c4d40
+10-08 11:41:33.398 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 11:41:33.405 I/NpuProbe(19557): SESSAO(92241cf): 3 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 11:41:33.406 I/NpuProbe(19557): PROMPT[0]: arquivo proprio (len=1101)
+10-08 11:42:21.720 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+--------- beginning of main
+10-08 11:41:33.350 I/NpuProbe(19557): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 11:41:33.351 I/NpuProbe(19557): [ggml] 
+10-08 11:41:33.351 I/NpuProbe(19557): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 11:41:33.351 I/NpuProbe(19557): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 11:41:33.352 I/NpuProbe(19557): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 11:41:33.358 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 allocating new session
+10-08 11:41:33.393 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 11:41:33.394 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d53c4d40
+10-08 11:41:33.398 I/NpuProbe(19557): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 11:41:33.405 I/NpuProbe(19557): SESSAO(92241cf): 3 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 11:41:33.406 I/NpuProbe(19557): PROMPT[0]: arquivo proprio (len=1101)
+10-08 11:42:21.720 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan tempos: prefill=7768.98ms export=0.58ms(12586017B) import=2.68ms gen=43393.24ms
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan fronteiras(ms): prefdone=7771.3 tok1r=7892.5 impdone=7895.2 tok2r=8883.8 fim=51288.4 wall=51288.4 reset=4.02
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan texto_len=1061 (integral no JSON)
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan lifecycle: load_dst=1907ms load_src=361ms (0=WARM)
+10-08 11:42:27.064 I/NpuProbe(19557): SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:42:27.065 I/NpuProbe(19557): PROMPT[1]: arquivo proprio (len=205)
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=46 emitidos=26 consumidos=26 dec_s=26
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan tempos: prefill=1140.65ms export=0.13ms(1770597B) import=1.90ms gen=3449.77ms
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan fronteiras(ms): prefdone=1141.1 tok1r=1162.3 impdone=1164.2 tok2r=1195.7 fim=4614.0 wall=4614.0 reset=5.28
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan texto_len=77 (integral no JSON)
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan RESULTADO: SMART-ACEITO
+10-08 11:42:31.704 I/NpuProbe(19557): PROMPT[2]: arquivo proprio (len=1101)
+--------- beginning of main
+10-08 11:42:21.720 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan tempos: prefill=7768.98ms export=0.58ms(12586017B) import=2.68ms gen=43393.24ms
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan fronteiras(ms): prefdone=7771.3 tok1r=7892.5 impdone=7895.2 tok2r=8883.8 fim=51288.4 wall=51288.4 reset=4.02
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan texto_len=1061 (integral no JSON)
+10-08 11:42:27.060 I/NpuProbe(19557): SESS[0] vulkan lifecycle: load_dst=1907ms load_src=361ms (0=WARM)
+10-08 11:42:27.064 I/NpuProbe(19557): SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:42:27.065 I/NpuProbe(19557): PROMPT[1]: arquivo proprio (len=205)
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=46 emitidos=26 consumidos=26 dec_s=26
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan tempos: prefill=1140.65ms export=0.13ms(1770597B) import=1.90ms gen=3449.77ms
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan fronteiras(ms): prefdone=1141.1 tok1r=1162.3 impdone=1164.2 tok2r=1195.7 fim=4614.0 wall=4614.0 reset=5.28
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan texto_len=77 (integral no JSON)
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:42:31.699 I/NpuProbe(19557): SESS[1] vulkan RESULTADO: SMART-ACEITO
+10-08 11:42:31.704 I/NpuProbe(19557): PROMPT[2]: arquivo proprio (len=1101)
+10-08 11:43:15.620 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+--------- beginning of main
+10-08 11:43:15.620 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan tempos: prefill=7412.20ms export=0.50ms(12586017B) import=2.35ms gen=41518.46ms
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan fronteiras(ms): prefdone=7413.9 tok1r=7559.7 impdone=7562.0 tok2r=7592.0 fim=49080.5 wall=49080.5 reset=3.73
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:20.917 I/NpuProbe(19557): SESS[2] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.121 I/NpuProbe(19557): SESSAO(92241cf): fim (3 requests)
+10-08 11:43:21.122 I/NpuProbe(19557): SMART REPORT:
+10-08 11:43:21.122 I/NpuProbe(19557): SMART (sessao)
+10-08 11:43:21.122 I/NpuProbe(19557): 
+10-08 11:43:21.122 I/NpuProbe(19557): SMARTv2 rota='sessao' mutante=(none)
+10-08 11:43:21.122 I/NpuProbe(19557): SESSAO(92241cf): 3 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[0]: arquivo proprio (len=1101)
+10-08 11:43:21.122 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan tempos: prefill=7768.98ms export=0.58ms(12586017B) import=2.68ms gen=43393.24ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan fronteiras(ms): prefdone=7771.3 tok1r=7892.5 impdone=7895.2 tok2r=8883.8 fim=51288.4 wall=51288.4 reset=4.02
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan lifecycle: load_dst=1907ms load_src=361ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[1]: arquivo proprio (len=205)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=46 emitidos=26 consumidos=26 dec_s=26
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan tempos: prefill=1140.65ms export=0.13ms(1770597B) import=1.90ms gen=3449.77ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan fronteiras(ms): prefdone=1141.1 tok1r=1162.3 impdone=1164.2 tok2r=1195.7 fim=4614.0 wall=4614.0 reset=5.28
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan texto_len=77 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan RESULTADO: SMART-ACEITO
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[2]: arquivo proprio (len=1101)
+10-08 11:43:21.122 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan tempos: prefill=7412.20ms export=0.50ms(12586017B) import=2.35ms gen=41518.46ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan fronteiras(ms): prefdone=7413.9 tok1r=7559.7 impdone=7562.0 tok2r=7592.0 fim=49080.5 wall=49080.5 reset=3.73
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.122 I/NpuProbe(19557): SESSAO(92241cf): fim (3 requests)
+--------- beginning of main
+10-08 11:43:15.620 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan tempos: prefill=7412.20ms export=0.50ms(12586017B) import=2.35ms gen=41518.46ms
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan fronteiras(ms): prefdone=7413.9 tok1r=7559.7 impdone=7562.0 tok2r=7592.0 fim=49080.5 wall=49080.5 reset=3.73
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:20.917 I/NpuProbe(19557): SESS[2] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.121 I/NpuProbe(19557): SESSAO(92241cf): fim (3 requests)
+10-08 11:43:21.122 I/NpuProbe(19557): SMART REPORT:
+10-08 11:43:21.122 I/NpuProbe(19557): SMART (sessao)
+10-08 11:43:21.122 I/NpuProbe(19557): 
+10-08 11:43:21.122 I/NpuProbe(19557): SMARTv2 rota='sessao' mutante=(none)
+10-08 11:43:21.122 I/NpuProbe(19557): SESSAO(92241cf): 3 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[0]: arquivo proprio (len=1101)
+10-08 11:43:21.122 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan tempos: prefill=7768.98ms export=0.58ms(12586017B) import=2.68ms gen=43393.24ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan fronteiras(ms): prefdone=7771.3 tok1r=7892.5 impdone=7895.2 tok2r=8883.8 fim=51288.4 wall=51288.4 reset=4.02
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan lifecycle: load_dst=1907ms load_src=361ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[1]: arquivo proprio (len=205)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=46 emitidos=26 consumidos=26 dec_s=26
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan tempos: prefill=1140.65ms export=0.13ms(1770597B) import=1.90ms gen=3449.77ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan fronteiras(ms): prefdone=1141.1 tok1r=1162.3 impdone=1164.2 tok2r=1195.7 fim=4614.0 wall=4614.0 reset=5.28
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan texto_len=77 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan RESULTADO: SMART-ACEITO
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[2]: arquivo proprio (len=1101)
+10-08 11:43:21.122 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan tempos: prefill=7412.20ms export=0.50ms(12586017B) import=2.35ms gen=41518.46ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan fronteiras(ms): prefdone=7413.9 tok1r=7559.7 impdone=7562.0 tok2r=7592.0 fim=49080.5 wall=49080.5 reset=3.73
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.122 I/NpuProbe(19557): SESSAO(92241cf): fim (3 requests)
+--------- beginning of main
+10-08 11:43:15.620 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan tempos: prefill=7412.20ms export=0.50ms(12586017B) import=2.35ms gen=41518.46ms
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan fronteiras(ms): prefdone=7413.9 tok1r=7559.7 impdone=7562.0 tok2r=7592.0 fim=49080.5 wall=49080.5 reset=3.73
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:20.917 I/NpuProbe(19557): SESS[2] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.121 I/NpuProbe(19557): SESSAO(92241cf): fim (3 requests)
+10-08 11:43:21.122 I/NpuProbe(19557): SMART REPORT:
+10-08 11:43:21.122 I/NpuProbe(19557): SMART (sessao)
+10-08 11:43:21.122 I/NpuProbe(19557): 
+10-08 11:43:21.122 I/NpuProbe(19557): SMARTv2 rota='sessao' mutante=(none)
+10-08 11:43:21.122 I/NpuProbe(19557): SESSAO(92241cf): 3 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[0]: arquivo proprio (len=1101)
+10-08 11:43:21.122 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan tempos: prefill=7768.98ms export=0.58ms(12586017B) import=2.68ms gen=43393.24ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan fronteiras(ms): prefdone=7771.3 tok1r=7892.5 impdone=7895.2 tok2r=8883.8 fim=51288.4 wall=51288.4 reset=4.02
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan lifecycle: load_dst=1907ms load_src=361ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[1]: arquivo proprio (len=205)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=46 emitidos=26 consumidos=26 dec_s=26
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan tempos: prefill=1140.65ms export=0.13ms(1770597B) import=1.90ms gen=3449.77ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan fronteiras(ms): prefdone=1141.1 tok1r=1162.3 impdone=1164.2 tok2r=1195.7 fim=4614.0 wall=4614.0 reset=5.28
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan texto_len=77 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan RESULTADO: SMART-ACEITO
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[2]: arquivo proprio (len=1101)
+10-08 11:43:21.122 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan tempos: prefill=7412.20ms export=0.50ms(12586017B) import=2.35ms gen=41518.46ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan fronteiras(ms): prefdone=7413.9 tok1r=7559.7 impdone=7562.0 tok2r=7592.0 fim=49080.5 wall=49080.5 reset=3.73
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.122 I/NpuProbe(19557): SESSAO(92241cf): fim (3 requests)
+--------- beginning of main
+10-08 11:43:15.620 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan tempos: prefill=7412.20ms export=0.50ms(12586017B) import=2.35ms gen=41518.46ms
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan fronteiras(ms): prefdone=7413.9 tok1r=7559.7 impdone=7562.0 tok2r=7592.0 fim=49080.5 wall=49080.5 reset=3.73
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:20.914 I/NpuProbe(19557): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:20.917 I/NpuProbe(19557): SESS[2] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.121 I/NpuProbe(19557): SESSAO(92241cf): fim (3 requests)
+10-08 11:43:21.122 I/NpuProbe(19557): SMART REPORT:
+10-08 11:43:21.122 I/NpuProbe(19557): SMART (sessao)
+10-08 11:43:21.122 I/NpuProbe(19557): 
+10-08 11:43:21.122 I/NpuProbe(19557): SMARTv2 rota='sessao' mutante=(none)
+10-08 11:43:21.122 I/NpuProbe(19557): SESSAO(92241cf): 3 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[0]: arquivo proprio (len=1101)
+10-08 11:43:21.122 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan tempos: prefill=7768.98ms export=0.58ms(12586017B) import=2.68ms gen=43393.24ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan fronteiras(ms): prefdone=7771.3 tok1r=7892.5 impdone=7895.2 tok2r=8883.8 fim=51288.4 wall=51288.4 reset=4.02
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan lifecycle: load_dst=1907ms load_src=361ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[0] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[1]: arquivo proprio (len=205)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=46 emitidos=26 consumidos=26 dec_s=26
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan tempos: prefill=1140.65ms export=0.13ms(1770597B) import=1.90ms gen=3449.77ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan fronteiras(ms): prefdone=1141.1 tok1r=1162.3 impdone=1164.2 tok2r=1195.7 fim=4614.0 wall=4614.0 reset=5.28
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan texto_len=77 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[1] vulkan RESULTADO: SMART-ACEITO
+10-08 11:43:21.122 I/NpuProbe(19557): PROMPT[2]: arquivo proprio (len=1101)
+10-08 11:43:21.122 I/NpuProbe(19557): DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6961 11:26.6733 26:16.0760 13:15.5419 739:13.9314 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0229 margemS=0.1723 finite=1
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan tempos: prefill=7412.20ms export=0.50ms(12586017B) import=2.35ms gen=41518.46ms
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan fronteiras(ms): prefdone=7413.9 tok1r=7559.7 impdone=7562.0 tok2r=7592.0 fim=49080.5 wall=49080.5 reset=3.73
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan texto_len=1061 (integral no JSON)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan lifecycle: load_dst=0ms load_src=0ms (0=WARM)
+10-08 11:43:21.122 I/NpuProbe(19557): SESS[2] vulkan RESULTADO: SMART-DIVERGENTE
+10-08 11:43:21.122 I/NpuProbe(19557): SESSAO(92241cf): fim (3 requests)

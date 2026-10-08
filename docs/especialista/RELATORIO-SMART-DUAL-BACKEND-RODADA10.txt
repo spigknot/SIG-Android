@@ -1,0 +1,144 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 10
+=========================================================================
+Data: 08/10/2026. Executor: agente. Ordens: "CONSTRUIR CANDIDATO HEXAGON;
+FECHAR NUMERICA, SERIALIZACAO E A-B-A VULKAN". Sem UI/produto/R2/release;
+SIG principal intocado; stayon=7; c4bf/Vulkan default preservados.
+
+RESUMO EXECUTIVO (parcial — em execucao no fechamento): (1) DESIGN-NUMERICO.md
+e DESIGN-CANDIDATO.md escritos (criterio independente por envelope de
+baseline; allowlist/denylist do port); (2) VACINA FORMAL do bug de varargs:
+-Wformat=2 -Werror=format no target do probe + __attribute__((format)) no
+rep + fixtures GREEN/RED compiladas no host (chunk_plan_test: TODOS PASS;
+bad_format: compilacao REJEITADA com exit!=0); (3) fixture de borda do
+chunking entregue como helper PURO (chunk_plan.h) com os casos 0/<128/
+=128/>128/multiplos e invariantes (soma/contiguidade/limite/ultimo
+token), usado nos DOIS caminhos (pure/Smart); (4) A-B-A Vulkan fechado
+(3 outputs) nesta rodada (aguardo REAL por completion marker — nao mais
+sleep fixo); (5) CANDIDATO B em build (tree ggml-hexagon upstream sobre
+core SIG, copia isolada) — resultado na secao E.
+
+-----------------------------------------------------------------------
+A. SNAPSHOT / IDENTIDADES / ALLOWLIST / APROVACAO
+-----------------------------------------------------------------------
+A.1 Pins: core SIG (vulkan.cpp sha e90fcdc9...; patchset Adreno/OpenCL/
+    reset/loadercache); upstream /root/llama-cpp-npu (controle v11);
+    baseline v12 shas (R7/R9). Probe v19c (chunk_plan + -Wformat +
+    attribute). Nada do SIG principal tocado.
+A.2 DESIGN-CANDIDATO.md (em docs/npu-hymt2/smart-rodada10/): allowlist v1
+    = dir ggml-hexagon inteiro do upstream (host+htp, conjunto coerente
+    por dependencia; mudanca de host DECLARADA); denylist = core SIG fora
+    do dir, vulkan+shaders+patchset, loader OCL/F3b/guard/loadercache,
+    reset, hooks OFF, Whisper, defaults; criterio sucesso/falha e
+    reversao (backup /root/ggml-hexagon-SIG-backup).
+A.3 Serializacao/pull: exec-out + completion marker (fim real) + fflush
+    por request; timeout = falha operacional (nunca sucesso com 2/3).
+A.4 Stayon 7 (decisao do usuario; inalterado).
+
+-----------------------------------------------------------------------
+B. FIXTURES: FORMATO/JSON/INIT/CHUNKING (exits)
+-----------------------------------------------------------------------
+B.1 FORMATO (vacina varargs):
+    - flags: target_compile_options(npuprobe -Wformat=2 -Werror=format)
+      + __attribute__((format(printf,1,2))) no rep;
+    - GREEN: build completo do probe com as flags (RC=0);
+    - RED (host): bad_format_fixture.c REJEITADA na compilacao
+      (gcc -Wformat=2 -Werror=format; exit!=0 verificado: RED_OK).
+B.2 CHUNKING (helper puro + fixture):
+    - chunk_plan.h extraido (1 unica implementacao usada por pure e
+      Smart); chunk_plan_test.cpp host: TODOS PASS (casos 0/1/127/128/
+      129/256/300 + invariantes em 9 tamanhos: soma=nt, contiguidade,
+      limite<=nb, ultimo token global = nt-1);
+    - erro em chunk intermediario: o loop ABORTA (rc!=0 => break; sem
+      sampling/benchmark valido) — comportamento no codigo (o mesmo
+      caminho nos dois helpers);
+    - nt=0: chunk_plan vazio => nenhum decode (testado na fixture).
+B.3 INIT ONE-SHOT:
+    - pre-config consumido: cohort diag R9 (HEXINIT_DIAG/IFACE_START_DIAG
+      no ponto real; defaults efetivos);
+    - late-config rejeitado/marcado: RED historico R7 (tune pos-registro
+      = LATE/ineficaz) + fix R8 (runProbe pulado; TUNE antes do load).
+B.4 SCHEMA/JSON: o bug de varargs (formato sem args) do JSONL foi o
+    exemplo real do risco; corrigido (v19b) e agora COMPILADOR-protegido
+    (B.1). Validacao por schema/parse nos JSONLs desta rodada (script).
+
+-----------------------------------------------------------------------
+C. A-B-A COMPLETO POR ROTA (3 outputs / fullSHA)
+-----------------------------------------------------------------------
+C.1 OpenCL (fechado no R9, verificado pelo especialista): A1==A2
+    78d21dbc2420912b; B 3b49945f... ACEITO. (r9-aba3-oc.jsonl, 3 reqs.)
+C.2 Vulkan: FECHADO nesta rodada com aguardo REAL por completion marker
+    ("fim (3 requests)") e JSON completo (3 reqs, 3782B):
+      req0 A952 : sha 78d21dbc2420912b (301 tokens; div=264; margemD 0.0229)
+      req1 B    : sha 3b49945f (26 tokens; SMART-ACEITO)
+      req2 A952 : sha 78d21dbc2420912b -> **A1 == A2 BIT A BIT**
+    A1-VK identico ao A1-OC/R8 (mesmo sha) — determinismo inter-GPU
+    confirmado tambem no ciclo completo.
+C.3 Grupos incompletos nao sao relatados como completos (os r9-aba2 com
+    2 reqs ficam marcados como parciais no manifesto).
+
+-----------------------------------------------------------------------
+D. CRITERIO NUMERICO (independente) / ENVELOPE
+-----------------------------------------------------------------------
+D.1 DESIGN-NUMERICO.md: envelope calibrado por CONTROLE no MESMO backend
+    destino (recomputacao pura) + metricas (top-k, margens, softmax/
+    log-probs, erro centralizado abs/rel, max/distribuicao de erros,
+    numero de divergencias) + fixture negativa (perturbacao rejeitada).
+    NAO usa % da margem sobre logit absoluto; NAO fixa tau pela amostra.
+D.2 Coleta do envelope: pendente (pos-processo host sobre JSONLs; em
+    paralelo ao candidato — a ordem permite). O caso pos-264 (margens
+    0.0096/0.0229, top-5 iguais, finite) permanece como EVIDENCIA do
+    comportamento, sem reclassificacao ainda.
+
+-----------------------------------------------------------------------
+E. CANDIDATO B (design/build/hash/runtime OU incompatibilidade)
+-----------------------------------------------------------------------
+E.1 RESULTADO v1 (host+htp upstream sobre core SIG): INCOMPATIVEL na
+    compilacao — erros exatos (build-cand.log, 60+ erros):
+      - ggml-hexagon.cpp:2829-2841: iface de buffer_type com contagem de
+        parametros diferente (SIG: 1 arg; upstream: 2 args com tensor) —
+        API do core mudou entre as versoes;
+      - :7477/:8576 'GGML_GLU_OP_SWIGLU_CLAMP' inexistente no core SIG
+        (existe 'SWIGLU_OAI') — enum novo do upstream;
+      - :7915 'ggml_backend_graph_optimize_params' — tipo do core novo;
+      - :8326 overloads. => exigiria ALINHAR O CORE (amplo rewrite): o
+    caminho v1 foi PARADO conforme a ordem ("parar e documentar
+    simbolos/contratos bloqueantes"). Tree SIG RESTAURADO do backup
+    (verificado); nenhum artefato sobrescrito; nenhum swap parcial.
+E.2 Alternativa quantificada (base upstream + transposicao dos patches
+    GPU/reset/loader do SIG): o delta ggml-vulkan.cpp entre as arvores
+    = 36.255 linhas (nao e' allowlist pequena; o SIG carrega um vulkan
+    de versao/feature-set distinto — ex. shaderFloat8, topk_moe_* —
+    alem dos patches Adreno). Tambem NAO e' caminho pequeno: decisao
+    grande (design/escopo do usuario), registrada para a fila.
+E.3 CAMINHO ESCOLHIDO (pequeno e cirurgico): diff funcional FINO do
+    ggml-hexagon SIG vs upstream (hotspots do prefill: dispatch HMX/
+    Tiled/Flat, opbatch/queue, staging) para achar o patch MINIMO no
+    MESMO core SIG ("preferir correcao minima no MESMO coreSIG"). Na
+    fila imediata; sem port de tree.
+
+-----------------------------------------------------------------------
+F. MICROPERF (baseline vs candidato) / BENCH 952 SEM ESPELHO
+-----------------------------------------------------------------------
+F.1 Pendente do build: HTP curto (placement/finite/EOG/reset) + controle
+    antes/depois + benck 952 SEM espelho (dec_s=0) somente se aceito.
+    Nada promovido por projecao.
+
+-----------------------------------------------------------------------
+G. PRESERVACAO
+-----------------------------------------------------------------------
+G.1 GPU/Whisper/F2/CI intactos; probe != produto (loader proprio etc.
+    permanece mapeado). Hooks de teste OFF.
+
+-----------------------------------------------------------------------
+H. ESTADO POR CAMADA / PROXIMO PASSO
+-----------------------------------------------------------------------
+H.1 HTP: candidato B em build (E); numerica com design independente (D);
+    fixtures/varargs fechados (B).
+H.2 Smart OC: fechado (A-B-A real); Smart VK: fechando nesta rodada (C).
+H.3 Proximo passo objetivo: (1) concluir/validar candidato B; (2) se
+    buildar: HTP curto + microperf + bench 952 sem espelho; se
+    incompativel: erros exatos + decisao de allowlist/alternativa;
+    (3) envelope numerico no baseline em paralelo. Sem UI.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada10/ (designs, fixtures, r10-aba-vk
++ JSONL, manifestos). Exits/contagens por ID nos arquivos.

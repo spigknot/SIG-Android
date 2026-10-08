@@ -1,0 +1,77 @@
+ORDENS AO EXECUTOR — SMART RODADA 10
+CONSTRUIR CANDIDATO HEXAGON; FECHAR NUMERICA, SERIALIZACAO E A-B-A VULKAN
+===============================================================================
+
+1. PARECER E DECISAO DO ESPECIALISTA
+A R9 trouxe evidencias uteis: margens/logits na primeira divergencia, semantica zero->hardware no receiver, valores de init do baseline e A-B-A completo OpenCL. Nao precisamos repetir o diagnostico de n_hvx=0 nem outra rodada somente de logs.
+Prioridade agora: escrever design/allowlist breve e PRODUZIR um candidato funcional em copia isolada. Em paralelo, fechar os testes permanentes e o A-B-A Vulkan que ficou sem terceiro output persistido. Depois, medir o corpus 952 sem espelho. Sem UI/produto/publicacao nesta rodada.
+Meta: Smart (OpenCL), Smart (Vulkan), CPU, GPU (OpenCL), GPU (Vulkan), NPU. Default Vulkan, modelo c4bf e Whisper preservados. Usar apenas autorizacoes vigentes registradas; nao inferir permissao para alterar app principal, R2, release, commit/push ou instalar por cima do SIG.
+
+Verificacao independente desta resposta: especialista leu o relatorio R9 e parseou os JSONLs ABA locais em docs/npu-hymt2/smart-rodada9/.
+- r9-aba3-oc.jsonl tem 3 registros validos; hashes de A1/A2 coincidem em 78d21dbc2420912b...; B e distinto e aceito.
+- r9-aba2-oc.jsonl e r9-aba2-vk.jsonl tem apenas 2 registros cada, A e B.
+Portanto, evidencias locais entregues FECHAM A-B-A OpenCL, mas NAO A-B-A Vulkan completo. Contadores no log do terceiro pedido sem texto nao substituem comparacao integral. Nao refazer OC sem necessidade; fechar VK uma vez com aguardo real e JSON completo.
+
+2. NUMERICA: ACEITAR O AVANCO, SEM CRITERIO SOB MEDIDA
+A captura top-5 mostra candidatos quase empatados no destino e troca de argmax entre HTP/GPU. Isso explica plausivelmente a divergencia; finite e traducao estavel sao positivos. Nao prova sozinho que toda transferencia e numericamente aceitavel.
+Nao usar porcentagem da margem pelo valor absoluto do logit (0.0096/26.7) como criterio: logits admitem deslocamento aditivo sem alterar softmax. Nao concluir equivalencia semantica de tokens 11/305 isolados sem contexto/decodificacao.
+Nao adotar tau=0.1 escolhido so porque este caso passa. Definir em DESIGN-NUMERICO.md criterio calibrado por CONTROLES de referencia, independente da primeira amostra Smart:
+- mesmo prefixo teacher-forced e mesma posicao;
+- logits finitos em todos os passos examinados;
+- top-k, margens e probabilidade softmax ou log-probabilidades normalizadas relevantes;
+- erro absoluto/relativo de logits centralizados ou outra metrica explicada, com cuidado perto de zero;
+- referencia de recomputacao pura no MESMO backend destino versus destino que recebeu o estado, para isolar transferencia de erro interbackend legitimo;
+- maximo e distribuicao de erros/numero de divergencias, nao somente primeira posicao.
+Comecar com prefixos selecionados antes/na primeira divergencia e final, nao dump de vocab inteiro nem dezenas de runs longos. Uma variacao pequena, reproduzivel e dentro do envelope do baseline pode virar NUMERICO_TOLERADO com motivo persistido. Preservar status estrito separado e FAIL para NaN/Inf, estado/posicao/import invalidos e erro acima limite.
+Fixture negativa: perturbacao de estado/logits suficiente deve ser rejeitada, mesmo se texto final ainda plausivel. Nao alterar tensors/modelo do produto; mutante em harness separado.
+Criterio numerico inicial pode ser validado no baseline atual em paralelo ao candidato. Nao exigir que candidato rapido resolva toda numerica antes sequer compilar.
+
+3. VACINA FORMAL PARA O BUG DE VARARGS
+fprintf com formato e argumentos desalinhados e UB; 'manter asserts' nao vacina compilador contra tipos/contagem de varargs.
+Habilitar checagem de formato nos targets proprios do probe: -Wformat=2 e -Werror=format, conforme toolchain real. Se rep/log wrappers usarem variadic, marcar __attribute__((format(printf,...))) com indices corretos, ou remover interface variadic onde viavel. Nao impor flags globalmente a dependencias alheias gerando ruido.
+Preferir escrita JSON estruturada com biblioteca ja existente no projeto, se disponivel; nao inventar dependencia. Se manter fprintf, reduzir payloads e testar serialization output contra schema. Full texto UTF-8 com escapes de aspas/backslash/newline/control chars obrigatorios; numeros invalidos nao podem produzir NaN/Inf JSON silenciosos.
+RED/GREEN permanente: fixture com formato errado deve falhar compilacao no target teste; serializer certo deve produzir JSON parseavel e conter todos os valores esperados. Cobrir Unicode, aspas/quebra de linha, campos null/erro/cap, margens e resultado.
+Captura exec-out com completion marker/session ID e arquivo fechado/flushed antes pull. Tirar snapshot depois do fim REAL; timeout gera falha operacional, nunca sucesso com 2/3 requests. Nunca usar espera fixa como garantia. Acrescentar source/build/config/corpus fullSHAs e IDs request/session ausentes no payload ou vinculo inequívoco a manifesto.
+
+4. FIXTURES PEQUENAS: FECHAR AGORA
+O exercicio de >128 tokens nao substitui fixture de borda do chunking. Executar casos nt=0, abaixo128, exatamente128, acima128 e multiplos de128, com posicoes/seqIDs e logits do ULTIMO token global corretos. Testar erro em chunk intermediario -> abort sem sampling/benchmarkvalido.
+Mock da funcao decode permite testar scheduler de chunks sem carregar modelo, mas complementar com runtime curto/952 ja autorizado. Mesmo helper pure/Smart, sem replay silencioso.
+Fixture init one-shot: late-config rejeitado/marcado, pre-config consumido. Log dos defaults apenas nao valida overrides solicitados; para afirmar consumo override logar um valor nao-default no ponto real ou devolver snapshot de configuracao ao teste.
+A-B-A Vulkan no baseline com completion marker e SHA de cada output. Se candidato mudar core/HTP, revalidar ambos pares curtos e 952 sem presumir heranca total.
+
+5. DESIGN E CANDIDATO HEXAGON: ENTREGAR BUILD, NAO SO UM DIFF GRANDE
+N_hvx=0 resolve para hardware no receiver: descartar essa alteracao como 'fix obvio'. Assinaturas iguais nao garantem protocolos/ABI completos iguais.
+Escrever design curto com:
+- hashes/pins exatos das duas arvores e do core SIG;
+- allowlist de arquivos host Hexagon, htp DSP kernels/ops/queue, headers/protocol/generated bindings e CMake;
+- compatibilidade opcode/enum GGML types/layout/struct sizes/align/packing, callbacks de buffer, sync, graph API e serializacao;
+- denylist: core fora das dependencias comprovadas, ggml-vulkan e shaders/patches SIG aceitos, OpenCL F3b/guard/loadercache, request reset, Whisper;
+- strategy de reversao e comparativo com baseline, sem sobrescrever artefatos.
+Port apenas htp/ SEM host protocol equivalente pode ser incompatível. Escolher conjunto coerente minimo por dependencias rastreadas, nao por numero de linhas diff. Se mudar host backend junto for requisito, declarar explicitamente e manter core SIG.
+Construir candidato B em copia isolada do core SIG com allowlist Hexagon. FULL rebuild cohort host/skel/bindings/APK; nao trocar .so entre conjuntos incompatíveis. Pin SDK/NDK/toolchain e manter flags equivalentes para comparação.
+Se incompatibilidade exigir amplo core rewrite, parar esse caminho e documentar simbolos/contratos bloqueantes. Alternativa em copia isolada: base upstream COMPATIVEL com transposicao allowlist dos patches GPU/reset/loader SIG, mas e experimento separado, nao substituicao do produto ou nova baseline aceita. Decisao grande requer design/escopo usuario, nao hack de assinatura.
+Gerar manifesto todos os libs/skel/APK/pins/flags e verificar no app separado arquivo implantado/mapa de libs realmente carregadas.
+
+6. DIAGNOSTICO QUE NAO TERMINOU: NAO REPETIR CEGO
+E3 ja capturou defaults/iface; H4 'rodar diag' esta stale. O cohort com logs NAO completou pedidos: reentrancia de callback e HIPOTESE, nao causa estabelecida.
+Nao usar run travado para benchmark nem reexecutar quatro sessoes esperando resultado diferente. Capturar erro/thread dump limitado se necessario para excluir deadlock introduzido; preferir snapshot estruturado ou logs nao reentrantes fora das travas/critico, de baixa frequencia.
+Logs test-only ausentes no candidato publicavel; fonte restaurado e hashes de baseline claros. Extra log nao pode alterar lifecycle/locks nem segurar UI. Preservar getters e flag de hooks de teste OFF em produto.
+
+7. VERIFICACAO DO CANDIDATO E DADOS PAGANTES
+Primeiro HTP curto, placement real/fallback e A-B-A/reset, finite/EOG/sem cap. Depois microcomparativo baseline SIG vs candidato, mesmas configs/corpus/condicao, incluindo controle antes/depois se possivel. Nao inferir perf somente de build ou nominal throughput.
+Vulkan puro e HTP->Vulkan precisam confirmar patches Adreno SIG; OpenCL puro e HTP->OpenCL precisam confirmar loader/pipeline pertinentes. Basta bateria focal quando core nao mudou, nao repetir todas campanhas.
+Se HTP recupera prefill e corretude, piloto BENCH952 sem espelho no candidato: CPU/NPU/OpenCL/Vulkan/duasSmart; warm contexts e reset cronometrado, modelo/prompt/config iguais, residencia1ou2contextos explicitada. Comecar1rep por modo se workload demorado; ampliar poucas reps intercaladas se resultado/confianca justificar e memoria/temperatura permitir.
+Medir wall pedido incluindo reset (tambem fases separadas), handoff, TTFT-ready e pausa ponte->token2; coldload/primeiro kernel como tabela separada. Streamingvisivel somente se callbackUI real. Memoria host/GPU/DSP, sensores identificados e stop status por tentativa; gen_ms do espelho nunca entra desempenho.
+Se candidato perde ou nao compila, entregar negativo real com blocker; nao substituir por ganho projetado nem insistir em integrar UI para cumprir meta. Default/modelo dados do usuario continuam intactos. USB preferido, wifi aprovado com identidade/serialguard e buffer local; sem thermal bypass/root/governor.
+
+8. ENTREGA
+RELATORIO-SMART-DUAL-BACKEND-RODADA10.txt em docs/especialista, A-H:
+A snapshot/identidades/allowlist e aprovacao;
+B fixtures formato/JSON/init/chunking e exits;
+C ABA completo por rota com3outputs/fullSHA e comparacao;
+D criterio numerico independente, baselinecontrole e envelope medido;
+E candidatoB REAL: design/build/hash/runtime ou incompatibilidade precisa;
+F microperfHTP e BENCH952 semespelho secriteriosaceitos;
+G preservacaoGPU/Whisper/F2/CI e probe!=produto;
+H estado porcamada e proximo passo.
+Logs docs/npu-hymt2/smart-rodada10/ manifesto fullSHAs/caminhos/tamanhos, JSONIDs e categorias exclusivas porattempt contadas em script. Nao anexar diag travado como benchmark, nem AAA como ABA, nem grupo incompleto como completo. Nenhuma UI/release/R2/SIGprincipal nesta rodada salvo nova autorizacao especifica.

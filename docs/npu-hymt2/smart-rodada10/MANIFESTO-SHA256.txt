@@ -1,0 +1,25 @@
+MANIFESTO SHA-256 — smart-rodada10 (08/10/2026)
+
+OBJ C: ABA-VK fechado (A1==A2 78d21dbc; B 3b49945f ACEITO; JSON 3782B).
+CAND v1 (host+htp upstream no core SIG): INCOMPATIVEL (erros exatos anexos;
+  buffer_type 2-args/GLU enum novo/graph_optimize) -> PARADO; tree restaurado.
+Alt (upstream+patches SIG): delta vulkan = 36255 linhas -> decisao grande (fila).
+Caminho escolhido: diff fino do hexagon (patch minimo no SIG).
+FIXTURES: chunk_plan TODOS PASS; bad_format RED_OK; one-shot TODOS PASS; schema 7/7.
+VACINA: -Wformat=2 -Werror=format + attribute no rep (build RC=0).
+
+615325961b0fa85a02cb58913ef51d0f90e82ec261e7a0b0353dd71590771e78  CANDIDATO-V1-ERROS-EXATOS.txt  (2470 B)
+fdfbd73904ae11a60ce6fb9fff8dedfa808dce6dea9671b2ff33b071b94378c5  DESIGN-CANDIDATO.md  (3234 B)
+e4822be0694a2ac8248b92e29747b220f93088f001d52033919ab66da7f42117  DESIGN-NUMERICO.md  (3019 B)
+3fae8891ae0db843f5ab19b9c91785a40191609021c4c81cde766dba13501807  bad_format_fixture.c  (280 B)
+40bae3ffd25953bafb027f9691c9c030273cf7511c4638884f23931cd2fdda77  chunk_plan.h  (608 B)
+93b3a242d99f01f781739326b97562af9413fb3222bbeb5cb62e5bef98c1151e  chunk_plan_test.cpp  (2257 B)
+9eff6fedf70bb15527a2bb66d72b084b919e6b55e336514e9c3bb3d4ac30ca52  init_oneshot_fixture.c  (1491 B)
+c42dc474e46344dd9a03c0d55d4624597ae06573850a7e14cdaec61fecd8b050  npuprobe-r10.log  (27577 B)
+5f954b55c66786185486258e488bf447dee35633dd1c6b7ae841dfb807a49477  r10-aba-vk.jsonl  (3782 B)
+c0408e65360639392b29c073a132f8ec1faf7213465faab2815d8dddd4d5905f  r10-aba-vk.sh  (1983 B)
+d0444f100e7563895017ff143bfc89b5d154ab58d0fa3562c81f489d71bc4010  r10-aba-vk.txt  (2014 B)
+7fc4d604dcf157d2a2a2c5a7f42092c268275005789326cfcc9e33c23be00a3a  r10-cand.sh  (2248 B)
+113fbfa0c47c50bece95522faf188287ac7b039476f46af303a845bc2d065371  valida-schema.py  (2944 B)
+
+9d08649c216e7eab586a4883595b27edea0bcc7cc627ea6d370f47e67a380ce5  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA10.txt (8713 B)
