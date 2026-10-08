@@ -1,0 +1,11 @@
+=== R11 SWEEP envs (15:04:21Z) ===
+[S0-padrao] 
+[S1-hostbuf0] 
+[S2-opstage2] prefill=5143.24ms ge =24531.92ms pp1=0.34ms wall=29676.1ms
+[S3-opstage1] 
+[S4-opfusion0] prefill=6054.37ms ge =36937.10ms pp1=0.63ms wall=42992.4ms
+[S5-oppoll1] 
+[S6-etm1] 
+[S7-faselect1] 
+[S8-mbuf2g] 
+R11_SWEEP_DONE

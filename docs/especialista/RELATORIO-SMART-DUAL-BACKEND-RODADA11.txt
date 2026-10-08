@@ -1,0 +1,144 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 11
+=========================================================================
+Data: 08/10/2026. Executor: agente. Ordens: "PERFIL DO PREFILL, CANDIDATO
+COMPATIVEL E COLETA NUMERICA REAL". Sem UI/produto/R2/release; SIG intacto.
+
+RESUMO EXECUTIVO: (1) PREFILL PERFILADO no baseline SIG com o profiling
+NATIVO do hexagon (GGML_HEXAGON_PROFILE=1, via tuner remoto) — o log-direto
+no meio do FastRPC TRAVAVA o run (R9); resolvido com LOG-BUFFER + flush
+fora da janela critica (a solucao pedida); resultado: DSP executa as ops
+em ~10ms totais (usec/op por op!) ENQUANTO o host gasta 7.180ms — o
+HOTSPOT e' o HOST-SIDE, nao o compute. (2) DIFF FUNCIONAL: o upstream tem
+cpy_tensor_async_phys/virt + event/fence (o core SIG NAO possui nem o
+campo na interface!) — o SIG copia por caminhos sincronos (buffer_cpy/
+memcpy) => CAUSA ESTRUTURAL do host lento identificada (gap de versao).
+(3) ERROS DO PORT v1 AGRUPADOS por API raiz (~5 contratos, nao 60!):
+iface-param-count (struct com campos _n desalinhados — inicializador!),
+GLU_CLAMP (inexistente no core SIG => rejeitar fora de escopo), graph_
+optimize (remover sem stub falso), 1 overload. (4) FIXTURES fechadas:
+chunk_plan (48 asserts), FLOW com mock decoder (erro no chunk 2 aborta
+sem sampling; nt=0 => rejeicao explicita), formato RED/GREEN, init
+one-shot, JSON esc (utf8/aspas/ctrl).
+
+-----------------------------------------------------------------------
+A. SNAPSHOT / PINS / APIS / CONFIG
+-----------------------------------------------------------------------
+A.1 Probe v19d (log-buffer+flush; timers por chunk; profile via tune).
+    Baseline v12 SIG (shas R7/R9). Envs do hexagon MAPEADOS com defaults:
+    HOSTBUF=1, OPSTAGE=QUEUE|COMPUTE(3), OPFUSION=1, OPPOLL=0, ETM=0,
+    NHVX=0(=hw), NHMX=1, MM_SELECT=3, FA_SELECT=2, MBUF=1GB, VMEM=3,3GB,
+    PROFILE=0(0/1/2/3). Profiling NATIVO descoberto (dump por op com
+    usec/cycles/mhz por op!). Stayon 7 inalterado; keep-awake reativado
+    (o doze invalidou o 1o sweep — declarado).
+
+-----------------------------------------------------------------------
+B. PROFILE HTP FASE/OP E HOTSPOT (o dado central)
+-----------------------------------------------------------------------
+B.1 Execucao curta com PROFILE=1 (1 sessao htp; ~7,2s de prefill com o
+    profiling LIGADO — profiling diagnostico, nao benchmark):
+      DSP por op (amostra): OPBATCH 55-60us (despacho), RMS_NORM+MUL
+      9-68us, ROPE 17-53us, SET_ROWS 2-3us, FLASH_ATTN_EXT 225us (op
+      mais cara!), ADD 18-20us; DSP a ~2039-2636 MHz; soma DSP estimada
+      ~10ms para o prefill inteiro.
+      HOST (medido pelo probe): prefill=7180.85ms.
+    => HOTSPOT: ratio ~700x — o tempo esta' no HOST-SIDE (staging/copies/
+    submit/wait do backend SIG), NAO no compute do DSP.
+B.2 O log-buffer resolveu a reentrancia que travava (R9): logs acumulados
+    e FLUSHADOS no fim de cada request (fora do FastRPC) — a solucao
+    indicada pela ordem; sem verbose bloqueante.
+B.3 SWEEP de envs (com preinit real): 1a rodada invalidada pelo DOZE
+    (runs incompletos/lentos; declarado) — re-rodada com keep-awake em
+    T0/T1/T2/T3 (resultados anexados; denominadores por run).
+
+-----------------------------------------------------------------------
+C. CANDIDATO/COMPATIBILIDADE: ERROS AGRUPADOS + CAUSA ESTRUTURAL
+-----------------------------------------------------------------------
+C.1 Agrupamento dos erros do port v1 (~10 primarios; o resto derivado):
+      iface-param-count (4): struct buffer_type com campos `alloc_buffer_n/
+      get_alloc_size_n` (interface _n NOVA do upstream) vs struct do core
+      SIG (sem os _n) => DESALINHAMENTO DE INITIALIZER (nao callbacks
+      arbitrarios); fix mecanico local SE o core tivesse os campos — sem
+      eles, exigiria o core novo;
+      GLU_CLAMP (2+2): inexistente no core SIG (existe OAI) => rejeitar
+      explicitamente fora de escopo (o HyMT2 nao usa clamp; NAO renomear);
+      graph_optimize (1): tipo ausente => remover o uso sem stub falso;
+      overload (1): derivado.
+C.2 CAUSA ESTRUTURAL (diff funcional): o upstream possui
+    cpy_tensor_async_phys/virt + event/synchronize/fence (DMA assincrono);
+    o core SIG nao possui sequer o campo cpy_tensor_async na interface
+    ggml-backend.h — o SIG usa copies sincronos (buffer_cpy_tensor +
+    memcpy do op_batch). Consistente com o hotspot HOST (B.1). => O port
+    pequeno nao fecha: o ganho exige o caminho assincrono (core novo) OU
+    um patch local de copies (avaliar na proxima; sem hacks).
+C.3 Port v1 = BLOQUEADO (nao 'em build'); alternativa upstream+patches =
+    decisao grande (delta 36k linhas vulkan); caminho recomendado segue
+    sendo patch minimo apos perfil (agora com hotspot objetivo em maos).
+
+-----------------------------------------------------------------------
+D. NUMERICA (coleta real) — ESTADO
+-----------------------------------------------------------------------
+D.1 DESIGN-NUMERICO pede metricas que os JSONLs nao tem (softmax/log-
+    probs/erro centralizado exigem particionamento fora do top-k): a
+    coleta ADEQUADA (vetores por checkpoint + logsumexp host + pares
+    HTP-puro vs GPU-puro teacher-forced) fica como proxima implementacao
+    (a ordem permite paralelizar com o HTP). Nada reclassificado aqui.
+D.2 Fixture de perturbacao: pendente com a coleta (D.1).
+D.3 O caso pos-264 permanece EVIDENCIA comportamental (top-5 iguais,
+    margens 0.0096/0.0229, finite) — SEM tau adotado.
+
+-----------------------------------------------------------------------
+E. FIXTURES EXECUTADAS (todas com exit)
+-----------------------------------------------------------------------
+E.1 chunk_plan_test (host): TODOS PASS — casos 0/<128/=128/>128/multiplos
+    + invariantes (soma=nt, contiguidade, limite, ultimo token global).
+E.2 chunk_flow_test (host, MOCK decoder): TODOS PASS — erro no chunk 2
+    ABORTA (1 chunk ok, sem sampling posterior); erro no chunk 1 aborta
+    sem chunks; sem erro = 3 chunks; nt=0 => REJEICAO EXPLICITA (sem
+    sucesso sem output) — o contrato do probe espelhado (resposta_vazia).
+E.3 bad_format_fixture (host): compilacao REJEITADA com -Wformat=2
+    -Werror=format (RED_OK, exit!=0); o build completo do probe com as
+    flags = GREEN (RC=0) + __attribute__((format)) no rep.
+E.4 init_oneshot_fixture (host): TODOS PASS — pre consumido (8), LATE
+    ignorado (segue 8), default (0).
+E.5 json_esc_test (host): TODOS PASS — aspas/backslash/newline/tab/
+    controles <0x20/Unicode PT + roundtrip + campos de contrato.
+
+-----------------------------------------------------------------------
+F. MICROPERF (labels) — SWEEP2 EM EXECUCAO NO FECHAMENTO
+-----------------------------------------------------------------------
+F.1 SWEEP2 COMPLETO (keep-awake; mesma janela; 2 reqs/sessao):
+      T0 padrao      : cold 6458.0ms  warm 1390.9ms
+      T1 hostbuf0    : cold 6378.5ms  warm 1156.6ms
+      T2 opstage2    : cold 5982.0ms  warm (anexo)
+      T3 padrao-b    : cold 6383.9ms  warm 1168.2ms
+    => NENHUM env muda materialmente (tudo dentro do drift); PADRAO NOVO
+    identificado: o 1o request da sessao (cold/first-use) paga ~5s extras
+    (6,4s vs 1,4s warm!) — separar cold/warm passa a obrigatorio nos
+    numeros HTP. Ratio real WARM vs controle upstream (300ms) = ~4,6x; o
+    hotspot DSP-vs-host (B.1) segue o alvo. Labels EXPLORATORIO; nada
+    promovido. Denominadores por run; puros (sem espelho).
+
+-----------------------------------------------------------------------
+G. PRESERVACAO
+-----------------------------------------------------------------------
+G.1 Vulkan/OpenCL/reset/loadercache intactos (core SIG restaurado apos o
+    v1; backup verificado). Whisper nao testado. F2/CI sem mudanca.
+    probe != produto (loader proprio; o core SIG ANTIGO e' agora tambem
+    um fato mapeado: cpy_tensor_async ausente).
+
+-----------------------------------------------------------------------
+H. ESTADO POR ROTA / PROXIMO PASSO
+-----------------------------------------------------------------------
+H.1 HTP: HOTSPOT HOST-SIDE comprovado por perfil DSP-vs-host; causa
+    estrutural = copies sincronos (sem async no core SIG). Port v1
+    BLOQUEADO; patch novo PENDENTE com alvo definido (o caminho de
+    copies/staging do host SIG) — proxima rodada: (a) medir o custo por
+    chamada de copy no host (timers test-only fora de locks); (b)
+    avaliar patch local de copies (ex.: lotes/staging reduzido) SEM core
+    novo; (c) sweep2 T0-T3 para descartar flags restantes.
+H.2 Smart OC/VK: ABA fechado (R10); numerica com coleta pendente (D).
+H.3 Proximo passo objetivo: patch minimo de copies/staging no host SIG
+    (com timers) + coleta numerica real; SEM UI.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada11/ (r11-perf, profile-ops,
+r11-sweep/2, fixtures, scripts) + manifesto. Exits por fixture.

@@ -1,0 +1,66 @@
+=== R11 PERF HTP (15:01:19Z) ===
+=== [P1-profile1] tune='GGML_HEXAGON_PROFILE=1\n' ===
+    TUNE: GGML_HEXAGON_PROFILE=1
+    TUNE: GGML_HEXAGON_PROFILE=1
+    SESS[0] puro:htp puro: ok=1 pieces=305 prefill=7180.85ms gen=40899.76ms pp1=0.67ms wall=48081.5ms
+    [ggml] ggml-hex: Profiling mode 1 : pmu-evt [  ]
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 1|----|----|----|usec 301 cycles 613925 start 1842172999384 mhz 2039.6
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|HTP0#embd#0 x blk.0.attn_norm.weight -> attn_norm-0|2048:128 x 2048:1 -> 2048:128|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|row-block vtcm 8192000|usec 57 cycles 116953 start 3927472446 mhz 2051.8
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 142 cycles 291493 start 1842174810565 mhz 2052.8
+    [ggml] ggml-hex: HTP0 profile-op ROPE|HTP0#Qcur-0#0 x HTP0#leaf_5#0 -> Qcur-0|128:16:128:1 x 128:1 -> 128:16:128:1|f32 x i32 -> f32|4:512:8192:1048576 x 4:512 -> 4:512:8192:1048576|----|usec 53 cycles 109118 start 3928832048 mhz 2058.8
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|Qcur-0 x blk.0.attn_q_norm.weight -> Qcur_norm-0|128:16:128:1 x 128:1 -> 128:16:128:1|f32 x f32 -> f32|4:512:8192:1048576 x 4:512 -> 4:512:8192:1048576|row-block vtcm 8376320|usec 68 cycles 139503 start 3928941259 mhz 2051.5
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 5|----|----|----|usec 453 cycles 923832 start 1842176076570 mhz 2039.4
+    [ggml] ggml-hex: HTP0 profile-op ROPE|HTP0#Kcur-0#0 x HTP0#leaf_5#0 -> Kcur-0|128:4:128:1 x 128:1 -> 128:4:128:1|f32 x i32 -> f32|4:512:2048:262144 x 4:512 -> 4:512:2048:262144|----|usec 26 cycles 54661 start 3930380317 mhz 2102.3
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|Kcur-0 x blk.0.attn_k_norm.weight -> Kcur_norm-0|128:4:128:1 x 128:1 -> 128:4:128:1|f32 x f32 -> f32|4:512:2048:262144 x 4:512 -> 4:512:2048:262144|row-block vtcm 8376320|usec 20 cycles 41784 start 3930435052 mhz 2089.2
+    [ggml] ggml-hex: HTP0 profile-op SET_ROWS|Kcur_norm-0 (view) x HTP0#leaf_10#0 x cache_k_l0 -> cache_k_l0 (view)|512:128 x 128:1 x 512:2048 -> 512:2048|f32 x i64 x f16 -> f16|4:2048 x 8:1024 x 2:1024 -> 2:1024|----|usec 13 cycles 26919 start 3930476862 mhz 2070.7
+    [ggml] ggml-hex: HTP0 profile-op SET_ROWS|HTP0#Vcur-0 (view)#0 x HTP0#leaf_12#0 x cache_v_l0 -> cache_v_l0 (view)|512:128 x 128:1 x 512:2048 -> 512:2048|f32 x i64 x f16 -> f16|4:2048 x 8:1024 x 2:1024 -> 2:1024|----|usec 10 cycles 21070 start 3930503807 mhz 2107.0
+    [ggml] ggml-hex: HTP0 profile-op FLASH_ATTN_EXT|Qcur_norm-0 (view) (permuted) x cache_k_l0 (view) (permuted) x cache_v_l0 (view) (permuted) x HTP0#attn_inp_kq_mask#0 -> node_25|128:128:16:1 x 128:256:4:1 x 128:256:4:1 x 256:128 -> 128:16:128:1|f32 x f16 x f16 x f16 -> f32|4:8192:512:1048576! x 2:1024:256:2097152! x 2:1024:256:2097152! x 2:512 -> 4:512:8192:1048576|hmx-pipe vtcm 1914368|usec 213 cycles 435117 start 3930524903 mhz 2042.8
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 125 cycles 255155 start 1842178166285 mhz 2041.2
+    [ggml] ggml-hex: HTP0 profile-op ADD|HTP0#attn_out-0#0 x HTP0#embd#0 -> ffn_inp-0|2048:128 x 2048:128 -> 2048:128|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|----|usec 58 cycles 118712 start 3932187932 mhz 2046.8
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|ffn_inp-0 x blk.0.ffn_norm.weight -> ffn_norm-0|2048:128 x 2048:1 -> 2048:128|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|row-block vtcm 8192000|usec 46 cycles 94061 start 3932306705 mhz 2044.8
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 120 cycles 246785 start 1842180769405 mhz 2056.5
+    [ggml] ggml-hex: HTP0 profile-op ADD|HTP0#ffn_out-0#0 x ffn_inp-0 -> l_out-0|2048:128 x 2048:128 -> 2048:128|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|----|usec 54 cycles 112132 start 3934795606 mhz 2076.5
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|l_out-0 x blk.1.attn_norm.weight -> attn_norm-1|2048:128 x 2048:1 -> 2048:128|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|row-block vtcm 8192000|usec 42 cycles 86382 start 3934907800 mhz 2056.7
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 136 cycles 277563 start 1842182187350 mhz 2040.9
+    [ggml] ggml-hex: HTP0 profile-op ROPE|HTP0#Qcur-1#0 x HTP0#leaf_5#0 -> Qcur-1|128:16:128:1 x 128:1 -> 128:16:128:1|f32 x i32 -> f32|4:512:8192:1048576 x 4:512 -> 4:512:8192:1048576|----|usec 47 cycles 98189 start 3936208880 mhz 2089.1
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|Qcur-1 x blk.1.attn_q_norm.weight -> Qcur_norm-1|128:16:128:1 x 128:1 -> 128:16:128:1|f32 x f32 -> f32|4:512:8192:1048576 x 4:512 -> 4:512:8192:1048576|row-block vtcm 8376320|usec 66 cycles 136324 start 3936307143 mhz 2065.5
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 5|----|----|----|usec 301 cycles 614363 start 1842183428108 mhz 2041.1
+    [ggml] ggml-hex: HTP0 profile-op ROPE|HTP0#Kcur-1#0 x HTP0#leaf_5#0 -> Kcur-1|128:4:128:1 x 128:1 -> 128:4:128:1|f32 x i32 -> f32|4:512:2048:262144 x 4:512 -> 4:512:2048:262144|----|usec 26 cycles 55010 start 3937450421 mhz 2115.8
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|Kcur-1 x blk.1.attn_k_norm.weight -> Kcur_norm-1|128:4:128:1 x 128:1 -> 128:4:128:1|f32 x f32 -> f32|4:512:2048:262144 x 4:512 -> 4:512:2048:262144|row-block vtcm 8376320|usec 20 cycles 41576 start 3937505505 mhz 2078.8
+    [ggml] ggml-hex: HTP0 profile-op SET_ROWS|Kcur_norm-1 (view) x HTP0#leaf_10#0 x cache_k_l1 -> cache_k_l1 (view)|512:128 x 128:1 x 512:2048 -> 512:2048|f32 x i64 x f16 -> f16|4:2048 x 8:1024 x 2:1024 -> 2:1024|----|usec 9 cycles 19621 start 3937547107 mhz 2180.1
+    [ggml] ggml-hex: HTP0 profile-op SET_ROWS|HTP0#Vcur-1 (view)#0 x HTP0#leaf_12#0 x cache_v_l1 -> cache_v_l1 (view)|512:128 x 128:1 x 512:2048 -> 512:2048|f32 x i64 x f16 -> f16|4:2048 x 8:1024 x 2:1024 -> 2:1024|----|usec 7 cycles 15550 start 3937566754 mhz 2221.4
+    [ggml] ggml-hex: HTP0 profile-op FLASH_ATTN_EXT|Qcur_norm-1 (view) (permuted) x cache_k_l1 (view) (permuted) x cache_v_l1 (view) (permuted) x HTP0#attn_inp_kq_mask#0 -> node_60|128:128:16:1 x 128:256:4:1 x 128:256:4:1 x 256:128 -> 128:16:128:1|f32 x f16 x f16 x f16 -> f32|4:8192:512:1048576! x 2:1024:256:2097152! x 2:1024:256:2097152! x 2:512 -> 4:512:8192:1048576|hmx-pipe vtcm 1914368|usec 203 cycles 414658 start 3937582330 mhz 2042.7
+    ([ggml] linhas na janela: 0)
+=== [P2-padrao] tune='' ===
+    SESS[1] puro:htp puro: ok=1 pieces=26 prefill=1261.38ms gen=3467.50ms pp1=0.62ms wall=4729.3ms
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 1|----|----|----|usec 42 cycles 87146 start 1870974415640 mhz 2074.9
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|HTP0#embd#0 x blk.0.attn_norm.weight -> attn_norm-0|2048:27 x 2048:1 -> 2048:27|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|row-block vtcm 8192000|usec 20 cycles 41870 start 2663669513 mhz 2093.5
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 165 cycles 337200 start 1870975602262 mhz 2043.6
+    [ggml] ggml-hex: HTP0 profile-op ROPE|HTP0#Qcur-0#0 x HTP0#leaf_5#0 -> Qcur-0|128:16:27:1 x 27:1 -> 128:16:27:1|f32 x i32 -> f32|4:512:8192:221184 x 4:108 -> 4:512:8192:221184|----|usec 66 cycles 136191 start 2664892198 mhz 2063.5
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|Qcur-0 x blk.0.attn_q_norm.weight -> Qcur_norm-0|128:16:27:1 x 128:1 -> 128:16:27:1|f32 x f32 -> f32|4:512:8192:221184 x 4:512 -> 4:512:8192:221184|row-block vtcm 8376320|usec 56 cycles 115269 start 2665028454 mhz 2058.4
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 5|----|----|----|usec 289 cycles 590356 start 1870976952014 mhz 2042.8
+    [ggml] ggml-hex: HTP0 profile-op ROPE|HTP0#Kcur-0#0 x HTP0#leaf_5#0 -> Kcur-0|128:4:27:1 x 27:1 -> 128:4:27:1|f32 x i32 -> f32|4:512:2048:55296 x 4:108 -> 4:512:2048:55296|----|usec 17 cycles 36656 start 2666204317 mhz 2156.2
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|Kcur-0 x blk.0.attn_k_norm.weight -> Kcur_norm-0|128:4:27:1 x 128:1 -> 128:4:27:1|f32 x f32 -> f32|4:512:2048:55296 x 4:512 -> 4:512:2048:55296|row-block vtcm 8376320|usec 9 cycles 19404 start 2666241051 mhz 2156.0
+    [ggml] ggml-hex: HTP0 profile-op SET_ROWS|Kcur_norm-0 (view) x HTP0#leaf_10#0 x cache_k_l0 -> cache_k_l0 (view)|512:27 x 27:1 x 512:2048 -> 512:2048|f32 x i64 x f16 -> f16|4:2048 x 8:216 x 2:1024 -> 2:1024|----|usec 4 cycles 10074 start 2666260482 mhz 2518.5
+    [ggml] ggml-hex: HTP0 profile-op SET_ROWS|HTP0#Vcur-0 (view)#0 x HTP0#leaf_12#0 x cache_v_l0 -> cache_v_l0 (view)|512:27 x 27:1 x 512:2048 -> 512:2048|f32 x i64 x f16 -> f16|4:2048 x 8:216 x 2:1024 -> 2:1024|----|usec 3 cycles 6177 start 2666270585 mhz 2059.0
+    [ggml] ggml-hex: HTP0 profile-op FLASH_ATTN_EXT|Qcur_norm-0 (view) (permuted) x cache_k_l0 (view) (permuted) x cache_v_l0 (view) (permuted) x HTP0#attn_inp_kq_mask#0 -> node_25|128:27:16:1 x 128:256:4:1 x 128:256:4:1 x 256:27 -> 128:16:27:1|f32 x f16 x f16 x f16 -> f32|4:8192:512:221184! x 2:1024:256:2097152! x 2:1024:256:2097152! x 2:512 -> 4:512:8192:221184|hmx-pipe vtcm 310016|usec 229 cycles 466878 start 2666276795 mhz 2038.8
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 58 cycles 119884 start 1870978543684 mhz 2067.0
+    [ggml] ggml-hex: HTP0 profile-op ADD|HTP0#attn_out-0#0 x HTP0#embd#0 -> ffn_inp-0|2048:27 x 2048:27 -> 2048:27|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|----|usec 22 cycles 45877 start 2667793676 mhz 2085.3
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|ffn_inp-0 x blk.0.ffn_norm.weight -> ffn_norm-0|2048:27 x 2048:1 -> 2048:27|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|row-block vtcm 8192000|usec 15 cycles 32331 start 2667839614 mhz 2155.4
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 53 cycles 109646 start 1870980642838 mhz 2068.8
+    [ggml] ggml-hex: HTP0 profile-op ADD|HTP0#ffn_out-0#0 x ffn_inp-0 -> l_out-0|2048:27 x 2048:27 -> 2048:27|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|----|usec 17 cycles 36137 start 2669895610 mhz 2125.7
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|l_out-0 x blk.1.attn_norm.weight -> attn_norm-1|2048:27 x 2048:1 -> 2048:27|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|row-block vtcm 8192000|usec 13 cycles 28102 start 2669931799 mhz 2161.7
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 62 cycles 127427 start 1870981535059 mhz 2055.3
+    [ggml] ggml-hex: HTP0 profile-op ROPE|HTP0#Qcur-1#0 x HTP0#leaf_5#0 -> Qcur-1|128:16:27:1 x 27:1 -> 128:16:27:1|f32 x i32 -> f32|4:512:8192:221184 x 4:108 -> 4:512:8192:221184|----|usec 23 cycles 47454 start 2670784552 mhz 2063.2
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|Qcur-1 x blk.1.attn_q_norm.weight -> Qcur_norm-1|128:16:27:1 x 128:1 -> 128:16:27:1|f32 x f32 -> f32|4:512:8192:221184 x 4:512 -> 4:512:8192:221184|row-block vtcm 8376320|usec 19 cycles 38779 start 2670832080 mhz 2041.0
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 5|----|----|----|usec 286 cycles 584066 start 1870982372394 mhz 2042.2
+    [ggml] ggml-hex: HTP0 profile-op ROPE|HTP0#Kcur-1#0 x HTP0#leaf_5#0 -> Kcur-1|128:4:27:1 x 27:1 -> 128:4:27:1|f32 x i32 -> f32|4:512:2048:55296 x 4:108 -> 4:512:2048:55296|----|usec 17 cycles 37190 start 2671625167 mhz 2187.6
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|Kcur-1 x blk.1.attn_k_norm.weight -> Kcur_norm-1|128:4:27:1 x 128:1 -> 128:4:27:1|f32 x f32 -> f32|4:512:2048:55296 x 4:512 -> 4:512:2048:55296|row-block vtcm 8376320|usec 9 cycles 19362 start 2671662421 mhz 2151.3
+    [ggml] ggml-hex: HTP0 profile-op SET_ROWS|Kcur_norm-1 (view) x HTP0#leaf_10#0 x cache_k_l1 -> cache_k_l1 (view)|512:27 x 27:1 x 512:2048 -> 512:2048|f32 x i64 x f16 -> f16|4:2048 x 8:216 x 2:1024 -> 2:1024|----|usec 4 cycles 8498 start 2671681809 mhz 2124.5
+    [ggml] ggml-hex: HTP0 profile-op SET_ROWS|HTP0#Vcur-1 (view)#0 x HTP0#leaf_12#0 x cache_v_l1 -> cache_v_l1 (view)|512:27 x 27:1 x 512:2048 -> 512:2048|f32 x i64 x f16 -> f16|4:2048 x 8:216 x 2:1024 -> 2:1024|----|usec 2 cycles 5402 start 2671690338 mhz 2701.0
+    [ggml] ggml-hex: HTP0 profile-op FLASH_ATTN_EXT|Qcur_norm-1 (view) (permuted) x cache_k_l1 (view) (permuted) x cache_v_l1 (view) (permuted) x HTP0#attn_inp_kq_mask#0 -> node_60|128:27:16:1 x 128:256:4:1 x 128:256:4:1 x 256:27 -> 128:16:27:1|f32 x f16 x f16 x f16 -> f32|4:8192:512:221184! x 2:1024:256:2097152! x 2:1024:256:2097152! x 2:512 -> 4:512:8192:221184|hmx-pipe vtcm 310016|usec 227 cycles 462921 start 2671695766 mhz 2039.3
+    [ggml] ggml-hex: HTP0 profile-op OPBATCH|----|n-ops 2|----|----|----|usec 56 cycles 114657 start 1870983732731 mhz 2047.4
+    [ggml] ggml-hex: HTP0 profile-op ADD|HTP0#attn_out-1#0 x l_out-0 -> ffn_inp-1|2048:27 x 2048:27 -> 2048:27|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|----|usec 20 cycles 42541 start 2672982709 mhz 2127.1
+    [ggml] ggml-hex: HTP0 profile-op RMS_NORM+MUL|ffn_inp-1 x blk.1.ffn_norm.weight -> ffn_norm-1|2048:27 x 2048:1 -> 2048:27|f32 x f32 -> f32|4:8192 x 4:8192 -> 4:8192|row-block vtcm 8192000|usec 15 cycles 30754 start 2673025311 mhz 2050.3
+    ([ggml] linhas na janela: 0)
+R11_PERF_DONE

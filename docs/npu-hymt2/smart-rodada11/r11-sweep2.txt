@@ -1,0 +1,28 @@
+=== R11 SWEEP2 (15:13:43Z) ===
+  mWakefulness=Awake
+[T0-padrao] prefill=6458.04ms ge|=42552.57ms
+prefill=1390.98ms ge|=3705.80ms
+prefill=6458.04ms ge|=42552.57ms
+prefill=1390.98ms ge|=3705.80ms
+[T1-hostbuf0] prefill=6458.04ms ge|=42552.57ms
+prefill=1390.98ms ge|=3705.80ms
+prefill=6458.04ms ge|=42552.57ms
+prefill=1390.98ms ge|=3705.80ms
+prefill=6378.51ms ge|=39554.32ms
+prefill=1156.64ms ge|=3045.20ms
+prefill=6378.51ms ge|=39554.32ms
+prefill=1156.64ms ge|=3045.20ms
+[T2-opstage2] prefill=6378.51ms ge|=39554.32ms
+prefill=1156.64ms ge|=3045.20ms
+prefill=6378.51ms ge|=39554.32ms
+prefill=1156.64ms ge|=3045.20ms
+prefill=5982.00ms ge|=36550.88ms
+[T3-padrao-b] prefill=6383.89ms ge|=36333.81ms
+prefill=1168.21ms ge|=3079.12ms
+prefill=6383.89ms ge|=36333.81ms
+prefill=1168.21ms ge|=3079.12ms
+prefill=6383.89ms ge|=36333.81ms
+prefill=1168.21ms ge|=3079.12ms
+prefill=6383.89ms ge|=36333.81ms
+prefill=1168.21ms ge|=3079.12ms
+R11_SWEEP2_DONE

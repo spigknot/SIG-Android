@@ -1,0 +1,24 @@
+MANIFESTO SHA-256 — smart-rodada11 (08/10/2026)
+
+PERFIL: DSP ~10ms (usec/op: FA 225us, OPBATCH 55-60us) vs HOST 7180ms -> hotspot host-side.
+CAUSA ESTRUTURAL: upstream tem cpy_tensor_async_phys/virt+event/fence; core SIG NAO tem o campo.
+ERROS v1 agrupados: iface-param-count (_n struct!), GLU_CLAMP, graph_optimize, overload.
+SWEEP2: envs sem efeito (hostbuf0/opstage2 ~padrao); cold 6,4s vs warm 1,4s (first-use ~5s).
+FIXTURES: chunk_plan 48 asserts; flow-mock (erro chunk2 aborta; nt=0 rejeitado);
+  bad_format RED; init one-shot PASS; json_esc PASS.
+
+63cb5cd3d186e9e813ee8fc5e7b3a6b5bacc0d72fc52ff3c9acecfbba0ca46cf  PROFILE-OPS-AMOSTRA.txt  (10162 B)
+3fae8891ae0db843f5ab19b9c91785a40191609021c4c81cde766dba13501807  bad_format_fixture.c  (280 B)
+2d5b063ad10d0ebbbaeb491bb9c9f1487e255665e24b6cf5b12e1fadfb1be94c  chunk_flow_test.cpp  (2250 B)
+40bae3ffd25953bafb027f9691c9c030273cf7511c4638884f23931cd2fdda77  chunk_plan.h  (608 B)
+93b3a242d99f01f781739326b97562af9413fb3222bbeb5cb62e5bef98c1151e  chunk_plan_test.cpp  (2257 B)
+9eff6fedf70bb15527a2bb66d72b084b919e6b55e336514e9c3bb3d4ac30ca52  init_oneshot_fixture.c  (1491 B)
+16db72d292d957681a8d0265e2f561683f6e25adbf494e274c9b14a81f19650e  json_esc_test.py  (1757 B)
+a69dd1e81c041bebba02784a136fbe8e0c1a28762b32b9d818f7171b291c6089  npuprobe-r11.log  (396027 B)
+43cd30bc3e4a3d5ebd81dab8f481fceef5df7ad5594d26817dadc1ec9057697d  r11-perf.sh  (1604 B)
+57b030e672b056516957b79c0e3a566f9b6033f4b203d71be2d659c64ad18cf9  r11-perf.txt  (13096 B)
+bf74f3c5d485a547e140bb56e0ede3669f020295cca64b692d075930b127ad8b  r11-sweep.txt  (294 B)
+a05ba154f95b818b54cb741f2e5faa0e8d71d86447dc2c4f2ebe574fa0fe6fae  r11-sweep2.sh  (1535 B)
+37433f22b4ac759b55205f4506d7c7f936200e881eaf285d67a3b832d2cafd95  r11-sweep2.txt  (935 B)
+
+761ddf4c6983a9e92bcf623270dbf1b9416d8d4ced75cd63dbe64568f1afc129  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA11.txt (8901 B)
