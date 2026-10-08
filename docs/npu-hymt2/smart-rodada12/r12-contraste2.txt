@@ -1,0 +1,37 @@
+=== R12 CONTRASTE2 v11 (15:41:34Z) ===
+BUILD_RC=0 (se !=0: v11-link falhou; ver log)
+Success
+--- supports no v11 ---
+  SUPPORTS HTP0 m=Q4_0: SIM
+  SUPPORTS HTP0 m=Q4_K: SIM
+  SUPPORTS HTP0 m=Q6_K: SIM
+  SUPPORTS HTP0 m=Q4_0: SIM
+  SUPPORTS HTP0 m=Q4_K: SIM
+  SUPPORTS HTP0 m=Q6_K: SIM
+--- splits no v11 (controle; esperado: menos/zero splits CPU nas matmuls) ---
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    ## SPLIT #0: CPU # 0 inputs
+    ## SPLIT #1: HTP0 # 9 inputs
+    prefill=270.18ms gen=9356.94ms pp1=0.63ms wall=9629.2ms
+    prefill=270.18ms gen=9356.94ms pp1=0.63ms wall=9629.2ms
+--- RESTORE v12 ---
+RESTORE_RC=0
+Success
+R12_CONTRASTE2_DONE

@@ -1,0 +1,2103 @@
+--------- beginning of main
+10-08 12:33:18.350 I/NpuProbe(12619): nativeLibraryDir=/data/app/~~k-sqWv1b76V8LmSKmdVxqA==/br.gov.sp.pcsp.npuprobe-9joaf9k9VohDWEFgEww73A==/lib/arm64
+10-08 12:33:18.350 I/NpuProbe(12619): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:33:18.350 I/NpuProbe(12619): REPORT:
+10-08 12:33:18.350 I/NpuProbe(12619): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:33:18.350 I/NpuProbe(12619): AUTO-GATILHO='smart:sessao'
+10-08 12:33:18.350 I/NpuProbe(12619): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 12:33:18.350 I/NpuProbe(12619): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:33:18.350 I/NpuProbe(12619): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:33:18.423 I/NpuProbe(12619): SESSAO(951a2c9): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:33:18.425 I/NpuProbe(12619): PROMPT[0]: arquivo proprio (len=1101)
+--------- beginning of main
+10-08 12:33:18.350 I/NpuProbe(12619): nativeLibraryDir=/data/app/~~k-sqWv1b76V8LmSKmdVxqA==/br.gov.sp.pcsp.npuprobe-9joaf9k9VohDWEFgEww73A==/lib/arm64
+10-08 12:33:18.350 I/NpuProbe(12619): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:33:18.350 I/NpuProbe(12619): REPORT:
+10-08 12:33:18.350 I/NpuProbe(12619): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:33:18.350 I/NpuProbe(12619): AUTO-GATILHO='smart:sessao'
+10-08 12:33:18.350 I/NpuProbe(12619): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 12:33:18.350 I/NpuProbe(12619): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:33:18.350 I/NpuProbe(12619): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:33:18.423 I/NpuProbe(12619): SESSAO(951a2c9): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:33:18.425 I/NpuProbe(12619): PROMPT[0]: arquivo proprio (len=1101)
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp puro: ok=1 pieces=305 prefill=4366.41ms gen=29338.97ms pp1=0.36ms wall=33706.3ms
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp puro texto_len=1069 (integral no JSON)
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp lifecycle: load=573ms reset=1.96ms wall=33706.3ms
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 allocating new session
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5eed280
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #0: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #1: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [embd (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #2: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #3: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_5 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #4: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #5: HTP0 # 5 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-0 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_10 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-0 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_12 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_inp_kq_mask (   4K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #6: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #7: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #8: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #9: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #10: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #11: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #12: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #13: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-1 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-1 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #14: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #15: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #16: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #17: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #18: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #19: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #20: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #21: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-2 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-2 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #22: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #23: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #24: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #25: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #26: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #27: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #28: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #29: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-3 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-3 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #30: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #31: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #32: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #33: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #34: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #35: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #36: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #37: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-4 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-4 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #38: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #39: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #40: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #41: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #42: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #43: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #44: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #45: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-5 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-5 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #46: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #47: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #48: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #49: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #50: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #51: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #52: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #53: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-6 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-6 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #54: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #55: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #56: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #57: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #58: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #59: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #60: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #61: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-7 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-7 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #62: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #63: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #64: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #65: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #66: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #67: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #68: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #69: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-8 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-8 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #70: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #71: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #72: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #73: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #74: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #75: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #76: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #77: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-9 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-9 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #78: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #79: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #80: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #81: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #82: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #83: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #84: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #85: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-10 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-10 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #86: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #87: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #88: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #89: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #90: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #91: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #92: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #93: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-11 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-11 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #94: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #95: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #96: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #97: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #98: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #99: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #100: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #101: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-12 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-12 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #102: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #103: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #104: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #105: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #106: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #107: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #108: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #109: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-13 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-13 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #110: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #111: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #112: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #113: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #114: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #115: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #116: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #117: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-14 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-14 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #118: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #119: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #120: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #121: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #122: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #123: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-15 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #124: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #125: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-15 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-15 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #126: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #127: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [attn_out-15 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #128: CPU # 0 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #129: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [ffn_out-15 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #130: CPU # 0 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #131: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [Qcur-16 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #132: CPU # 0 inputs
+--------- beginning of main
+10-08 12:33:18.350 I/NpuProbe(12619): nativeLibraryDir=/data/app/~~k-sqWv1b76V8LmSKmdVxqA==/br.gov.sp.pcsp.npuprobe-9joaf9k9VohDWEFgEww73A==/lib/arm64
+10-08 12:33:18.350 I/NpuProbe(12619): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:33:18.350 I/NpuProbe(12619): REPORT:
+10-08 12:33:18.350 I/NpuProbe(12619): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:33:18.350 I/NpuProbe(12619): AUTO-GATILHO='smart:sessao'
+10-08 12:33:18.350 I/NpuProbe(12619): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 12:33:18.350 I/NpuProbe(12619): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:33:18.350 I/NpuProbe(12619): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:33:18.423 I/NpuProbe(12619): SESSAO(951a2c9): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:33:18.425 I/NpuProbe(12619): PROMPT[0]: arquivo proprio (len=1101)
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp puro: ok=1 pieces=305 prefill=4366.41ms gen=29338.97ms pp1=0.36ms wall=33706.3ms
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp puro texto_len=1069 (integral no JSON)
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp lifecycle: load=573ms reset=1.96ms wall=33706.3ms
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 allocating new session
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5eed280
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #0: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #1: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [embd (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #2: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #3: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_5 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #4: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #5: HTP0 # 5 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-0 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_10 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-0 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_12 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_inp_kq_mask (   4K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #6: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #7: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #8: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #9: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #10: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #11: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #12: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #13: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-1 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-1 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #14: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #15: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #16: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #17: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #18: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #19: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #20: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #21: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-2 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-2 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #22: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #23: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #24: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #25: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #26: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #27: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #28: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #29: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-3 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-3 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #30: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #31: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #32: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #33: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #34: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #35: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #36: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #37: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-4 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-4 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #38: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #39: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #40: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #41: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #42: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #43: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #44: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #45: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-5 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-5 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #46: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #47: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #48: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #49: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #50: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #51: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #52: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #53: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-6 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-6 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #54: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #55: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #56: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #57: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #58: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #59: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #60: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #61: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-7 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-7 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #62: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #63: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #64: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #65: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #66: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #67: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #68: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #69: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-8 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-8 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #70: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #71: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #72: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #73: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #74: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #75: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #76: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #77: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-9 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-9 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #78: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #79: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #80: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #81: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #82: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #83: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #84: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #85: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-10 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-10 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #86: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #87: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #88: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #89: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #90: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #91: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #92: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #93: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-11 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-11 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #94: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #95: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #96: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #97: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #98: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #99: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #100: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #101: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-12 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-12 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #102: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #103: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #104: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #105: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #106: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #107: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #108: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #109: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-13 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-13 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #110: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #111: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #112: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #113: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #114: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #115: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #116: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #117: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-14 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-14 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #118: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #119: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #120: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #121: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #122: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #123: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-15 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #124: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #125: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-15 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-15 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #126: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #127: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [attn_out-15 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #128: CPU # 0 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #129: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [ffn_out-15 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #130: CPU # 0 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #131: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [Qcur-16 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #132: CPU # 0 inputs
+--------- beginning of main
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp puro: ok=1 pieces=305 prefill=4366.41ms gen=29338.97ms pp1=0.36ms wall=33706.3ms
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp puro texto_len=1069 (integral no JSON)
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp lifecycle: load=573ms reset=1.96ms wall=33706.3ms
+10-08 12:33:52.706 I/NpuProbe(12619): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 allocating new session
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5eed280
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #0: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #1: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [embd (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #2: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #3: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_5 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #4: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #5: HTP0 # 5 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-0 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_10 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-0 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [leaf_12 (   0K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_inp_kq_mask (   4K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #6: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #7: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #8: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #9: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-0 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #10: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #11: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #12: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #13: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-1 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-1 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #14: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #15: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #16: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #17: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-1 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #18: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #19: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #20: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #21: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-2 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-2 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #22: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #23: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #24: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #25: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-2 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #26: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #27: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #28: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #29: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-3 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-3 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #30: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #31: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #32: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #33: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-3 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #34: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #35: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #36: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #37: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-4 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-4 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #38: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #39: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #40: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #41: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-4 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #42: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #43: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #44: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #45: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-5 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-5 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #46: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #47: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #48: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #49: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-5 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #50: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #51: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #52: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #53: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-6 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-6 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #54: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #55: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #56: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #57: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-6 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #58: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #59: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #60: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #61: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-7 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-7 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #62: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #63: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #64: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #65: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-7 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #66: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #67: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #68: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #69: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-8 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-8 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #70: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #71: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #72: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #73: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-8 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #74: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #75: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #76: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #77: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-9 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-9 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #78: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #79: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #80: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #81: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-9 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #82: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #83: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #84: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #85: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-10 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-10 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #86: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #87: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #88: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #89: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-10 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #90: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #91: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #92: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #93: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-11 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-11 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #94: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #95: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #96: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #97: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-11 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #98: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #99: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #100: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #101: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-12 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-12 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #102: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #103: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #104: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #105: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-12 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #106: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #107: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #108: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #109: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-13 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-13 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #110: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #111: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #112: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #113: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-13 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #114: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #115: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #116: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #117: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-14 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-14 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #118: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #119: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [attn_out-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #120: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #121: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [ffn_out-14 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #122: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #123: HTP0 # 1 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Qcur-15 (   8K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #124: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #125: HTP0 # 2 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Kcur-15 (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] [Vcur-15 (view) (   2K)] 
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #126: CPU # 0 inputs
+10-08 12:33:52.706 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.706 I/NpuProbe(12619): ## SPLIT #127: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [attn_out-15 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #128: CPU # 0 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #129: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [ffn_out-15 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #130: CPU # 0 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #131: HTP0 # 1 inputs
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] : 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] [Qcur-16 (   8K)] 
+10-08 12:33:52.707 I/NpuProbe(12619): [ggml] 
+10-08 12:33:52.707 I/NpuProbe(12619): ## SPLIT #132: CPU # 0 inputs
+--------- beginning of main
+10-08 12:41:17.209 I/NpuProbe( 2307): nativeLibraryDir=/data/app/~~3gGQck2unXFdp2i5FuFdTA==/br.gov.sp.pcsp.npuprobe-wbWCm5WiU-NJ9UnfyoUSmw==/lib/arm64
+10-08 12:41:17.209 I/NpuProbe( 2307): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:41:17.209 I/NpuProbe( 2307): REPORT:
+10-08 12:41:17.209 I/NpuProbe( 2307): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:41:17.209 I/NpuProbe( 2307): AUTO-GATILHO='smart:supports'
+10-08 12:41:17.210 I/NpuProbe( 2307): SMART iniciando rota=supports com /data/local/tmp/hymt2_app.gguf
+10-08 12:41:17.219 I/NpuProbe( 2307): SMARTv2 rota='supports' mutante=(none)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q6_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q5_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SMART REPORT:
+10-08 12:41:17.292 I/NpuProbe( 2307): SMART (supports)
+10-08 12:41:17.292 I/NpuProbe( 2307): 
+10-08 12:41:17.292 I/NpuProbe( 2307): SMARTv2 rota='supports' mutante=(none)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q6_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q5_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F32: SIM
+--------- beginning of main
+10-08 12:41:17.209 I/NpuProbe( 2307): nativeLibraryDir=/data/app/~~3gGQck2unXFdp2i5FuFdTA==/br.gov.sp.pcsp.npuprobe-wbWCm5WiU-NJ9UnfyoUSmw==/lib/arm64
+10-08 12:41:17.209 I/NpuProbe( 2307): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:41:17.209 I/NpuProbe( 2307): REPORT:
+10-08 12:41:17.209 I/NpuProbe( 2307): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:41:17.209 I/NpuProbe( 2307): AUTO-GATILHO='smart:supports'
+10-08 12:41:17.210 I/NpuProbe( 2307): SMART iniciando rota=supports com /data/local/tmp/hymt2_app.gguf
+10-08 12:41:17.219 I/NpuProbe( 2307): SMARTv2 rota='supports' mutante=(none)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q6_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q5_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SMART REPORT:
+10-08 12:41:17.292 I/NpuProbe( 2307): SMART (supports)
+10-08 12:41:17.292 I/NpuProbe( 2307): 
+10-08 12:41:17.292 I/NpuProbe( 2307): SMARTv2 rota='supports' mutante=(none)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q6_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q5_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F32: SIM
+--------- beginning of main
+10-08 12:41:17.209 I/NpuProbe( 2307): nativeLibraryDir=/data/app/~~3gGQck2unXFdp2i5FuFdTA==/br.gov.sp.pcsp.npuprobe-wbWCm5WiU-NJ9UnfyoUSmw==/lib/arm64
+10-08 12:41:17.209 I/NpuProbe( 2307): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:41:17.209 I/NpuProbe( 2307): REPORT:
+10-08 12:41:17.209 I/NpuProbe( 2307): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:41:17.209 I/NpuProbe( 2307): AUTO-GATILHO='smart:supports'
+10-08 12:41:17.210 I/NpuProbe( 2307): SMART iniciando rota=supports com /data/local/tmp/hymt2_app.gguf
+10-08 12:41:17.219 I/NpuProbe( 2307): SMARTv2 rota='supports' mutante=(none)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q6_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q5_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SMART REPORT:
+10-08 12:41:17.292 I/NpuProbe( 2307): SMART (supports)
+10-08 12:41:17.292 I/NpuProbe( 2307): 
+10-08 12:41:17.292 I/NpuProbe( 2307): SMARTv2 rota='supports' mutante=(none)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q4_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q6_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=Q5_K: NAO(skip)
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS HTP0 m=F32: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F16: SIM
+10-08 12:41:17.292 I/NpuProbe( 2307): SUPPORTS CPU m=F32: SIM
+--------- beginning of main
+10-08 12:43:09.803 I/NpuProbe( 6245): nativeLibraryDir=/data/app/~~5bCIn1gEbA1Ip0ysGyQOXg==/br.gov.sp.pcsp.npuprobe-EZi9m_5aCDjUb3nB-PAC2g==/lib/arm64
+10-08 12:43:09.803 I/NpuProbe( 6245): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:43:09.803 I/NpuProbe( 6245): REPORT:
+10-08 12:43:09.803 I/NpuProbe( 6245): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:43:09.803 I/NpuProbe( 6245): AUTO-GATILHO='smart:supports'
+10-08 12:43:09.803 I/NpuProbe( 6245): SMART iniciando rota=supports com /data/local/tmp/hymt2_app.gguf
+10-08 12:43:09.803 I/NpuProbe( 6245): SMARTv2 rota='supports' mutante=(none)
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SMART REPORT:
+10-08 12:43:09.862 I/NpuProbe( 6245): SMART (supports)
+10-08 12:43:09.862 I/NpuProbe( 6245): 
+10-08 12:43:09.862 I/NpuProbe( 6245): SMARTv2 rota='supports' mutante=(none)
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F32: SIM
+--------- beginning of main
+10-08 12:43:09.803 I/NpuProbe( 6245): nativeLibraryDir=/data/app/~~5bCIn1gEbA1Ip0ysGyQOXg==/br.gov.sp.pcsp.npuprobe-EZi9m_5aCDjUb3nB-PAC2g==/lib/arm64
+10-08 12:43:09.803 I/NpuProbe( 6245): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:43:09.803 I/NpuProbe( 6245): REPORT:
+10-08 12:43:09.803 I/NpuProbe( 6245): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:43:09.803 I/NpuProbe( 6245): AUTO-GATILHO='smart:supports'
+10-08 12:43:09.803 I/NpuProbe( 6245): SMART iniciando rota=supports com /data/local/tmp/hymt2_app.gguf
+10-08 12:43:09.803 I/NpuProbe( 6245): SMARTv2 rota='supports' mutante=(none)
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SMART REPORT:
+10-08 12:43:09.862 I/NpuProbe( 6245): SMART (supports)
+10-08 12:43:09.862 I/NpuProbe( 6245): 
+10-08 12:43:09.862 I/NpuProbe( 6245): SMARTv2 rota='supports' mutante=(none)
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F32: SIM
+--------- beginning of main
+10-08 12:43:09.803 I/NpuProbe( 6245): nativeLibraryDir=/data/app/~~5bCIn1gEbA1Ip0ysGyQOXg==/br.gov.sp.pcsp.npuprobe-EZi9m_5aCDjUb3nB-PAC2g==/lib/arm64
+10-08 12:43:09.803 I/NpuProbe( 6245): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:43:09.803 I/NpuProbe( 6245): REPORT:
+10-08 12:43:09.803 I/NpuProbe( 6245): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:43:09.803 I/NpuProbe( 6245): AUTO-GATILHO='smart:supports'
+10-08 12:43:09.803 I/NpuProbe( 6245): SMART iniciando rota=supports com /data/local/tmp/hymt2_app.gguf
+10-08 12:43:09.803 I/NpuProbe( 6245): SMARTv2 rota='supports' mutante=(none)
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SMART REPORT:
+10-08 12:43:09.862 I/NpuProbe( 6245): SMART (supports)
+10-08 12:43:09.862 I/NpuProbe( 6245): 
+10-08 12:43:09.862 I/NpuProbe( 6245): SMARTv2 rota='supports' mutante=(none)
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS HTP0 m=F32: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_0: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q4_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q6_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=Q5_K: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F16: SIM
+10-08 12:43:09.862 I/NpuProbe( 6245): SUPPORTS CPU m=F32: SIM
+10-08 12:43:45.560 I/NpuProbe(11395): nativeLibraryDir=/data/app/~~5bCIn1gEbA1Ip0ysGyQOXg==/br.gov.sp.pcsp.npuprobe-EZi9m_5aCDjUb3nB-PAC2g==/lib/arm64
+10-08 12:43:45.560 I/NpuProbe(11395): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:43:45.560 I/NpuProbe(11395): REPORT:
+10-08 12:43:45.560 I/NpuProbe(11395): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:43:45.560 I/NpuProbe(11395): AUTO-GATILHO='smart:sessao'
+10-08 12:43:45.560 I/NpuProbe(11395): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 12:43:45.560 I/NpuProbe(11395): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:43:45.560 I/NpuProbe(11395): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:43:45.578 I/NpuProbe(11395): SESSAO(95b349c): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:43:45.580 I/NpuProbe(11395): PROMPT[0]: arquivo proprio (len=1101)
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp puro: ok=1 pieces=300 prefill=270.18ms gen=9356.94ms pp1=0.63ms wall=9629.2ms
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp puro texto_len=1053 (integral no JSON)
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp lifecycle: load=2094ms reset=1.94ms wall=9629.2ms
+10-08 12:43:57.306 I/NpuProbe(11395): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Hexagon Arch version v81, DMA64 enabled
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 allocating new session : domain 3 phys-idx 0 virt-idx 0
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000076deeb7c00
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 8192 n-ops 1280 vmem 3311845376
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask ( 128K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 256K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (  64K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   2K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): fim (1 requests)
+10-08 12:43:57.373 I/NpuProbe(11395): SMART REPORT:
+10-08 12:43:57.373 I/NpuProbe(11395): SMART (sessao)
+10-08 12:43:57.373 I/NpuProbe(11395): 
+10-08 12:43:57.373 I/NpuProbe(11395): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:43:57.373 I/NpuProbe(11395): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:43:57.373 I/NpuProbe(11395): PROMPT[0]: arquivo proprio (len=1101)
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp puro: ok=1 pieces=300 prefill=270.18ms gen=9356.94ms pp1=0.63ms wall=9629.2ms
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp puro texto_len=1053 (integral no JSON)
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp lifecycle: load=2094ms reset=1.94ms wall=9629.2ms
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): fim (1 requests)
+--------- beginning of main
+10-08 12:43:45.560 I/NpuProbe(11395): nativeLibraryDir=/data/app/~~5bCIn1gEbA1Ip0ysGyQOXg==/br.gov.sp.pcsp.npuprobe-EZi9m_5aCDjUb3nB-PAC2g==/lib/arm64
+10-08 12:43:45.560 I/NpuProbe(11395): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:43:45.560 I/NpuProbe(11395): REPORT:
+10-08 12:43:45.560 I/NpuProbe(11395): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:43:45.560 I/NpuProbe(11395): AUTO-GATILHO='smart:sessao'
+10-08 12:43:45.560 I/NpuProbe(11395): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 12:43:45.560 I/NpuProbe(11395): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:43:45.560 I/NpuProbe(11395): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:43:45.578 I/NpuProbe(11395): SESSAO(95b349c): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:43:45.580 I/NpuProbe(11395): PROMPT[0]: arquivo proprio (len=1101)
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp puro: ok=1 pieces=300 prefill=270.18ms gen=9356.94ms pp1=0.63ms wall=9629.2ms
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp puro texto_len=1053 (integral no JSON)
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp lifecycle: load=2094ms reset=1.94ms wall=9629.2ms
+10-08 12:43:57.306 I/NpuProbe(11395): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Hexagon Arch version v81, DMA64 enabled
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 allocating new session : domain 3 phys-idx 0 virt-idx 0
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000076deeb7c00
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 8192 n-ops 1280 vmem 3311845376
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask ( 128K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 256K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (  64K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   2K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): fim (1 requests)
+10-08 12:43:57.373 I/NpuProbe(11395): SMART REPORT:
+10-08 12:43:57.373 I/NpuProbe(11395): SMART (sessao)
+10-08 12:43:57.373 I/NpuProbe(11395): 
+10-08 12:43:57.373 I/NpuProbe(11395): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:43:57.373 I/NpuProbe(11395): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:43:57.373 I/NpuProbe(11395): PROMPT[0]: arquivo proprio (len=1101)
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp puro: ok=1 pieces=300 prefill=270.18ms gen=9356.94ms pp1=0.63ms wall=9629.2ms
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp puro texto_len=1053 (integral no JSON)
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp lifecycle: load=2094ms reset=1.94ms wall=9629.2ms
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): fim (1 requests)
+--------- beginning of main
+10-08 12:43:45.560 I/NpuProbe(11395): nativeLibraryDir=/data/app/~~5bCIn1gEbA1Ip0ysGyQOXg==/br.gov.sp.pcsp.npuprobe-EZi9m_5aCDjUb3nB-PAC2g==/lib/arm64
+10-08 12:43:45.560 I/NpuProbe(11395): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 12:43:45.560 I/NpuProbe(11395): REPORT:
+10-08 12:43:45.560 I/NpuProbe(11395): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 12:43:45.560 I/NpuProbe(11395): AUTO-GATILHO='smart:sessao'
+10-08 12:43:45.560 I/NpuProbe(11395): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 12:43:45.560 I/NpuProbe(11395): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:43:45.560 I/NpuProbe(11395): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:43:45.578 I/NpuProbe(11395): SESSAO(95b349c): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:43:45.580 I/NpuProbe(11395): PROMPT[0]: arquivo proprio (len=1101)
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp puro: ok=1 pieces=300 prefill=270.18ms gen=9356.94ms pp1=0.63ms wall=9629.2ms
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp puro texto_len=1053 (integral no JSON)
+10-08 12:43:57.305 I/NpuProbe(11395): SESS[0] puro:htp lifecycle: load=2094ms reset=1.94ms wall=9629.2ms
+10-08 12:43:57.306 I/NpuProbe(11395): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: FASTRPC_GET_DOMAINS query failed (0x14), using static CDSP domains
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: Hexagon Arch version v81, DMA64 enabled
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: device 0: HTP0 (phys=0, virt=0, domain=cdsp:3)
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 allocating new session : domain 3 phys-idx 0 virt-idx 0
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000076deeb7c00
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 8192 n-ops 1280 vmem 3311845376
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.306 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1M)] 
+10-08 12:43:57.306 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   8K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.307 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_1 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [node_2 (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [embd (   1M)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   1K)] 
+10-08 12:43:57.307 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask ( 128K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd ( 512K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs ( 256K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (  64K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   1K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #0: CPU # 0 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] 
+10-08 12:43:57.308 I/NpuProbe(11395): ## SPLIT #1: HTP0 # 9 inputs
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] : 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_1 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_mixed_slots (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [node_2 (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [embd (   8K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [inp_pos (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_k_idxs (   0K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_v_idxs (   4K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [attn_inp_kq_mask (   2K)] 
+10-08 12:43:57.308 I/NpuProbe(11395): [ggml] [out_ids (   0K)] 
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): fim (1 requests)
+10-08 12:43:57.373 I/NpuProbe(11395): SMART REPORT:
+10-08 12:43:57.373 I/NpuProbe(11395): SMART (sessao)
+10-08 12:43:57.373 I/NpuProbe(11395): 
+10-08 12:43:57.373 I/NpuProbe(11395): SMARTv2 rota='sessao' mutante=(none)
+10-08 12:43:57.373 I/NpuProbe(11395): TUNE: GGML_SCHED_DEBUG=1
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 12:43:57.373 I/NpuProbe(11395): PROMPT[0]: arquivo proprio (len=1101)
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp puro: ok=1 pieces=300 prefill=270.18ms gen=9356.94ms pp1=0.63ms wall=9629.2ms
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp puro texto_len=1053 (integral no JSON)
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp lifecycle: load=2094ms reset=1.94ms wall=9629.2ms
+10-08 12:43:57.373 I/NpuProbe(11395): SESS[0] puro:htp RESULTADO: PURO-EXECUTADO
+10-08 12:43:57.373 I/NpuProbe(11395): SESSAO(95b349c): fim (1 requests)

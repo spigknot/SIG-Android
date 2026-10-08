@@ -1,0 +1,62 @@
+ORDENS AO EXECUTOR — SMART RODADA 12
+VERIFICAR MUL_MAT Q4_K/Q6_K NA CPU ANTES DE OTIMIZAR COPIAS
+===============================================================================
+
+PARECER DO ESPECIALISTA — NOVA EVIDENCIA CONCRETA
+O especialista leu o perfil R11, o sweep2 e o fonte local SIG ggml-hexagon.cpp. Nao executou o aparelho. Encontrou um bloqueio de suporte que precisa ser verificado no binario implantado ANTES de tratar copies sincronos como causa raiz.
+
+No fonte SIG:
+- ggml-hexagon.cpp:2783-2853, ggml_hexagon_supported_mul_mat;
+- switch src0->type: Q4_0, Q4_1, Q8_0, IQ4_NL, MXFP4, F16, F32;
+- Q4_K e Q6_K NAO entram em nenhum case; default retorna false (2841-2842).
+- tipos de repack/HMX (210-218) tambem nao incluem Q4_K/Q6_K.
+O Q4_K_M produto c4bf historicamente tem matrizes Q4_K/Q6_K. Portanto o fonte lido REJEITA esses MUL_MAT para o HTP. Se o binario R11 corresponde a esse fonte, as multiplicacoes podem estar caindo na CPU e o DSP apenas executando normas, RoPE, attention etc.
+
+Conferencia programatica do npuprobe-r11.log:
+Profile contem OPBATCH, RMS_NORM+MUL, ROPE, SET_ROWS, FLASH_ATTN_EXT, ADD; ZERO linhas profile de MUL_MAT. Counts brutos podem conter duplicacoes REPORT e nao sao total exclusivo de ops. Isso e compativel com fallback das matrizes, nao prova por si so todo placement.
+
+1. PRIORIDADE IMEDIATA: CONFIRMAR PLACEMENT DO MODELO REAL
+Congelar SHA/source correspondente ao cohort baseline R11 e comparar supports_op com trecho acima. Se binario diferente, entregar fonte exato/manifest/diff: nao usar copia local como prova do binario sem hash.
+No app separado, capturar scheduler/backend placement REAL no prefill de c4bf: por tipo de op, dtype de peso, camada, shapes e backend efetivo. GGML_SCHED_DEBUG se existir nesse pin e suficiente; senao instrumentacao pontual por split/node com saida compacta fora locks. Contar MUL_MAT Q4_K/Q6_K CPU versus HTP, tempo por split quando observavel, bytes de transferencias e waits. Verificar fallback tambem no output/lm-head; n_gpu_layers=999 ou nome HTP0 nao provam todos os pesos/ops no DSP.
+Probe/test-backend-ops com fixtures pequenas Q4_K/Q6_K deve perguntar suporte e rodar numerica APENAS quando suporta; reporte SKIP verdadeiro, nao PASS com CPU silenciosa. Comparar com upstream rapido com modelo c4bf e mesmos casos: ele tem suporte real a essas quantizacoes? Confirmar placement, nao generalizar benchQ4_0 antigo.
+Controle Q4_0 suportado em ambos cohorts pode separar limitacao K-quant do transporte/compute, SOMENTE harness isolado com modelo autorizado e SHA pinado. Nao baixar/modelcopiarGB sem necessidade nem trocar modelo c4bf no SIG. Q4_0 nao valida produto Q4_K_M.
+
+2. RETIFICACOES DO PERFIL R11
+- prefill=7180.85ms e um intervalo end-to-end de llama_decode, nao tempo CPU medido exclusivamente. Pode incluir CPU compute/fallback, transferencias, espera, DSP, perfil, locks e startup.
+- somar uma AMOSTRA de ops DSP nao mede prefill inteiro. Separar request/prefill/decode/chunk/batch, filtrar exclusivamente janela correta e deduplicar REPORT. O log entrega 305 pieces nessa sessao: nao chamar esse perfil de 'prompt curto' sem identidade de prompt/nt/chunks; amostra tem dimensoes 2048:128.
+- OPBATCH e tempos de ops internas sao aninhados: NAO somar os dois como exclusivos. Eventos/multithread podem sobrepor; explicar coverage e relacao de tempos. Start op e uint32 enquanto batch uint64, wrap deve ser tratado se correlacionar ciclos.
+- compute DSP ~10ms estimado nao exclui CPU MUL_MAT. '700x => copies' NAO e inferencia valida.
+- ausencia de cpy_tensor_async no core e diferenca arquitetural, nao prova que copies dominam. Causa 'async exige core novo' permanece HIPOTESE ate medir tempo/volume/timeline de copias e placement.
+- relatorio sweep2 nao tem T2 warm completo; varios trechos T1/T2 repetem resultados anteriores. Agrupar por session/request/build/config efetiva, completion marker e logs integrais, nao trecho tail com linhas herdadas. Nao generalizar 'nenhum env muda' sem denominadores/controles suficientes.
+
+3. DECISAO DE CANDIDATO APOS O DADO
+A. Se MUL_MAT K-quant fica CPU:
+Priorizar suporte correto Q4_K/Q6_K no HTP compativel com coreSIG ou um backend de historico compatível que suporte os tipos, antes otimizar memcpy pequena. Identificar dependencias coerentes host/DSP, unpack/dequant/repack, dispatch, kernels e protocolos. Nao apenas acrescentar dois cases supports_op: kernel/repack/layout/numerica devem existir e ser validados.
+Candidato minimo em copia isolada, FULL rebuild cohort/skel/binding/APK, GPU/Whisper/core fora allowlist preservados. Testes numéricos de matrizes contra CPU nos shapes Hy-MT2, VTCM/dimensoes limites, quantizacao, finite, rejeicao honesta unsupported. Depois grafo c4bf real, curto/ABA/reset e placement confirmado.
+Se backport K-quant nao pequeno/compativel, entregar design/risco/contratos bloqueantes e alternativa historica; nao renovar promessa de 'patchcopies' sem pertinencia.
+
+B. Se MUL_MAT K-quant ja roda HTP e prova rejeicao do fonte nao corresponde ao build:
+Esclarecer provenance primeiro e medir tempos exclusivos hostcopies/submission/wait/CPU fallback/DSP coverage. So otimizar copies se dominancia medida.
+Para patchcopies: buffers/eventlifetimes, ownership, sync/fence e fallback IN-ORDER seguro, cancel/unload/errorcleanup, nunca reduzirwait sem assegurarcompletion. Reusar licoesOpenCLguard sem copiar API inexistente. Nenhum stub assincrono que roda sync e se declara ganho.
+
+4. ENTREGAVEL PRATICO DESTA RODADA
+Nao quero outra rodada limitada a 'hipotese na fila'. Primeiro entregar placement Q4_K/Q6_K confirmado e teste support contrastado baseline/upstream. Entao construir/exercitar o candidato escolhido ou apresentar blocker tecnicamente preciso.
+Pode executar perfil frio/warm com PROFILE=0 para benchmark e PROFILE=1 somente diagnostico, poucas reps no mesmo corpus/config/estado. Instrumentacao fora locks/FastRPC com logs bufferizados, counts e limitesmemoria para nao alterar mecanismo medido.
+HTP nome nao basta: identidade efetiva no modo NPU e Smart registra fallback ops e backenddecode. Se baseline e majoritariamente CPU em matmul, retificar relatos anteriores 'NPUinteira' como 'HTP+CPUfallback pesado' no escopo desse build/modelo, sem apagar evidencias CLI upstream verdadeiro.
+
+5. NUMERICA EM PARALELO, NAO MAIS ADIADA
+Capturar vetores/metricas completas em poucos checkpoints para GPU-puro versus GPU-importado sob MESMO prefixo. Logsumexp/probs e erro centralizado como design, holdout e fixture negativa. Top5 sozinho nao reconstrói distribuicao. Criterio nao sob medida; manter estrito/tolerado separados.
+Nao repetir ABA baselines ja fechados, revalidar candidato relevante. Preservar fixtures forma/chunkflow/init/JSON e labels; texto integral/hash/stop/EOG/cap, sembenchmarkcomespelho. Nenhum ganho de escala alegado ate bench952 semespelho.
+
+6. SEGURANCA / ESCOPO / ENTREGA
+App-id separado e serial explicitamente aprovado, PJA110 fora escopo; sem uninstall/clear SIG, root/governor/bypass, UI/release/R2/Whisperpatch. c4bf/defaultVulkan/stayon7 usuario preservados. WIP alheio intacto. Backup/restore cohort e config com readback; hashes full e maps libs.
+Em docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA12.txt A-H:
+A identidade de fonte/binario/model/config;
+B suporta Q4_K/Q6_K? teste numerico/skip e placement por backend;
+C CPU/DSP/copies/wait profilecoverage, timers e retificacoes R11;
+D candidato focal determinado pelo dado, build/runtime/REDGREEN ou blocker;
+E coleta numerica real/prefixos/envelope/fixture;
+F microperf e bench experimental se criterio seguro, cold/warm separados;
+G preservacao e probe!=produto;
+H conclusao por rota e proximo passo objetivo.
+Logs docs/npu-hymt2/smart-rodada12/ fullSHAmanifest, sessao/requestIDs, contas exclusivas e exits por script. Memoria/cooldown/cap/timeout seguros; estado deviceidle separado de wakefulness. Nao declarar copiaassincrona como causa comprovada antes excluir matmulCPU e medir volume/tempo real.

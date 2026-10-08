@@ -1,0 +1,8 @@
+=== R12 SCHED PLACEMENT (15:32:21Z) ===
+--- resumo (contagens exclusivas) ---
+linhas [ggml] na janela: 297
+MUL_MAT mencionados: 0
+MUL_MAT..HTP0: 0
+MUL_MAT..CPU: 0
+--- amostra do dump (primeiras linhas de assignments) ---
+R12_SCHED_DONE

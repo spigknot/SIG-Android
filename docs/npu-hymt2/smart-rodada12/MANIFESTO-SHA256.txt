@@ -1,0 +1,19 @@
+MANIFESTO SHA-256 — smart-rodada12 (08/10/2026)
+
+SUPORTE (medido): SIG HTP0 Q4_K/Q5_K/Q6_K=NAO(skip), Q4_0/F16/F32=SIM; v11 HTP0 Q4_K/Q6_K=SIM.
+PLACEMENT: SIG splits CPU<->HTP alternando; v11 = CPU(0)+HTP0(9 inputs) unico.
+PREFILL: v11 270.18ms (cold!) vs SIG 800-1440ms -> causa = matmul K-quant na CPU.
+BACKPORT K-quant medido: ~10.9k linhas diff (matmul-ops+htp-ops+kernels) = port GRANDE.
+RETIFICACOES R11: e2e != DSP; '10ms'=non-matmul; '700x=>copies' RETIRADO.
+RELATOS 'NPU inteira' (builds SIG/modelo c4bf): recalibrados para 'HTP+CPU-fallback'.
+
+560da5922b869437f97b456a97ffcc2c6b4bd162562ae1a3ac989cc8e536e8fb  SPLITS-DUMP.txt  (30990 B)
+53bf4646cde6220df0d13a074c77ce672cf04c3f0126d9b45c13372f0e49f6a3  SUPPORTS-TESTE.txt  (9204 B)
+361d38c2f5d80011dda920d0ef1d570c149d7181192cc4561fd942b78d83f5be  npuprobe-r12.log  (136134 B)
+b3b5c8f4da43dd87b0a85d9c00b0538cd50d13a0581d8c769a5a2dde7aa9e20e  r12-contraste.txt  (234 B)
+03c010f4e8f2052c024ffb8108cbae2a68bfdbb76adf65f339b25a733c38890d  r12-contraste2.sh  (3142 B)
+a030e4e4d7109b5355d2f1453e4364a660117c217edfced499f147c1d969fa72  r12-contraste2.txt  (1196 B)
+4777c8769369ebeba99a942bb06dc4926ba5ff82fab745ed19f3b9dd28614336  r12-sched.sh  (1596 B)
+3fc66d69e9b0a11c27dca9ac4255462a1b00fc429bed68a24e86014babfe8bc9  r12-sched.txt  (236 B)
+
+3a9183065657917f86d5159362f15258309bd8d22aaa054dbba9ec1648dfccb7  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA12.txt (9547 B)

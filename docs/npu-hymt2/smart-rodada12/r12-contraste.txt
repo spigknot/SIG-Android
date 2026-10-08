@@ -1,0 +1,9 @@
+=== R12 CONTRASTE v11 (15:34:59Z) ===
+--- deploy v11 ---
+BUILD_RC=1
+adb.exe: failed to install app/build/outputs/apk/debug/app-debug.apk: 
+--- splits no v11 (controle) ---
+--- RESTORE v12 ---
+RESTORE_RC=0
+Success
+R12_CONTRASTE_DONE

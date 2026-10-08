@@ -1,0 +1,155 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 12
+=========================================================================
+Data: 08/10/2026. Executor: agente. Ordens: "VERIFICAR MUL_MAT Q4_K/Q6_K NA
+CPU ANTES DE OTIMIZAR COPIAS". Sem UI/produto/R2/release; SIG intacto.
+
+RESUMO EXECUTIVO: (1) O BLOQUEIO DE SUPORTE APONTADO FOI CONFIRMADO EM 4
+CAMADAS INDEPENDENTES: fonte (switch sem Q4_K/Q5_K/Q6_K -> default false),
+perfil R11 (ZERO MUL_MAT nos profile-ops do DSP), sched-dump GGML_SCHED_DEBUG
+(splits CPU<->HTP alternando) e TESTE EXPLICITO de suporte no device
+(SUPPORTS HTP0 Q4_K/Q5_K/Q6_K = NAO/SKIP verdadeiro; CPU = SIM; Q4_0/F16/F32
+= SIM no HTP). => As MUL_MAT do c4bf (Q4_K_M) rodam na CPU; o DSP executa
+normas/RoPE/attention. A hipotese "copies sincronos = causa raiz" do R11 foi
+RETIRADA (a causa e' o fallback de matmul). (2) Contraste upstream em anexo
+(o v11 suporta os K-quants no fonte: cases Q2..Q6_K + check de neumann).
+(3) Backport K-quant MEDIDO: ~10.900 linhas de diff (matmul-ops.c/h + kernels
+hmx/hvx + htp-ops.h/protocolo) = port GRANDE, nao-patch -> entregue como
+design/risco com contratos bloqueantes + alternativas (decisao maior).
+
+-----------------------------------------------------------------------
+A. IDENTIDADE FONTE/BINARIO/MODEL/CONFIG
+-----------------------------------------------------------------------
+A.1 Fonte SIG lido no ponto exato (ggml-hexagon.cpp:2783-2853,
+    ggml_hexagon_supported_mul_mat): cases Q4_0/Q4_1/Q8_0/IQ4_NL/MXFP4/F16/
+    F32; SEM Q4_K/Q5_K/Q6_K/Q3_K/Q2_K; default: return false (2841-42).
+    Tipos de repack/HMX (210-218) idem. CADEIA BINARIO<->FONTE: o cohort
+    baseline e' o build-smart12b do MESMO /root/sig-smart/llama (script em
+    docs/npu-hymt2/smart-rodada4/); shas das libs no manifesto (hexagon
+    dc88db2d...). O teste SUPPORTS roda no APK desse binario (v19e) => o
+    fonte lido CORRESPONDE ao implantado (supports medido == supports do
+    codigo).
+A.2 Modelo c4bf (Q4_K_M; matrizes Q4_K/Q6_K), config do probe (n_ctx 2048,
+    FA off, chunk 128), stayon 7, keep-awake; nada alterado no SIG.
+
+-----------------------------------------------------------------------
+B. SUPORTA Q4_K/Q6_K? TESTE E PLACEMENT POR BACKEND
+-----------------------------------------------------------------------
+B.1 TESTE EXPLICITO (modo "supports" novo no probe; fixtures ggml tiny
+    256x4 por tipo; ggml_backend_dev_supports_op; SKIP verdadeiro):
+      HTP0: Q4_0=SIM  Q4_K=NAO(skip)  Q6_K=NAO(skip)  Q5_K=NAO(skip)
+            F16=SIM  F32=SIM
+      CPU : Q4_0..Q6_K/F16/F32 = SIM (o fallback aceita)
+B.2 PLACEMENT no prefill do c4bf:
+      - GGML_SCHED_DEBUG=1 (tune preinit!) => dump "## SPLIT #N: <backend>":
+        padrao CPU <-> HTP0 alternando (ex.: #0 CPU, #1 HTP0, #2 CPU, #3
+        HTP0, #4 CPU, #5 HTP0...) — as matmuls nos splits CPU;
+      - perfil R11: nenhum profile-op MUL_MAT no DSP (so RMS/ROPE/SET_ROWS/
+        FLASH_ATTN/ADD) — consistente;
+      - source: case ausente + default false — consistente.
+    CONCLUSAO B: placement CONFIRMADO; Q4_K/Q6_K na CPU no build SIG.
+B.3 CONTRASTE UPSTREAM (cohort v11, MESMO probe/mesmo teste/tune):
+      SUPPORTS HTP0: Q4_0=SIM  Q4_K=SIM  Q6_K=SIM (!!)
+      GGML_SCHED_DEBUG: splits = [CPU(0 inputs), HTP0(9 inputs!)] —
+        o grafo INTEIRO das matmuls num unico split HTP (sem alternancia!)
+      prefill = 270.18ms (1a execucao da sessao = inclusive cold!)
+      vs SIG: Q4_K/Q6_K=NAO, alternancia CPU/HTP, prefill 800-1440ms.
+    => A/B DIRETO E CONCLUSIVO: a diferenca de prefill (~3-5x warm; ~24x
+    cold) e' explicada pelo SUPORTE de matmul K-quant (placement CPU vs
+    DSP). "Copies" retirado (C.3). Q4_0 = suportado nos DOIS (controle;
+    nao valida o produto Q4_K_M).
+
+-----------------------------------------------------------------------
+C. PROFILE COVERAGE / TIMERS / RETIFICACOES R11
+-----------------------------------------------------------------------
+C.1 prefill=7180.85ms (R11) era intervalo END-TO-END de llama_decode (CPU
+    compute/fallback + transferencias + espera + DSP + perfil + startup) —
+    NAO tempo exclusivo de DSP. Retificado.
+C.2 "DSP ~10ms" do R11: media apenas as ops NAO-matmul (normas/RoPE/att!)
+    — NAO exclui a CPU nas MUL_MAT. Retificado.
+C.3 "700x => copies" (R11): RETIRADO como inferencia causal. A causa
+    dominante e' o fallback de matmul na CPU (B). A diferenca
+    cpy_tensor_async continua sendo diferenca ARQUITETURAL (fato), sem
+    alegacao de dominancia.
+C.4 OPBATCH/aninhamento: os tempos de ops sao ANINHADOS no batch — nao
+    somar como exclusivos (R11 anotado). Start (u32) vs batch (u64): wrap
+    tratado como nota ao correlacionar ciclos (nao usado como soma).
+C.5 Sweep2: T2 warm incompleto no relatorio; trechos T1/T2 herdaram
+    resultados por janela — agrupar por session/request (nota de metodo);
+    "nenhum env muda" mantido com denominadores por run (cold ~6.0-6.5s /
+    warm ~1.15-1.39s consistentes).
+
+-----------------------------------------------------------------------
+D. CANDIDATO FOCAL DETERMINADO PELO DADO
+-----------------------------------------------------------------------
+D.1 DADO => o caminho correto NAO e' otimizar copies; e' SUPORTAR
+    Q4_K/Q6_K no HTP. ESCOPO medido do backport (SIG vs upstream):
+      matmul-ops.c 3979 vs 4729 linhas (diff 8708);
+      matmul-ops.h 783 vs 891 (diff 1674);
+      htp-ops.h 237 vs 269 (diff 506 — o PROTOCOLO host<->skel/opcodes!);
+      hmx/hvx-mm-kernels-tiled.h: 1378/1200 vs 1554/1550.
+    => ~10-11k linhas em familia acoplada (dispatcher+kernels+protocolo+
+    repack/dequant/layout) = NAO e' patch pequeno. Exigiria tambem os
+    opcodes de DSP correspondentes e validacao numerica por shape.
+D.2 ENTREGAVEIS conforme a ordem §3-A: (a) design/risco/contratos
+    bloqueantes (os 4 contratos: opcodes htp-ops.h, dispatcher matmul-ops,
+    kernels tiled HMX/HVX, repack/layout K-quant + numerica por shape);
+    (b) alternativas historicas: cohort UPSTREAM v11 (prefill 72-104ms
+    comprovado!) como base — custo: perde o patchset Vulkan SIG (o
+    Smart-VK exige o patchset; o Smart-OC do v11 e' funcional — R7!);
+    (c) decisao GRANDE (core/allowlist/risco) = do usuario/especialista,
+    sem hacks de assinatura. NADA construido nesta rodada (por desenho:
+    'não apenas adicionar dois cases supports_op' — kernel/repack/layout/
+    numerica devem existir e ser validados).
+D.3 Alternativa de patch pequeno FUTURA (se desejada): suportar APENAS
+    Q4_K/Q6_K (nao a familia inteira) com kernels existentes no upstream
+    para os shapes Hy-MT2 — ainda exige o protocolo (opcodes) e kernels;
+    registrar como 'patch novo PENDENTE' com este escopo, jamais como
+    'copies' (retificado).
+
+-----------------------------------------------------------------------
+E. COLETA NUMERICA (paralelo) — ESTADO
+-----------------------------------------------------------------------
+E.1 DESIGN-NUMERICO mantido; coleta real (vetores por checkpoint, GPU-puro
+    vs GPU-importado sob MESMO prefixo, logsumexp host, erro centralizado,
+    holdout, fixture negativa) = implementacao pendente declarada (a ordem
+    pede NAO mais adiar: e' o proximo item de codigo do probe/host; sem
+    tocar as fixtures formais existentes: forma/chunkflow/init/JSON).
+E.2 Nada reclassificado; ABA baselines nao repetidos; candidato futuro
+    revalidara.
+
+-----------------------------------------------------------------------
+F. MICROPERF EXPERIMENTAL
+-----------------------------------------------------------------------
+F.1 Sem novidade valida nesta rodada alem do F.1 do R11 (cold/warm
+    separados; labels EXPLORATORIO). Bench 952 sem espelho nao executado
+    (criterio: depende do candidato D). gen_ms do espelho fora de perf.
+
+-----------------------------------------------------------------------
+G. PRESERVACAO / PROBE != PRODUTO
+-----------------------------------------------------------------------
+G.1 Vulkan/OpenCL/reset/loadercache intactos (cohort v12 RESTAURADO apos
+    contraste; verificacao de sha). Whisper nao testado. F2/CI sem
+    mudanca. c4bf/defaultVulkan/stayon7 preservados; WIP alheio intacto.
+G.2 RETIFICACAO DE RELATOS ANTERIORES (ordem §4): no build/modelo atuais,
+    os relatos de "NPU inteira" que dependem de MUL_MAT devem ser lidos
+    como "HTP + CPU-fallback pesado nas matmuls" (ex.: P4/persistencia
+    anteriores). As evidencias CLI do upstream verdadeiro (prefill 72-104
+    com matmul no DSP) PERMANECEM validas para AQUELE cohort. Sem apagar
+    evidencias de nenhum lado.
+
+-----------------------------------------------------------------------
+H. CONCLUSAO POR ROTA / PROXIMO PASSO
+-----------------------------------------------------------------------
+H.1 HTP: BLOQUEIO DE SUPORTE CONFIRMADO (4 camadas) => a lentidao
+    dominante do prefill no build SIG e' CPU-fallback de matmul. "Copies"
+    nao era a causa (retificado). Caminhos: backport K-quant (grande,
+    design D.2) OU base upstream (perde Vulkan-patch). DECISAO MAIOR
+    PENDENTE (usuario/especialista) com objetos precisos.
+H.2 Smart OC/VK: corretude fechada (R10); perf do Smart depende do HTP
+    (D). Numerica: coleta pendente (E.1 = proximo codigo).
+H.3 Proximo passo objetivo imediato: implementar a coleta numerica real
+    (E.1) enquanto a decisao do candidato K-quant e' tomada; nada de
+    otimizar copies antes. Sem UI.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada12/ (r12-sched, r12-contraste*,
+supports do log, perfil R11 referenciado, scripts) + manifesto.
