@@ -1,0 +1,18 @@
+MANIFESTO SHA-256 — smart-rodada13 (08/10/2026)
+
+ARQUEOLOGIA: #28994=1ec818809 (~880 linhas, 7 arquivos hexagon; core intocado); SIG-hexagon diverge ~11k do parent => port adaptado.
+NUMERICA N1 (952; dst=opencl src=htp ref=cpu): 301/301 passos; div=1 (0,33%); e_dr=1,082/0,531; e_sr=1,186/0,674; e_ds=0,886/0,504; fin=111.
+Envelope: e_dr p50=0,498 max=0,782; e_sr p50=0,702 max=0,987; e_ds p50=0,469 max=0,663.
+Divergencia unica pos=128 (margem 0,004 << envelope) — assinatura R9; import fiel no envelope.
+PENDENTE device-off: N2 perturba (fixture negativa) e N3 repeat GPU (calibracao).
+RETIFICACAO: 270,18 vs 800-1440 = 1a execucao ambos; matched do ganho pendente.
+
+73e9efddeae31dd9853d192e2f7fd37417f17ea4a8f70963d1a85f0c7dc5e7dc  DESIGN-BACKPORT-FOCAL.md  (3839 B)
+66620df6aeda661c2c79ebcde7477a82229f7bfea6ffc707539aa3288b837428  NUMERIC-ENVELOPE.txt  (3121 B)
+a1a5b9cc0fa2ab91307d5ab361bf113f10337e4a7ebf9201748362f9406efbf8  NUMERIC-RAW.txt  (5784 B)
+110ab1cda44587108bb940b5b441057fb797ea38f261cf7b5d0d5bd8b67caee4  analyze-r13.py  (3017 B)
+96591fa45c12dc7adce9c6d170b8df408e3818fbc79c4c0658c47be134e2598e  npuprobe-r13.log  (34971 B)
+abdb698c10c9dd4d34e22f6d459bc8671060aef54a39b3789fa9e8a6efc6bf82  r13-numeric.sh  (1673 B)
+5133431404fae2746092922dcbcbed40c5a7752e46ffa4e9fc49e0e62da0ed0f  r13-numeric.txt  (8363 B)
+
+bc076b3132acebbb177bf7f28651c10c2fed1ed3baf1d6218eabb31949c3f4a2  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA13.txt (9224 B)

@@ -1,0 +1,402 @@
+--------- beginning of main
+10-08 13:04:00.224 I/NpuProbe(20559): nativeLibraryDir=/data/app/~~7UMtsvoX8mtM58hzCoDyHQ==/br.gov.sp.pcsp.npuprobe-6eYAXXkwryQh8vsZvSB7Tw==/lib/arm64
+10-08 13:04:00.224 I/NpuProbe(20559): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 13:04:00.224 I/NpuProbe(20559): REPORT:
+10-08 13:04:00.224 I/NpuProbe(20559): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 13:04:00.224 I/NpuProbe(20559): AUTO-GATILHO='smart:sessao'
+10-08 13:04:00.225 I/NpuProbe(20559): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 13:04:00.228 I/NpuProbe(20559): SMARTv2 rota='sessao' mutante=(none)
+10-08 13:04:00.353 I/NpuProbe(20559): SESSAO(96d714a): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:04:00.354 I/NpuProbe(20559): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:04:00.354 I/NpuProbe(20559): SESS[0] rota invalida 'numeric:htp:opencl' -> FALHA
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] 
+10-08 13:04:00.354 I/NpuProbe(20559): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: HTP0 allocating new session
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000076e2410900
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 13:04:00.354 I/NpuProbe(20559): SESSAO(96d714a): fim (1 requests)
+10-08 13:04:00.354 I/NpuProbe(20559): SMART REPORT:
+10-08 13:04:00.354 I/NpuProbe(20559): SMART (sessao)
+10-08 13:04:00.354 I/NpuProbe(20559): 
+10-08 13:04:00.354 I/NpuProbe(20559): SMARTv2 rota='sessao' mutante=(none)
+10-08 13:04:00.354 I/NpuProbe(20559): SESSAO(96d714a): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:04:00.354 I/NpuProbe(20559): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:04:00.354 I/NpuProbe(20559): SESS[0] rota invalida 'numeric:htp:opencl' -> FALHA
+10-08 13:04:00.354 I/NpuProbe(20559): SESSAO(96d714a): fim (1 requests)
+--------- beginning of main
+10-08 13:04:00.224 I/NpuProbe(20559): nativeLibraryDir=/data/app/~~7UMtsvoX8mtM58hzCoDyHQ==/br.gov.sp.pcsp.npuprobe-6eYAXXkwryQh8vsZvSB7Tw==/lib/arm64
+10-08 13:04:00.224 I/NpuProbe(20559): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 13:04:00.224 I/NpuProbe(20559): REPORT:
+10-08 13:04:00.224 I/NpuProbe(20559): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 13:04:00.224 I/NpuProbe(20559): AUTO-GATILHO='smart:sessao'
+10-08 13:04:00.225 I/NpuProbe(20559): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 13:04:00.228 I/NpuProbe(20559): SMARTv2 rota='sessao' mutante=(none)
+10-08 13:04:00.353 I/NpuProbe(20559): SESSAO(96d714a): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:04:00.354 I/NpuProbe(20559): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:04:00.354 I/NpuProbe(20559): SESS[0] rota invalida 'numeric:htp:opencl' -> FALHA
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] 
+10-08 13:04:00.354 I/NpuProbe(20559): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: HTP0 allocating new session
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000076e2410900
+10-08 13:04:00.354 I/NpuProbe(20559): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 13:04:00.354 I/NpuProbe(20559): SESSAO(96d714a): fim (1 requests)
+10-08 13:04:00.354 I/NpuProbe(20559): SMART REPORT:
+10-08 13:04:00.354 I/NpuProbe(20559): SMART (sessao)
+10-08 13:04:00.354 I/NpuProbe(20559): 
+10-08 13:04:00.354 I/NpuProbe(20559): SMARTv2 rota='sessao' mutante=(none)
+10-08 13:04:00.354 I/NpuProbe(20559): SESSAO(96d714a): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:04:00.354 I/NpuProbe(20559): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:04:00.354 I/NpuProbe(20559): SESS[0] rota invalida 'numeric:htp:opencl' -> FALHA
+10-08 13:04:00.354 I/NpuProbe(20559): SESSAO(96d714a): fim (1 requests)
+--------- beginning of main
+10-08 13:07:28.560 I/NpuProbe(11857): nativeLibraryDir=/data/app/~~7UMtsvoX8mtM58hzCoDyHQ==/br.gov.sp.pcsp.npuprobe-6eYAXXkwryQh8vsZvSB7Tw==/lib/arm64
+10-08 13:07:28.561 I/NpuProbe(11857): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 13:07:28.561 I/NpuProbe(11857): REPORT:
+10-08 13:07:28.561 I/NpuProbe(11857): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 13:07:28.561 I/NpuProbe(11857): AUTO-GATILHO='smart:sessao'
+10-08 13:07:28.561 I/NpuProbe(11857): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 13:07:28.561 I/NpuProbe(11857): SMARTv2 rota='sessao' mutante=smart_perturba
+10-08 13:07:28.636 I/NpuProbe(11857): SESSAO(9709ee4): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:07:28.637 I/NpuProbe(11857): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:07:28.637 I/NpuProbe(11857): SESS[0] rota invalida 'numeric:htp:opencl' -> FALHA
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] 
+10-08 13:07:28.637 I/NpuProbe(11857): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: HTP0 allocating new session
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5eed240
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 13:07:28.637 I/NpuProbe(11857): SESSAO(9709ee4): fim (1 requests)
+10-08 13:07:28.637 I/NpuProbe(11857): SMART REPORT:
+10-08 13:07:28.637 I/NpuProbe(11857): SMART (sessao)
+10-08 13:07:28.637 I/NpuProbe(11857): 
+10-08 13:07:28.637 I/NpuProbe(11857): SMARTv2 rota='sessao' mutante=smart_perturba
+10-08 13:07:28.637 I/NpuProbe(11857): SESSAO(9709ee4): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:07:28.637 I/NpuProbe(11857): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:07:28.637 I/NpuProbe(11857): SESS[0] rota invalida 'numeric:htp:opencl' -> FALHA
+10-08 13:07:28.637 I/NpuProbe(11857): SESSAO(9709ee4): fim (1 requests)
+--------- beginning of main
+10-08 13:07:28.636 I/NpuProbe(11857): SESSAO(9709ee4): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:07:28.637 I/NpuProbe(11857): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:07:28.637 I/NpuProbe(11857): SESS[0] rota invalida 'numeric:htp:opencl' -> FALHA
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] 
+10-08 13:07:28.637 I/NpuProbe(11857): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: HTP0 allocating new session
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077c5eed240
+10-08 13:07:28.637 I/NpuProbe(11857): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 13:07:28.637 I/NpuProbe(11857): SESSAO(9709ee4): fim (1 requests)
+10-08 13:07:28.637 I/NpuProbe(11857): SMART REPORT:
+10-08 13:07:28.637 I/NpuProbe(11857): SMART (sessao)
+10-08 13:07:28.637 I/NpuProbe(11857): 
+10-08 13:07:28.637 I/NpuProbe(11857): SMARTv2 rota='sessao' mutante=smart_perturba
+10-08 13:07:28.637 I/NpuProbe(11857): SESSAO(9709ee4): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:07:28.637 I/NpuProbe(11857): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:07:28.637 I/NpuProbe(11857): SESS[0] rota invalida 'numeric:htp:opencl' -> FALHA
+10-08 13:07:28.637 I/NpuProbe(11857): SESSAO(9709ee4): fim (1 requests)
+--------- beginning of main
+10-08 13:08:40.644 I/NpuProbe(14870): nativeLibraryDir=/data/app/~~_wzWnIM5qCR3I6lgvPMQIg==/br.gov.sp.pcsp.npuprobe-kA7JpLdl0yBSqmYkCkdeKA==/lib/arm64
+10-08 13:08:40.644 I/NpuProbe(14870): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 13:08:40.644 I/NpuProbe(14870): REPORT:
+10-08 13:08:40.644 I/NpuProbe(14870): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 13:08:40.644 I/NpuProbe(14870): AUTO-GATILHO='smart:sessao'
+10-08 13:08:40.645 I/NpuProbe(14870): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 13:08:40.646 I/NpuProbe(14870): SMARTv2 rota='sessao' mutante=(none)
+10-08 13:08:40.722 I/NpuProbe(14870): SESSAO(971b87b): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:08:40.723 I/NpuProbe(14870): PROMPT[0]: arquivo proprio (len=1101)
+--------- beginning of main
+10-08 13:08:40.644 I/NpuProbe(14870): nativeLibraryDir=/data/app/~~_wzWnIM5qCR3I6lgvPMQIg==/br.gov.sp.pcsp.npuprobe-kA7JpLdl0yBSqmYkCkdeKA==/lib/arm64
+10-08 13:08:40.644 I/NpuProbe(14870): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 13:08:40.644 I/NpuProbe(14870): REPORT:
+10-08 13:08:40.644 I/NpuProbe(14870): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 13:08:40.644 I/NpuProbe(14870): AUTO-GATILHO='smart:sessao'
+10-08 13:08:40.645 I/NpuProbe(14870): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 13:08:40.646 I/NpuProbe(14870): SMARTv2 rota='sessao' mutante=(none)
+10-08 13:08:40.722 I/NpuProbe(14870): SESSAO(971b87b): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:08:40.723 I/NpuProbe(14870): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:09:02.155 I/NpuProbe(14870): NUMCHK pos=0 tok_dst=923 tok_ref=923 | lse_d=25.2214 lse_s=25.3810 lse_r=25.2159 | maxp_d=0.89059 | e_dr=0.4764 e_sr=0.6612 e_ds=0.4493 | fin=111 | top8_d=[923:25.106 5229:22.964 105318:19.766 98735:16.725 2961:15.932 14281:15.306 6649:14.746 25023:14.532 ]
+10-08 13:09:02.414 I/NpuProbe(14870): NUMCHK pos=1 tok_dst=71 tok_ref=71 | lse_d=34.5584 lse_s=33.8874 lse_r=34.4992 | maxp_d=0.99998 | e_dr=0.6116 e_sr=0.8564 e_ds=0.6628 | fin=111 | top8_d=[71:34.558 5994:23.674 70084:19.488 19264:18.172 23061:18.122 66704:18.102 45721:18.086 75782:17.690 ]
+10-08 13:09:04.293 I/NpuProbe(14870): NUMCHK pos=8 tok_dst=11 tok_ref=11 | lse_d=35.5107 lse_s=35.4489 lse_r=35.4910 | maxp_d=1.00000 | e_dr=0.5410 e_sr=0.7216 e_ds=0.4952 | fin=111 | top8_d=[11:35.511 10780:16.010 270:14.590 13:14.031 622:12.642 61499:12.029 1871:10.821 35651:10.454 ]
+10-08 13:09:11.502 I/NpuProbe(14870): NUMCHK pos=32 tok_dst=375 tok_ref=375 | lse_d=25.5871 lse_s=25.5843 lse_r=25.7578 | maxp_d=0.92237 | e_dr=0.4552 e_sr=0.5980 e_ds=0.4780 | fin=111 | top8_d=[375:25.506 5616:23.020 2277:17.599 54896:16.368 50211:16.127 5602:15.064 26463:14.977 9806:14.926 ]
+--------- beginning of main
+10-08 13:09:02.155 I/NpuProbe(14870): NUMCHK pos=0 tok_dst=923 tok_ref=923 | lse_d=25.2214 lse_s=25.3810 lse_r=25.2159 | maxp_d=0.89059 | e_dr=0.4764 e_sr=0.6612 e_ds=0.4493 | fin=111 | top8_d=[923:25.106 5229:22.964 105318:19.766 98735:16.725 2961:15.932 14281:15.306 6649:14.746 25023:14.532 ]
+10-08 13:09:02.414 I/NpuProbe(14870): NUMCHK pos=1 tok_dst=71 tok_ref=71 | lse_d=34.5584 lse_s=33.8874 lse_r=34.4992 | maxp_d=0.99998 | e_dr=0.6116 e_sr=0.8564 e_ds=0.6628 | fin=111 | top8_d=[71:34.558 5994:23.674 70084:19.488 19264:18.172 23061:18.122 66704:18.102 45721:18.086 75782:17.690 ]
+10-08 13:09:04.293 I/NpuProbe(14870): NUMCHK pos=8 tok_dst=11 tok_ref=11 | lse_d=35.5107 lse_s=35.4489 lse_r=35.4910 | maxp_d=1.00000 | e_dr=0.5410 e_sr=0.7216 e_ds=0.4952 | fin=111 | top8_d=[11:35.511 10780:16.010 270:14.590 13:14.031 622:12.642 61499:12.029 1871:10.821 35651:10.454 ]
+10-08 13:09:11.502 I/NpuProbe(14870): NUMCHK pos=32 tok_dst=375 tok_ref=375 | lse_d=25.5871 lse_s=25.5843 lse_r=25.7578 | maxp_d=0.92237 | e_dr=0.4552 e_sr=0.5980 e_ds=0.4780 | fin=111 | top8_d=[375:25.506 5616:23.020 2277:17.599 54896:16.368 50211:16.127 5602:15.064 26463:14.977 9806:14.926 ]
+10-08 13:09:18.746 I/NpuProbe(14870): NUMCHK pos=64 tok_dst=1142 tok_ref=1142 | lse_d=20.3064 lse_s=20.3833 lse_r=20.4914 | maxp_d=0.96262 | e_dr=0.3805 e_sr=0.4809 e_ds=0.4342 | fin=111 | top8_d=[1142:20.268 2941:15.663 1716:15.378 510:14.824 992:14.733 273:14.046 950:13.754 4992:13.197 ]
+10-08 13:09:32.534 I/NpuProbe(14870): NUMCHK pos=128 tok_dst=19572 tok_ref=1129 | lse_d=20.6208 lse_s=20.6086 lse_r=20.6054 | maxp_d=0.39877 | e_dr=0.4385 e_sr=0.7639 e_ds=0.4278 | fin=111 | top8_d=[19572:19.701 1129:19.697 29563:18.715 10857:17.125 3116:15.919 14691:15.378 17229:14.409 6670:14.231 ]
+--------- beginning of main
+10-08 13:09:18.746 I/NpuProbe(14870): NUMCHK pos=64 tok_dst=1142 tok_ref=1142 | lse_d=20.3064 lse_s=20.3833 lse_r=20.4914 | maxp_d=0.96262 | e_dr=0.3805 e_sr=0.4809 e_ds=0.4342 | fin=111 | top8_d=[1142:20.268 2941:15.663 1716:15.378 510:14.824 992:14.733 273:14.046 950:13.754 4992:13.197 ]
+10-08 13:09:32.534 I/NpuProbe(14870): NUMCHK pos=128 tok_dst=19572 tok_ref=1129 | lse_d=20.6208 lse_s=20.6086 lse_r=20.6054 | maxp_d=0.39877 | e_dr=0.4385 e_sr=0.7639 e_ds=0.4278 | fin=111 | top8_d=[19572:19.701 1129:19.697 29563:18.715 10857:17.125 3116:15.919 14691:15.378 17229:14.409 6670:14.231 ]
+10-08 13:09:46.957 I/NpuProbe(14870): NUMCHK pos=192 tok_dst=989 tok_ref=989 | lse_d=25.0070 lse_s=25.0116 lse_r=25.0301 | maxp_d=0.99852 | e_dr=0.7138 e_sr=0.7016 e_ds=0.3665 | fin=111 | top8_d=[989:25.006 5229:18.106 1035:16.573 86847:15.248 30367:15.059 9625:14.022 1129:13.952 6882:13.904 ]
+10-08 13:10:02.161 I/NpuProbe(14870): NUMCHK pos=255 tok_dst=18964 tok_ref=18964 | lse_d=27.0864 lse_s=27.5046 lse_r=27.4784 | maxp_d=0.99179 | e_dr=0.5191 e_sr=0.5004 e_ds=0.4693 | fin=111 | top8_d=[18964:27.078 11:22.269 458:16.340 1188:16.009 18085:15.793 305:15.648 2695:15.363 7667:14.987 ]
+--------- beginning of main
+10-08 13:10:13.827 I/NpuProbe(14870): NUMCHK pos=300 tok_dst=120020 tok_ref=120020 | lse_d=34.3449 lse_s=34.3882 lse_r=34.2795 | maxp_d=1.00000 | e_dr=0.7822 e_sr=0.9874 e_ds=0.6039 | fin=111 | top8_d=[120020:34.345 515:13.372 1291:11.147 1315:10.647 11744:10.202 2843:9.596 39769:9.347 286:9.321 ]
+10-08 13:10:13.827 I/NpuProbe(14870): NUMRES src=htp dst=opencl ref=cpu | passos=301 nchk=301 div_dst_ref=1 | e_dr(max/mean)=1.0820/0.5314 e_sr=1.1856/0.6744 e_ds=0.8864/0.5037 | lse0(d/s/r)=25.221/25.381/25.216 | out=300 texto_len=1059
+10-08 13:10:13.827 I/NpuProbe(14870): NUM texto_len=1059
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] 
+10-08 13:10:13.827 I/NpuProbe(14870): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml-hex: HTP0 allocating new session
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000077d9ab5e40
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml_opencl: kernel cache enabled at '/data/user/0/br.gov.sp.pcsp.npuprobe/cache/llama.cpp/cl-cache'
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] ggml_opencl: loading OpenCL kernels
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.827 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.828 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.829 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] .
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: OpenCL driver: OpenCL 3.0 QUALCOMM build: 0842.41 Compiler E031.50.19.27
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: vector subgroup broadcast support: true
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: subgroup shuffle support: true
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: device FP16 support: true
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: khr dot product support: true
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: mem base addr align: 128
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: global mem size: 7555 MB
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: max mem alloc size: 2048 MB
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: device max image buffer size (pixels): 2147483648
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: device max image2d size: 16384 x 16384
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: device max workgroup size: 1024
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: SVM coarse grain buffer support: true
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: SVM fine grain buffer support: true
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: SVM fine grain system support: false
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: SVM atomics support: true
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: cl_qcom_subgroup_shuffle support: true
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: flattening quantized weights representation as struct of arrays (GGML_OPENCL_SOA_Q)
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: using kernels optimized for Adreno (GGML_OPENCL_USE_ADRENO_KERNELS)
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: lazy-compiling flash_attn prepass for DK=128 DV=128
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: compiling fa prepass f16
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: compiling fa f32_f16
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 DK=128 DV=128 per-kernel max 128 < required 256; skipping registration (will fall back)
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: compiling fa f32_f16 MQ_GQA=8
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: flash_attn_f32_f16_q1_vec_mq_split_c8 (g8) DK=128 DV=128 per-kernel max 128 < required 192; skipping registration (will fall back)
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: compiling fa f32_f16 c8 NSG2
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: compiling fa f32_f16 c8 g8 NSG2
+10-08 13:10:13.830 I/NpuProbe(14870): [ggml] ggml_opencl: compiling fa f32_f16 split
+10-08 13:10:14.349 I/NpuProbe(14870): SESSAO(971b87b): fim (1 requests)
+10-08 13:10:14.350 I/NpuProbe(14870): SMART REPORT:
+10-08 13:10:14.350 I/NpuProbe(14870): SMART (sessao)
+10-08 13:10:14.350 I/NpuProbe(14870): 
+10-08 13:10:14.350 I/NpuProbe(14870): SMARTv2 rota='sessao' mutante=(none)
+10-08 13:10:14.350 I/NpuProbe(14870): SESSAO(971b87b): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 13:10:14.350 I/NpuProbe(14870): PROMPT[0]: arquivo proprio (len=1101)
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=0 tok_dst=923 tok_ref=923 | lse_d=25.2214 lse_s=25.3810 lse_r=25.2159 | maxp_d=0.89059 | e_dr=0.4764 e_sr=0.6612 e_ds=0.4493 | fin=111 | top8_d=[923:25.106 5229:22.964 105318:19.766 98735:16.725 2961:15.932 14281:15.306 6649:14.746 25023:14.532 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=1 tok_dst=71 tok_ref=71 | lse_d=34.5584 lse_s=33.8874 lse_r=34.4992 | maxp_d=0.99998 | e_dr=0.6116 e_sr=0.8564 e_ds=0.6628 | fin=111 | top8_d=[71:34.558 5994:23.674 70084:19.488 19264:18.172 23061:18.122 66704:18.102 45721:18.086 75782:17.690 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=8 tok_dst=11 tok_ref=11 | lse_d=35.5107 lse_s=35.4489 lse_r=35.4910 | maxp_d=1.00000 | e_dr=0.5410 e_sr=0.7216 e_ds=0.4952 | fin=111 | top8_d=[11:35.511 10780:16.010 270:14.590 13:14.031 622:12.642 61499:12.029 1871:10.821 35651:10.454 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=32 tok_dst=375 tok_ref=375 | lse_d=25.5871 lse_s=25.5843 lse_r=25.7578 | maxp_d=0.92237 | e_dr=0.4552 e_sr=0.5980 e_ds=0.4780 | fin=111 | top8_d=[375:25.506 5616:23.020 2277:17.599 54896:16.368 50211:16.127 5602:15.064 26463:14.977 9806:14.926 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=64 tok_dst=1142 tok_ref=1142 | lse_d=20.3064 lse_s=20.3833 lse_r=20.4914 | maxp_d=0.96262 | e_dr=0.3805 e_sr=0.4809 e_ds=0.4342 | fin=111 | top8_d=[1142:20.268 2941:15.663 1716:15.378 510:14.824 992:14.733 273:14.046 950:13.754 4992:13.197 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=128 tok_dst=19572 tok_ref=1129 | lse_d=20.6208 lse_s=20.6086 lse_r=20.6054 | maxp_d=0.39877 | e_dr=0.4385 e_sr=0.7639 e_ds=0.4278 | fin=111 | top8_d=[19572:19.701 1129:19.697 29563:18.715 10857:17.125 3116:15.919 14691:15.378 17229:14.409 6670:14.231 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=192 tok_dst=989 tok_ref=989 | lse_d=25.0070 lse_s=25.0116 lse_r=25.0301 | maxp_d=0.99852 | e_dr=0.7138 e_sr=0.7016 e_ds=0.3665 | fin=111 | top8_d=[989:25.006 5229:18.106 1035:16.573 86847:15.248 30367:15.059 9625:14.022 1129:13.952 6882:13.904 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=255 tok_dst=18964 tok_ref=18964 | lse_d=27.0864 lse_s=27.5046 lse_r=27.4784 | maxp_d=0.99179 | e_dr=0.5191 e_sr=0.5004 e_ds=0.4693 | fin=111 | top8_d=[18964:27.078 11:22.269 458:16.340 1188:16.009 18085:15.793 305:15.648 2695:15.363 7667:14.987 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMCHK pos=300 tok_dst=120020 tok_ref=120020 | lse_d=34.3449 lse_s=34.3882 lse_r=34.2795 | maxp_d=1.00000 | e_dr=0.7822 e_sr=0.9874 e_ds=0.6039 | fin=111 | top8_d=[120020:34.345 515:13.372 1291:11.147 1315:10.647 11744:10.202 2843:9.596 39769:9.347 286:9.321 ]
+10-08 13:10:14.350 I/NpuProbe(14870): NUMRES src=htp dst=opencl ref=cpu | passos=301 nchk=301 div_dst_ref=1 | e_dr(max/mean)=1.0820/0.5314 e_sr=1.1856/0.6744 e_ds=0.8864/0.5037 | lse0(d/s/r)=25.221/25.381/25.216 | out=300 texto_len=1059
+10-08 13:10:14.350 I/NpuProbe(14870): NUM texto_len=1059
+10-08 13:10:14.350 I/NpuProbe(14870): SESSAO(971b87b): fim (1 requests)
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -
+- waiting for device -

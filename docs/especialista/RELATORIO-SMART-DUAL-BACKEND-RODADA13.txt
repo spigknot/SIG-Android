@@ -1,0 +1,141 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 13
+=========================================================================
+Data: 08/10/2026. Ordens: "BACKPORT FOCAL Q4_K/Q6_K, SUPORTE NUMERICO E
+MEDIDAS COM MESMO CORPUS". Sem UI/produto/R2/release; SIG intacto.
+
+RESUMO EXECUTIVO: (1) ARQUEOLOGIA FECHADA: o pacote minimo K-quant tem nome
+e escopo — commit upstream 1ec818809 (#28994, "hexagon: Support for K-Quants
+Q4_K and Q6_K"): ~880 linhas em 7 ARQUIVOS SO DO HEXAGON (core intocado!).
+O SIG-hexagon diverge do parent (~11k linhas) => port ADAPTADO, nao cherry-
+pick; hunks maperados por contrato (repack 377 / kernels ~320 / dispatch /
+protocolo +2 opcodes). Design focal completo em DESIGN-BACKPORT-FOCAL.md.
+(2) COLETA NUMERICA REAL ENTREGUE (nao mais "proximo codigo"): modo "numeric"
+3-way no probe (dst GPU / src HTP / ref CPU, teacher-forced, vetor COMPLETO
+por passo: logsumexp, top8, maxp, erro centralizado, finite) rodado no 952:
+301/301 passos coletados; div_dst_ref=1 (0,33%); e_dr max/mean 1,082/0,531;
+e_sr 1,186/0,674; e_ds 0,886/0,504; fin=111 em todos. Leitura: o handoff
+(import do estado) NAO adiciona desvio acima da diferenca intrinseca entre
+backends (e_dr-medio 0,53 ~= e_ds 0,50; e_sr 0,67); a unica divergencia
+ocorreu onde a margem natural (0,004) caiu abaixo do envelope de erro do
+par (max 0,78) — consistente com o R9 (pos 264; aqui pos 128 do stream).
+(3) BLOCKER OPERACIONAL no fim: o N2 (fixture negativa smart_perturba) e o
+N3 (repeat GPU) nao completaram — o device caiu da rede wireless apos o
+primeiro run (adbd recusando; recuperacao exige o aparelho acordar). Estado
+honesto: item 5 PARCIAL (N1 entregue; N2/N3 PENDENTE por device-off, nao
+por codigo — o modo ja esta implementado e compilado).
+
+-----------------------------------------------------------------------
+A. IDENTIDADE FONTE/BUILD/CORPUS/PLACEMENT
+-----------------------------------------------------------------------
+A.1 Probe v19g (fontes com o modo numeric; build probe-r13d OK; APK instalado
+    "Success" no CPH2747). Lado SIG: cohort v12 (inalterado desde o R12;
+    sha do hexagon no manifesto). Modelo c4bf; corpus 952; config do probe:
+    n_ctx 2048, FA off, chunk 128, cap 400 (out=300 nessa execucao).
+A.2 Uso de SUPPORTS como evidencia: mantido como PROVA DE SUPORTE/placement
+    (nao numerica) — a numerica desta rodada e' a coleta 3-way acima.
+
+-----------------------------------------------------------------------
+B. DESIGN DEPENDENCIAS K-QUANT / ALLOWLIST / HISTORIA
+-----------------------------------------------------------------------
+B.1 ACHADO: 1ec818809 (2026-09-16): 7 arquivos, 818+/61-. Relacionados
+    fora do escopo (Q5_K #29123; Q2/Q3 #29717; quantizer; DMA; scalability).
+B.2 MAPA: host (repackers NOVOS +377; cases em repack_tiled/buffer_get;
+    precomputes; supported_mul_mat/mul_mat_id +2/+2; nx_kernel; init);
+    DSP (htp-ops.h +2 opcodes; hvx flat +143; hvx tiled +74/+63; hmx
+    dequant +41 + transfers; matmul-ops dispatch +84/+29).
+B.3 CONTRATOS RAIZ (mandam no custo): (1) repack/layout K-quant no host;
+    (2) kernels DSP HVX/HMX (vetorizados; VTCM/shapes); (3) protocolo
+    host<->skel (+2 opcodes => skel/htp-v81 recompila junto — COHORT);
+    (4) dispatch/params + rejeicao honesta de tipos fora do escopo.
+B.4 COMPATIBILIDADE: git apply do patch = rejeitado em todos os 7 arquivos
+    (SIG ~11k linhas de divergencia do parent) => NAO e' "add case": e'
+    port adaptado com 3-4 contratos; custo estimado: substancial (kernel
+    work + adaptacao host), mas CIRCUNSCRITO a 7 arquivos do hexagon.
+B.5 Gate metodologico pedido: teste que altera supports sem kernel/protocolo
+    deve FALHAR (a ser implementado junto do candidato — o modo "supports"
+    atual apenas CONSULTA; nao confundir com numerica PASS).
+
+-----------------------------------------------------------------------
+C. CANDIDATO REAL — ESTADO
+-----------------------------------------------------------------------
+C.1 NAO construido nesta rodada (decisao de escopo pendente conforme a
+    ordem: "apresentar escopo concreto"). O que EXISTE: arquitetura do port
+    mapeada hunk-a-hunk (patch 1444 linhas em /root/kquant-28994.patch),
+    contrato de protocolo identificado, e a numerica pronta para validar
+    qualquer candidato (modo numeric).
+C.2 Proposta objetiva de escopo (se aprovado): fase 1 = protocolo/opcodes +
+    flags + guards (mecanico); fase 2 = kernels DSP em bloco; fase 3 =
+    repackers adaptados ao SIG; fase 4 = numerica por shape (CPU-vs-HTP
+    com tolerancia do DESIGN-NUMERICO) antes do grafo c4bf. Cohort completo
+    por fase; nada de swap parcial.
+
+-----------------------------------------------------------------------
+D. GRAFO C4BF / ABA / PRESERVACAO (herdado R12)
+-----------------------------------------------------------------------
+D.1 Placement R12 mantido (supports SKIP / sched-dump / perfil). ABA e
+    preservacao GPU intactos; nenhuma mudanca de core nesta rodada.
+
+-----------------------------------------------------------------------
+E. COLETA NUMERICA REAL — ENTREGUE (N1) + PENDENCIAS
+-----------------------------------------------------------------------
+E.1 Modo "numeric" (novo, permanente): rota "numeric:SRC:DST[:REF]";
+    default ref=CPU; teacher-forced com os 3 backends; por passo: lse,
+    top8 (ids:logits), maxp, erro centralizado dst-ref / src-ref / dst-src
+    (vetor COMPLETO — sem dump de vocab); fin por lado; NUMRES agregado.
+E.2 RESULTADO N1 (952; dst=opencl, src=htp, ref=cpu):
+      passos=301 nchk=301 div_dst_ref=1 (0,33%) out=300 texto_len=1059
+      e_dr(max/mean)=1,082/0,531  e_sr=1,186/0,674  e_ds=0,886/0,504
+      envelope por checkpoint: e_dr p50=0,498 max=0,782; e_sr p50=0,702
+      max=0,987; e_ds p50=0,469 max=0,663; fin=111 sempre.
+      Checkpoints estaveis (pos 0/1/8/32/64/192/255/300): token dst==ref
+      com maxp 0,89-1,00000 (argmax trivialmente certo). A UNICA divergencia
+      (pos 128): dst=19572 vs ref=1129, maxp_d=0,399, top5 com empate real
+      (19,701 vs 19,697; margem 0,004) — MESMA assinatura do R9 (pos 264;
+      margens 0,0096/0,0229): diverge onde a margem cai ABAIXO do envelope.
+E.3 LEITURA PRINCIPAL: o import do estado (handoff) nao adiciona erro acima
+    da diferenca intrinseca GPU-vs-CPU (e_dr 0,531 ~= e_ds 0,504; HTP mais
+    distante: e_sr 0,674) — a transferencia e' FIEL no envelope medido;
+    a troca de argmax e' empate local (margem 0,004 << erro 0,4-0,8).
+E.4 PENDENTE (device-off apos N1): N2 fixture negativa smart_perturba
+    (codigo pronto: +50 no logit 0 na pos 8; esperado: rejeicao clara) e
+    N3 repeat GPU (numeric:opencl:opencl:opencl) para fechar o envelope de
+    CALIBRACAO (baseline do par sem import). Holdout/envelope estrito-
+    tolerado: definidos no DESIGN-NUMERICO; execucao quando o device
+    voltar. Blockers: apenas o aparelho fora da rede (adbd recusando;
+    provavel doze pos force-stop/first-run longo) — nenhum blocker de API.
+
+-----------------------------------------------------------------------
+F. PERF COM MESMO CORPUS / MATCHED
+-----------------------------------------------------------------------
+F.1 RETIFICACAO DO R12 (auto-aplicada): o 270,18ms do v11 (r12-contraste2)
+    NAO e' matched com os 800-1440 do SIG sem confirmar prompt/nt/cap/ctx:
+    ambos usaram prompt default (31tok)/chunk1/FAoff/n_ctx2048, cap default
+    48, mesma primeira-sessao — mesmos parametros observaveis, MAS o
+    controle teve gen=9356,94ms/wall=9629,2ms (1a execucao, inclui 1o uso
+    de kernels/contexto) => rotular como "1a execucao (first-use)" de ambos
+    os lados; magnitude de ganho matched fica para a fase pos-candidato.
+    O suporte (SIM/NAO) e' o que esta PROVADO; o percentual, nao ainda.
+F.2 Bench 952 sem espelho / seis rotas: nao executado (depende do candidato
+    e da numerica Smart aceita — label permanece NUMERICA_PENDENTE).
+
+-----------------------------------------------------------------------
+G. PROBE != PRODUTO / PRESERVACAO / F2 CI / WHISPER
+-----------------------------------------------------------------------
+G.1 Probe separado; SIG intacto (v12); Whisper NAO testado (intocado);
+    WIP alheio intacto; stayon 7 preservado; PJA110 fora (nunca tocado);
+    serial explicito em toda acao enquanto o CPH esteve acessivel.
+G.2 O device saiu da rede apos o N1 (sem acoes minhas desde entao); no
+    restore: nenhum estado deixado no /data/local/tmp ao fim do script.
+
+-----------------------------------------------------------------------
+H. DECISAO POR ROTA / PROXIMO PASSO
+-----------------------------------------------------------------------
+H.1 HTP: caminho focal definido (B) + numerica pronta (E). DECISAO PENDENTE
+    DO USUARIO/ESPECIALISTA: aprovar a fase 1 do port focal (protocolo+
+    guards+flags; mecanica) em copia isolada, com numerica por shape.
+H.2 SMARTS: sem mudanca; numerica Smart agora com coleta real por checkpoint
+    (E.2) — envelope completo depende de N2/N3 (device).
+H.3 IMEDIATO quando o device voltar: N2+N3 (5 min); depois fase 1 do port.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada13/ (DESIGN-BACKPORT-FOCAL.md,
+NUMERIC-ENVELOPE.txt, scripts, manifesto) + relatorio R12.

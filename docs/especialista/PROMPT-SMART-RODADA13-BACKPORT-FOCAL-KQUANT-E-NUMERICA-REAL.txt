@@ -1,0 +1,63 @@
+ORDENS AO EXECUTOR — SMART RODADA 13
+BACKPORT FOCAL Q4_K/Q6_K, SUPORTE NUMERICO E MEDIDAS COM MESMO CORPUS
+===============================================================================
+
+PARECER E DECISAO TECNICA
+O bloqueio principal agora esta concretamente identificado: backend SIG rejeita matmul Q4_K/Q6_K e fallback CPU pesa no caminho chamado HTP. As copias deixaram de ser causa presumida. O especialista leu SUPPORTS-TESTE.txt e r12-contraste2.txt; nao executou device.
+Direcao preferencial: preservar core/GPU SIG e investigar/backportar o conjunto necessario APENAS Q4_K e Q6_K, com dependencias coerentes host/DSP. Nao trocar todo core, nao remover Vulkan como meta e nao mudar modelo c4bf por Q4_0 para evitar o problema.
+Essa decisao orienta prototipo em COPIA ISOLADA dentro das autorizacoes vigentes. Nao autoriza aplicar um backport grande no app principal, instalar sobre ele, publicar, commitar/push ou alterar R2. Se a allowlist exigir amplo core/ABI fora do escopo autorizado, entregar pedido objetivo ao usuario com arquivos/riscos/alternativas antes executar essa ampliacao. Trabalho independente numerico deve seguir enquanto isso.
+
+1. RETIFICAR O QUE FOI COMPROVADO
+Suporte consultado SIM/NAO nao e teste de execucao numerica. Confirmacao supports+placement+fonte+perfil sustenta fallback das matmuls. Nao chamar tinyquerysupports de numerica PASS.
+Splitlista CPU/HTP eh evidencia de particao, mas listar op/tipo/camada e backend em amostra representative torna atribuição de matmul explicita. Consolidar por runID deduplicando REPORT; SUPPORTS-TESTE tem varias repeticoes da mesmahoraPID, nao execucoes independentes.
+Nao comparar prefill270.18ms de r12-contraste2 com baseline curto800-1440 e inferir ratio causal sem confirmar SAME nprompt/chunks/config/corpus. O controle tem gen9356.94ms/wall9629.2ms, sinal de workload possivelmente distinto da saudacao curta. Extrair promptSHA/nt/output/stop/cap/ctx FA/timers de ambos. 'inclusive cold' significa first-use-request, nao automaticamente loadmodel/contextincluidos.
+Ganhos exatos e percentual de tempo devidofallback requerem comparacao equivalente. Nao negar bloqueiosuporte real porque ainda falta percentual: suporte esta provado; magnitude do ganho precisa matched.
+CorretudeSmart no952 eh comportamental/repetibilidade/ABA aceitos; numericaestrita/envelope permanece PENDENTE, nao 'corretude fechada' universal.
+
+2. ALCANCE DO BACKPORT: LINHAS DE DIFF NAO DEFINEM PACOTE MINIMO
+Diff inteiro de matmul/protocolo inclui recursos nao exigidos pelo modelo. Identificar commits/funcionalidades upstream que introduziram Q4_K/Q6_K, suas dependencias e compatibilidade com core SIG. Usar history/fileblobs/enumlayouts reais, nao upstreamHEAD flutuante.
+Criar design-focal com lista concreta:
+- suporte host: supports_op, buffer/repack/quantlayout, parametros/matmuldispatch;
+- interface compartilhada: opcode/enums/structsize/alignment/type IDs/IDL gerada;
+- kernels DSP: dequant/repack/matmul HMX ou HVX para Q4_K/Q6_K, VTCM, edge/shapes;
+- CMake/toolchain/skel: dependencias e flags;
+- referencias de testes/baseline e regras de rejeicao para demais tipos.
+NÃO apenas addcase. Não assumir que quantkernelQ4_0 aceita blocosK; layouts/escala/mins e Q6_K precisam implementacao correta.
+Priorizar suporte das duas quantizacoes utilizadas pelo c4bf; Q5_K/Q2/Q3/novasops nao metas nesta fase. Se dependência compartilhada exigir mais codigo, incluircomjustificativa; nao cortar protocolo arbitrariamente para parecer pequeno.
+Buscar implementacao upstream historica compativel pode reduzir delta mais que adaptar latest. Se inviavel, entregar 3-5 contratos RAIZ bloqueantes e custo; nao '10mil linhas entao impossivel' sem fechamento de dependencias.
+Denylist: core fora dos contratos permitidos, Vulkan/shaders/workarounds Qualcomm/Q8, OpenCL F3b/guard/cache/loader, requestreset, Whisper, defaultUI/modelo. Hooks produto OFF. Buildisolado no servidor sem substituir fonteSIGworkingtree nem mover WIPoutroagente.
+
+3. EXECUTAR CANDIDATO REAL COM TESTES EM CAMADAS
+A. Build FULLCOHORT coerente host+skel+bindings+APK normalprobe. Manifest fullSHA/pin/flags/layout; nenhum swapparcial entrecohortsABI. Verifyreadbackmaps eidentity.
+B. Matmul Q4_K/Q6_K numerica CPU vsHTP em fixtures conhecidas/shapes doHyMT2: prefillbatch1/pequeno/128 e bordas/strides quando suportadas. finite/erro tolerado definido e reference output; unsupportedshape realSKIP commotivo e sem CPUoculta contabilizadaPASSHTP.
+C. Gate que altera supportscases semkernel/protocolobom devefalhar, nao darGREEN por enumSIM. DeviceeffectiveHTP/kernelcounttrace requerido.
+D. Grafo c4bf real: MUL_MATtypes/camadas realmenteHTP, fallbackrestanteexplicito, semCPUperlayer pesado, requestshort/EOG/resetABA e samplingcorreto. Context memorysafe; nenhuma chave/modelosensivel emlog.
+E. PureVulkan/OpenCL curto e asduasSmart curto, baselinepatchesSIGpreservados. Se core nao mudou, evitarrepetirbateriaantiga inteira. Revalidar952numericacandidato quando necessario.
+Exits/statusporcamada; um buildpass nao valida kernel. Timeout/gates/cancelunload seguros. Candidatofalha -> preservarreproducer/negativehonesto, NAO fallbackCPU rotulado 'NPU rapida'.
+
+4. ALTERNATIVAS, SOMENTE SE FOCAL NAO FECHAR
+Nao escolher automaticamente upstreamsemVulkanaceito: metaSmartVulkanmantida. Copia experimentalbaseupstreamcompativel com port APENAS patchesGPUprodutoallowlist e reset/loader eh planoB de design, nao transplantar36mil linhas. PreservacaonumericaQ4/Q8/Adrenofusoesrequerprova.
+Amplacoreupdate eoutra decisao de produto, comregression/ABIs/packaging e aprovacao do usuario. Duascohorts emmesmoprocesso/bridge entreversoes e outra arquitetura arriscada (simboloscolidem/stateversion), nao workaround simplessemcontrato. Nada de misturarlibscompatibilidadepresumida.
+ManterexploracaoOpenCLcontrole e trabalho numerico aproveitavel sem convertercontrole emrelease. Naoperguntar abstratamente 'voce quer uma mudança grande?': apresentar escopo concreto se necessario.
+
+5. NUMERICA REAL — ENTREGAR NESTA RODADA, NAO MAIS 'PROXIMO CODIGO'
+Independente do buildKquant, coletar no baseline atual vetores de logits em poucos checkpoints do952 com GPU-puro vsGPU-importado mesmo prefixo, referenciasHTP e CPU apropriadas. Calcularlogsumexp/probs/errocentralizado comdadosCOMPLETOS, finite/topk/margens/divcount; envelopecalibration/holdout e fixtureperturbacao.
+Persistircollectbinary/JSONcompacto/corpusfullSHA/config/positions/ID, semdumpvocab301steps. Nao extrairsoftmaxfull dos top5. Critérioindependente, estrito/toleradoseparados; codigoNaN oustatewrongtemFAIL.
+Se nãoexecutado, dizer blockerconcreto (API/campo/tempoautorizacao) e artefatoimplementado/testado, nao apenas repetir designpendente. AOmesmotempo conservarfixtureformat/chunkflow/init/json ecompletionmarker/exec-out.
+
+6. PERF COM SUPORTE VERDADEIRO
+Depois numericaMatmul/c4bf/placement aceitos: comparar baselineSIGfallback vscandidatoDSP noMESMOcorpus/config/nprompt/coldwarm/reset/residency/energia. Poucasrepwarmintercaladas; load/firstusekernel e warmrequest separados. MicrotesteHTPporop/completion comperfilOFF; perfilON diagnostico fora resultadosproduto.
+Bench952SEMespelho no candidato, seisrotas quando numericaSmartaceita; se apenasexperimental, labelNUMERICA_PENDENTE e sempromocao. Wall inclreset efronteiras handoff/gen, TTFT-ready/visiblequando real, pausa ponte->tok2, memoryhost/GPU/DSP limitações. CandidatocorretoNAOgarante ganho: medir custo2contexts etransfer.
+Moderarlimits termicos/memoria e logsdevice; não governor/root/thermalbypass/killappsusuario. Stayon7decididoconservar; serialallowedCPHexplicit emcadaacao, PJA110foraescopo, antiuninstallSIGguard. USB preferido; wifiapprovedcomidentity e perdasclassificadas.
+
+7. ENTREGA A-H
+RELATORIO-SMART-DUAL-BACKEND-RODADA13.txt em docs/especialista:
+A source/build/corpus/placementidentity;
+B designdependenciasKquant/allowlist/compatibilityhistory;
+C candidato REAL: build/artifacts/numericashapes/HTPkerneltrace oublockerRAIZ;
+D grafo c4bf/ABA/preservationGPU;
+E coleta numericareal/envelope/negativefixture;
+F matchedmesmocorpus/benchexperimental oupendenciaprecisa;
+G probe!=produto/F2CI/WhisperintocadoNAOtestado/restore;
+H decisionporrota e pedido deescopo somente se necessario.
+Manifest logs docs/npu-hymt2/smart-rodada13/ fullSHA/exits/tamanhos/IDscategoriasexclusivas. Nao chamar supportquery de numericaexecutada nem ratiosdecrosscorpus dematched. SemUI/SIGprincipal/R2/release semescopoexplicito. Objetivoagora e produzir suporteREALKquant numbuildSIGseguro, nao renovarhipotesecopies.
