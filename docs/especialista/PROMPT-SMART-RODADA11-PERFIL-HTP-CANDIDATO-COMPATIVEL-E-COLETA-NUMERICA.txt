@@ -1,0 +1,62 @@
+ORDENS AO EXECUTOR — POS R10 / RODADA 11
+PERFIL DO PREFILL, CANDIDATO COMPATIVEL E COLETA NUMERICA REAL
+===============================================================================
+
+1. PARECER E ESTADO CORRIGIDO
+O especialista leu o relatorio R10 e DESIGN-NUMERICO.md e parseou r10-aba-vk.jsonl. CONFIRMADO: tres registros Vulkan; A1 e A2 tem SHA completo 78d21dbc2420912b47dbf3058ced9e5e7e458a512a7151f347751bab8c6f8882; B tem SHA 3b49945faefca9f3d5b48145e04a3ae1bd3a59b1663381c40b55e5b75022cc54 e SMART-ACEITO. Reset/independencia A-B-A no952 esta fechado para ambas rotas, no build/config testados. Nao repetir esses ciclos antes de uma mudanca relevante.
+Numerica continua separada: A1/A2 Vulkan sao SMART-DIVERGENTE, pos264; nao rotular aceitacao estrita plena. Fixtures formato/chunking representam progresso real relatado. Port upstream completo NAO compila; o candidato v1 esta BLOQUEADO, nao 'em build'. H1/H3 e resumo devem refletir esse estado.
+Nada integrado ao SIG. Preservar c4bf/defaultVulkan/Whisper/dados/WIP. Meta dualSmart continua; performanceutil pendente. Sem UI/R2/release/app principal nesta rodada. Usar autorizacoes vigentes reais, nao inferir nova permissao desta diretriz.
+
+2. PRIORIDADE: LOCALIZAR O TEMPO ANTES DE ESCOLHER OUTRO PORT
+Duas frentes independentes: (A) diagnostico de prefill curto/batch/dispatch para produzir patch; (B) coleta numerica adequada. Não mais rodadas so escrevendo designs ou repetindo texto do protocolo.
+No baseline SIG, coletar perfil MINIMO seguro por fase/op em UMA execucao curta, e se preciso em prefixo do952. O callback de log anteriormente travou: usar buffer/snapshot fora da trava/FastRPC e flush posterior; nao logar vocab inteiro nem introduzir reentrancia.
+Separar tempo host de preparar/staging/repack/submeter/esperar de tempo DSP quando disponivel. Contar nos/ops reais HTP vs CPU, tipos quantizados, caminho HMX/Tiled/Flat, FA/RMS/ROPE, batch sizes, compilacao/primeiro uso, queue/poll/sync. Registrar opt efetivos e perfil real de performance no runtime.
+Comparar controle upstream com config e workload equivalentes; formato do perfil pode diferir, mapear fases honestamente. Mesma temperatura/power-state suficientemente semelhante e controle antes/depois quando seguro. Dois ou poucos runs bastam para localizar diferenca de ordem de magnitude; nao soak.
+Checar antes flags de otimizacao/compiler/buildtype, profiling/tracing ativado, defaults de HTPpower/perf e host CPUfallback/dispatch. Nao atribuir lentidao a arvoreinteira pelo tamanho diff. Se recurso profiling pronto falhar, fornecer caminho alternativo pontual de timers test-only fora locks, nao aguardar outra rodada sem dado.
+SAIDA A: hotspot objetivo, placement comprovado e candidato MINIMO ligado a ele, compilado/exercitado ou blocker preciso.
+
+3. COMPATIBILIDADE: 60 ERROS NAO SIGNIFICAM AUTOMATICAMENTE REWRITE TOTAL
+Agrupar erros de build por APIs RAIZ distintas; muitos diagnostics podem derivar de poucos contratos. Ler definicao/usages no coreSIG e upstream antes decidir escopo.
+buffer_typecallback 1arg vs2args: investigar se dependencia tensor e essencial a caminhoHYMT2 usado, se existe implementacao compativel mais antiga ou backportsemantico seguro. Nao descartar parametro silenciosamente com cast para passar compilador.
+SWIGLU_CLAMP vs SWIGLU_OAI: NAO renomear enum por similaridade. Comparar formula/scalars/tipo/mappinggraph e suporte; opnaosuportada pode ser explicitamente reject/fallback se fora escopo, sem transformar uma op em outra.
+graph_optimize_params/overloads: rastrear opcionalidade e efeito em numerica/perf/placement; remover otimização sem avaliar custo pode explicar um candidato ainda lento. Sem stub que retorna sucesso falso.
+Opcao secundaria: procurar no historico upstream uma versao Hexagon compativel com API do coreSIG e identificar delta de performance comprovado para backport. Pin completo e reproducer; nao checkout 'latest' ou atualizar todo core.
+Decidir entre patchcirurgico noSIG e portcompativel somente apos perfil/contratos. Contagem de linhas em Vulkan nao equivale ao conjunto minimo de patches do produto: nao importar36mil linhas nem abandonar workaround; mapear allowlist ja aceita antes qualquer alternativa maior. Baseupstream+patchGPU e contingencia com design/autorizacao especifica, nao planoautomatico.
+Cada candidato FULL rebuild cohort+skel+bindingAPK em copiaisolada, configs/pins/flags/fullSHA e readbackmaps. Nao swaps parciais ABI. Guard teste que falha combug antigo e passa comfix; correcaoplacement/core nao pode perder Q4/Q8 numerica/reset/GPUworkarounds.
+
+4. NUMERICA: O DESIGN ATUAL REQUER DADOS QUE OS JSONLs NAO TEM
+DESIGN-NUMERICO.md linhas53-56 propoe hostpostprocess de top5/margens para softmax/logprobsnormalizadas/errocentralizado. NAO e possível reconstruir essas metricas gerais somente dos top5: falta particionamento do vocab/restante logits e valores pareados fora topk.
+Implementar coleta ADEQUADA em prefixos selecionados:
+- comparar destinoSmart/importado e destinoGPU-puro/recomputado SOB O MESMO PREFIXO;
+- obter vetores logits de mesmo vocab e calcular metrics nativas/host comlogsumexp estavel e finite; salvar compactamente agregados/topk e hashes/config;
+- alternativamente exportar vetores completos de poucos checkpoints para calcularhost, nunca dump por301steps. Prefixo token stream registrado, semsamplerhistorico diferente;
+- erros logits CENTRALIZADOS, max/quantis e divergencia/probs definidas no design, com controle de escala/nearzero apropriado.
+MesmoGPU vs elemesmo mede repetibilidade, CPUvsGPUmede outro par backend. Para HTP->GPU, calibrar errointerbackend apropriado (HTPpuro vsGPU-puro teacherforced) e distinguir erro extra do import. Nao exigir envelopeGPUself=zero como tolerancia universal nem relaxar por amostra atualisolada.
+Preset limiar com controles/prefixos calibração independentes e holdout verificacao; caso pos264 nao deve sozinho escolher tau. Manter gateESTRITO e NUMERICO_TOLERADO separados, criterios e motivo noJSON. Fixtureperturbacao de estado/logits deve falhar; offsets comuns logits que nao alteramdistribuicao nao devem falsamentefalhar criterio probabilistico.
+Comparacao no952 com textosvalidos e ABAigual eh positiva para comportamento, nao prova de tolerancia definida. Capturar quantasdivergencias, finite e piorcaso, nao apenasfirst.
+SAIDA B: metricas realmente calculadas/calibradas+fixture negativa e decisao numerica justificada porrota. Nao publicar percentuaisde margem sobrelogitabsoluto.
+
+5. FIXTURES E SERIALIZACAO: FECHAR LACUNAS PEQUENAS
+-Wformat=2/-Werror=format e attributeprintf corrigem classevarargs — preservar. Fixtureplan0/128/... valida plano; erroemchunkintermediario atualmente apenas leitura de codigo: adicionar mockdecoderque retornaerrochunk2 e assert NENHUMsampling/batchposterior/sucesso. Helpervazio requer resultado explícito requestrejeitado, nao sucesso sem output.
+JSON parse deve testar UTF8/aspas/newline/backslash/controles, null/falha/margens e camposreset/identity, completo ao fim real. completionmarker/sessionIDs e fflush/endfile antespull exec-out. ArtifactJSONincorruptível nao sóformatargsvalidos.
+Initone-shotfixtureoffline exista e esteja executada, com lateconfigdetectado e overriddennondefaultcapturado; defaultslog diag nao substitui esse teste.
+Registrar full output e IDs; ABAbaseline ja confirmado nao precisa rerun se esses ajustes nao alteraremruntimeinference.
+
+6. PERFORMANCE: NAO MAIS BLOQUEAR COMPILACAO POR CRITERIO NUMERICO
+CandidatoHTP curto pode ser perfilado e benchmarkado enquanto criterios de ponte amadurecem, contanto finite/placement/output/resetsejamaceitos. NumericaSmartcompleta nao bloqueia localizarHTPperformance.
+Depois candidato compile e execute, testar HTPcurto, pureVulkan/OpenCL e dualSmartcurto em app separado. Recuperou ganho? piloto BENCH952 sem espelho/dec_s0 e stopEOG; config/prompt/model iguais, resetincluido no pedido e phasesfora load/cold separados, residency1ou2declarada, firsttokenready vsvisible real.
+Se numerica ainda nao aceita, pode coletar perfexperimental mas nao promover como aceiteproduto. Label EXPLORATORIO/NUMERICA_PENDENTE, resultadosfalhos nuncacomparativo válido.
+Poucasrepsintercaladas e limitesmemoria/termica; aumentar sóquandoinformativo. Confirmarganho noMESMOcohort candidatoSIGcorrigido, nao controleupstream semworkaroundVulkan. Se não há benefício, negativo honesto semmudar default.
+Serialfixo identity failclosed, PJA110foraescopo; preferirUSB, wifiautorizadacomlogdevice. Stayon7autorizadoinalterado, configtemporariarestoreexactreadback. Semroot/governor/thermalbypass/appsusuariosmortos.
+
+7. ENTREGA RODADA11 — RESULTADO REAL
+Em docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA11.txt A-H:
+A snapshot/pins/APIs/config/escopo;
+B profileHTPfase/op e hotspot observado;
+C candidatomínimo oucompatível: diff/build/runtime e gatesREDGREEN ou incompatibilidadeRAIZ;
+D coleta numerica real/baselinecontrols/metricas/envelope/holdout/fixture;
+E fixturesplanerror/JSON/init executadas;
+F microperf/952experimental sefeito com labels e denominadores;
+G preservacaopatches/Whispernaotestado/CI/F2/artefatosprobe!=SIG;
+H decisionporrota e nextstep, distinguindo 'portv1BLOQUEADO' de 'patchnovoPENDENTE'.
+Logs docs/npu-hymt2/smart-rodada11/ manifesto fullSHA/exits/contagensexclusivas porattempt/session. Nao relatar design como envelopecalculado nem candidatoincompatível comoembuild. SemUI/R2/release/appprincipal nesta rodada. Entregar perfil e artefatoexecutado ou blockerobjetivo; nao repetir 'diff fino na fila' sem nova evidencia.
