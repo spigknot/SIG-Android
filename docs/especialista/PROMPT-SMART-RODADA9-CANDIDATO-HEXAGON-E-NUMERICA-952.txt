@@ -1,0 +1,49 @@
+ORDENS AO EXECUTOR — POS R8: CANDIDATO HEXAGON E VALIDACAO NUMERICA DO CORPUS 952
+================================================================================
+
+PARECER DO ESPECIALISTA
+RelatorioR8 lido em docs/especialista. Nao reexecutei aparelho nem conferi todos os novos anexos. Reconheco preinitcorrigido e corpus952 finalmente exercitado comchunking, traducao completa nas duasrotas e repeticoes iguais. Esses sao avanços. Nao aceito ainda tolerancianumericaresolvida, resetABA pleno no952 ou ganhocomescala.
+Meta dualSmart/menu/defaultVulkan/c4bf preservados. Stayon7 foi decidido pelo usuario segundoA5: pendencia fechada, sem novas alteracoes. SemUI/SIGprincipal/Whisper/R2/release nesta rodada salvo escopoespecificoexplicito.
+
+1. RETIFICAR R8 ANTES NOVAS CONCLUSOES
+- F4 diz inicialmente OC/VK IDENTICOS aoCPU; depoislinha159 declara diferencatextual. Corrigir: SmartOC==SmartVK e repeticoesidenticas; CPU difere pelo menos nesse trecho relatado. Entregar fullSHA de CADA output e diff real, sem 'identico' contraditorio.
+- Tres pedidos IDENTICOS comreset entre eles sao A-A-A, nao A-B-A. Comprova repetibilidade/idempotencia, nao independencia entre entradas. Precisamos A952 -> Bcurtodiferente -> A952 noMESMOparcontextos, ambossamplersreset; A1/A2comparados e B validada.
+- Argmaxdivergente sem margem/logits NAO prova apenaserrodetolerancia. Texto bom/semcorrupcaoobservada eh evidencia positiva, mas 'margempequena' aindaHIPOTESE. Nao reclassificarSMART-DIVERGENTE comoCCEcorretudecompleta ate diagnostico.
+- Tempos952 tem ESPELHO (dec_s301), nao benchmarkproduto. Nao conclui 'ganho crescecomcorpus' nem escala. H2 deve dizer correto/semanticamenteplausivel na amostra, numerica/reset/perf pendentes separadamente.
+- Parametros preinit aplicados antesload melhorammetodo, mas B3 nao registravaloresinternos consumidos. OPBATCH/OPQUEUE/NHVX4 somenteR7lateinvalidos nao podem ser herdados como negativospreinitR8. Conclusao: MM_SELECT2/NHVX8 sem diferencaobservavel COM aplicacaopre-registro; prova interna pendente. Nao gastar outrogrid; instrumentar consumo.
+
+2. EXECUTAR AGORA DIFF FOCAL + PRIMEIRO CANDIDATO, SEM MAIS RODADA SO DE FLAGS
+Em paralelo a diagnosticonumerico, auditar backendHTP cohortSIGvsupstream: contratoiface/opcodes/types/layout/host staging/quantweights/HMXselection/queues/compilerflags/skelprotocol. Rastreardefinicoes eimplementacoes, nao so nomes/diffallfiles.
+Adicionar logs curtos/test-only no ponto ggml_hexagon_init e htp_iface_start: parametros efetivos, n_threads/HVX/HMX/vmem/dispatch/profile e identidades; flagsfora produto. Nao usar verbosecompleta bloqueante, nemrequireverbose até fazerqualquertrabalho. Capturar logsdevicearquivoapropriadoquando stdoutfora logcat.
+Escolher primeiro candidato minimo a partir do diff, documentar designallowlist e testeRED/GREEN. O envio this->n_threads em vezopt_nhvxzero continuaHIPOTESE; confirmarsemanticaRPC/receiver/skelantes patch. Se prototiparsafetysemantica, rebuildTODOcohort coerente noMESMOcoreSIG. Nada de swappingbinarysubcohort.
+Se candidato nao reduz gargalo, devolverresultado e passarnextcausaespecifica, nao portar backendinteiro porpalpite. Port allowlist upstream se realmente necessario e APIscompativeis, preserving patchsetVulkan/OpenCL/reset/loadercache. Sem mexer coreSIG/Whisperpublicados. Buildisolado servidor caminhoscurtosmanifestpins/flagsFULLSHAs/8libsSKELbindingAPK ehashreadbackmaps.
+Validar HTP curto/reset/finite/placement e microperfbaselinecandidato sobconfig/energiaequivalentes. Controle A-B-A de buildsquando seguro para evitar termalordemconfound, semcampanha longa. Get deviceidle separado wakefulnessclockCPU; restoreexatoflags/configtemporary, stayon7autorizadoinalterado.
+
+3. NUMERICA: LOCALIZAR PRIMEIRA DIVERGENCIA SEM 6 RUNS LONGOS
+Reusar952pinado/contractpromptSHA e chunkingcorreto. Logar n_prompt e lotes reais, posicoes/logitsultimo; c3historico tinha outro prompt: nao comparart/scomo matched.
+Rodar VALIDACAOUMArotaSmartselecionada e capturar na PRIMERA divergencia teacherforced:
+- posicao, tokenconsumido, top-kIDs/logits/margemtop1top2 de ambos lados;
+- finite, erroabs/rel e indicadornormalizadoadequado as distribuicoes conforme design;
+- cumulativosteps/pass/divcount e toleranciacriteriofixadaANTESreclassificacao.
+Origem e destino devem consumir prefixoidentico, samplers separados/greedy e semhistoricodiferente. Distinguirdivergenciaoriginprefill vs memoriaimport vs decodecompute.
+Controle puroGPU -> mesmaGPUstate roundtrip e CPU/HTP references em prefixoscurtosselecionados; nao exigirbitidenticofloatscrossbackend, mas comparar errocontrabaseline puro doMESMOdestino para avaliarhandoff. Chamartoleranciacorreta somente aposnumericevidence, nao 'texto semelhante'.
+Depois validaoutrarota e A952-Bcurto-A952 em ambosparescontexts (preferir1ciclo completo por rota primeiro); outputs fullSHA/tokenstream/stop/runtimes e veredito camadas. Cap/EOG/timeout/resetgate: nenhumdivergete/cap viraSUCESSOna camadaestrita. Gate pode ter statusNUMERICO_TOLERADO porcriteriovalidado, nao remover checkporque incomoda.
+Fixture chunking permanente: nt<128,==128,>128,empty/limite, logitsultimotokenbatchpositionscontinuas; no replayfull, requestreset, capincluiponte. Mesmohelperpredfill pure/Smart. Mutantesfixtureinitone-shot e consumoefetivo ainda pendentes: executaroffline+runtimefocal, nao apenas declararhistoricoRED.
+
+4. PERFORMANCE952 SO NO BENCHMARK SEM ESPELHO
+Se numericahandoffaceita e candidatoHTPfuncional, piloto952/short de seis modos (validar apenasbaselines necessarios, nãorepetir matrizvulkaninteira semmudancacore). Camposbenchdec_s0, stopEOG, fulloutput/ID/configmanifest congruentes. Umawarmrepdiagnostica se demorada, ampliar3 intercaladas se seguro/conclusaoprecisa.
+Manter mesmo prompt/modelo/config e residencyequivalenteconforme1ou2contextproduto; coldloadpreparacao/kernelwarmup separado do pedidoTotalInclReset e TTFTready/visible se callbackreal. WalldeespeIhoantigo nãoentra tabelabeneficio. Medianas de wall medido porrequest, NAO soma de medianas nem 'substituir prefill por90ms' para ganhoestimado.
+Ganhoshort~10% noctrlcohort upstream continua EXPLORATORIO, nao candidatoSIG integrado. Exigir confirmar no candidatoSIGcorrigido comGPUpatchespreservados. Se952Smartperde, relatarhonesto; meta nao obriga fabrica beneficio.
+Memoriahost/GPU/DSP limitesobservabilidade/LMK/sensores porrun, condiçoescomparaveis/awake safely e serialfixoidentidade. Nao instalar sobreSIGprincipal nemuninstallprotected/datawipe; PJA110foraescopo.
+
+5. ENTREGA / CONCLUSAO RODADA
+RELATORIO-SMART-DUAL-BACKEND-RODADA9.txt docs/especialista A-H:
+A identidade/preinitvaloresefetivos/configs;
+B fixturesinit/chunking/resetgates/exits;
+C952outputsfullSHA/diff/AAAretificadoeABAreal;
+D primeirasdivergenciasnumericas/toleranciajustificada;
+E diffsemanticoallowlist e candidatoMINIMOcompile/exec ou bloqueioAPI concreto;
+F controleHTPbaselinecandidato e BENCH952 semespelho secriterioatingido;
+G preservacaoGPU/Whisper/F2/CI/probe!=produto;
+H estado porcamada/rota e nextstep objetivo.
+Logsmanifest fullSHA em docs/npu-hymt2/smart-rodada9/. Tentativasclassesexclusivas dedupe porsession/request/mode, todos exitcodes. Entregar artefatos de fato, naoanexosfantasmas. Nao novoquestionario 'o que priorizar': seguir candidato e numericaem paralelo, pedir somente autorizacaoexternal realmente faltante. NenhumaUI/release antesaceitacaodevalorestabilidade/compatibilidade/memoria/escopo.
