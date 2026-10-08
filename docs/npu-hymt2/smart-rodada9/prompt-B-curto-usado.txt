@@ -1,0 +1,3 @@
+<｜hy_begin▁of▁sentence｜><｜hy_User｜>Translate the following segment into Portuguese, without additional explanation.
+
+The cat sat quietly on the old wooden mat by the window.<｜hy_Assistant｜>

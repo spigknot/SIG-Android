@@ -1,0 +1,173 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 9
+=========================================================================
+Data: 08/10/2026 (madrugada). Executor: agente. Ordens: "POS R8: CANDIDATO
+HEXAGON E VALIDACAO NUMERICA DO CORPUS 952". Sem UI/produto/R2/release;
+SIG principal intocado; stayon=7 (decidido, inalterado).
+
+RESUMO EXECUTIVO: (1) RETIFICACOES do R8 emitidas (FULLSHA de CADA output;
+"identico" corrigido: OC==VK e repeticoes; CPU difere numa regiao unica;
+os 3 pedidos identicos = A-A-A (rotulado!)); (2) A-B-A REAL executado
+(A952->Bcurto->A952 no mesmo par; o B (26 tokens) ACEITO; A1/A2 em
+comparacao; com o fix de um bug de varargs achado no caminho); (3) PROVA
+NUMERICA DA DIVERGENCIA: capturada na 1a divergencia (pos 264) com top-5/
+logits/margens de AMBOS os lados em OC e VK — margens de 0.0096/0.0229
+(empate real entre 2 traducoes validas; determinismo INTRA-GPU e
+INTER-GPU identico; HTP difere por 0.17 num ponto ambiguo); finite=1;
+(4) DIFF FOCAL do backend: contrato iface IDENTICO (assinatura; n_hvx=0 =
+"hardware" no receiver -> NAO e' bug; hipotese descartada por leitura); o
+RESTANTE do tree diverge substancialmente (ex. main.c: 2556 linhas de
+diff) -> candidato viavel = port allowlist do tree htp/ (fase seguinte);
+(5) COHORT DIAGNOSTICO construido no servidor (mesmo core SIG + 2 logs
+test-only em ggml_hexagon_init/htp_iface_start; fonte restaurado; 8 libs
++ skel com manifest) para capturar parametros efetivos (a prova interna
+pendente do R8) — deploy/ensaio na sequencia desta rodada.
+
+-----------------------------------------------------------------------
+A. IDENTIDADE / PREINIT / VALORES EFETIVOS / CONFIGS
+-----------------------------------------------------------------------
+A.1 Cohorts: baseline v12 (shas R7); diag = build novo a partir do MESMO
+    core SIG (logs test-only; +40 bytes no libggml-hexagon). Probe v19
+    (prompts por request; DIV_DET com top-k; fix de varargs). APK
+    reinstalado a cada passo; nada do SIG principal tocado.
+A.2 Preinit (R8) mantido: runProbe pulado com p4-auto; TUNE antes do
+    load. A PROVA INTERNA (valores consumidos em ggml_hexagon_init +
+    argumentos de htp_iface_start) sera' observada no cohort diag (B).
+A.3 Stayon=7 (decisao do usuario; inalterado). Device awake monitorado.
+
+-----------------------------------------------------------------------
+B. FIXTURES INIT/CHUNKING/RESET/GATES (exits)
+-----------------------------------------------------------------------
+B.1 FIXTURES:
+    - init/reset/gate fixtures: os testes focais do R7/R8 (session gates
+      7/7) permanecem; a fixture init one-shot = cohort diag (log real do
+      primeiro init) + RED historico (R7 LATE).
+    - chunking: exercitado no 952 (nt~250 > 128: 2 lotes) — fixture
+      PERMANENTE de casos (nt<128, ==128, >128, vazio) fica na fila junto
+      do runner; nesta rodada o caminho >128 rodou 3x (CPU/OC/VK).
+B.2 BUG CORRIGIDO (varargs): o fprintf do JSON ganhou os %d/%.4f do
+    div_pos/margens sem a lista de args correspondente -> desalinhamento
+    (textos/resultados viravam lixo de ponteiro no JSONL da sessao!). O
+    LOG (contadores/DIV_DET) permaneceu integro (fprintf diferente).
+    Corrigido e reinstalado (v19b); o ABA2 re-captura os textos.
+    LICAO: mudanca de formato sem args = UB silencioso; manter asserts.
+B.3 Pulls: `adb shell > file` pode corromper bytes; adotado `exec-out`
+    (RAW) nos pulls de JSONL nesta rodada.
+
+-----------------------------------------------------------------------
+C. 952: OUTPUTS FULLSHA / DIFF / A-A-A RETIFICADO / A-B-A REAL
+-----------------------------------------------------------------------
+C.1 FULLSHAs (cada output):
+    CPU  sha256 62638c2b1d6bf13088c1560f85b58cb40a65092c40b3bc93e7ac20209d200660
+    OC-A1/A2/A3 = 78d21dbc2420912b47dbf3058ced9e5e7e458a512a7151f347751bab8c6f8882 (x3)
+    VK-A1/A2/A3 = 78d21dbc... (x3; OC==VK)
+C.2 DIFF CPU vs Smart: UMA regiao (pos 405-425, unica reescrita):
+    CPU "desrespeitar o sinal de transito" vs SMART "nao seguir as regras
+    de transito" — AMBAS traducoes validas; corrigida a afirmacao
+    contraditoria do R8 (nao "identicos ao CPU"; Smart OC==VK sim).
+C.3 A-A-A (retificado): os 3 pedidos identicos com reset = repetibilidade/
+    idempotencia (NAO A-B-A de independencia). O A-B-A REAL (A952->B->
+    A952, prompts por request, mesmo par de contextos): EXECUTADO em OC e
+    VK. Resultados (ABA2, fix de varargs aplicado):
+      req0 (A952): tok1=14533, 301 tokens, sha 78d21dbc (== A1 do R8!);
+      req1 (B curto): tok1=46, 26 tokens, "O gato sentou-se silenciosamente
+        no tapete de madeira velho, perto da janela." -> SMART-ACEITO;
+      req2 (A952): SESS[2] executou (contadores 301/301 e DIV identico no
+        log); o TEXTO do req2 caiu fora do pull (timing do runner; mitigado
+        no ABA3 que aguarda o fim real).
+    ABA3 (ciclo completo, pull apos o fim real; JSON 3789B, 3 reqs):
+      req0 A952 : sha 78d21dbc (301 tokens; div=264)
+      req1 B    : sha 3b49945f (26 tokens; SMART-ACEITO)
+      req2 A952 : sha 78d21dbc  -> **A1 == A2 BIT A BIT (== A1 do R8!)**
+    => repetibilidade/idempotencia E independencia entre entradas (o B no
+    meio NAO alterou o A); DIV identico (pos 264) apos o B.
+C.4 Espelho: os tempos do 952 SAO com espelho (dec_s=301!) — nao e'
+    benchmark de produto; "ganho cresce com corpus" segue HIPOTESE (nao
+    promovida).
+
+-----------------------------------------------------------------------
+D. PRIMEIRAS DIVERGENCIAS NUMERICAS / TOLERANCIA JUSTIFICADA
+-----------------------------------------------------------------------
+D.1 Captura na 1a divergencia (teacher-forced; prefixo identico; samplers
+    separados/greedy) — OC e VK, MESMO resultado nos dois:
+    pos=264: tokD=305 (26.6921/26.6961) vs tokS=11 (26.7165)
+    topD=[305:26.6921 11:26.6825 26:16.0612 13:15.5356 739:13.9387]
+    topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038]
+    margemD=0.0096 (OC) / 0.0229 (VK); margemS=0.1723; finite=1.
+D.2 LEITURA (com a evidencia numerica, nao "texto semelhante"):
+    (a) os top-5 dos dois lados sao OS MESMOS tokens (ordens trocadas);
+    (b) a margem do destino e' minima (0.0096-0.0229 de ~26.7 = ~0.04-0.09%)
+    — o ponto e' um EMPATE praticamente exato entre duas continuacoes
+    semanticamente equivalentes;
+    (c) determinismo: OC e VK reproduzem a MESMA divergencia (mesma pos,
+    mesmos tokens) — nao e' instabilidade; e' o HTP discordando dos DOIS
+    GPUs por 0.17 em um ponto genuinamente ambiguo; (reproduzido 2x em
+    sessoes independentes: ABAs R9: mesmos top-5/margens 0.0096/0.0229);
+    (d) finite=1 (sem NaN/Inf). NAO ha corrupcao de estado evidenciada;
+    a hipotese "margem pequena" agora tem REGISTRO numerico (D.1).
+D.3 Criterio: tolerancia NUMERICA proposta (para reclassificacao do gate,
+    NAO removendo o check): divergencia com margem < tau (ex. 0.1 logits)
+    + top-k sobreposto + finite => status NUMERICO_TOLERADO (a validar
+    na proxima rodada com o critério fixado no design); a camada estrita
+    permanece para divergencias maiores. NAO reclassificar ainda (a ordem
+    pede criterio ANTES).
+
+-----------------------------------------------------------------------
+E. DIFF SEMANTICO / ALLOWLIST / CANDIDATO MINIMO
+-----------------------------------------------------------------------
+E.1 Contrato iface: assinatura de htp_iface_start IDENTICA nos 2 cohorts;
+    no receiver, n_hvx==0 => hw_nhvx ("use all") — o opt_nhvx=0 do SIG
+    NAO e' bug (hipotese DESCARTADA por leitura do main.c, como a ordem
+    exigia antes de patch). O envio de n_threads pelo upstream e' apenas
+    HIPOTESE residual sem efeito observavel (NHVX=8 sem diferenca).
+E.2 Estado do diff: o tree htp/ do vendor SIG e' substancialmente
+    diferente do upstream (main.c 1179 vs 1375 linhas; 2556 linhas de
+    diff; ops/kernels/queue reescritos). Nao ha flag/patch unico obvio;
+    o candidato viavel e' o PORT ALLOWLIST do tree htp/ (fase seguinte,
+    com design de APIs e preservacao do patchset Vulkan/OpenCL/reset/
+    loadercache). Nao portar antes do design (ordem).
+E.3 COHORT DIAG construido e ENSAIADO (mesmo core SIG + 2 logs
+    test-only; fonte restaurado apos; libs+manifest anexados):
+      HEXINIT_DIAG: nhvx=0 nhmx=1 mm_select=3 opbatch=1024 opqueue=16 vmem=3355443200
+      IFACE_START_DIAG: arg_nthreads=0 | n_hvx=8 n_hmx=1 dev=0 queue=0 vmem=3355443200
+    => os valores EFETIVOS = os defaults do fonte; o iface recebe 0 e o
+    INTERNO ja' e' 8 (= hw) — a hipotese n_threads MORRE aqui (0->hw no
+    receiver e 8 interno: mesmo resultado). OBSERVACAO: com os logs, o
+    run de medicao do diag NAO completou (os 4 requests abriram sessao e
+    os 4 HEXINIT/IFACE ocorreram; nenhum SESS concluiu) — o instrumento
+    perturbou o fluxo (reentrancia do callback de log durante o FastRPC,
+    hipotese) — para medir com logs: registrar FORA da janela critica
+    (ex. so no init) — declarado; o objetivo (efetivos) foi atingido.
+E.4 Nada de swap parcial; nenhum default de produto alterado.
+
+-----------------------------------------------------------------------
+F. CONTROLE HTP / BENCH 952
+-----------------------------------------------------------------------
+F.1 Controle upstream (R7) mantido como referencia (nao-produto).
+F.2 Bench 952 sem espelho: PENDENTE (so' apos numerica aceita + candidato
+    funcional — ordem 4). Nada promovido.
+
+-----------------------------------------------------------------------
+G. PRESERVACAO
+-----------------------------------------------------------------------
+G.1 Vulkan/OpenCL patches, reset, loadercache: intactos no core SIG;
+    Whisper intocado (nao testado); F2/CI sem mudanca; probe != produto
+    (loader OCL proprio do SIG permanece a diferenca mapeada).
+
+-----------------------------------------------------------------------
+H. ESTADO POR CAMADA / PROXIMA DECISAO
+-----------------------------------------------------------------------
+H.1 HTP: causa localizada entre cohorts (CCE R7); flags runtime sem
+    efeito com preinit (R8); contrato iface compativel (E.1); candidato
+    = port allowlist htp/ (design pendente) + cohort diag para valores
+    efetivos (E.3).
+H.2 Smart OC: correto/semanticamente plausivel no 952 (amostra); numerica
+    com evidencia parcial (D.1/D.2; criterio a fixar); perf pendente.
+H.3 Smart VK: idem (mesma divergencia reproduzida).
+H.4 Proximo passo objetivo: (1) rodar o cohort diag (valores efetivos);
+    (2) design allowlist do port htp/ + build candidato; (3) criterio
+    numerico fixado + fixture chunking permanente; (4) bench 952 sem
+    espelho quando 1-3 estiverem aceitos. Sem UI.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada9/ (r9-aba txts/JSONLs via
+exec-out, DIV_DET do log, cohort diag libs+manifest, scripts). Exits e
+contagens por ID nos arquivos; o BUG varargs documentado (B.2).

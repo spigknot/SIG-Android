@@ -1,0 +1,34 @@
+=== R9 ABA3 ciclo completo (02:45:12Z) ===
+[ABA3] fim detectado (ou teto) em ~360s
+    PROMPT[0]: arquivo proprio (len=1101)
+    PROMPT[0]: arquivo proprio (len=1101)
+    PROMPT[0]: arquivo proprio (len=1101)
+    PROMPT[0]: arquivo proprio (len=1101)
+    PROMPT[0]: arquivo proprio (len=1101)
+    PROMPT[0]: arquivo proprio (len=1101)
+    PROMPT[0]: arquivo proprio (len=1101)
+    DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6921 11:26.6825 26:16.0612 13:15.5356 739:13.9387 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0096 margemS=0.1723 finite=1
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    PROMPT[1]: arquivo proprio (len=205)
+    PROMPT[0]: arquivo proprio (len=1101)
+    DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6921 11:26.6825 26:16.0612 13:15.5356 739:13.9387 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0096 margemS=0.1723 finite=1
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    PROMPT[1]: arquivo proprio (len=205)
+    SESS[1] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=46 emitidos=26 consumidos=26 dec_s=26
+    SESS[1] opencl texto_len=77 (integral no JSON)
+    SESS[1] opencl RESULTADO: SMART-ACEITO
+    PROMPT[2]: arquivo proprio (len=1101)
+    PROMPT[0]: arquivo proprio (len=1101)
+    DIV_DET: pos=264 tokD=305 tokS=11 | topD=[305:26.6921 11:26.6825 26:16.0612 13:15.5356 739:13.9387 ] topS=[11:26.7165 305:26.5443 26:16.1251 13:15.5035 739:14.0038 ] | margemD=0.0096 margemS=0.1723 finite=1
+    SESS[0] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=14533 emitidos=301 consumidos=301 dec_s=301
+    SESS[0] opencl texto_len=1061 (integral no JSON)
+    SESS[0] opencl RESULTADO: SMART-DIVERGENTE
+    PROMPT[1]: arquivo proprio (len=205)
+    SESS[1] opencl valid: ok=1 cap=0 eog_tok1=0 tok1=46 emitidos=26 consumidos=26 dec_s=26
+    SESS[1] opencl texto_len=77 (integral no JSON)
+    JSON: 3789 bytes
+R9_ABA3_DONE

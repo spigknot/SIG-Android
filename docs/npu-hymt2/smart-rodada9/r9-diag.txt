@@ -1,0 +1,28 @@
+=== R9 DIAG DEPLOY (02:39:18Z) ===
+--- backup v12 ---
+0fa02e2a83b0ec0b*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libggml.so
+c8987c2b7dc87604*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libggml-base.so
+03831fd147082cf0*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libggml-cpu.so
+dc88db2d7c2e5237*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libggml-hexagon.so
+0a4ec5b7ac18a940*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libggml-htp-v81.so
+78c9d17ffa659747*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libggml-opencl.so
+326635436a249de4*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libggml-vulkan.so
+6682f6f3f7dc13d2*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libllama.so
+--- deploy diag (scp) ---
+b460d741f223d075*C:/npu-probe/app/src/main/jniLibs/arm64-v8a/libggml-hexagon.so
+BUILD_RC=0
+Success
+--- run htp solo x4 (cohort diag) ---
+    [ggml] HEXINIT_DIAG: nhvx=0 nhmx=1 mm_select=3 opbatch=1024 opqueue=16 vmem=3355443200
+    [ggml] IFACE_START_DIAG: arg_nthreads=0 n_hvx=8 n_hmx=1 dev=0 queue=0 vmem=3355443200
+    [ggml] HEXINIT_DIAG: nhvx=0 nhmx=1 mm_select=3 opbatch=1024 opqueue=16 vmem=3355443200
+    [ggml] IFACE_START_DIAG: arg_nthreads=0 n_hvx=8 n_hmx=1 dev=0 queue=0 vmem=3355443200
+    [ggml] HEXINIT_DIAG: nhvx=0 nhmx=1 mm_select=3 opbatch=1024 opqueue=16 vmem=3355443200
+    [ggml] IFACE_START_DIAG: arg_nthreads=0 n_hvx=8 n_hmx=1 dev=0 queue=0 vmem=3355443200
+    [ggml] HEXINIT_DIAG: nhvx=0 nhmx=1 mm_select=3 opbatch=1024 opqueue=16 vmem=3355443200
+    [ggml] IFACE_START_DIAG: arg_nthreads=0 n_hvx=8 n_hmx=1 dev=0 queue=0 vmem=3355443200
+    JSON: 0 bytes
+--- RESTORE v12 ---
+RESTORE_BUILD_RC=0
+Success
+R9_DIAG_DONE

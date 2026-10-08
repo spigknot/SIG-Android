@@ -1,0 +1,25 @@
+MANIFESTO SHA-256 — smart-rodada9 (08/10/2026; v2 final)
+
+FULLSHAs 952: CPU 62638c2b...; OC==VK 78d21dbc (x8: R8 x6 + R9 A1/A2); B-curto 3b49945f.
+ABA3: A1==A2 bit a bit; B ACEITO no meio; DIV pos264 identico apos o B.
+DIV_DET: margemD OC 0.0096 / VK 0.0229; margemS 0.1723; finite=1; top5 iguais (empate real).
+COHORT DIAG: efetivos nhvx=0/nhmx=1/mm3/1024/16; iface arg 0 -> n_hvx=8 (hipotese n_threads morta).
+BUG varargs do JSONL corrigido (v19b); pulls via exec-out; ficar ciente do 'w' por sessao.
+
+d41231f31f35bab501cf47b34761ce8decc5177a199db9aab2fd9ca41fc669b1  npuprobe-r9.log  (351740 B)
+0b234aac304c7707185c730c07d51761390ab92bf81929f10cc6bf76533c393d  prompt-B-curto-usado.txt  (205 B)
+d502c68618186b9c4bd85a675cd7b5b4806d00838a80a1342f21899def869acb  r9-aba-real.sh  (1550 B)
+5491790eeec107f395ed31fa35740f3cdd4ace81e7695e60664ac6dca9c7b0b1  r9-aba.txt  (2690 B)
+b95a4cdf8e6ebf66fe5812691fa3f9cfc5e3599b43cb0c5e665a0a33cf96be6c  r9-aba2-oc.jsonl  (2197 B)
+17e727b8a063172a43aa0e25578479cded9be8a87dcb5a477a4e4211074a3dd2  r9-aba2-vk.jsonl  (2194 B)
+3a95ced9dd05002336f9e3784fae387a2f55ed913f6322129dba5a8fa1f15066  r9-aba2.sh  (1811 B)
+ff8d9951f4f016cbfa4dd34bafbf280b06b2a9e7f563c95051a61c0779934f55  r9-aba2.txt  (2236 B)
+43d0a6bc8146a76aee7ae798c6bc557d005fd500ae69c4e3200acd1535754753  r9-aba3-oc.jsonl  (3789 B)
+bdf9e5b8774e894b561d44d514088959507862712649562a21cae75a4fe56ce6  r9-aba3.sh  (1890 B)
+6f29f1c6aa79b7ba641dcd4821a05f9885fe2dc603c16987483e0aeb91d0c852  r9-aba3.txt  (2211 B)
+660e3a25daaf7d07f541ea0244f0a9c5293983b7fd3955cfc1b98747b9909c39  r9-build-diag.sh  (2969 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  r9-diag-htp.jsonl  (0 B)
+44fe138faa582b1b566f4db728fc559a0f27455ea407e17775f25b6b7c975e27  r9-diag.sh  (2959 B)
+ab7d7f5b8f8f884adb6b3767ed767103d812b35c6b6075592c4f64a68de9dafe  r9-diag.txt  (1637 B)
+
+a41357f7dcce2933fc549be41c0b0dc4f0af0faf2c20cc93fbb927eb787d67d7  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA9.txt (10885 B)
