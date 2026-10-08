@@ -1,0 +1,57 @@
+ORDENS AO EXECUTOR — SMART RODADA 8: CORRIGIR ORDEM DE INICIALIZACAO ANTES DE PORTAR HEXAGON
+========================================================================================
+
+PARECER
+A comparacao de cohorts e um avanco: o conjunto upstream reproduziu HTP rapido e surgiu um sinal favoravel ao Smart OpenCL no curto. Entretanto, NAO aceito a conclusao 'flags nao fazem efeito' nem o isolamento causal exclusivo em libggml-hexagon. O especialista encontrou um defeito concreto na ordem de inicializacao do probe atual. Corrigir e retestar esse ponto barato ANTES de portar um backend inteiro.
+
+EVIDENCIA DE FONTE LIDA PELO ESPECIALISTA
+C:/npu-probe/app/src/main/java/br/gov/sp/pcsp/npuprobe/MainActivity.java:59 chama runProbe(libdir), ANTES do auto-gatilho smart nas linhas68-77.
+C:/npu-probe/app/src/main/cpp/probe.cpp:113 carrega todos os backends; 120 carrega Hexagon diretamente; depois enumera/inicializa HTP.
+O tune remoto p4-tune.txt e aplicado so no caminho de sessao de runSmart, linhas798-815, DEPOIS de runProbe.
+No fonte SIG, ggml-hexagon.cpp:4375-4394 le as envs em ggml_hexagon_init; 4479-4498 faz essa inicializacao UMA VEZ, protegida por static initialized.
+Portanto, imprimir TUNE/setenv antes do SEGUNDO load nao comprova parametro ativo: o registro Hexagon ja foi inicializado com defaults pelo runProbe anterior. Force-stop/restart nao resolve se onCreate repete sempre essa ordem.
+Confirmar hashes do fonte lido versus APK usado na R7. Se APK tiver ordem diferente, entregar fonte/diff correspondente. Especialista nao executou aparelho nesta resposta.
+
+1. PRIORIDADE IMEDIATA: CONFIGURACAO PRE-INIT REAL
+Mover a preparacao de ambiente/config para antes do PRIMEIRO registro/load/init Hexagon no processo. Nao executar kernel de controle ou listar device antes do tune. Opcoes de design:
+A. Bootstrap nativo unico: aplicar config -> inicializar backends -> executar probe/request.
+B. Em auto-gatilho de benchmark, pular runProbe antecipado e usar um bootstrap comum configurado; controles P1-P3 em modo separado.
+Escolher o menor ajuste testavel sem code paths divergentes. Inspecionar tambem System.loadLibrary/dynamic dependency constructors para garantir que registro nao acontece antes do ponto escolhido.
+Printar parametro SOLICITADO e parametro EFETIVO no ponto real ggml_hexagon_init e valores enviados a htp_iface_start, incluindo n_threads/n_hvx/HMX/MM_SELECT/opbatch/opqueue. Log TUNE setenv nao e valor efetivo do backend.
+Mutante/init-order test permanente: preinit com parametro nao-default deve produzir configuracao ativa esperada; configurar depois de registro deve ser rejeitado ou marcado LATE/INEFICAZ, nunca passar como tuning. Simular registro one-shot em fixture offline e depois confirmar em app separado normal com hashes.
+
+2. RETESTE CURTO DE CONFIG, MESMO COHORT SIG
+Preservar baseline v12 completo. Repetir somente defaults vs NHVX=8 (e/ou correcao minima this->n_threads no iface se auditoria de contrato justificar), com freshprocess e tune efetivo confirmado ANTES registro. Nao assumir que opt_nhvx=0 e bug: comentario diz 'use all'; rastrear semantica do receptor/skel se zero significa all/default. Enviar n_threads pode ser candidato, nao fix automatico.
+Se parametro realmente ativo mudar performance, testar corretude/reset e perfil/fallback; registrar causa com controle. Se continuar igual, a conclusao 'estas configuracoes testadas nao explicam diferenca' passa a ter fundamento — nao excluir toda flag possivel.
+Nao reexecutar quatro combos por horas; miniensaio curto com warmreps e mesmo prompt/config/estado, controle antes/depois. Perfil leve por operacao/HMX/HVX/fallback so se necessario, fora benchmark.
+Nao alterar lib SIG principal/Whisper/modelo/UI/default. No alvo separado, manter wrappers serial/identity/antiuninstall e restore exato das alteracoes autorizadas.
+
+3. COHORT A/B: CONCLUSAO LIMITADA, PERO UTIL
+Trocaram oito componentes/core/skel/backend. Isso demonstra nesta amostra que o conjunto upstream e rapido e o SIG atual lento sob protocolo comparado; nao isola codigo Hexagon sozinho. Conclusao correta: diferenca de desempenho localizada entre cohorts, backend Hexagon/config e candidato principal.
+Tambem nao chamar parametro extraido do fonte de 'parametro efetivo runtime' sem confirmar consumo real. Retificar R7D3/E1/H1 depois do teste de inicializacao.
+Se preinit nao explicar: fazer diff semantico focal, kernels HMX/dispatch/host staging/queue/fallback e protocolos iface. Preferir correcao minima no MESMOcoreSIG. Portar tree upstream e dependencias so apos design/allowlist se APIs compatíveis. FULL rebuild cohort coherente; nunca swap ABI parcial. Controle upstream nao vira produto nem candidato Smart Vulkan sem patchset SIG.
+
+4. GANHO OPENCL: SINAL PROMISSOR, NAO ESCALA COMPROVADA
+Tres wall Smart452.9/493.2/519.6ms vs pure520.4-534.8ms sustentam um resultado favoravel exploratorio no controle. Para percentual final exigir tres valores puros exatos por request, criterios cold/warm/residency/reset equivalentes, ordem e sensores; calcular mediana/dispersao por script. Nao substituir faixa por media inventada.
+'o ganho cresce com corpus' NAO foi medido: corpus952 nao executado. Rotular HIPOTESE a testar. Prefill fraction maior nao garante ganho porque handoff/state size e memoria tambem crescem.
+Benchmark wall excluir reset/load e aceitavel como campo desde que pedidoTotalInclReset e coldmodel/context separados. Sem espelho: zero decode origem posponte confirmado; stopEOG/saida inteira/cap gates antesvalidattempt.
+Artefatos do controle precisam estar entregues: manifesto cita ctrlJSONLs, mas no diretório da R7 consultado pelo especialista nao apareceram ctrl*.jsonl. Localizar/copiar evidencias reais sem fabricar, registrar paths/fullSHAs, identity/shaAPKbindingssourcetested e restore v12. Logs npuprobe-r7.log consultados terminam em focais v12, nao substituem automaticamente stream do controle posterior. Nenhuma alegacao 'sem evidencia listada' basta se anexo esta fora do bundle.
+
+5. CORPUS E NEXT STEP, SEM POSTERGAR NOVAMENTE POR DEFAULT
+Quando preinit correto/parametros e gates estejam seguros, executar prova de corretude do952 identificado em duasrotas no buildSIG ou candidato corrigido (mesmo se lento, timeoutbounded). Hash completo de fonte/prompt, chunks n_batch128, ultimo logit/posicoes corretos, outputs completos/EOG/cap, A-B-A no mesmo par de contextos. Nao reparar final 'an.' silenciosamente; se quiser corpus completo novo rotularNOVO.
+Se HTP rapido recuperado, matched6modos pequenos intercalados/estado comparavel no buildcorrigido, depois952. Se nao, entregar diagnostico e prova maior com medicao negativa honesta; nao condicionar toda fase a 'voltar90ms'. Meta6opcoes preservada sem UIprematura.
+
+6. PENDENCIA STAYON E ESTADOS
+stayon7 com valororiginalperdido deve ser decisao usuario; nao presumir0 nem7 como estado correto. Em proxima interacao necessaria agrupar essa pergunta com demais autorizacoes objetivas, sem revelar/pedir credenciais. Evitar novaalteracao ate decidido. Descrever mWakefulness e deviceidle separados; nao repetir 'Doze medido por display/clocks'. ClockCPU nao clockHTP.
+
+7. ENTREGA OBRIGATORIA
+RELATORIO-SMART-DUAL-BACKEND-RODADA8.txt em docs/especialista A-H:
+A identidade/sourceAPK/primeiroinit/manifest/protecao;
+B RED/GREEN de preinit e gates/configsolicitada-efetiva;
+C defaults vs NHVX/etc com parametrosrealmenteconsumidos;
+D resultado microteste e causaOBSERVADA/hipotese/configlimites;
+E cohortcorrigido ou diffportallowlist se necessario;
+F controleOpenCL anexos completos e ganhoescopo, 952execucao ou bloqueio exato;
+G integracaoNAOrealizada/Whispernaotestado/restore/stayon;
+H conclusao porrota e proxima decisao com estados CCE/PARCIAL/PENDENTE/BLOQUEADO.
+Logs docs/npu-hymt2/smart-rodada8/ fullSHA/exit/countsclassesexclusivas/IDs. Comparativos por script sem percentuais estimados promovidos a MEDIDO. Sem UI/release/SIGprincipal/R2 nesta rodada salvo novoescopoexplicito. Prioridade: bootstrappreinit, reteste barato, depois port se justificado — NAO portar antes resolver o defeito do harness.
