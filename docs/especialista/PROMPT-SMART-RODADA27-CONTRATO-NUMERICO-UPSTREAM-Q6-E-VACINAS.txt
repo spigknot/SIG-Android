@@ -1,0 +1,75 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 27
+FECHAR CONTRATO NUMERICO COM REFERENCIA PINADA, Q6 OFFLINE E VACINAS REAIS
+===============================================================================
+
+1. PARECER DA R26 E VERIFICACAO INDEPENDENTE
+O especialista encontrou/leu RELATORIO-SMART-DUAL-BACKEND-RODADA26.txt na pasta solicitada. Conferiu os3 hashes de anexos: correspondem. Deduplicou por PID+resultado (REPORT nao conta novo run):15matmuls, 11PASS e4FAIL no criterio atual. Q4_K eQ6_K B1/B2PASS estao comprovados no log; Q6 e avanco real, nao inferencia do fonte.
+B128: F32PASS (viol0/maxabs0.07092/NRMSE0.00022), Q4_0FAIL4, Q8_0FAIL6, Q4_KFAIL10, Q6_KFAIL9. Todos comfinite/cobertura completos naquelas execucoes. Nao 'controlescompletosPASS': quantizadosantigos B128 tambemFAIL. Teste separado de rejeicaoQ5 nao e kernelPASS.
+Conferi constanteQ6 DIRETAMENTE no pin1ec81880944a63bc4aaf1abfe9a6d35c7569a757: HTP_MM_WEIGHT_TILE_SIZE_Q6_K=896. ParaK256/N64, required14336 esta coerente. Menções anteriores a tile1024 nao sao referencia do pin; usar o header DO COHORT e pinexato, nao copiar formulaQ4.
+RETIFICAR 'nao e port, e FP16accumulate confirmado'. Falhas em tiposantigos tornam plausivel errocomum de datapath/referencia/criterio, mas NAO excluem bug adicionalK nem provam precision do acumulador. Valoresfp16-like comprovam compatibilidade com representacaosaida, nao aritmetica intermediaria. F32B128 tambem tem maxabs0.07092, muito diferente do B1~0.00003, embora passecriterio; estudar caminhos completos, nao dicotomia 'quantizadofalha/F32exato'.
+Contraprova calculada pelo especialista no maiorvioladorQ4(b42,n45): CPU-0.094327398 convertido a FP16 e -0.09429931640625 (erro2.808159375e-05); HTP=-0.168334961 (erro0.074007563). Logo simplesROUND_FINAL_FP16 do refCPU nao explica essa diferenca. Pode envolver quantativacao/pesos/accum/cancelamento/referencia; esses mecanismos precisam ser separados.
+GreenB1/B2 aceitos no minimo, nao KERNEL_VALIDATEDglobal. Shapesproduto/graph/Smart/perf continuamposteriores. Instabilidadebuild/loggingOPEN, nao fixternarioaceito.
+
+2. REFERENCIA NOVA: O CRITERIO DO TESTE OFICIAL DO PIN
+Inspecionado diretamente via git show pin:tests/test-backend-ops.cpp:
+- nmse, linhas298-310: soma((a-b)^2)/soma(a^2), usando referenciaa;
+- test_mul_mat::max_nmse_err():5e-4 (ha override especialBLACKWELL_FP4, NAO aplicavel aqui).
+O harness atual usa NRMSE=sqrt(NMSE) como metrica auxiliar e regra elemento0.02+0.05*abs(ref) como gate. Sao contratos DIFERENTES. Nao comparar NRMSE a limiteNMSE diretamente. LogNRMSE0.00037 arredondado implica aproximadamenteNMSE1.369e-7, nao valor exato paraauditoria; obter vetores/metricasfullprecision.
+Isso permite avaliar criterio FUNDAMENTADO no teste upstream pinado, nao simplesmente subir limite a partirdos10violadores. Nao afirmar PASS_UPSTREAM por apenasquadrado do numero arredondado. Confirmar a orientacao de referencia/denominador e finite, cobertura, shape/config/type/kernel exatamente usados.
+Formalizar documento DESIGN-CRITERIO-NUMERICO.md junto dos testes:
+A criterioLEGADO0.02+5% permanece congelado e suasfalhas sao preservadas;
+B criterioPIN_NMSE e implementado/executado fielmente comguardfinite/coverage/denominatorzero e referenciaexplicita;
+C max_abs/violadores/localizacaodiferencas continuam diagnosticos, nao apagados;
+D aceiteglobal exige tambem contratos estruturais/dispatch/alloc, mutantes/bounds e cobertura, nao umscoreglobal sozinho.
+Se proporusar NMSEpinado como gate de aceitação dos kernels, registrar explicitamente justificativa/limites/validacaocasosindependentes e decisao, nunca reclassificar retroativamente os logsLEGADO. Esse contrato e para matmul, NAO autoriza mudar NUMGATE de handoff/logits ou liberar qualidade da traducao/modelo.
+Nao relaxar criterios escondido. NMSEpode diluir erroisolado: incluir fixtures conhecidoresultado/sinais/onehot/layout/scales e mutantes que gateestrutural/metrica deve detectar, com cobertura de perturbacoeslocalizadas. Concluir PASSmatmul em um contrato NAO garante semanticsKV/handoff.
+
+3. ACEITACAO MINIMA DESTA RODADA: OFFLINE EXECUTADO, NAO MAIS PENDENTE
+Ha serverg++ funcional e deviceGREEN. Q6oracle, vacinas e referencias foram repetidamenteadiados semblockertecnico; esta rodada deve entregar artefatos reais e comandos/exits. Nao outra sessao so de logsseguida 'proximooffline'.
+Entregar obrigatoriamente:
+1 Q6offline sobre CODIGOREAL upload/alloc/descriptor + goldenpinado/leitorindependente(signs/planes/scale/padding/bounds);
+2 pelo menosregressao callbacksdispatch->memcpy e allocK->canonical REDmutante/GREENcorreto, compilada do codigo usadopelocandidato;
+3 vetores/refsB128 e resultadoNMSEpinado/LEGADO separados comprecisioncompleta;
+4 auditafusedFFNQ4K/guardQ6 antes modelo; nao nota parafuturo indefinido.
+Se alvo real naocompila, entregarcomando/errorABI/symbol e fixseamminimo, nao substituir por replica Python. Device nao bloqueiacodigooffline; se compiler realmente indisponivel documentarerro real e alternativa, semfabricarretornos.
+Snapshot/tiledRAW pode ser colhido no mesmoensaio quevetoresnecessarios. Tensor_getquantizado podeunpack: capturar payload fisico real no callback/mappingtest-only e validarbounds/length/hash. Goldeninline e referencia, nao runtimecandidato.
+
+4. REFERENCIAS B128: ISOLAR COMPONENTES E CRITERIO
+ReusarCSV10violadoresverificadoR25 e logsR26 (tiposantigos4/6 e Q6=9). Extrair o que jaesta anexado, sem novasexecucoespararefazer total. Dedupeattempt/type/b/n, preservandotentativasindependentes.
+Capturarcanonweightbytes/actfloat reais do caso K256/N64/B128, fullSHA e sameinputCPUHTP. Exportoutput completo8192 e decodedweights suficientes; spans/nb validados, finiteem TODOS vetores e cleanup/sync.
+Calcular sobre MESMOS dados:
+Rcpu backendCPUreal (pode usarquantativacao vec_dot);
+Rscalar dequantcanonical + doubleacc sobreactfloat;
+Rtiled leitorindependente dos pesosFISICOSruntime depoisroundingFP16 + doubleacc sobreactfloat;
+Ract/acc se contrato realdo kernel permite reproduziractivationsquant/precisionaccum.
+Comparar pares para localizar primeiroerrointroduzido: CPUrefapprox, pack/scalerounding, actquant, accumulation/castfinal. Mostrar todas8192metricas e tabelas dascoordsvioladoras; firstdifffield/row/tile e entradastermoproduto para uma coordexemplar. Naoe' suficiente notar numero multiplo de potencia2.
+ConfrontarkernelID/pathB1B128 e tiposF32/Q4_0/Q8_0/Q4K/Q6K para demonstrar commonpath. Profile/descriptor/configefetiva devemobservados; nome do tipo nao prova HMX/HVX/accprecision.
+Se datascancela revelam erroesperadobounded conhecidoformato, documentarbound/testepinado e holdoutcases antescriteriogate. Se revela falha de layout/scale/act/acc, patchminimo RED/GREEN. NAO NaN->zero, sleep/logternario comofix, toleranciaescolhida paraengolir9/10 pontos.
+Rodar teste matmul do pin numa copia COERENTE separada se viavel ou reusar a logica pinada na fixturefork com API da versao real. Nao forcarport de todos testesupstreamincompativeis/coreinteiro; documentardiferenca. Nao misturar librariespinarbitrariamente emapp.
+
+5. Q6 E VACINA COMPLETA DO HOST
+Q6tile896 pinado; helperalloc/descriptorrequired14336 K256N64; logicalcanonical13440. Testar callbacks reais e opcode/type/rowbytes/offsets coerentes. Golden/leitor nao pack+unpackcandidatomesmoerro. Testes finite/allrows/allocationcanarios e scalarcomplete, sem extra4096 oculta como validacaotensorreq.
+Mutantes removem dispatch setQ4/Q6->memcpycanonical, sizecallbackK->logical e offset/sizeinvalido: testes reais devem RED. RestauracaoGREEN, demonstrar probe/library chama funcaotestada e hashesextracaoverbatimquandousada. Classificar programas/testes/assercoes/execucoes separadamente.
+Guardoffsetpreserva valorreal e recusa partial/fullpackinvalid antes acesso; fonteGREENcomzerooffsetfixo e diagnostico, nao contratonegativoaceito. AlocacaoREPACKfalha deve impedirupload/compute; testejecaocomsharedflow.
+Preflightnumerico optopstage0/1/2recusados,3validonaquelecontrato, e efetivoone-shot logado. Varargs/logs com-Wformat/-Werror e somentemecanismoseguro; nao printfreentranteFastRPC nem arraynameNULLcheck comoguardmágico.
+DepoisofflineQ6green e metricaexplicitada, confirmeB1/B2posguards no cohortnovo, B128comLEGADO+PINrotulos. Semcriargradede100shapeantesentenderpequeno. Regressaooutputinalterado deve terstatus/graphnodes/opstage/enqueue/complete/readbacksync, nao somente sentinel.
+
+6. INSTABILIDADE LOGGING E GATE FUSION: TRABALHOS CURTOS, NAO ADIAR A PRIORIDADE
+InstabilityternarioOPEN. Comparacaofontecompleta/codegen/rodata/relocations antes MAX4runsB1configcohort/probeconstantes. SomenteUMAvariavel format/argsOUcondicionalname porA/B. Codigootimizadoidentico sugere layout/timing/UB, nao causadoternario. Arquivarbadartifact e camposloadfullSHA; nenhumfixfuncionalapoiado em manterlogwarning.
+Se nao concludente emrunbudget, entregarclassificacaohipoteses/dados e impedirpromocao, mas terminaroffline/refsimandependentememente. Nao mais8rebuilds comfixturependente. Semrebootstress/root/logdreset.
+Fusion: rastrear precompute_fused_ffn_params comQ4_1-only, Q4_Koffset/q8_1/wrow, mergeability e dispatchreal. Se pathdefaultpode receberQ4K comparamserrados, fix+fixture REDGREEN antesc4bf; alternativa honestarejeitarfusionunsupported no candidato comdecisaoexplícita, nunca fallbacksilenciosoCPU/chamarrotacorreta semsuporte. Q6nofusedguardpreservado.
+Kernelcoverage: shapesGGUFc4bf reais suportados, limiteslmheadhonestos, allocator/renderreal e metricas. Somente depois fusegates/shapeacceptance, grafo curto comprofile/scheduler proving K_MUL_MATHTP. Graphacceptance/handoff/perf/postrelease sao fasesseparadas; thresholdNMSEtest nao resolve NUMGATEimport.
+
+7. IDENTIDADE/ESCOPO/ENTREGA A-H
+PASSrun nao provaELF/APKcarregado. Criarreadback targetentryAPK/installed/procmapoudladdr quandoobservavel fullSHA/buildID/PID/core/skel/libnpuprobe/headerconfig; manifestoR26 sohasheia3evidencefiles, nao checkpointdosbinarios. Semreconstruirhistorianaoexistente; artifactbaselinearquivado8e/differentsource2c sempreidentificados.
+Somente copiaisolada/probe; SIGprincipal/Whisper/UI/defaultVulkan/c4bf/R2/releaseintocados, semcommit/push/promotion/installSIGsemOK. WIPbyteabyte, semlimpeza/reset/stashrestoreamplos. CPH2747serial3B15BD00FVE00000/wififailclosed; nuncaPJA110; stayon7; FFmpegpin somenteprocessoautorizado. Probestatefinalaprovado/readback, nenhumaalegacaov12produtoalterado.
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA27.txt docs/especialista e logs docs/npu-hymt2/smart-rodada27/ fullSHA/counts/exits:
+A identidadesatuaisreadback e estadoscopefinal;
+B Q6offlineREAL/goldensignplanes/alloc/descriptor/cobertura;
+C vaccinascallbacksmutantesREDGREEN/offsetpartial/allocfail/opstage;
+D DESIGNcriterioLEGADOversusPINNMSE e metricasexactas/refsB128;
+E componentescausaisdemonstrados ouhipotesesaindaabertas, sem FP16accconfirmedporrepresentacao;
+F fusionauditfixture e estabilidadebuildworkbudget;
+G escopo/preservacao/R16separado;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCEdistintos.
+Minimo deencerramentoR27: Q6oracle + regressaocallbackreal + refs/numericalcontractpinadoEXECUTADOS, oublockerobjetivocomcomandoerro. Naoencerrar com 'failcomumprovanaoeport,FP16confirmed' e todasrefs/vacinaspendentes. Q4/Q6minimosgreenmantidos; KERNEL_VALIDATEDglobal depende cobertura/contratos/estabilidade, naoempilharcalibracaomovidaatePASS.

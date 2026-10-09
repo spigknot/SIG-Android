@@ -1,0 +1,10 @@
+=== r27_vacina (dispatch set_tensor + alloc!) ===
+MUTANTE_SEM_CASES_K ativo!
+  [RED] T1 dispatch Q4_K -> repack calls=0 (esperado >=1!)
+  [RED] T1b memcpy calls=1 (esperado 0 para Q4_K!)
+  [RED] T1c byte-marcador do repack presente (0x49!)
+  [OK ] T2 alloc Q4_K: got=10240 esperado=10240 (canon=9216)
+  [OK ] T3 alloc Q6_K: got=14336 esperado=14336
+
+TOTAL: 3 RED de 5 | repack=0 memcpy=1
+EXIT=1

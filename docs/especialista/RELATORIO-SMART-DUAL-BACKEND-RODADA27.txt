@@ -1,0 +1,130 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 27
+=========================================================================
+Data: 09/10/2026. Ordens: "FECHAR CONTRATO NUMERICO COM REFERENCIA PINADA,
+Q6 OFFLINE E VACINAS REAIS". Copia isolada/probe; sem publicacao.
+
+RESUMO EXECUTIVO — os QUATRO entregaveis obrigatorios do §3 EXECUTADOS:
+(1) Q6 OFFLINE (oraculo real!): pack golden VERBATIM + leitor independente
+com as CONSTANTES REAIS do pin (tile896!): 16384/16384 entradas, 0 NaN,
+max_abs=0.00048, first_bad=-1 PASS; matmul TODAS as 64 rows PASS
+(0.026!); tiled_sz=14336 == o device! (2) VACINA DOS CALLBACKS REAL
+(compilada!): DISPATCH do set_tensor (cases K!) + get_alloc_size (helper!)
+=> GREEN 0-RED; MUTANTE sem cases K => 3 RED (repack=0! memcpy=1! byte
+canonico!); MUTANTE alloc lista => 2 RED (9216 em vez de 10240/14336!).
+(3) CONTRATO NUMERICO PINADO: implementado NO PROBE (nmse_pin = soma
+((a-b)^2)/soma(a^2)!): resultados REAIS do device: B1=2.537e-08, B2=1.188e-07,
+B128=1.337e-07 — TODOS << 5e-4 (limite do test_mul_mat do pin!) com margem
+~1000-20000x; o LEGADO (0.02+5%) permanece CONGELADO com as falhas
+historicas preservadas (DESIGN-CRITERIO-NUMERICO.md!); nrmse^2 ~= nmse_pin
+confere (1.369e-7 vs 1.337e-7 — o especialista previu!). (4) AUDIT FUSED:
+o gate is_mergeable_mul_mat ACEITA qualquer quantizado (so' exclui Q6_K —
+guard R15 OK!); o precompute_fused_ffn_params (L3122!) tinha
+`wtype == Q4_1` SEM Q4_K no src1_row_size => BUG LATENTE para Q4_K no
+path fused; FIX MINIMO aplicado no fonte (|| Q4_K — igual aos outros
+precomputes!) — rebuild+fixture no proximo ensaio (nao tocar o device
+nesta rodada!); Q6 guard do fused preservado. RETIFICACOES aceitas:
+"FP16 accumulate confirmado" -> NAO (representacao de saida comprovada,
+aritmetica nao! contraprova do especialista: fp16 do ref != HTP!);
+estabilidade do build/logging permanece OPEN (nao fix!). KERNEL_VALIDATED:
+NAO (aguarda cobertura/contratos/estabilidade!).
+
+-----------------------------------------------------------------------
+A. IDENTIDADE / CHECKPOINT
+-----------------------------------------------------------------------
+A.1 Cohort GREEN no device: 2c45ed97 (hexagon!) + probe R27 (nmse_pin!);
+    runs com stream contemporaneo (PID 21647!) e package/attempt nos logs
+    salvos (r27-nmse-device.txt!). readback: o run PASS usa o mesmo PID do
+    stream. v12/lib produto/SIG intocados (escopo!).
+A.2 Artefatos: 8e953285 (kqfix-libs! — referencia GREEN 2x!), 2c45ed97 (base
+    GREEN atual!), fb8cc5d0 (UNWRITTEN — bad artifact ARQUIVADO!); fontes
+    kq2/sigcand2 identicos; fix fused aplicado no fonte (nao buildado!).
+
+-----------------------------------------------------------------------
+B. Q6 OFFLINE (entregavel 1!) — EXECUTADO
+-----------------------------------------------------------------------
+B.1 r27_oracle_q6k.c: q6_K_get_quant + repack_q6_K_tiled VERBATIM do
+    candidato; leitor INDEPENDENTE (decodifica lo-nibbles/hi-2bit/sc_pl
+    com a formula canonica (q-32)!) vs DEQUANT CANONICO do ggml
+    (dequantize_row_q6_K!): nd=16384/16384, 0 NaN, max_abs=0.00048
+    (arredondamento FP16 das scales!), first_bad=-1 PASS; matmul todas as
+    64 rows: max_diff=0.026 PASS. tiled_sz=14336 (tile896 REAL — o
+    K256/N64 do device!).
+B.2 Limites: golden+leitor nao usam o MESMO codigo (o leitor deriva do
+    contrato dos planos + formula canonica!); Q6 B1/B2 do device (R26!)
+    mantidos; B2/B128 Q6 com rotulos LEGADO/PIN ficam no proximo ciclo.
+
+-----------------------------------------------------------------------
+C. VACINAS DOS CALLBACKS (entregavel 2!) — EXECUTADO
+-----------------------------------------------------------------------
+C.1 r27_vacina.c compila o DISPATCH REAL (switch do set_tensor com os
+    cases K + contador de chamadas!) + o get_alloc_size REAL (helper!):
+    GREEN: T1 (repack chamado! memcpy=0! marcador!), T2 (10240!), T3
+    (14336!) = 0 RED de 5.
+C.2 MUTANTES: (a) sem cases K (o estado pre-R23!): T1=RED (repack=0,
+    memcpy=1, byte canonico 0x49!) — o teste DETECTA o defect ORIGINAL!;
+    (b) alloc lista (sem K!): T2/T3=RED (9216 vs 10240/14336!). Os dois
+    consomem o codigo REAL do candidato (funcoes copiadas verbatim!).
+C.3 Pendencias registradas: ALLOC_FAIL (sem upload/compute!) e
+    offset/partial negativos no fluxo compartilhado = proximo (os
+    contadores ja' existem no probe/gate!); opstage preflight numerico
+    0/1/2/3 = pendente (o codigo do opstage foi auditado OK no R25!).
+
+-----------------------------------------------------------------------
+D. CONTRATO NUMERICO PINADO (entregavel 3!) — EXECUTADO
+-----------------------------------------------------------------------
+D.1 DESIGN-CRITERIO-NUMERICO.md formalizado (LEGADO congelado! PIN
+    NMSE<=5e-4 com guardas finite/coverage/denominador! diagnosticos
+    preservados! aceite global exige estruturais+mutantes!).
+D.2 nmse_pin no device (5 runs dedupe: 1!): B1=2.536685e-08 (PASS!),
+    B2=1.187797e-07 (PASS!), B128=1.337495e-07 (PASS no pin!). O
+    "FAIL B128" fica SO' como falha LEGADO-histórica (elemento-a-elemento!);
+    o NMSE oficial do backend PASS. Nao retro-classificar os logs LEGADO!
+D.3 Refs finas (Rcpu/Rscalar/Rtiled!) e decomposicao (actquant vs acc vs
+    cast!): PARCIAL — os dados-base (violadores/CSV!) estao anexados; a
+    decomposicao com double-acc fica como analise pendente DECLARADA
+    (nao substitui o resultado acima; proxima!).
+
+-----------------------------------------------------------------------
+E. AUDIT FUSED (entregavel 4!) — EXECUTADO + FIX
+-----------------------------------------------------------------------
+E.1 is_mergeable_mul_mat: aceita quantizados (exclui Q6_K — guard R15 OK!);
+    callers: is_qkv_mergeable + is_mergeable_mul_mat_pair (src1
+    compartilhado!). o precompute_fused_ffn_params: src1_row_size SEM
+    Q4_K (BUG LATENTE!) => FIX minimo aplicado (fonte!); fixture/rebuild
+    no proximo ensaio; Q6 guard preservado. fused para Q4_K agora usa
+    q8_1 como os demais precomputes; qualquer mudanca de comportamento
+    do modelo sera' coberta pelos gates pre-modelo (proximo!).
+E.2 Estabilidade build/logging: OPEN (o parecer do especialista aceito: o
+    par 8e/2c difere format+offset alem do ternario!) — A/B fino com
+    codegen compare, MAX 4 runs B1, PENDENTE (nao executado hoje: sem
+    tocar o device apos o NMSE!).
+
+-----------------------------------------------------------------------
+F. R16 / ESTADOS
+-----------------------------------------------------------------------
+F.1 R16: separado, sem novo abort. Controles F32/Q4_0/Q8_0: CCE (R26!).
+    Q4_K/Q6_K B1/B2: CCE (device!). NMSE pin: CCE. Vacinas: CCE
+    (mutantes reais!). Q6 offline: CCE. Fused: auditado+fix. Offline
+    restante (refs finas, ALLOC_FAIL-flow, opstage-preflight, ternario
+    A/B): PENDENTE declarado. KERNEL_VALIDATED: NAO. COMPILED: sim.
+
+-----------------------------------------------------------------------
+G. ESCOPO
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP intocado; PJA110 nao tocado;
+    CPH2747 wifi; stayon7; sem root/governor/reboots nesta rodada; streams
+    filtrados (sem dados de outros apps!). Device: nenhum reinstall apos
+    o NMSE (cohort GREEN intacto!).
+
+-----------------------------------------------------------------------
+H. PROXIMOS (ordem!)
+-----------------------------------------------------------------------
+H.1 (1) rebuild com o fix fused + A/B do ternario (<=4 runs!); (2) refs
+    finas B128 (Rcpu/Rscalar/Rtiled com os bytes MESMOS!); (3) ALLOC_FAIL
+    flow + offset/partial no gate; (4) opstage preflight numerico;
+    (5) Q6 B2/B128 rotulados; (6) so' entao shapes/modelo/gates!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada27/ (DESIGN-CRITERIO-NUMERICO.md!,
+r27_oracle_q6k.c + r27-oracle-out.txt (PASS!), r27_vacina.c + as 3 saidas
+(GREEN/MUT1/MUT2!), r27-nmse-device.txt (o nmse_pin REAL!), scripts de
+audit/fix!) + manifesto.

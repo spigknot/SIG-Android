@@ -1,0 +1,4 @@
+tiled_sz=14336 (esperado 14336!)
+LEITOR_Q6 vs CANONICO: nd=16384/16384 n_nan=0 max_abs=0.000480652 n_bad1e6=14675 first_bad=-1 PASS
+MATMUL Q6 todas as 64 rows: max_diff=0.026230345 first_viol=-1 n_nan=0 PASS
+R27_Q6_ORACLE_DONE

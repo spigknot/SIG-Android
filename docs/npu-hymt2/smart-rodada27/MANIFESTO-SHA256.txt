@@ -1,0 +1,19 @@
+MANIFESTO — smart-rodada27 (Q6 offline + vacinas + NMSE pinado!)
+
+OS 4 ENTREGAVEIS §3 EXECUTADOS: (1) Q6 offline PASS (16384/16384! tile896 REAL!); (2) vacina mutantes (GREEN 0-RED; MUT1 3-RED!; MUT2 2-RED!); (3) NMSE pin no device (1e-8-1e-7 << 5e-4!); (4) fused audit + FIX (Q4_K no src1_row_size!).
+RETIFICACOES: 'FP16 accumulate' NAO confirmado (so representacao!); build/ternario OPEN.
+LEGADO congelado (DESIGN-CRITERIO-NUMERICO.md!); KERNEL_VALIDATED: NAO.
+
+08059fafe1bfad7dcc797e5f75aca1e7c867990574c0e9738368f40adcbf5e1d  DESIGN-CRITERIO-NUMERICO.md  (3361 B)
+a91c4e793daf8e0406436cb1fd7997731ccf928c0b42f7eeea1f05460cff5a38  r27-audit.py  (435 B)
+3e5d31354df66e846585cfc2c6d8a2fd3326e797e7c25f2984c358216198c286  r27-audit2.py  (375 B)
+c798ed696196a2d80f189c4bbb0bf7b6e948a55e4d14b285edba25f88be13562  r27-fused.py  (688 B)
+e68fca09f56350211fabf086a969e0bcec5c7842f27c0035a7626e4158f42bd1  r27-nmse-device.txt  (11451 B)
+d7715cf9342334aab004b5b9eaac0695536ebf0f58a52c65a5325c6fc0f00a00  r27-oracle-out.txt  (227 B)
+a6484c62f882fafba172b59e7f627501363b701731af62391d3a5c0142111d16  r27-vac-green.txt  (368 B)
+f2cf5aa3ae8b7059e2b8fe97b9ccee062bfa252ac88fb6a66d2323cf07aa927c  r27-vac-mut1.txt  (395 B)
+1ab6a5d74aac5fea3dacd45574328b5e04b5a94821cfd3ab2addc89262ceb75c  r27-vac-mut2.txt  (393 B)
+5664276aaa905435ee616e417f55f33b56b31fd15e2935fb41f024acd7817b41  r27_oracle_q6k.c  (9065 B)
+bac6a0c41f66f3d9217a99ee9bf32f30694b6b4b27d21ad81a336b4674c4de5a  r27_vacina.c  (7871 B)
+
+4fbdfae0866b95527415f70bfd3a8081ed645385484aad270e817a46f107189e  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA27.txt

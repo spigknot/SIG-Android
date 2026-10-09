@@ -1,0 +1,102 @@
+10-09 14:47:44.920 I/NpuProbe(21647): nativeLibraryDir=/data/app/~~qxqcT2TnxbzeySucwo90Vw==/br.gov.sp.pcsp.npuprobe-A7Ln3coWSxntURGB-XmPlQ==/lib/arm64
+10-09 14:47:44.920 I/NpuProbe(21647): runProbe PULADO (p4-auto presente; preinit do tune)
+10-09 14:47:44.920 I/NpuProbe(21647): REPORT:
+10-09 14:47:44.920 I/NpuProbe(21647): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-09 14:47:44.920 I/NpuProbe(21647): AUTO-GATILHO='smart:sessao'
+10-09 14:47:44.921 I/NpuProbe(21647): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-09 14:47:44.921 I/NpuProbe(21647): SMARTv2 rota='sessao' mutante=(none)
+10-09 14:47:45.040 I/NpuProbe(21647): SESSAO(1024031): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-09 14:47:45.040 I/NpuProbe(21647): MM: backends cpu=0xb4000078be090760 htp=0xb4000078be090800
+10-09 14:47:45.040 I/NpuProbe(21647): MM: extra buft[0] = HTP0-REPACK
+10-09 14:47:45.040 I/NpuProbe(21647): MM: repack buft = HTP0-REPACK
+10-09 14:47:45.042 I/NpuProbe(21647): MM trace: K=256 N=64 B=1 q4_K sup_pre=1 repack=1
+10-09 14:47:45.042 I/NpuProbe(21647): MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=1280
+10-09 14:47:45.042 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.045 I/NpuProbe(21647): MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=5376
+10-09 14:47:45.045 I/NpuProbe(21647): MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 14:47:45.045 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.046 I/NpuProbe(21647): MM[K=256 N=64 B=1 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=64/64 max_abs=0.05263 nrmse=0.00016 nmse_pin=2.536685e-08 viol=0 PASS
+10-09 14:47:45.048 I/NpuProbe(21647): MM trace: K=256 N=64 B=2 q4_K sup_pre=1 repack=1
+10-09 14:47:45.048 I/NpuProbe(21647): MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=2560
+10-09 14:47:45.048 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.048 I/NpuProbe(21647): MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=6656
+10-09 14:47:45.048 I/NpuProbe(21647): MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 14:47:45.048 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.049 I/NpuProbe(21647): MM[K=256 N=64 B=2 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=128/128 max_abs=0.10385 nrmse=0.00034 nmse_pin=1.187797e-07 viol=0 PASS
+10-09 14:47:45.052 I/NpuProbe(21647): MM trace: K=256 N=64 B=128 q4_K sup_pre=1 repack=1
+10-09 14:47:45.052 I/NpuProbe(21647): MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=163840
+10-09 14:47:45.052 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.054 I/NpuProbe(21647): MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=167936
+10-09 14:47:45.054 I/NpuProbe(21647): MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 14:47:45.054 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.056 I/NpuProbe(21647): MM first_viol b=10 n=22 htp=0.984375 ref=0.892909 lim=0.064645
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #1 b=10 n=22 htp=0.984375000 ref=0.892908752 abs=0.091466248 lim=0.064645438 exc=0.026820810
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #2 b=22 n=21 htp=0.134521484 ref=0.184086412 abs=0.049564928 lim=0.029204321 exc=0.020360607
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #3 b=31 n=33 htp=-0.129882812 ref=-0.172790021 abs=0.042907208 lim=0.028639501 exc=0.014267707
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #4 b=39 n=34 htp=-0.387695312 ref=-0.342197597 abs=0.045497715 lim=0.037109880 exc=0.008387836
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #5 b=42 n=45 htp=-0.168334961 ref=-0.094327398 abs=0.074007563 lim=0.024716370 exc=0.049291193
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #6 b=50 n=54 htp=-0.239013672 ref=-0.187566355 abs=0.051447317 lim=0.029378318 exc=0.022068999
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #7 b=56 n=47 htp=-0.940917969 ref=-0.871456742 abs=0.069461226 lim=0.063572837 exc=0.005888389
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #8 b=66 n=2 htp=0.240722656 ref=0.288361222 abs=0.047638565 lim=0.034418061 exc=0.013220504
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #9 b=110 n=1 htp=0.812011719 ref=0.882331133 abs=0.070319414 lim=0.064116557 exc=0.006202857
+10-09 14:47:45.056 I/NpuProbe(21647): MMVIOL #10 b=123 n=8 htp=0.258056641 ref=0.214986980 abs=0.043069661 lim=0.030749349 exc=0.012320312
+10-09 14:47:45.056 I/NpuProbe(21647): MM[K=256 N=64 B=128 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=8192/8192 max_abs=0.16718 nrmse=0.00037 nmse_pin=1.337495e-07 viol=10 FAIL
+10-09 14:47:45.057 I/NpuProbe(21647): MM rejeicao Q5_K: htp supports=0 (esperado 0)
+10-09 14:47:45.057 I/NpuProbe(21647): MMTOTAL pass=3 fail=1 skip=0 compute_calls=6
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] 
+10-09 14:47:45.057 I/NpuProbe(21647): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml-hex: Hexagon Arch version v81
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml-hex: HTP0 allocating new session
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb4000078be1fdd80
+10-09 14:47:45.057 I/NpuProbe(21647): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-09 14:47:45.057 I/NpuProbe(21647): SESSAO(1024031): fim (1 requests)
+10-09 14:47:45.057 I/NpuProbe(21647): SMART REPORT:
+10-09 14:47:45.057 I/NpuProbe(21647): SMART (sessao)
+10-09 14:47:45.057 I/NpuProbe(21647): 
+10-09 14:47:45.057 I/NpuProbe(21647): SMARTv2 rota='sessao' mutante=(none)
+10-09 14:47:45.057 I/NpuProbe(21647): SESSAO(1024031): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-09 14:47:45.057 I/NpuProbe(21647): MM: backends cpu=0xb4000078be090760 htp=0xb4000078be090800
+10-09 14:47:45.057 I/NpuProbe(21647): MM: extra buft[0] = HTP0-REPACK
+10-09 14:47:45.057 I/NpuProbe(21647): MM: repack buft = HTP0-REPACK
+10-09 14:47:45.057 I/NpuProbe(21647): MM trace: K=256 N=64 B=1 q4_K sup_pre=1 repack=1
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=1280
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=5376
+10-09 14:47:45.057 I/NpuProbe(21647): MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.057 I/NpuProbe(21647): MM[K=256 N=64 B=1 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=64/64 max_abs=0.05263 nrmse=0.00016 nmse_pin=2.536685e-08 viol=0 PASS
+10-09 14:47:45.057 I/NpuProbe(21647): MM trace: K=256 N=64 B=2 q4_K sup_pre=1 repack=1
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=2560
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=6656
+10-09 14:47:45.057 I/NpuProbe(21647): MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.057 I/NpuProbe(21647): MM[K=256 N=64 B=2 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=128/128 max_abs=0.10385 nrmse=0.00034 nmse_pin=1.187797e-07 viol=0 PASS
+10-09 14:47:45.057 I/NpuProbe(21647): MM trace: K=256 N=64 B=128 q4_K sup_pre=1 repack=1
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=163840
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=167936
+10-09 14:47:45.057 I/NpuProbe(21647): MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 14:47:45.057 I/NpuProbe(21647): MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 14:47:45.057 I/NpuProbe(21647): MM first_viol b=10 n=22 htp=0.984375 ref=0.892909 lim=0.064645
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #1 b=10 n=22 htp=0.984375000 ref=0.892908752 abs=0.091466248 lim=0.064645438 exc=0.026820810
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #2 b=22 n=21 htp=0.134521484 ref=0.184086412 abs=0.049564928 lim=0.029204321 exc=0.020360607
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #3 b=31 n=33 htp=-0.129882812 ref=-0.172790021 abs=0.042907208 lim=0.028639501 exc=0.014267707
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #4 b=39 n=34 htp=-0.387695312 ref=-0.342197597 abs=0.045497715 lim=0.037109880 exc=0.008387836
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #5 b=42 n=45 htp=-0.168334961 ref=-0.094327398 abs=0.074007563 lim=0.024716370 exc=0.049291193
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #6 b=50 n=54 htp=-0.239013672 ref=-0.187566355 abs=0.051447317 lim=0.029378318 exc=0.022068999
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #7 b=56 n=47 htp=-0.940917969 ref=-0.871456742 abs=0.069461226 lim=0.063572837 exc=0.005888389
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #8 b=66 n=2 htp=0.240722656 ref=0.288361222 abs=0.047638565 lim=0.034418061 exc=0.013220504
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #9 b=110 n=1 htp=0.812011719 ref=0.882331133 abs=0.070319414 lim=0.064116557 exc=0.006202857
+10-09 14:47:45.057 I/NpuProbe(21647): MMVIOL #10 b=123 n=8 htp=0.258056641 ref=0.214986980 abs=0.043069661 lim=0.030749349 exc=0.012320312
+10-09 14:47:45.057 I/NpuProbe(21647): MM[K=256 N=64 B=128 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=8192/8192 max_abs=0.16718 nrmse=0.00037 nmse_pin=1.337495e-07 viol=10 FAIL
+10-09 14:47:45.057 I/NpuProbe(21647): MM rejeicao Q5_K: htp supports=0 (esperado 0)
+10-09 14:47:45.057 I/NpuProbe(21647): MMTOTAL pass=3 fail=1 skip=0 compute_calls=6
+10-09 14:47:45.057 I/NpuProbe(21647): SESSAO(1024031): fim (1 requests)
