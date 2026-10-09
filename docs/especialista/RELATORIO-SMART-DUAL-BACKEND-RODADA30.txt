@@ -1,0 +1,112 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 30
+=========================================================================
+Data: 09/10/2026. Ordens: "CONSOLIDAR A ENTREGA GREEN E FECHAR O FLUXO:
+NAO MAIS ADIAR GATE PIN/FUSAO". Copia isolada/probe.
+
+RESUMO EXECUTIVO — OS DOIS ENTREGAVEIS PRINCIPAIS EXECUTADOS (§4!) +
+CORRECAO DA ENTREGA (§1/§2!): (1) GATE PIN COMPARTILHADO (r30_gate.h — a
+MESMA seam para probe E fixture!): verdict_legacy/verdict_pin SEPARADOS,
+guardas de validade (exec/alloc/sync/ref/cobertura/finite/unwritten/
+somas!), denom0 explicito (INVALID — nunca PASS por sentinela!) e NMSE<=
+5e-4. Fixture COMPILADA com 13 casos: ambosPASS; legacyFAIL/PINPASS (o
+caso B128 REAL!); NMSE alto; ref/out NaN; exec; parcial; sentinel;
+denom0; somas inf; overflow; ref invalida; nd=0 => GREEN 0 RED!
+Mutantes: M1 (sem a guarda de validade!) => 7 RED; M3 (o falso-PASS do
+-1/sentinel — o caso apontado no parecer!) => C8 RED! (M2 com denom0
+redundante ficou coberto pelas guardas em profundidade — registrado!).
+(2) FUSED FIXTURE ligada a funcao REAL: is_mergeable_mul_mat VERBATIM
+(L3942!) + a expressao REAL do src1_row_size (L3151! com o fix R27
+visivel!): GREEN 0 RED (Q4_1=1/Q4_K=1/Q6_K=0/F16=0 no predicado;
+640/640/512/512 no row_size!); MUTANTE (retirar o Q4_K!) => T2 RED
+(Q4_K=512 = q8_0 errado!). (3) CORRECAO-ENTREGA-R29: a auditoria do
+especialista estava CERTA — o r29_settensor_adap.inc exportado era o da
+RAIZ (nao atualizado pelo t4.py — que so' escreve nos cenarios!) =>
+entrega-real-r29/ com os adapters REALMENTE COMPILADOS por cenario
+(green=2 guardas; m1=0; m2=1; m3=2; m4=2; m5=0 — matriz coerente!) +
+scripts anexados (r29_extrai.py/r29_guard2.py!) + lacunas declaradas
+(r28_fixture_inv!; metadado L0..L0 corrigido no formato a partir daqui!).
+PENDENCIAS DECLARADAS (§3): guarda ATIVA (rejeicao OBSERVAVEL — o
+fprintf+break nao comunica falha ao loader: mecanismo A/B escolhido =
+GGML_ABORT ativo conforme implementacao — proximo passo focal!) e
+ALLOC_FAIL-flow/opstage-preflight (nao executados — o tempo foi dos DOIS
+entregaveis obrigatorios!). KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. EXPORT / PIPELINE (§1/§2!)
+-----------------------------------------------------------------------
+A.1 entrega-real-r29/: adapters+gens por cenario (os COMPILADOS!);
+    CORRECAO-ENTREGA-R29.md (o mecanismo do descompasso — sem fraude!);
+    scripts: r29_extrai.py/guard2/muts3/t4 (cadeia R29!) + r30_* (novos!).
+A.2 O pipeline unico (r30_pipeline.sh — desenhado!): extracao->adaptacao->
+    mutacao->build->run->export em dir isolado + FALHA se o adapter
+    exportado nao casar com o gen (guarda de proveniencia!) — implementacao
+    completa = proxima (o desenho esta' pronto; a cadeia manual desta
+    rodada seguiu os MESMOS passos!).
+
+-----------------------------------------------------------------------
+B. GUARDA — ESTADO (focal, honesto!)
+-----------------------------------------------------------------------
+B.1 A guarda (fprintf+break, buffer intacto: PROVADO por T4a/T4b com 0
+    bytes!) — MAS o parecer §3 exige REJEICAO OBSERVAVEL: o retorno void
+    nao comunica ao loader => mecanismo ativo PENDENTE (GGML_ABORT ativo —
+    nao assert C removivel! — aplicacao focal na proxima, com o T4
+    refinado: REJEICAO_OBSERVAVEL + zero side effects, aceitando abort
+    seguro como rejeicao valida!). T4 atual mede bytes-escritos (propriedade
+    de seguranca!) — nao prefere mecanismo.
+B.2 ALLOC_FAIL/opstage: PENDENTES declarados (nao executados — prioridade
+    foi os 2 entregaveis! ). Desenho: injecao na seam real + counters!
+
+-----------------------------------------------------------------------
+C. GATE PIN (§4 — EXECUTADO!)
+-----------------------------------------------------------------------
+C.1 r30_gate.h (seam!): INVALID (guardas!)/LEGACY_PASS/FAIL/PIN_PASS/FAIL;
+    nmse_pin valido so' com denominador>0 e somas finitas; score invalido
+    = -1 + pin_valid=0 (NUNCA PASS!); denominador0 => INVALID explicito.
+C.2 Fixture (13 casos!): GREEN 0 RED; M1 (guarda removida!) 7 RED; M3
+    (sentinela -1 vira PASS!) C8 RED. O probe passa a incluir a MESMA seam
+    (proximo: 1 linha de uso + verdicts emitidos nos logs!).
+C.3 Contadores/fixture = compilados; rotulos LEGADO/PIN preservados; a
+    formula e' referencia de CONTRATO matmul (nao afirma execucao do
+    test-backend-ops oficial inteiro nem autoriza NUMGATE/handoff!).
+
+-----------------------------------------------------------------------
+D. FUSED FIXTURE (§4 — EXECUTADA!)
+-----------------------------------------------------------------------
+D.1 is_mergeable_mul_mat EXTRAIDO VERBATIM (L3942..3947 sha=3e54bb46!) +
+    expressao REAL do src1_row_size (L3151 — com o fix R27!) => GREEN:
+    predicado Q4_1/Q4_K=1, Q6_K/F16=0 (guard R15!); row_size 640/640/
+    512/512! MUTANTE (sem Q4_K!) => T2 RED (512!). Stubs externos
+    (q8_1/q8_0 com valores distintos!) — declarados; o predicado e a
+    expressao sao o codigo REAL.
+D.2 O rebuild do candidato com o fix fused: SEPARADO (nao feito aqui —
+    proxima cadeia, com diff/hashes e sem misturar com logging/A-B!).
+
+-----------------------------------------------------------------------
+E. REFS/DEVICE / ESTABILIDADE
+-----------------------------------------------------------------------
+E.1 Refs finas/snapshot: PENDENTES (uma captura focal no probe
+    autorizado — desenho pronto; o leitor Q4 esta' corrigido e valida!).
+E.2 Logging A-B: OPEN (budget 4 runs; codegen antes!). Cohorts: device
+    2c45ed97 e' PRE-guard/pre-fused — nao alega-lo como validador do
+    source atual (checkpoint source->ELF->APK->readback na proxima
+    rodada device!).
+
+-----------------------------------------------------------------------
+F. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+F.1 GATE_PIN: CCE (compartilhado + fixture + mutantes!). FUSED_FIXTURE:
+    CCE (funcao real + mutante!). CORRECAO_ENTREGA: CCE (adapters reais +
+    matriz coerente!). GUARDA_ATIVA: PENDENTE. ALLOC_FAIL/opstage:
+    PENDENTE. KERNEL_VALIDATED: NAO. COMPILED: sim.
+F.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; WIP intocado; device
+    nao tocado (nenhum reinstall!); sem reboots; PJA110 nao tocado.
+H.1 PROXIMOS (ordem!): (1) guarda ATIVA (GGML_ABORT + T4 refinado!);
+    (2) ALLOC_FAIL + opstage no gate; (3) seam no probe (1 linha!) +
+    rodada device focal com verdicts LEGADO/PIN (checkpoint ELF!);
+    (4) rebuild separado do fused; (5) refs/snapshot; (6) so' depois:
+    shapes/modelo/fases!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada30/ (r30_gate.h + r30_gate_test.c
++ 3 saidas do gate!, r30_fused_test.c + gen/inc + 2 saidas!, extracao
+r30_fused_extrai.py!, CORRECAO-ENTREGA-R29.md!, entrega-real-r29/ (os
+adapters COMPILADOS por cenario!), scripts R29 anexados!) + manifesto.

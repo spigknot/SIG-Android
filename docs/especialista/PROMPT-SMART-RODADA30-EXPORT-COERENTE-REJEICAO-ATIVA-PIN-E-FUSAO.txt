@@ -1,0 +1,69 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 30
+CONSOLIDAR A ENTREGA GREEN E FECHAR O FLUXO: NAO MAIS ADIAR GATE PIN/FUSAO
+===============================================================================
+
+1. PARECER R29 — AVANCO ACEITO COM ESCOPO PRECISO
+Helper extraido corretamente, leitor Q4 inalterado, Q6 e allocator testados: o rumo esta certo. A confirmacao dos7.968 erros do helper e os mutantes especificos sao provas uteis.
+Os14 hashes dos anexos conferem. Isso, porem, nao garante coerencia entre fonte compilado e log. Ha um erro de EXPORT da entrega que o especialista reproduziu independentemente:
+- r29_settensor_gen.inc tem guardas full-only e repassa offset real;
+- r29_settensor_adap.inc arquivado NAO tem essas guardas, ainda passa zero fixo.
+Compilei os arquivos entregues sem os editar: BUILD0/RUN1, T1/T2/T3GREEN, T4a eT4b com9598 bytes escritos cada, TOTAL2RED.
+Regenerando apenas o adapter a partir do gen guardado: BUILD0/RUN0, T4a/b0 bytes escritos, TOTAL0RED.
+Portanto o GREEN offline do callback guardado foi REPRODUZIDO pelo especialista; nao reabrir pack/leitor nem refazer a campanha completa. Corrigir a proveniencia/export do adapter efetivamente compilado.
+Prova/logs/fontes:
+D:/Projetos/SIG/docs/especialista/AUDITORIA-R29-ADAPTER-GUARDADO-E-FLUXO.txt
+D:/Projetos/SIG/docs/especialista/AUDITORIA-R29-LOGS/
+App/probe/candidato/device nao foram alterados pelo especialista.
+
+2. CORRIGIR ENTREGA SEM REFAZER O TRABALHO
+r29_t4.py copia/regenera adapter em /root/r29_t/<cenario>, mas nao atualiza o adapter na raiz. Isso explica uma exportacao desatualizada; nao presumir fraude ou bugkernel pela discrepancia.
+Arquivar adapter/harness/gen de /root/r29_t/green e de cada mutante REALMENTE compilado, com comando/exit/stdout/stderr separados, hashes completos e diff das adaptacoes permitidas. Nao copiar a raiz por conveniencia.
+Criar um script unico reproduzivel de extracao->adaptacao->mutacao->build->run->export, executado em diretoria isolada, que registra os mesmos caminhos usados pelo compilador e pelo manifesto. Fail se adapter esperado contem guardas mas exportado nao. Nao incluir segredo/configs de release.
+Se forem preservados arquivosR29 antigos, nao os sobrescrever silenciosamente: entregar CORRECAO-ENTREGA-R29 com novos arquivos/manifests ou a nova cadeia emR30 e declarar o descompasso original. r29_extrai.py/r29_guard2.py foram citados mas nao anexados; arquivar as versoes utilizadas se existem, senao lacuna declarada e checkpointnovo, sem retrofabricar.
+Metadado L0..L0 nao atesta linhaextraida: gerar fonte/intervalo/hash real, distinguindo bytes brutos de texto normalizado. Pipeline export precisa teste: mutante exporta adapter velho -> RED por inconsistencia antes declarar pronto.
+
+3. GUARDA LOCAL JA PROVADA; FALTA REJEICAO ATIVA NO FLUXO
+O callback guardado usa fprintf+break em funcao void. Buffer intacto e necessario, mas o retorno normal nao comunica falha ao loader/probe. Nao afirmar failclosed de inferencia apenas porque nao escreveu.
+Para upload invalido, o chamador nao pode continuar com grafo usando pesos nao carregados ou antigos. Trace contrato da API/loader e escolha um mecanismo REAL:
+A abort/assert ativo do backend para violacao do contrato full-only, antes qualquer acesso (GGML_ASSERT/GGML_ABORT conforme implementacao, nao assert C removivel); OU
+B erro explicitamente propagado/estado de upload invalido que loader/gate realmente consulta antes graph_compute; nenhum campo/API inventado, localizar definicao/usos primeiro.
+Nao deixar stderr como unico sinal. Se optar por preflight no chamador, provar que protege TODOS os callers relevantes do callback e que o callback invalidonao parece uploadnormal.
+Atualizar criterioT4: REJEICAO_OBSERVAVEL e zero side effects, nao necessariamente abort==0. Uma recusa ativa pode ser segura. O teste atual rejeita abort mesmo quando abort ocorreu antes de escrever; isso testa preferencia de mecanismo, nao propriedade de seguranca. Se o pack ja rejeita offset via assert, nao forcar RED pela simples remocao de um if redundante; testar defeito semantico que permite continuacao/upload indevido.
+CasesQ4 eQ6: offset nao zero, size0/parcial/maior/inconsistente, fonte curta testada comguard/sanitizerquando disponivel, canarios e contadores de acessos. Rejeicao deve impedir compute no teste de FLUXO usado pelo probe; caso valido deve computar, para impedir vacina noop.
+ALLOC_FAIL-REPACK: injecao na funcao/seam realmente usada, upload_calls==0 e compute_calls==0, erro explicito e cleanup. Preflight opstage0/1/2recusados e3validonaquelecontrato antescompute; valorEFETIVO observado antesinit. Essas provas seguem pendentes: esta rodada deve executa-las ou mostrarblockerobjetivo.
+Nao usar buffer cheio comsizeparcial como prova de ausencia de OOB em memoria realmente curta. Nao tolerar erro dehash, quietfallbackCPU ou copiarpeso zero para recuperarrecusa.
+
+4. ENTREGAVEIS PRINCIPAIS R30: GATE PIN E FUSED FIXTURE EXECUTADOS
+A vacina pack/callback passou de simulacao a teste util. Agora parar de dedicar toda rodada a repack: os gates e fusao ja foram repetidamenteadiados, semblockertecnico.
+GATE PIN:
+Implementar na MESMA seam/funcao usada pelo probe E fixture compilada, mostrar include/usos/build. Emitir verdict_legacy/verdict_pin e counters separados. Score correto nao equivale a gate implementado.
+Contratos: exec/support/alloc/sync/sentinel/finite/coverage e referencia validos; NMSE=sum(error²)/sum(ref²)<=5e-4 quando denominador e valido; score-1/invalido, NaN/Inf/overflow/zero denominator precisam classificacao explicita. Se refzero e saidazero for aceito, documentar ramo exato; nao -1<limite PASS.
+Casoscompilados: ambosPASS; legacyFAIL/PINPASSvalido; NMSEalto; ref/saidaNaN/Inf; execfalha; partial; sentinel; denom0; score-1/somasnaofinitas. Mutantes de bypass RED e restauracaoGREEN. Nao testesPython de replica. Controles/rejeicaoQ5 nao entram no contador kernelPASS.
+Preservar logs/FAILlegado e rotulos. A formula do pin e referencia decontrato matmul, nao prova test-backend-ops oficial completo nem autorizacaoNUMGATEhandoff/traducao.
+FUSED:
+Fixture ligada a funcao real de precompute/mergeability/dispatch, Q4_1controle, Q4_Kalvo eQ6rejeicao. Verificar q8_1/q8_0,src1_row_size,type,offsets,nb,allocation,paramfields e consumidores; sharedsrc1/predicados reais. Mutante retiraQ4_K -> RED. Nao reimplementar formulaesperada localmente como implementacao sobteste.
+Fix fonte sembuild nao e validado. Somente depoisfixture aprovadas, rebuild candidatoisolado comdiff/hashes. LoggingA/B tembaseline congelada e variavelunica; nao misturar fixfused/guards/log/probe como se fossem mesmo delta.
+ACEITACAO OBRIGATORIA R30: gatePINcompartilhado+fixture e fusedfixture EXECUTADOS. Nao novamente 'pendentes, desenho do parecer anterior'. Se compilador/API impede, mostrarcomando/erropreciso e tentaradaptacao focal decontorno semstub do algoritmo.
+
+5. REFS B128 E RODADA DEVICE FOCAL
+Snapshot/vetores completos ainda nao existem nos anexosCSV/MMVIOL. Quando offlinegate/fused/fluxo aprovado, planejar UMA captura probeautorizado que exporte canonweights/act/outputCPUHTP e payloadtiledRAW comSHA. Nao tensor_getqueunpacka como fisico.
+CalcularRscalarCanonical eRtiledReaderdoubleacc com os mesmosdados; leitorQ4 ja foi corrigido por dependencia, nao bloqueia essaanalise. Mostrar10coords e metricas8192, diferencasCPUref/roundscales/actquant/acc/cast comlimites precisos. Se nao reproduzirpathact/acc, rotularhipotese, nao 'FP16acccomprovado'.
+Devicecohort atual2c45ed97 e antigo/pre-guard/pre-fused: nao alegar que testeantigo valida sourceatual. Identificar source/header/config -> ELF -> APKentry -> installed/readback/pathcarregado/PID antesensaiar novo. installSuccess+PID nao eSHA.
+Uma rodadaQ4/Q6B1/B2/B128 comLEGADO/PINrotulados e controlesfocais, nao gridsdemuitosreinstalls. Guard/SKIP/ALLOC_FAIL/statuscompute conhecidos. UNWRITTEN exige rc/graphnodes/opstage/enqueue-submit-complete/readbacksync e pararprogressao, semreiniciarphoneparaencobrir.
+LogginginstabilityOPEN: comparecodegen/strings/relocations e preservebadfb8 egreen8e/2c; MAX4runsB1A1-B1-B2-A2comvariavelunica. Nao gastar toda sessao nisso deixando testesofflinependentes; nuncaaceitarmanternullcheckredundantearraycomofix.
+
+6. PROGRESSAO E ESCOPO
+Depois desses gates/fluxo/fusion/contratos e estabilidade: shapesreais doGGUFproduto c4bf comsupportspost/profile; grafo pequeno; handoffNPU->GPUOpenCL eNPU->GPUVulkan semreplayintegral; beneficio medido. KERNEL_VALIDATEDglobal nao deriva somente da vacina2D ouNMSEbaixo.
+Somente copiaisolada/probe autorizado. SIGprincipal/Whisper/UI/defaultVulkan/c4bf/R2/releaseintocados, semcommit/push/promocao/installSIG. WIPbyteabyte; semlimpeza/stash/resetamplos. CPH2747 serial3B15BD00FVE00000 explicito,wififailclosed; nuncaPJA110; stayon7; semroot/governor/reboots/logdreset/pmclear/uninstall. Readbackfinaldocumentado.
+
+7. ENTREGA A-H
+RELATORIO-SMART-DUAL-BACKEND-RODADA30.txt emdocs/especialista; evidenciasdocs/npu-hymt2/smart-rodada30/, hashes/totais/exits:
+A exportcoerente dos arquivoscompilados/correcaohistoricaR29, pipeline reproducivel;
+B localguardnowrite versus rejeicaoobservavel/zero compute/ALLOC_FAIL/opstage;
+C gatePINreal+fixture+mutantes/counterslegadopin;
+D fusedfixture/consumidores/mutante/buildseparado;
+E checkpointruntime/rodadafocal/snapshotrefs oublockerreal;
+F estabilidadebuildbudget/dadosreais;
+G escopo/estadofinal/WIP/R16;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE separados.
+Nao refazerpack/leitorjaGREEN por causa doexportvelho: corrigir a copia e investir no gate/fusion. Nao tratar recusa semstatuscomo carregamentocorreto. Os dois entregaveisprincipais agora precisam sair executados, nao apenas novamenteenumerados.

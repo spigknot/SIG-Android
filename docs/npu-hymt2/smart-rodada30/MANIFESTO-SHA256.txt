@@ -1,0 +1,35 @@
+MANIFESTO — smart-rodada30 (GATE PIN + FUSED FIXTURE EXECUTADOS + correção da entrega!)
+
+GATE PIN (seam compartilhada!): fixture 13 casos GREEN 0 RED; M1 7 RED; M3 (sentinela -1!) C8 RED!
+FUSED FIXTURE (função real!): GREEN 0 RED (Q4_1/Q4_K=1, Q6_K/F16=0!); MUTANTE RED (Q4_K=512!)
+CORRECAO-ENTREGA-R29: adapters REALMENTE compilados por cenário (matriz: 2/0/1/2/2/0!) + scripts anexados + lacunas declaradas!
+Pendentes: guarda ativa, ALLOC_FAIL/opstage, seam no probe, refs. KERNEL_VALIDATED: NAO.
+
+dd0f9d90978d7a34f28b9bac22bc3b341d165ec45b40cdcda8f22698b8bb6274  CORRECAO-ENTREGA-R29.md  (1949 B)
+6e540880e77b26ff4a4b96991bb8dd1b3f2a45f3c88fc192433fe0ba26d29b61  r29_extrai.py  (4266 B)
+e1997afb4fd2253991b4ad485585de8288ea0a3ed05eb291a4b7751c21e9181b  r29_guard2.py  (3056 B)
+11ee4c0b0a68048f270cb6e0978bc6559d6cb7e4a35ea5211ff194e9fd4e5822  r30-fused-green.txt  (288 B)
+4c4b96d32c50dc2ecc481c55231ef4529e3ad959e4f8dc9939f9165aa376acf1  r30-fused-mut.txt  (288 B)
+ba81a6450d137756a320f84d319e3476ffac7b207cacc7232b8deac4ad8c3f36  r30-gate-green.txt  (485 B)
+a16be9e21f51e26cacb7b8fb7c6a4a837ff4869d1ce513bd62e32b64a8f473ab  r30-gate-m1.txt  (485 B)
+404b6246586fbb63656491a1fbc59ec912323cc5fbd23b7358759a23c06b24a0  r30-gate-m3.txt  (485 B)
+3c63d8975251a73eaa6c4b57ce97c657c19278bca22ff0032f32b7bd047db17c  r30_fused_extrai.py  (2130 B)
+da69db671c1465fed3a22e109dee84d7147f1b74ca112cc84038af8fbf930d47  r30_fused_test.c  (3323 B)
+7908f379fa2219969210d27546ba946af5ab3d636693245d6eea23edaecab9ae  r30_gate.h  (3167 B)
+c956a553c74cc35f0afe1f785aec44bf51bf75b147a66c23b54706968544576a  r30_gate_test.c  (3434 B)
+e7214d52777fb5a4d67c82b439b61bbb6cb2c02e1304f28158bede32f530b840  r30_merge_gen.inc  (475 B)
+b61c24e3b1c3f72f61770d03bc85c2a5061ccca36766a8aaabb2d1ce14699294  r30_rowsize_gen.inc  (215 B)
+714d5371fb100c383af52c71526fd5f91f700b6866ec7abf4750b7e37e4ba3b4  entrega-real-r29/green/r29_cores_gen.h  (7924 B)
+82cc492857f730573dd8901f05ed0e5f741b43bc6d6d92c53811e739ee3f5b84  entrega-real-r29/green/r29_settensor_adap.inc  (3403 B)
+714d5371fb100c383af52c71526fd5f91f700b6866ec7abf4750b7e37e4ba3b4  entrega-real-r29/m1/r29_cores_gen.h  (7924 B)
+0f4b51948e91a6829b0ed814ad8166d53e06bf346169be81c57a894a845fff9d  entrega-real-r29/m1/r29_settensor_adap.inc  (1840 B)
+714d5371fb100c383af52c71526fd5f91f700b6866ec7abf4750b7e37e4ba3b4  entrega-real-r29/m2/r29_cores_gen.h  (7924 B)
+a15ee8c70ebd033c7110f61ba541e8ad336f8ffefc011b819964f95c3e832285  entrega-real-r29/m2/r29_settensor_adap.inc  (2833 B)
+925f522a712a7a7d9b207c42e7229bf9c7bd59d5bc0d1c173887be6d8a6aef8b  entrega-real-r29/m3/r29_cores_gen.h  (8058 B)
+82cc492857f730573dd8901f05ed0e5f741b43bc6d6d92c53811e739ee3f5b84  entrega-real-r29/m3/r29_settensor_adap.inc  (3403 B)
+7e796fe78f29697ee2318e654e1fb30da512f78c672ad47727fff5dede39f885  entrega-real-r29/m4/r29_cores_gen.h  (7954 B)
+82cc492857f730573dd8901f05ed0e5f741b43bc6d6d92c53811e739ee3f5b84  entrega-real-r29/m4/r29_settensor_adap.inc  (3403 B)
+714d5371fb100c383af52c71526fd5f91f700b6866ec7abf4750b7e37e4ba3b4  entrega-real-r29/m5/r29_cores_gen.h  (7924 B)
+60dcda76b64a02845c9a86af3d06c115eff4167db900069633ca9c551fa6e36f  entrega-real-r29/m5/r29_settensor_adap.inc  (2831 B)
+
+3a8eebb3d98fb75e56b3b98365f0d592d1e36983ec71f9d1aeb397899c7d7c8b  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA30.txt

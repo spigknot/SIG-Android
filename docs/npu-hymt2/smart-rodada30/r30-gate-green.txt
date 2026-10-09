@@ -1,0 +1,17 @@
+=== r30_gate_test (gate PIN compartilhado!) ===
+  [OK ] C1 ambos PASS
+  [OK ] C2 legacyFAIL/PINPASS (B128!)
+  [OK ] C3 NMSE alto => PIN_FAIL
+  [OK ] C4a ref NaN => INVALID
+  [OK ] C4b out NaN => INVALID
+  [OK ] C5 exec fail => INVALID
+  [OK ] C6 parcial => INVALID
+  [OK ] C7 sentinel => INVALID
+  [OK ] C8 denom0 => INVALID (nao PASS!)
+  [OK ] C9 soma inf => INVALID
+  [OK ] C10 overflow => INVALID
+  [OK ] C11 ref invalida => INVALID
+  [OK ] C12 nd=0 => INVALID
+
+TOTAL: 0 RED
+EXIT=0
