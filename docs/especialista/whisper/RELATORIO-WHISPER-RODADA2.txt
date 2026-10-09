@@ -1,0 +1,684 @@
+================================================================================
+RELATORIO-WHISPER-RODADA2.txt — Whisper local (SIG) / rodada 2 — LOTE FINAL (F)
+================================================================================
+Data: 2026-10-09 (America/Sao_Paulo). Worktree: D:/SIG-whisper-r1 (branch
+codex/whisper-r1; SEM commit/push — patch final ver §2/§10). Device: OnePlus
+PJA110 (SM8550, Android 13/API33, Adreno 740), serial 100.114.88.45:5555
+(C:/adb/adb.exe, sempre -s). Escritas no device restritas a
+/data/local/tmp/whisper-bench-r2/ e ao sandbox do app de lab
+(br.gov.sp.pcsp.whisperlab); o SIG instalado NAO foi tocado. Este relatorio e
+autossuficiente: todo numero tem arquivo-fonte citado (caminhos absolutos;
+base de evidencias = D:/SIG-whisper-r1/build/whisper-rodada2/20261009-0149).
+
+Metodo do WER: identico ao documentado em runner-a/WER-metodo.md, executado
+por runner-a/build-controles-csv.py (normalize_words+numerize+wer); CER
+computado sobre a mesma normalizacao (Levenshtein por caractere da frase
+normalizada). Referencias: c01_ref.txt/c02_ref.txt/c03_ref.txt (shas em §2).
+
+
+================================================================================
+1. RESULTADO EXECUTIVO
+================================================================================
+
+Bugs corrigidos/mitigados/abertos nesta rodada (detalhe e provas em §3/§5):
+- CORRIGIDOS COM PROVA: R2-03 (cadeia do crash Vulkan/FA: pre-checagem +
+  recusa limpa + fallback automatico + deadlock do compile_count), R2-04
+  (ownership: API owned no nativo + controller v2 + provas em ART), R2-06
+  (comparacao B0/B1/C2 refeita byte a byte — W14 retratado), R2-07 (WAV 35/35
+  host+device + semantica no runner), R2-01 (resolver de dispositivo do
+  harness core: 18/18 + smoke opencl->GPUOpenCL), R2-08 (gates com exit reais;
+  ambiente do SmartInsertNativeTest consertado — gate Kotlin 630/0/4 VERDE).
+- MITIGADOS (causa raiz aberta): R2-02/W11/W12 (FA em GPU: Vulkan recusa limpa
+  e refaz FA-off; OpenCL nunca entra com FA-on no produto — nenhuma faixa de
+  aceleracao GPU entregue; planos D1/D2 em §7/§12). W06 idem.
+- ABERTOS: W13 (Vulkan produz texto INCORRETO mesmo FA-off — por isso Vulkan
+  esta excluido de qualquer candidato), divergencia numerica 3-way em enc[0]
+  (DIVERGENCIA-C2, proximo passo exato no doc), drift de call-index (§5 F-01),
+  silencio->alucinacao (§5), pilha GPU/FA (§7).
+
+FA acelerou em CPU? SIM — medido A/B no mesmo processo/padrao de chamadas,
+com pares alternados AB/BA (5 medidas por lado):
+- CPU FA-off: mediana 5057,8 ms (4920,4–5146,8) — C01, jni, R2-C4.
+- CPU FA-on : mediana 4147,3 ms (4028,0–4172,7) — mesmas condicoes.
+- speedup mediano off/on = 1,22x (encoder 4312,8->3414,7 ms de mediana;
+  decoder ~570 ms nos dois lados). WER C01: 4,35% (FA-off) vs 2,17% (FA-on);
+  a saida FA-on e estavel entre repeticoes (5/5 mesmo sha 428ca5654e80...).
+- Vulkan produz texto correto? NAO (W13). Em R2-C4 Vulkan FA-off "executa"
+  (recusa limpa do FA na pre-checagem em 90,99 ms; fallback FA-off ok), mas a
+  transcricao Vulkan sai corrompida (88 chars de lixo, bytes invalidos
+  E8 80 20 crus; DIVERGENCIA-C2 §2; sequencia r2c-C6-fa-recovery). Vulkan
+  segue EXCLUIDO da matriz por qualidade (W13), nao apenas por FA.
+- Melhor perfil VALIDO da rodada: CPU + FA-on, beam 1, best-of 1, threads 4
+  (caminho de produto, jni). Alternativa conservadora: CPU FA-off (mesmo
+  backend validado, ~22% mais lento).
+- OpenCL FA-off nao vira candidato GPU: ~24,6 s/inferencia em C01 (4,8-5,9x
+  MAIS LENTO que CPU) e WER 6,82% (pior que CPU) com 1 corrida de warmup em
+  0,2439 — lento demais + qualidade pior + instavel (§8). EXCLUIDO.
+
+A candidata R2-C4 pode ser integrada no SIG agora? NAO AINDA.
+Pendencias de aceitacao (todas em §12): (1) drift de saida entre a 1a e as
+chamadas seguintes do MESMO processo (deterministico por indice de chamada;
+4 chamadas -> 4 textos diferentes, inclusive JNI==core==1 thread; afeta o uso
+real multi-arquivo); (2) FA em GPU nao entrega aceleracao (ABERTO desde a
+rodada 1; planos D1/D2); (3) silencio alucina com status ok (semantica);
+(4) divergencia numerica enc[0] entre backends sem causa isolada; (5) prova
+numerica de FA em GPU nao executada (D1; so CPU coberto). Todos os gates
+estao VERDES (§10), a lib R2-C4 e identificada (sem hooks, sem libOpenCL
+estatica) e os cenarios de ciclo de vida/ownership passaram em ART (§6).
+
+
+================================================================================
+2. ORIGEM / SNAPSHOT
+================================================================================
+
+- Worktree: D:/SIG-whisper-r1, branch codex/whisper-r1, base
+  963d41a08d78a1a456b8c7b59a5a025e1fd2e238 (git diff HEAD no snapshot final).
+- Snapshot inicial da rodada (fase A): snapshot/manifest-origem.json +
+  snapshot/full-diff.patch + copias em snapshot/files/.
+- Snapshot FINAL (este lote):
+  * build/whisper-rodada2/20261009-0149/snapshot/final-diff.patch  (git diff
+    HEAD --binary @ final-head; sha256 81d2c7474d3b31a188dc2c022c4da9e7fe8c6f10d1bf390830a51a14bf3f95dd; tamanho 533579 B)
+  * snapshot/final-untracked.txt (lista), snapshot/final-diff-stat.txt,
+    snapshot/final-status-porcelain.txt, snapshot/final-head.txt,
+    snapshot/final-files/new/ (copias dos fontes novos) e
+    snapshot/final-files/modified/ (fontes rastreados modificados).
+  * snapshot/manifest-final.json == MANIFESTO-WHISPER-RODADA2.json (hashes de
+    tudo: fontes novos/modificados, libs, binarios, corpus, modelo, APKs).
+- Libs carregadas no device (sha256):
+  * R2-C4 (rodada 2, NORMAL): libsig_whisper.so 8ba09192d174177d6cbd1c678a40404b1b5b4ee7bbe01b5c862f592f86deb8da,
+    62 802 808 B (NEEDED sem libOpenCL; 7 simbolos owned; hooks de diag = 0);
+    + libomp.so da75dcbe6026a3e08d01bfe86860159432051b329a84deb5ee042ce9b8e1a302.
+    Device: /data/local/tmp/whisper-bench-r2/libs/R2-C4/ (sha conferido).
+  * R2-C3 (rodada 2, candidata anterior): a57c05d3bc327e1e42725918a8998b5b8cf2789dfeae1c121b841b2d3702d021,
+    62 734 096 B (usada nas provas ART; sandbox do lab hoje tem R2-C4).
+  * Controles rodada 1: B0 6213f86e…, B1 0c88f086…, C2 91091742…, C1 dd8ca9a1…
+    (build/whisper-rodada1/20261008-r1/libs/).
+- Harness: build/whisper-rodada2/20261009-0149/whisper_bench_harness
+  (ELF arm64, NDK r27c; sha256 e65170c3a22fe7218186d8f2c083c63ebaa53b88044e05bf2092d2c119f4c563;
+  identico no device). Fonte: tools/whisper/whisper_bench_harness.cpp.
+- Modelo: ggml-base.bin sha256 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe
+  (147 951 465 B; copia em models/; mesmo sha no device).
+- Corpus (device /data/local/tmp/whisper-bench-r2/corpus/):
+  C01 c01_speech_short.wav d39c490515ed45c7a7aa3200865d9b3ea3b18493f15f42a6a1ad69d3fce1319d (14,0 s);
+  C02 c02_speech_long.wav 73bc4091c22465479f0144fb63fee647482a804d2b5c9f14897218223db8a9f7 (96,7 s);
+  C03 c03_speech_load.wav d0822376d88a49a8944ff3295e931d670b0546f67abcc966c2833822b2e54a7a (393,9 s; empurrado nesta rodada);
+  refs c01_ref aa9156f8…, c02_ref c3dfba9e…, c03_ref d654b58f….
+- Device/driver: PJA110/Adreno 740; OpenCL 3.0 QUALCOMM Compiler
+  E031.41.03.36; Vulkan build 1a285a84ae; Android 13 (SDK 33);
+  ro.build.type=user, ro.debuggable=0.
+- Toolchain: gradle 9.5.0 (wrapper), JDK 21.0.12.1-Microsoft, NDK
+  27.2.12479018, zig 0.16.0 (.tools/zig-0.16.0/zig.exe), Pester 3.4.0,
+  ffmpeg do gate = 8.0.1-full_build-www.gyan.dev (WinGet Links; o binario
+  hermes 9.0.1 do PATH da sessao REJEITA o frame FLAC de 1 amostra do teste —
+  ver §10/R2-08).
+- Comandos canonicos (celula de benchmark; runner monta identico):
+  adb -s 100.114.88.45:5555 shell LD_LIBRARY_PATH=/data/local/tmp/whisper-bench-r2/libs/R2-C4 \
+    /data/local/tmp/whisper-bench-r2/whisper_bench_harness --lib .../R2-C4/libsig_whisper.so \
+    --model .../model/ggml-base.bin --wav .../corpus/<caso>.wav --backend <b> --flash <on|off> \
+    --warmup 1 --runs 1 --beam 1 --best-of 1 --threads 4 --language pt --vad off \
+    --word-timestamps off --vk-profile V0 --run-id <id> --out <dev out> [--mode jni|core]
+
+
+================================================================================
+3. RETIFICACAO DA RODADA 1 (R2-01..R2-08) — STATUS FINAL
+================================================================================
+
+- R2-01 CORRIGIDO_COM_PROVA. O modo core agora resolve o dispositivo pelo
+  backend pedido (tools/whisper/core_device_selector.h; harness R2 com
+  backend_effective/backend_match/devices/params_effective). Prova: teste host
+  do resolvedor 18/18 exit 0 (fase-f/f3/host/core_device_selector_host.log) +
+  smoke cpu/vulkan/opencl com opencl->GPUOpenCL indice 1 (backend_info
+  "devices=3 / [1] GPUOpenCL" nos session objects, ex.
+  fase-f/f1/f1b-live.jsonl). backend efetivo != pedido agora e falha
+  explicita (core_run_object).
+- R2-02 MITIGADO com recusa antecipada + fallback automatico; FA GPU segue
+  ABERTO. Vulkan: pre-checagem sig_vk_flash_attn_preflight recusa ANTES do
+  abort (90,99 ms), carga refeita FA-off com aviso (r2c-C6-fa-recovery, exit 0,
+  ~192 s); driver real repetiu ErrorUnknown. OpenCL: guarda W11 mantida no JNI
+  (FA-on nunca executa no produto). Plano de entrega real: D2 (§7/§12).
+- R2-03 CORRIGIDO_COM_PROVA. Recusa por OP (GGML_OP_FLASH_ATTN_EXT) em vez de
+  recusa global; cadeia do tombstone simbolizada (fase-c/BTRACE-C1.md) e
+  comprovadamente INALCANCAVEL a partir de falha de pipeline FA. Bug RAIZ
+  achado no processo: deadlock do compile_count (vazamento de vagas em TODO
+  caminho de falha de compilacao; hardware_concurrency=6 -> load_shaders
+  bloqueava para sempre; reproduzido em logs/parcial-c5-leak com 0% CPU) —
+  corrigido com RAII compile_permit_guard; requisito "sem loop/retry infinito"
+  provado com injecao ESCOPADA a pre-checagem + sequencia PASS + regressao
+  comparativa (com injecao: 1x inject e so no passo FA-on; sem deadlock).
+- R2-04 CORRIGIDO_COM_PROVA. API owned (beginSessionOwned/loadModelOwned/
+  releaseModelOwned/transcribeOwned/cancelTranscriptionOwned/
+  lastTranscribeStatusOwned/ownershipApiVersion + gen) na lib normal (7
+  simbolos conferidos, R2-C4) + controller v2 no Kotlin. 7 invariantes
+  (WhisperSessionOwnershipTest) + ART: s2/s3/s5cpu/s6 provam release de gen
+  antigo = false, transcribe obsoleto = ("Cancelado: sessao substituida",
+  cancelled) sem tocar no nativo, callbacks antigos barrados
+  (wrapCallback/runIfCurrent; s6q ran=false/destroyed=true).
+- R2-05 CORRIGIDO em codigo+JVM (ART s11 NAO_EXECUTADO). LivePcmPipeline.kt
+  separa captura (leitor AudioRecord, runReadLoop) do worker de inferencia;
+  stop drena e processa o trecho final; awaitFinished; contadores em amostras
+  fecham exato (390 400 amostras no teste 1); cancel invalida callbacks. 5
+  testes JVM (sem sleeps) em fase-d-e/logs/gate-kotlin.txt. W04 restaurado ao
+  significado original de R2-05 (captura e inferencia na mesma thread);
+  instrumentacao/ART pendente (s11).
+- R2-06 FEITO. Controles B0/B1/C2 CPU FA-off refeitos como bytes (18 celulas,
+  runner-a/CONTROLES.csv + WER-metodo.md + cells/): transcripts byte-identicos
+  entre as 3 libs nas 6 series (C01 e C02 x 3 reps) — W14 RETRATADO (o
+  mojibake era transporte/pipeline, nao build). Nesta rodada R2-C4 tambem
+  produziu, na mesma posicao de chamada, sha256 66408b73… identico ao dos
+  controles (§8). Byte 0xB3 invalido no C02 CPU segue registrado (offset
+  ~4274, nos 3 reps; R2-C4 sanitiza na borda JNI — §5/F-04).
+- R2-07 CORRIGIDO_COM_PROVA. WAV: 35/35 host (ASan/UBSan) + 35/35 device
+  (sha arm64 803d35f81380151a94d20f43f77d84f3870227af7f20cb81368e65169d63651a);
+  politica do byte impar contada (partial_sample_bytes). Semantica no runner:
+  no_speech-vazio-com-fala = falha semantica (invalid_utf8 marcado;
+  WER-metodo.md) — foi o que classificou as celulas OpenCL/FA da rodada 1.
+- R2-08 PARCIAL->FECHADO NESTE LOTE. (a) Gates com exit reais colhidos (§10):
+  testDebugUnitTest 630/0/4 EXIT=0 — ambiente do SmartInsertNativeTest
+  consertado: a falha nao era demo, e o ffmpeg 9.0.1 do PATH da sessao
+  rejeitar "invalid block size: 1" (frame FLAC de 1 amostra do grafo de teste);
+  com o ffmpeg 8.0.1 gyan (ferramenta de referencia do proprio repo,
+  docs/validacao/manifesto-referencia-20260914.md:31) o teste passa — daemon
+  do Gradle reiniciado com o PATH correto (gradle --stop + PATH com WinGet
+  Links na frente); nenhum codigo de teste alterado, nenhum skip. (b) texto
+  final x sumario: este relatorio separa execucao x qualidade x conclusao
+  (§4/§8). (c) SIGABRT=6 corrigido na atribuicao (BTRACE-C1). (d) snapshot
+  unico e verificado (§2) — patch de 4 arquivos substituido pelo diff binario
+  completo HEAD + untracked + copias + manifesto com hashes.
+
+
+================================================================================
+4. FASES A–F — PASS/FAIL/NAO_EXECUTADO + DENOMINADOR + EVIDENCIA
+================================================================================
+
+(denominador = numero de execucoes/celulas contratadas; evidencia = caminho)
+
+| Fase | Entrega | Status | Denominador | Evidencia |
+|---|---|---|---|---|
+| A  | snapshot inicial + manifest + diff | PASS | 1/1 | snapshot/manifest-origem.json, full-diff.patch |
+| A2 | harness R2 (core resolver, params_effective, sched-debug) | PASS | smoke cpu/vulkan/opencl + host 18/18 | host-tests/core_device_selector_test.exe; session objects (backend_info devices=3/GPUOpenCL[1]); fase-f/f3/host/core_device_selector_host.log |
+| A3 | runner consertado + controles | PASS | Pester 54/54; 18/18 celulas ok (C01/C02 x 3 libs x 3 reps) | runner-a/CONTROLES.csv/METADATA.json/WER-metodo.md/cells/; pester-runner.log |
+| B  | ownership (lib owned + controller v2) | PASS | 630 testes / 1 pre-existente (na epoca) / 4 skip; lib R2-C4 7 simbolos owned | libs/R2-C4/IDENTIDADE-C4.txt; fase-c/logs/gradle-* |
+| C  | recuperacao Vulkan + deadlock raiz + sanitize MUTF-8 + dumps 3-way + BTRACE | PASS | sequencia fa-recovery 4/4 passos exit 0; cycles 3/3 ok; sanitize host 128/0; dumps 15/15 arquivos | fase-c/SUMMARY-C.md, BTRACE-C1.md, DIVERGENCIA-C2.md, logs/, host-tests/ |
+| D+E | WAV 35/35, LivePcm 5/5 JVM, FlashAttentionNotice 6/6, fa_attention_test 5/5 host+device, D2 repro OpenCL | PASS (D1 GPU NAO_EXECUTADO; D2 port NAO_IMPLEMENTADO — plano) | host+device conforme logs | fase-d-e/SUMMARY-DE.md + logs/ |
+| F1 | desempenho (FA CPU off/on; OpenCL; threads/beam C02) | PASS | a: 1 warmup + 10 medidas (5 pares AB/BA); b: 1+3; c: 4 threads + 4 beam (thr4 e thr8) | fase-f/f1/ (live.jsonl + cells por subfase) + analysis.json a) 1 warmup + 10 medidas em 5 pares AB/BA (0 falhas; 5 off + 5 on); b) 1+3 (0 falhas, excluida da candidatura — ver §8.2); c) 4 celulas de threads (2/4/6/8) + 2 de beam (3/5) em thr4 + 2 complementares em thr8 (0 falhas) |
+| F2 | estabilidade | PASS — 30/30 + 20/20 + 10/10 + 5/5 + 1/1, zero falhas (triagem, nao prova de ausencia de intermitencia — §8.6) | 30 C01 + 20 ciclos + 10 cancel/resume + 5 fechar/reabrir + 1 C03 | fase-f/f2/ + f2_close_reopen/ + f3/wav_io_test_device.log + f3/fa_attention_test_device.log; analysis.json |
+| F3 | gates + snapshot final | PASS | 8 gates + snapshot | §10 |
+
+Nao executados (transparencia): D1 GPU (prova numerica de FA em GPU), D2 port
+lazy OpenCL, ART s11 (live seam no lab), CheckJNI s10, vulkan re-test na matriz
+(excluido por W13), turbo/small (backlog).
+
+================================================================================
+5. ACHADOS — W01–W15 (atualizacao) + NOVOS (R2A-xx / F-xx)
+================================================================================
+
+Formato: estado ATUAL | causa/trigger | frequencia | estagio | arquivo:linha |
+teste antes/depois | patch | risco residual. Caminhos relativos a
+D:/SIG-whisper-r1 salvo indicacao.
+
+W01 (release longo na UI) — CORRIGIDO_COM_PROVA | release assincrono via
+  controller (nunca na main thread) | sem recorrencia nas provas | UI/lifecycle |
+  app/src/main/java/br/gov/sp/pcsp/launcher/WhisperSessionController.kt |
+  ART s2/s3/s5cpu: destroy no meio do load com reabertura ok; s6q post pos-
+  destroy bloqueado | risco: baixo.
+W02 (g_ctx sem ownership) — CORRIGIDO_COM_PROVA | API owned (gen) + barreiras |
+  n/a | nativo/ART | app/src/main/cpp/whisper_jni.cpp (owned) + controller |
+  lib R2-C4 exporta os 7 simbolos (IDENTIDADE-C4.txt); releaseModelOwned(gen
+  antigo)=false em s2/s3/s5/s5cpu | risco: baixo.
+W03 (stop-live anunciava fim com worker vivo) — CORRIGIDO em codigo+JVM; ART
+  s11 NAO_EXECUTADO | worker de inferencia dedicado + awaitFinished + drenagem |
+  testes JVM 5/5 | UI/live | LivePcmPipeline.kt; WhisperActivity.kt (requestStop
+  + listener runIfCurrent) | antes: join(3000) sem checar; depois: estado
+  distinto + callbacks invalidados | risco: baixo (falta prova ART).
+W04 (captura e inferencia na mesma thread — significado original) —
+  CORRIGIDO em codigo+JVM (runReadLoop le AudioRecord; worker separado; teste
+  JVM de fechamento exato) | UI/live | LivePcmPipeline.kt | ART s11 pendente.
+W05 (env GGML_VK_* lidas por presenca) — CORRIGIDO (trava de ENSAIO
+  SIG_WHISPER_VK_PROFILE_LOCK; auditoria estatica completa) | sem regressao |
+  nativo | docs/whisper/rodada1/auditoria-estatica-w05-w06.md | risco:
+  comportamento de produto intocado (trava so com a env).
+W06 (init OpenCL eager de 27 programas FA sem guarda) — MITIGADO (guarda W11
+  no JNI impede o caminho no produto) / ABERTO como capacidade | reproduzido:
+  FA-on no OpenCL = vazio silencioso (D2: 4/4 no_speech vazio; so 18 batchd
+  runs; fallbacks 5p/run) | init/FA | ggml-opencl.cpp vendorizado;
+  fase-d-e/SUMMARY-DE.md §D2 | port lazy+nao-fatal NAO implementado (plano de
+  4 passos no SUMMARY-DE) | risco: em outros devices/uso direto da lib.
+W07 (parser WAV fragil) — CORRIGIDO_COM_PROVA | 35/35 host (ASan/UBSan) +
+  35/35 device | testes nativos | app/src/main/cpp/whisper_wav_io.{h,cpp};
+  native-dependencies/tests/whisper/wav_io_test.cpp | fixtures t_wav/t_*.wav
+  no device; politica riff_size/tail/padding documentada.
+W08 (callbacks de thread nativa com JNIEnv invalido) — CORRIGIDO_COM_PROVA
+  (ART s6: 16 excecoes Java lancadas e engolidas; fila pos-destroy barrada;
+  contadores no log nativo) | n/a | nativo | whisper_jni.cpp (ScopedEnv) |
+  teste antes/depois: s6t/s6q PASS em ART | risco: baixo.
+W09 (cancelamento apagado) — CORRIGIDO_COM_PROVA | 3 barreiras + beginSession |
+  latencias request->worker-done: load 128-261 ms; pre-infer <1 ms; during-
+  infer 2,6-17,4 s | nativo/UI | whisper_jni.cpp; WhisperNative.kt |
+  ART s4 a/b/c PASS; F2 re-valida 10 ciclos (R2-C4) — 10/10 cancelamentos ok (cancelled; 'Cancelado: transcricao cancelada') e 10/10 retomadas ok; latencia pedido->worker-done: during-infer 4082-5188 ms (n=6), pre-infer 0.3-0.5 ms (n=2), load 155.9-156.0 ms (n=2). Evidencia: fase-f/f2/f2c-live.jsonl.
+W10 (status solto / no_speech) — CORRIGIDO_COM_PROVA | lastTranscribeStatus
+  vinculado a gen + parser (7 pares no s7 + runner classifica vazio-com-fala
+  como falha semantica) | n/a | nativo/UI | whisper_jni.cpp; parser/controller |
+  risco: baixo.
+W11 (vulkan+FA SIGABRT) — MITIGADO (recusa limpa ~90,99 ms + fallback
+  automatico FA-off; crash nao ocorre mais) / FA GPU ABERTO | reproduzido
+  novamente: ErrorUnknown real fora de injecao (r2c-C6-jni-fon.jsonl) |
+  estagio: pre-checagem whisper_model_load | ggml-vulkan.cpp (preflight),
+  whisper.cpp:1865-1872, whisper_jni.cpp:763-771; BTRACE-C1.md | risco:
+  aceleracao nao entregue (plano D2/§12).
+W12 (opencl+FA vazio silencioso) — MITIGADO (guarda JNI) / ABERTO como
+  capacidade | D2 4/4 vazio com FA-on; FA-off transcreve correto | idem W06 |
+  risco: idem.
+W13 (vulkan FA-off corrompe texto) — ABERTO — CONFIRMADO NESTA RODADA |
+  na recuperacao C1 o lado FA-off do Vulkan devolveu 472 chars (texto
+  corrompido, nao a transcricao); o dump 3-way mostra garbage de 88 chars com
+  bytes E8 80 20 crus | 100% nas execucoes vulkan | inferencia | 
+  DIVERGENCIA-C2.md §2; r2c-C6-fa-recovery; rodada1 analysis-final | Vulkan
+  EXCLUIDO da matriz como candidato (nao entra em F1/F2) | risco: alto se
+  alguem religar Vulkan; decisao: manter CPU como unica rota de produto.
+W14 (B0 divergente dos rebuilds) — RETRATADO COM DADOS INTEGROS | controles
+  A3 byte-identicos (C01 e C02, 3 reps, 3 libs); nesta rodada, na mesma
+  posicao de chamada, R2-C4 == B0 == B1 == C2 (sha 66408b73… C01) | n/a |
+  transporte/parse da rodada 1 | runner-a/CONTROLES.csv; fase-f/f1/f1a-summary.json
+  §controles_rodada1_call2 | risco: extinto (hipoteses de build descartadas).
+W15 (--fa-compare core nao aplicava guarda W11/W12 em GPU) — ABERTO
+  (NAO_EXECUTADO na GPU no lote F; caminho core CPU validado) | n/a | teste |
+  tools/whisper/whisper_bench_harness.cpp | a prova numerica de FA em GPU
+  continua backlog (D1); usar tweaks de GPU exige --mode core e o resguardado
+  agora e explicito (sem guarda) | risco: contido (capacity nao entregue).
+
+NOVOS ACHADOS (rodada 2):
+R2A-01 MUTF-8/NewStringUTF abortou o processo com texto Vulkan cru —
+  CORRIGIDO_COM_PROVA | tokens do modelo com bytes UTF-8 parciais (E8 80 20)
+  passavam crus ao NewStringUTF (ART aborta, nao capturavel) | reproduzido em
+  s5 (rodada 1) | borda JNI | app/src/main/cpp/whisper_mutf8.{h,cpp};
+  whisper_jni.cpp (new_string_utf8_sanitized); teste
+  native-dependencies/tests/whisper/mutf8_sanitize_test.cpp 128/0 (ASan+UBSan)
+  | antes: SIGABRT; depois: U+FFFD com contagem (1 sequencia / 2 bytes; log
+  "MUTF-8 sanitize (segmento): 1 ..." no s5-c5; sha do resultado identico entre
+  s5-c4/c5 59d99bdc…) | risco: CPUs/GPU com texto corrompido seguem
+  sanitizados (por desenho).
+R2A-02 deadlock do compile_count (vulkan) — CORRIGIDO_COM_PROVA | vaga de
+  compilacao vazada em TODO return de falha do ggml_vk_create_pipeline_func;
+  acumuladas >= hardware_concurrency (6) bloqueava load_shaders para sempre |
+  reproduzido (0% CPU, 3 threads paradas; terminado pelo wrapper ~7 min depois
+  do inicio — parcial-c5-leak, epoch 1791531379=04:36:19) | load/compile |
+  ggml-vulkan.cpp:2191-2205 (RAII compile_permit_guard) + :3708-3717 (nao
+  re-tentar familia FA reprovada) | antes: travamento silencioso do passo
+  FA-off (era lido como "lentidao do W13"); depois: sequencia de recuperacao
+  PASS (~192 s, exit 0) | risco: baixo.
+R2A-03 divergencia numerica FA-off entre backends — ABERTO | mel BIT-IDeNTICO
+  nos 3 backends; primeira divergencia em enc[0] (cpu -0,4859073 vs opencl
+  -0,5842379 vs vulkan +0,1045028); 100% dos elementos de enc/logits divergem;
+  max|Δ| enc 16,997 (cpu-opencl) / 30,937 (cpu-vulkan) | deterministica |
+  encoder (primeira op) | fase-c/DIVERGENCIA-C2.md + dumps/ (15 .bin) |
+  proximo passo EXATO no doc: comparar op-a-op o grafo do encoder por passo
+  (GGML_OP_* com GGML_SCHED_DEBUG/dumps por op) + checar fp16/DISABLE_F16 | 
+  risco: explica textos diferentes opencl (WER 6,8%) vs cpu sem tocar o CPU.
+R2A-04 byte 0xB3 invalido no transcript C02 CPU — ABERTO (registrado) |
+  1 byte 0xB3 cru no offset ~4274, nos 3 reps e nas 3 libs (copia preservada em
+  runner-a/cells/…C02….utf8-invalid.txt) | 3/3 | decode CPU | runner-a/
+  CONTROLES.csv; WER-metodo.md | produto sanitiza na borda (R2A-01); a origem e
+  o TOKEN cru do modelo (alucinacao/latin-1) — sem acao de produto pendente |
+  risco: baixo.
+R2A-05 silencio alucinado com status ok — ABERTO | whisper-base em silencio
+  digital emite anotacoes sonoras (5 s -> "[MÚSICA DE FUNDO]"; 60 s -> idem 2x;
+  tom -> "[Balão]"; ruido -> "[MÚSICA DE FUNDO]"); contrato nativo so marca
+  no_speech com texto vazio | reproduzido em s8/s8b | pos/inferencia |
+  art-lab/SUMMARY-ART.md §4.3; cenarios-s8*.jsonl | caminho: VAD (modelo
+  ausente no device) ou pos-limiar | risco: UX ("sem fala" nunca aparece).
+R2A-06 envelope numerico do FA CPU (F16 one_chunk) — REGISTRADO | o caminho
+  one_chunk acumula VKQ em f16 (medido ~5e-4 mean_abs); tolerancias FIXADAS a
+  priori no teste (F16 max_abs<=3e-2/mean<=1e-3; F32 1e-4/1e-6/max_rel 1e-3;
+  NaN/Inf=FAIL) | n/a | kernel | tools/whisper/fa_attention_test.cpp |
+  os 5 casos passam host e device com numeros identicos | risco: nenhum novo;
+  documenta por que FA CPU fica dentro do envelope.
+F-01 SAIDA DEPENDE DO INDICE DA CHAMADA no mesmo processo — ABERTO (NOVO,
+  achado central de estabilidade) | 4 chamadas seguidas do MESMO audio no
+  MESMO processo => 4 textos DIFERENTES, deterministicos por indice (call1
+  7f666ee4… 266 B; call2 66408b73… 271 B; call3 7901a742… 269 B; call4
+  7613324d… 268 B); WER por chamada (FA-off) 4,35/4,35/0/2,17% e (FA-on)
+  6,52/2,17/12,5/0% | 100% das execucoes; REPLICADO JNI==core==threads=1==
+  threads=4 (f1ax/f1ax2) | inferencia (whisper.cpp ctx->state reutilizado) |
+  fase-f/f1/f1ax-live.jsonl + f1ax2-live.jsonl | hipoteses DESCARTADAS por
+  evidencia: nao e JNI (core identico), nao e scheduling OpenMP (1 thread
+  identico), nao e prompt_past (no_context=true limpa, whisper.cpp:6960), nao
+  e audio mutado (whisper_full_parallel(1)=>whisper_full, sem mutacao) |
+  suspeita remanescente: estado/alloc-dependente no ctx->state (ex.: selecao
+  de kernel por alinhamento de buffer na 1a alocacao vs reuso) — instrumentar
+  com logits por chamada | impacto de produto: o app carrega 1 contexto por
+  sessao e transcreve N arquivos — 1o arquivo difere dos seguintes; com a
+  amostra C01 a diferenca de qualidade e de -1 a +2 erros (WER 0-12,5%);
+  SEM acao ate decisao do especialista (abaixo §12.1).
+F-02 OpenCL FA-off lento/inconsistente — EXCLUIDO de candidatura GPU |
+  24 588,4 ms mediada em C01 (4,8x CPU FA-off / 5,9x CPU FA-on); WER 6,82%
+  (3 medidas) e 1 warmup com 24,39%; outputs variam entre 256/257 chars |
+  4/4 | inferencia GPU | fase-f/f1/f1b-live.jsonl | motivo de exclusao:
+  lento demais + qualidade pior + variabilidade | risco: nenhum (nao entra).
+F-03 deriva termica intra-sessao — REGISTRADO (honestidade de amostra) |
+  bateria 35,5 °C (inicio F1a) -> 38,1 °C (fim F1c); tempos absolutos CPU
+  off subiram ~19% entre os blocos frio (4,92-5,15 s) e aquecido (5,98-6,10 s);
+  toda comparacao A/B desta rodada usa pares alternados AB/BA no MESMO periodo
+  termico | n/a | medida | fase-f/device-state.jsonl + f1a/f1ax | risco:
+  leitura de numeros absolutos SEM o contexto termico | nota: sem promessa de
+  p95 (amostras pequenas por config: 3-5).
+
+
+================================================================================
+6. ART / UI / LIVE (fechamento do lote)
+================================================================================
+
+- Pacote de lab: br.gov.sp.pcsp.whisperlab (applicationId proprio; sem
+  propriedade -PwhisperLab o flavor NAO existe; release desabilitado).
+  APK de lab com a correcao do filtro de log: app-whisperlab-debug-s5c5.apk
+  sha256 a85c5f6443338b61b0edb4e761cbbfe142c731e69db5a3d84c78007de5cabf8d
+  (9 437 681 B). APKs de produto sem hooks: ad1655f1… (8 196 446 B, sem
+  propriedade) e 81b8633f… (2 ABIs). Scan de dex/manifest dos APKs de produto:
+  WhisperLabActivity=0, whisperlab-libs=0.
+- Cenarios s1-s10 executados (SUMMARY-ART.md): s1 transcreve (4 685 ms, 260
+  chars, sha 7f666ee4 — MESMO sha desta rodada para o call-1 do C01!); s2/s3
+  fechar/reabrir durante load/inferencia com ownership correto (release de gen
+  antigo=false); s4 cancel latencias (antes do load 4 ms; durante o load
+  11 094 ms — inclui o load; durante a inferencia 2 609 ms); s5 vulkan corrigido
+  na R2-C4 (sem abort; sanitize com contagem; sha do resultado 59d99bdc identico
+  entre s5-c4/c5); s6 excecoes em callback engolidas (16) e fila barrada;
+  s7 parser (7 pares + audio C06 real); s8 silencio/erro/recuperacao (achado
+  R2A-05); s9 UTF-8/MUTF-8 (emoji+NUL no roundtrip JNI); s10 CheckJNI
+  SKIP_JUSTIFICADO (ro.debuggable=0; setprop negado; nao habilitavel por app).
+- Heartbeat (main thread, alvo 100 ms): atraso maximo global 37 ms (s9); tipico
+  2-26 ms; nenhum bloqueio em beginSession/cancel/release. App-freezer do
+  Android 13 documentado em s2-r1 (load retomou ~129 s depois, ao voltar ao
+  primeiro plano) — comportamento do SO, evidenciado.
+- LivePcmPipeline (E1): contagem fechada 390 400 amostras (12 frases x 2,0 s +
+  sobra 0,4 s), reconstrucao byte a byte, descarte do mais antigo contado,
+  cancel invalida callback, awaitFinished; 5 testes JVM sem sleeps.
+  FlashAttentionNotice: 6 testes JVM; mensagem de recusa (C1/W11) exibida no
+  terminal/log; CPU = honrado.
+- Fechar/reabrir nesta rodada (F2): 5 ciclos do cenario s2 (run ids unicos
+  s2c1..s2c5) — 5/5 ciclos PASS (destroy observado e fase 2 concluida em todos; waits fase1 4,6-5,2 s / fase2 22,4-25,4 s; stale_release rc_freed=false em todos; transcribe da sessao nova ok sha 7f666ee4 (mesmo do call-1 do harness/app)) — Evidencia: fase-f/f2/close-reopen/ (ciclo-*.jsonl + summary.json). Evidencia:
+  fase-f/f2/close-reopen/ (ciclo-*.jsonl, summary.json, logcats).
+
+
+================================================================================
+7. GPU / FLASH ATTENTION
+================================================================================
+
+- Prova numerica FA (CPU) — tools/whisper/fa_attention_test.cpp; seed fixa
+  0x9E3779B97F4A7C15; referencia NAO fundida em f64 lendo os mesmos tensores
+  (strides nb/ne do whisper); layout do resultado [DV, n_head, N, 1].
+  Casos (host 5/5, device 5/5, numeros identicos):
+  * enc-self f16 1500/pad1536 [64,8,1500,1] max_abs 1,435e-07 / mean 7,3e-09;
+  * dec-self f16 causal [64,8,4,1] max_abs 5,071e-04 / mean 5,7e-05;
+  * dec-cross f16 4/1536-pad max_abs 4,434e-04 / mean 5,9e-05;
+  * dec-self f32 controle max_abs 1,131e-07 / mean 1,5e-08;
+  * dec-self f16 nb3 de camada (il=1) max_abs 5,637e-04 / mean 7,0e-05.
+  Tolerancias fixadas antes da execucao; NaN/Inf=FAIL; F16 one_chunk acumula
+  VKQ em f16 (~5e-4 — R2A-06). Backend: cpu (ggml_graph_compute_with_ctx),
+  n_threads=8 host / 2 device; binario device sha ba7296e7… (2 044 792 B).
+  Re-run nesta rodada: fase-f/f3/host/fa_attention_test_host.log (5/5) e
+  fase-f/f3/fa_attention_test_device.log TOTAL pass=5 fail=0 (binario device sha ba7296e7…; numeros identicos ao host).
+- Backend efetivo (modo core, A2): session object traz "devices=3 / [0] Vulkan0
+  / [1] GPUOpenCL / [2] CPU" e "OpenCL loader: libOpenCL.so"; backend_match
+  obrigatorio (efetivo != pedido = erro explicito). Nota: o device do modo core
+  e resolvido pelo BACKEND pedido (R2-01) — nos logs de carga GPU aparece o
+  backend correto (r2c-C2-dump-opencl.jsonl etc.).
+- Nos FA por backend (--sched-debug): capacidade implementada (GGML_SCHED_DEBUG=2
+  -> sched_nodes_by_backend no run object); NAO exercitada para GPU no lote F
+  (orcamento) — para a prova de FA GPU (D1) usar o plano do SUMMARY-DE §D1
+  (dlsym de ~15 simbolos + ggml_backend_sched_*).
+- Crash historico simbolizado (BTRACE-C1.md): ggml_abort (ggml.c:271) <-
+  ggml_backend_sched_backend_id_from_cur (ggml-backend.cpp:898) <-
+  split_graph (1041) <- alloc_graph (1872) <- whisper_encode_internal
+  (whisper.cpp:2442) <- ... <- Java_..._transcribe (whisper_jni.cpp:778);
+  causa: 6x "compute pipeline creation failed for flash_attn_f32_f16_aligned:
+  ErrorUnknown" (driver Adreno 740) + recusa global de suporte; classe: SIGABRT
+  (signal 6, exit 134). Hj: recusa por OP + pre-checagem — cadeia inalcancavel.
+- OpenCL upstream (D2): commit d1be6fde, ggml-opencl.cpp sha256
+  9b6ed650cdf50cf09407c9f7ea5109fa90ca87ae8e58616930c68d31d6215085
+  (1 449 955 B); lazy FA + quirks E17/A7X existem no upstream e NAO no vendor
+  local; repro FA-on vazio 4/4 (18 batchd runs, fallbacks 5p/run); plano de
+  port lazy+nao-fatal em 4 passos (SUMMARY-DE §D2) — NAO implementado.
+- FA CPU acelera de verdade no produto? §8 (medido). FA GPU: NAO executado
+  (recusa/guarda em todas as rotas); aceleracao GPU pendente (D1/D2).
+
+
+================================================================================
+8. DESEMPENHO / QUALIDADE
+================================================================================
+
+Cuidados de metodo (todos registrados): 1 warmup dedicado + 5 pares medidos
+alternando AB/BA; medicao = 2a inferencia do processo (call2, posicao
+comparavel); pares no mesmo periodo termico; sem promessa de p95 (n=5 por
+lado); tempos vem de inference_wall_ms/encoder_ms/decoder_ms do harness (relogio
+do device); R2-C4; ggml-base; jni/threads=4 quando nao indicado.
+
+8.1 F1(a) CPU FA off vs on (C01, jni) — ordem executada e pares (ms medidos):
+  f1a-warmup-off  FA=off   4770.0 ms  enc=  4059.0 dec=  551.2  WER=0.0435 sha=66408b73205d428c
+  f1a-p1-off      FA=off   4920.4 ms  enc=  4181.1 dec=  572.4  WER=0.0435 sha=66408b73205d428c
+  f1a-p1-on       FA=on    4028.0 ms  enc=  3306.1 dec=  559.0  WER=0.0217 sha=428ca5654e80b0c0
+  f1a-p2-on       FA=on    4072.6 ms  enc=  3347.3 dec=  557.7  WER=0.0217 sha=428ca5654e80b0c0
+  f1a-p2-off      FA=off   5042.1 ms  enc=  4305.4 dec=  574.5  WER=0.0435 sha=66408b73205d428c
+  f1a-p3-off      FA=off   5057.8 ms  enc=  4312.8 dec=  577.6  WER=0.0435 sha=66408b73205d428c
+  f1a-p3-on       FA=on    4157.3 ms  enc=  3414.7 dec=  572.1  WER=0.0217 sha=428ca5654e80b0c0
+  f1a-p4-on       FA=on    4147.3 ms  enc=  3414.4 dec=  574.4  WER=0.0217 sha=428ca5654e80b0c0
+  f1a-p4-off      FA=off   5146.8 ms  enc=  4376.1 dec=  591.1  WER=0.0435 sha=66408b73205d428c
+  f1a-p5-off      FA=off   5136.2 ms  enc=  4373.1 dec=  590.5  WER=0.0435 sha=66408b73205d428c
+  f1a-p5-on       FA=on    4172.7 ms  enc=  3415.9 dec=  583.6  WER=0.0217 sha=428ca5654e80b0c0
+  P1: f1a-p1-off(4920.4) vs f1a-p1-on(4028.0) -> delta 892.3 ms
+  P2: f1a-p2-on(4072.6) vs f1a-p2-off(5042.1) -> delta -969.5 ms
+  P3: f1a-p3-off(5057.8) vs f1a-p3-on(4157.3) -> delta 900.4 ms
+  P4: f1a-p4-on(4147.3) vs f1a-p4-off(5146.8) -> delta -999.4 ms
+  P5: f1a-p5-off(5136.2) vs f1a-p5-on(4172.7) -> delta 963.5 ms
+Medianas: OFF 5 057,75 ms [4 920,4–5 146,8] (n=5); ON 4 147,33 ms
+[4 028,0–4 172,7] (n=5); speedup 1,22x. Encoder: OFF mediana 4 312,8 ms ->
+ON 3 414,7 ms (o ganho esta quase todo no encoder); decoder ~570-580 ms nos dois.
+WER C01: OFF 4,35% (5/5), ON 2,17% (5/5). Saidas byte-estaveis por config
+(5/5 mesmo sha em cada lado). Falhas: 0/11 celulas.
+
+8.2 F1(b) OpenCL FA-off (C01, jni) — candidato GPU: EXCLUIDO.
+Medidas (call2): 24 676,6 / 24 962,3 / 24 500,3 / 23 826,3 ms (mediana
+24 588,4 ms => 4,8x CPU FA-off, 5,9x CPU FA-on); WER 6,82% (6f5864fb… 257 B)
+com 1 warmup em 24,39% (b78a3fa5… 248 B) e rep3 com 256 B (2457d504…);
+backend efetivo OpenCL confirmado no session object. Motivos de exclusao:
+lento demais + qualidade pior que CPU + variabilidade com o mesmo input.
+(Cross-check D2: FA-off OK/FA-on vazio — W12.)
+
+8.3 F1(c) varredura (C02, modo core, FA-on) — uma variavel por vez:
+threads (beam1/best_of1): t2 48 441,5 ms (WER 17,92%); t4 24 310,3 (21,22%);
+t6 29 848,1 (14,40%); t8 23 243,2 (17,41%). Melhor tempo: threads=8.
+beam (threads=4): beam1 24 310,3; beam3 43 786,2 (15,10%); beam5 52 185,5
+(15,48%). Complemento em threads=8: threads=8: beam3 28 664,3 ms / beam5 39 818,1 ms (vs beam1 23 243,2 no mesmo threads; custos 1,23x/1,71x). Obs.: em beam>1 o dec_ms reportado e artefato de parse (33-322 ms) — usar inference_wall_ms (== whisper_total_ms). Evidencia: fase-f/f1/f1cb-live.jsonl. Custo de beam ~1,8x
+(beam3) e ~2,1x (beam5) sobre beam1; o JNI de produto fixa threads=4.
+Nota: WERs em C02 (core) ficam na faixa 14–21% — o texto C02 e longo e
+sensivel a numeros; a comparacao experimental A/B deve usar o MESMO modo
+(os controles jni deram 27,82% com invalid_utf8 marcado).
+
+8.4 Controles da rodada (A3) — reproduzidos aqui para confronto:
+B0/B1/C2, C01: WER 4,35% x3; C02: 27,82% + 1 byte 0xB3 invalido x3;
+transcripts byte-identicos entre libs (sha C01 66408b73… — igual ao call2 do
+R2-C4). C01 e a referencia de qualidade; C02 carrega o achado R2A-04.
+
+8.5 Cold/warm/load: load do modelo (jni) 108–130 ms (cold load_ms do run
+object); "cold" e apenas o registro de carga; a 1a inferencia do processo e a
+mais lenta em C02 (ex.: thr4 26 001 ms cold-ish vs 24 310 ms na call2) e a
+saida muda por indice de chamada (F-01). Cada celula e um PROCESSO novo
+(isolamento adotado na rodada).
+
+8.6 F2 — estabilidade (melhor perfil correto = CPU FA-on, jni, threads=4):
+- 30 transcricoes C01: 30/30 celulas ok, 0 falhas; transcript UNICO em 30/30 (sha 428ca5654e80, 269 B, WER 0.0217); inference mediana 4917.0 ms [4901.0..5656.1] (as 3 primeiras ~5,64-5,66 s em pico termico local; resto 4,90-4,93 s). Evidencia: fase-f/f2/f2a-live.jsonl
+  (fase-f/f2/f2a-live.jsonl; cada celula = processo novo, warmup 1 + 1 medida).
+- 20 ciclos load/release (jni --load-release-cycles 20): 20/20 ciclos ok (rc=0), 0 erros; load 171.1-211.9 ms; teardown 31.6-41.4 ms. Evidencia: fase-f/f2/f2b-live.jsonl
+- 10 ciclos cancelamento/retomada (cancel-at load/pre-infer/during-infer +
+  re-run): 10/10 cancelamentos ok (cancelled; 'Cancelado: transcricao cancelada') e 10/10 retomadas ok; latencia pedido->worker-done: during-infer 4082-5188 ms (n=6), pre-infer 0.3-0.5 ms (n=2), load 155.9-156.0 ms (n=2). Evidencia: fase-f/f2/f2c-live.jsonl
+- 5 ciclos fechar/reabrir (lab s2): 5/5 ciclos PASS (destroy observado e fase 2 concluida em todos; waits fase1 4,6-5,2 s / fase2 22,4-25,4 s; stale_release rc_freed=false em todos; transcribe da sessao nova ok sha 7f666ee4 (mesmo do call-1 do harness/app)) — Evidencia: fase-f/f2/close-reopen/ (ciclo-*.jsonl + summary.json)
+- C03 longo 1x (jni, FA-on): C03 (393,9 s) transcrito 1x: status ok, 101.8 s (RTF 0.258; encoder 58.6 s / decoder 20.1 s), 6174 B, WER 0.2107 / CER 0.1056; load 144,9 ms; sem >1800 s (nao precisou reduzir). Evidencia: fase-f/f2/f2e-live.jsonl
+Honestidade: zero falhas aqui e triagem — nao prova ausencia de
+intermitencia; a janela de execucao, a temperatura (§F-03) e a amostra estao
+registradas; se algo aqueceu/demorou, ver desvios de fase (§4) e F-03.
+
+8.7 Falhas de run: F1a 0/11; F1b 0/4; F1c 0/6 (thr2-8: 4 celulas + thr4
+beam3/5; +2 no f1cb); nenhuma celula de benchmark falhou nesta rodada. As
+falhas historicas de qualidade por config (vulkan etc.) estao em §3/§5.
+
+================================================================================
+9. INCIDENTES (com extratos; sem editar evidencia original)
+================================================================================
+
+I-01 CRASH SIGABRT Vulkan+FA (rodada 1 reproduzido na A3). Celula
+  crash-c1-vulkan-fa: exit=134 (SIGABRT), uptime 17 s, 2026-10-09 02:53:45.215;
+  tombstone + logcat em runner-a/crash-c1-vulkan-fa/ (logcat-crash.txt,
+  RESULTADO.md). Extrato: 6x "ggml_vulkan: compute pipeline creation failed
+  for flash_attn_f32_f16_aligned: vk::Device::createComputePipeline:
+  ErrorUnknown" -> GGML_ABORT "pre-allocated tensor ... cannot run the
+  operation" (ggml-backend.cpp:898). Simbolizacao e leitura completa em
+  fase-c/BTRACE-C1.md. Hj: inalcancavel (pre-checagem + recusa por OP).
+I-02 DEADLOCK do compile_count (descoberto na fase C). Execucao
+  r2c-C5-fa-recovery travou no passo FA-off: stderr estatico (93->94 linhas,
+  ultimo "Terminated"), 0% CPU, 3 threads paradas; iniciada 04:36:19
+  (epoch 1791531379) e terminada pelo wrapper ~7 min depois (mtime 04:44);
+  evidencia fase-c/logs/parcial-c5-leak/. RAIZ: vazamento de vaga em qualquer
+  retorno de falha de compilacao (>= hardware_concurrency=6 -> load_shaders
+  bloqueia). Corrigido com RAII (ggml-vulkan.cpp:2191-2205) e provado com a
+  sequencia de recuperacao (r2c-C6-fa-recovery, exit 0, ~192 s) + injecao
+  escopada.
+I-03 APP-FREEZER (Android 13). s2-r1: Activity fechada durante o load ficou em
+  cached/frozen; o load so retomou ~129 s depois, ao trazer nova instancia ao
+  primeiro plano. Comportamento do SO; evidencia cenarios-s2-r1.jsonl;
+  repeticao limpa s2-r2 e a canonica. Sem crash.
+I-04 MOJIBAKE cp437 hist orico (rodada 1) em B0/C1 e recuperacao parcial de
+  C02 — RETRATADO nesta rodada: controles refeitos como bytes (A3) +
+  reproduzidos no lote F; W14 encerrado (§5). Nao se repetiu nenhum mojibake
+  nas 60+ celulas desta rodada.
+I-05 FLAKES de teste (fase D/E + gate): (a) primeira execucao do gate falhou
+  por corrida de arquivo (in-progress-results-generic.bin) — re-run limpo;
+  (b) LivePcmPipelineTest acusou 1 flake de EXPECTATIVA (fila cap=4 com worker
+  sem gate = descarte legitimo sob carga) — corrigido para capacidade folgada
+  nos testes sem backpressure (32/8), com o mecanismo de descarte coberto pelo
+  teste 2. Nenhum flake nesta rodada (o gate F rodou limpo).
+I-06 FALHA SILENCIOSA OpenCL+FA (D2): 4/4 runs FA-on = no_speech VAZIO com
+  decoder_ms=0,0 e 18 batchd runs (encode ~17-20 s), sem erro nativo; o MESMO
+  audio transcreve com FA-off. Nao e no_speech legitimo (falha semantica
+  registrada; guarda W11 impede no produto). Evidencia
+  fase-d-e/d2-opencl-*.{jsonl,stderr}.
+I-07 CheckJNI por app (s10): SKIP_JUSTIFICADO — ro.debuggable=0;
+  setprop dalvik.vm.checkjni true negado (exit 1); nao habilitavel sem mudanca
+  global de sistema (proibido). Evidencia cenarios-s10-r1.jsonl +
+  adb-commands.jsonl.
+I-08 Descuidos de ferramenta da fase C (registrados e corrigidos): (a)
+  run_s5_c4.py sobrescreveu cenarios-s5-c4.jsonl com a rodada s5-c5 — conteudo
+  restaurado do consolidado (64 eventos) e script corrigido; (b) exit.txt dos
+  wrappers de device nao era gravado (o harness registra exit:0 no proprio
+  JSONL; sem impacto nos numeros).
+I-09 DIVERGENCIA DE REGISTRO (nao de resultado): SUMMARY-C registra "harness
+  sha device cfb75a44…", mas a build canonica do harness e e65170c3… (mesma do
+  runner-a/METADATA.json e a que esta no device — conferida por sha nesta
+  rodada). Copias locais: fase-c/whisper_bench_harness (cfb75a44…) e
+  whisper_bench_harness na raiz da rodada (e65170c3…). Todos os ensaios do
+  lote F usaram e65170c3…; registrado para rastreio.
+I-10 Desvio de ferramenta do lote F: o default do argumento --thr-best (4)
+  sobrepos a derivacao automatica do melhor threads em f1c (bug do driver,
+  corrigido no arquivo), de modo que a varredura de beam rodou em threads=4;
+  complemento em threads=8 foi executado (f1cb). Nenhum dado invalido; desvio
+  declarado em §8.3.
+I-11 Memoria/contencao (historico da rodada 1): builds pesados concorrentes
+  causaram contencao; a partir dai builds/benchmarks pesados foram
+  serializados por device. Nesta rodada: fila unica por device (sessoes A/B/C
+  encadeadas) e gates de host em paralelo apenas com o device.
+
+================================================================================
+10. GATES + SNAPSHOT FINAL (comandos / exit / logs)
+================================================================================
+
+Todos executados em 2026-10-09 sobre o worktree D:/SIG-whisper-r1 (sem commit).
+Logs em build/whisper-rodada2/20261009-0149/fase-f/f3/.
+
+| # | gate | comando | exit | resultado |
+|---|---|---|---|---|
+| 1 | unit | ./gradlew.bat :app:testDebugUnitTest | 0 | 630 testes, 0 falhas, 4 skips (NativeDepsOfficialFixturesTest x4 — requerem ZIPs oficiais ausentes; ambiental). SmartInsertNativeTest PASSA (fix de ambiente: ffmpeg 8.0.1 gyan primeiro no PATH; daemon reiniciado: gradle --stop -> "2 Daemons stopped"). Log: gate-testDebugUnitTest.log; XMLs em app/build/test-results/testDebugUnitTest/ |
+| 2 | lint | ./gradlew.bat :app:lintDebug | 0 | 1116 findings informativos (maioria HardcodedText/SetTextI18n; nivel warning); SARIF/HTML gerados. gate-lintDebug.log |
+| 3 | build | ./gradlew.bat :app:assembleDebug | 0 | APK debug ok. gate-assembleDebug.log |
+| 4 | module-map | powershell -File scripts/check-module-map.ps1 -Quiet | 0 | sem saida (quiet). gate-check-module-map.log |
+| 5 | diff | git diff --check | 0 | so warnings LF->CRLF (5 arquivos); nenhum erro de whitespace. gate-git-diff-check.log |
+| 6 | diff staged | git diff --cached --check | 0 | vazio. gate-git-diff-cached-check.log |
+| 7 | Pester runner | powershell -File scripts/tests/run-whisper-adb-benchmark.tests.ps1 | 0 | Passed: 54 Failed: 0 Total: 54 (15,62 s). pester-runner.log |
+| 8 | agent-harness | powershell -File scripts/tests/validate-agent-harness.tests.ps1 -Quiet | 0 | quiet sem saida. gate-validate-agent-harness.log |
+| 9 | wav host | zig (ASan/UBSan) + run | 0 | TOTAL pass=35 fail=0. f3/host/wav_io_test_host.log |
+| 10 | wav device | ./wav_io_test_arm64 (sha 803d35f8…) | 0 | TOTAL pass=35 fail=0 (binario device sha 803d35f8…). f3/wav_io_test_device.log |
+| 11 | fa host | bash tools/whisper/build_fa_test.sh host + run | 0 | TOTAL pass=5 fail=0 (numeros identicos ao D/E). f3/host/fa_attention_test_host.log |
+| 12 | fa device | ./fa_attention_test_arm64 4 (sha ba7296e7…) | 0 | TOTAL pass=5 fail=0 (binario device sha ba7296e7…; numeros identicos ao host). f3/fa_attention_test_device.log |
+| 13 | resolver host | zig + run (A2) | 0 | TOTAL pass=18 fail=0. f3/host/core_device_selector_host.log |
+| 14 | sanitize host (fase C) | mutf8_sanitize_test.exe | 0 | pass=128 fail=0 (histórico; fase-c/host-tests/mutf8_sanitize_test.log) |
+
+Snapshot final (regenerado apos todos os ensaios):
+- snapshot/final-diff.patch = git diff HEAD --binary; sha256 81d2c7474d3b31a188dc2c022c4da9e7fe8c6f10d1bf390830a51a14bf3f95dd;
+  533579 bytes; snapshot/final-head.txt = 963d41a08d78a1a456b8c7b59a5a025e1fd2e238.
+- snapshot/final-untracked.txt: 55 arquivos novos (copias em
+  snapshot/final-files/new/); tracked-modificados copiados em
+  snapshot/final-files/modified/ (lista em final-diff-name-status.txt).
+- MANIFESTO-WHISPER-RODADA2.json == snapshot/manifest-final.json: entradas=119, existentes=119, ausentes=0
+  entradas com sha256/tamanho (fontes novos/modificados, libs R2-C3/R2-C4,
+  harness local+device, modelo, corpus C01-C03+refs, binarios de teste
+  host/device, APKs, handlers do lote F).
+
+================================================================================
+11. ESTADO DO DEVICE (preservacao, remanescentes, limpeza)
+================================================================================
+
+- SIG PRESERVADO: br.gov.sp.pcsp.launcher instalado e intocado (nenhuma
+  instalacao/escrita do SIG foi feita; toda escrita ficou em
+  /data/local/tmp/whisper-bench-r2/ e no sandbox do app de lab). Package do
+  lab: br.gov.sp.pcsp.whisperlab (applicationId proprio, debug; release
+  desabilitado).
+- Remanescentes no device (845 MB): /data/local/tmp/whisper-bench-r2/ com
+  whisper_bench_harness (e65170c3…), corpus/ (C01, C02, C03 + refs no lab),
+  model/ggml-base.bin (60ed5bc3…), libs/ (B0, B1, C1, C2, R2-C3, R2-C4,
+  R2-C4-DIAG, R2-C5-DIAG, R2-C6-DIAG), out/ (JSONL por run), dumps/ (15 .bin),
+  fase-c/, fase-d-e/ (binarios de teste + D2), lab-stage/.
+- Sandbox do lab (run-as files/): whisperlab-libs (libsig R2-C4 8ba09192… +
+  libomp), whisperlab-model (ggml-base + copia), whisperlab-corpus, art-lab
+  (cenarios.jsonl + saidas).
+- Rollback/limpeza documentados (NAO executados — manter para reprodutibilidade):
+  C:/adb/adb.exe -s 100.114.88.45:5555 shell pm uninstall br.gov.sp.pcsp.whisperlab
+  C:/adb/adb.exe -s 100.114.88.45:5555 shell rm -rf /data/local/tmp/whisper-bench-r2
+  (o SIG nao precisa de limpeza: nunca foi tocado).
+- Sem escritas em /sdcard; sem kill-server/reboot; device nunca foi reiniciado
+  nas sessoes desta rodada.
+
+================================================================================
+12. PENDENCIAS (5 experimentos para a proxima rodada)
+================================================================================
+
+1) enc[0] op-a-op (fecha R2A-03/DIVERGENCIA-C2): comparar o grafo do encoder
+   passo a passo (destilar GGML_OP_* com GGML_SCHED_DEBUG=2 e/ou dumps por op
+   nos mesmos 3 backends, C01 FA-off) para achar a primeira OP divergente;
+   checar fp16/DISABLE_F16 (V0). Entrada pronta: fase-c/dumps/, script
+   tools/whisper/compare_dumps_c2.py; proximo passo EXATO no fim do
+   DIVERGENCIA-C2.md.
+2) Lazy FA OpenCL (D2): port dos 4 passos do SUMMARY-DE §D2 (compilacao lazy
+   por primeiro uso, build_program_from_source nao-fatal, recusa E17/A7X em
+   supports_op, cache/liberacao) + testes (init FA-off, FA-on suportado,
+   recusado, falha injetada, libera/recarrega) no device.
+3) FA GPU — prova numerica (D1): construir via ggml_backend_sched (plano exato
+   no SUMMARY-DE §D1: dlsym ~15 simbolos + sched) para medir FA-on vs FA-off
+   dos MESMOS tensores na GPU; so depois falar de aceleracao GPU. Usa o
+   --sched-debug do harness para contar nos FA por backend.
+4) s8/quietude: silencio e nao-fala (R2A-05) — decidir contrato (VAD com modelo
+   Silero presente no device ou pos-limiar) para nao exibir "[MÚSICA DE FUNDO]"
+   como sucesso; cobrir no runner e no UI.
+5) ART s11 + lab completo: rodar o cenario live (s11) do seam LivePcmPipeline
+   no app de lab (fechamento da prova W03/W04/R2-05) e reexecutar a suite
+   s1-s10 com a lib integrada final.
+
+Decisoes de aceitacao pendentes do especialista (nao sao experimentos):
+(a) F-01 drift de call-index — incluir instrumentacao (logits por chamada /
+    reset de estado explicito entre arquivos, ex.: novo ctx por job ou
+    re-init de estado) ANTES da integracao no SIG; e a maior lacuna entre
+    "funciona nos ensaios" e "repetivel no produto".
+(b) Politica de backend: produto segue 100% CPU (Vulkan/OpenCL excluidos por
+    qualidade/estabilidade) — confirmar com o dono do produto.
+
+================================================================================
+FIM DO RELATORIO — evidencia completa em
+D:/SIG-whisper-r1/build/whisper-rodada2/20261009-0149/ (snapshot/, runner-a/,
+fase-c/, fase-d-e/, art-lab/, fase-f/) e entregaveis em
+D:/Projetos/SIG/docs/especialista/whisper/.
+================================================================================

@@ -1,15 +1,21 @@
 package br.gov.sp.pcsp.launcher
 
 import android.app.Activity
-import android.graphics.Color
+import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.graphics.Typeface
-import android.text.method.ScrollingMovementMethod
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
+import androidx.core.graphics.ColorUtils
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.progressindicator.LinearProgressIndicator
+import com.google.android.material.shape.MaterialShapeDrawable
 import kotlin.math.roundToInt
 
 /**
@@ -53,8 +59,9 @@ object DownloadPlanDialog {
         aoConfirmar: () -> Unit,
     ) {
         if (activity.isFinishing) return
-        val corpo = corpo(activity, plano, comProgresso = false, prefacio = prefacio, sufixo = sufixo)
-        val dialog = AlertDialog.Builder(activity)
+        val builder = dialogo(activity)
+        val corpo = corpo(builder.context, plano, comProgresso = false, prefacio = prefacio, sufixo = sufixo)
+        val dialog = builder
             .setTitle(plano.rotulo)
             .setView(corpo.view)
             .setNegativeButton(negativo) { _, _ -> aoNegar?.invoke() }
@@ -81,8 +88,9 @@ object DownloadPlanDialog {
         cancelavel: Boolean = false,
     ): Progresso {
         if (activity.isFinishing) return Progresso(null, null, plano)
-        val corpo = corpo(activity, plano, comProgresso = true)
-        val dialog = AlertDialog.Builder(activity)
+        val builder = dialogo(activity)
+        val corpo = corpo(builder.context, plano, comProgresso = true)
+        val dialog = builder
             .setTitle(titulo)
             .setView(corpo.view)
             .setCancelable(cancelavel)
@@ -155,6 +163,7 @@ object DownloadPlanDialog {
                     if (item != null) {
                         log.concluido(item.nome, item.bytes)
                         corpo.log.text = log.texto()
+                        corpo.log.visibility = View.VISIBLE
                     }
                 }
             }
@@ -188,6 +197,7 @@ object DownloadPlanDialog {
             val corpo = corpo ?: run { fechar(); return }
             log.fim(totalBaixado)
             corpo.log.text = log.texto()
+            corpo.log.visibility = View.VISIBLE
             corpo.status.text = "Download concluído."
             corpo.bar?.let { it.progress = it.max }
             // A barra some: ela já cumpriu o papel e roubaria altura da lista.
@@ -204,106 +214,145 @@ object DownloadPlanDialog {
         }
     }
 
+    /** Mantém o acabamento arredondado comum a confirmação e progresso. */
+    private fun dialogo(activity: Activity): MaterialAlertDialogBuilder {
+        return MaterialAlertDialogBuilder(activity, R.style.ThemeOverlay_SIG_DownloadDialog).apply {
+            (background as? MaterialShapeDrawable)?.let { fundo ->
+                val corTexto = MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnSurface, "DownloadPlanDialog")
+                fundo.setStroke(context.resources.displayMetrics.density, ColorUtils.setAlphaComponent(corTexto, 32))
+            }
+        }
+    }
+
     /**
-     * Monta o corpo (cabeçalho + lista rolável [+ barra]) de todos os diálogos.
-     *
-     * A lista tem altura limitada (~40% da tela): cabe junto do botão, e o
-     * usuário rola para ler tudo. A alternativa seria cortar ou agrupar, e as
-     * duas escondem justamente o que o usuário pediu para ver.
+     * Monta o corpo com altura natural: novas linhas no status, lista ou log
+     * provocam uma nova medição. O corpo inteiro compartilha a rolagem quando
+     * chega ao limite, mantendo título e botões fora da área rolável.
      */
     private fun corpo(
-        activity: Activity,
+        context: Context,
         plano: DownloadSizeFormat.Plano,
         comProgresso: Boolean,
         prefacio: String? = null,
         sufixo: String? = null,
     ): Corpo {
-        val dens = activity.resources.displayMetrics.density
-        val padding = (20 * dens).roundToInt()
-        val content = LinearLayout(activity).apply {
+        val dens = context.resources.displayMetrics.density
+        fun dp(valor: Int) = (valor * dens).roundToInt()
+        val corTexto = MaterialColors.getColor(context, com.google.android.material.R.attr.colorOnSurface, "DownloadPlanDialog")
+        val corFundo = MaterialColors.getColor(context, com.google.android.material.R.attr.colorSurface, "DownloadPlanDialog")
+        val corDestaque = MaterialColors.getColor(context, com.google.android.material.R.attr.colorPrimary, "DownloadPlanDialog")
+        val corSecundaria = ColorUtils.setAlphaComponent(corTexto, 210)
+        val content = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(padding, 0, padding, 0)
+            setPadding(dp(24), dp(4), dp(24), dp(8))
         }
 
-        // Prefácio/sufixo são texto normal (não a lista): o que explica/encerra o
-        // diálogo não é monoespaçado nem entra no log de arquivos.
-        val texto = TextView(activity).apply {
+        // A explicação e o resumo usam fonte normal; nomes e log ficam abaixo.
+        val texto = TextView(context).apply {
             val partes = listOfNotNull(
                 prefacio?.takeIf { it.isNotBlank() },
                 DownloadSizeFormat.cabecalho(plano),
                 sufixo?.takeIf { it.isNotBlank() },
             )
             text = partes.joinToString("\n\n")
-            setTextColor(Color.WHITE)
+            setTextColor(corTexto)
             textSize = 14f
+            setLineSpacing(dp(3).toFloat(), 1f)
         }
         content.addView(texto)
 
-        val status = TextView(activity).apply {
-            text = ""
-            setTextColor(Color.WHITE)
+        val status = TextView(context).apply {
+            text = "Preparando download..."
+            setTextColor(corDestaque)
             textSize = 14f
+            setLineSpacing(dp(2).toFloat(), 1f)
             visibility = if (comProgresso) View.VISIBLE else View.GONE
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(12) }
         }
         content.addView(status)
 
         val bar = if (comProgresso) {
-            ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal).apply {
+            LinearProgressIndicator(context).apply {
                 isIndeterminate = false
                 max = 100
+                trackThickness = dp(4)
+                trackCornerRadius = dp(2)
+                setIndicatorColor(corDestaque)
+                trackColor = ColorUtils.setAlphaComponent(corTexto, 32)
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = (10 * dens).roundToInt() }
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                ).apply { topMargin = dp(12) }
             }.also { content.addView(it) }
         } else {
             null
         }
 
-        // O LOG do download: começa vazio e vai "colando" uma linha por arquivo
-        // concluído. Rola junto com a lista, então no fim o usuário sobe e lê a
-        // sequência inteira antes de continuar (mesmo espírito do log do SigUpdater).
-        val log = TextView(activity).apply {
-            text = ""
-            setTextColor(Color.LTGRAY)
-            textSize = 12f
+        fun textoDeArquivos(): TextView = TextView(context).apply {
+            setTextColor(corSecundaria)
             typeface = Typeface.MONOSPACE
-            movementMethod = ScrollingMovementMethod()
-            setHorizontallyScrolling(true)
-            visibility = if (comProgresso) View.VISIBLE else View.GONE
+            setLineSpacing(dp(3).toFloat(), 1f)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(12).toFloat()
+                setColor(MaterialColors.layer(corFundo, corTexto, 0.04f))
+                setStroke(dp(1), ColorUtils.setAlphaComponent(corTexto, 24))
+            }
+            // A quebra de linha também conta na altura; o ScrollView cuida de
+            // toda a rolagem, sem disputar gestos com TextViews roláveis.
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (8 * dens).roundToInt() }
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = dp(14) }
+        }
+
+        // O histórico e a lista compartilham a rolagem para permitir a leitura
+        // completa, inclusive depois de terminar o download.
+        val log = textoDeArquivos().apply {
+            text = ""
+            textSize = 12f
+            // Um log vazio não reserva altura. Ao receber a primeira linha,
+            // [Progresso] o exibe e a janela cresce junto com o conteúdo.
+            visibility = View.GONE
         }
         content.addView(log)
 
-        val lista = TextView(activity).apply {
+        val lista = textoDeArquivos().apply {
             text = DownloadSizeFormat.linhas(plano.arquivos)
-            setTextColor(Color.LTGRAY)
             textSize = 13f
-            // Monoespaçada: `linhas()` já alinha por espaços, e o alinhamento só
-            // é exato se a fonte tiver largura fixa.
-            typeface = Typeface.MONOSPACE
-            // Rola dentro do próprio TextView, que é mais leve que um ScrollView
-            // com o tamanho fixo da tela.
-            movementMethod = ScrollingMovementMethod()
-            setHorizontallyScrolling(true)
-            // Plano sem itens = arquivo único: a lista não tem o que mostrar.
+            // A fonte monoespaçada mantém o alinhamento dos nomes e tamanhos.
             visibility = if (plano.arquivos.isEmpty()) View.GONE else View.VISIBLE
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                (activity.resources.displayMetrics.heightPixels * 0.40f).toInt()
-            ).apply { topMargin = (10 * dens).roundToInt() }
         }
         content.addView(lista)
 
-        return Corpo(content, status, lista, bar, log)
+        val scroll = ConteudoRolavel(context).apply {
+            isFillViewport = false
+            addView(content, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        return Corpo(scroll, status, lista, bar, log)
+    }
+
+    /** Limita a altura máxima, sem impor altura mínima aos planos pequenos. */
+    private class ConteudoRolavel(context: Context) : ScrollView(context) {
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            // screenHeightDp acompanha rotação e multiwindow. O espaço restante
+            // do AlertDialog ainda limita o corpo em telas baixas ou fonte grande.
+            val maximo = (resources.configuration.screenHeightDp * resources.displayMetrics.density * 0.60f).roundToInt()
+            val limite = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
+                maximo
+            } else {
+                minOf(maximo, MeasureSpec.getSize(heightMeasureSpec))
+            }
+            super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(limite, MeasureSpec.AT_MOST))
+        }
     }
 
     /** As views do corpo, prontas para o [Progresso] pintar. */
     class Corpo(
-        val view: LinearLayout,
+        val view: ScrollView,
         val status: TextView,
         val lista: TextView,
         val bar: ProgressBar?,

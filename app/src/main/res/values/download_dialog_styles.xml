@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="ThemeOverlay.SIG.DownloadDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="alertDialogStyle">@style/MaterialAlertDialog.SIG.Download</item>
+        <item name="colorSurface">#20252B</item>
+        <item name="colorOnSurface">#F2F5F7</item>
+        <item name="colorPrimary">#5EDAF2</item>
+        <item name="android:textColorPrimary">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="MaterialAlertDialog.SIG.Download" parent="MaterialAlertDialog.MaterialComponents">
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearanceOverlay.SIG.DownloadDialog</item>
+    </style>
+
+    <style name="ShapeAppearanceOverlay.SIG.DownloadDialog" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">24dp</item>
+    </style>
+</resources>

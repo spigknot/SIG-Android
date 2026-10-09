@@ -1,0 +1,1020 @@
+{
+ "generated_at": "2026-10-09T06:43:57-0300",
+ "manifest_id": "whisper-rodada2-20261009-0149-final",
+ "base_commit": "963d41a08d78a1a456b8c7b59a5a025e1fd2e238",
+ "branch": "codex/whisper-r1",
+ "worktree": "D:\\SIG-whisper-r1",
+ "evidence_dir": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149",
+ "regra": "sem commit/push; patch final em snapshot/final-diff.patch",
+ "report_files": {
+  "relatorio": "D:\\Projetos\\SIG\\docs\\especialista\\whisper\\RELATORIO-WHISPER-RODADA2.txt",
+  "matriz": "D:\\Projetos\\SIG\\docs\\especialista\\whisper\\MATRIZ-WHISPER-RODADA2.csv",
+  "resumo": "D:\\Projetos\\SIG\\docs\\especialista\\whisper\\RESUMO-METRICAS-WHISPER-RODADA2.md",
+  "manifesto": "D:\\Projetos\\SIG\\docs\\especialista\\whisper\\MANIFESTO-WHISPER-RODADA2.json"
+ },
+ "sources_new": [
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\sig_whisper_dump.cpp",
+   "kind": "source_new",
+   "exists": true,
+   "size": 3726,
+   "sha256": "3a9f6297ae415def057079185b06346906ae2cab1f2b66b59073160453074cf4",
+   "mtime": "2026-10-09T04:01:55"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\sig_whisper_dump.h",
+   "kind": "source_new",
+   "exists": true,
+   "size": 1101,
+   "sha256": "7fec9dd139864c57eaa702f29c130e3b70e2d27e1fe0960929c02982465d323c",
+   "mtime": "2026-10-09T04:01:55"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\whisper_mutf8.cpp",
+   "kind": "source_new",
+   "exists": true,
+   "size": 4512,
+   "sha256": "35c845f122d7a95f518683ed4833f1ef0297394e7e919aa44df075413cca153d",
+   "mtime": "2026-10-09T03:51:12"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\whisper_mutf8.h",
+   "kind": "source_new",
+   "exists": true,
+   "size": 1972,
+   "sha256": "0964a1f25385895ec8001184ca5f7e9a47f357319e5c35317d8f337813288633",
+   "mtime": "2026-10-09T03:51:12"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\FlashAttentionNotice.kt",
+   "kind": "source_new",
+   "exists": true,
+   "size": 3239,
+   "sha256": "48c595ffa69be1d184159397f96d6229956c6ae9bb570ec5cce43ae364644613",
+   "mtime": "2026-10-09T04:45:46"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\LivePcmPipeline.kt",
+   "kind": "source_new",
+   "exists": true,
+   "size": 10863,
+   "sha256": "2351b597211a4dd876fffd25ed9f34569f4c4ff621054cdd4e20f087fa45a92c",
+   "mtime": "2026-10-09T04:44:26"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\loader-prod\\br\\gov\\sp\\pcsp\\launcher\\WhisperLibLoader.kt",
+   "kind": "source_new",
+   "exists": true,
+   "size": 854,
+   "sha256": "fdc8d2dd5801d7551d34a93c0bea141bf3e6c66f712adfe49fccaafbd1bcfcf1",
+   "mtime": "2026-10-09T02:52:22"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\test\\java\\br\\gov\\sp\\pcsp\\launcher\\FlashAttentionNoticeTest.kt",
+   "kind": "source_new",
+   "exists": true,
+   "size": 3791,
+   "sha256": "36f686f8f1a82ecb78b1eb62eccdab245d7084ca541e8b42d34477956f537abf",
+   "mtime": "2026-10-09T04:46:02"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\test\\java\\br\\gov\\sp\\pcsp\\launcher\\LivePcmPipelineTest.kt",
+   "kind": "source_new",
+   "exists": true,
+   "size": 12203,
+   "sha256": "fa937775aae71e6e455d2a0677c5849dd157e8051c4a928f76684c684f2f0798",
+   "mtime": "2026-10-09T05:19:52"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\test\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperSessionOwnershipTest.kt",
+   "kind": "source_new",
+   "exists": true,
+   "size": 32326,
+   "sha256": "e2795a557faad7af6e1b0074d34b1368c2a509cdf0dc05bae4ece5d3faa92fda",
+   "mtime": "2026-10-09T02:33:36"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\whisperlab\\AndroidManifest.xml",
+   "kind": "source_new",
+   "exists": true,
+   "size": 808,
+   "sha256": "a03b46738ba38cdcdb62a31fc0c5eb57aafa035e34dc4eb9cb186a12394bdb0a",
+   "mtime": "2026-10-09T02:54:43"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\whisperlab\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperLabActivity.kt",
+   "kind": "source_new",
+   "exists": true,
+   "size": 40210,
+   "sha256": "0d922633b7e9f170f979bef0954645a7b8397503d7ddbda55301f01820ecccf9",
+   "mtime": "2026-10-09T05:06:49"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\whisperlab\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperLibLoader.kt",
+   "kind": "source_new",
+   "exists": true,
+   "size": 4713,
+   "sha256": "3c89cbe08a638f13a8542b5bea9d29745a35c9f7fca2865ebcdb753935d48432",
+   "mtime": "2026-10-09T02:52:41"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\native-dependencies\\tests\\whisper\\mutf8_sanitize_test.cpp",
+   "kind": "source_new",
+   "exists": true,
+   "size": 7441,
+   "sha256": "8f89ee7632735d0729b02f3b1c126151f3efda3bce995d8b65d2cfe782bb92e4",
+   "mtime": "2026-10-09T03:52:03"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_48k.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 64,
+   "sha256": "e0ce134f7d235a393407820b66aa94f810ba97d928b9597728da67016108a2d7",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_align.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 64,
+   "sha256": "7f976362b9768e74ead0734b038d4a67308d25359743a035ab1c994941acd352",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_bad_riff.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 36,
+   "sha256": "44eeee3f4bc5eef48a1afcadc7148552726da63a4781605b620c9bbf394ee478",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_beyond_3.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 247,
+   "sha256": "a26b68bae009910eb891544bec35e44d3015c7048f64ecf6e87c40a64c55428e",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_beyond_40.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 284,
+   "sha256": "d6adf1198dd4c61ccf38bab017be0d6424e3f6a5a9348bd344a294924b64e546",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_byterate.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 64,
+   "sha256": "a17fd788d9a437dd3edb8138bd77d4cb2bb1092960c36d86cddb358b39100944",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_chunk_overflow.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 49,
+   "sha256": "97d5b1133ea8b4fd9c5fa2eb51ef386cc207435a0772b854fcf1b54deb0bfcfd",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_empty_data.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 44,
+   "sha256": "ba584a378b11d9e9c98736fd8c256fe1453a84ee4139416d24b07acff424f0fb",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_float.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 64,
+   "sha256": "b312ce769ba44e18bca76e264e47d0c08df0638f1dda19196f70de246d9e0795",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_fmt18.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 66,
+   "sha256": "a54db3dd33fe216fe231c4f692c611e1f67aa88fe11ba5e94bd087cb2c1d49ea",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_fmt_conflict.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 88,
+   "sha256": "f22d53b1125b2345b7bf0405d7cb62d53e2c94b8ab8b479ae2cef93c3fe19099",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_fmt_dup.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 88,
+   "sha256": "e4b2fa69c8be49f36b3eb6de5ee1b987c8648ac54f185919d86107e2beb9269b",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_hdr_eof.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 16,
+   "sha256": "ce575f8a458237b386723f9dea54045e550c93fbbe963955f9b7f13ef6ba73fa",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_huge_data.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 64,
+   "sha256": "15ed00570194dc27536fd764fba286d5c33b4913b599e0daeafb54632adb80ff",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_multi_data.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 152,
+   "sha256": "c3c5c479229793e124102d80fd95c851a8cf386fcf189914c3b908b9f5eb79de",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_odd_data.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 146,
+   "sha256": "e26caa27e6ad16cdcb4e7d5c39b51a220419ddfd2e3bcf102b10fb294f979125",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_riff_big.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 244,
+   "sha256": "4c05b39a9194ae752f8bb03ed82d23839151678b8dbf80bef4240245274c1439",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_riff_overflow.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 64,
+   "sha256": "1a4fb059cde30bb8d24f88ab169b4c8c4bdf47f953f049781d2f71ac2e73a354",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_riff_small.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 444,
+   "sha256": "e453d37b46ea349e15c6d66e1ecae4ba594407a72532ff81117e4ff61f2b6066",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_riff_tiny.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 64,
+   "sha256": "ec9bbaadf0624abb38286beaf9b9861b2c2eb6b9f202f2e101eb58e12149a7ef",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_short_fmt.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 56,
+   "sha256": "b8bd181639baf7fbceaafd959112ade633f3e82a4886aa3df8764d12c2cd4307",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_tail_1.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 85,
+   "sha256": "3ee1413a7973edb082c225c11379020616e55068c8b89572efc69c740623098a",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_tail_2.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 86,
+   "sha256": "5e8e7d4ae8f642228153180284486c58b1cb89efeea0c2564782ee859556d24b",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_tail_3.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 87,
+   "sha256": "06967396d9e47a793ac15f1bcbad0474f6959c022e83202dc6a4d475f4aa6c0c",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_tail_4.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 88,
+   "sha256": "1fe9550312a4eb0a2466594fe2357f54e774affc098d8da4185767023f0b09f4",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_tail_5.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 89,
+   "sha256": "59e3a0625c5e6c485e6ac7243456a6a2d54bb843713f8376dc5001ab4d78f2a9",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_tail_6.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 90,
+   "sha256": "c9495d8351bbed9494e524eac1fb7b9c0fcd961c3c4d0741bca72d98c6ca4155",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_tail_7.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 91,
+   "sha256": "f80ce82fb8e435f22c6d23311053d771fac202858c32112fd9b3bd950cb8089a",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_trunc_data.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 64,
+   "sha256": "7740709b754d605e714ce65ed6f6f1c659c33df87ebd23f2551a2458cab35b00",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_trunc_pad.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 47,
+   "sha256": "3dc8f96009a6a4340feeb9ee5da80954589f5fcf29624a77fbf2a7a3deb3661c",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_unknown.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 270,
+   "sha256": "0dd1a8869f1cf2f77d8675197aa7c6b640f009a2a52a494da12a37687feacec8",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\t_valid.wav",
+   "kind": "source_new",
+   "exists": true,
+   "size": 3244,
+   "sha256": "41d4bbd5264f37ae651eb4b148fecf555c384bd4531b14e36f51ef842c897047",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\build_fa_test.sh",
+   "kind": "source_new",
+   "exists": true,
+   "size": 3375,
+   "sha256": "76fee3a1f3a681269c89b9a7453f3cedf5556436eafd3b27b976fc227c1e6d12",
+   "mtime": "2026-10-09T05:09:22"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\compare_dumps_c2.py",
+   "kind": "source_new",
+   "exists": true,
+   "size": 3153,
+   "sha256": "17d3787f4c3d48020fafb1c2ffcb6b01adfae7db71c2fc2b4927fd8ba04e596b",
+   "mtime": "2026-10-09T05:12:50"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\core_device_selector.h",
+   "kind": "source_new",
+   "exists": true,
+   "size": 3262,
+   "sha256": "c3b0f9a90afd3f07e56e2e1197f8a9a76d4d1e9ffb2f13886c3470eab95f9e66",
+   "mtime": "2026-10-09T01:57:58"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\core_device_selector_test.cpp",
+   "kind": "source_new",
+   "exists": true,
+   "size": 6203,
+   "sha256": "394029140b8ed00502e901117f4b997aa94f7b07252e01dd96663f13caae0037",
+   "mtime": "2026-10-09T01:58:09"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\fa_attention_test.cpp",
+   "kind": "source_new",
+   "exists": true,
+   "size": 16324,
+   "sha256": "fb25e80bbc48b2e785159bd60d618259142b3ff7a162e37f23a6e29d2f727546",
+   "mtime": "2026-10-09T05:06:11"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\lab\\d2_opencl_probe.sh",
+   "kind": "source_new",
+   "exists": true,
+   "size": 1078,
+   "sha256": "c8c21072b297137644bc07defb56b68d8216353e0e1a8cc06b42cd5f27e00fed",
+   "mtime": "2026-10-09T05:20:27"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\lab\\run_art_lab.py",
+   "kind": "source_new",
+   "exists": true,
+   "size": 18887,
+   "sha256": "6c2a6fece8433b38aea1ef77241bc3a11b78366968b3083a69856c3b4f29aeff",
+   "mtime": "2026-10-09T03:25:05"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\lab\\run_s5_c4.py",
+   "kind": "source_new",
+   "exists": true,
+   "size": 4208,
+   "sha256": "06e7491693053314c87a1791760cd7b561c74ae2f1ea60e853cc5a5caa69e99f",
+   "mtime": "2026-10-09T05:10:00"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\lab\\summarize_art_lab.py",
+   "kind": "source_new",
+   "exists": true,
+   "size": 3202,
+   "sha256": "6bc24ee8078b1f707edbdfbf64a8974ca7deb9bf0fec81a8043f582511d60680",
+   "mtime": "2026-10-09T03:24:06"
+  }
+ ],
+ "sources_modified": [
+  {
+   "path": "D:\\SIG-whisper-r1\\MODULE-MAP.md",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 10961,
+   "sha256": "64b258191e07d803aad23f7c16afde2c19485331ec0923932092ad76de226ce4",
+   "mtime": "2026-10-08T22:56:08"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\build.gradle",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 9511,
+   "sha256": "ac51d9eb8909655c1db2ad36763d7201affd6593326f7cb13faa2803fff0e260",
+   "mtime": "2026-10-09T04:02:44"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\CMakeLists.txt",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 6290,
+   "sha256": "25c5f7875cdceee2d6c8956093fabb1ff2c82ff6c0a64ac8531db9a1f8a54f59",
+   "mtime": "2026-10-09T04:02:27"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\whisper.cpp\\ggml\\src\\ggml-vulkan\\ggml-vulkan.cpp",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 919390,
+   "sha256": "382f133f5bc935acc7e8f9d21df9133cc9ef85338b59d4cb6608c16c976243d1",
+   "mtime": "2026-10-09T04:46:02"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\whisper.cpp\\src\\whisper.cpp",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 341866,
+   "sha256": "08c6e104c4cb7dc592bfccd0b5639842f60f1eb72beff2b12d34e6031c735b7a",
+   "mtime": "2026-10-09T04:01:34"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\whisper_jni.cpp",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 52959,
+   "sha256": "2db41d02c498ec8f14abc24a77a525c94255048772bb43999a9ee6ff9c5ae193",
+   "mtime": "2026-10-09T04:03:37"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\whisper_wav_io.cpp",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 12712,
+   "sha256": "32683d5f2d8d09b77b26acbe9fa88f773b37a39d040decf83574a0d152fd247d",
+   "mtime": "2026-10-09T04:33:32"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\cpp\\whisper_wav_io.h",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 2919,
+   "sha256": "775febac1d65b5a26adcfdf478516b9736d3850f8f9d22a30a0be62cc972ace7",
+   "mtime": "2026-10-09T04:32:18"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperActivity.kt",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 129800,
+   "sha256": "269a45d51a314c8874b349a7f7fe8a9759979d0a87854b493d7f7a6b3e93e98a",
+   "mtime": "2026-10-09T04:48:44"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperNative.kt",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 3935,
+   "sha256": "90c7ef206a7fd4787d52cd2c96ef7eb86c599708ca8d5747c66d3b05e3f50824",
+   "mtime": "2026-10-09T02:52:23"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperResultParser.kt",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 2894,
+   "sha256": "88c75bd35e13c74bb5d59600ea2041ad1fd18152b8238c5ce0c9f3e17fe32802",
+   "mtime": "2026-10-08T20:47:11"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\main\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperSessionController.kt",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 18111,
+   "sha256": "97b3088ad51c9739f9f70dd19d0ae35e33c5e9b77e5eb6b35701ff8654971286",
+   "mtime": "2026-10-09T02:34:14"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\test\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperResultParserTest.kt",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 6731,
+   "sha256": "d0d37a0e4528ed068ae22abbecde0da93d2705f7548d97de3d75d41e02eff2fe",
+   "mtime": "2026-10-08T20:52:51"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\app\\src\\test\\java\\br\\gov\\sp\\pcsp\\launcher\\WhisperSessionControllerTest.kt",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 14495,
+   "sha256": "bf3fdfd33e93d931e4187ee635b41e23907e03933b06d35a9aaa782d2f3ca72f",
+   "mtime": "2026-10-09T02:30:56"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\docs\\whisper\\rodada1\\RELATORIO-WHISPER-RODADA1.md",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 35771,
+   "sha256": "ceb61d9fd56e87a4cb0c29578bc75b43067de9619cd263d98544f7a3fba38bde",
+   "mtime": "2026-10-08T19:15:54"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\docs\\whisper\\rodada1\\auditoria-estatica-w05-w06.md",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 22012,
+   "sha256": "49b0b8b9fa37b619ccfba227742904aa30672ffef307391cd29968a30c19b8d2",
+   "mtime": "2026-10-08T14:51:32"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\docs\\whisper\\rodada1\\manifesto-correcoes.md",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 5880,
+   "sha256": "8f9e3646c8dfac3ea8cff1709a6e6c69cc4ff2e99a49448a8275b26fa2e7c1a2",
+   "mtime": "2026-10-08T19:17:07"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\docs\\whisper\\rodada1\\resumo-metricas.md",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 2827,
+   "sha256": "2891951dec9ce1e194166f756a8b6dc5ae949f7d3ec32c6416350adc3a04f9ac",
+   "mtime": "2026-10-08T19:16:24"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\native-dependencies\\tests\\whisper\\wav_io_test.cpp",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 22836,
+   "sha256": "1ef0d9a4169a59375275d4a8f8abba18c90fdc099731e0aa5174e9c4ce049276",
+   "mtime": "2026-10-09T04:36:36"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\scripts\\run-whisper-adb-benchmark.ps1",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 97814,
+   "sha256": "18ac7fb602f00532e468ac70a0d09c2cdc89ff0112fe98b44e9e9d2e10aafc90",
+   "mtime": "2026-10-09T02:50:38"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\scripts\\tests\\run-whisper-adb-benchmark.tests.ps1",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 45745,
+   "sha256": "7fdab92c0c5038c3ead484d8c46f1077327c9af6b85c64b9b57b69139b9ad9f1",
+   "mtime": "2026-10-09T02:50:38"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\build_bench_harness.sh",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 846,
+   "sha256": "38e865c752f36fedf5082aed354d22402ec3e04d43816d831d7f9d67ef44826d",
+   "mtime": "2026-10-08T15:18:09"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\generate_corpus.ps1",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 2998,
+   "sha256": "b3eec6a5a894a47cff77f3e119d6a25193350e26a6286904c9f6257b00bdda1f",
+   "mtime": "2026-10-08T14:56:34"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\generate_corpus_fixtures.py",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 34940,
+   "sha256": "f9aeb3f74eab8b5e88ffa3d7816868dda5dd96735a11e73dd3b38da7037a6df6",
+   "mtime": "2026-10-08T15:07:00"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\whisper_bench_harness.cpp",
+   "kind": "source_modified",
+   "exists": true,
+   "size": 94895,
+   "sha256": "c8c9370542210d65cf7b85b9cce025c3502e7b8fd892061558523559af61368b",
+   "mtime": "2026-10-09T04:05:17"
+  }
+ ],
+ "libs": [
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\libs\\R2-C3\\libsig_whisper.so",
+   "kind": "libsig_whisper",
+   "exists": true,
+   "size": 62734096,
+   "sha256": "a57c05d3bc327e1e42725918a8998b5b8cf2789dfeae1c121b841b2d3702d021",
+   "mtime": "2026-10-09T02:50:03",
+   "label": "R2-C3",
+   "device": "/data/local/tmp/whisper-bench-r2/libs/R2-C3/libsig_whisper.so"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\libs\\R2-C4\\libsig_whisper.so",
+   "kind": "libsig_whisper",
+   "exists": true,
+   "size": 62802808,
+   "sha256": "8ba09192d174177d6cbd1c678a40404b1b5b4ee7bbe01b5c862f592f86deb8da",
+   "mtime": "2026-10-09T04:48:29",
+   "label": "R2-C4",
+   "device": "/data/local/tmp/whisper-bench-r2/libs/R2-C4/libsig_whisper.so"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\libs\\R2-C4\\libomp.so",
+   "kind": "libomp",
+   "exists": true,
+   "size": 1229304,
+   "sha256": "da75dcbe6026a3e08d01bfe86860159432051b329a84deb5ee042ce9b8e1a302",
+   "mtime": "2026-10-09T04:48:29",
+   "label": "R2-C4"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\libs\\R2-C4\\IDENTIDADE-C4.txt",
+   "kind": "identidade",
+   "exists": true,
+   "size": 1530,
+   "sha256": "42e504501d25840ee42896131c649f251c99c7f2e70f2cebc6cecd1a88e7f87f",
+   "mtime": "2026-10-09T04:49:38"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\libs\\B0\\libsig_whisper.so",
+   "kind": "libsig_whisper",
+   "exists": true,
+   "size": 36168384,
+   "sha256": "6213f86e95732b568ec7f3b3e3bbabab7cc0a7978f4c62b4b4fd1ffecd0414d2",
+   "mtime": "2026-10-08T15:22:17",
+   "label": "B0"
+  },
+  {
+   "path": "D:/SIG-whisper-b1/app/build/intermediates/cxx/Debug/e222v1a5/obj/arm64-v8a/libsig_whisper.so",
+   "kind": "libsig_whisper",
+   "exists": true,
+   "size": 62548152,
+   "sha256": "0c88f086fa7b513e2cbf448bbd0a193c3ab5f818cac820147fb401a6ce820883",
+   "mtime": "2026-10-08T22:59:54",
+   "label": "B1"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\libs\\C2\\libsig_whisper.so",
+   "kind": "libsig_whisper",
+   "exists": true,
+   "size": 62629528,
+   "sha256": "91091742f490ff2bb6bdf92e7f2791eb8a8cb84a53ffb674cefa62e30db1139c",
+   "mtime": "2026-10-08T22:57:33",
+   "label": "C2"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\libs\\C1\\libsig_whisper.so",
+   "kind": "libsig_whisper",
+   "exists": true,
+   "size": 62628200,
+   "sha256": "dd8ca9a1a10ddc6d2aa0c42b1aa66cfc22e8b57f67187f0580d15e82f28162df",
+   "mtime": "2026-10-08T15:38:23",
+   "label": "C1"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\libs\\R2-C6-DIAG\\libsig_whisper.so",
+   "kind": "libsig_whisper",
+   "exists": true,
+   "size": 62917280,
+   "sha256": "9546c69a183f84d9c332153378a307381129e46799f02f389aaaa3635856a5ab",
+   "mtime": "2026-10-09T04:48:30",
+   "label": "R2-C6-DIAG"
+  }
+ ],
+ "binaries": [
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\whisper_bench_harness",
+   "kind": "harness",
+   "exists": true,
+   "size": 1376864,
+   "sha256": "e65170c3a22fe7218186d8f2c083c63ebaa53b88044e05bf2092d2c119f4c563",
+   "mtime": "2026-10-09T02:03:23",
+   "device": "/data/local/tmp/whisper-bench-r2/whisper_bench_harness"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-f\\f3\\host\\wav_io_test_host.exe",
+   "kind": "test_host",
+   "exists": true,
+   "size": 1138176,
+   "sha256": "b54a7808d385875f3600fb232ed631ee495a5fcd2e72ebc195a69bd19f2a93d6",
+   "mtime": "2026-10-09T06:02:20"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-f\\f3\\host\\fa_attention_test_host.exe",
+   "kind": "test_host",
+   "exists": true,
+   "size": 2420736,
+   "sha256": "6c56877c2f2114a2bd055788f318c7066c46fdc9c7fdd33519e8ecad84246884",
+   "mtime": "2026-10-09T06:02:40"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-f\\f3\\host\\core_device_selector_test_r2.exe",
+   "kind": "test_host",
+   "exists": true,
+   "size": 1046016,
+   "sha256": "712fd66deca0e6a9263eaca1976c6b41b3133d04f6fa2b41ee97e8a7b8ab2a82",
+   "mtime": "2026-10-09T06:02:12"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-c\\host-tests\\mutf8_sanitize_test.exe",
+   "kind": "test_host",
+   "exists": true,
+   "size": 1072128,
+   "sha256": "4812f02e023cdbb6691d2e70b90d56c0c38cbc6d8df7ba9045d1a0c708fc8e71",
+   "mtime": "2026-10-09T04:41:51"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-d-e\\wav-io\\wav_io_test_arm64",
+   "kind": "test_device",
+   "exists": true,
+   "size": 587008,
+   "sha256": "803d35f81380151a94d20f43f77d84f3870227af7f20cb81368e65169d63651a",
+   "mtime": "2026-10-09T04:37:18",
+   "device": "/data/local/tmp/whisper-bench-r2/fase-d-e/wav_io_test_arm64"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-d-e\\fa\\fa_attention_test_arm64",
+   "kind": "test_device",
+   "exists": true,
+   "size": 2044792,
+   "sha256": "ba7296e791605130bb15021935ce1caf4259af8f143609afb2399be3ccb6f423",
+   "mtime": "2026-10-09T05:11:01",
+   "device": "/data/local/tmp/whisper-bench-r2/fase-d-e/fa_attention_test_arm64"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\models\\ggml-base.bin",
+   "kind": "modelo",
+   "exists": true,
+   "size": 147951465,
+   "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+   "mtime": "2026-10-09T02:14:36",
+   "device": "/data/local/tmp/whisper-bench-r2/model/ggml-base.bin"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\art-lab\\app-whisperlab-debug-s5c5.apk",
+   "kind": "apk_lab",
+   "exists": true,
+   "size": 9437681,
+   "sha256": "a85c5f6443338b61b0edb4e761cbbfe142c731e69db5a3d84c78007de5cabf8d",
+   "mtime": "2026-10-09T05:07:58"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\art-lab\\app-debug-prod-sem-propriedade.apk",
+   "kind": "apk_produto",
+   "exists": true,
+   "size": 8196446,
+   "sha256": "ad1655f1cc6e45ec088c34017851e8b4dc2e8de1c520a8ba0dad7990361161c7",
+   "mtime": "2026-10-09T03:27:11"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\art-lab\\app-debug-prod-nativo-2abi.apk",
+   "kind": "apk_produto",
+   "exists": true,
+   "size": 83100148,
+   "sha256": "81b8633fff6bc9d88431530049b25001b9c51f4b91ee43823cefc2868bbf9590",
+   "mtime": "2026-10-09T03:18:53"
+  }
+ ],
+ "corpus": [
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\corpus\\c01_speech_short.wav",
+   "kind": "corpus",
+   "exists": true,
+   "size": 448032,
+   "sha256": "d39c490515ed45c7a7aa3200865d9b3ea3b18493f15f42a6a1ad69d3fce1319d",
+   "mtime": "2026-10-08T15:07:44",
+   "caseid": "C01",
+   "device": "/data/local/tmp/whisper-bench-r2/corpus/c01_speech_short.wav"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\corpus\\c02_speech_long.wav",
+   "kind": "corpus",
+   "exists": true,
+   "size": 3094134,
+   "sha256": "73bc4091c22465479f0144fb63fee647482a804d2b5c9f14897218223db8a9f7",
+   "mtime": "2026-10-08T15:07:44",
+   "caseid": "C02",
+   "device": "/data/local/tmp/whisper-bench-r2/corpus/c02_speech_long.wav"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\corpus\\c03_speech_load.wav",
+   "kind": "corpus",
+   "exists": true,
+   "size": 12604688,
+   "sha256": "d0822376d88a49a8944ff3295e931d670b0546f67abcc966c2833822b2e54a7a",
+   "mtime": "2026-10-08T15:07:45",
+   "caseid": "C03",
+   "device": "/data/local/tmp/whisper-bench-r2/corpus/c03_speech_load.wav"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\corpus\\c01_ref.txt",
+   "kind": "referencia",
+   "exists": true,
+   "size": 270,
+   "sha256": "aa9156f87f571ca65b062aeafd2e44d2b05a0fe17694d70931463d136bddb546",
+   "mtime": "2026-10-08T15:07:38"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\corpus\\c02_ref.txt",
+   "kind": "referencia",
+   "exists": true,
+   "size": 1508,
+   "sha256": "c3dfba9ed1a0eb4ea1938dbec4a0bb35bcec72dbfad6bf4e7355b03982797f8e",
+   "mtime": "2026-10-08T15:07:38"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada1\\20261008-r1\\corpus\\c03_ref.txt",
+   "kind": "referencia",
+   "exists": true,
+   "size": 6282,
+   "sha256": "d654b58f1c827455e1a4de4b2e7dd09c7092fd20cf61e619d1e746591cb97a7a",
+   "mtime": "2026-10-08T15:07:38"
+  }
+ ],
+ "snapshot": [
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\snapshot\\final-diff.patch",
+   "kind": "snapshot",
+   "exists": true,
+   "size": 533579,
+   "sha256": "81d2c7474d3b31a188dc2c022c4da9e7fe8c6f10d1bf390830a51a14bf3f95dd",
+   "mtime": "2026-10-09T06:41:48"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\snapshot\\final-untracked.txt",
+   "kind": "snapshot",
+   "exists": true,
+   "size": 1577,
+   "sha256": "89171b9ddc99329e8708606647cfaf6d51305ce3d1705f81140755ef5fbfb225",
+   "mtime": "2026-10-09T06:41:48"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\snapshot\\final-diff-stat.txt",
+   "kind": "snapshot",
+   "exists": true,
+   "size": 1664,
+   "sha256": "75790047c9d944a416f5e96c4aa4e50240bedfa359757853f841977f04715434",
+   "mtime": "2026-10-09T06:41:49"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\snapshot\\final-head.txt",
+   "kind": "snapshot",
+   "exists": true,
+   "size": 41,
+   "sha256": "4cee820fd57fbf66cccc651ed105de318aa1931bfea2e0c2e46761269cea8774",
+   "mtime": "2026-10-09T06:41:48"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\snapshot\\manifest-origem.json",
+   "kind": "snapshot",
+   "exists": true,
+   "size": 8507,
+   "sha256": "95f5ed0efea31699ec0cd1a33b14000b59d558227bfaf6ada8fd42f2c2905e11",
+   "mtime": "2026-10-09T01:51:33"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-f\\driver-f.py",
+   "kind": "handler_f",
+   "exists": true,
+   "size": 13440,
+   "sha256": "423f0527fcb71ef079728f4fa68fa15d17cf3bc40b377a7772a3e5ccfa6e5aa3",
+   "mtime": "2026-10-09T06:04:27"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-f\\analyze_f1a.py",
+   "kind": "handler_f",
+   "exists": true,
+   "size": 7320,
+   "sha256": "fa156de225f6b10247b7213ae881aee86071855887a7874941c0328cbfde2b94",
+   "mtime": "2026-10-09T05:53:19"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-f\\f2_close_reopen.py",
+   "kind": "handler_f",
+   "exists": true,
+   "size": 3334,
+   "sha256": "de76a20007f572bece7271d5ba57a8794d24bedcfa1e0c7a79c5e35ade56f3a7",
+   "mtime": "2026-10-09T05:46:02"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\build\\whisper-rodada2\\20261009-0149\\fase-f\\make_snapshot.sh",
+   "kind": "handler_f",
+   "exists": true,
+   "size": 1381,
+   "sha256": "a736e991f3e53a4a7fe1083be93106866d3e0884e097b440de565367678e9c42",
+   "mtime": "2026-10-09T06:05:12"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\scripts\\run-whisper-adb-benchmark.ps1",
+   "kind": "runner",
+   "exists": true,
+   "size": 97814,
+   "sha256": "18ac7fb602f00532e468ac70a0d09c2cdc89ff0112fe98b44e9e9d2e10aafc90",
+   "mtime": "2026-10-09T02:50:38"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\scripts\\tests\\run-whisper-adb-benchmark.tests.ps1",
+   "kind": "runner_tests",
+   "exists": true,
+   "size": 45745,
+   "sha256": "7fdab92c0c5038c3ead484d8c46f1077327c9af6b85c64b9b57b69139b9ad9f1",
+   "mtime": "2026-10-09T02:50:38"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\whisper_bench_harness.cpp",
+   "kind": "harness_source",
+   "exists": true,
+   "size": 94895,
+   "sha256": "c8c9370542210d65cf7b85b9cce025c3502e7b8fd892061558523559af61368b",
+   "mtime": "2026-10-09T04:05:17"
+  },
+  {
+   "path": "D:\\SIG-whisper-r1\\tools\\whisper\\lab\\run_art_lab.py",
+   "kind": "lab_driver",
+   "exists": true,
+   "size": 18887,
+   "sha256": "6c2a6fece8433b38aea1ef77241bc3a11b78366968b3083a69856c3b4f29aeff",
+   "mtime": "2026-10-09T03:25:05"
+  }
+ ],
+ "device": {
+  "serial": "100.114.88.45:5555",
+  "modelo": "OnePlus PJA110 (SM8550, Android 13/API33, Adreno 740)",
+  "device_root": "/data/local/tmp/whisper-bench-r2",
+  "lab_pkg": "br.gov.sp.pcsp.whisperlab",
+  "opencl_driver": "OpenCL 3.0 QUALCOMM Compiler E031.41.03.36"
+ },
+ "toolchain": {
+  "gradle": "9.5.0",
+  "jvm_tests": "21.0.12.1-Microsoft (gradle wrapper)",
+  "ndk": "27.2.12479018",
+  "zig": "0.16.0 (.tools/zig-0.16.0/zig.exe)",
+  "adb": "C:/adb/adb.exe",
+  "pester": "3.4.0",
+  "ffmpeg_gate": "8.0.1-full_build-www.gyan.dev (WinGet Links; R2-08)"
+ },
+ "resumo": {
+  "entradas": 119,
+  "existentes": 119,
+  "ausentes": 0
+ }
+}

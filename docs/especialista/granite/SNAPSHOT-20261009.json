@@ -1,0 +1,110 @@
+{
+  "schema": "sig-granite-specialist-snapshot/v1",
+  "inspection_started_local_date": "2026-10-08",
+  "delivery_local_date": "2026-10-09",
+  "timezone": "America/Sao_Paulo",
+  "host": "GUSTAVO",
+  "main": {
+    "path": "D:/Projetos/SIG",
+    "branch": "main",
+    "commit": "21439199ed28086139c2bbbe64ce4e4e18de77d9",
+    "foreign_modified_paths": [
+      "app/src/main/java/br/gov/sp/pcsp/launcher/FfmpegJoinVideosActivity.kt",
+      "app/src/main/java/br/gov/sp/pcsp/launcher/SmartJoinPlanner.kt",
+      "app/src/test/java/br/gov/sp/pcsp/launcher/SmartJoinPlannerTest.kt",
+      "app/src/test/java/br/gov/sp/pcsp/launcher/SmartJoinTimingTest.kt"
+    ]
+  },
+  "experimental": {
+    "path": "D:/SIG-perfis-20260914-123811",
+    "branch": "codex/granite-perfis-20260914-123811",
+    "commit": "0036f149fd8dd7cb94b24fcdf6eef686a6749a07",
+    "merge_base": "7a6115039652328cb995d03a3ec9284f9b255696",
+    "preserve_untracked": ["hs_err_pid52044.log", "replay_pid52044.log"]
+  },
+  "android_build": {
+    "compile_sdk": 35,
+    "target_sdk": 35,
+    "min_sdk": 24,
+    "ndk": "27.2.12479018",
+    "ort_aar": "com.microsoft.onnxruntime:onnxruntime-android-qnn:1.29.0",
+    "native_package_version_main": "11",
+    "qairt_distribution_version": "1",
+    "loaded_ort_sha256": null,
+    "loaded_qairt_sha256": null,
+    "loaded_qairt_sdk_version": null
+  },
+  "device_observation": {
+    "model": "CPH2747",
+    "serial": "3B15BD00FVE00000",
+    "soc": "SM8850",
+    "android": "16",
+    "security_patch": "2026-07-01",
+    "transport_at_inspection": "100.108.27.64:5555",
+    "package": "br.gov.sp.pcsp.launcher",
+    "apk_sha256": "713873631aa33a67d6b9227965f4bfe03585399603724ba7e5eea053e364be45",
+    "version_name": "1.509",
+    "version_code": 72,
+    "pid_at_inspection": 31711,
+    "apk_commit": null,
+    "exclusive_access": false,
+    "device_mutated": false
+  },
+  "other_device": {
+    "model": "PJA110",
+    "serial": "1164a04",
+    "transports_at_inspection": ["1164a04", "100.114.88.45:5555"],
+    "same_physical_device_by_serial": true
+  },
+  "capacity_at_inspection": {
+    "ram_bytes": 34191020032,
+    "cpu": "Intel Xeon E5-2696 v3",
+    "cpu_physical_cores": 18,
+    "cpu_logical_processors": 36,
+    "gpu": "NVIDIA GeForce RTX 3060 Ti",
+    "gpu_driver_windows": "32.0.16.1742",
+    "c_free_bytes": 233727225856,
+    "d_free_bytes": 14300766208,
+    "e_excluded": true
+  },
+  "known_inputs": [
+    {
+      "path": "D:/SIG-granite-nar-lab-rebuild/source/vocab.json",
+      "sha256": "8af71076de8b0b626eed0f4c984faf0a7c062479164b2a31308a948524d4f69c"
+    },
+    {
+      "path": "D:/SIG-granite-nar-lab-rebuild/nar-next-20260914-0950/handoff/entrega-perfis-reais/RELATORIO-FINAL-20260925.md",
+      "sha256": "997acc5bf3e6daf89d80aeab603c2d5715400edb3049d787719ff9ff88266a00"
+    },
+    {
+      "path": "C:/Users/Gustavo/.codex/attachments/b5e7ece3-75bc-4656-91c4-0d1753f291df/Texto colado.txt",
+      "sha256": "6586d4cb98d1e6259584021842f3e7b981dc1bffe8e08464a0b6596d996cb02a"
+    },
+    {
+      "path": "D:/SIG-granite-nar-lab-rebuild/nar-next-20260914-0950/corpus-ptbr/runs/10556936069191551163/n1/n1-10556936069191551163-aeb28490/stream.log",
+      "sha256": "d8d0d4505f48aa18f381f18503854254762032435c6259675a04bc6dbd27ae38",
+      "spot_check": {
+        "inference_line": 39,
+        "memory_after_pss_kib": 6096242,
+        "end_line": 40,
+        "end_pss_kib": 3861902,
+        "release_ms": 822,
+        "json_event_pid": null,
+        "pid_requires_logcat_and_start_correlation": true
+      }
+    }
+  ],
+  "executor": {
+    "thread_id": null,
+    "host_id": null,
+    "status": "unlinked",
+    "order": "ORDEM-G01-20261009.md",
+    "order_dispatched": false,
+    "subagents_are_external_executor": false
+  },
+  "worktree_for_document_versioning": {
+    "path": "C:/Users/Gustavo/.codex/worktrees/granite-plano-20261008/SIG",
+    "base_commit": "21439199ed28086139c2bbbe64ce4e4e18de77d9",
+    "scope": "documentation_only"
+  }
+}

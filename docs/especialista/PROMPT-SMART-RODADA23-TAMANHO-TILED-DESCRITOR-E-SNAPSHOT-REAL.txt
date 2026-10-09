@@ -1,0 +1,74 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 23
+INDICIO OBJETIVO: REQUISITO CANONICO NO LUGAR DO TILED; AUDITAR HOST/DESCRITOR
+===============================================================================
+
+1. PARECER E NOVA EVIDENCIA DO ESPECIALISTA
+Aceito o progresso R22: fix ALLOC_FAIL no fonte, leitor direto sobre golden com finite e todas as rows, ensaio real adicional com MMHOST. Os quatro hashes dos anexos foram verificados e correspondem. Entretanto a conclusao 'defeito localizado POS-host' permanece RETIRADA: bytes reais do candidato/device e descritor nao foram observados.
+NOVO INDICIO concreto calculado pelo especialista para K256/N64/Q4_K:
+- canonical block144: 144*64 = 9216 bytes;
+- tiled Q4_1-like: (64/32)*(256/32)*640 = 10240 bytes;
+- req retornado pela API no trace HTP: 9216, DEFICIT1024 em relacao ao tiled;
+- buffer walloc=13312 = 9216+4096 de folga. walloc suficiente nesse caso NAO torna correto o requisito logico do tensor. Nao demonstra overflow por si, mas pode MASCARAR contrato errado de allocation/stride/descriptor.
+O especialista conferiu DIRETAMENTE no pin upstream 1ec81880944a63bc4aaf1abfe9a6d35c7569a757: ggml_backend_hexagon_buffer_type_get_alloc_size usa ggml_hexagon_is_repack_type e retorna ggml_hexagon_tiled_row_size(type,ne0)*ne1*ne2*ne3; o helper Q4_K usa (ne0/32)*(HTP_MM_WEIGHT_TILE_SIZE_Q4_1/32). Esse caminho retorna row160 para K256, total10240 para N64. Portanto req9216 deve ser explicado/corrigido no host candidato realmente carregado, nao rotulado 'size correto'.
+No fonte SIG baseline, tanto get_alloc_size quanto h.nb[1] da serializacao historica usam ggml_row_size canonico. O candidato precisa portar os DOIS callsites corretamente. Nao presumir que adicionar helper/cases suportados atualizou callbacks e descritor.
+A priori isto e forte pista de H1-alloc/H2-descriptor. NAO afirmar causa do NaN provada ate localizar callback/stride e validar RED/GREEN. Nao mudar kernel DSP antes dessa prova barata.
+
+2. RETIFICAR LEITURA DO MMHOST SEM MAIS RODADA DE NARRATIVA
+probe-r22.cpp:957-959 loga cc->ne e cc->nb: sao dimensoes/strides do OUTPUT [64,B], NAO dos pesos [256,64]. Os pesos nao tiveram ne/nb serializados nesse log.
+A funcao build_e_run e chamada para CPU e depois HTP. No arquivo r22-ensaio-mmhost.txt, PID24501:
+B1: CPU req0/walloc9216/aalloc1280 -> HTP req9216/walloc13312/aalloc5376;
+B2: CPU req0/walloc9216/aalloc2560 -> HTP req9216/walloc13312/aalloc6656;
+B128: CPU req0/walloc9216/aalloc163840 -> HTP req9216/walloc13312/aalloc167936.
+A discrepancia citada no relatorio nao e evidencia de concorrencia: faltaram tags de backend/tensor. req0 CPU e campo nao consultado, nao requisito fisico zero. Marcar N/A se nao calculado. O arquivo tambem comeca com PID26349 antigo R19; nao tratar esse trecho como novo ensaio. Dedupe report duplicado no mesmo PID/attempt, nao execucoes independentes.
+Sizes sozinhos nao provam ranges sem alias: MMHOST nao tem base+offset+fim dos tensores. Retirar 'ranges nao se sobrepoem' ate enderecos/ranges verificaveis ou ownership distinto comprovado.
+Leitor r22_leitor_direto.c:84-114 gera payload GOLDEN inline, e depois le esse payload. Resultado prova LEITOR_SOBRE_GOLDEN=PASS, nao candidato observado no ARM. Corpo candidato/golden igual e evidencia auxiliar, nao dump do runtime. Manter leitor como ferramenta pronta para ler snapshot verdadeiro, nao repetir a validacao golden como prova do candidato.
+Fix ALLOC_FAIL esta no fonte; injecao de falha ainda pendente, portanto CODIGO_CORRIGIDO/TestePENDENTE, nao CCE de vacina. Fechar pequeno teste junto da auditoria atual sem desviar investigacao principal.
+
+3. TRABALHO PRIORITARIO: AUDITAR CALLSITES REAIS DO KQ_ON
+No cohort candidato CONGELADO, localizar definicao e uso de:
+A. ggml_hexagon_is_repack_type;
+B. ggml_hexagon_tiled_row_size ou helper equivalente real;
+C. get_alloc_size do buft efetivamente usado (iface/registry confirmados);
+D. tensor_set dispatch Q4_K/Q6_K e repack realmente chamado;
+E. serializacao tensor -> htp tensor: h.ne/h.nb/h.size/offset/flags;
+F. matmul precompute: weight rowbytes e activation q8_1-like versus q8_0-like conforme formato.
+Comparar com pin K-quant e adaptacoes do fork por contrato, nao atualizar core inteiro nem copiar arquivos completos sem revisao. Um helper presente mas nao usado nao fecha o hunk.
+Adicionar log/test-only no callback real: type numeric+nome, ne/nb pesos, is_repack, buft/session/usage, canonical_nbytes, tiled_rowbytes, padded_dimensions, tensor_get_alloc_size, ctx_required, actual_buffer_size e offset/span do tensor. Registrar identidade source/header/ELF/APK/carregado PID atual. Novo checkpoint basta; provenance historica continua PARCIAL sem inventar cadeia.
+EXPECTED para ESTE caso Q4_K (confirmar mesmas constantes/shape/config): row_tiled160, tensor_required10240, h.nb[1]160, h.size10240 para ne2=ne3=1. Canonical nb1=144 pode legitimamente continuar no tensor GGML logico; o requisito fisico/descritor repack e que precisa corresponder ao tiled. Nao editar nb logico indiscriminadamente.
+Se API host continua9216, verificar case/helper/interface/binario, e se o caminho nao repack foi escolhido. Campo req e da API ggml_backend_alloc_ctx_tensors_from_buft_size: explicitar se ctxsize inclui alinhamento ou outro contrato; mostrar callback por tensor para eliminar ambiguidade.
+Walloc inclui guard/padding interno e nao substitui tensor_required. Registrar intervalo permitido/escrito/referenciado pelo DSP. Nao remover protecao4096 do backend para forcarcrash nem usar buffer maior como 'fix' sem corrigir contrato logico.
+Buffer de pesos no probe nao tem ggml_backend_buffer_set_usage(...WEIGHTS) no fonte inspecionado; o baseline usa usage para flags HTP_TENSOR_COMPUTE. Registrar usage/flags no candidato e consumidor DSP; alinhar uso explicito ao contrato de pesos em ensaio controlado quando apropriado, sem presumir que esse e o bug. Nao marcar ativacoes/output como WEIGHTS. Nunca alterar simultaneamente alloc/descriptor/usage sem evidencias que permitam separar os efeitos.
+
+4. TESTE NATIVO DE CONTRATO E FIX SE NECESSARIO
+Usar codigo real get_alloc_size/serialize/precompute do candidato em seam ou wrappers test-only, nao stubs substituindo justamente o que se quer provar.
+Teste K256/N64 Q4_K: required_reported >= independent_required_tiled, descriptor_row160 e span10240, bounds/offset/session/flags previstos. No codigo atual que gera9216 esse teste deve RED por requisito subestimado se confirmado, nao por expectativa artificial. Mesmo teste apos fix minimo -> GREEN.
+Cobrir Q4_0/Q8_0 antigos sem regressao; Q6_K com formula e constantes reais separadas. Padding/row/tile-edge permitidos, alloc failure injetada -> ALLOC_FAIL e upload/compute zero. Testes nao podem PASS com NaN ou cobertura parcial. Retorno/rc e classes explicitos.
+Se size e stride de fato errados, corrigir a CLASSE de callsites host relevantes, preservando fork e guardQ6fusion. Corrigir apenas alloc deixando descriptor canonical nao basta. Registrar diffs e dependencia de rebuild: mudanca host com protocolo estrutural invariavel ainda exige host novo e skel compativel demonstrado; mudar protocolo/ABI exige fullcohort.
+Se size/descriptor no runtime ja correto e o req9216 era outro campo/bug de log, provar com callback real e corrigir instrumentacao, sem alterar algoritmo para acomodar interpretacao errada.
+Sem kernelpatch, modelo diferente, supports=true arbitrario, relaxamento de tolerancia, NaN->zero, copia upstream completa ou benchmarkSmart para contornar falha.
+
+5. SNAPSHOT FISICO E DESCRITOR NO MESMO ENSAIO
+Usar leitor R22 ja pronto para ler o dump tiled REAL depois tensor_set/repack no callback/mapping host correto. Nao tensor_get quantizado que pode unpack/normalizar. Salvar bytes canonicos+ativacoes e payload fisico com ranges/lengths/fullSHA; comparar com pack golden usando os MESMOS bytes. Publicar primeira divergencia byte/field/coord e allrows/scalarfinite/exitgate.
+Snapshots antes upload/depois repack/antes submit/apos compute sincronizados conforme API. Mostrar peso/ativacao/output ownership+offset/span e sentinel precompute. Ausencia do sentinel apos readback nao prova kernel correto escreveu sem excluir alias/upload/get/cache.
+Descriptor PRE-SUBMIT REAL: op/type numeric+nome, tensorIDs/ne/nb/h.size/buffer offsets, params/kernelselect e numero de ops. Capturar registro final enviado, nao apenas ggml_tensor de entrada ou funcao supports.
+Se hostpayload/descrip corretos e B1 ainda FAIL, instrumentar entrada DSP/kernelID/enter-exit/status e amostras equivalentes por mecanismo SDK/trace seguro. Essa instrumentacao no probe/cohort isolado e parte do trabalho autorizado; 'exige rebuild' nao e bloqueio. Design curto e rebuild coerente, sem printf reentrante nem structs ABI improvisadas. Comparar sizeof/offsetof host/skel e campos recebidos.
+Se traceDSP tecnicamente impossivel, entregar comando/erro/exato limite observado; nao declarar POS-host sem ter demonstrado snapshot hostpayload e serializacao coerentes.
+
+6. ENSAIO LIMITADO, SEM REPETIR GRADES RUINS
+Preflight identidadedevice CPH2747 serial3B15BD00FVE00000, WIFI fail-closed; fresh process e logs por attempt/backend. Controles pequenos F32/Q4_0 no MESMO probe instrumentado.
+Q4_K K256/N64/B1 apenas: refCPU finita, supportposttrue, alloc/size contrato correto, snapshotreal e descriptor. Antes/depois fix com input/config identicos quando houver causa confirmada. Capturar NaN/firstviol/outputcoverage e errorcode real. B2/B128 somente se B1 GREEN. Nao continuar grade apos B1FAIL para reproduzir a mesma falta de causalidade.
+Se localloc RED, rejeitar antes compute: isso ja e prova objetiva. Se fixhost leva B1GREEN, coletar regressionrecord permanente e progredir batch/shapes suportados com gates distintos. KERNEL_VALIDATED ainda depende cobertura declarada Q4/Q6, nao um sucesso isolado.
+Q6_K offline separado sem extrapolacao e sem impedir fechar Q4. IncidenteR16 abort permanece separado; se ocorrer abort novo, preservar tombstone/logcat raw/buildID/symbols imediatamente.
+
+7. ESCOPO E ENTREGA A-H
+Somente copia isolada/probe autorizado. SIGprincipal/Whisper/UI/defaultVulkan/c4bf/R2/release intocados; sem commit/push/publicacao/promocao/instalacao sobre SIG sem OK especifico. Preservar WIP byte a byte, sem limpeza/reset/stash/restores amplos. Nunca PJA110; stayon7; semroot/governor. FFmpeg pin apenas processoautorizado.
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA23.txt docs/especialista; evidencias docs/npu-hymt2/smart-rodada23/ com fullSHA/contagens/exits reais:
+A checkpointsource/header/config/ELF/APK/PID e restorefullcohort verificado;
+B retificacoes MMHOST CPU/HTP/outputdims e leitor-golden versus candidato;
+C callbacksalloc+descriptorreais, 9216vs10240 explicados, testes RED/GREEN;
+D snapshotpayloadreal comparado golden/leitor, firstdivergence;
+E ensaioQ4B1 e traceDSP se necessario OU erro tecnico bloqueante concreto;
+F causa/patchminimo/reproducer ou fronteiraobservadaaindaaberta;
+G escopo/WIP/Whisper/Q6/R16 preservados;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE separados.
+ACEITACAO minima desta rodada: esclarecer a discrepancia9216/10240 no callbackreal e mostrar descriptor/payload efetivamente usados, ou bloqueio real com artefato. Nao entregar novamente apenas leitor sobre golden+sizesglobais como 'POS-host'. O indiciodecontratodesize e prioridade sobre novoDSPkernelpatch. Restaurar cohort baseline aprovado/readback no fim conforme escopo.

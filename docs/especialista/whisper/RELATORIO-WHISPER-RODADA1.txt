@@ -1,0 +1,846 @@
+================================================================================
+RELATÓRIO SUPER DETALHADO — WHISPER LOCAL (SIG ANDROID) — RODADA 1
+Ordem do especialista: "cumpra tudo, sempre... relatório super detalhado
+relatando tudo que ocorreu na execução das ordens, sucessos, falhas,
+explicações, logs importantes, etc."
+Executor: agente Hermes (codex/whisper-r1)
+Data de fechamento: 2026-10-08/09 (America/Sao_Paulo)
+================================================================================
+
+SUMÁRIO
+  1. Identificação e escopo
+  2. Proveniência (completa e verificada)
+  3. Cronologia da execução (o que foi feito, em que ordem)
+  4. Correções aplicadas e provas antes/depois
+  5. Tabela de achados W01–W15 (atualizada)
+  6. Resultados numéricos de todas as etapas (A–F)
+  7. Gates de código (comandos e exit codes)
+  8. Falhas, incidentes e explicação de cada um
+  9. O que NÃO foi executado e por quê
+  10. Pendências (backlog para a próxima rodada)
+  11. Inventário de artefatos (caminhos absolutos)
+  12. Logs importantes (excertos textuais)
+
+================================================================================
+1. IDENTIFICAÇÃO E ESCOPO
+================================================================================
+Rodada 1 de estabilização/aceleração do Whisper local do SIG Android, guiada
+pelo prompt do especialista (docs/especialista/PROMPT-WHISPER-RODADA1.md).
+Trabalho 100% local: nenhuma chamada a API de transcrição externa, nenhuma
+chave embutida, nenhum push/commit/release automático, app SIG instalado no
+dispositivo NUNCA modificado.
+
+Ordens recebidas e status FINAL:
+  [x] Worktree isolado na base do prompt
+  [x] Runner reproduzível + testes de contrato
+  [x] Corpus C01–C09 determinístico + manifesto
+  [x] Baseline com identidade registrada (B0) + rebuild B1 + candidatas C1/C2
+  [x] Matriz principal (backend × FA × caso × lib)
+  [x] Etapas C (prova numérica FA), D (perfis), E (estabilidade/adversos),
+      F (beam/threads)
+  [x] Correções focais com prova antes/depois (W05, W07, W08, W09, W10,
+      W11/W12)
+  [x] Correção de lifecycle Kotlin (W01/W02/W03) + 32 testes novos
+  [x] Gates (unit/lint/assemble/module-map/Pester)
+  [x] Relatório .md da rodada + este .txt super detalhado
+
+================================================================================
+2. PROVENIÊNCIA (verificada por hash; nada por suposição)
+================================================================================
+Base git (prompt):  963d41a08d78a1a456b8c7b59a5a025e1fd2e238
+Worktrees:
+  D:\SIG-whisper-r1  branch codex/whisper-r1  (correções + infraestrutura)
+  D:\SIG-whisper-b1  branch codex/whisper-b1  (controle = base 963d41a)
+  (nenhum commit; alterações no worktree r1 estão staged/na árvore de trabalho)
+
+Dispositivo: PJA110 (OnePlus), SoC SM8550 "kalama", Android 13/API 33,
+Adreno 740; ADB por rede serial 100.114.88.45:5555 (0 reconexões na rodada
+final; 1 queda de rede durante a rodada anterior, restabelecida).
+Drivers coletados em runtime (via --info-only do harness):
+  Vulkan : raw 2150252544, build 1a285a84ae, uma=1 fp16=1 bf16=0 warp=64,
+           shared=32768 int_dot=0 matrix_cores=none
+  OpenCL : OpenCL 3.0 QUALCOMM, Compiler E031.41.03.36, plataforma
+           "QUALCOMM Snapdragon(TM)", device "QUALCOMM Adreno(TM) 740"
+  ggml    : devices=3 → [Vulkan0 type=2] [GPUOpenCL type=1] [CPU type=0]
+  whisper 1.8.4 / ggml 0.11.1 commit e1bd73e (build_info da lib)
+
+IDENTIDADES DAS LIBS (SHA-256 conferidos no host e no device):
+  B0 (distribuída v11, extraída via run-as do app instalado):
+      6213f86e95732b568ec7f3b3e3bbabab7cc0a7978f4c62b4b4fd1ffecd0414d2
+      36.168.384 bytes (símbolos de debug ausentes = artefato do R2)
+  B1 (rebuild puro da base 963d41a, sem correções):
+      0c88f086…e820883 (completo em runner-out/final/SUMMARY-FINAL.md)
+      1ª tentativa FALHOU por crash do clang (ver §8.1); re-tentativa EXIT=0
+  C1 (candidata com W05/W07/W08/W09/W10, ANTES da guarda FA-GPU):
+      dd8ca9a1a10ddc6d2aa0c42b1aa66cfc22e8b57f67187f0580d15e82f28162df
+      62.628.200 bytes (arquivo maior = seções .debug_*; .text delta ≈ +18 KB
+      vs B0; ambos -O3 -DNDEBUG pelo CMake do repo)
+  C2 (candidata FINAL = C1 + guarda W11/W12 + trava de perfil W05):
+      91091742f490ff2bb6bdf92e7f2791eb8a8cb84a53ffb674cefa62e30db1139c
+      62.629.528 bytes; strings "SIG_WHISPER_VK_PROFILE_LOCK" (2) e
+      "W11/W12" (1) conferidas no binário antes do push
+  libomp.so (dependência NEEDED, extraída do mesmo pacote v11):
+      8d9fb977184d7a4bffd85cdd6ebb07db06a451dac6e425b47ec8ecd8d35c3a7c
+  Harness (harness_bench_arm64, reprodutível: 2 builds = mesmo SHA):
+      857f76e4323e1c7b04641fdc5fa8a86a1e7e8eddfc4b29e9cbd8ac213d329b46
+
+MODELOS (em /sdcard/Android/data/br.gov.sp.pcsp.launcher/files/whisper_models/
+ — SOMENTE LEITURA durante toda a rodada; sha256 por cópia local):
+  ggml-base.bin   60ed5bc3…fba2efe  (benchmark principal; type=base, ftype=1)
+  ggml-tiny.bin   be07e048…e1b21    (provas de cancelamento/lifecycle)
+  ggml-small.bin  487.601.967 B     (presente; não usado nas medições)
+  ggml-large-v3-turbo.bin 1.624.555.275 B (presente; NÃO usado — declarado)
+  Quantização identificada pelo load_log do próprio arquivo (não pelo nome):
+  ftype=1 e qntvr=0 impressos em whisper_model_load.
+
+CORPUS (tools/whisper/generate_corpus.ps1 + generate_corpus_fixtures.py;
+TTS = Microsoft Maria Desktop pt-BR (System.Speech, Rate 4; C09 Rate 2) +
+ffmpeg 16k mono s16le; determinismo: 2 gerações byte-idênticas):
+  C01 c01_speech_short.wav    13,999 s / 223.977 samples / d39c490515ed / 46 palavras
+  C02 c02_speech_long.wav     96,689 s / 1.547.028 samples / 73bc4091c224 / 245 palavras
+  C03 c03_speech_load.wav    393,894 s / d0822376d88a (CONCATENAÇÃO — carga/duração,
+                              não diversidade linguística; declarado no manifesto)
+  C04 c04_speech_noise.wav    96,689 s / ad0791bab331 (seed 20261008, SNR alvo
+                              18,0 dB, medido 18,00 dB, 0 amostras clipadas)
+  C05a/b/c silêncio 5,000 s / tom 440 Hz 3,000 s / ruído 3,000 s
+  C06 c06_prefix_collision.wav 13,137 s — texto COMEÇA com "Erro: " e contém
+                              "Cancelado:", 2026, 1.508 (colisão de protocolo)
+  C07a estéreo 48 kHz 13,999 s / C07b AAC 44,1 kHz (conversão pelo ffmpeg)
+  C08 sete fixtures RIFF corruptos + c08_unknown_chunks.wav VÁLIDO (2,000 s)
+  C09 c09_numbered_pcm.wav 32,200 s — 12 frases numeradas, offsets exatos no
+                              manifesto, fatiamento 2,0 s → 16 chunks + sobra
+                              final 0,2 s (< 0,5 s, como pedido)
+  Refs: c01_ref.txt … c09_ref.txt (trecho sintetizado por caso; c05/c08 vazios
+  por design = não são teste de precisão).
+
+================================================================================
+3. CRONOLOGIA DA EXECUÇÃO
+================================================================================
+1) Proveniência: base confirmada, worktree codex/whisper-r1 criado,
+   local.properties copiado (contém API key local — nunca citada em relatórios).
+2) Leitura dos fontes focais (WhisperActivity 2680→2757 linhas, WhisperNative,
+   whisper_jni.cpp 921→~940 linhas) e classificação estática W01–W10.
+3) Disparo paralelo (3 subagentes): corpus C01–C09; auditoria estática
+   W05/W06; runner PowerShell + Pester.
+4) Parser WAV extraído para whisper_wav_io.{h,cpp} (W07) + teste nativo
+   wav_io_test.cpp compilado com NDK clang → 14/14 PASS no device
+   (2 falhas iniciais eram bugs do FIXTURE meu — faltava padding RIFF; o
+   parser estava certo; corrigido o fixture, não o teste).
+5) Correções no whisper_jni.cpp: W09 (3 barreiras de cancelamento +
+   beginSession + consumo no fim), W08 (JavaVM + ScopedEnv + global ref +
+   contadores), W10 (lastTranscribeStatus + no_speech definido), W05
+   (trava SIG_WHISPER_VK_PROFILE_LOCK).
+6) Harness whisper_bench_harness.cpp: dlopen da lib sob teste + JNIEnv/JavaVM
+   FALSOS que exercitam o caminho JNI REAL (parser, barreiras, callbacks).
+   2 bugs do harness encontrados e corrigidos na validação (§8.2, §8.3).
+7) Smoke no device: exit 0, load 85,6 ms, inferência 2.639 ms
+   (encoder 2.348 / decoder 19,7), teardown 50,9 ms.
+8) Provas W09 antes/depois (B0 vs C1) — ver §4.
+9) Matriz principal via runner (72 células planejadas; 66 executadas,
+   10 FAIL = crash vulkan+FA) + cancel (18) + cycles (6) — ~2h41.
+10) Relatório .md da rodada (11 seções) + gates + patch.
+11) SEGUNDA LEVA (ordem "cumpra tudo"):
+    a) B1 criado (1ª tentativa: crash do clang → 2ª: EXIT=0)
+    b) Guarda W11/W12 no loadModel (FA forçada off em GPU + aviso no log)
+    c) Seams Kotlin WhisperSessionController + WhisperResultParser + 32 testes
+       + integração na Activity (W01/W02/W03/W10) → 612 testes, 1 falha
+       ambiental pré-existente
+    d) Harness: --mode core (--threads EFETIVO, beam), --fa-compare
+       (logits via logits_filter_callback — o símbolo
+       whisper_full_get_token_logits NÃO existe nesta lib, verificado por
+       llvm-nm), --vad-model; runner: CP850 → UTF-8, exit 134 → engine_crash
+       (Pester 17 → 32/32)
+    e) Etapas D+E no device (45 células): REVELARAM que a trava não existia
+       na C1 → A/B de perfis daquela rodada era inválido (colapsou em V0)
+    f) Build C2 (com trava + guarda) e RODADA FINAL DE PROVAS (35 células,
+       41 execuções, 41 pulls, exit geral 0) — ver §6
+
+================================================================================
+4. CORREÇÕES APLICADAS E PROVAS ANTES/DEPOIS
+================================================================================
+W07 — Parser WAV (whisper_wav_io.{h,cpp}):
+  Antes: pcm.resize(chunk_size/2) sem conferir o tamanho REAL do arquivo →
+  OOM/alocação por header forjado; fread sem checagem; múltiplos chunks data
+  perdidos; fseek com tamanho declarado.
+  Depois: todo chunk limitado ao restante real (erro "chunk WAV declara mais
+  bytes que o arquivo"), fread exato, RAII, fmt ≥16 bytes aceitando estendido,
+  data ímpar com padding, múltiplos data concatenados em ordem, EOF = erro
+  explícito.
+  Prova: native-dependencies/tests/whisper/wav_io_test.cpp → 14/14 PASS no
+  device (roundtrip, chunks desconhecidos aceitos, fmt curto, dado gigante
+  forjado, truncado, ímpar, múltiplos, RIFX, float, 48k, vazio, EOF, fmt 18).
+
+W09 — Cancelamento (whisper_jni.cpp):
+  Antes (B0, REPRODUZIDO no device): cancel antes da inferência era APAGADO
+  em loadModel/transcribe → inferência inteira rodava: cancel-at load =
+  status ok, 1 segmento, 2.692 ms, ok=false; cancel-at pre-infer = 2.661 ms,
+  transcrição cheia. Apenas during-infer funcionava (abort_callback, 2.342 ms).
+  Depois (C1/C2): 3 barreiras determinísticas (pré-WAV, pré-lock,
+  pós-inferência) + beginSession() como fronteira de sessão; cancel nunca
+  espera o mutex; pedido consumido no fim (não vaza para a próxima sessão).
+  Prova (device): load 79,9 ms / pre-infer 0,206 ms / during-infer 1.714 ms
+  → 3/3 status=cancelled, segments=0, texto "Cancelado: transcrição cancelada".
+
+W08 — Callbacks multi-thread (whisper_jni.cpp):
+  Antes: JNIEnv* herdado da chamada JNI usado por callbacks que podem vir de
+  threads internas do ggml (rastro de crash).
+  Depois: JavaVM capturado em JNI_OnLoad; cada callback obtém env próprio via
+  GetEnv/AttachCurrentThread (ScopedEnv RAII); callback global com cleanup;
+  mutex para o resumo VAD; observabilidade "callbacks=N foreign_thread_callbacks=M"
+  na linha native result. Status: compilado e exercitado em TODAS as execuções
+  do harness (as provas de cancelamento e os runs passam por este caminho);
+  medição explícita do contador: pendente como experimento (não bloqueia).
+
+W10 — Protocolo de resultado (whisper_jni.cpp + WhisperResultParser.kt):
+  Antes: texto começando com "Erro:"/"Cancelado:" confundido com controle;
+  transcrição vazia = erro genérico.
+  Depois: lastTranscribeStatus() → ok/no_speech/cancelled/error; texto vazio
+  com inferência OK = no_speech (resultado DEFINIDO, não sucesso silencioso);
+  parser Kotlin: status vence prefixo; prefixo só como fallback de lib antiga.
+  Testes: WhisperResultParserTest 20 casos.
+
+W05 — Perfis Vulkan (whisper_jni.cpp + harness):
+  Trava SIG_WHISPER_VK_PROFILE_LOCK: o produto não reescreve as variáveis
+  GGML_VK_* quando o harness assume o controle (sem ela todo A/B V0–V6
+  colapsa em V0 — foi EXATAMENTE o que aconteceu na Etapa D da primeira
+  rodada, descoberto na segunda). Auditoria: 9/13 variáveis são lidas por
+  PRESENÇA ("0" tem o mesmo efeito que "1"); leituras são 1× por processo e
+  sobrevivem a whisper_free.
+
+W11 — Vulkan + Flash Attention = SIGABRT (NOVO, REPRODUZIDO 10/10):
+  Antes: vulkan+FA on → abort (exit 134) em 10/10 células (B0 e C1, C01 e
+  C02), logo após o load, frames dentro de libsig_whisper.so. Este é o
+  provável "Vulkan intermitente" do usuário: a variável era a ferramenta com
+  FA ligada na GPU.
+  Depois (C2): guarda no loadModel força flash_attn=false em backend≠CPU com
+  aviso "W11/W12: Flash Attention desativado em GPU…" no load_log.
+  Prova (device): C2 vulkan+FA C01/C02 → exit 0, aviso presente,
+  "flash attn = 0", transcrição FA-on ≡ FA-off byte a byte; contraponto
+  B0 vulkan+FA on = exit 134 (re-confirmado).
+
+W12 — OpenCL + FA = falha silenciosa (NOVO, REPRODUZIDO):
+  Antes: opencl+FA on "rodava" mas devolvia no_speech/transcript vazio com
+  decoder 0 ms (falha silenciosa de qualidade) — WER 100%.
+  Depois: mesma guarda da C2 (aviso no load_log). Resultado: exit 0, WER
+  0,109 em C01 com a guarda — sem aceleração (FA em GPU não acelera neste
+  driver). NOTA: na Etapa C via --mode core a guarda NÃO é aplicada (caminho
+  direto sem JNI) e opencl+fa-compare crashou exit 134 — comportamento do
+  caminho de teste, não do produto; registrado.
+
+W13 — Vulkan com FA off devolve transcrição CORROMPIDA (NOVO, ABERTO):
+  Vulkan (qualquer perfil) devolve "sopa de tokens" com bytes UTF-8 inválidos
+  (WER 0,978 em C01 e 0,992–0,996 em C02). A hipótese era que V1 (fusion
+  off) / V2 (graph-optimize off) corrigissem: NÃO corrigem — com a trava
+  funcionando (C2, vk_profile_effective diferente por perfil, latência varia
+  2,2×: V3 53,0 s … V1 23,8 s), o WER permanece ≈1 em TODOS. O Vulkan é
+  8–14× mais lento que a CPU no C01 e ainda produz lixo → candidato a
+  correção de produto = backend CPU (já é o default).
+
+W01/W02/W03 — Lifecycle Kotlin (ESTATICO → CORRIGIDO + TESTES):
+  Confirmado nos fontes: onDestroy bloqueava a UI com releaseModel() sob o
+  mutex de inferência; g_ctx global vs modelLoadLock por-Activity; stop-live
+  fazia join(3000) e SEMPRE reabilitava a UI dizendo "finalizada".
+  Correção: WhisperSessionController (geração/ownership; releaseAsync com
+  executor próprio que só libera se a geração ainda é atual; transcribe e
+  callbacks de sessão antiga são descartados; cancel() sem lock algum) +
+  WhisperActivity: beginSession() nos 3 pontos de início, callbacks com
+  wrapCallback, onDestroy → releaseAsync (zero espera na UI), stop-live com
+  re-checagem a 500 ms (teto 30 s) até a thread morrer antes de reabilitar.
+  Testes: WhisperSessionControllerTest 12 casos (release fora da thread
+  chamadora, geração antiga descartada, cancel não bloqueia com load em
+  andamento — latch com timeout 3 s) + WhisperResultParserTest 20 = 32 novos.
+
+================================================================================
+5. TABELA DE ACHADOS (atualizada ao fim da rodada)
+================================================================================
+ID  Prior.  Status        Causa / Resumo / Prova
+W01 alta    CORRIGIDO     onDestroy bloqueava UI no releaseModel → releaseAsync
+                          + geração (WhisperSessionController, 12 testes)
+W02 alta    CORRIGIDO     ownership global vs lock por-Activity → geração +
+                          release condicionado (idem)
+W03 alta    CORRIGIDO     stop-live mentia "finalizada" → espera verificável
+                          com teto 30 s (Activity, sem join na UI)
+W04 —       SEM REGISTRO  causa de UI nativa sem rastro → instrumentação de
+                          registo em backlog
+W05 alta    CORRIGIDO     perfis Vulkan colapsavam em V0 → trava de ensaio;
+                          auditoria: 9/13 variáveis por presença
+W06 média  HIPÓTESE      crash OpenCL na init (compilação eager de 27 kernels
+        NÃO REPRODUZIDA  FA sem guarda Adreno, upstream d1be6fde tem lazy+
+                          guardas) — NÃO crashou neste driver; port = backlog
+W07 alta    CORRIGIDO     parser WAV → whisper_wav_io + 14/14 no device
+W08 alta    CORRIGIDO     JNIEnv cross-thread → JavaVM/ScopedEnv + contadores
+W09 alta    CORRIGIDO+    cancelamento apagado → 3 barreiras; prova B0 vs C1
+             REPRODUZIDO  no device (antes: inferência inteira; depois: 3/3)
+W10 média  CORRIGIDO     prefixo vs texto → lastTranscribeStatus + parser
+W11 alta    REPRODUZIDO+  vulkan+FA SIGABRT 10/10 → guarda FA-off em GPU;
+             CORRIGIDO    prova C2 exit 0 + B0 exit 134 (contraponto)
+W12 alta    REPRODUZIDO+  opencl+FA vazio silencioso → mesma guarda; prova
+             CORRIGIDO    C2 exit 0 com aviso
+W13 alta    REPRODUZIDO   Vulkan FA-off corrompe texto (WER ≈1 em TODOS os
+             ABERTO       perfis V0/V1/V2/V3/V6 com trava ativa) → A/B válido
+                          feito; nenhum perfil corrige; candidata = CPU
+W14 média  NOVO/ABERTO   B1 == C2 byte a byte no C01, mas B0 difere de ambos
+             (INCONSISTÊNCIA)  (WER entre transcripts 0,087; e C02: C2 WER
+                          0,369 vs B0 0,568) — a distribuída B0 não bate com
+                          rebuilds da mesma base. Hipótese: divergência de
+                          build/ambiente entre o artefato do R2 e os rebuilds
+                          locais (o repo documenta que o ZIP do pacote vem de
+                          worktree próprio D:/svr11). NÃO resolveu na rodada.
+W15 baixa   NOVO/ABERTO   fa-compare em GPU: --mode core não aplica a guarda
+                          W11/W12 → exit 134 dentro de whisper_full_parallel
+                          (caminho de teste); prova numérica de GPU FA fica
+                          como backlog.
+
+================================================================================
+6. RESULTADOS NUMÉRICOS DE TODAS AS ETAPAS
+================================================================================
+6.1 MATRIZ PRINCIPAL (runner, ggml-base, perfil V0, 1 warmup + reps;
+    medianas "warm"; RTF vs 14,0 s / 96,7 s):
+  backend flash lib  | C01 ms / RTF      | C02 ms / RTF      | FAIL
+  cpu     off   B0   | 5.147 / 0,37      | 29.850 / 0,31     | 0
+  cpu     off   C1   | 6.087 / 0,43      | 30.012 / 0,31     | 0
+  cpu     on    B0   | 4.167 / 0,30      | 23.973 / 0,25     | 0
+  cpu     on    C1   | 4.905 / 0,35      | 24.348 / 0,25     | 0
+  vulkan  off   B0   | 37.964 / 2,71     | 28.473 / 0,29     | 0
+  vulkan  off   C1   | 33.987 / 2,43     | 28.667 / 0,30     | 0
+  vulkan  on    B0/C1| CRASH (SIGABRT)   | CRASH (SIGABRT)   | 10 (W11)
+  opencl  off   B0   | 25.058 / 1,79     | 153.176 / 1,58    | 0
+  opencl  off   C1   | 24.617 / 1,76     | 127.162 / 1,32    | 0
+  opencl  on    B0   | 25.018 / 1,79     | 216.915 / 2,24    | 0 (vazio = W12)
+  opencl  on    C1   | 25.522 / 1,82     | 210.104 / 2,17    | 0 (vazio = W12)
+  Contagens: matrix 66 exec / 10 FAIL / 0 puladas (C1 reduzida a 2 reps
+  por tempo — declarado; as células cpu/C01 herdaram n=5).
+  cancel: 18 exec / 6 FAIL (as 6 = B0 que NÃO cancela — é o bug); cycles: 6/0
+  (10 ciclos de load/release cada, zero erros).
+
+6.2 ETAPA D — PERFIS VULKAN (C2 com trava; 10/10 exit 0):
+  vk_profile_effective difere por perfil (1 var/perfil conforme design);
+  "Vulkan profile lock ativo" no load_log de todas.
+  Latência C01: V3 (sem prefer host mem) 53,0 s … V1 (fusion off) 23,8 s
+  (variação 2,2×) → O A/B de perfis FUNCIONOU.
+  Qualidade: WER C01 0,978 e C02 0,992–0,996 em TODOS os perfis → W13
+  não é fusion nem graph-optimize; NENHUM perfil corrige.
+
+6.3 ETAPA E (45 células, driver próprio, --out + pull UTF-8):
+  Estabilidade: 30/30 runs cpu sem reload (8,6–9,9 s, sem degradação);
+  10 processos alternando cpu↔vulkan sem contaminação.
+  C03 (6,5 min): finaliza nos dois — CPU 205 s (RTF 0,52, WER 12,4%);
+  Vulkan 150 s mas 89 chars de lixo (W13 — decoder aborta cedo).
+  VAD: silero_vad.bin AUSENTE no device → SKIP_JUSTIFICADO; --vad on sem
+  modelo = erro explícito rápido, sem crash.
+  word-timestamps on: não injeta timestamps no transcript; harness não
+  serializa callbacks de segmento → evidência parcial (declarado).
+  C07 convertido (ffmpeg 16k mono): WER 0,0% nos dois arquivos.
+  C08 adversos: C1 rejeita TUDO com erro explícito; B0 TRAVA >900 s em
+  data_beyond_file e ACEITA truncated_data silenciosamente (confirma o risco
+  do parser antigo, agora com prova de campo); unknown_chunks transcende nos
+  dois (compatibilidade preservada pela C1 — 14/14 do teste nativo cobre o
+  resto). Sem crash/OOM.
+  C09: 12/12 frases em ordem, WER 0,0% (single-shot; caminho live REAL =
+  SKIP_JUSTIFICADO sem reinstalar o app).
+  F6/cp850: bug CP850 reproduzido em probe (revis├úo dos relat├│rios) e
+  já neutro no runner consertado.
+
+6.4 ETAPA C — fa-compare (prova numérica FA, CPU):
+  C01: numeric_proof_status=partial, logits_available=true,
+  max_abs_diff=0,333338, argmax_agreement=1,000 (393/393 posições),
+  speedup 1,142× (FA on vs off).
+  C02: partial, alinhamento 0 tokens (2303 vs 2298 → diff null), speedup
+  1,109×.
+  GPU (vulkan/opencl): exit 134 no core → sem prova (W15).
+  Leitura honesta: FA-off vs FA-on na CPU dá o MESMO argmax em todas as
+  posições alinhadas e acelera ~1,11–1,14×; "partial" porque o alinhamento
+  de C02 falhou por divergência de tokenização e a lib não expõe
+  whisper_full_get_token_logits (símbolo verificado ausente por llvm-nm; a
+  captura veio do logits_filter_callback).
+
+6.5 ETAPA F — varredura (8/8, ~8 min, sem corte):
+  threads {1,2,4,8} × beam {1,5}, C02 cpu C2:
+  - transcript IDÊNTICO nas 4 threads dentro de cada beam (n_threads não
+    muda o resultado);
+  - qualidade depende do beam: WER b1 0,369 → b5 0,143 (default do app é 5);
+  - escala de tempo: b1 93,7→26,4 s (1→8 threads); b5 120,4→37,6 s.
+  (JNI do produto fixa n_threads=4; --threads só é efetivo no --mode core.)
+
+6.6 CONTROLE B1 (Etapa C do experimento "antes/depois" da correção):
+  cancel-at load e pre-infer na B1 → status=ok, segments_seen=1–4, ok=false,
+  exit 2 → B1 REPRODUZ o bug da B0 (prova que a correção vem das C1/C2 e
+  não do ambiente/rebuild).
+  C2 no mesmo teste → cancelled, segments=0, exit 0.
+  B1 C01 cpu: transcript byte-idêntico ao da C2 (5.270 ms).
+
+6.7 REGRESSÃO DE QUALIDADE (F6):
+  C01: C2 WER 0,0652 (= B0/C1 reparado 0,0652); C02: C2 0,369 vs B0 0,568.
+  Ressalva: transcripts da C2 e da B0 NÃO são idênticos entre si (WER 0,087)
+  e o esperado "WER 0%" não se confirma para NENHUM lado — mas B1 == C2,
+  logo a diferença não vem das correções (é W14).
+
+================================================================================
+7. GATES DE CÓDIGO (comando → exit code → log)
+================================================================================
+  ./gradlew.bat :app:testDebugUnitTest  → EXIT_CODE=1
+    RE-EXECUÇÃO FINAL (pós-Kotlin, logs/gates/testDebugUnitTest-after-kotlin.log):
+      "SmartInsertNativeTest > losslessMatchesContinuousEncodingAtFourTransition
+       TimesAndBoundaries FAILED / java.lang.IllegalStateException at
+       SmartInsertNativeTest.kt:27"
+      "612 tests completed, 1 failed, 4 skipped" / BUILD FAILED 3m50s
+    +32 testes novos (WhisperSessionControllerTest 12 + WhisperResultParserTest
+    20) todos verdes; a ÚNICA falha é SmartInsertNativeTest — REPRODUZIDA NO
+    BASE 963d41a com "580 tests completed, 1 failed" e a MESMA exceção
+    (logs/gates/base-testDebugUnitTest-rerun.log) → falha pré-existente
+    ambiental (ffmpeg local ausente no host), não regressão da rodada.
+    Valores anteriores do mesmo gate: 580/1/4 antes da leva Kotlin (§15).
+  ./gradlew.bat :app:lintDebug          → EXIT_CODE=0 (2m25s) logs/gates/lint-c2.log
+  ./gradlew.bat :app:assembleDebug       → EXIT_CODE=0 (C1 e C2; build-c1.log,
+    build-c2.log; também assembleDebug.exitcode=0)
+  powershell scripts/check-module-map.ps1 -Quiet → EXIT_CODE=0 (exigiu git add
+    dos arquivos novos: o verificador usa git ls-files e marcava os 2 seams
+    como "inexistentes" enquanto untracked)
+  powershell scripts/tests/run-whisper-adb-benchmark.tests.ps1 -Quiet → 32/32
+    (17 na entrega original + 15 novos nos consertos; exit 0, re-executado
+    pelo executor)
+  Teste nativo wav_io_test (no device) → 14/14 PASS
+  (O pre-commit do repo roda o gate; nenhum commit foi feito — árvore staged
+  pronta para o commit que o especialista autorizar.)
+
+================================================================================
+8. FALHAS, INCIDENTES E EXPLICAÇÃO DE CADA UM
+================================================================================
+8.1 BUILD B1 FALHOU na 1ª tentativa (BUILD FAILED 2m21s):
+  Causa: crash do COMPILADOR (clang++ "frontend command failed due to
+  signal") compilando gguf.cpp — não é erro de código. Disparado sob
+  contenção de memória (build + matriz de dispositivo rodando juntos).
+  Correção: re-tentar sozinho → EXIT=0 (43 tasks). Nenhuma alteração de
+  código. Evidência: logs/build-b1.log (falha) e build-b1-retry.log (sucesso).
+
+8.2 HARNESS CRASHOU (SIGSEGV pc=0) no smoke — causa própria:
+  A wrapper C++ JNIEnv::CallVoidMethod despacha para CallVoidMethodV, que
+  deixei NULO na tabela → chamada de ponteiro nulo. addr2line no backtrace
+  apontou _JNIEnv::CallVoidMethod. CORRIGIDO (CallVoidMethodV implementado).
+  Lição registrada: o mesmo padrão de wrapper vale checar para outras entradas
+  varargs da JNINativeInterface.
+
+8.3 PUSH SILENCIOSO DA C1 FALHOU (exit 1 por "not found"):
+  pipeline `push | tail -1 || mkdir` — o exit code foi engolido pelo tail
+  (classe de erro que o próprio runner foi instruído a evitar). Corrigido com
+  mkdir explícito + verificação ls. Nenhum artefato corrompido.
+
+8.4 ETAPA D DA PRIMEIRA RODADA ERA INVÁLIDA (10 células desperdiçadas):
+  Descoberta na segunda: a C1 não continha a string SIG_WHISPER_VK_PROFILE_LOCK
+  (grep = 0) — a trava tinha sido escrita no fonte DEPOIS do build C1, então
+  o produto reescrevia as variáveis e todo perfil colapsava em V0. Tratamento:
+  build da C2 com a trava + RE-EXECUÇÃO da Etapa D (10/10 exit 0 com
+  vk_profile_effective distinto por perfil). A primeira Etapa D foi marcada
+  como inconclusiva e substituída — não foi usada como evidência.
+
+8.5 BUGS DO RUNNER (encontrados em operação):
+  (a) parse marcava células como FAIL por causa do registro "teardown" —
+      CORRIGIDO (ramo ignora teardown/load/info), Pester re-verde.
+  (b) stdout capturado em CP850 corrompia acentos dos transcriptos
+      (revis├úo dos relat├│rios) — CORRIGIDO: StandardOutputEncoding UTF8
+      sem BOM; reproduzido em probe e validado neutro depois.
+  (c) exit 134 (SIGABRT) classificado como erro de transporte — CORRIGIDO:
+      nova classe engine_crash + colunas failure_stage/signal no CSV.
+  (d) um subagente passou -HarnessPath apontando ao .so em vez do binário —
+      erro de uso do operador, registrado, sem dano.
+  (e) driver de campo engoliu exit code numa fase — também corrigido pelo
+      próprio subagente e documentado.
+
+8.6 W14 — INCONSISTÊNCIA B0 vs rebuilds (NÃO RESOLVIDA):
+  B1 (rebuild puro da base) é byte-idêntico à C2 no C01, mas a B0
+  (distribuída) difere de ambos (WER 0,087 entre transcripts; C02 0,369 vs
+  0,568). Hipótese: o artefato do R2 foi buildado em outro worktree/estado
+  (o README documenta D:/svr11 e estados de strip distintos). Deixado como
+  W14 com evidências — não interfere nas conclusões de crash/lifecycle.
+
+8.7 SUBAGENTES: 1 execução de matriz anterior foi interrompida na fronteira
+  B0→C1 por decisão registrada (tempo); SUMMARY-MANUAL.md consolida. Um
+  job de B1 e o lint rodaram em background sem conflito após o incidente
+  da contenção de memória (8.1) — passamos a serializar builds pesados.
+
+================================================================================
+9. O QUE NÃO FOI EXECUTADO E POR QUÊ (transparência total)
+================================================================================
+- Correções W11/W12 por PORT das guardas Adreno do upstream d1be6fde:
+  a ordem era correção mínima de baixo risco → a guarda defensiva (FA off em
+  GPU) fechou o crash com prova; o port completo é backlog (§10).
+- Prova numérica de FA em GPU (Etapa C em GPU): exit 134 no caminho core
+  (W15); a guarda W11/W12 torna FA em GPU inaplicável no produto mesmo assim.
+- Prova numérica "complete": status = partial (limitação da lib: sem
+  whisper_full_get_token_logits; alinhamento de C02 divergiu) — declarado
+  como partial, nunca como completo.
+- Caminho LIVE real (injeção de chunks no microfone) e ciclo de vida de UI:
+  SKIP_JUSTIFICADO — exigiria instalar/substituir o APK do app (violaria o
+  isolamento). Substituído por: testes unitários de seam (W01–W03), C09
+  single-shot e cycles nativos.
+- silero_vad.bin: ausente no device → VAD real = SKIP_JUSTIFICADO (o modo
+  --vad on sem modelo foi testado: erro explícito, sem crash).
+- Modelos small/turbo: não medidos (tempo); base + tiny cobrem as hipóteses.
+- ASan/UBSan no host: sem toolchain C++ host no Windows → SKIP_JUSTIFICADO
+  (testes nativos rodam no device; o harness valida o caminho JNI real).
+- word-timestamps: evidência parcial (harness não serializa callbacks de
+  segmento por célula).
+- Nenhum default de qualidade do produto mudou (beam 5, threads 4, VAD on,
+  FA off permanecem como estavam).
+
+================================================================================
+10. PENDÊNCIAS — BACKLOG PARA A PRÓXIMA RODADA (máx. 5 experimentos)
+================================================================================
+E1 (W13 — maior impacto): investigar a corrupção Vulkan FA-off nos kernels
+    (tokens inválidos UTF-8) com dumps do grafo/split; hipótese: split
+    CPU↔GPU ou dtype errado em partes do encoder; evidência: SUMMARY-E/Final
+    (WER ≈1 em 6 perfis); teste: minimizar com ggml-bench de um único nó;
+    parar se a investigação exigir modificações >3 arquivos no ggml vendor.
+E2 (W11/W12 — causa raiz): port focal das guardas/detalhamento Adreno FA do
+    upstream d1be6fde (compilação lazy + recusa em supports_op para A7X/E031);
+    hipótese: corrige FA em GPU sem a guarda defensiva; evidência: auditoria
+    W05/W06 (OCL:833/1977–2043/4763 e guards 9190/9219); teste: fa-compare
+    em GPU completo (numeric_proof_status=complete) + WER; parar se o port
+    passar de ~150 linhas sem prova de estabilidade.
+E3 (W14): reconciliar B0 (R2) vs rebuilds — reproducir o build do worktree
+    do pacote (D:/svr11) e comparar transcript/SHA; hipótese: divergência de
+    configuração/estado; evidência: §8.6; teste: 3 builds, 3 transcrições;
+    parar se os 3 rebuilds coincidirem entre si (então a diferença é só do
+    artefato publicado).
+E4 (Qualidade CPU): C02 tem WER 21–37% com TTS — avaliar VAD real (baixar
+    silero_vad.bin) e small no corpus; hipótese: VAD + beam 5 reduz WER;
+    teste: matriz C02 {tiny,base,small}×{vad on/off}×{beam 1,5}; parar se o
+    melhor WER já estiver <10%.
+E5 (Runner): automatizar a matriz inteira num único comando com retry e
+    resumo automático (o modo parcial já existe); evidência: SUMMARY-E.md;
+    teste: Pester + DryRun; parar quando 1 comando reproduzir as 3 fases.
+
+================================================================================
+11. INVENTÁRIO DE ARTEFATOS (caminhos absolutos)
+================================================================================
+Relatórios:
+  D:\Projetos\SIG\docs\especialista\whisper\RELATORIO-WHISPER-RODADA1.txt  (este)
+  D:\SIG-whisper-r1\docs\whisper\rodada1\RELATORIO-WHISPER-RODADA1.md      (11 seções)
+  D:\SIG-whisper-r1\docs\whisper\rodada1\resumo-metricas.md
+  D:\SIG-whisper-r1\docs\whisper\rodada1\manifesto-correcoes.md
+  D:\SIG-whisper-r1\docs\whisper\rodada1\auditoria-estatica-w05-w06.md      (281 linhas)
+Código novo/alterado (worktree r1):
+  app\src\main\cpp\whisper_jni.cpp, whisper_wav_io.{h,cpp}, CMakeLists.txt
+  app\src\main\java\...\WhisperNative.kt, WhisperActivity.kt,
+    WhisperSessionController.kt, WhisperResultParser.kt
+  app\src\test\java\...\WhisperSessionControllerTest.kt, WhisperResultParserTest.kt
+  app\build.gradle (guarda -PwhisperBenchAbi), MODULE-MAP.md
+  scripts\run-whisper-adb-benchmark.ps1 + scripts\tests\*.tests.ps1
+  tools\whisper\{whisper_bench_harness.cpp, build_bench_harness.sh,
+    generate_corpus.ps1, generate_corpus_fixtures.py}
+  native-dependencies\tests\whisper\wav_io_test.cpp
+Evidências (D:\SIG-whisper-r1\build\whisper-rodada1\20261008-r1\):
+  libs\{B0,B1,C1,C2}\libsig_whisper.so + B0\libomp.so (SHA §2)
+  whisper_bench_harness, wav_io_test
+  corpus\ (18 áudios + 9 refs + corpus-manifest.json/md)
+  logs\{build-c1.log, build-c2.log, build-b1.log, build-b1-retry.log,
+    gates\*, pester-*, matrix*, logcat-crash-*, analysis-final.txt}
+  runner-out\{runs.jsonl, results.csv, cells\, PROVENANCE.md,
+    SUMMARY-MANUAL.md, smoke\, dryrun\, c1\, scenarios\}
+  runner-out\e\{SUMMARY-E.md, f1..f5.jsonl, adb-commands.jsonl, device\…}
+  runner-out\final\{SUMMARY-FINAL.md, commands.jsonl, cells\ (80 pulls),
+    final-extract.json, analyze_final.py, run_final.sh}
+  whisper-r1.patch (git diff da rodada) + whisper-r1-untracked.txt
+Patch/branch: worktrees D:\SIG-whisper-r1 (codex/whisper-r1) e
+  D:\SIG-whisper-b1 (codex/whisper-b1); nenhum commit/push feito.
+
+================================================================================
+12. LOGS IMPORTANTES (excertos textuais)
+================================================================================
+[L — crash Vulkan reproduzido (B0, contraponto da prova W11)]
+  10-08 15:30:22 F libc: Fatal signal 11 (SIGSEGV)/… e na matriz:
+  exit=134 (SIGABRT) células vulkan-fon — backtrace em libsig_whisper.so
+  (logs/logcat-crash-snapshot1.txt, logcat-crash-abortmsg.txt)
+
+[L — prova da correção W11 na C2]
+  load_log: "W11/W12: Flash Attention desativado em GPU (SIGABRT no
+  Vulkan/falha silenciosa no OpenCL); FA off nesta carga."
+  "whisper_init_with_params_no_state: flash attn = 0" → exit 0;
+  transcrição FA-on ≡ FA-off (hash idêntico, C01 e C02)
+
+[L — prova do bug de cancelamento (B0/B1) vs correção (C1/C2)]
+  B0/B1: {"cancel_stage":"load","result_status":"ok","returned":" [campainha]",
+    "segments_seen":1,"ok":false}   ← cancelamento IGNORADO, inferência inteira
+  C1/C2: {"cancel_stage":"load","result_status":"cancelled",
+    "cancel_request_to_worker_done_ms":79.9,"segments_seen":0,"ok":true}
+  C1 pre-infer: 0,206 ms · during-infer: 1.714 ms · C2: idem
+
+[L — trava de perfil validada na C2 (Etapa D)]
+  "Vulkan profile lock ativo (SIG_WHISPER_VK_PROFILE_LOCK): variáveis de
+  ambiente não modificadas." + vk_profile_effective{"GGML_VK_DISABLE_FUSION":"1"}
+  para V1 (etc.), latência V1 23,8 s vs V3 53,0 s (2,2×) mas WER ≈1 em todos
+
+[L — fa-compare (Etapa C, CPU)]
+  {"numeric_proof_status":"partial","logits_available":true,
+   "max_abs_diff":0.333338,"argmax_agreement":1.0,"argmax_matched_positions":393,
+   "speedup":1.142}   (C01); C02 speedup 1.109, alinhamento 0 → diff null
+
+[L — gates]
+  lint: "BUILD SUCCESSFUL in 2m 25s … EXIT=0"
+  module-map (antes do git add): "commit bloqueado: MODULE-MAP.md cita 2
+  arquivo(s) inexistente(s): WhisperResultParser.kt, WhisperSessionController.kt"
+  → após indexar: EXIT=0
+  Pester: 32/32 · testDebugUnitTest: 612 exec / 1 falha (SmartInsertNativeTest,
+  pré-existente) / 4 skipped
+
+[L — runner consertado]
+  engine_crash: "ENGINE CRASH: sinal SIGABRT (exit 134)…" + colunas
+  failure_stage/signal no results.csv; captura UTF-8 sem BOM.
+
+================================================================================
+PARTE II — EXECUÇÃO DAS TAREFAS DELEGADAS (relato completo)
+================================================================================
+Esta parte registra COMO as ordens foram cumpridas na prática: cada
+delegação (subagente), o que foi pedido, o que voltou, o que o executor
+verificou por conta própria, e as falhas/justificativas. Nenhum resultado de
+subagente foi aceito sem conferência — regras seguidas: (a) re-executar
+testes que podem ser re-executados, (b) conferir arquivos no disco,
+(c) bater SHA-256, (d) tratar auto-relato como CLAIM, não fato.
+
+--------------------------------------------------------------------------------
+13. INVENTÁRIO DAS DELEGAÇÕES (6 lotes, 9 subagentes, todos completed)
+--------------------------------------------------------------------------------
+Lote  Data/hora início  Duração   api_calls  Tarefa
+D1    08/10 14:36       32m26s    34         Corpus C01–C09 + gerador + manifesto
+D2    08/10 14:40       11m36s    27         Auditoria estática W05/W06
+D3    08/10 15:10       32m06s    40         Runner PowerShell + Pester
+D4    08/10 15:58       2h41m     121        Matriz principal B0×C1 (72 células)
+D5    08/10 ~19:00      —         —          Gates + relatório .md da rodada
+D6    08/10 20:33       2h20m     34+112+134 3 frentes: Kotlin (W01–W03/W10),
+                                            harness+runner, Etapas D+E no device
+D7    08/10 22:58       1h21m     87         Rodada final de provas (F1–F6)
+Execuções próprias do executor (não delegadas): worktree, correções no
+whisper_jni.cpp, builds C1/C2/B1, harness v0, smoke, provas W09, gates.
+
+--------------------------------------------------------------------------------
+14. RELATO POR DELEGAÇÃO
+--------------------------------------------------------------------------------
+D1 — CORPUS (D:/SIG-whisper-r1/tools/whisper/generate_corpus.ps1 + fixtures.py)
+  Pedido: C01–C09 com formato, faixas de duração, refs, manifesto de hashes.
+  Retorno: 29 arquivos (18 áudios + 9 refs + 2 manifestos); C01 13,999 s;
+  C02 96,689 s/245 palavras; C03 393,894 s; C04 SNR medida 18,00 dB; C09
+  12 frases com offsets exatos e sobra de 0,2 s; determinismo 2× byte-idêntico.
+  VERIFICAÇÃO DO EXECUTOR: conferido em disco (corpus-manifest.json + .md);
+  os casos usados depois em dezenas de células de dispositivo reais provaram
+  que os WAVs são usáveis (WER 0,0% em C07 convertido, 12/12 no C09).
+  Desvios aceitos: Rate 4 no TTS (Rate 0 estourava as faixas de duração);
+  refs por caso (não por arquivo); c05/c08 refs vazias por design.
+
+D2 — AUDITORIA W05/W06 (docs/whisper/rodada1/auditoria-estatica-w05-w06.md)
+  Pedido: variáveis GGML_VK_* lidas por PRESENÇA vs valor + guardas FA do
+  ggml-opencl vendorizado vs upstream d1be6fde.
+  Retorno: 9/13 variáveis por presença ("0" == "1" — armadilha real para
+  perfis); leituras 1×/processo que sobrevivem a whisper_free (env antes da
+  1ª enumeração); ~16 variáveis não controladas; FA eager: 27 programas
+  compilados na init sem guarda Adreno (OCL:1977–2043) com falhas fatais
+  (exit(1) OCL:820–827); upstream tem lazy compile + guardas E17/A7X.
+  VERIFICAÇÃO: 281 linhas no disco; greps de sanidade nas linhas OCL:1977,
+  4763, 9190, 9219 refeitos por mim; a predição "crash OpenCL na init"
+  derivada daqui foi TESTADA em campo e NÃO se confirmou (marcada como
+  hipótese não reproduzida — a auditoria alertou risco, não afirmou crash).
+
+D3 — RUNNER + PESTER (scripts/run-whisper-adb-benchmark.ps1)
+  Pedido: runner com validação de SHA, plano de células, timeout por célula,
+  JSONL incremental, dry-run, exit codes + testes de contrato.
+  Retorno: 64 KB de script; 17 testes Pester; DryRun 96 células planejadas;
+  recusa de SHA errado com exit 2.
+  VERIFICAÇÃO DO EXECUTOR: re-execuções MINHAS: 17/17 (após entrega) e
+  32/32 (após a leva de consertos) — logs gates/runner-pester-tests-verbose.log
+  ("Passed: 17 Failed: 0 ... OK: contratos do runner whisper-adb").
+  Falhas encontradas DEPOIS em operação (D4) e corrigidas em D6:
+  parse do teardown marcava célula FAIL; CP850; exit 134 = transporte.
+
+D4 — MATRIZ PRINCIPAL (2h41m, 121 chamadas de API — a delegação mais cara)
+  Pedido: executar 72 células (2 libs × 2 casos × 3 backends × 2 FA × 1 perfil
+  × 3 reps) + cancel + cycles.
+  Retorno: 66 executadas / 10 FAIL / 0 puladas (C1 reduzida a 2 reps por
+  tempo — DECLARADO, não escondido); cancel 18/6 (os 6 FAIL = B0 que não
+  cancela = o bug); cycles 6/0; mediana das tabelas §6.1; WER por célula.
+  Achado maior: vulkan+FA SIGABRT 10/10 (exit 134) com backtrace em
+  libsig_whisper.so → virou W11 (o sintoma "Vulkan intermitente" do usuário).
+  Falhas do runner descobertas só em operação (CP850 com mojibake
+  "revis├úo dos relat├│rios", exit 134 como "transporte", teardown=FAIL).
+  Intervenção do executor: mandei o subagente NÃO consertar o runner na hora
+  (foco na evidência) — os consertos entraram em D6 com testes novos.
+
+D5 — GATES + RELATÓRIO .md (docs/whisper/rodada1/RELATORIO-WHISPER-RODADA1.md)
+  NOTA DE HONESTIDADE: o resultado consolidado desta delegação NUNCA chegou
+  como mensagem na conversa (entrega perdida). O executor NÃO assumiu nada:
+  verificou os artefatos diretamente no disco — RELATORIO-WHISPER-RODADA1.md
+  35.771 B com 11 seções ("##" contados = 11), resumo-metricas.md,
+  manifesto-correcoes.md, whisper-r1.patch 23.523 B, whisper-r1-untracked.txt,
+  e os exit codes em logs/gates/*.exitcode (ver §15). Só então o relato foi
+  aceito. Pré-condição do gate que eles encontraram e eu reproduzi depois:
+  check-module-map rejeita arquivos novos untracked (usa git ls-files) —
+  resolvido com git add dos 7 caminhos novos → EXIT=0.
+
+D6 — 3 FRENTES PARALELAS (2h20m — maior densidade de trabalho da rodada)
+  D6a KOTLIN (W01/W02/W03/W10):
+    Retorno: WhisperSessionController.kt (214 L), WhisperResultParser.kt (65 L),
+    2 testes (12+20 = 32 casos), WhisperActivity.kt 2680→2757 L, gate
+    "612 testes, 1 falha, 4 skipped — a única é SmartInsertNativeTest".
+    VERIFICAÇÃO: git status confirmou os 4 arquivos; MODULE-MAP atualizado e
+    EXIT=0; teste unitário completo re-executado pelo executor (§15). Análise
+    do diff confirmou: onDestroy sem espera, beginSession nos 3 pontos,
+    wrapCallback nos 3 callbacks, stop-live com re-checagem 500 ms/30 s.
+    Decisão registrada do subagente: geração = contador interno (monotônico
+    mesmo se o nativo repetir id); NoSpeech em arquivo não vai para
+    transcricoes.txt (só terminal/log) — escolha explícita, não acidente.
+  D6b HARNESS + RUNNER:
+    Retorno: --mode core (threads EFETIVAS), --fa-compare via
+    logits_filter_callback (símbolo whisper_full_get_token_logits AUSENTE na
+    lib, verificado por llvm-nm — não inventaram prova), --vad-model; runner
+    UTF-8 sem BOM + engine_crash/SIGABRT; Pester 17→32/32; harness novo
+    compilado 2× = mesmo SHA 857f76e4… (reprodutibilidade do próprio binário).
+    VERIFICAÇÃO: re-execução MINHA do Pester = 0; SHA conferido; o modo core
+    foi exercitado de verdade na D7 (8 células Etapa F + fa-compare).
+  D6c ETAPAS D+E NO DEVICE (45 células, 141 comandos adb registrados):
+    Retorno: DESCOBERTA PRINCIPAL — a trava SIG_WHISPER_VK_PROFILE_LOCK não
+    existia na C1 (a correção foi escrita no fonte DEPOIS do build C1) →
+    todo A/B de perfis daquela rodada colapsou em V0 = INCONCLUSIVO. Eles
+    não "consertaram" o resultado: marcaram como inválido e explicaram.
+    Também: C08 B0 trava >900 s em data_beyond_file (risco do parser antigo
+    em campo); silero_vad.bin ausente (SKIP_JUSTIFICADO); 30/30 runs estáveis;
+    C03 finaliza; CP850 reproduzido em probe e neutro no runner consertado.
+    VERIFICAÇÃO: grep -c "SIG_WHISPER_VK_PROFILE_LOCK" na C1 = 0 e no fonte
+    = 3, depois na C2 = 2 (binário) — confirmei cada afirmação.
+
+D7 — RODADA FINAL DE PROVAS (1h21m, 35 células, 41 execuções, 41 pulls)
+  Pedido: provar a guarda W11/W12 (C2), refazer Etapa D com trava válida,
+  fa-compare, Etapa F, controle B1, regressão C2.
+  Retorno e verificação:
+    F1 W11/W12 OK: C2 vulkan+FA C01/C02 exit 0 + aviso "W11/W12: Flash
+    Attention desativado…" + flash attn = 0 + transcrição FA-on ≡ FA-off
+    (hash idêntico); contraponto B0 vulkan+FA = exit 134 (re-confirmado).
+    F2 Etapa D VÁLIDA: 10/10 exit 0, "Vulkan profile lock ativo" no load_log,
+    vk_profile_effective com 1 var/perfil, latência varia 2,2× (V3 53,0 s vs
+    V1 23,8 s) → A/B de fato variou; WER ≈0,98–0,996 em TODOS → W13 aberto.
+    F3 fa-compare = "partial" (NÃO completo — honestidade): CPU C01 diff
+    0,333338 com argmax 393/393 e speedup 1,142×; C02 alinhou 0 tokens
+    (2303 vs 2298 → diff null); GPU = exit 134 no core (a guarda W11/W12 só
+    existe no caminho JNI; --mode core é caminho de teste) → W15.
+    F4 Etapa F 8/8: transcript idêntico nas 4 threads dentro de cada beam;
+    WER depende do beam (b1 0,369 → b5 0,143); escala 93,7→26,4 s.
+    F5 B1 REPRODUZ o bug (cancel ok=false, transcrição cheia, exit 2) e B1
+    == C2 byte a byte no C01 → controle fechou: a correção é das C1/C2.
+    F6 sem regressão (C01 C2 WER 0,0652 = B0) MAS B0 ≠ C2 entre si
+    (WER 0,087) → novo achado W14 (distribuída diverge dos rebuilds).
+
+--------------------------------------------------------------------------------
+15. JOBS DE TERMINAL EM BACKGROUND (execução própria) + GATES (exit codes reais)
+--------------------------------------------------------------------------------
+Job                  Resultado            Log (build/whisper-rodada1/20261008-r1/)
+build C1 (nativo)    EXIT=0 (4m29s)       logs/build-c1.log
+build B1 (1ª vez)    EXIT=1 — crash do clang (§8.1)  logs/build-b1.log
+build B1 (retry)     EXIT=0 (43 tasks)    logs/build-b1-retry.log
+build C2 (nativo)    EXIT=0               logs/build-c2.log
+Gates (logs/gates/ e *.exitcode lidos pelo executor):
+  assembleDebug.exitcode            = EXIT_CODE=0
+  lintDebug.exitcode                = EXIT_CODE=0   (BUILD SUCCESSFUL 2m25s)
+  check-module-map.exitcode         = EXIT_CODE=0   (após git add dos novos)
+  runner-pester-tests.exitcode      = EXIT_CODE=0   (quiet)
+  runner-pester-tests-verbose       = EXIT_CODE=0   ("Passed: 17 Failed: 0
+                                       Total: 17" na entrega; 32/32 após D6b)
+  testDebugUnitTest.exitcode        = EXIT_CODE=1   ← NÃO é sucesso verde
+  base-testDebugUnitTest.exitcode   = EXIT_CODE=0   (run rápido/up-to-date)
+  base-testDebugUnitTest-rerun      = EXIT_CODE=1   ← BASE TAMBÉM FALHA
+  LEITURA: logs/gates/testDebugUnitTest.log:
+    "SmartInsertNativeTest > losslessMatchesContinuousEncodingAtFourTransition
+     TimesAndBoundaries FAILED / java.lang.IllegalStateException at
+     SmartInsertNativeTest.kt:27 / 580 tests completed, 1 failed, 4 skipped"
+  logs/gates/base-testDebugUnitTest-rerun.log (rodado NO CHECKOUT BASE
+  D:/Projetos/SIG, sem tocar em nada):
+    "580 tests completed, 1 failed" — MESMO teste, MESMA exceção.
+  CONCLUSÃO: exit 1 do gate é FALHA PRÉ-EXISTENTE/AMBIENTAL (ffmpeg local
+  ausente no host do agente), não regressão da rodada. Rodada atual fechou
+  com 612 executados / 1 falha (idêntica) / 4 skipped — ver re-execução
+  gates/testDebugUnitTest-after-kotlin.log (§18).
+
+--------------------------------------------------------------------------------
+16. JUSTIFICATIVAS DAS DECISÕES DO EXECUTOR
+--------------------------------------------------------------------------------
+1. Delegar corpus/auditoria/runner/campo mas NÃO as correções no produto:
+   as mudanças em whisper_jni.cpp e WhisperActivity.kt foram feitas por mim
+   (artesanato crítico); subagentes fizeram o mecânico/paralelizável.
+2. Descartar a 1ª Etapa D em vez de "consertar" o número: resultado inválido
+   por trava ausente; re-executar custou 1 h mas manteve a integridade.
+3. Guarda defensiva (FA off em GPU) em vez do port do upstream nesta rodada:
+   ordem = correção mínima de baixo risco para defeitos NOVOS; o crash tinha
+   prova 10/10 e a guarda tem prova de antes/depois; port d1be6fde (~150 linhas
+   em ggml vendorizado) = backlog E2 com critério de parada.
+4. C1 com 2 reps em vez de 3 (D4): projeção >100 min por células OpenCL de
+   C02 (5–8 min cada); registrado em vez de fingir n=3.
+5. Modelo large-v3-turbo e small NÃO medidos: base+tiny cobrem as hipóteses;
+   1,6 GB por célula não cabia no orçamento de tempo.
+6. SKIPs com justificativa em vez de approximação: live real e UI = exigiriam
+   reinstalar o app (viola isolamento); silero ausente no device; ASan host =
+   sem toolchain C++ no Windows; VAD só com o erro explícito sem modelo.
+7. CP850/exit-134 consertados NA SEGUNDA leva, com testes, e não na hora:
+   preservar a evidência bruta primeiro (as falhas ficaram documentadas com
+   mojibake original) e depois corrigir com Pester.
+
+--------------------------------------------------------------------------------
+17. LOGS ADICIONAIS IMPORTANTES (excertos capturados durante as delegações)
+--------------------------------------------------------------------------------
+[L — D4: crash reproduzido do Vulkan+FA, logcat do device]
+  10-08 ... F libc : Fatal signal 13 (SIGABRT) ... pid ... (whisper_bench...)
+  backtrace: #01–#09 dentro de libsig_whisper.so
+  → células runner-out/cells/*vulkan-fon*: exit=134, 10/10
+[L — D4/D6c: bug CP850 em campo (antes do conserto)]
+  transcript: "revis├úo dos relat├│rios e dos rascunhos" (UTF-8 sob CP850)
+  → conserto: StandardOutputEncoding = UTF8Encoding($false); validado com
+  filho + JSONL sem BOM; Pester +15 casos = 32/32
+[L — D6c: trava ausente detectada]
+  "$ grep -c SIG_WHISPER_VK_PROFILE_LOCK .../C1/libsig_whisper.so" → 0
+  "$ grep -c ... app/src/main/cpp/whisper_jni.cpp" → 3
+  load_log idêntico em V0..V6 na C1 (colapso) vs "Vulkan profile lock ativo"
+  em todas as células da C2 (F2)
+[L — D6c: B0 em adverso W07]
+  célula c08_data_beyond_file com B0: timeout >900 s (travamento do parser
+  antigo); com C1: erro explícito imediato — mesma fixture
+[L — D7: controle B1 (prova da correção)]
+  {"lib":"B1","stage":"load","result_status":"ok","segments_seen":1,
+   "ok":false}   ← bug reproduzido no REBUILD PURO da base
+  {"lib":"C2","stage":"load","result_status":"cancelled","segments_seen":0,
+   "ok":true}    ← correção no mesmo ambiente
+[L — gates] ver §15 (trechos literais de testDebugUnitTest.log e base).
+
+--------------------------------------------------------------------------------
+18. VERIFICAÇÃO FINAL INDEPENDENTE DO EXECUTOR
+--------------------------------------------------------------------------------
+- testDebugUnitTest RE-EXECUTADO após as mudanças Kotlin →
+  logs/gates/testDebugUnitTest-after-kotlin.log (contagem final em §7).
+- Pester re-executado 2× por mim (17/17 na entrega D3; 32/32 após D6b).
+- check-module-map re-executado (EXIT=0 após git add).
+- SHA-256 recolhidos por mim para B0/C1/C2/libomp/harness/modelo; B1 coletado
+  e conferido na D7 (0c88f086…e820883).
+- Artefatos de cada delegação conferidos no disco (não pelo auto-relato):
+  corpus-manifest, auditoria .md, SUMMARY-E.md (22.060 B),
+  SUMMARY-FINAL.md (20.423 B), SUMMARY-MANUAL.md, *.exitcode, logs de gate.
+- Entrega perdida (D5) tratada como não-entregue até aferição direta.
+- App SIG: nenhum install/kill/push de APK em toda a rodada; modelos sempre
+  abertos em modo leitura; /data/local/tmp/whisper-bench é o único lixo
+  (listado com comando de limpeza no .md §10).
+
+================================================================================
+PARTE III — DECLARAÇÃO DE CONFORMIDADE DAS ORDENS
+================================================================================
+Ordem do especialista: "cumpra tudo, sempre; depois relatório super detalhado
+num .txt em D:\Projetos\SIG\docs\especialista".
+  [x] Toda a lista da rodada 1 executada ou declarada com status honesto:
+      proveniência, runner+testes, corpus, B0/B1/C1/C2, matriz, Etapas A–F,
+      correções W05/W07/W08/W09/W10/W11/W12 + W01/W02/W03, gates, rollback.
+  [x] Itens NÃO executados têm seção própria com motivo (§9 do Parte I):
+      port d1be6fde (backlog), ASan host, live/UI real, silero, small/turbo,
+      prova numérica FA "complete" (parcial, com o porquê).
+  [x] Novos achados W13/W14/W15 registrados em vez de escondidos.
+  [x] Relatório super detalhado: ESTE ARQUIVO (Parte I + II + III), na pasta
+      pedida. Espelhos: docs/whisper/rodada1/*.md (rodada técnica) e sumários
+      em build/whisper-rodada1/20261008-r1/runner-out/.
+  [x] Sem commit/push/release; app do usuário intacto; nenhum segredo citado.
+
+FIM DO RELATÓRIO — gerado pelo executor após cumprimento das ordens
+"cumprir tudo" + relatório detalhado. Última verificação: 35 células da
+rodada final com exit 0 geral; app SIG e /sdcard intocados (apenas leitura);
+data local do host na hora da escrita: 2026-10-09.
+================================================================================
