@@ -1,0 +1,112 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 28
+=========================================================================
+Data: 09/10/2026. Ordens: "CORRIGIR A VACINA SIMULADA, FECHAR GATES E
+VALIDAR FUSAO SEM CONTAMINAR O A/B". Copia isolada/probe.
+
+RESUMO EXECUTIVO — PARECER ACEITO (a vacina R27 era simulada!) e a
+SUBSTITUIDA foi CONSTRUIDA (opcao C do parecer!): extracao AUTOMATICA
+VERBATIM (r28_extrai.py -> r28_cores_gen.h + r28_switch_gen.inc com
+hashes por trecho!) das funcoes REAIS (q6_K_get_quant/is_repack_type/
+tiled_row_size/repack_q4_K_tiled/repack_q6_K_tiled/get_alloc_size + o
+SWITCH real do set_tensor) e um harness (r28_fixture.c) que EXERCITA o
+path real (switch -> repack -> payload tiled fisico -> leitor vs dequant
+canonico em TODAS as entradas!) + 4 cenarios. RESULTADOS REAIS:
+- MUTANTE M2 (SO o case Q6_K removido — o contra-mutante do especialista!):
+  T2 RED (n_bad=16065!) => O TESTE AGORA PEGA a perda do dispatch Q6! (na
+  vacina antiga passava!)
+- MUTANTE M1 (cases Q4+Q6 removidos): T1/T2 RED (n_bad 13590/16065 +
+  NaN!) => pega o defeito ORIGINAL!
+- MUTANTE M3 (alloc lista sem K!): T3 RED (9216/13440 vs 10240/14336!)
+- GREEN: T3 OK (10240/14336!); T2 (Q6) OK (0 bad, max_abs=0.00048!);
+  T1 (Q4_K) = 7968/16384 bad => ACHADO NOVO: o leitor do oraculo R22
+  (validado SO' contra o pack TRANSCRITO no R22!) NAO decodifica o pack
+  REAL auto-extraido => a validacao R22 era (parcialmente) ESPELHADA
+  (transcricao+leitor com o mesmo erro!) — o DEVICE continua GREEN
+  (B1/B2 PASS!) provando que o PACK real e' funcional; o LEITOR precisa
+  ser corrigido (pendencia com o dequant como arbitro; 4 mapeamentos
+  testados, nenhum zera => falta investigar scales/shift/qs_sub tambem!).
+- T4a/T4b (offset!=0 e size parcial!): "abort=0" => O TESTE CAPTUROU A
+  BRECHA DO OFFSET VIVA no fonte: o switch atual passa ZERO FIXO ao pack
+  (`repack_q4_K_tiled(tensor, data, 0, size)`) e o guard do R24 foi
+  REVERTIDO pelo rollback (R24h!) => upload com offset!=0 e' silenciosamente
+  normalizado a 0 (e size parcial NAO e' recusado!) — exatamente o defeito
+  apontado no parecer R24! (. GGML_ASSERT do ggml.h ATIVO — o pack nao
+  abortou PORQUE NUNCA VE' o offset real!). A CAUSA-RAIZ do R28: guard
+  nao esta no fonte; a vacina (T4!) agora o DETECTA (o harness correto!).
+Retificacoes aceitas: vacina R27 = DIDATICA/AUXILIAR (CCE_CALLBACK_REAL
+RETIRADO!); Q6 offline = reproducao independente do especialista OK
+(comando real!); fused fix = FONTE PATCHADO/NAO BUILDADO (FUSED_VALIDATED
+= NAO!); NMSE: METRICA=SIM/GATE=NAO (o probe nao decide PIN — pendente no
+probe + fixture!).
+
+-----------------------------------------------------------------------
+A. IDENTIDADE / CHECKPOINT
+-----------------------------------------------------------------------
+A.1 Fonte candidato kq2/sigcand2: com o fused-fix R27 (nao buildado!);
+    SEM o guard do offset (o rollback o removeu — ACHADO R28!). Extracao
+    r28 com hashes por trecho (q6_get_quant a0e644ca/repack_q6 f40fa637/
+    repack_q4 3dbb71c3/switch 44785a3d/gen d97afe0e...!). Builds R28:
+    fixture green+m1+m2+m3 (hashes no manifesto!).
+A.2 Device: cohort GREEN 2c45ed97 intacto (sem reinstall nesta rodada!);
+    v12/produto/SIG intocados.
+
+-----------------------------------------------------------------------
+B. VACINA REAL (substitui a simulada!) — ENTREGUE
+-----------------------------------------------------------------------
+B.1 r28_extrai.py: extrai VERBATIM (por chaves balanceadas!) + hashes;
+    r28_fixture.c: o harness (stubs so' de contorno — log/longjmp de
+    rejeicao!; adaptadores declarados: typedef do buft + get_scale_min_k4
+    verbatim!); o codigo exercitado = o EXTRAIDO (gerado do fonte!).
+B.2 Cenarios e resultados: (green) T3/T2 OK + T1 RED (leitor!); (m1)
+    T1/T2 RED; (m2) T2 RED (Q6 pego!); (m3) T3 RED. Os mutantes afetam
+    o GERADO (nao o harness!) — RED confirmado por cenario separado.
+B.3 Pendencias declaradas: T4 (offset/parcial) = a brecha VIVA (guard
+    ausente no fonte! — correcao: re-aplicar os guards do R24 (asserts
+    com mensagem!) SEM o ternario/mudancas de logging (variavel unica!);
+    ALLOC_FAIL-flow (o gate do probe!) e preflight opstage numerico
+    permanecem pendentes (nao fingir cobrir!).
+
+-----------------------------------------------------------------------
+C. CONTRATO NUMERICO — ESTADO REAL
+-----------------------------------------------------------------------
+C.1 METRICA_PIN: implementada no probe (nmse_pin!) e impressa (R27!).
+    GATE_PIN: NAO implementado (o probe decide por finitude/novl/coverage!)
+    — retificacao do parecer aceita; proximo: verdict_legacy+verdict_pin
+    por caso + counters + guardas (NaN/coverage/denom0/nmse=-1 NAO podem
+    virar PASS!) + fixture compilada do gate (mutantes que bypassam => RED!).
+
+-----------------------------------------------------------------------
+D. FUSED — ESTADO REAL
+-----------------------------------------------------------------------
+D.1 FIX no FONTE (|| Q4_K no src1_row_size!) — NAO buildado/testado
+    (FUSED_VALIDATED=NAO!). Proximo: fixture ligada a funcao real
+    (Q4_1 controle/Q4_K alvo/Q6 rejeicao!) + mutante RED + rebuild
+    SEPARADO do A/B (uma variavel por vez!).
+
+-----------------------------------------------------------------------
+E. REFS FINAS / B128 / ESTABILIDADE
+-----------------------------------------------------------------------
+E.1 Refs finas (Rcpu/Rscalar/Rtiled com os MESMOS bytes!): PENDENTE
+    declarado (a base: o CSV + MMVIOL; o export completo do device fica
+    para a rodada de snapshot!). Estabilidade ternario: OPEN (budget 4
+    runs B1 — nao consumido; fonte completa/codegen antes!).
+E.2 R16: separado. Escopo: sem reboots/reinstalls neste ciclo.
+
+-----------------------------------------------------------------------
+F. ESTADOS
+-----------------------------------------------------------------------
+F.1 VACINA_REAL: CCE (mutantes M1/M2/M3 RED! — T1/T4 revelaram defeitos
+    reais!). Q6 offline: CCE (reproducao independente + T2 OK!). NMSE:
+    metrica CCE, gate PENDENTE. Fused: fix fonte, validacao PENDENTE.
+    Leitor Q4_K: RED (VERDADE: pack OK (device!), leitor espelhado!) —
+    correcao PENDENTE. Guard offset: AUSENTE no fonte (ACHADO!) —
+    correcao PENDENTE. KERNEL_VALIDATED: NAO. COMPILED: sim (4 builds!).
+H.1 PROXIMOS EXATOS: (1) re-aplicar guard offset/size (variavel unica,
+    com o T4 da vacina como RED->GREEN!); (2) corrigir o leitor Q4_K
+    (com o dequant arbitro!) e re-validar T1; (3) gate PIN no probe +
+    fixture; (4) fused fixture + rebuild separado; (5) refs finas
+    (snapshot!); (6) so' depois: shapes/modelo/fases!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada28/ (r28_extrai.py/r28_fixture.c/
+r28_mut2.py/r28_mapas.c + r28-gen-info.txt (hashes dos trechos extraidos!)
++ os 4 cenarios compilados/rodados no servidor!) + manifesto.

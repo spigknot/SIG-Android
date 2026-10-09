@@ -1,0 +1,18 @@
+MANIFESTO — smart-rodada28 (VACINA REAL: extracao verbatim + mutantes!)
+
+VACINA_REAL: r28_extrai.py (VERBATIM + hashes!) -> gen/inc; harness exercita o path REAL!
+MUTANTES: M1 (sem Q4+Q6) RED!; M2 (so Q6!) RED — o contra-mutante AGORA PEGO!; M3 (alloc) RED!
+ACHADOS: T1 = leitor R22 espelhado (7968 bad! pack OK pelo device!); T4 = BRECHA DO OFFSET VIVA (zero fixo no switch, guard do R24 revertido!)!
+Retificacoes: vacina R27 didatica; fused nao buildado; NMSE gate pendente. KERNEL_VALIDATED: NAO.
+
+6d83c029d13e27025c2858f9f7ada1b1f03b4562aaf360d93492c8d9f87c2568  r28-gen-info.txt  (294 B)
+c60f034a4d0ccf299088201fad17a7cec6b1aea155cdb43449fb37e6182780c1  r28-green.txt  (487 B)
+3b7133226bf58b6507ff6251e9bb82d2a8f07ddc6c11d9bdfa0f7013d8406228  r28-m1.txt  (252 B)
+fb6e499ce95c06a0b22b34bf929a87b9f295f9c3ffd555e90878d04c9de4915b  r28-m2.txt  (272 B)
+52d90a15e2cd4022d49b80aff21325fe55972abfabdda9c4a786f0796f8c8e08  r28-m3.txt  (192 B)
+96515a9e5efa660f056dc818acee6b76ec86be55e7416101dd949e73531146ec  r28_extrai.py  (3500 B)
+7220dbaac932e1b5f0ae55c424b33408175a4e9517a1041885080f0ad73edfa4  r28_fixture.c  (11695 B)
+544f3ca133d757fd3d110e800f5232e523e7cc53046338c8f0d8aea957257d3d  r28_mapas.c  (4429 B)
+f88115e60346428fa2b1df8535f38fb24809fb5e0a3f7e1734ad587fc5232938  r28_mut2.py  (1798 B)
+
+a362c60e469e9f2cc026057fca97ba21ed156d60740b58dfbec51b68ec10745a  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA28.txt

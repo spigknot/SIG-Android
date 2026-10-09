@@ -1,0 +1,6 @@
+=== m1 (cases Q4+Q6 REMOVIDOS!) ===
+  [RED] T1 Q4_K: n_bad=13590 n_nan=2656 max_abs=922998.236267  (canonico puro!)
+  [RED] T2 Q6_K: n_bad=16065 n_nan=80 max_abs=1965057.141033
+  [OK ] T3 alloc REAL: 10240/14336
+  [RED] T4a/T4b (abort=0!)
+TOTAL: 4 RED

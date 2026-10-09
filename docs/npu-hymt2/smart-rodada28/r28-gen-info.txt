@@ -1,0 +1,9 @@
+// r28_cores_gen.h — GERADO AUTOMATICAMENTE por r28_extrai.py (NAO EDITAR!)
+// Conteudo VERBATIM do candidato: /root/kq2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+// sha256 do fonte: 39999fa7b73e4ca3f864b47e99c1ba14e555570c3c7997319f756fe588505a35
+green
+m1
+m2
+m3
+r28_fixture.c
+r28_fixture_inv.c

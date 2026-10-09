@@ -1,0 +1,74 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 28
+CORRIGIR A VACINA SIMULADA, FECHAR GATES E VALIDAR FUSAO SEM CONTAMINAR O A/B
+===============================================================================
+
+1. PARECER DO ESPECIALISTA — O QUE ESTA REALMENTE COMPROVADO
+Li a R27 e auditei os arquivos em docs/npu-hymt2/smart-rodada27/. Os 11 hashes dos anexos conferem. O arquivo r27-nmse-device.txt contem 3 resultados unicos Q4_K, repetidos no REPORT do MESMO PID 21647: B1, B2, B128. Nao ha cinco runs independentes nem Q6 com nmse neste arquivo.
+Q4_K NMSE: B1=2.536685e-08; B2=1.187797e-07; B128=1.337495e-07. Sao valores abaixo de 5e-4. A formula soma(erro²)/soma(ref²) foi acrescentada ao probe. Porem probe.cpp:1038-1042 ainda decide okc/pass/fail EXCLUSIVAMENTE por finitude, novl==0 e cobertura. O NMSE e apenas impresso. Assim B128 continua explicitamente FAIL no log e o MMTOTAL ainda nao possui contador/veredicto PIN separado.
+Distinguir: METRICA_PIN_IMPLEMENTADA = SIM; VALOR_ABAIXO_DO_LIMITE = SIM; GATE_PIN_IMPLEMENTADO_E_TESTADO = NAO. Nao retirar o FAIL legado nem chamar a observacao de execucao do teste oficial completo.
+Q6 offline: achei bom resultado e o reproduzi independentemente em Windows, sem editar fontes do app/candidato. 16384/16384 entradas, max_abs=0.000480652; 64 rows de matmul, max_diff=0.026230345; exit0. Usei ggml-quants.c canonico local como C11 e um alias EXPLICITO quantize_row_q6_K=quantize_row_q6_K_ref, pois o header nao declara o nome chamado no oracle. Exigir comando e dependencias reais do servidor para reproducibilidade. Essa reproducao nao inventa a provenance original.
+Comparacao com o pin: q6_K_get_quant tem corpo igual; repack_q6_K_tiled difere em const, comentarios/espacos e (void)size em vez de GGML_UNUSED(size), mantendo a logica do pack. Declarar adaptacoes, nao VERBATIM literal sem essas ressalvas. O oracle valida o pack offline, nao alloc/set/descriptor reais nem bytes fisicos do device.
+Fused: fonte patchado, NAO buildado/testado. AUDIT_APLICADO/FIX_FONTE = parcial; FUSED_VALIDATED = NAO. Nenhum resultado atual prova a library com esse fix.
+
+2. ACHADO GRAVE: A VACINA R27 E UMA SIMULACAO, NAO CALLBACK REAL
+Arquivo r27_vacina.c auditado, SHA256 bac6a0c41f66f3d9217a99ee9bf32f30694b6b4b27d21ad81a336b4674c4de5a:
+- linhas51-71: repack_q4_K_tiled tem corpo OMITIDO e escreve somente dst[0]=0xAA. Isso e um STUB/ESPION de chamada, nao o repack real.
+- linhas76-93: set_tensor_dispatch e funcao local reescrita; o case Q6_K tem somente break, sem repack.
+- linhas95-115: get_alloc_size_real nao chama o helper is_repack_type real; reimplementa a decisao com type==Q4_K||Q6_K e a formula local.
+- linhas164-167: t6 e copia de t Q4_K com apenas type alterado. nb continua canonico Q4_K. O mutante alloc Q6 retorna 9216, mas o canonico Q6 correto para esse shape e 13440. Isso revela que a fixture tambem nao representa corretamente o tensor Q6.
+Esse teste tem valor DIDATICO/AUXILIAR para mostrar cases/requisito, mas nao fornece vacina permanente contra regressao no fonte compilado do candidato. Rotular corretamente e retirar CCE_CALLBACK_REAL.
+PROVA EXECUTADA pelo especialista:
+Baseline: exit0/0RED; mutante sem cases K: exit1/3RED; mutante alloc-lista: exit1/2RED.
+Contra-mutante adicional: removi SOMENTE o case Q6_K de set_tensor_dispatch, sem mudar alloc. Resultado exit0/0RED, stdout IDENTICO ao baseline. Logo o teste deixa passar perda total do dispatch Q6.
+Logs reais, ja copiados/verificados, em D:/Projetos/SIG/docs/especialista/AUDITORIA-R27-LOGS/ (run.log, green.log, mut1.log, mut2.log, delete_Q6_dispatch.log e MANIFESTO-SHA256.txt). Nao alegar que uma execucao RED do espelho equivale a teste da funcao produtiva.
+
+3. PRIORIDADE 1 — CONSTRUIR UMA VACINA LIGADA AO CODIGO EFETIVO
+Nao responder com outro C copiado/adaptado e marcador. Escolher UM caminho comprovavel:
+A fixture que compila/chama os callbacks efetivos da copia isolada, com contexto/minimo de dependencia controlado e pack real; OU
+B seam compartilhada realmente usada pelo callback do candidato E pela fixture, com chamada/include/build comprovados e pack real exercitado em teste complementar; OU
+C extracao automatica VERBATIM dos corpos atuais dos callbacks e helpers reais, registrada por hash/diff, compilando-os com adaptador de contexto nos limites externos. A fixture deve ser gerada do fonte correto; nao transcrita manualmente. Stubs externos somente de log/contexto/RPC nao exercitado, identificados. Nao substituem o algoritmo/alocacao sob teste.
+Preservar o app principal: seam e mudancas apenas na copia isolada autorizada. Teste nao exige adotar todo backend ou migrar a base.
+Q4_K E Q6_K devem passar por upload efetivo; validar bytes contra golden/reader independente em TODO payload tiled, com canarios e shapes. Uma chamada contada nao prova pack correto. Mutantes reais do callback (cases omitidos -> memcpy) devem RED separadamente para Q4 e Q6. Mutante alloc sem K deve retornar canonico Q4=9216/Q6=13440 com tensors corretamente inicializados e falhar contra tiled10240/14336.
+Usar nb/ggml_nbytes/row_size corretos, helpers atuais de padding/tile, type tags e contador do callback real. Se alterou o helper no candidato, demonstrar que probe/library usa exatamente aquele codigo. Instalar fixtures no fluxo de testes do lab, nao apenas fonte em docs que nunca roda novamente.
+Negativos: offset!=0, size parcial/maior/inconsistente, canarios antes/depois e zero side effects quando rejeitado; ALLOC_FAIL-REPACK impede upload e graph_compute. Se o contrato suporta apenas full upload, recusar antes pack e explicar API/callsite. Nao normalizar offset dado para zero nem ler tensor completo de um buffer parcial.
+A prova deve incluir RED no fonte da mesma funcao que foi restaurada para GREEN; testes de espelho ficam auxiliares, nao gate.
+
+4. PRIORIDADE 2 — IMPLEMENTAR VEREDICTOS NUMERICOS INDEPENDENTES
+Formalizar no DESIGN-CRITERIO-NUMERICO.md o alcance da escolha do contrato do pin. Preservar criterio legado0.02+0.05*abs(ref), todos logs historicos e seus FAILs. Novo gate nao pode reclassificar resultados anteriores nem liberar handoff/modelo automaticamente.
+Emitir por caso: verdict_legacy e verdict_pin, sum_error2/sum_ref2 com precision suficiente, nmse_pin, N esperado/comparado, nf por lado, unwritten, statuscompute, supports/alloc/flags relevantes. Contadores PASS/FAIL/SKIP por contrato independentes; contabilizar teste de rejeicao de suporte separado de kernel numerico. REPORT repetido nao conta outro attempt.
+PIN aceita somente se referencia/saida finitas, exec/alloc/coverage/sync/sentinel validos, dimensoes/strides comprovados, NMSE valido e <=5e-4. Nao aceitar numero sentinela -1 como score: -1<limite e VERDADEIRO e causaria falso PASS se nao tiver validade separada. Tratar denominador0, NaN/Inf, overflow da soma, output incompleto e ref invalida explicitamente. Definir caso refzero/saida zero por contrato documentado ou classificar ZERO_REF, nunca divisao0/valorinvalido promovido a PASS.
+Teste compilado do gate compartilhado deve incluir: legadoFAIL/PINPASS valido; ambosPASS; NMSEalto; ref/saidaNaN/Inf; coverageparcial; sentinel; execfalha; denominadorzero; nmse=-1 e somas nao finitas. Mutantes que bypassam essas guardas devem RED. Guardas estruturais continuam a detectar certos defeitos locais que a metrica global dilui; nao prometer que qualquer erroisolado excedera NMSE.
+Comparar a formula ao pin e declarar diferenca de precisao: o teste oficial soma produtos gerados de floats, enquanto o probe usa erro double. Usar referencia identificada e justificar diferenca, sem vender execucao do test-backend-ops oficial se apenas sua formula foi usada.
+Rodar Q4 e Q6 B1/B2/B128 no cohort novo SOMENTE apos fixtures/gates/fused aprovados. Uma rodada com rotulos completos, nao series de reinstalls para cada numero. Nao repetir dump velho para 'gerar evidencias' que ja existem.
+
+5. PRIORIDADE 3 — FUSED_FFN: PROVAR CORRECAO ANTES DO REBUILD
+Rastrear is_mergeable_mul_mat -> qkv/pair/ffn -> precompute_fused_ffn_params -> dispatch/ativacao real. Verificar src1_row_size, src1_type, q8_1/q8_0, offsets/strides/allocation e casts correspondentes. Acrescentar ||Q4_K parece coerente com outros precomputes, mas so comparacao e fixture/contrato fechado demonstram a correcao.
+Fixture ligada a funcao real: Q4_1 controle, Q4_K caso-alvo, Q6_K rejeicao/fusionguard, entradas compartilhadas/nao compartilhadas e shape relevante. Mutante retira Q4_K do src1_row_size e deve RED. Nao fixture que recalcula condicional esperado localmente. Se caminho nao alcancavel, registrar predicados/config; nao declarar bug executado em modelo sem prova.
+Nao buildar fixfused e simultaneamente trocar logging no A/B: sao DUAS variaveis. Primeiro fechar fixture e snapshot do fix. A/B logging deve usar baseline congelada, fonte/probe/core/skel/config/input constantes e UM delta identificado; depois fusioncandidate como ensaio separado. Os resultados atuais 2c45ed97 pertencem ao ELF pre-fixfused.
+Ao rebuild novo, registrar hashes/build command/compiler/config e readback do ELF realmente carregado. PID igual ao stream identifica sessao, NAO SHA do APK ou lib. installSuccess+PASS nao identifica cohort. Usar entryAPK/readbackinstalled e mapping/dladdr/buildID quando permitido; nao inventar acesso nao disponivel.
+
+6. REFERENCIAS FINAS B128 — ENTREGAR, NAO MAIS ADIAR
+O valor NMSE baixo reduz preocupacao global, mas nao explica os 10 pontos nem fecha mecanismos. Os CSV/violadores nao sao os vetores completos de pesos/ativacoes/saida; nao dizer que 'dados-base completos' existem so com eles.
+Exportar comhash os MESMOS bytescanonicos/ativacoesfloat e outputCPU/HTP completos. Snapshot raw tiled durante callback/mappingtest-only, sem get_tensor que unpacka. Reusar exports no offline para calcular RscalarCanonical doubleacc e RtiledReader doubleacc; adicionar Ract se contrato permite e rotular quando nao implementado. Tabela dos violadores + metricas de todas8192 entradas + componente que primeiro introduz diferenca.
+Quando usa golden inline, rotular REFERENCE_GOLDEN, nao runtimepayload. As tolerancias do oracle atual (0.05 no peso/0.1 matmul) sao permissivas e nao derivadas do erroFP16; reportar resultados atuais, adicionar expectativa por scale arredondada/limite justificado e casos independentes/holdout. Protecao por bitplanes/canarios/layout nao pode depender so de NMSE global.
+Essa decomposicao nao deve bloquear a criacao dos testes/gates; sao trabalhos offline independentes apos snapshot. Nao afirmar FP16acc confirmado por saida representavel; esse erro de conclusao ja foi retirado.
+
+7. INSTABILIDADE BUILD/LOGGING — ABERTO, EXPERIMENTO LIMITADO
+Badartifact fb8cc5d0 e GREEN8e/2c preservados com fullSHA. Comparar fonte completa e codegen/rodata/relocations antes decidir delta. Redundancia tensor->name (array) nao e fix funcional. Tamanho total do ELF nao mede bytes de instrucoes desse ternario.
+MAX4runsB1 A1-B1-B2-A2, mesma baseline/cohort/config/probe e variavel unica. Contadores efetivos opstage/QUEUE/COMPUTE/enqueue-submit-complete e readback/sync/status no ramoUNWRITTEN. Se nao reproduz, declarar NAO_REPRODUZIDO; nao forcar flake com reboots/pmclear/timers/logspam.
+Nao deixar todos testes offline novamente pendentes por passar a sessao inteira nessa pista. Se incerteza persiste, impedirpromocao e manter diagnosticoOPEN. Nenhuma causa precisa ser inventada para preservar Q4/Q6 minimosGREEN.
+Preflightnumerico0/1/2/3 precisa funcao efetiva/fixture: auditoria do default nao prova todos processos carregam o valor nem exclusao de skip no ramo ruim.
+
+8. ESCOPO E ENTREGA A-H
+Somente copia isolada/probe autorizado; nao modificar app principal, Whisper, UI, defaultsVulkan, c4bfproduto, R2, releases. Semcommit/push/promocao/installSIG. WIP alheio preservado byteabyte; semlimpeza/stash/reset amplos. CPH2747 serial3B15BD00FVE00000 explicito; wifi failclosed; nuncaPJA110; stayon7, semroot/governor/reboot/logdreset/pmclear/uninstall. Estado final do probe documentado comreadback.
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA28.txt em docs/especialista e evidencias em docs/npu-hymt2/smart-rodada28/:
+A identidadescohort/probe/header/config/PID/readback e escopo final;
+B vacina efetiva Q4/Q6 e extra-mutante Q6 removido agoraRED, canarios/offsetpartial;
+C ALLOC_FAIL-flow e opstage/gates reais com comandos/exits;
+D verdictsLEGADO/PIN separados, counters e testsvalidade/zero/invalid;
+E fusionfuncao real/fixture/REDGREEN/build separado;
+F vetores/refsB128 e mecanismo demonstrado ou limitacao especifica;
+G loggingA/B budget/provenance/R16/escopo;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO por prova, COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE separados.
+Minimo de aceiteR28: substituir vacina simulada por prova ligada ao codigo; demonstrar mutanteQ6RED e validacaoNMSE semsentinelfalsoPASS; fixturefusedantesbuild; referenciasfinas executadas ou blockerreal identificado. Se faltar, rotular exatamente o alcance, nao 'quatro entregaveis executados' quando so audit/fonte/logmetrica.
+Depois dessas provas: shapesGGUF c4bf realmente suportados, grafo pequeno com placement/profile, e so depois handoff NPU->GPU sem replay integral e beneficio medido. Nao transformar criterio matmul em autorizacao para liberar Smart. KERNEL_VALIDATEDglobal permanece NAO ate cobertura/contratos/estabilidade suficientes.

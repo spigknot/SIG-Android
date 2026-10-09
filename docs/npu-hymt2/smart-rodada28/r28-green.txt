@@ -1,0 +1,7 @@
+=== green (0 RED esperado... mas achados!) ===
+  [RED] T1 Q4_K upload REAL: leitor vs dequant nas 16384 entradas: n_bad=7968 n_nan=0 max_abs=1.296227
+  [OK ] T2 Q6_K upload REAL: leitor vs dequant nas 16384 entradas: n_bad=0 n_nan=0 max_abs=0.000481
+  [OK ] T3 alloc REAL: Q4_K=10240 (tiled 10240/canon 9216!) Q6_K=14336 (tiled 14336/canon 13440!)
+  [RED] T4a offset!=0 REJEITADO pelo pack real (abort=0 esperado 1!)
+  [RED] T4b size parcial REJEITADO (abort=0 esperado 1!)
+TOTAL: 3 RED

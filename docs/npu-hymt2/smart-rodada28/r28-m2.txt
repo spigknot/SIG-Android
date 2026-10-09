@@ -1,0 +1,6 @@
+=== m2 (SO o Q6_K removido — o contra-mutante!) ===
+  [RED] T1 Q4_K: n_bad=7968 (o mesmo do green!)
+  [RED] T2 Q6_K: n_bad=16065 n_nan=80 max_abs=1965057.141033  => O TESTE PEGA!!! (na vacina R27 passava!)
+  [OK ] T3 alloc REAL: 10240/14336
+  [RED] T4a/T4b
+TOTAL: 4 RED

@@ -1,0 +1,6 @@
+=== m3 (alloc LISTA sem K!) ===
+  [RED] T1 = 7968 (leitor!)
+  [OK ] T2 Q6 OK
+  [RED] T3 alloc: Q4_K=9216 (canon!) Q6_K=13440 (canon!) => RED vs tiled 10240/14336!
+  [RED] T4a/T4b
+TOTAL: 4 RED
