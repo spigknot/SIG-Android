@@ -1,0 +1,13 @@
+MANIFESTO — smart-rodada33 (ALLOC_FAIL + OPSTAGE executados!)
+
+ALLOC_FAIL: T1 NULL => rc-996/upload0/compute0/frees2!; T2 válido executa!; M7 5 RED!
+OPSTAGE: 0/1/2 recusados, 3 permite (flags REAIS htp-ops.h!); M8 3 RED!
+PIPELINE v2: 7 contratos OK + CT1 (adapter-sem-guardas detectado!); fail-flag residual declarado.
+Pendentes: caller/counters, snapshot/refs. KERNEL_VALIDATED: NAO.
+
+64fdf5772efed57545e1ded9a2fe6b79783abf2722c05acc335027ca0b1ed305  r33_alloc_gen.inc  (925 B)
+68e0dca7b556b38dbc83a1e76153879f65cb5fe804c371653128668b84c358ec  r33_extrai.py  (1840 B)
+037a359af490ea160d24e99395df74b0ab5304718b0ba926dce81a62113b0671  r33_flow_test.c  (4534 B)
+3c4345a16a8ea6f6c735e7cf66cc35f6caef569c9f146bdbf87ce69542958ca0  r33_pipeline_v2.sh  (7529 B)
+
+778c683e259e1bf4165aafa384486fa15e9cf6f0e6f67766489017bbc0f667f7  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA33.txt

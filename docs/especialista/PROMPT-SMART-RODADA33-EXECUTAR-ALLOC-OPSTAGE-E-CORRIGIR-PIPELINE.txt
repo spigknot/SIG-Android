@@ -1,0 +1,75 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 33
+PRIORIDADE: EXECUTAR ALLOC_FAIL/OPSTAGE; CORRIGIR PIPELINE SEM OUTRA RODADA SO DE PACKAGING
+===============================================================================
+
+1. PARECER E ESCOPO ACEITO
+A brecha do M6 foi fechada: as saidas mostram rejeicao ativa observada + zero efeitos, e o retorno silencioso agora da RED. O T5 garante que caso valido escreve. Preservar essas provas; nao reconstruir novamente pack/leitor/T4.
+Verifiquei38 hashes dos anexos e igualdade das saidas raiz/export. Matriz: green0RED; m1=4; m2/m3/m4/m5=1; m6=2. Aceito a matriz entregue e a existencia do pipeline.
+Nao aceito PIPELINE_FAIL_CLOSED_VALIDADO. O script foi executado, mas nao implementa parte da validacao declarada. Contraprova e logs em docs/especialista/AUDITORIA-R32-M6-FECHADO-E-EXPORT-NOOP.txt e AUDITORIA-R32-LOGS/.
+O bloco final do script contem apenas pass. Copiei os exports para scratch, troquei green pelo adapter m5 SEM guardas e executei a verificacao original: exit normal, imprime export ok. Ela nao detecta o erro de export historico.
+Nao ha novo defeito de kernel neste achado; e uma falha de validacao/empacotamento. Correcao curta, nao motivo para adiar fluxo mais uma vez.
+
+2. ORDEM OBRIGATORIA DE TRABALHO — FLUXO PRIMEIRO
+Os testes ALLOC_FAIL/opstage foram adiados por varias rodadas e sao offline. Agora nao iniciar outra campanha de mutantes pack, testes MinGW ou organizacao antes destes dois resultados.
+Primeiro localizar/extrair os pontos reais do probe e implementar uma seam de fluxo efetivamente usada pelo caller, ou fixture que compila o codigo extraido sem replica da decisao. Entregar include/chamada/build e contadores reais de side effects.
+ALLOC_FAIL:
+- injetarNULL na alocacaoREPACK realmente selecionada;
+- ALLOC_FAIL explicito, upload0, compute0, cleanup correto;
+- caso valido fazupload/compute, evitando teste noop;
+- mutante continua/fallbacksilencioso aposNULL deveRED;
+- separar suporte, alocacao e bufferdefaultlegitimo. Nao alloc_ok=supports_post como prova de alocacao.
+OPSTAGE:
+- rota numerica exige QUEUE+COMPUTE:0/1/2 rejeitados antesupload/compute;3 executa;
+- injecoes/mutantebypass devemRED na funcao usada pelo probe;
+- valor efetivo deve vir do bootstrap/sessao real, antes primeira inicializacao estatica do registroHexagon; setenv depoisinit nao basta;
+- se nao ha getter, localizar a definicao e instrumentar a copia isolada de modo minimo. Nao inventar API/campo ou tomar falta de arquivo tune por prova de flags;
+- profiling/skip do backend fora da rota numerica pode continuar existindo; o preflight nao e proibicao global desses modos.
+Esses sao os DOIS resultados obrigatorios da R33. Tempo de sessao nao e blocker tecnico que os transforma em CCE. Se uma API/compiler impede o caminho, comando/exit/erro e alternativa focal, nao novo desenho pronto.
+A embalagem pode ser corrigida em paralelo ou logo depois. Nunca fechar novamente 'tempo foi do pipeline' com ambos testes pendentes.
+
+3. AJUSTAR CALLER/COUNTERS NA MESMA INTEGRACAO
+Usar r30_gate ja integrado, nao novo header/replica. Contadores LEGADO/PIN/INVALID/SKIP e controleunsupported separados. Consumir g30 nos resultados da tentativa; manter FAILlegadohistorico, e contar Q5unsupported como controle, nao kernelPASS.
+Inputs da mesma tentativa com flags de alocacao/compute/readback/ref reais. GGML graph_compute normal sincroniza no core local; confirmar contrato do cohort, sem synchronize redundante por suposicao. Sentinel confirma escrita, nao substitui evento/contrato de sincronizacao.
+Teste caller: legacyFAIL/PINPASS, INVALID por erro, SKIP e controleQ5. Mutante ignora veredicto novo ou somaQ5aoPINPASS deveRED. Anexar fonte exatamente compilado e log de contadores, nao so nd/nf como se fossem contagem de suite.
+
+4. CORRIGIR PIPELINE ATUAL, NAO CRIAR OUTRO FRAMEWORK
+Falhas objetivas em r32_pipeline.sh:
+- buildfalha: continue sem acumulador/status final de falha;
+- RRC capturado, mas nenhum contrato valida green0 e mutantes1; crash nao pode passar como mutante detectado;
+- cp suprime erro e nao valida export;
+- Python final abre arquivos e executa pass; imprime exportok sem teste;
+- r32_fixture.c realmente compilado nao veio no export, nem stderr/exitcodes.
+Ajuste minimo:
+A resultado final nao-zero se qualquer buildfalhar, greenfalhar, mutante nao for detectado, erro de export ou incoerencia. Pode coletar os demais erros para diagnostico, mas nao anunciar sucesso final;
+B validar exit e cenario esperado. Para esses testes, green0 e mutantes1; terminacao por sinal/crash/timeout e erro de infraestrutura, nao RED legitimo. Checar as assercoes especificas do defeito, nao apenas qualquer RED;
+C nao usar grepRED como contador (inclui TOTAL). Emitir resumo JSON/CSV comstatus e falhas estruturadas ou parse estrito doTOTAL;
+D verificar semanticamente inputs exportados e igualdadehash comEXATOSarquivoscompilados. Para cada cenario, validar guardas/cases/helper/allocator/mutante previsto; fonte original/comandos/gerados/harness completos. Um checksum so nao detecta adapter incorreto que foi hasheado corretamente;
+E executar contra-testes: compilerfalha; greenfalha; mutanteexit0; runtimecrash; greenexport semguardas; arquivoexport faltante. Pipeline deve terminar nao-zero em todos;
+F exportar harness, headers/inc, scripts/dependencias declaradas, commandline, stdout/stderr, statusbuild/run por cenario. Guardar logglobal do pipeline e seuexit. Buildlogvazio pode ser normal, mas exigeexit registrado;
+G substituir rm-rf de diretoria fixa por diretoria de run nova, ou limitar claramente a area descartavel aprovada. Nao apagar evidencias anteriores.
+Nao fabricardados para demostrarfailclosed: usar injecoes rotuladas em scratch/lab e capturar a execucao real.
+
+5. SNAPSHOT/REFS: UMA CAPTURA, NAO NOVA GRADE
+Depois dos dois testes principais e integraçao do caller, executar uma captura focal Q4B128 no probe autorizado, com o cohort identificado. AdicionarQ6 se cabe na mesma exportacao, mas nao repetir toda bateria6casos por rotina.
+Salvar canonweightsquantizados, actfloat, CPUout/HTPout completos eRAWtiledaposupload no callback/mappingtest-only. Nao usar tensor_getqueunpacka comoRAW. FullSHA, shape/nb, offsets/sizes/canarios e bytes esperados porarquivo. CSVdevioladores nao e substituto.
+Calcular RscalarCanonical e RtiledReaderDOUBLEacc com MESMOSbytes; mostrar10coords e todas8192metricas, primeira introducao de diferencaCPUref/FP16scale/actquant/acc/cast. Quando mecanismo nao reproduzido, hipotese rotulada, nao FP16accporrepresentacao.
+Fullcohort: fonte/header/config->ELFunstripped/strippedAPK->APKentry/instalado/readback/pathcarregado/PID. ebb80bbd prefixoreportado nao encerra essa cadeia. Se historico irrecuperavel, declarar e criarcheckpointnovo; nao reinstalar somenteporhash se readbacknaodestrutivo resolve.
+Se device indisponivel, preservar erroreal e concluir offline/pipeline. Nao alegar deviceblocker sem tentar a captura autorizada; focooffline escolhido nao e bloqueio do aparelho.
+
+6. DEPOIS: FUSAO/ESTABILIDADE/SHAPES — SEM PROMOVER PRODUTO
+FusedR30 testou predicado+expressao, ainda faltamparamfields/consumidores da funcao real e contrato antes grafocomfusaoreal. PreservarQ6guard. LoggingA/BOPEN, budgetMAX4runsB1 comvarunica/codegenantes; sem novos8rebuilds, semternarioredundantecomofix.
+Nao usar esses itens para adiar os dois testesdefluxo; trabalhos restantes seguem checkpoints separados. Quando contratos/cobertura/proveniencia suficientemente aprovados: shapesGGUFproduto c4bf comprofileplacement, grafocurto, handoffNPU->GPUOpenCL/NPU->GPUVulkan semreplay e beneficio medido.
+KERNEL_VALIDATEDglobal=NAO; GRAPH/HANDOFF/PERFORMANCE separados. Regras de aceitematmul nao liberam qualidade de traducao nem NUMGATEhandoff.
+
+7. ESCOPO E ENTREGA A-H
+Somente copia isolada/probe autorizado. SIGprincipal/Whisper/UI/defaultVulkan/c4bf/R2/releasesintocados. Semcommit/push/publicacao/installSIG. WIPSTT/MODULE-MAP/outros preservado; semstash/reset/restoresamplos/limpeza. CPHserial3B15BD00FVE00000/wififailclosed; nuncaPJA110; stayon7; semroot/governor/reboot/logdreset/pmclear/uninstall. Estadofinalreadbackregistrado.
+RELATORIO-SMART-DUAL-BACKEND-RODADA33.txt docs/especialista; evidenciasdocs/npu-hymt2/smart-rodada33/ comfullSHA/exits/totais:
+A ALLOC_FAIL fluxo executado/sideeffects e mutante;
+B opstage0..3 no fluxo real/valorbootstrap e mutante;
+C caller/countersconsumindoLEGADO/PIN/INVALID/SKIP/controle;
+D pipelinecorrectoexecutado e contra-testesde falha/export;
+E snapshot/refsB128 oublockerobjetivo;
+F fullcohort/fusao/estabilidade comfronteiras precisas;
+G escopo/WIP/estadofinal/R16;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e gatesglobaisseparados.
+MinimoR33 e A+B executados, nao 'designextraivel pronto'. M6jaestaencerrado no teste entregue; nao outra rodada inteira so de vacina/packaging enquanto fluxo nao recebe injecoes.

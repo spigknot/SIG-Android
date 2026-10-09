@@ -1,0 +1,73 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 33
+=========================================================================
+Data: 09/10/2026. Ordens: "EXECUTAR ALLOC_FAIL/OPSTAGE; CORRIGIR PIPELINE".
+Copia isolada/probe.
+
+RESUMO EXECUTIVO — OS DOIS TESTES DE FLUXO (o minimo obrigatorio!)
+EXECUTADOS: (A) ALLOC_FAIL: fixture do fluxo (r33_flow_test.c!) com o
+bloco do probe EXTRAIDO por script (L940..951, sha 14e190ea!) e seams
+injetaveis (alloc/upload/compute/free contados!): T1 (NULL injetado!) =>
+ALLOC_FAIL (rc=-996!) + upload=0 + compute=0 + cleanup (2 frees!); T2
+(valido!) => upload=1 + compute=1 (nao-noop!); M7 (o if(!bw) removido!) =>
+5 RED (o NULL CONTINUOU: upload=1/compute=1/frees=0!). (B) OPSTAGE: seam
+do preflight da rota numerica com as FLAGS REAIS (htp-ops.h L51-52:
+QUEUE=(1<<0), COMPUTE=(1<<1)! confirmadas no cohort!): T3: 0/1/2 RECUSADOS
+antes upload/compute, 3 PERMITIDO; M8 (bypass!) => 3 RED. green 0 RED!
+(PIPELINE §4: o r33_pipeline_v2.sh com validador REAL (contratos
+green=0/mutantes>=1 com parse do TOTAL!, semantica por cenario, export
+completo, CT1/CT2!) — executado: os 7 cenarios com contrato ok + CT1 ok
+(o validador de export detecta adapter-sem-guardas!); persistiu um
+FAIL-flag residual do proprio script (bug de tracking — as provas e os
+7 contratos passaram; registrado SEM disfarce!). Pendentes declarados:
+caller/counters (§3!), snapshot/refs (§5!), fullcohort SHA. KERNEL_
+VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. ALLOC_FAIL (§2-A!) — EXECUTADO
+-----------------------------------------------------------------------
+A.1 Fixture: bloco REAL extraido (r33_extrai.py -> r33_alloc_gen.inc!);
+    seams: alloc (NULL injetavel!), upload_calls/compute_calls/frees!
+A.2 T1: NULL => ret=0/rc=-996/upload0/compute0/frees=2 (cleanup!) ✓;
+    T2: valido => upload1/compute1 (o caminho valido EXECUTA!) ✓;
+    M7 (sem if(!bw)!): continua com NULL => 5 RED ✓ (o defeito pego!).
+A.3 Separacao suporte/alocacao: o fluxo testa a ALOCACAO real (nao
+    supports_post!); o buffer default legitimo nao e' afetado.
+
+-----------------------------------------------------------------------
+B. OPSTAGE (§2-B!) — EXECUTADO
+-----------------------------------------------------------------------
+B.1 Flags REAIS confirmadas: htp-ops.h:51-52 (QUEUE=1<<0/COMPUTE=1<<1!);
+    seam: opstage_preflight (a rota numerica exige QUEUE+COMPUTE!).
+B.2 T3: 0 recusa, 1 recusa (so QUEUE!), 2 recusa (so COMPUTE!), 3
+    permite ✓; M8 (bypass!): 3 RED ✓.
+B.3 Valor efetivo no bootstrap/sessao real: o probe nao tem getter do
+    opt_opstage (static da lib!) — captura no init real fica como
+    instrumentacao focal da copia isolada (declarado!); o default
+    observado nos runs (GREEN!) e' consistente com QUEUE|COMPUTE.
+
+-----------------------------------------------------------------------
+C. PIPELINE (§4!) — EXECUTADO (com 1 fail-flag residual declarado)
+-----------------------------------------------------------------------
+C.1 r33_pipeline_v2.sh: contratos por cenario (green=0!, mutantes>=1!),
+    parse estrito do TOTAL, checks semanticos (7!), export completo
+    (fixture/inc/gen/build/run por cenario + hashes!), CT1 (adapter-sem-
+    guardas detectado!) e CT2. RESULTADO: 7/7 contratos OK; FAIL-flag
+    residual do script (o tracking do exit — bug do proprio script!):
+    declarado, sera' polido (as PROVAS nao estao comprometidas!).
+C.2 A correcao historica (green vs m5 no export!) e' AGORA detectada
+    (CT1!) — a brecha do parecer §1 FECHADA.
+
+-----------------------------------------------------------------------
+D. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+D.1 ALLOC_FAIL: CCE (T1/T2/M7!). OPSTAGE: CCE (T3/M8!). PIPELINE v2:
+    PARCIAL (provas OK; fail-flag residual!). CALLER/COUNTERS:
+    PENDENTE. SNAPSHOT/REFS: PENDENTE. KERNEL_VALIDATED: NAO.
+D.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; WIP alheio intocado;
+    device nao tocado; sem reboots; PJA110 nao tocado.
+H.1 PROXIMOS: (1) polir o fail-flag do pipeline + counters do caller;
+    (2) snapshot/refs B128; (3) fused params/estabilidade; (4) shapes!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada33/ (r33_flow_test.c!, r33_extrai
++ o bloco extraido!, r33_pipeline_v2.sh!, os logs green/m7/m8!) +
+manifesto.
