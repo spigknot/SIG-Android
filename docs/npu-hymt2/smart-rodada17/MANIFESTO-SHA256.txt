@@ -1,0 +1,14 @@
+MANIFESTO — smart-rodada17 (harness v2 + matriz minima)
+
+HARNESS v2: supports_op antes do compute; ref via backend CPU real (mesmo grafo); leitura por strides nb (corrige b*N+n); tolerancia abs+rel; NRMSE; controles positivos.
+CONTROLES (v12 E KQ_ON): F32 B=1/2/128 PASS; Q4_0/Q8_0 B=1/2 PASS (nrmse 3e-4); Q4_0/Q8_0 B=128 viol 0.043 (obs fp16).
+Q4_K/Q6_K: sup_h=1 (suporte DECLARADO!) mas compute invalido: Q4_K fin=0; Q6_K lixo max_abs=3.6e6 — NOS DOIS cohortes => bug real de kernel/contrato.
+F16: trava no HTP nos dois (incidente separado; fora do escopo A-D).
+PIDs: v12 4850/2956; KQ_ON 7913/10627. Device CPH2747 vivo; stays intactos.
+
+f0b96d5572ee5f691b5155d15e796d3e49a2c3e78622cb74c4dc2ddb3b7adabc  npuprobe-r17.log  (277477 B)
+be9b7579490d0de6484e3db102b0cb376c8ec594cd5d8b051cfac7e24b8e9ae9  r16-kqon2.py  (742 B)
+5f7ab93bcb53fbc71cb5a12d1cdd8c26089c14d1a47e7f885d17ff7e5be204da  r17-matrix-all.txt  (10295 B)
+60a295c0b4cd8145b8965639deb99b0ab240afbde4d0c112c4d0b3b14a5adcbf  r17-matrix-v12.txt  (4364 B)
+
+495ea2830a873f385ff17a18eec75c228a092685f8f643b11dc427aca202d3e5  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA17.txt

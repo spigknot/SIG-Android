@@ -1,0 +1,12 @@
+MANIFESTO — smart-rodada18 (Fase I: identidade + contradicao resolvida)
+
+CONTRADICAO RESOLVIDA: sup_h=1 do R17 era do KQ_ON (rotulagem); V12 limpo mede sup_h=0 p/ Q4_K/Q6_K => SKIP honesto (o fonte manda).
+V12 (PID 25572, 03:07): MMTOTAL pass=8 fail=2 skip=6; F32 B=1/2/128 PASS; Q4_0/Q8_0 B=1/2 PASS + B=128 FAIL tolerancia (viol 0.043 = FAIL real).
+KQ_ON (PIDs 7913/10627): sup_h=1 e compute invalido (Q4_K fin=0; Q6_K lixo 3.6e6) = bug REAL do candidato.
+IDENTIDADE ELF: device carrega o STRIPPED do APK (libllama 2.95MB vs 35.5MB; htp-v81 sha lido por toybox == entry do APK; readback OK).
+
+35f627bd528d8b237b57a89107c0d00bfa2c207fe3eb7d3995b3e12298579836  npuprobe-r17.log  (3173284 B)
+1b6ece1b5e21d1ff0f14cbc63e4ff2df28635bf60f4b772cdf759b51a014b020  r18-fase1-v12.txt  (7617 B)
+8685975d5089913f47c2af441b6213f5bdfcdc8460cd5dd97be53cad0af6dbdf  r18-sha.py  (957 B)
+
+79513b184ab68f594ef62937e9494339534983ec4bcaa33fd6a1334e4719726c  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA18.txt

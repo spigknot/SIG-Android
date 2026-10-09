@@ -1,0 +1,81 @@
+10-09 01:59:22.961 I/NpuProbe(11982): MM[K=256 N=64 B=1 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:02:19.006 I/NpuProbe( 2956): MM[K=256 N=64 B=1 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:04:26.575 I/NpuProbe( 4850): MM[K=256 N=64 B=1 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:04:26.577 I/NpuProbe( 4850): MM[K=256 N=64 B=1 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05176 nrmse=0.00026 viol=0.00000 PASS
+10-09 02:04:26.579 I/NpuProbe( 4850): MM[K=256 N=64 B=1 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05052 nrmse=0.00026 viol=0.00000 PASS
+10-09 02:04:26.583 I/NpuProbe( 4850): MM[K=256 N=64 B=1 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:04:26.586 I/NpuProbe( 4850): MM[K=256 N=64 B=1 q6_K] hrc=0 crc=0 fin=0 max_abs=3607354.52518 nrmse=11049.70094 viol=3607345.13144 FAIL(exec)
+10-09 02:04:26.588 I/NpuProbe( 4850): MM[K=256 N=64 B=2 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:04:26.591 I/NpuProbe( 4850): MM[K=256 N=64 B=2 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07724 nrmse=0.00033 viol=0.00000 PASS
+10-09 02:04:26.593 I/NpuProbe( 4850): MM[K=256 N=64 B=2 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07687 nrmse=0.00034 viol=0.00000 PASS
+10-09 02:04:26.596 I/NpuProbe( 4850): MM[K=256 N=64 B=2 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:04:26.600 I/NpuProbe( 4850): MM[K=256 N=64 B=2 q6_K] hrc=0 crc=0 fin=0 max_abs=3607354.52518 nrmse=11049.70094 viol=3607345.13144 FAIL(exec)
+10-09 02:04:26.609 I/NpuProbe( 4850): MM[K=256 N=64 B=128 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07092 nrmse=0.00022 viol=0.00000 PASS
+10-09 02:04:26.612 I/NpuProbe( 4850): MM[K=256 N=64 B=128 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13705 nrmse=0.00032 viol=0.04331 FAIL
+10-09 02:04:26.617 I/NpuProbe( 4850): MM[K=256 N=64 B=128 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13245 nrmse=0.00031 viol=0.04557 FAIL
+10-09 02:04:26.621 I/NpuProbe( 4850): MM[K=256 N=64 B=128 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:04:26.626 I/NpuProbe( 4850): MM[K=256 N=64 B=128 q6_K] hrc=0 crc=0 fin=0 max_abs=3042.36145 nrmse=30.53398 viol=3037.35952 FAIL(exec)
+10-09 02:04:26.627 I/NpuProbe( 4850): MM rejeicao Q5_K: htp supports=0 (esperado 0)
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=1 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=1 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05176 nrmse=0.00026 viol=0.00000 PASS
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=1 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=1 q6_K] hrc=0 crc=0 fin=0 max_abs=3607354.52518 nrmse=11049.70094 viol=3607345.13144 FAIL(exec)
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=1 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05052 nrmse=0.00026 viol=0.00000 PASS
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=128 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07092 nrmse=0.00022 viol=0.00000 PASS
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=128 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13705 nrmse=0.00032 viol=0.04331 FAIL
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=128 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=128 q6_K] hrc=0 crc=0 fin=0 max_abs=3042.36145 nrmse=30.53398 viol=3037.35952 FAIL(exec)
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=128 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13245 nrmse=0.00031 viol=0.04557 FAIL
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=2 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=2 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07724 nrmse=0.00033 viol=0.00000 PASS
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=2 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=2 q6_K] hrc=0 crc=0 fin=0 max_abs=3607354.52518 nrmse=11049.70094 viol=3607345.13144 FAIL(exec)
+10-09 02:04:26.627 I/NpuProbe( 4850): MM[K=256 N=64 B=2 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07687 nrmse=0.00034 viol=0.00000 PASS
+10-09 02:04:26.627 I/NpuProbe( 4850): MMTOTAL pass=8 fail=8 skip=0
+10-09 02:07:12.372 I/NpuProbe( 7913): MM[K=256 N=64 B=1 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:07:12.375 I/NpuProbe( 7913): MM[K=256 N=64 B=1 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05176 nrmse=0.00026 viol=0.00000 PASS
+10-09 02:07:12.377 I/NpuProbe( 7913): MM[K=256 N=64 B=1 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05052 nrmse=0.00026 viol=0.00000 PASS
+10-09 02:07:12.381 I/NpuProbe( 7913): MM[K=256 N=64 B=1 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:07:12.384 I/NpuProbe( 7913): MM[K=256 N=64 B=1 q6_K] hrc=0 crc=0 fin=0 max_abs=3607354.52518 nrmse=11049.70094 viol=3607345.13144 FAIL(exec)
+10-09 02:07:12.387 I/NpuProbe( 7913): MM[K=256 N=64 B=2 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:07:12.389 I/NpuProbe( 7913): MM[K=256 N=64 B=2 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07724 nrmse=0.00033 viol=0.00000 PASS
+10-09 02:07:12.392 I/NpuProbe( 7913): MM[K=256 N=64 B=2 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07687 nrmse=0.00034 viol=0.00000 PASS
+10-09 02:07:12.395 I/NpuProbe( 7913): MM[K=256 N=64 B=2 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:07:12.397 I/NpuProbe( 7913): MM[K=256 N=64 B=2 q6_K] hrc=0 crc=0 fin=0 max_abs=3607354.52518 nrmse=11049.70094 viol=3607345.13144 FAIL(exec)
+10-09 02:07:12.401 I/NpuProbe( 7913): MM[K=256 N=64 B=128 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07092 nrmse=0.00022 viol=0.00000 PASS
+10-09 02:07:12.404 I/NpuProbe( 7913): MM[K=256 N=64 B=128 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13705 nrmse=0.00032 viol=0.04331 FAIL
+10-09 02:07:12.408 I/NpuProbe( 7913): MM[K=256 N=64 B=128 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13245 nrmse=0.00031 viol=0.04557 FAIL
+10-09 02:07:12.413 I/NpuProbe( 7913): MM[K=256 N=64 B=128 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:07:12.418 I/NpuProbe( 7913): MM rejeicao Q5_K: htp supports=0 (esperado 0)
+10-09 02:07:12.418 I/NpuProbe( 7913): MM[K=256 N=64 B=128 q6_K] hrc=0 crc=0 fin=0 max_abs=3042.36145 nrmse=30.53398 viol=3037.35952 FAIL(exec)
+10-09 02:07:12.418 I/NpuProbe( 7913): MMTOTAL pass=8 fail=8 skip=0
+10-09 02:07:12.419 I/NpuProbe( 7913): MM rejeicao Q5_K: htp supports=0 (esperado 0)
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=1 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=1 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05176 nrmse=0.00026 viol=0.00000 PASS
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=1 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=1 q6_K] hrc=0 crc=0 fin=0 max_abs=3607354.52518 nrmse=11049.70094 viol=3607345.13144 FAIL(exec)
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=1 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05052 nrmse=0.00026 viol=0.00000 PASS
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=128 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07092 nrmse=0.00022 viol=0.00000 PASS
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=128 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13705 nrmse=0.00032 viol=0.04331 FAIL
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=128 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=128 q6_K] hrc=0 crc=0 fin=0 max_abs=3042.36145 nrmse=30.53398 viol=3037.35952 FAIL(exec)
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=128 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13245 nrmse=0.00031 viol=0.04557 FAIL
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=2 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=2 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07724 nrmse=0.00033 viol=0.00000 PASS
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=2 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=2 q6_K] hrc=0 crc=0 fin=0 max_abs=3607354.52518 nrmse=11049.70094 viol=3607345.13144 FAIL(exec)
+10-09 02:07:12.419 I/NpuProbe( 7913): MM[K=256 N=64 B=2 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07687 nrmse=0.00034 viol=0.00000 PASS
+10-09 02:07:12.419 I/NpuProbe( 7913): MMTOTAL pass=8 fail=8 skip=0
+10-09 02:09:49.005 I/NpuProbe(10627): MM trace: inicio K=256 N=64 B=1 q4_K sup_h=1 sup_c=1
+10-09 02:09:49.008 I/NpuProbe(10627): MM[K=256 N=64 B=1 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:09:49.009 I/NpuProbe(10627): MM trace: inicio K=256 N=64 B=2 q4_K sup_h=1 sup_c=1
+10-09 02:09:49.011 I/NpuProbe(10627): MM[K=256 N=64 B=2 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:09:49.014 I/NpuProbe(10627): MM trace: inicio K=256 N=64 B=128 q4_K sup_h=1 sup_c=1
+10-09 02:09:49.016 I/NpuProbe(10627): MM rejeicao Q5_K: htp supports=0 (esperado 0)
+10-09 02:09:49.016 I/NpuProbe(10627): MM trace: inicio K=256 N=64 B=1 q4_K sup_h=1 sup_c=1
+10-09 02:09:49.016 I/NpuProbe(10627): MM trace: inicio K=256 N=64 B=128 q4_K sup_h=1 sup_c=1
+10-09 02:09:49.016 I/NpuProbe(10627): MM trace: inicio K=256 N=64 B=2 q4_K sup_h=1 sup_c=1
+10-09 02:09:49.016 I/NpuProbe(10627): MM[K=256 N=64 B=1 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:09:49.016 I/NpuProbe(10627): MM[K=256 N=64 B=128 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:09:49.016 I/NpuProbe(10627): MM[K=256 N=64 B=2 q4_K] hrc=0 crc=0 fin=0 max_abs=0.00000 nrmse=-1.00000 viol=0.00000 FAIL(exec)
+10-09 02:09:49.016 I/NpuProbe(10627): MMTOTAL pass=1 fail=3 skip=0

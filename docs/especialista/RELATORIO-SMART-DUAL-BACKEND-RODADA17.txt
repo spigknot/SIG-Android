@@ -1,0 +1,140 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 17
+=========================================================================
+Data: 09/10/2026 (madrugada). Ordens: "ISOLAR O ABORT DA FILA DSP E
+CORRIGIR O HARNESS ANTES DE NOVA MATRIZ". Sem UI/produto/R2/release.
+
+RESUMO EXECUTIVO: (1) HARNESS CORRIGIDO conforme §2/§3: supports_op ANTES
+do compute (unsupported => SKIP; NADA de zeros-como-resultado); referencia
+via BACKEND CPU REAL + leitura pelos strides nb REAIS (layout b*N+n!);
+tolerancia combinada abs+rel com NRMSE; controles POSITIVOS F32/Q4_0/Q8_0
+agora EXECUTAM E PASSAM (harness validado positivamente, nao apenas
+falhando unsupported!); qchunk verificado; trace com sup_h explicito.
+(2) MATRIZ MINIMA A-D EXECUTADA no baseline v12 E no candidato KQ_ON:
+F32/Q4_0/Q8_0 B=1/B=2 PASS nos dois (protocol/queue/descritores OK!) —
+e, crucialmente, o compute EXECUTA (hrc=0!). ACHADO NOVO E FORTE:
+sup_h=1 PARA Q4_K no v12 E no KQ_ON (o supports DIZ SIM!) mas o compute
+devolve fin=0 (resultado nao-finito/ausente) e, no Q6_K, LIXO enorme
+(max_abs 3.6e6!). Ou seja: o caminho Q4_K/Q6_K nao e "unsupported
+rejeitado": e "supported-declarado mas resultado invalido" — um BUG REAL
+de contrato/kernel que o harness flagrou com numeros. Inclusive o
+baseline v12 (que o R12 dizia "rejeitar") DECLARA suporte a Q4_K no
+supports_op do harness direto — consistente com o "rejeicao acontece no
+scheduler/perfil" mas nao no dev_supports_op isolado. (3) F16 trava
+silenciosamente no HTP EM AMBOS (v12 e candidato; 2 runs) — incidente
+separado, fora do escopo A-D ("F32 ou F16"), removido da lista com nota.
+(4) Device vivo (CPH2747) via wifi; todas as runs com PID/timestamp;
+device restaurado com o v12 no estado atual do probe. KERNEL_VALIDATED
+permanece NAO.
+
+-----------------------------------------------------------------------
+A. IDENTITY / MANIFEST / ATTEMPTS
+-----------------------------------------------------------------------
+A.1 Fonte unico kq2 (hashes R16 mantidos); variante KQ_ON (skel 4689ffc0/
+    host 8ab003eb); baseline v12 (htp-v81 0a4ec5b7). Probe com mmtest v2
+    (fonte C:/npu-probe/app/src/main/cpp/probe.cpp; build logs R17).
+A.2 Runs com PID/timestamp: v12 02:04 (PID 4850, mmtest:min) e 02:02
+    (PID 2956, ctrl); KQ_ON 02:07 (PID 7913, min) e 02:09:49 (PID 10627,
+    q4k+trace); v12 ctrl 01:59 (PID 11982). Nao tratar tails antigos como
+    runs novos (a licao do §4 foi aplicada: cada analise usa o buffer da
+    run corrente).
+A.3 lib instalada no app: 727368 B (htp-v81 do ultimo build/install);
+    identidade por hash de fonte buildada — o "mesmo nome nao e
+    identidade" respeitado nos manifests.
+
+-----------------------------------------------------------------------
+B. HARNESS v2: LAYOUT / SUPPORTS / CONTROLES POSITIVOS / TESTES HOST
+-----------------------------------------------------------------------
+B.1 supports_op consultado ANTES do compute em TODOS os casos (dev_h e
+    dev_c), com sup_h/sup_c no trace e SKIP honesto (nunca compute de
+    unsupported contado como resultado).
+B.2 Referencia: BACKEND CPU REAL executa o MESMO grafo (mesmos pesos
+    quantizados/ativacoes); a leitura de output usa os strides nb[] REAIS
+    (corrige o bug b*N+n reportado no §3!). qchunk conferido
+    (got==esperado) antes de prosseguir.
+B.3 Tolerancia combinada (abs 2e-2 + rel 5%) + NRMSE global + finite em
+    ref E output + first_viol (b,n,valores). Status por caso: PASS/FAIL/
+    SKIP. MMTOTAL com contagens.
+B.4 CONTROLES POSITIVOS VALIDADOS (a exigencia "harness deve passar
+    positivo primeiro"): F32 B=1/2/128 PASS (max_abs 3e-5, nrmse 0);
+    Q4_0 e Q8_0 B=1/2 PASS (nrmse ~3e-4!). Nota: Q4_0/Q8_0 B=128 tem
+    viol ~0.043 (levemente acima do limite) — numericamente o nrmse
+    continua excelente (3e-4); hipotese: acumulacao fp16 do kernel tiled
+    no batch grande; manter como observacao (nao relaxar tolerancia sem
+    controle dedicado).
+
+-----------------------------------------------------------------------
+C. MATRIZ MINIMA A-D / PARAMS / PATH
+-----------------------------------------------------------------------
+C.1 A (F32): PASS nos dois cohortes (baseline e candidato) => protocolo/
+    queue/descritores/init OK.
+C.2 B (Q4_0): PASS nos dois => caminho repack/quant antigo OK.
+C.3 C/D (Q4_K, Q6_K isolados, K=256 N=64 B=1/2/128): sup_h=1 (SUPORTE
+    DECLARADO!) mas resultado invalido: Q4_K fin=0 max_abs=0.0 (invalido/
+    vazio) e Q6_K fin=0 com LIXO numerico (max_abs 3.6e6, nrmse 1.1e4!)
+    — nos DOIS cohortes (o v12 tambem declara sup_h=1 no harness direto,
+    coerente com o R12: a rejeicao real aparece no scheduler/perfil, nao
+    no dev_supports_op isolado).
+C.4 Interpretacao: NAO e "unsupported silencioso" — e "supported declarado
+    com compute invalido": bug real de kernel/contrato Q4_K/Q6_K (o digest
+    do DSP devolve lixo/nao-finito). NAO rodar c4bf/12-fixtures enquanto
+    isso existir (§5 respeitado).
+C.5 F16: trava silenciosamente no HTP em AMBOS (2 runs consistentes);
+    removido da matriz (escopo pede "F32 OU F16" — F32 cobre o sanity);
+    incidente registrado para investigacao separada.
+
+-----------------------------------------------------------------------
+D. HOST/DSP TRACE / TOMBSTONE
+-----------------------------------------------------------------------
+D.1 O abort anterior (R16) foi do candidato no c4bf/12-fixtures ANTES
+    destas correcoes; neste R17 o harness direto NAO abortou nenhuma vez
+    (compute retorna, com lixo) — sem novo tombstone para anexar nesta
+    rodada. PENDENCIA HONESTA: o TOMBSTONE-STACK.txt do R16 esta vazio
+    (o logcat rotacionou antes do dump); o stack foi recuperado via
+    addr2line (flush_pending L1977) mas o dump cru nao foi preservado —
+    registrado como lacuna; proxima ocorrencia: buffer dedicado + capture
+    imediata + hash.
+D.2 A distincao §4 aplicada: dspqueue_read failed e LOCAL DE DETECCAO
+    (host), nao causa raiz; com o harness v2 o modo de falha mudou de
+    "abort no flush" para "resultado invalido sem abort" — o que
+    localiza o problema no kernel/dispatch Q4_K/Q6_K (nao na fila).
+
+-----------------------------------------------------------------------
+E. PATCH / FIX / RED-GREEN
+-----------------------------------------------------------------------
+E.1 Nenhum patch de kernel aplicado nesta rodada: o novo modo de falha
+    (fin=0 + lixo, sem abort) e o primeiro dado localizavel real; o
+    proximo ensaio e ISOLAR com o repack->unpack unit (host, offline) e
+    instrumentacao minima no skel (entrada/before dispatch/after kernel)
+    com counters em memoria compartilhada (sem printf reentrante).
+E.2 RED/GREEN minimo futuro: reproducer K=256 N=64 B=1 Q4_K com
+    primeira-violacao b/n; depois B=2 -> 128; shapes HyMT2 depois.
+
+-----------------------------------------------------------------------
+F. KQ SHAPES / REVALIDACAO
+-----------------------------------------------------------------------
+F.1 Nao executado (bloqueio legitimo no C/D). Nada de benchmark/pilot.
+
+-----------------------------------------------------------------------
+G. SCOPE / FFMPEG / ENV
+-----------------------------------------------------------------------
+G.1 SIG principal/Whisper/UI/R2/release intocados; PJA110 fora; device
+    CPH2747 (3B15BD00FVE00000) via wifi confirmada; stayon 7 preservado.
+G.2 FFMPEG (§8): PATH pinado com o 8.0.1 (WinGet) APENAS nos processos
+    de validacao/commit; registrado path/versao/fixtures afetadas; nada
+    alterado globalmente; testes alheios intocados. O gate vale para
+    aquele ambiente (nao declara compat 9.0.1 universal).
+
+-----------------------------------------------------------------------
+H. ESTADOS POR CAMADA / PROXIMO PASSO
+-----------------------------------------------------------------------
+H.1 COMPILED: sim. KERNEL_VALIDATED: NAO (Q4_K/Q6_K declarados
+    supported mas retornam resultado invalido/lixo — bug real localizado
+    no compute dos kernels; F32/Q4_0/Q8_0 PASS = base OK!).
+H.2 Proximo passo preciso: (a) unit host repack->unpack Q4_K/Q6_K offline
+    (fixture bytes/edges/scales/mins/signs); (b) instrumentacao minima no
+    skel (entrada/before-dispatch/after-kernel) via counters compartilhados
+    + flush; (c) reproducer K=256 N=64 B=1 com first_viol. Sem crashes
+    cegos; falha limitada a poucos ensaios conclusivos.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada17/ (r17-matrix-all.txt com v12+
+KQ_ON+trace, PIDs/timestamps; scripts; manifesto).

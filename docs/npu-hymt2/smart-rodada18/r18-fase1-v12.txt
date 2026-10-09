@@ -1,0 +1,75 @@
+10-09 03:06:12.035 I/NpuProbe(13734): MM trace: inicio K=256 N=64 B=1 q4_K sup_h=0 sup_c=1
+10-09 03:06:12.035 I/NpuProbe(13734): MM[K=256 N=64 B=1 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:06:12.037 I/NpuProbe(13734): MM trace: inicio K=256 N=64 B=2 q4_K sup_h=0 sup_c=1
+10-09 03:06:12.037 I/NpuProbe(13734): MM[K=256 N=64 B=2 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:06:12.040 I/NpuProbe(13734): MM trace: inicio K=256 N=64 B=128 q4_K sup_h=0 sup_c=1
+10-09 03:06:12.040 I/NpuProbe(13734): MM[K=256 N=64 B=128 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:06:12.040 I/NpuProbe(13734): MMTOTAL pass=1 fail=0 skip=3
+10-09 03:06:12.041 I/NpuProbe(13734): MM trace: inicio K=256 N=64 B=1 q4_K sup_h=0 sup_c=1
+10-09 03:06:12.041 I/NpuProbe(13734): MM trace: inicio K=256 N=64 B=128 q4_K sup_h=0 sup_c=1
+10-09 03:06:12.041 I/NpuProbe(13734): MM trace: inicio K=256 N=64 B=2 q4_K sup_h=0 sup_c=1
+10-09 03:06:12.041 I/NpuProbe(13734): MM[K=256 N=64 B=1 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:06:12.041 I/NpuProbe(13734): MM[K=256 N=64 B=128 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:06:12.041 I/NpuProbe(13734): MM[K=256 N=64 B=2 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:06:12.041 I/NpuProbe(13734): MMTOTAL pass=1 fail=0 skip=3
+10-09 03:07:40.237 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 f32 sup_h=1 sup_c=1
+10-09 03:07:40.239 I/NpuProbe(25572): MM[K=256 N=64 B=1 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 03:07:40.240 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 q4_0 sup_h=1 sup_c=1
+10-09 03:07:40.242 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 q8_0 sup_h=1 sup_c=1
+10-09 03:07:40.242 I/NpuProbe(25572): MM[K=256 N=64 B=1 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05176 nrmse=0.00026 viol=0.00000 PASS
+10-09 03:07:40.244 I/NpuProbe(25572): MM[K=256 N=64 B=1 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05052 nrmse=0.00026 viol=0.00000 PASS
+10-09 03:07:40.247 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 q4_K sup_h=0 sup_c=1
+10-09 03:07:40.247 I/NpuProbe(25572): MM[K=256 N=64 B=1 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.249 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 q6_K sup_h=0 sup_c=1
+10-09 03:07:40.249 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 f32 sup_h=1 sup_c=1
+10-09 03:07:40.249 I/NpuProbe(25572): MM[K=256 N=64 B=1 q6_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.251 I/NpuProbe(25572): MM[K=256 N=64 B=2 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 03:07:40.252 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 q4_0 sup_h=1 sup_c=1
+10-09 03:07:40.257 I/NpuProbe(25572): MM[K=256 N=64 B=2 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07724 nrmse=0.00033 viol=0.00000 PASS
+10-09 03:07:40.258 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 q8_0 sup_h=1 sup_c=1
+10-09 03:07:40.261 I/NpuProbe(25572): MM[K=256 N=64 B=2 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07687 nrmse=0.00034 viol=0.00000 PASS
+10-09 03:07:40.263 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 q4_K sup_h=0 sup_c=1
+10-09 03:07:40.263 I/NpuProbe(25572): MM[K=256 N=64 B=2 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.264 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 q6_K sup_h=0 sup_c=1
+10-09 03:07:40.264 I/NpuProbe(25572): MM[K=256 N=64 B=2 q6_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.266 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 f32 sup_h=1 sup_c=1
+10-09 03:07:40.268 I/NpuProbe(25572): MM[K=256 N=64 B=128 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07092 nrmse=0.00022 viol=0.00000 PASS
+10-09 03:07:40.270 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 q4_0 sup_h=1 sup_c=1
+10-09 03:07:40.271 I/NpuProbe(25572): MM[K=256 N=64 B=128 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13705 nrmse=0.00032 viol=0.04331 FAIL
+10-09 03:07:40.273 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 q8_0 sup_h=1 sup_c=1
+10-09 03:07:40.275 I/NpuProbe(25572): MM[K=256 N=64 B=128 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13245 nrmse=0.00031 viol=0.04557 FAIL
+10-09 03:07:40.278 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 q4_K sup_h=0 sup_c=1
+10-09 03:07:40.278 I/NpuProbe(25572): MM[K=256 N=64 B=128 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.280 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 q6_K sup_h=0 sup_c=1
+10-09 03:07:40.280 I/NpuProbe(25572): MM[K=256 N=64 B=128 q6_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 f32 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 q4_0 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 q4_K sup_h=0 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 q6_K sup_h=0 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=1 q8_0 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 f32 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 q4_0 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 q4_K sup_h=0 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 q6_K sup_h=0 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=128 q8_0 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 f32 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 q4_0 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 q4_K sup_h=0 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 q6_K sup_h=0 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM trace: inicio K=256 N=64 B=2 q8_0 sup_h=1 sup_c=1
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=1 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=1 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05176 nrmse=0.00026 viol=0.00000 PASS
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=1 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=1 q6_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=1 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.05052 nrmse=0.00026 viol=0.00000 PASS
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=128 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07092 nrmse=0.00022 viol=0.00000 PASS
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=128 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13705 nrmse=0.00032 viol=0.04331 FAIL
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=128 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=128 q6_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=128 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.13245 nrmse=0.00031 viol=0.04557 FAIL
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=2 f32/CTRL] hrc=0 crc=0 fin=1 max_abs=0.00003 nrmse=0.00000 viol=0.00000 PASS
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=2 q4_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07724 nrmse=0.00033 viol=0.00000 PASS
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=2 q4_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=2 q6_K] SKIP (htp unsupported; sup_c=1) 
+10-09 03:07:40.281 I/NpuProbe(25572): MM[K=256 N=64 B=2 q8_0/CTRL] hrc=0 crc=0 fin=1 max_abs=0.07687 nrmse=0.00034 viol=0.00000 PASS
+10-09 03:07:40.281 I/NpuProbe(25572): MMTOTAL pass=8 fail=2 skip=6

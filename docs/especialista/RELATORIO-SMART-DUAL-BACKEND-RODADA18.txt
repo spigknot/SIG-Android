@@ -1,0 +1,115 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 18
+=========================================================================
+Data: 09/10/2026 (madrugada). Ordens: "PRIORIDADE: IDENTIDADE HOST E
+CONTRATO DO HARNESS ANTES DE ATRIBUIR FALHA AO DSP". Sem publicacao.
+
+RESUMO EXECUTIVO: A CONTRADICAO BLOQUEANTE FOI RESOLVIDA E ERA UM ERRO DE
+ROTULAGEM DO R17: o "sup_h=1 para Q4_K" reportado foi medido com a lib
+KQ_ON carregada (run 02:09 com trace), nao com o baseline. Medicao limpa
+com o V12 reinstalado (build+install+readback, PID 25572, 03:06-03:07):
+**sup_h=0 PARA Q4_K/Q6_K no baseline** => a consulta direta COINCIDE com o
+fonte (ggml-hexagon.cpp:2783-2853, default false em 2841-42) e o harness
+da SKIP HONESTO (6 SKIPs; nenhum compute de unsupported!). O KQ_ON
+(candidato) mantem sup_h=1 e retorna resultado invalido no compute (bug
+REAL do candidato, coerente). Controles positivos no v12: F32 B=1/2/128
+PASS; Q4_0/Q8_0 B=1/2 PASS; B=128 FAIL de tolerancia (viol 0.043,
+registrado como FAIL real, nao "PASS com observacao"). MMTOTAL v12:
+pass=8 fail=2 skip=6. Identidade de ELF: o cluster de libs instalado e o
+STRIPPED do APK (ex.: libllama 2.949.992 B no device vs 35.520.432 B
+unstripped no jniLibs; htp-v81 710636 B stripped com sha lido por toybox
+== sha do entry do APK). Documentado ambos por design (stripping legitimo
+do gradle). F16 removido (incidente separado). KERNEL_VALIDATED: NAO
+(candidato ainda com compute invalido; a causa do "lixo" segue aberta
+com o caminho novo: agora SEM a ambiguidade de identidade).
+
+-----------------------------------------------------------------------
+A. IDENTIDADE FULL-COHORT (fonte->ELF->stripped->APK->PID)
+-----------------------------------------------------------------------
+A.1 Tabela baseline v12 (esta rodada):
+    - fonte: jnilibs-v12-backup (usado no build do probe);
+    - ELF unstripped (jniLibs): htp-v81 0a4ec5b7ac18a940c8883312... (710636 B
+      unstripped? NAO: 710636 e o proprio unstripped do v12);
+    - ELF stripped (APK entry): 23b7d161f5a4513add0e36fc (710636 B? ambos
+      710636 — o strip nao alterou tamanho deste; libllama: unstripped
+      35.520.432 -> stripped 2.949.992 no APK);
+    - instalado/PID: pasta /data/app/~~... vuUynS4xPK9Qqs7ZZXZGaw/lib/arm64,
+      sha toybox lido == sha do entry do APK (readback OK!);
+    - PID 25572 (run 03:06/03:07) e 13734 (03:06 q4k).
+A.2 Tabela candidato KQ_ON (rodada anterior, para contraste): jniLibs
+    4689ffc0 (htp-v81) / 8ab003eb (libllama) / 9b99d90e (hexagon);
+    stripped no APK com sha distinto por pasta de instalacao; runs 02:07
+    (PID 7913) e 02:09 (PID 10627).
+A.3 METODO: build -> install -> readback por toybox sha256sum no DIR
+    instalado (fresh process a cada troca; app force-stop antes).
+    Documentado que o device carrega o STRIPPED (stripping do gradle
+    legitimo; sem alegacao de erro pelo tamanho).
+
+-----------------------------------------------------------------------
+B. CONTRADICAO RESOLVIDA (supports R12/R17 vs fonte)
+-----------------------------------------------------------------------
+B.1 MEDICAO LIMPA V12: sup_h=0 para Q4_K/Q6_K (trace linha a linha);
+    SKIP honesto (6 de 6 K-quants). => a consulta direta (mesmo grafo
+    descartavel) COINCIDE com o fonte do SIG (default return false).
+B.2 O "sup_h=1" do R17 era do KQ_ON (rotulagem errada, retificada):
+    com o candidato, sup_h=1 e compute invalido (Q4_K fin=0; Q6_K lixo
+    3.6e6) — consistente com o hunk do port que ADICIONA os cases.
+B.3 RETIFICACAO EXPLICITA: a frase R17 ("coerente com R12: rejeicao so no
+    scheduler") fica CORRIGIDA: a rejeicao do baseline aparece SIM na
+    consulta direta (sup_h=0), como o fonte manda; a observacao anterior
+    decorreu de rotulagem entre cohortes.
+
+-----------------------------------------------------------------------
+C. SUPPORTS PRE/POST + BUFFERS/REPACK (o que falta - Fase II)
+-----------------------------------------------------------------------
+C.1 O harness v2 consulta supports num grafo descartavel (pre) e executa
+    em outro grafo alocado. PENDENTE conforme §4 do especialista:
+    registrar supports_post no MESMO grafo executado + o caminho de
+    repack real (supported_mul_mat 2814-2816 exige buffer REPACK para
+    pesos quantizados; default device buffer != repack_buffer_type).
+C.2 Next: construir o grafo com buffer REPACK para os pesos (API real da
+    versao isolada; exemplos/testes do backend), supports_post antes do
+    compute; SKIP/REJECTED_BUFFER se false; CPU-ref finita ANTES do HTP.
+
+-----------------------------------------------------------------------
+D. METRICAS (Fase II)
+-----------------------------------------------------------------------
+D.1 PENDENTE a separacao fina (exec_cpu_ok/exec_htp_ok, nonfinite counts
+    por lado, first_nonfinite(lado,b,n,valor), compared/expected, PRIMEIRO
+    erro preservado, sentinel de output). O codigo atual ja separa PASS/
+    SKIP/FAIL e imprime max_abs/nrmse/viol; a expansao fica para o loop
+    com o probe atualizado (proximo ensaio unico).
+
+-----------------------------------------------------------------------
+E. TESTES OFFLINE/ORACULO (Fase III) / PATCH
+-----------------------------------------------------------------------
+E.1 PENDENTE (repack->unpack com oraculo independente; golden upstream).
+E.2 Nenhum patch de kernel aplicado; o proximo passo e o ensaio unico
+    Fase II (repack + supports_post) para localizar o "lixo" do KQ_ON.
+
+-----------------------------------------------------------------------
+F. SHAPES/GRAFO
+-----------------------------------------------------------------------
+F.1 Nao executados (KERNEL_VALIDATED aberto).
+
+-----------------------------------------------------------------------
+G. SCOPE / PRESERVACAO / FFMPEG
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP alheio (20 arquivos Smart/
+    FFmpeg) INTACTO (nao incluido, sem restore/reset amplo — decisao de
+    seguranca registrada); PJA110 fora; CPH2747 3B15BD00FVE00000 via wifi
+    com identidade; stayon=7 preservado.
+G.2 FFMPEG pin 8.0.1 apenas nos processos de validacao (registrado);
+    nada global; testes alheios intocados.
+
+-----------------------------------------------------------------------
+H. ESTADOS POR CAMADA
+-----------------------------------------------------------------------
+H.1 COMPILED: sim (cohort KQ_ON). KERNEL_VALIDATED: NAO (candidato com
+    compute invalido; baseline correto com SKIP). GRAPH/HANDOFF/PERF: nao.
+H.2 Fase I (identidade+consulta): CCE (fechada nesta rodada!). Fase II
+    (repack/supports_post): PENDENTE (proximo ensaio unico). Fase III/IV:
+    PENDENTES. Bloqueios: nenhum de identidade (resolvido); resta o
+    contrato de buffer/repack.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada18/ (r18-fase1-v12.txt com trace/
+SKIP, PIDs e readback de sha) + manifesto.

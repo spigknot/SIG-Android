@@ -1,0 +1,61 @@
+ORDENS AO EXECUTOR — SMART RODADA 17
+ISOLAR O ABORT DA FILA DSP E CORRIGIR O HARNESS ANTES DE NOVA MATRIZ
+===============================================================================
+
+1. PARECER E PROVAS
+Aceito o resultado negativo real: candidato compilou, foi implantado no probe e abortou no compute. KERNEL_VALIDATED permanece NAO; grafo/performance nao devem prosseguir. Restauracao do baseline e preservacao do SIG foram a direcao correta.
+O especialista leu mmtest em C:/npu-probe/app/src/main/cpp/probe.cpp:834-949 e anexos R16. Nao reexecutou aparelho. Encontrou dois problemas do harness e uma lacuna de evidencias que devem ser corrigidos imediatamente.
+Escopo continua exclusivamente copia isolada/probe autorizado. Nao mexer SIG principal/Whisper/UI/R2/release/c4bf/defaultVulkan. Device CPH serial3B15BD00FVE00000 (wifi apenas confirmado); PJA110 fora. Sem root/governor/bypass. Stayon7 decidido preservado.
+
+2. ZERO NAO E FALLBACK CPU NO HARNESS DIRETO
+mmtest usa ggml_backend_graph_compute(bhtp, gr) DIRETAMENTE (905), sem scheduler CPU/HTP. Ele instancia bcpu mas nao o usa para compute. Portanto baseline outputzero NAO prova CPU-fallback silencioso nesse teste; e backend recusando/ignorando op nao suportada, harness invalido ou outro defeito a localizar. Fallback CPU do grafo c4bf continua comprovado pelo scheduler R12, nao por este zeros.
+Consultar supports_op em TODOS os fixtures ANTES do compute. Baseline Kquantunsupported => SKIP/REJECTED, nunca chamar kernel e contar outputzero como referencia valida. No candidato supportsSIM exige compute e resultado real. No baseline e candidato, controles F32/F16/Q4_0 suportados devem executar e comparar corretamente. Harness deve primeiro passar positivo, nao apenas falhar casos unsupported.
+Se quiser demonstrar fallback num teste separado, usar scheduler explicitly e trace CPU; rotular resultado CPU, nunca NPU PASS.
+
+3. BUG DO LAYOUT DA REFERENCIA CPU PARA BATCH>1
+Referencia manual escreve ref[n*B+b] (887). ggml_mul_mat(wa[K,N], ab[K,B]) produz cc[N,B] cujo elemento contiguo e n; layout usual e ref[b*N+n].
+Conferir ne/nb de cc e indexar a referencia/resultado pelos strides reais. Batch1 coincide, batch128 NAO; erro pode produzir falseFAIL quando crash for resolvido. Nao atribuir esse mismatch ao DSP.
+Executar fixture host de layout batch1/2/128 com N/K pequenos e valores identificaveis; referencia manual cruzada com backend CPU REAL (bcpu atualmente inutilizado). Mesmos pesos quantizados/dequantizados e ativacoes, orientation explicita. Verificar qchunk esperado/retorno, ctx/graphalloc/tensor buf null, tipo/dim/buffer/repacknecessario, sincronizacao e tamanho output; nada de ignorar qchunk.
+max_rel<5% com denominador |ref|+1e-6 e criterio fragil perto de zero e arbitrario para erro tolerado. Usar combinado abs_tol+rel_tol*|ref|, metricas globais pertinentes/NRMSE quando adequado, finite em ref/output e tolerancias documentadas do baseline dos kernels esperados (FP16/HMX). Nao relaxar para candidate passar. Impor status/exit e firstmismatchcoords reais, não só textual PASS.
+O relato inclui lm_head2048x120818, mas array atual tem seis shapes e NAO inclui esse caso. Identificar PLANEJADO versus EXECUTADO. lm_headlimite pode serunsupported legitimo; futuro teste só com memoria segura.
+
+4. ABORT EM dspqueue_read E LOCAL DE DETECCAO, NAO CAUSA RAIZ
+O erro na fila pode decorrer de kernel/DSP hang, descriptor/protocolo/queue/timeout/session reset/driver/worker ou endereco invalido. Ausencia de SSRdump nao prova workerhang nem ausencia de crash DSP. Registrar codigo numerico EXATO de dspqueue_read e interpretar nos headers da versaoSDK em uso, retorno timeout vs sessionclosed etc. Callsiteabort host nao localiza falha dentro do DSP.
+Evidenciafaltante: TOMBSTONE-STACK.txt entregue na pasta R16 esta VAZIO (0bytes). Entregar tombstone real/readback/caminho/hash e addr2line da lib exata, buildID e ELF nao stripado. Se noutrocaminho, fornecer/copiar anexo real, nao narrar stack sem artefato. r16-debug.txt comeca 'device offline' e trechos antigos/outrosPIDs: vincular attempt/source/build/PID/timestamps, nao tratar tail antigo como novo run. '100% reprodutivel' deve ser limitado as tentativas controladas reais com denominador e identity.
+Gate preflight nao deve continuar no deviceoffline. Logs completion/tracebufferbounded, sem espera100s repetida como garantia.
+
+5. MATRIZ MINIMA PARA LOCALIZAR FALHA
+Uma execucao pequena por caso, app separado processfresh/timeoutbound/restore aprovado:
+A. F32 ou F16 suportado no baseline e candidato -> sanity protocolo/queue geral.
+B. Q4_0 suportado nos dois -> sanity repack/quantpath antigo.
+C. Q4_K isolado (256-aligned K pequeno, N/B minimos suportados, nao2048x512 logo de inicio) -> caminho novo.
+D. Q6_K isolado -> caminho novo separado.
+Nao rodarall12fixtures nem modelo c4bf enquantoprimeirocomputecrasha. Se A/B tambem falham candidato, priorizarcohort/protocolo/descritores/initialization, nao kernelKespecifico. Se apenasC/D falham, localizar pathrepack/dispatch/DSPkernel.
+Quandoexistir configuracaoHMX/HVX controlavel real, comparar UMcaso caminhoHVX versusHMX comparametros efetivoslogados e suporte real; nao usarenvlate nemassumirMM_SELECTsemconsumo. Recuperar limitesVTCM/rowbytes/repack/tilesporK/N/B ekernelIDselecionado.
+
+6. INSTRUMENTAR SEM CRIAR OUTRO DEADLOCK
+No host: request/queue/opcount/opcode/types/dims/strides/offsets/bufferbytes/align e kernelparams; snapshot fora mutexes e logs de baixa frequencia.
+No skel: entrada do batch, antes dispatch, antes/depois kernel, status/retorno. Se printf/callback não seguro, counters/trace em memoria compartilhada com flush posteriormente ou mecanismo oficial DSP SDK. Nao repetir reentrancia de logFastRPC.
+Verificar structsizeof/offsetof/packing/endian/typeIDs/opcodes/IDL e limites descriptors; kernel recebe mesmo layout que hostrepackproduz. Unitrepack->unpack e fixture bytesedge/q4scalesmins/q6sign sem precisarDSPsempre. Assert bounds/alignment em variante teste, nunca continuar comdescriptorinvalido.
+Recompilar só skel e aceitavel APENAS quando mesmafontehost/protocolo/ABI/cohort invariantes documentadas e alteracao e exclusivamenteinstrumentacaocompatível. Patchprotocol/layout requer FULLrebuildhost+skel. Mesmo instrumentation build vira manifestnova identidade, nãobinariotrocadocomhashvelho. Nao 'skel sozinho' indiscriminado aposbugcontrato.
+Se faltakerneldebugginginfo hostabort nao resolve addr2lineDSP: separar toolchain/symbols DSP reais; nao converter offset hostem linha deDSP.
+
+7. FIX / REVALIDACAO
+Depois localizarbug, patch minimo na copia allowlist e RED/GREEN com reproducer minimal. Em sucessominimal, batch1->2->128 e shapesHyMT2, numericaCpuHTP/layoutcorrigido e placementtrace. GuardQ6fusion, unsupportedKQfamilias e kernelsantigos preservados.
+Só então grafo c4bf +short/resetABA e pureGPU/dualSmart. EnvelopeSmartcalibration pode prosseguir independente da falhakernels em baseline, mas nao distrairdebuggingprincipal. Zero benchmark/pilot952promocao ate KERNEL_VALIDATED.
+Se naoisolar em poucosensaiosconclusivos, entregarfaultmap/ultimaevidencia e bloqueio específico, nao maiscrashescegos/horasdegrid. Preservardados/limitesmemoriatermica/controledeprocesso.
+
+8. INFRA FFMPEG
+Fixar executable/versaoPATH APENAS no processo de validacao conforme ambiente aprovado. Registrar path, ffmpeg-version e fixturesaffected. Nao alterarPATHglobal/Hermestools/testealheio/nativosWhisper para mascararerro. Testes que dependem FFmpeg devem explicitar toolrequired/context, resultado8.0.1 vs9.0.1 em evidencia. gatepass com PATHpinned vale aquele ambiente, nao compatibilidade9.0.1 universal. Commitdocs eescopo distinto de candidato produto.
+
+9. ENTREGA
+RELATORIO-SMART-DUAL-BACKEND-RODADA17.txt docs/especialista A-H:
+A identitymanifest/source/PID/attempt/cohortrestore;
+B harnesslayout/supportskip/positiveCPUHTPcontrols e testeshost;
+C matrizminimal A-D/paramspath/decode errorcode;
+D host/DSPtrace real, tombstoneNaoVazio, causaobservadaouhipotese;
+E patchfixminimalREDGREEN oublocker;
+F KQshapesrevalidacao/grafo seaceito, sembenchmarkprematuro;
+G scopeSIG/Whisper/gatesFFmpeg/envpreserve;
+H estadosKERNEL/GRAPH/HANDOFF/PERFORMANCE distintos.
+Logs docs/npu-hymt2/smart-rodada17/ fullSHA/exits/classesexclusivas/sessionIDs. Nao zeros=fallbackdireto, nao refbatchtransposta, nao queue_read=kernelcausaprova. Entregar reproducer pequeno e dado real que localiza a falha.

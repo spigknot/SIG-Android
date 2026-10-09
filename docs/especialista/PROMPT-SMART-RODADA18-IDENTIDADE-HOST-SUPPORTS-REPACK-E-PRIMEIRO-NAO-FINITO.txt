@@ -1,0 +1,69 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 18
+PRIORIDADE: IDENTIDADE HOST E CONTRATO DO HARNESS ANTES DE ATRIBUIR FALHA AO DSP
+===============================================================================
+
+1. PARECER DO ESPECIALISTA E LIMITES
+Aceito os avancos R17: referencia via backend CPU real, layout por strides, qchunk verificado, controles positivos F32/Q4_0/Q8_0 B=1/2, ausencia de benchmark prematuro e lacuna do tombstone R16 assumida. KERNEL_VALIDATED permanece NAO.
+NAO aceito ainda a conclusao de que o defeito foi localizado no kernel/dispatch DSP. O teste comprova divergencia/nao-finitude no caminho testado, mas ha uma contradicao fonte/binario/consulta que deve ser resolvida primeiro.
+O especialista inspecionou fontes e evidencias locais; nao executou aparelho, nao alterou app/probe/servidor, nao instalou nada.
+Escopo permanece o ja autorizado: copia isolada do candidato e probe separado. SIG principal, Whisper, UI, R2, release, backend padrao e modelo produto c4bf intocados. Sem commit/push/publicacao/promocao/instalacao sobre SIG sem autorizacao especifica. Preservar WIP alheio (ha alteracoes SmartJoin/FFmpeg no repo atual); nao incluir esses arquivos no trabalho nem usar restore/reset/stash amplos. CPH2747 serial 3B15BD00FVE00000; wireless somente com identidade fail-closed confirmada; PJA110 excluido; stayon=7 preservado.
+
+2. CONTRADICAO BLOQUEANTE: BASELINE SUPPORTS NAO E COERENTE COM O FONTE
+No fonte SIG local ggml-hexagon.cpp:
+- 2783-2853: ggml_hexagon_supported_mul_mat aceita Q4_0/Q4_1/Q8_0/IQ4_NL/MXFP4/F16/F32. Q4_K/Q6_K caem no default return false (2841-2842).
+- 4087-4089: device_supports_op MUL_MAT chama EXATAMENTE esse helper.
+- 4225-4226: retorna supp, sem override de sucesso.
+- ggml-backend.cpp:623-625: ggml_backend_dev_supports_op chama device->iface.supports_op diretamente.
+Logo a frase R17 'coerente com R12: rejeicao so no scheduler, nao em dev_supports_op' NAO esta demonstrada: a consulta direta deveria tambem rejeitar K-quants se esse fonte e realmente o host baseline executado.
+A consulta R17 ocorre num tensor sem buffer. Isso pode diferir da consulta pos-alocacao para os tipos que exigem repack, mas NAO faz Q4_K entrar num switch que nao tem esse case.
+Hipoteses a distinguir, nao conclusoes: baseline host errado/upstream/candidato; so skel foi restaurado; packaging cache; copia isolada baseline diferente do SIG; biblioteca carregada de outro caminho; incompatibilidade ABI/callback; tensor/op/type errado em runtime; log rotulado incorretamente.
+Resolva isso ANTES de instrumentar/recompilar kernel DSP. Se o baseline tiver suporte diferente legitimamente, reidentifique-o e retifique a comparacao R12/R17; nao force narrativa de compatibilidade.
+
+3. IDENTIDADE FULL-COHORT DO QUE REALMENTE EXECUTA
+MANIFESTO R17 entregue tem hashes de quatro arquivos de evidencia e do relatorio, mas NAO lista os ELF/APK/headers de cada tentativa. O especialista conferiu os quatro hashes de evidencia: correspondem aos arquivos locais. Isso nao valida as libs carregadas.
+Hash de fonte buildada e tamanho 727368 B nao identificam ELF instalado. Diferenca entre ELF unstripped e stripped pode ser legitima; documentar ambos, sem declarar erro pelo tamanho apenas.
+Produzir tabela por baseline e KQ_ON: fonte exato/pin/patch/config/headers -> build ELF full SHA256/build-id -> stripped ELF full SHA256 -> entrada do APK extraida -> caminho instalado/carregado no PID -> hash correspondente. Incluir libnpuprobe, libggml-base, libggml, libggml-cpu, libggml-hexagon, libllama e skel; demais libs do cohort tambem no manifesto. Nao apenas hash skel.
+Inspecionar loader/DT_NEEDED e caminhos reais com mecanismo permitido (dladdr/export de identidade e maps do proprio processo quando acessivel). Detectar duplicatas/registro de backend distinto. Registrar backend/device name e GUID, op/type numericos e nomes no mesmo fixture. Para callback interno nao exportado, adicionar identidade/log diagnostico em variante isolada em vez de adivinhar pelo nome HTP0.
+Fresh process apos cada troca e readback da instalacao. Se skel carregado pelo DSP vier de outro ADSP_LIBRARY_PATH, explicitar caminho/resolucao real. Nao assumir que trocar jniLibs substituiu a biblioteca no processo vivo. Restauracao exige readback de TODO cohort baseline, nao so skel.
+Comparacao preliminar do especialista: os blocos ggml_op e ggml_tensor nos ggml.h probe/SIG locais coincidem; ggml_type difere em Q2_0/STQ1_0/COUNT por personalizacao SIG. Q4_K=12/Q6_K=14 no header do probe. Isso NAO prova incompatibilidade nem a descarta para demais headers/core/interface/binarios. Nao renumerar enums nem mudar modelo para fazer teste passar. Auditar headers efetivamente usados pelo build e ABI das interfaces internas por cohort.
+Teste de identidade fail-closed: baseline correto deve devolver false para Q4_K/Q6_K no helper correspondente; candidato deve devolver true somente com contratos completos. Se callback relata tipo/op inesperado, resolver transporte/ABI antes do compute.
+
+4. CONSULTA POS-ALOCACAO E BUFFER/REPACK REAL DO HARNESS
+probe.cpp:903-920 consulta suporte num grafo descartavel sem buffers. build_e_run:883-901 constroi OUTRO grafo, aloca tudo com ggml_backend_alloc_ctx_tensors(c2,bk), escreve e computa SEM reconsultar esse grafo alocado.
+No fonte SIG: supported_mul_mat:2814-2816 exige buffer REPACK para pesos quantizados quando buffer existe; default device buffer (3936-3938) e sess->buffer_type, distinto de repack_buffer_type. Portanto supports_pre=1 NAO basta para autorizar graph_compute direto.
+Registrar supports_pre e supports_post no MESMO grafo que sera executado, apos alocacao correta e antes compute. Logar peso/ativacao/output: type/op/ne/nb, buft name/usage/alignment/alloc_size, sessao, funcao/caminho de tensor_set/repack efetivamente chamado. Caso supports_post=false => REJECTED_BUFFER/SKIP/FAIL-harness conforme esperado, nunca kernel PASS/FAIL numerico.
+Localizar exemplos/testes existentes do backend que alocam quant weights no buffer repack; usar a API real da versao isolada, sem inventar funcao. Separar pesos de ativacoes/output quando necessario. Nao marcar TODO contexto WEIGHTS de forma cega. Registrar transicao tensor_set -> formato tiled e descritor que chega ao compute. Controls antigos pequenos passando nao provam que o buffer/contexto da fixture K esteja correto.
+Referencias CPU e HTP devem partir dos mesmos bytes GGUF-quantizados, em grafos/buffers independentes. Validar suporte CPU tambem (R17 calcula sup_c, mas nao usa como gate); CPU-ref precisa concluir e ser finita ANTES de HTP. Se referencia invalida, nao disparar DSP e nao chamar erro de kernel.
+Checar span pelos strides, ggml_nbytes e capacidade do vetor antes de get/index. Em output contiguo atual nelements*sizeof(float) pode coincidir; assert explicito evita leitura fora da area se padrao mudar. Capturar strides apos alocacao, nao presumir que nunca mudam. Sincronizacao conforme contrato efetivo da API.
+
+5. METRICAS: PRIMEIRO NAO-FINITO E DENOMINADOR COMPLETO
+probe.cpp:932-936 para imediatamente no primeiro NaN/Inf; max_abs e NRMSE podem ser de PREFIXO, nao do vetor todo. fin agrega sucesso de execucao e finite CPU/HTP. O nome FAIL(exec) atualmente tambem cobre NaN com hrc=crc=0.
+Assim Q4_K fin=0 max_abs=0 nao significa output zero/vazio. Pode ser NaN no primeiro elemento. Q6_K max_abs=3.6e6 seguido de fin=0 nao localiza lado nem causa.
+Separar: exec_cpu_ok/exec_htp_ok, ref_nonfinite_count, out_nonfinite_count, first_nonfinite(lado,b,n,valor/bits), first_tolerance_violation(b,n,ref,out,lim), compared_count/expected_count. Exibir resumo global somente se todos os elementos pertinentes foram varridos; em caso contrario metric_scope=PREFIX/PARTIAL. Preservar primeiro erro mesmo que fin=false e mesmo depois de outros casos falhos (hoje first_viol so imprime se !okc && fin && fail<=3).
+Prefill output com sentinel determinista e verificar escrita completa com mecanismo compativel ao backend; sentinel inalterado indica possivel op nao executada, nao prova de kernel numericamente errado. Se usar sentinel NaN, distinguir sentinel original de NaN produzido por operacao. Guardas/canarios onde suportados, nao enderecos fora da alocacao.
+Classes exclusivas: CPU_REF_FAIL, UNSUPPORTED_PRE, UNSUPPORTED_POST, ALLOC/UPLOAD_FAIL, EXEC_FAIL, NONFINITE_REF, NONFINITE_HTP, UNWRITTEN_OUTPUT, NUMERIC_FAIL, PASS. Exit code/resultado machine-readable por caso e execucao; sem PASS global com falhas.
+Q4_0/Q8_0 B=128 sao FAIL de tolerancia no gate atual, nao 'PASS com observacao'. NRMSE pequeno nao anula violacao por elemento. Hipotese FP16 permanece hipotese; sem relaxar tolerancias para obter verde. F16 hang e incidente separado, F32 cobre controle escolhido; nao repetir F16 agora.
+
+6. BASELINE / CANDIDATO / REPACK: ORDEM MINIMA CONCLUSIVA
+Fase I (prioridade): identidade e consulta no mesmo grafo; baseline correto deve produzir a rejeicao K esperada, com controles antigos positivos. Um caso de cada tipo, sem nova grade.
+Fase II: buffers/repack corretos + CPU-ref finita + dados de upload/readback. Baseline antigo K fica SKIP; nao executar unsupported direto. Candidato: Q4_K K=256 N=64 B=1, depois Q6_K isolado. Fresh process/timeout/capture por tentativa; evitar ensaios repetidos sem novo dado.
+Fase III se candidato continuar falhando: teste offline repack->unpack/dequant com oraculo INDEPENDENTE e asserts de offsets/scales/mins/signs/padding. Encode/decode com mesmo erro pode roundtrip perfeito: usar fixture conhecida/golden validada com layout upstream e dequantizador canonico, sem apenas reaplicar duas funcoes candidatas. Units de bounds/alignment e deslocamento/tileedges. Para dados irreversivelmente re-quantizados, tolerancia derivada do contrato real, nao byte equality inventada.
+Fase IV somente se I-III fechadas: trace host/DSP minimo (request/op/kernel IDs/types/shapes/rowbytes/params/entrada-saida/status/counters) usando mecanismo SDK ou memoria compartilhada EXISTENTE e compativel, sem printf reentrante, sem mudar ABI de forma escondida. Provar que op nova foi enviada e kernel novo executou. Callback/result digest nao e evidencia suficiente por si so.
+F32/Q4_0 passando reduz suspeita de falha geral, mas nao valida todos os descritores novos. Nao excluir fila/protocolo para shapes c4bf por ausencia de abort na fixture minima corrigida. R16 e R17 mudaram harness/shapes; nao foi um A/B isolando a causa do abort. Tombstone cru R16 perdido permanece lacuna; addr2line isolado nao reconstitui frames.
+Patch minimo e RED/GREEN sobre causa isolada na copia allowlist. Depois B=2/128 e shapes reais; apos KERNEL_VALIDATED, grafo c4bf/placement/reset A-B-A e Smart. Nada de benchmark/semantica/performance enquanto identidade ou numerica K estiverem abertas.
+
+7. EVIDENCIAS E CONTAGENS
+Arquivo r17-matrix-all.txt tem linhas repetidas de mesmos PIDs. Resumo do especialista deduplicado por PID+resultado: 4850 e 7913 possuem cada um 15 linhas de matmul distintas (7 PASS, 8 FAIL); MMTOTAL 8 PASS/8 FAIL inclui o teste separado de rejeicao Q5_K. PID10627: 3 resultados Q4_K FAIL + 1 PASS de rejeicao Q5_K. Explicitar matmul vs teste de suporte; nao contar Q5 rejection como kernel executado. Preservar tentativas independentes mesmo quando resultado e identico; usar attempt_id, nao deduplicar execucoes pelo texto.
+Entregar logs brutos por tentativa + resumo deduplicado com regras de contagem, timestamps/PID/identidade. Nao tail acumulado apresentado como log novo. Manifesto fullSHA com origem/size/count e tipos de artefatos; totals comparados em script.
+
+8. RELATORIO DE ENTREGA A-H
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA18.txt em docs/especialista e evidencias em docs/npu-hymt2/smart-rodada18/:
+A. Fullcohort fonte->ELF->APK->PID e baseline/candidato/restauracao comprovados;
+B. Retificacao ou resolucao da contradicao supports R12/R17 com callback real;
+C. supports_pre/post, buffers e caminho de repack do grafo efetivamente executado;
+D. CPU/ref/HTP nonfinite separados, first-error e cobertura completa das metricas;
+E. Testes offline/oraculo/golden e candidato minimo, causa demonstrada ou bloqueio;
+F. Patch RED/GREEN e shapes/graph somente se gates anteriores fecharem;
+G. SIG/Whisper/WIP/env preservados, sem publicacao; FFmpeg pin apenas no processo autorizado;
+H. Estados CCE/PARCIAL/PENDENTE/BLOQUEADO por etapa e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE separados, totais por script e logs fullSHA.
+Se nao for possivel comprovar biblioteca/callback carregado, declarar BLOQUEADO_IDENTIDADE, nao migrar investigacao para kernel por eliminacao aparente. Nao apresentar sourcehash como hashbinario. A proxima rodada deve resolver a contradicao, nao repetir 'supports=SIM + lixo' sem cadeia de identidade.
