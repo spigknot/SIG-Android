@@ -1,0 +1,90 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 32
+=========================================================================
+Data: 09/10/2026. Ordens: "GATE RUNTIME ACEITO; FECHAR FLUXO ALLOC/OPSTAGE
+E CAPTURAR DADOS". Copia isolada/probe.
+
+RESUMO EXECUTIVO — CORRECAO §2 EXECUTADA + PIPELINE §6 EXECUTADO: (1) A
+BRECHA DO T4 (silent-refusal!) foi FECHADA: o T4 agora exige a REJEICAO
+ATIVA OBSERVADA (abort!) E zero efeitos; M6 (GGML_ABORT->fprintf+break —
+o contra-mutante do especialista!) => T4a/T4b RED (observada=0!); T5
+novo (caso VALIDO executa — nao-vacina-noop!) => GREEN; a vacina R32:
+green 0 RED; m5 1 RED (size-parcial escreve!); M6 2 RED! (2) O PIPELINE
+UNICO (r32_pipeline.sh!) EXECUTADO DE VERDADE: extracao (verbatim +
+hashes!)->adaptacao (contexto declarado!)->mutacao (m1..m6!)->build->
+run->export em dir isolado, com fail-closed em cada etapa; RESULTADO:
+os 7 cenarios: green 0 RED (build 0/run 0!); m1 4 RED; m2/m3/m4/m5 1
+RED; m6 2 RED — TODOS os exits preservados (build.log/run.out exportados
+por cenario + hashes!). PENDENTES DECLARADOS (§3/§4/§5): alloc-NULL/
+opstage no fluxo (design extraido; o tempo foi do M6+pipeline!), counters
+separados LEGADO/PIN/SKIP, snapshot/refs B128 (device!). KERNEL_
+VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. PIPELINE (§6!) — EXECUTADO
+-----------------------------------------------------------------------
+A.1 r32_pipeline.sh: 5 etapas (extracao->adaptacao->mutacao->build->run->
+    export!) — o script FALHA se: extracao vazia, adaptacao falha,
+    cenarios vazios (fail-closed!); exporta os EXATOS compilados
+    (adap/gen por cenario!) + build.log/run.out + hashes.txt!
+A.2 Resultados: green 0 RED; m1 4; m2 1; m3 1; m4 1; m5 1; m6 2 — todos
+    BUILD=0! (o export/ no pacote com os 7!). A matriz de mutantes
+    especifica: cada defeito -> RED proprio!
+
+-----------------------------------------------------------------------
+B. REJEICAO ATIVA (§2!) — EXECUTADA (M6!)
+-----------------------------------------------------------------------
+B.1 T4 refinado: `ok = (g_aborted==1 && bytes==0)` — o MECANISMO
+    observado (abort!) e' requisito, nao so' os bytes!; T5: o caso
+    valido DEVE escrever (9598 bytes!) — a vacina noop e' pega!
+B.2 M6 (abort->fprintf+break!): T4a/T4b RED com observada=0 — a
+    regressao abort->retorno silencioso AGORA E' PEGA (era a brecha!)
+B.3 Nota MinGW/longjmp (O2 crashou — O0 ok!): os cenarios oficiais
+    rodam no SERVIDOR (Linux g++ — longjmp funciona!); MinGW fica como
+    limitacao declarada do harness Windows (nao e' bug Android!).
+
+-----------------------------------------------------------------------
+C. ALLOC_FAIL / OPSTAGE (§3!) — PENDENTE (declarado com design!)
+-----------------------------------------------------------------------
+C.1 Nao executados: o tempo foi para M6+pipeline (o §8: os ajustes
+    curtos + o pipeline!). Design exato: (a) alloc: seam no build_e_run
+    (o trecho EXTRAIVEL por script do probe!) com injecao NULL ->
+    ALLOC_FAIL + upload0/compute0 + cleanup; (b) opstage: preflight da
+    rota numerica (0/1/2 recusa, 3 permite!) com o valor EFETIVO lido do
+    init do registro Hexagon (nao setenv pos-init!). Ambos OFFLINE
+    (nao dependem do device!) — blocker: TEMPO desta sessao (declarado,
+    nao disfarcado!).
+
+-----------------------------------------------------------------------
+D. COUNTERS / CALLER (§4!) — PARCIAL
+-----------------------------------------------------------------------
+D.1 Os verdicts LEGADO/PIN/INVALID estao no runtime (R31!) com counters
+    de tentativa (nd/nf/unw/novl!); falta a separacao explicita dos
+    counters da suite (PIN x LEGADO x SKIP x controle-Q5!) — o MMTOTAL
+    atual nao e' PIN 3/3 (parecer aceito!) — ajuste curto pendente.
+D.2 As flags (alloc_ok=hsp!) tem semantica documentada (supports_post!);
+    separar "supports" de "alloc real" fica no ajuste do caller (curto!).
+
+-----------------------------------------------------------------------
+E. SNAPSHOT / REFS (§5!) — PENDENTE (device!)
+-----------------------------------------------------------------------
+E.1 UMA captura focal do B128 (canonweights/act/CPUout/HTPout + RAW
+    tiled no mapping!) — nao feita nesta rodada (o device nao foi
+    tocado: foco offline!). O leitor Q4 (dependencia corrigida!) e o Q6
+    estao prontos para calcular RscalarCanonical/RtiledReader doubleacc!
+
+-----------------------------------------------------------------------
+F. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+F.1 REJEICAO_ATIVA: CCE (M6 RED!); PIPELINE: CCE (executado!); VACINA
+    R32: CCE (7 cenarios!); ALLOC/OPSTAGE: PENDENTE; COUNTERS: PARCIAL;
+    SNAPSHOT/REFS: PENDENTE. KERNEL_VALIDATED: NAO. COMPILED: sim.
+F.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; WIP alheio (STT/
+    MODULE-MAP!) intocado; PJA110 nao tocado; sem reboots; device
+    intocado nesta rodada (cohort ebb80bbd aguardando a proxima!).
+H.1 PROXIMOS: (1) alloc/opstage (design pronto!); (2) counters do
+    caller; (3) snapshot/refs; (4) fused params; (5) estabilidade;
+    (6) shapes/modelo!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada32/ (r32_pipeline.sh + os 7
+run.out!, export/ com os compilados por cenario + hashes!, r32_m6b.py!) +
+manifesto.

@@ -1,0 +1,47 @@
+MANIFESTO — smart-rodada32 (brecha do T4 FECHADA + PIPELINE EXECUTADO!)
+
+T4: exige rejeição ATIVA OBSERVADA (abort!) + zero efeitos; T5: válido executa (não-noop!)!
+M6 (silent-refusal: abort→fprintf+break!): T4a/T4b RED (observada=0!) — a brecha FECHADA!
+PIPELINE REAL executado: extração→adaptação→mutação→build→run→export (7 cenários: 0/4/1/1/1/1/2 RED!)!
+Pendentes: alloc/opstage (design pronto!), counters, snapshot/refs. KERNEL_VALIDATED: NAO.
+
+18e845b3b3051c876e0b02b8715d073d2ace27e6421f32b195e682613fc50b54  r32-green.out  (626 B)
+ce13638f23c9b8d63fadbc1059825a59d1c58f73c7327b3695f0b171088e3ce1  r32-hashes.txt  (1539 B)
+beba09e3e529db87c50f7b2197a31d3b9c6499906824ebf47d7e8e04a8613fd0  r32-m1.out  (655 B)
+88e1cfa34f52dff5d2f311e4b4102549c11b8860a87c59cafaf659d8b901fb14  r32-m2.out  (637 B)
+b3a3258f9c7e6688d571e3d48be99ec62a6fd76cd48df83f8bb708e8acf4fc58  r32-m3.out  (625 B)
+aee627c0b7fd1d26a12cb6bacd75ebb058b5e6bac5e680cf05a99f54fde4bbc6  r32-m4.out  (629 B)
+37c722db65053452552632e3ff1199ad3170a1b3d58ee9a5bf1f342857a6a6ea  r32-m5.out  (629 B)
+f3743ae18414009208a71910e61f460dcbf6b9bac55ace61e9ec7c1a3d202aee  r32-m6.out  (626 B)
+c717ff94518e3b2028f36bc394f5ab3c4a6ec9e96a0fd4010e5648a4194634ef  r32_m6b.py  (936 B)
+2fd389a50d5fcde50b33643ac5b4aab9678be506f06c04220e0a8f2b0e928358  r32_pipeline.sh  (5513 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  export/green/build.log  (0 B)
+b1d602b36d84bbe8b03263516f1d620153ee4bdf1cc97954b03992ba18664bc5  export/green/r29_cores_gen.h  (7924 B)
+ae1791df23371c3b50c53f237bbecb58c21bc87a1fe2bcfc3274853b7201fa21  export/green/r29_settensor_adap.inc  (3622 B)
+18e845b3b3051c876e0b02b8715d073d2ace27e6421f32b195e682613fc50b54  export/green/run.out  (626 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  export/m1/build.log  (0 B)
+b1d602b36d84bbe8b03263516f1d620153ee4bdf1cc97954b03992ba18664bc5  export/m1/r29_cores_gen.h  (7924 B)
+2a7f72b9c195330e35592c0b87ffca1944114f290ecb513ebacebed6b5a3f16c  export/m1/r29_settensor_adap.inc  (1805 B)
+beba09e3e529db87c50f7b2197a31d3b9c6499906824ebf47d7e8e04a8613fd0  export/m1/run.out  (655 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  export/m2/build.log  (0 B)
+b1d602b36d84bbe8b03263516f1d620153ee4bdf1cc97954b03992ba18664bc5  export/m2/r29_cores_gen.h  (7924 B)
+ef809ae6944b617c19c2e0d25015eea4179348d2faf6cb89db0676b742afc77f  export/m2/r29_settensor_adap.inc  (3024 B)
+88e1cfa34f52dff5d2f311e4b4102549c11b8860a87c59cafaf659d8b901fb14  export/m2/run.out  (637 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  export/m3/build.log  (0 B)
+09be5273ed61b995442b4db48b863c42c77353cea84d2fad38f3d8639bc1b49c  export/m3/r29_cores_gen.h  (7927 B)
+ae1791df23371c3b50c53f237bbecb58c21bc87a1fe2bcfc3274853b7201fa21  export/m3/r29_settensor_adap.inc  (3622 B)
+b3a3258f9c7e6688d571e3d48be99ec62a6fd76cd48df83f8bb708e8acf4fc58  export/m3/run.out  (625 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  export/m4/build.log  (0 B)
+7d2200035fec4ab59164aa758e045b35ff7da8e1ee2ea3a31eb1e33ee073e726  export/m4/r29_cores_gen.h  (7938 B)
+ae1791df23371c3b50c53f237bbecb58c21bc87a1fe2bcfc3274853b7201fa21  export/m4/r29_settensor_adap.inc  (3622 B)
+aee627c0b7fd1d26a12cb6bacd75ebb058b5e6bac5e680cf05a99f54fde4bbc6  export/m4/run.out  (629 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  export/m5/build.log  (0 B)
+b1d602b36d84bbe8b03263516f1d620153ee4bdf1cc97954b03992ba18664bc5  export/m5/r29_cores_gen.h  (7924 B)
+fd5bb2459da14688261aeb44be3ad6382df19752d7cd2c80a40746e1073acf04  export/m5/r29_settensor_adap.inc  (2796 B)
+37c722db65053452552632e3ff1199ad3170a1b3d58ee9a5bf1f342857a6a6ea  export/m5/run.out  (629 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  export/m6/build.log  (0 B)
+b1d602b36d84bbe8b03263516f1d620153ee4bdf1cc97954b03992ba18664bc5  export/m6/r29_cores_gen.h  (7924 B)
+acd13b863913833d81b81f408c6c4c4e77e3369133fe6482c979a66d7382feb6  export/m6/r29_settensor_adap.inc  (3422 B)
+f3743ae18414009208a71910e61f460dcbf6b9bac55ace61e9ec7c1a3d202aee  export/m6/run.out  (626 B)
+
+917c8e056b9d4b7303f65514b39a15830c78edeefe079dcad3efa33d10f21431  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA32.txt

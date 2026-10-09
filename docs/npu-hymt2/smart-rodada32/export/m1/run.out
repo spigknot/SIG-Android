@@ -1,0 +1,10 @@
+=== r28_fixture (VACINA REAL: codigo extraido verbatim!) ===
+  [RED] T1 Q4_K upload REAL: leitor vs dequant nas 16384 entradas: n_bad=13590 n_nan=2656 max_abs=922998.236267
+  [RED] T2 Q6_K upload REAL: leitor vs dequant nas 16384 entradas: n_bad=16065 n_nan=80 max_abs=1965057.141033
+  [OK ] T3 alloc REAL: Q4_K=10240 (tiled 10240/canon 9216!) Q6_K=14336 (tiled 14336/canon 13440!)
+  [RED] T4a offset!=0: rejeicao ATIVA observada=0 (1=abort!) + ZERO efeitos (bytes=9007!)
+  [RED] T4b size parcial: rejeicao ATIVA observada=0 + ZERO efeitos (bytes=4503!)
+  [OK ] T5 caso VALIDO executa: abort=0 bytes-escritos=9007 (>0 = upload real!)
+
+TOTAL: 4 RED
+EXIT=1

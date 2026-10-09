@@ -1,0 +1,65 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 32
+GATE RUNTIME ACEITO; FECHAR FLUXO ALLOC/OPSTAGE E CAPTURAR DADOS, SEM OUTRO CICLO DE PLANOS
+===============================================================================
+
+1. PARECER R31 — PRESERVAR O AVANCO REAL
+Confirmei include/chamada do r30_gate em probe-r31.cpp:14/1066, header byte-identico ao R30, BUILD SUCCESSFUL e logs runtime. A integracao da FUNCAO AVALIADORA agora esta comprovada, nao reabrir o problema do header sem caller.
+Os6 hashes de anexos conferem. As12 linhas de verdict sao6 casos unicos, duplicados no REPORT: Q4/Q6 xB1/B2/B128. PIN_PASS nos6; LEGACY_FAIL nos2B128, com10/9 violadores. Resultados minimos numericos aceitos nesse contrato, nao kernelglobal nemvalidacaodequalidademodelo.
+Contadores do probe ainda sao antigos: pass/fail atualizados por okc antes r30_gate; MMTOTAL inclui teste esperado de rejeicaoQ5. Nao chamar MMTOTAL3/1 de PIN3/3. Adicionar contabilidade explicita sem refazer formula.
+ALLOC_FAIL/opstage eram parte do aceite minimo e permanecem pendentes. Pipeline/snapshot tambem foram repetidamente adiados. Esta rodada deve fecha-los com execucao, nao mais apenasdesenho.
+Fonte/guard ativa e avanco aceito, mas a vacina da REJEICAO_OBSERVAVEL tem uma brecha comprovada (abaixo). Nao usar isso para reiniciar investigacao do pack/leitor ja aprovados.
+
+2. CORRIGIR SOMENTE A BRECHA DO T4, NAO O PACK
+r31_pack.py:46/55 implementa ok=(bytes_alterados==0). Isso nao exige abort nem status consumido de recusa. O texto 'ATIVA OU recusa' nao torna a recusa observavel pelo chamador.
+CONTRA-MUTANTE REAL DO ESPECIALISTA: scriptsR31 reexecutados emscratch cominputR29; substituir somente os2GGML_ABORT por fprintf+break. BaselineativaO0GREEN, m5partialRED, mas contra-mutante silent-refusalGREEN com0bytes. Logo a vacina deixa regressao abort->retorno silencioso passar.
+Prova/logs: docs/especialista/AUDITORIA-R31-GATE-INTEGRADO-E-MUTANTE-RECUSA-SILENCIOSA.txt e AUDITORIA-R31-LOGS/.
+Mecanismo escolhido continua GGML_ABORT. Testar evento de abort antes qualquer acesso e impossibilidade de continuar/compute; buffer intacto e apenas um dos requisitos. Se escolher outro canal explicito, demonstrar chamador consultandooerro. fprintf isolado nao e canal.
+Atualizar T4 com observacao do mecanismo real. Adicionar mutante M6: GGML_ABORT->fprintf+break DEVE RED. Caso valido deve executarupload/compute, impedindovacina noop. Offsetguard redundante comassertdopack pode continuar rejeitando semguard; nao forcarRED se propriedadepermaneceprotegida. Partialsemguard continuaRED.
+O harness longjmp baseline emMinGW O2 compilou, mas crashou no ensaio independente; O0 funcionou. Causa nao diagnosticada, nao e bugAndroidcomprovado. Preferir subprocesso isolado no servidor/compiler real para exercitarabort; nao gastar toda rodada depurandoMinGW nem ocultar falha. Arquivar compilerflags/exit e fontes exatas dofixturereal, atualmente nao vieram nosanexosR31.
+
+3. ENTREGAVEL PRINCIPAL 1: ALLOC_FAIL E OPSTAGE NO FLUXO REAL
+Localizar build_e_run e a funcao/seam compartilhada antes editar. O probe ja retornaALLOCFALHA, mas codigoexistente nao prova injecao/zerosideeffects.
+InjetarNULL onde a alocacaoREPACKefetiva e chamada; registrarALLOC_FAIL, cleanup, upload_calls0,compute_calls0. Caso success executaambos; mutantefallbackdefault oucontinuacaocompute deveRED. Nao replicaclassificadorPython; teste da funcao/caminho que o probe realmente usa, cominclude/usos/build. Seextrairlambda, fazerseamreal ouextracaoautomaticaligada ao fonte, preservando corposnecessarios.
+Opstageefetivo0/1/2 deve recusar rota numerica,3permite. Testar antesupload/compute, mutantesbypassRED. Isso nao proibeprofiling/skipdev noutrosmodos dobackend. Aplicarconfigantesprimeiroregistro/staticinit, ler/logarvalor que a sessao realmente recebe; setenvdepoisinit nao provaefetivo. API/fonte real antesinventar getter/campo.
+Fechar negativos de alloc/opstageOFFLINE na mesma rodada; deviceindisponivel nao bloqueia esses testes. Mostrar comandos/exits/cobertura e limitacoes exatas. 'Basejaexiste, tempofoioutroitem' nao eblockertecnico.
+
+4. CONSOLIDAR O CALLER DO GATE SEM REFATORACAO GRANDE
+Flags atuais: alloc_ok=hsp representa supports_post, nao resultadoallocator; sync_ok=(hunw==0) representa escrita, nao evento de synchronizacao. Ok_h pressupoeallocation/computelegitimos, portanto nao concluo falsocasoPASSnessarota, mas melhorar a origem de cada flag e nomes.
+No corelocal ggml_backend_graph_compute chama ggml_backend_synchronize antes retornar (ggml-backend.cpp:444-447). Confirmar no CORE DO COHORT antes exigir outro synchronize redundante; registrar returned_compute/sync/readback e sentinel separadamente. Nao reduzir sync a unwritten0 nem afirmar asyncbug pela ausencia de chamada explicitano probe.
+Propagar resultados reais allocation/readback/ref/exec e erros pelo build_e_run, semdefaults1. As condicoes que nao sao observaveis precisamcontrato/limite declarado. Early-return gera INVALID corretamente, mas agregar counters independente para LEGADO/PIN/INVALID/SKIP e reject-control separado.
+O veredicto deve ser consumido pelo resultado da tentativa/report; nao somente logdiagnostico que nao altera counters/status usados na suite. Preservar legacyFAILhistorico e PINvalidade0 paraerros. Nao reimplementar gateR30nemmoverthresholdparaNUMGATEhandoff.
+Adicionar teste docaller/contabilidade: uma tentativa legacyFAIL/PINPASS +invalid/sentinel/allocfail +controleQ5; countsassumidos devem falhar no mutanteque ignora g30 ou mistura controlecomkernelPASS.
+
+5. ENTREGAVEL PRINCIPAL 2: SNAPSHOT COMPLETO + REFERENCIAS B128
+A pontenumérica minima ja esta verde no PIN. Nao repetir toda bateria6casos apenaspara maisstdout. FazerUMA captura focal doB128 jaaprovado com os mesmosinputsdeterministicos:
+canonweightsquantizados,actfloat,CPUout,HTPout completos; payloadtiledRAW capturado depoisupload no mapping/callbackdiagnosticotest-only, fullsize/canarios eSHA. Nao usar tensor_getqueunpacka como se fosseRAW.
+Uma captura podeexportarQ4 eQ6 se o harnessmesmo permite; priorizarQ4B128 para fecharos10violadores. Arquivar shapes/nb/seed/formula/wbytes/tiledrequired/offsets e limites da copia. Dados sintéticos somente, semmodelo/credenciais/produção.
+Usar leitorQ4dependenciacorrigida eQ6jaaprovado para calcularRscalarCanonical eRtiledReaderDOUBLEacc sobreMESMOSact. Mostrar tabela10coords e metricas8192, onde erroprimeiroaparece (CPUrefapprox/FP16scales/actquant/acc/cast). Quando reproduziractquant nao disponivel, rotularhipotese; nao FP16accporrepresentacaodeout.
+CSV/MMVIOLnao sao vetorescompletos. Nao encerrar refsCCE sem arquivosreais/compilacao/exits; nãopromoverpayloadgoldeninline a bytesdeviceobservados.
+Se captura muda library/probe, checkpoint antes/apos, novaidentidade explicitada. Devicefailure real deve preservar rawlogerro e ainda executaroffline/pipeline, semnovoreboot pararesgatarensaio.
+
+6. ENTREGAVEL PRINCIPAL 3: PIPELINE REAL E PROVENIENCIA
+Implementar o pipeline unico efetivo que extrai/adapta/muta/build/run/export, emdirisolado, preservandoexits. Bastaautomatizarcadeiaatual; nao novo framework. Executar. Exportarexatamenteheader/inc/harness/probe/flags que ocompiler leu, e testesrawstdout/stderr/exits, hashescompletos.
+Mutanteexportador usaadaptervelho->RED antesdeanunciarentrega. Os scripts atuais devem falhar se patch naoencontraambosblocos (r31_ga.pyhojeescrevesemexigirn4/n6==1). Tratamentoidempotente precisa reconhecerestadojaaplicado, nao '0alteracoes=sucesso' semprova.
+ManifestoR31hash6documentos nao prova ELF/APK. ebb80bbd e prefixoreportado; fecharfullSHA da hostlibunstripped/strippedAPK, core/skel/probe/APK/readbackdoarquivoinstalado e mapping/path/buildID permitido. Registrar1cohort porattempt, nao nomepasta/PIDcomoidentidadedeELF.
+Nao executarbuild/reinstall extra somenteporhashfaltante se artefato atual pode serreadbacknao-destrutivo. Se historiconãorecuperavel, limite explicito e checkpointnovo, semfabricarchain.
+Pipeline e referencias podem compartilhar mesmaexportbatchparaevitar novasrodadas sódeorganização.
+
+7. FUSAO/ESTABILIDADE E PASSAGEM AO MODELO
+Fused: predicado+expressaoQ4_K testadosR30; fullprecomputeparamfields/pairconsumer evalidacaoruntime continuamabertos. Nao tratar clock/estrutura minimacomoautorizaçãodefusaocompleta. Fixture ligada a precompute real antes grafo que exercitefused;Q6guardpreservado. Incluirevidencia/builddofix, hojeR31naoarquivoufontes/libparaessecontrato.
+LogginginstabilityOPEN: preservebadfb8 egreen8e/2c, comparecodegen/rodata/relocations; MAX4runsB1varunica, semmisturarfixguard/fused/probe. Nao novos8rebuilds nemternarioarrayredundantecomoaceite. TestescohortR31positivo reduzpreocupação, nao resolvecausahistórica.
+Depois alloc/opstage/pipeline/snapshot/refs e contratos/cobertura aprovados, listarshapesGGUFproduto c4bf comprofileplacement, executar grafocurto;posteriormentehandoffSmartNPU->GPUOpenCL eNPU->GPUVulkan semreplayintegral e beneficiomedido. KERNEL/GRAPH/HANDOFF/PERFORMANCEseparados. Nao começarUI/releaseenquantofusão/placement/transferindefinidos.
+
+8. ACEITE MINIMO E ESCOPO
+R32 deve entregar fluxoalloc/opstageEXECUTADO + pipelineEXECUTADO + snapshot/refsREAIS, oublockerobjetivoporcaptura. M6silent-refusalRED ecaller/countercorrigidos saoajustescurtos, naojustificativa paraadiaros3entregaveismaisumarodada.
+Somente copiaisolada/probeautorizado. SIG/Whisper/UI/defaultVulkan/c4bf/R2/releasesintocados; semcommit/push/promocao/installSIG. WIPSTT/MODULE-MAP/outros preservado, nenhumstash/reset/restoremplo/limpeza. CPH2747serial3B15BD00FVE00000/wififailclosed; nuncaPJA110; stayon7; semroot/governor/reboot/logdreset/pmclear/uninstall. Backupsdeoutratarefanaoautorizamcommitsnessamissao.
+RELATORIO-SMART-DUAL-BACKEND-RODADA32.txt docs/especialista; evidenciasdocs/npu-hymt2/smart-rodada32/ hashesfull/exits/totais:
+A pipelineexecutado/exportcoerente/fullcohort/readback;
+B rejeicaoATIVA,M6RED/zerosideeffects e callerresult;
+C allocNULL/opstage0..3no fluxo real;
+D LEGADO/PIN/INVALID/counterscontrole separados;
+E snapshotRAW/canonact/CPUHTP e refs8192;
+F fusedfronteira/estabilidadebudget/shapesquandoaprovado;
+G escopo/WIP/estadofinal/R16;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e gatesglobaisseparados.
+Preservar resultadoR31: gateavaliadorruntime e6PINPASS sao avanço. O que agora precisa sair sao provasdefluxo e dados, nao outra rodada chamando replica/mensageme planodesenhado de CCE.
