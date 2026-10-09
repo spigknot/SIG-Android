@@ -1,0 +1,11 @@
+FORCE LOGS R24g (binario f5f309d7, run 09:37) — transcrito do terminal:
+======================================================================
+[ggml] KQSET-FORCE q4_K: offset=0 size=9216 nbytes=9216 ne0=256 ne1=64 nb1=144
+[ggml] KQSET-REPACK q4_K: chamando repack_q4_K_tiled!
+(x3 — um por caso B1/B2/B128)
+[ggml] MMTOTAL pass=1 fail=3 skip=0 compute_calls=6 (todos UNWRITTEN!)
+
+INTERPRETACAO: o case K E alcancado; os numeros sao consistentes
+(offset=0! size==nbytes!); o repack E CHAMADO — e o output ainda fica
+UNWRITTEN => o limite NAO esta no dispatch do set_tensor (que executa!).
+O A/B R25 mostrou: com o ternario => GREEN; sem => UNWRITTEN.

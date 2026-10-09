@@ -1,0 +1,12 @@
+MANIFESTO — smart-rodada25 (startup resolvido + A/B do ternario!)
+
+STARTUP: era artefato de leitura (dump tardio!); STREAM provou app logando + GREEN!
+A/B: 8e953285 (R23!) GREEN 2x; fb8cc5d0 (sem ternario!) UNWRITTEN; 2c45ed97 (ternario!) GREEN!
+OPSTAGE: callsites OK, sem tune/mutante => descartado. Build DETERMINISTICO (fb8cc5d0 2x!).
+BASE GREEN NO DEVICE: 2c45ed97. PENDENTES: sanity F32/Q4_0, Q6, B128 violadores, vacina offline.
+
+d6f9aad0faab2b72aa00563dd74ced75eaa50e0854f283d2318a938490c5628c  r24-force-logs.txt  (654 B)
+da9886686356529a9231f44c724b74cea7e20630b724e99d73cac74de12fbdc1  r25-stream-green-8e953285.txt  (11315 B)
+3ba2a48d3ed93635a8de922dfee7792a218a7456a7aa6138d19da0d4116a30e4  r25b-stream-green-2c45ed97.txt  (11315 B)
+
+d9f696611a90d293feb10fe0526ac1747b10aa2541b492d5ca61cc4426ea0223  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA25.txt

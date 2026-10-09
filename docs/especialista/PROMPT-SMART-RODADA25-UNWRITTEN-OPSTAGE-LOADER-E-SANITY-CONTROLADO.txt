@@ -1,0 +1,73 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 25
+REGRESSAO UNWRITTEN: CHECAR EXECUCAO EFETIVA, CONFIG E LOADER ANTES DE OUTRO REBOOT
+===============================================================================
+
+1. PARECER E EVIDENCIAS
+Confirmo os10 hashes dos anexosR24 e tres resultados distintos no PID28152: UNWRITTEN_OUTPUT B1=64/64, B2=128/128, B128=8192/8192. REPORT repetido nao e segundoensaio. R23 B1/B2PASS historico permanece valido, mas nao implica reproducibilidadeatual.
+RETIRAR 'rollbackEXATO prova NAO E CODIGO/ambienteCDSP': fb8cc5d0 e rebuild diferente de8e953285; probeJava/libnpuprobe/config/arquivoscontrole/ordeminit mudaram ou nao foram comprovadosidenticos. Restaurar alguns trechosnaolocaliza todasvariaveis. Sentinel preservado e OUTPUT_NAO_ALTERADO_OBSERVADO no readback; NAO prova por si que DSPrecebeu/executou e naoescreveu.
+OcaseKalcancado/repacklogado reduzem suspeita de falta do dispatchupload, mas nao provam op enfileirada/compute/kernel/uploadcache/readbackcorretos. Device/CDSPdegradado e HIPOTESE, nao causa provada. Separar UNWRITTEN anterior do APPSEMLOG posreboot: podem ser incidentes diferentes.
+Guards/source vacinado parcialmente: fixture nativa/mutantes OFFLINE nao dependem de device; nao marcar todos testes bloqueados por app/device se servidorcompilerfunciona. B128/Q6runtime legitimamente ficam bloqueados ate sanity.
+
+2. PISTA NOVA PRIORITARIA: OPSTAGE PODE SKIPAR COMPUTE E RETORNAR SUCCESS
+FonteSIG inspecionado pelo especialista:
+- htp-ops.h:49-50: QUEUE bit0 e COMPUTE bit1;
+- ggml-hexagon.cpp:82 default QUEUE|COMPUTE;
+- 4377/4428 le GGML_HEXAGON_OPSTAGE e atribui opt_opstage;
+- add_op:1375-1376, sem bitCOMPUTE => HTP_OPFLAGS_SKIP_COMPUTE;
+- graph_compute:3708-3717, so enqueue quando bitQUEUE presente, flush e retornoGGML_STATUS_SUCCESS.
+Logo opstage0 ou2 pode retornar sucesso SEM enfileirar; opstage1 enfileira mas marcaSKIP_COMPUTE. Sentinelinalterado e compatível com isso sem CDSPdegradado. Isto e mecanismoobservado no fonte, NAO afirmacao de que configR24estavaassim.
+Conferir no candidato real equivalencia dessescallsites e registrar config EFETIVA/flags/opcounts; nao presumir pelo getenv/preinit impresso. read_tune em runSmart:1337-1355 aplica /data/local/tmp/p4-tune.txt antesinit; staticone-shot podejaestar inicializado por outra rota. p4-auto/session, mutantefiles e env sao parte do inputdoensaio.
+PRIMEIRO passo deUNWRITTEN: capturar (whitelist) p4-auto/p4-session/p4-tune e mutante/config real mais ordemFIRSTregister/init. Configapresentada deve conter somente camposdebenchbackendsem credenciais. Validebyteconteudo/terminadores/sizes/hashes; smart:sessao\n e13bytes (confirmado), mas nao e a unica configuracao. Nao reescrever arquivoscontrole antes preservar snapshots e compararR23.
+Registrar opt_opstage real, QUEUEenabled, COMPUTEenabled, o.flags SKIP_COMPUTE, graphnodecount/htpnodes/enqueued/submitted/completed e kernelID/enter-exit ondeobservavel. GGML_STATUS_SUCCESS e compute_calls++ do wrapper nao provam umaoperacao DSPexecutada.
+Se opstageinvalido para teste numerico, rejeitar PREFLIGHT_CONFIG_INVALID antes compute e consertar a origem/tuneexplicitamente em probe. Mutante0/1/2 deve ser recusado pelo gate de teste;3 e modo numerico normal se contrato candidato equivale. Nao alterar defaultproduto nem retirar modosdiagnosticosdo backendgeral. Teste permanente evita chamar benchmark/no-compute de inferenciavalida.
+
+3. APPSEMLOG: STARTUP/LOADER ANTES DE REINICIAR PHONE
+MainActivity.java:16 tem static {System.loadLibrary("npuprobe");}, antesonCreate e lognativeLibraryDir linha55. Falha/espera no carregamento ou constructorJNI pode impedir esse log. Ausencia dele nao provaCDSPnemlogdmorto. O try/catch do runProbe dentroonCreate nao captura necessariamente falhaestaticaantesActivityinit.
+ColetarANTES de limpar/rebootar: startresultadoActivity/PID+processalive/timestamps, package/component/resumedactivity, instalacaopath/APK/libsfullSHA e logs relevantesAndroidRuntime/linker/ActivityManager/DEBUG/FastRPC/app. Logsrestritos/redigidos; naoexpor notificacoes, identificadores de outrosapps/dadosproducao nemcredenciais. Nao logcat-c/clear, nao fabricar tombstone quando ausente.
+Distinguir: filtro/tag/PID antigo; Activitynaoiniciada; UnsatisfiedLinkError/symbol/DT_NEEDED/ABI; nativeconstructor/JNI_OnLoadhang; crashantesonCreate; bloqueio/desbloqueio usuario aposboot; app/probeestado. ProcessoPIDque existe nao comprova Activityexecutando.
+Inspecionar libnpuprobe e dependencias reais carregadas, nao so libggml-hexagon. TabelaELF/APKentry/readback/procmap ou dladdrquandoobservavel. Se shutdowncache/processstale, freshprocessdocumentado; force-stop nao e prova de mesmoapk.
+Se necessario adicionar logJavaANTES do load e AFTERload em variante diagnosticaisolada, comcatch/rethrow documentado para registrar o erro, sem mascarar falha como sucesso. Isso cria APKnovo identificado; nao chamardeR23exato. Mais simples: primeiroextrair errosoriginais de linker/AndroidRuntime e resultadoamstart.
+NAO iniciar por 'segundorebootlimpo'. Outro reboot somente depoiscaptura e hipotese falsificavel que precise dele, dentroautorizacao de device/disponibilidade do usuario. Nao loopsreboot/reinstall, nao pmclear/uninstallprobe/SIG, nao apagarconfigbackup ou reiniciarlogd/root. Recuperarstartup primeiro; um incidente nativeinit pode ter causas locais detectaveis sem interromper novamente telefone.
+
+4. HIPOTESES RANQUEADAS, UMTESTE POR VARIAVEL
+H1 barata: tuning/opstage/mutante/ordeminit impede execucao. Predicao configefetiva/flagsop mostramsemQUEUE ouSKIP_COMPUTE; fixconfigpreflightrestauraescrita.
+H2: probe/harness/capture/config diferem deR23. Predicao cohort+probeoriginal com controlsiguaisrestauraPASS enquanto probenovo com mesmaslibsfalha.
+H3: ELF/APK/loader/ABI/callback/registro incorreto. Predicao readback/loadpaths/symbols/startlog contradizem identidadeesperada ou mostramerroantesonCreate.
+H4: dispatch/sincronizacao/cache/graphnode vazio/readbackindependentemente de config. Predicao queue/computeefetivos mas outputnaovisto; snapshotantes/depoissync e contadores isolam limite.
+H5: CDSP/deviceestado. Predicao cohort/config comprovadamenteiguaisfalham tambem em controlesantigossuportados, diagnosticoFastRPC/queue/session mostrafalha; recuperacao deliberada muda resultado mantendo as outrasvariaveis.
+Nao descartar H1-H4 simplesmente porque rebuild de rollback tambemfalhou. Nenhum novo kernelpatch enquanto nao houverlimitecausal claro.
+
+5. RESTAURACAO/A-B CONTROLADO: O QUE E 'EXATO'
+Preservar R23-GREEN host8e953285 como artefato imutavel de referencia, fixupload/alloc mantido. Rebuildfb8... diferente e 'reconstituicao de trechos', nao mesmoELF.
+Script r24h usa findglobalprimeirocaseQ4/Q6/default sem ancorarfuncao set_tensor; limita dois blocos, muda logging e nao comprova restauraarquivo inteiro. Comparar fonteantesdepois integralnormalizado por hash/diff, verificarfuncaocorrecta/occurrencecounts antes outraexecucao. Nao repetirpatchbyfindsemvalidarcontexto.
+Se APKR23 original/libnpuprobeoriginal/configsnapshotexistem, usar seusfullSHA e package/deviceautorizados, freshprocess semuninstall/resetdados. Se nao existem, declarar baseline RECONSTRUIDO e preservar o limite, nao inventar 'APKEXATO'. Fonteprobe-r22 arquivado pode auxiliarreconstrucao, mas nao identifica byteshistoricos.
+A/B pequeno:
+A referenciaR23arquivada (ou reconstruida explicitamente) + fullcohort8e... + configcongeladavalida;
+B probenovo + MESMO fullcohort + MESMAconfig;
+depois variar so hostguards se A/B permite. Toda troca readback/procpath/attemptPID e inputs comprovados. Registrar guard/source flags de cada build, nao ambosfontes 'diff0' como prova da instalacao.
+No fim restaurar o cohortprobeaprovado e verificarefeito. 'APKrestaurado' exige readback; 'sanityrestaurado' exige testePASS. Nao afirmar v12default/produto alterado: backups v12, libsprobeR23 e SIGprincipal sao targets distintos.
+
+6. LOOP SANITY CURTO ANTES DE Q6/B128
+Quando startup/logcapture funcionar: UMAfixtureF32B1 e UMAQ4_0B1 suportadas no mesmoHTP; CPUreference independente garanteharness. Registrar resultado/payload/pre-post/sync/opcounts/configefetiva. Se todasHTPinertes, priorizargateconfig/init/queue; se soKfalha, voltarcontratoK/descriptorkernel.
+Somenteaposcontrolegreen: Q4_K K256/N64/B1 com input/configR23 documentados. Sentinelreadback deve ser validado antescompute e aposexec/sincronizacaoreal; capturar rc/errno/backendstatus antes retornarclasseUNWRITTEN. O logR24entregue omite hrc/contadoresDSP no ramoUNWRITTEN; adiciona-los sem alterarfluxocalculo.
+B2/B128 naosao saneamentoambiente; naorepetirambosaposB1inertes. DepoisB1GREEN reproduzivel, retomarQ6e10violadoresB128 congeladosconformeR24. Configdeexecucaoreal/queue devevirar preflightpermanente; globalopstagemodo diagnóstico podecontinuarexistindo fora testevalidacao.
+Se sentinelpersistir com computeexecutadoprovado, capturardescriptor/kernel/enterexit e copias/cache. Nao forcarescritaoutput para obter 'written' nem trocar sentinel/esconderfalha paraPASS.
+R16 continuaaberto e independente. Capture rawtombstone/logcat/errorcode/buildID imediatamente se houvercrash/abortnovo.
+
+7. OFFLINE NAO BLOQUEADO PELO DEVICE
+Enquantostartup/config se investiga, executar emservidorcompilersaude comprovada a vacina de callbackupload+alloc+offset/partial e mutantesdispatch->memcpy/allocK->canonical conformepromptR24. Testeestrutura/opstage numérico preflight dosmodos0/1/2/3. Guard negativo impede pack de ler tensorcompleto sobreinputparcial.
+As fixtures native compartilhadas/codepathsreais podem rodarsemDSP; se houverdependenciatecnica que realmenteimpeca essealvo, entregar comando/erro, nao 'devicebloqueoufixtureoffline'. Q6oracleoffline e auditafusedFFNtambempodemprogredir semphone. Sem grandesrefatoracoes/numericalcriteriachanges; B128criterioabsrelcongelado.
+Nao delegar ou paralelizarmultiplosatores no mesmoADB/instalacao; umautorcontroledevice, trabalhosofflineindependentes se desejado. Sem stressrepetido/reinstallsblindas.
+
+8. ESCOPO/ENTREGA A-H
+Somente copiaisolada/probeautorizado; semSIG/Whisper/UI/defaultVulkan/c4bf/R2/release/commit/push/promocao/instalacaosobreSIGsemOK. PreservarWIPbyteabyte e evidencias, semlimpeza/stash/reset/restoreamplos. CPH2747serial3B15BD00FVE00000/wififailclosed, nuncaPJA110; stayon7; semroot/governor/logdreset; FFmpegpin so processoautorizado.
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA25.txt docs/especialista e logs docs/npu-hymt2/smart-rodada25/ fullSHA/contagens/exits:
+A startup/loader/process/activity e checkpointELF/APK/PID;
+B configarquivos/ordeminit/optopstageFLAGS efetivos e vaccinapreflight;
+C exactversusrebuiltA/B com controlsF32/Q4_0/Q4KB1;
+D opcounts/queue/compute/sync/sentinel e primeiralimitenaofuncional;
+E causasprovadas ouhipotesesrankedcomtestes; rebootseocorrer justificado e antes/depoiscoletados;
+F offlinecallbacks+mutantes/Q6oracle/fusedFFN com resultado real;
+G escopo/preservacao/readbackrestauracaodoprobetarget;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE distintos.
+Minimo: explicarstartupmudo ouconfig/no-compute com evidencianova e construirloopredcapablecurto; nao outrorelatorio 'ambienteCDSPdegradado' apoiado apenas em rollbackparcial ou sentinelpersistente. R23GREEN mantemmarcohistorico, nao e garantiareprodutibilidadeatual. Sanitydeexecucaoreal precede Q6/B128.

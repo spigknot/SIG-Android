@@ -1,0 +1,133 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 25
+=========================================================================
+Data: 09/10/2026. Ordens: "REGRESSAO UNWRITTEN: CHECAR EXECUCAO EFETIVA,
+CONFIG E LOADER ANTES DE OUTRO REBOOT". Copia isolada/probe.
+
+RESUMO EXECUTIVO — OS DOIS MISTERIOS DA R24 RESOLVIDOS: (1) O "APP SEM
+LOG" NAO EXISTIA: era artefato de LEITURA (os dumps logcat -d tardios
+liam o buffer ja rotacionado pelo spam do sistema; o STREAM continuo
+provou que o app SEMPRE logou — nativeloader + L55 + mmtest!). (2) O
+UNWRITTEN: A/B CONTROLADO (parecer §5!) revelou uma correlacao FORTE com
+o build: o binario R23 8e953285 (com o ternario no fprintf!) => GREEN
+(reproduzido 2x: 08:45 e 11:18!); o fb8cc5d0 (o "rollback r24h", SEM o
+ternario!) => UNWRITTEN; o 2c45ed97 (restaurado o ternario!) => GREEN
+AGAIN (11:23! B1/B2 PASS!). O rebuild e' DETERMINISTICO (fb8cc5d0
+rebuildado = fb8cc5d0!) => nao e' flake de build; o delta fonte esta fora
+da janela do set_tensor (diff da janela = 0!); a diferenca 72/48 bytes
+entre os binarios e' o ternario (`? tensor->name : "?"` vs direto!) — o
+mecanismo exato (timing/layout?) fica ABERTO, mas o A/B empirico e' claro
+e a base GREEN esta restabelecida. Cobertura dos §: opstage (callsites
+OK, sem tune/mutante/mudanca de config!), loader (nativeloader OK!),
+fixture F32/Q4_0 (pendente — bloqueio de tempo/escopo, nao de device!).
+KERNEL_VALIDATED: NAO (Q6/B128 pendentes!).
+
+-----------------------------------------------------------------------
+A. CHECKPOINT / STARTUP (a captura do §3!)
+-----------------------------------------------------------------------
+A.1 nativeloader(17208): "Load .../libnpuprobe.so using class loader" ✓;
+    NpuProbe(17208): "nativeLibraryDir=/data/app/.../lib/arm64" (L55!) ✓
+    e o AUTO-GATILHO='smart:sessao' + o mmtest COMPLETO nos logs do STREAM
+    (o app NUNCA esteve mudo!). O logcat -d anterior falhava por buffer
+    rotacionado (o spam Oppo cospe milhares de linhas/min!). LIÇÃO: usar
+    STREAM (nunca julgar por dump tardio!).
+A.2 App: PID 17208 vivo; package ok (codePath /data/app/~~ix552d0V9...!);
+    sem UnsatisfiedLinkError/linker error; /proc/status: sleeping normal.
+    O force-stop anterior matou 584 (normal). Nada de CDSP/logd morto!
+A.3 CHECKPOINT DE ARTEFATOS (imutaveis!): 8e953285 (R23-GREEN, salvo em
+    kqfix-libs! — 2x GREEN!) = REFERENCIA; 2c45ed97 (o R23-reconstituido +
+    ternario! = base GREEN ATUAL no device!) = 5816184 B; fb8cc5d0 (sem
+    ternario! = UNWRITTEN!) = 5816160 B; 09a013a3/1918d050/7767a77c/
+    f5f309d7 (guard/HEX/FORCE = UNWRITTEN, 5816xxx!). Fonte kq2/sigcand2
+    identicos; janela do set_tensor (L1318-1390) validada por diff = 0 vs o
+    arquivado R23-estado (a divergencia real era o ternario FORA do diff
+    inicial — achado pelo A/B!).
+
+-----------------------------------------------------------------------
+B. CONFIG / OPSTAGE (a pista do §2!)
+-----------------------------------------------------------------------
+B.1 Callsites conferidos no candidato: default opt_opstage = QUEUE|COMPUTE
+    (L83 ✓); add_op usa SKIP_COMPUTE se sem bit COMPUTE (L1785 ✓);
+    graph_compute enfileira se bit QUEUE (L4123 ✓); getenv
+    GGML_HEXAGON_OPSTAGE (L4796/4847 ✓). LOGICA OK!
+B.2 Config real: /data/local/tmp/p4-tune.txt NAO EXISTE (sem tune!);
+    p4-mutante.txt NAO EXISTE (mutante=(none)!); p4-auto="smart:sessao"
+    (13 B ✓); p4-session="mmtest:q4k"; env do app sem OPSTAGE/GGML.
+    => opstage efetivo = DEFAULT (sem SKIP!). NAO era a causa do UNWRITTEN.
+    (Preflight permanente de opstage: fica como pendencia §7/§6!)
+
+-----------------------------------------------------------------------
+C. A/B CONTROLADO (exact vs rebuilt!)
+-----------------------------------------------------------------------
+C.1 RUNS REAIS (mesmo fluxo smart:sessao+mmtest:q4k, STREAM!):
+    - 8e953285: 08:45 GREEN (B1/B2 PASS!) + 11:18 GREEN (reproduzido!).
+    - fb8cc5d0 (rollback r24h SEM ternario!): 09:41 UNWRITTEN (dump ok!).
+    - 2c45ed97 (ternario RESTAURADO!): 11:23 GREEN! (B1/B2 PASS!).
+C.2 Build DETERMINISTICO: rebuild do fonte identico => mesmo hash
+    (fb8cc5d0 2x!). Delta fonte != janela set_tensor (diff=0!). O ternario
+    (72/48 B de codigo!) separa GREEN/UNWRITTEN — mecanismo aberto
+    (timing/layout? UB do fprintf? 1 amostra/lado + o R23 2x!), mas o dado
+    e' empirico e a base GREEN esta' no device. Controles F32/Q4_0 B1 na
+    mesma sessao HTP: PENDENTES (nao executados nesta rodada — o foco foi
+    o A/B; registrar!).
+C.3 "APK restaurado" verificado por readback? O APK no device = o probe
+    com o 2c45ed97 (install Success + o run GREEN prova!). v12/lib
+    produto/SIG: intocados (o probe e' separado!).
+
+-----------------------------------------------------------------------
+D. OP COUNTS / SYNC / SENTINEL / PRIMEIRA LIMITE
+-----------------------------------------------------------------------
+D.1 O ramo UNWRITTEN do probe nao imprimia hrc/contadores (omissao
+    notada pelo especialista!) — o probe agora tem o MMVIOL/MMHOST-PESO;
+    a classe UNWRITTEN com rc/status fica pendente (proximo passo junto do
+    sanity!).
+D.2 Primeira limite NAO-funcional observada no material R24: o ramo
+    UNWRITTEN do fb8cc5d0 — com o binario GREEN de volta, o limite
+    reproduzivel atual e' nulo (green!).
+
+-----------------------------------------------------------------------
+E. CAUSAS / HIPOTESES
+-----------------------------------------------------------------------
+E.1 H2 (probe/harness/config diferem) PARCIALMENTE CONFIRMADA no sentido
+    de BUILD/BINARIO (o ternario!). H1 (opstage/tune): DESCARTADA
+    (defaults OK!). H3 (loader/ABI): DESCARTADA (nativeloader OK!). H4/H5
+    (dispatch/CDSP): sem evidencia; o green atual com o mesmo device
+    REDUZ H5. O mecanismo do ternario: OPEN (registrado honestamente!).
+E.2 LIÇÃO DE MÉTODO: nunca julgar app por logcat -d tardio (buffer!); A/B
+    de binarios com o MESMO fluxo; diff de janela nao basta (o delta pode
+    estar em COMENTARIO/STRING aparentemente neutro!).
+
+-----------------------------------------------------------------------
+F. OFFLINE (§7) / Q6 / FUSED_FFN / R16
+-----------------------------------------------------------------------
+F.1 Vacina offline callbacks+mutantes / opstage preflight numerico 0/1/2/3:
+    PENDENTES (registrados; o tempo foi para a recuperacao do A/B!).
+F.2 Q6_K: pendente (proximo, apos sanity+controles!). fused_ffn L3122:
+    nota->gate mantida. R16: separado, sem novo abort.
+
+-----------------------------------------------------------------------
+G. ESCOPO / PRESERVACAO
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP intocado; PJA110 nao tocado;
+    CPH2747 wifi; stayon7; sem root/governor/logd; UM reboot em R24
+    (justificado) — NENHUM novo reboot nesta rodada! v12 intocado.
+G.2 Backup: kqfix-libs (8e953285 etc!) preservado; scripts r24/r25
+    arquivados.
+
+-----------------------------------------------------------------------
+H. ESTADOS
+-----------------------------------------------------------------------
+H.1 STARTUP: RESOLVIDO (era leitura!); A/B: CCE (correlacao forte
+    ternario/binary!); base GREEN restabelecida (2c45ed97 no device!);
+    opstage/config: verificados OK. SANITY: B1/B2 GREEN reproduce!
+    Controles F32/Q4_0: PENDENTE. Q6: PENDENTE. B128 (10 violadores):
+    PENDENTE (dump pronto!). KERNEL_VALIDATED: NAO. COMPILED: sim (8
+    builds host R24+R25!).
+H.2 PROXIMOS EXATOS: (1) sanity completo (F32/Q4_0 B1 + Q4_K B1 com
+    contadores/rc no ramo UNWRITTEN!); (2) Q6_K B1 (offline+device!);
+    (3) B128 violadores (dump!); (4) vacina offline (mutantes!); (5)
+    ISOLAR O TERNARIO (A/B duplo com 2 amostras/lado!) ou aceitar como
+    achado empirico documentado.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada25/ (r25-capture-live.txt com o
+STREAM que provou o app logando + o GREEN!, r25b-capture.txt o A/B
+2c45ed97!, diff-e-janela, hashes dos 3 binarios!) + manifesto.
