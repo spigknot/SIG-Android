@@ -1,0 +1,117 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 19
+=========================================================================
+Data: 09/10/2026. Ordens: "EXECUTAR A FASE II: BUFFER REPACK, SUPPORTS NO
+GRAFO REAL E PRIMEIRO ERRO". Sem publicacao; copia isolada/probe.
+
+RESUMO EXECUTIVO: A FASE II FOI IMPLEMENTADA, BUILDADA E EXERCITADA.
+O harness v3 obteve o buffer REPACK REAL pelo caminho do especialista
+(registry -> ggml_backend_dev_get_extra_bufts; "HTP0-REPACK" ENUMERADO e
+USADO!), alocou pesos no REPACK e ativacao/output no HTP, consultou
+supports_post no MESMO grafo alocado (post=1!), garantiu CPU-ref finita
+antes do HTP e coletou o PRIMEIRO ERRO completo. RESULTADO DO ENSAIO REAL
+(candidato KQ_ON, K=256 N=64, B=1/2/128): sup_pre=1, repack=HTP0-REPACK,
+sup_post=1, ref OK (nf_ref=0), hrc=0, output ESCRITO mas com NaN/lixo
+(first_nonfinite b=0 n=0 bits=0xffffffff; first_viol b=0 n=1 htp=-76327.77
+vs ref=-192.50; nf_out=45/64 em B=1; 7395/8192 em B=128) => conforme a
+§7 do especialista: "post=true + escrita real + HTP NaN/erro numerico =
+DEFEITO DEMONSTRADO no caminho candidato" — com o contrato do harness
+AGORA correto. Resta separar HOSTREPACK vs DESCRITOR vs DSPKERNEL (Fase
+III: oraculo/trace) — NAO colapsar em "bug DSP" sem essa separacao.
+Testes offline permanentes: 10 testes RED/GREEN sem DSP (T6 nasceu RED e
+foi corrigido => RED/GREEN real). Baseline v12 nao precisa repetir (sup
+aceito na R18). KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. IDENTIDADE / CONTRATO API CONFIRMADO NO FONTE DO COHORT
+-----------------------------------------------------------------------
+A.1 kq2 confirmado: repack_buffer_type (L291/L2300-2312, context
+    "*-REPACK"); extensao get_extra_bufts exportada sob strcmp+opt_hostbuf
+    (L4732-4733); opt_hostbuf=1 DEFAULT (L72; override GGML_HEXAGON_HOSTBUF
+    L4779); bufts[0]=repack (L4649). Headers do probe: dev_backend_reg
+    L188, reg_get_proc_address L205, get_extra_bufts_t L219,
+    alloc_ctx_tensors_from_buft (ggml-alloc.h:82), buft_name L37, e
+    buffer_get_type (usado por ser struct opaca).
+A.2 No device: extensao respondeu e enumerou "HTP0-REPACK" (log:
+    "MM: repack buft = HTP0-REPACK"); alloc: bw=HTP0-REPACK ba=HTP0
+    (nomes reais pelo buffer_get_type!). Callback nao exportada NAO foi
+    chamada por nome; registro via registry do proprio device HTP0.
+
+-----------------------------------------------------------------------
+B. TESTES OFFLINE PERMANENTES (RED/GREEN, sem DSP)
+-----------------------------------------------------------------------
+B.1 r19-offline-tests.py: 10 testes das regras do gate: T1 pre/post =>
+    REJECTED_BUFFER (nunca compute); T2 ref NaN => CPU_REF_FAIL (aborta
+    antes do HTP); T3 NaN primeiro elemento => NONFINITE_HTP (hrc=0 nao
+    vira PASS); T4 rc!=0 => EXEC_FAIL; T5 sentinel nao escrito =>
+    UNWRITTEN_OUTPUT (nao confundido com kernel errado); T6 violacao de
+    tolerancia com NRMSE pequeno => NUMERIC_FAIL (nasceu RED por erro do
+    proprio teste => corrigido => GREEN: RED/GREEN real!); T7 indexing
+    B1/B2/B128 (b*N+n com strides) span OK; T8 rotulagem fail-closed
+    (attempt+cohort+pid obrigatorios; cohort trocado recusado = vacina do
+    erro de rotulagem R17!). Resultado: 10 OK / 0 RED, exit 0.
+
+-----------------------------------------------------------------------
+C. GRAFO/BUFFERS/PRE/POST/REPACK EFETIVO
+-----------------------------------------------------------------------
+C.1 Ordem por caso: (1) supports_pre em grafo descartavel; (2) CPU-ref
+    PRIMEIRO (grafo independente, backend CPU, mesmos bytes quantizados);
+    ref nao-finita => CPU_REF_FAIL sem tocar o HTP; (3) HTP: pesos em ctx
+    SEPARADO alocado via alloc_ctx_tensors_from_buft(buft_repack),
+    ativacao/output no ctx de compute alocado no backend; (4)
+    supports_post_alloc NO MESMO cc pos-alocacao (logado!); post=0 =>
+    REJECTED_BUFFER; (5) upload (tensor_set) + sentinel no output; (6)
+    compute; (7) metricas completas.
+C.2 Logs reais do ensaio: "sup_pre=1 repack=1"; "alloc ok bw=HTP0-REPACK
+    ba=HTP0 sup_post=1".
+
+-----------------------------------------------------------------------
+D. ENSAIO MINIMO / PRIMEIRO ERRO / COBERTURA
+-----------------------------------------------------------------------
+D.1 Q4_K K=256 N=64 B=1: hrc=0 pre=1 post=1 nf_ref=0 nf_out=45 nd=19/64
+    max_abs=9.09e6 nrmse=9881 viol=19 FAIL. first_nonfinite HTP b=0 n=0
+    bits=0xffffffff (NaN!) primeiro elemento. first_viol b=0 n=1
+    htp=-76327.765625 ref=-192.495834 lim=9.644792.
+D.2 B=2: nf_out=90/128; B=128: nf_out=7395/8192 nd=797 viol=797 (o lixo
+    escala com o batch!). Cobertura COMPLETA contada (nd/expected e
+    nonfinite por lado; NRMSE so quando nd>0; primeiro erro preservado
+    sem fail<=3).
+D.3 Q5_K: supports=0 (rejeicao continua separada da contagem de kernels!).
+
+-----------------------------------------------------------------------
+E. PROGRESSAO / CAUSA (Fase III)
+-----------------------------------------------------------------------
+E.1 O defeito esta DEMONSTRADO no caminho candidato com o contrato
+    correto (repack+post+ref). Proximo passo da Fase III (§8): separar
+    HOSTREPACK vs DESCRITOR vs DSPKERNEL via (a) teste OFFLINE
+    repack->unpack com ORACULO independente (golden upstream pinado;
+    fixtures scales/mins/signs/tile-edges/padding); (b) trace minimo
+    host/DSP (opID/types/dims/rowbytes/kernelID) por mecanismo SDK seguro.
+    NAO executado nesta rodada (escopo da rodada era o ensaio+gate; o
+    oraculo fica como proximo passo concreto com dados preservados).
+E.2 Nenhum patch de kernel; nada de supports=true como substituto.
+
+-----------------------------------------------------------------------
+F. INCIDENTE R16 / GRAFO / SMART
+-----------------------------------------------------------------------
+F.1 Separado e aberto (NaN do harness v3 e evento distinto do abort do
+    c4bf R16). Sem grafo/Smart/benchmark enquanto KERNEL_VALIDATED=NAO.
+
+-----------------------------------------------------------------------
+G. ESCOPO / PRESERVACAO
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP alheio intacto (nao
+    incluido; outro agente commitou o dele: 43a0f16); CPH2747
+    3B15BD00FVE00000; stayon7; sem root/governor; FFmpeg pin 8.0.1 so nos
+    processos de validacao; reruns baseline nao repetidos (aceito R18).
+
+-----------------------------------------------------------------------
+H. ESTADOS
+-----------------------------------------------------------------------
+H.1 COMPILED: sim (harness v3 build RC=0). KERNEL_VALIDATED: NAO (defeito
+    demonstrado no caminho candidato). GRAPH/HANDOFF/PERF: nao.
+H.2 Fase I: CCE. Fase II: CCE (implementada+buildada+exercitada; ensaio
+    com repack/post/primeiro-erro completos!). Fase III: PENDENTE
+    (oraculo/trace — proximo passo concreto; dados preservados).
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada19/ (r19-ensaio-v3.txt,
+r19-offline-tests.py, api check) + manifesto.

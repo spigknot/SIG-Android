@@ -1,0 +1,13 @@
+MANIFESTO — smart-rodada19 (Fase II: repack + post + primeiro erro)
+
+CONTRATO: repack_buffer_type + get_extra_bufts confirmados no kq2; opt_hostbuf=1 default; device enumerou HTP0-REPACK (usado no alloc!).
+ENSAIO v3 (KQ_ON, K=256 N=64): sup_pre=1 repack=HTP0-REPACK sup_post=1 ref OK hrc=0; HTP NaN/lixo: first_nonfinite b=0 n=0 bits=0xffffffff; first_viol n=1 -76327.77 vs -192.50; nf_out 45/64 (B=1), 7395/8192 (B=128).
+§7: post=true + escrita real + HTP NaN = DEFEITO DEMONSTRADO no caminho candidato (Fase III: oraculo/trace proximo).
+TESTES OFFLINE: 10/10 OK (exit 0; T6 RED->GREEN real!).
+RESTORE: v12 de volta (device 710636 readback ok).
+
+89e465e49b882eb1179303503372a7e2727b3d33e1444a5659797ff821d7bde8  r19-api.py  (658 B)
+5eb319db96e9222f459b707821a6e3d3356e9e473585b98fbb01fd7509bc8406  r19-ensaio-v3.txt  (4525 B)
+1d9d74c5e6731276ed37dfca81902402312570a15339c01662cff46f82d40e45  r19-offline-tests.py  (3901 B)
+
+f6db3944e10f3ced5b9f21d15c318f548eb2c67ae70764ac3f1748a7548ce44a  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA19.txt

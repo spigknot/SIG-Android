@@ -1,0 +1,79 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 19
+EXECUTAR A FASE II: BUFFER REPACK, SUPPORTS NO GRAFO REAL E PRIMEIRO ERRO
+===============================================================================
+
+1. PARECER E ACEITACAO DA R18
+A contradicao FUNCIONAL de suporte esta resolvida: o trace limpo V12 (PID25572) mostra sup_h=0 e SKIP para Q4_K/Q6_K, coerente com o fonte. A retificacao de rotulagem R17 e aceita. Nao reabrir essa discussao nem gastar outra rodada repetindo toda a matriz baseline.
+O especialista verificou os anexos locais e seus hashes. Deduplicando linhas de resultado do PID25572: 15 casos matmul, sendo 7 PASS, 2 FAIL, 6 SKIP. O MMTOTAL 8 PASS inclui o teste separado de rejeicao Q5_K; nao e oitavo kernel aprovado. PID13734: tres casos Q4_K SKIP. Q4_0 B128 viol=0.04331 e Q8_0 B128 viol=0.04557 sao FAIL reais do criterio atual.
+Ha progresso de identidade, mas a cadeia documental full-cohort nao esta inteiramente entregue: manifesto R18 hasheia tres arquivos de evidencia, nao os ELF/APK por tentativa; r18-sha.py trunca hashes para 24 caracteres e a tabela do relatorio usa prefixos. O anexo fase1 tem trace, nao a tabela completa de readback. Nos logs fornecidos o especialista nao encontrou linhas fullSHA de readback ELF. Nao afirmar auditoria full-cohort CCE pelo especialista; foi verificada a coerencia de suporte, nao toda a cadeia carregada.
+KQ_ON invalido e resultado HISTORICO do harness anterior. Ainda nao ha prova do candidato com supports_post e buffer correto. Causa permanece aberta; nao chamar lixo de bug do kernel demonstrado antes dessa prova.
+
+2. ESCOPO E ENTREGA DESTA RODADA
+Continuar somente copia isolada do candidato/probe autorizado; nao editar SIG principal, Whisper, UI, R2, defaults ou modelo produto c4bf. Sem APK sobre SIG, promocao, release, commit/push sem autorizacao especifica. Preservar WIP SmartJoin/FFmpeg byte a byte; nao restaurar/stash/reset em lote nem fazer limpeza.
+CPH2747 serial 3B15BD00FVE00000, wireless somente apos identidade fail-closed; PJA110 excluido; stayon7 preservado. Usar timeout limitado/captura imediata sem root ou mudanca de governor.
+ENTREGA MINIMA: harness v3 realmente implementado/buildado, testes offline permanentes do gate/metrica, e UM ensaio diagnostico do candidato com peso REPACK e supports_post no mesmo grafo. Nao encerrar apenas com 'Next: construir o grafo'. Se device/build bloquear, entregar testes reais offline e bloqueio preciso, sem inventar runtime.
+Se caso minimo passar, prosseguir incrementalmente nesta mesma rodada conforme gates abaixo. Se falhar, localizar o primeiro erro com dados suficientes; nao repetir grades cegas.
+
+3. CAMINHO API CONCRETO ENCONTRADO PELO ESPECIALISTA
+No fork SIG inspecionado:
+- ggml-hexagon.cpp:3941-3943 retorna sess->repack_buffer_type;
+- ggml-hexagon.cpp:4332-4338 exporta a extensao 'ggml_backend_dev_get_extra_bufts' quando opt_hostbuf esta ativo;
+- ggml-backend.h define ggml_backend_dev_get_extra_bufts_t como funcao que retorna array terminado por NULL;
+- llama-model.cpp:988 em diante demonstra uso via ggml_backend_dev_backend_reg(dev) -> ggml_backend_reg_get_proc_address(reg, 'ggml_backend_dev_get_extra_bufts') -> funcao(dev);
+- os headers locais do probe contem ggml_backend_dev_backend_reg, ggml_backend_reg_get_proc_address, ggml_backend_dev_get_extra_bufts_t e ggml_backend_alloc_ctx_tensors_from_buft (ggml-alloc.h:82).
+O executor deve confirmar esses contratos no FONTE DO COHORT CANDIDATO antes de usar; API no header local nao prova ABI compativel com biblioteca carregada.
+Obter a extensao pelo registry do proprio device HTP0; enumerar bufts com nomes/device. Escolher o buffer repack da MESMA sessao por contrato real. Nao usar registry CPU nem um nome hardcoded como prova de identidade. Callback privada estatica nao deve ser chamada por dlsym inventado.
+Opt_hostbuf importa: se desativado, a extensao pode nao existir e buffer default pode ser tratado como repack pelo helper. Conferir opt efetivo e fonte; nao concluir 'REPACK indisponivel' sem distinguir esse modo. Configurar antes init one-shot e registrar valores efetivos. Nao alterar arbitrariamente env para burlar false.
+
+4. HARNESS v3: MESMO GRAFO, ALOCACAO CORRETA E GATES
+Construir pesos quantizados em contexto/buffer apropriado REPACK e ativacoes/output no buffer de compute apropriado HTP, com todos mapeados na mesma sessao. Alocar pesos separadamente por ggml_backend_alloc_ctx_tensors_from_buft quando confirmado para o cohort. O grafo pode referenciar os pesos vivos de outro contexto; preservar contextos/buffers ate fim. Nao marcar TODO contexto WEIGHTS nem alocar ativacoes/output indiscriminadamente em buffer de peso.
+Registrar type/op/ne/nb/buft/usage/alloc_size/alignment para peso, ativacao, output, e suporta_pre antes de alocar no mesmo grafo.
+Apos alocacao correta, consultar supports_post_alloc no MESMO cc que entrara em graph_compute. Depois de upload, registrar caminho de tensor_set/repack e supports_post_upload se upload muda metadata. Nao reconstruir grafo para a consulta.
+Se suporta_post=false, classificar REJECTED_BUFFER/UNSUPPORTED e nao computar. Se pre=true/post=false, isso demonstra precisamente por que a consulta descartavel anterior era insuficiente; nao modificar supports para aceitar nem contabilizar como kernel numericamente defeituoso.
+Guardar bytes canonicos quantizados gerados pela API real uma unica vez, qchunk conferido; CPU e HTP recebem os mesmos bytes, em grafos independentes. Validar CPU support, alloc, upload, execucao e finite da referencia inteira ANTES de executar HTP. Referencia invalida aborta o caso com CPU_REF_FAIL.
+Depois upload, readback logico/dequant comparado a referencia e trace do repack realmente chamado. Roundtrip nao e prova independente de layout: encode/decode podem compartilhar erro; correlacionar formato com contrato de kernels e, se necessario, oraculo da secao8.
+Assert span dos strides <= bytes obtidos, capacidades, tamanhos quantizados/repacked, limites e alinhamento. Capturar strides apos alocacao. Sincronizar conforme API efetiva e verificar todos retornos. Sem dados nao inicializados tratados como output real.
+Sentinel de output antes do compute: usar mecanismo permitido pelo backend, rastrear bits originais e cobertura de escrita. Sentinel inalterado e sinal de saida nao escrita, nao prova de erro numerico. Evitar sentinel que coincida com saida legitima; documentar limitacoes e complementar com contador de execucao se necessario. Nao escrever fora da alocacao nem usar canario sem espaco reservado.
+
+5. METRICAS E VACINAS PERMANENTES ANTES DO DEVICE
+Separar exec_cpu_ok/exec_htp_ok, ref_nonfinite_count/out_nonfinite_count, first_nonfinite(lado,b,n,valor/bits), first_tolerance_violation(ref,htp,lim), output_unwritten_count e compared_count/expected_count.
+Varrer vetor com contagem completa de finite, mesmo se houver erro inicial; preservar primeiro erro sem condicao fail<=3. Distinguir metricas de todos os valores finitos versus vetor inteiro; nao emitir NRMSE global quando cobertura incompleta. NaN no primeiro elemento nao pode virar 'max_abs=0 => outputzero'.
+Mantem criterio abs_tol=0.02+rel_tol=0.05*abs(ref) do harness atual para comparabilidade, sem declarar tolerancia cientificamente calibrada nem relaxar para verde. NRMSE auxiliar nao anula falha por elemento; documentar sumref2=0/nd=0 com status explicito.
+Testes offline permanentes RED/GREEN, sem DSP: pre=true/post=false impede compute; CPUref NaN impede HTP; output NaN primeiro/ultimo elemento distingue lado e cobre contagem; exec rc!=0 nao usa vetor como resultado; B1/B2/B128 verifica indexing/span; sentinel nao escrito classificado; violacao de tolerancia com NRMSE pequeno permanece FAIL.
+Fixar rotulagem automaticamente: attempt_id + cohort_id + APK/fullSHA + PID no preambulo do ensaio e em resultado machine-readable. Agregador recusa baseline com hash candidato, rotulo sem origem e linhas de PID/attempt antigo. Teste mutante de rotulagem deve falhar. Isso formaliza a vacina do erro R17; nao depender somente da lembranca de force-stop.
+Exit code/estado por execucao distingue PASS total, falha e SKIP legitimo. Teste Q5_K rejeitado e assert de suporte separado das contagens de kernels executados. Nao mudar todos testes alheios nem PATH global para esses testes.
+
+6. ENSAIO REAL MINIMO E PROGRESSAO CONDICIONAL
+Preflight de identidade read-only, fresh process e captura dedicada. No mesmo lote, emitir tabela fullSHA completa nao truncada: origem unstripped -> entrada stripped APK -> readback instalado, com caminho/buildid/config dos ELF e SHA APK; host/core/skel do candidato e baseline. Reusar artefatos/evidencias existentes, sem repetir bateria baseline para gerar hashes. Se caminhos carregados/ABI contradizerem tabela, abortar antes DSP e declarar BLOQUEADO_IDENTIDADE.
+A stripping explicita e legitima; nao esperar hashes unstripped==stripped. O que precisa coincidir e APKentry com binario instalado correspondente. Fonte 'jnilibs-backup' e origem de artefatos, nao pin de fonte; registrar provenance original ou limite de provenance sem inventar.
+F32 e Q4_0, K256/N64/B1 no candidato -> controles pequenos e buffers validados.
+Q4_K, K256/N64/B1 com REPACK, post=true, ref finita -> compute uma vez e first-error completo.
+Q6_K isolado igual -> compute uma vez se preflight/localizacao permitir. Se abort ocorrer, preservar tombstone/logcat imediatamente antes de novo ensaio; nao deixar rotacionar como R16.
+Se passar: B2, depois B128, com cobertura e numerica completas. Controls antigos B128 continuam FAIL conhecido; registrar comparacao e nao atribuir esse erro preexistente ao port K. Nao anunciar KERNEL_VALIDATED global com grades incompletas; status minimo e distinto de aceitacao total.
+Se dois K passam no minimo, prosseguir shapes HyMT2 extraidos do GGUF c4bf e suportados pelo candidato com planejamento de RAM. lm_head acima do limite pode ser rejeicao legitima: registrar SKIP/placement real, nao exigir suporte que contrato exclui. Se shape falhar, reduzir reproducer mantendo tipo/stride/path para localizar fronteira. Nada de modelo completo/prefillSmart ate gates de kernel/shapes relevantes fechados.
+Se falhar minimo: parar grid e seguir secao8 dentro da rodada; nao relatar apenas 'sup_h=1+fin=0' novamente.
+
+7. INTERPRETACAO DO RESULTADO DO ENSAIO
+- pre=true/post=false: contrato do HARNESS nao atendido; corrigir alocacao, nao kernel.
+- ref CPU nao finita: fixture/referencia invalida; nao diagnosticar DSP.
+- post=true + upload/repack validado + ref finita + output nao escrito: investigar dispatch/exec/sincronizacao/protocolo antes numerica.
+- post=true + escrita real + HTP NaN/erro numerico: defeito demonstrado no caminho candidato; localizar HOSTREPACK vs DESCRITOR vs DSPKERNEL com oraculo e trace, nao colapsar todos em 'bug DSP'.
+- output correto com REPACK: harness anterior tinha contrato inadequado; confirmar contraste pre/post sem executar buffer rejeitado so para obter lixo.
+Nenhum desses casos por si resolve abort R16 no grafo maior. NaN e filaabort sao eventos distintos; manter incidente R16 aberto ate reproducer controlado ou evidencia suficiente do fix.
+
+8. SE FALHAR MESMO COM BUFFER CORRETO
+Offline repack/dequant com oraculo independente: golden upstream pinado, fixtures escalas/mins/signs/tileedges/padding; referencia canonica dequant e bounds/alignment. Encode/decode candidatos apenas nao bastam. Tolerancia ou byte equality derivadas do formato real; nao inventar reversibilidade se port altera representacao.
+Trace minimo host/DSP: opID/types/dims/strides/rowbytes/params/kernelID/entrada-saida/status. Usar mecanismo SDK seguro ou trace/counters compartilhados ja suportados; nao criar buffer compartilhado/callback ABI sem design e rebuild coerente. Logs sem printf reentrante na janela FastRPC. Provar se kernel Q4_K/Q6_K novo realmente entrou e completou.
+Instrumentacao vira nova identidade. Rebuild so skel permitido somente sem mudanca de ABI/protocolo/layout e com host congelado compativel; alterar contrato exige rebuild cohort. Patch minimo na copia isolada com reproducer RED/GREEN; jamais supports=true como substituto para implementacao.
+
+9. ENTREGA A-H
+RELATORIO-SMART-DUAL-BACKEND-RODADA19.txt em docs/especialista e logs/fixtures/scripts em docs/npu-hymt2/smart-rodada19/:
+A identidade/tabela fullSHA carregada + restauracao fullcohort;
+B tests offline/metrica/rotulagem com contagens e RED/GREEN;
+C grafo/buffers/pre/post/repack efetivo;
+D ensaio minimo CPU/HTP e primeiro erro/cobertura;
+E progressao B/shapes OU oraculo/trace/patch quando falhar;
+F incidente R16 separado, grafo/Smart/benchmark somente se gates aceitarem;
+G escopo/WIP/Whisper/FFmpeg pin/processos preservados, sem publicacao;
+H estados CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE separados, totais por script e referencias dos logs fullSHA.
+Nao entregar outra rodada de planejamento da FaseII: implementar, exercitar e trazer o resultado real ou bloqueio objetivo. Nao repetir a matriz baseline ja aceita. Restaurar cohort aprovado e verificar readback no fim conforme escopo autorizado.
