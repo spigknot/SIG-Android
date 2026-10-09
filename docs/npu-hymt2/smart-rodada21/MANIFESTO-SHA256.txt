@@ -1,0 +1,17 @@
+MANIFESTO — smart-rodada21 (seam de fluxo + golden pack)
+
+SEAM USADA: probe.cpp inclui gate_seam.h e chama gate_preflight (preflight antes de upload/compute!) — separacao preflight/classificacao.
+FLUXO RED/GREEN: GREEN 11/11 (post=0: upload=0 compute=0!); MUTANTE (bypass) 5 RED EXIT=1 — regressao do fluxo PROVADA.
+GOLDEN: repack_q4_K_tiled candidato == upstream 1ec818809 (65=65 linhas; diff so' const!) — H1-pack ELIMINADA (identico ao golden!).
+PENDENTE: leitor independente (§4B), alloc asserts, mutantes layout/NaN, trace, Q6_K (separados!).
+
+b9c91cc46802a0c2ccf2ff558b1602ced8750ff431570839a31adc93862e9b9e  gate_seam.h  (2848 B)
+7701f1f2964ab3f369f7f444935c21c527784abd0d507db6a284f75ac48a299d  gate_seam_mut.h  (1192 B)
+284e5a80cb994069c0ef112708119685a9a5f1b5f42575e588043be311f37cbc  golden_repack_q4k.txt  (2583 B)
+d7e20297b05808cb560adee3053d88d1d7e5563f05358c08dafe3d18768d9a78  r21-flow-green.txt  (472 B)
+fd5f9d7719553c42bdb41bf69d6d4835177ab913167b38b0e93a1c2f8fcc390f  r21-flow-red.txt  (472 B)
+3979ef20ed1d562a85f3feda16ff08288ef312a00218233e8eba62c58dd83f9d  r21-golden-diff.txt  (397 B)
+095bb762fb2fd3554181098fb7e69e85fd30c3ee6ce116ea5b94e2213fc82361  r21_flow_test.cpp  (3090 B)
+25adaa45edd0078eb6cdc63176075b61691240983fef5b86c352e6457892c251  r21_flow_test_mut.cpp  (3094 B)
+
+c664eff2892ea1ad0c1efb7a077162d323cff80b23d105f3eae55efe9ca785a8  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA21.txt

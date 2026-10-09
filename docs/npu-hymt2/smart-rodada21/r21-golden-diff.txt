@@ -1,0 +1,10 @@
+candidato: 65 linhas | golden: 65 linhas
+linhas de diff: 8
+--- golden
++++ candidato
+@@ -1,4 +1,4 @@
+-static void repack_q4_K_tiled(ggml_tensor * t, const void * data, size_t offset, size_t size) {
++static void repack_q4_K_tiled(const ggml_tensor * t, const void * data, size_t offset, size_t size) {
+     GGML_ASSERT(offset == 0);
+ 
+     const block_q4_K * src_matrix = (const block_q4_K *) data;

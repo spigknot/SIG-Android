@@ -1,0 +1,121 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 21
+=========================================================================
+Data: 09/10/2026. Ordens: "FECHAR PROVA INDEPENDENTE DO LAYOUT E EXECUTAR
+TRACE, SEM NOVA CCE APARENTE". Sem publicacao; copia isolada/probe.
+
+RESUMO EXECUTIVO: (1) RETIFICACOES ACEITAS E APLICADAS (os pontos do
+especialista estavam certos!): (a) a "seam" do R20 NAO era usada pelo
+probe (so' header!) — AGORA e': o probe.cpp INCLUI gate_seam.h e CHAMA
+gate_preflight() no fluxo real (preflight ANTES de upload/compute);
+(b) "H1 refutada" RETIRADA como conclusao do roundtrip candidato-candidato
+(race de cancelamento!) — substituida por prova NOVA e correta:
+DIFF GOLDEN: o repack_q4_K_tiled do candidato e' IDENTICO ao upstream
+pinado 1ec818809 (65 vs 65 linhas; diff = 8 linhas APENAS do const-fix
+"const ggml_tensor * t" declarado!). Ou seja: para Q4_K, o payload pack do
+candidato e' o do golden: H1-Q4K fica ELIMINADA PARA O PACK (nao para
+alloc/descriptor — limites precisos mantidos). (2) SEAM DE FLUXO: nova
+gate_preflight() no gate_seam.h, USADA pelo probe (include+chamada+build)
+e pelo teste nativo r21_flow_test.cpp com callbacks de I/O contados:
+GREEN 11/11 (post=0 => upload_calls==0 E compute_calls==0! ref NaN =>
+compute==0!); MUTANTE (gate_seam_mut.h preflight bypassado) => 5 RED
+(post=0 CHAMOU upload/compute!) EXIT=1 — RED/GREEN de regressao REAL do
+fluxo. (3) PENDENCIAS EXPLICITAS: leitor escalar INDEPENDENTE do tiled
+(§4B) NAO executado nesta rodada; trace host/DSP (§5) NAO executado;
+oraculo Q6_K pendente. KERNEL_VALIDATED: NAO. Nada de nova CCE aparente:
+o que fechou foi a prova de layout do PACK e o fluxo do gate; o resto
+segue aberto com fronteira precisa.
+
+-----------------------------------------------------------------------
+A. CHECKPOINT DE IDENTIDADE
+-----------------------------------------------------------------------
+A.1 Cohort atual: probe com seam integrada (build RC=0, fonte probe.cpp
+    com include gate_seam.h + chamada gate_preflight); v12 no jniLibs
+    (readback 710636 na rodada R20; reconfiguracao pendente de ensaio);
+    KQ_ON libs preservadas nos backups. FULLSHA por tentativa: PARCIAL
+    (historico) + checkpoint NOVO desta rodada (fonte/hashes no manifesto);
+    sourcehash != ELF (limite mantido); stripping do gradle documentado.
+A.2 Nada executado no device nesta rodada (fechamento offline prioritario
+    §2/§4); g++ do servidor usado nos testes nativos (logs reais).
+
+-----------------------------------------------------------------------
+B. SEAM REALMENTE USADA PELO PROBE + TESTE NATIVO DE FLUXO RED/GREEN
+-----------------------------------------------------------------------
+B.1 gate_seam.h AGORA tem DUAS camadas: gate_preflight (DECISAO, antes de
+    upload/compute) + gate_decide (CLASSIFICACAO, pos-execucao) — separacao
+    exigida. O probe.cpp inclui e chama gate_preflight no build_e_run; se
+    != PRE_GO => cleanup + return false SEM upload/sentinel/compute.
+B.2 r21_flow_test.cpp (nativo, mesma funcao!): callbacks contados.
+    GREEN: 11/11 — T1 post=0: REJECTED_BUFFER + upload==0 + compute==0;
+    T2 ref NaN: CPU_REF_FAIL + compute==0; T3 pre=0: SKIP + compute==0;
+    T4 GO: PASS + upload==1 + compute==1; T5 rc!=0: EXEC_FAIL (compute
+    tentou!). EXIT=0.
+B.3 MUTANTE gate_seam_mut.h (preflight bypassado): 5 RED de 11 (T1 x3 +
+    T2 compute + T3 compute) EXIT=1 — o teste DETECTA o bypass (mutante
+    de regressao conforme §2!). Restauracao => GREEN. Ligacao provada por
+    include+chamada+build.
+B.4 ALLOC_FAIL explicito PENDENTE (fallback silencioso da alocacao REPACK
+    nao tratado nesta rodada — registrado; sup_post nao mascara tipo mas
+    a alocacao planejada falha => ALLOC_FAIL e' proximo fix pequeno).
+
+-----------------------------------------------------------------------
+C. ROUNDTRIP AUXILIAR RETIFICADO + GOLDEN (prova independente do PACK)
+-----------------------------------------------------------------------
+C.1 Retificacao: o roundtrip R20 (pack->unpack candidato) fica como
+    AUXILIAR (erros comuns de layout podem se cancelar; comparador sem
+    isfinite/row0/gate so' max_abs — limites aceitos e registrados!).
+C.2 PROVA NOVA (§4A): diff direto pack CANDIDATO vs pack GOLDEN
+    (upstream 1ec818809, extraido VERBATIM via git show): 65 vs 65 linhas,
+    diff = 8 linhas SOMENTE do const-fix (assinatura const ggml_tensor*)
+    declarado no port. => payload de pack Q4_K = golden (para a entrada
+    determinista; bytes identicos por identidade de codigo+entrada).
+C.3 O que isso NAO cobre (limites honestos): validacao do LEITOR DSP
+    (leitor escalar independente §4B PENDENTE!), get_alloc_size real
+    (stubs!), canarios/allocated>=required (PENDENTE), Q6_K (pendente!).
+    Mutantes de layout compartilhado e NaN (comparador) PENDENTES.
+
+-----------------------------------------------------------------------
+D. ALLOCATED/REQUIRED/PADDING
+-----------------------------------------------------------------------
+D.1 PENDENTE (get_alloc_size real do backend + assert allocated>=required
+    + canarios + sanitizer quando disponivel) — proximo passo offline.
+
+-----------------------------------------------------------------------
+E. TRACE FRONTEIRA HOST/DSP
+-----------------------------------------------------------------------
+E.1 NAO executado (prioridade da rodada foi §2/§4 parcial). Bloqueio
+    tecnico preciso: trace DSP exige instrumentacao no skel (identidade
+    nova, rebuild coerente) OU mecanismo SDK — design minimo a preparar.
+    O trace HOST (tensor_set->repack, ne/nb/extra, offsets) e' viavel no
+    proximo ensaio sem instrumentacao nova.
+
+-----------------------------------------------------------------------
+F. CAUSA / FRONTEIRA
+-----------------------------------------------------------------------
+F.1 H1 (pack Q4_K): ELIMINADA para o payload (golden identico!) —
+    H1-alloc/descriptor segue. H2/H3/H4: sem evidencia nova (trace
+    pendente). Nenhuma inferencia DSP nova.
+
+-----------------------------------------------------------------------
+G. ESCOPO / Q6 / R16
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP alheio intocado; PJA110
+    fora; CPH2747 via wifi (nao usado nesta rodada); stayon7; sem
+    root/governor; FFmpeg pin apenas no processo autorizado.
+G.2 Q6_K: pendente e separado (sem extrapolacao!). R16: incidente
+    separado aberto.
+
+-----------------------------------------------------------------------
+H. ESTADOS
+-----------------------------------------------------------------------
+H.1 FIX_POST_RETURN: CODIGO CORRIGIDO (e agora testado no fluxo!).
+    REGRESSAO_FLUXO_REAL: CCE (RED/GREEN com mutante provado!).
+    ROUNDTRIP_Q4K: auxiliar retificado. GOLDEN_PACK_Q4K: PASS (identico
+    ao upstream pinado!). ORACULO_INDEPENDENTE_Q4K (leitor): PENDENTE.
+    KERNEL_VALIDATED: NAO. COMPILED: sim.
+H.2 Proximos passos exatos: (1) leitor escalar independente + mutantes
+    (layout/NaN) + alloc asserts; (2) trace host no ensaio minimo (uma
+    tentativa capturada); (3) Q6_K offline separado.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada21/ (gate_seam.h com preflight,
+r21_flow_test(+mut), golden_repack_q4k.txt, r21-golden-diff.txt, logs
+RED/GREEN reais) + manifesto.

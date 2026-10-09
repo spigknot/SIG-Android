@@ -1,0 +1,15 @@
+== r21_flow_test (FLUXO do probe: gate_preflight!) ==
+  [RED] T1 post=0 => REJECTED_BUFFER
+  [RED] T1 post=0 => upload_calls==0
+  [RED] T1 post=0 => compute_calls==0
+  [OK ] T2 ref NaN => CPU_REF_FAIL
+  [RED] T2 => compute_calls==0
+  [RED] T3 pre=0 => SKIP + compute==0
+  [OK ] T4 GO => PASS
+  [OK ] T4 => upload_calls==1
+  [OK ] T4 => compute_calls==1
+  [OK ] T5 rc!=0 => EXEC_FAIL
+  [OK ] T5 => compute_calls==1 (tentou!)
+
+TOTAL: 5 RED de 11 | upload=1 compute=1
+EXIT=1

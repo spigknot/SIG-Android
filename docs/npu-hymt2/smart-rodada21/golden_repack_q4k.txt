@@ -1,0 +1,65 @@
+static void repack_q4_K_tiled(ggml_tensor * t, const void * data, size_t offset, size_t size) {
+    GGML_ASSERT(offset == 0);
+
+    const block_q4_K * src_matrix = (const block_q4_K *) data;
+    int64_t ne0 = t->ne[0];
+    int64_t ne1 = t->ne[1];
+    int64_t ne2 = t->ne[2];
+    int64_t ne3 = t->ne[3];
+    int64_t ne0_padded = hex_round_up(ne0, 32);
+    int64_t ne1_padded = hex_round_up(ne1, 32);
+
+    GGML_ASSERT(ne0 % QK_K == 0);
+
+    const int n_col_tiles = ne1_padded / 32;
+    const int n_k_tiles   = ne0_padded / 32;
+    const size_t tile_size   = HTP_MM_WEIGHT_TILE_SIZE_Q4_1;
+    const size_t matrix_size = (size_t) n_col_tiles * n_k_tiles * tile_size;
+
+    const int64_t sb_per_row = ne0 / QK_K;
+
+    for (int i3 = 0; i3 < ne3; i3++) {
+        for (int i2 = 0; i2 < ne2; i2++) {
+            const block_q4_K * src_slice = src_matrix + (i3 * ne2 + i2) * (ne1 * sb_per_row);
+            uint8_t * matrix_dst = (uint8_t *) t->data + (i3 * ne2 + i2) * matrix_size;
+
+            memset(matrix_dst, 0, matrix_size);
+
+            for (int64_t r = 0; r < ne1; r++) {
+                const int ct  = (int) (r / 32);
+                const int row = (int) (r % 32);
+                const block_q4_K * src_row = src_slice + r * sb_per_row;
+
+                for (int kt = 0; kt < n_k_tiles; kt++) {
+                    const int kt_local = kt % 8;
+                    const block_q4_K * b = &src_row[kt / 8];
+                    const float d = GGML_FP16_TO_FP32(b->d);
+                    const float dmin = GGML_FP16_TO_FP32(b->dmin);
+
+                    uint8_t * tile_dst = matrix_dst + ((size_t) ct * n_k_tiles + kt) * tile_size;
+
+                    uint8_t sc, m;
+                    get_scale_min_k4(kt_local, b->scales, &sc, &m);
+
+                    const float D = d * (float) sc;
+                    const float M = -dmin * (float) m;
+
+                    const uint8_t * qs_sub = b->qs + (kt_local / 2) * 32;
+                    const int shift = (kt_local & 1) ? 4 : 0;
+
+                    for (int cp = 0; cp < 16; cp++) {
+                        const uint8_t q0 = (qs_sub[2 * cp + 0] >> shift) & 0x0F;
+                        const uint8_t q1 = (qs_sub[2 * cp + 1] >> shift) & 0x0F;
+                        tile_dst[cp * 32 + row] = (uint8_t) ((q1 << 4) | q0);
+                    }
+
+                    ggml_half * scale_dst = (ggml_half *) (tile_dst + 512);
+                    scale_dst[2 * row + 0] = GGML_FP32_TO_FP16(D);
+                    scale_dst[2 * row + 1] = GGML_FP32_TO_FP16(M);
+                }
+            }
+        }
+    }
+
+    GGML_UNUSED(size);
+}

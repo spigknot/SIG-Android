@@ -1,0 +1,69 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 21
+FECHAR PROVA INDEPENDENTE DO LAYOUT E EXECUTAR TRACE, SEM NOVA CCE APARENTE
+===============================================================================
+
+1. PARECER DA R20: FIX REAL, CONCLUSOES EXCESSIVAS
+Aceito o fix localizado: probe.cpp:943-949 agora retorna antes upload/compute se sup_post=false, com cleanup. Isso corrige a brecha do R19 no fonte atual.
+NAO aceito ainda 'seam compartilhada usada pelo probe e vacina nativa fechada': no probe.cpp local o especialista buscou gate_seam/gate_decide/gate_name e encontrou ZERO referencias. O teste chama gate_decide, mas o probe mantem ifs proprios. O fluxo do teste, r20_gate_test.cpp:16-26, se declara simulacao; compute_calls e contador simulado. Alterar o classificador antigo do teste demonstra sensibilidade desse teste, nao regressao do fluxo real do probe.
+NAO aceito 'H1 refutada / defeito localizado pos-host': o oracle R20 e pack CANDIDATO -> unpack CANDIDATO -> dequant canonico. O dequant canonico nao torna a dupla pack/unpack independente. Erro comum de layout pode se cancelar. E exatamente o limite ja apontado em R20.
+Os oito hashes dos arquivos listados no manifesto correspondem aos anexos locais. Logs nativos mostram 14 checks GREEN e 2 checks RED na versao mutante; o especialista nao recompilou localmente (g++/clang++ nao disponiveis no PATH). Evidencia de servidor aceita como logs, mas os limites do teste permanecem.
+Estados corretos: FIX_POST_RETURN=CÓDIGO CORRIGIDO; REGRESSAO_FLUXO_REAL=PARCIAL; ROUNDTRIP_Q4K=PASS no teste entregue; ORACULO_INDEPENDENTE_Q4K=PENDENTE; H1/H2/H3/H4 ainda nao eliminadas. KERNEL_VALIDATED=NAO. Incidente R16 separado; nenhuma nova inferencia DSP nesta rodada.
+
+2. INTEGRACAO NATIVA: FECHAR UMA VEZ, SEM OUTRO ESPELHO
+Integrar uma seam DE FLUXO/PREFLIGHT realmente chamada pelo build_e_run do probe, capaz de impedir upload/compute, com callbacks de I/O externos contados no teste. Nao basta incluir header sem usar; nao basta classificador pos-exec compartilhado.
+Teste nativo deve chamar a mesma funcao de fluxo/preflight usada antes de graph_compute: post=false -> upload_calls=0 e compute_calls=0, CPU-ref invalida -> HTP compute_calls=0; sucesso -> chamada prevista. Preflight nao deve receber resultados futuros de execucao para decidir se executa; separar preflight e classificacao apos exec.
+Demonstrar ligacao por includes/usos e build de libnpuprobe. Mutante de regressao remove/bypassa o gate da funcao compartilhada -> teste RED; restauracao do mesmo gate -> GREEN. Nao chamar header sintetico 'seam antiga do probe' se essa seam nao existia no probe antigo; rotular como mutante de teste.
+Verificar fallback de alocacao REPACK: se explicitamente selecionado e falhar, ALLOC_FAIL, nao silently default. O sup_post protege tipo mas nao deve mascarar falha de alocacao planejada. Retornos/bounds/cleanup CPU e HTP testados.
+Manter teste Python apenas auxiliar. Registrar rotulagem fullSHA/attempt/cohort/PID no produtor e no agregador real; integrar vacina da troca baseline/candidato quando tocar esse fluxo, sem declaracao ficticia de hash testado por comparar apenas uma string.
+Escopo minimo: probe/copia isolada; nao refatorar SIG principal, nem apagar codigo/WIP alheio para TDD.
+
+3. LIMITES EXATOS DO ORACLE ENTREGUE
+r20_oracle_q4k.c:
+- 16 define tile640 manualmente (valor coincide com fontes locais lidas, mas deve vir do header do cohort real, nao validar ABI por coincidencia).
+- 240 aloca tiled_sz+4096 com calloc, sem canario verificado. Pode esconder escrita alem do tamanho real esperado; nao chama o get_alloc_size real do backend.
+- 246/250 chamam pack/unpack do mesmo candidato, com size=0.
+- 259-264 usam fabs e comparacoes sem isfinite. Se diff for NaN, d>max_abs e d>0.05 sao falsos, e teste pode PASS com max_abs=0. O especialista reproduziu esse comportamento do comparador em teste matematico; NAO afirmou que o run entregue continha NaN.
+- 270 calcula matmul SOMENTE row0. Primeiro valor finito incorreto no device R19 foi n=1; o teste row0 nao cobre esse ponto nem o vetor completo.
+- 273 decide exit SOMENTE por max_abs<=0.05. O resultado scalar matmul apenas e impresso; nao participa do gate de aceitacao.
+- 211-225 sao stubs de row/type size; nao provam callback get_alloc_size, rowbytes/precompute/descriptor do backend real.
+Portanto roundtrip max_abs=0.000901 e resultado util de ida/volta, nao prova de payload correto para o leitor DSP nem do tamanho/padding real da API. Manter esse teste como AUXILIAR, nao jogar fora o avancado, mas retificar a conclusao.
+O readback pode normalizar escalas/mins e arredondar FP16: nao exigir byte equality GGUF apos roundtrip. Comparacao independente precisa respeitar formato tiled/rounding do contrato.
+
+4. PROVA HOST INDEPENDENTE A SER EXECUTADA
+Pin golden upstream: 1ec81880944a63bc4aaf1abfe9a6d35c7569a757; parent 82324fc508006de234552e701f4509c72c4fdd8d. Registrar fonte/header/compiler/flags/sha da extracao exata, funcoes verbatim versus adaptacoes/stubs explicitos. Checkout local mais novo nao e o pin automaticamente.
+Usar exatamente os bytes quantizados e ativacoes do reproducer: exportar/hash por tensor (R19 ou recriar e verificar origem/config explicitamente). Gerar sin/cos em outra libc sem comparar bytes nao prova identidade do input. Se bytes R19 nao preservados, assumir novo reproducer diagnosticamente equivalente, nao alegar byte-identico ao antigo.
+Minimo Q4_K K256/N64/B1, duas comparacoes independentes:
+A. payload pack-candidato vs pack-golden pinado, com mesma entrada e regra de padding; quando layout e o mesmo, comparar bytes deterministas e primeira coordenada/campo divergentemente. Se diferenca esperada de normalizacao/layout, documentar e fazer comparacao semantica direta no formato.
+B. leitor ESCALAR INDEPENDENTE do tiled (nao unpack candidato) -> pesos efetivos com scales/mins/rounding do contrato -> matmul de TODAS as N linhas versus dequant canonico. first_nonfinite/first_violation, matriz completa e finite em todas entradas/saidas.
+Leitor independente deve ser validado com golden upstream/fixtures conhecidas antes julgar candidato. Nao transcrever pack e escrever unpack espelhado para chamar independente. Q4K tile do pin/fork pode ser confrontado com layout usado no DSP, incluindo constantes, strides e offsets efetivos.
+Adotar mutante de layout compartilhado: alterar mesma permutacao/offset de pack+unpack no TESTE isolado. Roundtrip antigo pode continuar verde; comparacao independente precisa falhar. Mutante NaN tambem deve falhar com exit!=0. Testar que scalar diff acima da tolerancia leva a FAIL, nao mero printf.
+Verificar allocated_bytes do get_alloc_size/alloc real candidato e required_bytes da equacao independente; assert allocated>=required, canarios offline fora do destino declarado e sanitizer quando disponivel. Retirar folga secreta como substituto de validacao. Padding inicializado e conferido, alocacao/inputs/outputs com bounds. Stubs nao podem definir o que esta sendo provado.
+Fixtures pequenas adicionais: assimetria scales/mins, nibble alto/baixo, tile-edge/padding permitido. Nao fuzz/grid gigante antes primeiro desacordo. Q6_K oraculo separado, sem extrapolacao; nao distrair do Q4 reproduzido.
+Se houver bug host/layout/alloc: primeiro reproducer RED, patch minimo no candidato, GREEN; regressao antiga preservada. Nesse caso H1 nao estava refutada. Se payload/golden/size todos PASS, H1 baixa de prioridade para o caso e pode ser limitada precisamente, nao eliminada globalmente para runtime ARM/transferencias.
+
+5. TRACE HOST/DSP NESTA RODADA, SEM NOVO ADIAMENTO POR NARRATIVA
+Em paralelo ao fechamento offline, preparar trace que distingue fronteiras do caso minimo. Execucao DSP somente apos preflight/gate/identidade minima seguros; nenhum SIG principal tocado.
+Host: confirmar tensor_set realmente chama pack Q4_K do candidato; payload antes/depois repack (hash do intervalo exato + amostra escalas/dados), logical/tiled/allocated_size, t->ne/nb/extra, buffer/sessao/offset e alias de pesos/ativacoes/output. Descriptor: opID/type numeric+nome/dims/rowbytes/strides/offset/params/kernel-select efetivos.
+DSP: batch/op entrada, descriptor recebido com sizeof/offsetof/packing comparados, kernelID realmente escolhido, contadores enter/exit/status e amostra limitada dos MESMOS dados/escalas antes compute. Provar o skel efetivo do cohort, nao inferir pelo nome do .so.
+Se checksum/snapshot usado, comparar mesmo intervalo/layout/comprimento. Nao hash dos bytes canonicos contra tiled como se fosse transferencia sem transformacao. Validar enderecos/ranges e memoria/padding definidos.
+Usar mecanismo SDK seguro ou trace/counters compartilhados existentes, sem printf reentrante/FastRPC. Novo ABI de trace requer design minimo e rebuild coerente. Instrumentacao tem identidade nova; nao misturar host/skel de cohorts para ganhar trace. Nao converter host addr2line em localizacao DSP.
+Snapshot de output logo antes compute deve mostrar sentinel esperado; apos compute cobertura alterada. Diferenca do sentinel nao prova por si que kernel correto escreveu; excluir alias/upload/get/cache/sync. Registrar estado sincronizado conforme API.
+Uma tentativa bem capturada: controles F32/Q4_0 pequenos no mesmo probe instrumentado, depois Q4_K K256/N64/B1. Nada de B2/B128 enquanto B1 FAIL. Q6_K B1 separado se preflight/oracle/risco permitirem; nenhuma afirmacao de validacao Q6 por analogia.
+Se host correto mas descriptor recebido diverge -> H2 localizado. Se descriptor/data corretos mas kernelID/entrada ausentes -> H3. Se kernel correto entra com dados corretos e produz erro -> H4 ganha evidencia. Se so host snapshot foi obtido, declarar limite observado e dado DSP faltante, nao 'pos-host provado'.
+Se opabort ocorrer: preservar raw tombstone/logcat/errorcode/PID/buildid imediatamente. R16 nao fica resolvido automaticamente por esta fixture minima nao abortar.
+
+6. IDENTIDADE E ESCOPO
+Provenance historica pode permanecer PARCIAL, mas criar NOVO checkpoint do cohort instrumentado fullSHA/config/header/ELF/APK/install/readback/PID desde agora. Nao reconstruir toda historia nem repetir matriz v12 para gerar hashes. Provar libs atuais realmente usadas antes comparar oracle com device; sourcehash nao identifica ELF. Stripping legitimamente muda hash; APKentry deve coincidir com readback correspondente. Restore fullcohort baseline conforme autorizado e verificar readback no fim.
+Limites: copia isolada/probe separado; sem SIG/Whisper/UI/modelo c4bf/defaultVulkan/R2/release/commit/push/promocao sem autorizacao especifica. Preservar WIP byte a byte, sem limpeza/reset/stash/restores amplos. CPH2747 serial3B15BD00FVE00000; wireless identity fail-closed; PJA110 fora; stayon7; sem root/governor. FFmpeg pin somente processo autorizado.
+
+7. ENTREGA E ACEITACAO A-H
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA21.txt docs/especialista; fixtures/scripts/logs docs/npu-hymt2/smart-rodada21/ fullSHA, contagens e exits reais:
+A checkpoint atual ELF/APK/PID e limites historicos/restauracao;
+B seam realmente usada pelo probe e teste nativo RED/GREEN de fluxo;
+C roundtrip auxiliar RETIFICADO, oracle independente completo e mutantes;
+D allocated/required/padding e caminho repack real;
+E trace fronteira host/DSP executado OU bloqueio tecnico preciso com artefato;
+F causa primeira divergencia e patch RED/GREEN, ou fronteira ainda aberta;
+G escopo preservado, Q6 e R16 separados;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE separados.
+Obrigatorio retirar 'H1 REFUTADA' enquanto oracle independente/layout/alloc nao estiverem provados. Obrigatorio retirar 'mesma seam usada no probe' enquanto nao houver include+uso+build reais. Proximo resultado deve ser uma comparacao independente ou trace que localiza a primeira fronteira divergente, nao novamente o mesmo roundtrip GREEN com conclusao ampliada.
