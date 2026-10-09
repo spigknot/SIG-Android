@@ -1,0 +1,25 @@
+AUDITORIA INDEPENDENTE R30 — TESTES OFFLINE ACEITOS, INTEGRACAO AINDA PENDENTE
+===============================================================================
+A. VERIFICACAO
+Os26 hashes dos anexos do manifesto correspondem aos arquivos locais. Adapters corrigidos R29 tem a matriz de guardas esperada: green2/m1=0/m2=1/m3=2/m4=2/m5=0. O problema do adapter exportado antigo foi corrigido na nova entrega.
+Busca no diretorio C:/npu-probe/app/src/main/cpp por r30_gate/gate_verdict/verdict_pin: nenhum resultado. Logo a seam R30 ainda nao foi incorporada ao probe local inspecionado; o proprio relatorio indica que include/uso ficam para o proximo passo. A conclusao valida e GATE_OFFLINE_TESTADO, nao INTEGRACAO_PROBE_CCE.
+
+B. EXECUCOES REAIS DO ESPECIALISTA
+Compilei os arquivos entregues em scratch com g++ C++17 -O2 (MinGW), sem editar fontes do app/probe/candidato e sem dispositivo.
+r30_gate_test.c + r30_gate.h: BUILD_EXIT0/RUN_EXIT0, 13 checks impressos, TOTAL0RED.
+r30_fused_test.c + gerados: BUILD_EXIT0/RUN_EXIT0, TOTAL0RED.
+Mutante retirando somente '|| wtype == GGML_TYPE_Q4_K' da expressao row_size gerada: BUILD_EXIT0/RUN_EXIT1, T2RED, Q4_K512 em vez de640.
+
+C. LIMITES
+Gate: formula/validade/veredictos estao testados offline; o caller precisa preencher entradas reais e consultar resultados. Include sem chamada/contadores/veredictos runtime nao integra a seam.
+Fused: o teste usa predicado extraido e UMA expressao row_size, com helpers row_size constantes e mm_is_hmx_eligible falso. Isso valida a selecao q8_1 para Q4_K e rejeicao Q6 no ramo testado; nao valida a funcao inteira precompute_fused_ffn_params, offsets/strides/consumidores, HMX ou kernel de fusao.
+T3 da fixture imprime OK sem incrementar failures nem provar compartilhamento entre dois nos; nao tratar como teste de mergeability pair.
+Guarda ativa/ALLOC_FAIL/opstage/rebuild/source->ELF->readback e refs permanecem pendentes conforme relatorio. Nao repetir testes pack/leitor ja encerrados para substituir integracao.
+
+D. LOGS/FONTES PRESERVADOS EM docs/especialista/AUDITORIA-R30-LOGS/
+9a7365aa5d777e832ffceb441699c34621eaca07526f6c6d8245e1d4ce125e55  audit.py
+72342ad283a1f55662cf7bd60e0360f23f03705125207c0f2f7704a3ac0096e3  results.json
+acc5a7cc53715de9b1a9b2f49447196090af509e70aacf4a9998bcd17094a0f0  gate.log
+51f48a95d0c4cdad63892944c6894744431ad9eb9e215462a922ef68dbcffa4e  fused.log
+ee1dc7030f1585195e694dcd25703cd63c90d90eb2403d2846c14505f793f077  fused-mutant.log
+Script gera/copias/compila arquivos: reexecutar somente em scratch/copia isolada. Estes logs provam execucao independente local, nao a provenance dos binarios do servidor.

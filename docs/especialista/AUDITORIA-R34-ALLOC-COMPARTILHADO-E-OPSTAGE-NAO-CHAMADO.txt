@@ -1,0 +1,26 @@
+AUDITORIA R34 — ALOCACAO COMPARTILHADA ACEITA; CONTADORES DE I/O SAO MARCADORES
+===============================================================================
+1. AVANCO VALIDADO
+Oito hashes de anexos correspondem. probe-r34-com-seam.cpp:15 inclui flow_seam.h; :949-957 delega aos allocadores/ggml_free reais; :959 chama flow_alloc_preflight; :960-964 consome rc=-996 e retorna antes do upload/compute. Header e fixture agora estao realmente ligados, diferentemente daR33.
+Reproducao independente com g++C++17 O2 emscratch: greenexit0/TOTAL0RED, M7exit1/5RED, M8exit1/3RED. Poison #error no header: buildexit1 e diagnostico esperado. Isso confirma ligacao e a decisaoNULL/cleanup compartilhada.
+
+2. LIMITE DOS CONTADORES
+flow_seam.h:49-50 atribui upload_calls=1 e compute_calls=1. A seam nao possui callbacks de upload/compute nem os chama; os campos representam permissao/intencao, nao eventos executados. Assim T2 nao prova upload/compute real, embora prove alocador real injetado chamado e bw devolvido. Cleanup tem callbacks efetivos e contador observado nafixture.
+Aceitar ALLOC_DECISION_SHARED_VALIDATED. Para I/O do caller: testar branch retorno/continuidade efetiva e instrumentar callbacks reais, ou renomear campos para permitido/GO e declarar limite. Nao retornar 1 em marcador e anunciar chamada real.
+
+3. OPSTAGE
+flow_opstage_preflight e testado nafixture e M8 detectado. No probe arquivado: UMA chamada flow_alloc_preflight; ZERO chamadas flow_opstage_preflight. Opstage no probe continua sem preflight dessa seam. Captura bootstrap e outra fronteira pendente, nao o unico passo faltante.
+Estado: OPSTAGE_PREDICATE_OFFLINE_TESTED; OPSTAGE_PROBE_CALLER_INTEGRATED=NAO.
+
+4. RUNNER/PROXIMAS PROVAS
+r34_run.sh ainda filtra build/run por pipes e conclui com echo; poison-check e conferido por grep de diagnostico, sem capturar explicitamente exit do compilador. Minha reproducao capturou os exits diretamente. Nao promover este runner a pipelinefailclosed completo.
+Prioridade seguinte: chamar preflightopstage no caller comflags efetivas, observar eventos/counters reais, capturar snapshotB128 e refs/fullcohort. Pack/leitor/guardaplicada/gatePINminimo sao preservados; nenhuma necessidade de refazeressasprovas.
+
+5. LOGS EM docs/especialista/AUDITORIA-R34-LOGS/
+6a3fb3f74723c4ebb006f9bc393a5d2ea18cba5a900a68a4b1e8853983eef73f  audit.py
+09e8275a7cc5377f9e9cff87f2b1cbaed9fc104ec41d2526a4c3262bfa36986e  results.json
+7ca611e6dfba78010fe07ba419fd1a868a0287179269931972a6017939665f28  green.log
+25f73dc8a2c62af0b3b08a86d44768a6c1ff5567a4da0685047f521371f95760  m7.log
+c6218b144d67e3fb52bb1436c4f7b872106f2dd4ffb3161351c2b53c65da7afb  m8.log
+560a8fee59f029687e09e0495521ee05ae2e6ac05734725dd8daaa86e17491aa  poison-build.log
+Experimentos somente emscratch, semapp/probe/candidato editados ou aparelho. Script gera arquivos: reexecutar apenas emscratch/copia isolada.

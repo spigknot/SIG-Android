@@ -1,0 +1,31 @@
+AUDITORIA R32 — M6 FECHADO; PIPELINE EXECUTADO, MAS NAO FAIL-CLOSED
+===============================================================================
+
+1. VERIFICADO
+38 hashes de anexos conferem. As sete saidas na raiz sao byte-identicas aos respectivos export/<cenario>/run.out.
+Matriz TOTAL: green0RED; m1=4; m2/m3/m4/m5=1; m6=2.
+Green: T4 exige observada1/abort e zero bytes; T5 valido escreve9598bytes.
+M6: T4a/b observada0 e zero bytes -> RED; T5 permaneceOK. A brecha abort->retorno silencioso foi corrigida no teste entregue. Aceito essa prova, sem repetir o pack/leitor.
+
+2. FALHA DO PIPELINE
+r32_pipeline.sh:97 continua apos erro de compilacao, sem acumular falha para o status final.
+:98 captura RRC, mas nenhuma regra verifica greenexit0/mutantesexit1; uma regressao nao detectada ou crash pode prosseguir ao export.
+:106 export suprime stderr e ignora erro do cp; nao exporta r32_fixture.c, build.err, run.err ou arquivo de exitcodes.
+:110-119 a suposta verificacao semantica abre os arquivos e executa somente pass, depois imprime export ok. A mensagem final de sucesso pode existir sem matriz correta.
+Contagem grepRED inclui a linhaTOTAL; usar resultado estruturado/checagem especifica, nao numero de linhas comsubstring como contrato.
+
+3. CONTRAPROVA EXECUTADA
+Copiei os arquivos exportados para scratch. Substitui SOMENTE o adapter green pelo adapter m5 entregue, que nao tem as guardas. Executei o bloco Python real da verificacao final do script, remapeando /root para scratch.
+Resultado: terminou normalmente (exit equivalente0), stdout='export ok'.
+Logo a verificacao de export desatualizado ainda e NO-OP e aceita o defeito historico. Os hashes continuam uteis, mas nao substituem coerencia semanticamente testada.
+Nao executei o pipeline original /root ou seus rm; nao alterei app/probe/candidato nem aparelho. A execucao independente foi somente o bloco de validacao sobre copias.
+
+4. LIMITES E PROXIMA ENTREGA
+Pipeline_EXISTE/EXECUTADO tem evidencias, mas PIPELINE_FAIL_CLOSED_VALIDADO=NAO. O fixture compilado nao foi entregue, impedindo reproducao completa a partir deste pacote. Os logs de build0bytes podem ser sucesso silencioso, mas nao provam por si so o exit.
+Fechar validacao real e export completo com status. Nao repetir matriz toda como substituto para ALLOC_FAIL/opstage que continuam sem execucao, apesar de independentes do aparelho.
+
+5. ARTEFATOS PRESERVADOS EM docs/especialista/AUDITORIA-R32-LOGS/
+1e941d022e2d1497423d40cc05b8f75eef161d7da5de31c720c6de3b7725d315  audit.py
+10839215c7ca92765a3cfc6eef89784b01b92a753d8fa0776e522000261cfdfc  results.json
+8a9abfa023f904c9303d17a739d83fa8ee3087be2564604cb85339c3b05950ad  stale-export-check.log
+Script de auditoria cria copias em seu proprio diretorio; reexecutar somente em scratch/copia isolada. Nao representa execucao do build original do executor.

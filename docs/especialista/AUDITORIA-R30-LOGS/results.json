@@ -1,0 +1,17 @@
+[
+  {
+    "case": "gate",
+    "exit": 0,
+    "stdout": "=== r30_gate_test (gate PIN compartilhado!) ===\n  [OK ] C1 ambos PASS\n  [OK ] C2 legacyFAIL/PINPASS (B128!)\n  [OK ] C3 NMSE alto => PIN_FAIL\n  [OK ] C4a ref NaN => INVALID\n  [OK ] C4b out NaN => INVALID\n  [OK ] C5 exec fail => INVALID\n  [OK ] C6 parcial => INVALID\n  [OK ] C7 sentinel => INVALID\n  [OK ] C8 denom0 => INVALID (nao PASS!)\n  [OK ] C9 soma inf => INVALID\n  [OK ] C10 overflow => INVALID\n  [OK ] C11 ref invalida => INVALID\n  [OK ] C12 nd=0 => INVALID\n\nTOTAL: 0 RED\nEXIT=0\n"
+  },
+  {
+    "case": "fused",
+    "exit": 0,
+    "stdout": "=== r30_fused_test (fixture da fusao: funcao REAL!) ===\n  [OK ] T1 predicado: Q4_1=1 Q4_K=1 Q6_K=0 F16=0 (esperado 1/1/0/0!)\n  [OK ] T2 row_size: Q4_1=640 Q4_K=640 F16=512 Q8_0=512 (esperado 640/640/512/512!)\n  [OK ] T3 base: Q4_K com src1 F32 = 1 (predicado ativo!)\n\nTOTAL: 0 RED\nEXIT=0\n"
+  },
+  {
+    "case": "fused_without_q4k",
+    "exit": 1,
+    "stdout": "=== r30_fused_test (fixture da fusao: funcao REAL!) ===\n  [OK ] T1 predicado: Q4_1=1 Q4_K=1 Q6_K=0 F16=0 (esperado 1/1/0/0!)\n  [RED] T2 row_size: Q4_1=640 Q4_K=512 F16=512 Q8_0=512 (esperado 640/640/512/512!)\n  [OK ] T3 base: Q4_K com src1 F32 = 1 (predicado ativo!)\n\nTOTAL: 1 RED\nEXIT=1\n"
+  }
+]

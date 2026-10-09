@@ -1,0 +1,4 @@
+In file included from C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r34-specialist-audit/poison/r34_flow_test.c:6:
+C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r34-specialist-audit/poison/flow_seam.h:1:2: error: #error POISON_SHARED_HEADER
+    1 | #error POISON_SHARED_HEADER
+      |  ^~~~~

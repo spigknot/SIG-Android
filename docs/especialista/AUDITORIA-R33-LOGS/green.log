@@ -1,0 +1,19 @@
+=== r33_flow_test (ALLOC_FAIL + OPSTAGE!) ===
+    [fluxo] ALLOC_FAIL (REPACK selecionado falhou! req=10240)
+  T1: ret=0 rc=-996 upload=0 compute=0 frees=2
+  [OK ] T1 alloc NULL => NAO continua (ret=0!)
+  [OK ] T1 rc = ALLOC_FAIL (-996!)
+  [OK ] T1 upload_calls == 0
+  [OK ] T1 compute_calls == 0
+  [OK ] T1 cleanup (frees == 2!)
+  [OK ] T2 alloc OK => continua (ret=1!)
+  [OK ] T2 upload_calls == 1
+  [OK ] T2 compute_calls == 1
+  [OK ] T2 sem frees no caminho valido
+  [OK ] T3 opstage 0 RECUSADO
+  [OK ] T3 opstage 1 RECUSADO (só QUEUE!)
+  [OK ] T3 opstage 2 RECUSADO (só COMPUTE!)
+  [OK ] T3 opstage 3 PERMITIDO
+
+TOTAL: 0 RED
+EXIT=0

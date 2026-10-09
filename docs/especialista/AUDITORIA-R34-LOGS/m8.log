@@ -1,0 +1,21 @@
+=== r34_flow_test (SEAM REAL: flow_seam.h — o MESMO do probe!) ===
+MUTANTE_BYPASS_OPSTAGE ativo (no HEADER!)
+  T1: rc=-996 alloc_failed=1 upload=0 compute=0 free=2 (alloc_calls=1)
+  [OK ] T1 alloc NULL => rc=ALLOC_FAIL (-996!)
+  [OK ] T1 alloc_failed marcado
+  [OK ] T1 upload_calls == 0 (da SEAM!)
+  [OK ] T1 compute_calls == 0 (da SEAM!)
+  [OK ] T1 cleanup: free_calls == 2 (da SEAM!)
+  [OK ] T1 o alocador FOI chamado (injetor!)
+  [OK ] T2 alloc OK => rc=0 (sem falha!)
+  [OK ] T2 upload_calls == 1 (da SEAM!)
+  [OK ] T2 compute_calls == 1 (da SEAM!)
+  [OK ] T2 bw devolvido pela seam
+  [OK ] T2 sem frees no caminho valido
+  [RED] T3 opstage 0 RECUSADO
+  [RED] T3 opstage 1 RECUSADO (so QUEUE!)
+  [RED] T3 opstage 2 RECUSADO (so COMPUTE!)
+  [OK ] T3 opstage 3 PERMITIDO
+
+TOTAL: 3 RED
+EXIT=1

@@ -1,0 +1,33 @@
+AUDITORIA R33 — FIXTURE EXECUTADA, MAS O TRECHO EXTRAIDO NAO E COMPILADO
+===============================================================================
+1. VERIFICACAO E REPRODUCAO
+Quatro hashes dos anexos declarados conferem. Compilei r33_flow_test.c em scratch com g++ C++17 -O2:
+baseline build0/run0, TOTAL0RED;
+-DMUTANTE_SEM_IF_BW build0/run1, TOTAL5RED;
+bypass equivalente M8 (return1 em opstage_preflight local) build0/run1, TOTAL3RED.
+Esses resultados confirmam o funcionamento da fixture auxiliar; nao o fluxo do probe real.
+
+2. FALHA DE LIGACAO
+r33_flow_test.c:33-55 reescreve o fluxo com fake_alloc/fake_free e increments upload/compute. Nao inclui r33_alloc_gen.inc e nao chama funcao de fluxo compartilhada com o probe.
+r33_alloc_gen.inc e apenas um trecho que termina em returnfalse com2chavesabertas e nenhuma fechada. Nao e corpo compilavel independente. O extrator para no primeiro returnfalse e omite resto/fechamento.
+Contraprova executada: coloquei #error EXTRACTED_BLOCK_NOT_COMPILED em r33_alloc_gen.inc no scratch e recompilei a mesma fixture. Build0/run0/TOTAL0RED. O arquivo extraido pode ser invalido/removido sem afetar a suite, pois nao e consumido.
+Busca por r33_flow/r33_alloc_gen/fluxo_alloc_e_upload/opstage_preflight em C:/npu-probe/app/src/main/cpp nao encontrou usos. Opstage e um bool local aos testes, comflagsdigitadas1/2; constantes corretas nao integram o preflight ao caller nem capturam opt_opstage real.
+Estado adequado: AUXILIAR_MODEL_FLOW_TESTADO. ALLOC_FAIL_FLUXO_REAL_VALIDADO e OPSTAGE_PROBE_INTEGRADO continuam abertos. Pode preservar fixture como didatica, nao como vacina do caller.
+
+3. PIPELINE: MOTIVO CONCRETO PARA REVER O TRACKING
+ValidadorM6 em r33_pipeline_v2.sh:87 exige substring GGML_ABORT ausente. O adapterM6 entregue naR32 nao tem chamadasGGML_ABORT, mas tem comentario '- GGML_ABORT ativo...'. Reproduzi essa condicao: validatorFalse, chamadasreais0. Portanto um inputM6 correto pode marcarFAIL por comentario, sem bug de tracking abstrato.
+Nao recebi stdoutglobal/exportv2 R33; nao atribuo a falha final somente a esse motivo. Arquivar log antes mudarflag, nao zerarFAIL no fim.
+CT2 e apenas echo/comentario, nao um contra-testeexecutado. CT1 fazgrepsobre arquivo adulterado, nao chama o mesmo validador de export usado na cadeia. ParserTOTAL usa999para ausencia; num mutante isso satisfaz>=1 e pode aceitar saidainvalida. Exigir parsing valido/unico, exit0green/exit1mutante e nao crash.
+
+4. PROXIMO PASSO MINIMO
+Criar seam pequena cujo codigo seja realmente chamado pelo build_e_run e pela fixture, comcallbacks externos do ggml/adaptadores injetados. Incluir e usar no probe agora, buildar, demonstrarM7/M8 sobre MESMAfuncao. Opcaoextracaoverbatim tambem exige corpo completo compilado e arquivo efetivamenteconsumido. Poison-check do header/inc deve impedirbuild.
+Nao repetir testes do espelho ou apagarFAIL residual para declararfeito. Integracao + snapshot sao as prioridades; pipeline pode recebercorrecao focal delexicalvalidator/status.
+
+5. LOGS/FONTES EM docs/especialista/AUDITORIA-R33-LOGS/
+692cbb4bdbee0ac7cfa2336267b7879e226474cecde0c0e3966de9aa65a57dd7  audit.py
+f69339a8259456c3801ad97f11755e403417b20a6a711e371f9e3b03b84262fa  results.json
+f3ad330d85b04c5bf1a6561d5fbc09c85088810f4a8ee9dc328e3d36676bd44a  green.log
+1e1b2a854f513594b4f274195bde7f9b9e850f704d4d9c7e82894ad3387ccf73  m7.log
+fdc578fd1ebce219d5dd9b431429f3b2cbdf5030153079dc0044d9204eee3ad3  m8-equivalent.log
+f3ad330d85b04c5bf1a6561d5fbc09c85088810f4a8ee9dc328e3d36676bd44a  unused-inc.log
+Experimentos somente emscratch; nenhum arquivo app/probe/candidato editado e nenhum aparelho utilizado. M8 e contramutante equivalente local, nao sourcehistorico naoanexado do servidor.

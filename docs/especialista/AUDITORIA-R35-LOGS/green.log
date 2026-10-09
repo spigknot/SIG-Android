@@ -1,0 +1,10 @@
+=== r35_flow_test (opstage no CALLER + I/O real!) ===
+  [OK ] T4 opstage 0: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)
+  [OK ] T4 opstage 1: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)
+  [OK ] T4 opstage 2: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)
+  [OK ] T5 opstage 3: continua + I/O executada (1/1!)
+  [OK ] T6 alloc NULL: rc=-996 + ZERO I/O
+  [OK ] T7 CPU (fora da rota numerica!): nao bloqueia (I/O 1/1!)
+
+TOTAL: 0 RED
+EXIT=0

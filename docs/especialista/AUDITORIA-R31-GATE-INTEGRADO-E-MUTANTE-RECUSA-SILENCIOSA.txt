@@ -1,0 +1,27 @@
+AUDITORIA INDEPENDENTE R31 — GATE NO PROBE E LIMITES DA VACINA ATIVA
+===============================================================================
+A. ACEITO / VERIFICADO
+Seis hashes de anexos conferem. Header r30_gate-no-probe.h byte-identico ao r30_gate.h R30. Include em probe-r31.cpp:14, chamada:1066 e logs runtime demonstram a integracao da funcao avaliadora.
+12 linhas de veredicto nos logs = 6 casos unicos, porPID/cobertura/resultado. Q4 eQ6 B1/B2/B128 PIN_PASS; doisB128 LEGACY_FAIL, com10 e9 violadores, preservados. Nao somar REPORT como novas tentativas.
+MMTOTAL continua do contador antigo; nao ha counters PIN separados no fonte arquivado. O gate novo e chamado e resultado emitido, mas nao atualiza a contabilidade antiga. alloc_ok=hsp e proxy de suporte; sync_ok=hunw==0 e proxy de escrita. No core local, graph_compute chama backend_synchronize antes retornar (ggml-backend.cpp:444-447): portanto nao concluir async semsynchronizacao por falta de chamada explicita no probe. Registrar o contrato do CORE DO COHORT e mapear flags pelos eventos correspondentes.
+Manifesto nao inclui ELF/APK/readback ou fixture/gerados/outputs da guarda; ebb80bbd e identidade reportada por prefixo, ainda nao cadeia fullSHA auditada pelo especialista.
+
+B. BRECHA OBJETIVA DO T4
+r31_pack.py:46 e55 consideram somente mudou==0. A mensagem diz ATIVA ou recusa, mas nao verifica rejeicao observavel. Um callback void que faz fprintf+break e preserva buffer volta a ser aceito.
+Reexecutei scripts R31 sobre copias dos inputs R29, todos caminhos /root remapeados para scratch. Prova independente, nao recuperacao dos gerados ausentes do servidor:
+- GGML_ABORT baseline em MinGW O0: BUILD0/RUN0, T4 ativa +0bytes.
+- mutante m5 sem guards: RUN1, parcial altera9598bytes, offset ainda aborta pelo pack.
+- contra-mutante SILENT_REFUSAL, trocando somente os dois GGML_ABORT por fprintf+break: BUILD0/RUN0, T4 imprime recusa e0bytes. Logo a vacina atual nao detecta regressao abort->retorno silencioso.
+OBSERVACAO DE AMBIENTE: baseline GGML_ABORT com harness longjmp em MinGW O2 compilou, mas terminou com codigo3221225477; O0 executou corretamente. Nao foi diagnosticada a causa e isso nao e prova de falha do ELFAndroid. Preservados ambos logs. Para teste de abort portavel, preferir subprocesso isolado e observacao de terminacao/efeitos em vez de depender de longjmp no codigo otimizado. Os mutantes m5/silent executaram emO2.
+
+C. PROXIMA PROVA
+T4 exigir evento observavel de rejeicao e semcontinuacao/zero efeitos. Na implementacao que escolheu GGML_ABORT, capturar abort e verificar que nunca chega ao compute; se outro canal explicito for escolhido, testar esse canal consumido. Acrescentar mutante abort->retorno silencioso deveRED. Somente bufferintacto nao basta, e mensagem stderr nao e canal de erro consultado pelo loader.
+ALLOC_FAIL/opstage-flow, pipeline executado, snapshot/refs, fused funcao completa e estabilidade continuam abertos. Nao reabrir pack/leitor/score PIN ja demonstrados no caso minimo.
+
+D. LOGS EM docs/especialista/AUDITORIA-R31-LOGS/
+ea122a418e1eccde163e010507e8528a85550e73a5ed4412d3e8151a26373a42  audit.py
+5f7a55396e96aa83edd73020e5cb7116168e1cfdf4cd3b6eb5c63ceb73341b1b  green-o2-failed.log
+286f7823a2a2119ecd60d67b06440c0db879fe7e87b8ad71959ee1bfd6efa965  green-o0.log
+fb078e847e60ffbba7277dc3ed22b4ffd8894b09f3da6bec595f3c17644ab922  m5.log
+dbb1665d9e6ade7f29b593dd6d4603990054a46d85eb3baf77ddbc91f89ca228  silent-refusal.log
+Script registra o primeiro ensaioO2 e termina emassertion se baselinecrasha; a execucaoO0 e a agregacao dos logs foram realizadas em chamadas separadas. Nao representa pipeline completo do executor. Reexecutar somente emscratch. Canonico local, scripts/inputscopiados, semalteracao app/probe/candidato, nenhum aparelho.

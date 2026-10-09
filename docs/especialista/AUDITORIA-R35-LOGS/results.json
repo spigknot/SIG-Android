@@ -1,0 +1,27 @@
+{
+  "runs": [
+    {
+      "case": "green",
+      "exit": 0,
+      "stdout": "=== r35_flow_test (opstage no CALLER + I/O real!) ===\n  [OK ] T4 opstage 0: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)\n  [OK ] T4 opstage 1: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)\n  [OK ] T4 opstage 2: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)\n  [OK ] T5 opstage 3: continua + I/O executada (1/1!)\n  [OK ] T6 alloc NULL: rc=-996 + ZERO I/O\n  [OK ] T7 CPU (fora da rota numerica!): nao bloqueia (I/O 1/1!)\n\nTOTAL: 0 RED\nEXIT=0\n"
+    },
+    {
+      "case": "m7",
+      "exit": 1,
+      "stdout": "=== r35_flow_test (opstage no CALLER + I/O real!) ===\n  [OK ] T4 opstage 0: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)\n  [OK ] T4 opstage 1: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)\n  [OK ] T4 opstage 2: rejeitado (rc=-998!) + ZERO I/O (io=0/0!)\n  [OK ] T5 opstage 3: continua + I/O executada (1/1!)\n  [RED] T6 alloc NULL: rc=-996 + ZERO I/O\n  [OK ] T7 CPU (fora da rota numerica!): nao bloqueia (I/O 1/1!)\n\nTOTAL: 1 RED\nEXIT=1\n"
+    },
+    {
+      "case": "m8",
+      "exit": 1,
+      "stdout": "=== r35_flow_test (opstage no CALLER + I/O real!) ===\n  [RED] T4 opstage 0: rejeitado (rc=-998!) + ZERO I/O (io=1/1!)\n  [RED] T4 opstage 1: rejeitado (rc=-998!) + ZERO I/O (io=1/1!)\n  [RED] T4 opstage 2: rejeitado (rc=-998!) + ZERO I/O (io=1/1!)\n  [OK ] T5 opstage 3: continua + I/O executada (1/1!)\n  [OK ] T6 alloc NULL: rc=-996 + ZERO I/O\n  [OK ] T7 CPU (fora da rota numerica!): nao bloqueia (I/O 1/1!)\n\nTOTAL: 3 RED\nEXIT=1\n"
+    }
+  ],
+  "snapshot_expected_bytes": {
+    "Q4_canonical": 9216,
+    "Q4_tiled": 10240,
+    "act_f32": 131072,
+    "cpu_out_f32": 32768,
+    "htp_out_f32": 32768
+  },
+  "hashes_match": 7
+}

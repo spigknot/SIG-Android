@@ -1,0 +1,24 @@
+[
+  {
+    "case": "green",
+    "build_exit": 0,
+    "run_exit": 0,
+    "stdout": "=== r34_flow_test (SEAM REAL: flow_seam.h \u2014 o MESMO do probe!) ===\n  T1: rc=-996 alloc_failed=1 upload=0 compute=0 free=2 (alloc_calls=1)\n  [OK ] T1 alloc NULL => rc=ALLOC_FAIL (-996!)\n  [OK ] T1 alloc_failed marcado\n  [OK ] T1 upload_calls == 0 (da SEAM!)\n  [OK ] T1 compute_calls == 0 (da SEAM!)\n  [OK ] T1 cleanup: free_calls == 2 (da SEAM!)\n  [OK ] T1 o alocador FOI chamado (injetor!)\n  [OK ] T2 alloc OK => rc=0 (sem falha!)\n  [OK ] T2 upload_calls == 1 (da SEAM!)\n  [OK ] T2 compute_calls == 1 (da SEAM!)\n  [OK ] T2 bw devolvido pela seam\n  [OK ] T2 sem frees no caminho valido\n  [OK ] T3 opstage 0 RECUSADO\n  [OK ] T3 opstage 1 RECUSADO (so QUEUE!)\n  [OK ] T3 opstage 2 RECUSADO (so COMPUTE!)\n  [OK ] T3 opstage 3 PERMITIDO\n\nTOTAL: 0 RED\nEXIT=0\n"
+  },
+  {
+    "case": "m7",
+    "build_exit": 0,
+    "run_exit": 1,
+    "stdout": "=== r34_flow_test (SEAM REAL: flow_seam.h \u2014 o MESMO do probe!) ===\nMUTANTE_SEM_IF_BW ativo (no HEADER!)\n  T1: rc=0 alloc_failed=0 upload=1 compute=1 free=0 (alloc_calls=1)\n  [RED] T1 alloc NULL => rc=ALLOC_FAIL (-996!)\n  [RED] T1 alloc_failed marcado\n  [RED] T1 upload_calls == 0 (da SEAM!)\n  [RED] T1 compute_calls == 0 (da SEAM!)\n  [RED] T1 cleanup: free_calls == 2 (da SEAM!)\n  [OK ] T1 o alocador FOI chamado (injetor!)\n  [OK ] T2 alloc OK => rc=0 (sem falha!)\n  [OK ] T2 upload_calls == 1 (da SEAM!)\n  [OK ] T2 compute_calls == 1 (da SEAM!)\n  [OK ] T2 bw devolvido pela seam\n  [OK ] T2 sem frees no caminho valido\n  [OK ] T3 opstage 0 RECUSADO\n  [OK ] T3 opstage 1 RECUSADO (so QUEUE!)\n  [OK ] T3 opstage 2 RECUSADO (so COMPUTE!)\n  [OK ] T3 opstage 3 PERMITIDO\n\nTOTAL: 5 RED\nEXIT=1\n"
+  },
+  {
+    "case": "m8",
+    "build_exit": 0,
+    "run_exit": 1,
+    "stdout": "=== r34_flow_test (SEAM REAL: flow_seam.h \u2014 o MESMO do probe!) ===\nMUTANTE_BYPASS_OPSTAGE ativo (no HEADER!)\n  T1: rc=-996 alloc_failed=1 upload=0 compute=0 free=2 (alloc_calls=1)\n  [OK ] T1 alloc NULL => rc=ALLOC_FAIL (-996!)\n  [OK ] T1 alloc_failed marcado\n  [OK ] T1 upload_calls == 0 (da SEAM!)\n  [OK ] T1 compute_calls == 0 (da SEAM!)\n  [OK ] T1 cleanup: free_calls == 2 (da SEAM!)\n  [OK ] T1 o alocador FOI chamado (injetor!)\n  [OK ] T2 alloc OK => rc=0 (sem falha!)\n  [OK ] T2 upload_calls == 1 (da SEAM!)\n  [OK ] T2 compute_calls == 1 (da SEAM!)\n  [OK ] T2 bw devolvido pela seam\n  [OK ] T2 sem frees no caminho valido\n  [RED] T3 opstage 0 RECUSADO\n  [RED] T3 opstage 1 RECUSADO (so QUEUE!)\n  [RED] T3 opstage 2 RECUSADO (so COMPUTE!)\n  [OK ] T3 opstage 3 PERMITIDO\n\nTOTAL: 3 RED\nEXIT=1\n"
+  },
+  {
+    "case": "poison",
+    "build_exit": 1
+  }
+]

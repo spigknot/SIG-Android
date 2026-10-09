@@ -1,0 +1,42 @@
+{
+  "manifest_matching": 38,
+  "scenarios": [
+    {
+      "case": "green",
+      "red": 0,
+      "root_output_identical": true
+    },
+    {
+      "case": "m1",
+      "red": 4,
+      "root_output_identical": true
+    },
+    {
+      "case": "m2",
+      "red": 1,
+      "root_output_identical": true
+    },
+    {
+      "case": "m3",
+      "red": 1,
+      "root_output_identical": true
+    },
+    {
+      "case": "m4",
+      "red": 1,
+      "root_output_identical": true
+    },
+    {
+      "case": "m5",
+      "red": 1,
+      "root_output_identical": true
+    },
+    {
+      "case": "m6",
+      "red": 2,
+      "root_output_identical": true
+    }
+  ],
+  "stale_export_check_exit": 0,
+  "stale_export_check_stdout": "export ok\n"
+}

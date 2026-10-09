@@ -1,0 +1,26 @@
+AUDITORIA R35 — OPSTAGE CHAMADO, MAS ENV ATUAL NAO E O ESTADO RETIDO DA LIB
+===============================================================================
+1. ACEITO
+Sete hashes de anexos conferem. O probe arquivado chama flow_opstage_preflight:1017 antes de tensor_set:1029, consome recusa comrc=-998 ecleanup. Build arquivado. Campos da seam renomeados upload_go/compute_go comescopo correto de permissao. Preservar esses avancos.
+Reproduzi fixturebaseline0RED, M7=1RED eM8=3RED emscratch comg++C++17O2. Sao resultados dafixturemodelada, nao runtimeR35 noAndroid.
+
+2. FLAGS
+probe:1012-1014 le getenv atual e strtoulbase0 ou default3. Esse input e ambiente no momento da chamada, nao necessariamente opt_opstage retido no primeiroinit da lib. Se initocorre com1 e envmuda para3, o guard doprobe pode permitir enquanto backendcontinuaSKIP_COMPUTE. Este e risco de contrato temporal; nao foi executado novoexperimentoAndroid nesta auditoria.
+Estado correto: OPSTAGE_ENV_CALLER_INTEGRATED, BACKEND_EFFECTIVE_STATE_UNOBSERVED. Nao chamar getenv de valor efetivo da sessao sem provar ausencia de mudanca/ordeminit e parsing iguais.
+
+3. FIXTURE
+r35_flow_test.c:17-28 define caller_flow local nao presente no probe; :25-26 incrementa io_upload/io_compute diretamente. Nao existem callbacks de I/O chamados pelo fluxo compartilhado. A decisao bool/alloc e compartilhada, mas a composicao cleanup/retorno/I/O continua modelo.
+Caller local retorna emopstageinvalido semcleanup; o probe fazcleanup real. A fixture nao valida essa diferenca. Classificar limites e usar callercompartilhado/extraido para regressao dos efeitos, sem resimular sua condicao.
+
+4. SNAPSHOT
+Instrumentacao de export ausente e trabalho necessario autorizado no lab, nao impedimento externo que dispense implementacao. Nenhuma tentativa de aparelho ocorreu. Falta implementar caminho de escrita/RAW e coleta, depois computar as refs.
+Plano minimo Q4K256/N64/B128, tamanhos calculados:
+canonweights9216 bytes; RAWtiled10240; actfloat131072; CPUout32768; HTPout32768. Confirmar sizes reais do cohort/helper antes copiar; nao expor paddingextra ou reinterpretar canonicalcomoRAW.
+
+5. LOGS EM docs/especialista/AUDITORIA-R35-LOGS/
+e64b9040048d2afc7f4b29273dbef89c9bcd39aea6b9014cd53ebedaa2b16cd8  audit.py
+5a6599c31efb73c78890ebc933024784918918622a7854a7df0c1e284af7858e  results.json
+7b1427d0640865bf60f5c7f2523f4d062ec3c5bff4493daea1b4ba37a491baa7  green.log
+1050b9416d7ea31b3edf3f7f66c0d421208cf7f9b145b7c38b75d973e692f9ad  m7.log
+d2bc1a5e66e5bebd6935b9a7381dcc447cc545b4b4169833125c232369a653e0  m8.log
+Nenhum app/probe/candidato editado pelo especialista e nenhum aparelho. Script gera arquivos; reexecutar somente emscratch/copiaisolada.

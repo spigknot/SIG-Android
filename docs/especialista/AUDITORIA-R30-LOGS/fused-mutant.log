@@ -1,0 +1,7 @@
+=== r30_fused_test (fixture da fusao: funcao REAL!) ===
+  [OK ] T1 predicado: Q4_1=1 Q4_K=1 Q6_K=0 F16=0 (esperado 1/1/0/0!)
+  [RED] T2 row_size: Q4_1=640 Q4_K=512 F16=512 Q8_0=512 (esperado 640/640/512/512!)
+  [OK ] T3 base: Q4_K com src1 F32 = 1 (predicado ativo!)
+
+TOTAL: 1 RED
+EXIT=1
