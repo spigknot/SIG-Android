@@ -1,0 +1,20 @@
+AUDITORIA INDEPENDENTE DO ESPECIALISTA — R27
+Arquivos de stdout de execucoes reais, copiados do scratch e verificados apos copia.
+
+831baa3ccff9c6e31a73bb3339a6d6111bd816dbd4eb2d3df3891988eefe22ee  run.log  231 bytes
+5780618ab90a56ec51f513fab918532c3d2de95b03460e28bf5398785a74b6f3  green.log  377 bytes
+a24c2685361c4814899fdf807212c1e02c8f6d66113ecb1f1d73134764c6025d  mut1.log  405 bytes
+492ff1cc6f8199d3f07843e9a9039c761031d3be82b38d09f7c95bf65769b59b  mut2.log  403 bytes
+5780618ab90a56ec51f513fab918532c3d2de95b03460e28bf5398785a74b6f3  delete_Q6_dispatch.log  377 bytes
+
+Fonte da fixture auditada:
+bac6a0c41f66f3d9217a99ee9bf32f30694b6b4b27d21ad81a336b4674c4de5a  D:/Projetos/SIG/docs/npu-hymt2/smart-rodada27/r27_vacina.c
+
+AMBIENTE E LIMITES:
+Compiler: C:/msys64/mingw64/bin/gcc.exe e g++.exe.
+Canonico independente: ggml-quants.c e headers de D:/Projetos/SIG/app/src/main/cpp/llama/ggml (somente leitura); nao reconstruz provenance do executor.
+Quants compilado como C11 -O2 -ffunction-sections -fdata-sections em quants.o.
+Oracle compilado como C++17 -O2 -ffunction-sections -fdata-sections, -Dquantize_row_q6_K=quantize_row_q6_K_ref, quants.o e -Wl,--gc-sections. O alias foi necessario: o fonte chama quantize_row_q6_K mas o header canonico declara quantize_row_q6_K_ref. Sem alias o build independente falhou por simbolo nao declarado; com alias build/run exit0 e valores identicos ao anexo do executor. Isso nao prova o comando usado no servidor: exigir comando/deps/hash la.
+Fixtures compiladas por stdin como C++17 -fpermissive -O2 -ffunction-sections -fdata-sections, headers canonicos acima, quants.o e -Wl,--gc-sections. Baseline exit0; -DMUTANTE_SEM_CASES_K exit1/3RED; -DMUTANTE_ALLOC_LISTA exit1/2RED.
+Contra-mutante independente: remover apenas as duas linhas do case GGML_TYPE_Q6_K e seu break em set_tensor_dispatch, preservando os cases da funcao alloc. Compilou e executou exit0/0RED, stdout identico ao baseline. Prova executada de que o teste nao detecta a perda do dispatch Q6.
+Nenhum fonte do app/probe/candidato editado; somente artefatos derivados de teste no scratch e estas evidencias/documentos.
