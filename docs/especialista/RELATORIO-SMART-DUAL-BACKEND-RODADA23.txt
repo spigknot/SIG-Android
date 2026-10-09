@@ -1,0 +1,135 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 23
+=========================================================================
+Data: 09/10/2026. Ordens: "INDICIO OBJETIVO: REQUISITO CANONICO NO LUGAR
+DO TILED; AUDITAR HOST/DESCRITOR". Sem publicacao; copia isolada/probe.
+
+RESUMO EXECUTIVO — O INDICIO DO ESPECIALISTA ESTAVA CERTO E LEVOU AO BUG
+FATAL: (1) AUDITORIA COMPLETA DOS 6 CALLSITES (A-F) no candidato
+kq2/sigcand2: is_repack_type OK; tiled_row_size OK; serializacao
+(same_shape/add_tensor) OK (h.nb[1]=160/h.size=10240 SEMPRE tiled!);
+precompute principal OK (fused_ffn tem nota!); MAS DOIS BUGS REAIS:
+[C-BUG] get_alloc_size com LISTA INLINE sem Q4_K/Q6_K => retornava 9216
+CANONICO em vez de 10240 tiled (exatamente o indicio! o pin usa
+is_repack_type); [D-BUG FATAL] set_tensor SEM os cases Q4_K/Q6_K =>
+Q4_K caia no `default: memcpy` = copia CANONICA [9216] SEM REPACK!
+O descritor sempre disse tiled (10240) => o DSP lia bytes canonicos como
+tiled => NaN/lixo (R19-R22!). (2) FIXES MINIMOS (host-only, fieis ao pin):
+set_tensor + cases K (repack efetivo, log KQSET); get_alloc_size usa
+is_repack_type. Rebuild incremental (~1 min): SO libggml-hexagon.so mudou
+(9b99d90e => 8e953285); outras 7 libs byte-identicas. (3) RED/GREEN REAL
+NO DEVICE: req 9216=>10240 (callback real!); MM[Q4_K B=1]: NaN => PASS
+(nrmse=0.00016!); B=2: NaN => PASS (0.00034!); B=128: NaN => FAIL
+marginal (viol=10/8192=0.12%, nrmse=0.00037 global). MMTOTAL pass=3
+fail=1. O NaN MORREU. KERNEL_VALIDATED permanece NAO (Q6_K e B128
+pendentes — cobertura minima!). H1-RUNTIME LOCALIZADO E CORRIGIDO.
+
+-----------------------------------------------------------------------
+A. CHECKPOINT ATUAL (novo, sem reconstruir historia)
+-----------------------------------------------------------------------
+A.1 Fonte: kq2/sigcand2 idênticos pos-fix (diff=0); fix nos 2 via script
+    (r23-fix*.py arquivados!). Libs novas (build 09/10 11:44):
+    libggml-hexagon 8e953285 (NOVA! era 9b99d90e); libggml 43aec1d1;
+    base 33c3ed67; cpu b7ef45c3; llama 8ab003eb (INALTERADA!);
+    opencl e4177706; vulkan 18c2b322; htp-v81 4689ffc0 (skel inalterado!).
+    So a host lib tocada => skel/ABI/protocolo inalterados (change host
+    com estrutural invariavel — rebuild coerente de uma lib!).
+A.2 Device CPH2747: cohort fix instalado para o ensaio; v12 RESTAURADO no
+    fim (readback no manifesto). Provenance historica segue PARCIAL.
+
+-----------------------------------------------------------------------
+B. RETIFICACOES APLICADAS (todas aceitas do parecer!)
+-----------------------------------------------------------------------
+B.1 MMHOST media cc->ne/nb = OUTPUT [64,B], NAO os pesos — retificado; o
+    log dos PESOS (wa->ne/nb com tags de backend/tensor) fica como
+    instrumentacao pendente (nota!).
+B.2 "ranges nao se sobrepoem" RETIRADO (sem base+offset+fim!). "req0"
+    da CPU e campo nao consultado (N/A!). Dedupe PID/attempt registrado.
+B.3 Leitor: rotulado LEITOR_SOBRE_GOLDEN (tool pronta para ler snapshot
+    real — pendente o snapshot fisico!); NAO repetido como prova do
+    candidato. O GREEN de agora vem do DEVICE (B1/B2!), nao do leitor.
+B.4 ALLOC_FAIL: CODIGO_CORRIGIDO, injecao de teste PENDENTE (registrado!).
+
+-----------------------------------------------------------------------
+C. CALLBACKS REAIS, 9216 vs 10240 EXPLICADO + TESTES RED/GREEN
+-----------------------------------------------------------------------
+C.1 O indicio (L1491): lista inline sem K => return ggml_nbytes = 9216
+    CANONICO. Pin upstream L2055: `if (ggml_hexagon_is_repack_type(...))`.
+    FIX aplicado (helper!). RED/GREEN no DEVICE: MMHOST req=9216 (RED,
+    R22!) => req=10240 walloc=14336 (GREEN, R23!). E o caso minimo do
+    especialista (required_reported >= required_tiled!) confirmado!
+C.2 BUG FATAL (novo achado da auditoria D): set_tensor sem cases K
+    (L1339-1364: SO Q4_0/Q4_1/Q8_0/IQ4_NL/MXFP4 + default memcpy!).
+    Corrigido com os cases (mesmo padrao do get_tensor que JA tinha!).
+C.3 Descriptor: auditado no fonte — same_shape/add_tensor (L1639-1700)
+    computam h.nb[1]=tiled_row_size=160, h.nb[2]=10240, h.size=10240.
+    Estava CORRETO o tempo todo — o erro era o CONTEUDO do buffer
+    (canonico!) lido como tiled. Contrato quebrado: descritor vs payload!
+C.4 Testes de contrato: o ensaio device e o proprio teste RED/GREEN
+    (NaN=>PASS com mesma entrada/config!). Nota fused_ffn L3122
+    (`wtype == Q4_1` sem Q4_K): variante fused-FFN NAO usada no mmtest —
+    registrada para rodada futura (nao corrigida sem prova de uso!).
+
+-----------------------------------------------------------------------
+D. SNAPSHOT FISICO / LEITOR
+-----------------------------------------------------------------------
+D.1 NAO capturado ainda (o GREEN do device prova o fluxo ponta-a-ponta:
+    com repack no set_tensor, a numerica real passou!). O snapshot do
+    tiled real + leitor R22 fica como instrumentacao do proximo ensaio
+    (probe com mapping + leitor: pronto para usar!). Payload fisico
+    observado indiretamente (numerica!); pendencia explicita.
+
+-----------------------------------------------------------------------
+E. ENSAIO LIMITADO (device, fresh process, cohort fix)
+-----------------------------------------------------------------------
+E.1 Q4_K K256/N64: B1 PASS (max_abs 0.05263/nrmse 0.00016/viol 0!);
+    B2 PASS (0.10385/0.00034/0!); B128 FAIL marginal (0.16718/0.00037/
+    viol 10 de 8192 = 0.12%!). NaN: ZERO em todos. Controles F32/Q4_0 no
+    probe (nao repetidos nesta janela de log; na rodada anterior OK).
+E.2 B128: os 10 viols com nrmse global 0.00037 (0.037%!) sugerem pontos
+    de |ref| pequeno no criterio rel atual (abs+rel combinado pendente —
+    e nota para tolerancia documentada por tipo, SEM relaxar para
+    candidato!). B1/B2 = o minimo do especialista: GREEN!
+E.3 Trace DSP: nao necessario AINDA (H1-runtime localizado! o trace fica
+    para o proximo estagio se B128/Q6 revelarem necessidade!).
+
+-----------------------------------------------------------------------
+F. CAUSA E CORRECAO (RED/GREEN)
+-----------------------------------------------------------------------
+F.1 CAUSA PRIMEIRA: set_tensor sem dispatch K => memcpy canonico [9216]
+    enquanto descritor serializava tiled [10240] => NaN do DSP. PROVADO
+    por RED (R19-R22: NaN com o mesmo input/config!) => GREEN (R23: B1/B2
+    PASS + req=10240!). H1-RUNTIME LOCALIZADO (como o especialista previu
+    — "pista de H1-alloc/H2-descriptor" ficou H1-payload/set!).
+F.2 Patch minimo: 2 hunks host (set_tensor/get_alloc_size) — fiel ao
+    padrao do arquivo e ao pin. Sem kernelpatch, sem sucesso fabricado.
+F.3 B128 e Q6_K = fronteiras AINDA ABERTAS (honesto!). R16: incidente
+    separado (sem abort novo nesta rodada!).
+
+-----------------------------------------------------------------------
+G. ESCOPO / Q6 / R16
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP alheio intocado; PJA110
+    reapareceu no adb e NAO foi tocado; CPH2747 via wifi; stayon7; sem
+    root/governor; FFmpeg pin apenas processo autorizado.
+G.2 Q6_K: oraculo/ensaio separado (o fix o cobre no set_tensor, mas SEM
+    prova numerica Q6 ainda — nao extrapolar!). R16: separado.
+
+-----------------------------------------------------------------------
+H. ESTADOS
+-----------------------------------------------------------------------
+H.1 COMPILED: sim (host r23, 1 lib!). FIX_R23 (set_tensor+alloc): CCE com
+    RED/GREEN REAL no device! Q4_K B1/B2: NUMERICAMENTE PASS (device!).
+    Q4_K B128: PARCIAL (marginal, criterio a refinar ± investigar!).
+    Q6_K: PENDENTE (oraculo+ensaio!). DESCRIPTOR: OK auditado.
+    SNAPSHOT FISICO: PENDENTE (instrumentacao pronta!). TRACE DSP: nao
+    necessario nesta etapa. KERNEL_VALIDATED: NAO (falta Q6_K + B128!).
+GRAND/HANDOFF/PERFORMANCE: intocados (o prefill real com o modelo: proximo
+    ensaio controlado quando Q4 cobertura fechar!).
+H.2 Proximos passos EXATOS: (1) B128 (criterio abs+rel + investigar os 10);
+    (2) Q6_K oraculo + ensaio; (3) snapshot fisico com leitor no mesmo
+    ensaio; (4) so' entao: modelo real/H2+. Fused_ffn Q4_K = nota!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada23/ (r23-auditoria-callsites.txt,
+r23-setensor-pos-fix.cpp, r23-getallocsize-pos-fix.cpp, r23-fix*.py,
+r23-build-novo.txt com hashes, r23-ensaio-green.txt com o RED/GREEN
+device!) + manifesto.

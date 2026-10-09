@@ -1,0 +1,14 @@
+[3/8] Completed 'vulkan-shaders-gen'
+[4/8] Building CXX object ggml/src/ggml-hexagon/CMakeFiles/ggml-hexagon.dir/ggml-hexagon.cpp.o
+/workspace/ggml/src/ggml-hexagon/ggml-hexagon.cpp:1364:29: warning: address of array 'tensor->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+ 1364 |                     tensor->name ? tensor->name : "?", offset, size);
+      |                     ~~~~~~~~^~~~ ~
+/workspace/ggml/src/ggml-hexagon/ggml-hexagon.cpp:1370:29: warning: address of array 'tensor->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+ 1370 |                     tensor->name ? tensor->name : "?", offset, size);
+      |                     ~~~~~~~~^~~~ ~
+2 warnings generated.
+[5/8] Linking CXX shared library bin/libggml-hexagon.so
+[6/8] Linking CXX shared library bin/libggml.so
+[7/8] Linking CXX shared library bin/libllama.so
+====
+8e953285f78e636c8f589ce0620313a4

@@ -1,0 +1,29 @@
+AUDITORIA R23 — CALLSITES KQ (candidato kq2/sigcand2, pre-fix!)
+=================================================================
+A. ggml_hexagon_is_repack_type (L211-218): TEM Q4_K/Q6_K. CORRETO.
+B. ggml_hexagon_tiled_row_size (L220-231): Q6_K tile1024/32, Q4_1 tile640/32; else canonico. CORRETO.
+C. get_alloc_size (L1490-1501): BUG! lista INLINE (Q4_0/Q4_1/Q8_0/IQ4_NL/MXFP4)
+   SEM Q4_K/Q6_K => Q4_K caia no `return ggml_nbytes(t)` = 9216 CANONICO
+   (em vez de 10240 tiled!). O pin upstream usa ggml_hexagon_is_repack_type(t->type).
+   FIX: usa o helper (fiel ao pin!).
+D. set_tensor (L1318-1364): BUG FATAL! switch SEM cases Q4_K/Q6_K =>
+   Q4_K caia no `default: memcpy(tensor->data, data, size)` = copia CANONICA
+   SEM REPACK! O buffer contem bytes canonicos enquanto o descritor serializado
+   (E) diz tiled => o DSP le canonicos como tiled => NaN/lixo (R19-R22!).
+   FIX: cases Q4_K/Q6_K => repack_q4_K_tiled/repack_q6_K_tiled (log KQSET!).
+E. serializacao same_shape/add_tensor (L1639-1700): CORRETO! h.nb[1]=tiled_row_size
+   (=160!), h.nb[2]=160*64=10240, h.size=10240. O DESCRITOR sempre esteve tiled!
+   Por isso o contrato quebrava: descritor tiled + buffer canonico.
+F. precompute mm_params (L3040-3107): Q4_K presente nos src1_row_size/flat. OK.
+   precompute_fused_ffn_params (L3122): `(wtype == Q4_1)` SEM Q4_K (variante
+   fused-FFN; nao usada no mmtest; NOTA para rodadas futuras!).
+=================================================================
+FIXES R23 (host-only!):
+1. set_tensor: + cases Q4_K/Q6_K (repack efetivo + log KQSET stderr).
+2. get_alloc_size: lista inline => ggml_hexagon_is_repack_type(t->type).
+REBUILD: build-kq target llama (incremental, ~1 min). So a lib mudou:
+libggml-hexagon.so 9b99d90e => 8e953285 (5816232 B); as outras 7 libs
+byte-identicas (llama 8ab003eb mantida!).
+ENSAIO DEVICE (cohort fix): MMHOST req=9216=>10240 walloc=13312=>14336;
+MM[B=1] NaN=>PASS (nrmse=0.00016!); MM[B=2] PASS (0.00034); MM[B=128]
+FAIL marginal (viol=10/8192, nrmse=0.00037). MMTOTAL pass=3 fail=1.

@@ -1,0 +1,16 @@
+MANIFESTO — smart-rodada23 (O BUG FATAL: set_tensor + get_alloc_size!)
+
+AUDITORIA A-F: get_alloc_size lista inline sem K (req 9216 canonico!) + set_tensor SEM cases K (memcpy canonico!) = NaN do DSP.
+FIXES: set_tensor +cases K (repack!); get_alloc_size usa is_repack_type. Rebuild: SO libggml-hexagon.so mudou (9b99d90e => 8e953285!).
+RED/GREEN DEVICE: req 9216=>10240; Q4_K B=1 NaN=>PASS (nrmse 0.00016!); B=2 NaN=>PASS (0.00034); B=128 FAIL marginal (viol 10/8192, nrmse 0.00037).
+v12 restaurado no probe (readback 0a4ec5b7). KERNEL_VALIDATED: NAO (Q6+B128 pendentes!).
+
+6c6e42441d8d3645d8a7280bafd80964cb1e99968ba75b8ee74470590e9945c7  r23-auditoria-callsites.txt  (2033 B)
+152d050d1f96dc4f076fc238907d56a5723a2004fe616a4093863b4a5bb8746f  r23-build-novo.txt  (905 B)
+94fdec5f87bc06f9069da29aea5c57c86e1ca5189946df87a3a58ef977c13874  r23-ensaio-green.txt  (3202 B)
+eb759ba7281dfa11bdaca993b54a767fb910d5ee601298a11b77d811a227b774  r23-fix-setensor-alloc-sigcand2.py  (2691 B)
+0507f28cb390ead628549bd1846d10faa593e0244e1dbf0de53ad62120ca6c99  r23-fix-setensor-alloc.py  (2686 B)
+5bd7ebc65b66d8b65bc8d6984a0a46527bde1cc91b3286d3fc0e3d85691e1969  r23-getallocsize-pos-fix.cpp  (1381 B)
+e3957c6dd732aff33a1bb469bf81b379ad274be5c1300d3b3671b493fa090ba1  r23-setensor-pos-fix.cpp  (3011 B)
+
+8a0381f2604a6a9c6f00e0df197b43045f41820e003ec4bd87f1e04c7034f154  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA23.txt

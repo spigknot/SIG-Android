@@ -1,0 +1,26 @@
+10-09 08:45:32.995  5176 24674 I NpuProbe: MM trace: K=256 N=64 B=1 q4_K sup_pre=1 repack=1
+10-09 08:45:32.995  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=1280
+10-09 08:45:32.996  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=5376
+10-09 08:45:32.997  5176 24674 I NpuProbe: MM[K=256 N=64 B=1 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=64/64 max_abs=0.05263 nrmse=0.00016 viol=0 PASS
+10-09 08:45:32.999  5176 24674 I NpuProbe: MM trace: K=256 N=64 B=2 q4_K sup_pre=1 repack=1
+10-09 08:45:32.999  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=2560
+10-09 08:45:33.000  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=6656
+10-09 08:45:33.001  5176 24674 I NpuProbe: MM[K=256 N=64 B=2 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=128/128 max_abs=0.10385 nrmse=0.00034 viol=0 PASS
+10-09 08:45:33.005  5176 24674 I NpuProbe: MM trace: K=256 N=64 B=128 q4_K sup_pre=1 repack=1
+10-09 08:45:33.005  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=163840
+10-09 08:45:33.006  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=167936
+10-09 08:45:33.008  5176 24674 I NpuProbe: MM[K=256 N=64 B=128 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=8192/8192 max_abs=0.16718 nrmse=0.00037 viol=10 FAIL
+10-09 08:45:33.009  5176 24674 I NpuProbe: MMTOTAL pass=3 fail=1 skip=0 compute_calls=6
+10-09 08:45:33.009  5176 24674 I NpuProbe: MM trace: K=256 N=64 B=1 q4_K sup_pre=1 repack=1
+10-09 08:45:33.009  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=1280
+10-09 08:45:33.009  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=5376
+10-09 08:45:33.009  5176 24674 I NpuProbe: MM[K=256 N=64 B=1 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=64/64 max_abs=0.05263 nrmse=0.00016 viol=0 PASS
+10-09 08:45:33.009  5176 24674 I NpuProbe: MM trace: K=256 N=64 B=2 q4_K sup_pre=1 repack=1
+10-09 08:45:33.009  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=2560
+10-09 08:45:33.009  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=6656
+10-09 08:45:33.009  5176 24674 I NpuProbe: MM[K=256 N=64 B=2 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=128/128 max_abs=0.10385 nrmse=0.00034 viol=0 PASS
+10-09 08:45:33.009  5176 24674 I NpuProbe: MM trace: K=256 N=64 B=128 q4_K sup_pre=1 repack=1
+10-09 08:45:33.009  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=163840
+10-09 08:45:33.009  5176 24674 I NpuProbe: MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=167936
+10-09 08:45:33.009  5176 24674 I NpuProbe: MM[K=256 N=64 B=128 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=8192/8192 max_abs=0.16718 nrmse=0.00037 viol=10 FAIL
+10-09 08:45:33.009  5176 24674 I NpuProbe: MMTOTAL pass=3 fail=1 skip=0 compute_calls=6
