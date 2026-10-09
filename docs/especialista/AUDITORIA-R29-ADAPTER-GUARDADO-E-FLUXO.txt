@@ -1,0 +1,30 @@
+AUDITORIA INDEPENDENTE R29 — EXPORT DO ADAPTER DESATUALIZADO
+===============================================================================
+A. PARECER
+Os14 hashes dos anexos conferem, mas a coerencia semantica fonte/adaptador/log nao confere. O original r29_settensor_gen.inc tem as guardas novas e passa offset real; r29_settensor_adap.inc arquivado nao tem as guardas e passa zero fixo. Manifesto valido so atesta os bytes que foram entregues, nao que esses bytes geraram o stdout GREEN.
+O script r29_t4.py regenera adapter nos subdiretorios /root/r29_t/<cenario>, mas nao atualiza /root/r29_settensor_adap.inc. Esse fluxo e consistente com uma copia final desatualizada da raiz; nao e prova de que os resultados no servidor sao inventados.
+
+B. REPRODUCAO REAL DO ESPECIALISTA
+Compilei os arquivos da entrega em scratch, usando canonico local e adaptadores ja declarados no harness, sem alterar app/probe/candidato ou tocar dispositivo.
+1. Arquivos entregues: BUILD_EXIT0, RUN_EXIT1
+T1/Q4 e T2/Q6 GREEN, allocator GREEN;
+T4a: abort0, 9598 bytes diferentes de zero;
+T4b: abort0, 9598 bytes diferentes de zero;
+TOTAL2RED.
+2. Adapter regenerado do ORIGINAL com guardas, somente renomeacao da funcao/remocao contexto+HEX_VERBOSE externos conforme contrato da fixture: BUILD_EXIT0, RUN_EXIT0.
+T4a/b abort0, 0 bytes diferentes de zero; TOTAL0RED.
+A reproducao confirma o GREEN offline para a variante realmente guardada. Corrigir a entrega/export nao requer reescrever pack/leitor nem refazer a campanha toda.
+
+C. LIMITE DO CONTRATO
+No original guardado, rejeicao e fprintf+break em callback void. Isso comprova nao escrever nesse callback; nao prova que o loader perceba erro nem que graph_compute seja bloqueado. A fixture considera sucesso somente bufferintacto+semabort, sem status observavel de rejeicao. Preservar essa prova como GUARD_LOCAL_NO_WRITE, mas acrescentar rejeicao ativa e teste de fluxo que impeca compute sobre pesos nao carregados. A API callback void exige garantir falha por outro canal ou abort ativo em violacao de contrato; nao pode retornar normalmente e depender de stderr para impedir continuacao.
+
+D. ARTEFATOS EM docs/especialista/AUDITORIA-R29-LOGS/
+8eb8dd3e3a425ee00bf0ca74694341af99621147f1277be179a95f4966e2cdf5  audit.py
+489e06d278768b0fb9992f427014818d4969c2ad86c55cbe4c53f1065800cbfa  results.json
+ee772be93e410f812a26649d3462cba45b9f309054ace51173953e7ec25e935b  delivered-stdout.log
+f0ec81d10c72af3727c06d1862519c5921df42cf9f7a225eb3486bc995b09ed2  delivered-stderr.log
+b84c9fe41ab50249014dc3b79f1650ce8962119da58cef2262c4d2cbcf4d6552  regenerated-stdout.log
+2c5e31809791e8c76d67c92de534d993b4a605b769f5a7afa06f115ec1ed80f6  regenerated-stderr.log
+3613fbf85593429e4ecf0bb651ee6432773eef9923d1c4737cc0488fc620d487  regenerated-callback.inc
+Compilador MinGW gcc C11 para ggml-quants.c, g++ C++17 -fpermissive para fixture, O2/functionsections/datasections/gc-sections. Headers/canonico: D:/Projetos/SIG/app/src/main/cpp/llama/ggml, somente leitura. Isso e reproducao independente local, nao a provenance dos binarios do servidor.
+Script gera/copias arquivos: reexecutar apenas em scratch/copia isolada. Nenhum fonte rastreado do SIG foi alterado.

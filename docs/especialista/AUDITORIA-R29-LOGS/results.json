@@ -1,0 +1,16 @@
+[
+  {
+    "name": "delivered",
+    "exit": 1,
+    "stdout": "=== r28_fixture (VACINA REAL: codigo extraido verbatim!) ===\n  [OK ] T1 Q4_K upload REAL: leitor vs dequant nas 16384 entradas: n_bad=0 n_nan=0 max_abs=0.000702\n  [OK ] T2 Q6_K upload REAL: leitor vs dequant nas 16384 entradas: n_bad=0 n_nan=0 max_abs=0.000481\n  [OK ] T3 alloc REAL: Q4_K=10240 (tiled 10240/canon 9216!) Q6_K=14336 (tiled 14336/canon 13440!)\n  [RED] T4a offset!=0 REJEITADO sem efeitos (abort=0 bytes-escritos=9598!)\n  [RED] T4b size parcial REJEITADO sem efeitos (abort=0 bytes-escritos=9598!)\n\nTOTAL: 2 RED\nEXIT=1\n",
+    "stderr": "KQSET: q4_K name=testq4k size=9216 -> repack_q4_K_tiled\nKQSET: q6_K name=testq6k size=13440 -> repack_q6_K_tiled\nKQSET: q4_K name= size=9216 -> repack_q4_K_tiled\nKQSET: q4_K name= size=4608 -> repack_q4_K_tiled\n",
+    "callback_sha256": "3ffa6bc35379ae49c7eead9d059009d66ea0735f981b49869e29122d4f2152c4"
+  },
+  {
+    "name": "regenerated_from_guarded_gen",
+    "exit": 0,
+    "stdout": "=== r28_fixture (VACINA REAL: codigo extraido verbatim!) ===\n  [OK ] T1 Q4_K upload REAL: leitor vs dequant nas 16384 entradas: n_bad=0 n_nan=0 max_abs=0.000702\n  [OK ] T2 Q6_K upload REAL: leitor vs dequant nas 16384 entradas: n_bad=0 n_nan=0 max_abs=0.000481\n  [OK ] T3 alloc REAL: Q4_K=10240 (tiled 10240/canon 9216!) Q6_K=14336 (tiled 14336/canon 13440!)\n  [OK ] T4a offset!=0 REJEITADO sem efeitos (abort=0 bytes-escritos=0!)\n  [OK ] T4b size parcial REJEITADO sem efeitos (abort=0 bytes-escritos=0!)\n\nTOTAL: 0 RED\nEXIT=0\n",
+    "stderr": "KQSET: q4_K name=testq4k size=9216 -> repack_q4_K_tiled\nKQSET: q6_K name=testq6k size=13440 -> repack_q6_K_tiled\nKQSET-RECUSA: q4_K offset=32 size=9216 nbytes=9216 (contrato full-only!)\nKQSET-RECUSA: q4_K offset=0 size=4608 nbytes=9216 (contrato full-only!)\n",
+    "callback_sha256": "3613fbf85593429e4ecf0bb651ee6432773eef9923d1c4737cc0488fc620d487"
+  }
+]

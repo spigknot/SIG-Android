@@ -1,0 +1,4 @@
+KQSET: q4_K name=testq4k size=9216 -> repack_q4_K_tiled
+KQSET: q6_K name=testq6k size=13440 -> repack_q6_K_tiled
+KQSET-RECUSA: q4_K offset=32 size=9216 nbytes=9216 (contrato full-only!)
+KQSET-RECUSA: q4_K offset=0 size=4608 nbytes=9216 (contrato full-only!)
