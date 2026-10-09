@@ -109,5 +109,16 @@ H.2 BLOCKER PRECISO (sem output fabricado): o opbatch do candidato faz o
     layout do repack Q4_K enviado (tile sizes 896/Q4_1-like) e o opcode 12;
     (c) recompilar o skel sozinho e re-testar por shape (1 caso minimo).
 =========================================================================
+NOTA ADICIONAL (infra de gate): o commit dos docs ficou bloqueado pelo
+pre-commit (teste SmartInsertNativeTest/losslessMatches... falhando com
+"flac: invalid block size: 1"). Diagnostico realizado (autorizado pelo
+usuario): o caso time=0.0 gera window de 1 sample; o encoder FLAC do
+ffmpeg 9.0.1 (unico no PATH via hermes/tools) REJEITA <16 samples
+(bisect: 1/2/4/8 falham, 16/1000 passam) — regressao do 9. O ambiente
+tem TAMBEM o ffmpeg 8.0.1 (WinGet) que ACEITA o caso; com o PATH
+corrigido o teste passa (BUILD SUCCESSFUL verificado!) e o commit
+prossegue. NENHUMA mudanca no teste alheio foi necessaria (ele esta
+correto para o ffmpeg embarcado do app). Nota de ambiente para os gates.
+=========================================================================
 Evidencias: docs/npu-hymt2/smart-rodada16/ (log r16, tombstones, scripts,
 hashes) + manifesto.
