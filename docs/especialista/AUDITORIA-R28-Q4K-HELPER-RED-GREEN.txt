@@ -1,0 +1,39 @@
+AUDITORIA INDEPENDENTE — R28 / Q4_K
+Causa do RED de 7.968 entradas localizada no helper da fixture
+===============================================================================
+
+A. ESTADO
+A auditoria do especialista nao editou o app, probe, candidato ou arquivo R28 do executor. Foram criados somente testes derivados no scratch e documentos/logs nesta pasta. Nenhuma execucao no aparelho.
+Os nove hashes de anexos do manifesto R28 conferem. r28_cores_gen.h e r28_switch_gen.inc NAO estao entre os arquivos entregues localmente; portanto esta reproducao nao substitui a auditoria dos gerados do servidor.
+
+B. DIFERENCA DE FONTE
+r28_fixture.c:64, para j>=4, reconstrui o minimo com:
+*m = (uint8_t) ((q[j+4] >> 4) | ((q[j-4] >> 6) << 4));
+O canonico ggml-quants.c:885 e o pin 1ec81880944a63bc4aaf1abfe9a6d35c7569a757 usam:
+*m = (q[j+4] >> 4) | ((q[j] >> 6) << 4);
+O termo q[j-4] pertence aos bits altos da escala d; para o minimo m sao necessarios os bits altos de q[j]. O helper copiado da fixture nao e VERBATIM. r28_mapas.c:45 repete o mesmo defeito.
+
+C. EXPERIMENTO EXECUTADO
+Usei repack_q4_K_tiled extraido do pin, o leitor_q4k_w INALTERADO de r28_fixture.c e o mesmo input K256/N64, sin(i*0.017)*1.7. Comparacao com dequantizacao canonica local. As duas variantes diferem SOMENTE no indice q[j-4] -> q[j] da reconstrucao de m.
+WRONG_HELPER: BUILD_EXIT=0 / RUN_EXIT=1
+Q4K same_reader bad=7968 nonfinite=0 max_abs=1.296227455 bad_k0_127=0 bad_k128_255=7968
+CORRECT_HELPER: BUILD_EXIT=0 / RUN_EXIT=0
+Q4K same_reader bad=0 nonfinite=0 max_abs=0.000701904 bad_k0_127=0 bad_k128_255=0
+Isso reproduziu EXATAMENTE a contagem da R28 e a magnitude do erro, e restaurou a validacao do leitor sem mudar seu mapeamento. Confirma a causa no reproducer da fixture; nao declara a identidade dos gerados ausentes nem o comportamento de todos os shapes do candidato.
+
+D. CONCLUSAO E LIMITES
+Nao atribuir esse RED a leitor Q4_K errado ou prova R22 espelhada: o helper dependente do pack era diferente do canonico. Nao alterar o repack, layout tiled ou bibliotecas do produto para compensar a fixture. Extrair o helper correto do fonte real e comparar com o pin; repetir a matriz do executor com gerados completos arquivados.
+Guard offset/size continua pendente: esta reproducao nao corrige o switch zero-fixo nem valida partial. A vacina completa R28 ainda nao e GREEN (T1/T4 RED). Testes que revelam falhas sao progresso de diagnostico, nao validacao final do candidato.
+
+E. REPRODUCIBILIDADE
+Arquivos de teste e logs em docs/especialista/AUDITORIA-R28-LOGS/.
+audit.py busca o pack do pin via git show, extrai helper/leitor da fixture e gera duas variantes no diretorio do proprio script. Usa gcc C11 para ggml-quants.c e g++ C++17 para o teste, -O2 -ffunction-sections -fdata-sections -Wl,--gc-sections. Dependencias canonicas locais: D:/Projetos/SIG/app/src/main/cpp/llama/ggml/include e /src, somente leitura; stubs de row_size/type_size/name/abort e arredondamento declarados no teste, sem substituir pack/helper/leitor/dequant sob prova. Essa e uma reproducao independente local, nao a cadeia de build do executor.
+ATENCAO: o script gera arquivos; reexecute apenas em scratch/copia isolada. Fontes generated wrong_helper.cpp/correct_helper.cpp ja foram preservados aqui para leitura/diff.
+
+F. SHA-256 DOS ARTEFATOS COPIADOS E VERIFICADOS
+831f3a51f3258d5bc5a32ba6dad9ee2c1bdda33de05b6721fbd6c58ed78cbbf6  audit.py
+7e4b1f6680c6841e64f5a27a4cb1fa751767f702df1cac0d63a2b05487091c59  wrong_helper.cpp
+77fbbb4136056f80d493b50d4012df52e13a91a800ff8f8996ebb00e3b75af1e  correct_helper.cpp
+13d30a610935250d7087bc4f0c5c175b7d410e36faf4deecfdec063bef47ab2e  wrong_helper.log
+5f65453a6dbf3774095f3857360f41aebb5547b6dbb724dfc679d62764fef077  correct_helper.log
+8fc68c12e244d3acb8791fb3aba84a04448ecbd4a522cfae7dc27d7d4c41547a  results.json

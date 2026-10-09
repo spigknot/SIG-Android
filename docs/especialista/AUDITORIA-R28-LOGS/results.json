@@ -1,0 +1,14 @@
+[
+  {
+    "name": "wrong_helper",
+    "exit": 1,
+    "stdout": "Q4K same_reader bad=7968 nonfinite=0 max_abs=1.296227455 bad_k0_127=0 bad_k128_255=7968\n",
+    "source_sha256": "7e4b1f6680c6841e64f5a27a4cb1fa751767f702df1cac0d63a2b05487091c59"
+  },
+  {
+    "name": "correct_helper",
+    "exit": 0,
+    "stdout": "Q4K same_reader bad=0 nonfinite=0 max_abs=0.000701904 bad_k0_127=0 bad_k128_255=0\n",
+    "source_sha256": "77fbbb4136056f80d493b50d4012df52e13a91a800ff8f8996ebb00e3b75af1e"
+  }
+]
