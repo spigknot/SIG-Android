@@ -1,0 +1,93 @@
+=== R16 DEBUG HANG (23:26:17Z) ===
+adb.exe: device offline
+--- rodando 100s (hang esperado no compute) ---
+--- logcat (NpuProbe + ggml + hexagon + dspcall!) ---
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+10-08 20:28:25.476 27020 29590 I NpuProbe: [ggml] .
+--- processo vivo? ---
+2295
+27020
+R16_DEBUG_DONE
+--- logcat (NpuProbe + ggml + hexagon + dspcall!) ---
+10-08 20:29:09.611 27020 29673 I NpuProbe: DIV_DET: pos=2 tokD=317 tokS=33165 | topD=[317:16.6129 658:14.5269 24150:13.4676 555:13.2984 59302:13.2636 ] topS=[33165:23.275
+10-08 20:29:09.611 27020 29673 I NpuProbe: DIV_DET: pos=1 tokD=0 tokS=310 | topD=[2:0.0000 4:0.0000 0:0.0000 1:0.0000 3:0.0000 ] topS=[310:28.2748 404:18.6495 45168:17.51
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1: ok=1 cap=0 eog_tok1=0 tok1=33 amostrados(s/d)=35/34 emitidos=34 consumidos=34 decodes_s_pos_ponte=34
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 tempos: prefill=3397.47ms export=0.21ms(2032789B) import=230.32ms gen=13245.70ms
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 espelho: passos=34 iguais=3 div_pos=2 div_marg(d/s)=-1.000/-1.000 marg_final_destino=0.1165
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 fronteiras(ms desde request): prefill_done=12316.0 tok1_ready=12338.2 import_done=12568.5 tok2_ready=13846.0 fim=25814.3 (IN
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 prompt_hash=a5de647b1ff84e74
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 texto: Bomil Beckeristinos. Mês doo兰 -yana ofh-quefe-appine marvzesc尧da—— 小小孩啊？
+10-08 20:29:09.611 27020 29673 I NpuProbe: reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+10-08 20:29:09.611 27020 29673 I NpuProbe: CHUNK[0]: n=31 t=1517.3ms rc=0
+10-08 20:29:09.611 27020 29673 I NpuProbe: DIV_DET: pos=2 tokD=317 tokS=33165 | topD=[317:16.6129 658:14.5269 24150:13.4676 555:13.2984 59302:13.2636 ] topS=[33165:23.275
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1: ok=1 cap=1 eog_tok1=0 tok1=33 amostrados(s/d)=48/47 emitidos=48 consumidos=47 decodes_s_pos_ponte=47
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 tempos: prefill=2479.11ms export=0.11ms(2032789B) import=5.23ms gen=20525.70ms
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 espelho: passos=47 iguais=23 div_pos=1 div_marg(d/s)=-1.000/-1.000 marg_final_destino=0.0000
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 fronteiras(ms desde request): prefill_done=10987.7 tok1_ready=11004.3 import_done=11009.5 tok2_ready=14210.1 fim=31535.2 (IN
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 prompt_hash=a5de647b1ff84e74
+10-08 20:29:09.611 27020 29673 I NpuProbe: A1 texto: B!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+10-08 20:29:09.611 27020 29673 I NpuProbe: reset: pos cmp (origem=-1 destino=-1) -> VAZIO ok
+10-08 20:29:09.611 27020 29673 I NpuProbe: CHUNK[0]: n=31 t=1512.6ms rc=0
+10-08 20:29:09.611 27020 29673 I NpuProbe: DIV_DET: pos=1 tokD=0 tokS=310 | topD=[2:0.0000 4:0.0000 0:0.0000 1:0.0000 3:0.0000 ] topS=[310:28.2748 404:18.6495 45168:17.51
+10-08 20:29:09.611 27020 29673 I NpuProbe: A2: ok=1 texto igual ao A1: SIM
+10-08 20:29:09.611 27020 29673 I NpuProbe: RESULTADO: SMART-DIVERGENTE (espelho divergiu na pos 2 de 34; A-B-A igual)
+10-08 20:29:09.611 27020 29673 I NpuProbe: A2: ok=1 texto igual ao A1: SIM
+10-08 20:29:09.611 27020 29673 I NpuProbe: RESULTADO: SMART-PARCIAL (cap atingido; A-B-A igual)
+10-08 20:29:21.924 22198 22198 I adbd    : adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'NpuProbe''
+10-08 20:29:22.562 22198 22198 I adbd    : adbd service requested 'shell,v2,TERM=xterm-256color,raw:pgrep -f npuprobe || echo MORTO'
+10-08 20:29:39.333  7811  9253 D WindowManager: NFW_findFocusedWindowIfNeeded:Window{f4cb70 u0 br.gov.sp.pcsp.npuprobe/br.gov.sp.pcsp.npuprobe.MainActivity} mCurrentFocus
+10-08 20:29:40.906 22198 22198 I adbd    : adbd service requested 'shell,v2,TERM=xterm-256color,raw:ls -la /data/app/*/br.gov.sp.pcsp.npuprobe*/lib/arm64/libggml-htp-v81.
+10-08 20:29:40.994  5031  5031 W ls      : type=1400 audit(0.0:2833): avc:  denied  { ioctl } for  path="pipe:[2062433]" dev="pipefs" ino=2062433 ioctlcmd=0x5401 scontext
+10-08 20:29:40.994  5031  5031 W ls      : type=1400 audit(0.0:2834): avc:  denied  { ioctl } for  path="socket:[2056499]" dev="sockfs" ino=2056499 ioctlcmd=0x5401 sconte
+10-08 20:29:40.994  5031  5031 W ls      : type=1400 audit(0.0:2835): avc:  denied  { ioctl } for  path="pipe:[2062433]" dev="pipefs" ino=2062433 ioctlcmd=0x5401 scontext
+10-08 20:29:43.308 22198 22198 I adbd    : adbd service requested 'shell,v2,TERM=xterm-256color:export ANDROID_LOG_TAGS=''; exec logcat '-d' '-s' 'NpuProbe''
+10-08 20:29:45.594  7811  8481 D WindowManager: NFW_findFocusedWindowIfNeeded:Window{f4cb70 u0 br.gov.sp.pcsp.npuprobe/br.gov.sp.pcsp.npuprobe.MainActivity} mCurrentFocus
+10-08 20:29:45.603  7811 10220 D WindowManager: NFW_findFocusedWindowIfNeeded:Window{f4cb70 u0 br.gov.sp.pcsp.npuprobe/br.gov.sp.pcsp.npuprobe.MainActivity} mCurrentFocus
+10-08 20:29:48.591  7811  8006 I UserAwareMgr: handleTopAppChanged: br.gov.sp.pcsp.npuprobe, pid: 27020, uid: 10554
+10-08 20:29:59.323 10342 10539 W Battery : ThermalControllHandler: tempLevel=[4],userMode=2,gameUserMode=-1,appType=-1,envTempType=0,appStates=[],appSwitchSafetyMode=true
+10-08 20:29:59.506  7811  8107 I AppsFilter: interaction: PackageSetting{7530c00 br.gov.sp.pcsp.npuprobe/10554} -> PackageSetting{9d05eff com.oplus.dmp/10177} BLOCKED
+10-08 20:30:00.338  7811  9665 I OStatsManager_Calc: add wifi power pkgName = br.gov.sp.pcsp.npuprobe, uid = 10554, fg = 0.0, total = 0.0, deltaFg = 0.0, deltaTotal = 0.0
+10-08 20:30:00.340  7811  9665 I OStatsManager_Calc: add modem power pkgName = br.gov.sp.pcsp.npuprobe, uid = 10554, fg = 0.0, total = 0.0, deltaFg = 0.0, deltaTotal = 0.
+10-08 20:30:00.341  7811  9665 I OStatsManager_Calc: add screen power pkgName = br.gov.sp.pcsp.npuprobe, uid = 10554, power = 28701.488399999682, is Fg = true, fore size 
+--- processo vivo? ---
+5359
+27020
+R16_DEBUG_DONE

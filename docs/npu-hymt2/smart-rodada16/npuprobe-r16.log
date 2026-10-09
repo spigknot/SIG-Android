@@ -1,0 +1,1220 @@
+--------- beginning of main
+10-08 19:13:24.830 I/NpuProbe( 8532): nativeLibraryDir=/data/app/~~bhReyxWU8_kkc1mTtWR1Nw==/br.gov.sp.pcsp.npuprobe-C4iMskfKDqQImLYpj9N9PA==/lib/arm64
+10-08 19:13:24.830 I/NpuProbe( 8532): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:13:24.830 I/NpuProbe( 8532): REPORT:
+10-08 19:13:24.830 I/NpuProbe( 8532): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:13:24.830 I/NpuProbe( 8532): AUTO-GATILHO='smart:sessao'
+10-08 19:13:24.831 I/NpuProbe( 8532): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:13:24.831 I/NpuProbe( 8532): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:13:24.925 I/NpuProbe( 8532): SESSAO(43a400): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:13:24.925 I/NpuProbe( 8532): MM: backends cpu=0xb400007b002ecdc0 htp=0xb400007b002ece60
+10-08 19:13:25.011 I/NpuProbe( 8532): MM[K=2048 N=512 B=1 q4_K] rc=0 fin=1 max_abs=282.20923 max_rel=1.00000 FAIL
+10-08 19:13:25.011 I/NpuProbe( 8532): MM first_diff i=0 htp=0.000000 ref=245.699524
+10-08 19:13:25.076 I/NpuProbe( 8532): MM[K=2048 N=512 B=1 q6_K] rc=0 fin=1 max_abs=281.77328 max_rel=1.00000 FAIL
+10-08 19:13:25.076 I/NpuProbe( 8532): MM first_diff i=0 htp=0.000000 ref=244.639908
+10-08 19:13:25.568 I/NpuProbe( 8532): MM[K=2048 N=512 B=128 q4_K] rc=0 fin=1 max_abs=307.17795 max_rel=1.00000 FAIL
+10-08 19:13:26.036 I/NpuProbe( 8532): MM[K=2048 N=512 B=128 q6_K] rc=0 fin=1 max_abs=306.73468 max_rel=1.00000 FAIL
+10-08 19:13:26.316 I/NpuProbe( 8532): MM[K=2048 N=2048 B=1 q4_K] rc=0 fin=1 max_abs=282.65955 max_rel=1.00000 FAIL
+10-08 19:13:26.548 I/NpuProbe( 8532): MM[K=2048 N=2048 B=1 q6_K] rc=0 fin=1 max_abs=281.89197 max_rel=1.00000 FAIL
+10-08 19:13:30.669 I/NpuProbe( 8532): MM[K=2048 N=2048 B=128 q4_K] rc=0 fin=1 max_abs=307.36990 max_rel=1.00000 FAIL
+10-08 19:13:34.835 I/NpuProbe( 8532): MM[K=2048 N=2048 B=128 q6_K] rc=0 fin=1 max_abs=306.74860 max_rel=1.00000 FAIL
+10-08 19:13:36.740 I/NpuProbe( 8532): MM[K=2048 N=6144 B=1 q4_K] rc=0 fin=1 max_abs=282.68594 max_rel=1.00000 FAIL
+10-08 19:13:38.330 I/NpuProbe( 8532): MM[K=2048 N=6144 B=1 q6_K] rc=0 fin=1 max_abs=282.11823 max_rel=1.00000 FAIL
+10-08 19:13:40.445 I/NpuProbe( 8532): MM[K=6144 N=2048 B=1 q4_K] rc=0 fin=1 max_abs=93.60207 max_rel=1.00000 FAIL
+10-08 19:13:42.018 I/NpuProbe( 8532): MM[K=6144 N=2048 B=1 q6_K] rc=0 fin=1 max_abs=92.68965 max_rel=1.00000 FAIL
+10-08 19:13:42.376 I/NpuProbe( 8532): MM rejeicao Q5_K: HTP supports=0 (esperado 0!)
+10-08 19:13:42.376 I/NpuProbe( 8532): MMTOTAL pass=1 fail=12
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml_vulkan: Found 1 Vulkan devices:
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml_vulkan: 0 = Adreno (TM) 840 (Qualcomm Technologies Inc. Adreno Vulkan Driver) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] 
+10-08 19:13:42.376 I/NpuProbe( 8532): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: Loading driver libcdsprpc.so
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: Hexagon backend (experimental) : allocating new registry : ndev 1
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: Hexagon Arch version v81
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 allocating new session
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 new session : session-id 0 domain-id 3 uri file:///libggml-htp-v81.so?htp_iface_skel_handle_invoke&_modver=1.0&_dom=cdsp&_session=0 handle 0xb400007b00236ac0
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 op batching: n-bufs 16 n-tensors 7168 n-ops 1024 vmem 3355443200
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml-hex: HTP0 dspcall : dsp-rsp: NO-SUPPORT
+10-08 19:13:42.376 I/NpuProbe( 8532): SESSAO(43a400): fim (1 requests)
+10-08 19:13:42.376 I/NpuProbe( 8532): SMART REPORT:
+10-08 19:13:42.376 I/NpuProbe( 8532): SMART (sessao)
+10-08 19:13:42.376 I/NpuProbe( 8532): 
+10-08 19:13:42.376 I/NpuProbe( 8532): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:13:42.376 I/NpuProbe( 8532): SESSAO(43a400): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:13:42.376 I/NpuProbe( 8532): MM: backends cpu=0xb400007b002ecdc0 htp=0xb400007b002ece60
+10-08 19:13:42.376 I/NpuProbe( 8532): MM[K=2048 N=512 B=1 q4_K] rc=0 fin=1 max_abs=282.20923 max_rel=1.00000 FAIL
+10-08 19:13:42.376 I/NpuProbe( 8532): MM first_diff i=0 htp=0.000000 ref=245.699524
+--------- beginning of main
+10-08 19:20:49.082 I/NpuProbe(  622): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:20:49.082 I/NpuProbe(  622): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:20:49.082 I/NpuProbe(  622): REPORT:
+10-08 19:20:49.082 I/NpuProbe(  622): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:20:49.082 I/NpuProbe(  622): AUTO-GATILHO='smart:sessao'
+10-08 19:20:49.083 I/NpuProbe(  622): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:20:49.083 I/NpuProbe(  622): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:20:49.142 I/NpuProbe(  622): SESSAO(4a6b3a): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:20:49.142 I/NpuProbe(  622): MM: backends cpu=0xb400007b78067dc0 htp=0xb400007b78067e60
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+--------- beginning of main
+10-08 19:24:27.557 I/NpuProbe( 8443): nativeLibraryDir=/data/app/~~YISp0zK3LRMdH3qDAwO9AA==/br.gov.sp.pcsp.npuprobe-go7vHhx2PETkHoPfjIeUYg==/lib/arm64
+10-08 19:24:27.557 I/NpuProbe( 8443): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:24:27.557 I/NpuProbe( 8443): REPORT:
+10-08 19:24:27.557 I/NpuProbe( 8443): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:24:27.557 I/NpuProbe( 8443): AUTO-GATILHO='smart:sessao'
+10-08 19:24:27.558 I/NpuProbe( 8443): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:24:27.558 I/NpuProbe( 8443): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:24:27.624 I/NpuProbe( 8443): SESSAO(4dc0ab): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.865 I/NpuProbe(14365): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:26:37.865 I/NpuProbe(14365): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:26:37.865 I/NpuProbe(14365): REPORT:
+10-08 19:26:37.865 I/NpuProbe(14365): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:26:37.866 I/NpuProbe(14365): AUTO-GATILHO='smart:sessao'
+10-08 19:26:37.866 I/NpuProbe(14365): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:26:37.867 I/NpuProbe(14365): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:26:37.927 I/NpuProbe(14365): SESSAO(4fbdaa): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...
+10-08 19:28:37.686 I/NpuProbe(16104): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:28:37.686 I/NpuProbe(16104): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:28:37.686 I/NpuProbe(16104): REPORT:
+10-08 19:28:37.686 I/NpuProbe(16104): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:28:37.686 I/NpuProbe(16104): AUTO-GATILHO='smart:sessao'
+10-08 19:28:37.687 I/NpuProbe(16104): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:28:37.687 I/NpuProbe(16104): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:28:37.769 I/NpuProbe(16104): SESSAO(5191cc): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-08 19:29:38.486 I/NpuProbe(22607): nativeLibraryDir=/data/app/~~HaMB3sp7ITPkU6kDBGbxDw==/br.gov.sp.pcsp.npuprobe-8DVLYfZ2cjbnjtuczIJITg==/lib/arm64
+10-08 19:29:38.486 I/NpuProbe(22607): runProbe PULADO (p4-auto presente; preinit do tune)
+10-08 19:29:38.486 I/NpuProbe(22607): REPORT:
+10-08 19:29:38.486 I/NpuProbe(22607): (runProbe PULADO: p4-auto presente; evita init Hexagon pre-tune - R8)
+10-08 19:29:38.487 I/NpuProbe(22607): AUTO-GATILHO='smart:sessao'
+10-08 19:29:38.487 I/NpuProbe(22607): SMART iniciando rota=sessao com /data/local/tmp/hymt2_app.gguf
+10-08 19:29:38.488 I/NpuProbe(22607): SMARTv2 rota='sessao' mutante=(none)
+10-08 19:29:38.581 I/NpuProbe(22607): SESSAO(527f58): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)

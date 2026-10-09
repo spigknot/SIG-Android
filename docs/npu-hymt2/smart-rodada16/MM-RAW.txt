@@ -1,0 +1,35 @@
+10-08 19:13:24.925 I/NpuProbe( 8532): MM: backends cpu=0xb400007b002ecdc0 htp=0xb400007b002ece60
+10-08 19:13:25.011 I/NpuProbe( 8532): MM first_diff i=0 htp=0.000000 ref=245.699524
+10-08 19:13:25.011 I/NpuProbe( 8532): MM[K=2048 N=512 B=1 q4_K] rc=0 fin=1 max_abs=282.20923 max_rel=1.00000 FAIL
+10-08 19:13:25.076 I/NpuProbe( 8532): MM first_diff i=0 htp=0.000000 ref=244.639908
+10-08 19:13:25.076 I/NpuProbe( 8532): MM[K=2048 N=512 B=1 q6_K] rc=0 fin=1 max_abs=281.77328 max_rel=1.00000 FAIL
+10-08 19:13:25.568 I/NpuProbe( 8532): MM[K=2048 N=512 B=128 q4_K] rc=0 fin=1 max_abs=307.17795 max_rel=1.00000 FAIL
+10-08 19:13:26.036 I/NpuProbe( 8532): MM[K=2048 N=512 B=128 q6_K] rc=0 fin=1 max_abs=306.73468 max_rel=1.00000 FAIL
+10-08 19:13:26.316 I/NpuProbe( 8532): MM[K=2048 N=2048 B=1 q4_K] rc=0 fin=1 max_abs=282.65955 max_rel=1.00000 FAIL
+10-08 19:13:26.548 I/NpuProbe( 8532): MM[K=2048 N=2048 B=1 q6_K] rc=0 fin=1 max_abs=281.89197 max_rel=1.00000 FAIL
+10-08 19:13:30.669 I/NpuProbe( 8532): MM[K=2048 N=2048 B=128 q4_K] rc=0 fin=1 max_abs=307.36990 max_rel=1.00000 FAIL
+10-08 19:13:34.835 I/NpuProbe( 8532): MM[K=2048 N=2048 B=128 q6_K] rc=0 fin=1 max_abs=306.74860 max_rel=1.00000 FAIL
+10-08 19:13:36.740 I/NpuProbe( 8532): MM[K=2048 N=6144 B=1 q4_K] rc=0 fin=1 max_abs=282.68594 max_rel=1.00000 FAIL
+10-08 19:13:38.330 I/NpuProbe( 8532): MM[K=2048 N=6144 B=1 q6_K] rc=0 fin=1 max_abs=282.11823 max_rel=1.00000 FAIL
+10-08 19:13:40.445 I/NpuProbe( 8532): MM[K=6144 N=2048 B=1 q4_K] rc=0 fin=1 max_abs=93.60207 max_rel=1.00000 FAIL
+10-08 19:13:42.018 I/NpuProbe( 8532): MM[K=6144 N=2048 B=1 q6_K] rc=0 fin=1 max_abs=92.68965 max_rel=1.00000 FAIL
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 19:13:42.376 I/NpuProbe( 8532): [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-08 19:13:42.376 I/NpuProbe( 8532): ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-08 19:13:42.376 I/NpuProbe( 8532): MM first_diff i=0 htp=0.000000 ref=245.699524
+10-08 19:13:42.376 I/NpuProbe( 8532): MM rejeicao Q5_K: HTP supports=0 (esperado 0!)
+10-08 19:13:42.376 I/NpuProbe( 8532): MM: backends cpu=0xb400007b002ecdc0 htp=0xb400007b002ece60
+10-08 19:13:42.376 I/NpuProbe( 8532): MM[K=2048 N=512 B=1 q4_K] rc=0 fin=1 max_abs=282.20923 max_rel=1.00000 FAIL
+10-08 19:13:42.376 I/NpuProbe( 8532): MMTOTAL pass=1 fail=12
+10-08 19:20:49.142 I/NpuProbe(  622): MM: backends cpu=0xb400007b78067dc0 htp=0xb400007b78067e60
+10-08 19:24:27.624 I/NpuProbe( 8443): MM: backends cpu=0xb400007a738e28c0 htp=0xb400007a738e2960
+10-08 19:26:37.927 I/NpuProbe(14365): MM trace: inicio K=2048 N=512 B=1
+10-08 19:26:37.927 I/NpuProbe(14365): MM: backends cpu=0xb400007a6e5088c0 htp=0xb400007a6e508960
+10-08 19:26:37.953 I/NpuProbe(14365): MM trace: row_sz=1152 quantize...
+10-08 19:26:37.995 I/NpuProbe(14365): MM trace: quantize ok (589824)
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: cpu ref...
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant ok
+10-08 19:26:38.002 I/NpuProbe(14365): MM trace: dequant...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: alloc ok (0xb400007b734db300)
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: cpu ref ok; HTP alloc...
+10-08 19:26:38.006 I/NpuProbe(14365): MM trace: set ok; compute...

@@ -1,0 +1,62 @@
+ORDENS AO EXECUTOR — SMART RODADA 16
+EXECUTAR KERNELS Q4_K/Q6_K DO CANDIDATO; NAO ADIAR POR CALIBRACAO SMART
+===============================================================================
+
+PARECER
+R15 trouxe NUMGATE funcional com testes adversariais e auditoria do guard Q6_K. Candidato host/skel continua COMPILED, ainda NAO foi executado para validar os novos kernels. Device voltou: retirar BLOCKED_DEVICE da fila. Proxima prioridade e variante experimental KQ_ON, testes reais e grafo c4bf; nao mais uma rodada apenas de acabamento do gate.
+Especialista leu manifesto R15 e GATE2-RAW.txt. Confirmou linhas finais FAIL(import>env) com 49.9924 e FAIL(reference) depois de tentativas anteriores erradas. PASS com calibration_id=R15-TEST valida somente comportamento do detector, NAO tolerancia numerica de produto. Sem envelope verdadeiro, CALIBRACAO_PENDENTE continua apropriado.
+Sem alterar SIG principal/UI/modelo/default/R2/release/Whisper. Escopo do usuario A+B e testes no probe separado permanece a referencia; nao ampliar aprovacoes. Stayon7 decidido preservado.
+
+1. CONGELAR CANDIDATO E BUILD DA VARIANTE TESTE
+Auditoria guard Q6_K e relevante: nao permitir qkv/ffn fused sem kernel correspondente. Testar que o guard desvia para caminho implementado, nao apenas contar ocorrencias q6_k no fonte.
+Usar fonte unico kq2 reconciliado, hashes finais de cada arquivo e cohorte, manifesto libs/skel/API/flags/bindingAPK. O libllama inalterado nao prova rebuild do backend: libs que receberam repack/guard/kernels sao hexagon/skel e devem vincular timestamp/build/sourceSHA por artefato.
+Compilar variante experimental GGML_HEXAGON_KQ_ENABLED=1 no probe separado, todos componentes coerentes FULLBUILD. Identidade explicita KQ_ON e status NAO_VALIDADO. Produto/default conserva gateOFF. Antes install, comparar manifesto completo e conferir hashes/loadedmaps apos implantacao. Sem swap de SO entre conjuntos diferentes. Mesmo nome de lib nao e identidade.
+APK de teste e modelo c4bf no sandbox permitido; nao remover arquivos/modelo recuperado no fim de cada request. Se limpeza for necessaria, somente temporarios proprios allowlist e autorizados; nao atribuir desaparecimento a reboot sem evidencia causal.
+
+2. PRIORIDADE ABSOLUTA: MATRIZES REALMENTE NO DSP
+Implementar/executar harness de matmul Q4_K/Q6_K CPU vs HTP com assert backend/context/kernel efetivo. O modo numeric de traducao NAO substitui teste unitario por shape/repack/kernel; supportsSIM NAO e PASS.
+Plano minimo:
+- pesos sintéticos deterministas em Q4_K/Q6_K conforme API real de quantizacao; registrar seed/config/sourcefixture;
+- shapes representativos obtidos do GGUF c4bf, incluindo matvec batch1 e prefill batches menores/128, tilebordas/limites/alinhamento/VTCM quando suportados;
+- referenciaCPU em MESMOS pesos/entradas e output float comparado com tolerancias adequadas documentadas, finite/errormax/distribuicao;
+- rejeicoes reais Q5_K/Q2/Q3/shapesunsupported, semCPUfallbacksilencioso contado PASSHTP;
+- roundtrip repack/get_tensor/desempacotamento quando API suportar, verifica scales/mins/sinais Q6_K e layout tiled;
+- flagOFF->supportsFALSE, flagON+kernel->HTPexecucao. Mutante supportSIMsemkernel/protocolo deveFAIL.
+Comecar poucos fixtures essenciais, ampliar somente ao localizar bug. Em falha, abortar grafo, salvar firstmismatch/shape/flags/bufferconfig e corrigir raiz na copia isolada. Rebuild depoisalteracao e rerun focal e siblingskernel paths. Nao seguir benchmark para 'ver se traduz' com numerica inválida.
+Successgate numerico matmul e independente do envelopeSmartGPU; nao esperar calibracao de handoff para testar kernelsHTP.
+
+3. GRAFO C4BF E SUPORTE EFETIVO
+Se matrizes passam, carregar modelo exato c4bf no app normal. Capturar colocacao por op/dtype/camada: Q4_K/Q6_K MUL_MAT HTP e fallback remanescente CPU explicitado. Trace comparado baselineSIGfallback vs candidato. Contar opbackend inclusive lmhead/embedding conforme suportado; nao claim zeroCPU seGET_ROWS restou.
+Um pedido curto completo/EOG, finite, samplercontract e posicao, reset A-B-A. Uma falha de sessão/load/flags/ctxmismatch ou cap nao viraSUCESSO. Testar cancel/unload/errorcleanup nos estados tocados peloport de modo limitado.
+Depois pureOpenCL/Vulkan e ambosSmartcurto; preservar Adreno patches/Q8/reset/guardcache. Se DSP guard evitaQ6fusion, placementtrace e saidanumerica devem provar caminho correto.
+Uma prova952 em ambosSmart e referenciaCPU/HTP conforme necessidade, chunkinghelper ja testado e requestreset/stop. NAO repetirababaselineR10inutilmente; candidatonecessitarevalidacaopor novoprefillrealDSP.
+
+4. MEDIR MICROPERF EM PARALELO AO ENVELOPE
+Depois KQmatmul+grafoaceitos, medir prefillcurto noMESMOprompt/config/deviceestado baseline vs candidato, warmmodelcontexts e countsnprompt iguais. MenosCPUfallback nao e ganho garantido, mas permite diagnostico relevante.
+PROFILEOFF/semteacherforcingnajanela; frio first-use separado carga/context/reset, wallpedido incluindo reset e fasesexclusive. Poucasrepsintercaladas, estado/batchthreadsFA/modelconfigs/dtype iguais, memoriaDSP/host/GPU observavel e temperatura controlada.
+Se perf demonstrar ganho realHTP e estabilidade, pilotoBENCH952SEMespelho/dec_s0 em seismodos. LabelEXPLORATORIO/NUMERICA_SMART_PENDENTE enquanto criterioSmartnao aceito; NAO bloquear coleta nem promover comoproduto. CompletoEOG/outputpin, capsbounded e classesfaultsexclusivas.
+Ganhosupstream10% nao entramcomoaceitecandidato. medirrequestcoldwarm/TTFTready/gappontehandoff/pesosduplos/memoria; visiblesomenteUIcallbackreal.
+
+5. ENVELOPE SMART: EXECUTAR POUCOS CONTROLES, SEM OUTRO CICLO DE MUTANTES
+Red/GREEN já observado G1/R2/R3/R4: manter como vacina. GATE2-RAW inclui tentativas antigas erradas e REPORTdup; classificar invalidteste/superseded e reruns finais porsession/request, nao apagar nem tratar tudoPASS. Versao corrigida deve ser pinada.
+G5 semdst2 precisa runfinalpersistido com label SEM-REFERENCIA; nao confundir linhas antigas que dizemCALIBRACAO_PENDENTE. Pode validar comfixture se nao mudoucompute.
+Coletar calibracao verdadeira com GPUrepeat/roundtrip e parGPU-importado/GPU-puro sobMESMOprefixo; holdoutindependente e criterios calibrados/documentados, semajustarparaN1passar. Modelo/build/prefixo/params/calibrationID fixados; envelopeTEST proibido emaceite.
+Residencia4contexts so se memoriarealmente segura; preferir paressequenciais quando implementados comcheckpoint/tokenstreampersistido e comparacaoreal. Removerdst2 eh SEM-REFERENCIA, nao sequencialequivalente.
+Testes deNaN/Inf/decodeintermediario/cap se naoexecutados devem terfixture real, nãodesignclaim. Limitecalibrado pode variar porbuild/corpus/context; alteracaobackendKquantnao herda automaticamente baselinefallbackenvelope.
+
+6. ESCOPO DE GIT / EVIDENCIAS
+Commits de docs/harness/relatos NAO significam backport integrado ao codigoappnem biblioteca distribuida. Manter camadas COMPILED, KERNEL_VALIDATED, GRAPH_VALIDATED, HANDOFF_NUMERICALLY_VALIDATED, PERFORMANCE_VALIDATED e PRODUCT_INTEGRATED separadas.
+Se aprovacoesgitdoc existentes, seguir hooks/gates e WIPpreservado; nao commitproduto para dar sensacao progresso. Releaseversion/ZIP/APIminSDK24/loaderOCLproduto eWhispersmoke sao futuroaposdecisaointegrar, nao preencher comoresolvido peloprobe.
+
+7. ENTREGA OBRIGATORIA
+RELATORIO-SMART-DUAL-BACKEND-RODADA16.txt docs/especialista A-H:
+A varianteKQ_ON/fullmanifest/escopo;
+B fixturesMUL_MAT CPUvsHTP porshape comresultado/trace/errors;
+C placementgrafo c4bf/reset/cancel e fallbackreal;
+D preservacaoGPU e dualSmartcandidate;
+E microperf matchedshort e piloto952experimental sefeito;
+F calibracaoSmartreal/holdout e status;
+G dados/device/scopegit/probe!=produto/Whispernaotestado;
+H decisioncamadas, blockerpreciso se houver.
+Logs docs/npu-hymt2/smart-rodada16/ fullSHA/countsclassesexclusivas/exit por script. Nada de repetir 'numerica kernels na fila' enquantodevice/build disponiveis: entregar execucao real ou faltanteexato (harnesssymbol/config/toolchain/autorizaçao), sem outputfabricado.
+Seguranca: serial3B15BD00FVE00000 USBpreferido ouWifiCPHconfirmada, PJA110foraescopo, wrapperidentity/antiuninstallSIG, logdeviceexecoutcompletionmarker, limitesmemoriatermica, semroot/governor/thermalbypass/killappsusuario. Stayon7conservar; restorecohort/configtemporariareadbackexact quando aplicavel.

@@ -1,0 +1,20 @@
+MANIFESTO — smart-rodada16 (execucao dos kernels KQ)
+
+FROZEN KQ_ON hashes (sha256 normalizado): hexagon 8b315d12; matmul-ops.c fa53ff4b; matmul-ops.h ed31955b; htp-ops d8e8ba67.
+BUILD: skel htp-v81 4689ffc0... (747336B); libllama 8ab003eb...; hexagon lib 9b99d90e...
+BASELINE v12: mmtest 12 FAILs com htp=0.000000 (fallback silencioso!) + Q5_K supports=0.
+KQ_ON: crash SIGABRT no flush_pending (ggml-hexagon.cpp:1977 dspqueue_read failed) — DSP nao responde ao opbatch.
+STACK: abort<-ggml_abort<-flush_pending+456<-flush<-graph_compute<-runSmart.
+RESTORE: v12 de volta no device (0a4ec5b7...).
+
+61df2ac21a4b561e4b9f41ce92f0a5573f7dd0a76a58a84c51957d145b540fd1  MM-RAW.txt  (3331 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  TOMBSTONE-STACK.txt  (0 B)
+b032c630c1c2f281ed569695a3c741de9ba43cfa698df5783037b64811ecf40b  npuprobe-r16.log  (109814 B)
+6a68bd76b9a5beccd3632b854d00cd169ee4bc7b458da2b74c747e997ab86155  r16-debug.sh  (1511 B)
+3758f610dd34daa8fbef74eedf924a5ecee2c393a1adfd8ea2324ea05e041cbb  r16-debug.txt  (7953 B)
+be9b7579490d0de6484e3db102b0cb376c8ec594cd5d8b051cfac7e24b8e9ae9  r16-kqon2.py  (742 B)
+6051078002213004205f494082fcb64fe42f09b6b0498b9fd1bceb8da21bbc97  r16-proto.py  (784 B)
+20abaad84eb1199b89a044c4a1a853a9ef98b640328c922929bb19d6bd399c8c  r16-swap.sh  (2261 B)
+4bceb14f0c81cec0fb24a3c2a7c494c1afdbdd36e86972f048e68c00b28de81b  r16-swap.txt  (141 B)
+
+df643819c3967f8fc93e62eea0015b3f7736e6f6e4112af82778a7351f9e3d9f  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA16.txt

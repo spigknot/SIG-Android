@@ -1,0 +1,8 @@
+=== R16 SWAP KQ_ON ===
+backup v12 feito: 8 libs
+KQ_ON copiado
+4689ffc0d6f5b96a7f82cd33
+BUILD_RC=0
+Success
+=== MM (KQ_ON!) ===
+R16_SWAP_DONE

@@ -1,0 +1,113 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 16
+=========================================================================
+Data: 08/10/2026 (madrugada). Ordens: "EXECUTAR KERNELS Q4_K/Q6_K DO
+CANDIDATO; NAO ADIAR POR CALIBRACAO SMART". Sem UI/produto/R2/release.
+
+RESUMO EXECUTIVO: A ORDEM FOI CUMPRIDA ATE' O PRIMEIRO-MISMATCH REAL: o
+candidato KQ_ON foi congelado, buildado, implantado no probe separado e
+EXECUTADO contra um harness de matmul novo (mmtest). O harness PROVOU-SE
+(o baseline v12 "completa" com os 12 FAILs esperados e o fallback
+silencioso flagrado com htp=0.000000) e o candidato KQ_ON **CRASHA**
+(SIGABRT 100% reprodutivel) no primeiro compute — stack cravado ate' a
+linha: `ggml_hexagon_session::flush_pending()` -> `ggml-hexagon.cpp:1977`
+GGML_ABORT("dspqueue_read failed") = o DSP nao respondeu ao opbatch que
+continha as ops Q4_K/Q6_K. Device RESTAURADO ao v12 ao fim. O candidato
+permanece NAO_VALIDADO (kernel/port com bug real do lado DSP a investigar).
+
+-----------------------------------------------------------------------
+A. VARIANTE KQ_ON / MANIFEST / ESCOPO
+-----------------------------------------------------------------------
+A.1 Congelamento: fonte unico kq2 (7 arquivos), hashes sha256 (normalizado):
+    ggml-hexagon.cpp 8b315d12...; hmx-tiled e82fa200...; htp-ops d8e8ba67...;
+    hvx-flat 446afd68...; hvx-tiled 2f91323c...; matmul-ops.c fa53ff4b...;
+    matmul-ops.h ed31955b...
+A.2 Variante KQ_ON: cases Q4_K/Q6_K ATIVOS (sem gate — a variante de teste
+    e' o proprio candidato; produto/SIG principal intocado e' o gate OFF por
+    definicao, nunca alterado). Identidade KQ_ON explicita; status
+    NAO_VALIDADO.
+A.3 Build FULLCOHORT: skel htp-v81 4689ffc0... (747336 B); host libllama
+    8ab003eb... ; hexagon 9b99d90e... ; 8 libs no manifesto da rodada.
+A.4 Implantacao: backup v12 (8 libs, C:/llama-npu/rodada2/jnilibs-v12-backup)
+    -> KQ_ON -> rebuild/install no PROBE separado; restauracao v12 ao fim
+    (sha 0a4ec5b7... no device, build+install+cleanup OK).
+
+-----------------------------------------------------------------------
+B. FIXTURES MUL_MAT CPU vs HTP POR SHAPE (mmtest) — EXECUTADO!
+-----------------------------------------------------------------------
+B.1 HARNESS: modo "mmtest" no probe: pesos sinteticos deterministas
+    (sin(i*0.017)*1.7) quantizados pela API REAL (ggml_quantize_chunk),
+    dequantizados por to_float; ativacoes cos(i*0.013)*0.8; shapes do c4bf
+    EXTRAIDOS DO GGUF (Q4_K/Q6_K: 2048x512, 2048x2048, 2048x6144,
+    6144x2048, lm_head 2048x120818)! batch 1 e 128; CPU-ref manual (float
+    double-acc) vs HTP (ggml_backend HTP0: tensor_set -> graph_compute);
+    compare max_abs/max_rel vs tolerancia <5%; first_diff registrado;
+    rejeicao Q5_K via ggml_backend_dev_supports_op.
+B.2 BASELINE v12: 12/12 casos rc=0 MAS output ZERADO (htp=0.000000,
+    max_rel=1.0) => FAIL todos = o FALLBACK SILENCIOSO provado com numeros
+    (exatamente o que a ordem queria pegar); Q5_K supports=0 OK;
+    MMTOTAL pass=1 fail=12 (esperado). O v12 COMPLETA o harness (sem hang).
+B.3 CANDIDATO KQ_ON: trace passo-a-passo provou ate' onde chega:
+    quantize ok -> dequant ok -> cpu ref ok -> alloc HTP ok -> set ok ->
+    **compute... = CRASH (SIGABRT 100% reprodutivel; 2 runs + puro:htp
+    com modelo c4bf tambem trava/crasha).**
+B.4 STACK DO CRASH (tombstone + addr2line):
+    #00 libc abort
+    #01 ggml_abort (libggml-base)
+    #02 ggml_hexagon_session::flush_pending(bool)+456 == ggml-hexagon.cpp:1977
+    #03 flush -> #04 ggml_backend_graph_compute
+    #05-06 runSmart (probe)
+    L1977 = GGML_ABORT("ggml-hex: dspqueue_read failed: 0x%08x") => o DSP
+    NAO RESPONDEU o opbatch que continha as ops Q4_K/Q6_K. (Sem SSR dump do
+    CDSP nos diretorios de ramdump = provavel hang do worker/skel e nao
+    crash do subsistema.)
+
+-----------------------------------------------------------------------
+C. PLACEMENT / GRAFO C4BF / RESET
+-----------------------------------------------------------------------
+C.1 NAO ALCANCADO: o grafo c4bf nao pode rodar com o candidato no estado
+    atual (crash no primeiro compute). Baseline v12 preservado; c4bf OK de
+    volta no fim (v12 restaurado).
+
+-----------------------------------------------------------------------
+D. PRESERVACAO GPU E DUALSMART
+-----------------------------------------------------------------------
+D.1 NaO testado nesta rodada (bloqueio legítimo no kernel DSP). Adreno
+    patches/Q8/reset/guardcache intocados; dualSmart pendente do KQ.
+
+-----------------------------------------------------------------------
+E. MICROPERF / PILOTO 952
+-----------------------------------------------------------------------
+E.1 NAO EXECUTADO (sem suporte numerico; perf exploratorio bloqueado por
+    desenho — nao "ver se traduz apos numerica invalida").
+
+-----------------------------------------------------------------------
+F. CALIBRACAO SMART / ENVELOPE
+-----------------------------------------------------------------------
+F.1 Intocado nesta rodada (foco kernels). RED/GREEN da R15 mantidos como
+    vacina; envelope TEST proibido em aceite; SEM-REFERENCIA pendente de
+    rerun rotulado (G5 executado na R15).
+
+-----------------------------------------------------------------------
+G. DADOS / DEVICE / ESCOPO / WHISPER
+-----------------------------------------------------------------------
+G.1 Device CPH2747/3B15BD00FVE00000 (WiFi 100.108.27.64:5555). PJA110
+    fora (nunca tocado; desconectado quando apareceu por engano no tailnet).
+    Modelo c4bf no sandbox (/data/local/tmp/hymt2_app.gguf sha c4bf1015...
+    verificado por exec-out; NAO removido). v12 restaurado ao fim.
+G.2 Probe!=produto mantido; Whisper intocado; WIP alheio intacto; nenhum
+    commit de produto; nada de release/R2.
+
+-----------------------------------------------------------------------
+H. DECISAO POR CAMADA / PROXIMO PASSO
+-----------------------------------------------------------------------
+H.1 COMPILED: sim (skel+host+cohort completo); KERNEL_VALIDATED: NAO (crash
+    real no compute); GRAPH/HANDOFF/PERFORMANCE/PRODUCT: nao.
+H.2 BLOCKER PRECISO (sem output fabricado): o opbatch do candidato faz o
+    DSP nao responder (flush_pending:1977). Proximos passos concretos:
+    (a) instrumentar o SKEL (log de entrada no worker antes do dispatch do
+    Q4_K) para ver se a op chega e onde para; (b) revisar o descritor/
+    layout do repack Q4_K enviado (tile sizes 896/Q4_1-like) e o opcode 12;
+    (c) recompilar o skel sozinho e re-testar por shape (1 caso minimo).
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada16/ (log r16, tombstones, scripts,
+hashes) + manifesto.
