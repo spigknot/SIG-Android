@@ -1,0 +1,3 @@
+attempt=mmtest:q4k K=256 N=64 B=128 type=q4_K pid=27773
+wbytes=9216 act_bytes=131072 out_floats=8192 (indice b*N+n!)
+cpu_nb0=4 cpu_nb1=256 htp_nb0=4 htp_nb1=256

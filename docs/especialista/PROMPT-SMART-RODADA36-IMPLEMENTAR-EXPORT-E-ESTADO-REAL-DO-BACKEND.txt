@@ -1,0 +1,70 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 36
+IMPLEMENTAR O EXPORT AUTORIZADO E CONSULTAR O ESTADO REAL DO BACKEND
+===============================================================================
+
+1. PARECER R35 E PRIORIDADE
+A chamada de flow_opstage_preflight realmente entrou no probe, antesupload, comrc=-998/cleanup. A renomeacao dosmarcadoresGO e correta. Os7 hashes conferem; fixturebaseline0/M7=1/M8=3RED reproduzidos independentemente. Preservarallocshared/pack/leitor/guardativa/PINminimo aprovados.
+Dois limites:
+- getenv atual NAO e opt_opstage retido no primeiroinit. O guard ainda podepermitirenv3 quando bibliotecaesta1; BACKEND_EFFECTIVE_STATE naoobservado;
+- r35_flow_test.c temcaller_flow local e incrementos io_upload++/io_compute++, nao callbacksI/O do callercompartilhado. Teste do modelo, nao e2e do probe. Nao retomar claim 'I/Oreal' semfonte efetivo.
+Auditoria: docs/especialista/AUDITORIA-R35-ENV-NAO-E-BOOTSTRAP-E-EXPORT-PENDENTE.txt.
+A ausencia doexport nao eblockerexterno: e trabalho necessario ja autorizado na copiaisolada. Cria-lo agora, nao outra rodada que termina 'patch dedicado no proximo ciclo'.
+
+2. ENTREGAVEL PRINCIPAL R36 — SNAPSHOT Q4B128 COMPLETO
+Implementar instrumentacao focal test-only no probe/backendISOLADO, semalterarSIGproduto/DSP/skel/protocolo. Captura unica K256/N64/B128Q4_K, mesmosinputs da bateria jaaprovada.
+Arquivos de bytes EFETIVAMENTE usados:
+1 canonweights do wsrc_p que vai ao upload;
+2 actfloat do vector de entrada realmente copiado;
+3 CPUout da tentativa de referencia;
+4 HTPout aposcompute/readbackvalido;
+5 RAWtileddepoisrepackefetivo do candidato.
+Tamanhos esperados calculados (confirmar comhelper/cohort real):9216/131072/32768/32768/10240 bytes respectivamente. Outputindiceb*N+n e strides/logicalshape devem documentados. Floatlittleendian/quantblocklayout version e sizeof/offsetof relevantes fixados.
+RAW mais simples pode ser copia diagnostica de tensor->data logo APOS repack_q4_K_tiled real no callback, pelo intervalo tiledrequired dohelperreal, depoisverificarqueapointer e mappinghostvalido e span cabe no buffer. Capturarantesunpack e sempaddingextradoctx. Alternativa mappinglegitimo doprobe aposupload; investigarownership/permissoes antesler, nao copiar pointerDSP arbitrario.
+NAO tensor_getquantizado comoRAW, poisnormaliza/desempacota. NAO packgoldeninline como se fossebytesdevice. NAO refabricarvetores pelaformula/seed depois, pois arredondamento pode diferir. Canon/act reais eoutputs reais devemexportados.
+Se precisar expor hook/consulta diagnóstica na hostlibisolada, definir e chamar de modo mínimo após localizar as estruturas reais. Nao afirmar API existente nao encontrada. Skel/coreABI/protocolo preservados; diagnostico desligado porpadrao, ativado apenas nessa rota/labcandidate. Bibliotecasdocohortcoerentes e hashing completo.
+Pasta deexport autorizada comUIDprobe: localizar diretoriofiles/cache/externoprivado existente e caminho de readbackpermitido(run-as se debuggable/canaljausado). Validarwriteability antes inferencia. Nao escreverem/data/local/tmp por presumirpermissaodeapp nem exportaremarea compartilhada semnecessidade.
+FileIO deve validar fopen/writebytes/close/status, evitar arquivosstale porattemptnovo, emitir EXPORT_FAIL emerro e nao 'sucesso' comarquivo parcial. Metadata final identifica tipos/shapes/nb/origem/sizes/hash/attempt/PID/ELFs; incompleto fica marcado, nunca synthesizedfill. Nenhuma captura deaudio/dadosproducao.
+Build real + uma captura probeautorizado noCPH2747 comserialexplicito e streamantestrigger. Nao repetirgrid6casospara adiar os5arquivos. Se device/conexao/writefalha, comando/erroreal e alternativa; falta deimplementacao continuaTODO, nao blocker.
+
+3. REFERENCIAS OFFLINE SOBRE ESSES MESMOS BYTES
+Usar dequantcanonical real e leitorRAWQ4dependenciacorrigida para gerar:
+RscalarCanonical: pesoscanonicosdequantizados xactfloat, doubleacc;
+RtiledReader: pesosfisicosleitos do snapshot xMESMOSact, doubleacc;
+Rcpu/Rhtp: outputs reais exportados.
+Comparar todas8192entradas, finitude/cobertura/NMSE/maxabs e criterioLEGADOcongelado; tabela dos10violadores conhecidos. LocalizarqualcomparacaoprimeirointroduzdiferencaCPUrefapprox/FP16scale/actquant/acc/cast. Mecanismonaoreproduzido rotuladohipotese; naoconcluirFP16accporrepresentacaofinal.
+Os leitores/oraclesexistentes podem seradaptados paraB128 e leituraarquivo, comandos/exits reais. Compilarcomheaders/quants do pin/cohort documentado; guardasdetamanho/endian. Nada de recalculocandidatounpack->pack como unicooraculo.
+Entregar binaryfiles+metadata+script/refoutput verificaveis, nao soCSVMMVIOL. Q6extra e opcional nessa rodada; Q4snapshot/ref e prioridade inadiavel.
+
+4. ESTADO EFETIVO DE OPSTAGE — LEITURA DO BACKEND
+Localizaropt_opstage/init/registry/session no candidato. Implementar consulta diagnóstica privada ou retorno/snapshot real doinit, seguindo infraestruturaactual do fork. Log separado ENV_AT_CALL versus BACKEND_EFFECTIVE_AT_INIT; o preflight deveusar o segundo, vinculado a sessao correta.
+Nao passar getenv como supostogetterreal; nao literal3 nemdefault inferidoporGREEN. Se somente logforpossivel, declarar quecaller ainda nao consulta flags e nao promovere2evalidado.
+Teste temporal daMESMApolitica de init: initcom1, depoisenv3 -> efetivo1 e callerrecusa; initcom3, depoisenv1 -> efetivo3 identificado, semreclassificarcomoSKIPpelaproxyenv. Se a política rejeita divergenceexplicitamente emvezpermitirsegundocaso, documentar; o que nao pode e falsePASSquando backendnãocomputa. Freshbootstrap/inicializacao única respeitada.
+0/1/2 recusa antesupload/compute;3permite. Caller deveconsumir consultaefetiva antesI/O, cleanup garantido. Fazer essa instrumentacaonamesmahospayloadlibrary se ajudar a reduzirrebuild, mas nao chama-laA/Bcausal de logging.
+Se getterdependeABI/datatype, desenho curto e localizarusos anteseditar. Nada de alteracaoproduto oureloadarcore/skel arbitrariamente.
+
+5. FECHAR CALLER/COUNTERS SEM REESCREVER TUDO
+A seamalloc e compartilhada; preservar. O caller local dafixturecontinua reescrita e nao valida cleanupdoprobe(ela retornaemopstageinvalidosemfree, enquanto probe fazcleanup).
+Extrair/compartilhar apenas trechoefetivo decontinuacao/guard/cleanup comcallbacksupload/compute/readback injetaveis ou testarcallerprodutivoisolado; essescallbacks realmente chamados devemalimentarcontadores. Nao io_upload++ substituido por comentario 'tensor_setreal'.
+Producaodelega aosggml_tensor_set/graph_compute reais quejaexistem. Fixtureinstrumenta efeitos externos mas rodaMESMAordem/decisao/cleanup. Caso validofazI/O, invalidosnao; M7/M8nafuncaoreal RED, cleanupassert. Poisoncheckconfirmaheadergerado compilado e include/chamadaprobeconsumidos, não header somentepronto.
+Suitecounters LEGADO/PIN/INVALID/SKIP/CONTROL_Q5 separados e alimentadosdeg30real. Controleunsupported nao contaPINPASS; reportduplicado nao somatentativa. Counterteste legacyFAIL/PINPASS,invaliderro,skip,controle; mutanteignora-g30/misturaQ5deveRED.
+Nao é necessária grande refatoração daActivity/backend para essas provas. Enquantoestiverparcial, nomearcampo/readinesshonestamente e anexarfronteira; não criarCCEretroativa.
+
+6. PIPELINE/COHORT E LIMITE DE DIAGNOSTICO
+CorrecõesR33/M6substring/CT2echo/TOTAL999/statusglobal seguem abertas. Corrigir deforma focal e arquivar uma execucaopipeline real, semrepetirmatrizespackemvezcapturasnapshot. Mesmovaldor noscontra-testes,parseestrito/exitgreen0/mutante1/crashINFRA, exportinputsha efixturestderr/exits. Run-dirnovo abrange tudo, naodeletarhistorico.
+FullSHA source/header/config->ELFunstripped/strippedAPK->APKentry/readback/pathcarregado/PID. Readbacknaodestrutivoantes reinstalar sóporhash; lacunahistoricarotulada. O device atual probeR31/ebb80bbd NAO valida o buildlocalR35/R36.
+Snapshot ehdiagnostico: extraI/O/payloadcopy pode alterar timing/layout, portanto NAO benchmark. Não atribuir mudança de resultado a um unico delta se alterouguard/getter/export/fused simultaneamente. EmUNWRITTEN, primeirafronteira/status/flags/queue/readback eparargrid; sem12rebuilds/reboots.
+Fusedparamfields/pair/consumer aindaaberto antesgrafocomfusao, Q6guardpreservado. LogginginstabilityOPENbudget4B1comvarunica. Depoiscontratos/cobertura suficientes: shapesGGUFc4bf/profileplacement/grafocurto; depoisSmartNPU->GPUOpenCL/NPU->GPUVulkan semreplay e beneficomedido. UI/releaseintocadas.
+
+7. ACEITE R36 E ESCOPO
+Minimo: EXPORT_IMPLEMENTADO+build+tentativa REAL de coleta; se coletou,5arquivosverificados+refs8192executadas. Getterbackendefetivo deveimplementado oublockerAPIpreciso, nao falta degetter como desculpa permanente. Counters/caller/pipeline curtos nao podem consumir toda rodada e deixar novamenteexportnaopatchado.
+Somente copiaisolada/probeautorizado; nãoappSIGprincipal,Whisper/UI/defaultVulkan/c4bf/R2/releases. Semcommit/push/promocao/installSIG. WIPSTT/MODULE-MAP/outrosbyteabyte; semstash/reset/restoresamplos/limpeza. CPHserial3B15BD00FVE00000/wififailclosed;nuncaPJA110;stayon7;semroot/governor/reboot/logdreset/pmclear/uninstall.Readbackfinaldocumentado.
+RELATORIO-SMART-DUAL-BACKEND-RODADA36.txt docs/especialista; evidenciasdocs/npu-hymt2/smart-rodada36/ fullSHA/sizes/exits:
+A patchdiagnostico/export/hook/tensorMappingreal/build;
+B captura5arquivos/metadata/readbackcohort ouerrodevice/write real;
+C refsCanonical/Tiled/CPUHTP8192 e10coords;
+D opt_opstageEFETIVO/ENV temporal/callerusoconsulta;
+E I/Ocallerreal/cleanup/counters;
+F pipelineexecutado/contra-testes/fusão/estabilidadefronteiras;
+G escopo/WIP/estadofinal/R16;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e KERNEL/GRAPH/HANDOFF/PERFORMANCE separados.
+Nao concluir 'exportinexistente,blockerobjetivo' semimplementalo no escopojaautorizado. Nesta rodada precisam surgir bytescapturados oufalha externa verificavel depois do patch e tentativa.

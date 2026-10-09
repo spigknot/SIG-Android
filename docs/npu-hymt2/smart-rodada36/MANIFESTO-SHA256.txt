@@ -1,0 +1,21 @@
+MANIFESTO — smart-rodada36 (EXPORT REAL + SNAPSHOT + REFS: o mecanismo revelado!)
+
+OS 5 ARQUIVOS DO DEVICE (tamanhos exatos!): canon 9216 / act 131072 / cpu+htp 32768 / tiled RAW 10240!
+REFS: HTP vs Rtiled nmse=4.86e-08 (padrão do PIN!); CPU é o outlier (0.09 no (10,22) vs HTP-Rtiled 1e-3!)
+MECANISMO: o primeiro erro é a REFERÊNCIA CPU (vec_dot!), não o caminho K-quant!
+Hook RAW no candidato (test-only, pós-repack!); opstage caller ✓ (AT_INIT pendente). KERNEL_VALIDATED: NAO.
+
+f7beafca6bd65e16cf9e3b6c1fc345c8fd2ea56103c72ee62831bcddd8703f72  probe-r36-com-export.cpp  (98235 B)
+a989d79424e6de75c18d03f3e4e352338809bd74e748d1edb94ce3cb3d66b761  r36-capture-filtrada.txt  (23657835 B)
+ddf90f4edf69c713f52e25a60daae0f7e79787fa29ead45eacabd0217080d981  r36-refs-out.txt  (62 B)
+19a6f9978374eb02e3b854249c1f72d26ce49b3523a79679af7a07be4b63a2ec  r36_cand.py  (2400 B)
+5a8f7120c4cd7ab5d192da0746a21a3e6f5967370a1e0d216b6826d3eb8590c1  r36_refs.c  (5540 B)
+5a00bd78c1f5a224acca2c8ae511855c5bb32f9a4eefbf36fc4f117204ca1ee6  captura/SHA256-BINARIOS.txt  (495 B)
+9f049f9245ea3255d5db6fdcd93a812d63f987c3d6575ec9d2bf5395431d4e5a  captura/actfloat_131072.bin  (131072 B)
+a7a66a351e68b86d352ea90bff94b3b08534eb8d15c35580790e33ba0ae1ad9f  captura/canonweights_9216.bin  (9216 B)
+f0a327728c22e34934a2f29131eaafcc2fa2543878e61c861bb61a2acee28782  captura/cpuout_32768.bin  (32768 B)
+435a6e929db5704e726858c40a4fc22d7585c4c789b1b0010cecf0600de8a81e  captura/htpout_32768.bin  (32768 B)
+b13c712224b44505a5e3aac6a5636357f8c50219f72b59a6feb5870043e14349  captura/meta.txt  (161 B)
+5b014970d17134dd3a62707fa199ad1ef3306ecf06454fa7885e203e5967eeda  captura/tiled_raw.bin  (10240 B)
+
+d684c97ff76e9fb73942a4db928936d22a99b5cfc5a1a502a6061d6a467cbb24  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA36.txt

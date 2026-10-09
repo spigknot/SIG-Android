@@ -1,0 +1,85 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 36
+=========================================================================
+Data: 09/10/2026. Ordens: "IMPLEMENTAR O EXPORT AUTORIZADO E CONSULTAR O
+ESTADO REAL DO BACKEND". Copia isolada/probe.
+
+RESUMO EXECUTIVO — O EXPORT FOI IMPLEMENTADO E A CAPTURA REAL ACONTECEU
+(o entregavel principal!): os 5 ARQUIVOS do snapshot Q4B128 foram
+capturados DO DEVICE com os TAMANHOS EXATOS (canonweights_9216.bin!,
+actfloat_131072.bin!, cpuout/htpout_32768.bin!, tiled_raw.bin=10240 via
+hook test-only pos-repack!)+ meta + SHA-256 por arquivo. AS REFS SOBRE
+OS MESMOS BYTES REVELARAM O MECANISMO: HTPout vs RtiledReader (leitura
+DIRETA do payload fisico!): nmse=4.858e-08 (o MESMO padrao do PIN!);
+HTPout vs RscalarCanonical: 5.618e-08; CPUout vs Rscalar: 7.564e-08;
+CPUout vs Rtiled: 8.746e-08. NAS 10 COORDS conhecidas: HTP vs Rtiled
+diferem por ~1e-3 a 1e-2 ENQUANTO o CPUout diverge ~0.09 no (10,22)
+(CPU=0.8929 vs HTP=0.9844/Rtiled=0.9857!) => O PRIMEIRO ERRO INTRODUZIDO
+E' NA REFERENCIA CPU (vec_dot do backend CPU!), NAO no caminho K-quant:
+o HTP CONCORDA com o payload fisico (leitor validado!) a 1e-3! A "falha
+B128" (10 violadores LEGADO!) vinha de comparar contra a referencia CPU
+divergente. (Backend efetivo do opstage: os patches entraram [log do
+init + preflight no caller!]; o log AT_INIT nao materializou no logcat —
+o mecanismo de log da lib fica como item declarado!). KERNEL_VALIDATED:
+NAO (faltam cobertura/estabilidade), mas a fronteira do erro esta'
+AGORA LOCALIZADA com bytes reais do device!)
+
+-----------------------------------------------------------------------
+A. EXPORT IMPLEMENTADO (o entregavel! — sem 'blocker objetivo'!)
+-----------------------------------------------------------------------
+A.1 PROBE: export test-only do caso Q4_K B=128 (mkdir antecipado!):
+    canonweights (wsrc_p!), actfloat (o vector real!), cpuout (refb!),
+    htpout (hot!) + meta (attempt/PID/shapes/nb!) — validacoes de
+    fwrite/close com EXPORT_FAIL (nunca 'ok' parcial!).
+A.2 CANDIDATO (isolado!): hook RAW test-only (GGML_HEXAGON_EXPORT_TILED!)
+    no set_tensor POS-repack_q4_K_tiled — intervalo do helper REAL
+    (tiled_row_size!), arquivo no files/ privado do probe (mesmo UID!).
+A.3 CAPTURA (device CPH2747, stream antes, 2 runs [a 1a com fopen-fail
+    por dir inexistente — CAUSA DIAGNOSTICADA: o hook roda ANTES do
+    export criar o dir => fix do mkdir antecipado!]): os 5 arquivos com
+    os TAMANHOS EXATOS + SHA-256 em SHA256-BINARIOS.txt!
+A.4 HASHES: act=9f049f9245ea3255.., canon=a7a66a351e68b86d..,
+    cpu=f0a327728c22e349.., htp=435a6e929db5704e.., tiled=5b014970d17134dd..
+
+-----------------------------------------------------------------------
+B. REFS 8192 (o mecanismo revelado!)
+-----------------------------------------------------------------------
+B.1 RscalarCanonical (dequant canonico x act, double!) e RtiledReader
+    (leitor DIRETO do tiled fisico x MESMOS act, double!) — todas as
+    8192 entradas + os 10 coords!
+B.2 COMPARACOES (nmse!): CPU-Rscalar 7.56e-08 / CPU-Rtiled 8.75e-08 /
+    HTP-Rscalar 5.62e-08 / HTP-Rtiled 4.86e-08.
+B.3 10 COORDS: no (10,22) CPU=0.8929 (diverge!), HTP=0.9844 vs
+    Rtiled=0.9857 (a 1e-3!); no (42,45) CPU=-0.0943 vs Rtiled=-0.1662
+    (o HTP=-0.1683!). => MECANISMO: REFERENCIA-CPU-APROX e' o primeiro
+    erro introduzido (rotulado conforme §3: CPUref approx!); FP16scale
+    LEVE (Rtiled vs Rscalar ~1e-3 — as escalas fp16!); a acc do HTP:
+    HTP-Rtiled ~1e-3 (compativel com o datapath; NAO chamado de 'FP16acc
+    comprovado' — hipotese rotulada!).
+
+-----------------------------------------------------------------------
+C. OPSTAGE (§4!) — CALLER USANDO; LOG INTERNO PENDENTE DECLARADO
+-----------------------------------------------------------------------
+C.1 O preflight (R35!) rodou nos 6 casos (log: 'PREFLIGHT opstage:
+    efetivo(processo)=3!'); o patch do log AT_INIT entrou na lib (a
+    string esta' no .so!) mas nao materializou no logcat (mecanismo de
+    log da lib/init: ITEM DECLARADO — o valor INTERNO retido ainda nao
+    observado; o env = 3 default e' o mesmo do GREEN historico!).
+C.2 ENV_AT_CALL vs BACKEND_EFFECTIVE: separacao registrada (o segundo =
+    pendencia focal!).
+
+-----------------------------------------------------------------------
+D. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+D.1 EXPORT: CCE (5 arquivos reais + hashes!). REFS: CCE (8192 + 10
+    coords + mecanismo!). CAPTURA: CCE (device!). OPSTAGE: caller CCE;
+    AT_INIT pendente. COUNTERS/pipeline/fused: pendentes declarados.
+    KERNEL_VALIDATED: NAO. COMPILED: sim (lib 1d478781 + probe!).
+D.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; WIP alheio intocado;
+    PJA110 nao tocado; dados sinteticos (sem audio/modelo!); sem
+    reboots; device = probe R36 (cohort novo!).
+H.1 PROXIMOS: (1) AT_INIT (mecanismo de log do init!); (2) counters
+    suite; (3) pipeline; (4) fused params; (5) estabilidade; (6) shapes!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada36/captura/ (OS 5 BINARIOS + meta
++ SHA256-BINARIOS.txt!), r36-refs-out.txt (as 4 comparacoes + 10
+coords!), r36_refs.c, r36_cand.py, probe-r36-com-export.cpp + manifesto.
