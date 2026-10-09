@@ -1,0 +1,107 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 31
+=========================================================================
+Data: 09/10/2026. Ordens: "SAIR DO HEADER OFFLINE: INTEGRAR O GATE,
+REJEITAR UPLOAD E EXECUTAR O COHORT NOVO". Copia isolada/probe.
+
+RESUMO EXECUTIVO — INTEGRACAO EXECUTADA (itens A/B/D do §2!): (A) O GATE
+R30 ESTA' NO PROBE REAL: include (probe.cpp L13!) + chamada do r30_gate
+(a MESMA funcao da fixture! — sem replica!) + mapeamento dos inputs da
+MESMA tentativa (exec/alloc/sync/ref/cobertura/nf/unwritten/somas!) +
+verdicts emitidos no log; early-returns (CPU_REF_FAIL/REJECTED/EXEC/
+UNWRITTEN) emitem verdict INVALID com motivo! Build: BUILD SUCCESSFUL;
+runtime: OS VERDICTS NO DEVICE (abaixo!). (B) GUARDA ATIVA: os guards do
+set_tensor agora usam GGML_ABORT (mecanismo ATIVO do backend — nao
+assert C removivel!) — o harness captura via longjmp: T4a/T4b =
+"rejeicao=ATIVA(abort!)" com ZERO bytes escritos! Mutante m5 (guards
+removidos!): T4b size-parcial ESCREVEU 9598 bytes => RED (o offset
+segue rejeitado pelo assert do pack — redundancia esperada e
+DOCUMENTADA conforme o parecer!). (D) A BATERIA FOCAL NO DEVICE (cohort
+NOVO ebb80bbd = fonte com guard-ativa + probe com o gate!): Q4_K E Q6_K
+x B1/B2/B128 com verdicts SEPARADOS: Q4_K: B1/B2 LEGACY_PASS+PIN_PASS;
+B128 LEGACY_FAIL (novl=10!) + PIN_PASS (1.337494703e-07!); Q6_K: B1/B2
+PASS+PASS; B128 LEGACY_FAIL (novl=9!) + PIN_PASS (1.364505795e-07!).
+nmse_full com PRECISAO COMPLETA; counters nd/nf/unw/novl coerentes;
+PIN 3/3 PASS em ambos os tipos (margem ~3700x do 5e-4!). KERNEL_
+VALIDATED: NAO (faltam ALLOC_FAIL/opstage-flow, pipeline, refs/snapshot
+e estabilidade!).
+
+-----------------------------------------------------------------------
+A. GATE INTEGRADO (§3!) — EXECUTADO
+-----------------------------------------------------------------------
+A.1 Include em probe.cpp L13 (#include "r30_gate.h"!) + chamada r30_gate
+    (a MESMA!); inputs: exec_ok=ok_h/alloc_ok=hsp/sync_ok=unw==0/ref_ok=
+    ok_cpu/nd-n_expected/nf_ref-nf_out/n_unwritten/sum_err2(sum2)/
+    sum_ref2(sref2)/mx_abs/novl — TODOS da mesma tentativa (nenhum
+    default a1!). Verdicts: verdict_legacy/verdict_pin/pin_valid/
+    nmse_full + counters no log (12 linhas de verdict na bateria!).
+A.2 Early-returns com verdict INVALID + motivo (cpu_ref/rejected/exec/
+    unwritten!) — o gate NAO bloqueia upload/compute (guardas precompute
+    x veredicto pos — separados como pedido!).
+A.3 Build/runtime: o compiler log (BUILD SUCCESSFUL!) e o log runtime
+    (r31-bateria-device.txt!) — trecho include/chamada comprovado!
+
+-----------------------------------------------------------------------
+B. GUARDA ATIVA (§4!) — EXECUTADA
+-----------------------------------------------------------------------
+B.1 GGML_ABORT ativo aplicado nos 2 cases (fonte kq2/sigcand2!) — o
+    ggml.h define GGML_ABORT=>ggml_abort (implementacao real — nao
+    assert C removivel!); aborta ANTES de qualquer leitura/escrita;
+    offset real repassado no caso valido.
+B.2 Harness: green T4a/T4b = ATIVA(abort!) + 0 bytes; m5 (sem guards!)
+    T4b 9598 bytes = RED (defeito semantico: o parcial NAO e' recusado
+    sem o guard!); o T4a do m5 aborta mesmo assim (assert do pack!) —
+    redundancia declarada (nao forca RED artificial!).
+B.3 Buffer curto/ASAN/canarios estendidos: PENDENTE declarado (o
+    buffer-cheio-com-parcial ja nao e' a prova principal — o m5 cobre o
+    defeito semantico!).
+
+-----------------------------------------------------------------------
+C. ALLOC_FAIL / OPSTAGE (§5!) — PENDENTE DECLARADO
+-----------------------------------------------------------------------
+C.1 Nao executados nesta rodada (o tempo foi da integracao + guarda +
+    bateria — os 3 do aceite minimo!). Desenho: injecao alloc-NULL no
+    build_e_run + ALLOC_FAIL/upload0/compute0; opstage preflight com o
+    valor EFETIVO (captura no primeiro init do registro Hexagon!). O
+    probe JA' tem o caminho ALLOC_FAIL (R22!) — a injecao fica!
+
+-----------------------------------------------------------------------
+D. BATERIA FOCAL (§7!) — EXECUTADA (cohort novo!)
+-----------------------------------------------------------------------
+D.1 Cohort: libggml-hexagon = ebb80bbd (guard-ativa!) + probe com o gate
+    (APK novo!) + demais libs do GREEN; device CPH2747; 2 runs focais
+    (q4k e q6k; sem grids/reinstalls!); stream antes do trigger
+    (attempt/PID nos logs!). NOTA: device anterior era pre-guard; este e'
+    o cohort NOVO.
+D.2 Resultados (verdicts!): Q4_K: B1 LEGACY_PASS/PIN_PASS (2.536684723e-08!);
+    B2 PASS/PASS (1.187797106e-07!); B128 LEGACY_FAIL (novl=10)/PIN_PASS
+    (1.337494703e-07!). Q6_K: B1 PASS/PASS (3.736337929e-08!); B2 PASS/
+    PASS (1.690828400e-07!); B128 LEGACY_FAIL (novl=9)/PIN_PASS
+    (1.364505795e-07!). Counters: nd cheio, nf 0/0, unw 0 nos 6!
+D.3 Snapshot/refs (canonweights/act/output + RAW tiled!): PENDENTE —
+    proximo (o desenho pronto; o leitor Q4 corrigido!).
+
+-----------------------------------------------------------------------
+E. PIPELINE (§7!) — PENDENTE DECLARADO
+-----------------------------------------------------------------------
+E.1 r30_pipeline.sh: ainda NAO executado como artefato unico (a cadeia
+    manual seguiu os passos; o script real fica — declarado sem
+    disfarce!).
+
+-----------------------------------------------------------------------
+F. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+F.1 GATE_PROBE: CCE (include+USO+build+runtime com verdicts reais!).
+    GUARDA_ATIVA: CCE (GGML_ABORT + T4 refinado + m5 RED semantico!).
+    BATERIA NOVA: CCE (6 casos com LEGADO/PIN!). ALLOC_FAIL/opstage:
+    PENDENTE. PIPELINE: PENDENTE. REFS/SNAPSHOT: PENDENTE.
+    KERNEL_VALIDATED: NAO. COMPILED: sim (lib+probe!).
+F.2 ESCOPO: SIG/Whisper/UI/R2/release/c4bf intocados; WIP alheio
+    (STT/MODULE-MAP!) NAO TOCADO (backups automaticos do commit
+    anterior o restauraram!); PJA110 nao tocado; stayon7; sem reboots.
+H.1 PROXIMOS: (1) ALLOC_FAIL/opstage no fluxo; (2) pipeline real;
+    (3) snapshot/refs B128 (Rscalar/Rtiled!); (4) estabilidade/logging
+    (budget!); (5) so' depois: shapes/modelo/fases!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada31/ (r31-bateria-device.txt com
+OS 12 VERDICTS!, r31-build.log!, r31_fixture/pack.py + os cenarios
+compilados no servidor!) + manifesto.

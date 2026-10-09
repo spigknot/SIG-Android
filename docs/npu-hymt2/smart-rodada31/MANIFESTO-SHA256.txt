@@ -1,0 +1,15 @@
+MANIFESTO — smart-rodada31 (GATE NO PROBE + GUARDA ATIVA + BATERIA NOVA!)
+
+GATE NO PROBE: include L13 + r30_gate (a MESMA!) + consumers reais; BUILD SUCCESSFUL!
+BATERIA ebb80bbd: Q4_K B1/B2 PASS+PASS, B128 LEGACY_FAIL/PIN_PASS!; Q6_K idem (novl=9/10!)!
+GUARDA ATIVA: GGML_ABORT => T4 'ATIVA(abort!)' + 0 bytes!; m5 mostra o parcial escrevendo (RED!)!
+Pendentes: ALLOC_FAIL/opstage, pipeline, refs/snapshot. KERNEL_VALIDATED: NAO.
+
+42f2a1df9a611c0d69eda84b018d9d1c63efb82159e44bba98f970ea81c7abdb  probe-r31.cpp  (92484 B)
+7908f379fa2219969210d27546ba946af5ab3d636693245d6eea23edaecab9ae  r30_gate-no-probe.h  (3167 B)
+fdd82f2b511197ad2e68dd87c81c80352185b135a5fd9fc4c09ccc4cf15105c4  r31-bateria-device.txt  (24596 B)
+d5cbeec24d7029bb7b689b4b47a6063bd481175c6c7bfcc32b8dbc619d48cf04  r31-build.log  (3037 B)
+229d3408d88727cfbbc43a4d64e22fa097d36589516c8fc58c80986b0de2676a  r31_ga.py  (2413 B)
+52b846395573104aa99fb99eaba9791fe820608dc1a272f49139b5a9ca27a224  r31_pack.py  (5687 B)
+
+a7de6bdf70679bbe745e337827b9bc8fd37883832cf508605001baf4d383d22d  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA31.txt

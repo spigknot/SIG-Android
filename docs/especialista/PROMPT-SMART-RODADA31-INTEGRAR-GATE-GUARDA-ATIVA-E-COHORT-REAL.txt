@@ -1,0 +1,74 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 31
+SAIR DO HEADER OFFLINE: INTEGRAR O GATE, REJEITAR UPLOAD E EXECUTAR O COHORT NOVO
+===============================================================================
+
+1. PARECER R30 — ACEITO O AVANCO OFFLINE, NAO A INTEGRACAO AINDA
+O especialista verificou os26 hashes dos anexos e a matriz de guardas dos adapters R29 corrigidos:2/0/1/2/2/0. Correcao do export aceita, sem reabrir pack/leitor.
+Reproduzi realmente no scratch:
+- Gate13checks: BUILD0/RUN0, TOTAL0RED.
+- Fused predicado+expressao: BUILD0/RUN0.
+- Mutante removeQ4_K do row_size: BUILD0/RUN1, Q4_K512 em vez640, T2RED.
+Logs/fontes/verificacao: docs/especialista/AUDITORIA-R30-GATE-OFFLINE-E-ESCOPO-FUSED.txt e AUDITORIA-R30-LOGS/.
+RETIFICACAO OBRIGATORIA: 'compartilhado probe E fixture' e prematuro. Busca local em C:/npu-probe/app/src/main/cpp por r30_gate/uso/verdict_pin nao encontrou refs. A propria C.2 do relatorio diz integracao no proximo passo. Estado correto: GATE_OFFLINE_TESTADO=SIM; GATE_PROBE_INTEGRADO=NAO. Nao repetir CCE por header pronto para ser incluido.
+Fused validacao cobre o predicado extraido e selecao q8_1 de UMA expressao. Helpers row_size sao constantes640/512 e mm_is_hmx_eligible e stubfalse. Aceito a prova do ramoQ4_K, nao a funcao inteira precompute/consumidores/HMX/kernel. T3 apenasimprimeOK e nao asserta compartilhamentoentre doisnos.
+KERNEL_VALIDATEDglobal=NAO; device2c45ed97 e fonte antigo/pre-guards/fused. Produto intocado.
+
+2. OBJETIVO R31: INTEGRACAO EXECUTADA, NAO NOVO DESENHO
+Nao gastar a rodada construindo outro header ou repetindo pack/leitor. Os testes atuais sao a base. Entregar:
+A gateR30 realmente chamado no probe, entradas reais/counters/veredictos, build;
+B guardaATIVA Q4/Q6 e teste de rejeicao/zero efeitos;
+C ALLOC_FAIL/opstage no fluxo real com injecoes;
+D candidatoisolado buildado e UMA bateria focal no probe, comsnapshot/refs quando device disponivel;
+E cadeia de extracao/adaptacao/build/export efetivamente executada.
+Se devicebloqueado, A/B/C/build/pipeline/offline continuam executaveis. Mostrar bloqueio de runtime real, nao alegarpendencia de tudo. Se buildfalha, comando/exit/erro e alternativa focal. Nao fechar com '1 linha no proximo' novamente.
+
+3. INTEGRAR r30_gate.h EXISTENTE AO CALLER REAL
+Descobrir funcao/variaveis atuais antes editar. Usar a MESMA funcao r30_gate da fixture, include+chamada+build, nao replica de formula no probe. Nao apenas colocar include.
+Mapear explicitamente exec_ok/alloc_ok/sync_ok/ref_ok, nd/n_expected, nf_ref/nf_out, n_unwritten, sum_err2/sum_ref2, mx_abs/novl dos dados da mesma tentativa. Nao inicializar flags a1 apenas para obterPASS. O que nao foi observado deve ser desconhecido/invalido ou ter limitacao declarada.
+Os earlyreturnsCPU_REF_FAIL/EXEC_FAIL/ALLOC_FAIL/REJECTED_BUFFER/UNWRITTEN precisam status/counters coerentes, nunca sumas defaultvalidas. Distinguir guardas precompute de veredicto numericoPOST: gateR30 nao bloqueiaupload/compute por si so.
+Emitir verdict_legacy, verdict_pin, pin_valid, nmsefullprecision e denominador/erro/cobertura. Counters separados, semsomar REPORTduplicado; testes de rejeicaoQ5 ou suporte nao entram kernelPASS. CriterioLEGADOcongelado; PINlimite5e-4 como referencia matmul, nao NUMGATEhandoff.
+Fixture compartilhada ja tem13checks: preservar, acrescentar alloc_ok0/sync_ok0, soma_refInf/negativa e overflow da RAZAO de somas finitas se necessario; nao reconstruir suite nem diluirgate. O caso denom0 nuncaPASSsentinela-1. Teste da integracao/caller deve mostrar que verdicts/counters sao consumidos e alterados por um mutante real, nao somente testarfuncaoisolada.
+Demonstrar trecho include/chamada comlinha, compilerlog e logruntime do novo probe. Sourcehash nao substituiELFhash, e 'nao reinstalamos' significa nenhumruntime novo doheader.
+
+4. GUARDA ATIVA DO CALLBACK void — APLICAR E TESTAR AGORA
+Mecanismo escolhido no relatorio: GGML_ABORT ativo do backend para contrato full-only invalido. Confirmar macro/funcao real e sua implementacao, nao usar assert C removivel. Aplicar antes qualquerleitura/escrita em Q4_K/Q6_K, passandooffsetreal no caso valido.
+T4 passa se REJEICAO_OBSERVAVEL + zero efeitos e semcontinuacao; nao exige abort0. Capturarabort no harnessoffline (longjmp declarado ou subprocess) sem disparar deliberadamente no aparelho. Contar tentativaspack/write/compute: rejeitado0, validoexecuta. Nunca impedirprocessovalido comfixture noop.
+Cases por tipo: offset!=0,size0/parcial/maior/inconsistente, nbytescanonico corretos. Se API/loader admitechunkedupload, comprovarcallerfull-only/rejeicaoantesusar; nao quebrarloader para melhorarfixture. Semnormalizaroffset0, bufferzero/pesoantigo ou stderr como unicoerro.
+Mutante removeguardfullsize: uploadparcial deveRED porleitura/escrita/continuacao indevida. Se guardoffset redundante removido e o packassert ainda rejeita, isso nao e falha semantica; nao obrigar teste a RED pela identidade do if.
+Bufferfisico curto e canarios/ASAN quando disponivel: o teste antigo com buffercompletosizeparcial prova rejeicao, naoabsenceOOBde bufferrealcurto. Adaptacoes decontextonao alteram guard/pack.
+A guarda agora valida erro de contrato, nao um controle de estabilidade=logging. Nao modificarformat/args/ternario fora do minimo desse passo; congelarbaselineA/B separada.
+
+5. ALLOC_FAIL E OPSTAGE: TESTE DO FLUXO USADO
+Localizar o build_e_run/flowseam e allocatorREPACK selecionado. InjetarallocNULL no ponto efetivo, classificarALLOC_FAIL, cleanup, upload0/compute0. CasoREPACKnaoplanejado/defaultlegitimo separado; nao fallbacksilencioso que mascara ausencia deK.
+Opstage0/1/2recusados na rota numerica que requerQUEUE+COMPUTE;3normal. Testar essa decisao antesupload/compute, mostrar functionusada. Flags efetivas dependem PRIMEIRA init do registroHexagon: capturarantesprimeirobootstrap/constructor e initreal. setenv depoisstaticinitialized nao prova configuracao aplicada.
+Valores0/1/2 validos para outrosmodosprofilingdev nao precisam ser removidos do backend global; o guard e da rota de validacaonumerica. Seminferirdefaultpelafalta dearquivo tune. Wrappercompute_calls nao prova DSPexecutou: guardar enqueue-submit-complete/kernelpath quando observavel.
+
+6. FUSED: FECHAR PARAMFIELDS RELEVANTES, NAO INVENTAR FULLCCE
+Preservar fixtureR30 e mutante row_size: sao regressao util da selecaoQ4_K.
+Adicionar chamada da funcao real precompute_fused_ffn_params (extracao por assinatura, naojanelaL3100..3180 nem fallbackqualquerlinhaQ4_1-only) comcontorno declarado. Campos fundamentais avalidar: wtype/src1_type,rowbytes/flat/offsets/strides/allocation, q8_1vsq8_0 e consumersqueosusam. Caso conhecido comQ4_1controle/Q4_Kalvo eQ6 guard no predicate relevante.
+T3 'src1naocompartilhado' precisa doisnos/predicatepair que realmente verificaidentidade deativacao. Um nodeapontandoact2 e is_mergeable_mul_matlocal nao testa pairsharing; implementarassertreal ouretirarclaimT3. TestarHMXpredicate comdadosreais/limiterotulado: stubfalse nao provaHMXcomportamento.
+Nao exigir kernelDSPfusioncompleto offline se dependeHTP: formalizar fronteira parametrizacao/predicate e observarruntime emcasografico posterior. Mas corrigir todos parametrosnecessarios ao fix antes aceitarpromocao.
+Rebuild isolado comguard/fused/gate integrados apos testesofflines. Uma nova candidateconfig pode conter variosfixesdocumentados, mas nao chama-la A/Bcausal de logging. Para loggingexperimento isolarUMAvariavel/corte de fonte/probe/cohort.
+
+7. PIPELINE E BATERIA FOCAL REAL
+r30_pipeline.sh desenhado nao e artefatoexecutado e nem veio entre os anexos. Implementar scriptreal no lab que faz extracao/adaptacao/mutacao/build/run/export comfailclosedexits; exporta EXATOSinputscompilados, stdout/stderr/code e hashes. Verificacaosemantica adaptersguardados vs sourcegen, testeexportvelho->RED. Nao trazer dependencia/credentialR2 ou cleanup amplo.
+Gerados/mutantes/harness/header/compilerflags/probe/core/skel/ELFs/APKentry e readback do caminho carregado completos. Hashbruto e normalizado separados; scriptmissingfuncao/ambiguidade devefalhar.
+Depoisofflinepassar, build/install APENASprobeautorizado noCPH2747 comserialexplicito e origemconjuntoABIcoerente. Nenhuma instalacaoSIG.
+UMA bateria Q4/Q6 K256N64 B1/B2/B128 comLEGADO/PINrotulados econtrolesfocais. Novos resultados nao sao eco do2c45ed97 antigo. Streamantestrigger e attempt/PID/SHA, semlogspamoutrosapps. Snapshotcanonweights/act/outputCPUHTP completos e RAWtiled no callback/mappingdiagnostico; nao tensor_getqueunpacka. Canonical model/testinputhash preservado.
+Comessesbytes, calcularRscalarCanonical eRtiledReaderdoubleacc comleitoresjaaprovados. Tabela10coords + total8192metricas ecomponentes de erro seminferirprecisaoaccporepresentacao. Se naoexportouvetores, CSVnaobasta paraessaCCE.
+SeUNWRITTEN: rc/flags/graphnodes/queuecompletion/readbacksync, pararprogressao. LoggingA/BOPEN, MAX4runsB1 comvariavelunica/codegenantes; semreboots paraforcarreencontro. Nao deixar essebudget consumir todosofflines.
+
+8. ACEITE E ESCOPO
+MinimoR31: INTEGRACAO_GATEPROBE cominclude+USO+build real, GUARDA_ATIVAcomT4refinado e FLUXOalloc/opstage executados. Prova do novocohortdevice+refs e muito desejada na mesma rodada; se deviceindisponivel, blockerpreciso e build/offlineentregues, semtransicionarkernelglobal porreportdraft.
+Depoisdisso: shapesGGUFproduto c4bf complacement/profile real; grafocurto; handoffNPU->GPUOpenCL/NPU->GPUVulkan semreplayintegral e beneficomedido. DefaultVulkan eIDsprodutopreservados, KERNEL/GRAPH/HANDOFF/PERFORMANCEseparados.
+Somente copiaisolada/probeautorizado. SIG/Whisper/UI/R2/releases/c4bfintocados, semcommit/push/publish/installSIG. WIPalheiopreservadobytes, semstash/reset/restoresamplos/limpeza. Atualmente existem modificacoesrastreadas deSTT/MODULE-MAP no workspace observadas pelo especialista: NAO pertencem aesta tarefa; nao toca-las nemreverte-las. CPHserial3B15BD00FVE00000/wififailclosed; nuncaPJA110; stayon7, semroot/governor/reboot/logdreset/pmclear/uninstall. Readbackfinaldocumentado.
+RELATORIO-SMART-DUAL-BACKEND-RODADA31.txt docs/especialista; evidenciasdocs/npu-hymt2/smart-rodada31/ fullSHA/exits/totais:
+A pipelineexecutado/artefatoscoerentes/readback;
+B gateprobe include+chamada+counters+verdictsfixture/runtime;
+C guardaativa/ALLOC_FAIL/opstage e mutantes defluxo;
+D fusedparamfields/predicatepair/fronteiras de teste;
+E bateriafocalnovocohort;
+F snapshot/refsB128/estabilidadebudget;
+G escopo/estadofinal/WIP/R16;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO por prova e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE.
+Nao fechar novamente 'seam compartilhada CCE, proximo1linha': compartilhamento exigecallerrealconsumindoresultado. Nao mais reapresentar planos de pipeline/guards/refs como entregasexecutadas. Avancar integracao nesta rodada, preservar o trabalhoofflinevalidado.
