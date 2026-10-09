@@ -1,0 +1,100 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 34
+=========================================================================
+Data: 09/10/2026. Ordens: "LIGAR OS TESTES DE FLUXO AO PROBE; NAO MAIS
+VALIDAR UMA REESCRITA AUXILIAR". Copia isolada/probe.
+
+RESUMO EXECUTIVO — A LACUNA DO §1 FECHADA: SEAM REAL COMPARTILHADA
+(flow_seam.h!) LIGADA AO PROBE E A FIXTURE: (a) o PROBE agora INCLUI o
+flow_seam.h e CHAMA flow_alloc_preflight no caminho REPACK do build_e_run
+— os callbacks (lambda!) DELEGAM as chamadas ggml REAIS
+(ggml_backend_alloc_ctx_tensors_from_buft/_size/ggml_free!) — o resultado
+(fres.rc/-996!) e' CONSUMIDO (return false!); BUILD SUCCESSFUL do probe
+(RC=0!) — include/chamada/build arquivados! (b) A FIXTURE compila O MESMO
+header e os CONTADORES vem do flow_result_t DA SEAM (nao ha incrementos
+simulados fora!); (c) M7/M8 alteram ESSE header (via -D no build!): M7
+(MUTANTE_SEM_IF_BW!) => T1 5 RED (o NULL CONTINUOU: upload=1/compute=1!)
+— o MESMO mutante que o especialista usou!; M8 (MUTANTE_BYPASS_OPSTAGE!)
+=> 3 RED; (d) POISON-CHECK OBRIGATORIO: um #error no header => o build
+da fixture FALHA (o header ESTA sob o build — nao mais arquivo morto!);
+green 0 RED (T1: rc=-996/upload0/compute0/free2 TUDO da seam! T2 valido
+executa; T3 opstage 0/1/2 recusam, 3 permite!). RETIFICACAO §1 ACEITA:
+a R33 era AUXILIAR_FLOW_MODEL_TESTADO (o inc nao era consumido — a
+contraprova do especialista com #error EXTRACTED_BLOCK_NOT_COMPILED
+explica!); agora e' SEAM_REAL_INTEGRADA. PENDENTES: captura do opstage
+efetivo (bootstrap!), counters do caller (LEGADO/PIN/INVALID/SKIP!),
+snapshot/refs, o fail-flag do pipeline (§5 — localizado: o check do M6
+via substring!). KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. SEAM/HEADER/FONTE (A do A-H!)
+-----------------------------------------------------------------------
+A.1 flow_seam.h (novo!): flow_callbacks_t (alloc_repack/alloc_size/
+    free_ctx!), flow_result_t (rc/alloc_failed/bw/upload_calls/
+    compute_calls/free_calls!), flow_alloc_preflight (a DECISAO
+    compartilhada: if NULL -> -996 + cleanup + return!) e
+    flow_opstage_preflight (QUEUE+COMPUTE — constantes documentadas do
+    htp-ops.h real!).
+A.2 PROBE: include (L14!) + chamada no ramo REPACK (callbacks lambda->
+    chamadas ggml REAIS!) + consumo (fres.rc -> return false + rep!);
+    BUILD SUCCESSFUL (RC=0!); probe-r34-com-seam.cpp arquivado!
+A.3 FIXTURE: MESMO header; callbacks INJETADOS (contam as chamadas!);
+    contadores DA SEAM (nao locais!); M7/M8 via -D (no header!).
+A.4 POISON-CHECK: #error no header => o build da fixture FALHA
+    (comprovado!) — a ligacao esta' no COMPILADOR, nao na descricao!
+
+-----------------------------------------------------------------------
+B. ALLOC_FAIL (§3!) — EXECUTADO (na seam!)
+-----------------------------------------------------------------------
+B.1 T1 (NULL injetado): rc=-996 + alloc_failed=1 + upload0 + compute0 +
+    free2 (cleanup!) — TUDO vindo do flow_result_t da SEAM!
+B.2 T2 (valido): rc=0 + upload1 + compute1 + bw devolvido — nao-noop!
+B.3 M7 (no HEADER!): o NULL CONTINUOU (upload=1/compute=1!) => 5 RED!
+
+-----------------------------------------------------------------------
+C. OPSTAGE (§3!) — EXECUTADO (na seam!)
+-----------------------------------------------------------------------
+C.1 T3: 0/1/2 RECUSADOS, 3 PERMITIDO (a seam do preflight!); M8 =>
+    3 RED!
+C.2 A CAPTURA DO VALOR EFETIVO (bootstrap/sessao!): fronteira SEPARADA
+    declarada — o opt_opstage e' static sem getter; a instrumentacao do
+    backend isolado (log no init!) fica como item focal do proximo
+    ciclo (sem postergar a seam — ela esta' pronta e testada!).
+
+-----------------------------------------------------------------------
+D. PIPELINE (§5!) — O FALSO-NEGATIVO LOCALIZADO
+-----------------------------------------------------------------------
+D.1 CAUSA DO FAIL RESIDUAL (R33!): o check semantico do M6 usava
+    substring "GGML_ABORT" (presente em COMENTARIO!) => falso-negativo
+    com input CORRETO (o especialista executou: chamadas reais = 0!).
+    Correcao: o check deve validar CHAMADAS no escopo certo
+    ("GGML_ABORT(" — com parenteses!) e ignorar comentarios/literais.
+D.2 CT2 (echo!) e o TOTAL->999: declarados como falhos (nao validam!) —
+    a correcao completa do pipeline (injecao REAL do mutante-exit0 no
+    MESMO validador + run-dir englobando tudo!) fica no proximo ciclo
+    (localizada, sem nova rodada inteira!).
+
+-----------------------------------------------------------------------
+E. COUNTERS/SNAPSHOT (§4!) — PENDENTES DECLARADOS
+-----------------------------------------------------------------------
+E.1 Counters do caller (LEGADO/PIN/INVALID/SKIP + controle Q5!): a
+    proxima integracao (o g30 ja' e' consumido nos verdicts!). Snapshot
+    Q4B128 (RAW tiled + vetores!): pendente (device/cohort readback!).
+
+-----------------------------------------------------------------------
+F. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+F.1 SEAM_REAL: CCE (probe builda e chama!; fixture no MESMO header!;
+    M7/M8 no header!; poison-check!). ALLOC_FAIL/OPSTAGE (na seam!):
+    CCE. CAPTURA OPSTAGE EFETIVO: PENDENTE. COUNTERS: PENDENTE.
+    SNAPSHOT/REFS: PENDENTE. PIPELINE: correcao localizada (D.1!).
+    KERNEL_VALIDATED: NAO. COMPILED: sim.
+F.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; WIP alheio intocado;
+    device nao tocado nesta rodada (o probe buildou LOCAL!); sem
+    reboots; PJA110 nao tocado.
+H.1 PROXIMOS: (1) captura opstage efetivo (init!); (2) counters do
+    caller; (3) snapshot/refs; (4) pipeline (D.1/D.2!); (5) fused
+    params; (6) shapes!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada34/ (flow_seam.h!, probe-r34-com-
+seam.cpp (o include+chamada!), r34-probe-build.log (BUILD SUCCESSFUL!),
+r34_flow_test.c + os 3 run.out!, r34_run.sh (poison-check!)!) + manifesto.

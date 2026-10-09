@@ -1,0 +1,75 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 34
+LIGAR OS TESTES DE FLUXO AO PROBE; NAO MAIS VALIDAR UMA REESCRITA AUXILIAR
+===============================================================================
+
+1. PARECER OBJETIVO DA R33
+Reproduzi baseline0RED, M7=5RED e um bypass equivalenteM8=3RED. Os quatro hashes dos anexos declarados correspondem. As provas auxiliares sao reais, mas o alcance anunciado nao e.
+r33_flow_test.c nao inclui r33_alloc_gen.inc. Reescreve fluxo_alloc_e_upload e opstage_preflight localmente; upload/compute sao incrementos diretos, nao chamadas da funcao do probe. O extraido termina no primeiro returnfalse, sem fechar duas chaves, e nao e corpo compilavel.
+Contraprova executada: substitui o inc no scratch por #error EXTRACTED_BLOCK_NOT_COMPILED. Fixture compila e ficaGREEN. Logo o trecho real extraido NAO esta sobteste.
+Nao encontrei referencias dessasfuncoes/gerado no probe local. ConstantesQUEUE1/COMPUTE2 corretas nao comprovam preflight aplicado nemcapture do valorreal.
+Retificar para AUXILIAR_FLOW_MODEL_TESTADO. Preservar o arquivo como didatico; nao anunciar ALLOC_FAIL_FLUXO_REAL_CCE ou OPSTAGE_PROBE_CCE.
+Auditoria/logs: docs/especialista/AUDITORIA-R33-TRECHO-EXTRAIDO-NAO-CONSUMIDO.txt e AUDITORIA-R33-LOGS/.
+Nao ha novo bug de kernel identificado. O erro e de ligacao do teste ao codigo que executa.
+
+2. ENTREGA PRINCIPAL: UMA SEAM REAL COMPARTILHADA E CHAMADA AGORA
+Preferir seam pequena do fluxo alloc/preflight/upload/compute/cleanup, nao mais trecho manual. Ela deve ser utilizada pelo build_e_run do probe e pelo teste nativo. Modificacoes somente no probe/copia isolada autorizada.
+Passos concretos:
+1 localizar assinatura/capturas/tipos reais de build_e_run e allocatorREPACK;
+2 extrair mecanica relevante para funcao compartilhada, recebendo os callbacks/estado necessarios. Nao inventar APIsggml: os callbacks deproducao delegam a chamadasjaexistentes; no teste sao injetados e contados;
+3 substituir o caminho relevante do probe por chamada dessaMESMAfuncao e usar rc/result para decidir cleanup/return/report;
+4 fixture inclui o MESMOheader/fonte compilado. M7/M8 alteram essecodigo, nao copia separada;
+5 build real do probe, arquivar include/chamada/command/exits e fonte/header completos.
+Injecoessao apenas efeitos externos. Decisao ifNULL/preflight/retornos/ordemcleanup deve estar no codigo compartilhado, nao no mock/harness. Contadores medemcallbacks realmente chamados pela funcao; nao increments simulados depois de fluxo local independente.
+Alternativa VERBATIM e aceita apenas se o corpo completo real for extraido e compilado com adaptadores declarados e a referencia ao gerado estiver na unitcompilada. Cortar ate primeiroreturnfalse e manter inc inutilizado NAO atende.
+POISON-CHECK obrigatorio: colocar #error no arquivo compartilhadogerado, emcopia de teste, deve fazer o build dafixture falhar. A vinculacao ao probe exige tambem chamada/consumo/build, nao somentepoisoncheck offline.
+Nao fechar esta rodada com 'seam pronta, uma linha para incluir na proxima'. Fazer a ligacao agora.
+
+3. CENARIOS NECESSARIOS DO FLUXO REAL
+ALLOC_FAIL:
+- REPACKselecionado, allocatorNULL -> rcALLOCFALHA, upload0,compute0, cleanup correto dos contextos/buffers efetivamente criados;
+- sucesso -> upload/computeexecutados (teste nao-noop);
+- M7 bypass ifNULL/continuacao deveRED;
+- defaultlegitimo nao e fallback silencioso de REPACKfalho. Manter suporte e alocacao como estados distintos.
+OPSTAGE:
+- funcao efetiva da rota numerica exigeQUEUE+COMPUTE;0/1/2 nao upload/compute,3executa;
+- M8 bypass provocaRED naMESMAfuncao;
+- constantes extraidas/importadas do headerreal, nao somente digitadas comcomentarioREAL;
+- valor da sessao vindo da primeira inicializacao efetiva. Se opt_opstage e static semgetter, instrumentar o backendISOLADO comlog/consulta diagnostica minima apropriada, confirmando antesregistro/constructor. DefaultdeduzidodeGREEN nao e capturedo valor;
+- nao bloquearmodosdevprofiling/skip fora da rotanumerica.
+Os testes do fluxocomum podem ser offline. A capturaefetiva dobackendruntime temfronteira separada; declarar essa diferenca, nao postergarfixture porque getter ainda precisa implementar.
+Mapear alloc_ok/exec_ok/sync/readback/ref por eventos reais. O graph_compute normal sincroniza no core local; confirmar core docohort. Sentinelsemalteracao e escrita, nao sincronizacao.
+
+4. COUNTERS E SNAPSHOT NA MESMA INTEGRACAO
+R30_gate ja e realmente chamado e6casosPINR31passaram. Nao reescrever formula nem refazer a bateria inteira.
+Ao substituir o fluxo do caller, incluir counters LEGADO/PIN/INVALID/SKIP e controleQ5 separados, consumindo g30. Invalidpreflight/allocerro nunca contam kernelPASS. Testecontabilidade com legacyFAIL/PINPASS, invalid e controleunsupported; bypassdocountermutanteRED.
+Depois buildidentificado, UMA capturaQ4B128 comcanonweights/act/CPUHTPoutputs eRAWtiled aposupload no mapping/callbacktest-only, fullSHA/tamanho/shape/nb/ranges. Nao tensor_getqueunpacka comoRAW. Q6 podevirnomesmopacote se simples, masnaogridsobrigatorios.
+CalcularRscalarCanonical eRtiledReaderdoubleacc sobreMESMOSdados,10coords e8192metricas. Leitores jaaprovados; nao bloquear porlayoutnovamente semevidenciaconcreta. Dadossinteticos, semcredenciais/modeloproducao.
+Fullcohort fonte/header/config->ELF/strippedAPK->APKentry/readback/pathcarregado/PID. Prefixo ebb80bbd nao eSHAcompleto. Recuperarhashreadbacknaodestrutivo quando viavel, checkpointnovo sehistoriafaltante.
+Se devicebloqueado, comando/erroreal eofflines/buildentregues. Nao 'deviceintocado,focooffline' como blocker.
+
+5. PIPELINE: LOCALIZAR O FAIL, NAO ZERAR A FLAG
+Ha um falso-negativo concreto no validador deM6: r33_pipeline_v2.sh exige substringGGML_ABORT ausente. O adapterM6R32 correto nao tem chamadas, mas mantem comentario comGGML_ABORT. Executei essa verificacao: false, chamadasreais0. Isso pode marcarFAILcominputcorreto. Semlogglobal nao atribuir unica causaaoFAILresidual; preservarlogs e localizar primeira etapa falha.
+Validar codigo/chamadas no escopo certo, ignorando comentarios/literais quando aplicavel; nao removernome em comentario para satisfazercheck. SemanticahelperM4 deve observar a atribuicaom, nao substrings deq[j-4] que aparecem legitimamente emd.
+CT2 atual e apenas echo/comentario: implementarinjecaoREAL mutanteexit0 e executarMESMOvalidador usado no caminho normal. CT1 tambem deve passar peloMESMOvalidador deexport, nao umgrepindependente que so demonstraausenciadetoken.
+Nao usar TOTALausente->999, pois mutant>=1 podeaceitarsaida invalida. ExigirTOTALunico/parsevalido/assercoesdo defect e exitgreen0/mutante1; crash/timeout/exitdiscordante eINFRA/FAIL. Capturar status emarquivo e logglobal, nao so 'contratook' incondicional.
+Run-dirnovo deve englobarcenarios/extract/adapt/export. O script ainda usa /root/r33_pipe_casosfixo e o apaga apesar deRUNnovo; fazer todasetapas naarea daquele run, preservando historico.
+Arquivar oexportv2 verdadeiro, harnesses/fullscripts/headers/stdout/stderr/status ehashes. O pacoteR33 atual tem scripts/3outputs mas nao export/logglobalpipeline; nao validar cadeias somente pela descricao.
+Essa correcao e localizada. Nao dedicar outrarodada inteira ao pipeline e parar semseamintegrada.
+
+6. LIMITES E PROGRESSAO
+Pack/leitor/helper/GGML_ABORT/M6 e6PINPASSminimos jaestao provados emseusrespectivosescopos: preservar, nao repetir para substituirtarefaaberta.
+Fusedparamfields/consumer/pairpredicate ainda aberto, loggingestabilidadeOPENbudget4runsB1comvarunica. Somente aposcontratos/provenienciacobertura suficientes: shapesGGUFproduto c4bf, profileplacement/grafocurto, handoffNPU->GPUOpenCL eNPU->GPUVulkan semreplayintegral e desempenho medido. NenhumaUI/release liberada por resultadomínimo.
+
+7. ESCOPO/ACEITE/RELATORIO A-H
+Somente copiaisolada/probeautorizado. SIG/Whisper/UI/defaultVulkan/c4bf/R2/releasesintocados, semcommit/push/promocao/installSIG. WIPSTT/MODULE-MAP/outros preservado, nenhumstash/reset/restoresamplos/limpeza. CPHserial3B15BD00FVE00000 explicito/wififailclosed; nuncaPJA110; stayon7; semroot/governor/reboot/logdreset/pmclear/uninstall. Readbackfinaldocumentado.
+MinimoR34: codigo compartilhado REAL +callerprobe usandooresultado +fixtureM7/M8sobreessecodigo +poisoncheck +buildprobe. Capturaopstageefetivo/snapshot/counters devem seguir nessa mesma rodada seviaveis, comlimitesreais se falharem. Nao repetir a fixtureauxiliar como cumprimento.
+RELATORIO-SMART-DUAL-BACKEND-RODADA34.txt emdocs/especialista e evidence docs/npu-hymt2/smart-rodada34/ fullSHA/status/totais:
+A seam/header/fonteprodutivoisoldado/include/chamada/build/poisoncheck;
+B ALLOCFAILNULL/M7 zerosideeffects/cleanup;
+C opstage0..3/M8 evalorbootstrapreal separado;
+D counterscallerLEGADO/PIN/INVALID/SKIP/controle;
+E snapshot/refs/fullcohort oublockerobjetivo;
+F pipelineprimeirafalhalocalizada/contra-testesexecutados/export;
+G escopo/WIP/estadofinal/R16/fusão/estabilidade;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO por prova e KERNEL/GRAPH/HANDOFF/PERFORMANCE distintos.
+A conclusao R33 e teste de modeloauxiliar, nao fluxo realintegrado. A mudanca R34 precisa eliminar exatamente essa lacuna; nao outro arquivo extraido que ocompilador nunca le.

@@ -1,0 +1,17 @@
+MANIFESTO — smart-rodada34 (SEAM REAL ligada ao probe + poison-check!)
+
+flow_seam.h: a DECISÃO compartilhada (probe CHAMA com callbacks ggml REAIS! BUILD SUCCESSFUL!)
+Fixture: MESMO header; contadores DA SEAM; M7 (no header!) 5 RED; M8 3 RED; green 0 RED!
+POISON-CHECK: #error no header => build FALHA (o header está sob o build — não é arquivo morto!)
+Retificação R33 aceita (auxiliar!); pipeline falso-negativo localizado (o M6/substring!). KERNEL_VALIDATED: NAO.
+
+44ed0bb31bb635560d01ac6d74520f94e3517e8a198045065475e5b1f87b2f3c  flow_seam.h  (2855 B)
+a8983aa712ca5ac1ba813bb9f676394a149c352d58ce99ce5565fc0722d36daf  probe-r34-com-seam.cpp  (93623 B)
+9b6d4f3949e67e994ca97380453704e53d2fdac0da13e1268f9afceeebcc07dc  r34-green.out  (755 B)
+06cd672c3ec7d3c451f7f360f7a0424ca4ced2ebb2604f1b0b013c6e006eab05  r34-m7.out  (789 B)
+5ed0a868b7c8b7f76f07bff617c0417bdb15042a880096686db4f6ac6262b983  r34-m8.out  (797 B)
+5f219ae95883c033ab817b8de36078f2b9421c1c12b1e19c9be2568532bc639f  r34-probe-build.log  (3133 B)
+fdab5c82b914a9efdb8909220da6c1c194820a32a2a3b6121d858b9278db6846  r34_flow_test.c  (3260 B)
+0588c3b6cd5735d8abd89b0ec6fcd087cf7862c82dcb6cfb6f5e7d6114760a89  r34_run.sh  (1647 B)
+
+86e7d033f7d9cba41780501f7782777710039f0fd5ffd92af7b1ff20fdb786e8  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA34.txt
