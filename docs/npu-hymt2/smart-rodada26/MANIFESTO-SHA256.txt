@@ -1,0 +1,12 @@
+MANIFESTO — smart-rodada26 (sanity + Q6_K B1/B2 GREEN!)
+
+SANITY: F32/Q4_0/Q8_0 B1/B2 PASS; B128 quantizados marginais (4/6 viols!) vs F32 0 viol!
+Q4_K B1/B2 PASS (sanity!). Q6_K B1/B2 PASS NO DEVICE (nrmse 0.00019/0.00041! req=14336 tile Q6 REAL!).
+B128: CSV do especialista reusado + MMVIOL do device; padrao FP16 do datapath HTP (nao do port!).
+Ternario: parecer aceito (par 8e/2c difere format tambem!); A/B fino pendente (4 runs max).
+
+f34f1af619a468c6e8b7642c6645d4543e45edc7f214f1ab4d2fac3638fad06e  R25-B128-10-VIOLADORES-VERIFICADOS.csv  (1522 B)
+6762aa26ab2ec264d96fc41a4dc3fc72261133aa28c43fa713b2fa59b1fe4ac9  r26-q4k-q6k.txt  (22402 B)
+6abf5f31a79ac6a86fcb9d61c2f23e8d0f0a4ab7f4be8b944ed506362954edbf  r26-sanity-ctrl.txt  (9999 B)
+
+967b08d519c16b548bf7d6312ccb24d3942ff3adece313a6e56fa79259780b96  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA26.txt

@@ -1,0 +1,71 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 26
+GREEN REPRODUZIDO: Q6 E REFS B128 AGORA; TERNARIO NAO E FIX ACEITO
+===============================================================================
+
+1. PARECER R25 E DESCOBERTAS DO ESPECIALISTA
+Aceito startup/logcapture RESOLVIDO: stream contemporaneo registra nativeLibraryDir/gatilho/mmtest. 'Appmudo/CDSPdegradado' doR24 fica retirado como conclusao; nao novo reboot. Os3 hashes dos anexosR25 correspondem. R23host8e953285 e2c45ed97 reproduzem Q4B1/B2PASS; semnewNaN, B128 continuaFAILcriterio congelado.
+A correlacao BUILD->resultado e evidencia util, NAO mecanismo causal do ternario. Nao aceitar warning/logternario como workaround definitivo do candidato. Congelar artefatosGREEN para diagnostico limitado enquanto se fecha causa e testes.
+NOVAS PROVAS DO ESPECIALISTA, executadas localmente em arquivos reais:
+A. kqfix-libs/libggml-hexagon.so = SHA2568e953285f78e636c8f589ce0620313a403e1688e80325829ba69a160568f2337, bytes5816232.
+B. jniLibs atual = SHA2562c45ed976df49578130dbbdc4a0b0c767bc2a64488eea0a64fea38a7a5ccb581, bytes5816184.
+Ambos .text tamanho444320, mas hashes diferem; .rodata24764 versus24732. StringsKQSET do8e contem 'name=%s offset=%zu size=%zu', strings2c contem 'name=%s size=%zu'. Logo esses dois GREEN NAO diferem so pelo ternario; logging/format/args tambem diferem. Diferenca debytes do ELFtotal nao equivale a bytes de instrucciones do ternario.
+C. kqfix2-libs local contem09a013a3966d35e1c131579014c0a6b1c32ff8319367960ab55452278a5f1e2d, NAO2c45ed97. Nomepasta nao identifica build. Backup imutavel deve ter manifesto porhash.
+D. Os10violadoresB128 JA ESTAO nos dois streamsR25, comMESMAS coordenadas/valores aposdedupe. O especialista extraiu e verificou o CSV D:/Projetos/SIG/docs/especialista/R25-B128-10-VIOLADORES-VERIFICADOS.csv (10 linhas de dados, valores decimais preservados e as duas fontes indicadas). Reusar esse artefato; nao pedir novaexecucao apenas para exporta-los.
+Refabs entre0.094327398 e0.892908752; maior excesso(b42,n45): HTP-0.168334961, CPU-0.094327398, abs0.074007563, limite0.024716370, excesso0.049291193. Pequena magnitude nao e zero nem prova arredondamentoaceitavel. Criteriaabs+rel jausados; NRMSEbaixo nao mudaFAIL.
+
+2. OBJETIVO DESTA RODADA: RESULTADOS, NAO OITO REBUILDS NOVAMENTE
+Entregar Q6K offline+primeiroensaioB1 e analise dos10violadoresB128 com Rcpu/Rscalar/Rtiled, alemdevacinasoffline priorizadas. Fazer sanityF32/Q4_0B1 no mesmo cohorteGREEN antesQ6: nao pendenciar indefinidamente controlespositivos simples.
+A/Bternario e workstream curto/limitado: quatrotentativasB1max comvariavelunica e binarioscongelados; nada deB128/graph em cada reinstall nem novosreboots. Coleteprimeirafronteira/contadores no ramoUNWRITTEN; nao substituir por maisfprintfsemcontrole.
+Se o buildGREEN falhar no sanityoureadback, priorizarloopcontrolado e declararQ6runtimebloqueado com erroreal; ainda executarofflinefixtures/oracleQ6/analisedados salvos. 'Tempo/escopo' nao e blocker tecnico de fixture requerida e jaautorizada.
+KERNEL_VALIDATED=NAO; produto/release/Smartnaotocados. GreenB1/B2 e avanco preservado, nao aceiteglobalnemgarantia de estabilidade.
+
+3. CONTROLES + Q6_K MINIMO
+CheckpointatualfullSHA fonte/header/config/ELF/APKentry/readback/carregado PID; nao 'installSuccess+PASS provaAPK': umrunPASS nao identificaqualELFloadado. Defaultssemarquivo tune reduzemH1, mas capturaropt_opstage/QUEUE/COMPUTE efetivos e opcounts noinitreal para excluirskip comdados, semreabrir toda investigacao.
+Usar stream iniciadoANTESamstart/freshprocess, guardarpackage/PID/timestamps/attempt/statuscapturefim. Rawlogretencao suficiente sem systemspam indiscriminado ou dadosoutrosapps; retificarlimitacao: logcat-d e valido se buffer ainda contem janela; dumpTARDIO pode perderjanela. Nao afirmarnunca usar-d emabsoluto, mas nao julgarstartup porausenciadocapturetardio.
+F32B1 eQ4_0B1 no mesmoHTP/harness/currentGREEN -> resultados/rc/cobertura. Computecalls wrapper separado de enqueued/submitted/completed/profile/kernelID quando observavel. Se todosHTPinertes, pararQ6 e isolarsistema/execgate; se controlesGREEN, prosseguirQ6.
+Q6offline: callbacksreais alloc/set/descriptor + packgoldenpinado e leitorscalarindependente/signs/planes/tile1024conformeconstantesreais; finite/canarios/allrows/exits. Nao canonicalrow/tileQ4copiado. Aplicarguardoffset/size planejado de forma testavel; rejeitarpartial antesfullpackquandoAPI nao suporta. Nao ternario debug como precondicao do contrato.
+Q6K K256/N64/B1 no probeisolado, bytescanonicos/actexportados eCPUreffinita, supportsposttrue, actualalloc/coherentdescriptor, outputfinitefirsterror. SeB1GREEN -> B2; B128somentequandoB1/B2aceitos e com metrica/dumpcongelados. Se falha, pararbatches e capturar snapshotfisico/descriptor/KQenterexitrelevantes, sem extrapolarQ4.
+Offline nao depende device: se errocompiler/linker real, entregar comando eexit, nao bloquear pela ausencia de phone. Nao libmix/cohortABI para obterPASS.
+
+4. B128: CONSUMIR LOG JA ENTREGUE E GERAR REFERENCIAS
+Extrairscript dos streamsR25 paraCSV/JSON os10violadores, dedupe porattempt+b+n (REPORTdup nao novasviolacoes). Verificarcontagem10 e igualdadeentre8e/2c; todos8192 finite eNMRSEglobaldisponivel, criterio0.02+0.05*abs(ref) preservado.
+Gerarreferencias sobre MESMOS bytescanonicos quantizados eact, comhash/caseconfig:
+Rcpu backendCPU doensaio;
+Rscalar dequantcanonical+doubleacc sobreactfloat, sem quantativacaoCPU;
+Rtiled leitor direto doPAYLOADREALcandidato aposupload/FP16weights+doubleacc;
+Ract se puder reproduzirquantizacaoativacao/caminhoHMX/HVXporcontratoreal.
+Avaliar toda matrizB128, mas destacar10coordsjaidentificadas. Comparar erroCPUrefversusscalar (CPUdotquantizaact), errotiling/scalerounding e erroHTPquantacc separadamente. Quando Rtiled usa goldeninline emvezpayloaddevice, rotular REFERENCE_GOLDEN, nao payloadobservado; neste caso capturar snapshottest-onlynaocanonicaltensor_get queunpacka.
+Se needed, usar controlesQ4_0/Q8_0B128 da mesmaconfig pra errointrinseco e cohortupstreamknown-good COERENTE apenasemprobe; nao mudarcoreSIG/Vulkan. Dados fora docriterioconfirmamFAIL atual. Secriterio deve mudar, design/envelopejustificado porprecisao/formato e casos independentes/holdout, manterhistoricoFAIL e mutantesdetectados; nao escolhertolerancia pelos10violadores.
+Se padrao revelaindex/activationlayout/accbug, reproducerRED+fixminimo+GREEN e regressaopermanente. Nao NaN->zero nemgateque ignora violacao peloNRMSE.
+
+5. ISOLAR A CORRELACAO DO BUILD SEM 'ACEITAR EMPIRICO' COMO CORRECAO
+PreservarELFfb8cc5d0 e fonte/hashfullreal queo gerou; prefixo/tamanho nao basta. Preservar8e/2cAPK/probe/core/skel/config. Se artefatoB naoexistirlocal, recuperarbackup/servidor sem inventar; reconstruido e rotulado separado.
+CompararTODOfontebuildinput/headerflags/compiler/CMakeCache/commands/pins e dependencias, nao janelaL1318-1390. Ternarioemset_tensornaomesmaparteda janela nao pode ser 'fora do diff' sem identificar qualfuncao/linha/arquivo mudou. Lista exata dedeltas antesclaimvariavelunica.
+No AArch64 compiler, tensor->name e array cujoendereco e sempretrue no fluxo valido; warningR23 confirmava isso. O compiler pode eliminar ternario. Se A/B código differir realmente, localizarinstrucao/callsite/disassembly em set_tensor e limites. Se bodyotimizadoidentico e apenaslayout/strings/relocationsdiferem, nao atribuircausa ao condicionalC; hipotesesUB/memoriainicializada/alignment/cache/timing/queue permanecem.
+Nao inferir bytes de instrucoes pelo tamanhoELF. Inspecionar .text/.rodata/relocations/symbols e functionbytes normalizados por relocacoes. Strings/varargs precisam MESMOformat/mESMOSargs: o par8e/2c nao serve de isolate do ternario porque offsetfieldfoiretirado. Podediferenciar efeitos:
+A somentecondicionalde name, format+args restoiguais;
+B soformat/offset mantendoexpressaoname;
+C opcional loggingenabled/disabled comcontratopreservado.
+Naoexecutartresgrids: primeirocompararcodegen para selecionarUMAvariavel cheap. Sanitizershost/minimalfixture e bounds/initialization quando disponibiliados, antes culpar 'timingDSP' porfprintfaparentementeinocuo.
+TesteA1-B1-B2-A2 com noMAX4runsKQ_B1, freshprocessreadback e config/inputconstantes, guard/currentprobeconstantes, streamcontadorrc e regiao_outputsentinelprec-post. SeBnaoreproduzUNWRITTEN comcapturacontrole, rotularnaoreproduzido e nao forcarstate/hoursreinstalls.
+No ramoUNWRITTEN emitir hrc/status, supports/gate/graphnodes/nodeIDs/QUEUECOMPUTEflag/enqueue-submit-complete/erroqueue, readbacksynchronization/payloadsizes antesclasse e firstunchanged. Repackchamado so prova uploadpath, nao kernelop.
+Se identificarflag/opgraph/copyinert -> fixraizREDGREEN. Semcausacomprovada, congelarGREEN apenasparaexperimentos, instabilityOPEN impede promotion/default; 'manterternario'naoe vacina nem aceitefinal. Nao baixar exigencia guardoffset para depender de logging especial.
+
+6. VACINAS PERMANENTES E FUSAO SEM ADIAR
+FixturesnativasREAlcallbacks upload/alloc/offsetpartial/allocfail; mutante setcaseK->memcpycanonical e allocK->canonical devem falhar. Preflightnumericopstage0/1/2recusados,3normal onde contrato equivale. Headercompartilhado/usosbuild comprovados; nao replicasclassificador com computecounter inventado.
+Pelo menosuma regressionfixtureefetiva executadacomREDmutante/GREENnovo nesta rodada, enquantoA/Bdevice e serial offline podeparalelizarse independente. Nenhum agenteconcorrente noADB/instalacao.
+Antesmodelo: rastrear precompute_fused_ffn_params Q4_1-only e Q4_Koffset/q8_1, consumidores/mergeability/dispatch eQ6guard; fixturebugou rejeicaofusaohonesta. Isso nao e 'notafutura' se defaultmodelo podechamar. Nao modelgraphenquanto isso/K6coverage/batchcriteriaabertos.
+Kernels->shapesGGUFc4bf->graphshort+placementprofile->SmartABA/numericimport->performance semespelho e pipelineposterior. R16rawtombstone se reaparece; naomarcarresolvido porcaseB1passar.
+
+7. ESCOPO/ENTREGA A-H
+Somente copiaisolada/probeautorizado; SIG/Whisper/UI/defaultVulkan/c4bf/R2/releaseintocados; semcommit/push/promocao/installSIGsemOK. WIPbyteabyte, backups/evidenciaspreservados; semlimpeza/stash/resetamplos. CPHserial3B15BD00FVE00000/wififailclosed,nuncaPJA110; stayon7; semroot/governor/rebootsadicionais/logdreset/pmclear/uninstall. FFmpegpin apenasprocessoautorizado. Encerrarnoestadoscopeaprovado comreadbackdocohorttarget; nao alegarv12/produtoalterados.
+RELATORIO-SMART-DUAL-BACKEND-RODADA26.txt docs/especialista e evidence docs/npu-hymt2/smart-rodada26/ fullSHA/counts/exits:
+A identidadeAPK/ELF/core/skel/probe/config/PID e estadoscopefinal;
+B controlsF32/Q4_0 eQ4B1 atual comstatuscounts;
+C Q6offline/deviceB1/B2progressaosegreen;
+D CSV10B128 JAEXTRAIDOS + Rcpu/scalar/tilednovascomparacoes;
+E completebuilddiff/codegen/A/Blimitado e limitecausalaindaabertooufIX;
+F vaccinacallbackmutantes/opstage/fusedFFNgates reais;
+G escopo/WIP/R16preservados;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCEdistintos.
+ACEITACAOminima: sanitycontrols + Q6B1resultado (oublockerreal), analiseB128dosartefatosjaentregues e vacinaofflineexecutada. A/Bternarioabrependenciadeestabilidade;naoautorizaencerrarkernel nemsubstituitestenumérico. Naopedirodumpdos10jaentregue, nemnovaR26todaemlogging/rebuild semQ6.

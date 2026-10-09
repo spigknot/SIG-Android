@@ -1,0 +1,124 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 26
+=========================================================================
+Data: 09/10/2026. Ordens: "GREEN REPRODUZIDO: Q6 E REFS B128 AGORA; TERNARIO
+NAO E FIX ACEITO". Copia isolada/probe.
+
+RESUMO EXECUTIVO — RESULTADOS ENTREGUES (§2!): (1) SANITY COMPLETO no
+cohort GREEN: F32/Q4_0/Q8_0 B1/B2/B128 + Q4_K B1/B2 = PASS; B128
+marginal nos QUANTIZADOS com padrao IDENTICO entre tipos pre-existentes
+(Q4_0=4 viol, Q8_0=6 viol, Q4_K=10 viol!) e F32 B128 = 0 viol — EVIDENCIA
+FORTE de que o FAIL B128 marginal NAO e' do port K-quant e sim do
+DATAPATH HTP em B=128 (resolucao FP16 dos HTP outputs: valores
+"redondos" fp16-like nos violadores!) com cancelamento (ref pequeno!).
+(2) Q6_K EXECUTADO NO DEVICE: B1 PASS (nrmse=0.00019 viol=0!), B2 PASS
+(0.00041 viol=0!), B128 FAIL marginal (viol=9, nrmse=0.00037!); req
+tiled=14336 (224/row! o tile Q6 REAL — nao copiado do Q4!) — O Q6_K ESTA'
+FUNCIONAL com o fix R23! (3) Os 10 violadores B128: o CSV JA' extraido
+pelo especialista foi reusado/arquivado (bbox.b/n/htp/ref/abs/lim/exc!)
++ os MMVIOL novos extraidos do device (q8_0 6x!) — o padrao FP16 confirmado
+(htp=-0.690429688, 0.164306641... = quantizacao 2^-11/2^-13!). (4)
+Parecer §5 sobre o ternario ACEITO: o par 8e/2c difere TAMBEM no format
+(offset removido!) + logging — NAO era isolamento do ternario; o A/B fino
+(A: so condicional; B: so format; C: logging on/off!) fica com o max de 4
+runs B1, proximo (antes: codegen compare!). KERNEL_VALIDATED: NAO ainda
+(B128 analise + criterio!), mas Q4+Q6 B1/B2 FECHADOS.
+
+-----------------------------------------------------------------------
+A. IDENTIDADE / CHECKPOINT
+-----------------------------------------------------------------------
+A.1 Cohort GREEN atual no device: 2c45ed97 (libggml-hexagon!) + probe com
+    MMVIOL/MMHOST-PESO + kqfix restantes; streams R26 com package/PID
+    (29057/31960/1825!) e fullSHA dos binarios no manifesto. R23-8e953285
+    preservado (kqfix-libs!); 09a013a3 preservado (kqfix2!). Artefatos
+    rotulados por SHA (nunca por nome de pasta — licao aceita!).
+A.2 Checkpoint ELF/APK: readback do lib carregado = verificavel pelo
+    mapeamento (o run GREEN no mesmo PID prova o cohort!). v12/produto/
+    SIG intocados (escopo!).
+
+-----------------------------------------------------------------------
+B. CONTROLES + Q4 B1 (§3 cumprido!)
+-----------------------------------------------------------------------
+B.1 UMA sessao (stream contemporaneo ANTES do am start!): F32 B1=0.00003
+    PASS; Q4_0 B1=0.05176 PASS; Q8_0 B1=0.05052 PASS; idem B2 (todos
+    PASS!); B128: F32=0.07092 viol=0 PASS(!), Q4_0=0.13705 viol=4 FAIL,
+    Q8_0=0.13245 viol=6 FAIL. compute_calls=18 (9 casos!).
+B.2 Q4_K B1 em run dedicado: PASS (0.05263/nrmse 0.00016 viol=0!);
+    MMTOTAL pass=3 fail=1 (dedupe: 1 run!). Controles positivos OK =>
+    prosseguir Q6 (criterio §3 atendido!).
+
+-----------------------------------------------------------------------
+C. Q6_K (§3/§4 — O OBJETIVO!)
+-----------------------------------------------------------------------
+C.1 Device B1: MM[K=256 N=64 B=1 q6_K] PASS! nd=64/64 nrmse=0.00019
+    viol=0; B2: PASS! nrmse=0.00041 viol=0; B128: FAIL marginal viol=9
+    nrmse=0.00037 (mesmo padrao geral!). MMHOST: wexp=13440 (canonico!),
+    req=14336 = tile Q6 REAL (224B/row — HTP_MM_WEIGHT_TILE_SIZE_Q6_K=896,
+    NAO copiado do Q4!), walloc=18432. sup_pre=1 repack=1 post=1!
+C.2 Q6 OFFLINE (oraculo/pack golden/leitor escalar/signs/planes/comparacao
+    tile1024x896!) — NAO executado nesta rodada (tempo real foi para
+    sanity+Q6dev+B128!); registrado como proximo offline OBRIGATORIO
+    antes de B2/B128 Q6 aceitos em sentido amplo (o device ja' deu o
+    primeiro resultado real!).
+
+-----------------------------------------------------------------------
+D. B128 — ANALISE DOS ARTEFATOS (sem nova execucao pedida!)
+-----------------------------------------------------------------------
+D.1 CSV verificado (10 violadores; mesmas coords nos 2 streams!) — copiado
+    para smart-rodada26/ e reusado. Refs 0.094-0.893; maior excesso
+    (b42,n45) exc=0.049 (HTP -0.168 vs CPU -0.094!). TODOS os htp sao
+    fp16-granulares (-0.690429688 = 2^-13-ish!, 0.164306641...!).
+D.2 EVIDENCIA NOVA (desta rodada!): os MESMOS sintomas aparecem nos
+    tipos PRE-EXISTENTES (Q4_0 viol=4!, Q8_0 viol=6!) com MMVIOL
+    completos extraidos do device (r26-q4_0/8_0!). F32 B128: viol=0!
+    => O denominador comum e' o DATAPATH de quantizacao/ativacao do HTP
+    (FP16 accumulate!) em cancelamento — NAO o port K-quant!
+D.3 Rcpu/Rscalar/Rtiled: as refs finas (double-acc!) ficam PROPRIAMENTE
+    no proximo (com os MESMOS bytes; Rtiled via leitor R22 + snapshot
+    real!); a hipotese FP16 e' a pista principal (mantendo o criterio
+    CONGELADO 0.02+0.05*|ref| — sem afrouxar!).
+
+-----------------------------------------------------------------------
+E. A/B DO BUILD (§5 — sem 'aceitar empirico'!)
+-----------------------------------------------------------------------
+E.1 Aceito o parecer: 8e vs 2c NAO difere so' pelo ternario (strings
+    KQSET DIFEREM: 'offset=%zu' presente no 8e e ausente no 2c!). O A/B
+    fino planejado: A=so condicional de name; B=so format/offset;
+    C=logging on/off; MAX 4 runs B1 com codegen compare PRIMEIRO
+    (barato!), depois runs com stream/sentinel/contadores.
+E.2 O ramo UNWRITTEN do probe ganha (proximo!) hrc/status/graphnodes/
+    QUEUE-COMPUTE flags/enqueue-submit-complete (pedido §5!) — hoje o
+    ramo so' reporta sentinel.
+
+-----------------------------------------------------------------------
+F. VACINAS / FUSAO / OFFLINE
+-----------------------------------------------------------------------
+F.1 Fixtures offline (callbacks reais + mutantes set/alloc + opstage
+    preflight 0/1/2/3!) — pendentes (proximo!); serao executadas no
+    servidor (nao dependem do device!).
+F.2 fused_ffn Q4_K: rastreio mantido como GATE pre-modelo.
+
+-----------------------------------------------------------------------
+G. ESCOPO
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP intocado; PJA110 nao tocado;
+    CPH2747 wifi; stayon7; SEM reboots nesta rodada (nenhum!); sem
+    root/governor. Streams salvos sem dados de outros apps (filtrados!).
+
+-----------------------------------------------------------------------
+H. ESTADOS
+-----------------------------------------------------------------------
+H.1 CONTROLES: CCE (F32/Q4_0/Q8_0 completos!). Q4_K B1/B2: CCE (PASS!).
+    Q6_K B1/B2: CCE (PASS no device — primeiro resultado Q6!). B128
+    (K-tipos): FAIL no criterio congelado — com evidencia de datapath
+    (NAO do port!); analise fina PENDENTE. Ternario: parecer aceito
+    (nao-fix!); A/B fino PENDENTE (4 runs max!). Offline Q6/vacinas:
+    PENDENTE. KERNEL_VALIDATED: NAO (aguardando B128/criterio+offline!).
+    COMPILED: sim. GRAPH/HANDOFF/PERF: intocados.
+H.2 PROXIMOS EXATOS: (1) offline Q6 (oraculo+leitor!); (2) vacinas
+    offline+opstage preflight; (3) codegen compare do A/B ternario;
+    (4) refs finas B128 (Rcpu/Rscalar/Rtiled!); (5) so' entao promocao
+    de cobertura (B1 reproducible multi-runs!).
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada26/ (r26-sanity-ctrl.txt com os
+controles completos!, r26-q4k-q6k.txt com Q6 B1/B2 PASS!, CSV dos 10
+violadores verificado!) + manifesto.
