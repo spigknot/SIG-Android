@@ -1,0 +1,66 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 22
+PRIORIDADE: TRACE REAL DO CASO Q4_K E ALOCACAO/PAYLOAD OBSERVADOS
+===============================================================================
+
+1. PARECER DA R21: AVANCOS ACEITOS COM LIMITES PRECISOS
+O especialista conferiu os oito hashes de anexos R21: todos correspondem. Conferiu golden_repack_q4k.txt DIRETAMENTE via git show do commit 1ec81880944a63bc4aaf1abfe9a6d35c7569a757 no checkout local: a funcao entregue corresponde exatamente ao pin. Aceita-se o diff apresentado do corpo candidato com unica adaptacao de const como evidencia favoravel de port do pack.
+Tambem conferiu probe.cpp:13 include gate_seam.h e 946 chamada gate_preflight ANTES de upload/compute. Integracao do preflight de post agora existe. Nao repetir auditoria 'seam nao usada' nem refazer mais uma rodada dedicada a isso.
+Limites: igualdade do CORPO DA FUNCAO nao prova payload identico em runtime sem mesmos bytes de entrada, helper get_scale_min_k4, block_q4_K/QK_K/layout/tile constants, conversoes FP16/macros, flags/alocacao e caminho efetivamente chamado. Um corpo igual com dependencias diferentes ou sem ser chamado nao elimina defeito host runtime. Retificar 'H1-pack ELIMINADA' para 'CORPO_PACK_Q4K_EQUIVALENTE_AO_PIN; equivalencia de payload/alloc runtime ainda pendente'.
+O teste r21_flow_test.cpp testa preflight compartilhado, mas fluxo_probe:17-33 continua wrapper do teste. O probe chama gate_preflight(1,1,0,sup_post), enquanto pre/ref sao gates externos; isso e justificavel se invariantes externas foram verificadas, mas 11 checks nao cobrem todo encadeamento externo. Aceitar regressao da decisao post compartilhada; nao divulgar cobertura completa de fluxo/ref/rotulagem. Nao criar refatoracao ampla para aperfeicoar esse detalhe antes investigar a falha principal.
+R21 nao executou novo DSP. KERNEL_VALIDATED segue NAO. Q4_K minimo ruim R19 ainda reproducer; Q6_K e incidente R16 separados.
+
+2. ESCOPO E OBJETIVO: NAO OUTRA RODADA APENAS DE RETIFICACAO
+Continuar copia isolada/probe autorizado. SIG principal/Whisper/UI/defaultVulkan/c4bf/R2/release intocados; sem commit/push/promocao/instalacao sobre SIG sem OK especifico. WIP alheio byte a byte; sem limpeza/stash/reset/restores amplos. CPH2747 serial3B15BD00FVE00000; wireless identidade fail-closed; nunca PJA110; stayon7; sem root/governor; FFmpeg pin apenas processo autorizado.
+Objetivo MINIMO DESTA RODADA: corrigir ALLOC_FAIL pequeno, observar alloc/payload reais e EXECUTAR uma tentativa Q4_K K256/N64/B1 com trace host. Preparar/rodar trace DSP de fronteira no mesmo trabalho se necessario. Nao encerrar apenas com 'trace exige instrumentacao' ou 'design a preparar': instrumentacao na copia autorizada e trabalho a executar, nao bloqueio por si so.
+Nao exigir reconstruir toda provenance antiga nem repetir matriz v12. Criar checkpoint atual fullSHA do cohort instrumentado a partir de agora, com fonte/header/config/build ELF/APK/readback/PID. Limite historico permanece declarado. Nao trocar skel/host aleatoriamente; fontehash nao identifica ELF. Instrumentacao muda identidade e requer compatibilidade documentada.
+
+3. FIX PEQUENO: REPACK ALLOC FAIL-CLOSED
+probe.cpp:930-932 ainda tenta REPACK e, se falhar, usa default silenciosamente. Se REPACK foi selecionado para este ensaio, falha dessa alloc => ALLOC_FAIL, cleanup, upload_calls=compute_calls=0. Default permitido somente quando modo explicitamente planejado e contrato apropriado, nunca fallback escondido.
+Teste sobre a seam de alocacao/preflight efetivamente usada: injecao da falha de alloc REPACK reproduz RED no fluxo antigo e GREEN no fix, sem alterar tests alheios. Teste preflight post=false continua GREEN. Preservar os gates externos CPU-ref/pre suportados; nao substituir dados reais por constantes em novos caminhos sem precondicoes garantidas.
+Registrar nomes/bufts/session/usage/addresses ou ranges necessarios, tamanho do buffer e get_alloc_size por tensor. Nao chamar ALLOC_FAIL de REJECTED_BUFFER por rc/output bool generico; classes e exits explicitos.
+
+4. PRIMEIRA PROVA: ALOCACAO E PACK REAL, ANTES DO COMPUTE
+Calcular required tiled bytes por equacao independente do formato pinado e comparar ao get_alloc_size/alloc efetivamente chamado no candidato, inclusive padding/alignment. Chamar a API do backend real, nao stubs de ggml_row_size do oracleR20. Confirmar a soma/range do buffer, inicio e fim do tensor, stride e intervalo escrito. Ranges dos pesos/ativacoes/output nao podem se sobrepor indevidamente.
+Capturar bytes quantizados canonicos de entrada e ativacoes, shape/type/config e fullSHA reais por tensor. Se bytes R19 nao foram preservados, declarar NOVO reproducer com mesma geracao/config, nao 'byte identico ao R19' sem prova.
+Instrumentar o caminho real tensor_set no candidato: contador/identidade repack_q4_K_tiled chamado, payload apos repack ANTES envio, ne/nb/extra, sizeof/offsetof block_q4_K, QK_K/tile_size, get_scale_min_k4/FP16 conversion identities. Distinguir canonical nbytes de physical/repacked allocation.
+Exportar snapshot tiled fisico por mecanismo diagnostico test-only adequado do backend. ggml_backend_tensor_get em quant tensor pode UNPACK/normalizar dados: nao chamar esse readback de dump tiled bruto. Usar snapshot dentro do callback/host mapping correto, preservando ownership/lifecycle/bounds; nenhuma alteracao no backend produto.
+Executar pack golden pinado com MESMOS bytes/metadata/dependencias compativeis; comparar payload completo, primeira divergencia byte/campo e padding. Source diff continua evidencia auxiliar, nao substitui essa comparacao de runtime.
+Leitor escalar independente deve ler DIRETAMENTE o tiled (nao unpack candidato), reconstruir scales/mins/quant com rounding do formato e comparar TODAS as N linhas/elementos finitos e matmul B1. Primeiro erro real R19 n=1 precisa estar coberto. Exit FAIL se NaN/Inf, cobertura incompleta, scalar diff ou alloc/canario violado. Validar leitor com golden/fixture conhecida.
+Mutantes layout comum pack/unpack e NaN devem ser detectados pela prova independente. Alocacao offline exatamente no tamanho declarado com canarios/sanitizer quando disponivel; folga +4096 sem canario nao prova bounds. Metrica global nao pode usar so outputs finitos com denominador total.
+Essas provas sao ferramentas para localizar a falha, nao nova frente interminavel de testes. Priorizar reproducer Q4_K atual e, se encontra divergencia, parar e corrigir uma causa de cada vez.
+
+5. SEGUNDA PROVA: DESCRITOR E FRONTEIRA DSP
+Preparar instrumentacao minima no cohort isolado; design curto junto do script, nao entregar so design. Usar mecanismo SDK seguro/trace counters suportados; sem printf reentrante/FastRPC, sem ABI compartilhada improvisada. Registrar source/buildID/fullSHA e structs/opcodes de host e skel.
+Host antes submit: attempt/PID/cohort, opID/type numerico e nome, K/N/B/ne/nb/rowbytes/tilebytes/offsets/params/kernel-select efetivos, allocated/required, payload hash do intervalo enviado e amostra escalas/dados.
+DSP ao receber: batch/op entrada, descriptor realmente recebido, sizeof/offsetof/packing, type/opcode/dims/rowbytes, kernelID escolhido, enter/exit/status. Quando seguro, checksum/snapshot limitado do MESMO intervalo de payload; comparar mesmo layout/comprimento, nao bytes canonicos com tiled.
+Snapshot output imediatamente antes compute deve confirmar sentinel nos ranges corretos; depois, cobertura de escrita/finite/first_error. Excluir alias/upload/get/cache/sync antes afirmar que NaN veio da aritmetica do kernel. Dados/padding definidos e sinais de poison rastreados sem presuncao causal por 0xffffffff.
+Se SDK oferece profiling ja existente, usa-lo para comprovar op executada; se nao mostra params/payload, explicitar limite e complementar. Nao inventar nome de API/env; localizar definicao/consumidor reais. So comparar HVX/HMX se kernelID/config efetiva comprovam caminhos distintos; um caso, nao tuning/grid.
+Rebuild coerente quando mudar contrato/layout; skel sozinho so se instrumentacao compativel e host congelado comprovados. Mesmo ABI invariavel, nova lib/manifesto. Nao carregar skel de outro cohort ou alterar SIG para colher trace.
+
+6. ENSAIO REAL LIMITADO E DIAGNOSTICO
+Preflight device identity/battery/memoria/conexao e timeout do ensaio. Fresh process, logs por attempt e capture imediata. Checkpoint libs/APK instaladas/efetivamente carregadas, sem fake source->ELF chain.
+Controles F32/Q4_0 pequenos no MESMO probe instrumentado, sem repetir suite baseline inteira.
+Q4_K K256/N64/B1 somente: refCPU inteira finita, supports_post no grafo real true, REPACK alloc adequada, snapshot input/output pre, compute e snapshot post/trace. Nenhum B2/B128 enquanto B1 FAIL. Se alloc/layout contradiz contrato, rejeitar antes compute e isso e resultado diagnostico valido.
+Regra de decisao:
+- payload runtime diverge golden: H1-runtime localizado; rastrear helper/entrada/conversao/repack efectivo.
+- alloc<required/canario alterado: H1-alloc localizado; fix minimo antes DSP.
+- payload host correto mas descriptor/DSP input diverge: H2 transferencia/protocolo/stride localizado.
+- descriptor/input corretos mas kernelID/enter nao correspondem: H3 skel/dispatch/identidade localizado.
+- kernel correto entra com input correto e output errado: H4 ganha evidencia; isolar suboperacao/scalar/linha minima e corrigir com RED/GREEN.
+- so trace host obtido: declarar ultima fronteira PROVADA e primeira NAO observada, sem excluir as demais causas.
+Se abort: dump cru/tombstone/errorcode/PID/buildID/symbols imediatamente; nao deixar log girar. Incidente R16 nao resolvido por diferente modo de falha desta fixture.
+Patch minimo na copia allowlist apenas sobre causa identificada. Mesmo input/config antes-depois, teste permanente, sem tolerancia relaxada/NaN->zero/success default/supports falso. Se B1 passar, progressao B2/B128 e shapes reais suportados; kernel/graph/handoff/performance separados.
+Q6_K offline separado pode ser feito sem impedir traceQ4; nao assumir portQ6 correto. Nao migrar modelo, backend padrao, core inteiro ou iniciar benchmarkSmart para contornar bug.
+
+7. ENTREGA A-H E CRITERIO DE ENCERRAMENTO
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA22.txt docs/especialista; evidencias docs/npu-hymt2/smart-rodada22/ fullSHA/totais/exits reais:
+A checkpoint ELF/APK/config/PID atual e restore fullcohort;
+B allocfail fix/native regression e alcance exato dos testes preflight;
+C allocated/required/canarios/payload runtime vs golden;
+D leitor direto independente/finite/rows e mutantes;
+E trace HOST REAL e DSP quando necessario, first divergence;
+F causa+patch RED/GREEN ou limite observado e erro tecnico bloqueante;
+G escopo/WIP/Whisper, Q6/R16 separados;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE distintos.
+No fim restaurar baseline aprovado e verificar readback conforme escopo. Se bloqueio real impedir device/toolchain, incluir comando, exit/erro e ultima evidencia; necessidade de instrumentar por si so NAO e bloqueio.
+Nao voltar a entregar apenas diff de fonte como eliminacao de payload, nem novo relatorio todo offline enquanto hosttrace viavel fica 'proxima rodada'. Prioridade e mover a fronteira de observacao do reproducer ruim. Mantem KERNEL_VALIDATED=NAO ate numerica relevante passar com cobertura documentada.

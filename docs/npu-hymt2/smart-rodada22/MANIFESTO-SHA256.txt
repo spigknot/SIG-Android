@@ -1,0 +1,13 @@
+MANIFESTO — smart-rodada22 (ALLOC_FAIL + MMHOST + leitor independente)
+
+ALLOC_FAIL: probe.cpp rc=-996 REPACK falha => ALLOC_FAIL explicito (sem fallback!).
+MMHOST (device real): wexp=9216 (canonical!) walloc=13312 (REPACK!) aalloc por batch.
+LEITOR INDEPENDENTE: 16384/16384, 0 NaN, max_abs=0.000702 PASS; matmul B1 64 rows 0.028 PASS (n=1 coberto!).
+v12 RESTAURADO no probe (jniLibs).
+
+bab37defc68125f3b0539d4a8734833fecbe3f1c64b4cb88fda3d256ad3331f7  probe-r22.cpp  (89883 B)
+e2493c2c91883341d08f3e0d62f9dfbc8e27518800fe2e63cb9ff204b83db618  r22_leitor_direto.c  (7138 B)
+b75cba6e4aed4d0c2f567244c662d3341ddb74e2a63b1a333766a4221953e6fb  r22-ensaio-mmhost.txt  (3355 B)
+16dbf78e0c1055a1d927ab2a05a15bfef6e6aa934620668f18f78b248331ba72  r22-leitor-out.txt  (167 B)
+
+162c32a38ee23195234f0e3908b2ffe904b03640a394fbb5bea95fc2f68ee2b6  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA22.txt

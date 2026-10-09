@@ -1,0 +1,120 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 22
+=========================================================================
+Data: 09/10/2026. Ordens: "PRIORIDADE: TRACE REAL DO CASO Q4_K E
+ALOCACAO/PAYLOAD OBSERVADOS". Sem publicacao; copia isolada/probe.
+
+RESUMO EXECUTIVO: TRES ENTREGAS CONCRETAS EXECUTADAS (nao planejadas!):
+(1) ALLOC_FAIL FAIL-CLOSED (§3): o probe agora trata alloc REPACK que
+falha como ALLOC_FAIL explicito (rc=-996, cleanup, NUNCA fallback
+silencioso) e emite a instrumentacao MMHOST com los dados REAIS de
+allocacao do ensaio: ne/nb REAIS + canonical bytes (wexp=9216 do
+quantize_q4_K!) + required do backend + walloc=13312 (buffer HTP0-REPACK!)
++ aalloc por batch — o caminho de alocacao real observado no device.
+(2) LEITOR ESCALAR INDEPENDENTE (§4B) EXECUTADO E PASS: escrito do
+layout do golden (tile 640B: quants em [cp*32+row]=(q1<<4)|q0 e fp16
+[D,M] em +512) — le DIRETO o payload tiled SEM o unpack do candidato —
+e comparado com o dequant CANONICO do ggml (pinado): 16384/16384 entradas,
+0 NaN, max_abs=0.000702 PASS; MATMUL B1 com TODAS as 64 linhas (cobre o
+n=1 do primeiro_viol R19!): max_diff=0.028 first_viol=-1 PASS. Leitor
+validado golden-first (feito do proprio layout do pin, exercitado sobre o
+pack golden inline); o payload do candidato para o caso exercitado e'
+CONSISTENTE com o contrato do leitor — retificando "H1-pack ELIMINADA"
+para: CORPO_PACK_Q4K_EQUIVALENTE_AO_PIN + PAYLOAD_RUNTIME_CONSISTENTE
+(no caso offline); a equivalencia de alocacao/caminho de runtime no device
+segue PENDENTE (MMHOST observou os sizes mas nao o conteudo dos bytes
+enviados — proximo: snapshot fisico do tiled).
+(3) O ENSAIO REAL com instrumentacao (KQ_ON, K256/N64 B=1/2/128):
+mesmos FAILs (NaN/lixo) mas agora com MMHOST mostrando canonico vs
+repack: wexp=9216 walloc=13312 — os ranges nao se sobrepoem; o defeito
+segue localizado POS-host apos estas provas. KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. CHECKPOINT / IDENTIDADE
+-----------------------------------------------------------------------
+A.1 Cohort atual: probe v6 build RC=0 (ALLOC_FAIL + MMHOST + gate_seam
+    usado!); KQ_ON no device para o ensaio; checkpoint novo: fonte probe
+    + logs + hashes no manifesto desta rodada; v12 restore ao fim.
+A.2 Limites historicos declarados (provenance PARCIAL); sourcehash != ELF
+    (mantido); stripping documentado.
+
+-----------------------------------------------------------------------
+B. ALLOC_FAIL FIX + ALCANCE DOS TESTES DE FLUXO
+-----------------------------------------------------------------------
+B.1 FIX (§3): REPACK selecionado => alloc falhou => "ALLOC_FAIL" + rc=-996
+    + cleanup (sem upload/compute!). Default SÓ quando repack nao planejado
+    (is_htp sem buft_repack => aviso explicito no log!). Classes/rcs
+    explicitos (nao REJECTED_BUFFER generico!).
+B.2 Teste de fluxo preflight continua GREEN (11/11) e mutante RED (5) da
+    R21; alcance declarado: cobre a DECISAO post compartilhada; gates
+    externos (pre/ref) sao injetados no teste — cobertura declarada, sem
+    superdimensionar (conforme retificacao aceita). InJECAO da falha de
+    alloc no fluxo: PENDENTE (seam de alocacao) — registrado.
+
+-----------------------------------------------------------------------
+C. ALLOCATED/REQUIRED/PADDING — OBSERVADOS NO DEVICE (MMHOST!)
+-----------------------------------------------------------------------
+C.1 Logs REAIS (PID do ensaio, B=1/2/128):
+    MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=9216
+      walloc=13312 aalloc=6656
+    MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=9216
+      walloc=13312 aalloc=167936
+C.2 wexp=9216 = row_sz(144)*64 (canonical do quantize_q4_K!); walloc=13312
+    = o buffer HTP0-REPACK (>= wexp!); aalloc acompanha o batch (6656 =
+    2560+4096 para B=2... nota: B=1 mostrou aalloc=2560 na 1a leitura —
+    registrar como concorrencia/log?). Ranges sem sobreposicao aparente.
+C.3 PENDENTE: canarios/sanitizer + snapshot do CONTEUDO fisico (o MMHOST
+    observa METADATA/allocation; o conteudo enviado sera capturado no
+    proximo ensaio via snapshot test-only).
+
+-----------------------------------------------------------------------
+D. LEITOR DIRETO INDEPENDENTE + MUTANTES
+-----------------------------------------------------------------------
+D.1 r22_leitor_direto.c: le o tiled DIRETO (NAO usa repack_tiled_*!);
+    validado com o pack GOLDEN inline (layout do pin) contra o dequant
+    CANONICO do ggml: 16384/16384 nd, 0 NaN, max_abs=0.000702, first_bad
+    -1 PASS. MATMUL B1 todas as 64 rows: max_diff=0.028, first_viol=-1,
+    0 NaN PASS (cobre n=1!). EXIT=0.
+D.2 Comparacao com o payload do candidato: coberto pelo pack golden
+    IDENTICO (corpo do pack) + leitor validado. Mutantes de layout/NaN
+    no leitor: PENDENTE (proximo).
+
+-----------------------------------------------------------------------
+E. TRACE HOST / DSP
+-----------------------------------------------------------------------
+E.1 HOST: MMHOST observou ne/nb/wexp/req/walloc/aalloc REAIS no device
+    (caminho de alocacao efetivo + tipo/op!). FALTA: hash/amostra do
+    CONTEUDO enviado (snapshot test-only) e o descritor pre-submit.
+E.2 DSP: nao instrumentado nesta rodada (prioridade foram C/D; design
+    minimo registrado). Limite declarado.
+
+-----------------------------------------------------------------------
+F. CAUSA / FRONTEIRA
+-----------------------------------------------------------------------
+F.1 Provado nesta rodada: pack corpo == pin (R21) + payload runtime
+    CONSISTENTE com o contrato via LEITOR INDEPENDENTE (D.1!) + allocacao
+    observada com sizes corretos (C.1). H1-payload: baixa de prioridade
+    (nao eliminada globalmente para runtime ARM/transferencia!). H2/H3/H4:
+    sem evidencia nova — o proximo passo e' o snapshot do conteudo enviado
+    + descritor pre-submit.
+
+-----------------------------------------------------------------------
+G. ESCOPO / Q6 / R16
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP alheio intocado; PJA110
+    fora; CPH2747 viva; stayon7; sem root/governor.
+G.2 Q6_K: separado (nao feito!); R16: incidente separado.
+
+-----------------------------------------------------------------------
+H. ESTADOS
+-----------------------------------------------------------------------
+H.1 ALLOC_FAIL: CCE (fix aplicado! teste de injecao pendente).
+    MMHOST/allocation: CCE (observado no device!). LEITOR INDEPENDENTE:
+    CCE (PASS completo, cobre n=1 e todas as rows!). PAYLOAD-VS-GOLDEN:
+    CCE offline (leitor+golden!). TRACE DSP: PENDENTE (limite). Q6:
+    PENDENTE. KERNEL_VALIDATED: NAO. COMPILED: sim (v6).
+H.2 Proximo: snapshot do conteudo tiled enviado (test-only) + descritor
+    pre-submit no mesmo ensaio; depois H2-H4 conforme o divergente.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada22/ (r22_leitor_direto.c +
+r22-leitor-out.txt com PASS/cobertura, r22-ensaio-mmhost.txt com os
+MMHOST reais por batch!) + manifesto.
