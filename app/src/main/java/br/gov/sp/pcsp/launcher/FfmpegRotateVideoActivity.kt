@@ -91,6 +91,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private lateinit var outputStats: TextView
 
     private val handler = Handler(Looper.getMainLooper())
+    private val previewSource = FfmpegPreviewSource(handler)
     private var selectedUri: Uri? = null
     private var selectedName = ""
     private var durationMs = 0L
@@ -139,12 +140,21 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     private var previewMetadataRotation = 0
     private var previewGopSize = 60
     private var previewKeyframesMs: List<Long> = emptyList()
-    private var previewAnalysisGeneration = 0
+    @Volatile private var previewAnalysisGeneration = 0
+    private var previewAnalysisThread: Thread? = null
+    private var playWhenSeekCompletes = false
+    private val previewSeeker = FfmpegPreviewSeeker(handler) {
+        if (playWhenSeekCompletes) {
+            playWhenSeekCompletes = false
+            startPreviewPlayback()
+        }
+    }
 
     private val progressTicker = object : Runnable {
         override fun run() {
             val player = previewPlayer
-            if (videoPreview.visibility == View.VISIBLE && player?.isPlaying == true) {
+            if (videoPreview.visibility == View.VISIBLE && previewSeeker.isReady &&
+                !previewSeeker.isSeeking && player?.isPlaying == true) {
                 val position = player.currentPosition.toLong().coerceIn(0L, durationMs)
                 val startMs = timeline.getStartMs()
                 val endMs = timeline.getEndMs()
@@ -176,7 +186,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         }
 
         override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-            previewPlayer?.setSurface(null)
+            previewSource.detachSurface(previewPlayer)
             previewSurface?.release()
             previewSurface = null
             return true
@@ -395,7 +405,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
 
     override fun onPause() {
         handler.removeCallbacks(progressTicker)
-        if (previewPlayer?.isPlaying == true) {
+        playWhenSeekCompletes = false
+        previewSeeker.cancelPending()
+        if (previewSeeker.isReady && previewPlayer?.isPlaying == true) {
             previewPlayer?.pause()
             setPlaybackButtonPlaying(false)
         }
@@ -403,9 +415,13 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        previewAnalysisGeneration++
+        previewAnalysisThread?.interrupt()
+        handler.removeCallbacks(commandPreviewRefresh)
         releasePreviewPlayer()
         previewSurface?.release()
         previewSurface = null
+        previewSource.close()
         super.onDestroy()
     }
 
@@ -488,7 +504,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         if (previewSurface != null) {
             preparePreview(uri)
         }
-        sourceCodecFamily = detectSourceCodecFamily(uri)
+        sourceCodecFamily = null
         refreshResolvedEncoder()
         scheduleRotatePreviewAnalysis(uri)
         refreshCommandPreview()
@@ -498,9 +514,18 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         val surface = previewSurface ?: return
         releasePreviewPlayer()
         previewPlayer = MediaPlayer().apply {
-            setDataSource(this@FfmpegRotateVideoActivity, uri)
+            setOnErrorListener { failed, _, _ ->
+                if (previewPlayer === failed) {
+                    releasePreviewPlayer()
+                    status.text = "Não foi possível reproduzir o vídeo."
+                    setPlaybackButtonPlaying(false)
+                }
+                true
+            }
             setSurface(surface)
             setOnPreparedListener { player ->
+                if (previewPlayer !== player) return@setOnPreparedListener
+                previewSeeker.attach(player)
                 durationMs = player.duration.toLong().coerceAtLeast(1L)
                 this@FfmpegRotateVideoActivity.videoWidth = player.videoWidth
                 this@FfmpegRotateVideoActivity.videoHeight = player.videoHeight
@@ -513,16 +538,26 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 seekPreview(0L)
             }
             setOnCompletionListener {
+                if (previewPlayer !== it) return@setOnCompletionListener
                 setPlaybackButtonPlaying(false)
                 timeline.setCurrent(durationMs)
                 currentTime.text = formatTime(durationMs)
             }
-            prepareAsync()
+            val loading = this
+            previewSource.prepare(loading, { loading.setDataSource(this@FfmpegRotateVideoActivity, uri) }) { error ->
+                if (previewPlayer === loading) {
+                    Log.w(TAG, "Não foi possível abrir a prévia", error)
+                    status.text = "Não foi possível abrir a prévia."
+                    releasePreviewPlayer()
+                }
+            }
         }
     }
 
     private fun releasePreviewPlayer() {
-        previewPlayer?.release()
+        playWhenSeekCompletes = false
+        previewSeeker.reset()
+        previewSource.release(previewPlayer)
         previewPlayer = null
     }
 
@@ -1522,7 +1557,16 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
 
     private fun scheduleRotatePreviewAnalysis(uri: Uri) {
         val generation = ++previewAnalysisGeneration
-        Thread {
+        previewAnalysisThread?.interrupt()
+        previewAnalysisThread = Thread {
+            val codecFamily = detectSourceCodecFamily(uri)
+            // A escolha do encoder não precisa aguardar a varredura inteira de keyframes.
+            runOnUiThread {
+                if (generation == previewAnalysisGeneration && selectedUri == uri && !isDestroyed && !isProcessing) {
+                    sourceCodecFamily = codecFamily
+                    refreshResolvedEncoder()
+                }
+            }
             var bitrate = FALLBACK_VIDEO_BITRATE
             var gop = 60
             val keyframes = mutableListOf<Long>()
@@ -1541,7 +1585,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                         ?: 30
                     gop = (fps.coerceIn(1, 120) * 2).coerceAtLeast(1)
                     extractor.selectTrack(videoTrack)
-                    while (extractor.sampleTime >= 0L) {
+                    while (generation == previewAnalysisGeneration && !Thread.currentThread().isInterrupted && extractor.sampleTime >= 0L) {
                         if (extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
                             keyframes += extractor.sampleTime / 1_000L
                         }
@@ -1552,6 +1596,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
             } finally {
                 extractor.release()
             }
+            if (generation != previewAnalysisGeneration || Thread.currentThread().isInterrupted) return@Thread
             val retriever = android.media.MediaMetadataRetriever()
             val rotation = try {
                 retriever.setDataSource(this, uri)
@@ -1564,7 +1609,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 retriever.release()
             }
             runOnUiThread {
-                if (generation == previewAnalysisGeneration && selectedUri == uri) {
+                if (generation == previewAnalysisGeneration && selectedUri == uri && !isDestroyed) {
+                    sourceCodecFamily = codecFamily
+                    refreshResolvedEncoder()
                     previewVideoBitrate = bitrate
                     previewGopSize = gop
                     previewMetadataRotation = rotation
@@ -1572,10 +1619,16 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     refreshCommandPreview()
                 }
             }
-        }.start()
+        }.also { it.start() }
     }
 
+    private val commandPreviewRefresh = Runnable { renderCommandPreview() }
     private fun refreshCommandPreview() {
+        handler.removeCallbacks(commandPreviewRefresh)
+        handler.postDelayed(commandPreviewRefresh, 120L)
+    }
+
+    private fun renderCommandPreview() {
         if (isProcessing || parallelProcessing || !::status.isInitialized) return
         val encoder = selectedCodec
         val input = File(selectedName.takeIf(String::isNotBlank) ?: "input.ext")
@@ -1918,7 +1971,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 (120 * resources.displayMetrics.density).toInt(),
                 (620 * resources.displayMetrics.density).toInt()
             )
-        previewFrame.layoutParams = previewFrame.layoutParams.apply { height = heightPx }
+        if (previewFrame.layoutParams.height != heightPx) {
+            previewFrame.layoutParams = previewFrame.layoutParams.apply { height = heightPx }
+        }
     }
 
     /** A seleção continua sobre os MESMOS pixels quando o giro/espelho muda. */
@@ -2417,17 +2472,29 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     }
 
     private fun togglePlayback() {
+        if (!previewSeeker.isReady) return
         val player = previewPlayer ?: return
-        if (player.isPlaying) {
+        if (player.isPlaying || playWhenSeekCompletes) {
+            playWhenSeekCompletes = false
+            previewSeeker.cancelPending()
             player.pause()
             setPlaybackButtonPlaying(false)
             return
         }
         val startMs = timeline.getStartMs()
         val endMs = timeline.getEndMs()
-        if (player.currentPosition.toLong() !in startMs until endMs) {
-            seekPreview(startMs)
+        val position = if (previewSeeker.isSeeking) timeline.getCurrentMs() else player.currentPosition.toLong()
+        val target = if (position !in startMs until endMs) startMs else position
+        if (!previewSeeker.isSeeking && position in startMs until endMs) {
+            startPreviewPlayback()
+            return
         }
+        playWhenSeekCompletes = true
+        previewSeeker.request(target, immediate = true)
+    }
+
+    private fun startPreviewPlayback() {
+        val player = previewPlayer ?: return
         player.start()
         applyPlaybackSpeed()
         setPlaybackButtonPlaying(player.isPlaying)
@@ -2441,18 +2508,13 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
 
     private fun syncPlaybackButtonSoon() {
         handler.postDelayed({
-            setPlaybackButtonPlaying(previewPlayer?.isPlaying == true)
+            setPlaybackButtonPlaying(previewSeeker.isReady && previewPlayer?.isPlaying == true)
         }, 180L)
     }
 
     private fun seekPreview(positionMs: Long) {
-        val player = previewPlayer ?: return
         val safePosition = positionMs.coerceIn(0L, durationMs).coerceAtMost(Int.MAX_VALUE.toLong())
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            player.seekTo(safePosition, MediaPlayer.SEEK_CLOSEST)
-        } else {
-            player.seekTo(safePosition.toInt())
-        }
+        previewSeeker.request(safePosition)
     }
 
     private fun changePlaybackSpeed(direction: Int) {
@@ -2464,9 +2526,12 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     }
 
     private fun applyPlaybackSpeed() {
+        if (!previewSeeker.isReady) return
         val player = previewPlayer ?: return
         try {
+            val playing = player.isPlaying
             player.playbackParams = player.playbackParams.setSpeed(playbackSpeed)
+            if (!playing) player.pause()
         } catch (e: Exception) {
             Log.w(TAG, "Could not change playback speed", e)
             playbackSpeed = 1f

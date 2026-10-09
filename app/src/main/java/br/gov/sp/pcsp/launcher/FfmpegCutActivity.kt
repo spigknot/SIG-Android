@@ -94,6 +94,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     @Volatile private var isSaving = false
 
     private val handler = Handler(Looper.getMainLooper())
+    private val previewSource = FfmpegPreviewSource(handler)
     private var selectedUri: Uri? = null
     private var selectedName: String = ""
     private var selectedMime: String = ""
@@ -128,14 +129,18 @@ class FfmpegCutActivity : AppCompatActivity() {
     private var selectedKeyframesUs: List<Long> = emptyList()
     @Volatile private var selectedAnalysisReady = false
     @Volatile private var currentSessionId: Long? = null
-    private var lastSeekTime = 0L
-    private var pendingSeekPos = -1L
-    private val pendingSeekDebounce = Runnable {
-        if (pendingSeekPos != -1L) {
-            performActualSeek(pendingSeekPos, forPlaybackStart = false)
-            pendingSeekPos = -1L
+    private val previewSeeker = FfmpegPreviewSeeker(handler) {
+        if (playWhenSeekCompletes) {
+            playWhenSeekCompletes = false
+            startPreview()
+            setPlaybackButtonPlaying(isPreviewPlaying())
         }
     }
+    private var selectedPcmEncoder = "pcm_s16le"
+    @Volatile private var selectionGeneration = 0
+    private var selectionLoadThread: Thread? = null
+    private var selectionLoading = false
+    private var previewAnalysisThread: Thread? = null
 
     private var previewSurface: Surface? = null
     private var videoWidth = 0
@@ -144,7 +149,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private val surfaceListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
             previewSurface = Surface(surfaceTexture)
-            selectedUri?.let { preparePreview(it) }
+            selectedUri?.takeIf { !selectionLoading }?.let { preparePreview(it) }
         }
 
         override fun onSurfaceTextureSizeChanged(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
@@ -152,7 +157,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
 
         override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-            previewPlayer?.setSurface(null)
+            previewSource.detachSurface(previewPlayer)
             previewSurface?.release()
             previewSurface = null
             return true
@@ -165,7 +170,7 @@ class FfmpegCutActivity : AppCompatActivity() {
 
     private val progressTicker = object : Runnable {
         override fun run() {
-            if (playbackControls.visibility == View.VISIBLE && isPreviewPlaying()) {
+            if (playbackControls.visibility == View.VISIBLE && !previewSeeker.isSeeking && isPreviewPlaying()) {
                 val position = currentPreviewPosition()
                 val startMs = timeline.getStartMs()
                 val endMs = timeline.getEndMs()
@@ -369,6 +374,8 @@ class FfmpegCutActivity : AppCompatActivity() {
 
     override fun onPause() {
         handler.removeCallbacks(progressTicker)
+        playWhenSeekCompletes = false
+        previewSeeker.cancelPending()
         if (isPreviewPlaying()) {
             pausePreview()
             playWhenSeekCompletes = false
@@ -378,10 +385,15 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        selectionGeneration++
+        selectionLoadThread?.interrupt()
+        previewAnalysisThread?.interrupt()
+        handler.removeCallbacks(commandPreviewRefresh)
         releasePreviewPlayer()
         releaseAudioPlayer()
         previewSurface?.release()
         previewSurface = null
+        previewSource.close()
         super.onDestroy()
     }
 
@@ -463,19 +475,53 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun loadSelectedMedia(uri: Uri) {
+        val generation = ++selectionGeneration
+        selectionLoadThread?.interrupt()
+        previewAnalysisThread?.interrupt()
+        releasePreviewPlayer()
+        releaseAudioPlayer()
         selectedUri = uri
-        selectedName = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "arquivo"
-        var mime = detectMediaMime(uri)
-        if (mime.isEmpty()) {
-            val extension = selectedName.substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
-            mime = when (extension) {
-                "mp4", "mkv", "mov", "avi", "webm", "3gp", "m4v" -> "video/$extension"
-                "mp3", "wav", "m4a", "aac", "ogg", "opus", "flac" -> "audio/$extension"
-                else -> "application/octet-stream"
+        selectionLoading = true
+        setCutEnabled(false)
+        playbackControls.visibility = View.GONE
+        timeline.isEnabled = false
+        status.text = "Lendo mídia..."
+        selectionLoadThread = Thread {
+            try {
+                val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "arquivo"
+                val detected = detectMediaMime(uri)
+                val extension = name.substringAfterLast('.', "").lowercase(Locale.ROOT)
+                val mime = detected.ifEmpty {
+                    when (extension) {
+                        "mp4", "mkv", "mov", "avi", "webm", "3gp", "m4v" -> "video/$extension"
+                        "mp3", "wav", "m4a", "aac", "ogg", "opus", "flac" -> "audio/$extension"
+                        else -> "application/octet-stream"
+                    }
+                }
+                val duration = readDuration(uri)
+                val pcm = if (mime.startsWith("audio/")) detectPcmEncoder(uri) else "pcm_s16le"
+                runOnUiThread {
+                    if (generation != selectionGeneration || isDestroyed) return@runOnUiThread
+                    applySelectedMedia(uri, name, mime, duration, pcm, generation)
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    if (generation == selectionGeneration && !isDestroyed) {
+                        selectionLoading = false
+                        selectedUri = null
+                        status.text = error.message ?: "Não foi possível ler a mídia."
+                    }
+                }
             }
-        }
+        }.also { it.start() }
+    }
+
+    private fun applySelectedMedia(uri: Uri, name: String, mime: String, duration: Long, pcm: String, generation: Int) {
+        selectionLoading = false
+        selectedName = name
         selectedMime = mime
-        durationMs = readDuration(uri)
+        durationMs = duration
+        selectedPcmEncoder = pcm
         selectedAnalysisReady = false
         selectedStreamBitrates = StreamBitrates()
         selectedRotationDegrees = 0
@@ -545,12 +591,12 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
         refreshCommandPreview()
         if (selectedMime.startsWith("video/")) {
-            Thread {
+            previewAnalysisThread = Thread {
                 val bitrates = detectStreamBitrates(uri)
                 val rotation = detectMetadataRotation(uri)
                 val keyframes = extractKeyframes(uri)
                 runOnUiThread {
-                    if (selectedUri == uri) {
+                    if (generation == selectionGeneration && selectedUri == uri && !isDestroyed) {
                         selectedStreamBitrates = bitrates
                         selectedRotationDegrees = rotation
                         selectedKeyframesUs = keyframes
@@ -558,7 +604,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                         refreshCommandPreview()
                     }
                 }
-            }.start()
+            }.also { it.start() }
         }
     }
 
@@ -1434,7 +1480,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         } ?: return emptyList()
         val keyframes = mutableListOf<Long>()
         extractor.selectTrack(videoTrack)
-        while (true) {
+        while (!Thread.currentThread().isInterrupted) {
             val sampleTime = extractor.sampleTime
             if (extractor.sampleTrackIndex < 0) break
             if (sampleTime >= 0 && (extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC) != 0) keyframes += sampleTime
@@ -2181,7 +2227,13 @@ class FfmpegCutActivity : AppCompatActivity() {
         return FfmpegMediaPolicies.audioSelectionCanUseStreamCopy(startMs, endMs, durationMs)
     }
 
+    private val commandPreviewRefresh = Runnable { renderCommandPreview() }
     private fun refreshCommandPreview() {
+        handler.removeCallbacks(commandPreviewRefresh)
+        handler.postDelayed(commandPreviewRefresh, 120L)
+    }
+
+    private fun renderCommandPreview() {
         if (isProcessing || !::status.isInitialized) return
         // O botao de qualidade acompanha o modo de copia (so recodifica com
         // selecao parcial no audio); qualquer mudanca de trim reavalia aqui.
@@ -2200,7 +2252,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                 FfmpegMediaPolicies.cutAudioEncoderArguments(
                     extension,
                     selectedAudioQuality.bitrate,
-                    selectedUri?.let(::detectPcmEncoder) ?: "pcm_s16le"
+                    selectedPcmEncoder
                 )
             }
             val args = FfmpegMediaPolicies.cutAudioCommandArguments(
@@ -2442,82 +2494,30 @@ class FfmpegCutActivity : AppCompatActivity() {
         audioWaveform.setCurrent(safePosition)
         currentTime.text = formatTime(safePosition)
 
-        if (forPlaybackStart) {
-            performActualSeek(safePosition, forPlaybackStart = true)
-        } else {
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastSeekTime >= 150L) {
-                lastSeekTime = now
-                performActualSeek(safePosition, forPlaybackStart = false)
-                pendingSeekPos = -1L
-            } else {
-                pendingSeekPos = safePosition
-                handler.removeCallbacks(pendingSeekDebounce)
-                handler.postDelayed(pendingSeekDebounce, 100L)
-            }
-        }
+        previewSeeker.request(safePosition, immediate = forPlaybackStart)
         updatePlayPauseLabel()
     }
 
-    private fun performActualSeek(safePosition: Long, forPlaybackStart: Boolean) {
-        val player = previewPlayer
-        try {
-            if (videoPreview.visibility == View.VISIBLE) {
-                if (forPlaybackStart && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && player != null) {
-                    player.seekTo(safePosition, MediaPlayer.SEEK_NEXT_SYNC)
-                } else {
-                    seekMediaPlayer(player, safePosition)
-                }
-            } else {
-                seekMediaPlayer(audioPlayer, safePosition)
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error performing actual seek", e)
-        }
-    }
-
     private fun togglePreviewPlayback() {
-        if (playbackControls.visibility != View.VISIBLE) return
-
-        if (isPreviewPlaying()) {
-            pausePreview()
+        if (playbackControls.visibility != View.VISIBLE || !previewSeeker.isReady) return
+        if (isPreviewPlaying() || playWhenSeekCompletes) {
             playWhenSeekCompletes = false
+            previewSeeker.cancelPending()
+            pausePreview()
             setPlaybackButtonPlaying(false)
             return
         }
-
+        val currentMs = if (previewSeeker.isSeeking) timeline.getCurrentMs() else currentPreviewPosition()
         val startMs = timeline.getStartMs()
         val endMs = timeline.getEndMs()
-        val currentMs = currentPreviewPosition()
-        val playFromMs = if (currentMs < startMs || currentMs >= endMs) startMs else currentMs
-        if (currentMs < startMs || currentMs >= endMs) {
-            playWhenSeekCompletes = true
-            seekPreview(playFromMs, forPlaybackStart = true)
-            setPlaybackButtonPlaying(true)
-            syncPlaybackButtonSoon()
-            if (videoPreview.visibility != View.VISIBLE) {
-                playWhenSeekCompletes = false
-                startPreview()
-                setPlaybackButtonPlaying(isPreviewPlaying())
-                syncPlaybackButtonSoon()
-            } else if (previewPlayer == null) {
-                videoPreview.postDelayed({
-                    if (playWhenSeekCompletes) {
-                        playWhenSeekCompletes = false
-                        startPreview()
-                        setPlaybackButtonPlaying(isPreviewPlaying())
-                        syncPlaybackButtonSoon()
-                    }
-                }, 100L)
-            }
+        val playFromMs = if (currentMs !in startMs until endMs) startMs else currentMs
+        if (!previewSeeker.isSeeking && currentMs in startMs until endMs) {
+            startPreview()
+            setPlaybackButtonPlaying(isPreviewPlaying())
             return
         }
-
-        timeline.setCurrent(playFromMs)
-        audioWaveform.setCurrent(playFromMs)
-        startPreview()
-        setPlaybackButtonPlaying(isPreviewPlaying())
-        syncPlaybackButtonSoon()
+        playWhenSeekCompletes = true
+        seekPreview(playFromMs, forPlaybackStart = true)
     }
 
     private fun updatePlayPauseLabel() {
@@ -2541,9 +2541,17 @@ class FfmpegCutActivity : AppCompatActivity() {
         releaseAudioPlayer()
         status.text = "Carregando áudio..."
         audioPlayer = MediaPlayer().apply {
-            setDataSource(this@FfmpegCutActivity, uri)
+            setOnErrorListener { failed, _, _ ->
+                if (audioPlayer === failed) {
+                    releaseAudioPlayer()
+                    status.text = "Não foi possível reproduzir o áudio."
+                    setPlaybackButtonPlaying(false)
+                }
+                true
+            }
             setOnPreparedListener { player ->
-                previewPlayer = player
+                if (audioPlayer !== player) return@setOnPreparedListener
+                previewSeeker.attach(player)
                 durationMs = player.duration.toLong().coerceAtLeast(durationMs)
                 timeline.setRange(durationMs, 0L, durationMs)
                 timeline.setCurrent(0L)
@@ -2553,6 +2561,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                 status.text = ""
             }
             setOnCompletionListener {
+                if (audioPlayer !== it) return@setOnCompletionListener
                 val completedPosition = if (hasPreviewPlaybackStarted) durationMs else 0L
                 hasPreviewPlaybackStarted = false
                 timeline.setCurrent(completedPosition)
@@ -2560,7 +2569,15 @@ class FfmpegCutActivity : AppCompatActivity() {
                 currentTime.text = formatTime(completedPosition)
                 setPlaybackButtonPlaying(false)
             }
-            prepareAsync()
+            val loading = this
+            previewSource.prepare(loading, { loading.setDataSource(this@FfmpegCutActivity, uri) }) { error ->
+                if (previewPlayer === loading || audioPlayer === loading) {
+                    Log.w(TAG, "Não foi possível abrir a prévia", error)
+                    status.text = "Não foi possível abrir a prévia."
+                    releasePreviewPlayer()
+                    releaseAudioPlayer()
+                }
+            }
         }
     }
 
@@ -2571,9 +2588,18 @@ class FfmpegCutActivity : AppCompatActivity() {
         updateSpeedButton()
         status.text = ""
         previewPlayer = MediaPlayer().apply {
-            setDataSource(this@FfmpegCutActivity, uri)
+            setOnErrorListener { failed, _, _ ->
+                if (previewPlayer === failed) {
+                    releasePreviewPlayer()
+                    status.text = "Não foi possível reproduzir o vídeo."
+                    setPlaybackButtonPlaying(false)
+                }
+                true
+            }
             setSurface(surface)
             setOnPreparedListener { player ->
+                if (previewPlayer !== player) return@setOnPreparedListener
+                previewSeeker.attach(player)
                 durationMs = player.duration.toLong().coerceAtLeast(1L)
                 this@FfmpegCutActivity.videoWidth = player.videoWidth
                 this@FfmpegCutActivity.videoHeight = player.videoHeight
@@ -2588,13 +2614,22 @@ class FfmpegCutActivity : AppCompatActivity() {
                 seekPreview(0L)
             }
             setOnCompletionListener {
+                if (previewPlayer !== it) return@setOnCompletionListener
                 val completedPosition = if (hasPreviewPlaybackStarted) durationMs else 0L
                 hasPreviewPlaybackStarted = false
                 timeline.setCurrent(completedPosition)
                 currentTime.text = formatTime(completedPosition)
                 setPlaybackButtonPlaying(false)
             }
-            prepareAsync()
+            val loading = this
+            previewSource.prepare(loading, { loading.setDataSource(this@FfmpegCutActivity, uri) }) { error ->
+                if (previewPlayer === loading || audioPlayer === loading) {
+                    Log.w(TAG, "Não foi possível abrir a prévia", error)
+                    status.text = "Não foi possível abrir a prévia."
+                    releasePreviewPlayer()
+                    releaseAudioPlayer()
+                }
+            }
         }
     }
 
@@ -2612,8 +2647,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         // O quadro do player tem a MESMA proporção da mídia (palco do Windows):
         // o zoom cresce o quadro e o deslocamento o posiciona, sempre cobrindo
         // todo o palco — nunca aparece fundo.
-        val scaleX = drawnWidth.toFloat() / videoWidth.toFloat()
-        val scaleY = drawnHeight.toFloat() / videoHeight.toFloat()
+        val scaleX = drawnWidth.toFloat() / stageWidth.toFloat()
+        val scaleY = drawnHeight.toFloat() / stageHeight.toFloat()
         val matrix = Matrix()
         matrix.setScale(scaleX, scaleY)
         matrix.postTranslate(originX.toFloat(), originY.toFloat())
@@ -2631,7 +2666,9 @@ class FfmpegCutActivity : AppCompatActivity() {
                 (120 * resources.displayMetrics.density).toInt(),
                 (620 * resources.displayMetrics.density).toInt()
             )
-        previewFrame.layoutParams = previewFrame.layoutParams.apply { height = heightPx }
+        if (previewFrame.layoutParams.height != heightPx) {
+            previewFrame.layoutParams = previewFrame.layoutParams.apply { height = heightPx }
+        }
     }
 
     /** Menu da seleção de área (equivalente ao botão direito do Windows). */
@@ -2644,16 +2681,21 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun releasePreviewPlayer() {
-        previewPlayer?.release()
+        playWhenSeekCompletes = false
+        previewSeeker.reset()
+        previewSource.release(previewPlayer)
         previewPlayer = null
     }
 
     private fun releaseAudioPlayer() {
-        audioPlayer?.release()
+        playWhenSeekCompletes = false
+        previewSeeker.reset()
+        previewSource.release(audioPlayer)
         audioPlayer = null
     }
 
     private fun isPreviewPlaying(): Boolean {
+        if (!previewSeeker.isReady) return false
         return if (videoPreview.visibility == View.VISIBLE) {
             previewPlayer?.isPlaying == true
         } else {
@@ -2662,6 +2704,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun currentPreviewPosition(): Long {
+        if (!previewSeeker.isReady) return timeline.getCurrentMs()
         return if (videoPreview.visibility == View.VISIBLE) {
             previewPlayer?.currentPosition?.toLong() ?: timeline.getCurrentMs()
         } else {
@@ -2693,16 +2736,6 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
-    private fun seekMediaPlayer(player: MediaPlayer?, positionMs: Long) {
-        if (player == null) return
-        val safePosition = positionMs.coerceAtMost(Int.MAX_VALUE.toLong())
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            player.seekTo(safePosition, MediaPlayer.SEEK_CLOSEST)
-        } else {
-            player.seekTo(safePosition.toInt())
-        }
-    }
-
     private fun changePlaybackSpeed(direction: Int) {
         val currentIndex = speedSteps.indexOfFirst { kotlin.math.abs(it - playbackSpeed) < 0.01f }
         val safeIndex = if (currentIndex >= 0) currentIndex else speedSteps.indexOfFirst { it == 1f }
@@ -2712,9 +2745,12 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun applyPlaybackSpeed() {
+        if (!previewSeeker.isReady) return
         val player = previewPlayer ?: audioPlayer ?: return
         try {
+            val playing = player.isPlaying
             player.playbackParams = player.playbackParams.setSpeed(playbackSpeed)
+            if (!playing) player.pause()
         } catch (e: Exception) {
             Log.w(TAG, "Could not change playback speed", e)
             playbackSpeed = 1f

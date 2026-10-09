@@ -49,7 +49,7 @@ internal object FfmpegCommandPresenter {
         val text = formatPreview(commands)
         anchor.post {
             val commandView = commandView(anchor) ?: return@post
-            commandView.text = text
+            if (commandView.text.toString() != text) commandView.text = text
             commandView.visibility = View.VISIBLE
             showingPreview[commandView] = true
             // Um novo planejamento descarta o historico anterior; o proximo
@@ -67,7 +67,7 @@ internal object FfmpegCommandPresenter {
     fun placeholder(anchor: TextView, text: String) {
         anchor.post {
             val commandView = commandView(anchor) ?: return@post
-            commandView.text = text
+            if (commandView.text.toString() != text) commandView.text = text
             commandView.visibility = View.VISIBLE
             showingPreview[commandView] = true
             commandLogs[commandView]?.clear()

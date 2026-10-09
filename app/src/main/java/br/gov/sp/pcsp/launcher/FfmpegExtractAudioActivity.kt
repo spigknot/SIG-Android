@@ -106,20 +106,22 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private var zipFile: File? = null
     private var sourcePopup: PopupWindow? = null
     private val handler = Handler(Looper.getMainLooper())
+    private val previewSource = FfmpegPreviewSource(handler)
     private var previewPlayer: MediaPlayer? = null
     private var durationMs = 0L
     private var syncingFields = false
     private var playWhenSeekCompletes = false
     private var playbackSpeed = 1f
-    private var lastSeekTime = 0L
-    private var pendingSeekPos = -1L
-    private val pendingSeekDebounce = Runnable {
-        if (pendingSeekPos != -1L) {
-            performActualSeek(pendingSeekPos, forPlaybackStart = false)
-            pendingSeekPos = -1L
+    private val previewSeeker = FfmpegPreviewSeeker(handler) {
+        if (playWhenSeekCompletes) {
+            playWhenSeekCompletes = false
+            startPreview()
         }
     }
 
+    @Volatile private var selectionGeneration = 0
+    private var selectionLoadThread: Thread? = null
+    private var selectionLoading = false
     private var previewSurface: Surface? = null
     private var videoWidth = 0
     private var videoHeight = 0
@@ -128,7 +130,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         override fun onSurfaceTextureAvailable(surfaceTexture: SurfaceTexture, width: Int, height: Int) {
             previewSurface = Surface(surfaceTexture)
             val selected = selectedVideos.singleOrNull()
-            if (selected != null && isVideo(selected.mime, selected.name)) {
+            if (!selectionLoading && selected != null && isVideo(selected.mime, selected.name)) {
                 preparePreview(selected.uri)
             }
         }
@@ -138,7 +140,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
 
         override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-            previewPlayer?.setSurface(null)
+            previewSource.detachSurface(previewPlayer)
             previewSurface?.release()
             previewSurface = null
             return true
@@ -170,7 +172,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     private val progressTicker = object : Runnable {
         override fun run() {
             val player = previewPlayer
-            if ((videoPreview.visibility == View.VISIBLE || audioWaveform.visibility == View.VISIBLE) && player?.isPlaying == true) {
+            if ((videoPreview.visibility == View.VISIBLE || audioWaveform.visibility == View.VISIBLE) && previewSeeker.isReady && !previewSeeker.isSeeking && player?.isPlaying == true) {
                 val position = player.currentPosition.toLong()
                 val startMs = timeline.getStartMs()
                 val endMs = timeline.getEndMs()
@@ -337,8 +339,10 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     override fun onPause() {
         handler.removeCallbacks(progressTicker)
+        playWhenSeekCompletes = false
+        previewSeeker.cancelPending()
         val player = previewPlayer
-        if (player?.isPlaying == true) {
+        if (previewSeeker.isReady && player?.isPlaying == true) {
             player.pause()
             playWhenSeekCompletes = false
             setPlaybackButtonPlaying(false)
@@ -347,9 +351,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        selectionGeneration++
+        selectionLoadThread?.interrupt()
         releasePreviewPlayer()
         previewSurface?.release()
         previewSurface = null
+        previewSource.close()
         super.onDestroy()
     }
 
@@ -360,13 +367,16 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         status.text = ""
         refreshCommandPreview()
         previewPlayer = MediaPlayer().apply {
-            setDataSource(this@FfmpegExtractAudioActivity, uri)
             previewSurface?.takeIf { videoPreview.visibility == View.VISIBLE }?.let { setSurface(it) }
-            setOnErrorListener { _, what, extra ->
+            setOnErrorListener { failed, what, extra ->
+                if (previewPlayer !== failed) return@setOnErrorListener true
                 Log.w(TAG, "previewPlayer error: what=$what, extra=$extra")
+                releasePreviewPlayer()
                 true // suppress error dialog
             }
             setOnPreparedListener { player ->
+                if (previewPlayer !== player) return@setOnPreparedListener
+                previewSeeker.attach(player)
                 durationMs = player.duration.toLong().coerceAtLeast(1L)
                 this@FfmpegExtractAudioActivity.videoWidth = player.videoWidth
                 this@FfmpegExtractAudioActivity.videoHeight = player.videoHeight
@@ -382,17 +392,27 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 seekPreview(0L)
             }
             setOnCompletionListener {
+                if (previewPlayer !== it) return@setOnCompletionListener
                 timeline.setCurrent(durationMs)
                 audioWaveform.setCurrent(durationMs)
                 currentTime.text = formatTime(durationMs)
                 setPlaybackButtonPlaying(false)
             }
-            prepareAsync()
+            val loading = this
+            previewSource.prepare(loading, { loading.setDataSource(this@FfmpegExtractAudioActivity, uri) }) { error ->
+                if (previewPlayer === loading) {
+                    Log.w(TAG, "Não foi possível abrir a prévia", error)
+                    status.text = "Não foi possível abrir a prévia."
+                    releasePreviewPlayer()
+                }
+            }
         }
     }
 
     private fun releasePreviewPlayer() {
-        previewPlayer?.release()
+        playWhenSeekCompletes = false
+        previewSeeker.reset()
+        previewSource.release(previewPlayer)
         previewPlayer = null
     }
 
@@ -516,33 +536,56 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         startActivityForResult(intent, REQUEST_PICK_FOLDER)
     }
 
+    private fun loadSelection(read: (Int) -> Unit) {
+        selectionLoading = true
+        val generation = ++selectionGeneration
+        selectionLoadThread?.interrupt()
+        releasePreviewPlayer()
+        timeline.isEnabled = false
+        setExtractEnabled(false)
+        status.text = "Lendo mídia..."
+        selectionLoadThread = Thread {
+            try { read(generation) } catch (error: Exception) {
+                runOnUiThread { if (generation == selectionGeneration && !isDestroyed) {
+                    clearSelection(error.message ?: "Não consegui ler a mídia.")
+                } }
+            }
+        }.also { it.start() }
+    }
+
     private fun handleIncomingShareIntent(intent: Intent?) {
         val action = intent?.action ?: return
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
-        var skippedSilentVideos = 0
-        val videos = sharedUrisFrom(intent).mapNotNull { uri ->
-            MediaUriSupport.tryTakeReadPermission(contentResolver, uri, intent.flags)
-            val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia"
-            val mime = contentResolver.getType(uri).orEmpty().ifBlank { mimeFromName(name) }
-            if (!isSupportedMedia(mime, name)) return@mapNotNull null
-            if (!hasAudioTrack(uri)) {
-                skippedSilentVideos++
-                return@mapNotNull null
+        loadSelection { generation ->
+            var skippedSilentVideos = 0
+            val videos = sharedUrisFrom(intent).mapNotNull { uri ->
+                if (generation != selectionGeneration) return@mapNotNull null
+                MediaUriSupport.tryTakeReadPermission(contentResolver, uri, intent.flags)
+                val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia"
+                val mime = contentResolver.getType(uri).orEmpty().ifBlank { mimeFromName(name) }
+                if (!isSupportedMedia(mime, name)) return@mapNotNull null
+                if (!hasAudioTrack(uri)) {
+                    skippedSilentVideos++
+                    return@mapNotNull null
+                }
+                SelectedVideo(uri, name, mime)
             }
-            SelectedVideo(uri, name, mime)
-        }
-        selectedOutputFolder = null
-        if (videos.isEmpty()) {
-            clearSelection(if (skippedSilentVideos > 0) "O vídeo selecionado não possui trilha de áudio." else "Compartilhe um arquivo de áudio ou vídeo.")
-            return
-        }
-        selectedVideos.clear()
-        selectedVideos.addAll(videos.distinctBy { it.uri })
-        showSelection()
-        status.text = if (skippedSilentVideos > 0) {
-            "$skippedSilentVideos vídeo(s) sem áudio ignorado(s)."
-        } else {
-            "Arquivo recebido pelo compartilhamento."
+            runOnUiThread {
+                if (generation != selectionGeneration || isDestroyed) return@runOnUiThread
+                selectedOutputFolder = null
+                if (videos.isEmpty()) {
+                    clearSelection(if (skippedSilentVideos > 0) "O vídeo selecionado não possui trilha de áudio." else "Compartilhe um arquivo de áudio ou vídeo.")
+                    return@runOnUiThread
+                }
+                selectedVideos.clear()
+                selectedVideos.addAll(videos.distinctBy { it.uri })
+                showSelection()
+                status.text = if (skippedSilentVideos > 0) {
+                    "$skippedSilentVideos vídeo(s) sem áudio ignorado(s)."
+                } else {
+                    "Arquivo recebido pelo compartilhamento."
+                }
+            }
         }
     }
 
@@ -587,33 +630,39 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
         data.data?.let { uris.add(it) }
 
-        var skippedSilentVideos = 0
-        val videos = uris.distinct().mapNotNull { uri ->
-            val mime = contentResolver.getType(uri).orEmpty()
-            val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia"
-            if (!isSupportedMedia(mime, name)) return@mapNotNull null
-            try {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } catch (_: SecurityException) {
+        loadSelection { generation ->
+            var skippedSilentVideos = 0
+            val videos = uris.distinct().mapNotNull { uri ->
+                if (generation != selectionGeneration) return@mapNotNull null
+                val mime = contentResolver.getType(uri).orEmpty()
+                val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia"
+                if (!isSupportedMedia(mime, name)) return@mapNotNull null
+                try {
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: SecurityException) {
+                }
+                if (!hasAudioTrack(uri)) {
+                    skippedSilentVideos++
+                    return@mapNotNull null
+                }
+                SelectedVideo(uri, name, mime.ifBlank { mimeFromName(name) })
             }
-            if (!hasAudioTrack(uri)) {
-                skippedSilentVideos++
-                return@mapNotNull null
+
+            runOnUiThread {
+                if (generation != selectionGeneration || isDestroyed) return@runOnUiThread
+                selectedOutputFolder = null
+                if (videos.isEmpty()) {
+                    clearSelection(if (skippedSilentVideos > 0) "Os vídeos selecionados não possuem trilha de áudio." else "Escolha arquivos de áudio ou vídeo.")
+                    return@runOnUiThread
+                }
+
+                selectedVideos.clear()
+                selectedVideos.addAll(videos)
+                showSelection()
+                if (skippedSilentVideos > 0) {
+                    status.text = "$skippedSilentVideos vídeo(s) sem trilha de áudio ignorado(s)."
+                }
             }
-            SelectedVideo(uri, name, mime.ifBlank { mimeFromName(name) })
-        }
-
-        selectedOutputFolder = null
-        if (videos.isEmpty()) {
-            clearSelection(if (skippedSilentVideos > 0) "Os vídeos selecionados não possuem trilha de áudio." else "Escolha arquivos de áudio ou vídeo.")
-            return
-        }
-
-        selectedVideos.clear()
-        selectedVideos.addAll(videos)
-        showSelection()
-        if (skippedSilentVideos > 0) {
-            status.text = "$skippedSilentVideos vídeo(s) sem trilha de áudio ignorado(s)."
         }
     }
 
@@ -633,41 +682,48 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         } catch (_: SecurityException) {
         }
 
-        val folder = DocumentFile.fromTreeUri(this, treeUri)
-        if (folder == null || !folder.isDirectory) {
-            clearSelection("Não consegui abrir essa pasta.")
-            return
-        }
-
-        var skippedSilentVideos = 0
-        val videos = folder.listFiles()
-            .filter { it.isFile }
-            .mapNotNull { file ->
-                val name = file.name ?: "midia"
-                val mime = file.type.orEmpty().ifBlank { mimeFromName(name) }
-                if (!isSupportedMedia(mime, name)) return@mapNotNull null
-                if (!hasAudioTrack(file.uri)) {
-                    skippedSilentVideos++
-                    return@mapNotNull null
-                }
-                SelectedVideo(file.uri, name, mime)
+        loadSelection { generation ->
+            val folder = DocumentFile.fromTreeUri(this, treeUri)
+            if (folder == null || !folder.isDirectory) {
+                runOnUiThread { if (generation == selectionGeneration && !isDestroyed) clearSelection("Não consegui abrir essa pasta.") }
+                return@loadSelection
             }
 
-        selectedOutputFolder = null
-        if (videos.isEmpty()) {
-            clearSelection(if (skippedSilentVideos > 0) "Os vídeos da pasta não possuem trilha de áudio." else "A pasta escolhida não tem áudio ou vídeo reconhecido.")
-            return
-        }
+            var skippedSilentVideos = 0
+            val videos = folder.listFiles()
+                .filter { it.isFile }
+                .mapNotNull { file ->
+                    if (generation != selectionGeneration) return@mapNotNull null
+                    val name = file.name ?: "midia"
+                    val mime = file.type.orEmpty().ifBlank { mimeFromName(name) }
+                    if (!isSupportedMedia(mime, name)) return@mapNotNull null
+                    if (!hasAudioTrack(file.uri)) {
+                        skippedSilentVideos++
+                        return@mapNotNull null
+                    }
+                    SelectedVideo(file.uri, name, mime)
+                }
 
-        selectedVideos.clear()
-        selectedVideos.addAll(videos)
-        showSelection()
-        if (skippedSilentVideos > 0) {
-            status.text = "$skippedSilentVideos vídeo(s) sem trilha de áudio ignorado(s)."
+            runOnUiThread {
+                if (generation != selectionGeneration || isDestroyed) return@runOnUiThread
+                selectedOutputFolder = null
+                if (videos.isEmpty()) {
+                    clearSelection(if (skippedSilentVideos > 0) "Os vídeos da pasta não possuem trilha de áudio." else "A pasta escolhida não tem áudio ou vídeo reconhecido.")
+                    return@runOnUiThread
+                }
+
+                selectedVideos.clear()
+                selectedVideos.addAll(videos)
+                showSelection()
+                if (skippedSilentVideos > 0) {
+                    status.text = "$skippedSilentVideos vídeo(s) sem trilha de áudio ignorado(s)."
+                }
+            }
         }
     }
 
     private fun showSelection() {
+        selectionLoading = false
         clearOutputResult()
         setExtractEnabled(true)
         val count = selectedVideos.size
@@ -1377,29 +1433,25 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun togglePreviewPlayback() {
-        if (videoPreview.visibility != View.VISIBLE && audioWaveform.visibility != View.VISIBLE) return
+        if (!previewSeeker.isReady) return
         val player = previewPlayer ?: return
-        if (player.isPlaying) {
-            player.pause()
+        if (player.isPlaying || playWhenSeekCompletes) {
             playWhenSeekCompletes = false
+            previewSeeker.cancelPending()
+            player.pause()
             setPlaybackButtonPlaying(false)
             return
         }
-
+        val currentMs = if (previewSeeker.isSeeking) timeline.getCurrentMs() else player.currentPosition.toLong()
         val startMs = timeline.getStartMs()
         val endMs = timeline.getEndMs()
-        val currentMs = player.currentPosition.toLong()
-        val playFromMs = if (currentMs < startMs || currentMs >= endMs) startMs else currentMs
-        if (currentMs < startMs || currentMs >= endMs) {
-            playWhenSeekCompletes = true
-            seekPreview(playFromMs, forPlaybackStart = true)
-            setPlaybackButtonPlaying(true)
-            syncPlaybackButtonSoon()
+        val playFromMs = if (currentMs !in startMs until endMs) startMs else currentMs
+        if (!previewSeeker.isSeeking && currentMs in startMs until endMs) {
+            startPreview()
             return
         }
-
-        timeline.setCurrent(playFromMs)
-        startPreview()
+        playWhenSeekCompletes = true
+        seekPreview(playFromMs, forPlaybackStart = true)
     }
 
     private fun startPreview() {
@@ -1419,37 +1471,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         audioWaveform.setCurrent(safePosition)
         currentTime.text = formatTime(safePosition)
 
-        if (forPlaybackStart) {
-            performActualSeek(safePosition, forPlaybackStart = true)
-        } else {
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastSeekTime >= 150L) {
-                lastSeekTime = now
-                performActualSeek(safePosition, forPlaybackStart = false)
-                pendingSeekPos = -1L
-            } else {
-                pendingSeekPos = safePosition
-                handler.removeCallbacks(pendingSeekDebounce)
-                handler.postDelayed(pendingSeekDebounce, 100L)
-            }
-        }
-    }
-
-    private fun performActualSeek(safePosition: Long, forPlaybackStart: Boolean) {
-        val player = previewPlayer ?: return
-        try {
-            if (forPlaybackStart && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                player.seekTo(safePosition, MediaPlayer.SEEK_NEXT_SYNC)
-            } else {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    player.seekTo(safePosition, MediaPlayer.SEEK_CLOSEST)
-                } else {
-                    player.seekTo(safePosition.toInt())
-                }
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Error performing actual seek", e)
-        }
+        previewSeeker.request(safePosition, immediate = forPlaybackStart)
     }
 
     private fun changePlaybackSpeed(direction: Int) {
@@ -1461,9 +1483,12 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun applyPlaybackSpeed() {
+        if (!previewSeeker.isReady) return
         val player = previewPlayer ?: return
         try {
+            val playing = player.isPlaying
             player.playbackParams = player.playbackParams.setSpeed(playbackSpeed)
+            if (!playing) player.pause()
         } catch (e: Exception) {
             Log.w(TAG, "Could not change playback speed", e)
             playbackSpeed = 1f
@@ -1493,7 +1518,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
 
     private fun syncPlaybackButtonSoon() {
         handler.postDelayed({
-            setPlaybackButtonPlaying((videoPreview.visibility == View.VISIBLE || audioWaveform.visibility == View.VISIBLE) && previewPlayer?.isPlaying == true)
+            setPlaybackButtonPlaying(previewSeeker.isReady && (videoPreview.visibility == View.VISIBLE || audioWaveform.visibility == View.VISIBLE) && previewPlayer?.isPlaying == true)
         }, 180L)
     }
 
@@ -1736,6 +1761,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun clearSelection(message: String) {
+        selectionLoading = false
         selectedVideos.clear()
         selectedOutputFolder = null
         selectionSummary.text = ""

@@ -322,7 +322,7 @@ class FfmpegPreviewOverlayView @JvmOverloads constructor(
         offsetX = FfmpegPreviewSelection.clampedOffset(width, drawnWidth, offsetX + dx)
         offsetY = FfmpegPreviewSelection.clampedOffset(height, drawnHeight, offsetY + dy)
         invalidate()
-        onViewportChanged?.invoke()
+        scheduleViewportChanged()
     }
 
     private fun handlePinch(event: MotionEvent) {
@@ -348,7 +348,20 @@ class FfmpegPreviewOverlayView @JvmOverloads constructor(
         offsetY = FfmpegPreviewSelection.clampedOffset(height, zoomedHeight, offsetNewY)
         pinchDistance = distance
         invalidate()
-        onViewportChanged?.invoke()
+        scheduleViewportChanged()
+    }
+
+    private val viewportChanged = Runnable { onViewportChanged?.invoke() }
+
+    private fun scheduleViewportChanged() {
+        removeCallbacks(viewportChanged)
+        postOnAnimation(viewportChanged)
+    }
+
+    override fun onDetachedFromWindow() {
+        removeCallbacks(viewportChanged)
+        removeCallbacks(longPress)
+        super.onDetachedFromWindow()
     }
 
     private fun pointerDistance(event: MotionEvent): Float {

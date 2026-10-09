@@ -66,6 +66,7 @@ também é bloqueado.
 | `FfmpegJoinPlaybackTimelineView.kt` | Timeline de reprodução do preview da junção. |
 | `FfmpegInsertAudioTimelineView.kt` | Timeline da inserção de áudio. |
 | `FfmpegPreviewOverlayView.kt` | Seleção de área e gestos (zoom/arrasto) do player FFmpeg. |
+| `FfmpegPreviewSeeker.kt` | Buscas precisas agrupadas no MediaPlayer e descarte de callbacks do player. |
 | `AppVersionTextView.kt` | TextView com a versão do app. |
 | `SystemBars.kt` | Extensão para system bars / edge-to-edge. |
 
@@ -73,6 +74,7 @@ também é bloqueado.
 
 | Arquivo | Responsabilidade |
 |---|---|
+| `FfmpegPreviewSeekQueue.kt` | Destino mais recente, debounce e serialização das buscas da prévia. |
 | `SttResponseParsers.kt` | Parsing das respostas STT (REST, SSE e WS). |
 | `SttRequestBuilders.kt` | Contratos de requisição REST/WS por provedor (URL, header, form). |
 | `SttLanguageSettings.kt` | Regras de idioma por provedor STT. |
@@ -150,6 +152,7 @@ também é bloqueado.
 | Arquivo | Responsabilidade |
 |---|---|
 | `SigApplication.kt` | `Application`: bootstrap do app. |
+| `FfmpegPreviewSource.kt` | Abertura e liberação serializadas das fontes do MediaPlayer fora da UI. |
 | `FfmpegRecoveryUi.kt` | Oferta de retomada, opções da tela e integração dos checkpoints com FFmpegKit. |
 | `CancelExitGuard.kt` | Extensão: confirmar saída durante tarefa. |
 | `AppUpdateChecker.kt` | Atualização via GitHub (release, parse, download). |

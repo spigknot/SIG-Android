@@ -98,6 +98,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var buttonSelectVideos: View
 
     private val handler = Handler(Looper.getMainLooper())
+    private val previewSource = FfmpegPreviewSource(handler)
     private val clips = mutableListOf<JoinClip>()
     private val selectedAudioTracks = mutableMapOf<String, Int>()
     private val tempOutputFiles = mutableListOf<File>()
@@ -121,7 +122,37 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private var updatingJoinModeChecks = false
     private var previewProfiles: Map<String, OutputProfile> = emptyMap()
     private var previewKeyframes: Map<String, List<Double>> = emptyMap()
-    private var previewAnalysisGeneration = 0
+    @Volatile private var previewAnalysisGeneration = 0
+    private var previewAnalysisThread: Thread? = null
+    private val clipLoader = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private var pendingJoinSeek: Long? = null
+    private val joinSeekDispatch = Runnable {
+        pendingJoinSeek?.let { position ->
+            pendingJoinSeek = null
+            performJoinSeek(position)
+        }
+    }
+    private var startJoinAfterSeek = false
+    private var allowPreviewPlayback = false
+    private val joinSeeker: FfmpegPreviewSeeker = FfmpegPreviewSeeker(handler) {
+        if (startJoinAfterSeek && joinPreviewPrepared) {
+            startJoinAfterSeek = false
+            joinPreviewPlayer?.start()
+            updateJoinPlaybackButton(true)
+            handler.removeCallbacks(joinPreviewTicker)
+            handler.post(joinPreviewTicker)
+        }
+    }
+    private var startResultAfterSeek = false
+    private val resultSeeker: FfmpegPreviewSeeker = FfmpegPreviewSeeker(handler) {
+        if (startResultAfterSeek) {
+            startResultAfterSeek = false
+            resultPreviewPlayer?.start()
+            updateResultPlaybackButton(true)
+            handler.removeCallbacks(resultPreviewTicker)
+            handler.post(resultPreviewTicker)
+        }
+    }
     private var resultPreviewPlayer: MediaPlayer? = null
     private var resultPreviewSurface: Surface? = null
     private var pendingResultPreviewFile: File? = null
@@ -138,7 +169,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         override fun run() {
             val player = joinPreviewPlayer ?: return
             val index = joinPreviewClipIndex
-            if (index < 0 || index >= clips.size || !player.isPlaying) return
+            if (index < 0 || index >= clips.size || !joinPreviewPrepared || !player.isPlaying) return
+            if (pendingJoinSeek != null || joinSeeker.isSeeking) {
+                handler.postDelayed(this, 50L)
+                return
+            }
             val position = joinClipOffset(index) + player.currentPosition.toLong()
             joinPlaybackTimeline.setCurrent(position)
             joinCurrentTime.text = formatTime(position)
@@ -148,10 +183,12 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private val resultPreviewTicker = object : Runnable {
         override fun run() {
             val player = resultPreviewPlayer ?: return
-            if (player.isPlaying) {
-                val position = player.currentPosition.toLong().coerceIn(0L, resultPreviewDurationMs)
-                resultTimeline.setCurrent(position)
-                resultCurrentTime.text = formatTime(position)
+            if (resultSeeker.isReady && player.isPlaying) {
+                if (!resultSeeker.isSeeking) {
+                    val position = player.currentPosition.toLong().coerceIn(0L, resultPreviewDurationMs)
+                    resultTimeline.setCurrent(position)
+                    resultCurrentTime.text = formatTime(position)
+                }
                 handler.postDelayed(this, 100L)
             }
         }
@@ -261,7 +298,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             }
 
             override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-                resultPreviewPlayer?.setSurface(null)
+                previewSource.detachSurface(resultPreviewPlayer)
                 resultPreviewSurface?.release()
                 resultPreviewSurface = null
                 return true
@@ -375,26 +412,37 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun addPickedUris(uris: List<Uri>, flags: Int) {
         if (uris.isEmpty()) return
 
-        val loaded = uris.distinct().mapNotNull { uri ->
-            SharedMediaIntents.takeReadPermission(contentResolver, uri, flags)
-            loadClip(uri)
+        val picked = uris.distinct()
+        picked.forEach { SharedMediaIntents.takeReadPermission(contentResolver, it, flags) }
+        status.text = "Lendo mídia..."
+        clipLoader.execute {
+            val loaded = picked.mapNotNull { uri ->
+                if (Thread.currentThread().isInterrupted) null else loadClip(uri)
+            }
+            runOnUiThread {
+                if (isDestroyed || isProcessing) {
+                    loaded.forEach { it.thumbnail?.recycle() }
+                    return@runOnUiThread
+                }
+                if (loaded.isEmpty()) {
+                    status.text = "Nenhum arquivo de áudio ou vídeo foi reconhecido."
+                    return@runOnUiThread
+                }
+                if ((clips + loaded).map { it.isAudio }.distinct().size > 1) {
+                    loaded.forEach { it.thumbnail?.recycle() }
+                    Toast.makeText(this, "Selecione apenas áudios ou apenas vídeos por vez.", Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                clearOutputResult()
+                clips += loaded
+                status.text = ""
+                updateSelectionUi()
+            }
         }
-        if (loaded.isEmpty()) {
-            Toast.makeText(this, "Nenhum arquivo de áudio ou vídeo foi reconhecido.", Toast.LENGTH_LONG).show()
-            return
-        }
-        val combinedKinds = (clips + loaded).map { it.isAudio }.distinct()
-        if (combinedKinds.size > 1) {
-            Toast.makeText(this, "Selecione apenas áudios ou apenas vídeos por vez.", Toast.LENGTH_LONG).show()
-            return
-        }
-        clearOutputResult()
-        clips += loaded
-        updateSelectionUi()
     }
 
     private fun loadClip(uri: Uri): JoinClip? {
-        val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia_${clips.size + 1}"
+        val name = MediaUriSupport.queryDisplayName(contentResolver, uri) ?: "midia"
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(this, uri)
@@ -405,13 +453,26 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             val height = rawHeight?.coerceAtLeast(2) ?: 720
             val rotationDegrees = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
             val hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) == "yes"
-            val thumbnail = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            val thumbnail = if (rawWidth != null && rawHeight != null) {
+                val scale = minOf(320f / width, 180f / height, 1f)
+                val targetWidth = (width * scale).toInt().coerceAtLeast(1)
+                val targetHeight = (height * scale).toInt().coerceAtLeast(1)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                    retriever.getScaledFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, targetWidth, targetHeight)
+                } else {
+                    retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.let { frame ->
+                        Bitmap.createScaledBitmap(frame, targetWidth, targetHeight, true).also { scaled ->
+                            if (scaled !== frame) frame.recycle()
+                        }
+                    }
+                }
+            } else null
             val isAudio = rawWidth == null && rawHeight == null && thumbnail == null && hasAudio
             if (!hasAudio && isAudio) error("Arquivo sem faixa de áudio")
             JoinClip(System.nanoTime(), uri, name, durationMs, width, height, rotationDegrees, hasAudio, isAudio, thumbnail)
         } catch (e: Throwable) {
             Log.e(TAG, "Could not load clip $name", e)
-            Toast.makeText(this, "Não consegui ler $name.", Toast.LENGTH_SHORT).show()
+            runOnUiThread { if (!isDestroyed) Toast.makeText(this, "Não consegui ler $name.", Toast.LENGTH_SHORT).show() }
             null
         } finally {
             retriever.release()
@@ -548,21 +609,24 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             previewKeyframes = emptyMap()
             return
         }
-        Thread {
+        previewAnalysisThread?.interrupt()
+        previewAnalysisThread = Thread {
             val profiles = snapshot.associate { clip ->
+                if (Thread.currentThread().isInterrupted) return@Thread
                 clip.uri.toString() to detectOutputProfile(clip.uri, clip)
             }
             val keyframes = snapshot.filterNot { it.isAudio }.associate { clip ->
+                if (Thread.currentThread().isInterrupted) return@Thread
                 clip.uri.toString() to detectVideoKeyframes(clip.uri)
             }
             runOnUiThread {
-                if (generation == previewAnalysisGeneration) {
+                if (generation == previewAnalysisGeneration && !isDestroyed) {
                     previewProfiles = profiles
                     previewKeyframes = keyframes
                     refreshCommandPreview()
                 }
             }
-        }.start()
+        }.also { it.start() }
     }
 
     private fun refreshCommandPreview() {
@@ -2525,9 +2589,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun toggleJoinPlayback() {
         if (clips.isEmpty() || isProcessing) return
         val player = joinPreviewPlayer
-        if (player?.isPlaying == true) {
+        if (startJoinAfterSeek || (joinPreviewPrepared && player?.isPlaying == true)) {
+            startJoinAfterSeek = false
+            pendingJoinSeek = null
+            handler.removeCallbacks(joinSeekDispatch)
+            joinSeeker.cancelPending()
             joinPreviewPositionMs = currentJoinPlaybackPosition()
-            player.pause()
+            if (joinPreviewPrepared) player?.pause()
             handler.removeCallbacks(joinPreviewTicker)
             updateJoinPlaybackButton(false)
             return
@@ -2536,10 +2604,18 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         if (joinPreviewPositionMs >= totalDurationMs()) joinPreviewPositionMs = 0L
         if (player != null && joinPreviewPrepared && joinPreviewClipIndex >= 0) {
             applyJoinPlaybackSpeed(player)
-            player.start()
-            updateJoinPlaybackButton(true)
-            handler.removeCallbacks(joinPreviewTicker)
-            handler.post(joinPreviewTicker)
+            if (pendingJoinSeek == null && !joinSeeker.isSeeking) {
+                player.start()
+                updateJoinPlaybackButton(true)
+                handler.removeCallbacks(joinPreviewTicker)
+                handler.post(joinPreviewTicker)
+                return
+            }
+            val position = pendingJoinSeek ?: joinPreviewPositionMs
+            pendingJoinSeek = null
+            handler.removeCallbacks(joinSeekDispatch)
+            startJoinAfterSeek = true
+            performJoinSeek(position)
         } else {
             startJoinPlaybackAt(joinPreviewPositionMs)
         }
@@ -2562,21 +2638,18 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val player = MediaPlayer()
         joinPreviewPlayer = player
         try {
-            player.setDataSource(this, clip.uri)
             player.setOnPreparedListener { prepared ->
+                if (joinPreviewPlayer !== prepared) return@setOnPreparedListener
                 joinPreviewPrepared = true
-                seekMediaPlayer(prepared, localPositionMs)
+                joinSeeker.attach(prepared)
+                startJoinAfterSeek = startWhenPrepared && allowPreviewPlayback
+                joinSeeker.request(localPositionMs, immediate = true)
                 applyJoinPlaybackSpeed(prepared)
-                if (startWhenPrepared) {
-                    prepared.start()
-                    updateJoinPlaybackButton(true)
-                    handler.removeCallbacks(joinPreviewTicker)
-                    handler.post(joinPreviewTicker)
-                } else {
-                    updateJoinPlaybackButton(false)
-                }
+                prepared.pause()
+                updateJoinPlaybackButton(startJoinAfterSeek)
             }
             player.setOnCompletionListener {
+                if (joinPreviewPlayer !== it) return@setOnCompletionListener
                 if (index < clips.lastIndex) {
                     startJoinPlaybackAt(joinClipOffset(index + 1))
                 } else {
@@ -2587,13 +2660,20 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     updateJoinPlaybackButton(false)
                 }
             }
-            player.setOnErrorListener { _, _, _ ->
+            player.setOnErrorListener { failed, _, _ ->
+                if (joinPreviewPlayer !== failed) return@setOnErrorListener true
                 status.text = "Não consegui reproduzir ${clip.name}."
                 status.setTextColor(Color.parseColor("#FFFF5A5A"))
                 stopJoinPlayback()
                 true
             }
-            player.prepareAsync()
+            previewSource.prepare(player, { player.setDataSource(this, clip.uri) }) { error ->
+                if (joinPreviewPlayer === player) {
+                    Log.w(TAG, "Não foi possível abrir a prévia", error)
+                    status.text = "Não consegui reproduzir ${clip.name}."
+                    stopJoinPlayback()
+                }
+            }
         } catch (error: Throwable) {
             Log.w(TAG, "Não foi possível preparar a prévia de ${clip.name}", error)
             status.text = "Não consegui reproduzir ${clip.name}."
@@ -2607,14 +2687,23 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         joinPreviewPositionMs = positionMs.coerceIn(0L, totalDurationMs())
         joinPlaybackTimeline.setCurrent(joinPreviewPositionMs)
         joinCurrentTime.text = formatTime(joinPreviewPositionMs)
+        pendingJoinSeek = joinPreviewPositionMs
+        handler.removeCallbacks(joinSeekDispatch)
+        handler.postDelayed(joinSeekDispatch, 120L)
+    }
+
+    private fun performJoinSeek(positionMs: Long) {
+        if (clips.isEmpty()) return
+        joinPreviewPositionMs = positionMs.coerceIn(0L, totalDurationMs())
         val index = clips.indices.firstOrNull { joinPreviewPositionMs < joinClipOffset(it) + clips[it].durationMs }
             ?: clips.lastIndex
         val localPosition = (joinPreviewPositionMs - joinClipOffset(index)).coerceAtLeast(0L)
-        val wasPlaying = joinPreviewPlayer?.isPlaying == true
+        val wasPlaying = startJoinAfterSeek || (joinPreviewPrepared && joinPreviewPlayer?.isPlaying == true)
         if (joinPreviewClipIndex == index && joinPreviewPrepared) {
             joinPreviewPlayer?.let { player ->
-                seekMediaPlayer(player, localPosition)
-                if (wasPlaying && !player.isPlaying) player.start()
+                startJoinAfterSeek = wasPlaying
+                player.pause()
+                joinSeeker.request(localPosition, immediate = true)
             }
         } else {
             prepareJoinPlayback(index, localPosition, wasPlaying)
@@ -2625,13 +2714,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val index = joinPreviewSpeedSteps.indexOfFirst { kotlin.math.abs(it - joinPreviewSpeed) < 0.01f }
             .let { if (it >= 0) it else 2 }
         joinPreviewSpeed = joinPreviewSpeedSteps[(index + direction).coerceIn(0, joinPreviewSpeedSteps.lastIndex)]
-        joinPreviewPlayer?.let(::applyJoinPlaybackSpeed)
+        if (joinPreviewPrepared) joinPreviewPlayer?.let(::applyJoinPlaybackSpeed)
         updateJoinSpeedButtons()
     }
 
     private fun applyJoinPlaybackSpeed(player: MediaPlayer) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
-        runCatching { player.playbackParams = player.playbackParams.setSpeed(joinPreviewSpeed) }
+        runCatching {
+            val playing = player.isPlaying
+            player.playbackParams = player.playbackParams.setSpeed(joinPreviewSpeed)
+            if (!playing) player.pause()
+        }
     }
 
     private fun updateJoinPlaybackButton(playing: Boolean) {
@@ -2645,6 +2738,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun currentJoinPlaybackPosition(): Long {
+        if (pendingJoinSeek != null || joinSeeker.isSeeking) return joinPreviewPositionMs
         val player = joinPreviewPlayer
         val index = joinPreviewClipIndex
         return if (player != null && joinPreviewPrepared && index in clips.indices) {
@@ -2656,15 +2750,6 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private fun joinClipOffset(index: Int): Long = clips.take(index).sumOf { it.durationMs }
 
-    private fun seekMediaPlayer(player: MediaPlayer, positionMs: Long) {
-        val safePosition = positionMs.coerceAtLeast(0L)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            player.seekTo(safePosition, MediaPlayer.SEEK_CLOSEST)
-        } else {
-            player.seekTo(safePosition.toInt())
-        }
-    }
-
     private fun stopJoinPlayback() {
         joinPreviewPositionMs = 0L
         releaseJoinPreviewPlayer()
@@ -2674,8 +2759,12 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun releaseJoinPreviewPlayer() {
+        startJoinAfterSeek = false
+        pendingJoinSeek = null
+        handler.removeCallbacks(joinSeekDispatch)
+        joinSeeker.reset()
         handler.removeCallbacks(joinPreviewTicker)
-        joinPreviewPlayer?.release()
+        previewSource.release(joinPreviewPlayer)
         joinPreviewPlayer = null
         joinPreviewClipIndex = -1
         joinPreviewPrepared = false
@@ -2686,11 +2775,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         if (!currentJoinIsAudio() && surface == null) return
         if (!file.exists()) return
         handler.removeCallbacks(resultPreviewTicker)
-        resultPreviewPlayer?.release()
+        startResultAfterSeek = false
+        resultSeeker.reset()
+        previewSource.release(resultPreviewPlayer)
         resultPreviewPlayer = MediaPlayer().apply {
-            setDataSource(file.absolutePath)
             if (surface != null) setSurface(surface)
             setOnPreparedListener { player ->
+                if (resultPreviewPlayer !== player) return@setOnPreparedListener
+                resultSeeker.attach(player)
                 resultPreviewDurationMs = player.duration.toLong().coerceAtLeast(1L)
                 resultTimeline.isEnabled = true
                 resultTimeline.setRange(resultPreviewDurationMs, 0L, resultPreviewDurationMs)
@@ -2700,46 +2792,62 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             }
             setOnVideoSizeChangedListener { _, _, _ -> applyResultPreviewTransform() }
             setOnCompletionListener {
+                if (resultPreviewPlayer !== it) return@setOnCompletionListener
                 resultTimeline.setCurrent(resultPreviewDurationMs)
                 resultCurrentTime.text = formatTime(resultPreviewDurationMs)
                 updateResultPlaybackButton(false)
             }
-            prepareAsync()
+            val loading = this
+            previewSource.prepare(loading, { loading.setDataSource(file.absolutePath) }) { error ->
+                if (resultPreviewPlayer === loading) {
+                    Log.w(TAG, "Não foi possível abrir o resultado", error)
+                    clearJoinedPreview()
+                }
+            }
         }
     }
 
     private fun toggleResultPlayback() {
+        if (!resultSeeker.isReady) return
         val player = resultPreviewPlayer ?: return
-        if (player.isPlaying) {
+        if (player.isPlaying || startResultAfterSeek) {
+            startResultAfterSeek = false
+            resultSeeker.cancelPending()
             player.pause()
             handler.removeCallbacks(resultPreviewTicker)
             updateResultPlaybackButton(false)
         } else {
-            if (player.currentPosition.toLong() >= resultPreviewDurationMs) {
-                player.seekTo(0)
-                resultTimeline.setCurrent(0L)
-                resultCurrentTime.text = formatTime(0L)
+            val position = if (resultSeeker.isSeeking) resultTimeline.getCurrentMs() else player.currentPosition.toLong()
+            val target = if (position >= resultPreviewDurationMs) 0L else position
+            if (!resultSeeker.isSeeking && position < resultPreviewDurationMs) {
+                player.start()
+                updateResultPlaybackButton(true)
+                handler.removeCallbacks(resultPreviewTicker)
+                handler.post(resultPreviewTicker)
+                return
             }
-            player.start()
-            updateResultPlaybackButton(true)
-            handler.removeCallbacks(resultPreviewTicker)
-            handler.post(resultPreviewTicker)
+            resultTimeline.setCurrent(target)
+            resultCurrentTime.text = formatTime(target)
+            startResultAfterSeek = true
+            resultSeeker.request(target, immediate = true)
         }
     }
 
     private fun changeResultPlaybackSpeed(direction: Int) {
         val index = resultSpeedSteps.indexOfFirst { it == resultPlaybackSpeed }.let { if (it >= 0) it else 2 }
         resultPlaybackSpeed = resultSpeedSteps[(index + direction).coerceIn(0, resultSpeedSteps.lastIndex)]
-        resultPreviewPlayer?.let { player ->
+        resultPreviewPlayer?.takeIf { resultSeeker.isReady }?.let { player ->
+            val playing = player.isPlaying
             player.playbackParams = player.playbackParams.setSpeed(resultPlaybackSpeed)
+            if (!playing) player.pause()
         }
         updateResultSpeedButtons()
     }
 
     private fun seekResultPreview(positionMs: Long) {
-        val player = resultPreviewPlayer ?: return
+        if (!resultSeeker.isReady) return
         val safePosition = positionMs.coerceIn(0L, resultPreviewDurationMs).toInt()
-        player.seekTo(safePosition)
+        resultSeeker.request(safePosition.toLong())
         resultCurrentTime.text = formatTime(safePosition.toLong())
     }
 
@@ -2765,14 +2873,16 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         val width = player.videoWidth * scale
         val height = player.videoHeight * scale
         resultVideoPreview.setTransform(Matrix().apply {
-            setScale(scale, scale)
+            setScale(width / viewWidth, height / viewHeight)
             postTranslate((viewWidth - width) / 2f, (viewHeight - height) / 2f)
         })
     }
 
     private fun clearJoinedPreview() {
+        startResultAfterSeek = false
+        resultSeeker.reset()
         handler.removeCallbacks(resultPreviewTicker)
-        resultPreviewPlayer?.release()
+        previewSource.release(resultPreviewPlayer)
         resultPreviewPlayer = null
         pendingResultPreviewFile = null
         resultPreviewDurationMs = 0L
@@ -2783,22 +2893,38 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         joinPlaybackContainer.visibility = if (clips.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
+    override fun onResume() {
+        super.onResume()
+        allowPreviewPlayback = true
+    }
+
     override fun onPause() {
+        allowPreviewPlayback = false
+        startResultAfterSeek = false
         joinPreviewPositionMs = currentJoinPlaybackPosition()
-        joinPreviewPlayer?.pause()
+        startJoinAfterSeek = false
+        pendingJoinSeek = null
+        handler.removeCallbacks(joinSeekDispatch)
+        joinSeeker.cancelPending()
+        resultSeeker.cancelPending()
+        if (joinPreviewPrepared) joinPreviewPlayer?.pause()
         handler.removeCallbacks(joinPreviewTicker)
         updateJoinPlaybackButton(false)
-        resultPreviewPlayer?.pause()
+        if (resultSeeker.isReady) resultPreviewPlayer?.pause()
         handler.removeCallbacks(resultPreviewTicker)
         updateResultPlaybackButton(false)
         super.onPause()
     }
 
     override fun onDestroy() {
+        previewAnalysisGeneration++
+        previewAnalysisThread?.interrupt()
+        clipLoader.shutdownNow()
         releaseJoinPreviewPlayer()
         clearJoinedPreview()
         resultPreviewSurface?.release()
         resultPreviewSurface = null
+        previewSource.close()
         super.onDestroy()
     }
 
@@ -3651,7 +3777,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             } ?: return emptyList()
             extractor.selectTrack(videoTrack)
             val result = mutableListOf<Double>()
-            while (extractor.sampleTime >= 0L) {
+            while (!Thread.currentThread().isInterrupted && extractor.sampleTime >= 0L) {
                 if (extractor.sampleFlags and MediaExtractor.SAMPLE_FLAG_SYNC != 0) {
                     val seconds = extractor.sampleTime / 1_000_000.0
                     if (result.lastOrNull()?.let { kotlin.math.abs(it - seconds) > 0.0005 } != false) result += seconds

@@ -76,6 +76,17 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     private lateinit var arrowInputOutput: View
 
     private val handler = Handler(Looper.getMainLooper())
+    private val previewSource = FfmpegPreviewSource(handler)
+    private var startAfterSeek = false
+    private val previewSeeker = FfmpegPreviewSeeker(handler) {
+        if (startAfterSeek && filteredPreviewReady) {
+            startAfterSeek = false
+            filteredPreviewPlayer?.start()
+            updatePlayButton(true)
+            handler.removeCallbacks(playbackTicker)
+            handler.post(playbackTicker)
+        }
+    }
     private var mainAudio: AudioSource? = null
     private var insertedAudio: AudioSource? = null
     private val selectedAudioTracks = mutableMapOf<String, Int>()
@@ -367,7 +378,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
 
     private fun togglePlayback() {
         if(previewRendering) { stopFilteredPreview();return }
-        if(isPlaying()) { finishTimeEditing();pausePlayback();return }
+        if(isPlaying() || startAfterSeek) { finishTimeEditing();pausePlayback();return }
         finishTimeEditing()
         val main=mainAudio ?: return
         listOfNotNull(main,insertedAudio).firstOrNull {
@@ -421,7 +432,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 checkCancelled()
                 runOnUiThread {
                     if(version!=previewGeneration || previewCancelled || isDestroyed || isProcessing) {
-                        work.deleteRecursively()
+                        Thread { work.deleteRecursively() }.start()
                     } else {
                         filteredPreviewFile=output;filteredPreviewPlan=result.plan;filteredPreviewKey=key
                         mainAudio=mainAudio?.copy(durationMs=(result.plan.main*1000.0/result.audio.rate).roundToLong())
@@ -430,17 +441,21 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                         val player=MediaPlayer()
                         filteredPreviewPlayer=player
                         try {
-                            player.setDataSource(output.absolutePath)
                             player.setOnPreparedListener {
                                 if(version==previewGeneration && !previewCancelled) {
-                                    previewRendering=false;filteredPreviewReady=true;applyPlaybackSpeed(it);startFilteredPlayer()
+                                    previewRendering=false;filteredPreviewReady=true;previewSeeker.attach(it);applyPlaybackSpeed(it);it.pause();startFilteredPlayer()
                                 }
                             }
-                            player.setOnCompletionListener { finishPlayback() }
-                            player.setOnErrorListener { _,_,_ ->
+                            player.setOnCompletionListener { if(filteredPreviewPlayer===it)finishPlayback() }
+                            player.setOnErrorListener { failed,_,_ ->
+                                if(filteredPreviewPlayer!==failed)return@setOnErrorListener true
                                 status.text="Não foi possível reproduzir a prévia.";stopFilteredPreview();true
                             }
-                            player.prepareAsync()
+                            previewSource.prepare(player, { player.setDataSource(output.absolutePath) }) { error ->
+                                if (filteredPreviewPlayer === player) {
+                                    stopFilteredPreview();status.text=error.message
+                                }
+                            }
                         } catch(error: Throwable) { stopFilteredPreview();status.text=error.message }
                     }
                 }
@@ -460,17 +475,26 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         val plan=filteredPreviewPlan ?: return
         if(!filteredPreviewReady)return
         val sample=SmartInsertPlanner.sampleCount(compositePositionMs/1000.0,plan.rate)
-        seekPlayer(player,(plan.outputPosition(sample)*1000.0/plan.rate).roundToLong())
-        player.start();updatePlayButton(true)
-        handler.removeCallbacks(playbackTicker);handler.post(playbackTicker)
+        val position=(plan.outputPosition(sample)*1000.0/plan.rate).roundToLong()
+        if(!previewSeeker.isSeeking && kotlin.math.abs(player.currentPosition.toLong()-position)<=20L) {
+            player.start();updatePlayButton(true)
+            handler.removeCallbacks(playbackTicker);handler.post(playbackTicker)
+            return
+        }
+        startAfterSeek=true
+        previewSeeker.request(position, immediate=true)
     }
 
     private fun stopFilteredPreview() {
+        startAfterSeek=false
+        previewSeeker.reset()
         previewCancelled=true;previewGeneration++
         previewSessionId?.let { FFmpegKit.cancel(it) }
         previewRendering=false
-        filteredPreviewPlayer?.release();filteredPreviewPlayer=null;filteredPreviewReady=false
-        filteredPreviewFile?.parentFile?.takeIf { it.parentFile==cacheDir && it.name.startsWith("insert_preview_") }?.deleteRecursively()
+        previewSource.release(filteredPreviewPlayer);filteredPreviewPlayer=null;filteredPreviewReady=false
+        filteredPreviewFile?.parentFile?.takeIf { it.parentFile==cacheDir && it.name.startsWith("insert_preview_") }?.let { directory ->
+            Thread { directory.deleteRecursively() }.start()
+        }
         filteredPreviewFile=null;filteredPreviewPlan=null;filteredPreviewKey=null
         handler.removeCallbacks(playbackTicker)
         if(::playPause.isInitialized)updatePlayButton(false)
@@ -479,7 +503,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     private fun updateCompositePlaybackPosition() {
         val player=filteredPreviewPlayer ?: return
         val plan=filteredPreviewPlan ?: return
-        if(!filteredPreviewReady)return
+        if(!filteredPreviewReady || previewSeeker.isSeeking)return
         val sample=SmartInsertPlanner.sampleCount(player.currentPosition/1000.0,plan.rate)
         compositePositionMs=(plan.compositePosition(sample)*1000.0/plan.rate).roundToLong().coerceIn(0,compositeDurationMs())
         timeline.setCurrent(compositePositionMs)
@@ -536,13 +560,15 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         playbackSpeed = speedSteps[(index + direction).coerceIn(0, speedSteps.lastIndex)]
         applyPlaybackSpeed(filteredPreviewPlayer)
         updateSpeedButtons()
-        if (wasPlaying) startFilteredPlayer() else pausePlayersOnly()
+        if (!wasPlaying) pausePlayersOnly()
     }
 
     private fun applyPlaybackSpeed(player: MediaPlayer?) {
-        if (player == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        if (player == null || !filteredPreviewReady || Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
         try {
+            val playing = player.isPlaying
             player.playbackParams = player.playbackParams.setSpeed(playbackSpeed)
+            if (!playing) player.pause()
         } catch (_: Throwable) {
         }
     }
@@ -1034,6 +1060,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun pausePlayback() {
+        startAfterSeek=false
+        previewSeeker.cancelPending()
         pausePlayersOnly()
         handler.removeCallbacks(playbackTicker)
         updatePlayButton(false)
@@ -1049,11 +1077,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun seekPlayer(player: MediaPlayer?, positionMs: Long) {
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) player?.seekTo(positionMs.coerceAtLeast(0L), MediaPlayer.SEEK_CLOSEST)
-            else player?.seekTo(positionMs.coerceAtLeast(0L).toInt())
-        } catch (_: Throwable) {
-        }
+        if (player === filteredPreviewPlayer) previewSeeker.request(positionMs)
     }
 
     private fun releasePlayers() { stopFilteredPreview() }
@@ -1069,6 +1093,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         if(isProcessing)cancelProcessing()
         releasePlayers()
         mainAudio?.cachedFile?.delete();insertedAudio?.cachedFile?.delete()
+        previewSource.close()
         super.onDestroy()
     }
 
