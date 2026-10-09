@@ -111,6 +111,20 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
     }
 
+    private val recovery by lazy { FfmpegRecoveryUi(this,"insert",::recoveryRequest,::restoreRecovery) { startInsert() } }
+    private fun recoveryRequest(): JSONObject = JSONObject().put("main",sourceRecovery(mainAudio!!)).put("inserted",sourceRecovery(insertedAudio!!)).put("insertion",insertionMs).put("transition",selectedTransition)
+    private fun restoreRecovery(r: JSONObject) {
+        mainAudio=restoreSourceRecovery(r.getJSONObject("main"));insertedAudio=restoreSourceRecovery(r.getJSONObject("inserted"));insertionMs=r.getLong("insertion");selectedTransition=r.getString("transition")
+    }
+
+    private fun sourceRecovery(source: AudioSource): JSONObject = JSONObject().put("uri",source.uri.toString()).put("name",source.name).put("duration",source.durationMs)
+        .put("cached",source.cachedFile?.absolutePath).put("track",selectedAudioTracks[trackKey(source)] ?: 0)
+    private fun restoreSourceRecovery(r: JSONObject): AudioSource {
+        val cached=r.optString("cached").takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.isFile }
+        val source=AudioSource(recovery.uri(r.getString("uri")),r.getString("name"),r.getLong("duration"),cached)
+        selectedAudioTracks[trackKey(source)]=r.getInt("track");return source
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -196,6 +210,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         updateSpeedButtons()
         refreshCommandPreview()
         handleIncomingShareIntent(intent)
+        window.decorView.post { recovery.offer() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -582,6 +597,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         val options = try { selectedOptions() } catch (error: IllegalStateException) {
             status.text = error.message; return
         }
+        recovery.begin()
         stopFilteredPreview()
         pausePlayback()
         processingCancelled = false
@@ -590,6 +606,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         val tracker = FfmpegTaskTracker(status, listOf("Preparando arquivos", "Inserindo áudio", "Validando arquivo para salvar"))
         Thread {
             val inputs = mutableListOf<File>()
+            var keepRecoveryOutput=false
             var resultFile: File? = null
             try {
                 val mainFile = cachedInput(main, "insert_main", inputs)
@@ -598,7 +615,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                 tracker.completeTask(0)
                 val extension = main.name.substringAfterLast('.', "m4a").lowercase(Locale.ROOT)
                     .takeIf { it in SUPPORTED_COPY_EXTENSIONS } ?: "m4a"
-                val output = File(cacheDir,"insert_${UUID.randomUUID()}.$extension")
+                val output = recovery.file("output", ".$extension") { File(cacheDir,"insert_${UUID.randomUUID()}.$extension") }
                 resultFile = output
                 tracker.startTask(1)
                 val pipeline = SmartInsertPipeline(
@@ -612,9 +629,12 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                     probe = { args -> probeInsert(args) },
                     cancelled = { checkInsertCancellation() },
                     log = { message -> Log.i(TAG,message); runOnUiThread { insertHint.text = message } },
-                    packetProbe = { args -> probeInsertOutput(args) }
+                    packetProbe = { args -> probeInsertOutput(args) },
+                    workDirectory = recovery.work("smart_insert") { File(output.parentFile,"smart_insert_${UUID.randomUUID()}") },
+                    keepWork = recovery.job != null
                 )
                 val result = pipeline.run(mainFile,insertedFile,output,options)
+                keepRecoveryOutput=true
                 checkInsertCancellation()
                 tracker.setTaskEncoder(1,result.audio.encoder)
                 tracker.completeTask(1);tracker.completeTask(2)
@@ -636,24 +656,25 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
                         outputName.text = lastOutputName;outputName.visibility = View.VISIBLE
                         outputActions.visibility = View.VISIBLE;saveButton.visibility = View.VISIBLE
                         openFolderButton.visibility = View.GONE;shareButton.visibility = View.GONE
-                        outputStats.text = "Estatísticas:\n${tracker.successMessageOrEmpty()}"
+                        outputStats.text = listOfNotNull(result.warning, "Estatísticas:\n${tracker.successMessageOrEmpty()}").joinToString("\n\n")
+                        outputStats.setTextColor(if (result.warning == null) android.graphics.Color.parseColor("#FF2ECC71") else android.graphics.Color.parseColor("#FFFFC857"))
                         outputStats.visibility = View.VISIBLE
                         scroll.post { scroll.smoothScrollTo(0,outputActions.bottom) }
                     }
                 }
             } catch (_: ProcessingCancelled) {
-                resultFile?.delete()
+                recovery.delete(resultFile)
                 runOnUiThread { setProcessing(false);tracker.fail("Operação cancelada.") }
             } catch (error: Throwable) {
-                resultFile?.delete()
+                recovery.delete(resultFile)
                 Log.e(TAG,"Audio insertion failed",error)
                 runOnUiThread { setProcessing(false);tracker.fail(error.message ?: "Falha inesperada") }
-            } finally { inputs.forEach { it.delete() } }
+            } finally { recovery.finish(keepRecoveryOutput,processingCancelled);inputs.forEach { recovery.delete(it) } }
         }.start()
     }
 
     private fun cachedInput(source: AudioSource, prefix: String, temporary: MutableList<File>): File =
-        source.cachedFile?.takeIf { it.isFile } ?: copyUriToCache(source.uri,source.name,prefix) { checkInsertCancellation() }.also { temporary += it }
+        (if(recovery.job==null)source.cachedFile?.takeIf { it.isFile } else null) ?: copyUriToCache(source.cachedFile?.takeIf { it.isFile }?.let { Uri.fromFile(it) } ?: source.uri,source.name,prefix) { checkInsertCancellation() }.also { temporary += it;recovery.alias(source.uri,it) }
 
     private fun checkInsertCancellation() { if (processingCancelled) throw ProcessingCancelled() }
 
@@ -665,14 +686,17 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
         checkCancelled()
         val latch=CountDownLatch(1)
-        val session=FFprobeKit.executeWithArgumentsAsync(args) { latch.countDown() }
+        val probeFile=File.createTempFile("insert_probe_",".txt",cacheDir)
+        val redirected=args.toMutableList().apply { addAll(0,listOf("-o",probeFile.absolutePath)) }
+        val session=FFprobeKit.executeWithArgumentsAsync(redirected.toTypedArray()) { latch.countDown() }
         if (preview) previewSessionId=session.sessionId else currentSessionId=session.sessionId
         try {
             if ((preview && previewCancelled) || (!preview && processingCancelled)) FFmpegKit.cancel(session.sessionId)
             latch.await();checkCancelled()
             check(ReturnCode.isSuccess(session.returnCode)) { "Não foi possível analisar a faixa de áudio selecionada." }
-            return session.output
+            return probeFile.readText()
         } finally {
+            probeFile.delete()
             if(preview && previewSessionId==session.sessionId)previewSessionId=null
             if(!preview && currentSessionId==session.sessionId)currentSessionId=null
         }
@@ -754,6 +778,8 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun executeWithProgress(args: Array<String>, durationMs: Long, tracker: FfmpegTaskTracker, taskIndex: Int): FFmpegSession {
+        recovery.reuse(args)?.let { return it }
+        recovery.starting(args)
         FfmpegCommandPresenter.show(status, args.asIterable())
         Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(args.asIterable())}")
         val latch = CountDownLatch(1)
@@ -774,6 +800,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         currentSessionId = null
         val completed = result.get() ?: session
         FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        recovery.completed(args, completed)
         return completed
     }
 
@@ -901,6 +928,7 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun cancelProcessing() {
+        recovery.cancel()
         processingCancelled = true
         status.text = "Cancelando..."
         currentSessionId?.let { FFmpegKit.cancel(it) }
@@ -914,10 +942,12 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
         }
         val document = directory.createFile(audioMime(targetName), targetName) ?: return
         try {
-            contentResolver.openOutputStream(document.uri)?.use { output -> source.inputStream().use { it.copyTo(output) } }
+            val destination=contentResolver.openOutputStream(document.uri) ?: error("Não foi possível abrir a saída para salvar.")
+            destination.use { output -> source.inputStream().use { it.copyTo(output) } }
             finalOutputDirUri = treeUri
             lastOutputUri = document.uri
             outputName.text = document.name ?: lastOutputName
+            recovery.saved()
             saveButton.visibility = View.GONE
             openFolderButton.visibility = View.VISIBLE
             shareButton.visibility = View.VISIBLE
@@ -971,6 +1001,12 @@ class FfmpegInsertAudioActivity : AppCompatActivity() {
     }
 
     private fun copyUriToCache(uri: Uri, displayName: String, prefix: String, checkCancelled: () -> Unit = {}): File {
+        recovery.input(uri,displayName) { target ->
+            contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { output ->
+                val buffer=ByteArray(1 shl 20)
+                while(true) { checkInsertCancellation();val count=input.read(buffer);if(count<0)break;output.write(buffer,0,count) }
+            } } ?: error("Não consegui abrir $displayName")
+        }?.let { return it }
         val extension=displayName.substringAfterLast('.',"audio").takeIf { it.matches(Regex("[A-Za-z0-9]{1,8}")) } ?: "audio"
         val file=File(cacheDir,"${prefix}_${UUID.randomUUID()}.$extension")
         try {

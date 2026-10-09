@@ -1,5 +1,8 @@
 package br.gov.sp.pcsp.launcher
 
+import org.json.JSONObject
+import kotlin.math.roundToLong
+
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
@@ -186,6 +189,20 @@ class FfmpegCutActivity : AppCompatActivity() {
         }
     }
 
+    private val recovery by lazy { FfmpegRecoveryUi(this,"cut",::recoveryRequest,::restoreRecovery) { cutSelectedMedia(true) } }
+    private fun recoveryRequest(): JSONObject = JSONObject().put("uri",selectedUri.toString()).put("name",selectedName).put("mime",selectedMime).put("duration",durationMs)
+        .put("mode",selectedCutMode).put("quality",selectedVideoQuality.name).put("audioQuality",selectedAudioQuality.name)
+        .put("speed",selectedVideoSpeed.name).put("path",encoderPath).put("advanced",encoderAdvanced)
+        .put("selection",FfmpegRecoveryUi.selection(previewSelection))
+        .put("encoder",FfmpegRecoveryUi.encoder(selectedVideoEncoder))
+    private fun restoreRecovery(r: JSONObject) {
+        selectedUri=recovery.uri(r.getString("uri"));selectedName=r.getString("name");selectedMime=r.getString("mime");durationMs=r.getLong("duration")
+        selectedCutMode=r.getString("mode");selectedVideoQuality=FfmpegVideoQuality.valueOf(r.getString("quality"));selectedAudioQuality=FfmpegAudioQuality.valueOf(r.getString("audioQuality"))
+        selectedVideoSpeed=FfmpegVideoSpeed.valueOf(r.getString("speed"));encoderPath=r.getString("path");encoderAdvanced=r.getString("advanced")
+        previewSelection=FfmpegRecoveryUi.selection(r.optJSONObject("selection"));timeline.setRange(durationMs,0L,durationMs)
+        selectedVideoEncoder=FfmpegRecoveryUi.encoder(r.optJSONObject("encoder"))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -336,6 +353,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         
         handleIncomingShareIntent(intent)
         refreshCommandPreview()
+        window.decorView.post { recovery.offer() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -605,7 +623,7 @@ class FfmpegCutActivity : AppCompatActivity() {
         var jobEncoder: FfmpegVideoEncoder? = null
         if (jobMime.startsWith("video/") && FfmpegCutModes.usesVideoEncoder(jobPlanMode)) {
             val choice = resolveEncoderForTask(sourceCodec, jobSeconds)
-            if (choice == null) {
+            if (choice == null && jobPlanMode != FfmpegCutModes.SMART) {
                 // Nenhum encoder para o codec do arquivo (ex.: HEVC sem hardware):
                 // só continua com a confirmação do usuário, em H.264.
                 if (!fullReencodeConfirmed) {
@@ -620,13 +638,14 @@ class FfmpegCutActivity : AppCompatActivity() {
                 jobPlanMode = FfmpegCutModes.REENCODE
                 jobEncoder = FfmpegVideoEncoderRegistry.toEncoder(fallbackChoice.option, fallbackChoice.forced)
                 lastEncoderReason = "Sem encoder ${sourceCodec?.uppercase(Locale.ROOT) ?: ""} neste aparelho: recodificando em H.264."
-            } else {
+            } else if(choice != null) {
                 jobEncoder = FfmpegVideoEncoderRegistry.toEncoder(choice.option, choice.forced)
                 lastEncoderReason = choice.reason
             }
         }
         selectedVideoEncoder = jobEncoder
 
+        recovery.begin()
         val producedMime = currentOutputMime()
         clearOutputResult()
         setProcessing(true)
@@ -638,8 +657,8 @@ class FfmpegCutActivity : AppCompatActivity() {
             try {
                 val currentInputFile = copyUriToCache(uri, selectedName)
                 inputFile = currentInputFile
-                val outputName = buildOutputName(selectedName)
-                val currentTempOutput = File(cacheDir, "${System.currentTimeMillis()}_$outputName")
+                val outputName = if(jobMime.startsWith("video/") && jobPlanMode==FfmpegCutModes.SMART) buildOutputName(selectedName).substringBeforeLast('.')+".mp4" else buildOutputName(selectedName)
+                val currentTempOutput = recovery.file("output", "_$outputName") { File(cacheDir, "${System.currentTimeMillis()}_$outputName") }
                 tempOutput = currentTempOutput
                 val tracker = FfmpegTaskTracker(status, listOf("Preparando arquivo"))
                 tracker.completeCurrentTask()
@@ -715,6 +734,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                     )
                 }
                 val success = execution.success
+                var completionWarning=execution.warning
                 if (success && currentTempOutput.exists() && currentTempOutput.length() > 0L) {
                     keepOutput = true
                 }
@@ -727,7 +747,10 @@ class FfmpegCutActivity : AppCompatActivity() {
                     var remuxRan = false
                     val remux = FfmpegOutputRemuxer.remuxToOriginalContainer(
                         currentTempOutput,
-                        FfmpegOutputRemuxer.originalVideoExtension(selectedName)
+                        FfmpegOutputRemuxer.originalVideoExtension(selectedName),
+                        preserveInBandHevc=jobPlanMode.startsWith(FfmpegCutModes.SMART),
+                        preserveIntermediate=true,
+                        execute={ arguments -> executeFfmpegWithProgress(arguments,jobEndMs-jobStartMs,tracker) }
                     ) { arguments ->
                         remuxRan = true
                         FfmpegCommandPresenter.show(status, arguments.asIterable())
@@ -736,7 +759,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                     if (remux.converted) {
                         FfmpegCommandPresenter.completeLastShown(status, true)
                         finalOutputFile = remux.file
-                        finalOutputName = remux.file.name
+                        finalOutputName = remux.file.name.substringAfter('_')
                         tempOutput = finalOutputFile
                     } else if (remuxRan) {
                         FfmpegCommandPresenter.completeLastShown(status, false)
@@ -746,6 +769,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                     // o resultado (inventario) ou deixou streams para tras,
                     // o operador ve o motivo na lista de tarefas.
                     remux.warning?.let { aviso ->
+                        completionWarning=listOfNotNull(completionWarning,aviso).joinToString("\n")
                         tracker.appendTasks(listOf(aviso))
                         tracker.completeTask(tracker.taskCount() - 1)
                     }
@@ -790,7 +814,8 @@ class FfmpegCutActivity : AppCompatActivity() {
                     // usuario ver Salvar/Compartilhar logo apos os passos.
                     val statsText = tracker.successMessageOrEmpty()
                     if (statsText.isNotBlank()) {
-                        outputStats.text = "Estatísticas:\n$statsText"
+                        outputStats.text = listOfNotNull(completionWarning,"Estatísticas:\n$statsText").joinToString("\n\n")
+                        outputStats.setTextColor(if(completionWarning==null)android.graphics.Color.parseColor("#FF2ECC71") else android.graphics.Color.parseColor("#FFFFC857"))
                         outputStats.visibility = View.VISIBLE
                     }
  
@@ -804,8 +829,9 @@ class FfmpegCutActivity : AppCompatActivity() {
                     status.text = "Erro ao cortar: ${e.message ?: "falha inesperada"}"
                 }
             } finally {
-                inputFile?.delete()
-                if (!keepOutput) tempOutput?.delete()
+                recovery.finish(keepOutput)
+                recovery.delete(inputFile)
+                if (!keepOutput) recovery.delete(tempOutput)
             }
         }.start()
     }
@@ -825,6 +851,13 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun copyUriToCache(uri: Uri, displayName: String): File {
+        recovery.input(uri,displayName) { target ->
+            contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { output ->
+                val buffer=ByteArray(1 shl 20)
+                while(true) { if (Thread.currentThread().isInterrupted) throw InterruptedException("Operação cancelada.");val count=input.read(buffer);if(count<0)break;output.write(buffer,0,count) }
+            } } ?: error("Não consegui abrir $displayName")
+        }?.let { return it }
+
         val extension = displayName.substringAfterLast('.', "tmp")
         val inputFile = File(cacheDir, "ffmpeg_input_${System.currentTimeMillis()}.$extension")
         contentResolver.openInputStream(uri)?.use { input ->
@@ -902,65 +935,41 @@ class FfmpegCutActivity : AppCompatActivity() {
         encoder: FfmpegVideoEncoder? = selectedVideoEncoder,
         quality: FfmpegVideoQuality = selectedVideoQuality
     ): CutExecutionResult {
-        val actualEncoder = encoder ?: return CutExecutionResult(false, false, "Encoder de vídeo indisponível")
+        val actualEncoder = encoder
         tracker.appendTasks(listOf("Analisando codec e orientação"))
         val sourceCodec = detectVideoCodecFamily(inputFile)
         val rotationDegrees = detectMetadataRotation(inputFile)
         tracker.completeCurrentTask()
 
         tracker.appendTasks(listOf("Localizando keyframes no intervalo"))
-        val keyframes = extractKeyframesFromFile(inputFile)
-        val startUs = startMs * 1000L
-        val endUs = endMs * 1000L
-        val startKeyframe = keyframes.firstOrNull { it >= startUs }
-        val endKeyframe = keyframes.lastOrNull { it <= endUs }
-        val hasInternalKeyframes = startKeyframe != null && endKeyframe != null &&
-            (endKeyframe - startKeyframe) / 1_000_000.0 > FfmpegCutModes.SMARTCUT_MIN_EDGE
+        val video=probeCutVideo(inputFile)
+        val plan=SmartCutTiming.plan(video,startMs/1000.0,endMs/1000.0)
         tracker.completeCurrentTask()
-
-        val edgeEncoderAvailable = sourceCodec != null &&
-            resolveEncoderForTask(sourceCodec, 0.0)?.option?.codec == sourceCodec
-        val fallbackReason = FfmpegCutModes.smartCutFallbackReason(
-            codecFamily = sourceCodec,
-            hasInternalKeyframes = hasInternalKeyframes,
-            edgeEncoderAvailable = edgeEncoderAvailable
-        ) ?: if (actualEncoder.codecFamily != sourceCodec) {
-            "O encoder escolhido não produz o mesmo codec do arquivo (o miolo é copiado)."
-        } else {
-            null
+        val needsEdges=plan.segments.any { !it.copy }
+        val edgeEncoderAvailable=!needsEdges || (sourceCodec!=null && resolveEncoderForTask(sourceCodec,0.0)?.option?.codec==sourceCodec)
+        val fallbackReason=FfmpegCutModes.smartCutFallbackReason(sourceCodec,plan.segments.any { it.copy },edgeEncoderAvailable)
+        if(fallbackReason!=null) {
+            tracker.appendTasks(listOf("Caminho rápido indisponível: $fallbackReason"));tracker.completeCurrentTask()
+            return executePreciseVideoCut(inputFile,outputFile,startMs,endMs,tracker,actualEncoder ?: return CutExecutionResult(false,false,"Este intervalo exige bordas recodificadas. Escolha um encoder do codec original ou Reencode Completo."),quality)
         }
-        if (fallbackReason != null) {
-            tracker.appendTasks(
-                listOf("Caminho rápido indisponível: ${fallbackReason.removeSuffix(".").lowercase(Locale.ROOT)}")
-            )
-            tracker.completeCurrentTask()
-            return executePreciseVideoCut(inputFile, outputFile, startMs, endMs, tracker, actualEncoder, quality)
-        }
-        val internalStartKeyframe = checkNotNull(startKeyframe)
-        val internalEndKeyframe = checkNotNull(endKeyframe)
-
+        val internalStartKeyframe=(plan.segments.first { it.copy }.start*1_000_000).roundToLong()
+        val internalEndKeyframe=(plan.segments.first { it.copy }.end*1_000_000).roundToLong()
         val bitrates = detectStreamBitrates(inputFile)
-        val workDir = File(cacheDir, "cut_hybrid_${System.currentTimeMillis()}").apply { mkdirs() }
+        val workDir = recovery.work("cut_hybrid") { File(cacheDir, "cut_hybrid_${System.currentTimeMillis()}") }
         val pieces = mutableListOf<File>()
         try {
-            val tasks = mutableListOf<String>()
-            if (internalStartKeyframe > startUs) tasks += "Recodificando borda inicial"
-            tasks += "Copiando vídeo do trecho central sem reencodar"
-            if (internalEndKeyframe < endUs) tasks += "Recodificando borda final"
-            tasks += "Juntando trechos e preservando orientação"
-            val taskOffset = tracker.taskCount()
+            val tasks=plan.segments.flatMap { if(it.copy)listOf("Copiando vídeo do trecho central sem reencodar") else listOf("Recodificando borda precisa","Preparando borda") }+"Juntando trechos e preservando orientação"
+            val taskOffset=tracker.taskCount()
             tracker.appendTasks(tasks)
-            tasks.forEachIndexed { index, task ->
-                if (task.startsWith("Recodificando")) {
-                    tracker.setTaskEncoder(taskOffset + index, actualEncoder.shortName)
-                }
-            }
-
+            val taskIndices=plan.segments.indices.map { index -> taskOffset+plan.segments.take(index).sumOf { if(it.copy)1 else 2 } }
+            val concatIndex=taskOffset+tasks.lastIndex
             fun runPiece(
                 build: (FfmpegVideoEncoder?) -> Array<String>,
                 encoder: FfmpegVideoEncoder?,
                 expectedMs: Long,
-                output: File
+                output: File,
+                taskIndex: Int,
+                assemble: Boolean = true
             ): CutExecutionResult? {
                 var lastFailure = ""
                 var candidate = encoder
@@ -970,14 +979,14 @@ class FfmpegCutActivity : AppCompatActivity() {
                         output.delete()
                         Thread.sleep(180L)
                     }
-                    tracker.startCurrentTask()
+                    tracker.startTask(taskIndex)
                     val session = executeFfmpegWithProgress(build(candidate), expectedMs, tracker)
                     if (ReturnCode.isCancel(session.returnCode)) {
                         return CutExecutionResult(false, true, "")
                     }
                     if (ReturnCode.isSuccess(session.returnCode) && output.exists() && output.length() > 0L) {
-                        tracker.completeCurrentTask()
-                        pieces += output
+                        tracker.completeTask(taskIndex)
+                        if(assemble)pieces += output
                         return null
                     }
                     lastFailure = ffmpegFailureDetails(session.allLogsAsString.orEmpty())
@@ -1005,7 +1014,7 @@ class FfmpegCutActivity : AppCompatActivity() {
             val edgeEncoderForPiece: (Double) -> FfmpegVideoEncoder = { pieceSeconds ->
                 val choice = resolveEncoderForTask(sourceCodec, pieceSeconds)
                 if (choice == null) {
-                    actualEncoder
+                    checkNotNull(actualEncoder)
                 } else {
                     val secondsText = String.format(Locale.US, "%.2f", pieceSeconds)
                     tracker.appendTasks(listOf("Encoder da borda (${secondsText}s): ${choice.option.encoder} — ${choice.reason}"))
@@ -1014,40 +1023,39 @@ class FfmpegCutActivity : AppCompatActivity() {
                 }
             }
 
-            if (internalStartKeyframe > startUs) {
-                val startPiece = File(workDir, "start.ts")
-                runPiece(
-                    { candidate ->
-                        buildHybridEdgeArguments(
-                            inputFile, startPiece, startUs, internalStartKeyframe, bitrates, candidate, quality, sourceCodec
-                        )
-                    },
-                    edgeEncoderForPiece((internalStartKeyframe - startUs) / 1_000_000.0),
-                    (internalStartKeyframe - startUs) / 1000L,
-                    startPiece
-                )?.let { return it }
+            var delay=plan.segments.maxOf { it.delay }
+            val encoded=mutableMapOf<Int,Pair<File,Double>>()
+            for((index,segment) in plan.segments.withIndex()) {
+                if(segment.copy)continue
+                val file=File(workDir,"edge_${index}.mp4")
+                runPiece({ candidate -> buildTimedCutSegment(inputFile,file,segment,video,sourceCodec,bitrates,candidate,quality,delay) },
+                    edgeEncoderForPiece(segment.end-segment.start),((segment.end-segment.start)*1000).roundToLong(),file,taskIndices[index],false)?.let { return it }
+                val encodedVideo=probeCutVideo(file)
+                val encodedDelay=encodedVideo.visiblePackets.first().let { (it.pts-it.dts).coerceAtLeast(0.0) }
+                delay=maxOf(delay,encodedDelay);encoded[index]=file to encodedDelay
             }
-
-            val bodyPiece = File(workDir, "body.ts")
-            runPiece(
-                { buildHybridBodyArguments(inputFile, bodyPiece, internalStartKeyframe, internalEndKeyframe, sourceCodec) },
-                null,
-                (internalEndKeyframe - internalStartKeyframe) / 1000L,
-                bodyPiece
-            )?.let { return it }
-
-            if (internalEndKeyframe < endUs) {
-                val endPiece = File(workDir, "end.ts")
-                runPiece(
-                    { candidate ->
-                        buildHybridEdgeArguments(
-                            inputFile, endPiece, internalEndKeyframe, endUs, bitrates, candidate, quality, sourceCodec
-                        )
-                    },
-                    edgeEncoderForPiece((endUs - internalEndKeyframe) / 1_000_000.0),
-                    (endUs - internalEndKeyframe) / 1000L,
-                    endPiece
-                )?.let { return it }
+            for((index,segment) in plan.segments.withIndex()) {
+                val piece=File(workDir,"piece_${index}.ts")
+                val command=if(segment.copy)buildTimedCutSegment(inputFile,piece,segment,video,sourceCodec,bitrates,null,quality,delay) else {
+                    val (file,encodedDelay)=encoded.getValue(index)
+                    val filter=checkNotNull(FfmpegMediaPolicies.tsBitstreamFilter(sourceCodec))+",setts=pts=PTS:dts=DTS-${SmartInsertPlanner.decimal(delay-encodedDelay)}/TB"
+                    arrayOf("-y","-i",file.absolutePath,"-map","0:v:0","-an","-c:v","copy","-bsf:v",filter,"-map_metadata","-1",
+                        "-avoid_negative_ts","disabled","-mpegts_flags","+resend_headers+initial_discontinuity","-muxdelay","0","-muxpreload","0","-f","mpegts",piece.absolutePath)
+                }
+                runPiece({ command },null,((segment.end-segment.start)*1000).roundToLong(),piece,taskIndices[index]+if(segment.copy)0 else 1)?.let { return it }
+                if(segment.copy) {
+                    val expected=plan.times.filter { it>=segment.start-0.000001 && it<segment.end-0.000001 }.map { it-segment.start }
+                    fun matches(): Boolean {
+                        val actual=probeCutVideo(piece).visiblePackets.map { it.pts }.sorted()
+                        return actual.size==expected.size && actual.zip(expected).all { (a,b)->kotlin.math.abs(a-b)<0.0001 }
+                    }
+                    if(!matches()) {
+                        pieces.remove(piece)
+                        val indexed=SmartCutTiming.arguments(inputFile.absolutePath,piece.absolutePath,segment,video,sourceCodec,emptyList(),delay,true)
+                        runPiece({ indexed },null,((segment.end-segment.start)*1000).roundToLong(),piece,taskIndices[index])?.let { return it }
+                        check(matches()) { "Não foi possível copiar os quadros corretos do miolo. As bordas concluídas foram preservadas para retomar." }
+                    }
+                }
             }
 
             val copiedSeconds = (internalEndKeyframe - internalStartKeyframe) / 1_000_000.0
@@ -1066,7 +1074,7 @@ class FfmpegCutActivity : AppCompatActivity() {
             tracker.completeCurrentTask()
 
             val concatList = File(workDir, "parts.txt")
-            concatList.writeText(pieces.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" }, Charsets.UTF_8)
+            concatList.writeText(pieces.mapIndexed { index,file -> "file '${file.absolutePath.replace("\\", "/")}'\nduration ${SmartInsertPlanner.decimal(plan.segments[index].end-plan.segments[index].start)}" }.joinToString("\n"),Charsets.UTF_8)
             val hasAudio = hasAudioTrack(inputFile)
             val concatArguments = FfmpegMediaPolicies.hybridConcatArguments(
                 listPath = concatList.absolutePath,
@@ -1078,9 +1086,9 @@ class FfmpegCutActivity : AppCompatActivity() {
                 hevc = sourceCodec == "hevc",
                 audioArguments = FfmpegMediaPolicies.preciseAudioTrackArguments(
                     detectStreamBitrates(inputFile).audioTracks
-                )
+                ), durationSeconds=(endMs-startMs)/1000.0,firstGap=plan.firstGap
             )
-            tracker.startCurrentTask()
+            tracker.startTask(concatIndex)
             val concatSession = executeFfmpegWithProgress(
                 concatArguments,
                 endMs - startMs,
@@ -1088,7 +1096,8 @@ class FfmpegCutActivity : AppCompatActivity() {
             )
             if (ReturnCode.isSuccess(concatSession.returnCode) && outputFile.exists() && outputFile.length() > 0L) {
                 tracker.completeCurrentTask()
-                return CutExecutionResult(true, false, "")
+                val warning=validateCutPresentation(outputFile,plan,startMs/1000.0,tracker,workDir)
+                return CutExecutionResult(true, false, "",warning)
             }
             return CutExecutionResult(
                 false,
@@ -1096,7 +1105,67 @@ class FfmpegCutActivity : AppCompatActivity() {
                 ffmpegFailureDetails(concatSession.allLogsAsString.orEmpty())
             )
         } finally {
-            workDir.deleteRecursively()
+            recovery.delete(workDir)
+        }
+    }
+
+    private fun probeCutVideo(input: File): SmartJoinTiming.Video {
+        recovery.checkCancellation()
+        val file=File.createTempFile("cut_probe_",".txt",cacheDir)
+        try {
+            val session=executeCutProbe(arrayOf("-v","error","-select_streams","v:0","-show_packets","-show_streams","-show_format",
+                "-show_entries","packet=pts_time,dts_time,duration_time,flags:stream=codec_type,start_time,duration,r_frame_rate:format=start_time,duration",
+                "-of","compact=p=1:nk=0","-o",file.absolutePath,input.absolutePath))
+            recovery.checkCancellation()
+            check(ReturnCode.isSuccess(session.returnCode)) { "Não foi possível analisar os timestamps do vídeo." }
+            return file.reader().use { SmartJoinTiming.readCompactProbe(it) }
+        } finally { file.delete() }
+    }
+
+    private fun buildTimedCutSegment(input: File,output: File,segment: SmartCutTiming.Segment,video: SmartJoinTiming.Video,
+        codec: String?,bitrates: StreamBitrates,encoder: FfmpegVideoEncoder?,quality: FfmpegVideoQuality,delay: Double): Array<String> =
+        SmartCutTiming.arguments(input.absolutePath,output.absolutePath,segment,video,codec,
+            encoder?.let { videoEncodingArguments(it,bitrates.videoBitrateForEncoding(),quality,bitrates.frameRate) }.orEmpty(),delay)
+
+    private fun executeCutProbe(arguments: Array<String>): com.arthenica.ffmpegkit.FFprobeSession {
+        recovery.checkCancellation()
+        val latch=CountDownLatch(1)
+        val session=com.arthenica.ffmpegkit.FFprobeKit.executeWithArgumentsAsync(arguments) { latch.countDown() }
+        currentSessionId=session.sessionId
+        if(recovery.isCancelled)FFmpegKit.cancel(session.sessionId)
+        try { latch.await();recovery.checkCancellation();return session } finally { currentSessionId=null }
+    }
+
+    private fun validateCutPresentation(output: File,plan: SmartCutTiming.Plan,start: Double,tracker: FfmpegTaskTracker,work: File): String? {
+        return try {
+            val result=probeCutVideo(output)
+            val expected=plan.times.map { it-start }
+            val actual=result.visiblePackets.map { it.pts }.sorted()
+            check(actual.size==expected.size && actual.zip(expected).all { (a,b)->kotlin.math.abs(a-b)<0.0001 }) {
+                "Os quadros ou timestamps do corte diferem do intervalo escolhido (${result.times.size}/${expected.size} quadros)."
+            }
+            // Pacotes presentes não garantem que todas as referências HEVC/H.264
+            // decodificam. Conferir só as bordas mantém o ganho da cópia.
+            val duration=plan.segments.last().end-start
+            val boundaries=(listOf(0.0,duration)+plan.segments.dropLast(1).map { it.end-start }).distinct()
+            boundaries.forEachIndexed { index,boundary ->
+                val window=SmartJoinTiming.decoderWindow(result,(boundary-.4).coerceAtLeast(0.0),minOf(duration,boundary+.4)) ?: return@forEachIndexed
+                val checkFile=File(work,"decode_$index.framecrc")
+                val task=tracker.taskCount();tracker.appendTasks(listOf("Conferindo borda em ${SmartInsertPlanner.decimal(boundary)} s"));tracker.startTask(task)
+                val session=executeFfmpegWithProgress(arrayOf("-y","-v","warning","-copyts","-ss",SmartInsertPlanner.decimal(window.seekSeconds),"-i",output.absolutePath,
+                    "-to",SmartInsertPlanner.decimal(window.untilSeconds),"-map","0:v:0","-an","-fps_mode","passthrough","-enc_time_base:v","1/${window.timeBaseDenominator}","-f","framecrc",checkFile.absolutePath),800,tracker)
+                check(ReturnCode.isSuccess(session.returnCode) && checkFile.isFile) { "A borda em ${SmartInsertPlanner.decimal(boundary)} s não decodificou." }
+                val pts=checkFile.useLines { lines -> lines.filter { it.isNotBlank() && !it.startsWith("#") }.map { it.split(',')[2].trim().toLong() }.toList() }
+                SmartJoinTiming.validateDecodedWindow(window,pts)
+                val logs=session.allLogsAsString.lowercase(Locale.ROOT)
+                check(!logs.contains("could not find ref") && !logs.contains("error constructing") && !logs.contains("invalid undecodable")) { "Referências de vídeo inválidas na borda em ${SmartInsertPlanner.decimal(boundary)} s." }
+                tracker.completeTask(task)
+            }
+            null
+        } catch(error: Exception) {
+            if(error is InterruptedException)throw error
+            recovery.checkCancellation()
+            "Arquivo concluído com aviso: ${error.message}. Confira o trecho antes de usá-lo ou compartilhá-lo."
         }
     }
 
@@ -1367,8 +1436,8 @@ class FfmpegCutActivity : AppCompatActivity() {
         extractor.selectTrack(videoTrack)
         while (true) {
             val sampleTime = extractor.sampleTime
-            if (sampleTime < 0L) break
-            if ((extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC) != 0) keyframes += sampleTime
+            if (extractor.sampleTrackIndex < 0) break
+            if (sampleTime >= 0 && (extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC) != 0) keyframes += sampleTime
             extractor.advance()
         }
         return keyframes.distinct().sorted()
@@ -1701,6 +1770,7 @@ class FfmpegCutActivity : AppCompatActivity() {
                 buttonSaveToFolder.alpha = 1f
                 if (failure == null && savedCount == filesToSave.size) {
                     hasSaved = true
+                    recovery.saved()
                     finalOutputDirUri = treeUri
                     lastOutputUri = lastSavedUri
                     lastOutputMime = lastOutputMime.ifBlank { currentOutputMime() }
@@ -1883,11 +1953,14 @@ class FfmpegCutActivity : AppCompatActivity() {
     }
 
     private fun cancelCut() {
+        recovery.cancel()
         status.text = "Cancelando..."
         currentSessionId?.let { FFmpegKit.cancel(it) } ?: FFmpegKit.cancel()
     }
 
     private fun executeFfmpegWithProgress(arguments: Array<String>, expectedDurationMs: Long, tracker: FfmpegTaskTracker): FFmpegSession {
+        recovery.reuse(arguments)?.let { return it }
+        recovery.starting(arguments)
         FfmpegCommandPresenter.show(status, arguments.asIterable())
         Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
         val latch = CountDownLatch(1)
@@ -1909,10 +1982,12 @@ class FfmpegCutActivity : AppCompatActivity() {
             }
         )
         currentSessionId = session.sessionId
+        if(recovery.isCancelled)FFmpegKit.cancel(session.sessionId)
         latch.await()
         currentSessionId = null
         val completed = sessionRef.get() ?: session
         FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        recovery.completed(arguments, completed)
         return completed
     }
 
@@ -2778,6 +2853,7 @@ class FfmpegCutActivity : AppCompatActivity() {
     private data class CutExecutionResult(
         val success: Boolean,
         val cancelled: Boolean,
-        val failureMessage: String
+        val failureMessage: String,
+        val warning: String? = null
     )
 }

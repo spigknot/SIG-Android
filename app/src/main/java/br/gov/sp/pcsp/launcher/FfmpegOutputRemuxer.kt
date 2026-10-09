@@ -4,6 +4,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.util.Log
 import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
 import java.util.Locale
@@ -97,6 +98,8 @@ object FfmpegOutputRemuxer {
         inputFile: File,
         originalExtension: String,
         preserveInBandHevc: Boolean = false,
+        preserveIntermediate: Boolean = false,
+        execute: ((Array<String>) -> FFmpegSession)? = null,
         onCommand: ((Array<String>) -> Unit)? = null
     ): RemuxResult {
         val extension = originalExtension.lowercase(Locale.ROOT)
@@ -113,14 +116,15 @@ object FfmpegOutputRemuxer {
         }
 
         val output = File(inputFile.parentFile, "${inputFile.nameWithoutExtension}.$extension")
-        output.delete()
+        if(!preserveIntermediate)output.delete()
 
         val isHevc = detectHevc(inputFile)
         val isMovContainer = extension in setOf("mp4", "mov", "m4v", "3gp", "3g2")
         val args = remuxArguments(inputFile.absolutePath, output.absolutePath, isHevc, isMovContainer, preserveInBandHevc)
 
         onCommand?.invoke(args)
-        val session = FFmpegKit.executeWithArguments(args)
+        val session = execute?.invoke(args) ?: FFmpegKit.executeWithArguments(args)
+        if(ReturnCode.isCancel(session.returnCode))throw InterruptedException("Operação cancelada.")
         if (!ReturnCode.isSuccess(session.returnCode) || !output.exists() || output.length() <= 0L) {
             output.delete()
             return RemuxResult(inputFile, false)
@@ -147,7 +151,7 @@ object FfmpegOutputRemuxer {
         }
 
         val aviso = extrasWarning(inputFile)
-        inputFile.delete()
+        if(!preserveIntermediate)inputFile.delete()
         return RemuxResult(output, true, aviso)
     }
 

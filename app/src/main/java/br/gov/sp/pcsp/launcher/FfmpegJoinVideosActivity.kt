@@ -88,6 +88,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var outputFileName: TextView
     private lateinit var outputStats: TextView
+    private lateinit var outputWarning: TextView
     private lateinit var outputActions: View
     private lateinit var buttonSaveToFolder: ImageButton
     private lateinit var buttonOutputFolder: ImageButton
@@ -156,6 +157,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         }
     }
 
+    private val recovery by lazy { FfmpegRecoveryUi(this,"join",::recoveryRequest,::restoreRecovery) { startJoin(true,true,true) } }
+    private fun recoveryRequest(): JSONObject = JSONObject().put("clips",org.json.JSONArray(clips.map { JSONObject().put("id",it.id).put("uri",it.uri.toString()).put("name",it.name).put("duration",it.durationMs).put("width",it.width).put("height",it.height).put("rotation",it.rotationDegrees).put("audio",it.hasAudio).put("audioOnly",it.isAudio) }))
+        .put("tracks",JSONObject(selectedAudioTracks as Map<*,*>)).put("transition",selectedTransition).put("quality",selectedVideoQuality.name).put("path",encoderPath).put("advanced",encoderAdvanced)
+        .put("encoder",FfmpegRecoveryUi.encoder(selectedVideoEncoder))
+    private fun restoreRecovery(r: JSONObject) {
+        clips.clear();selectedAudioTracks.clear();val items=r.getJSONArray("clips");val tracks=r.getJSONObject("tracks")
+        for(i in 0 until items.length()) { val c=items.getJSONObject(i);val uri=recovery.uri(c.getString("uri"));clips+=JoinClip(c.getLong("id"),uri,c.getString("name"),c.getLong("duration"),c.getInt("width"),c.getInt("height"),c.getInt("rotation"),c.getBoolean("audio"),c.getBoolean("audioOnly"),null);if(tracks.has(c.getString("uri")))selectedAudioTracks[uri.toString()]=tracks.getInt(c.getString("uri")) }
+        selectedTransition=r.getString("transition");selectedVideoQuality=FfmpegVideoQuality.valueOf(r.getString("quality"));encoderPath=r.getString("path");encoderAdvanced=r.getString("advanced")
+        selectedVideoEncoder=FfmpegRecoveryUi.encoder(r.optJSONObject("encoder"))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -192,6 +204,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         status = findViewById(R.id.status)
         outputFileName = findViewById(R.id.output_file_name)
         outputStats = findViewById(R.id.output_stats)
+        outputWarning = findViewById(R.id.output_warning)
         outputActions = findViewById(R.id.output_actions)
         buttonSaveToFolder = findViewById(R.id.button_save_to_folder)
         buttonOutputFolder = findViewById(R.id.button_output_folder)
@@ -289,6 +302,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         updateJoinSpeedButtons()
         refreshCommandPreview()
         handleIncomingShareIntent(intent)
+        if (!recovery.offer()) offerSmartJoinRecovery()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -923,6 +937,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             status.text = "Nenhum encoder de vídeo compatível está disponível."
             return
         }
+        recovery.begin()
         clearOutputResult()
         initProcessingSteps()
         smartJoinCancelled = false
@@ -995,7 +1010,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 } else {
                     intermediateVideoOutputName(outputName, originalEncoder, reencodeChecked)
                 }
-                val tempOutput = File(cacheDir, "join_${System.currentTimeMillis()}_$intermediateName")
+                val tempOutput = recovery.file("output", "."+intermediateName.substringAfterLast('.')) { File(cacheDir, "join_${System.currentTimeMillis()}_$intermediateName") }
                 val sourceProfile = detectAggregateOutputProfile(copiedInputs)
                 val directConcatOrientationMismatch = !audioOnly && clips.size >= 2 && clips.map { rotationComparisonKey(it.rotationDegrees) }.distinct().size > 1
                 if (!audioOnly) {
@@ -1047,6 +1062,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 }
 
                 var finalOutput = tempOutput
+                var completionWarning=result.warningMessage
                 var finalName = outputName
                 if (result.success && !audioOnly) {
                     handler.post {
@@ -1061,7 +1077,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     val remux = FfmpegOutputRemuxer.remuxToOriginalContainer(
                         tempOutput,
                         originalExtension,
-                        preserveInBandHevc = smartJoinChecked
+                        preserveInBandHevc = smartJoinChecked,
+                        preserveIntermediate=true,
+                        execute={ arguments -> executeFfmpegWithProgress(arguments,totalDurationMs(),"Converter para o formato original") }
                     ) { arguments ->
                         remuxRan = true
                         FfmpegCommandPresenter.show(status, arguments.asIterable())
@@ -1075,9 +1093,11 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     }
                     val finalExtension = remux.file.extension.ifBlank { tempOutput.extension }
                     finalName = outputNameWithExtension(outputName, finalExtension)
+                    completionWarning=listOfNotNull(completionWarning.takeIf { it.isNotBlank() },remux.warning).joinToString("\n")
                     updateStep("Converter para o formato original", 100, StepState.DONE)
                 }
 
+                recovery.finish(result.success,result.cancelled)
                 runOnUiThread {
                     setProcessing(false)
                     if (result.cancelled) {
@@ -1092,6 +1112,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     tempOutputFiles.clear()
                     tempOutputFiles.add(finalOutput)
                     lastOutputName = finalName
+                    showSmartJoinWarning(completionWarning)
                     updateStep("Preparar arquivo para salvar", 100, StepState.DONE)
                     
                     val elapsedMs = SystemClock.elapsedRealtime() - processingStartMs
@@ -1108,13 +1129,14 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     joinScroll.post { joinScroll.smoothScrollTo(0, outputActions.bottom) }
                 }
             } catch (e: Throwable) {
+                recovery.finish(false,smartJoinCancelled)
                 Log.e(TAG, "Failed to join media", e)
                 runOnUiThread {
                     setProcessing(false)
                     failActiveStep("Erro: ${e.message ?: "falha inesperada"}")
                 }
             } finally {
-                copiedInputs.forEach { it.delete() }
+                copiedInputs.forEach { recovery.delete(it) }
             }
         }.start()
     }
@@ -1127,13 +1149,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         var completed = false
         try {
             val seconds = if (selectedTransition == TRANSITION_NONE) 0.0 else safeTransitionSeconds()
-            runSmartJoinPipeline(inputs, outputFile, requestedEncoder, workDir, seconds, { plan, encoder, direct ->
+            val warning = runSmartJoinPipeline(inputs, outputFile, requestedEncoder, workDir, seconds, { plan, encoder, direct ->
                 val labels = buildList {
                     add(SMART_JOIN_ANALYZE_LABEL)
                     if (!direct) plan.clips.forEachIndexed { i, clip ->
                         if (clip.bodyDurationSeconds > SMART_JOIN_MIN_SEGMENT_SECONDS) {
                             add(smartJoinBodyLabel(clip, inputs.size))
                             if (!clip.copyVideo) add(smartJoinPrepareLabel("corpo", i + 1, inputs.size))
+                        }
+                        if (clip.tailDurationSeconds > SMART_JOIN_MIN_SEGMENT_SECONDS) {
+                            add(smartJoinTailLabel(i, inputs.size))
+                            add(smartJoinPrepareLabel("final", i + 1, inputs.size))
                         }
                         plan.junctions.getOrNull(i)?.let {
                             add(smartJoinBridgeLabel(i, plan.junctions.size))
@@ -1142,7 +1168,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     }
                     add(SMART_JOIN_FINALIZE_LABEL)
                     if (!direct) {
-                        val pieces = plan.clips.count { it.bodyDurationSeconds > SMART_JOIN_MIN_SEGMENT_SECONDS } + plan.junctions.size
+                        val pieces = plan.clips.count { it.bodyDurationSeconds > SMART_JOIN_MIN_SEGMENT_SECONDS } +
+                            plan.clips.count { it.tailDurationSeconds > SMART_JOIN_MIN_SEGMENT_SECONDS } + plan.junctions.size
                         repeat((pieces - 1).coerceAtLeast(0)) { add("Validando emenda ${it + 1}") }
                     }
                 }
@@ -1155,7 +1182,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 executeFfmpegWithProgress(args, (duration * 1000).toLong(), label)
             }
             completed = true
-            return JoinExecutionResult(true, false, "")
+            return JoinExecutionResult(true, false, "", warning)
         } catch (error: Exception) {
             if (smartJoinCancelled || (error is SmartJoinStepException && error.cancelled)) {
                 return JoinExecutionResult(false, true, "")
@@ -1163,7 +1190,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             return smartJoinFailure(outputFile, error.message.orEmpty())
         } finally {
             if (!completed) outputFile.delete()
-            cleanupSmartJoinWorkDir(workDir)
+            // Uma falha na conferência não invalida as peças já finalizadas.
+            if (completed || smartJoinCancelled || !File(workDir, "validation.json").isFile) cleanupSmartJoinWorkDir(workDir)
         }
     }
 
@@ -1172,19 +1200,22 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         inputs: List<File>, outputFile: File, requestedEncoder: FfmpegVideoEncoder?, workDir: File, requestedTransition: Double,
         onPlan: ((SmartJoinPlanner.Plan, FfmpegVideoEncoder, Boolean) -> Unit)?,
         run: (Array<String>, Double, String) -> FFmpegSession
-    ) {
+    ): String {
         val videos = inputs.map { checkSmartJoinCancellation(); probeSmartJoinVideo(it) }
         val profiles = inputs.mapIndexed { i, input ->
             applySelectedAudioProfile(input, clips[i], detectOutputProfile(input, clips[i])).copy(fps = videos[i].fps)
         }
         val sources = videos.mapIndexed { i, video ->
-            SmartJoinPlanner.Source(video.duration, profiles[i].toSmartJoinProfile(), video.keys, video.safeEnds)
+            SmartJoinPlanner.Source(video.duration, profiles[i].toSmartJoinProfile(), video.keys, video.safeEnds,
+                video.tailRepairStartSeconds)
         }
         val plan = SmartJoinPlanner.plan(sources, requestedTransition, isFadeInOutTransition())
         check(plan.canSmartJoin) { plan.ineligibilityReason.orEmpty() }
         check(plan.hasUsefulCopy) { "Nenhum corpo de vídeo pôde ser preservado: o SmartJoin recodificaria tudo e não traria ganho." }
         val rate = SmartJoinTiming.fps(profiles[plan.targetIndex].fps)
-        val needsEncoder = plan.junctions.isNotEmpty() || plan.clips.any { !it.copyVideo && it.bodyDurationSeconds > 0.000001 }
+        val needsEncoder = plan.junctions.isNotEmpty() || plan.clips.any {
+            (!it.copyVideo && it.bodyDurationSeconds > 0.000001) || it.tailDurationSeconds > 0.000001
+        }
         val encoder = if (needsEncoder) {
             val names = SmartJoinPlanner.compatibleEncoderNames(plan.targetProfile.codecFamily, requestedEncoder?.ffmpegName,
                 availableVideoEncoders.map { it.ffmpegName to it.codecFamily })
@@ -1202,7 +1233,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             checkSmartJoinCancellation()
             requireSmartJoinStep(run(args, seconds, label), file, label)
         }
-        val direct = !needsEncoder && plan.clips.all { it.copyVideo } && selectedAudioTracks.isEmpty() &&
+        // O concat direto perde a flag de descarte de edit-lists e pode tornar
+        // visível um último quadro oculto. Nesse caso ainda copiamos os corpos,
+        // limitados à contagem visível; nenhum vídeo precisa ser recodificado.
+        val hasDiscardedTail = videos.any { video ->
+            video.packets.any { it.discarded && it.pts - video.origin >= -0.00001 }
+        }
+        val direct = !hasDiscardedTail && !needsEncoder && plan.clips.all { it.copyVideo } && selectedAudioTracks.isEmpty() &&
             clips.map { it.hasAudio }.distinct().size == 1 && directConcatCompatibilityError(inputs) == null
         onPlan?.invoke(plan, encoder, direct)
         val pieces = mutableListOf<SmartJoinPiece>()
@@ -1215,7 +1252,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
             val manifest = File(workDir, "direct.txt")
             writeSmartJoinManifest(inputs.mapIndexed { i, file -> SmartJoinPiece(file, videos[i].duration) }, manifest)
             execute(buildSmartJoinDirectArguments(manifest, stage, tracks), expected, SMART_JOIN_FINALIZE_LABEL, stage)
-            sources.forEachIndexed { i, source -> frames.next(source.durationSeconds, videos[i].packets.size) }
+            sources.forEachIndexed { i, source ->
+                frames.next(source.durationSeconds, videos[i].count(0.0, source.durationSeconds))
+            }
         } else {
             plan.clips.forEachIndexed { i, clip ->
                 if (clip.bodyDurationSeconds > 0.000001) {
@@ -1225,7 +1264,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     val ts = File(workDir, "body_$i.ts")
                     val body = if (clip.copyVideo) ts else File(workDir, "body_$i.mp4")
                     execute(buildSmartJoinBodyArguments(inputs[i], i, profiles[i], target, encoder,
-                        clip.bodyStartSeconds, clip.bodyDurationSeconds, clip.copyVideo, 0, body, clip.copyVideo,
+                        clip.bodyStartSeconds, frames.lastDurationSeconds, clip.copyVideo, 0, body, clip.copyVideo,
                         count, delay - videos[i].delay(clip.bodyStartSeconds), videos[i].seekOffset,
                         if (clip.copyVideo) videos[i].leading(clip.bodyStartSeconds) else 0),
                         clip.bodyDurationSeconds, smartJoinBodyLabel(clip, inputs.size), body)
@@ -1234,8 +1273,28 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                         execute(buildSmartJoinTsArguments(body, ts, target.videoCodec, 0, (delay - encodedDelay).coerceAtLeast(0.0)),
                             clip.bodyDurationSeconds, smartJoinPrepareLabel("corpo", i + 1, inputs.size), ts)
                     }
-                    pieces += SmartJoinPiece(ts, count / rate)
-                    elapsed += count / rate
+                    // Os corpos copiados mantêm os timestamps VFR da câmera.
+                    // Só os quadros recodificados têm duração count / rate.
+                    pieces += SmartJoinPiece(ts, frames.lastDurationSeconds)
+                    elapsed += frames.lastDurationSeconds
+                    boundaries += elapsed
+                }
+                if (clip.tailDurationSeconds > 0.000001) {
+                    // Um quadro oculto de edit-list pode ser referência de um B
+                    // visível. Remuxar expõe o quadro oculto; descartá-lo quebra
+                    // a referência. Recodifique só esse último GOP, sem efeito.
+                    val count = frames.next(clip.tailDurationSeconds)
+                    val mp4 = File(workDir, "tail_$i.mp4")
+                    val ts = File(workDir, "tail_$i.ts")
+                    execute(buildSmartJoinBodyArguments(inputs[i], i, profiles[i], target, encoder,
+                        clip.tailStartSeconds!!, frames.lastDurationSeconds, false, 0, mp4, false,
+                        count, 0.0, videos[i].seekOffset), clip.tailDurationSeconds,
+                        smartJoinTailLabel(i, inputs.size), mp4)
+                    val encodedDelay = probeSmartJoinVideo(mp4).delay(0.0)
+                    execute(buildSmartJoinTsArguments(mp4, ts, target.videoCodec, 0, (delay - encodedDelay).coerceAtLeast(0.0)),
+                        clip.tailDurationSeconds, smartJoinPrepareLabel("final", i + 1, inputs.size), ts)
+                    pieces += SmartJoinPiece(ts, frames.lastDurationSeconds)
+                    elapsed += frames.lastDurationSeconds
                     boundaries += elapsed
                 }
                 plan.junctions.getOrNull(i)?.let { junction ->
@@ -1250,8 +1309,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                     val encodedDelay = probeSmartJoinVideo(mp4).delay(0.0)
                     execute(buildSmartJoinTsArguments(mp4, ts, target.videoCodec, 0, (delay - encodedDelay).coerceAtLeast(0.0)),
                         seconds, smartJoinPrepareLabel("emenda", i + 1, plan.junctions.size), ts)
-                    pieces += SmartJoinPiece(ts, count / rate)
-                    elapsed += count / rate
+                    pieces += SmartJoinPiece(ts, frames.lastDurationSeconds)
+                    elapsed += frames.lastDurationSeconds
                     boundaries += elapsed
                 }
             }
@@ -1259,42 +1318,209 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 sources.map { it.durationSeconds }, plan.transitionSeconds, plan.fadeInOut, videos.map { it.seekOffset }),
                 expected, SMART_JOIN_FINALIZE_LABEL, stage)
         }
+        val recovery = SmartJoinTiming.ResumeValidation(expected, frames.total, rate,
+            videos.maxOf { it.maximumFrameGapSeconds }, tracks, target.audioSampleRate, boundaries.toList(), stage.length())
+        writeSmartJoinRecovery(workDir, recovery, outputFile.name)
+        val warning = finishSmartJoinValidation(workDir, recovery, run)
+        check(if(this.recovery.job!=null) { FfmpegRecoveryStore.publish(stage,outputFile);true } else stage.renameTo(outputFile)) { "Não foi possível finalizar a saída validada." }
+        return warning
+    }
+
+    /** Montagem concluída pode ser usada com aviso; cancelamento e saída incompleta continuam sendo falhas. */
+    private fun finishSmartJoinValidation(
+        directory: File, recovery: SmartJoinTiming.ResumeValidation,
+        run: (Array<String>, Double, String) -> FFmpegSession
+    ): String {
+        val stage = File(directory, "validated_output.mp4")
+        check(stage.isFile && stage.length() == recovery.stageBytes) { "A saída preservada está incompleta ou foi alterada." }
+        return try {
+            validateSmartJoinStage(directory, recovery, run)
+            ""
+        } catch (error: Exception) {
+            checkSmartJoinCancellation()
+            if (error is SmartJoinStepException && error.cancelled) throw error
+            val detail = error.message.orEmpty().ifBlank { "Não foi possível concluir a conferência." }
+            Log.w(TAG, "SmartJoin completed with validation warning: $detail")
+            "O arquivo foi montado, mas não passou na validação do SmartJoin.\nProblema: $detail\n" +
+                "Você pode visualizar, salvar ou compartilhar. Confira a imagem e a sincronização antes de usar."
+        }
+    }
+
+    private fun showSmartJoinWarning(message: String) {
+        outputWarning.text = message
+        outputWarning.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
+    }
+
+    private fun validateSmartJoinStage(
+        workDir: File, recovery: SmartJoinTiming.ResumeValidation,
+        run: (Array<String>, Double, String) -> FFmpegSession
+    ) {
+        val stage = File(workDir, "validated_output.mp4")
+        check(stage.length() == recovery.stageBytes) { "A saída preservada está incompleta ou foi alterada." }
+        val expected = recovery.expected
         val resultVideo = probeSmartJoinVideo(stage)
-        SmartJoinTiming.validate(resultVideo, expected, frames.total, rate)
-        validateSmartJoinAudio(stage, expected, tracks, target.audioSampleRate)
+        SmartJoinTiming.validate(resultVideo, expected, recovery.frames, recovery.rate, recovery.sourceGap)
+        validateSmartJoinAudio(stage, expected, recovery.tracks, recovery.sampleRate)
         // Um decoder pode perder quadros sem emitir erro (observado no HEVC do Android).
         // Decodificar só as emendas mantém o ganho do stream copy nos vídeos longos.
-        boundaries.filter { it < expected - 0.0001 }.distinct().forEachIndexed { i, boundary ->
+        // A última posição é o fim do arquivo, mesmo se o arredondamento CFR
+        // a deixar alguns milissegundos abaixo da duração solicitada.
+        recovery.boundaries.dropLast(1).distinct().forEachIndexed { i, boundary ->
             val start = (boundary - 0.4).coerceAtLeast(0.0)
             val end = (boundary + 0.4).coerceAtMost(expected)
+            val window = SmartJoinTiming.decoderWindow(resultVideo, start, end) ?: return@forEachIndexed
             val checkFile = File(workDir, "decode_$i.framecrc")
-            val session = run(arrayOf("-y", "-v", "warning", "-ss", smartJoinSeconds(start), "-i", stage.absolutePath,
-                "-t", smartJoinSeconds(end - start), "-map", "0:v:0", "-an", "-fps_mode", "passthrough",
+            // Framecrc usa CFR por padrão e pode arredondar o último PTS para
+            // fora da janela. Preserve o relógio de 90 kHz e confira cada PTS.
+            val session = run(arrayOf("-y", "-v", "warning", "-copyts", "-ss", smartJoinSeconds(window.seekSeconds), "-i", stage.absolutePath,
+                "-to", smartJoinSeconds(window.untilSeconds), "-map", "0:v:0", "-an", "-fps_mode", "passthrough",
+                "-enc_time_base:v", "1/${window.timeBaseDenominator}",
                 "-f", "framecrc", checkFile.absolutePath), end - start, "Validando emenda ${i + 1}")
-            requireSmartJoinStep(session, checkFile, "Validar emenda")
-            val count = checkFile.useLines { lines -> lines.count { it.isNotBlank() && !it.startsWith("#") } }
-            val expectedFrames = resultVideo.count(start, end)
-            check(count == expectedFrames) { "Emenda não decodifica todos os quadros ($count/$expectedFrames)." }
+            requireSmartJoinStep(session, checkFile, "Validar emenda ${i + 1}")
+            val decodedPts = checkFile.useLines { lines ->
+                lines.filter { it.isNotBlank() && !it.startsWith("#") }
+                    .map { it.split(',')[2].trim().toLong() }.toList()
+            }
+            try {
+                SmartJoinTiming.validateDecodedWindow(window, decodedPts)
+            } catch (error: IllegalStateException) {
+                throw IllegalStateException("Emenda ${i + 1}, em ${smartJoinSeconds(boundary)} s: ${error.message}", error)
+            }
             val logs = session.allLogsAsString.lowercase(Locale.ROOT)
             check(!logs.contains("could not find ref") && !logs.contains("invalid undecodable") && !logs.contains("error constructing")) {
-                "Emenda contém referências de vídeo inválidas."
+                "Emenda ${i + 1}, em ${smartJoinSeconds(boundary)} s: referências de vídeo inválidas."
             }
         }
         checkSmartJoinCancellation()
-        check(stage.renameTo(outputFile)) { "Não foi possível finalizar a saída validada." }
+    }
+
+    private fun writeSmartJoinRecovery(directory: File, value: SmartJoinTiming.ResumeValidation, outputName: String) {
+        val json = JSONObject().put("expected", value.expected).put("frames", value.frames).put("rate", value.rate)
+            .put("sourceGap", value.sourceGap).put("tracks", value.tracks).put("sampleRate", value.sampleRate)
+            .put("boundaries", org.json.JSONArray(value.boundaries)).put("stageBytes", value.stageBytes)
+            .put("outputName", File(outputName).name)
+        val temporary = File(directory, "validation.json.tmp")
+        temporary.writeText(json.toString())
+        check(temporary.renameTo(File(directory, "validation.json"))) { "Não foi possível preservar a validação." }
+    }
+
+    private fun readSmartJoinRecovery(directory: File): SmartJoinTiming.ResumeValidation {
+        val json = JSONObject(File(directory, "validation.json").readText())
+        val boundaries = json.getJSONArray("boundaries")
+        return SmartJoinTiming.ResumeValidation(json.getDouble("expected"), json.getInt("frames"), json.getDouble("rate"),
+            json.getDouble("sourceGap"), json.getInt("tracks"), json.getInt("sampleRate"),
+            (0 until boundaries.length()).map { boundaries.getDouble(it) }, json.getLong("stageBytes"))
+    }
+
+    /** Compatibilidade com tentativas antigas, que já preservavam TS e manifesto mas não o checkpoint. */
+    private fun recoverLegacySmartJoin(directory: File): SmartJoinTiming.ResumeValidation {
+        val manifest = File(directory, "smart_join_concat.txt")
+        val pieces = mutableListOf<File>()
+        val durations = mutableListOf<Double>()
+        manifest.forEachLine { line ->
+            if (line.startsWith("file '")) {
+                val piece = File(line.removePrefix("file '").removeSuffix("'")).canonicalFile
+                check(piece.parentFile == directory.canonicalFile && piece.isFile && piece.length() > 0L) { "Peça preservada indisponível." }
+                pieces += piece
+            } else if (line.startsWith("duration ")) durations += line.removePrefix("duration ").toDouble()
+        }
+        check(pieces.isNotEmpty() && pieces.size == durations.size && durations.all { it.isFinite() && it > 0 }) {
+            "Manifesto preservado incompleto."
+        }
+        var frames = 0
+        var maxGap = 0.0
+        var rate = 0.0
+        pieces.forEach { piece ->
+            val video = probeSmartJoinVideo(piece)
+            frames += video.visiblePackets.size
+            maxGap = maxOf(maxGap, video.maximumFrameGapSeconds)
+            if (rate == 0.0) rate = SmartJoinTiming.fps(video.fps)
+        }
+        val streams = probeSmartJoinJson(File(directory, "validated_output.mp4"), false).getJSONArray("streams")
+        (0 until streams.length()).map { streams.getJSONObject(it) }.firstOrNull { it.optString("codec_type") == "video" }
+            ?.optString("r_frame_rate")?.let { rate = SmartJoinTiming.fps(it) }
+        val audio = (0 until streams.length()).map { streams.getJSONObject(it) }.filter { it.optString("codec_type") == "audio" }
+        val recovery = SmartJoinTiming.ResumeValidation(durations.sum(), frames, rate, maxGap, audio.size,
+            audio.firstOrNull()?.getString("sample_rate")?.toInt() ?: 48000,
+            durations.runningFold(0.0, Double::plus).drop(1), File(directory, "validated_output.mp4").length())
+        writeSmartJoinRecovery(directory, recovery, "SmartJoin recuperado.mp4")
+        return recovery
+    }
+
+    private fun offerSmartJoinRecovery() {
+        val root = cacheDir.canonicalFile
+        Log.d(TAG, "SmartJoin recovery scan: root=$root entries=${root.listFiles()?.size}")
+        val pending = root.listFiles()?.filter { directory ->
+            if ((directory.name.startsWith("smart_join_") || recovery.job?.owns(directory)==true)) Log.d(TAG,
+                "SmartJoin recovery candidate: parentMatches=${directory.canonicalFile.parentFile == root} " +
+                    "stage=${File(directory, "validated_output.mp4").isFile} checkpoint=${File(directory, "validation.json").isFile}")
+            directory.isDirectory && directory.canonicalFile.parentFile == root && (directory.name.startsWith("smart_join_") || recovery.job?.owns(directory)==true) &&
+                File(directory, "validated_output.mp4").isFile &&
+                (File(directory, "validation.json").isFile || File(directory, "smart_join_concat.txt").isFile)
+        }?.maxByOrNull { it.lastModified() } ?: return
+        AlertDialog.Builder(this).setTitle("Retomar SmartJoin")
+            .setMessage("Há uma junção interrompida com as peças prontas. Retomar a validação evita copiar e recodificar esses trechos novamente.")
+            .setPositiveButton("Retomar") { _, _ -> resumeSmartJoin(pending) }
+            .setNegativeButton("Agora não", null).show()
+    }
+
+    private fun resumeSmartJoin(directory: File) {
+        clearOutputResult()
+        smartJoinCancelled = false
+        setProcessing(true)
+        configureVideoProcessingPlan(listOf("Analisar saída preservada"))
+        Thread {
+            try {
+                updateStep("Analisar saída preservada", 0, StepState.RUNNING)
+                val recovery = if (File(directory, "validation.json").isFile) readSmartJoinRecovery(directory)
+                    else recoverLegacySmartJoin(directory)
+                configureVideoProcessingPlan(listOf("Analisar saída preservada") +
+                    recovery.boundaries.dropLast(1).indices.map { "Validando emenda ${it + 1}" })
+                updateStep("Analisar saída preservada", 100, StepState.DONE)
+                val warning = finishSmartJoinValidation(directory, recovery) { args, duration, label ->
+                    checkSmartJoinCancellation()
+                    executeFfmpegWithProgress(args, (duration * 1000).toLong(), label)
+                }
+                val name = JSONObject(File(directory, "validation.json").readText()).getString("outputName")
+                val output = File(cacheDir, "join_${System.currentTimeMillis()}_${File(name).name}")
+                check(File(directory, "validated_output.mp4").renameTo(output)) { "Não foi possível finalizar a saída recuperada." }
+                cleanupSmartJoinWorkDir(directory)
+                runOnUiThread {
+                    setProcessing(false)
+                    tempOutputFiles.clear()
+                    tempOutputFiles.add(output)
+                    lastOutputName = File(name).name
+                    showSmartJoinWarning(warning)
+                    updateStep("Preparar arquivo para salvar", 100, StepState.DONE)
+                    successStep("SmartJoin retomado e validado. As peças prontas foram reutilizadas.")
+                    outputActions.visibility = View.VISIBLE
+                    buttonSaveToFolder.visibility = View.VISIBLE
+                    buttonOutputFolder.visibility = View.GONE
+                    buttonOutputShare.visibility = View.GONE
+                    showJoinedPreview(output)
+                    joinScroll.post { joinScroll.smoothScrollTo(0, outputActions.bottom) }
+                }
+            } catch (error: Exception) {
+                Log.e(TAG, "Failed to resume SmartJoin", error)
+                runOnUiThread {
+                    setProcessing(false)
+                    failActiveStep("Erro ao retomar: ${error.message.orEmpty().take(420)}. As peças foram preservadas.")
+                }
+            }
+        }.start()
     }
 
     private fun checkSmartJoinCancellation() {
         if (smartJoinCancelled) throw SmartJoinStepException(true, "Operação cancelada.")
     }
 
-    private fun probeSmartJoinJson(input: File, videoOnly: Boolean): JSONObject {
+    private fun writeSmartJoinProbe(input: File, videoOnly: Boolean, destination: File) {
         checkSmartJoinCancellation()
         val args = mutableListOf("-v", "error")
         if (videoOnly) args.addAll(listOf("-select_streams", "v:0", "-show_packets"))
         args.addAll(listOf("-show_streams", "-show_format", "-show_entries",
             "packet=pts_time,dts_time,duration_time,flags:stream=codec_type,start_time,duration,r_frame_rate,sample_rate:format=start_time,duration",
-            "-of", "json", input.absolutePath))
+            "-of", if (videoOnly) "compact=p=1:nk=0" else "json", "-o", destination.absolutePath, input.absolutePath))
         val latch = CountDownLatch(1)
         val session = FFprobeKit.executeWithArgumentsAsync(args.toTypedArray(), { latch.countDown() })
         currentSessionId = session.sessionId
@@ -1303,37 +1529,41 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         currentSessionId = null
         checkSmartJoinCancellation()
         check(ReturnCode.isSuccess(session.returnCode)) { "Não foi possível analisar os quadros de ${input.name}." }
-        return JSONObject(session.output)
+        check(destination.isFile && destination.length() > 0L) { "Sondagem não produziu dados." }
     }
 
     private fun probeSmartJoinVideo(input: File): SmartJoinTiming.Video {
-        val json = probeSmartJoinJson(input, true)
-        val stream = json.getJSONArray("streams").getJSONObject(0)
-        val array = json.getJSONArray("packets")
-        val packets = (0 until array.length()).map { i ->
-            val packet = array.getJSONObject(i)
-            SmartJoinTiming.Packet(packet.getString("pts_time").toDouble(), packet.getString("dts_time").toDouble(),
-                packet.optString("duration_time", "0").toDouble(), packet.optString("flags").contains('K'))
+        val probe = File.createTempFile("smart_probe_", ".compact", input.parentFile)
+        try {
+            writeSmartJoinProbe(input, true, probe)
+            return probe.reader().use(SmartJoinTiming::readCompactProbe)
+        } finally {
+            probe.delete()
         }
-        check(packets.isNotEmpty()) { "Vídeo sem quadros analisáveis." }
-        val origin = stream.optString("start_time", "0").toDouble()
-        val formatOrigin = json.getJSONObject("format").optString("start_time", "0").toDouble()
-        val fps = stream.getString("r_frame_rate")
-        val duration = stream.optString("duration").toDoubleOrNull()
-            ?: (packets.maxOf { it.pts } - origin + 1.0 / SmartJoinTiming.fps(fps))
-        return SmartJoinTiming.Video(packets, origin, origin - formatOrigin, duration, fps)
+    }
+
+    private fun probeSmartJoinJson(input: File, videoOnly: Boolean): JSONObject {
+        check(!videoOnly) { "Sondagens de pacotes devem usar leitura incremental." }
+        val probe = File.createTempFile("smart_probe_", ".json", input.parentFile)
+        try {
+            writeSmartJoinProbe(input, false, probe)
+            return JSONObject(probe.readText())
+        } finally {
+            probe.delete()
+        }
     }
 
     private fun validateSmartJoinAudio(input: File, expected: Double, tracks: Int, sampleRate: Int) {
         val array = probeSmartJoinJson(input, false).getJSONArray("streams")
         val audio = (0 until array.length()).map { array.getJSONObject(it) }.filter { it.optString("codec_type") == "audio" }
-        check(audio.size == tracks) { "A saída perdeu ou acrescentou faixas de áudio." }
+        check(audio.size == tracks) { "Faixas de áudio: ${audio.size}; esperado: $tracks." }
         audio.forEach {
             val duration = it.getString("duration").toDouble()
             val origin = it.optString("start_time", "0").toDouble()
             val tolerance = 2048.0 / sampleRate + 0.002
             check(kotlin.math.abs(duration - expected) <= tolerance && kotlin.math.abs(origin) <= tolerance) {
-                "Áudio fora de sincronia com a duração solicitada."
+                String.format(Locale.ROOT, "Áudio fora de sincronia: duração %.6f s; esperado %.6f s; início %.6f s.",
+                    duration, expected, origin)
             }
         }
     }
@@ -1342,7 +1572,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         outputFile: File,
         reason: String
     ): JoinExecutionResult {
-        val detail = reason.ifBlank { "emenda híbrida indisponível" }.take(180)
+        val detail = reason.ifBlank { "emenda híbrida indisponível" }.take(420)
         Log.e(TAG, "SmartJoin failed without full-reencode fallback: $detail")
         outputFile.delete()
         updateStep(
@@ -1410,6 +1640,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private fun smartJoinBridgeLabel(index: Int, total: Int): String =
         "Recodificando emenda ${index + 1}/$total"
 
+    private fun smartJoinTailLabel(index: Int, total: Int): String =
+        "Ajustando último GOP ${index + 1}/$total"
+
     private fun smartJoinPrepareLabel(kind: String, index: Int, total: Int): String =
         "Preparando $kind $index/$total"
 
@@ -1424,8 +1657,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
 
     private fun createSmartJoinWorkDir(): File {
         val root = cacheDir.canonicalFile
-        val directory = File(root, "smart_join_${System.currentTimeMillis()}_${System.nanoTime()}").canonicalFile
-        check(directory.parentFile == root && directory.name.startsWith("smart_join_")) {
+        val directory = recovery.work("smart_join") { File(root, "smart_join_${System.currentTimeMillis()}_${System.nanoTime()}") }.canonicalFile
+        check((directory.parentFile == root && directory.name.startsWith("smart_join_")) || recovery.job?.owns(directory)==true) {
             "Diretório temporário inválido para SmartJoin."
         }
         check(directory.mkdirs()) { "Não foi possível criar o diretório temporário do SmartJoin." }
@@ -1433,6 +1666,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun cleanupSmartJoinWorkDir(directory: File) {
+        if (recovery.job?.owns(directory)==true) return
+
         val root = runCatching { cacheDir.canonicalFile }.getOrNull() ?: return
         val target = runCatching { directory.canonicalFile }.getOrNull() ?: return
         if (target.parentFile != root || !target.name.startsWith("smart_join_")) return
@@ -1584,7 +1819,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun buildDirectConcatArguments(inputs: List<File>, outputFile: File): Array<String> {
-        val listFile = File(cacheDir, "join_list_${System.currentTimeMillis()}.txt")
+        val listFile = recovery.file("concat_list", ".txt") { File(cacheDir, "join_list_${System.currentTimeMillis()}.txt") }
         listFile.writeText(inputs.joinToString("\n") { "file '${it.absolutePath.replace("\\", "/")}'" }, Charsets.UTF_8)
         return FfmpegMediaPolicies.directConcatCommandArguments(listFile.absolutePath, outputFile.absolutePath)
     }
@@ -2031,6 +2266,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         taskLabel: String,
         encoderName: String? = null
     ): FFmpegSession {
+        recovery.reuse(arguments)?.let { updateStep(taskLabel,100,StepState.DONE,"Etapa preservada");return it }
+        recovery.starting(arguments)
         FfmpegCommandPresenter.show(status, arguments.asIterable())
         Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
         val latch = CountDownLatch(1)
@@ -2090,6 +2327,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 FfmpegCommandPresenter.completeLastShown(status, false)
             }
         }
+        recovery.completed(arguments, completedSession)
         return completedSession
     }
 
@@ -2149,6 +2387,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     }
 
     private fun cancelJoin() {
+        recovery.cancel()
         smartJoinCancelled = true
         failActiveStep("Cancelando...")
         currentSessionId?.let { FFmpegKit.cancel(it) }
@@ -2189,11 +2428,13 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 status.text = "Erro ao criar arquivo na pasta selecionada."
                 return
             }
-            contentResolver.openOutputStream(document.uri)?.use { output ->
+            val destination=contentResolver.openOutputStream(document.uri) ?: error("Não foi possível abrir a saída para salvar.")
+            destination.use { output ->
                 tempFile.inputStream().use { input -> input.copyTo(output) }
             }
             finalOutputDirUri = treeUri
             lastOutputUri = document.uri
+            recovery.saved()
             lastOutputName = document.name ?: outputName
             
             // Preserva o texto de estatísticas/progresso e adiciona a mensagem de salvamento
@@ -2572,9 +2813,17 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
         outputStats.visibility = View.GONE
+        showSmartJoinWarning("")
     }
 
     private fun copyUriToCache(uri: Uri, displayName: String): File {
+        recovery.input(uri,displayName) { target ->
+            contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { output ->
+                val buffer=ByteArray(1 shl 20)
+                while(true) { if (Thread.currentThread().isInterrupted) throw InterruptedException("Operação cancelada.");val count=input.read(buffer);if(count<0)break;output.write(buffer,0,count) }
+            } } ?: error("Não consegui abrir $displayName")
+        }?.let { return it }
+
         val extension = displayName.substringAfterLast('.', "mp4")
         val file = File(cacheDir, "join_input_${System.nanoTime()}.$extension")
         contentResolver.openInputStream(uri)?.use { input ->
@@ -2782,6 +3031,7 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 )
                 StepState.DONE -> FfmpegProgressText.suffix(
                     encoderName = step.encoderName,
+                    detail = step.detail,
                     elapsedMs = step.elapsedMs
                 )
                 else -> ""
@@ -2791,6 +3041,9 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
                 builder.append(step.label)
             } else if (step.state == StepState.ERROR) {
                 builder.append(step.label).append(": FALHOU")
+                step.detail?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                    builder.append("\n    ").append(it)
+                }
             } else {
                 builder.append(step.label).append(' ').append(step.percent.toString()).append('%').append(suffix)
             }
@@ -3546,7 +3799,8 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
     private data class JoinExecutionResult(
         val success: Boolean,
         val cancelled: Boolean,
-        val failureMessage: String
+        val failureMessage: String,
+        val warningMessage: String = ""
     )
 
     companion object {

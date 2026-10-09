@@ -7,18 +7,20 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
-/** Inserção testável sem Activity: copia PCM/ALAC/FLAC e publica somente após validar. */
+/** Inserção testável sem Activity: copia PCM/ALAC/FLAC e libera a saída concluída com aviso se a validação divergir. */
 class SmartInsertPipeline @JvmOverloads constructor(
     private val execute: (Array<String>, Double) -> Unit,
     private val probe: (Array<String>) -> JSONObject,
     private val cancelled: () -> Unit = {},
     private val log: (String) -> Unit = {},
-    private val packetProbe: ((Array<String>) -> String)? = null
+    private val packetProbe: ((Array<String>) -> String)? = null,
+    private val workDirectory: File? = null,
+    private val keepWork: Boolean = false
 ) {
     data class Options(val insertion: Double, val seconds: Double, val curve: String, val smart: Boolean,
         val mainTrack: Int = 0, val insertedTrack: Int = 0)
     data class Result(val plan: SmartInsertPlanner.Render, val audio: SmartInsertPlanner.Audio,
-        val partial: Boolean, val reason: String?)
+        val partial: Boolean, val reason: String?, val warning: String? = null)
 
     private fun info(path: File, track: Int = 0, packets: Boolean = false, interval: String? = null): JSONObject {
         cancelled()
@@ -108,8 +110,8 @@ class SmartInsertPipeline @JvmOverloads constructor(
         val insertedSamples = SmartInsertPlanner.sampleCount(other.duration,audio.rate)
         val plan = SmartInsertPlanner.render(original.samples,insertedSamples,
             SmartInsertPlanner.sampleCount(options.insertion.coerceAtLeast(0.0),audio.rate),audio.rate,options.seconds,options.curve,options.smart)
-        val work = File(output.parentFile,"smart_insert_${UUID.randomUUID()}")
-        check(work.mkdirs()) { "Não foi possível criar a pasta temporária." }
+        val work = workDirectory ?: File(output.parentFile,"smart_insert_${UUID.randomUUID()}")
+        check(work.isDirectory || work.mkdirs()) { "Não foi possível criar a pasta temporária." }
         val staged = File(work,output.name)
         var partial = options.smart && !preview && !forceContinuous && SmartInsertPlanner.canCopy(original,output.extension)
         var reason: String? = null
@@ -135,31 +137,42 @@ class SmartInsertPipeline @JvmOverloads constructor(
                     log("Smart Insert: principal PCM em cópia por amostras; ${if(canCopyInserted) "inserido também em cópia." else "somente o inserido foi recodificado."}")
                 }
             } else if (partial) {
-                val splice=try {
+                    val splice=try {
                     SmartInsertPlanner.splice(packets(main,original),plan.main,plan.inserted,plan.cut,
-                        if(audio.codec=="flac")16 else 0)
+                        if(audio.codec=="flac")16 else 0,
+                        if(audio.codec=="alac")kotlin.math.ceil(audio.rate/1000.0).toLong() else 0)
                 } catch(error: IllegalArgumentException) { partial=false;reason=error.message;null }
                 if (splice != null) {
                     val pieces=mutableListOf<File>(); val durations=mutableListOf<Double>()
                     fun copy(start: Long, samples: Long, packets: Int) {
                         val piece=File(work,"${pieces.size}.${output.extension}")
-                        val args=listOf("-hide_banner","-y","-ss",SmartInsertPlanner.decimal(start.toDouble()/audio.rate),"-i",main.absolutePath,
+                        val args=listOf("-hide_banner","-y","-ss",SmartInsertPlanner.decimal(start.toDouble()/audio.rate+original.seekOffset),"-i",main.absolutePath,
                             "-ss","0","-map","0:a:${options.mainTrack}","-c:a","copy","-frames:a",packets.toString(),
                             "-bsf:a","setts=pts=PTS-STARTPTS:dts=DTS-STARTPTS","-avoid_negative_ts","disabled",piece.absolutePath)
                         execute(args.toTypedArray(),samples.toDouble()/audio.rate)
                         validate(piece,audio,samples)
                         pieces+=piece;durations+=samples.toDouble()/audio.rate
                     }
-                    if (splice.left>0 && audio.codec!="flac") copy(0,splice.left,splice.prefix.size)
+                    fun edge(start: Long,samples: Long) {
+                        val piece=File(work,"${pieces.size}.${output.extension}")
+                        val args=listOf("-hide_banner","-y","-ss",SmartInsertPlanner.decimal(start.toDouble()/audio.rate+original.seekOffset),"-i",main.absolutePath,
+                            "-map","0:a:${options.mainTrack}","-vn","-af","apad,atrim=end_sample=$samples,asetpts=N/SR/TB",
+                            "-ar",audio.rate.toString(),"-ac",audio.channels.toString())+audio.encoderArguments()+piece.absolutePath
+                        execute(args.toTypedArray(),samples.toDouble()/audio.rate);validate(piece,audio,samples)
+                        pieces+=piece;durations+=samples.toDouble()/audio.rate
+                    }
+                    if(splice.headEnd>0)edge(0,splice.headEnd)
+                    if(splice.prefix.isNotEmpty() && audio.codec!="flac")copy(splice.headEnd,splice.left-splice.headEnd,splice.prefix.size)
                     val middle=File(work,"middle.${output.extension}")
                     val bridge=SmartInsertPlanner.render(splice.right-splice.left,plan.inserted,plan.cut-splice.left,
                         audio.rate,options.seconds,options.curve,true)
                     val args=continuousArguments(main,inserted,middle,audio,bridge,options.mainTrack,options.insertedTrack).toMutableList()
-                    args.addAll(args.indexOf("-i"),listOf("-ss",SmartInsertPlanner.decimal(splice.left.toDouble()/audio.rate)))
+                    args.addAll(args.indexOf("-i"),listOf("-ss",SmartInsertPlanner.decimal(splice.left.toDouble()/audio.rate+original.seekOffset)))
                     execute(args.toTypedArray(),bridge.total.toDouble()/audio.rate)
                     validate(middle,audio,bridge.total)
                     pieces+=middle;durations+=bridge.total.toDouble()/audio.rate
-                    if (splice.right<plan.main && audio.codec!="flac") copy(splice.right,plan.main-splice.right,splice.suffix.size)
+                    if (splice.suffix.isNotEmpty() && audio.codec!="flac") copy(splice.right,splice.tailStart-splice.right,splice.suffix.size)
+                    if(splice.tailStart<plan.main)edge(splice.tailStart,plan.main-splice.tailStart)
                     if (audio.codec=="flac") {
                         val middlePackets=packets(middle,audio.copy(track=0,startTime=0.0))
                         SmartInsertFlac.assemble(listOf(Pair(main,splice.prefix),Pair(middle,middlePackets),Pair(main,splice.suffix)),staged,main,plan.total,cancelled)
@@ -172,7 +185,7 @@ class SmartInsertPipeline @JvmOverloads constructor(
                             "-map","0:a:0","-map_metadata","1","-map_metadata:s:a:0","1:s:a:${options.mainTrack}","-map_chapters","-1","-c:a","copy","-avoid_negative_ts","disabled",
                             "-movflags","+faststart",staged.absolutePath),plan.total.toDouble()/audio.rate)
                     }
-                    log("Smart Insert: ${SmartInsertPlanner.decimal((plan.main-splice.right+splice.left).toDouble()/audio.rate)} s em cópia; " +
+                    log("Smart Insert: ${SmartInsertPlanner.decimal((splice.tailStart-splice.right+splice.left-splice.headEnd).toDouble()/audio.rate)} s em cópia; " +
                         "inserido e ${SmartInsertPlanner.decimal((splice.right-splice.left).toDouble()/audio.rate)} s da emenda recodificados.")
                 }
             }
@@ -183,12 +196,18 @@ class SmartInsertPipeline @JvmOverloads constructor(
                 }
                 execute(continuousArguments(main,inserted,staged,audio,plan,options.mainTrack,options.insertedTrack),plan.total.toDouble()/audio.rate)
             }
-            validate(staged,audio,plan.total)
+            check(staged.isFile && staged.length()>0L) { "O FFmpeg não gerou áudio." }
+            val warning = try { validate(staged,audio,plan.total); null } catch (error: Exception) {
+                cancelled()
+                if (preview) throw error
+                "O arquivo foi montado, mas a validação encontrou um problema: ${error.message}. " +
+                    "Você pode salvar e compartilhar; confira o áudio antes de usar."
+            }
             cancelled()
-            check(!output.exists()) { "O arquivo de saída já existe." }
-            check(staged.renameTo(output)) { "Não foi possível publicar o áudio validado." }
-            return Result(plan,audio,partial,reason)
-        } finally { work.deleteRecursively() }
+            check(!output.exists() || keepWork) { "O arquivo de saída já existe." }
+            check(if(keepWork) { FfmpegRecoveryStore.publish(staged,output);true } else staged.renameTo(output)) { "Não foi possível publicar o áudio validado." }
+            return Result(plan,audio,partial,reason,warning)
+        } finally { if(!keepWork)work.deleteRecursively() }
     }
 
     fun validate(path: File, audio: SmartInsertPlanner.Audio, samples: Long) {

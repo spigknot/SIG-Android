@@ -84,6 +84,17 @@ class SmartInsertNativeTest {
                 equalReference(main,inserted,SmartInsertPipeline.Options(at,.2,"tri",true),true)
         }
     }
+    @Test fun editListWithPartialPacketsMatchesContinuousWithoutEncodingTheMainBody() = inDirectory {
+        val original=fixture("original.m4a","alac",duration="6.2")
+        val main=File(root,"edited.m4a")
+        native("ffmpeg",listOf("-v","error","-y","-ss","0.037","-i",original.absolutePath,"-t","5.951","-c:a","copy",main.absolutePath))
+        val inserted=fixture("inserted.wav","pcm_s16le",44100,"1.731",233)
+        for(time in listOf(0.0,.2,.5)) {
+            commands.clear();messages.clear()
+            equalReference(main,inserted,SmartInsertPipeline.Options(2.123,time,"tri",true),true)
+            assertTrue(commands.any { command -> command.contains("-c:a") && command[command.indexOf("-c:a")+1]=="copy" })
+        }
+    }
     @Test fun lossyKeepsSmartEffectWithContinuousEncodingAndGaplessDurations() = inDirectory {
         val inserted=fixture("inserted.wav","pcm_s16le",44100,"1.731",233)
         for((codec,extension) in listOf("aac" to "m4a","libmp3lame" to "mp3","libopus" to "opus","libvorbis" to "ogg","wmav2" to "wma")) {

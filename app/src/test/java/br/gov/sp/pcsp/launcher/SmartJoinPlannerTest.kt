@@ -7,6 +7,91 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SmartJoinPlannerTest {
+    @Test fun nominalFrameRateDifferenceDoesNotForceBodyEncode() {
+        val result=SmartJoinPlanner.plan(listOf(source(12.0,profile(fps=25.0)),source(12.0,profile(fps=30.0))),.5,false)
+        assertTrue(result.clips.all { it.copyVideo })
+    }
+
+
+    @Test fun cameraNegativePrerollDoesNotHideVisibleKeyframe() {
+        val cameraClip = source(12.0, keyframes = listOf(-.033756, 0.0, 2.0, 4.0, 6.0, 8.0, 10.0))
+        for (seconds in listOf(0.0, .2, .5, 1.0)) {
+            for (fadeInOut in listOf(false, true)) {
+                val result = SmartJoinPlanner.plan(listOf(source(10.0), cameraClip), seconds, fadeInOut)
+                assertTrue(result.clips.all { it.copyVideo })
+                if (seconds == 0.0) assertTrue(result.junctions.isEmpty())
+            }
+        }
+    }
+
+    @Test fun negativePrerollWithoutVisibleInitialKeyframeStillRequiresEncode() {
+        val cameraClip = source(12.0, keyframes = listOf(-.033756, 3.0, 6.0, 9.0))
+        val result = SmartJoinPlanner.plan(listOf(source(10.0), cameraClip), .5, false)
+        assertFalse(result.clips[1].copyVideo)
+        assertTrue(result.clips[1].incompatibilityReason.orEmpty().contains("keyframe"))
+    }
+
+    @Test fun zeroTransitionRepairsOnlyCameraLastGopWhenDiscardedFrameIsStillAReference() {
+        val camera = source(2304.1279, profile(codec = "hevc", fps = 89.0 / 3.0, codecProfile = "Main"),
+            listOf(0.0, 2300.186644, 2301.203122, 2302.219600, 2303.236056))
+            .copy(tailRepairStartSeconds = 2303.236056)
+        val next = source(1067.947856, camera.profile, listOf(0.0, 2.059044, 4.117944))
+        val plan = SmartJoinPlanner.plan(listOf(camera, next), 0.0, false)
+
+        assertTrue(plan.canSmartJoin && plan.hasUsefulCopy)
+        assertTrue(plan.clips.all { it.copyVideo })
+        assertTrue(plan.junctions.isEmpty())
+        val first = plan.clips.first()
+        assertEquals(2303.236056, first.bodyEndSeconds, 1e-9)
+        assertEquals(2303.236056, first.tailStartSeconds!!, 1e-9)
+        assertEquals(2304.1279, first.tailEndSeconds!!, 1e-9)
+        assertEquals(.891844, first.tailDurationSeconds, 1e-9)
+        assertEquals(3372.075756, plan.expectedDurationSeconds(listOf(camera.durationSeconds, next.durationSeconds)), 1e-9)
+        assertEquals(camera.durationSeconds, first.bodyDurationSeconds + first.tailDurationSeconds, 1e-9)
+        assertNull(plan.clips.last().tailStartSeconds)
+    }
+
+    @Test fun transitionAlreadyCoveringDiscardedCameraTailDoesNotEncodeAnExtraTail() {
+        val camera = source(2304.1279, keyframes = listOf(0.0, 2300.186644, 2301.203122, 2302.219600, 2303.236056))
+            .copy(tailRepairStartSeconds = 2303.236056)
+        val plan = SmartJoinPlanner.plan(listOf(camera, source(1067.947856)), 3.0, false)
+
+        assertTrue(plan.clips.all { it.copyVideo })
+        assertEquals(2300.186644, plan.clips.first().bodyEndSeconds, 1e-9)
+        assertNull(plan.clips.first().tailStartSeconds)
+        assertEquals(0.0, plan.clips.first().tailDurationSeconds, 0.0)
+    }
+
+    @Test fun incomingBridgeMayCoverCopyBodyBeforeARequiredTail() {
+        val camera = source(4.0, keyframes = listOf(0.0, 2.0, 3.0))
+            .copy(tailRepairStartSeconds = 1.92)
+        val plan = SmartJoinPlanner.plan(listOf(source(6.0), camera), 1.0, false)
+        val clip = plan.clips.last()
+
+        assertTrue(plan.hasUsefulCopy)
+        assertTrue(clip.copyVideo)
+        assertEquals(2.0, clip.bodyStartSeconds, 0.0)
+        assertEquals(0.0, clip.bodyDurationSeconds, 0.0)
+        assertEquals(2.0, clip.tailStartSeconds!!, 0.0)
+        assertEquals(2.0, clip.tailDurationSeconds, 0.0)
+        assertEquals(2.0, plan.junctions.single().incomingBridgeEndSeconds, 0.0)
+    }
+
+    @Test fun sourceWithoutDiscardedReferenceKeepsEntireBodyCopied() {
+        val plan = SmartJoinPlanner.plan(listOf(source(6.0), source(6.0)), 0.0, false)
+        assertTrue(plan.clips.all { it.copyVideo && it.tailDurationSeconds == 0.0 })
+        assertTrue(plan.clips.all { it.bodyDurationSeconds == 6.0 })
+    }
+
+    @Test fun encodedTailUsesCfrRoundingWithoutStretchingCopiedCameraBody() {
+        val rate = 89.0 / 3.0
+        val scheduler = SmartJoinTiming.Frames(rate)
+        assertEquals(69496, scheduler.next(2303.236056, 69496))
+        assertEquals(26, scheduler.next(2304.1279 - 2303.236056))
+        assertEquals(31654, scheduler.next(1067.947856, 31654))
+        assertEquals(101176, scheduler.total)
+        assertEquals(2303.236056 + 26.0 / rate + 1067.947856, scheduler.durationSeconds, 1e-9)
+    }
 
     @Test fun invalidNumbersAreRejected() {
         for (seconds in listOf(Double.NaN, Double.POSITIVE_INFINITY, -1.0)) {
@@ -195,12 +280,12 @@ class SmartJoinPlannerTest {
     }
 
     @Test
-    fun compatibilityChecksCodecFpsRotationPixelFormatAndSar() {
+    fun compatibilityChecksCodecRotationPixelFormatAndSar() {
         val base = profile()
 
         assertNull(SmartJoinPlanner.videoIncompatibility(base, base.copy(fps = 30.005)))
         assertEquals("codec diferente", SmartJoinPlanner.videoIncompatibility(base, base.copy(codecFamily = "hevc")))
-        assertEquals("framerate diferente", SmartJoinPlanner.videoIncompatibility(base, base.copy(fps = 29.97)))
+        assertNull(SmartJoinPlanner.videoIncompatibility(base, base.copy(fps = 29.97)))
         assertEquals("rotação diferente", SmartJoinPlanner.videoIncompatibility(base, base.copy(rotationDegrees = 90)))
         assertEquals("formato de pixel diferente", SmartJoinPlanner.videoIncompatibility(base, base.copy(pixelFormat = "yuv422p")))
         assertEquals("SAR/DAR diferente", SmartJoinPlanner.videoIncompatibility(base, base.copy(sampleAspectRatio = "4:3")))

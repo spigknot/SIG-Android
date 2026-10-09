@@ -1,5 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
+import org.json.JSONObject
+
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
@@ -65,6 +67,12 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     private var lastOutputName = ""
     private val terminalLines = StringBuilder()
 
+    private val recovery by lazy { FfmpegRecoveryUi(this,"clean",::recoveryRequest,::restoreRecovery) { cleanSelectedAudio(true) } }
+    private fun recoveryRequest(): JSONObject = JSONObject().put("uri",selectedUri.toString()).put("name",selectedName).put("mode",selectedMode.name)
+    private fun restoreRecovery(r: JSONObject) {
+        selectedUri=recovery.uri(r.getString("uri"));selectedName=r.getString("name");selectedMode=CleanMode.valueOf(r.getString("mode"))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -114,6 +122,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         buttonOutputShare.setOnClickListener { shareOutputFile() }
         refreshModeUi()
         handleIncomingShareIntent(intent)
+        window.decorView.post { recovery.offer() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -213,6 +222,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
                 .show()
             return
         }
+        recovery.begin()
         clearOutputResult()
         clearTerminal()
         val jobFilterMode = selectedMode
@@ -224,7 +234,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
             try {
                 inputFile = copyUriToCache(uri, selectedName)
                 val outputName = buildOutputName(selectedName)
-                outputFile = File(cacheDir, "clean_${System.currentTimeMillis()}_$outputName")
+                outputFile = recovery.file("output", ".wav") { File(cacheDir, "clean_${System.currentTimeMillis()}_$outputName") }
                 val duration = readDuration(inputFile).coerceAtLeast(1L)
                 val sourceProfile = inspectAudioSource(inputFile)
                     ?: error("Não foi possível identificar os parâmetros do áudio.")
@@ -279,8 +289,9 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
                     status.text = "Erro: ${e.message ?: "falha inesperada"}"
                 }
             } finally {
-                inputFile?.delete()
-                if (!keepOutput) outputFile?.delete()
+                recovery.finish(keepOutput)
+                recovery.delete(inputFile)
+                if (!keepOutput) recovery.delete(outputFile)
             }
         }.start()
     }
@@ -370,6 +381,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
             buttonSaveToFolder.visibility = View.GONE
             buttonOutputFolder.visibility = View.VISIBLE
             buttonOutputShare.visibility = View.VISIBLE
+            recovery.saved()
             source.delete()
             tempOutputFile = null
         } catch (e: Exception) {
@@ -402,6 +414,8 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     }
 
     private fun executeFfmpegWithProgress(arguments: Array<String>, durationMs: Long, tracker: FfmpegTaskTracker): FFmpegSession {
+        recovery.reuse(arguments)?.let { return it }
+        recovery.starting(arguments)
         FfmpegCommandPresenter.show(status, arguments.asIterable())
         Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
         val latch = CountDownLatch(1)
@@ -426,6 +440,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
         latch.await()
         val completed = sessionRef.get() ?: session
         FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        recovery.completed(arguments, completed)
         return completed
     }
 
@@ -470,6 +485,7 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     }
 
     private fun cancelCleaning() {
+        recovery.cancel()
         status.text = "Cancelando..."
         currentSessionId?.let { FFmpegKit.cancel(it) } ?: FFmpegKit.cancel()
     }
@@ -526,6 +542,13 @@ class FfmpegCleanAudioActivity : AppCompatActivity() {
     }
 
     private fun copyUriToCache(uri: Uri, displayName: String): File {
+        recovery.input(uri,displayName) { target ->
+            contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { output ->
+                val buffer=ByteArray(1 shl 20)
+                while(true) { if (Thread.currentThread().isInterrupted) throw InterruptedException("Operação cancelada.");val count=input.read(buffer);if(count<0)break;output.write(buffer,0,count) }
+            } } ?: error("Não consegui abrir $displayName")
+        }?.let { return it }
+
         val extension = displayName.substringAfterLast('.', "audio")
         val inputFile = File(cacheDir, "clean_input_${System.currentTimeMillis()}.$extension")
         contentResolver.openInputStream(uri)?.use { input ->

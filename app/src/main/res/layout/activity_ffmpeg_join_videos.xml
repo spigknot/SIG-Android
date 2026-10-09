@@ -547,6 +547,15 @@
             </LinearLayout>
 
             <TextView
+                android:id="@+id/output_warning"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:textColor="#FFFFC857"
+                android:textSize="15sp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/output_stats"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

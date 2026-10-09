@@ -141,6 +141,7 @@ também é bloqueado.
 | `ConversionParallelismSettings.kt` | Paralelismo das conversões. |
 | `NameDatabaseStore.kt` | Banco local de nomes (load/add/remove). |
 | `AppCacheManager.kt` | Limpeza de caches por idade e tamanho. |
+| `FfmpegRecoveryStore.kt` | Registro persistente de entradas e etapas concluídas das ferramentas FFmpeg. |
 | `FfmpegTaskTracker.kt` | Estado das tarefas FFmpeg (progresso, encoder). |
 
 ## F. Sistema e dependências
@@ -148,6 +149,7 @@ também é bloqueado.
 | Arquivo | Responsabilidade |
 |---|---|
 | `SigApplication.kt` | `Application`: bootstrap do app. |
+| `FfmpegRecoveryUi.kt` | Oferta de retomada, opções da tela e integração dos checkpoints com FFmpegKit. |
 | `CancelExitGuard.kt` | Extensão: confirmar saída durante tarefa. |
 | `AppUpdateChecker.kt` | Atualização via GitHub (release, parse, download). |
 | `NativeDependencyManager.kt` | Pacote nativo: versão/URL/SHA-256 por ABI e ativação. |

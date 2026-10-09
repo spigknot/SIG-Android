@@ -1,5 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
+import org.json.JSONObject
+
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -183,6 +185,20 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) = Unit
     }
 
+    private val recovery by lazy { FfmpegRecoveryUi(this,"rotate",::recoveryRequest,::restoreRecovery) { rotateSelectedVideo(true) } }
+    private fun recoveryRequest(): JSONObject = JSONObject().put("uri",selectedUri.toString()).put("name",selectedName).put("duration",durationMs).put("width",videoWidth).put("height",videoHeight)
+        .put("quality",selectedVideoQuality.name).put("path",encoderPath).put("advanced",encoderAdvanced).put("selectionFilters",selectionFilters)
+        .put("selection",FfmpegRecoveryUi.selection(previewSelection)).put("order",org.json.JSONArray(transformOrder.map { it.name }))
+        .put("encoder",FfmpegRecoveryUi.encoder(selectedCodec))
+    private fun restoreRecovery(r: JSONObject) {
+        selectedUri=recovery.uri(r.getString("uri"));selectedName=r.getString("name");durationMs=r.getLong("duration");videoWidth=r.getInt("width");videoHeight=r.getInt("height")
+        selectedVideoQuality=FfmpegVideoQuality.valueOf(r.getString("quality"));encoderPath=r.getString("path");encoderAdvanced=r.getString("advanced");selectionFilters=r.getString("selectionFilters")
+        previewSelection=FfmpegRecoveryUi.selection(r.optJSONObject("selection"));transformOrder.clear()
+        val order=r.getJSONArray("order");for(i in 0 until order.length())transformOrder+=TransformOp.valueOf(order.getString(i))
+        sourceCodecFamily=selectedUri?.let { detectSourceCodecFamily(it) };timeline.setRange(durationMs,0L,durationMs)
+        selectedCodec=FfmpegRecoveryUi.encoder(r.optJSONObject("encoder"))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -349,6 +365,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         updateMetadataModeState()
         refreshCommandPreview()
         handleIncomingShareIntent(intent)
+        window.decorView.post { recovery.offer() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -601,6 +618,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     }
 
     private fun executeRotation(uri: Uri, degrees: Int, metadataOnly: Boolean) {
+        recovery.begin()
         val processingStartMs = SystemClock.elapsedRealtime()
         clearOutputResult()
         val startMs = timeline.getStartMs()
@@ -636,7 +654,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 val currentInputFile = copyUriToCache(uri, selectedName)
                 inputFile = currentInputFile
                 val outputName = buildOutputName(selectedName, metadataOnly)
-                val currentTempOutput = File(cacheDir, "rotate_${System.currentTimeMillis()}_$outputName")
+                val currentTempOutput = recovery.file("output", "_$outputName") { File(cacheDir, "rotate_${System.currentTimeMillis()}_$outputName") }
                 tempOutput = currentTempOutput
                 
                 val tracker: FfmpegTaskTracker
@@ -778,6 +796,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     tracker.completeTask(1, encoder.shortName)
                 }
                 val success = result.success
+                var completionWarning: String?=null
                 if (success) keepOutput = true
                 var finalOutputFile = currentTempOutput
                 var finalOutputName = outputName
@@ -788,7 +807,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     var remuxRan = false
                     val remux = FfmpegOutputRemuxer.remuxToOriginalContainer(
                         currentTempOutput,
-                        FfmpegOutputRemuxer.originalVideoExtension(selectedName)
+                        FfmpegOutputRemuxer.originalVideoExtension(selectedName),
+                        preserveIntermediate=true,
+                        execute={ arguments -> executeFfmpegWithProgress(arguments,tracker,endMs-startMs) }
                     ) { arguments ->
                         remuxRan = true
                         FfmpegCommandPresenter.show(status, arguments.asIterable())
@@ -797,12 +818,13 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     if (remux.converted) {
                         FfmpegCommandPresenter.completeLastShown(status, true)
                         finalOutputFile = remux.file
-                        finalOutputName = remux.file.name
+                        finalOutputName = remux.file.name.substringAfter('_')
                         tempOutput = finalOutputFile
                     } else if (remuxRan) {
                         FfmpegCommandPresenter.completeLastShown(status, false)
                     }
                     tracker.completeTask(convertIndex)
+                    completionWarning=remux.warning
                 }
 
                 runOnUiThread {
@@ -836,7 +858,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     // usuario ver Salvar/Compartilhar logo apos os passos.
                     val statsText = tracker.successMessageOrEmpty()
                     if (statsText.isNotBlank()) {
-                        outputStats.text = "Estatísticas:\n$statsText"
+                        outputStats.text = listOfNotNull(completionWarning,"Estatísticas:\n$statsText").joinToString("\n\n")
+                        outputStats.setTextColor(android.graphics.Color.parseColor(if(completionWarning==null)"#FF2ECC71" else "#FFFFC857"))
                         outputStats.visibility = View.VISIBLE
                     }
 
@@ -849,9 +872,10 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                     status.text = "Erro: ${e.message ?: "falha inesperada"}"
                 }
             } finally {
-                inputFile?.delete()
-                tempIntermediate?.delete()
-                if (!keepOutput) tempOutput?.delete()
+                recovery.finish(keepOutput)
+                recovery.delete(inputFile)
+                recovery.delete(tempIntermediate)
+                if (!keepOutput) recovery.delete(tempOutput)
             }
         }.start()
     }
@@ -861,6 +885,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         tracker: FfmpegTaskTracker,
         expectedDurationMs: Long = durationMs
     ): FFmpegSession {
+        recovery.reuse(arguments)?.let { return it }
+        recovery.starting(arguments)
         FfmpegCommandPresenter.show(status, arguments.asIterable())
         Log.i(TAG, FfmpegMediaPolicies.formatCommand(arguments.asIterable()))
         val latch = CountDownLatch(1)
@@ -888,6 +914,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         currentSessionId = null
         val completed = sessionRef.get() ?: session
         FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        recovery.completed(arguments, completed)
         return completed
     }
 
@@ -897,6 +924,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         taskIndex: Int,
         expectedDurationMs: Long
     ): FFmpegSession {
+        recovery.reuse(arguments)?.let { return it }
+        recovery.starting(arguments)
         FfmpegCommandPresenter.show(status, arguments.asIterable())
         Log.i(TAG, FfmpegMediaPolicies.formatCommand(arguments.asIterable()))
         val latch = CountDownLatch(1)
@@ -921,6 +950,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         currentSessionId = null
         val completed = sessionRef.get() ?: session
         FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        recovery.completed(arguments, completed)
         return completed
     }
 
@@ -932,7 +962,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         tracker: FfmpegTaskTracker
     ): RotationExecutionResult {
         parallelProcessing = true
-        val workDir = File(cacheDir, "rotate_parallel_${System.currentTimeMillis()}").apply { mkdirs() }
+        val workDir = recovery.work("rotate_parallel") { File(cacheDir, "rotate_parallel_${System.currentTimeMillis()}") }
         val segmentDir = File(workDir, "segments").apply { mkdirs() }
         val rotatedDir = File(workDir, "rotated").apply { mkdirs() }
         val videoBitrate = detectVideoBitrate(inputFile)
@@ -1113,6 +1143,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
 
                         val segmentArguments = buildSegmentRotationArguments(segment, chunkOutput, filters, encoder, quality, videoBitrate, videoGopSize).toTypedArray()
                         Log.i(TAG, FfmpegMediaPolicies.formatCommand(segmentArguments.asIterable()))
+                        val cachedSession=recovery.reuse(segmentArguments)
+                        if(cachedSession!=null)finalSession=cachedSession else {
+                            recovery.starting(segmentArguments)
                         FFmpegKit.executeWithArgumentsAsync(
                             segmentArguments,
                             { s ->
@@ -1129,7 +1162,9 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                         )
                         latch.await()
                         
+                        }
                         val session = finalSession!!
+                        recovery.completed(segmentArguments,session)
                         if (ReturnCode.isCancel(session.returnCode)) {
                             cancelCount.incrementAndGet()
                         } else if (ReturnCode.isSuccess(session.returnCode) && chunkOutput.exists() && chunkOutput.length() > 0L) {
@@ -1211,7 +1246,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
         } finally {
             previousSessionHistorySize?.let { FFmpegKitConfig.setSessionHistorySize(it) }
             parallelProcessing = false
-            workDir.deleteRecursively()
+            recovery.delete(workDir)
         }
     }
 
@@ -1267,8 +1302,8 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 extractor.selectTrack(videoTrackIndex)
                 while (true) {
                     val sampleTime = extractor.sampleTime
-                    if (sampleTime < 0) break
-                    if ((extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
+                    if (extractor.sampleTrackIndex < 0) break
+                    if (sampleTime >= 0 && (extractor.sampleFlags and android.media.MediaExtractor.SAMPLE_FLAG_SYNC) != 0) {
                         keyframes.add(sampleTime / 1000L)
                     }
                     extractor.advance()
@@ -2151,6 +2186,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     }
 
     private fun cancelRotation() {
+        recovery.cancel()
         status.text = "Cancelando..."
         if (parallelProcessing) {
             FFmpegKit.cancel()
@@ -2226,6 +2262,7 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
                 buttonSaveToFolder.isEnabled = true
                 buttonSaveToFolder.alpha = 1f
                 if (failure == null && savedCount == filesToSave.size) {
+                    recovery.saved()
                     finalOutputDirUri = treeUri
                     lastOutputUri = lastSavedUri
                     lastOutputName = lastSavedName
@@ -2451,6 +2488,13 @@ class FfmpegRotateVideoActivity : AppCompatActivity() {
     }
 
     private fun copyUriToCache(uri: Uri, displayName: String): File {
+        recovery.input(uri,displayName) { target ->
+            contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { output ->
+                val buffer=ByteArray(1 shl 20)
+                while(true) { if (Thread.currentThread().isInterrupted) throw InterruptedException("Operação cancelada.");val count=input.read(buffer);if(count<0)break;output.write(buffer,0,count) }
+            } } ?: error("Não consegui abrir $displayName")
+        }?.let { return it }
+
         val extension = displayName.substringAfterLast('.', "mp4")
         val inputFile = File(cacheDir, "rotate_input_${System.currentTimeMillis()}.$extension")
         contentResolver.openInputStream(uri)?.use { input ->

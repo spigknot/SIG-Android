@@ -512,7 +512,9 @@ internal object FfmpegMediaPolicies {
         sourcePath: String,
         startUs: Long,
         hevc: Boolean,
-        audioArguments: List<String> = emptyList()
+        audioArguments: List<String> = emptyList(),
+        durationSeconds: Double? = null,
+        firstGap: Double = 0.0
     ): Array<String> = buildList {
         addAll(listOf("-y", "-fflags", "+genpts"))
         val inicio = String.format(Locale.US, "%.6f", startUs.coerceAtLeast(0L) / 1_000_000.0)
@@ -528,8 +530,15 @@ internal object FfmpegMediaPolicies {
         } else {
             addAll(audioArguments)
         }
-        if (hevc) addAll(listOf("-tag:v", "hvc1"))
-        addAll(listOf("-avoid_negative_ts", "make_zero", "-max_interleave_delta", "0"))
+        durationSeconds?.let { duration ->
+            val limit=SmartInsertPlanner.decimal(duration)
+            if(hasAudio)addAll(listOf("-af","aresample=async=1:first_pts=0,apad,atrim=duration=$limit,asetpts=N/SR/TB"))
+            val gap=SmartInsertPlanner.decimal(firstGap)
+            addAll(listOf("-bsf:v","setts=pts=PTS+$gap/TB:dts='if(eq(N,0),DTS+$gap/TB,max(DTS+$gap/TB,PREV_OUTDTS+1))':duration='min(DURATION,max(1,$limit/TB-(PTS+$gap/TB)))'","-t",limit))
+        }
+        if (hevc) addAll(listOf("-tag:v", if(durationSeconds==null) "hvc1" else "hev1"))
+        addAll(listOf("-avoid_negative_ts", if(durationSeconds==null) "make_zero" else "disabled", "-max_interleave_delta", "0"))
+        if(outputPath.endsWith(".mp4",ignoreCase=true))addAll(listOf("-video_track_timescale","90000","-movie_timescale","90000","-movflags","+faststart"))
         addAll(listOf("-map_metadata", "0", "-map_chapters", "-1", outputPath))
     }.toTypedArray()
 

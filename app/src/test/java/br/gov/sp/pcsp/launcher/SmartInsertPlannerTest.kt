@@ -71,4 +71,15 @@ class SmartInsertPlannerTest {
         for(text in listOf("N/A,0.1,2,40","0,0.1,-1,40","0,0.1,2,N/A","0,0.1,2"))
             assertThrows(IllegalArgumentException::class.java) { SmartInsertPlanner.csvPackets(text,48000,0.0) }
     }
+    @Test fun packetSideDataDoesNotForceContinuousReencoding() {
+        val packets=SmartInsertPlanner.csvPackets("-0.037000,0.085333,1912,44,Skip Samples,1776,0,0,0\n0.048333,0.085333,1952,1956\n",48000,0.0)
+        assertEquals(-1776L,packets.first().start);assertEquals(4096L,packets.first().count)
+        assertEquals(packets.first().start+packets.first().count,packets.last().start)
+    }
+    @Test fun millisecondEofRoundingOnlyEncodesTheLastPacket() {
+        val packets=(0..2).map { SmartInsertPlanner.Packet(it*4096L,4096,0,10) }
+        val splice=SmartInsertPlanner.splice(packets,12288+16L,1000,4096,endTolerance=48)
+        assertEquals(8192L,splice.tailStart);assertEquals(1,splice.suffix.size)
+        assertThrows(IllegalArgumentException::class.java) { SmartInsertPlanner.splice(packets,12388,1000,4096,endTolerance=48) }
+    }
 }

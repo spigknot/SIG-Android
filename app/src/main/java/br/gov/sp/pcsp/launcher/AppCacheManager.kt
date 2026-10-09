@@ -30,6 +30,7 @@ object AppCacheManager {
 
     private fun deleteOlderThan(file: File, cutoff: Long): Long {
         if (!file.exists()) return 0L
+        if (file.isDirectory && file.parentFile?.name == "ffmpeg_jobs" && FfmpegRecoveryStore.protected(file)) return 0L
         if (file.isFile) {
             val size = file.length()
             return if (file.lastModified() < cutoff && file.delete()) size else 0L

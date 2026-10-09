@@ -1,5 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
+import org.json.JSONObject
+
 import android.app.Activity
 import android.app.DownloadManager
 import android.content.ActivityNotFoundException
@@ -192,6 +194,15 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         }
     }
 
+    private val recovery by lazy { FfmpegRecoveryUi(this,"extract",::recoveryRequest,::restoreRecovery) { extractSelectedAudio() } }
+    private fun recoveryRequest(): JSONObject = JSONObject().put("videos",org.json.JSONArray(selectedVideos.map { JSONObject().put("uri",it.uri.toString()).put("name",it.name).put("mime",it.mime) }))
+        .put("tracks",JSONObject(selectedAudioTracks as Map<*,*>)).put("preset",outputPreset.name).put("extension",outputExtension.name).put("rate",sampleRate).put("channels",channels).put("bitrate",bitrate)
+    private fun restoreRecovery(r: JSONObject) {
+        selectedVideos.clear();selectedAudioTracks.clear();val videos=r.getJSONArray("videos");val tracks=r.getJSONObject("tracks")
+        for(i in 0 until videos.length()) { val v=videos.getJSONObject(i);val uri=recovery.uri(v.getString("uri"));selectedVideos+=SelectedVideo(uri,v.getString("name"),v.getString("mime"));if(tracks.has(v.getString("uri")))selectedAudioTracks[uri.toString()]=tracks.getInt(v.getString("uri")) }
+        outputPreset=AudioPreset.valueOf(r.getString("preset"));outputExtension=AudioExtension.valueOf(r.getString("extension"));sampleRate=r.getInt("rate");channels=r.getInt("channels");bitrate=r.getString("bitrate")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
@@ -310,6 +321,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         })
         handleIncomingShareIntent(intent)
         refreshCommandPreview()
+        window.decorView.post { recovery.offer() }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -752,6 +764,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         val jobAudioTracks = jobVideos.associate { it.uri.toString() to (selectedAudioTracks[it.uri.toString()] ?: 0) }
         val processingStartMs = SystemClock.elapsedRealtime()
         val jobSettings = currentAudioSettings()
+        recovery.begin()
         val jobOutputMime = jobSettings.extension.mime
         clearOutputResult()
         clearTerminal()
@@ -778,7 +791,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 try {
                     val inputFile = copyUriToCache(video.uri, video.name)
                     val outputName = buildOutputName(video.name, usedNames, jobSettings.extension)
-                    val tempOutput = File(cacheDir, "audio_${System.currentTimeMillis()}_$outputName")
+                    val tempOutput = recovery.file("output:$index", "_$outputName") { File(cacheDir, "audio_${System.currentTimeMillis()}_$outputName") }
                     val trimStartMs = if (trimSingleMedia) startMs ?: 0L else 0L
                     val trimEndMs = if (trimSingleMedia) endMs else null
                     val expectedDuration = trimEndMs?.let { it - trimStartMs } ?: readDuration(video.uri)
@@ -814,6 +827,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
                 }
             }
 
+            recovery.finish(results.isNotEmpty() && failures.isEmpty(),cancelled)
             runOnUiThread {
                 setProcessing(false)
                 if (cancelled) {
@@ -1016,7 +1030,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
             try {
                 val document = destDir.createFile(fileMime, outputName)
                 if (document != null) {
-                    contentResolver.openOutputStream(document.uri)?.use { output ->
+                    val destination=contentResolver.openOutputStream(document.uri) ?: error("Não foi possível abrir a saída para salvar.")
+                    destination.use { output ->
                         tempFile.inputStream().use { input ->
                             input.copyTo(output)
                         }
@@ -1031,6 +1046,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
  
         if (savedCount > 0) {
             hasSaved = true
+            if(savedCount==tempOutputFiles.size)recovery.saved()
             finalOutputDirUri = treeUri
             outputItems.clear()
             outputItems.addAll(savedItems)
@@ -1067,6 +1083,13 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun copyUriToCache(uri: Uri, displayName: String): File {
+        recovery.input(uri,displayName) { target ->
+            contentResolver.openInputStream(uri)?.use { input -> target.outputStream().use { output ->
+                val buffer=ByteArray(1 shl 20)
+                while(true) { if (Thread.currentThread().isInterrupted) throw InterruptedException("Operação cancelada.");val count=input.read(buffer);if(count<0)break;output.write(buffer,0,count) }
+            } } ?: error("Não consegui abrir $displayName")
+        }?.let { return it }
+
         val extension = displayName.substringAfterLast('.', "tmp")
         val inputFile = File(cacheDir, "extract_input_${System.currentTimeMillis()}.$extension")
         contentResolver.openInputStream(uri)?.use { input ->
@@ -1630,6 +1653,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
     }
 
     private fun cancelExtraction() {
+        recovery.cancel()
         status.text = "Cancelando..."
         currentSessionId?.let { FFmpegKit.cancel(it) } ?: FFmpegKit.cancel()
     }
@@ -1639,6 +1663,8 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         expectedDurationMs: Long,
         tracker: FfmpegTaskTracker
     ): FFmpegSession {
+        recovery.reuse(arguments)?.let { return it }
+        recovery.starting(arguments)
         FfmpegCommandPresenter.show(status, arguments.asIterable())
         Log.i(TAG, "FFmpeg: ${FfmpegMediaPolicies.formatCommand(arguments.asIterable())}")
         val latch = CountDownLatch(1)
@@ -1664,6 +1690,7 @@ class FfmpegExtractAudioActivity : AppCompatActivity() {
         currentSessionId = null
         val completed = sessionRef.get() ?: session
         FfmpegCommandPresenter.completeLastShown(status, ReturnCode.isSuccess(completed.returnCode))
+        recovery.completed(arguments, completed)
         return completed
     }
 

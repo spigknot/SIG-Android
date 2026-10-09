@@ -12,7 +12,7 @@ object SmartInsertPlanner {
 
     data class Audio(val codec: String, val rate: Int, val channels: Int, val layout: String,
         val samples: Long, val sampleFormat: String, val bits: Int, val bitrate: String, val track: Int = 0,
-        val startTime: Double = 0.0) {
+        val startTime: Double = 0.0, val seekOffset: Double = 0.0) {
         val duration get() = samples.toDouble() / rate
         val encoder get() = when (codec) { "mp3" -> "libmp3lame"; "opus" -> "libopus"; "vorbis" -> "libvorbis"; else -> codec }
         val lossless get() = codec in pcmCodecs || codec in setOf("alac", "flac")
@@ -45,7 +45,8 @@ object SmartInsertPlanner {
     }
 
     data class Packet(val start: Long, val count: Long, val offset: Long, val size: Int)
-    data class Splice(val left: Long, val right: Long, val prefix: List<Packet>, val suffix: List<Packet>)
+    data class Splice(val left: Long, val right: Long, val prefix: List<Packet>, val suffix: List<Packet>,
+        val headEnd: Long = 0,val tailStart: Long = 0)
 
     fun decimal(value: Double): String = String.format(Locale.US, "%.9f", value)
     fun sampleCount(seconds: Double, rate: Int): Long {
@@ -72,7 +73,8 @@ object SmartInsertPlanner {
             ?: FfmpegMediaPolicies.channelLayout(channels)
         return Audio(codec, rate, channels, layout, samples, audio.optString("sample_fmt"),
             audio.optInt("bits_per_raw_sample"), "${(audio.optLong("bit_rate", 192000) / 1000).coerceAtLeast(1)}k", track,
-            audio.optDouble("start_time",0.0))
+            audio.optDouble("start_time",0.0),
+            audio.optDouble("start_time",0.0) - (info.optJSONObject("format")?.optDouble("start_time",0.0) ?: 0.0))
     }
 
     fun render(main: Long, inserted: Long, cut: Long, rate: Int, seconds: Double, curve: String, smart: Boolean): Render {
@@ -149,22 +151,33 @@ object SmartInsertPlanner {
     fun csvPackets(text: String, rate: Int, origin: Double): List<Packet> = text.lineSequence()
         .filter { it.isNotBlank() }.map { line ->
             val values=line.trim().split(',')
-            require(values.size==4) { "Tabela de pacotes inválida." }
+            // FFprobe acrescenta Skip Samples/discard padding depois destes
+            // quatro campos quando o MP4 tem edit list/preroll.
+            require(values.size>=4) { "Tabela de pacotes inválida." }
             val start=values[0].toDoubleOrNull();val duration=values[1].toDoubleOrNull()
             val size=values[2].toIntOrNull();val offset=values[3].toLongOrNull()
             require(start!=null && start.isFinite() && duration!=null && size!=null && size>0 && offset!=null && offset>=0) { "Pacote de áudio inválido." }
             Packet(((start-origin)*rate).roundToLong(),sampleCount(duration,rate),offset,size)
         }.toList()
 
-    fun splice(packets: List<Packet>, main: Long, inserted: Long, cut: Long, minimumBridge: Int = 0): Splice {
-        require(packets.isNotEmpty() && packets.first().start == 0L && packets.last().let { it.start+it.count } == main &&
+    fun splice(packets: List<Packet>, main: Long, inserted: Long, cut: Long, minimumBridge: Int = 0, endTolerance: Long = 0): Splice {
+        // O relógio da edit list MOV pode arredondar o EOF para milissegundos.
+        // Só essa fração final é reconstruída com o mesmo apad do encode contínuo.
+        require(endTolerance>=0)
+        require(packets.isNotEmpty() && packets.first().start <= 0L && packets.last().let { it.start+it.count } >= main-endTolerance &&
             packets.all { it.count > 0 } && packets.zipWithNext().all { (a,b) -> a.start+a.count == b.start }) {
             "Os pacotes não formam uma sequência contínua de amostras."
         }
         val at = cut.coerceIn(0,main)
-        val borders = packets.map { it.start } + main
+        var head=packets.firstOrNull { it.start<0 && it.start+it.count>0 }?.let { it.start+it.count } ?: 0
+        var tail=packets.lastOrNull { it.start<main && it.start+it.count>main }?.start
+            ?: packets.last().takeIf { it.start+it.count<main }?.start ?: main
+        head=minOf(main,head);tail=maxOf(0,tail)
+        val borders = (listOf(0L,main)+packets.map { it.start }.filter { it in 1 until main }).distinct().sorted()
         var left = borders.last { it <= at }
         var right = borders.first { it >= at }
+        if(at<head)right=maxOf(right,head)
+        if(at>tail)left=minOf(left,tail)
         if (minimumBridge > 0) {
             if (left == main && main-packets.last().start < minimumBridge) left = packets.last().start
             if (right-left+inserted < minimumBridge) {
@@ -172,7 +185,9 @@ object SmartInsertPlanner {
                 else if (left > 0) left = borders.last { it < left }
             }
         }
-        return Splice(left,right,packets.filter { it.start < left },packets.filter { it.start >= right })
+        head=minOf(head,left);tail=maxOf(tail,right)
+        return Splice(left,right,packets.filter { it.start>=head && it.start<left && it.start+it.count<=main },
+            packets.filter { it.start>=right && it.start+it.count<=tail },head,tail)
     }
 
     fun canCopy(audio: Audio, extension: String): Boolean = when (extension.lowercase(Locale.ROOT)) {
