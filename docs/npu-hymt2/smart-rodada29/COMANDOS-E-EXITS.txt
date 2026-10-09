@@ -1,0 +1,27 @@
+COMANDOS E EXITS — smart-rodada29 (reproducao!)
+=================================================
+[1] Extracao automatica:
+  python3 /root/r29_extrai.py
+  => get_scale_min_k4: L880..887 (ggml-quants.c!) sha=d3903c4626a22745
+  => set_tensor COMPLETO: L1318..1391 sha=ff72823990842093 (74 linhas!)
+  => gen sha256: 9b80901e32d2d94b9d35ba58c1a56b0b89b9785879fc78c88027e80a1f3c6d4e
+
+[2] A GUARDA (R29 §5) aplicada no fonte (kq2/sigcand2!):
+  python3 /root/r29_guard2.py  => changed: 2 (Q4_K + Q6_K!)
+  (re-extraido depois: o inc dos cenarios tem os guards!)
+
+[3] Compilacao dos 6 cenarios:
+  cd /root/r29_t/<cenario>
+  g++ -std=c++17 -fpermissive -O2 -I/root/llama-cpp-npu/ggml/include       -I/root/llama-cpp-npu/ggml/src -I. ./r29_fixture.c       /root/llama-cpp-npu/ggml/src/ggml-quants.c -lm -o fx
+  (todos BUILD OK!)
+
+[4] Resultados (outputs em r29-*-out.txt!):
+  green: 0 RED (T1 0bad, T2 0bad, T3 10240/14336, T4a/b rejeitados sem efeitos!)
+  m1 (cases Q4+Q6 removidos): T1 RED 13590, T2 RED 16065!
+  m2 (so Q6 removido): T2 RED 16065, T1 OK (0!) — ESPECIFICO!
+  m3 (alloc lista): T3 RED (9216/13440!)
+  m4 (helper indice errado q[j-4]!): T1 RED 7968! (max_abs 1.296 — identico ao especialista!)
+  m5 (guards removidos): T4a abort=1; T4b 9598 bytes escritos => RED!
+
+[5] LACUNA HISTORICA DECLARADA: r28_fixture_inv.c (variante invertida do R28)
+    NAO preservado (nao encontrado no servidor!) — nao retrofabricar!

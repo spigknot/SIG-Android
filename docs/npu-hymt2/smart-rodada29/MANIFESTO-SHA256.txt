@@ -1,0 +1,23 @@
+MANIFESTO — smart-rodada29 (helper corrigido via extração + guarda + VACINA VALIDADA!)
+
+T1 GREEN com o leitor inalterado (helper era a causa — idêntico ao especialista 0.000702!)!
+GUARDA re-aplicada (QR 2 hunks) + T4 GREEN (sem efeitos!) + m5 RED!
+6 CENÁRIOS: green 0 RED; m1/m2/m3/m4/m5 cada defeito com seu RED específico!
+VACINA_VALIDADA_GREEN: SIM! Pendentes: gate PIN, fused build, refs, ALLOC_FAIL. KERNEL_VALIDATED: NAO.
+
+8463d365eaa891b0f2398feefe55808a42b405afebce6239438139d6d9f98053  COMANDOS-E-EXITS.txt  (1427 B)
+00b4b9857082fda6072110e0077dcb6ebb516261a10faad0b743b8258d39d555  r29-green-out.txt  (527 B)
+ee3d193612ccf00f590a2f20ec927cdd545965df1ccdef078bc7605c93ebf295  r29-m1-out.txt  (556 B)
+3751d1396d9b6b49aa035ca3722f4db966de9b65fa9b0e005d0198ae8e7e5201  r29-m2-out.txt  (538 B)
+dbebf7e3d638d324bb6cddfc02c9934713dbb2fdab50b5404ccc905f91b3c211  r29-m3-out.txt  (526 B)
+5e0d29c8a1674bb6cb21ae98989decb3a635145f61402520d65c5b5e7c759190  r29-m4-out.txt  (530 B)
+1dfc533fe25ea2c4eb8b04565c3c0764177e967b55f1aa262237a19760f9bbe5  r29-m5-out.txt  (530 B)
+714d5371fb100c383af52c71526fd5f91f700b6866ec7abf4750b7e37e4ba3b4  r29_cores_gen.h  (7924 B)
+22798501cdc5e1efb9b784b6228bf770d869791bc40b44a0cbc08c92e65ee4bf  r29_fixture.c  (11595 B)
+e1767befc64d5cd46ef5cb0324506694d0c16b7485d7528e5edae2c9156f0e58  r29_mkfix2.py  (2497 B)
+cd9c898da3797a986caf2564385fce4c6b173f047dcf81eb74c39df92fd08bc0  r29_muts3.py  (1283 B)
+0dc5caf6b8940749bdecfabb017319ed5318cdd91cc30fb6302a540fb3a719b3  r29_settensor_adap.inc  (2607 B)
+17bb1e35c421578d8641b72b6d3bce1f96bae4bbfeb6bc8f1108e9bd43325c37  r29_settensor_gen.inc  (3497 B)
+ac6ac06df451fdccedc859c2bbc59a23d313e4e0ea96b612dd3ea6dbcbfc74b5  r29_t4.py  (3357 B)
+
+20f557b683c35033a3de28e7ad8a209e6e9a941c082d87bb5cf7201586b60054  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA29.txt

@@ -1,0 +1,74 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 29
+CAUSA DO RED Q4 LOCALIZADA: HELPER ERRADO NA FIXTURE; RESTAURAR GUARDA E FECHAR GATES
+===============================================================================
+
+1. PARECER: PROGRESSO ACEITO, CONCLUSAO SOBRE O LEITOR RETIRADA
+A extracao automatica e os testes dos mutantes sao um avanco real sobre a simulacao R27. Agora o caso de perda do dispatch Q6 e detectado, o tensor Q6 tem strides canonicos proprios e os negativos evidenciam ausencia de rejeicao no caminho exercitado. Os nove hashes dos anexos R28 correspondem.
+Por outro lado, a baseline chamada green tem 3 RED. VACINA_CONSTRUIDA/DIAGNOSTICO_EXECUTADO pode ser declarado; VACINA_VALIDADA_GREEN nao. Manter explicitamente T1/T4 abertos ate fix e execucao.
+O especialista LOCALIZOU E REPRODUZIU o erro T1. Nao mudar o leitor nem declarar o R22 espelhado antes aplicar este achado.
+
+2. CAUSA EXATA DO ERRO DE 7.968 ENTRADAS
+Em r28_fixture.c:64, helper get_scale_min_k4, ramo j>=4:
+ATUAL: *m = (uint8_t) ((q[j+4] >> 4) | ((q[j-4] >> 6) << 4));
+CANONICO: *m = (uint8_t) ((q[j+4] >> 4) | ((q[j] >> 6) << 4));
+A escala d recebe bits altos de q[j-4]; o minimo m recebe de q[j]. O helper transcrito usa os bits de d nos dois campos. Nao e VERBATIM do ggml-quants.c. A mesma falha esta em r28_mapas.c:45, por isso quatro mapeamentos nao consertariam os offsets de escala/minimo.
+O canonico local ggml-quants.c:880-887 e o pin1ec81880944a63bc4aaf1abfe9a6d35c7569a757 conferem nessa formula.
+Experimento REAL do especialista, mesmo input K256/N64, pack real extraido do pin, leitor R28 INALTERADO, dequant canonico:
+helper errado -> exit1, n_bad=7968, nf=0, max_abs=1.296227455;
+helper correto -> exit0, n_bad=0, nf=0, max_abs=0.000701904.
+Todos os erros da variante errada ficam em k128..255; k0..127 nao falha. Isso corresponde aos tiles j4..7 cujo minimo foi reconstruido incorretamente.
+Fontes/logs/prompt de reproducao ja salvos em:
+D:/Projetos/SIG/docs/especialista/AUDITORIA-R28-Q4K-HELPER-RED-GREEN.txt
+D:/Projetos/SIG/docs/especialista/AUDITORIA-R28-LOGS/
+Nenhum arquivo da sua fixture/candidato foi editado pelo especialista.
+Essa prova valida o mecanismo na reproducao independente; os gerados reais do servidor ainda precisam estar arquivados para fechar a cadeia exata do candidato. Nao afirmar pack/reader globais pela baseline pequena nem pelos PASSB1/B2 do device.
+
+3. PRIMEIRA ACAO: CORRIGIR A DEPENDENCIA, NAO O ALGORITMO PARA COMPENSAR
+Extrair automaticamente get_scale_min_k4 do fonte real que o candidato usa, com fonte/linha/SHA completo e diff com o pin. Se o helper do CANDIDATO for correto, corrigir SOMENTE o harness transcrito; nao patchar host/DSP/produto. Se o candidato tambem diferir, separar defeito da fixture e do candidato com prova e fix focal autorizado na copia isolada.
+Repetir T1 com o leitor atual, sem trocar nibble/cp/layout. Corrigir r28_mapas.c ou retirar seu uso como referencia: nao mais tentativa de mapeamento sobre pack com helper errado.
+Testar helper isoladamente para j0..7 usando bytes em que bits altos da escala e do minimo diferem. Caso conhecido que distinga q[j] de q[j-4], expectativa externa fixa; mutante restaura o indice errado e deve RED. Isso vacina a dependencia que escapou da primeira extracao.
+Tolerancia global0.05 nao substitui limites de arredondamento/payload. Preservar valores observados; acrescentar esperado FP16 por escala/minimo e/ou bound local justificado. Nao exigir igualdade canonica impossivel apos arredondamento, nem afrouxar a tolerancia para mascarar index errado.
+Depois da correcao da fixture, T1/T2/T3 devem GREEN com fonte candidato atual, T4 ainda RED ate corrigir a guarda. Documentar duas etapas e preservar o diagnostico antigo.
+
+4. EXTRACAO: ENTREGAR O QUE FOI COMPILADO E O CALLBACK COMPLETO
+Faltam localmente r28_cores_gen.h, r28_switch_gen.inc e variantes; r28-gen-info.txt tem so prefixo/lista de nomes. Recuperar/arquivar os arquivos REAIS ja usados, stdout bruto e comandos/exits, sem sobrescrever a evidencia R28. Manifesto deve incluir gerados, mutantes, harness utilizado, deps/headers e fonte exato. Se r28_fixture_inv.c foi compilado, arquivar esse arquivo tambem e declarar a diferenca para r28_fixture.c.
+Nao retrofabricar o estado antigo a partir do fonte depois do fix. Se nao preservado, declarar lacuna historica e gerar novo checkpoint R29.
+r28_extrai.py escolhe o PRIMEIRO switch(tensor->type) global e o envolve em callback local. Isso nao garante ownership nem captura guardas colocadas ANTES do switch. Ao reaplicar guards no callback, essa extracao antiga pode omitir o fix e produzir conclusao falsa.
+Extrair o corpo COMPLETO da funcao set_tensor identificada por assinatura/intervalo, incluindo validacoes pre-switch. Adaptar apenas contexto/log/RPC externo nao exercitado, declarando os limites. Alternativa: seam realmente compartilhada. Falhar se alguma funcao requerida nao encontrada ou se houver assinatura ambigua; nao continuar com header parcial. Hash do fonte bruto separado do texto normalizado e hashes completos por corpo.
+Conferir chaves de strings/comentarios se usar parser simples, assert da contagem/intervalos e diff do gerado com fonte. Nao precisa migrar todo backend para clang tooling, mas nenhuma extracao por primeira ocorrencia global sem verificacao.
+
+5. SEGUNDA ACAO: REAPLICAR GUARDA DE UPLOAD COM T4 RED->GREEN
+O zero fixo passado ao repack esconde offset real. Garantir offset==0 e tamanho FULL requerido pelo contrato antes ler/escrever, e repassar offset real ao pack. Exigir size==ggml_nbytes(tensor) se full-only, nao somente size<=nbytes. Validar o contrato nos callers do loader; se partial e suportado pela API geral mas nao por esse pack, recusar explicitamente na rota ou implementar contrato separado com testes, nunca normalizar silenciosamente.
+Usar calculos/cast sem overflow, estado tensor/buffer valido e leitura dos bytes canonicos corretos. Nao alterar nb logico para tiled indiscriminadamente; allocator/descriptor continuam distinguindo logical/canonical de tiled.
+Cobrir Q4 E Q6: offset!=0, size0/parcial/maior/inconsistente, canarios de leitura/escrita, sem repack/memcpy/upload/compute quando rejeitado. A fixture atual passa buffer completo mesmo com size parcial: ela prova falta de guarda, nao leitura OOB em buffer realmente curto. Acrescentar alloc curta+guard/sanitizer quando viavel, sem provocar acesso indevido intencional no processo principal.
+Se assert e o contrato escolhido, test harness captura rejeicao; release nao pode usar apenas assert C removivel por NDEBUG. Usar garantia ativa do backend ou gate failclosed real conforme o contrato. Mensagem de erro nao deve mudar todo logging no mesmo passo.
+Mutantes removem guardoffset, guardfullsize, caseQ4, caseQ6 e reconhecimento K no allocator separadamente. Cada defeito deve RED em cenario especifico e restauracao GREEN. Nao tratar quantidade de RED baseline como criterio de eficacia de vacina final.
+ALLOC_FAIL-REPACK no fluxo real deve impedir upload/compute. Criar injecao compartilhada e contadores de side effects, nao replica de classificacao.
+
+6. TERCEIRA ACAO: GATE PIN REAL, FUSAO E DADOS B128 SEM NOVO ADIAMENTO
+Gate PIN permanece pendente. Implementar verdict_legacy/verdict_pin e counters independentes no codigo efetivo usado pelo probe e testes. Guardas de execucao/support/alloc/sync/sentinel/finite/coverage, referencia/denominador e soma finita sao obrigatorias. Score=-1 nao pode PASS por ser menor que5e-4. Refzero tem contrato explicito, nao divisao0 aceita.
+Fixture compilada compartilhada: legacyFAIL/PINPASS valido, ambosPASS, NMSEalto, NaN/Inf, parcial, execfalha, sentinel, denom0, scoreinvalido e overflow. Mutantes de bypass devem RED. Preservar FAILlegado, nao emitir um PASS sem rotulo como se test-backend-ops oficial inteiro tivesse sido executado.
+Fused fix fonte nao foi validado. Fixture REAL precompute/merge predicates comQ4_1 controle,Q4_K alvo,Q6 rejeitado; verificar q8_1/q8_0,rowbytes,offset,strides/paramfields e consumidores. Mutante remove Q4_K do row_size e deve RED. Somente apos essa prova rebuild separado; nao tocar ternario e fusao no mesmo A/B.
+Refs finas continuam necessarias: CSV/MMVIOL nao sao vetores completos. Exportar mesmos canonweights/act/outputCPUHTP comSHA e snapshotRAWtiled sem tensor_get que unpacka. Calcular RscalarCanonical e RtiledReader comdoubleacc; destacar10coords e medir todas8192. Identificar contribuicaoCPUref/scale/act/acc/cast sem inferir FP16acc por representacao final.
+A correcao do helper agora permite usar o leitor Q4 corretamente sobre snapshot. Nao mais adiar refs por um misterio que ja tem reproducer.
+Executar os trabalhos offline independentes na mesma rodada; se houverblocker real, comando/exits/erro e alternativa. Tempo dedicado a procurar nibble errada nao e motivo para deixar novamente gates/fixtures todaspendentes.
+
+7. DISPOSITIVO, COHORTS E PROGRESSAO
+Nao precisa aparelho para corrigir fixture/helper/guardtest/gate/fusedfixture. Primeiro fechar esses artefatos offline. Preservar GREEN2c45ed97/skel/core e badartifact fb8cc5d0.
+A/B logging continuaOPEN, MAX4runsB1 e UMAvariavel com fonte/probe/config/inputs/ELFs identificados. Comparar codegen/rodata/relocations antes novos runs; ternario redundante emarray nao e fix. Nao consumir toda sessao em rebuild logging.
+Quando novo candidato buildado, separar estados: fixture corrigida; guardfix; fusionfix; probePIN. Produzir diffs por mudanca e checkpoint source->ELF->APKentry->readback->PID. PID/stream ou installSuccess nao identificaSHA carregado. Reusar cohorts invariaveis no A/B e nao comparar oldELF comnewsource como se fossem mesmaimplementacao.
+Uma rodada focal device com Q4/Q6B1/B2/B128 e verdictsLEGADO/PIN completos depoisoffline aprovados, no probe autorizado. Se UNWRITTEN, coletar status/opstageefetivo/enqueue-submit-complete/readbacksync antesclasse e parar grade. Sem novos reboots/pmclear/logspam.
+Depois gates/guard/fusion/payload/cobertura e estabilidade suficientes: shapes do GGUFproduto c4bf, grafo curto complacement/profiles; posteriormente Smart NPU->GPUOpenCL e NPU->GPUVulkan comhandoffsemreplay e beneficomedido. Nao ainda UI/release nem KERNEL_VALIDATEDporB1/B2.
+
+8. ESCOPO E ENTREGA OBRIGATORIA A-H
+Somente copia isolada/probe autorizado. SIGprincipal/Whisper/UI/defaultVulkan/c4bf/R2/releasesintocados, semcommit/push/publicacao/installSIG. WIPbyteabyte; semlimpeza/stash/reset amplos. SerialCPH2747 3B15BD00FVE00000 explicitamente; wifi failclosed; nuncaPJA110. stayon7, semroot/governor/reboot/logdreset/pmclear/uninstall. Readback/estadofinaldocumentados.
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA29.txt em docs/especialista e evidencias docs/npu-hymt2/smart-rodada29/ comhashes/totais/exits:
+A fonte/gerados/adapter/headers/comandos/ELF/APK/readback e escopo;
+B helper indicecorreto, T1GREEN comleitorinalterado, mutantehelperRED;
+C guardoffset/fullsizeQ4Q6 e ALLOC_FAIL fluxo, mutantesRED/GREEN;
+D PIN/LEGADOgates+fixtureefetiva e countersvalidados;
+E fusionfixture/paramfields/mutante e buildseparado;
+F snapshot/vetores/refsB128 oublockerobjetivo;
+G loggingbudget/estabilidade/guardcohorts/R16;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO, COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE distintos.
+Aceite minimo: T1/Q6/alloc/negativos baselineGREEN + mutantes casos separadosRED + gatePINe fusionfixture efetivos. Refs devem entregues oublockerreal; nao proclamar vacinaCCE combaselineRED. O achado local elimina a necessidade de trocarleitor emtentativas cegas; concentrar em fechar testes/gates para avançar ao modelo, sem sucessao de rodadas apenasrebatizandopendencias.

@@ -1,0 +1,108 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 29
+=========================================================================
+Data: 09/10/2026. Ordens: "CAUSA DO RED Q4 LOCALIZADA: HELPER ERRADO NA
+FIXTURE; RESTAURAR GUARDA E FECHAR GATES". Copia isolada/probe.
+
+RESUMO EXECUTIVO — CAUSA CONFIRMADA E CORRIGIDA (§2/§3!): o helper
+get_scale_min_k4 TRANSCRITO tinha o indice errado no ramo j>=4 (*m usava
+q[j-4]; o canonico usa q[j]!) — exatamente o achado do especialista. A
+CORRECAO seguiu a ordem §3: extracao AUTOMATICA do helper do
+ggml-quants.c REAL (L880..887, sha d3903c4626a22745 — sem transcricao!) e
+re-extracao do set_tensor COMPLETO por ASSINATURA (L1318..1391, 74 linhas,
+sha ff72823990842093 — inclui validacoes pre-switch; nao mais "primeiro
+switch global"!). RESULTADO: T1 Q4_K GREEN com o leitor INALTERADO
+(0 bad, max_abs=0.000702 — IDENTICO ao 0.000701904 da reproducao
+independente do especialista!) => o leitor R22 NAO era espelhado (a
+conclusao foi RETIRADA conforme §1!). A GUARDA (§5) foi re-aplicada no
+fonte como UNICA mudanca (sem ternario/logging!): offset!=0 OU size
+nao-completo => KQSET-RECUSA + break ANTES de ler/escrever; offset REAL
+passado ao pack. Com o criterio melhorado do T4 (rejeicao = buffer SEM
+efeitos!), o GREEN COMPLETO: 0 RED! Os 6 CENARIOS DA VACINA (todos
+compilados do codigo EXTRAIDO!): green 0 RED; m1 (cases Q4+Q6 removidos)
+T1/T2 RED (13590/16065!); m2 (SO Q6 removido) T2 RED ESPECIFICO (T1
+intacto!); m3 (alloc lista) T3 RED (9216/13440!); m4 (helper indice
+errado) T1 RED (7968! — a vacina da dependencia!); m5 (guards removidos)
+T4 RED (abort=1 / 9598 bytes escritos!). VACINA_VALIDADA_GREEN: SIM (com
+os defeitos injetados SEPARADOS e RED cada um!). KERNEL_VALIDATED: NAO
+(gate PIN/fused/refs pendentes!).
+
+-----------------------------------------------------------------------
+A. FONTE / GERADOS / ADAPTADORES (cadeia completa!)
+-----------------------------------------------------------------------
+A.1 Fontes: kq2/sigcand2 com a GUARDA R29 (2 hunks; SEM ternario!);
+    ggml-quants.c (helper canonico!); EXTRAIDO por assinatura/hashes:
+    helper d3903c46; set_tensor ff728239; q6_get_quant a0e644ca;
+    repack_q6 f40fa637; repack_q4 3dbb71c3; alloc daf01a5c; gen
+    9b80901e...! Adaptacoes DECLARADAS (harness): typedefs (buffer/
+    buft!), HEX_VERBOSE removido, sbuf/sess=null (contexto nao
+    exercitado!), get_scale_min_k4 NAO transcrito (vem do gen!).
+A.2 O extrator falha se funcao requerida nao encontrada (asserts!) e
+    separa o corpo COMPLETO (assinatura!) do texto normalizado
+    (hashes separados!). Arquivos arquivados (14!: gen/inc/fixture/
+    scripts/outputs/comandos!).
+
+-----------------------------------------------------------------------
+B. HELPERS/LEITOR — RESULTADO REAL
+-----------------------------------------------------------------------
+B.1 T1 (leitor INALTERADO + helper CORRETO): 0 bad nas 16384;
+    max_abs=0.000702 (arredondamento FP16 das escalas — o esperado!).
+    O caso dos "7968" era o helper (k128..255 = tiles j4..7 — o m
+    errado!); NADA de leitor espelhado (retirado!). r28_mapas.c
+    RETIRADO como referencia (tentava mapear sobre pack com helper
+    errado!) — mantido so' como registro historico nos anexos R28.
+B.2 Tolerancias: os valores medidos ficam (<0.001!); o limite global
+    nao substitui analise (o T4 agora mede EFEITOS — bytes escritos
+    = 0 — nao so' abort!).
+
+-----------------------------------------------------------------------
+C. GUARDA + ALLOC FAIL (§5) — ESTADO
+-----------------------------------------------------------------------
+C.1 A guarda full-only: 2 cases (Q4_K/Q6_K!) — RECUSA antes de ler/
+    escrever; offset real repassado; sem normalizacao silenciosa.
+    T4a/T4b GREEN (sem efeitos!). m5 = a vacina (RED sem os guards!).
+C.2 ALLOC_FAIL-REPACK (injecao no fluxo compartilhado!): PENDENTE
+    (nao implementado nesta rodada — registrado; o gate do probe tem a
+    base!). Preflight opstage numerico: PENDENTE declarado.
+
+-----------------------------------------------------------------------
+D. GATE PIN / FIXTURE DO GATE — ESTADO
+-----------------------------------------------------------------------
+D.1 METRICA_PIN: implementada (probe!). GATE_PIN (verdict_legacy+
+    verdict_pin, counters, guardas NaN/coverage/denom0/score=-1 NAO
+    PASS, overflow!): PENDENTE — nao fingido como feito (a fixture do
+    gate com os 10 casos listados fica na proxima — o desenho completo
+    esta no parecer §6!).
+
+-----------------------------------------------------------------------
+E. FUSED / REFS / ESTABILIDADE
+-----------------------------------------------------------------------
+E.1 Fused: fix no FONTE (nao buildado!) — FUSED_VALIDATED=NAO; a
+    fixture real do precompute (Q4_1 controle/Q4_K alvo/Q6 rejeitado!)
+    fica na proxima (o desenho no parecer §6!). Rebuild SEPARADO do A/B!
+E.2 Refs finas (RscalarCanonical/RtiledReader com doubleacc!): PENDENTE
+    OBRIGATORIO declarado — agora DESBLOQUEADO (o helper correto!)
+    para o leitor sobre snapshot; a captura raw fica na rodada de
+    snapshot (sem tensor_get que unpacka!).
+E.3 Estabilidade/logging A-B: OPEN (budget 4 runs B1 — nao consumido;
+    comparar codegen/rodata/relocations antes!). ternario NAO e' fix.
+
+-----------------------------------------------------------------------
+F. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+F.1 ESTADOS: VACINA (callbacks Q4/Q6 + alloc + offset/parcial!): CCE
+    VALIDADA (6 cenarios!). T1/T2/T3/T4: GREEN! Q6 offline: CCE.
+    NMSE: metrica CCE/gate PENDENTE. Fused: fonte PENDENTE de build.
+    Refs: PENDENTE. KERNEL_VALIDATED: NAO. COMPILED: sim.
+F.2 ESCOPO: device INTACTO (2c45ed97! — nenhum reinstall nesta rodada!);
+    SIG/Whisper/UI/R2/release intocados; WIP intocado; sem reboots;
+    PJA110 nao tocado. O A/B/device ficou congelado (foco offline!).
+H.1 PROXIMOS (ordem!): (1) gate PIN (probe+fixture!); (2) fused fixture
+    + rebuild separado; (3) refs finas (snapshot!); (4) ALLOC_FAIL-flow;
+    (5) uma rodada device Q4/Q6 com verdicts LEGADO/PIN completos;
+    (6) shapes/modelo/fases!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada29/ (14 arquivos: r29_cores_gen.h/
+r29_settensor_adap.inc (o COMPILADO!), r29_fixture.c, scripts r29_*.py,
+os 6 outputs green/m1..m5, COMANDOS-E-EXITS.txt com a lacuna historica
+declarada (r28_fixture_inv nao preservado — nao retrofabricado!)) +
+manifesto.
