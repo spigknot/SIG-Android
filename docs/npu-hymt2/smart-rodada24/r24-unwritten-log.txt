@@ -1,0 +1,40 @@
+10-09 09:43:28.485 28152 29340 I NpuProbe: SESSAO(35b69e2): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-09 09:43:28.485 28152 29340 I NpuProbe: MM: backends cpu=0xb400007b6cf2eec0 htp=0xb400007b6cf2ef60
+10-09 09:43:28.485 28152 29340 I NpuProbe: MM: extra buft[0] = HTP0-REPACK
+10-09 09:43:28.485 28152 29340 I NpuProbe: MM: repack buft = HTP0-REPACK
+10-09 09:43:28.488 28152 29340 I NpuProbe: MM trace: K=256 N=64 B=1 q4_K sup_pre=1 repack=1
+10-09 09:43:28.488 28152 29340 I NpuProbe: MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=1280
+10-09 09:43:28.488 28152 29340 I NpuProbe: MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 09:43:28.489 28152 29340 I NpuProbe: MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=5376
+10-09 09:43:28.489 28152 29340 I NpuProbe: MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 09:43:28.489 28152 29340 I NpuProbe: MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 09:43:28.491 28152 29340 I NpuProbe: MM[K=256 N=64 B=1 q4_K] UNWRITTEN_OUTPUT (64/64!)
+10-09 09:43:28.493 28152 29340 I NpuProbe: MM trace: K=256 N=64 B=2 q4_K sup_pre=1 repack=1
+10-09 09:43:28.493 28152 29340 I NpuProbe: MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=2560
+10-09 09:43:28.493 28152 29340 I NpuProbe: MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 09:43:28.497 28152 29340 I NpuProbe: MMHOST q4_K ne=[64,2,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=6656
+10-09 09:43:28.497 28152 29340 I NpuProbe: MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 09:43:28.497 28152 29340 I NpuProbe: MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 09:43:28.499 28152 29340 I NpuProbe: MM[K=256 N=64 B=2 q4_K] UNWRITTEN_OUTPUT (128/128!)
+10-09 09:43:28.502 28152 29340 I NpuProbe: MM trace: K=256 N=64 B=128 q4_K sup_pre=1 repack=1
+10-09 09:43:28.502 28152 29340 I NpuProbe: MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=163840
+10-09 09:43:28.502 28152 29340 I NpuProbe: MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 09:43:28.504 28152 29340 I NpuProbe: MMHOST q4_K ne=[64,128,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=167936
+10-09 09:43:28.504 28152 29340 I NpuProbe: MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1
+10-09 09:43:28.504 28152 29340 I NpuProbe: MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 09:43:28.505 28152 29340 I NpuProbe: MM[K=256 N=64 B=128 q4_K] UNWRITTEN_OUTPUT (8192/8192!)
+10-09 09:43:28.506 28152 29340 I NpuProbe: MM rejeicao Q5_K: htp supports=0 (esperado 0)
+10-09 09:43:28.506 28152 29340 I NpuProbe: MMTOTAL pass=1 fail=3 skip=0 compute_calls=6
+10-09 09:43:28.506 28152 29340 I NpuProbe: [ggml] ggml_opencl: selected platform: 'QUALCOMM Snapdragon(TM)'
+10-09 09:43:28.506 28152 29340 I NpuProbe: ggml_opencl: device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-09 09:43:28.506 28152 29340 I NpuProbe: [ggml] ggml_opencl: default device: 'QUALCOMM Adreno(TM) 840 (OpenCL 3.0 Adreno(TM) 840)'
+10-09 09:43:28.506 28152 29340 I NpuProbe: SESSAO(35b69e2): fim (1 requests)
+10-09 09:43:28.506 28152 29340 I NpuProbe: SESSAO(35b69e2): 1 requests na mesma sessao (roles separados; JSON nativo em files/r6-sess.jsonl)
+10-09 09:43:28.506 28152 29340 I NpuProbe: MM: backends cpu=0xb400007b6cf2eec0 htp=0xb400007b6cf2ef60
+10-09 09:43:28.506 28152 29340 I NpuProbe: MM: extra buft[0] = HTP0-REPACK
+10-09 09:43:28.506 28152 29340 I NpuProbe: MM: repack buft = HTP0-REPACK
+10-09 09:43:28.506 28152 29340 I NpuProbe: MM trace: K=256 N=64 B=1 q4_K sup_pre=1 repack=1
+10-09 09:43:28.506 28152 29340 I NpuProbe: MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=0 walloc=9216 aalloc=1280
+10-09 09:43:28.506 28152 29340 I NpuProbe: MMHOST-PESO wa: nbytes=9216 wbytes=9216 nb1=144 canon=9216 ne=256x64
+10-09 09:43:28.506 28152 29340 I NpuProbe: MMHOST q4_K ne=[64,1,1,1] nb0=4 nb1=256 wexp=9216 req=10240 walloc=14336 aalloc=5376
+10-09 09:43:28.506 28152 29340 I NpuProbe: MM trace: alloc ok bw=HTP0-REPACK ba=HTP0 sup_post=1

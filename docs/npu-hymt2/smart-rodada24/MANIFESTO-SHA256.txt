@@ -1,0 +1,20 @@
+MANIFESTO — smart-rodada24 (fenomeno UNWRITTEN + guard/offset + receita sessao)
+
+CONTEXTO: R23-GREEN real (B1/B2 PASS 8e953285!); R24 = guards/offset + investigacao do UNWRITTEN.
+DADOS-CHAVE: case K alcancado (offset=0 size=9216==nbytes=9216!) + repack CHAMADO nos FORCE logs!
+ROLLBACK EXATO R23 (fb8cc5d0) => UNWRITTEN TAMBEM => NAO e' o codigo (ambiente/device!).
+RECEITA: p4-auto='smart:sessao' (13B!) -> SESSION MODE -> mmtest via p4-session!
+ESTADO: device com app 'mudo' pos-reboots (recuperacao pendente!); APK = R23-binary (8e953285!).
+
+c125748391a8f4dc7b63dd0153d0c4552f055af61a1059e86836f51fd29d0d2c  r24-fix3.py  (2335 B)
+1dcc94529a652223ae177014317615728c0aa3dfaf81b7959ba7d6ed4fee02de  r24-investigacao-unwritten.txt  (2638 B)
+d52ecbe88c0b7a6f0c8988c1fc2345f8bd38e6983e2bc2629a884d161d2a2680  r24-unwritten-log.txt  (4270 B)
+04ea82140b22db8cc0ae24de4a7ee31e792c3c0903fa5969e1a82eaf0d6b87d0  r24b-diag.py  (2539 B)
+8919bae3e0dab9f8f43c61fa81ec2f95a770c1c3a68a066c7db64d956561ab06  r24c-fixstring.py  (1058 B)
+68882f90d7360ab22c403a8c390dc89129e7e0e42d807f5c14723cb30e0034bf  r24d-hexlog.py  (3344 B)
+0c630f5691baba8033b77ce870a90faf2f45cd5134ce7716ce621520279f07f2  r24e-fix2.py  (681 B)
+d0a49f55b88cf28d67fb6b2a62da0c17facb5590b0a9e4c5730fb602b0fca307  r24f-fix3.py  (487 B)
+abb74363420a6978958ac720befdffa97dd31402fdc852f1ecd54209378abfe2  r24g-force.py  (2718 B)
+6219f25369d25303090c863c5b85e1379b4d832c4531895e4a3b8cbe39b97d9c  r24h-rollback.py  (1239 B)
+
+a4b6e761f463a59494aef87becbb96444e0753a5947c43cffeeeea3cd548412d  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA24.txt

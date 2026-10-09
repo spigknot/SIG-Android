@@ -1,0 +1,121 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 24
+=========================================================================
+Data: 09/10/2026. Ordens: "VIRADA CONFIRMADA: CONSOLIDAR FIX HOST, TESTAR
+Q6_K E INVESTIGAR B128 SEM MOVER TRAVE". Copia isolada/probe.
+
+RESUMO EXECUTIVO: A rodada avancou a vacina/guarda (§2) MAS encontrou um
+FENOMENO NOVO que bloqueou os ensaios: depois do primeiro rebuild com os
+guards (09a013a3), TODAS as execucoes do mmtest passaram a dar
+UNWRITTEN_OUTPUT nos 3 casos Q4_K (eram GREEN no R23!) — e o ROLLBACK
+EXATO ao codigo do R23 (fb8cc5d0) TAMBEM deu UNWRITTEN => NAO e' o codigo
+da lib. Os logs FORCE (GGML_LOG_DEBUG) provaram no device: o case K E'
+ALCANCADO (offset=0, size=9216==nbytes=9216, nb1=144 — TUDO consistente!)
+e o repack_q4_K_tiled E' CHAMADO — mas o output continua com o sentinel
+(sem escrita pelo DSP). Depois de um reboot do device, o app degradou
+(roda, PID muda, mas nao loga nem o onCreate!). Estado: device a
+recuperar; R23-GREEN (binario 8e953285) restaurado no APK como ultimo
+estado bom. Achados entregues: a guarda/offset (brecha do parecer §2), a
+receita de gatilho (smart:sessao!) e a cronologia da investigacao.
+
+-----------------------------------------------------------------------
+A. CHECKPOINT
+-----------------------------------------------------------------------
+A.1 Builds R24 (todos host-only, so' libggml-hexagon.so!): 09a013a3 (FIX3:
+    guards + warning), 1918d050 (recusa c/ log), 7767a77c (HEX_VERBOSE),
+    f5f309d7 (GGML_LOG_DEBUG FORCE), fb8cc5d0 (ROLLBACK EXATO R23), e o
+    R23-binary 8e953285 RESTAURADO no APK no fim (8 libs kqfix-libs!).
+    Fonte kq2/sigcand2 idênticos (diff=0!) em todos os passos.
+A.2 Device CPH2747: app degradado pos-reboot (sem logs!); force-stop
+    aplicado; recuperacao necessaria (ver F.2!). v12 nao tocado (o probe/
+    APK e' separado!).
+
+-----------------------------------------------------------------------
+B. VACINA/GUARDA (§2) — PARCIAL + BRECHA NOVA DOCUMENTADA
+-----------------------------------------------------------------------
+B.1 A brecha do offset foi tratada: guards + recusa ANTES do pack (nunca
+    finge parcial!). E a correcao revelou a tensao REAL do contrato: o
+    loader chama com size=9216 (canonico) e o tensor tem nbytes=9216
+    (nb1=144 — NAO adaptado!) — o guard aceita os dois (nada rejeitado
+    nos numeros observados!). A guarda ficou pronta; a VACINA PERMANENTE
+    (fixture compilada dos callbacks + mutantes RED/GREEN) segue PENDENTE
+    (o device bloqueou a validacao da fixture no fluxo!).
+B.2 RECEITA DO FLUXO DESCOBERTA E DOCUMENTADA (para reprodutibilidade!):
+    p4-auto.txt="smart:sessao\n" (13 bytes!) -> MainActivity pula runProbe
+    + AUTO-GATILHO rodarSmart("sessao") -> runSmart SESSION MODE ->
+    run_sessao le p4-session.txt -> rota "mmtest:q4k" -> O MMTEST. (O
+    p4-session sozinho NAO executa o auto-gatilho; a rota "sessao" e' a
+    chave do SESSION MODE! MainActivity.java L63-87 + probe.cpp L1348!)
+B.3 O probe ganhou (para o B128!) o export DOS VIOLADORES completos
+    (ate 20: b/n/htp/ref/abs/lim/exc!) + MMHOST-PESO (nbytes/wbytes/nb1/
+    canon!) — prontos para o proximo ensaio valido!
+
+-----------------------------------------------------------------------
+C. B128 — NAO RE-EXPORTADO (BLOQUEADO PELO FENOMENO!)
+-----------------------------------------------------------------------
+C.1 O criterio abs+rel JA EXISTIA (retificacao aceita: ABS_TOL=2e-2,
+    REL_TOL=5e-2, lim=abs+rel*|ref|!) — a investigacao dos 10 violadores
+    ficou BLOQUEADA (o device entrou no modo UNWRITTEN!). O probe tem o
+    dump pronto (MMVIOL!). Proximo: 1 run valida exporta os 10 + refs
+    triplas (Rcpu/Rscalar/Rtiled conforme ordens!).
+C.2 Controles F32/Q4_0/Q8_0 B128: o probe tem a infra (rotas ctrl!) —
+    nao executados nesta janela (bloqueio!).
+C.3 Criterio CONGELADO (o mesmo do R23!) — nenhuma tolerancia relaxada.
+
+-----------------------------------------------------------------------
+D. Q6_K — BLOQUEADO
+-----------------------------------------------------------------------
+D.1 O fix do set_tensor/alloc cobre Q6 no fonte (cases!) mas SEM prova
+    numerica (o ensaio Q6 nao executou — bloqueio do device!). NAO
+    extrapolar! Q6 offsets/formula do pin: pendentes de auditoria propria.
+
+-----------------------------------------------------------------------
+E. FUSED_FFN — NOTA REGISTRADA (gate antes do modelo!)
+-----------------------------------------------------------------------
+E.1 L3122 (precompute_fused_ffn_params): `(wtype == GGML_TYPE_Q4_1)` SEM
+    Q4_K — variante fused-FFN (gate/swiglu!) NAO usada no mmtest direto.
+    Registrado como GATE: rastrear consumidores/mergeability/dispatch
+    antes de qualquer ensaio de MODELO (conforme ordens §5!). Checklist
+    tipo->repack->alloc->set/get->descriptor->precompute->supports->
+    fusion->kernel adotado como metodo (2 hunks faltantes achados por
+    ele: set_tensor e alloc! — os demais auditados OK!).
+
+-----------------------------------------------------------------------
+F. CAUSA / FENOMENO / RECUPERACAO
+-----------------------------------------------------------------------
+F.1 O FENOMENO (dados reais!): o MESMO mmtest (mesmo input/config!) deu
+    GREEN as 08:45 (B1/B2 PASS!) e UNWRITTEN de 08:58 em diante — com o
+    rollback EXATO do codigo GREEN ainda UNWRITTEN! Os logs FORCE provam
+    o caminho correto (case K alcancado, repack CHAMADO, numeros OK!) —
+    o DSP nao escreveu o output (sentinel intacto!). H-A: estado do
+    device/CDSP apos N reinstalls (o ambiente degradou!); H-B: probe
+    rebuildado (nao excluido!); H-C: o reboot agravou (app sem logs!).
+F.2 RECUPERACAO (proximo passo EXATO): (1) 2o reboot limpo + sanity do
+    logcat/app (o onCreate loga L55?!); (2) se mudo: tombstones/logd; (3)
+    restaurar o R23-probe EXATO (sem os logs novos!) + R23-libs; (4)
+    re-rodar o R23-GREEN como SANITY (8e953285!); (5) so' entao Q6/B128.
+F.3 Nenhum patch novo mantido sem prova: o FIX3/R24b-g estao nos scripts
+    (evidencia!) mas o APK/estado final = R23-binary (o unico GREEN
+    real!).
+
+-----------------------------------------------------------------------
+G. ESCOPO / WIP
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP alheio intocado; PJA110 nao
+    tocado (segue listado no adb!); CPH2747 wifi; stayon7; sem
+    root/governor; sem stress extra (um reboot controlado apenas!).
+G.2 R16: separado (sem novo abort!). v12: intocado no device.
+
+-----------------------------------------------------------------------
+H. ESTADOS
+-----------------------------------------------------------------------
+H.1 FIX host R23 (set_tensor/alloc): MANTIDO (R23-GREEN real!). Brecha
+    offset: TRATADA (guard+recusa!) mas vacina PENDENTE. B128: BLOQUEADO
+    (dump pronto!); Q6: BLOQUEADO; fused_ffn: NOTA->GATE; fenomeno
+    UNWRITTEN: ABERTO (device!). KERNEL_VALIDATED: NAO (Q6/B128!).
+    COMPILED: sim (6 builds host!). GRAPH/HANDOFF/PERF: intocados.
+H.2 A R23 MANTEM-SE como o marco GREEN (B1/B2 q4_K PASS + req 10240!). O
+    proximo ensaio deve comecar pela recuperacao do device + sanity R23.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada24/ (r24-investigacao-unwritten.txt
+com a cronologia completa!, r24-unwritten-log.txt, r24-*.py os 8 scripts
+dos fixes/rollback!) + manifesto.

@@ -1,0 +1,61 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 24
+VIRADA CONFIRMADA: CONSOLIDAR FIX HOST, TESTAR Q6_K E INVESTIGAR B128 SEM MOVER TRAVE
+===============================================================================
+
+1. PARECER: CAUSA HOST LOCALIZADA, GREEN MINIMO ACEITO
+Aceito a descoberta e o fix: set_tensor sem cases K copiava canonical enquanto o descritor esperava tiled; get_alloc_size tambem nao reconhecia K. O mismatch de contrato host explica o modo de falha NaN e foi corrigido na copia isolada.
+Conferi os sete hashes de anexos R23: correspondem. Deduplicado PID5176: Q4_K B1 e B2 PASS, nf_ref=nf_out=0, cobertura64/64 e128/128; B128 nf=0 cobertura8192/8192 mas10 violacoes => FAIL. MMTOTAL pass3 inclui rejeicaoQ5_K, nao terceiro matmul aprovado. Os logs repetidos pelo REPORT nao sao tentativas adicionais.
+Req10240/walloc14336 confirma a correcao de requisito; desaparecimento de NaN e numerica B1/B2GREEN confirmam progresso ponta a ponta real. Nao exigir instrumentacao DSP complexa agora so para demonstrar o que ja foi localizado no host. Snapshot/trace devem ajudar regressao ou localizar falha residual, nao virar impedimento artificial ao trabalho util.
+Estado: FIX_UPLOAD/ALLOC=CORRIGIDO com evidencia runtime; Q4_K_MINIMO=B1/B2PASS; Q4_K_B128=FAIL no criterio vigente; Q6_K=PENDENTE; KERNEL_VALIDATED=NAO. Grafo/Smart/performance ainda separados. R16 abort continua incidente separado, nao declarar resolvido sem reteste controlado.
+
+2. VACINA PERMANENTE DO CONTRATO HOST — PRIORIDADE CURTA
+O GREEN device e boa evidencia, mas precisamos teste permanente para nao perder o hunk numa atualizacao. Exercitar os callbacks REAIS de set_tensor/get_alloc_size/serializacao do candidato em fixture nativa/test-only, compilada do mesmo codigo; nada de replica Python ou mera contagem de cases no fonte.
+Para Q4_K/Q6_K: mesmo inputcanonical nao trivial -> upload via callback real -> payload tiled fisico comparado golden/leitor independente, requirement/descriptor coerentes, canarios/bounds, finite e cobertura. Teste mutante retira caseK de set_tensor (memcpycanonical) => RED. Outro mutante retiraK do allochelper => RED. Fix ambos restaurado => GREEN. Testes de allocfail/preflight existentes preservados; injecao de allocREPACKfalha deve parar antes upload/compute.
+NOVA BRECHA nos cases R23: repack_q4_K_tiled(tensor,data,0,size) e Q6 equivalente passam ZERO FIXO e nao verificam offset da callback. Assim offset nao-zero pode ser ignorado e bypassa assert(offset==0) do pack. Corrigir com guard explicito e parametro real conforme contrato suportado. Se pack exige tensor inteiro, validar size canonical completo e recusar upload parcial antes ler/escrever; se a API precisa suportar partial, desenhar adaptacao real, nao fingir partial com pack completo. Checar como loader real usa essa API. Nao tocar contratos dos tipos antigos fora do escopo sem evidencia.
+Testes negative offset/nonfullsize/oversize devem falhar sem leitura fora de bounds/compute. Nao aceitar offset errado como zero nem size menor lido como tensor completo. Arrays tensor->name nunca sao NULL: corrigir warning dos logs KQSET sem alterar semantica; logging diagnostico limitado/test-only e nao reentrante.
+Nao negar o GREEN de R23 por esse negativo ainda nao testado; apenas bloquear aceite global/promocao ate contrato fechar.
+
+3. B128: O CRITERIO ABS+REL JA EXISTE
+probe.cpp:1018/1025 inspecionado: ABS_TOL=0.02, REL_TOL=0.05 e limite=0.02+0.05*abs(ref). Portanto 'abs+rel pendente' deve ser RETIFICADO. Dez de8192=0.1220703125% e dado descritivo, nao autorizacao para transformar FAIL em PASS. NRMSE0.00037 nao anula violacao por elemento. Near-zero/FP16 e hipotese, nao causa provada.
+Congelar criterio e input/config do R23 antes proximo run. Exportar TODOS os10 violadores (b,n,refCPU,HTP,abs_error,limite/excesso,finite), max-errorcoord, distribuicao por rows/batch/tiles e magnitude da referencia. O log entregue so tem totals, sem esses valores: nao sabemos ainda se todos eram perto de zero.
+Capturar pequenos vetores completos canonical/act/output ou artefatos binarios fullSHA do caso K256/N64/B128; metadataexacta e matrices independentes. Logs por attempt/backend/tensorroles, sem tails antigos.
+Usar referencias que separam fontes de erro:
+Rcpu = backendCPU atual, mesmos pesos quantizados/ativacoes;
+Rscalar = dequant canonico + matmul scalar/double sobre ativacoes float reais (sem quant adicional de ativacao do CPU);
+Rtiled = leitorindependente dos pesos tiled efetivos/FP16rounding + mesma matmul scalar;
+quando observavel, referencia com quant de ativacao/kernel accumulation conforme contrato real.
+Essas referencias NAO sao presumidamente identicas: a CPU pode usar seu vec_dot/quantizacao de ativacao; HTP pode usar q8_1/HMX e FP16. Comparar cada diferenca isoladamente para nao culparimport/repack por errointrinseco esperado. Primeiro usar o MESMO payload que runtimegerou, nao goldeninline novamente apresentado como candidato.
+Reexecutar controles F32/Q4_0/Q8_0 B128 no MESMO cohort/harness/settings se necessario para contextualizar falha preexistente. Comparacao upstreamknown-good pode usar cohort coerente em probe separado, com identidade e bytesiguais, sem misturar .so/ABI. Nao assumir que upstreampure resolveVulkanproduto nem atualizarcore.
+Se erro residual excede contrato esperado e tem padrao/localizavel, patch minimo com RED/GREEN. Se dados indicam envelope numerico legitimo, escrever design de criterio JUSTIFICADO pelo formato/precisao, com calibracao em casos independentes e validacao holdout; manter FAILhistorico no criterio antigo. Nao escolher tolerancia olhando os10 casos e apenas aumentaratePASS. Criterio novo precisa distinguir mutante de layout/escala/NaN e ser aprovado na etapa de aceitacao, nao promovido implicitamente.
+Uma ou duas execucoes diagnosticas bem capturadas, nao gridsrepetidos. Config kernelID/HVX/HMX so quando selecao real for confirmada; nada de env inventado ou late-init.
+
+4. Q6_K: EXECUTAR, NAO EXTRAPOLAR
+Agora set_tensor/alloc o cobrem, mas nenhum resultado numericoQ6posfix foi entregue. Fechar offline packgolden/leitor independente/signs/planes/scale/tilepadding/bounds, usando codigo realcallback e tabelaallocdescriptor.
+Ensaio device K256/N64/B1 Q6_K com referenciaCPUfinita, supports_post, req/h.nb/h.size e payloadconsistente. Se B1GREEN, B2, depoisB128. Se FAIL, parar progressao e preservarfirsterror/NaN/snapshot/descriptor; aplicar mesmasfrontiereshost->DSP. GuardQ6nofusedpreservado; rejeicaoQ5 permanece teste separado.
+Q6 formula/tile nao devem ser copiadas de Q4: localizarconstantes e helpers reais do pin/cohort. Manifesto checkpoint atual fullSHA/header/config/ELF/APK/install/PID; strip esperado, readback correspondeentryAPK. Artefatoshistoricosparciais continuam rotulados, nao reconstruirnarrativa falsa.
+Snapshotfisico pode ser colhido junto dos testes/Q6/B128; tensor_getquantizado pode unpack, logo capturar no callback/mapping real e validar intervalo. Se minimo continuaGREEN e snapshotnao requerido para causaresidual, nao obrigar rodadaexclusiva de instrumentacao.
+
+5. FUSED_FFN: NOTA AGORA VIRA GATE ANTES DO MODELO
+AuditoriaR23 registrou wtype==Q4_1 sem Q4_K em precompute_fused_ffn_params. O mmtest direto nao exerce fusao; isso NAO prova que o grafo do modelo nao usa.
+Antes do c4bf completo, rastrear consumidores/mergeability/dispatch e comparar contrato com o pinKquant: formatos com offset Q4_1 e Q4_K podem exigirparametros/tamanhosq8_1. Localizar cada predicate equivalente e guard, inclusive qkv/ffn_fused e Q6 exclusion. Nao corrigirglobalmente por replacecego; validar a condicao e fixture correspondente.
+Se fusedpath pode receberQ4_K e parametros estaoerrados, fix/testeminimo antesgraph. Se op nao e suportada no escopo, rejeitarfusao honestamente. Diagnostico com fusao OFF pode isolarrota somente em probe, via config REAL comprovada preinit; nao e aceite do produto final se caminho defaultenabledpermanecebugado.
+Oporthost ainda e adaptado. Naofarir hunkstodascombuild apenas: checklist tipo->repack->alloc->set/get->descriptor->precompute->supports->fusion->kernel e contrato real em cada caminho. Isso vacina a classe de dispatchfaltando que escapou nas rodadas anteriores.
+
+6. PROGRESSAO PARA SHAPES/GRAFO SEM PROMOCAO PREMATURA
+Depois minimoQ4/Q6 e entendimento do B128, exercitar shapes c4bf EXTRAIDOS previamente do GGUF com planejamemoria (2048x512/2048x2048/2048x6144/6144x2048 e limites lm_head). Suportefalse => SKIPhonesto, traceplacement quando chegargrafo; nao construirtensorenorme desnecessariamente.
+Gerargradeexecutada emscript com type/K/N/B/status/coverage e totais. ShapeB1pass nao implicaB128pass nem validacaomodelo. Se shape falha, minimizarmantendostride/path antescorpo completo.
+Somente depois gates de kernelsrelevantes/fusao: ensaio c4bfcurto (modelo produtoSHAfixo) no probe, schedtrace/profile para provar MUL_MATK no HTP e ausenciadeCPUfallbackescondido. Sem graphacceptance por supportsSIM. SeR16abortreaparece preservarrawtombstone/errorcode/buildID/symbols imediatamente; naorodar12fixturesemhangrepetido.
+SmartOpenCL/Vulkan handoff/resetABA, numericaGPU-pura/import e benchmarksem espelho sao fasesposteriores. Nao UI/menu6/default/backend/release agora. KERNEL_VALIDATED, GRAPH_VALIDATED e PERFORMANCE_VALIDATED distintos.
+
+7. ESCOPO E ENTREGA A-H
+Somente copiaisolada/probeautorizado; SIGprincipal/Whisper/UI/defaultVulkan/c4bf/R2/release intocados. Sem commit/push/promocao/instalacaosobreSIG sem OKespecifico. Preservar WIP byteabyte, sem limpeza/stash/reset/restoresamplos. CPH2747 serial3B15BD00FVE00000/wifiidentidadefailclosed, nuncaPJA110; stayon7; semroot/governor; FFmpegpin apenasprocessoautorizado. Restaurarfullcohortbaseline aprovado/readback nofim conformeescopo.
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA24.txt docs/especialista; evidencias docs/npu-hymt2/smart-rodada24/ fullSHA/contagens/exits reais:
+A checkpointposfixhost/cohort/restauracao;
+B vacinacallbacksreaisalloc/upload/offset/partial e mutantesREDGREEN;
+C dump dos10violadoresB128/refstriplas/criteriocongelado e conclusaolimites;
+D oracle+ensaiosQ6B1/B2/B128 com gates;
+E auditafusedFFN/Q4offset/Q6guard antesgrafo;
+F shapescobertas e modeloapenasquandoaceito, R16separado;
+G escopo/WIP/Whisper preservados;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e estadoskernel/graph/handoff/perfseparados.
+Nao deixar a viradaR23 virar outrociclo de nomesdebuffer/oracle sobregolden. Proximoresultado deve trazer Q6posfix real e/ou explicaros10violadoresB128 comvalores, alemdevacinapermanente do bughost localizado. Failmarginal continuaFAIL, mas osPASSminimos confirmados devem ser preservados como avancoreal.

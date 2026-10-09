@@ -1,0 +1,40 @@
+INVESTIGACAO R24 — O FENOMENO UNWRITTEN (cronologia real!)
+=====================================================================
+CONTEXTO: R23-GREEN real as 08:45 (B1/B2 PASS c/ binario 8e953285!).
+A R24 comecou com o FIX3 (guard de offset/size no set_tensor + warning name).
+
+CRONOLOGIA (tudo com o MESMO fluxo: p4-auto=smart:sessao! + mmtest:q4k!):
+1. 09a013a3 (FIX3: guards GGML_ASSERT!) -> UNWRITTEN nos 3 casos! (era GREEN!)
+2. 1918d050 (R24b: asserts->recusa c/ log stderr) -> UNWRITTEN. KQSET/stderr
+   NAO aparece no logcat (o stderr da lib nao vai pro logcat!).
+3. 7767a77c (R24f: HEX_VERBOSE) -> UNWRITTEN. HEX_VERBOSE = if(opt_verbose)
+   (condicional!) -> nada logado.
+4. f5f309d7 (R24g: GGML_LOG_DEBUG FORCE!) -> UNWRITTEN! MAS os logs SAIRAM:
+   "KQSET-FORCE q4_K: offset=0 size=9216 nbytes=9216 ne0=256 ne1=64 nb1=144"
+   "KQSET-REPACK q4_K: chamando repack_q4_K_tiled!" (x3!)
+   => O case K E ALCANCADO, os numeros sao CONSISTENTES (offset=0! size==nbytes!),
+   o repack E CHAMADO — e mesmo assim o OUTPUT fica UNWRITTEN (sentinel intacto!).
+5. fb8cc5d0 (R24h: ROLLBACK EXATO ao R23: fprintf + repack(0,size)!) -> UNWRITTEN
+   TAMBEM!!! => NAO E O CODIGO DA LIB (o mesmo binario logico que era GREEN!).
+6. Probes MMHOST-PESO: nbytes=9216 wbytes=9216 nb1=144 canon=9216 (perfeitos!).
+7. Descoberta do fluxo de gatilho: p4-auto="smart:sessao" (13 bytes!) -> SESSION
+   MODE -> run_sessao processa p4-session (mmtest:q4k!) = O FLUXO DO MMTEST!
+   (documentado: MainActivity.java L63-87 + probe.cpp L1348-1355!)
+8. REBOOT do device (limpar estado!) -> o app DEGRADOU: roda (PID muda) mas NAO
+   LOGA NADA (nem o onCreate L55!) e nao executa o mmtest. Sem tombstone/SIGSEGV
+   visivel no logcat. O logcat geral funciona (12k linhas do sistema!).
+9. Restaurado o binario R23 (8e953285) no APK como "ultimo estado bom conhecido".
+
+HIPOTESES (nao conclusoes!):
+- H-A: o ambiente do device (4-5 reinstalls do APK na manha + estado DSP/CDSP
+  acumulado!) degradou as sessoes HTP (o kernel nao escreve o output!).
+- H-B: o probe rebuildado (com os logs MMHOST-PESO/violadores!) introduziu algo
+  (pouco provavel — log puro via rep(), mas NAO excluido!).
+- H-C: o estado pos-reboot (app em loop sem logs!) e a causa dominante agora —
+  recuperar o device antes de re-testar.
+
+ESTADO DE RECUPERACAO NECESSARIO (proximo passo!):
+1. Segundo reboot LIMPO + verificar se o app volta a logar (o onCreate L55!).
+2. Se nao: investigar tombstones/logd (o app morre no load da lib?).
+3. Restaurar o probe SEM os logs novos (o R23-probe!) se H-B confirmada.
+4. Re-rodar o R23-GREEN (8e953285!) como sanity! Se GREEN: prosseguir Q6/B128!
