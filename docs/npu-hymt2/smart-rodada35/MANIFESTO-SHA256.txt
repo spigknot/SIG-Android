@@ -1,0 +1,16 @@
+MANIFESTO — smart-rodada35 (opstage no CALLER + I/O real + nomes honestos!)
+
+OPSTAGE INTEGRADO: probe chama flow_opstage_preflight (flags efetivas!) → rc=-998 + ZERO I/O! BUILD ✓!
+Fixture do CALLER: T4 0/1/2 rejeitam c/ zero I/O; T5 (3) executa 1/1; M8 RED PELA I/O (io=1/1!)!
+Nomes honestos (upload_go/compute_go — PERMISSÃO!); poison ✓; alloc seam preservada!
+Pendentes: valor bootstrap, counters suite, snapshot (blocker objetivo!), pipeline. KERNEL_VALIDATED: NAO.
+
+793c447622ccedebbf5d2d55826aab5dc0057d6b33b80b840d25016f976c9b4d  flow_seam.h  (2983 B)
+acbe7a695a6ca64d416f02c8d54efc65cad3e41465d8583244c927ad7e44a802  probe-r35-com-opstage.cpp  (94842 B)
+e979eee2c4d309e175900bb18060614dd8795aed0948ddf303adb6e5e24d1067  r35-green.out  (428 B)
+c08c335045bfdb73ed6231a41bdf74277a73d3de2b8311e804d2979ee12d332d  r35-m7.out  (428 B)
+5ab68fb6521c25814cec1deed954617b117a06f5967079b01c8a8f4ea8266f7e  r35-m8.out  (428 B)
+d6a526c70d1136fc4f1b4c4029512f2e9f6d8416c0e3db0ca839a15a484d17f4  r35-probe-build.log  (3140 B)
+df86beb8b7ab5f1a20ddd3ae02a53cf8117bf1c204bec2ed8bf1e1153700e19f  r35_flow_test.c  (3272 B)
+
+112342709c32cfcfb1c558246cb25288f6d023fcfc6e6e24b781d890cdbdcd96  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA35.txt

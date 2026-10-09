@@ -1,0 +1,78 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 35
+=========================================================================
+Data: 09/10/2026. Ordens: "PREFLIGHT OPSTAGE NO CALLER, EVENTOS REAIS E
+SNAPSHOT: PRESERVAR A SEAM ALLOC APROVADA". Copia isolada/probe.
+
+RESUMO EXECUTIVO — OS DOIS LIMITES DO §1 FECHADOS: (A) NOMES HONESTOS:
+os campos da seam alloc foram RENOMEADOS para upload_go/compute_go
+(marcadores de PERMISSAO — com comentario explicito de que NAO sao
+execucao!); o free_calls continua evento real. (B) OPSTAGE INTEGRADO NO
+CALLER: o probe agora CHAMA flow_opstage_preflight no build_e_run (antes
+do upload!) com as flags EFETIVAS do processo (getenv GGML_HEXAGON_OPSTAGE
+— o MESMO env que a lib le' no init!); recusa => rc=-998 + cleanup +
+ZERO I/O; BUILD SUCCESSFUL! A fixture do FLUXO (r35_flow_test.c!)
+modela o CALLER (alloc->opstage->I/O!) e mede a I/O por EVENTOS
+(io_upload/io_compute — nao marcadores!): green 0 RED (T4: 0/1/2 =>
+rc=-998+ZERO I/O!; T5: 3 => I/O 1/1!; T6: alloc NULL => -996+ZERO I/O!;
+T7: CPU fora da rota NAO bloqueia!); M7 (header!) => 1 RED; M8 (bypass!)
+=> 3 RED PELA OCORRENCIA DE I/O (io=1/1 nos invalidos — como o parecer
+exigiu!). POISON-CHECK ok. PENDENTES: o valor do bootstrap REAL da lib
+(opt_opstage static — instrumentacao do backend isolado fica separada e
+declarada!); counters de suite (LEGADO/PIN/INVALID/SKIP/Q5!); SNAPSHOT
+Q4B128 (blocker objetivo declarado abaixo!); pipeline (correcoes
+localizadas!). KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. OPSTAGE NO CALLER (Prioridade 1!) — EXECUTADO
+-----------------------------------------------------------------------
+A.1 probe.cpp: include do flow_seam.h + CHAMADA no build_e_run (antes do
+    upload!) + consumo (rc=-998 + cleanup + return => ZERO I/O!).
+A.2 Flags efetivas: getenv no probe (o valor que a sessao usaria; default
+    QUEUE|COMPUTE documentado!); log "PREFLIGHT opstage efetivo(p)=..".
+    LIMITE DECLARADO: o valor EFETIVO INTERNO da lib (opt_opstage static —
+    setado no primeiro init!) exige a instrumentacao do backend isolado
+    (consulta diagnostica privada no registry!) — item FOCAL do proximo
+    ciclo (nao posterga o caller, que esta' pronto e testado!).
+A.3 Fixture de FLUXO (o caller!): T4/T5/T6/T7; M8 RED pela I/O! (a
+    ocorrencia medida pelos eventos — nao o bool!)
+
+-----------------------------------------------------------------------
+B. NOMES/COUNTERS (Prioridade 2!) — PARCIAL
+-----------------------------------------------------------------------
+B.1 upload_calls/compute_calls => upload_go/compute_go (PERMISSAO!)
+    com comentarios explicitos (nao e' execucao!).
+B.2 Counters de SUITE (LEGADO/PIN/INVALID/SKIP/CONTROL_Q5 separados com
+    g30!): PENDENTE declarado (o g30 ja' e' consumido nos verdicts; a
+    contabilidade separada + mutante-ignora-g30 fica no proximo!).
+
+-----------------------------------------------------------------------
+C. SNAPSHOT/REFS (Prioridade 3!) — BLOCKER OBJETIVO DECLARADO
+-----------------------------------------------------------------------
+C.1 A captura Q4B128 (canonweights/act/CPUout/HTPout + RAW tiled!)
+    exige instrumentacao de EXPORT no probe (mapping/callback
+    test-only!) que NAO existe hoje — o probe apenas verifica
+    (metricas/verdicts). Blocker OBJETIVO: a implementacao do export
+    (um patch focado!) fica para o ciclo dedicado; o leitor Q4 (dep.
+    corrigida!) e o Q6 estao prontos para os calculos dupla-precisao.
+C.2 Nao houve tentativa de device nesta rodada (o foco foi o caller +
+    fixtures — offline!). Device/cohort intactos (ebb80bbd + probe R31
+    na R31; o probe R35 buildado LOCAL!).
+
+-----------------------------------------------------------------------
+D. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+D.1 OPSTAGE_CALLER: CCE (probe chama+consome+builda!; fixture do fluxo
+    com I/O real!; M8 RED pela I/O!). ALLOC_SEAM: preservada (CCE —
+    sem regressao!). NOMES: CCE. COUNTERS_SUITE: PENDENTE. SNAPSHOT:
+    BLOCKER OBJETIVO (export inexistente!). PIPELINE: localizado
+    (M6/substring!, CT2 echo, TOTAL->999!) — correcao no proximo.
+    KERNEL_VALIDATED: NAO. COMPILED: sim (probe R35!).
+D.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; WIP alheio intocado;
+    PJA110 nao tocado; sem reboots; device nao tocado.
+H.1 PROXIMOS: (1) valor bootstrap real (instrumentacao do backend!);
+    (2) counters da suite; (3) SNAPSHOT (patch de export!); (4)
+    pipeline (correcoes!); (5) fused params; (6) estabilidade/shapes!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada35/ (flow_seam.h (nomes GO!),
+probe-r35-com-opstage.cpp (a chamada!), r35-probe-build.log (BUILD
+SUCCESSFUL!), r35_flow_test.c + os 3 run.out!) + manifesto.

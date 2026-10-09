@@ -1,0 +1,60 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 35
+PREFLIGHT OPSTAGE NO CALLER, EVENTOS REAIS E SNAPSHOT: PRESERVAR A SEAM ALLOC APROVADA
+===============================================================================
+
+1. PARECER R34 — A LIGACAO DA ALOCACAO AGORA E REAL
+Aceito a decisao de alocacao compartilhada: flow_seam.h realmente incluido/chamado no probe, callbacks delegam as APIsggml atuais, e fres.rc=-996 e consumido comreturnfalse antesI/O. Oito hashes dos anexos conferem.
+Reproduzi green0RED, M7=5RED, M8=3RED; poisonheader#error falha comexit1. Portanto ALLOC_DECISION_SHARED_VALIDATED=SIM. Nao recriar essa seam nem voltar a uma replica local comoR33.
+Restam dois limites que precisam constar na classificacao:
+A flow_seam.h:49-50 atribui upload_calls=1/compute_calls=1, SEM executar upload/compute. Esses campos sao marcadoresGO, nao eventos. T2 prova alocacao/retorno de bw, naoexecucaoI/O.
+B flow_opstage_preflight nao e chamado no probe arquivado. A fixturetesta o bool eM8, mas nao a rota doprobe. OPSTAGE_PREDICATE_OFFLINE=SIM; OPSTAGE_PROBE_INTEGRATED=NAO. Nao dizer que falta apenascapture do valor.
+Auditoria/provas: docs/especialista/AUDITORIA-R34-ALLOC-COMPARTILHADO-E-OPSTAGE-NAO-CHAMADO.txt e AUDITORIA-R34-LOGS/.
+Nao ha novo bugDSP nem refutacao do PIN. Preservar pack/leitor/helper/guarda/gate/numerica minima ja provados.
+
+2. PRIORIDADE 1 — CHAMAR O PREFLIGHT DE OPSTAGE REAL
+No build_e_run, localizar o ponto anterior a upload/sentinel/graph_compute. Chamar flow_opstage_preflight no caminhoHTP com asFLAGS EFETIVAS da sessao/backend. Rejeitar comstatus especifico, cleanup correto e zeroI/O quandoQUEUE+COMPUTE ausentes. CPUref/caminhos fora dessa validacaonumerica nao recebem bloqueio global.
+Nao passar literal3 ou getenvtardio para marcarfeito. opt_opstage e static: localizarinit/registro e instrumentalizarbackendISOLADO minimamente para observar/consultar valorreal antesprimeirobootstrap, seguindo mecanismos reais do fork. Se necessario, adicionar consulta diagnostica privada na copiahost/registry comdefinicao/usos testados; nada de API existente inventada ou mudanca de protocoloDSP/skel.
+Fonte efetivo/linha/initorder, log de valores efetivos e caller realmente usandooresultado. Log isolated 'default3' nao e evidencia de preflight aplicado.
+Fixturecompilada do caller/seam com0/1/2: retorno/rejeicao, upload0/compute0 ecleanup;3: continua e executa. M8 deve permitir indevidamente osinvalidos e causarRED pela ocorrenciaI/O/continuidade, nao so teste do bool semcaller.
+Pode usar callbacks externos injetados para esse teste, mas a decisao/retorno/order que comandaessesefeitos precisa ser a MESMA do probe ou extraida de modoautomatizado completo e compilado. Include/usos/build/poisoncheck quando tiver gerado.
+Se getterinstrumentacao demora, ainda integrar/testarcaller cominput injetado e declarar separadamente faltade valorbootstrap; nao voltar 'seampronta,proximoinclude'. O objetivo final exige ambasprovas.
+
+3. PRIORIDADE 2 — NOMES E COUNTERS HONESTOS, TESTE DO CALLER
+Para a seamallocpreflight, remover campos falsamente chamados *_calls ou renomear GO/permissao. Nao atribuircallcount1 antes evento e usalo como prova. Um marcadorREADY pode ser util, desde que identificado como tal.
+Eventos reais devem vir dos callbacks/wrappers efetivamente chamados por upload/graph_compute/readback, contandoaposouantesda INVOCACAO deformaexplicitada. A solucao pode ser observarcaller completo ou uma pequena funcaocompartilhada de continuacao; nao obrigatorio reestruturar toda Activity/backend para medir2eventos.
+NegativoallocNULL: testarcaller retorna sem chamaroswrappers; positivoallocvalid: chamaefetivamente. Se teste só comprova decisaoalloc, manterescopo correspondente e nao declarare2e.
+Contadores de suite LEGADO/PIN/INVALID/SKIP/CONTROL_Q5 separados, usando g30. Campo nd/nf/novl e estatistica de tentativa, nao contabilidade suite. Reportduplicado nao dobraattempt; testeunsupported nao conta kernelPASS.
+Teste contabilidade/caller comlegacyFAIL/PINPASS, INVALID erro/preflight, SKIP, controleunsupported. Mutante ignora g30/misturaQ5noPINPASS deveRED. Ref/alloc/exec/sync/readback comorigem real; graph_compute do corelocal ja sincroniza, confirmar no corecohort seminserirchamadaredundante cegamente.
+Entregar buildprobecomnovo caller e fontes exatamente compilados. Nao nova CCE de umheader que so a fixture usa.
+
+4. PRIORIDADE 3 — UMA CAPTURA Q4B128 E REFERENCIAS COMPLETAS
+Esteitem foi adiado repetidamente e os leitores estao prontos. Depoisnovocaller/build, usar probeautorizado noCPH2747 para UMAcapturaQ4K256/N64/B128, mesmo inputdeterministico. Nao repetir grade6casos como substituto paraexport.
+Canonweightsquantizados/actfloat/CPUout/HTPout COMPLETOS eRAWtiled depoisupload no callback/mappingdiagnostico. Tensor_getquantizado queunpacka NAO eRAW. FullSHA/sizes/shape/nb/offset/ranges/canarios eidentidadeattempt/cohort. Dados sinteticos autorizados, nenhum audio/modelo/credencialproducao.
+ComMESMOSbytes, RscalarCanonicaldoubleacc eRtiledReaderdoubleacc; all8192metricas, tabela10violadores. IsolarCPUrefapprox,FP16scale,actquant/acc/castquando contratopermite; componentes nao reproduzidos saohipotesesdeclaradas, nao FP16accporrepresentacaofinal.
+Fullcohort: source/header/config->ELFunstripped/strippedentryAPK->APK/readbackinstalled/path/buildID/PID. Prefixo ebb80bbd nao fechaSHA; readbacknaodestrutivo antesreinstall somenteporhash. Se historicolacunoso, declararlimite e checkpointnovo.
+Se devicefalha, mostrarcomando/erroreal econtinuarofflines. 'Escolhemosnaotocar' nao eblockerdevice. Semreboot/pmclear/logdreset pararesolvercaptura.
+
+5. PIPELINE: CORRECOES FOCALIZADAS, NAO OUTRA RODADA INTEIRA
+r34_run.sh volta a usar pipesbuild/run para grep/head e concluirecho. Minha reproducao captura exits diretamente; o runner fornecido nao valida todosexits. Preservar status/saida emarquivo, nao pipeline queengoleerror nem2>/dev/null emlogs críticos.
+ProblemasR33 aindaabertos: M6checkporcomentario, CT2sóecho, TOTALausente->999,semexitcontratual efailglobal. Corrigir eEXECUTAR o mesmo validador parainjecoescompilerfail,greenfail,mutanteexit0,crash,exportstale,outputmalformado.
+Validadorsemantico deve ignorarcomentarios/literais e conferircodigofuncionalnoescopo certo. Não zerarFAIL porconveniencia; arquivarprimeirafalhalocalizada eexitglobal.
+Run-dirnovo englobaextracao/adaptacao/cenarios/build/export; semrm emrootfixo dehistorico. Exportaheader/fixture/probefonte/gerados/scripts/exactcommands/stdout/stderr/exits/hashfull. Nenhuma afirmacao de 'contratook' incondicional.
+Essa manutencao pode acontecer junto doexport dos novosfluxos/snapshot. Nao dedicar toda rodada a maisumepacote e pararantescaller/captura.
+
+6. FRONTEIRAS DE ACEITE E PROGRESSAO
+Nao proclamarSEAM_REAL para funções que nao foram chamadas. Nesta rodada: sharedALLOCpreservada; opstagecaller+counters+snapshot sao entregas principais. M7/M8 devem atuar no codigo efetivo, nao contadorartificial.
+FusedR30 apenas predicado+expressao; faltamfullprecomputeparamfields/consumer/pair/HMXfronteira. Validar antes grafoque exercitefusaoreal, preservarQ6guard. LogginginstabilityOPEN combudget4runsB1 evariavelunica/codegen; nenhumaaceitacao por ternarioredundantearray.
+Depoiscontratos/cobertura/proveniencia suficientes: shapesGGUFproduto c4bf comprofileplacement/grafocurto, depoishandoffNPU->GPUOpenCL eNPU->GPUVulkan semreplay e beneficomedido. KERNEL/GRAPH/HANDOFF/PERFORMANCEseparados; nenhumdeployUI/releaseporharnessminimo.
+
+7. ESCOPO E A-H
+Somente copiaisolada/probeautorizado. SIGprincipal/Whisper/UI/defaultVulkan/c4bf/R2/releasesintocados, semcommit/push/promocao/installSIG. WIPSTT/MODULE-MAP/outrosbyteabyte; nenhumstash/reset/restoresamplos/limpeza. CPHserial3B15BD00FVE00000/wififailclosed; nuncaPJA110; stayon7; semroot/governor/reboot/logdreset/pmclear/uninstall. Finalreadbackdocumentado.
+RELATORIO-SMART-DUAL-BACKEND-RODADA35.txt docs/especialista; evidenciasdocs/npu-hymt2/smart-rodada35/ fullSHA/status/totais:
+A calleropstageinclude+chamada+consumo+build;
+B flagsbootstrapEFETIVAS/cenários0..3/M8defluxo;
+C allocshared/callerI/Omedidos e testes;
+D LEGADO/PIN/INVALID/SKIP/controlecounters;
+E snapshot/refsB128/fullcohort oublockerobjetivo;
+F pipelineexecutado/correcaoefailtests/estabilidade/fusao;
+G escopo/WIP/estadofinal/R16;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO porprova e gatesglobaisseparados.
+MinimoR35: opstage realmente integrado no caller e testedofluxo comefeitos, indicadoresnomeshonestos e contabilidade. Snapshot deveexecutado ou tentativaquefalha objetivamente. Nao repetirteste de boolisolado como opstageprobeCCE, nem marker=1 como chamadaexecutada.
