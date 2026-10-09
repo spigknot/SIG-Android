@@ -82,6 +82,7 @@ também é bloqueado.
 | `SttKeywordsHelp.kt` | Texto da ajuda das keywords (o que faz e o limite de cada modelo). |
 | `AssemblyAiAsyncFlow.kt` | Decisão sync/async + polling da AssemblyAI. |
 | `LiveDiagnosticContext.kt` | Correlação de diagnóstico da sessão ao vivo. |
+| `SttLiveAudioFlow.kt` | Cadência PCM, pausa com silêncio e política de replay por provedor ao vivo. |
 | `TranscriptionReport.kt` | Relatório HTML, log de terminal, nomes e tamanhos. |
 | `DownloadSizeFormat.kt` | Tamanhos de download: base decimal, plano por arquivo e log do download. |
 | `TranscriptionRunTimings.kt` | Tempos da rodada: preparação, janela de rede e processamento do servidor. |

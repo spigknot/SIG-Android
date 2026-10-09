@@ -303,6 +303,7 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var grokCompletionHandled = false
     private val grokAudioLock = Any()
     private val grokReplayBuffer = PcmRingBuffer(GROK_REPLAY_BUFFER_BYTES)
+    private var grokLiveAudioFlow = SttLiveAudioFlow(isMuse = false, pcmBytesPerSecond = GROK_PCM_BYTES_PER_SECOND)
     private var grokReconnectAttempts = 0
     private var grokReconnectRunnable: Runnable? = null
     private var grokStableResetRunnable: Runnable? = null
@@ -1240,6 +1241,7 @@ class RemoteSttActivity : AppCompatActivity() {
         sttIsAssemblyai = transcriptionConfig.isAssemblyaiApi
         sttIsElevenlabs = transcriptionConfig.isElevenlabsApi
         sttIsMetamuse = transcriptionConfig.isMetamuseApi
+        grokLiveAudioFlow = SttLiveAudioFlow(isMuse = sttIsMetamuse, pcmBytesPerSecond = GROK_PCM_BYTES_PER_SECOND)
         sttIsAlibaba = transcriptionConfig.isAlibabaApi
         if (serverBaseUrl.isBlank() && !useWebSocket) {
             status.text = "Informe e teste o IP do servidor."
@@ -1521,6 +1523,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun handleGrokLiveEvent(webSocket: WebSocket, rawEvent: String) {
+        if (grokLiveWebSocket !== webSocket) return
         val event = runCatching { JSONObject(rawEvent) }.getOrElse {
             handleGrokWebSocketDisconnect(webSocket, "resposta inválida do Grok")
             return
@@ -1677,14 +1680,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 if (isFinal) {
                     val text = SttResponseParsers.prefixMetamuseSpeaker(rawText, checkboxLiveDiarize.isChecked, metamuseCurrentSpeaker, metamuseSpeakerNumbers)
                     synchronized(grokLiveFinalSegments) {
-                        val last = grokLiveFinalSegments.lastOrNull().orEmpty()
-                        if (last == text) {
-                            // já commitado; nada a fazer
-                        } else if (last.contains(text) || text.contains(last)) {
-                            grokLiveFinalSegments[grokLiveFinalSegments.lastIndex] = text
-                        } else {
-                            grokLiveFinalSegments += text
-                        }
+                        SttResponseParsers.commitMetamuseLiveSegment(grokLiveFinalSegments, text)
                         grokLivePartialSegment = ""
                         updateGrokLiveTranscriptLocked()
                     }
@@ -1721,14 +1717,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 if (rawText.isNotEmpty()) {
                     val text = SttResponseParsers.prefixMetamuseSpeaker(rawText, checkboxLiveDiarize.isChecked, metamuseCurrentSpeaker, metamuseSpeakerNumbers)
                     synchronized(grokLiveFinalSegments) {
-                        val last = grokLiveFinalSegments.lastOrNull().orEmpty()
-                        if (last == text) {
-                            // já commitado; nada a fazer
-                        } else if (last.contains(text) || text.contains(last)) {
-                            grokLiveFinalSegments[grokLiveFinalSegments.lastIndex] = text
-                        } else {
-                            grokLiveFinalSegments += text
-                        }
+                        SttResponseParsers.commitMetamuseLiveSegment(grokLiveFinalSegments, text)
                         grokLivePartialSegment = ""
                         updateGrokLiveTranscriptLocked()
                     }
@@ -1825,8 +1814,13 @@ class RemoteSttActivity : AppCompatActivity() {
         if (grokSocketReady) return
         val reconnectSucceeded = grokEverConnected
         var replaySucceeded = true
+        var discardedAudioBytes = 0L
         synchronized(grokAudioLock) {
-            val replay = if (reconnectSucceeded) grokReplayBuffer.snapshot() else ByteArray(0)
+            val recovery = grokLiveAudioFlow.recoverAudio(
+                bufferedAudio = if (reconnectSucceeded && grokLiveAudioFlow.replaysAudio) grokReplayBuffer.snapshot() else ByteArray(0),
+                disconnectedAudioBytes = grokDisconnectedAudioBytes,
+            )
+            val replay = recovery.replayAudio
             var offset = 0
             while (offset < replay.size) {
                 val length = minOf(grokWebSocketChunkBytes(), replay.size - offset)
@@ -1837,22 +1831,24 @@ class RemoteSttActivity : AppCompatActivity() {
                 offset += length
             }
             if (replaySucceeded) {
+                discardedAudioBytes = recovery.discardedAudioBytes
+                grokLiveAudioFlow.resetPacing(SystemClock.elapsedRealtime())
                 grokSocketReady = true
                 grokDisconnectedAudioBytes = 0L
             }
-        }
-        // Se o usuário já pediu a finalização durante a reconexão, finaliza
-        // imediatamente (o timeout de backup continua de segurança).
-        if (grokSocketReady && grokFinishRequested && !grokCompletionHandled) {
-            sendGrokAudioDone(webSocket)
         }
         if (!replaySucceeded) {
             handleGrokWebSocketDisconnect(webSocket, "não consegui reenviar o áudio bufferizado")
             return
         }
         grokEverConnected = true
+        val discardedSeconds = String.format(Locale.US, "%.1fs", discardedAudioBytes.toDouble() / GROK_PCM_BYTES_PER_SECOND)
+        if (discardedAudioBytes > 0L) {
+            emitGrokConnectionEvent(GrokConnectionEvent.AUDIO_LOST, discardedSeconds)
+        }
         emitGrokConnectionEvent(
-            if (reconnectSucceeded) GrokConnectionEvent.RECONNECTED else GrokConnectionEvent.CONNECTED
+            if (reconnectSucceeded) GrokConnectionEvent.RECONNECTED else GrokConnectionEvent.CONNECTED,
+            if (discardedAudioBytes > 0L) "Áudio do intervalo descartado ($discardedSeconds)." else null,
         )
         scheduleGrokReconnectCounterReset(webSocket)
         if (!liveTimerStarted) {
@@ -1867,6 +1863,8 @@ class RemoteSttActivity : AppCompatActivity() {
             handler.post(recordingTicker)
         }
         if (liveTranscribing) startGrokAudioCaptureIfNeeded()
+        // Finalização pedida durante a reconexão: um único endStream depois
+        // de liberar a sessão (o timeout de backup continua de segurança).
         if (grokFinishRequested) sendGrokAudioDone(webSocket)
     }
 
@@ -1904,17 +1902,25 @@ class RemoteSttActivity : AppCompatActivity() {
                 recorder.startRecording()
                 while (liveTranscribing && liveUsesGrokWebSocket) {
                     val read = recorder.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
-                    if (read <= 0 || livePaused) continue
+                    if (read <= 0) continue
+                    val delayMillis = synchronized(grokAudioLock) {
+                        if (grokSocketReady) grokLiveAudioFlow.delayBeforeSendMillis(read, SystemClock.elapsedRealtime()) else 0L
+                    }
+                    // Só a thread de captura espera; o leitor do socket e os
+                    // callbacks de reconexão continuam livres.
+                    if (delayMillis > 0L) Thread.sleep(delayMillis)
                     var failedSocket: WebSocket? = null
                     var audioLossSeconds: Double? = null
                     synchronized(grokAudioLock) {
-                        grokReplayBuffer.append(buffer, 0, read)
+                        if (!liveTranscribing || !liveUsesGrokWebSocket) return@synchronized
+                        val audio = grokLiveAudioFlow.outgoingAudio(buffer, read, livePaused) ?: return@synchronized
+                        if (!livePaused && grokLiveAudioFlow.replaysAudio) grokReplayBuffer.append(audio, 0, read)
                         val socket = grokLiveWebSocket
                         if (grokSocketReady && socket != null) {
-                            if (!sendAudioChunk(socket, buffer, 0, read)) failedSocket = socket
-                        } else {
+                            if (!sendAudioChunk(socket, audio, 0, read)) failedSocket = socket
+                        } else if (!livePaused) {
                             grokDisconnectedAudioBytes += read
-                            if (!grokAudioLossReported && grokDisconnectedAudioBytes > GROK_REPLAY_BUFFER_BYTES) {
+                            if (grokLiveAudioFlow.replaysAudio && !grokAudioLossReported && grokDisconnectedAudioBytes > GROK_REPLAY_BUFFER_BYTES) {
                                 grokAudioLossReported = true
                                 audioLossSeconds = (grokDisconnectedAudioBytes - GROK_REPLAY_BUFFER_BYTES).toDouble() /
                                     GROK_PCM_BYTES_PER_SECOND
@@ -2198,7 +2204,11 @@ class RemoteSttActivity : AppCompatActivity() {
                 GrokConnectionEvent.CONNECTING -> "Conectando ao $provider${detail?.let { ": $it" }.orEmpty()}..."
                 GrokConnectionEvent.CONNECTED -> "Conectado ao $provider. Ouvindo e transcrevendo..."
                 GrokConnectionEvent.RECONNECTING -> "Reconectando ao $provider${detail?.let { ": $it" }.orEmpty()}"
-                GrokConnectionEvent.RECONNECTED -> "Reconectado ao $provider. Áudio recente reenviado."
+                GrokConnectionEvent.RECONNECTED -> if (sttIsMetamuse) {
+                    "Reconectado ao $provider. Ouvindo o áudio atual.${detail?.let { " $it" }.orEmpty()}"
+                } else {
+                    "Reconectado ao $provider. Áudio recente reenviado."
+                }
                 GrokConnectionEvent.RECONNECT_FAILED -> "Falha na conexão com o $provider${detail?.let { ": $it" }.orEmpty()}"
                 GrokConnectionEvent.AUDIO_LOST -> "Áudio perdido durante a reconexão: ${detail.orEmpty()}"
                 GrokConnectionEvent.DISCONNECTED -> "Desconectado do $provider."
@@ -6759,7 +6769,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
-    private fun grokWebSocketChunkMillis(): Int = GrokApiSettings.grokChunkMillis()
+    private fun grokWebSocketChunkMillis(): Int = grokLiveAudioFlow.chunkMillis(GrokApiSettings.grokChunkMillis())
 
     private fun grokWebSocketChunkBytes(): Int =
         (LIVE_SAMPLE_RATE * 2L * grokWebSocketChunkMillis() / 1000L).toInt().coerceAtLeast(640)

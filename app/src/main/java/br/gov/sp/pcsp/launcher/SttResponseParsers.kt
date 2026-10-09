@@ -366,6 +366,18 @@ object SttResponseParsers {
         return "Interlocutor $number: $rawText"
     }
 
+    /** Consolida final/speechComplete do Muse, inclusive a primeira fala. */
+    fun commitMetamuseLiveSegment(segments: MutableList<String>, text: String) {
+        if (text.isBlank()) return
+        val last = segments.lastOrNull()
+        when {
+            last == null -> segments += text
+            last == text -> Unit
+            last.contains(text) || text.contains(last) -> segments[segments.lastIndex] = text
+            else -> segments += text
+        }
+    }
+
     /** Formata os turns do REST do Muse (DIARIZATION): cada turno com
      *  "speaker" (A, B, ...) vira "Interlocutor N: <texto>". */
     fun formatMetamuseDiarizedTurns(turns: JSONArray): String {

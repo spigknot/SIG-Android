@@ -8,6 +8,16 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.WebSocket
+import okhttp3.WebSocketListener
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Contratos de parsing das respostas STT extraídos de RemoteSttActivity.
@@ -237,6 +247,84 @@ class SttResponseParsersTest {
             "fallback",
             SttResponseParsers.formatGrokDiarizedTranscript(JSONObject("{}"), "fallback", diarizationEnabled = true)
         )
+    }
+
+    @Test
+    fun commitMetamuseLiveSegment_primeiroFinalNaoAcessaIndiceNegativo() {
+        val segments = mutableListOf<String>()
+
+        SttResponseParsers.commitMetamuseLiveSegment(segments, "Primeira fala.")
+
+        assertEquals(listOf("Primeira fala."), segments)
+    }
+
+    @Test
+    fun muse_primeiroFinalESpeechCompleteNaoDerrubamLeitorOkHttp() {
+        val server = MockWebServer()
+        val client = OkHttpClient()
+        val segments = mutableListOf<String>()
+        val failures = ConcurrentLinkedQueue<Throwable>()
+        val completed = CountDownLatch(1)
+        server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                webSocket.send("""{"sessionId":"fixture-session"}""")
+                webSocket.send("""{"type":"transcript","transcript":"Primeira fala.","final":true}""")
+                webSocket.send("""{"type":"speechComplete","turnId":1,"transcript":"Primeira fala."}""")
+                webSocket.send("""{"type":"speechComplete","turnId":2,"transcript":"Segunda fala."}""")
+            }
+        }))
+        server.start()
+        val socket = client.newWebSocket(Request.Builder().url(server.url("/asr/realtime")).build(), object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                webSocket.send(SttRequestBuilders.museHandshake("fixture-key", "ENDPOINTING"))
+            }
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                val event = JSONObject(text)
+                if (!event.has("transcript")) return
+                SttResponseParsers.commitMetamuseLiveSegment(segments, event.getString("transcript"))
+                if (event.optInt("turnId") == 2) completed.countDown()
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                failures += t
+                completed.countDown()
+            }
+        })
+        try {
+            assertTrue("O leitor não recebeu a segunda fala", completed.await(5, TimeUnit.SECONDS))
+            assertTrue("O callback provocou onFailure: $failures", failures.isEmpty())
+            assertEquals(listOf("Primeira fala.", "Segunda fala."), segments)
+        } finally {
+            socket.cancel()
+            client.dispatcher.executorService.shutdown()
+            client.connectionPool.evictAll()
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun commitMetamuseLiveSegment_primeiroSpeechCompleteDiarizadoEDuplicata() {
+        val segments = mutableListOf<String>()
+        val text = SttResponseParsers.prefixMetamuseSpeaker(
+            "Bom dia.", true, "A", mutableMapOf(),
+        )
+
+        SttResponseParsers.commitMetamuseLiveSegment(segments, text)
+        SttResponseParsers.commitMetamuseLiveSegment(segments, text)
+
+        assertEquals(listOf("Interlocutor 1: Bom dia."), segments)
+    }
+
+    @Test
+    fun commitMetamuseLiveSegment_corrigeUltimoTrechoEPreservaFalasDistintas() {
+        val segments = mutableListOf("Bom dia")
+
+        SttResponseParsers.commitMetamuseLiveSegment(segments, "Bom dia a todos.")
+        SttResponseParsers.commitMetamuseLiveSegment(segments, "Segunda fala.")
+        SttResponseParsers.commitMetamuseLiveSegment(segments, "  ")
+
+        assertEquals(listOf("Bom dia a todos.", "Segunda fala."), segments)
     }
 
     @Test

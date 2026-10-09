@@ -95,6 +95,23 @@ Para o Muse, validar também o handshake (`session`) antes do áudio e o
 6. Finalizar deliberadamente a sessão e confirmar resultado final, estado
    `DONE`, desconexão e limpeza dos callbacks.
 
+### Cenários focais do Muse
+
+- A primeira fala deve produzir `transcript` final ou `speechComplete` sem
+  encerrar o leitor do socket; a fala seguinte continua na mesma sessão.
+- Pausar mantém o ingresso com PCM de silêncio, sem transcrever o microfone.
+  Retomar volta ao áudio atual sem abrir uma sessão desnecessária.
+- Na reconexão, não reenviar o buffer de oito segundos: o Muse limita o
+  backlog a cinco segundos. Retomar com frames curtos em tempo real e registrar
+  `AUDIO_LOST` com a duração do intervalo descartado, quando houver.
+- Mesmo com chunk configurado acima de 100ms, o Muse usa no máximo 100ms por
+  frame. Outros provedores conservam o tamanho configurado e seu replay.
+
+Contrato de ingresso e limites do provedor:
+[documentação oficial do Muse](https://dev.meta.ai/docs/speech-to-text#keep-the-session-alive).
+As regressões determinísticas são cobertas por `SttLiveAudioFlowTest` e
+`SttResponseParsersTest`; o aparelho continua necessário para a prova de campo.
+
 ### Contrato determinístico de diagnóstico
 
 O seam `LiveDiagnosticContext` é exercitado por
