@@ -1,0 +1,126 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 20
+=========================================================================
+Data: 09/10/2026. Ordens: "ORACULO REPACK E TRACE DE FRONTEIRAS, COM GATE
+NATIVO REAL". Sem publicacao; copia isolada/probe.
+
+RESUMO EXECUTIVO: (1) BUG DO GATE CORRIGIDO E PROVADO: o fluxo real
+classificava post=0 DEPOIS do compute (o especialista estava certo!) —
+corrigido com return antecipado; extraida a SEAM compartilhada
+(gate_seam.h) usada pelo probe E pelo teste nativo (r20_gate_test.cpp
+compilado no servidor). RED/GREEN REAL: com a seam ANTIGA o teste falha
+exatamente em T1 (post=0 ainda computa — compute_calls=7!); com a seam
+NOVA 14/14 OK (compute_calls=6). Isso e' a vacina do bug, nao replica.
+(2) ORACULO REPACK Q4_K EXECUTADO (ordens §5): funcoes repack_q4_K_tiled/
+repack_tiled_q4_K extraidas VERBATIM do fonte do candidato kq2, compiladas
+com o ggml-quants CANONICO (quantize_q4_K/dequantize_row_q4_K) no servidor
+x86 e exercitadas com o MESMO input determinista R19 (K256/N64): RESULTADO
+GREEN — roundtrip repack->unpack max_abs=0.000901 (PASS), scalar matmul
+canonico=99.596843 == roundtrip=99.596843 (diff 0.000000!). Conclusao
+parcial FORTE: o HOSTREPACK do candidato esta' CORRETO para Q4_K => o
+defeito observado no device esta' DEPOIS do host (H2 descritor / H3
+skel/dispatch / H4 kernel) — nao no repack host. Q6_K: oraculo offline
+ainda PENDENTE (nao extrapolar o resultado Q4_K!). (3) Device: v12
+restaurado (readback 710636); nada executado no device nesta rodada alem
+do probe fixado instalado (preflight). KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. IDENTIDADE
+-----------------------------------------------------------------------
+A.1 Fonte unico kq2 (hashes R16-R19 mantidos); libs KQ_ON (4689ffc0/
+    8ab003eb/9b99d90e) e v12 (htp-v81 0a4ec5b7) nos backups locais;
+    probe com fix v4 instalado (v12 libs); readback ok.
+A.2 Identidade ELF/APK: o device carrega o STRIPPED do APK (documentado
+    R18/R19); libllama stripped 2.949.992 B vs unstripped 35.520.432 B
+    (stripping do gradle, legitimo). Tabela fullSHA completa
+    fonte->unstripped->stripped->PID: PARCIAL (unhashed builds antigos;
+    limite de provenance declarado, sem inventar cadeia).
+
+-----------------------------------------------------------------------
+B. RETIFICACAO DA SUITE + GATE NATIVO RED/GREEN (bug real corrigido!)
+-----------------------------------------------------------------------
+B.1 BUG CONFIRMADO (ordens §2): no probe.cpp, o build_e_run fazia
+    upload/sentinel/graph_compute mesmo com sup_post=0 e so' entao
+    classificava REJECTED_BUFFER => a alegacao "fail-closed" era falsa no
+    C++ e a suite Python nao detectava (so' replica de parametros).
+B.2 FIX: return ANTECIPADO no sup_post=0 (rc=-997; cleanup; NUNCA
+    upload/compute) + contador compute_calls exposto no MMTOTAL.
+B.3 SEAM: gate_seam.h (gate_decide/gate_name) — a MESMA logica compilada
+    pelo probe E pelo teste nativo (r20_gate_test.cpp). Nao e' espelho:
+    e' o codigo compartilhado.
+B.4 RED/GREEN REAL (evidencia executada no servidor g++):
+    - RED: seam ANTIGA (post avaliado depois do exec): T1 RED x2 —
+      "post=0 => REJECTED_BUFFER" falha E "compute NAO chamado" falha
+      (compute_calls=7!) => o teste DETECTA o bug de verdade (EXIT=1);
+    - GREEN: seam NOVA: 14/14 OK (compute_calls=6) EXIT=0.
+B.5 Testes nativos cobrem: post=0 bloqueia compute (T1); ref NaN bloqueia
+    HTP (T2); pre=0 skip (T3); NaN output conta (T4); rc!=0 (T5);
+    sentinel (T6); violacao (T7); cobertura parcial (T8); PASS (T9).
+    Suite Python r19 mantida como teste AUXILIAR de especificacao (nao
+    conta como vacina do fluxo nativo — retificacao aceita).
+
+-----------------------------------------------------------------------
+C. ORACULO REPACK Q4_K — EXECUTADO (golden canonico!)
+-----------------------------------------------------------------------
+C.1 Metodo (ordens §5): repack_q4_K_tiled + repack_tiled_q4_K extraidas
+    VERBATIM do ggml-hexagon.cpp do candidato (L767-831/L834-940);
+    quantize_q4_K/dequantize_row_q4_K CANONICOS do ggml-quants (upstream
+    pin 82324fc->1ec818809 confirmado no repo); input determinista
+    (sin(i*0.017)*1.7) K=256 N=64 (o MESMO do R19); roundtrip
+    repack->unpack->dequant + scalar matmul vs canonico.
+C.2 RESULTADO (REAL, oracle-q4k-out.txt): row_sz=160 tiled_sz=10240;
+    roundtrip max_abs=0.000901 first_bad=-1 PASS; scalar matmul
+    canonico=99.596843 == roundtrip=99.596843 (diff=0.000000!).
+C.3 Conclusao: H1 (hostrepack/tamanho/padding) REFUTADA para Q4_K no
+    caso exercitado — o payload tiled do candidato esta' consistente com
+    o contrato (roundtrip fiel + escala normalizada como o readback
+    declara). O defeito do device esta' DEPOIS do host.
+C.4 Limites honestos: oraculo e' do Q4_K apenas (Q6_K pendente — nao
+    extrapolar!); byte-equality nao exigida (readback normaliza
+    scales/mins — contrato numerico); golden = upstream pinado lido,
+    compilado localmente com g++ + stubs minimos declarados.
+
+-----------------------------------------------------------------------
+D. TRACE/FRONTEIRA (estado)
+-----------------------------------------------------------------------
+D.1 O proximo limite comprovavel (H2/H3/H4) exige trace host/DSP: opID/
+    types/dims/rowbytes/params/kernelID na fronteira. NAO executado nesta
+    rodada (a rodada fechou o gate nativo + oraculo — prioridades §2/§5
+    das ordens). Incidente R16 permanece separado.
+
+-----------------------------------------------------------------------
+E. CAUSA / FRONTEIRA EXATA
+-----------------------------------------------------------------------
+E.1 Provado: gate native RED/GREEN (bug do gate corrigido); HOSTREPACK
+    Q4_K correto (oraculo GREEN). Restam H2 descritor / H3 skel-dispatch
+    / H4 kernel — proximo ensaio com trace de fronteira (uma tentativa
+    bem capturada; sem repetir grades).
+E.2 Nenhum patch de kernel; sem supports=true como substituto.
+
+-----------------------------------------------------------------------
+F. MINIMO Q4/Q6 / R16
+-----------------------------------------------------------------------
+F.1 Q4_K: oraculo offline PASS; device FAIL conhecido (NaN/lixo) agora
+    localizado POS-host. Q6_K: pendente (offline separado!). B2/B128 e
+    shapes c4bf: somente apos B1 GREEN. R16: incidente separado aberto.
+
+-----------------------------------------------------------------------
+G. ESCOPO / PRESERVACAO
+-----------------------------------------------------------------------
+G.1 SIG/Whisper/UI/R2/release intocados; WIP alheio intocado (0
+    modificados no inicio desta rodada); PJA110 fora; CPH2747 via wifi;
+    stayon7; sem root/governor. FFmpeg pin 8.0.1 so' nos processos de
+    validacao (nada global).
+G.2 Nada publicado no SIG; probe separado apenas.
+
+-----------------------------------------------------------------------
+H. ESTADOS
+-----------------------------------------------------------------------
+H.1 COMPILED: sim. KERNEL_VALIDATED: NAO (Q4_K device FAIL pos-host
+    localizado; Q6 desconhecido). GRAPH/HANDOFF/PERF: nao.
+H.2 Fase II: CCE com retificacao (gate nativo corrigido+provado!).
+    Fase III: PARCIAL/CCE-Q4K (oraculo executado GREEN — fronteira
+    movida: defeito pos-host!). Proximo: trace de fronteira (H2/H3) e
+    oraculo Q6_K separado.
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada20/ (gate_seam.h, r20_gate_test
+(+old!), r20_oracle_q4k.c, oracle-q4k-out.txt, logs RED/GREEN) + manifesto.

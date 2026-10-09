@@ -1,0 +1,18 @@
+== r20_gate_test (teste NATIVO da seam!) ==
+  [OK ] T1 post=0 => REJECTED_BUFFER
+  [OK ] T1 post=0 => compute NAO chamado
+  [OK ] T2 ref NaN => CPU_REF_FAIL
+  [OK ] T2 => compute NAO chamado
+  [OK ] T3 pre=0 => SKIP
+  [OK ] T3 => compute NAO chamado
+  [OK ] T4 NaN output => NONFINITE_HTP
+  [OK ] T4 => compute chamado
+  [OK ] T5 rc!=0 => EXEC_FAIL
+  [OK ] T6 sentinel => UNWRITTEN
+  [OK ] T7 viol => NUMERIC_FAIL
+  [OK ] T8 cobertura parcial => NUMERIC_FAIL
+  [OK ] T9 full => PASS
+  [OK ] T9 => compute chamado
+
+TOTAL: 0 RED de 14 testes | compute_calls(simulados)=6
+EXIT=0

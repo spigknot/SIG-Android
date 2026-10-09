@@ -1,0 +1,16 @@
+MANIFESTO — smart-rodada20 (gate nativo + oraculo Q4_K)
+
+GATE NATIVO RED/GREEN: seam compartilhada (gate_seam.h); RED (seam antiga) T1 falha com compute_calls=7; GREEN 14/14 com compute_calls=6. Bug post=0-computa CORRIGIDO com return antecipado.
+ORACULO Q4_K: funcoes verbatim do kq2 + ggml-quants canonico; roundtrip max_abs=0.000901 PASS; scalar matmul diff=0.000000 => HOSTREPACK CORRETO (H1 refutada!).
+Q6_K: oraculo PENDENTE (nao extrapolar!). Defeito do device: pos-host (H2/H3/H4).
+
+9f5b77e5759fa71f3e187ae39f4db66e9a9fdb6a0bedd5f56de1c93440cbb301  gate_seam.h  (2100 B)
+9377bc01d126921f82da6166671476f93c7796bc660403913888bcc05c3c620d  gate_seam_old.h  (1186 B)
+4219da264cb55e74f81889d818e0c2630603b2507e4cb10e5770642143e1891e  oracle-q4k-out.txt  (168 B)
+92f11c7b0e8d12095528345f1d46be2b4de5f6602b9c55a5485fa08f01edab08  r20-gate-green.txt  (576 B)
+be4e32fc705fcd7104eb6ca9d1f004f191ebc0fbae48ba10260e067bbf2ed17d  r20-gate-red.txt  (576 B)
+a594a5707a0363216ef73fcdbd3245d796b4ec9065f4b63b957bcd75e4fff623  r20_gate_test.cpp  (3178 B)
+e04a8e328c5a02eafdd80e5d32c969065701f79d45175867b1c25b9445245c4a  r20_gate_test_old.cpp  (3182 B)
+27020a261d49f5b646c052c1fbc12efd27e760d67013da854d98306e68de3573  r20_oracle_q4k.c  (11302 B)
+
+49f0f91c6626dfedfd048be9b0a934a9b053d33ecfe5633527c8ef88f935e181  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA20.txt

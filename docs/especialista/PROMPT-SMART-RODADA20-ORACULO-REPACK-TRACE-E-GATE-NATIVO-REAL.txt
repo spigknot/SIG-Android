@@ -1,0 +1,83 @@
+ORDENS AO EXECUTOR — SMART DUAL-BACKEND / RODADA 20
+ORACULO REPACK E TRACE DE FRONTEIRAS, COM GATE NATIVO REAL
+===============================================================================
+
+1. PARECER DA R19: AVANCO REAL, MAS CCE DE GATE NAO ACEITO
+Aceito a prova negativa Q4_K: o log PID26349 mostra HTP0-REPACK para peso, HTP0 para compute, post=1, CPU-ref finita, rc=0 e HTP com NaN/valores absurdos. Deduplicando o REPORT acumulado: tres resultados Q4_K (B1/B2/B128), todos FAIL. Q5_K rejeitado e teste de suporte separado, nao kernel PASS. Q6_K NAO aparece no ensaio v3 entregue; nao extrapolar esse resultado para Q6_K.
+O especialista executou r19-offline-tests.py: 10 OK/0 RED, exit0, e conferiu os tres hashes de evidencia do manifesto: corretos. Porem a suite e uma REPLICA PYTHON das regras, nao testa o fluxo C++ efetivo. Encontrou bug real contradizendo T1, descrito na secao2.
+KERNEL_VALIDATED permanece NAO. Alocacao REPACK/post=1 e falha numerica do caso observado estao comprovadas no trace; isso NAO identifica sozinho HOSTREPACK versus descritor versus DSPkernel. Nome de buffer/post=true tambem nao provam todos os contratos de tamanho/layout/transferencia.
+FaseII: ensaio negativo entregue, gate de seguranca PARCIAL. FaseIII segue PENDENTE e deve ser EXECUTADA, nao novamente descrita apenas como proximo passo. Identidade fullcohort historica ainda deve ser documentada com ELF/APK/fullSHA; manifestos de logs nao substituem esse requisito.
+
+2. BUG DO GATE: post=0 AINDA COMPUTA, E O TESTE NAO O DETECTA
+No probe.cpp local:
+- 934 calcula sup_post;
+- 940-950 faz upload/sentinel/graph_compute SEM return quando sup_post=0;
+- 968 chama build_e_run(bhtp,...);
+- 969 so ENTAO classifica REJECTED_BUFFER.
+Logo 'post=false nunca compute' e falso no C++ atual, embora T1 Python passe. A mesma funcao calcula suporte CPU mas nao o usa para impedir compute. Isso nao invalida o FAIL Q4_K observado com post=1, mas invalida a alegacao de gate fail-closed completamente testado.
+Prioridade curta: teste nativo sobre o MESMO fluxo executado pelo probe, com callback de compute contada e supports_post=false -> compute_calls==0. Antes do fix esse teste deve falhar porque compute foi chamado, nao por erro no teste. Corrigir com saida antecipada/cleanup antes upload/compute e rodar GREEN. CPU post=false igualmente impede compute. Nao simplesmente adicionar mais uma replica Python correta.
+Extrair apenas a seam necessaria, compilada/incluida tanto pelo probe quanto pelo teste nativo; mocks substituem I/O externo, nao a logica sob teste. Alternativa: tornar o fluxo real testavel por injecao de callbacks. Nao 'espelho de loop' diferente da implementacao. Tracar definicao e uso para provar que runtime chama a seam testada.
+O fallback silencioso de alocacao 929-930 tambem merece gate: se REPACK explicitamente selecionado e sua alocacao falha, nao continuar automaticamente no default sem classificar/justificar modo. ALLOC_FAIL deve abortar, nao esconder erro ate compute.
+Preservar WIP e fazer isso no probe/copia autorizada somente. Nao alterar app SIG nem ampliar a refatoracao.
+
+3. LIMITES DA SUITE R19 E VACINA EFETIVA
+T1 so classifica parametros, nao observa compute_calls. T7 checa alguns indices matematicos e ok_idx fica true; nao chama indexacao real nem percorre o batch128 inteiro. T8 compara string cohort, mas nao confere fullSHA, attempt/PID esperados nem o agregador real; o trace C++ entregue nao inclui attempt/cohort. T6 que nasceu RED por erro na expectativa do proprio teste e depois foi corrigido NAO constitui RED/GREEN de um defeito corrigido na implementacao.
+Manter a suite Python como teste auxiliar de especificacao, sem contar como vacina suficiente do fluxo nativo. Fazer testes verticais do codigo compartilhado: post=false bloqueia compute; ref NaN/CPU fail bloqueia HTP; exec fail nao classifica output como valido; NaN primeiro/ultimo elemento e cobertura; sentinel preservado; violacao de tolerancia com erro global pequeno; indexing/span completo B1/B2/B128.
+Rotulagem: implementar no produtor/agregador real attempt/cohort/ELF/APK fullSHA/PID e teste com linha de hash candidato rotulada baseline -> rejeicao. Rejeitar attempt/PID antigo e entrada sem provenance. Nao considerar teste que apenas troca string cohort como teste de hash.
+Retificar contagens: distinguir testes de especificacao Python, testes nativos de fluxo, testes de repack e execucoes DSP. Logs de RED e GREEN reais preservados. Nao afirmar cobertura que o teste nao exercita.
+
+4. HIPOTESES RANQUEADAS E PROVAS BARATAS
+H1. Host/repack/tamanho alocado/padding incorretos. Predicao: payload tiled difere do oraculo ou excede get_alloc_size; falha observavel offline antes DSP.
+H2. Descritor/rowbytes/strides/offset/type/opcode errados na passagem. Predicao: payload host correto, mas descritor ou bytes vistos no DSP divergem; trace de fronteira encontra primeiro desacordo.
+H3. Skel/dispatch errado ou kernel novo nao executado. Predicao: entrada correta, mas kernelID/contador/retorno incorreto ou identidade do skel nao corresponde ao host.
+H4. Compute HVX/HMX incorreto com entrada/descritor corretos. Predicao: todos limites anteriores coerentes e kernel realmente entra; operacao minima/uma linha/amostra local diverge de scalar reference.
+Priorizar H1/H2; nao quatro patches simultaneos. 0xffffffff e bitpattern de NaN observado, nao assinatura exclusiva de causa. Nao corrigir substituindo NaN por zero, relaxando tolerancia ou forcando supports=true.
+
+5. EXECUTAR ORACULO OFFLINE NA ROTINA REAL DO CANDIDATO
+Fixar upstream de referencia no commit Kquant 1ec81880944a63bc4aaf1abfe9a6d35c7569a757 e parent 82324fc508006de234552e701f4509c72c4fdd8d. Usar fonte/payloads congelados do candidato KQ_ON real. Nenhum mix de core/bibliotecas no runtime para obter verde.
+O especialista localizou repack_q4_K_tiled e readback no checkout C:/llama-npu/llama.cpp: o readback declara normalizar scales/mins, e o repack converte escalas efetivas para FP16. Esse checkout e REFERENCIA DE LEITURA, nao golden automaticamente pinado no commit alvo. Portanto nao exigir byte equality canonica no roundtrip se o formato nao preserva bytes; usar contrato numerico/layout do pin exato.
+Compilar/chamar a rotina C++ REAL candidata (wrapper test-only minimo ou unidade extraida verbatim com hash e consumida tambem no runtime), nao reescrever o algoritmo candidato em Python para chamar de teste de port.
+Oraculo independente: dequantizador canonico dos blocos e leitor escalar do formato tiled definido pelo upstream pinado. Comparar quant nibbles, escalas/mins efetivas apos rounding esperado, padding e enderecos; dequant e scalar matmul sobre payload tiled vs referencia canonical. Se algoritmo independentemente reescrito, validar oraculo com golden upstream antes julgar candidato.
+Input principal e o MESMO wq/act determinista R19 K256/N64/B1. Salvar bytes/shape/type/hash reais; adicionar pequeno conjunto explicavel: escalas/mins assimetricos, nibbles baixo/alto, Q6 sign/planes, row/tile-edge e padding permitido. Nao grid de fuzz sem diagnostico inicial.
+Registrar logical bytes, required tiled bytes e allocated bytes da API real. Conferir get_alloc_size/repack callback/tensor extra/nb e offsets: alloc do tipo REPACK nao garante que o port adicionou o case de tamanho Q4_K/Q6_K corretamente. Guardas offline em area reservada detectam escrita alem do destino.
+Relatorio oracle: primeiro byte/campo/tensor-coordinate divergente; valor esperado/obtido; faixa alocada e faixa escrita; explica qual equacao/offset falha. Se oraculo RED, reparar UMA causa host com teste RED/GREEN antes device.
+Q4_K primeiro por reproducer atual; Q6_K offline separado, sem declarar kernel validado por analogia.
+
+6. TRACE DE TRANSFERENCIA/DESCRITOR/DISPATCH SE HOST PASSAR
+Provar caminho real tensor_set -> repack -> memoria compartilhada -> htp descriptor -> kernel. Buf name/consulta support nao comprovam essa cadeia.
+Instrumentacao limitada fora de locks/sem printf reentrante. Preferir recursos SDK ou trace/shared counters existentes. Se novo contrato de trace requerido, design minimo com size/alignment/owner/lifecycle e rebuild coerente; nao casts/struct ad hoc que mudem ABI sem manifesto.
+Host: attempt/op/type numeric+nome, K/N/B/ne/nb, allocation span, rowbytes/tilebytes, offsets/alignment, params/kernel select efetivos, numero de ops e identidade ELF.
+DSP: entrada batch/op, type/opcode/rowbytes/dims efetivamente recebidos, kernelID selecionado, enter/exit/status, snapshot limitado das escalas/dados relevantes antes compute. Se possivel checksum do MESMO intervalo host/DSP, com tamanho/layout definidos. Nao usar checksum de buffers logicos diferentes como se fossem iguais.
+Verificar independentes sizeof/offsetof/packing dos descritores host/skel e enums/params. Logar base+offset/bounds permitidos e por que stride recebido corresponde ao layout repack. Nao dar como valida ABI inteira por F32 anterior ter passado.
+Snapshot output imediatamente antes compute precisa conter sentinel esperado, e snapshot apos compute registra cobertura mudada. Sentinel diferente apos readback sugere alteracao, mas nao prova por si kernel escrevendo: excluir alias de pesos/ativacoes/output, erro de upload/get e modificacao antes compute. Dados de entrada/padding devem estar definidos; diferenciar poison/NaN de bytes validos.
+Se houver selecao HVX/HMX real nesse cohort, comparar UM caso por caminho somente com kernelID comprovado e config preinit efetiva. Nao inventar env nem reabrir tuning Smart.
+Se abort ocorrer, capture imediatamente codigo numerico/tombstone bruto/PID/buildID/symbols; R16 continua incidente separado, nao resolvido por ter NaN sem abort em outro shape.
+
+7. ENSAIO REAL DESTA RODADA: PEQUENO E DECISIVO
+Nao repetir B1/B2/B128 ruins sem dado novo. O ensaio R19 ja prova problema no minimo; correr para B128 apos B1 FAIL nao localizou causa adicional.
+Apos gate nativo GREEN e oracle/trace pronto:
+- controles F32/Q4_0 pequenos no MESMO harness/candidate instrumentado para validar o caminho novo de teste (sem rerun de toda matriz baseline);
+- Q4_K K256/N64/B1 com oracle ou trace de fronteira; uma tentativa bem capturada;
+- Q6_K isolado B1 apos preflight, se o resultado/risco permitir. Identificar claramente que sera primeira prova v3/v4 Q6 entregue, nao repetir conclusao Q4 como se fosse Q6.
+Se localizar causa: reproducer RED com causa observada, patch minimo na copia allowlist e GREEN com mesmo input/config; controles/regressoes antigas preservados. Rebuild host/skel depende do contrato modificado; instrumentation muda identidade e manifest.
+So progredir B2/B128 quando B1 K relevante estiver GREEN, depois shapes produto suportados extraidos do GGUF c4bf. Rejeicao honesta lm_head fora de limites continua aceitavel como limite, com placement real, nao kernel fake. KERNEL_VALIDATED exige cobertura declarada; graph/Smart/perf ainda gates separados.
+Se oracle/trace nao concluir causa, entregar ultimo limite comprovado e primeiro limite divergente ou dado que falta; nao 'proximo passo oraculo' sem nenhum oraculo executado.
+
+8. METRICAS E IDENTIDADE: FECHAR SEM DISTRACAO
+Codigo R19 988 usa soma do erro so em saidas finitas e denominador sref2 de TODA referencia. Com nf_out>0 isso NAO e NRMSE global. Rotular como parcial e definir mascara/denominador correspondente se util; preferir NRMSE_GLOBAL=N/A quando nao-finitude. Isso nao muda o FAIL observado, mas evita interpretar 9881/9655/64 como erro comparavel de vetores completos.
+Registrar nf_ref/nf_out/finite_mask/nd/expected/first_error, status exclusivos e rc completo. Validar span por strides apos alocacao; nao deixar leitura fora do vetor criar NaN falso. Não transformar sentinel plausivelmente coincidente em prova absoluta de cobertura.
+Tabela fullSHA nao truncada fonte/header/build-config -> unstripped -> stripped APKentry -> instalado/carregado PID de host/core/skel; manifesto dos arquivos efetivamente usados, origem e restauracao. Artefato fonte nao identifica ELF, e nome KQ_ON nao substitui hash. Gerar tabela durante preflight/mesmo ensaio, nao dedicar outra rodada apenas a narrativa. Se nao recuperar provenance historica, declarar limite; nao inventar cadeia.
+Nao repetir todos testes baseline; suporte baseline aceito R18, mantem para verificacao minima se necessario. Restore fullcohort/readback no fim conforme autorizacao, nao so tamanho skel.
+
+9. ESCOPO E ENTREGA A-H
+Sem mexer appSIG/Whisper/UI/defaultVulkan/modelo c4bf/R2/release, sem commit/push/promocao/instalacao sobre SIG sem OK especifico. Preservar WIP alheio; nao executar limpeza/restores amplos. CPH2747 serial3B15BD00FVE00000 (wifi identity fail-closed), nunca PJA110; stayon7; sem root/governor. FFmpeg pin apenas no processo autorizado, nao alterar testes alheios para mascarar erro.
+Salvar RELATORIO-SMART-DUAL-BACKEND-RODADA20.txt docs/especialista, logs docs/npu-hymt2/smart-rodada20/:
+A identidade/source/ELF/APK/PID/restore fullSHA;
+B retificacao suite espelhada e gate native RED/GREEN com compute_calls;
+C oracle host REAL executado, golden pinado e primeiro campo divergente;
+D trace/descriptors/DSP enter-exit efetivos quando necessario;
+E causa provada+patch RED/GREEN OU fronteira exata/bloqueio;
+F minimo Q4/Q6, cobertura seguinte somente se green e incidente R16 separado;
+G escopo/WIP/Whisper/FFmpeg preservados;
+H CCE/PARCIAL/PENDENTE/BLOQUEADO e COMPILED/KERNEL/GRAPH/HANDOFF/PERFORMANCE distintos, contagens por script e anexos reais hashados.
+Aceitacao minima R20: gate native real corrigido/testado e oracle real rodado; trace ou patch condicionado pelo resultado. Nao declarar nova CCE global apoiada em replica Python ou em post=1 somente. A proxima entrega precisa mover a fronteira causal, nao apenas reproduzir o mesmo NaN.
