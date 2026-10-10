@@ -20,6 +20,7 @@ object TranscriptionModelStore {
         val isAssemblyaiApi: Boolean = false,
         val isElevenlabsApi: Boolean = false,
         val isMetamuseApi: Boolean = false,
+        val isGeminiApi: Boolean = false,
         val isAlibabaApi: Boolean = false
     ) {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
@@ -76,6 +77,10 @@ object TranscriptionModelStore {
                 JSONObject().put("model", "fun-asr-flash-2026-06-15"),
                 isAlibabaApi = true
             )
+        }
+        if (GrokApiSettings.hasGoogleAiStudioApiKey()) {
+            available += Config(GrokApiSettings.GEMINI_TRANSCRIPTION_NAME, GeminiSttProtocol.REST_URL,
+                JSONObject().put("model", GeminiSttProtocol.REST_MODEL), isGeminiApi = true)
         }
         val selected = GrokApiSettings.selectedTranscription()
         val resolved = if (available.any { it.name == selected }) selected else available.first().name

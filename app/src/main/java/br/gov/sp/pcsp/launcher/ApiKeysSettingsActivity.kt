@@ -18,6 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
  */
 
 class ApiKeysSettingsActivity : AppCompatActivity() {
+    private lateinit var googleAiStudioKey: EditText
     private lateinit var xaiKey: EditText
     private lateinit var deepseekKey: EditText
     private lateinit var deepgramKey: EditText
@@ -34,6 +35,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
         setContentView(R.layout.activity_api_keys_settings)
+        googleAiStudioKey = findViewById(R.id.edit_google_ai_studio_key)
         xaiKey = findViewById(R.id.edit_xai_key)
         deepseekKey = findViewById(R.id.edit_deepseek_key)
         deepgramKey = findViewById(R.id.edit_deepgram_key)
@@ -69,6 +71,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         if (importPickerOpen) return
+        googleAiStudioKey.setText(GrokApiSettings.googleAiStudioApiKey())
         xaiKey.setText(GrokApiSettings.xaiApiKey())
         deepseekKey.setText(GrokApiSettings.deepseekApiKey())
         deepgramKey.setText(GrokApiSettings.deepgramApiKey())
@@ -81,6 +84,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     }
 
     private fun saveKeys() {
+        GrokApiSettings.setGoogleAiStudioApiKey(googleAiStudioKey.text.toString())
         GrokApiSettings.setXaiApiKey(xaiKey.text.toString())
         GrokApiSettings.setDeepseekApiKey(deepseekKey.text.toString())
         GrokApiSettings.setDeepgramApiKey(deepgramKey.text.toString())
@@ -92,6 +96,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
         // Só avisa quando há chave preenchida mas inválida; em branco
         // (não informada) ou válida, o salvamento é silencioso.
         val invalid = buildList {
+            if (isFilledButInvalid(GrokApiSettings.googleAiStudioApiKey(), GeminiSttProtocol::plausibleKey)) add("Google AI Studio")
             if (isFilledButInvalid(GrokApiSettings.xaiApiKey(), GrokApiSettings::isPlausibleXaiKey)) add("xAI")
             if (isFilledButInvalid(GrokApiSettings.deepseekApiKey(), GrokApiSettings::isPlausibleDeepseekKey)) add("Deepseek")
             if (isFilledButInvalid(GrokApiSettings.deepgramApiKey(), GrokApiSettings::isPlausibleDeepgramKey)) add("Deepgram")
@@ -119,7 +124,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     private fun applyKeysMask() {
         val method: android.text.method.TransformationMethod? =
             if (keysRevealed) null else PasswordTransformationMethod.getInstance()
-        listOf(xaiKey, deepseekKey, deepgramKey, assemblyaiKey, elevenlabsKey, metamuseKey, alibabaKey, imeiCheckKey).forEach {
+        listOf(googleAiStudioKey, xaiKey, deepseekKey, deepgramKey, assemblyaiKey, elevenlabsKey, metamuseKey, alibabaKey, imeiCheckKey).forEach {
             it.transformationMethod = method
         }
         buttonToggleKeys.text = if (keysRevealed) "Ocultar" else "Revelar"
@@ -156,6 +161,7 @@ class ApiKeysSettingsActivity : AppCompatActivity() {
     }
 
     private fun applyImportedKeys(result: ApiKeysImportParser.Result) {
+        result.keys[ApiKeysImportParser.Service.GOOGLE_AI_STUDIO]?.let { value -> googleAiStudioKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.XAI]?.let { value -> xaiKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.DEEPSEEK]?.let { value -> deepseekKey.setText(value) }
         result.keys[ApiKeysImportParser.Service.DEEPGRAM]?.let { value -> deepgramKey.setText(value) }

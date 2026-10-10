@@ -5,6 +5,7 @@ import android.content.Context
 /** Preferências privadas das integrações de API e dos modelos internos. */
 object GrokApiSettings {
 
+    const val GEMINI_TRANSCRIPTION_NAME = "Gemini 3.5 Transcribe"
     const val TRANSCRIPTION_NAME = "Grok STT"
     const val DEEPGRAM_TRANSCRIPTION_NAME = "Deepgram Nova 3"
     const val ASSEMBLYAI_TRANSCRIPTION_NAME = "AssemblyAI Universal-3.5 Pro"
@@ -61,6 +62,14 @@ object GrokApiSettings {
     private const val KEY_TEXT_REASONING = "text_reasoning"
     private const val KEY_PROXY_MODEL = "ia_proxy_model"
     private const val KEY_GROK_CHUNK_MS = "grok_chunk_ms"
+
+    fun googleAiStudioApiKey(): String = ApiKeyStore.get(preferences(), "g_ai_studio_api_key")
+    fun setGoogleAiStudioApiKey(value: String) = ApiKeyStore.put(preferences(), "g_ai_studio_api_key", value)
+    fun hasGoogleAiStudioApiKey(): Boolean = GeminiSttProtocol.plausibleKey(googleAiStudioApiKey())
+    fun geminiLanguageMode(): String = preferences().getString("gemini_language_mode", "pt-BR").orEmpty()
+    fun setGeminiLanguageMode(value: String) { preferences().edit().putString("gemini_language_mode", value).apply() }
+    fun geminiCustomLanguage(): String = preferences().getString("gemini_language_custom", "").orEmpty()
+    fun setGeminiCustomLanguage(value: String) { preferences().edit().putString("gemini_language_custom", value.trim()).apply() }
 
     fun apiKey(): String = xaiApiKey()
 

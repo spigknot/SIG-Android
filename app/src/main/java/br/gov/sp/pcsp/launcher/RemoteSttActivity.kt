@@ -288,6 +288,16 @@ class RemoteSttActivity : AppCompatActivity() {
     @Volatile private var sttIsAssemblyai = false
     @Volatile private var sttIsElevenlabs = false
     @Volatile private var sttIsMetamuse = false
+    @Volatile private var sttIsGemini = false
+    @Volatile private var geminiRotating = false
+    @Volatile private var geminiDraining = false
+    @Volatile private var geminiEnding = false
+    @Volatile private var geminiEndSent = false
+    @Volatile private var geminiPendingSpeech = false
+    private val geminiPendingAudio = java.util.ArrayDeque<ByteArray>()
+    private var geminiSetupRunnable: Runnable? = null
+    private var geminiRotationRunnable: Runnable? = null
+    private var geminiFinishRunnable: Runnable? = null
     @Volatile private var sttIsAlibaba = false
     @Volatile private var alibabaTaskId: String? = null
     @Volatile private var liveDraftIntervalMillis = DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS
@@ -1236,12 +1246,19 @@ class RemoteSttActivity : AppCompatActivity() {
         wasDiarizationRequested = checkboxLiveDiarize.isChecked && checkboxLiveDiarize.isEnabled
         val useWebSocket = transcriptionConfig.isGrokApi || transcriptionConfig.isDeepgramApi ||
             transcriptionConfig.isAssemblyaiApi || transcriptionConfig.isElevenlabsApi ||
-            transcriptionConfig.isMetamuseApi || transcriptionConfig.isAlibabaApi
+            transcriptionConfig.isMetamuseApi || transcriptionConfig.isAlibabaApi || transcriptionConfig.isGeminiApi
         sttIsDeepgram = transcriptionConfig.isDeepgramApi
         sttIsAssemblyai = transcriptionConfig.isAssemblyaiApi
         sttIsElevenlabs = transcriptionConfig.isElevenlabsApi
         sttIsMetamuse = transcriptionConfig.isMetamuseApi
-        grokLiveAudioFlow = SttLiveAudioFlow(isMuse = sttIsMetamuse, pcmBytesPerSecond = GROK_PCM_BYTES_PER_SECOND)
+        sttIsGemini = transcriptionConfig.isGeminiApi
+        geminiRotating = false
+        geminiDraining = false
+        geminiEnding = false
+        geminiEndSent = false
+        geminiPendingSpeech = false
+        synchronized(grokAudioLock) { geminiPendingAudio.clear() }
+        grokLiveAudioFlow = SttLiveAudioFlow(isMuse = sttIsMetamuse, pcmBytesPerSecond = GROK_PCM_BYTES_PER_SECOND, isGemini = sttIsGemini)
         sttIsAlibaba = transcriptionConfig.isAlibabaApi
         if (serverBaseUrl.isBlank() && !useWebSocket) {
             status.text = "Informe e teste o IP do servidor."
@@ -1269,6 +1286,10 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         if (useWebSocket && transcriptionConfig.isAlibabaApi && !GrokApiSettings.hasAlibabaApiKey()) {
             status.text = "Insira a chave API do Alibaba Cloud nas configurações."
+            return
+        }
+        if (useWebSocket && sttIsGemini && !GrokApiSettings.hasGoogleAiStudioApiKey()) {
+            status.text = "Insira a chave API do Google AI Studio nas configurações."
             return
         }
         if (isProcessing) return
@@ -1397,6 +1418,8 @@ class RemoteSttActivity : AppCompatActivity() {
             if (reconnecting) "tentativa $grokReconnectAttempts/$GROK_MAX_RECONNECT_ATTEMPTS" else null
         )
         val requestSpec = when {
+            sttIsGemini -> SttWebSocketSpec(GeminiSttProtocol.LIVE_URL,
+                SttRequestHeader("x-goog-api-key", GrokApiSettings.googleAiStudioApiKey()))
             sttIsDeepgram -> SttRequestBuilders.deepgramWebSocket(
                 apiKey = GrokApiSettings.deepgramApiKey(),
                 language = SttLanguageSettings.deepgramLanguageParam(),
@@ -1436,10 +1459,13 @@ class RemoteSttActivity : AppCompatActivity() {
             .header(requestSpec.header.name, requestSpec.header.value)
             .build()
         val isReconnectAttempt = reconnecting
-        grokLiveWebSocket = grokWebSocketClient.newWebSocket(request, object : WebSocketListener() {
+        val socket = grokWebSocketClient.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (grokLiveWebSocket !== webSocket) return
-                if (sttIsMetamuse) {
+                if (sttIsGemini) {
+                    val setup = GeminiSttProtocol.setup(SttLanguageSettings.geminiLanguageCodes(), activeSttKeywords())
+                    if (!webSocket.send(setup)) handleGrokWebSocketDisconnect(webSocket, "não consegui enviar setup do Gemini")
+                } else if (sttIsMetamuse) {
                     // O Muse autentica DENTRO do 1º frame JSON (o header é
                     // ignorado): envia o handshake e aguarda o "session" antes
                     // de liberar o áudio (onGrokWebSocketReady).
@@ -1493,6 +1519,10 @@ class RemoteSttActivity : AppCompatActivity() {
                 handleGrokLiveEvent(webSocket, text)
             }
 
+            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
+                if (sttIsGemini) handleGrokLiveEvent(webSocket, bytes.utf8())
+            }
+
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                 handleGrokWebSocketDisconnect(
                     webSocket,
@@ -1512,6 +1542,8 @@ class RemoteSttActivity : AppCompatActivity() {
                         grokLiveWebSocket = null
                         grokSocketReady = false
                         emitGrokConnectionEvent(GrokConnectionEvent.DISCONNECTED)
+                    } else if (sttIsGemini) {
+                        handleGrokWebSocketDisconnect(webSocket, "Gemini encerrou antes da confirmação final ($code)")
                     } else if (grokFinishRequested) {
                         completeGrokLiveTranscription(webSocket, "")
                     } else {
@@ -1520,12 +1552,27 @@ class RemoteSttActivity : AppCompatActivity() {
                 }
             }
         })
+        grokLiveWebSocket = socket
+        if (sttIsGemini) {
+            geminiSetupRunnable?.let(handler::removeCallbacks)
+            val timeout = Runnable {
+                if (grokLiveWebSocket === socket && !grokSocketReady) {
+                    finishGrokWebSocketPermanently("Gemini: tempo esgotado aguardando setupComplete.")
+                }
+            }
+            geminiSetupRunnable = timeout
+            handler.postDelayed(timeout, 20_000L)
+        }
     }
 
     private fun handleGrokLiveEvent(webSocket: WebSocket, rawEvent: String) {
         if (grokLiveWebSocket !== webSocket) return
         val event = runCatching { JSONObject(rawEvent) }.getOrElse {
-            handleGrokWebSocketDisconnect(webSocket, "resposta inválida do Grok")
+            handleGrokWebSocketDisconnect(webSocket, "resposta inválida do ${sttProviderName()}")
+            return
+        }
+        if (sttIsGemini) {
+            handleGeminiLiveEvent(webSocket, event)
             return
         }
         // O Scribe v2 usa "message_type"; os demais provedores usam "type".
@@ -1781,6 +1828,117 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun handleGeminiLiveEvent(webSocket: WebSocket, payload: JSONObject) {
+        val event = GeminiSttProtocol.liveEvent(payload)
+        if (event.error) {
+            finishGrokWebSocketPermanently("Gemini retornou erro na sessão. Verifique chave, modelo e limites.")
+            return
+        }
+        if (event.ready) {
+            geminiSetupRunnable?.let(handler::removeCallbacks)
+            geminiSetupRunnable = null
+            onGrokWebSocketReady(webSocket)
+        }
+        if (payload.optJSONObject("voiceActivity")?.optString("type") == "ACTIVITY_START") geminiPendingSpeech = true
+        synchronized(grokLiveFinalSegments) {
+            event.draft?.let {
+                grokLivePartialSegment = it.trim()
+                geminiPendingSpeech = it.isNotBlank()
+            }
+            event.final?.let {
+                if (it.isNotBlank()) grokLiveFinalSegments += it.trim()
+                grokLivePartialSegment = ""
+                geminiPendingSpeech = false
+            }
+            updateGrokLiveTranscriptLocked()
+        }
+        runOnUiThread { updateLiveTerminalText() }
+        if (geminiEndSent && (event.final != null || event.complete)) scheduleGeminiFinish(webSocket)
+        if (event.goAway && liveTranscribing && !geminiRotating) rotateGeminiSession(webSocket)
+    }
+
+    private fun drainGeminiPendingAudio(webSocket: WebSocket) {
+        synchronized(grokAudioLock) { geminiDraining = geminiPendingAudio.isNotEmpty() }
+        if (!geminiDraining) return
+        Thread {
+            while (grokLiveWebSocket === webSocket && !grokIntentionalClose) {
+                val audio = synchronized(grokAudioLock) {
+                    if (geminiPendingAudio.isEmpty()) { geminiDraining = false; null }
+                    else geminiPendingAudio.removeFirst()
+                } ?: break
+                if (!sendAudioChunk(webSocket, audio, 0, audio.size)) {
+                    finishGrokWebSocketPermanently("Gemini: falha ao enviar áudio aguardando renovação.")
+                    break
+                }
+                try { Thread.sleep(80L) } catch (_: InterruptedException) { break }
+            }
+        }.apply { name = "gemini-stt-drain"; start() }
+    }
+
+    private fun scheduleGeminiRotation(webSocket: WebSocket) {
+        geminiRotationRunnable?.let(handler::removeCallbacks)
+        val rotate = Runnable {
+            if (grokLiveWebSocket === webSocket && liveTranscribing && !grokFinishRequested) rotateGeminiSession(webSocket)
+        }
+        geminiRotationRunnable = rotate
+        handler.postDelayed(rotate, GeminiSttProtocol.ROTATE_AFTER_MS)
+    }
+
+    private fun rotateGeminiSession(webSocket: WebSocket) {
+        if (grokLiveWebSocket !== webSocket || geminiRotating || grokFinishRequested) return
+        geminiRotating = true
+        emitGrokConnectionEvent(GrokConnectionEvent.RECONNECTING, "renovando sessão Gemini")
+        finishGeminiAudio(webSocket)
+        val timeout = Runnable {
+            if (grokLiveWebSocket === webSocket && geminiRotating) {
+                finishGrokWebSocketPermanently("Gemini: tempo esgotado na renovação da sessão.")
+            }
+        }
+        geminiRotationRunnable = timeout
+        handler.postDelayed(timeout, GeminiSttProtocol.FINISH_TIMEOUT_MS)
+    }
+
+    private fun finishGeminiAudio(webSocket: WebSocket) {
+        synchronized(grokAudioLock) {
+            if (geminiEnding) return
+            geminiEnding = true
+        }
+        Thread {
+            // Ajuste validado no Windows: silêncio antes do EOF permite fechar a última fala.
+            while (geminiDraining && grokLiveWebSocket === webSocket) Thread.sleep(20L)
+            repeat(20) {
+                if (grokLiveWebSocket !== webSocket || grokIntentionalClose) return@Thread
+                if (!webSocket.send(GeminiSttProtocol.audio(ByteArray(3200)))) {
+                    handleGrokWebSocketDisconnect(webSocket, "Gemini: falha ao finalizar áudio")
+                    return@Thread
+                }
+                Thread.sleep(100L)
+            }
+            if (grokLiveWebSocket !== webSocket || grokIntentionalClose) return@Thread
+            geminiEndSent = true
+            if (!webSocket.send(GeminiSttProtocol.endAudio())) {
+                handleGrokWebSocketDisconnect(webSocket, "Gemini: falha ao enviar fim do áudio")
+            } else if (!geminiPendingSpeech) scheduleGeminiFinish(webSocket)
+        }.apply { name = "gemini-stt-finish"; start() }
+    }
+
+    private fun scheduleGeminiFinish(webSocket: WebSocket) {
+        geminiFinishRunnable?.let(handler::removeCallbacks)
+        val finish = Runnable {
+            if (grokLiveWebSocket !== webSocket || !geminiEndSent || geminiPendingSpeech) return@Runnable
+            if (geminiRotating && (!grokFinishRequested || synchronized(grokAudioLock) { geminiPendingAudio.isNotEmpty() })) {
+                geminiRotationRunnable?.let(handler::removeCallbacks)
+                archiveCurrentGrokTranscript()
+                grokLiveWebSocket = null
+                grokSocketReady = false
+                webSocket.close(1000, "Renovação")
+                connectGrokLiveWebSocket(reconnecting = true)
+            } else if (grokFinishRequested) completeGrokLiveTranscription(webSocket, "")
+        }
+        geminiFinishRunnable = finish
+        handler.postDelayed(finish, 1000L)
+    }
+
     private fun rescheduleDeepgramFastFinish() {
         deepgramFinishRunnable?.let(handler::removeCallbacks)
         // Nunca adia além do deadline absoluto: se o provedor continua mandando
@@ -1797,6 +1955,10 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun sendAudioChunk(webSocket: WebSocket, bytes: ByteArray, offset: Int, length: Int): Boolean {
+        if (sttIsGemini) {
+            if (webSocket.queueSize() > 1_000_000L) return false
+            return webSocket.send(GeminiSttProtocol.audio(bytes, offset, length))
+        }
         if (sttIsElevenlabs) {
             val chunk = bytes.copyOfRange(offset, offset + length)
             val payload = JSONObject()
@@ -1850,6 +2012,14 @@ class RemoteSttActivity : AppCompatActivity() {
             if (reconnectSucceeded) GrokConnectionEvent.RECONNECTED else GrokConnectionEvent.CONNECTED,
             if (discardedAudioBytes > 0L) "Áudio do intervalo descartado ($discardedSeconds)." else null,
         )
+        if (sttIsGemini) {
+            geminiRotating = false
+            geminiEnding = false
+            geminiEndSent = false
+            geminiPendingSpeech = false
+            drainGeminiPendingAudio(webSocket)
+            scheduleGeminiRotation(webSocket)
+        }
         scheduleGrokReconnectCounterReset(webSocket)
         if (!liveTimerStarted) {
             // O cronômetro do ao vivo nasce junto da captura, no CONNECTED —
@@ -1910,13 +2080,17 @@ class RemoteSttActivity : AppCompatActivity() {
                     // callbacks de reconexão continuam livres.
                     if (delayMillis > 0L) Thread.sleep(delayMillis)
                     var failedSocket: WebSocket? = null
+                    var geminiOverflow = false
                     var audioLossSeconds: Double? = null
                     synchronized(grokAudioLock) {
                         if (!liveTranscribing || !liveUsesGrokWebSocket) return@synchronized
                         val audio = grokLiveAudioFlow.outgoingAudio(buffer, read, livePaused) ?: return@synchronized
                         if (!livePaused && grokLiveAudioFlow.replaysAudio) grokReplayBuffer.append(audio, 0, read)
                         val socket = grokLiveWebSocket
-                        if (grokSocketReady && socket != null) {
+                        if (sttIsGemini && (geminiRotating || geminiDraining)) {
+                            if (geminiPendingAudio.size >= 100) geminiOverflow = true
+                            else geminiPendingAudio.addLast(audio.copyOf(read))
+                        } else if (grokSocketReady && socket != null) {
                             if (!sendAudioChunk(socket, audio, 0, read)) failedSocket = socket
                         } else if (!livePaused) {
                             grokDisconnectedAudioBytes += read
@@ -1929,6 +2103,10 @@ class RemoteSttActivity : AppCompatActivity() {
                     }
                     audioLossSeconds?.let {
                         emitGrokConnectionEvent(GrokConnectionEvent.AUDIO_LOST, String.format(Locale.US, "%.1fs", it))
+                    }
+                    if (geminiOverflow) {
+                        finishGrokWebSocketPermanently("Gemini: fila de áudio excedeu 10 segundos durante a renovação.")
+                        break
                     }
                     failedSocket?.let { handleGrokWebSocketDisconnect(it, "fila de envio do WebSocket fechada") }
                 }
@@ -1967,6 +2145,14 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun handleGrokWebSocketDisconnect(webSocket: WebSocket, message: String) {
         if (grokLiveWebSocket !== webSocket || grokIntentionalClose) return
+        if (sttIsGemini && geminiEndSent && !geminiPendingSpeech) {
+            scheduleGeminiFinish(webSocket)
+            return
+        }
+        if (sttIsGemini && (grokFinishRequested || geminiRotating)) {
+            finishGrokWebSocketPermanently("Gemini: conexão interrompida antes da confirmação final.")
+            return
+        }
         if (grokFinishRequested) {
             completeGrokLiveTranscription(webSocket, "")
             return
@@ -2110,6 +2296,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val second = continuation.trim()
         if (first.isBlank()) return second
         if (second.isBlank()) return first
+        if (sttIsGemini) return "$first\n$second"
         val firstWords = first.split(Regex("\\s+"))
         val secondWords = second.split(Regex("\\s+"))
         val maxOverlap = minOf(firstWords.size, secondWords.size, GROK_MAX_OVERLAP_WORDS)
@@ -2125,6 +2312,10 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun sendGrokAudioDone(webSocket: WebSocket) {
         if (grokLiveWebSocket !== webSocket || !grokSocketReady) return
+        if (sttIsGemini) {
+            finishGeminiAudio(webSocket)
+            return
+        }
         val payload = when {
             sttIsDeepgram -> "{\"type\":\"CloseStream\"}"
             sttIsAssemblyai -> "{\"type\":\"Terminate\"}"
@@ -2178,6 +2369,12 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun cancelGrokReconnectCallbacks() {
+        geminiSetupRunnable?.let(handler::removeCallbacks)
+        geminiSetupRunnable = null
+        geminiRotationRunnable?.let(handler::removeCallbacks)
+        geminiFinishRunnable?.let(handler::removeCallbacks)
+        geminiRotationRunnable = null
+        geminiFinishRunnable = null
         grokReconnectRunnable?.let(handler::removeCallbacks)
         grokStableResetRunnable?.let(handler::removeCallbacks)
         grokReconnectRunnable = null
@@ -2185,6 +2382,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun sttProviderName(): String = when {
+        sttIsGemini -> "Gemini"
         sttIsDeepgram -> "Deepgram"
         sttIsAssemblyai -> "AssemblyAI"
         sttIsElevenlabs -> "Scribe"
@@ -2310,7 +2508,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 status.text = "Recebendo a transcrição final do ${sttProviderName()}..."
                 // Deadline absoluto: completa até 10s após o pedido, mesmo que o
                 // provedor continue mandando finais (evita travar para sempre).
-                finishDeadlineMillis = SystemClock.elapsedRealtime() + DEEPGRAM_FINISH_TIMEOUT_MILLIS
+                finishDeadlineMillis = SystemClock.elapsedRealtime() + if (sttIsGemini) GeminiSttProtocol.FINISH_TIMEOUT_MS else DEEPGRAM_FINISH_TIMEOUT_MILLIS
                 val socket = grokLiveWebSocket
                 finishingSocket = socket
                 if (socket != null) {
@@ -2322,10 +2520,11 @@ class RemoteSttActivity : AppCompatActivity() {
                 deepgramFinishRunnable?.let(handler::removeCallbacks)
                 val timeout = Runnable {
                     deepgramFinishRunnable = null
-                    completeGrokLiveTranscription(finishingSocket ?: grokLiveWebSocket, "")
+                    if (sttIsGemini) finishGrokWebSocketPermanently("Gemini: tempo esgotado aguardando confirmação final.")
+                    else completeGrokLiveTranscription(finishingSocket ?: grokLiveWebSocket, "")
                 }
                 deepgramFinishRunnable = timeout
-                handler.postDelayed(timeout, DEEPGRAM_FINISH_TIMEOUT_MILLIS)
+                handler.postDelayed(timeout, if (sttIsGemini) GeminiSttProtocol.FINISH_TIMEOUT_MS else DEEPGRAM_FINISH_TIMEOUT_MILLIS)
             } else {
                 grokIntentionalClose = true
                 grokFinishRequested = false
@@ -2573,6 +2772,7 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isAssemblyaiApi) return sendAssemblyaiApiTranscription(uploadFile, isFinal)
         if (config.isElevenlabsApi) return sendElevenlabsApiTranscription(uploadFile, isFinal)
         if (config.isMetamuseApi) return sendMetamuseApiTranscription(uploadFile, isFinal)
+        if (config.isGeminiApi) return sendGeminiApiTranscription(uploadFile, isFinal)
         if (config.isAlibabaApi) return sendAlibabaApiTranscription(uploadFile, isFinal)
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -2859,6 +3059,72 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
+    private fun sendGeminiApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
+        val apiKey = GrokApiSettings.googleAiStudioApiKey()
+        require(GeminiSttProtocol.plausibleKey(apiKey)) { "Insira a chave API do Google AI Studio nas configurações." }
+        require(uploadFile.file.length() in 1..2_000_000_000L) { "Gemini aceita arquivos de até 2 GB." }
+        val languages = SttLanguageSettings.geminiLanguageCodes()
+        val diarize = checkboxLiveDiarize.isChecked && checkboxLiveDiarize.isEnabled
+        val keywords = activeSttKeywords()
+        // Valida incompatibilidades antes de subir o áudio.
+        GeminiSttProtocol.restBody("", uploadFile.mime, languages, diarize, keywords)
+        val http = client.newBuilder().connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS).callTimeout(180, TimeUnit.SECONDS)
+            .followRedirects(false).followSslRedirects(false).build()
+        fun execute(request: Request, cleanup: Boolean = false): Pair<String, String?> {
+            if (!cleanup && cancelRequested) throw CancellationException()
+            val call = (if (cleanup) http.newBuilder().callTimeout(10, TimeUnit.SECONDS).build() else http).newCall(request)
+            if (!cleanup) currentCalls.add(call)
+            if (!cleanup && isLiveFinal != null) synchronized(liveRequestLock) {
+                liveCurrentCall = call
+                liveCurrentCallIsFinal = isLiveFinal
+            }
+            try {
+                if (!cleanup && cancelRequested) { call.cancel(); throw CancellationException() }
+                call.execute().use { response ->
+                    if (!response.isSuccessful) throw IllegalStateException("Gemini respondeu HTTP ${response.code}.")
+                    return response.body?.string().orEmpty() to response.header("X-Goog-Upload-URL")
+                }
+            } finally {
+                currentCalls.remove(call)
+                synchronized(liveRequestLock) {
+                    if (liveCurrentCall === call) { liveCurrentCall = null; liveCurrentCallIsFinal = false }
+                }
+            }
+        }
+        fun builder(url: String): Request.Builder = Request.Builder().url(url).header("x-goog-api-key", apiKey)
+        val jsonMime = "application/json".toMediaType()
+        var fileName: String? = null
+        try {
+            val metadata = JSONObject().put("file", JSONObject().put("display_name", "sig-transcribe"))
+            val (_, uploadUrl) = execute(builder(GeminiSttProtocol.FILES_URL)
+                .header("X-Goog-Upload-Protocol", "resumable").header("X-Goog-Upload-Command", "start")
+                .header("X-Goog-Upload-Header-Content-Type", uploadFile.mime)
+                .header("X-Goog-Upload-Header-Content-Length", uploadFile.file.length().toString())
+                .post(metadata.toString().toRequestBody(jsonMime)).build())
+            val (uploaded, _) = execute(builder(GeminiSttProtocol.uploadUrl(uploadUrl.orEmpty()))
+                .header("X-Goog-Upload-Command", "upload, finalize").header("X-Goog-Upload-Offset", "0")
+                .post(uploadFile.file.asRequestBody(uploadFile.mime.toMediaType())).build())
+            var file = JSONObject(uploaded).getJSONObject("file")
+            fileName = file.getString("name")
+            val fileUrl = GeminiSttProtocol.fileUrl(fileName)
+            val deadline = SystemClock.elapsedRealtime() + 180_000L
+            while (file.optString("state") == "PROCESSING") {
+                if (cancelRequested) throw CancellationException()
+                require(SystemClock.elapsedRealtime() < deadline) { "Gemini: tempo esgotado no processamento do arquivo." }
+                Thread.sleep(500L)
+                val (polled, _) = execute(builder(fileUrl).get().build())
+                file = JSONObject(polled)
+            }
+            require(file.optString("state") != "FAILED") { "Gemini não conseguiu processar o arquivo." }
+            val body = GeminiSttProtocol.restBody(file.getString("uri"), uploadFile.mime, languages, diarize, keywords)
+            val (result, _) = execute(builder(GeminiSttProtocol.REST_URL).post(body.toRequestBody(jsonMime)).build())
+            return GeminiSttProtocol.restText(JSONObject(result), diarize)
+        } finally {
+            fileName?.let { name -> runCatching { execute(builder(GeminiSttProtocol.fileUrl(name)).delete().build(), cleanup = true) } }
+        }
+    }
+
     private fun sendAlibabaApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
         val apiKey = GrokApiSettings.alibabaApiKey()
         require(GrokApiSettings.isPlausibleAlibabaKey(apiKey)) { "Insira a chave API do Alibaba Cloud nas configurações." }
@@ -2939,6 +3205,7 @@ class RemoteSttActivity : AppCompatActivity() {
             config.isAssemblyaiApi -> "assemblyai"
             config.isElevenlabsApi -> "elevenlabs"
             config.isMetamuseApi -> "metamuse"
+            config.isGeminiApi -> "gemini"
             config.isAlibabaApi -> "alibaba"
             config.isGrokApi -> "grok"
             else -> null
@@ -2956,6 +3223,7 @@ class RemoteSttActivity : AppCompatActivity() {
             return
         }
         val options = when (apiProvider) {
+            "gemini" -> listOf("multi", "pt-BR", "en-US", "es-419", "custom")
             "deepgram" -> listOf("multi", "pt-BR", "en", "es", "custom")
             else -> listOf("multi", "pt", "es", "en", "custom")
         }
@@ -2977,6 +3245,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun setProviderLanguageMode(provider: String, mode: String) {
         when (provider) {
+            "gemini" -> GrokApiSettings.setGeminiLanguageMode(mode)
             "deepgram" -> GrokApiSettings.setDeepgramLanguageMode(mode)
             "assemblyai" -> GrokApiSettings.setAssemblyaiLanguageMode(mode)
             "elevenlabs" -> GrokApiSettings.setElevenlabsLanguageMode(mode)
@@ -2988,6 +3257,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun providerLanguageLabel(provider: String): String {
         val (mode, custom) = when (provider) {
+            "gemini" -> GrokApiSettings.geminiLanguageMode() to GrokApiSettings.geminiCustomLanguage()
             "deepgram" -> GrokApiSettings.deepgramLanguageMode() to GrokApiSettings.deepgramCustomLanguage()
             "assemblyai" -> GrokApiSettings.assemblyaiLanguageMode() to GrokApiSettings.assemblyaiCustomLanguage()
             "elevenlabs" -> GrokApiSettings.elevenlabsLanguageMode() to GrokApiSettings.elevenlabsCustomLanguage()
@@ -3005,7 +3275,11 @@ class RemoteSttActivity : AppCompatActivity() {
             setPadding(48, 24, 48, 8)
         }
         val edit = EditText(this).apply {
-            hint = if (provider == "deepgram") "código do idioma (ex.: fr-CA)" else "Ex: en, es, pt"
+            hint = when (provider) {
+                "gemini" -> "Ex: pt-BR, en-US"
+                "deepgram" -> "código do idioma (ex.: fr-CA)"
+                else -> "Ex: en, es, pt"
+            }
             setSingleLine(true)
             inputType = android.text.InputType.TYPE_CLASS_TEXT
         }
@@ -3046,6 +3320,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     edit.error = "Digite pelo menos um código de idioma."
                 } else if (invalid.isNotEmpty()) {
                     val providerName = when (provider) {
+                        "gemini" -> "Gemini 3.5 Transcribe"
                         "deepgram" -> "Deepgram"
                         "assemblyai" -> "Universal-3.5 Pro"
                         "metamuse", "muse" -> "Muse Voice"
@@ -3060,6 +3335,10 @@ class RemoteSttActivity : AppCompatActivity() {
                 } else {
                     val normalized = codes.joinToString(",")
                     when (provider) {
+                        "gemini" -> {
+                            GrokApiSettings.setGeminiCustomLanguage(normalized)
+                            GrokApiSettings.setGeminiLanguageMode("custom")
+                        }
                         "deepgram" -> {
                             GrokApiSettings.setDeepgramCustomLanguage(normalized)
                             GrokApiSettings.setDeepgramLanguageMode("custom")
@@ -3095,6 +3374,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun showLanguageCodesHelp(provider: String) {
         val codes = when (provider) {
+            "gemini" -> SttLanguageSettings.GEMINI_CODES.sorted().joinToString(", ")
             "deepgram" -> SttLanguageSettings.DEEPGRAM_CODES.sorted().joinToString(", ")
             "assemblyai" -> SttLanguageSettings.ASSEMBLYAI_CODES.sorted().joinToString(", ")
             "metamuse", "muse" -> SttLanguageSettings.MUSE_CODE_TO_LANGUAGE.keys.sorted().joinToString(", ")
@@ -3116,6 +3396,7 @@ class RemoteSttActivity : AppCompatActivity() {
         AlertDialog.Builder(this)
             .setTitle(
                 when (provider) {
+                    "gemini" -> "Códigos aceitos pelo Gemini"
                     "deepgram" -> "Códigos aceitos pelo Deepgram"
                     "assemblyai" -> "Códigos aceitos pelo Universal-3.5 Pro"
                     "metamuse", "muse" -> "Códigos aceitos pelo Muse Voice"
@@ -3354,6 +3635,7 @@ class RemoteSttActivity : AppCompatActivity() {
             config.isAssemblyaiApi -> "assemblyai"
             config.isElevenlabsApi -> "elevenlabs"
             config.isMetamuseApi -> "metamuse"
+            config.isGeminiApi -> "gemini"
             config.isAlibabaApi -> "alibaba"
             config.isGrokApi -> "grok"
             else -> null
@@ -3383,7 +3665,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val config = TranscriptionModelStore.selectedConfig()
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
             config.isAssemblyaiApi || config.isElevenlabsApi || config.isMetamuseApi ||
-            config.isAlibabaApi
+            config.isAlibabaApi || config.isGeminiApi
         // Granite (servidor/NAR) não oferece seleção de idioma nem
         // diarização; todos os demais modelos exibem ambos.
         val graniteModel = config.name == TranscriptionModelStore.SERVER_NAME
@@ -3441,7 +3723,9 @@ class RemoteSttActivity : AppCompatActivity() {
         val config = TranscriptionModelStore.selectedConfig()
         AlertDialog.Builder(this)
             .setMessage(
-                if (config.isAlibabaApi) "Diarização não disponível para Alibaba Fun ASR/Qwen."
+                if (config.isGeminiApi && !transcriptionMode) "Gemini Transcribe Live não oferece diarização. Ela está disponível na transcrição de arquivos via REST."
+                else if (config.isGeminiApi) "A diarização identifica interlocutores no REST. Para ativá-la no Gemini, desligue Keywords."
+                else if (config.isAlibabaApi) "Diarização não disponível para Alibaba Fun ASR/Qwen."
                 else "A diarização identifica interlocutores diferentes na transcrição. As falas de cada pessoa recebem rótulos como Interlocutor 1 e Interlocutor 2."
             )
             .setPositiveButton("OK", null)
@@ -3456,6 +3740,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 config.isAssemblyaiApi -> providerLanguageLabel("assemblyai")
                 config.isElevenlabsApi -> providerLanguageLabel("elevenlabs")
                 config.isMetamuseApi -> providerLanguageLabel("metamuse")
+                config.isGeminiApi -> providerLanguageLabel("gemini")
                 config.isAlibabaApi -> providerLanguageLabel("alibaba")
                 config.isGrokApi -> providerLanguageLabel("grok")
                 else -> selectedLiveLanguage.shortLabel
@@ -3906,7 +4191,8 @@ class RemoteSttActivity : AppCompatActivity() {
         val hasFiles = selectedItems.isNotEmpty()
         val zipAllowed = selectedItems.size > 1 && !TranscriptionModelStore.selectedConfig().isGrokApi &&
             !TranscriptionModelStore.selectedConfig().isMetamuseApi &&
-            !TranscriptionModelStore.selectedConfig().isAlibabaApi
+            !TranscriptionModelStore.selectedConfig().isAlibabaApi &&
+            !TranscriptionModelStore.selectedConfig().isGeminiApi
         batchOptionsRow?.visibility = if (hasFiles) View.VISIBLE else View.GONE
         checkboxSendZip?.visibility = if (zipAllowed) View.VISIBLE else View.GONE
         if (!zipAllowed && checkboxSendZip?.isChecked == true) checkboxSendZip?.isChecked = false
@@ -4082,8 +4368,13 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         if (!onlyConvert && !onlyVad && serverBaseUrl.isBlank() && !TranscriptionModelStore.selectedConfig().isGrokApi &&
             !TranscriptionModelStore.selectedConfig().isMetamuseApi &&
-            !TranscriptionModelStore.selectedConfig().isAlibabaApi) {
+            !TranscriptionModelStore.selectedConfig().isAlibabaApi &&
+            !TranscriptionModelStore.selectedConfig().isGeminiApi) {
             status.text = "Informe e teste o IP do servidor."
+            return
+        }
+        if (!onlyConvert && !onlyVad && TranscriptionModelStore.selectedConfig().isGeminiApi && !GrokApiSettings.hasGoogleAiStudioApiKey()) {
+            status.text = "Insira a chave API do Google AI Studio nas configurações."
             return
         }
         if (!onlyConvert && !onlyVad && TranscriptionModelStore.selectedConfig().isGrokApi && !GrokApiSettings.hasApiKey()) {
@@ -4491,6 +4782,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val config = TranscriptionModelStore.selectedConfig()
         if (config.isGrokApi) throw IllegalStateException("Envio ZIP não está disponível para o Grok STT.")
         if (config.isMetamuseApi) throw IllegalStateException("Envio ZIP não está disponível para o Muse Voice.")
+        if (config.isGeminiApi) throw IllegalStateException("Envio ZIP não está disponível para Gemini Transcribe.")
         if (config.isAlibabaApi) throw IllegalStateException("Envio ZIP não está disponível para o Alibaba Fun ASR/Qwen.")
         val level = compressionLevel.coerceIn(0, 9)
         val requestZip = File(tempDir, "lote_nivel_$level.zip")
@@ -4806,6 +5098,12 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isMetamuseApi) {
             return preparedUploads.sortedBy { it.index }.map { prepared ->
                 val text = sendMetamuseApiTranscription(prepared.uploadFile)
+                TranscriptionResult(prepared.index, prepared.item.name, text)
+            }
+        }
+        if (config.isGeminiApi) {
+            return preparedUploads.sortedBy { it.index }.map { prepared ->
+                val text = sendGeminiApiTranscription(prepared.uploadFile)
                 TranscriptionResult(prepared.index, prepared.item.name, text)
             }
         }

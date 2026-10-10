@@ -56,7 +56,7 @@ object SttKeywords {
 
     /** Provedores que aceitam algum tipo de termo de reforço. */
     private val SUPPORTED_PROVIDERS =
-        setOf("deepgram", "grok", "elevenlabs", "assemblyai", "metamuse", "alibaba")
+        setOf("deepgram", "grok", "elevenlabs", "assemblyai", "metamuse", "alibaba", "gemini")
 
     fun supportsKeywords(provider: String): Boolean = provider in SUPPORTED_PROVIDERS
 

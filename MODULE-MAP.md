@@ -76,6 +76,7 @@ também é bloqueado.
 |---|---|
 | `FfmpegPreviewSeekQueue.kt` | Destino mais recente, debounce e serialização das buscas da prévia. |
 | `SttResponseParsers.kt` | Parsing das respostas STT (REST, SSE e WS). |
+| `GeminiSttProtocol.kt` | Contratos puros Files/Interactions/Live do Gemini Transcribe. |
 | `SttRequestBuilders.kt` | Contratos de requisição REST/WS por provedor (URL, header, form). |
 | `SttLanguageSettings.kt` | Regras de idioma por provedor STT. |
 | `SttDiarization.kt` | Regras de diarização por provedor/modo. |

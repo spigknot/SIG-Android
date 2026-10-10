@@ -24,6 +24,7 @@ object SttDiarization {
         // Muse Voice: diarização via mode (DIARIZATION vs ENDPOINTING).
         "metamuse", "muse" -> true
         // Alibaba Fun ASR/Qwen: sem diarização em nenhum modo.
+        "gemini" -> !isLive
         "alibaba" -> false
         else -> false
     }

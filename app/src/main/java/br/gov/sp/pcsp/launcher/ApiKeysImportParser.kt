@@ -13,6 +13,7 @@ import java.util.Locale
 
 internal object ApiKeysImportParser {
     enum class Service {
+        GOOGLE_AI_STUDIO,
         XAI,
         DEEPSEEK,
         DEEPGRAM,
@@ -31,6 +32,10 @@ internal object ApiKeysImportParser {
 
     /** Rótulos aceitos, já normalizados (minúsculos, sem espaços/separadores). */
     private val SERVICE_ALIASES: Map<String, Service> = mapOf(
+        "googleaistudio" to Service.GOOGLE_AI_STUDIO,
+        "gaistudio" to Service.GOOGLE_AI_STUDIO,
+        "gemini" to Service.GOOGLE_AI_STUDIO,
+        "googleaistd" to Service.GOOGLE_AI_STUDIO,
         "xai" to Service.XAI,
         "grok" to Service.XAI,
         "xaigrok" to Service.XAI,

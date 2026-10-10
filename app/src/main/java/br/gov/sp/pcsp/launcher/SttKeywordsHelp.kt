@@ -17,6 +17,7 @@ object SttKeywordsHelp {
         "elevenlabs" -> "ElevenLabs Scribe v2"
         "assemblyai" -> "AssemblyAI Universal-3.5 Pro"
         "metamuse" -> "Muse Voice (Meta)"
+        "gemini" -> "Gemini 3.5 Transcribe"
         "alibaba" -> "Alibaba Fun ASR/Qwen"
         else -> provider
     }
@@ -53,6 +54,7 @@ object SttKeywordsHelp {
 
     /** O que cada provedor aproveita da lista (REST e ao vivo podem diferir). */
     fun providerLimit(provider: String, isLive: Boolean): String? = when (provider) {
+        "gemini" -> "Gemini: o SIG envia até 100 termos em custom_vocabulary (REST) ou customVocabulary (ao vivo). Desligue Keywords para usar diarização no REST."
         "deepgram" ->
             "Deepgram: envia os primeiros termos até somar 500 tokens no total — na prática, " +
                 "cerca de 38 termos de 50 caracteres. Os termos seguintes são descartados."
@@ -123,6 +125,7 @@ object SttKeywordsHelp {
                 providerLimit("elevenlabs", true),
                 providerLimit("assemblyai", true),
                 providerLimit("assemblyai", false),
+                providerLimit("gemini", false),
                 providerLimit("metamuse", false),
                 providerLimit("alibaba", false),
                 providerLimit("alibaba", true),

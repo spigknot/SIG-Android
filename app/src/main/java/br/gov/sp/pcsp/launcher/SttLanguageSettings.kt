@@ -9,6 +9,33 @@ package br.gov.sp.pcsp.launcher
  */
 object SttLanguageSettings {
 
+    val GEMINI_CODES: Set<String> = setOf(
+    "af-ZA", "ja-JP", "am-ET", "jv-ID", "ar-EG", "kea-CV", "hy-AM", "kn-IN",
+    "as-IN", "kk-KZ", "az-AZ", "ko-KR", "be-BY", "ky-KG", "bn-BD", "lv-LV",
+    "bn-IN", "ln-CD", "bs-BA", "lt-LT", "bg-BG", "mk-MK", "rup-BG", "ms-MY",
+    "my-MM", "ml-IN", "yue-Hant-HK", "mt-MT", "ca-ES", "cmn-Hans-CN", "ceb",
+    "mr-IN", "km-KH", "mn-MN", "hr-HR", "ne-NP", "cs-CZ", "nb-NO", "da-DK",
+    "or-IN", "nl-NL", "pl-PL", "en-GB", "pt-BR", "en-IN", "pt-PT", "en-US",
+    "pa-IN", "et-EE", "pa-Guru-IN", "fa-IR", "ro-RO", "fil-PH", "ru-RU",
+    "fi-FI", "sr-RS", "fr-FR", "sd-Arab-IN", "gl-ES", "sk-SK", "ka-GE",
+    "sl-SI", "de-DE", "es-419", "el-GR", "es-US", "gu-IN", "sw-KE", "ha-NG",
+    "sv-SE", "he-IL", "tg-TJ", "hi-IN", "te-IN", "hu-HU", "th-TH", "is-IS",
+    "tr-TR", "uk-UA", "id-ID", "uz-UZ", "it-IT", "vi-VN",
+)
+    fun geminiLanguageCodes(mode: String, custom: String): List<String> {
+        val codes = when (mode) {
+            "multi" -> listOf("multi")
+            "custom" -> parseCodes(custom).distinct()
+            else -> listOf(mode)
+        }
+        require(codes.isNotEmpty() && (codes == listOf("multi") || codes.all { it in GEMINI_CODES })) {
+            "Código de idioma inválido para Gemini."
+        }
+        return codes
+    }
+    fun geminiLanguageCodes(): List<String> = geminiLanguageCodes(
+        GrokApiSettings.geminiLanguageMode(), GrokApiSettings.geminiCustomLanguage())
+
     // Lista EXATA de códigos aceitos pelo Nova 3 (REST e WS usam o mesmo valor).
     val DEEPGRAM_CODES: Set<String> = setOf(
         "ar", "ar-AE", "ar-DZ", "ar-EG", "ar-IQ", "ar-IR", "ar-JO", "ar-KW", "ar-LB", "ar-MA",
@@ -117,6 +144,7 @@ object SttLanguageSettings {
     /** Códigos inválidos para o provedor (lista vazia = tudo válido). */
     fun invalidCodes(provider: String, codes: List<String>): List<String> = codes.filter { code ->
         when (provider) {
+            "gemini" -> code !in GEMINI_CODES
             "deepgram" -> !isValidDeepgram(code)
             "assemblyai" -> !isValidAssemblyai(code)
             "elevenlabs" -> !isValidElevenlabs(code)

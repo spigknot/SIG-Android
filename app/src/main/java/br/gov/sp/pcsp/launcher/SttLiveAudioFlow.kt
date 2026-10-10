@@ -9,30 +9,31 @@ package br.gov.sp.pcsp.launcher
 class SttLiveAudioFlow(
     private val isMuse: Boolean,
     private val pcmBytesPerSecond: Int,
+    private val isGemini: Boolean = false,
 ) {
     init {
         require(pcmBytesPerSecond > 0)
     }
 
-    val replaysAudio: Boolean get() = !isMuse
+    val replaysAudio: Boolean get() = !(isMuse || isGemini)
     private var nextAudioAtMillis = 0L
 
     data class Recovery(val replayAudio: ByteArray, val discardedAudioBytes: Long)
 
     /** Frames curtos evitam lacunas de ingresso mesmo com a opção de 2s. */
     fun chunkMillis(configuredMillis: Int): Int =
-        if (isMuse) configuredMillis.coerceIn(20, 100) else configuredMillis
+        if (isGemini) 100 else if (isMuse) configuredMillis.coerceIn(20, 100) else configuredMillis
 
     /** A pausa do Muse envia PCM zerado; os demais mantêm a política anterior. */
     fun outgoingAudio(pcm: ByteArray, length: Int, paused: Boolean): ByteArray? = when {
         !paused -> pcm
-        isMuse -> ByteArray(length)
+        isMuse || isGemini -> ByteArray(length)
         else -> null
     }
 
     /** O intervalo sem conexão do Muse é perdido e deve ser informado na UI. */
     fun recoverAudio(bufferedAudio: ByteArray, disconnectedAudioBytes: Long): Recovery =
-        if (isMuse) Recovery(ByteArray(0), disconnectedAudioBytes.coerceAtLeast(0L))
+        if (isMuse || isGemini) Recovery(ByteArray(0), disconnectedAudioBytes.coerceAtLeast(0L))
         else Recovery(bufferedAudio, 0L)
 
     fun resetPacing(nowMillis: Long) {
@@ -43,7 +44,7 @@ class SttLiveAudioFlow(
      * Após um atraso, a cadência recomeça no tempo atual, sem tentar compensá-lo.
      */
     fun delayBeforeSendMillis(byteCount: Int, nowMillis: Long): Long {
-        if (!isMuse || byteCount <= 0) return 0L
+        if (!(isMuse || isGemini) || byteCount <= 0) return 0L
         val sendAtMillis = maxOf(nextAudioAtMillis, nowMillis)
         val durationMillis = (byteCount * 1000L + pcmBytesPerSecond - 1) / pcmBytesPerSecond
         nextAudioAtMillis = sendAtMillis + durationMillis
