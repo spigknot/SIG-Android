@@ -1,0 +1,13 @@
+PASS modo=0 cap_rc=0 (esperado 0) fail=0 => OK (export completo)
+PASS modo=1 cap_rc=-3 (esperado -3) fail=1 => raiz mkdir falha (EACCES)
+PASS modo=2 cap_rc=-3 (esperado -3) fail=1 => dir do attempt EXISTE (EEXIST=erro)
+PASS modo=3 cap_rc=-4 (esperado -4) fail=1 => fopen tmp falha
+PASS modo=4 cap_rc=-6 (esperado -6) fail=1 => fwrite curto
+PASS modo=5 cap_rc=-6 (esperado -6) fail=1 => fflush falha
+PASS modo=6 cap_rc=-6 (esperado -6) fail=1 => fclose falha
+PASS modo=7 cap_rc=-5 (esperado -5) fail=1 => rename falha
+PASS modo=8 cap_rc=-7 (esperado -7) fail=1 => status.txt fopen falha
+PASS modo=9 cap_rc=-7 (esperado -7) fail=1 => status.txt ferror
+PASS modo=10 cap_rc=-7 (esperado -7) fail=1 => status.txt fclose falha
+PASS modo=11 cap_rc=-6 (esperado -6) fail=1 => ambos fclose falham => PRIMEIRO erro (-6) preservado
+VAC_EXPORT falhas=0 GREEN

@@ -1,0 +1,8 @@
+N1 flag0: status=0 (exigido 0!)
+N2 armed-sem-captura: status=1 (exigido 1!)
+N3 completo: status=2 rows=1 K=6144 N=2048 B=1 row=221184 cap=262144 (exigido 2/1/6144/2048/1/221184/262144!)
+N4 header-invalido: status=-1 (exigido -1!)
+N5 op_seen0: status=1 (exigido 1!)
+N6 rows0: status=1 (exigido 1!)
+
+API_VACINA_R46: TODAS PASS (6/6!) (0 falhas!)

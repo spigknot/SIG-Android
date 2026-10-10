@@ -1,0 +1,1486 @@
+PARECER INDEPENDENTE R45 + PROMPT AO EXECUTOR R46
+ACT SEGURA: IDENTIDADE, BOUNDS, OFF, ABI E LEITURA HOST
+=======================================================================
+Entrega do executor examinada: SMART DUAL-BACKEND R45, 10/10/2026.
+Este é o ÚNICO TXT de entrega do especialista para esta revisão: parecer
+A–H, ordem R46, saídas executadas, fontes das contraprovas e manifesto.
+Sem edição do app/probe/Whisper, sem servidor/ADB, staging, commit, push,
+instalação ou publicação pelo especialista. Testes somente em scratch.
+
+VEREDITO CURTO
+A R45 entregou um patch concreto — avanço sobre o mapa das rodadas anteriores.
+Porém, o patch ainda não tem contrato seguro de seleção/capacidade/lifetime.
+NÃO recomendar executar os binários R45 no aparelho antes das correções.
+ACT_REAL continua NÃO_EXECUTADA; build host+skel é RELATADO, não verificado
+independentemente: o pacote local contém quatro arquivos, nenhum build log
+ou ELF. Hash declarado de ELF não comprova build nem carregamento.
+Não confundir CCE_HOST dos testes diagnósticos com validação Android/DSP.
+
+=======================================================================
+PARTE I — PARECER A–H
+=======================================================================
+A. IDENTIDADE / MANIFESTO / RECONSTRUÇÃO
+A.1 O manifesto da seção V foi parseado diretamente do anexo, sem digitação
+manual de digests: 4/4 existência+tamanho+SHA-256 integral conferem.
+A pasta local smart-rodada45 tem exatamente:
+ r45-fullsha64-fontes-libs.txt; r45-p1p5.diff;
+ r45_patch2.py; r45_patch5.py.
+O diff tem 376 linhas. Esses números são de ferramenta, não estimativa.
+A lista de sete hashes remotos da seção IV é DECLARADA, não verificada com
+os respectivos arquivos ELF/fontes remotos nesta auditoria. libllama igual
+é uma observação limitada de artefato, não prova ausência de efeito runtime.
+
+A.2 Reconstruí o htp-ctx.h novo a partir do diff: SHA-256
+b975d17016ba2289a897d446a1e2cd281b5f2c5b0a1a9d04baee1467fc6a54f8,
+igual ao declarado. O htp-ctx.h antigo reconstruído em CRLF dá
+90eea5c1341a7badfb5d178a7bfd3794ce8ea11f7d442b3c1b9528fad277588e,
+igual à referência local. Isso valida esse arquivo reconstruível, NÃO os
+outros três fontes completos nem as três libs remotas.
+Grande parte das 376 linhas é a regravação do header inteiro CRLF→LF;
+não são 376 linhas novas de regra. Reduzir ruído futuro, sem reescrever
+retroativamente os arquivos R45.
+
+A.3 P7 cita 'lib 44a7ae1d': é o SKEL libggml-htp-v81.so; o host é
+libggml-hexagon.so f89236e9. Não trocar estes papéis no deploy/cohort.
+ABI/buildID, APK/probe e arquivos efetivamente carregados permanecem
+pendentes. 'htp-v81 precisa target explícito' é uma descoberta relatada;
+exigir comando/log do target e vínculo source→artefato, não inferir pela
+expressão BUILD_ALWAYS ON ou pelo target llama sozinho.
+
+B. HOST — ARMAMENTO E VÍNCULO NÃO SÃO SEGUROS
+Evidência principal: r45-p1p5.diff:7–33, 41; patch2.py:35–50.
+
+B.1 g_r45_act_dump_bi é global, mas o índice de add_buffer pertence ao
+BATCH. A referência local ggml-hexagon.cpp:1180–1188 zera n_bufs e os maps
+no reset; :1219–1239 retorna n_bufs++ e os índices começam em ZERO.
+O patch rejeita o índice válido zero com 'if (bi > 0)'.
+A contraprova usa o armamento R45 extraído sem mudar seu controle e
+add_buffer/reset extraídos da REFERÊNCIA local, com adapters host:
+ primeiro armamento de batch vazio adiciona buffer0, mas aceita_bi=-1;
+ armamento posterior aceita2; flag0 subsequente não limpa o global;
+ após reset, n_bufs=0 e global2 permanece; outro batch também não reinsere.
+Portanto 'bi estável antes dos tensores' não estabelece identidade por batch
+ou sessão. Confirmar add_buffer/reset do candidato remoto, que não veio
+completo; os resultados host não são observação da execução DSP.
+
+B.2 O retorno precoce g>=0 ocorre ANTES do parse de env. A afirmação de
+OFF inerte por construção só pode valer para um processo novo que nunca
+armou, e ainda depende da inicialização dos parâmetros abaixo. Não prova
+ON→OFF, outro batch/sessão nem finalização. O ponteiro criado por new não
+é retido para leitura/free na instrumentação entregue; add_buffer guarda
+um descritor, não prova ownership ou lifetime. A API de leitura não é só
+'imprimir o buffer': falta um objeto proprietário associado ao request.
+
+B.3 Armamento em TODO add_tensor não verifica op/tipo/K/N/B/token. Macro
+QUANTIZE_IMPL é compartilhada por formatos/conversões, não apenas Q6-alvo.
+Não há captura única/desarme, status completo nem proteção contra outra op
+sobrescrever bytes. API proposta no relato ainda não está implementada.
+
+B.4 Inicialização: diff:41 escreve act_dump_bi ANTES de chamar impl.
+Na referência ggml-hexagon.cpp:2506–2514, impl começa com memset de TODO
+kparams. SE o candidato conserva isso, ele apaga a atribuição e envia zero,
+inclusive no OFF (-1 pretendido). Não afirmo que medi isso no remoto.
+É um bloqueio de revisão a confirmar no fonte EXATO; zero é índice válido
+e a condição DSP do patch o aceita. Auditar callers comuns/fused/ID/QKV/FFN,
+inicialização e ordem montagem do batch→precompute→wire, não só o wrapper.
+
+C. DSP — ÍNDICES DISTINTOS, BOUNDS E COBERTURA
+C.1 diff:63–64 interpreta o índice do batch como slot ctx->mmap[bi].
+A referência htp/main.c:804–816 procura mapping por FD; :833–861 ocupa
+qualquer slot livre; :865–899 reutiliza mappings; :903–908 resolve tensor
+pelo DESCRITOR bufs[bi].base, já traduzido, não por ctx->mmap[bi].
+Executei reuse_buf da referência + guard R45 sobre mappings controlados:
+ bi do batch=1, FD99 reutilizado no slot7; o patch escolhe slot1 de outro
+ buffer. SELECTED_MATCHES_RESOLVED_DESCRIPTOR=0.
+Isso demonstra que as duas numerações não são intercambiáveis nessa
+referência. Não inventar API nem presumir que a coincidência no primeiro
+batch é contrato. Confirmar prep_op_bufs/reuse no candidato e usar sua
+resolução oficial por descritor/FD. A bounds correta no buffer ERRADO
+continua sendo incorreta.
+
+C.2 Guard apenas exige mmap.size !=0. O memcpy copia
+row_size*(ir_last-ir_first), com offset row_size*ir_first, sem verificar
+fim<=capacidade, sem conferir base válida e sem produtos overflow-safe.
+Contraprova real do fragmento: mapping declarado8192, row221184, escrita
+passa212992 bytes da capacidade declarada. O armazenamento físico do teste
+é maior, com sentinela: nenhum acesso fora da alocação foi provocado.
+B2 precisa442368, maior que buffer fixo262144. Cálculos conferidos por
+ferramenta. São contraprovas de contrato, não corrupção DSP observada.
+
+C.3 op_matmul limpa/seta o ponteiro, mas a referência limpa o octx uma vez
+por batch (main.c:1030–1046); entre ops limpa scratchpads, não o novo
+ponteiro (main.c:963–971). Dispatch fused/ID usa caminhos próprios e pode
+reutilizar a macro instrumentada. Risco de pointer stale entre operações:
+confirmar no candidato e zerar/desarmar no limite correto de TODAS as ops.
+Não presumir que uma op não selecionada nunca consultará o ponteiro.
+
+C.4 Quantizador ROW/tiled instrumentado não prova captura BLOCK/flat/HMX.
+A referência matmul-ops.c:843–849 mostra macro inclusive F32/F16; :851+ tem
+workers BLOCK separados. O HMX desvia no op_matmul. Sem branch registrado,
+0bytes/código não chamado é NOT_CAPTURED, não sucesso com bytes antigos.
+O nome de trigger mmtest:q4k é rótulo da suíte: provar que a operação
+capturada é Q6_K, K6144/N2048/B1 e usa o actfloat R39 íntegro.
+
+D. ABI / CACHE — LIMITES EXATOS
+D.1 diff insere act_dump_bi ANTES dos divisores. Compilação do struct
+EXTRAÍDO da referência, com a mesma inserção, mediu no host:
+ size124→128; offset primeiro div68→72; novo act_dump_bi no offset68.
+Isso cabe no blob, mas altera a interpretação do wire. main.c:921–922
+copia o blob bruto. Mistura host antigo/skel novo ou vice-versa não é
+compatível. Não são medidas das toolchains Android/Hexagon remotas.
+Exigir sizeof/offsetof dos dois builds, versão/cohort verificados e recusa
+a incompatibilidade antes de compute. Não espremer mais campos em128 bytes
+sem design do contrato privado; o struct referencial ficou no limite.
+
+D.2 Não concluo 'falta todo flush'. Confirmei na referência o flush/invalidate
+GLOBAL DSP no fim do batch (htp/main.c:1067–1070), antes da resposta.
+Mas o novo dump não é output tensor marcado em dirty_ranges; flags da
+fila em main.c:1091–1094 e ggml-hexagon.cpp:1473–1477 pertencem ao bloco
+dbuf de descritores, não provam invalidate CPU do dump separado.
+Reader deve aguardar conclusão real e usar contrato de coerência existente
+confirmado em código/SDK. Não inventar uma função RPC/cache pelo nome.
+Precisão do diagnóstico: visibilidade host PENDENTE, não ausência provada
+de flush DSP. Não encontrei prova de corrida só entre workers de linhas
+disjuntas; riscos reais são seleção/intervalos/lifetime/stale/op concorrente.
+
+E. TESTES, TOTAIS E ESTADOS — SEM CCE INFLADO
+E.1 audit_r45.py: build host0 + run0 + uma contraprova de gerador.
+Run cobre sete checagens: seis contraprovas/checagens (índice0; ON→OFF;
+reset; outro batch; capacidade8192 vs221184; aritmética B2 vs262144) e um
+controle OFF inicial. A última contraprova é cálculo, não
+uma segunda cópia física de442368 bytes.
+r45_patch5.py sobre fixture sem anchors: exit0, sem aplicar P4b/P5, apenas
+'já aplicado ou não encontrado'. Não é falha do compilador: o GERADOR não
+consome a recusa, pode reportar sucesso sem instrumentação.
+
+E.2 audit_contract.py: build host0 + run0; duas checagens: tradução de
+mapping reutilizado por FD e sizeof/offsetof referenciais. Primeira
+compilação falhou por GCC16 promover int-conversion (base=NULL num uint64_t).
+Reexecutei com -Wno-error=int-conversion, preservando o corpo da referência;
+warning ficou no build log. Não era defeito de execução do DSP.
+As suítes retornam0 porque confirmaram os defeitos esperados; as operações
+que examinam NÃO receberam 'PASS seguro'. Nenhum teste rodou o quantizador
+DSP ou recompilou os ELFs remotos. Os apêndices trazem comandos/fontes/saídas.
+
+E.3 R44 BUILDFAIL: a bateria local da R44 tem4 blocos, nenhum BUILD_EXIT=1.
+R45 diz 'exercitado na R44'; isso continua SEM EVIDÊNCIA local. Apresentar
+run íntegro com exit92 e prova de que run não executou, ou retirar a frase.
+Não aceitar a existência do guard como prova da vacina. Não use retificações
+administrativas como entrega central da R46: principal é segurança+reader.
+
+F. ESTADO POR FRONTEIRA
+ MANIFESTO_LOCAL4=CCE_HOST (existência/tamanho/fullSHA verificados).
+ PATCH_PRESENTE=VERIFICADO; HEADER_RECONSTRUÍDO=CCE_HOST.
+ BUILD_HOST_SKEL_REMOTO=RELATADO / NÃO_VERIFICADO; logs/ELFs ausentes.
+ CONTRAPROVAS_HOST_FRAGMENTOS=CCE_HOST nos adapters declarados.
+ INICIALIZAÇÃO_REMOTA/MAPPING_REMOTO=PARCIAL (referência+diff, conferir cohort).
+ VÍNCULO/CAPACIDADE/OFF/ONE_SHOT/LEITURA_HOST=INSUFICIENTES ou PENDENTES.
+ ABI_COMPAT/COERÊNCIA_CPU/ON_OFF_RUNTIME=NAO_VERIFICADOS.
+ ACT_REAL/REPLAY_REAL/2048_SAÍDAS_COM_ACT=NAO_EXECUTADOS.
+ EXPORT/CAPTURAS/CONTROLES=PARCIAIS/PENDENTES.
+ KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE=NAO.
+ CPU Q8_K, R39 PIN_PASS e HTP LEGACY_FAIL preservados; nenhuma hipótese de
+ CPU culpada, bug kernel DSP ou ACC_FP16 promovida por esta revisão.
+
+G. ESCOPO / PRESERVAÇÃO
+As9 entradas staged R37 foram snapshotadas por SHA-256 e verificadas
+idênticas ao fim. Branch main, nenhum arquivo rastreado editado. Não
+acionamos servidor, dispositivo, pacote de produção, R2 ou Whisper.
+As referências locais diferem dos fontes remotos; toda inferência dependente
+delas está rotulada. Subagente fez auditoria estática DSP; achados utilizados
+foram conferidos pelo coordenador nos blocos locais pertinentes.
+
+H. PRÓXIMO EXPERIMENTO
+Antes de P7: corrigir os contratos abaixo e exercitar o MESMO código em
+vacinas host; entregar API readback funcional, não só nome de símbolo.
+Depois: cohort corrigido host/skel/probe casados, uma captura controlada
+Q6, OFF/ON no MESMO artefato e bytes/metadata/saídas completas. Se uma rota
+não entrar no worker observado, registrar NOT_CAPTURED e experimentar a
+menor rota real/replay explicitamente aprovado, sem dump sintético.
+
+=======================================================================
+PARTE II — PROMPT R46 (COPIAR ESTA PARTE AO EXECUTOR)
+=======================================================================
+RODADA46 — FECHAR ACT SEGURA E LEITURA HOST ANTES DO DEVICE
+
+0. ESCOPO E ORDEM
+Leia o parecer R45 acima. Não instalar/executar a candidata R45 inalterada.
+Trabalhe apenas na cópia/probe isolados já autorizados. SIG principal,
+Whisper, UI/default Vulkan, modelo c4bf, R2, WIP e9 staged R37 intocados.
+Sem staging/commit/push/publicação/remoção/reboot. Serial exclusivo
+3B15BD00FVE00000 em TODO adb; PJA110/1164a04 proibidos; stayon7 intacto.
+Não ler credenciais. Esta ordem não autoriza instalar/promover sobre o SIG
+nem mudar bibliotecas/defaults de produção. Preserve R45 RED e baselineGREEN.
+Não transformar a urgência da ACT em dispensa dos gates de memória/ABI.
+
+1. FIXAR O CONTRATO COM OS FONTES EXATOS (PRIMEIRO, SEM DEVICE)
+Conferir add_buffer/reset, todos callers de precompute/impl, prep_op_bufs/
+reuse_buf, dispatch e workers do /root/sigcand2 com fullSHA64; entregar os
+blocos e patches recuperáveis. Descobrir o controle de ownership/sessão/
+batch existente; não inventar campos/símbolos de SDK.
+As contraprovas anexadas são o RED. Reproduzi-las com a seam usada pelo
+candidato, não um exporter paralelo. Contrastar com adapters do especialista
+explicitamente: local reference != candidate remoto. Confirmar ou refutar
+memset que pode apagar act_dump_bi ANTES de rodar os binários.
+
+2. CORRIGIR HOST / REQUEST — SEM GLOBAIS DE ÍNDICE
+Retenha o shared_buffer num owner da sessão/execução, com lifetime até
+conclusão+readback e liberação correta. Aceite índice zero válido e distinga
+falha de zero. Não guardar bi global entre batches/sessões; reinserir o mesmo
+buffer autorizado no batch correto, obter bi daquele batch e associar token,
+epoch/identidade da op/tensores. Sem new órfão/leak.
+
+Armamento deve ocorrer quando a OPERAÇÃO selecionada e os handles reais
+existirem — não em todo add_tensor. Selecione Q6_K K6144/N2048/B1 e entrada
+F32 original R39 por identidade, não só substring/nome de trigger/shape.
+Capturar UMA operação, uma vez, e desarmar; callback/request tardio, outro
+shape e duas ops iguais não podem sobrescrever a captura.
+OFF=-1 ou outro sentinela explicitamente acordado, definido APÓS todo
+memset/precompute em todos os callers pertinentes. Capture state/token
+por request; não permitir fallback0 acidental. Se env for init-only, declare
+a política e ofereça desarme privado consistente; não afirmar ON→OFF com
+global que retorna antes do parse. Flag unset/'0' não deve alocar/inserir/
+mapear/copiar nem expor bytes anteriores, inclusive após sessão/armamento
+anterior. Valores diferentes de'1' rejeitados/desligados como contrato.
+
+3. CORRIGIR DSP — RESOLUÇÃO REAL, BOUNDS E CONTEXTO
+Não usar ctx->mmap[batch_bi] como sinônimo de bufs[batch_bi].base. Resolva
+pelo mecanismo real já utilizado pelo candidato (descritor/FD mapeado),
+conferindo request n_bufs, fd, owner, epoch, base e capacidade. Índice fora
+ou FD diferente = recusa consumida ANTES de memcpy; sem abort genérico que
+possa derrubar DSP/aparelho.
+
+Calcular comprimento/offset/fim com aritmética checked e usar capacidade
+REAL. A captura alvo B1 precisa221184 payload bytes somente se a rota/formato
+confirmados produzirem esse row_size. Se adicionar header/alinhamento,
+contabilizá-los; não confundir payload com buffer total. B2/grandes shapes
+recusados ou alocados conforme contrato verificado, nunca overflow no256KiB.
+Validar source interval/lifetime, rows e strides, src/dst não sobrepostos,
+base válida e fim<=size nos DOIS lados. Nenhum sentinel parcial é CAPTURED.
+
+Inicialize/limpe estado de dump no início/fim de TODAS as operações relevantes,
+inclusive fused/ID/QKV/FFN/nãoalvo e caminhos HMX/BLOCK/flat. Só caminho
+selecionado pode copiar; demais retornam NOT_CAPTURED ou passam sem dump,
+sem herdar ponteiro. Documentar cobertura. Operação alvo que não chegou ao
+helper escolhido não emite COMPLETE lendo bytes stale.
+
+4. WIRE / ABI / BUILD — FECHAR ANTES DE EMPACOTAR
+124→128 e divisores deslocados não são compatibilidade. Medir sizeof e
+offsetof nos compilers host Android/Hexagon, não só desktop; asserts/versão
+do contrato privado e verificação dos ELFs usados. Host+skel precisam ser
+casados e incompatibilidade detectada antes de compute. Se o blob não tem
+espaço, desenhar metadados privados fora dele em mecanismo existente;
+não improvisar mais campos até exceder128. Test-only continua alterando ABI
+quando o struct muda: flagOFF não torna um host novo compatível com skelvelho.
+
+Build explícito dos targets host E htp-v81; capturar comando/cwd/toolchain/
+flags/revision/build exit/logs íntegros + ABI/buildID/tamanho/fullSHA64 dos
+outputs. Comprovar qual target produziu o SKEL f892(host)/44a7(skel) da R45
+apenas como histórico; nova candidata tem novos hashes próprios. Entregar
+fontes completos ou patch aplicável sobre baseline identificável porhash.
+
+5. IMPLEMENTAR A API PRIVADA DE LEITURA E SEU CONSUMIDOR (SEM ADIAR)
+O nome ggml_backend_hexagon_get_act_dump no R45 é PROPOSTA, não API existente.
+Antes de implementar, trace registry/handle do fork e o padrão dos getters
+privados já usados. API criada deve ter contrato versionado, por sessão/
+token, retorno/estado consumidos e metadados: op/type/K/N/B, formato/branch,
+row_size/nrows/bytes_written/capacity, epoch/RUN_ID, fonte/ACTinput hash e
+cohort. Não devolver só um ponteiro global sem owner ou assumir a capacidade
+é comprimento escrito. Reader: NOT_ARMED/NOT_CAPTURED/INVALID não produzem
+arquivo nem resultado numérico válido; CAPTURED somente após todos workers,
+intervalos completos, conclusão do compute e sincronização de memória.
+
+Confirmar flush DSP existente e contrato cache de RPC/shared_buffer no SDK
+usado; NÃO inventar API cache nem dizer que nenhum flush existe. Await da
+fila/barreira e visibilidade CPU devem fazer parte do reader. Provar com
+sentinel→payload e repetições que não lê versão anterior. Primeira causa
+preservada; sem reset arbitrário para obter COMPLETE. Probe chama a API real,
+valida e escreve binário com write/flush/close consumidos. Reader/caller/
+runner compartilham estado e recusas, não mero logging.
+
+6. VACINAS HOST ANTES DO DEVICE (CÓDIGO CONSUMIDO, MUTANTES)
+Rodar teste focal com comparação RED R45 vs GREEN candidata, sem precisar
+instalar versões inseguras:
+ índice0; duas ops idênticas; reset/reordenação do batch; mappingFD em slot
+ diferente do bi; sessão nova; ON→OFF/desarme; OFF inicial; alloc/addbuffer
+ falhando; inicialização após memset; mistura ABI recusada;
+ capacidade0/pequena, B2, offset/length overflow, base inválida, n_bufs/FD
+ incompatíveis; callback duplicado/tardio; op nãoalvo/fused/HMX/flat/BLOCK;
+ zero/partial bytes e sentinel stale; falha do compute/cache/read/write/close.
+Somente gere negativos perigosos nas seams host/mocks claramente declarados,
+não provoque corrupção/crash DSP. O mutante de bounds ou seleção precisa
+morrer no teste correto. Sem seam paralela que não integra o probe/skel.
+Conferir outputs/contagens exatos por script, build/run/op exits separados.
+
+Gerador patch5 R45 retornou0 com anchors ausentes: tornar ausência/duplicação
+ambígua erro real, e só aceitar 'já aplicado' se o bloco completo for igual.
+Vacina de missing-anchor deve falhar e bloquear build. Não executar scripts
+patch antigos sobre a cópia corrigida só para declarar sucesso.
+
+7. COHORT CORRIGIDO E UMA ACT REAL (SÓ APÓS 1–6 VERDES)
+Freeze de host/core/CPU/HTP/SKEL/probe/APK efetivamente usados/carregados:
+fullSHA64/tamanho/ABI/buildID/revision/flags. Não confundir host f892...
+com SKEL44a7.... Autorização permanece só ao probe/cópia isolados existentes.
+Baseline preservado e rollback isolado definido; sem troca de produção.
+
+Iniciar log stream ANTES do trigger, serial explícito. Executar seletivamente
+Q6 K6144/N2048/B1 com ACT F32 R39 original íntegra, flagOFF depoisON no MESMO
+artefato corrigido/config, token distinto. Verificar branch real e bytes
+válidos. Reader/API implementados já no build, não declarar P7 pendente só
+porque faltou escrever consumidor. Não rodar toda suíte genérica com dump
+armado por todos shapes. UNWRITTEN/falha ABI/queue/corrupt = preservar,
+parar expansão e diagnosticar uma variável contraGREEN; nunca reboot por
+esta ordem. Benchmark apenas dumpOFF, não misturar instrumentação com ganho.
+
+Entregar payload da ACT observada (ou REPLAY_REAL DSP se a rota in situ for
+tecnicamente bloqueada) + metadados/fullSHA/RUN_ID/fullcohort; caso replay,
+mesmo quantizador/intrínsecos/parâmetros reais e limites explicitados. Reader
+validado para layout tiled observado, não GGML Q8_0 canônico por analogia.
+Sem CPU/scalar passando por ACT DSP nem actfloat original renomeado.
+
+8. NÚMEROS E ENTREGA A–H (APÓS CAPTURA VÁLIDA)
+Recomputar todas2048 saídas usando ACT OBSERVADA + pesos Rtiled e critérios
+predefinidos; comparar HTP nova mesma operação/cohort com modelo observado,
+CPU/Rscalar/Rtiled separadamente. Se ACTnova for diferente de R39, R39HTP é
+histórico, não comparação causal direta sem identidade de input/saída.
+finite/nd/NMSE/max_abs/violadores/CSV completo; LEGACY0.02/0.05 e PIN5e-4
+preservados. Sem culpar CPU/DSP ou promover ACC_FP16 por escalaF16.
+Se divergência persistir, parciais reais porgruposK antes de mexer em fusão.
+
+Texto ÚNICO .txt A–H em docs/especialista, contendo patch/estado/conteagens/
+comandos/saídas/manifesto completo (existência+tamanho+fullSHA, não só lista
+remota não verificável). Entregar evidências integrais por RUN_ID na pasta
+smart-rodada46 e registrar todas no TXT, com sourcehash e buildlogs. Retificar
+CCE_COMPILADO, OFF por construção, BUILDFAIL R44 sem prova local; distinguir
+compilação relatada, testehost, device e validade numérica.
+Não repetir13/13/50/54 como entrega central, não entregar só desenho/API
+proposta. Se bloquear: comando/preflight real, erro e menor alternativa
+executada, sem fabricar dumps ou resumir bloqueio como 'faltou tempo'.
+
+Full exporter/two captures/controles vêm depois da primeira ACT íntegra;
+FFN/temporal/fused/minigrafo/placement/handoff não substituem esta fronteira.
+KERNEL/GRAPH/HANDOFF/PERF globais=NÃO até evidências próprias. Smart final:
+prefill NPU→geração GPU OpenCL/Vulkan sem replay integral; HTP→CPU não atende;
+PIN_PASS não aprova Smart. Nenhuma release/default por esta ordem.
+
+=======================================================================
+PARTE III — PROVAS EXECUTADAS E FONTES (INSERIDAS ABAIXO)
+=======================================================================
+Os apêndices seguintes são material de reprodução host. APIs/structs de
+adapters são explicitamente modelos; não substituem o SDK nem a ABI remota.
+Todos os arquivos referidos no manifesto de scratch são locais de auditoria,
+não novos dumps DSP nem anexos separados. Este TXT incorpora fontes e saídas
+principais; os caminhos indicam onde a execução realmente ocorreu.
+
+APÊNDICE1 — COMANDOS E EXIT REAIS
+Host: MinGW GCC/G++16.1, flags abaixo; PATH prefixado com C:/msys64/mingw64/bin e TMP/TEMP/TMPDIR=scratch do auditor.
+CMD_EXEC1: python C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/audit_r45.py
+BUILD_CMD1: ["C:/msys64/mingw64/bin/g++.exe", "-std=c++17", "-O2", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r45-specialist-audit\\r45-fragments.cpp", "-o", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r45-specialist-audit\\r45-fragments.exe"]
+BUILD_EXIT1=0 RUN_EXIT1=0 PATCH5_NOANCHORS_EXIT=0
+CMD_EXEC2: python C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/audit_contract.py
+BUILD_CMD2: ["C:/msys64/mingw64/bin/gcc.exe", "-std=c11", "-O2", "-Wno-error=int-conversion", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r45-specialist-audit\\r45-contract.c", "-o", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r45-specialist-audit\\r45-contract.exe"]
+BUILD_EXIT2=0 RUN_EXIT2=0
+A opção -Wno-error=int-conversion mantém o NULL→uint64_t da referência como warning em GCC16; não altera o campo/mecanismo da candidata.
+
+APÊNDICE2 — FONTES E SAÍDAS HOST INTEGRAIS
+
+===== BEGIN audit_r45.py | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/audit_r45.py =====
+from pathlib import Path
+import subprocess,os,re,json,hashlib
+S=Path(__file__).resolve().parent
+R=Path('D:/Projetos/SIG/docs/npu-hymt2/smart-rodada45')
+B=Path('D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon')
+
+def block(text,signature):
+    i=text.index(signature); begin=text.index('{',i);depth=1;j=begin+1
+    while depth:
+        if text[j]=='{':depth+=1
+        elif text[j]=='}':depth-=1
+        j+=1
+    return text[i:j]
+
+diff=(R/'r45-p1p5.diff').read_text()
+added='\n'.join(x[1:] for x in diff.splitlines() if x.startswith('+') and not x.startswith('+++'))
+arm=block(added,'void r45_act_dump_arm(')
+wire=block(added,'if (kparams->act_dump_bi >= 0')
+# Include the else branch from the real diff.
+idx=added.index('    } else {',added.index('if (kparams->act_dump_bi >= 0'))
+wire+=' else '+block(added[idx:],'else')[4:].strip()
+copy=block(added.replace('\\\n','\n'),'if (mmctx->octx->act_dump_ptr)')
+ref=(B/'ggml-hexagon.cpp').read_text()
+addbuffer=block(ref,'int add_buffer(')
+reset=block(ref,'void reset()')
+cpp=r'''#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
+#include <cstring>
+#include <map>
+#include <vector>
+#include <algorithm>
+#define HTP_OP_MAX_BUFS 16
+#define HTP_MAX_MMAPS 16
+#define GGML_LOG_DEBUG(...) ((void)0)
+#define HEX_VERBOSE(...) ((void)0)
+#define GGML_ASSERT(x) do { if (!(x)) std::abort(); } while(0)
+struct ggml_hexagon_session { const char*c_name()const{return "REFERENCE_ADAPTER";} };
+static int allocations=0,nextfd=10,g_r45_act_dump_bi=-1;
+struct ggml_hexagon_shared_buffer {
+ ggml_hexagon_session*sess;void*base=nullptr;size_t size;int fd;
+ ggml_hexagon_shared_buffer(ggml_hexagon_session*s,size_t n):sess(s),size(n),fd(nextfd++){allocations++;}
+};
+struct htp_buf_desc{uint64_t base=0;int fd=0;size_t size=0;};
+struct Batch {
+ ggml_hexagon_session*sess;unsigned n_bufs=0,n_tens=0,n_ops=0;size_t b_vmem=0;
+ std::map<int,int>b_map,t_map,d_map;std::vector<htp_buf_desc>h_bufs=std::vector<htp_buf_desc>(16);
+'''+addbuffer+'\n'+reset+'\n'+arm+r'''
+};
+struct Mapping {uint64_t size=0,base=0;};
+struct Ctx{Mapping mmap[16];};
+struct Octx{Ctx*ctx;uint8_t*act_dump_ptr=nullptr;};
+struct Params{int act_dump_bi;};
+struct Mmctx{Octx*octx;};
+void select_map(Params*kparams,Octx*octx){
+'''+wire+r'''
+}
+void copy_fragment(Mmctx*mmctx,uint8_t*dst_data,size_t dst_row_size,int ir_first,int ir_last){
+'''+copy+r'''
+}
+int main(){
+ ggml_hexagon_session sess;
+ Batch b; b.sess=&sess;
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","0");b.r45_act_dump_arm(&sess);
+ if(b.n_bufs!=0 || g_r45_act_dump_bi!=-1)return 11;
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","1");b.r45_act_dump_arm(&sess);
+ printf("EMPTY_BATCH n_bufs=%u accepted_bi=%d allocations=%d\n",b.n_bufs,g_r45_act_dump_bi,allocations);
+ if(b.n_bufs!=1 || g_r45_act_dump_bi!=-1 || allocations!=1)return 12;
+ ggml_hexagon_shared_buffer input(&sess,128);b.add_buffer(&input);b.r45_act_dump_arm(&sess);
+ int accepted=g_r45_act_dump_bi;
+ if(accepted!=2)return 13;
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","0");b.r45_act_dump_arm(&sess);
+ printf("ON_THEN_OFF global_bi=%d (not -1)\n",g_r45_act_dump_bi);
+ if(g_r45_act_dump_bi!=accepted)return 14;
+ b.reset();b.r45_act_dump_arm(&sess);
+ printf("RESET_BATCH n_bufs=%u cached_global_bi=%d\n",b.n_bufs,g_r45_act_dump_bi);
+ if(b.n_bufs!=0 || g_r45_act_dump_bi!=accepted)return 15;
+ Batch other;other.sess=&sess;other.r45_act_dump_arm(&sess);
+ printf("OTHER_BATCH n_bufs=%u cached_global_bi=%d\n",other.n_bufs,g_r45_act_dump_bi);
+ if(other.n_bufs!=0)return 16;
+ // Physical storage exceeds advertised mapping: no out-of-allocation access.
+ // Demonstrate writes past advertised capacity inside sentinel storage only.
+ const size_t row=221184, advertised=8192;
+ std::vector<uint8_t> dst(row+64,0x5a),src(row,0xa5);
+ Ctx ctx;ctx.mmap[1].size=advertised;ctx.mmap[1].base=(uint64_t)(uintptr_t)dst.data();
+ Octx octx{&ctx};Params params{1};select_map(&params,&octx);Mmctx mm{&octx};
+ copy_fragment(&mm,src.data(),row,0,1);
+ size_t crossed=std::count(dst.begin()+advertised,dst.begin()+row,(uint8_t)0xa5);
+ printf("ADVERTISED_CAPACITY=%zu ROW_BYTES=%zu COPIED_PAST_DECLARED=%zu\n",advertised,row,crossed);
+ if(!octx.act_dump_ptr || crossed!=row-advertised)return 17;
+ if(!std::all_of(dst.begin()+row,dst.end(),[](uint8_t v){return v==0x5a;}))return 18;
+ printf("B2_BYTES=%zu BUFFER_BYTES=262144 EXCEEDS=%s\n",row*2,row*2>262144?"YES":"NO");
+ puts("HOST_FRAGMENT_COUNTEREXAMPLES_CONFIRMED; not Android/DSP execution");
+ return 0;
+}
+'''
+(S/'r45-fragments.cpp').write_text(cpp)
+env=os.environ.copy();env['PATH']='C:/msys64/mingw64/bin;'+env.get('PATH','')
+for k in ['TMP','TEMP','TMPDIR']:env[k]=str(S)
+cmd=['C:/msys64/mingw64/bin/g++.exe','-std=c++17','-O2',str(S/'r45-fragments.cpp'),'-o',str(S/'r45-fragments.exe')]
+p=subprocess.run(cmd,capture_output=True,text=True,env=env);(S/'fragment-build.log').write_text(p.stdout+p.stderr);print('BUILD_EXIT',p.returncode)
+if p.returncode:print((p.stdout+p.stderr)[-1800:]);raise SystemExit(p.returncode)
+p=subprocess.run([str(S/'r45-fragments.exe')],capture_output=True,text=True,env=env);(S/'fragment-run.log').write_text(p.stdout+p.stderr);print(p.stdout);print('RUN_EXIT',p.returncode);assert p.returncode==0
+files=['r45_patch2.py','r45_patch5.py'];patch_results=[]
+# Source generator failure is tested only on scratch, no remote/app edit.
+case=S/'patch5-noanchors';(case/'htp').mkdir(parents=True,exist_ok=True)
+(case/'htp/matmul-ops.c').write_text('/* deliberately missing expected anchors: negative fixture */\n')
+p=subprocess.run([os.sys.executable,str(R/'r45_patch5.py'),case.as_posix()],capture_output=True,text=True,env=env)
+(S/'patch5-noanchors.log').write_text(p.stdout+p.stderr);print('PATCH5_MISSING_ANCHORS_EXIT',p.returncode);print(p.stdout.strip());assert p.returncode==0
+result={'build_command':cmd,'build_exit':0,'run_exit':0,'run_stdout':(S/'fragment-run.log').read_text(),'patch5_missing_anchors_exit':p.returncode,'patch5_missing_anchors_stdout':p.stdout,'scope':'extracted real R45 arm/map/copy; add_buffer/reset from local REFERENCE with adapters; no app/server/device actions; no physical overflow, sentinel proof of logical capacity breach'}
+for n in ['ggml-hexagon.cpp','htp/matmul-ops.h','htp/htp-ctx.h']:result.setdefault('reference_hashes',{})[n]=hashlib.sha256((B/n).read_bytes()).hexdigest()
+(S/'results.json').write_text(json.dumps(result,indent=2,ensure_ascii=False))
+print('AUDIT_COUNTEREXAMPLES_EXIT0')
+
+===== END audit_r45.py =====
+
+===== BEGIN audit_contract.py | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/audit_contract.py =====
+from pathlib import Path
+import subprocess,os,json
+S=Path(__file__).resolve().parent
+B=Path('D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon')
+R=Path('D:/Projetos/SIG/docs/npu-hymt2/smart-rodada45')
+def block(t,sig):
+ i=t.index(sig);k=t.index('{',i);j=k+1;d=1
+ while d:
+  if t[j]=='{':d+=1
+  elif t[j]=='}':d-=1
+  j+=1
+ return t[i:j]
+main=(B/'htp/main.c').read_text();reuse=block(main,'static inline bool reuse_buf(')
+added='\n'.join(l[1:] for l in (R/'r45-p1p5.diff').read_text().splitlines() if l.startswith('+') and not l.startswith('+++'))
+sel=block(added,'if (kparams->act_dump_bi >= 0');idx=added.index('    } else {',added.index('if (kparams->act_dump_bi >= 0'));sel+=' else '+block(added[idx:],'else')[4:].strip()
+header=(B/'htp/matmul-ops.h').read_text();old=block(header,'struct htp_mm_kernel_params {')+';';new=old.replace('struct htp_mm_kernel_params','struct new_htp_mm_kernel_params',1).replace('    // Precomputed division values','    int32_t act_dump_bi;\n    // Precomputed division values',1)
+fastdiv=block((B/'htp/hex-fastdiv.h').read_text(),'struct fastdiv_values {')+';'
+code='''#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdio.h>
+#define HTP_MAX_MMAPS 16
+struct htp_mmap {uint64_t size,base;uint32_t fd;};
+struct htp_context {struct htp_mmap mmap[16];};
+struct htp_buf_desc {uint64_t base;uint32_t fd;uint64_t size;};
+struct htp_ops_context {struct htp_context*ctx;uint8_t*act_dump_ptr;};
+struct params {int act_dump_bi;};
+'''+reuse+'\n'+fastdiv+'\n'+old+'\n'+new+'''
+void select_map(struct params*kparams,struct htp_ops_context*octx){
+'''+sel+'''
+}
+int main(void){
+ uint8_t wrong[16],dump[16];
+ struct htp_context ctx={0};
+ ctx.mmap[1].size=16;ctx.mmap[1].base=(uint64_t)(uintptr_t)wrong;ctx.mmap[1].fd=10;
+ ctx.mmap[7].size=16;ctx.mmap[7].base=(uint64_t)(uintptr_t)dump;ctx.mmap[7].fd=99;
+ struct htp_buf_desc bufs[2]={0};bufs[1].fd=99;bufs[1].size=16;
+ uint32_t mask=0;
+ bool reused=reuse_buf(&ctx,&mask,&bufs[1]);
+ struct htp_ops_context octx={.ctx=&ctx};struct params params={.act_dump_bi=1};select_map(&params,&octx);
+ printf("BATCH_BI=1 MAPPING_SLOT=7 FD=99 REUSED=%d SELECTED_MATCHES_RESOLVED_DESCRIPTOR=%d\\n",reused,octx.act_dump_ptr==(uint8_t*)(uintptr_t)bufs[1].base);
+ printf("LAYOUT_REFERENCE old_size=%zu new_size=%zu old_first_div=%zu new_first_div=%zu act_field=%zu\\n",sizeof(struct htp_mm_kernel_params),sizeof(struct new_htp_mm_kernel_params),offsetof(struct htp_mm_kernel_params,div_ne12_ne1),offsetof(struct new_htp_mm_kernel_params,div_ne12_ne1),offsetof(struct new_htp_mm_kernel_params,act_dump_bi));
+ if(!reused || bufs[1].base!=(uint64_t)(uintptr_t)dump || octx.act_dump_ptr!=(uint8_t*)wrong)return 1;
+ puts("REFERENCE_MAPPING_COUNTEREXAMPLE_CONFIRMED; not remote/DSP ABI measurement");return 0;
+}
+'''
+(S/'r45-contract.c').write_text(code)
+env=os.environ.copy();env['PATH']='C:/msys64/mingw64/bin;'+env.get('PATH','')
+for k in ['TMP','TEMP','TMPDIR']:env[k]=str(S)
+cmd=['C:/msys64/mingw64/bin/gcc.exe','-std=c11','-O2','-Wno-error=int-conversion',str(S/'r45-contract.c'),'-o',str(S/'r45-contract.exe')]
+p=subprocess.run(cmd,capture_output=True,text=True,env=env);(S/'contract-build.log').write_text(p.stdout+p.stderr);print('CONTRACT_BUILD_EXIT',p.returncode);assert p.returncode==0,p.stderr
+p=subprocess.run([str(S/'r45-contract.exe')],capture_output=True,text=True,env=env);(S/'contract-run.log').write_text(p.stdout+p.stderr);print(p.stdout);print('CONTRACT_RUN_EXIT',p.returncode);assert p.returncode==0
+(S/'contract-results.json').write_text(json.dumps({'build_command':cmd,'build_exit':0,'run_exit':0,'stdout':p.stdout,'scope':'R45 map guard + reuse_buf and kernel struct from LOCAL REFERENCE; controlled mappings; no remote/device memory access; actual candidate prep_op_bufs must be audited before use'},indent=2))
+
+===== END audit_contract.py =====
+
+===== BEGIN r45-fragments.cpp | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/r45-fragments.cpp =====
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
+#include <cstring>
+#include <map>
+#include <vector>
+#include <algorithm>
+#define HTP_OP_MAX_BUFS 16
+#define HTP_MAX_MMAPS 16
+#define GGML_LOG_DEBUG(...) ((void)0)
+#define HEX_VERBOSE(...) ((void)0)
+#define GGML_ASSERT(x) do { if (!(x)) std::abort(); } while(0)
+struct ggml_hexagon_session { const char*c_name()const{return "REFERENCE_ADAPTER";} };
+static int allocations=0,nextfd=10,g_r45_act_dump_bi=-1;
+struct ggml_hexagon_shared_buffer {
+ ggml_hexagon_session*sess;void*base=nullptr;size_t size;int fd;
+ ggml_hexagon_shared_buffer(ggml_hexagon_session*s,size_t n):sess(s),size(n),fd(nextfd++){allocations++;}
+};
+struct htp_buf_desc{uint64_t base=0;int fd=0;size_t size=0;};
+struct Batch {
+ ggml_hexagon_session*sess;unsigned n_bufs=0,n_tens=0,n_ops=0;size_t b_vmem=0;
+ std::map<int,int>b_map,t_map,d_map;std::vector<htp_buf_desc>h_bufs=std::vector<htp_buf_desc>(16);
+int add_buffer(ggml_hexagon_shared_buffer * sbuf) {
+        // Lookup by fd
+        auto it = b_map.find(sbuf->fd);
+        if (it != b_map.end()) { return it->second; }
+
+        // Add new buffer to the batch
+        int bi = n_bufs++;
+        GGML_ASSERT(n_bufs < HTP_OP_MAX_BUFS);
+
+        b_map.insert({sbuf->fd, bi});
+
+        htp_buf_desc &b = h_bufs[bi];
+        b.base = (uint64_t) sbuf->base;
+        b.fd   = sbuf->fd;
+        b.size = sbuf->size;
+
+        b_vmem += b.size;
+
+        HEX_VERBOSE("ggml-hex: %s add-buffer #%u : fd %d base %p size %zu : vmem %zu\n", sess->c_name(), bi, b.fd, (void*) sbuf->base, (size_t) b.size, b_vmem);
+
+        return bi;
+    }
+void reset() {
+        n_bufs = 0;
+        n_tens = 0;
+        n_ops  = 0;
+        b_vmem = 0;
+
+        b_map.clear();
+        t_map.clear();
+        d_map.clear();
+    }
+void r45_act_dump_arm(ggml_hexagon_session * sess) {
+        if (g_r45_act_dump_bi >= 0) return;
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        if (!(e && e[0] == '1' && e[1] == 0)) return;   // parse explicito (so' "1"!)
+        ggml_hexagon_shared_buffer * d = new ggml_hexagon_shared_buffer(sess, 262144);   // 256KB >= 221184!
+        const int bi = add_buffer(d);
+        if (bi > 0) {
+            g_r45_act_dump_bi = bi;
+            GGML_LOG_DEBUG("ggml-hex: R45 ACT_DUMP: bi=%d fd=%d size=%zu\n", bi, d->fd, d->size);
+        }
+    }
+};
+struct Mapping {uint64_t size=0,base=0;};
+struct Ctx{Mapping mmap[16];};
+struct Octx{Ctx*ctx;uint8_t*act_dump_ptr=nullptr;};
+struct Params{int act_dump_bi;};
+struct Mmctx{Octx*octx;};
+void select_map(Params*kparams,Octx*octx){
+if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < HTP_MAX_MMAPS && octx->ctx->mmap[kparams->act_dump_bi].size) {
+        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->mmap[kparams->act_dump_bi].base;
+    } else {
+        octx->act_dump_ptr = NULL;
+    }
+}
+void copy_fragment(Mmctx*mmctx,uint8_t*dst_data,size_t dst_row_size,int ir_first,int ir_last){
+if (mmctx->octx->act_dump_ptr) {                                                                       
+        uint8_t * d45 = mmctx->octx->act_dump_ptr + ((size_t) dst_row_size * ir_first);                    
+        memcpy(d45, dst_data, (size_t) dst_row_size * (ir_last - ir_first));                               
+    }
+}
+int main(){
+ ggml_hexagon_session sess;
+ Batch b; b.sess=&sess;
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","0");b.r45_act_dump_arm(&sess);
+ if(b.n_bufs!=0 || g_r45_act_dump_bi!=-1)return 11;
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","1");b.r45_act_dump_arm(&sess);
+ printf("EMPTY_BATCH n_bufs=%u accepted_bi=%d allocations=%d\n",b.n_bufs,g_r45_act_dump_bi,allocations);
+ if(b.n_bufs!=1 || g_r45_act_dump_bi!=-1 || allocations!=1)return 12;
+ ggml_hexagon_shared_buffer input(&sess,128);b.add_buffer(&input);b.r45_act_dump_arm(&sess);
+ int accepted=g_r45_act_dump_bi;
+ if(accepted!=2)return 13;
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","0");b.r45_act_dump_arm(&sess);
+ printf("ON_THEN_OFF global_bi=%d (not -1)\n",g_r45_act_dump_bi);
+ if(g_r45_act_dump_bi!=accepted)return 14;
+ b.reset();b.r45_act_dump_arm(&sess);
+ printf("RESET_BATCH n_bufs=%u cached_global_bi=%d\n",b.n_bufs,g_r45_act_dump_bi);
+ if(b.n_bufs!=0 || g_r45_act_dump_bi!=accepted)return 15;
+ Batch other;other.sess=&sess;other.r45_act_dump_arm(&sess);
+ printf("OTHER_BATCH n_bufs=%u cached_global_bi=%d\n",other.n_bufs,g_r45_act_dump_bi);
+ if(other.n_bufs!=0)return 16;
+ // Physical storage exceeds advertised mapping: no out-of-allocation access.
+ // Demonstrate writes past advertised capacity inside sentinel storage only.
+ const size_t row=221184, advertised=8192;
+ std::vector<uint8_t> dst(row+64,0x5a),src(row,0xa5);
+ Ctx ctx;ctx.mmap[1].size=advertised;ctx.mmap[1].base=(uint64_t)(uintptr_t)dst.data();
+ Octx octx{&ctx};Params params{1};select_map(&params,&octx);Mmctx mm{&octx};
+ copy_fragment(&mm,src.data(),row,0,1);
+ size_t crossed=std::count(dst.begin()+advertised,dst.begin()+row,(uint8_t)0xa5);
+ printf("ADVERTISED_CAPACITY=%zu ROW_BYTES=%zu COPIED_PAST_DECLARED=%zu\n",advertised,row,crossed);
+ if(!octx.act_dump_ptr || crossed!=row-advertised)return 17;
+ if(!std::all_of(dst.begin()+row,dst.end(),[](uint8_t v){return v==0x5a;}))return 18;
+ printf("B2_BYTES=%zu BUFFER_BYTES=262144 EXCEEDS=%s\n",row*2,row*2>262144?"YES":"NO");
+ puts("HOST_FRAGMENT_COUNTEREXAMPLES_CONFIRMED; not Android/DSP execution");
+ return 0;
+}
+
+===== END r45-fragments.cpp =====
+
+===== BEGIN r45-contract.c | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/r45-contract.c =====
+#include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include <stdio.h>
+#define HTP_MAX_MMAPS 16
+struct htp_mmap {uint64_t size,base;uint32_t fd;};
+struct htp_context {struct htp_mmap mmap[16];};
+struct htp_buf_desc {uint64_t base;uint32_t fd;uint64_t size;};
+struct htp_ops_context {struct htp_context*ctx;uint8_t*act_dump_ptr;};
+struct params {int act_dump_bi;};
+static inline bool reuse_buf(struct htp_context *ctx, uint32_t *m_reuse, struct htp_buf_desc *b) {
+    b->base = NULL;
+
+    for (uint32_t i=0; i<HTP_MAX_MMAPS; i++) {
+        struct htp_mmap *m = ctx->mmap + i;
+        if (m->size && m->fd == b->fd) {
+            b->base   = m->base;
+            *m_reuse |= (1 << i);
+            return true;
+        }
+    }
+
+    return false;
+}
+struct fastdiv_values {
+    uint32_t mp;
+    uint32_t l;
+};
+struct htp_mm_kernel_params {
+    int32_t  kernel_type;        // enum htp_mm_kernel_type
+    int32_t  pipeline;           // 1 = pipelined execution, 0 = standard
+    int32_t  m_chunk;            // Row chunk size (M chunk)
+    int32_t  n_chunk;            // Col chunk size (N chunk)
+    int32_t  n_threads;          // Number of threads to spawn
+    int32_t  n_act_threads;      // Number of threads for activation preparation
+    int32_t  n_hmx;              // 1 = use HMX, 0 = use HVX
+    int32_t  n_prefetch;         // Prefetch lookahead buffers/rows in VTCM
+    int32_t  tile_size;          // Weight tile size
+    int32_t  aligned_tile_size;  // Aligned weight tile size (padded to 128)
+    int32_t  src1_row_size;      // Row size for quantized activation
+    int32_t  vtcm_size;          // Total required scratchpad size in VTCM
+    int32_t  vtcm_src0_size;     // src0 scratchpad size in VTCM
+    int32_t  vtcm_src1_size;     // src1 scratchpad size in VTCM
+    int32_t  vtcm_src2_size;     // src2 scratchpad size in VTCM (fused only)
+    int32_t  vtcm_src3_size;     // src3 scratchpad size in VTCM (fused only)
+    int32_t  vtcm_dst_size;      // dst scratchpad size in VTCM
+
+    // Precomputed division values
+    struct fastdiv_values div_ne12_ne1;
+    struct fastdiv_values div_ne1;
+    struct fastdiv_values div_r2;
+    struct fastdiv_values div_r3;
+    struct fastdiv_values div_ne11;
+    struct fastdiv_values div_n_act_threads;
+    struct fastdiv_values div_ne00_padded;
+};
+struct new_htp_mm_kernel_params {
+    int32_t  kernel_type;        // enum htp_mm_kernel_type
+    int32_t  pipeline;           // 1 = pipelined execution, 0 = standard
+    int32_t  m_chunk;            // Row chunk size (M chunk)
+    int32_t  n_chunk;            // Col chunk size (N chunk)
+    int32_t  n_threads;          // Number of threads to spawn
+    int32_t  n_act_threads;      // Number of threads for activation preparation
+    int32_t  n_hmx;              // 1 = use HMX, 0 = use HVX
+    int32_t  n_prefetch;         // Prefetch lookahead buffers/rows in VTCM
+    int32_t  tile_size;          // Weight tile size
+    int32_t  aligned_tile_size;  // Aligned weight tile size (padded to 128)
+    int32_t  src1_row_size;      // Row size for quantized activation
+    int32_t  vtcm_size;          // Total required scratchpad size in VTCM
+    int32_t  vtcm_src0_size;     // src0 scratchpad size in VTCM
+    int32_t  vtcm_src1_size;     // src1 scratchpad size in VTCM
+    int32_t  vtcm_src2_size;     // src2 scratchpad size in VTCM (fused only)
+    int32_t  vtcm_src3_size;     // src3 scratchpad size in VTCM (fused only)
+    int32_t  vtcm_dst_size;      // dst scratchpad size in VTCM
+
+    int32_t act_dump_bi;
+    // Precomputed division values
+    struct fastdiv_values div_ne12_ne1;
+    struct fastdiv_values div_ne1;
+    struct fastdiv_values div_r2;
+    struct fastdiv_values div_r3;
+    struct fastdiv_values div_ne11;
+    struct fastdiv_values div_n_act_threads;
+    struct fastdiv_values div_ne00_padded;
+};
+void select_map(struct params*kparams,struct htp_ops_context*octx){
+if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < HTP_MAX_MMAPS && octx->ctx->mmap[kparams->act_dump_bi].size) {
+        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->mmap[kparams->act_dump_bi].base;
+    } else {
+        octx->act_dump_ptr = NULL;
+    }
+}
+int main(void){
+ uint8_t wrong[16],dump[16];
+ struct htp_context ctx={0};
+ ctx.mmap[1].size=16;ctx.mmap[1].base=(uint64_t)(uintptr_t)wrong;ctx.mmap[1].fd=10;
+ ctx.mmap[7].size=16;ctx.mmap[7].base=(uint64_t)(uintptr_t)dump;ctx.mmap[7].fd=99;
+ struct htp_buf_desc bufs[2]={0};bufs[1].fd=99;bufs[1].size=16;
+ uint32_t mask=0;
+ bool reused=reuse_buf(&ctx,&mask,&bufs[1]);
+ struct htp_ops_context octx={.ctx=&ctx};struct params params={.act_dump_bi=1};select_map(&params,&octx);
+ printf("BATCH_BI=1 MAPPING_SLOT=7 FD=99 REUSED=%d SELECTED_MATCHES_RESOLVED_DESCRIPTOR=%d\n",reused,octx.act_dump_ptr==(uint8_t*)(uintptr_t)bufs[1].base);
+ printf("LAYOUT_REFERENCE old_size=%zu new_size=%zu old_first_div=%zu new_first_div=%zu act_field=%zu\n",sizeof(struct htp_mm_kernel_params),sizeof(struct new_htp_mm_kernel_params),offsetof(struct htp_mm_kernel_params,div_ne12_ne1),offsetof(struct new_htp_mm_kernel_params,div_ne12_ne1),offsetof(struct new_htp_mm_kernel_params,act_dump_bi));
+ if(!reused || bufs[1].base!=(uint64_t)(uintptr_t)dump || octx.act_dump_ptr!=(uint8_t*)wrong)return 1;
+ puts("REFERENCE_MAPPING_COUNTEREXAMPLE_CONFIRMED; not remote/DSP ABI measurement");return 0;
+}
+
+===== END r45-contract.c =====
+
+===== BEGIN fragment-build.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/fragment-build.log =====
+
+===== END fragment-build.log =====
+
+===== BEGIN fragment-run.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/fragment-run.log =====
+EMPTY_BATCH n_bufs=1 accepted_bi=-1 allocations=1
+ON_THEN_OFF global_bi=2 (not -1)
+RESET_BATCH n_bufs=0 cached_global_bi=2
+OTHER_BATCH n_bufs=0 cached_global_bi=2
+ADVERTISED_CAPACITY=8192 ROW_BYTES=221184 COPIED_PAST_DECLARED=212992
+B2_BYTES=442368 BUFFER_BYTES=262144 EXCEEDS=YES
+HOST_FRAGMENT_COUNTEREXAMPLES_CONFIRMED; not Android/DSP execution
+
+===== END fragment-run.log =====
+
+===== BEGIN contract-build.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/contract-build.log =====
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r45-specialist-audit\r45-contract.c: In function 'reuse_buf':
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r45-specialist-audit\r45-contract.c:12:13: warning: assignment to 'uint64_t' {aka 'long long unsigned int'} from 'void *' makes integer from pointer without a cast [-Wint-conversion]
+   12 |     b->base = NULL;
+      |             ^
+
+===== END contract-build.log =====
+
+===== BEGIN contract-run.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/contract-run.log =====
+BATCH_BI=1 MAPPING_SLOT=7 FD=99 REUSED=1 SELECTED_MATCHES_RESOLVED_DESCRIPTOR=0
+LAYOUT_REFERENCE old_size=124 new_size=128 old_first_div=68 new_first_div=72 act_field=68
+REFERENCE_MAPPING_COUNTEREXAMPLE_CONFIRMED; not remote/DSP ABI measurement
+
+===== END contract-run.log =====
+
+===== BEGIN patch5-noanchors.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/patch5-noanchors.log =====
+P4b: ja aplicado ou nao encontrado (count=0)
+P5: ja aplicado ou nao encontrado (count=0)
+gravado: C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/patch5-noanchors/htp/matmul-ops.c
+
+===== END patch5-noanchors.log =====
+
+===== BEGIN results.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/results.json =====
+{
+  "build_command": [
+    "C:/msys64/mingw64/bin/g++.exe",
+    "-std=c++17",
+    "-O2",
+    "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r45-specialist-audit\\r45-fragments.cpp",
+    "-o",
+    "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r45-specialist-audit\\r45-fragments.exe"
+  ],
+  "build_exit": 0,
+  "run_exit": 0,
+  "run_stdout": "EMPTY_BATCH n_bufs=1 accepted_bi=-1 allocations=1\nON_THEN_OFF global_bi=2 (not -1)\nRESET_BATCH n_bufs=0 cached_global_bi=2\nOTHER_BATCH n_bufs=0 cached_global_bi=2\nADVERTISED_CAPACITY=8192 ROW_BYTES=221184 COPIED_PAST_DECLARED=212992\nB2_BYTES=442368 BUFFER_BYTES=262144 EXCEEDS=YES\nHOST_FRAGMENT_COUNTEREXAMPLES_CONFIRMED; not Android/DSP execution\n",
+  "patch5_missing_anchors_exit": 0,
+  "patch5_missing_anchors_stdout": "P4b: ja aplicado ou nao encontrado (count=0)\nP5: ja aplicado ou nao encontrado (count=0)\ngravado: C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/patch5-noanchors/htp/matmul-ops.c\n",
+  "scope": "extracted real R45 arm/map/copy; add_buffer/reset from local REFERENCE with adapters; no app/server/device actions; no physical overflow, sentinel proof of logical capacity breach",
+  "reference_hashes": {
+    "ggml-hexagon.cpp": "9779fb9f9e82a483a64ba936a83343fce9bdd4abc08b9285de64be34c682577b",
+    "htp/matmul-ops.h": "2f8540993aa0f18aa0fa889aa00b6c13b76d14c77a142c384bc1956d6df0844a",
+    "htp/htp-ctx.h": "90eea5c1341a7badfb5d178a7bfd3794ce8ea11f7d442b3c1b9528fad277588e"
+  }
+}
+===== END results.json =====
+
+===== BEGIN contract-results.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/contract-results.json =====
+{
+  "build_command": [
+    "C:/msys64/mingw64/bin/gcc.exe",
+    "-std=c11",
+    "-O2",
+    "-Wno-error=int-conversion",
+    "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r45-specialist-audit\\r45-contract.c",
+    "-o",
+    "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r45-specialist-audit\\r45-contract.exe"
+  ],
+  "build_exit": 0,
+  "run_exit": 0,
+  "stdout": "BATCH_BI=1 MAPPING_SLOT=7 FD=99 REUSED=1 SELECTED_MATCHES_RESOLVED_DESCRIPTOR=0\nLAYOUT_REFERENCE old_size=124 new_size=128 old_first_div=68 new_first_div=72 act_field=68\nREFERENCE_MAPPING_COUNTEREXAMPLE_CONFIRMED; not remote/DSP ABI measurement\n",
+  "scope": "R45 map guard + reuse_buf and kernel struct from LOCAL REFERENCE; controlled mappings; no remote/device memory access; actual candidate prep_op_bufs must be audited before use"
+}
+===== END contract-results.json =====
+
+===== BEGIN header-reconstruction.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/header-reconstruction.json =====
+{
+  "reconstructed_new_sha256": "b975d17016ba2289a897d446a1e2cd281b5f2c5b0a1a9d04baee1467fc6a54f8",
+  "original_lf_sha256": "1c6cee542dc23b174acf8c50b958663b7c9a6ed5fb16806a57fc8a9e7946459d",
+  "original_crlf_sha256": "90eea5c1341a7badfb5d178a7bfd3794ce8ea11f7d442b3c1b9528fad277588e",
+  "row_bytes": 221184,
+  "b2_bytes": 442368,
+  "fixed_capacity": 262144
+}
+===== END header-reconstruction.json =====
+
+===== BEGIN manifest-check.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/manifest-check.json =====
+[
+  {
+    "file": "r45-fullsha64-fontes-libs.txt",
+    "declared_sha": "12d6a83038eff9c8c1ed0767717170465f96e46558a5c55d1b4942e66aff0d40",
+    "observed_sha": "12d6a83038eff9c8c1ed0767717170465f96e46558a5c55d1b4942e66aff0d40",
+    "declared_bytes": 827,
+    "observed_bytes": 827,
+    "ok": true
+  },
+  {
+    "file": "r45-p1p5.diff",
+    "declared_sha": "2ee41f1c87ceba4abcd83c68580f511abb4d5a51755a9e005808d65efd2079ef",
+    "observed_sha": "2ee41f1c87ceba4abcd83c68580f511abb4d5a51755a9e005808d65efd2079ef",
+    "declared_bytes": 13782,
+    "observed_bytes": 13782,
+    "ok": true
+  },
+  {
+    "file": "r45_patch2.py",
+    "declared_sha": "b45c5ad3787a8ab06d72b530948d3e51bf7593cc17a7ceb8421eed61bad87630",
+    "observed_sha": "b45c5ad3787a8ab06d72b530948d3e51bf7593cc17a7ceb8421eed61bad87630",
+    "declared_bytes": 3151,
+    "observed_bytes": 3151,
+    "ok": true
+  },
+  {
+    "file": "r45_patch5.py",
+    "declared_sha": "8bbd0846e7088dc8ebcbce344ac6d2a89b3ecad2040dc73b88adff0c3af0c92e",
+    "observed_sha": "8bbd0846e7088dc8ebcbce344ac6d2a89b3ecad2040dc73b88adff0c3af0c92e",
+    "declared_bytes": 2188,
+    "observed_bytes": 2188,
+    "ok": true
+  }
+]
+===== END manifest-check.json =====
+
+APÊNDICE3 — QUATRO ARQUIVOS R45 ENTREGUES, INTEGRAIS
+
+===== BEGIN r45-fullsha64-fontes-libs.txt =====
+a81a907358aa93556823ef4b0977555badd197827e08798eaa6cc6d138eb3077  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+82ad8ffc0f3caa945fef8b766ae97f26d2985609383d2f46a72b9e20302242f2  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+7e01bc70430752aa14169501204b87ebf94488df6c61375590c1d94f9ed8398d  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.h
+b975d17016ba2289a897d446a1e2cd281b5f2c5b0a1a9d04baee1467fc6a54f8  /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+f89236e986e8e83fcc9e0a22470bff60e4ba17fff5bec2a44b1af6b6585da3b5  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+8ab003eb1fdd0643367b4d8ff25f1f6c91697c3a9d3dac9ab68d1251f7ede2cb  /root/sigcand2/build-kq/bin/libllama.so
+44a7ae1dd8d8d99007bfbd5bb7ef01d87c8790f74e50af7df82c9780d9126704  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+===== END r45-fullsha64-fontes-libs.txt =====
+
+===== BEGIN r45-p1p5.diff =====
+--- /root/r45_backup_sigcand2/ggml-hexagon.cpp	2026-10-10 04:36:19.141820271 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp	2026-10-10 04:39:32.913748095 -0300
+@@ -240,6 +240,9 @@
+ 
+ struct ggml_hexagon_session;
+ 
++// R45 (test-only!): o bi global do dump da ACT (-1 = OFF!)
++static int g_r45_act_dump_bi = -1;
++
+ static void ggml_hexagon_precompute_matmul_params(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+@@ -1725,9 +1728,23 @@
+                (h->nb[0] == t->nb[0]) && (h->nb[1] == nb1) && (h->nb[2] == nb2) && (h->nb[3] == nb3);
+     }
+ 
++    // R45 (test-only!): arma o dump UMA vez (P1: criacao; P2: add_buffer!)
++    void r45_act_dump_arm(ggml_hexagon_session * sess) {
++        if (g_r45_act_dump_bi >= 0) return;
++        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
++        if (!(e && e[0] == '1' && e[1] == 0)) return;   // parse explicito (so' "1"!)
++        ggml_hexagon_shared_buffer * d = new ggml_hexagon_shared_buffer(sess, 262144);   // 256KB >= 221184!
++        const int bi = add_buffer(d);
++        if (bi > 0) {
++            g_r45_act_dump_bi = bi;
++            GGML_LOG_DEBUG("ggml-hex: R45 ACT_DUMP: bi=%d fd=%d size=%zu\n", bi, d->fd, d->size);
++        }
++    }
++
+     // add tensor and return its index
+     int add_tensor(const ggml_tensor * t) {
+         auto sbuf = static_cast<ggml_hexagon_shared_buffer *>(t->buffer->context);
++        r45_act_dump_arm(sbuf->sess);   // R45: P2 (antes dos tensores — bi estavel!)
+ 
+         // First lookup by tensor data
+         auto range = d_map.equal_range(t->data);
+@@ -3027,6 +3044,7 @@
+     const struct ggml_tensor * dst,
+     struct htp_mm_kernel_params * kparams
+ ) {
++    kparams->act_dump_bi = g_r45_act_dump_bi;   // R45: P3 (test-only: -1 = OFF!)
+     ggml_hexagon_precompute_matmul_params_impl(sess, src0, src1, dst, 0, kparams);
+ }
+ 
+--- /root/r45_backup_sigcand2/matmul-ops.c	2026-10-10 04:36:19.143420420 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c	2026-10-10 04:39:32.913748095 -0300
+@@ -839,6 +839,10 @@
+     uint8_t * restrict dst_data = (uint8_t *) dst + (dst_row_size * ir_first);                             \
+     uint8_t * restrict tmp_data = (uint8_t *) mmctx->vtcm_dst + (mmctx->vtcm_dst_size_per_thread * ith);   \
+     kernel_fn(src_data, dst_data, tmp_data, ne0, ir_last - ir_first, src_row_size, dst_row_size);          \
++    if (mmctx->octx->act_dump_ptr) {                                                                       \
++        uint8_t * d45 = mmctx->octx->act_dump_ptr + ((size_t) dst_row_size * ir_first);                    \
++        memcpy(d45, dst_data, (size_t) dst_row_size * (ir_last - ir_first));                               \
++    }                                                                                                      \
+                                                                                                            \
+     htp_trace_event_stop(tr, HTP_TRACE_EVT_HVX_A_QUANT, ir_first);                                         \
+ }
+@@ -3428,6 +3432,13 @@
+ int op_matmul(struct htp_ops_context * octx) {
+     const struct htp_mm_kernel_params * kparams = (const struct htp_mm_kernel_params *) octx->kernel_params;
+ 
++    // R45 (test-only!): P4 — o dump da ACT: bi -> endereco DSP (o fd ja' mapeado!)
++    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < HTP_MAX_MMAPS && octx->ctx->mmap[kparams->act_dump_bi].size) {
++        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->mmap[kparams->act_dump_bi].base;
++    } else {
++        octx->act_dump_ptr = NULL;
++    }
++
+     if (kparams->n_hmx) {
+         return hmx_mm_op_matmul(octx, kparams);
+     }
+--- /root/r45_backup_sigcand2/matmul-ops.h	2026-10-10 04:36:19.142146780 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.h	2026-10-10 04:39:32.913748095 -0300
+@@ -94,6 +94,7 @@
+     int32_t  vtcm_src2_size;     // src2 scratchpad size in VTCM (fused only)
+     int32_t  vtcm_src3_size;     // src3 scratchpad size in VTCM (fused only)
+     int32_t  vtcm_dst_size;      // dst scratchpad size in VTCM
++    int32_t  act_dump_bi;        // R45 (test-only): buffer index do dump da ACT (-1 = OFF!)
+ 
+     // Precomputed division values
+     struct fastdiv_values div_ne12_ne1;
+--- /root/r45_backup_sigcand2/htp-ctx.h	2026-10-10 04:36:19.144601851 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h	2026-10-10 04:39:32.913748095 -0300
+@@ -1,145 +1,147 @@
+-#ifndef HTP_CTX_H
+-#define HTP_CTX_H
+-
+-#include "hex-dma.h"
+-#include "hmx-queue.h"
+-#include "htp-ops.h"
+-#include "hex-profile.h"
+-#include "work-queue.h"
+-#include "hex-fastdiv.h"
+-
+-#include <assert.h>
+-#include <dspqueue.h>
+-#include <stdatomic.h>
+-#include <stdint.h>
+-#include <stdbool.h>
+-
+-#ifndef HTP_MAX_NTHREADS
+-#define HTP_MAX_NTHREADS 10
+-#endif
+-#define HTP_MAX_MMAPS    16
+-
+-#define HTP_MAX_DIRTY_RANGES 16
+-
+-// Memory mapping
+-struct htp_mmap {
+-    uint64_t size;
+-    uint64_t base;
+-    uint32_t fd;
+-    uint32_t reserved;
+-};
+-
+-// Scratchpad state
+-struct htp_spad {
+-    const struct htp_tensor * src;             // original src of the data (for reuse)
+-    uint8_t *                 data;            // pointer to an area in vtcm
+-    uint32_t                  stride;          // stride used inside this spad
+-    uint32_t                  size;            // total size
+-    uint32_t                  size_per_thread; // size per thread
+-};
+-
+-struct htp_context;
+-
+-// Context while processing an Op
+-// TODO: fold this into the main context
+-struct htp_ops_context {
+-    struct htp_context * ctx;
+-
+-    enum htp_op_code    op; // FIXME: rename to opcode
+-    int32_t             op_params[HTP_OP_MAX_PARAMS];
+-    int32_t             kernel_params[HTP_OP_MAX_KERN_PARAMS];
+-
+-    const struct htp_tensor * src[HTP_OP_MAX_INPUTS];
+-    union {
+-        const struct htp_tensor * dst;
+-        const struct htp_tensor * dsts[HTP_OP_MAX_OUTPUTS];
+-    };
+-
+-    dma_queue **    src_dma[HTP_OP_MAX_INPUTS];
+-    dma_queue **    dst_dma[HTP_OP_MAX_OUTPUTS];
+-
+-    // TODO convert these to an array
+-    struct htp_spad src0_spad;
+-    struct htp_spad src1_spad;
+-    struct htp_spad src2_spad;
+-    struct htp_spad src3_spad;
+-    struct htp_spad dst_spad;
+-
+-    uint32_t n_threads;
+-    uint32_t flags;
+-};
+-
+-// Main context for htp DSP backend
+-struct htp_context {
+-    dspqueue_t             dsp_queue;
+-
+-    struct htp_mmap        mmap[HTP_MAX_MMAPS];
+-    dma_queue_t            dma[HTP_MAX_NTHREADS];
+-    dma_queue_t            dma_cached[HTP_MAX_NTHREADS];
+-    work_queue_t           work_queue;
+-    hmx_queue_t            hmx_queue;
+-
+-    uint32_t               n_threads;
+-    struct fastdiv_values  n_threads_div;
+-
+-    int                    thread_id;
+-    int                    thread_prio;
+-
+-    bool                   hmx_enabled;
+-    bool                   etm;
+-    uint32_t               profiler;
+-    struct htp_thread_trace trace[HTP_MAX_NTHREADS + 1];
+-
+-    uint8_t *              vtcm_base;
+-    size_t                 vtcm_size;
+-    uint32_t               vtcm_rctx;
+-    atomic_bool            vtcm_valid;
+-    atomic_bool            vtcm_needs_release;
+-
+-    uint64_t               max_vmem;
+-    struct htp_dirty_range {
+-        uint32_t start;
+-        uint32_t end;
+-        uint32_t bi;
+-    } dirty_ranges[HTP_MAX_DIRTY_RANGES];
+-
+-    // Persistent DDR scratchpad for MUL_MAT_ID mappings
+-    void *                 ddr_spad_base;
+-    size_t                 ddr_spad_size;
+-
+-    struct htp_ops_context octx;
+-
+-    qurt_thread_t          main_thread;
+-    void *                 main_stack;
+-    atomic_bool            killed;
+-    size_t                 footprint;
+-};
+-
+-int op_matmul(struct htp_ops_context * octx);
+-int op_matmul_id(struct htp_ops_context * octx);
+-int op_matmul_qkv(struct htp_ops_context * octx);
+-int op_matmul_ffn(struct htp_ops_context * octx);
+-int op_binary(struct htp_ops_context * octx);
+-int op_unary(struct htp_ops_context * octx);
+-int op_sum_rows(struct htp_ops_context * octx);
+-int op_activations(struct htp_ops_context * octx);
+-int op_softmax(struct htp_ops_context * octx);
+-int op_add_id(struct htp_ops_context * octx);
+-int op_rope(struct htp_ops_context * octx);
+-int op_flash_attn_ext(struct htp_ops_context * octx);
+-int op_set_rows(struct htp_ops_context * octx);
+-int op_get_rows(struct htp_ops_context * octx);
+-int op_cpy(struct htp_ops_context * octx);
+-int op_repeat(struct htp_ops_context * octx);
+-int op_argsort(struct htp_ops_context * octx);
+-int op_ssm_conv(struct htp_ops_context * octx);
+-int op_cumsum(struct htp_ops_context * octx);
+-int op_fill(struct htp_ops_context * octx);
+-int op_concat(struct htp_ops_context * octx);
+-int op_diag(struct htp_ops_context * octx);
+-int op_solve_tri(struct htp_ops_context * octx);
+-int op_gated_delta_net(struct htp_ops_context * octx);
+-int op_pad(struct htp_ops_context * octx);
+-int op_im2col(struct htp_ops_context * octx);
+-
+-#endif /* HTP_CTX_H */
++#ifndef HTP_CTX_H
++#define HTP_CTX_H
++
++#include "hex-dma.h"
++#include "hmx-queue.h"
++#include "htp-ops.h"
++#include "hex-profile.h"
++#include "work-queue.h"
++#include "hex-fastdiv.h"
++
++#include <assert.h>
++#include <dspqueue.h>
++#include <stdatomic.h>
++#include <stdint.h>
++#include <stdbool.h>
++
++#ifndef HTP_MAX_NTHREADS
++#define HTP_MAX_NTHREADS 10
++#endif
++#define HTP_MAX_MMAPS    16
++
++#define HTP_MAX_DIRTY_RANGES 16
++
++// Memory mapping
++struct htp_mmap {
++    uint64_t size;
++    uint64_t base;
++    uint32_t fd;
++    uint32_t reserved;
++};
++
++// Scratchpad state
++struct htp_spad {
++    const struct htp_tensor * src;             // original src of the data (for reuse)
++    uint8_t *                 data;            // pointer to an area in vtcm
++    uint32_t                  stride;          // stride used inside this spad
++    uint32_t                  size;            // total size
++    uint32_t                  size_per_thread; // size per thread
++};
++
++struct htp_context;
++
++// Context while processing an Op
++// TODO: fold this into the main context
++struct htp_ops_context {
++    struct htp_context * ctx;
++
++    enum htp_op_code    op; // FIXME: rename to opcode
++    int32_t             op_params[HTP_OP_MAX_PARAMS];
++    int32_t             kernel_params[HTP_OP_MAX_KERN_PARAMS];
++
++    const struct htp_tensor * src[HTP_OP_MAX_INPUTS];
++    union {
++        const struct htp_tensor * dst;
++        const struct htp_tensor * dsts[HTP_OP_MAX_OUTPUTS];
++    };
++
++    dma_queue **    src_dma[HTP_OP_MAX_INPUTS];
++    dma_queue **    dst_dma[HTP_OP_MAX_OUTPUTS];
++
++    // TODO convert these to an array
++    struct htp_spad src0_spad;
++    struct htp_spad src1_spad;
++    struct htp_spad src2_spad;
++    struct htp_spad src3_spad;
++    struct htp_spad dst_spad;
++
++    uint32_t n_threads;
++    uint32_t flags;
++
++    uint8_t * act_dump_ptr;   // R45 (test-only!): o dump da ACT Q6 (NULL = OFF!)
++};
++
++// Main context for htp DSP backend
++struct htp_context {
++    dspqueue_t             dsp_queue;
++
++    struct htp_mmap        mmap[HTP_MAX_MMAPS];
++    dma_queue_t            dma[HTP_MAX_NTHREADS];
++    dma_queue_t            dma_cached[HTP_MAX_NTHREADS];
++    work_queue_t           work_queue;
++    hmx_queue_t            hmx_queue;
++
++    uint32_t               n_threads;
++    struct fastdiv_values  n_threads_div;
++
++    int                    thread_id;
++    int                    thread_prio;
++
++    bool                   hmx_enabled;
++    bool                   etm;
++    uint32_t               profiler;
++    struct htp_thread_trace trace[HTP_MAX_NTHREADS + 1];
++
++    uint8_t *              vtcm_base;
++    size_t                 vtcm_size;
++    uint32_t               vtcm_rctx;
++    atomic_bool            vtcm_valid;
++    atomic_bool            vtcm_needs_release;
++
++    uint64_t               max_vmem;
++    struct htp_dirty_range {
++        uint32_t start;
++        uint32_t end;
++        uint32_t bi;
++    } dirty_ranges[HTP_MAX_DIRTY_RANGES];
++
++    // Persistent DDR scratchpad for MUL_MAT_ID mappings
++    void *                 ddr_spad_base;
++    size_t                 ddr_spad_size;
++
++    struct htp_ops_context octx;
++
++    qurt_thread_t          main_thread;
++    void *                 main_stack;
++    atomic_bool            killed;
++    size_t                 footprint;
++};
++
++int op_matmul(struct htp_ops_context * octx);
++int op_matmul_id(struct htp_ops_context * octx);
++int op_matmul_qkv(struct htp_ops_context * octx);
++int op_matmul_ffn(struct htp_ops_context * octx);
++int op_binary(struct htp_ops_context * octx);
++int op_unary(struct htp_ops_context * octx);
++int op_sum_rows(struct htp_ops_context * octx);
++int op_activations(struct htp_ops_context * octx);
++int op_softmax(struct htp_ops_context * octx);
++int op_add_id(struct htp_ops_context * octx);
++int op_rope(struct htp_ops_context * octx);
++int op_flash_attn_ext(struct htp_ops_context * octx);
++int op_set_rows(struct htp_ops_context * octx);
++int op_get_rows(struct htp_ops_context * octx);
++int op_cpy(struct htp_ops_context * octx);
++int op_repeat(struct htp_ops_context * octx);
++int op_argsort(struct htp_ops_context * octx);
++int op_ssm_conv(struct htp_ops_context * octx);
++int op_cumsum(struct htp_ops_context * octx);
++int op_fill(struct htp_ops_context * octx);
++int op_concat(struct htp_ops_context * octx);
++int op_diag(struct htp_ops_context * octx);
++int op_solve_tri(struct htp_ops_context * octx);
++int op_gated_delta_net(struct htp_ops_context * octx);
++int op_pad(struct htp_ops_context * octx);
++int op_im2col(struct htp_ops_context * octx);
++
++#endif /* HTP_CTX_H */
+
+===== END r45-p1p5.diff =====
+
+===== BEGIN r45_patch2.py =====
+#!/usr/bin/env python3
+# r45_patch2.py — R45: P1-P3 (o dump da ACT Q6 — test-only!)
+# P1: shared_buffer global (256KB) armado por env GGML_HEXAGON_ACT_DUMP=1
+# P2: add_buffer(dump) -> bi (o global!)
+# P3: bi no kernel_params do matmul (campo NOVO no struct!)
+import re
+import sys
+HEX = sys.argv[1] if len(sys.argv) > 1 else "/root/kq2/ggml/src/ggml-hexagon"
+
+# ===== ggml-hexagon.cpp: P1+P2+P3 =====
+p = f"{HEX}/ggml-hexagon.cpp"
+t = open(p, encoding="utf-8", errors="replace").read()
+
+# 0) o global file-scope (antes do precompute — L243!)
+old0 = "static void ggml_hexagon_precompute_matmul_params(\n    const struct ggml_hexagon_session * sess,"
+assert t.count(old0) >= 1, "global anchor!"
+t = t.replace(old0, """// R45 (test-only!): o bi global do dump da ACT (-1 = OFF!)
+static int g_r45_act_dump_bi = -1;
+
+static void ggml_hexagon_precompute_matmul_params(
+    const struct ggml_hexagon_session * sess,""", 1)
+
+# 1) P3: o precompute (a DEFINICAO!) seta o kparams->act_dump_bi!
+m = re.search(r"static void ggml_hexagon_precompute_matmul_params\([^;]*?\)\s*\{", t)
+assert m, "precompute def!"
+b0 = m.end() - 1   # o '{'
+t = t[:b0+1] + "\n    kparams->act_dump_bi = g_r45_act_dump_bi;   // R45: P3 (test-only: -1 = OFF!)" + t[b0+1:]
+
+# 2) P1+P2: no add_tensor (o batch!) — armar antes dos tensores!
+old2 = """    // add tensor and return its index
+    int add_tensor(const ggml_tensor * t) {
+        auto sbuf = static_cast<ggml_hexagon_shared_buffer *>(t->buffer->context);"""
+assert t.count(old2) == 1, "add_tensor anchor!"
+t = t.replace(old2, """    // R45 (test-only!): arma o dump UMA vez (P1: criacao; P2: add_buffer!)
+    void r45_act_dump_arm(ggml_hexagon_session * sess) {
+        if (g_r45_act_dump_bi >= 0) return;
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        if (!(e && e[0] == '1' && e[1] == 0)) return;   // parse explicito (so' "1"!)
+        ggml_hexagon_shared_buffer * d = new ggml_hexagon_shared_buffer(sess, 262144);   // 256KB >= 221184!
+        const int bi = add_buffer(d);
+        if (bi > 0) {
+            g_r45_act_dump_bi = bi;
+            GGML_LOG_DEBUG("ggml-hex: R45 ACT_DUMP: bi=%d fd=%d size=%zu\\n", bi, d->fd, d->size);
+        }
+    }
+
+    // add tensor and return its index
+    int add_tensor(const ggml_tensor * t) {
+        auto sbuf = static_cast<ggml_hexagon_shared_buffer *>(t->buffer->context);
+        r45_act_dump_arm(sbuf->sess);   // R45: P2 (antes dos tensores — bi estavel!)""", 1)
+open(p, "w", encoding="utf-8", newline="\n").write(t)
+print("P1+P2+P3 (host) ok")
+
+# ===== htp/matmul-ops.h: o campo (P3 wire!) =====
+p2 = f"{HEX}/htp/matmul-ops.h"
+t2 = open(p2, encoding="utf-8", errors="replace").read()
+old3 = """    int32_t  vtcm_dst_size;      // dst scratchpad size in VTCM
+"""
+assert t2.count(old3) == 1, "struct anchor!"
+t2 = t2.replace(old3, """    int32_t  vtcm_dst_size;      // dst scratchpad size in VTCM
+    int32_t  act_dump_bi;        // R45 (test-only): buffer index do dump da ACT (-1 = OFF!)
+""", 1)
+open(p2, "w", encoding="utf-8", newline="\n").write(t2)
+print("P3 (wire: matmul-ops.h) ok")
+print("=== patch P1-P3 COMPLETO (P4/P5 = skel — proximo!)")
+
+===== END r45_patch2.py =====
+
+===== BEGIN r45_patch5.py =====
+#!/usr/bin/env python3
+# r45_patch5.py — R45: P4b (op_matmul) + P5 (worker memcpy!) — o matmul-ops.c!
+import sys
+HTP = (sys.argv[1] if len(sys.argv) > 1 else "/root/kq2/ggml/src/ggml-hexagon") + "/htp"
+p = f"{HTP}/matmul-ops.c"
+t = open(p, encoding="utf-8", errors="replace").read()
+
+# P4b: o cast do bi -> ptr no op_matmul!
+old4 = """int op_matmul(struct htp_ops_context * octx) {
+    const struct htp_mm_kernel_params * kparams = (const struct htp_mm_kernel_params *) octx->kernel_params;
+
+    if (kparams->n_hmx) {"""
+if t.count(old4) == 1:
+    t = t.replace(old4, """int op_matmul(struct htp_ops_context * octx) {
+    const struct htp_mm_kernel_params * kparams = (const struct htp_mm_kernel_params *) octx->kernel_params;
+
+    // R45 (test-only!): P4 — o dump da ACT: bi -> endereco DSP (o fd ja' mapeado!)
+    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < HTP_MAX_MMAPS && octx->ctx->mmap[kparams->act_dump_bi].size) {
+        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->mmap[kparams->act_dump_bi].base;
+    } else {
+        octx->act_dump_ptr = NULL;
+    }
+
+    if (kparams->n_hmx) {""", 1)
+    print("P4b ok")
+else:
+    print(f"P4b: ja aplicado ou nao encontrado (count={t.count(old4)})")
+
+# P5: o memcpy (dentro do macro — com \\!)
+old5 = "    kernel_fn(src_data, dst_data, tmp_data, ne0, ir_last - ir_first, src_row_size, dst_row_size);          \\"
+if t.count(old5) == 1:
+    new5 = """    kernel_fn(src_data, dst_data, tmp_data, ne0, ir_last - ir_first, src_row_size, dst_row_size);          \\
+    if (mmctx->octx->act_dump_ptr) {                                                                       \\
+        uint8_t * d45 = mmctx->octx->act_dump_ptr + ((size_t) dst_row_size * ir_first);                    \\
+        memcpy(d45, dst_data, (size_t) dst_row_size * (ir_last - ir_first));                               \\
+    }                                                                                                      \\"""
+    t = t.replace(old5, new5, 1)
+    print("P5 ok")
+else:
+    print(f"P5: ja aplicado ou nao encontrado (count={t.count(old5)})")
+
+open(p, "w", encoding="utf-8", newline="\n").write(t)
+print(f"gravado: {p}")
+
+===== END r45_patch5.py =====
+
+APÊNDICE4 — MANIFESTO COMPLETO DE EVIDÊNCIAS REFERIDAS
+Formato: fullSHA-256 | bytes | absolute_path | papel. Todos os registros OBSERVADOS foram calculados dos arquivos reais; nenhuma equivalência remota é presumida. O hash do TXT final não entra nele próprio (evita autorreferência). Não há ZIP ou segundo TXT entregue.
+44830a57cb556c5361b199a3dbad13ddc67e77a9429a4af70fd73e06ef505c39 | 7076 | C:/Users/Gustavo/AppData/Local/hermes/attachments/pasted_content_2026-10-10_08-03-12-584_e49e10.txt | OBSERVADO: relato de entrada; hash não comprova suas afirmações
+12d6a83038eff9c8c1ed0767717170465f96e46558a5c55d1b4942e66aff0d40 | 827 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada45/r45-fullsha64-fontes-libs.txt | OBSERVADO: input R45 incorporado no apêndice3
+2ee41f1c87ceba4abcd83c68580f511abb4d5a51755a9e005808d65efd2079ef | 13782 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada45/r45-p1p5.diff | OBSERVADO: input R45 incorporado no apêndice3
+b45c5ad3787a8ab06d72b530948d3e51bf7593cc17a7ceb8421eed61bad87630 | 3151 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada45/r45_patch2.py | OBSERVADO: input R45 incorporado no apêndice3
+8bbd0846e7088dc8ebcbce344ac6d2a89b3ecad2040dc73b88adff0c3af0c92e | 2188 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada45/r45_patch5.py | OBSERVADO: input R45 incorporado no apêndice3
+72fb3636b5d1648f4c261a8d5993dc5c2dc3f1d9a3ca9859d27f34cbfcfc04ee | 6384 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/audit_r45.py | OBSERVADO: teste host/adapter/ref; não DSP
+440d3aef503360a81c55b43b18aa77c466c693349f47a5f81a68860bb4bb48e5 | 3813 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/audit_contract.py | OBSERVADO: teste host/adapter/ref; não DSP
+b7de9eb4e4e85474fac71d89ef9319ddb3df1ac668a05a98a37f446d84090675 | 5450 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/r45-fragments.cpp | OBSERVADO: teste host/adapter/ref; não DSP
+35c0e91bd31c8321d165432fd943ec30914c6ad70fd0d313884111e652f550db | 5457 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/r45-contract.c | OBSERVADO: teste host/adapter/ref; não DSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/fragment-build.log | OBSERVADO: teste host/adapter/ref; não DSP
+523e100db04cba2211c52be8ac2a324c3d905a0c8848cd8670e4ecd7a9fe164c | 355 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/fragment-run.log | OBSERVADO: teste host/adapter/ref; não DSP
+f2f0359e105a5ec68394c9ce9168c6e7465bf6d42c8ad15bbc29ec478e4d0df1 | 403 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/contract-build.log | OBSERVADO: teste host/adapter/ref; não DSP
+bf04052f424f453f265e4ee3218991e71c6fec8ab94df659e5966603a5219003 | 248 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/contract-run.log | OBSERVADO: teste host/adapter/ref; não DSP
+03b893c84acce52f56a7c8f67eedf7c324de973664e4a9dc725d66305bf61940 | 208 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/patch5-noanchors.log | OBSERVADO: teste host/adapter/ref; não DSP
+e78cdc247d570e9839bc23a25fc64c0aa00a4088d72ff0c9864de28252be4002 | 1526 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/results.json | OBSERVADO: teste host/adapter/ref; não DSP
+3b45c2da713b5bb0f2377416abf960fee703e616ea3032a92a7f406ce66a25a3 | 848 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/contract-results.json | OBSERVADO: teste host/adapter/ref; não DSP
+75a4268c6248737a26b185bb3e70e07e410692023494de44ee6dd8b0d9ec9866 | 366 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/header-reconstruction.json | OBSERVADO: teste host/adapter/ref; não DSP
+8a7cb825068ef712df61e082a74c9f6000e1cdd2d9d9eff14d68ef35e9355b58 | 1191 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/manifest-check.json | OBSERVADO: teste host/adapter/ref; não DSP
+bd2f622ae7f4250122b904bdf57e7b941d976cc7c9a3262e61b403b73553dd87 | 276029 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/r45-fragments.exe | OBSERVADO: teste host/adapter/ref; não DSP
+90486fbc5c52169768dd38c09a0acf857ea29e84a8b14ba4be2cbe313601f0b4 | 268400 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/r45-contract.exe | OBSERVADO: teste host/adapter/ref; não DSP
+c8313d90aa850ee9eb8bd0862f33f157836d4dce9f6f50c711bf851efa06ce44 | 651 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/audit-run.log | OBSERVADO: teste host/adapter/ref; não DSP
+5a51a9353a2480069513778f3baa5f16fbeb7e4b71bafbcf819f5f2b42047aee | 294 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/contract-audit.log | OBSERVADO: teste host/adapter/ref; não DSP
+523fd6052848dc97104bf5cf0438210a72a878141b4504ad9b5fec122e530fa7 | 1165 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/staged-baseline.json | OBSERVADO: teste host/adapter/ref; não DSP
+56766c59daf80fc2234f49b66879729886e7de38e2bd0b63f33cbcd36f5b94c7 | 62 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r45-specialist-audit/patch5-noanchors/htp/matmul-ops.c | OBSERVADO: fixture negativa scratch do gerador
+53a9d1dac7ae7b41f81a27f0633239decf7ada81f8d2ee6c81cf710003b7ebe4 | 5613 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada44/r44-bateria-casos.txt | OBSERVADO: conferência de ausência de BUILDFAIL na bateria entregue
+9779fb9f9e82a483a64ba936a83343fce9bdd4abc08b9285de64be34c682577b | 170105 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/ggml-hexagon.cpp | OBSERVADO: referência local somente leitura; não source completo do candidato remoto
+81998896b9c011c15dcd7f755999a07a50175063c76a41faabc4fd533f63cd6c | 39639 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/main.c | OBSERVADO: referência local somente leitura; não source completo do candidato remoto
+7e8c017989831075789c80bd202997ebb45c9d886d6a53cf750794ece07d4a8a | 231595 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/matmul-ops.c | OBSERVADO: referência local somente leitura; não source completo do candidato remoto
+2f8540993aa0f18aa0fa889aa00b6c13b76d14c77a142c384bc1956d6df0844a | 33247 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/matmul-ops.h | OBSERVADO: referência local somente leitura; não source completo do candidato remoto
+27e22efbfbd0e6eef7a5ceedff87add690c3ba638db6c510ebb66cb0f6ab6ab3 | 1170 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/hex-fastdiv.h | OBSERVADO: referência local somente leitura; não source completo do candidato remoto
+90eea5c1341a7badfb5d178a7bfd3794ce8ea11f7d442b3c1b9528fad277588e | 4536 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/htp-ctx.h | OBSERVADO: referência local somente leitura; não source completo do candidato remoto
+TOTAL_REGISTROS_OBSERVADOS=31
+
+LISTA REMOTA DECLARADA (reproduzida também no apêndice3, NÃO_VERIFICADA quanto aos arquivos remotos):
+a81a907358aa93556823ef4b0977555badd197827e08798eaa6cc6d138eb3077  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+82ad8ffc0f3caa945fef8b766ae97f26d2985609383d2f46a72b9e20302242f2  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+7e01bc70430752aa14169501204b87ebf94488df6c61375590c1d94f9ed8398d  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.h
+b975d17016ba2289a897d446a1e2cd281b5f2c5b0a1a9d04baee1467fc6a54f8  /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+f89236e986e8e83fcc9e0a22470bff60e4ba17fff5bec2a44b1af6b6585da3b5  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+8ab003eb1fdd0643367b4d8ff25f1f6c91697c3a9d3dac9ab68d1251f7ede2cb  /root/sigcand2/build-kq/bin/libllama.so
+44a7ae1dd8d8d99007bfbd5bb7ef01d87c8790f74e50af7df82c9780d9126704  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+PRESERVAÇÃO STAGED — hashes observados antes/depois; conteúdo idêntico:
+efdea59eb7a2caf3d0f31e56166c94eb210bb57d76f1418a11c1fc92fb81e3ea  docs/especialista/PROMPT-SMART-RODADA37-CPU-Q8K-ESTADO-EFETIVO-E-SHAPES-REAIS.txt
+15e2c5810aafa43b22efe13a33ec40ed456c05eaa6a0d56461d0d1232c361f4d  docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA37.txt
+aa8a34ff02b26d20276ee5631deb8c9645f3046b02d94cf447fc1ffeb305efa6  docs/npu-hymt2/smart-rodada37/MANIFESTO-SHA256.txt
+31ef1cf61f663a3c8a9b294f91d47e7026a31b4703329bf3b345987a635ed530  docs/npu-hymt2/smart-rodada37/probe-r37-com-consulta.cpp
+b122170f3d57d541e5d0013cf7b87190685071137630dbc22362d5a8544225ea  docs/npu-hymt2/smart-rodada37/r37-capture-full.txt
+893082f33ecedcd52846e3a3ee564d3d0f09cc9c8af93a064f70d5c055ef74b8  docs/npu-hymt2/smart-rodada37/r37-inventario-gguf.txt
+2cda873e27be4c76c3e97ba24cb58e7432c08e0504c41089b9d39946a2f4f18f  docs/npu-hymt2/smart-rodada37/r37-probe-build.log
+24b423801fe6dc56b0f261c8610b40589d52a9ddc9a4037d5d1bb011bb6caea5  docs/npu-hymt2/smart-rodada37/r37_cand.py
+412edb9400a53a01aefff392548e54cc6c1ff9d77ae714ab9e5cf62f27cc449e  docs/npu-hymt2/smart-rodada37/r37_gguf_invent.py
+STAGED_COUNT=9 BYTE_IDENTICAL=true
+
+FIM DO TXT ÚNICO — nenhuma ACT DSP foi sintetizada/capturada pelo especialista.

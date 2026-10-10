@@ -1,0 +1,112 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 42
+=======================================================================
+Escopo: leitura de arquivos, regressões host do loader real, injeções
+controladas no fornecedor de digest/compilador e teste do guard de mkdir.
+Sem edição de app/probe/Whisper, sem ADB/staging/commit/push/publicação.
+
+A. AVANÇOS CONFERIDOS — NÃO REABRIR CONTAGENS R39
+Seis registros SHA-256 do manifesto R42 conferem. Compilação independente
+host do r42_refs.c entregue e ggml-quants.c local: dois builds exit0.
+Reexecutei quatro cenários com cópias controladas do R39:
+NORMAL=0, NaN HTP=23, metadata outro shape=22, ACTzero/denominadorzero=28.
+Nos três negativos NÃO há PIN PASS/métricas finais. As novas guards de
+finitude/shape/denominador corrigem a classe de defeito da R41 nesses casos.
+Alloc das referências e checagem de refs não-finitas também foram adicionados.
+As contagens e números reproduzidos continuam13/13/50/54; são dados R39,
+não nova captura R42 ou observação da ACT após quantização.
+
+B. MKDIR — RECUSA AGORA CONSUMIDA NO FONTE OBSERVADO
+Em C:/npu-probe/app/src/main/cpp/probe.cpp:944-947, o bloco de falha agora
+incrementa fail e retorna antes do selector/build_e_run.
+Arquivei o source local observado, porque a pasta R42 não entrega o novo
+probe.cpp nem build log nativo. Compilei o bloco de setup extraído sem mudar
+seu controle de fluxo; adaptadores host só mapearam mkdir/paths/stdio.
+Attempt-dir existente -> SEL_FAIL_ESTRUTURAL, fail1, sem marcador após o
+guard e selector OLD_SELECTION preservado. Exit0 da suíte significa que a
+recusa esperada foi comprovada, não sucesso da tentativa recusada.
+Aceite: MKDIR_GUARD=CCE_HOST_LIMITADO. Não é prova de exercício Android/hook.
+O restante da seam/export/handle/vacina continua pendente, como declarado.
+
+Source local observado SHA-256:
+b802ac7e4349ad7f88244e8fd688715c1e611d3c0be3f01116994fdd6c8edcf2.
+APK local SHA-256:
+e2bc92b9309e78d8b3fb002fd5feba6d56dc1c47725c6822871ceb11f5bc7e66.
+Probe empacotado SHA-256:
+5f323884a038b96d43e1b56157eab359da13ddbdbef028d695c37cc8570df870;
+contém R42 SEL_FAIL_ESTRUTURAL. Isso confirma artefato local, não instalação
+ou identidade do cohort host/skel efetivamente carregado no aparelho.
+
+C. WHITELIST — NÃO É FULL SHA-256
+r42_refs.c:44-48 guarda apenas40 caracteres por SHA esperado.
+:64 executa sha256sum | cut -c1-40; :67 põe got[40]=0; :74 compara prefixos.
+Portanto, a descrição 'whitelist fullSHA dos cinco originais' está errada.
+O hash usado é prefixo160bits de SHA-256, não os256bits exigidos. Não relaxar
+esse contrato, mesmo que uma colisão genuína de prefixo seja difícil.
+
+Contraprova determinística no source entregue, usando -include apenas para
+injetar popen/pclose de teste: fornecedor retornou cinco digests64hex com
+PRIMEIROS40 corretos e ÚLTIMOS24 diferentes dos digests dos arquivos reais.
+RECON retornou0 e aceitou todos. Os bytes originais não foram alterados.
+Isso prova comparação incompleta, NÃO colisão SHA real nem corrupção
+observada dos binários. Header/executável/logs da injeção foram arquivados.
+Também faltam consumo do retorno pclose e validação estrita de comando/digest.
+O modo NORMAL parseia cinco campos do metadata; não valida ainda cohort,
+strides/layout/hashes/vínculo entre componentes. CCE limitado a essas guards.
+
+D. RUNNER — BUILD FAIL PODE VIRAR OBSERVAÇÃO VÁLIDA
+r42_runner.sh:20 captura BUILD_EXIT, mas nunca o consome para interromper.
+:24 apenas exige BIN já existente; :30 pode executar BIN de build anterior.
+:39 devolve só RUN_EXIT. SOURCE/BIN hashes são truncados a40 em :16/:28.
+
+Exercitei o script em sandbox com adaptação SOMENTE de /root e /tmp para
+scratch; compilador de teste retorna7 e existe executável diagnóstico
+anterior que imprime STALE_BIN_EXECUTED/retorna0. Nenhum binário real no
+servidor foi substituído, nenhuma métrica numérica foi inventada.
+Resultado REAL: BUILD_EXIT7, EXIST_EXIT0, STALE_BIN_EXECUTED, RUN_EXIT0,
+RUNNER_STATUS=OBSERVACAO_VALIDA e EXIT FINAL0. O controle de fluxo do runner
+permite falso sucesso após falha de build. Fonte/script/saídas arquivados.
+Condição necessária: consumir build!=0 ANTES de existência/run, identificar
+artefato exclusivo de build novo e propagar todos os erros. Não precisa
+apagar evidências antigas para impedir uso stale.
+
+E. EVIDÊNCIA DE RUNS — RECONCILIAR VERSÕES E ENTREGAR LOGS INTEGRAIS
+r42-bateria-casos.txt documenta cinco runs, mas os stdout/stderr são head.
+Os arquivos chamados normal-full/recon-full também contêm resumos parciais.
+O recon-full arquivado tem RUN_EXIT16, divergência de SHA esperada e source
+prefixf444ba...; a bateria posterior tem RECON0 com sourcedf590b... que
+corresponde ao source entregue. Não são o mesmo build/run; preservar ambos
+com rótulos anterior-RED versus posterior-GREEN e hashes64 completos.
+Não apresentar recon-full como a saída íntegra do RECON bem-sucedido.
+A descrição da bateria é sustentada por esse resumo; os arquivos completos
+/tmp/r42_run_out/err de cada execução não estão nos seis itens locais.
+Paths globais e rebuild por caso também podem sobrescrever logs. Dar ID
+próprio por execução e guardar stdout/stderr/build COMPLETOS por ID.
+
+F. ACT — DESENHO AINDA NÃO LOCALIZA UM PONTO DE IMPLEMENTAÇÃO
+O relato lista quantização tiled/flat como possibilidades e sugere VTCM ou
+replay, mas não dá função/callback/variável/linha exatos do buffer, lifetime,
+sourcehash/cohort e branch executado K6144/N2048/B1. ACT_REAL/REPLAY_REAL
+continuam NAO_EXECUTADOS. 'Tempo foi do loader' não é bloqueio técnico da
+observação. O avanço host nesta rodada é aceito; não pode substituir a
+primeira implementação e execução da ACT real na próxima rodada.
+Não reimprimir50/54 ou gerar outra hipótese1/127; usar snapshot existente
+como entrada para o quantizador REAL do cohort, sem scalar de intrínsecos.
+
+G. ESTADOS
+GUARDS_NAN_META_SHAPE_DENOM=CCE_HOST_LIMITADO aos casos exercitados.
+MKDIR_GUARD=CCE_HOST_LIMITADO; FULL_HASH_WHITELIST=NAO.
+RUNNER_BUILD_FAIL_CLOSED=NAO; runner operacional saudável=PARCIAL.
+EXPORT/HANDLE/NAMESPACE/VACINA/FULLCOHORT=PENDENTES/PARCIAIS conforme item.
+ACT_REAL/REPLAY_REAL/DUAS_CAPTURAS_CONTROLES=NAO_EXECUTADOS.
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NAO.
+CPU Q8_K explicada; PIN_PASS limitado; HTP LEGACY_FAIL preservado.
+
+H. ENTREGA E DIREÇÃO
+AUDITORIA-R42-LOGS/: auditor, source/digest injection, executáveis host,
+regressões, script adaptado e contraprova stale, guard mkdir, identidade e
+manifesto SHA-256. Cópias numéricas grandes/mutadas só em scratch, não novos
+dumps DSP. Script/fornecedores de teste são explicitamente diagnósticos.
+R43 focada: dois reparos host pequenos com vacina e implementação/exercício
+ACT real/replay real. Preparar seam export independente, sem usar sua
+pendência como impedimento de explorar o quantizador com R39 aprovado.
+=======================================================================

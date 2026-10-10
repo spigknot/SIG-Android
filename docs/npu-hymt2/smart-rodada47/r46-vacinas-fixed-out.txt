@@ -1,0 +1,10 @@
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+C5 len>cap=0(nada-escrito) off+len>cap=0(nada-escrito) exact=262144(write=ok) (exigido 0/0/262144/SIM!)
+C6 hmx_ptr=NULL (exigido NULL!)
+C7 flag0: bi=-1 (exigido -1! OFF total!)
+C8 flag01: bi=-1 (exigido -1!)
+
+VACINAS_R46: TODAS PASS (8/8!) (0 falhas!)

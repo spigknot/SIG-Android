@@ -1,0 +1,123 @@
+{
+  "manifest": [
+    {
+      "target": "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada40\\probe-r40-com-ids.cpp",
+      "size": 102764,
+      "sha256": "fea4a57764e378292b42514ad9e8ea76a8c1299d5f384f5140b53a574bb6c907"
+    },
+    {
+      "target": "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada40\\r39-nmse-nota.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "target": "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada40\\r39_refs-para-completar.c",
+      "size": 7468,
+      "sha256": "4a964ea90c9edea0072808c3da64629d812c5818de1aae47d80a73fee020ee7a"
+    },
+    {
+      "target": "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada40\\r40-probe-build.log",
+      "size": 3148,
+      "sha256": "b4ccc5326f15b64f4192996eb024c00b8f28cfb384eb5c7aec348fc7d74f2f45"
+    },
+    {
+      "target": "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada40\\r40-trace-q6-cadeia.txt",
+      "size": 1757,
+      "sha256": "ec493d6601af0de016e0ae5806a47f5cfa1a7eb48fe227c64e5b5c7927d12e35"
+    },
+    {
+      "target": "D:\\Projetos\\SIG\\docs\\especialista\\RELATORIO-SMART-DUAL-BACKEND-RODADA40.txt",
+      "size": 4991,
+      "sha256": "d0541e3fe52fb55f5c40ebb33bc43b3c4cab50ea1833a65a3cfaaca8a49590e1"
+    }
+  ],
+  "live_source": {
+    "archived_sha256": "fea4a57764e378292b42514ad9e8ea76a8c1299d5f384f5140b53a574bb6c907",
+    "live_sha256": "fea4a57764e378292b42514ad9e8ea76a8c1299d5f384f5140b53a574bb6c907",
+    "equal": true
+  },
+  "local_apk_libs": [
+    {
+      "name": "lib/arm64-v8a/libggml-base.so",
+      "size": 1066944,
+      "sha256": "e47509e5616255cdf00a448e3f54c5afc85f0fb168544968b7f429d128eb3f38"
+    },
+    {
+      "name": "lib/arm64-v8a/libggml-cpu.so",
+      "size": 884240,
+      "sha256": "428d9465b41f3f1ef04d0dd8051f658b2816c0857408ed693ee8d592f3121b54"
+    },
+    {
+      "name": "lib/arm64-v8a/libggml-htp-v81.so",
+      "size": 727368,
+      "sha256": "5c2666d87cd64be389a0000d6ebad96c23ca55fc7aa0f470681ea802195919a0"
+    },
+    {
+      "name": "lib/arm64-v8a/libggml-opencl.so",
+      "size": 3184968,
+      "sha256": "548ca8a8882eed2f522bbf9bb8bf7d4c2cad2ff5ede2f9aef03c5ff979977910"
+    },
+    {
+      "name": "lib/arm64-v8a/libggml-vulkan.so",
+      "size": 35232888,
+      "sha256": "d2a3617440468c0d11584d095f070c781f1ed13fd5e43db2abad182e08b9fe52"
+    },
+    {
+      "name": "lib/arm64-v8a/libggml.so",
+      "size": 58040,
+      "sha256": "1c8f336c596573d6fbd902f847243396fe1e022c4b5f3202706ec4b1904f6f1e"
+    },
+    {
+      "name": "lib/arm64-v8a/libllama.so",
+      "size": 2949992,
+      "sha256": "8e73a7d900888c331c5859d3a98f8ffb64ce14e4bfdbf17626e38093227e1de8"
+    },
+    {
+      "name": "lib/arm64-v8a/libggml-hexagon.so",
+      "size": 823664,
+      "sha256": "894f7a85ecdaff6164aa6515e99c45495f501400a06a54fce35904f67d39e8c0"
+    },
+    {
+      "name": "lib/arm64-v8a/libnpuprobe.so",
+      "size": 282536,
+      "sha256": "be01fffe26327fa53ce269ef40df9c4cc2619ac56d03a3f787e1b705c7d4e6e5",
+      "R40_marker_present": true
+    }
+  ],
+  "host_fragment_compile_rc": 0,
+  "filesystem_cases": [
+    {
+      "case": "one_byte_each_no_meta",
+      "complete": true,
+      "exit": 0,
+      "stdout": "R40 SNAPSHOT_COMPLETE attempt=audit-attempt (5/5 componentes!)\nHARNESS_AFTER exfail=0",
+      "fixture_scope": "synthetic filesystem, not numeric capture"
+    },
+    {
+      "case": "short_write_flag_ignored",
+      "complete": true,
+      "exit": 0,
+      "stdout": "R40 SNAPSHOT_COMPLETE attempt=audit-attempt (5/5 componentes!)\nHARNESS_AFTER exfail=1",
+      "fixture_scope": "synthetic filesystem, not numeric capture"
+    },
+    {
+      "case": "wrong_meta_and_stale_raw",
+      "complete": true,
+      "exit": 0,
+      "stdout": "R40 SNAPSHOT_COMPLETE attempt=audit-attempt (5/5 componentes!)\nHARNESS_AFTER exfail=0",
+      "fixture_scope": "synthetic filesystem, not numeric capture"
+    },
+    {
+      "case": "raw_missing",
+      "complete": false,
+      "exit": 0,
+      "stdout": "R40 SNAPSHOT_FAIL attempt=audit-attempt (4/5 componentes!)\nHARNESS_AFTER exfail=0",
+      "fixture_scope": "synthetic filesystem, not numeric capture"
+    }
+  ],
+  "id_count": 10000,
+  "unique_id_count": 10000,
+  "same_pid_process_restart_collision": true,
+  "mkdir_stdout": "HOST_MKDIR rc=-1 errno=17\nAFTER_ORIGINAL_MKDIR_REACHED\n",
+  "scope": "host source-fragment counterexamples; no app edit, ADB, Android execution, or DSP trace"
+}

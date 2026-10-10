@@ -1,0 +1,14 @@
+MANIFESTO — smart-rodada37 (consulta efetiva + cobertura real!)
+
+CONSULTA: getter privado via get_proc_address (o mecanismo real!); device: BACKEND_EFFECTIVE=3 (known=1!) + AT_INIT=3!
+COBERTURA: c4bf1015 (354 tensores! Q4_K=192/Q6_K=33!); ENSAIO c4: K=2048/6144 rodaram (nmse_pin 1.45e-07/3.93e-06 << 5e-4!)
+Pendentes: matriz temporal, Q6 snapshot, export robusto, counters/pipeline. KERNEL_VALIDATED: NAO.
+
+31ef1cf61f663a3c8a9b294f91d47e7026a31b4703329bf3b345987a635ed530  probe-r37-com-consulta.cpp  (99042 B)
+b122170f3d57d541e5d0013cf7b87190685071137630dbc22362d5a8544225ea  r37-capture-full.txt  (111493 B)
+893082f33ecedcd52846e3a3ee564d3d0f09cc9c8af93a064f70d5c055ef74b8  r37-inventario-gguf.txt  (15731 B)
+2cda873e27be4c76c3e97ba24cb58e7432c08e0504c41089b9d39946a2f4f18f  r37-probe-build.log  (3148 B)
+24b423801fe6dc56b0f261c8610b40589d52a9ddc9a4037d5d1bb011bb6caea5  r37_cand.py  (1481 B)
+412edb9400a53a01aefff392548e54cc6c1ff9d77ae714ab9e5cf62f27cc449e  r37_gguf_invent.py  (2255 B)
+
+15e2c5810aafa43b22efe13a33ec40ed456c05eaa6a0d56461d0d1232c361f4d  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA37.txt

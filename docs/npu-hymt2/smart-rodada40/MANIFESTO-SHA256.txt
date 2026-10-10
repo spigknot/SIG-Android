@@ -1,0 +1,14 @@
+MANIFESTO — smart-rodada40 (IDs/META/STATUS corrigidos + TRACE Q6! — sem commit, §2!)
+
+IDs: contador monotônico (a colisão now_ms morreu!); META runtime-derivado (ty.nm real!); SNAPSHOT_COMPLETE/FAIL!
+TRACE Q6: ativação usa q8_0 (não q8_1!); kernels HVX_QUANT_ROW/FLAT; b0/n1111 ΔΔ=0.25 (residual PRÓPRIO!)
+Retificações: o 'só CPU' NÃO vale para o Q6!; PIN limitado; hipóteses registradas. KERNEL_VALIDATED: NAO.
+Pendentes: vacina do export+handle, ACT_REAL, 2 capturas, controles, temporal/ffn!
+
+fea4a57764e378292b42514ad9e8ea76a8c1299d5f384f5140b53a574bb6c907  probe-r40-com-ids.cpp  (102764 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  r39-nmse-nota.txt  (0 B)
+4a964ea90c9edea0072808c3da64629d812c5818de1aae47d80a73fee020ee7a  r39_refs-para-completar.c  (7468 B)
+b4ccc5326f15b64f4192996eb024c00b8f28cfb384eb5c7aec348fc7d74f2f45  r40-probe-build.log  (3148 B)
+ec493d6601af0de016e0ae5806a47f5cfa1a7eb48fe227c64e5b5c7927d12e35  r40-trace-q6-cadeia.txt  (1757 B)
+
+d0541e3fe52fb55f5c40ebb33bc43b3c4cab50ea1833a65a3cfaaca8a49590e1  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA40.txt

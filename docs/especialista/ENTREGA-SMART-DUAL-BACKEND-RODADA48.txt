@@ -1,0 +1,98 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 48 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [EXECUCAO-REAL NO DEVICE!] | RODADA: 48 | DATA: 10/10/2026 |
+| ESTADO: OS 4 PONTOS FOCAIS EXECUTADOS (vacina/gerador/probe/cohort!) + A
+  ROTA RODOU NO DEVICE + O FAIL-CLOSED PROVOU-SE + A DESCOBERTA-CHAVE:
+  O ALVO USA O CAMINHO HMX_F16 (a ACT q8_0 NAO EXISTE NELE!)! |
+================================================================================
+
+================================================================================
+SECAO I — RESUMO (os 4 pontos + a captura!)
+================================================================================
+(1) VACINA (r47_vacinas.c!): as 6 calls atualizadas p/ o ABI novo (+stdbool);
+    o K7 mede o CAMPO (a 2ª => -1 — o ORACLE corrigido, sem tocar a produção!);
+    reexecutada: 8/8 no source EXATO (first=0 second=-1!) e o -O tambem!
+(2) GERADORES: assert->if/raise NOS TRES (r46/r46b/r47!) — o -O agora FALHA
+    tambem (FAIL: A1 anchor! — fail-closed de verdade!); o A3 do r47 (a
+    duplicacao hdr!) corrigido => reprodutivel!
+(3) O PROBE: (a) A ROTA PRIVADA `mmtest:act` (UMA op EXATA Q6_K K6144/N2048/
+    B1!) com o gate count==1 e o CAPTURE_REQUIRED_ON so' nela; (b) o
+    consumidor FAIL-CLOSED (capture_rc CONSUMIDO; dir por RUN_ID; temp+rename;
+    validacao type/K/N/B/version/rows/off/cap <=1MB!).
+(4) O COHORT: as libs R47 (bdcad412 + 5da659b8!) copiadas ao jniLibs e
+    verificadas; o APK rebuildado (17.254.862 B — os novos: hexagon
+    c966f1be / skel 9c1f6dcb pos-strip!); o APK antigo: 772c... aposentado!
+(5) A CAPTURA NO DEVICE (CPH2747! serial 3B15BD00FVE00000!): a rota rodou:
+    "R48 ACT_ROTA: a op EXATA — count=1!"; o host ARMOU ("epoch=1 bi=0 K=6144
+    N=2048 B=1 row=221184"); a API: status=1 (ARMED, rows=0); o FAIL-CLOSED
+    CONSUMIU: "R48 CAPTURE_REQUIRED_FAIL (cap_rc=-2!)" + fail=2 — o mecanismo
+    NOVO funcionou EXATAMENTE como desenhado! (o math ja' estava certo: nmse
+    pin 2.863562e-06 = o mesmo do R37!)
+(6) 🔥 A DESCOBERTA-CHAVE: O ALVO (Q6 K6144/N2048/B1) USA O CAMINHO
+    HTP_MM_KERNEL_HMX_F16_BATCHED (n_hmx=1! — o precompute L2873!): o PESO
+    vira F16 no repack e a ATIVACAO vai **F32 DIRETO** (o HMX converte pra
+    F16 no proprio hardware!) — A "ACT q8_0 TILED" (perseguida desde o R39!)
+    NAO EXISTE no caminho do alvo! O gate !n_hmx (R46!) PROTEGEU (nao copiou
+    lixo — o op_seen nem foi setado!). A "ACT real" do alvo = a conversao
+    F32->F16 DENTRO do HMX (o frontend hmx_mm_f16_f32_batched: activation =
+    src1->data F32!) — a hipotese ACC_FP16 ganha ANCORA ARQUITETURAL!
+================================================================================
+
+================================================================================
+SECAO II — A CAPTURA (linhas-chave do device!)
+================================================================================
+10-10 11:12:31.147 I/NpuProbe(17739): TUNE: GGML_HEXAGON_ACT_DUMP=1
+10-10 11:12:31.280 I/NpuProbe(17739): R48 ACT_ROTA: a op EXATA (Q6_K K=6144 N=2048 B=1!) — count=1!
+10-10 11:12:32.018 I/NpuProbe(17739): R48 ACT_DUMP: ret=0 status=1 magic=OK ver=1 type=14 K=6144 N=2048 B=1 rows=0 row=221184 cap=262144 valido=0 req=1
+10-10 11:12:32.018 I/NpuProbe(17739): R48 CAPTURE_REQUIRED_FAIL (cap_rc=-2 — consumido no fail!)
+10-10 11:12:32.021 I/NpuProbe(17739): MM[K=6144 N=2048 B=1 q6_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=2048/2048 max_abs=0.23239 nrmse=0.00169 nmse_pin=2.863562e-06 viol=37 FAIL
+10-10 11:12:32.187 I/NpuProbe(17739): MMTOTAL pass=0 fail=2 skip=0 compute_calls=2 (rota ACT!)
+10-10 11:12:32.187 I/NpuProbe(17739): [ggml] ggml-hex: HTP0 hwinfo: threads 8, hvx 8, hmx 1, vtcm 8 MB
+10-10 11:12:32.187 I/NpuProbe(17739): [ggml] ggml-hex: R47 ACT_DUMP: epoch=1 bi=0 K=6144 N=2048 B=1 row=221184
+10-10 11:12:32.187 I/NpuProbe(17739): TUNE: GGML_HEXAGON_ACT_DUMP=1
+10-10 11:12:32.187 I/NpuProbe(17739): R48 ACT_ROTA: a op EXATA (Q6_K K=6144 N=2048 B=1!) — count=1!
+10-10 11:12:32.187 I/NpuProbe(17739): R48 ACT_DUMP: ret=0 status=1 magic=OK ver=1 type=14 K=6144 N=2048 B=1 rows=0 row=221184 cap=262144 valido=0 req=1
+10-10 11:12:32.187 I/NpuProbe(17739): R48 CAPTURE_REQUIRED_FAIL (cap_rc=-2 — consumido no fail!)
+10-10 11:12:32.187 I/NpuProbe(17739): MM[K=6144 N=2048 B=1 q6_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=2048/2048 max_abs=0.23239 nrmse=0.00169 nmse_pin=2.863562e-06 viol=37 FAIL
+10-10 11:12:32.187 I/NpuProbe(17739): MMTOTAL pass=0 fail=2 skip=0 compute_calls=2 (rota ACT!)
+================================================================================
+
+================================================================================
+SECAO III — A FATIA DO FONTE (o HMX!)
+================================================================================
+(ver r48-fatia-hmx-fonte.txt — anexo: o ramo n_hmx=1 do precompute (L2873+:
+src1_row_size q8_0_tiled configurado MAS o kernel HMX_F16_BATCHED nao o usa!)
++ o hmx_mm_op_matmul (activation = (float*)src1->data! weight = __fp16!))
+
+================================================================================
+SECAO IV — MANIFESTO (existencias + tamanhos + fullSHA64!)
+================================================================================
+095cd5e75dd0733a93d63bb145d773ccbca160c9662c14b562bb739f479a7bc7  smart-rodada48/probe-r48-rota-act.cpp  (109344 B)
+fe593d1cb6d25ce5d415a6053159963e7b70a0e391ad5a0912ed01aca2597456  smart-rodada48/r47_vacinas-FIXADO.c  (9645 B)
+37d71d7db13e8f95fadf40b3f652375deaa4d5388575d5c58f543035d92ca564  smart-rodada48/r48-capture-full.txt  (14057 B)
+a788f5abadbd52445df2e6927ca7a32a1bde55d2873bf644420d808c767aa97e  smart-rodada48/r48-device-dirs.txt  (25 B)
+fcfd5b801d6cba3e48ccef0fa6bf6b0b39a748eea32fc2bef6ab1df6713b8e35  smart-rodada48/r48-fatia-hmx-fonte.txt  (2307 B)
+d06966a52a69077d5999e947731d0692d1b48ccbbe5e9aafd0e97aa911dc502b  smart-rodada48/r48_probe.py  (10494 B)
+
+================================================================================
+SECAO V — FRONTEIRAS A-H (retificadas — SEM 'proximo' vazio!)
+================================================================================
+A. cohort: libs R47 no jniLibs (bdcad412/5da659b8!) + o APK novo (pos-strip:
+   hexagon c966f1be / skel 9c1f6dcb / npuprobe 944f3ee4!) — o par strip/JNI
+   registrado; o APK antigo 772c... NAO foi usado!
+B. vacina/gerador: CCE (8/8 source exato + -O RED!) — o parecer 100% atendido!
+C. rota/consumer: CCE-HOST + RODADO NO DEVICE (a rota + o fail-closed!) — o
+   consumer FALHOU-COM-CONSUMO (cap_rc=-2 — como desenhado: o skel nao
+   copiou porque O CAMINHO E' OUTRO!).
+D. ACT real: a DESCOBERTA (HMX_F16!) reposiciona o alvo: a captura deve ser
+   no frontend HMX (a conversao F32->F16!) — o gate !n_hmx: preservado
+   (correto!); a instrumentacao do HMX = a proxima unidade FOCAL (o ponto:
+   hmx_mm_f16_f32_batched / o src1 F32 + a conversao!).
+E. o math: estavel (2.863562e-06 — identico ao R37!).
+F. runner/loader: CCE (R44+).
+G. fronteiras: tudo acima; KERNEL/GRAPH/HANDOFF/PERF = NAO.
+H. proximo teste EXATO (a R49 natural): (1) instrumentar o HMX (o ponto REAL:
+   a conversao F32->F16 do kernel!); (2) capturar a ACT F16 do alvo; (3)
+   comparar a hipotese ACC_FP16 (o datapath F16!) com os 50/54 do R39;
+   (4) as 2048 com a ACT F16 observada!
+================================================================================

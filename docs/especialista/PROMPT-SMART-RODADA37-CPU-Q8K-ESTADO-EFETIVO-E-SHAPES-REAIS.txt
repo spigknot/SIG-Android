@@ -1,0 +1,142 @@
+PROMPT AO AGENTE EXECUTOR — SMART DUAL-BACKEND — RODADA 37
+CONSULTA EFETIVA, ORACULOS CORRETOS E COBERTURA DE SHAPES REAIS
+=======================================================================
+Leia primeiro:
+- docs/especialista/AUDITORIA-R36-SNAPSHOT-VALIDADO-E-CPU-Q8K-REPRODUZIDO.txt
+- docs/especialista/AUDITORIA-R36-LOGS/run.log e q8-run.log
+- o prompt R36 e as evidências smart-rodada36.
+Você executa; o especialista não modifica diretamente o app/probe/candidato.
+
+1. PONTO DE PARTIDA APROVADO — NÃO REABRIR O QUE JÁ ESTÁ PROVADO
+A captura Q4_K K256/N64/B128 é válida: cinco binários, tamanhos e hashes
+verificados. As quatro NMSE do relato foram reproduzidas pelo especialista.
+Com o MESMO componente legado abs=0.02/rel=0.05, todas as 8.192 saídas HTP
+passam contra RscalarCanonical e RtiledReader (ZERO violações em ambos).
+A CPU dá 8/10 violações contra essas referências, respectivamente.
+O especialista reproduziu o CPUout por quantização Q8_K das MESMAS ativações:
+NMSE=1.747860557927e-15, max_abs=2.107277805408e-05 nas 8.192 entradas.
+Isso explica a aproximação CPU. NÃO classifique CPU como defeituosa, NÃO
+corrija o backend CPU/Whisper e NÃO relaxe as tolerâncias para obter verde.
+O LEGACY_CPU_FAIL original continua no histórico; a nova comparação com
+oráculos independentes tem nome/origem próprios. HTP concordar com Rtiled
+não prova precisão de acumulação FP16. Não proclame KERNEL_VALIDATED global.
+Preserve alloc compartilhado, guardas GGML_ABORT, pack/helpers/leitores e PIN.
+
+2. LIMITES/SEGURANÇA — MESMO LAB, NENHUMA PROMOÇÃO
+Somente cópia candidata e probe isolados. SIG principal, Whisper, UI,
+backend padrão, modelo Q4 produto c4bf1015..., WIP alheio e R2 intocados.
+Sem commit/push/release/APK SIG/instalação sobre produto/remoção/reboot.
+Device exclusivamente 3B15BD00FVE00000, serial explícito em todo adb.
+Nunca tocar PJA110. Stayon=7 preservado. Não ler credenciais.
+Antes de qualquer alteração: inventário/hashes completos do cohort ativo,
+fontes e artefatos; diff focal; build verificável. Use logs em streaming,
+PID/attempt_id e diretórios únicos, sem misturar execuções anteriores.
+Documentos do especialista em docs/especialista; evidências da rodada em
+ docs/npu-hymt2/smart-rodada37/. Não trocar modelo para o oficial dc5f44fc....
+
+3. FECHAR ESTADO EFETIVO DO BACKEND — NÃO MAIS CAÇAR SÓ LOG AT_INIT
+Implemente consulta diagnóstica privada, test-only, na biblioteca isolada
+usando o mecanismo de extensão realmente existente no registry; localize
+as definições/usos antes de escolher assinatura. Não invente uma API pronta.
+O getter deve retornar o opt_opstage efetivamente retido pela instância/lib
+inicializada. Consultar ANTES do upload; consumir o resultado no preflight.
+Ausente/não inicializado/ABI divergente deve ser erro diagnóstico observável,
+NUNCA fallback silencioso para getenv ou default 3 com nome 'efetivo'.
+Logue ENV_AT_CALL, BACKEND_EFFECTIVE, estado do init, cohort completo e decisão.
+Teste temporalmente em processos isolados quando o init não puder ser refeito:
+(a) init=1/env depois=3: recusa + zero eventos reais de upload/compute;
+(b) init=3/env depois=1: decisão deve seguir 3 retido, não env atual;
+(c) 0/1/2 recusam, 3 permite; CPU fora da rota não é bloqueada.
+A fixture deve consumir o getter/decisão compartilhados, declarando se I/O
+é modelado ou realmente executado. Mutante retorna getenv em vez de retido
+precisa falhar no teste temporal. String no ELF/log não é prova substituta.
+Se o device estiver indisponível, execute a prova offline e declare que a
+consulta integrada no processo Android ainda não foi observada.
+
+4. CONSOLIDAR A ENTREGA — SEM REFAZER INFERÊNCIA SÓ PARA OBTER O TXT
+O r36-refs-out.txt arquivado contém apenas 'No such file or directory'.
+Reconheça e corrija a proveniência: gere novo log com o programa realmente
+executado sobre os binários já existentes. Não substitua retroativamente
+logs como se fossem a captura original. Cite a reprodução do especialista.
+Formalize a vacina: loader valida tamanho exato/endian/layout, leitura total,
+finitude, denominador e cobertura; erro/arquivo truncado -> exit não zero.
+Faça asserções de resultados esperados, não só printf e return 0.
+Preserve o snapshot como fixture de regressão: HTP vs Rscalar/Rtiled com
+mesma tolerância, CPU vs modelo Q8_K-act com bound documentado compatível
+com o residual observado. Não exija igualdade binária do modelo escalar
+com uma implementação SIMD de outra arquitetura. Diferencie a aproximação
+Q8_K-act das diferenças de representação tiled e do residual do HTP.
+Mutantes mínimos: interpretar act como layout transposto, corromper um dado
+consumido pelo leitor/oráculo, arquivo truncado e gate que ignora cobertura.
+Cada mutante deve produzir a falha correspondente; não invente um PASS para
+entradas invalidas ou use TOTAL ausente como sentinela que satisfaz 'RED>=1'.
+
+5. EXPORT ROBUSTO E CONTABILIDADE — PATCH FOCAL, NÃO UMA NOVA REESCRITA
+O fonte R36 NÃO verifica retorno de fclose; meta não acumula falhas e o
+RAW ignora fwrite/fclose. Retifique a afirmação de 'close validado'.
+Use estado agregado da tentativa para os cinco arquivos+meta; cheque abertura,
+write completo, fflush/close e retorno de metadata. Falha RAW deve chegar ao
+consumidor, não apenas ao stderr. Não emitir SNAPSHOT_COMPLETE se qualquer
+componente falhar; diretório/ID únicos evitam aceitar arquivo velho.
+Injete short-write/close-error/dir inacessível e verifique a recusa global.
+A captura R36 aprovada NÃO fica invalidada por essa pendência de robustez.
+Contadores da suíte: LEGACY_CPU_PASS/FAIL, PIN_PASS/FAIL, INVALID, SKIP,
+CONTROL_Q5 e comparações com oráculos separados por tentativa/caso.
+Não contabilize linhas repetidas como casos; emita finais derivados dos
+verdicts realmente consumidos. Mutante ignora veredicto -> asserção falha.
+Feche o pipeline v2: build falho não executa binário velho; run/export falho
+não publica sucesso; M6 não falha por palavra GGML_ABORT em comentário;
+CT2 é injeção executada; TOTAL estrito e contrato por cenário. Registre os
+exits. Preserve os mutantes M1..M8 pertinentes sem 'export ok' no caminho RED.
+
+6. AVANÇAR COBERTURA — SAIR DO ÚNICO K256/N64 SINTÉTICO
+Faça inventário do GGUF produto por header/metadados, sem ler 1 GB à toa:
+SHA-256 completo, nomes/tipos/dimensões dos pesos usados em MUL_MAT, contagem
+de shapes únicos Q4_K/Q6_K. Não presumir dimensões do modelo nem copiar as
+fontes da fixture para dentro do código de produção. Norm/embedding/GET_ROWS
+não viram matmuls por conveniência. Consulte support real e liste recusas.
+Selecione pelo menos um shape representativo real de Q4_K e um de Q6_K,
+com K diferente de 256 se existir, e B=1/2/128 dentro dos limites do backend.
+Se N grande encarecer a referência escalar, calcule em blocos sem perder
+cobertura; declare amostragem, se usada, como tal e não como validação total.
+Colete snapshot Q6 físico com o leitor já validado, ou export equivalente
+com mesma rastreabilidade. Oráculos sobre mesmos bytes/act, sem CPU assumida
+como exata. Registre canonical/tiled/reference/exec e todos os gates.
+Execute pelo menos duas tentativas independentes por caso, sem mudanças de
+cohort entre elas; não misture binários para esconder UNWRITTEN_OUTPUT.
+Se falhar, preserve o caso e localize host-repack/descriptor/DSP antes de
+atribuir a causa. Se houver UNWRITTEN, pare expansão do cohort e compare com
+o GREEN preservado mediante uma variável por vez, sem trocar produto.
+
+7. FUSED E CAMINHO SMART — FRONTEIRAS EXPLÍCITAS
+Não alegue fused validado pelo teste só do predicado/row_size. Confirme se
+o fix focal Q4_K já entra no artefato compilado e execute o caminho completo
+precompute/descritores + resultado, com controle não fused; Q6_K fora da
+fusão continua controle separado. Não introduza fusão enquanto as provas
+não fused mudam de cohort ou ainda apresentam escrita ausente.
+Após consulta efetiva e cobertura mínima verde, próximo degrau é minigrafo
+compatível com operações reais do modelo, com intermediários/oráculos.
+Grafo/handoff/performance são fases próprias; não começar afirmando Smart
+pronto por uma matmul. Smart final continua NPU prefill -> geração GPU OpenCL
+ou Vulkan, sem replay integral do prompt. HTP->CPU não atende essa meta.
+Não bloquear o inventário offline por detalhes de contadores/empacotamento;
+execute trabalhos independentes em paralelo, mas respeite dependências de
+segurança antes de rodar novas computações no dispositivo.
+
+8. ENTREGA A-H E ACEITE — PROVAS, NÃO PRÓXIMOS SEM EXECUÇÃO
+A: fontes/patches/cohort/compilação e comandos reais.
+B: consulta efetiva e matriz temporal com mutante.
+C: reprodução refs + modelo CPU Q8_K-act + vacina e IO/export.
+D: counters/pipeline e injeções com exits próprios.
+E: inventário shapes reais + casos executados e cobertura/finitude/erros.
+F: repetições/fused/minigrafo, somente o que realmente ocorreu.
+G: limites e bloqueios precisos, sem reiniciar pendências já fechadas.
+H: próximos passos, status CCE/PARCIAL/PENDENTE/BLOQUEADO por item.
+Entregue RELATORIO e PROMPT-RELATORIO .txt no padrão combinado, logs completos
+com totais por script e MANIFESTO SHA-256 completo dos arquivos entregues.
+Uma prova mínima desta rodada deve trazer consulta efetiva testada e avanço
+real de cobertura/oráculo Q6/shapes, não só log debug colocado na biblioteca.
+Caso o aparelho impeça execução, entregue o inventário e provas offline
+executadas, com a etapa Android marcada BLOQUEADO; não fabricar capturas.
+KERNEL_VALIDATED global, GRAPH, HANDOFF e PERFORMANCE continuam NÃO até as
+respectivas provas. Não aprovar/promover APK/lib principal nesta rodada.

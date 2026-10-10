@@ -1,0 +1,76 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 39
+=========================================================================
+Data: 09-10/10/2026. Prompt: "IMPLEMENTAR EXPORT ACOPLADO E ENTREGAR
+SNAPSHOT/ORACULO Q6". Copia isolada/probe. SEM commit/staging (o §2!).
+
+RESUMO EXECUTIVO — OS DOIS NUCLEOS ENTREGUES: (A) O EXPORT ACOPLADO
+IMPLEMENTADO E EXERCITADO: o hook (lib 020ded2e!) agora e' ACOPLADO por
+SELECAO EXPLICITA: o probe escreve sel.txt (attempt K N B type!) num dir
+UNICO por attempt (files/r39/<attempt>/) ANTES do upload; o hook le' a
+selecao, CASA com o tensor (ne[0]/ne[1]/type!) e so' entao captura o RAW
+fisico POS-REPACK (intervalo do helper!) no dir do attempt; parse EXPLICITO
+da flag ("1" liga; '0'/unset = OFF!); Q4_K E Q6_K cobertos (o hook nos
+dois cases!); nada de nome global sobrescrito. (B) SNAPSHOT Q6 K6144/N2048/
+B1 CAPTURADO DO DEVICE: canonweights 10321920 (=Q6! 24x210x2048!), act
+24576 (B=1!), cpu/htp 8192, tiled_raw 11010048 (=192x64x896 — o RAW Q6
+fisico!) + SHAs completos! A IDENTIDADE: os TAMANHOS provam Q6 (o meta do
+probe tem rotulo hardcoded "q4_K/mmtest:q4k" — FALHO, registrado! o
+conteudo manda!). ORACULOS sobre os MESMOS bytes (o leitor Q6 validado!):
+TODAS as 2048 saidas (nd=2048 nf=0!): CPU vs Rscalar nmse=4.30e-07 viol=13
+(a assinatura Q8_K-act!); CPU vs Rtiled 6.13e-07 viol=13; HTP vs Rscalar
+4.97e-06; HTP vs Rtiled 4.81e-06 — PIN-PASS (<< 5e-4!). RETIFICACAO §1
+ACEITA: MATRIZ_TEMPORAL=PARCIAL (o env e' restaurado antes do preflight; a
+reconsulta SO' imprime DIVERGIU; o mutante getenv nao foi executado no
+Android!) — registrado sem "mutante morto". KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. EXPORT ACOPLADO (§3!) — IMPLEMENTADO + EXERCITADO
+-----------------------------------------------------------------------
+A.1 Lib: r39_tiled_hook (le' sel.txt; casa K/N/type; dir unico por attempt;
+    fwrite/fflush/fclose conferidos com R39_RAW FAIL/ok; parse "1"!)
+    chamado nos cases Q4_K E Q6_K (apos os repacks!).
+A.2 Probe: sel.txt ANTES do upload (attempt=PID+ts!) + mkdir do dir;
+    export com dir do attempt; condicional ampliado (Q4 B128 + Q6 K6144/
+    N2048/B1!).
+A.3 DEVICE: 4 attempts criados (arquivos por caso!); o alvo p...39590 =
+    Q6 K6144 COMPLETO (puxado + SHA!).
+A.4 Pendencias: SNAPSHOT_COMPLETE/FAIL agregado (o probe ainda nao
+    verifica os 5 no fim!); a vacina (short-write/close/RAW-stale!) como
+    fixture — declaradas!
+
+-----------------------------------------------------------------------
+B. ROTULOS/IDENTIDADE (o achado!)
+-----------------------------------------------------------------------
+B.1 O meta.txt do probe esta' HARDCODED ("attempt=mmtest:q4k ... type=
+    q4_K"!) — FALSO para o caso Q6 (os tamanhos provam: 10321920=Q6!).
+    RETIFICACAO: o conteudo/tamanhos mandam; o meta precisa ser
+    corrigido no proximo (registrado!).
+B.2 SHA-256 dos 5 binarios + meta em SHA256-BINARIOS.txt!
+
+-----------------------------------------------------------------------
+C. ORACULOS (§5!) — EXECUTADOS (2048 saidas!)
+-----------------------------------------------------------------------
+C.1 Tamanhos validados no loader (exit!=0 se errados!); nd=2048 nf=0.
+C.2 CPU vs Rscalar 4.30e-07 viol13; CPU vs Rtiled 6.13e-07 viol13;
+    HTP vs Rscalar 4.97e-06; HTP vs Rtiled 4.81e-06 (PIN<<5e-4!).
+C.3 O top10 completo: PARCIAL (1 coord no output — o resto no proximo!);
+    a vec_dot Q6 da CPU: nao inspecionada (declarado!).
+
+-----------------------------------------------------------------------
+D. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+D.1 EXPORT_ACOPLADO: CCE (implementado+exercitado no device!). SNAPSHOT
+    Q6: CCE (5 binarios+SHA!). ORACULOS Q6: CCE (2048!). VACINA DO EXPORT:
+    PENDENTE. TEMPORAL RESTANTE (T3/T4/init3-env1!): PENDENTE. FFN
+    {2048,6144}: PENDENTE. COUNTERS/PIPELINE/FUSED: PENDENTES.
+    KERNEL_VALIDATED: NAO.
+D.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; os 9 staged R37 +
+    WIP FfmpegPreview PRESERVADOS (nao tocados!); PJA110 nao tocado;
+    SEM staging/commit (o §2!); device = probe R39 (lib 020ded2e!).
+H.1 PROXIMOS: (1) o meta corrigido + SNAPSHOT_COMPLETE; (2) vacina do
+    export; (3) T3/T4/init3-env1 + o mutante; (4) ffn {2048,6144}
+    B1/B128 + repeticoes; (5) Q4 K6144 oraculos; (6) counters/pipeline!
+=========================================================================
+Evidencias (no DISCO — §2!): docs/npu-hymt2/smart-rodada39/ (captura-q6-
+k6144/ com os 5 binarios+SHA!, r39-refs-out.txt!, probe-r39-com-hook.cpp,
+r39_cand.py, r39_refs.c, r39-capture-full.txt) + PROMPT-RELATORIO.

@@ -1,0 +1,54 @@
+PROMPT-RELATORIO — SMART DUAL-BACKEND — RODADA 37
+=====================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 37 | DATA: 09/10/2026 |
+| ESTADO GERAL: CCE(PARCIAL) — consulta+cobertura entregues! |
+
+A. FONTES/PATCHES/COHORT (CCE!)
+- lib isolada 78372baf (getter privado + nome no get_proc_address!);
+- probe R37 (consulta via registry + consumo no preflight!) — BUILD ✓;
+- fontes: r37_cand.py, probe-r37-com-consulta.cpp (anexos!).
+
+B. CONSULTA EFETIVA + MATRIZ TEMPORAL (PARCIAL!)
+- DEVICE REAL: ENV_AT_CALL=(unset!) BACKEND_EFFECTIVE=3 (known=1!)
+  + [hex] OPSTAGE_AT_INIT efetivo=3! => CONSULTA RETORNA O RETIDO!
+- known=0 nas 1as chamadas (1o caso) = diag observavel (sem fallback!);
+- 0/1/2 recusam + 3 permite (fixture R35!) — a matriz temporal (a/b/c
+  com processos isolados) + o mutante getenv-vs-retido: PENDENTE
+  (mecanismo pronto: o tune!).
+
+C. ORACULOS/CPU Q8_K/EXPORT (PARCIAL — citado!)
+- A reproducao do especialista (CPU=Q8_K-act NMSE 1.75e-15!) CITADA;
+  LEGACY_CPU_FAIL preservado (CPU NAO reclassificado!);
+- r36-refs regenerado (proveniencia!); vacina do loader + mutantes:
+  PENDENTE; export robusto (fclose!): PENDENTE declarado.
+
+D. COUNTERS/PIPELINE (PENDENTE declarado!)
+- sem suites novas; o foco foi a consulta+cobertura (o §8 aceita!);
+- pipeline: correcoes localizadas (M6/substring etc!) — pendente.
+
+E. COBERTURA REAL (CCE! — o avanco!)
+- inventario c4bf1015 (SHA completo!): Q4_K 192 2D, Q6_K 33; shapes
+  reais K=2048/6144 (N!=256 como exigido!);
+- ENSAIO c4 no device: K2048xN2048xB128 + K6144xN2048xB1 (5 tipos cad!) —
+  nd completos; nmse_pin 1.45e-07/3.93e-06 << 5e-4 (PIN-PASS!);
+  f32: 1.9e-13; limhead fora por memoria (declarado!).
+
+F. REPETICOES/FUSED/MINIGRAFO
+- repeticoes independentes por caso: proximo (o ensaio c4 de hoje ja'
+  cobre 2 shapes reais!); fused: fix no fonte, fixture R30 (predicado!)
+  — o caminho completo real: PENDENTE; minigrafo: so' apos os gates!
+
+G. LIMITES/BLOQUEIOS
+- nada bloqueado externamente; pendencias declaradas item-a-item
+  (sem reiniciar as fechadas!); device sem reboots/instalacoes extras!
+
+H. PROXIMOS PASSOS
+1. matriz temporal + mutante do getter; 2. Q6 snapshot (hook!);
+3. export robusto + counters + pipeline; 4. fused caminho real;
+5. minigrafo -> Smart! (KERNEL/GRAPH/HANDOFF/PERF: NAO!)
+
+ESTADOS: CONSULTA_EFETIVA: CCE | COBERTURA_REAL: CCE | MATRIZ_MUTANTE:
+PENDENTE | Q6_SNAPSHOT: PENDENTE | EXPORT_ROBUSTO: PENDENTE |
+COUNTERS/PIPELINE: PENDENTE | KERNEL_VALIDATED: NAO | GRAPH/HANDOFF/
+PERFORMANCE: NAO!
+=====================================================================

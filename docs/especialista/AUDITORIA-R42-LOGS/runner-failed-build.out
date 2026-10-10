@@ -1,0 +1,16 @@
+=== R42 RUNNER ===
+CMD: C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r42-specialist-audit/runner-path-adapter.sh C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r42-specialist-audit/cases/normal 
+CWD: /c/Users/Gustavo/AppData/Local/hermes/cache/scratch/r42-specialist-audit/runner-sandbox
+SRC: C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r42-specialist-audit/runner-sandbox/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=7
+error: injected compiler failure
+EXIST_EXIT=0
+BIN: C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r42-specialist-audit/runner-sandbox/r42_refs_bin (52 bytes!)
+BIN_SHA: 14a153b6ffc7ab4e197e760fcb51120ae01cd5e9
+RUN_EXIT=0
+STDOUT bytes=19 STDERR bytes=0
+--- STDOUT (head):
+STALE_BIN_EXECUTED
+--- STDERR (head):
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e' classe NUMERICA separada!)

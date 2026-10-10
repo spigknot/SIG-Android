@@ -1,0 +1,83 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 49 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [EXECUCAO-REAL NO DEVICE!] | RODADA: 49 | DATA: 10/10/2026 |
+| ESTADO: ✅ O RAMO REAL PROVADO NO DEVICE (o HOST!): n_hmx=0 ·
+  kernel_type=10=HTP_MM_KERNEL_HVX_QUANT_ROW! — A "DESCOBERTA HMX" DA R48:
+  RETIFICADA (o especialista suspeitou CERTO!); a ACT q8_0 tiled EXISTE! |
+================================================================================
+
+================================================================================
+SECAO I — A RESPOSTA DEFINITIVA (a metadata do HOST no device!)
+================================================================================
+A linha decisiva (device, PID 9458!):
+  "R49 OP meta: n_hmx=0 kernel_type=10 pipeline=0 m_chunk=0 n_chunk=0
+   s0=[6144,2048,1,1,t=14] s1=[6144,1,1,1,t=0]"
++ o enum do cohort (matmul-ops.h:56-78!):
+  ... HTP_MM_KERNEL_HVX_QUANT_ROW = 10 (standard row-wise parallel quantization!)
+  ... HTP_MM_KERNEL_HMX_F16_BATCHED = 2!
+
+CONCLUSOES PROVADAS (o parecer R48 pediu exatamente isto!):
+(1) O ALVO (Q6 K6144/N2048/B1!) usa o ramo **HVX_QUANT_ROW** (kernel_type=10!)
+    com **n_hmx=0** — NAO o HMX_F16_BATCHED (a R48 errou — a fatia L2873 era
+    um ramo de OUTRO caminho; o log do device prova o opcode real!);
+(2) A "ACT q8_0 TILED" (perseguida desde o R39!) **EXISTE SIM** — e' o que o
+    HTP_MM_KERNEL_HVX_QUANT_ROW produz (o QUANTIZE_IMPL do R43!);
+(3) o gate !n_hmx (R46!) NAO era o bloqueio da captura (n_hmx=0!) — o bloqueio
+    real e' o outro lado: a metadata do SKEL nao chegou (op_entered=0 — o
+    "R49 RAMO: n_hmx=-1 kernel_type=-1" e' o default NAO-ESCRITO!) — o skel
+    NAO escreveu o header (o proximo debug: por que o bloco do op_matmul nao
+    executou com o bi=0: ordem/nbufs/bufs — DECLARADO!);
+(4) o kernel_type=10 != HMX 2 (o predicate da REFERENCIA do especialista —
+    Q6 nao-HMX-eligible — ERA CORRETO: o fork segue a MESMA regra!);
+(5) a hipotese ACC_FP16: **sem ancora** (o manual V81: acumulador 37-bit! —
+    retificacao aceita integralmente!); o residual (50/54) segue SEM explicacao
+    provada (as fronteiras: conversao HVX F32->? · dequant · acumulacao!).
+
+================================================================================
+SECAO II — O QUE FOI EXECUTADO (R49!)
+================================================================================
+(1) O PATCH R49 (host+skel!): metadata no add_op (o blob!) + no op_matmul
+    (h[4..7] no header, ANTES do if(n_hmx)!) + o worker gated por h[4]==0
+    (a copia segue HVX-only!) + getter v2 (n_hmx/kernel_type/op_entered!).
+(2) BUILD host RC=0 + skel RC=0 (15:12/15:13!); libs -> jniLibs
+    (8ad5acb5/1d7a6659!) + APK rebuild + install OK.
+(3) DEVICE (CPH2747! serial 3B15DD00FVE00000!): rota mmtest:act (count=1!) +
+    a metadata HOST lida + o CAPTURE_REQUIRED_FAIL consumido (cap_rc=-2 —
+    correto: a captura nao e' CAPTURED e o gate age!) + o math estavel
+    (2.863562e-06!) + os exports do snapshot (4/5 — o tiled_raw e' do HVX?).
+(4) RETIFICACOES DO PARECER (todas aceitas!): a) HMX nao provado → AGORA
+    provado o OPOSTO (HVX!); b) ACC_FP16 sem ancora (o 37-bit!); c) a
+    conversao HVX nas referencias (transfer_activation...!); d) o failsafe
+    negativo FUNCIONOU (mantido!); e) o package local coerente (mantido!);
+    f) os dirs do device offline (declarado!); g) os numeros: PIN_PASS
+    limitado + LEGACY_FAIL 37-vs-CPU (preservados!).
+================================================================================
+
+================================================================================
+SECAO III — MANIFESTO (existencias + tamanhos + fullSHA64!)
+================================================================================
+e9b523a5307cbe6d51be7b7ba5dcbd70091510cdff5ebd579ec7a2dce4498c9c  smart-rodada49/probe-r49-metadata.cpp  (109624 B)
+30f40c93b5abdbb72d1ea5103002cb846a68cce1cae2450d1144128590dac3cd  smart-rodada49/r49-capture-full.txt  (14431 B)
+4605624fd964c2145ac22147c99c6a78c8ff187dcf2af25a025fc133538178cb  smart-rodada49/r49-enum-e-patch-linhas.txt  (1130 B)
+acd421ec7791a4fafd56df0b1169bc2b15a55b5b9f18910f66b70d117bd0389e  smart-rodada49/r49_patch.py  (7039 B)
+
+================================================================================
+SECAO IV — FRONTEIRAS A-H
+================================================================================
+A. cohort: APK local NOVO (pos-R49!); libs 8ad5acb5 (host!) / 1d7a6659 (skel!)
+   nos jniLibs; o device: os carregados = o APK instalado (o mapping completo:
+   PARCIAL — o log prova a sessao htp-v81!).
+B. a metadata HOST: CCE no device! (o OP meta + o enum do cohort!); a metadata
+   SKEL: NAO CHEGOU (op_entered=0 — o debug declarado!).
+C. O RAMO: PROVADO = HVX_QUANT_ROW (n_hmx=0!) — a captura da ACT q8_0 tiled
+   esta NO CAMINHO CERTO (o QUANTIZE_IMPL do R43!) — o bloqueio atual: o
+   header do skel nao escrito (o proximo passo FOCAL!).
+D. o math: PIN_PASS limitado; LEGACY_FAIL 37 vs CPU preservado; 50/54: outros
+   oraculos (nomes separados!) — sem explicacao promovida!
+E. KERNEL/GRAPH/HANDOFF/PERF: NAO!
+H. o proximo teste EXATO (R50!): (1) achar por que o bloco do op_matmul nao
+   escreveu o header (candidatos DECLARADOS: o bi no wire (0!) · o r46_nbufs
+   no ctx (ordem!) · o act_dump_ptr resolvido!) — instrumentacao focal minima
+   (SEM copia!); (2) corrigido: a CAPTURA da ACT q8_0 tiled REAL (o caminho
+   HVX_QUANT_ROW!) — o snapshot de 221184 com o layout do cohort!
+================================================================================

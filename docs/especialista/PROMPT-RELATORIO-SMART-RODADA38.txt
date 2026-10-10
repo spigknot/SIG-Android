@@ -1,0 +1,45 @@
+PROMPT-RELATORIO — SMART DUAL-BACKEND — RODADA 38
+=====================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 38 | DATA: 09/10/2026 |
+| ESTADO GERAL: PARCIAL — matriz temporal CCE; export/oraculos pendentes! |
+
+A. PATCH/COHORT (CCE!)
+- probe R38 (backup: probe-r38-com-temporal.cpp!) + build log;
+- cohort: probe R38 instalado no CPH2747 (lib 78372baf mantida!);
+- SEM commit/staging (o §2!) — evidencias no disco!
+
+B. MATRIZ TEMPORAL (§3 — CCE!)
+- T2 (init=3!): BACKEND_EFFECTIVE=3 (known=1!) => PERMITE + PASS real
+  (nmse 2.54e-08!); TEMPORAL: env-pos-init=3 re-consulta=3 =>
+  RETIDO-CONFIRMADO!
+- T1 (init=1! p4-tune): getter=1 => OPSTAGE_RECUSADO (retido=1!) +
+  EXEC_FAIL (hrc=-998!) + compute_calls=3 (SO o CPU — ZERO I/O HTP!);
+  TEMPORAL: env-pos-init=3 re-consulta=1 => RETIDO-CONFIRMADO
+  (UM GETENV TERIA PERMITIDO!) — o MUTANTE DETECTADO EM RUNTIME!
+- T5 (CPU): BACKEND=CPU consulta=N/A (retificacao §1 aplicada!);
+- ZERO OPSTAGE_DIAG_FAIL no capture (o "known=0" era a rota CPU!);
+- T3 (0/2)/T4 (getter ausente): mecanismo pronto; executados=nao
+  (declarado!).
+
+C. EXPORT/SNAPSHOTS (§4 — PARCIAL declarado!)
+- export parametrizado/robusto (PID/attempt/dir unico + vacinas
+  short-write/close/RAW-stale + flag com parse!): PENDENTE (o foco foi
+  o temporal!); o snapshot R36 arquivado permanece INTEGRO;
+- os oraculos Q6/Q4 K6144 + o ffn {2048,6144}: PENDENTES.
+
+D. COUNTERS/PIPELINE/FUSED (PENDENTES — declarados!)
+- nao executados nesta rodada (sem disfarce!).
+
+E. LIMITES
+- device OK (sem reboots!); escopo preservado (SIG/Whisper/WIP/staged de
+  terceiros intocados!); PJA110 ausente!
+
+F. PROXIMOS (ordem!)
+1. export parametrizado + vacinas; 2. oraculos Q6/Q4 K6144 + ffn
+{2048,6144} B1/B128 com repeticoes; 3. T3/T4; 4. counters/pipeline;
+5. fused real; 6. minigrafo/placement!
+
+ESTADOS: MATRIZ_TEMPORAL: CCE | RETIFICACOES: CCE | EXPORT_PARAM:
+PENDENTE | ORACULOS_Q6/Q4: PENDENTE | FFN_SHAPE: PENDENTE | KERNEL/GRAPH/
+HANDOFF/PERFORMANCE: NAO!
+=====================================================================

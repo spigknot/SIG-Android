@@ -1,0 +1,157 @@
+PROMPT AO EXECUTOR — SMART DUAL-BACKEND — RODADA 40
+IDENTIDADE/FAIL-CLOSED DO EXPORT E FRONTEIRA NUMÉRICA Q6 NO CAMINHO REAL
+=======================================================================
+Leia AUDITORIA-R39-Q6-50-54-VIOLACOES-E-COLISOES-DE-ATTEMPT.txt e os logs/CSVs
+em docs/especialista/AUDITORIA-R39-LOGS/. O especialista não edita o app nem
+aciona o aparelho; você executa somente na cópia/probe isolados autorizados.
+
+1. RESULTADO APROVADO E RETIFICAÇÕES OBRIGATÓRIAS
+Os cinco binários Q6 K6144/N2048/B1 existem, têm tamanhos e hashes conferidos,
+e foram reprocessados pelo especialista com 2048/2048 saídas finitas.
+As NMSE descritas no relato foram reproduzidas. CPU Q6 usa vec_dot Q8_K;
+a quantização Q8_K das mesmas ativações reproduziu CPUout com
+NMSE2.3641884306682864e-13, max_abs0.00011351328618047773, zero violações.
+Essa aproximação CPU está explicada. NÃO corrigir CPU/Whisper.
+Mas o HTP tem 50 violações contra Rscalar e54 contra Rtiled, calculadas
+com limites originais0.02/0.05; a fonte R39 conta esses valores e não imprime.
+NMSE4.967947948058238e-06 /4.809954054115071e-06 satisfaz o limite PIN5e-4,
+mas NÃO transforma o critério pontual em PASS. Referências são objetos
+separados do gate original contra CPU (37 violações preservadas).
+Não repetir o diagnóstico 'a falha vinha só da CPU' da R36 para o caso Q6.
+Não concluir bug DSP, acumulação FP16 ou fix do kernel só por esses residuals.
+Dois modelos ACT32 e um modelo half experimentados offline não fecharam
+numericamente HTP; são hipóteses, não emulação do SDK nem dump de ACT real.
+
+2. ESCOPO/PREREQUISITOS — SEM MUDAR PRODUTO OU ÁRVORE ALHEIA
+SIG/Whisper/UI/default Vulkan/modelo c4bf/R2/WIP intocados. Sem staging,
+commit/push/release/remoção/reboot ou promoção/instalação sobre APK SIG.
+Preservar as nove adições staged R37 e WIP FfmpegPreview. PJA110 proibido.
+Serial exclusivo 3B15BD00FVE00000 em todo adb; Stayon7 intacto.
+Não ler credenciais. Fontes/logs novos smart-rodada40/; textos docs/especialista/.
+Congele fullSHA de APK probe/host/core/CPU/HTP/skel e mapa de fontes/flags
+realmente usados. Sourcehash/prefixo020ded2e não prova identidade do cohort.
+Antes de cálculo: getter efetivo3 confirmado; config antes do primeiro init,
+stream antes do trigger, PID/ID/arquivos reais. Desligue o teste temporal que
+muda env a cada matmul nas capturas de numerica. Não reabrir o getter retido
+aprovado. Novas instrumentações só privadas/test-only, sem alterar produção.
+
+3. ENTREGÁVEL A — IDs, META E STATUS REALMENTE CORRETOS
+A R39 NÃO tem ID único por caso: now_ms()/1000 colidiu no capture.
+p27216_39587 reúne23 descritores, p39588 reúne4 e p39589 reúne2.
+Quatro pastas não são quatro tentativas exclusivas. Corrigir agora com
+contador monotônico por processo + namespace da execução, sem depender
+só de timestamp. Incluir tipo/K/N/B para legibilidade, mas repetir o mesmo
+caso também deve gerar ID diferente. mkdir/EEXIST não pode aceitar reuso.
+Testar helper REAL sob relógio fixo e casos repetidos: todos os IDs distintos.
+Preservar arquivos R39 originais. Meta antiga type=q4_K/attempt=mmtest:q4k
+é falsa para Q6; não reescrevê-la como se fosse metadata capturada correta.
+Nova meta deriva type/attempt/shapes/nb/bytes do runtime, inclui fullcohort.
+Registre reconstrução histórica separada se necessário.
+
+O hook R39 lê B, mas só casa K/N/type. Em grafo com vários pesos iguais isso
+não identifica um tensor. Vincule seleção ao tensor/operação real, token
+ou handle exclusivo; o hook deve capturar exatamente uma vez e desarmar.
+B deve ficar associado à operação/act/output: pesos não contêm B em ne[1].
+Não chamar registro em sel.txt de vínculo que o consumidor não verifica.
+Se usar registry privado para seleção/status, defina API nova mínima e
+compartilhada; localizar mecanismo existente antes, não inventar API pronta.
+Captura por ID sem sobrescrever outro tensor; identidade precisa estar nos
+componentes/metadata/status, não só no nome da pasta.
+
+Hook RAW conferir fwrite/fflush/fclose é um avanço aceito. Falta propagar
+sucesso/erro ao probe, que hoje só recebe stderr e ignora outros fclose.
+Agregue seleção+RAW+canon+act+CPU+HTP+meta; qualquer erro impede COMPLETE.
+Status precisa ser consumido; arquivos stale/incompletos não podem dar CCE.
+Flags unset/'0' OFF e'1' ON, callbacks posteriores não sobrescrevem captura.
+Vacina do MESMO código: IDs com relógio fixo; seleção de dois tensores
+iguais; short-write/close; RAW ausente/stale; meta divergente; flag0.
+Mutante ignora erro/identidade -> teste FALHA consumida. Arquive compilados
+reais/exits, não fixtures paralelas que apenas imprimem esperado.
+
+4. ENTREGÁVEL B — LOCALIZAR O RESIDUAL HTP, SEM GUESSING DE PRECISÃO
+Use o snapshot já existente para diagnóstico offline; não repetir device
+só para extrair coordenadas. CSVs completos HTP50/54 já estão entregues.
+Comece b0/n1111: HTP=-0.1494922637939453; Rscalar=0.09633673164076129;
+Rtiled=0.04504355677811134. São diferenças acima do limite, não cast final
+isolado nem evidência suficiente de defeito do kernel.
+Trace no COHORT REAL a cadeia src1 F32 -> conversão/quantização -> layout
+interno -> matmul Q6 -> acumulação/readback. Registre caminhos/funções,
+dtypes/blocos/escala/rounding, dispatch HVX/HMX e parâmetros efetivos.
+Código do pin é pista, não substitui a fonte/skel implantados. Em particular,
+hvx-quant.h ou um helper de KV/cache não prova uso no MUL_MAT deste caso.
+
+Capture/observe as ativações REALMENTE consumidas após a conversão relevante,
+com coeficientes/códigos/layout/intervalos e identidade da mesma operação.
+Não chamar actfloat.bin original de dump da ACT quantizada. Se VTCM/domínio
+DSP não é acessível ao host, use instrumentação diagnóstica mínima privada
+ou uma seam de replay do quantizador REAL na cópia isolada. Documentar o
+limite e o ABI/cohort novo; não inventar mapping/API nem substituir por
+valores sintetizados. Prefira observação mínima antes de mudar protocolo.
+Dados sintéticos autorizados; sem modelo/áudio de produção. Sem benchmark
+com dump/log ligado. Compare normal/diagnóstico no mesmo artefato para
+excluir mudança de resultado; não misture cohorts silenciosamente.
+
+Reconstrua Rtiled x ACT_real decodificada, cobrindo todas as2048 saídas.
+Separe representacao de pesos, conversão de ACT, ordem/acumulação e output.
+Se modelo com ACT observada reproduzir HTP, identifique a aproximação
+esperada e mantenha LEGACY_FAIL/PIN_PASS separados; não mudar tolerâncias.
+Se residual continuar, avance para parcial por grupo K/descritor/offsets,
+com valores reais e asserções, sem culpar pack/leitor aprovado por reflexo.
+Critério de reproduzir modelo SIMD precisa ser documentado, não escolhido
+retrospectivamente para esconder diferenças. Zero/max_abs antes de NaN não PASS.
+Se impossível observar ACT nesta rodada, entregar trace efetivamente feito,
+comando/erro e menor alternativa executada, marcando ACT_REAL=PENDENTE;
+não declarar causa fechada com modelo hipotético.
+
+5. CONTROLES FOCADOS E NOVA CAPTURA ÍNTEGRA
+No mesmo K6144/N2048/B1, F32 e um quantizado antigo suportado (Q4_0 ou Q8_0)
+servem de controle do caminho comum. Compare a saídas contra referência
+canônica das próprias entradas, não CPU automaticamente exata. Inspecione
+suporte/alocação/opstage, nf/nd/unwritten/status e dispatch real.
+Não misturar diferentes pesos/tipos e chamar diferenças de precisão comuns
+sem decompor cada oráculo. Se RAW de controle exigir leitor novo, valide-o
+antes; pode executar primeiro scalar independente sem alegar tiled disponível.
+Após A corrigido, gere duas tentativas Q6 independentes no mesmo cohort,
+IDs realmente distintos, meta correta e status agregado. Repita métricas
+PIN/legado/oráculos; variação entre runs e reemissão de REPORT são distintos.
+UNWRITTEN -> preservar e parar expansão; comparar uma variável com GREEN,
+sem ternário de logging chamado de fix causal. Não apagar dados anteriores.
+
+6. RUNNER/LOADER — FECHAR A BRECHA RECORRENTE
+r39-refs-out.txt contém só './root/r39_refs: No such file or directory'.
+Substitua a cadeia por runner que resolve o executável REAL do build,
+confere build/run exits e escreve stdout/stderr sem mascarar status.
+Preserve o log histórico errado; a reprodução do especialista é outro log.
+Loader deve conferir todas as aberturas/allocs/tamanho exato inclusive bytes
+excedentes/endianness/finitude/cobertura/denominador e schema type/shapes.
+Não inferir tipo silenciosamente por filesize ignorando meta.
+NF/nd incompleto/denom inválido -> INVALID e falha consumida; return0 com
+printf não é validação. Runner distingue observação LEGACY_FAIL com execução
+válida de falha operacional/arquivo inválido e registra ambas explicitamente.
+Calcule vetores uma vez e ordene coordenadas, não N*K dez vezes. Top10 deve
+ter dez índices distintos e dizer se ordena erro absoluto, razão ou excesso.
+Use os CSVs já entregues: não gastar a rodada recuperando os mesmos54 pontos.
+
+7. FRONTEIRAS/SEQUÊNCIA — NÃO ABRIR FUSÃO PARA ESCONDER RESIDUAL
+FFN Q4 K2048/N6144 B1/B128, temporal completo, counters/pipeline/fused e
+minigrafo continuam pendentes. Podem ter preparações offline independentes,
+mas não substituir A+B por mais uma rodada somente de opstage/fusion.
+O decoder hunyuan-dense compartilha embedding/output quando necessário;
+head Q6 K2048/N120818 não foi validado. Placement exige grafo real.
+Smart final = prefill NPU -> geração GPU OpenCL/Vulkan sem replay integral;
+HTP->CPU não atende. Não publicar/promover nem alterar backend padrão.
+
+8. ENTREGA A-H — PROVAS DISTINTAS, ESTADOS HONESTOS
+A: fullcohort, patches/builds/identidade/hash dos carregados.
+B: IDs/selector/meta/status fail-closed e vacinas com mutantes/exits.
+C: trace ACT/dispatch real e captura/seam que realmente foi exercitada.
+D: decomposição numérica + modelo com ACT real, coverage/NMSE/violadores.
+E: controles F32/quant antigo e duas capturas Q6 coerentes.
+F: runner/loader, operacional vs LEGACY_FAIL, limites de injeções.
+G: CCE/PARCIAL/PENDENTE/BLOQUEADO por fronteira; não proclamar CPUculpada
+   nem kernelDSPbug sem evidência específica.
+H: próximos passos de cobertura/minigrafo/placement com condições exatas.
+RELATORIO e PROMPT-RELATORIO .txt A-H, logs completos/totais por script,
+manifesto SHA-256 completo e arquivos afirmados como anexos efetivamente
+entregues. KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NÃO até provas.
+PIN_PASS é resultado numérico limitado, não aprovação automática do Smart.

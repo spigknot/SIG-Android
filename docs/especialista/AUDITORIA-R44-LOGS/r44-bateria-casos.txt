@@ -1,0 +1,100 @@
+=== R44 RUNNER ===
+RUN_ID: r44_r39_cap_1791615710
+CMD: r44_runner.sh /root/r39_cap --reconstruct-r39
+CWD: /root
+SRC: /root/r42_refs.c (12229 bytes)
+SRC_SHA: 15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267
+SCRIPT_SHA: 5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97
+BUILD_EXIT=0  log: /root/r44_evid/r44_r39_cap_1791615710-build.log
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (195000 bytes)
+BIN_SHA: 5182535709f1ed41edc5beb38530149f29e2a7960ac11499b93717e8f1f6a648
+RUN_EXIT=0
+OUT: /root/r44_evid/r44_r39_cap_1791615710-out.txt (1286 B) ERR: /root/r44_evid/r44_r39_cap_1791615710-err.txt (622 B)
+--- STDOUT (head; integrais no arquivo acima):
+RECONSTRUCAO_R39: metadata reconstruida (K=6144 N=2048 B=1 type=q6_K — dos tamanhos/contrato!) — o meta FALSO do R39 NAO e' lido como schema!
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head; integrais acima):
+MODO: RECONSTRUCAO_R39 (whitelist SHA! metadata reconstruida SEPARADA!)
+RECONSTRUCAO_R39: canonweights_9216.bin SHA ok (0103fc0cc34700ff5b194e35dd89b088fff94c64197c58c3c03ef515e46d3640)
+RECONSTRUCAO_R39: actfloat_131072.bin SHA ok (8e126e530a6242c70a698dd00936de52890d93eea0960e1eba942b21cf2fd945)
+RECONSTRUCAO_R39: cpuout_32768.bin SHA ok (f343aaa6a9fe746178bd80cd05770fdeb39bb791dcae8fef489bd8f6e78cb315)
+RECONSTRUCAO_R39: htpout_32768.bin SHA ok (70f06e9494542513f1f9de7f837506b479ab06ae2bf078202868e4510c635e94)
+RECONSTRUCAO_R39: tiled_raw.bin SHA ok (66218735367089fbc9fe33f403c0c81e62214ef167779b88be644fa1104da1ff)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e classe NUMERICA separada)
+=== R44 RUNNER ===
+RUN_ID: r44_r42_normal_1791615717
+CMD: r44_runner.sh /root/r42_normal 
+CWD: /root
+SRC: /root/r42_refs.c (12229 bytes)
+SRC_SHA: 15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267
+SCRIPT_SHA: 5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97
+BUILD_EXIT=0  log: /root/r44_evid/r44_r42_normal_1791615717-build.log
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (195000 bytes)
+BIN_SHA: 5182535709f1ed41edc5beb38530149f29e2a7960ac11499b93717e8f1f6a648
+RUN_EXIT=0
+OUT: /root/r44_evid/r44_r42_normal_1791615717-out.txt (1181 B) ERR: /root/r44_evid/r44_r42_normal_1791615717-err.txt (68 B)
+--- STDOUT (head; integrais no arquivo acima):
+META ok: attempt=r42_1 K=6144 N=2048 B=1 type=q6_K
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head; integrais acima):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e classe NUMERICA separada)
+=== R44 RUNNER ===
+RUN_ID: r44_r43_tamper_1791615723
+CMD: r44_runner.sh /root/r43_tamper --reconstruct-r39
+CWD: /root
+SRC: /root/r42_refs.c (12229 bytes)
+SRC_SHA: 15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267
+SCRIPT_SHA: 5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97
+BUILD_EXIT=0  log: /root/r44_evid/r44_r43_tamper_1791615723-build.log
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (195000 bytes)
+BIN_SHA: 5182535709f1ed41edc5beb38530149f29e2a7960ac11499b93717e8f1f6a648
+RUN_EXIT=16
+OUT: /root/r44_evid/r44_r43_tamper_1791615723-out.txt (146 B) ERR: /root/r44_evid/r44_r43_tamper_1791615723-err.txt (280 B)
+--- STDOUT (head; integrais no arquivo acima):
+RECONSTRUCAO_R39: metadata reconstruida (K=6144 N=2048 B=1 type=q6_K — dos tamanhos/contrato!) — o meta FALSO do R39 NAO e' lido como schema!
+--- STDERR (head; integrais acima):
+MODO: RECONSTRUCAO_R39 (whitelist SHA! metadata reconstruida SEPARADA!)
+INVALID(REPLAY): canonweights_9216.bin SHA fora da whitelist R39: a8bf3a8a59d1b7e90d58081df52666af86997f2abff592b2df5d5e8d4c7a5da2 (esperado 0103fc0cc34700ff5b194e35dd89b088fff94c64197c58c3c03ef515e46d3640!)
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=16 consumido)
+=== R44 RUNNER ===
+RUN_ID: r44_naoexiste_r44_1791615729
+CMD: r44_runner.sh /root/naoexiste_r44 
+CWD: /root
+SRC: /root/r42_refs.c (12229 bytes)
+SRC_SHA: 15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267
+SCRIPT_SHA: 5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97
+BUILD_EXIT=0  log: /root/r44_evid/r44_naoexiste_r44_1791615729-build.log
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (195000 bytes)
+BIN_SHA: 5182535709f1ed41edc5beb38530149f29e2a7960ac11499b93717e8f1f6a648
+RUN_EXIT=20
+OUT: /root/r44_evid/r44_naoexiste_r44_1791615729-out.txt (0 B) ERR: /root/r44_evid/r44_naoexiste_r44_1791615729-err.txt (109 B)
+--- STDOUT (head; integrais no arquivo acima):
+--- STDERR (head; integrais acima):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+INVALID: meta.txt AUSENTE (modo NORMAL!)
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=20 consumido)

@@ -1,0 +1,41 @@
+--- /root/r45_backup_sigcand2/matmul-ops.c	2026-10-10 04:36:19.143420420 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c	2026-10-10 09:35:17.859227920 -0300
+@@ -839,6 +839,14 @@
+     uint8_t * restrict dst_data = (uint8_t *) dst + (dst_row_size * ir_first);                             \
+     uint8_t * restrict tmp_data = (uint8_t *) mmctx->vtcm_dst + (mmctx->vtcm_dst_size_per_thread * ith);   \
+     kernel_fn(src_data, dst_data, tmp_data, ne0, ir_last - ir_first, src_row_size, dst_row_size);          \
++    if (mmctx->octx->act_dump_ptr) {                                                                       \
++        const size_t d46_off = 64 + (size_t) dst_row_size * ir_first;    /* OFF 64 (o header!) */          \
++        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               \
++        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      \
++            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                \
++            atomic_fetch_add((atomic_uint *) &((uint32_t *) mmctx->octx->act_dump_ptr)[3], 1u);            \
++        }                                                                                                  \
++    }                                                                                                      \
+                                                                                                            \
+     htp_trace_event_stop(tr, HTP_TRACE_EVT_HVX_A_QUANT, ir_first);                                         \
+ }
+@@ -3428,6 +3436,23 @@
+ int op_matmul(struct htp_ops_context * octx) {
+     const struct htp_mm_kernel_params * kparams = (const struct htp_mm_kernel_params *) octx->kernel_params;
+ 
++    // R46 (test-only!): o dump da ACT — resolvido pelo DESCRITOR do request
++    // (bufs[bi].base do prep_op_bufs — NAO ctx->mmap[bi]! numeracoes DIFERENTES!)
++    // + bounds + somente o caminho HVX (o HMX desvia e nao usa!)
++    octx->act_dump_ptr = NULL;
++    octx->act_dump_cap = 0;
++    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < (int) octx->ctx->r46_nbufs && octx->ctx->r46_bufs && !kparams->n_hmx) {
++        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->r46_bufs[kparams->act_dump_bi].base;
++        octx->act_dump_cap = (size_t) octx->ctx->r46_bufs[kparams->act_dump_bi].size;
++        if (octx->act_dump_ptr && octx->act_dump_cap >= 64) {
++            uint32_t * h = (uint32_t *) octx->act_dump_ptr;
++            h[2] = 1;   // R46: op_seen (a op SELECIONADA chegou ao op_matmul!)
++        } else {
++            octx->act_dump_ptr = NULL;   // cap < 64: recusa!
++            octx->act_dump_cap = 0;
++        }
++    }
++
+     if (kparams->n_hmx) {
+         return hmx_mm_op_matmul(octx, kparams);
+     }

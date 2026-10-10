@@ -1,0 +1,102 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 45 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 45 | DATA: 10/10/2026 |
+| ESTADO GERAL: CCE nas frentes executadas — P1-P5 IMPLEMENTADOS E COMPILADOS
+  (host+skel, cohort separado!); §3 higiene executada; P6-P8 (device) na
+  sequencia com o runbook; a ACT ainda NAO capturada (device pendente!). |
+================================================================================
+
+================================================================================
+SECAO I — RESUMO EXECUTIVO
+================================================================================
+(1) P1-P5 IMPLEMENTADOS E COMPILADOS (o pedido central do §1/§2 — 'exigivel
+    nesta rodada'!):
+    P1: shared_buffer global (256KB!) armado por GGML_HEXAGON_ACT_DUMP=1
+        (parse EXPLICITO: so '1'! — no batch/add_tensor!);
+    P2: add_buffer(dump) -> bi (o global g_r45_act_dump_bi; ANTES dos
+        tensores — bi estavel!);
+    P3: o bi propagado por kernel_params (campo NOVO act_dump_bi no struct
+        htp_mm_kernel_params — sizeof <=128 respeitado!);
+    P4: skel: op_matmul traduz bi -> endereco DSP via octx->ctx->mmap[bi].base
+        (o fd ja' mapeado pelo fastrpc!); campo novo act_dump_ptr no octx;
+    P5: skel: o worker (QUANTIZE_IMPL) copia a ACT quantizada (dst_data!)
+        para o dump (no MACRO — cada linha com ' \' — o cuidado!).
+(2) BUILD: host+skel RC=0 (libggml-hexagon.so 5823752 B + libggml-htp-v81.so
+    747336 B — rebuild do skel via target htp-v81: o 'BUILD_ALWAYS ON' do
+    ExternalProject NAO e' puxado pelo target llama — descoberta documentada!);
+    libllama.so IMUTADA (8ab003eb... — o mesmo do R14!!).
+(3) DIFF COMPLETO: 376 linhas (r45-p1p5.diff — P1-P5, todos os pontos!);
+    fullSHA64 dos 4 fontes alterados + das 3 libs (secao IV!).
+(4) §3 HIGIENE: o runner R44 (SCRIPT/SRC/BIN SHA integrais + raiz por
+    RUN_ID!) ja' entregue; nesta rodada: o SRC renomeado NAO feito (o
+    r42_refs.c segue — declarado!); o BUILDFAIL exercitado na R44
+    (exit92!) — os demais itens: declarados no H.
+(5) A PROVA OFF: com a flag ausente/'0': o bi fica -1 -> act_dump_ptr NULL
+    -> ZERO efeito (codigo inerte por construcao!); os binarios DIFEREM do
+    baseline (codigo novo!) — diff JUSTIFICADO (so' o caminho arma/ON
+    executa!); sem device ainda (a prova runtime OFF vira no P7!).
+
+================================================================================
+SECAO II — O DIFF (a prova do patch — recuperavel!)
+================================================================================
+Ver r45-p1p5.diff (376 linhas!) — anexo integral (smart-rodada45/!).
+Pontos-chave: g_r45_act_dump_bi (global!) + r45_act_dump_arm (parse '1'!) +
+h.bi do dump ANTES dos tensores + kparams->act_dump_bi (o wire!) +
+octx->act_dump_ptr = mmap[bi].base (a traducao!) + o memcpy no MACRO.
+
+================================================================================
+SECAO III — P6-P8 (o RUNBOOK atualizado — a sequencia imediata!)
+================================================================================
+P6 (FEITO parcial!): o rebuild host+skel ✓ (cohort separado — os SHA acima!).
+P7: PROBE: instalar o cohort novo (lib 44a7ae1d...) no device; armar
+    GGML_HEXAGON_ACT_DUMP=1 (o tune!); rodar mmtest:q4k (K6144/N2048/B1!);
+    O HOST: ler o buffer (via... — PENDENCIA CONHECIDA: o host NO P7 precisa
+    acessar o sbuf do dump (o probe: uma API de leitura!) — a construir
+    (registry: 'ggml_backend_hexagon_get_act_dump'!) — DECLARADO!
+P8: entregar os 221184 B + fullSHA64 + RUN_ID; recomputar as 2048 saidas
+    (o reader validado + a ACT observada!) — F32 x Rscalar x Rtiled!
+LIMITE DECLARADO: o P7 ainda requer a API de leitura do dump no host (o
+buffer: criado pela LIB — o probe: precisa consumi-lo!) — o NEXT TESTE
+MINIMO EXATO (secao VI-H!).
+
+================================================================================
+SECAO IV — fullSHA64 (fontes alterados + libs do cohort!)
+================================================================================
+a81a907358aa93556823ef4b0977555badd197827e08798eaa6cc6d138eb3077  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+82ad8ffc0f3caa945fef8b766ae97f26d2985609383d2f46a72b9e20302242f2  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+7e01bc70430752aa14169501204b87ebf94488df6c61375590c1d94f9ed8398d  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.h
+b975d17016ba2289a897d446a1e2cd281b5f2c5b0a1a9d04baee1467fc6a54f8  /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+f89236e986e8e83fcc9e0a22470bff60e4ba17fff5bec2a44b1af6b6585da3b5  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+8ab003eb1fdd0643367b4d8ff25f1f6c91697c3a9d3dac9ab68d1251f7ede2cb  /root/sigcand2/build-kq/bin/libllama.so
+44a7ae1dd8d8d99007bfbd5bb7ef01d87c8790f74e50af7df82c9780d9126704  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+libllama.so = 8ab003eb1fdd0643367b4d8ff25f1f6c91697c3a9d3dac9ab68d1251f7ede2cb
+  (= O MESMO do R14 — IMUTADA pela mudanca! prova de acoplamento minimo!)
+================================================================================
+
+================================================================================
+SECAO V — MANIFESTO (existencias + tamanhos + fullSHA64)
+================================================================================
+12d6a83038eff9c8c1ed0767717170465f96e46558a5c55d1b4942e66aff0d40  smart-rodada45/r45-fullsha64-fontes-libs.txt  (827 B)
+2ee41f1c87ceba4abcd83c68580f511abb4d5a51755a9e005808d65efd2079ef  smart-rodada45/r45-p1p5.diff  (13782 B)
+b45c5ad3787a8ab06d72b530948d3e51bf7593cc17a7ceb8421eed61bad87630  smart-rodada45/r45_patch2.py  (3151 B)
+8bbd0846e7088dc8ebcbce344ac6d2a89b3ecad2040dc73b88adff0c3af0c92e  smart-rodada45/r45_patch5.py  (2188 B)
+
+================================================================================
+SECAO VI — FRONTEIRAS A-H
+================================================================================
+A. fullcohort: os 4 fontes + 3 libs com fullSHA64 (secao IV!); o APK probe
+   (nao instalado!) — PARCIAL declarado.
+B. patch P1-P5: COMPILADO (diff 376 linhas + RC=0!) — CCE (host+skel!);
+   as vacinas do export: pendentes (o S!).
+C. ACT/replay: code COMPILADO; captura PENDENTE (device + a API de leitura!).
+D. 2048 metricas com a ACT observada: PENDENTE (depende C!).
+E. capturas/controles: PENDENTES.
+F. runner/loader: CCE (R44!); nesta rodada: o SRC segue r42_refs.c (declarado!).
+G. fronteiras: P1-P5 = CCE_COMPILADO (nao rodado em device!); P7-P8 = PENDENTE
+   COM RUNBOOK PRECISO; KERNEL/GRAPH/HANDOFF/PERF = NAO.
+H. proximo teste minimo EXATO: (1) a API de leitura no host
+   (ggml_backend_hexagon_get_act_dump -> o probe lê o sbuf!); (2) instalar
+   o cohort novo; (3) GGML_HEXAGON_ACT_DUMP=1; (4) mmtest:q4k K6144/N2048/B1;
+   (5) ler 221184 B + SHA; (6) recomputar as 2048!
+================================================================================

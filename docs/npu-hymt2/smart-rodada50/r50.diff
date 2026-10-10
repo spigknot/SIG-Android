@@ -1,0 +1,178 @@
+diff -ruN r50_backup_hexagon/ggml-hexagon.cpp sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+--- r50_backup_hexagon/ggml-hexagon.cpp	2026-10-10 12:12:33.483102492 -0300
++++ sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp	2026-10-10 13:23:34.499505673 -0300
+@@ -459,6 +459,17 @@
+     int32_t  r49_kernel_type; // o kernel_type!
+     int32_t  r49_op_entered;  // 1 = o op_matmul LEU os kparams desta op!
+     int32_t  r49_reserved;
++    // R50 (version 3!): observabilidade em PENDING + o TRACE do quantizador DSP
++    int32_t  r50_meta_valid;    // 1 = header com magic/epoch OK (metadata VISIVEL mesmo em pending!)
++    int32_t  r50_firstcause;    // 0=none; 1=op_seen0; 2=rows0; 3=B!=1; 4=rows!=B; 5=row0; 6=cap/row; 7=sem entered
++    uint32_t r50_src1_nrows;    // h[8]  (DSP!)
++    uint32_t r50_n_threads;     // h[9]  (DSP!)
++    uint32_t r50_need_quant;    // h[10] (DSP!)
++    uint32_t r50_n_quant_tasks; // h[11] (DSP!)
++    uint32_t r50_quant_func_id; // h[12] (DSP! 0=null 1=q8_0_tiled 2=q8_1_tiled 3=q8_0_tiled_block 4=q8_1_tiled_block 5=q8_0_flat 6=q8_1_flat 7=f32 8=f16 9=f16f16)
++    uint32_t r50_dsp_decoded;   // 1 = h[13]==0xA5A50002 (o DSP DECODIFICOU a decisao!)
++    uint32_t r50_total_nb;      // h[14] (DSP! total de tiles da ACT — o coverage!)
++    uint32_t r50_reserved;
+ };
+ 
+ // Os metadados da captura (host!): a UMA captura (sem sobrescrever!)
+@@ -477,35 +488,51 @@
+     // R47: HANDSHAKE — recusa struct copiado menor (ABI às cegas morre aqui!)
+     if (!out_v || out_size < sizeof(struct ggml_hexagon_act_dump_status)) return -2;
+     struct ggml_hexagon_act_dump_status * out = (struct ggml_hexagon_act_dump_status *) out_v;
+-    out->magic = R46_MAGIC; out->version = 2;   // R49: + metadata do ramo!
++    out->magic = R46_MAGIC; out->version = 3;   // R50: + observabilidade em PENDING + trace DSP!
+     out->type = 0; out->K = 0; out->N = 0; out->B = 0;
+     out->epoch = g_r46_meta.epoch; out->rows_done = 0; out->payload_off = 64;
+     out->reserved = 0; out->ptr = 0; out->capacity = 0; out->row_size = 0;
+     out->r49_n_hmx = -1; out->r49_kernel_type = -1; out->r49_op_entered = 0; out->r49_reserved = 0;
++    out->r50_meta_valid = 0; out->r50_firstcause = 0;
++    out->r50_src1_nrows = 0; out->r50_n_threads = 0; out->r50_need_quant = 0;
++    out->r50_n_quant_tasks = 0; out->r50_quant_func_id = 0; out->r50_dsp_decoded = 0;
++    out->r50_total_nb = 0; out->r50_reserved = 0;
+     if (!g_r46_act_dump_armed()) { out->status = 0; return 0; }          // NOT_ARMED (a flag!)
+     if (g_r46_meta.epoch == 0 || !g_r46_act_dump_sbuf) { out->status = 1; return 0; }   // ARMED, sem captura
+     out->ptr = (uint64_t) (uintptr_t) g_r46_act_dump_sbuf->base;
+     out->capacity = g_r46_act_dump_sbuf->size;
+     out->type = g_r46_meta.type; out->K = g_r46_meta.K; out->N = g_r46_meta.N; out->B = g_r46_meta.B;
+     out->row_size = g_r46_meta.row_size;
++    // R50: CAPACIDADE conferida ANTES de qualquer load do header (parecer R49/D!)
++    if (g_r46_act_dump_sbuf->base == nullptr || g_r46_act_dump_sbuf->size < 64) { out->status = -1; return 0; }
+     const uint32_t * hdr = (const uint32_t *) g_r46_act_dump_sbuf->base;
+     if (hdr[0] != R46_MAGIC || hdr[1] != g_r46_meta.epoch) { out->status = -1; return 0; }   // INVALIDO (o header!)
+     out->rows_done = hdr[3];
+-    // R47: VALIDACAO FORMAL antes de CAPTURED (nada de >=B/row0/cap64 passando!)
++    // R50: A METADATA SAI AQUI (header valido!) — a observacao acontece MESMO em PENDING
++    // (o parecer R49/D: "-1/-1/0 eram os DEFAULTS do GETTER, nao evidencia do SKEL!")
++    out->r49_n_hmx = (int32_t) hdr[4];
++    out->r49_kernel_type = (int32_t) hdr[5];
++    out->r49_op_entered = (hdr[7] == 0xA5A50001u) ? 1 : 0;
++    out->r50_meta_valid = 1;
++    out->r50_src1_nrows = hdr[8];
++    out->r50_n_threads = hdr[9];
++    out->r50_need_quant = hdr[10];
++    out->r50_n_quant_tasks = hdr[11];
++    out->r50_quant_func_id = hdr[12];
++    out->r50_dsp_decoded = (hdr[13] == 0xA5A50002u) ? 1 : 0;
++    out->r50_total_nb = hdr[14];
++    // R47/R50: VALIDACAO FORMAL antes de CAPTURED (nada de >=B/row0/cap64 passando!)
+     const int op_seen = hdr[2] == 1;
+-    if (!op_seen) { out->status = 1; return 0; }                       // a op nao chegou!
+-    if (hdr[3] == 0) { out->status = 1; return 0; }                    // copiou 0 rows (nao capturou!)
+-    if (g_r46_meta.B != 1) { out->status = -1; return 0; }             // ALVO e' B1!
+-    if ((int) hdr[3] != g_r46_meta.B) { out->status = -1; return 0; }  // rows EXATO (excesso = INVALID!)
+-    if (g_r46_meta.row_size == 0) { out->status = -1; return 0; }      // row 0 = INVALID!
++    if (!op_seen) { out->status = 1; out->r50_firstcause = 1; return 0; }                       // op_seen0 (pending!)
++    if (hdr[3] == 0) { out->status = 1; out->r50_firstcause = 2; return 0; }                    // rows0 (pending!)
++    if (g_r46_meta.B != 1) { out->status = -1; out->r50_firstcause = 3; return 0; }             // ALVO e' B1!
++    if ((int) hdr[3] != g_r46_meta.B) { out->status = -1; out->r50_firstcause = 4; return 0; }  // rows EXATO!
++    if (g_r46_meta.row_size == 0) { out->status = -1; out->r50_firstcause = 5; return 0; }      // row 0!
+     if (g_r46_meta.row_size > out->capacity || out->payload_off + g_r46_meta.row_size > out->capacity) {
+-        out->status = -1; return 0;                                    // 64+row <= cap (fim!)
++        out->status = -1; out->r50_firstcause = 6; return 0;                                    // 64+row <= cap!
+     }
++    if (hdr[7] != 0xA5A50001u) { out->status = -1; out->r50_firstcause = 7; return 0; }         // R50: CAPTURED exige o op_matmul!
+     out->status = 2;   // CAPTURED (tudo validado!)
+-    // R49: a metadata do ramo (lida do header!) — exposta SEMPRE (observabilidade!)
+-    out->r49_n_hmx = (int32_t) hdr[4];
+-    out->r49_kernel_type = (int32_t) hdr[5];
+-    out->r49_op_entered = (hdr[7] == 0xA5A50001u) ? 1 : 0;
+     return 0;
+ }
+ 
+diff -ruN r50_backup_hexagon/htp/matmul-ops.c sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+--- r50_backup_hexagon/htp/matmul-ops.c	2026-10-10 12:12:33.483102492 -0300
++++ sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c	2026-10-10 13:23:34.511338986 -0300
+@@ -839,21 +839,8 @@
+     uint8_t * restrict dst_data = (uint8_t *) dst + (dst_row_size * ir_first);                             \
+     uint8_t * restrict tmp_data = (uint8_t *) mmctx->vtcm_dst + (mmctx->vtcm_dst_size_per_thread * ith);   \
+     kernel_fn(src_data, dst_data, tmp_data, ne0, ir_last - ir_first, src_row_size, dst_row_size);          \
+-    if (mmctx->octx->act_dump_ptr && ((const uint32_t *) mmctx->octx->act_dump_ptr)[4] == 0) {            \
+-        /* R49: a COPIA e' HVX-only (h[4]==0 — o n_hmx REAL do op_matmul!)!                  */          \
+-        /* R47: CHECKED — divisao ANTES dos produtos (sem wrap!) e todos os                  */          \
+-        /* limites validados: row>0, cap>=64, row<=cap-64, last<=max_rows!                   */          \
+-        const size_t d47_row = dst_row_size;                                                               \
+-        const size_t d47_cap = mmctx->octx->act_dump_cap;                                                  \
+-        if (d47_row > 0 && d47_cap >= 64 && d47_row <= d47_cap - 64 &&                                     \
+-            ir_first >= 0 && ir_last > ir_first &&                                                         \
+-            (size_t) ir_last <= (d47_cap - 64) / d47_row) {                                                \
+-            const size_t d47_off = 64 + d47_row * (size_t) ir_first;   /* provado <= cap! */               \
+-            const size_t d47_len = d47_row * (size_t) (ir_last - ir_first);                                \
+-            memcpy(mmctx->octx->act_dump_ptr + d47_off, dst_data, d47_len);                                \
+-            atomic_fetch_add((atomic_uint *) &((uint32_t *) mmctx->octx->act_dump_ptr)[3], 1u);            \
+-        }                                                                                                  \
+-    }                                                                                                      \
++    /* R50: a copia por-task (R46-R49) foi REMOVIDA — o worker BLOCK nunca a chamava!  */                \
++    /* A captura UNICA agora e' POS-BARREIRA em hvx_mm_matmul (cobre BLOCK E ROW!)     */                \
+                                                                                                            \
+     htp_trace_event_stop(tr, HTP_TRACE_EVT_HVX_A_QUANT, ir_first);                                         \
+ }
+@@ -1369,6 +1356,20 @@
+     }
+ }
+ 
++// R50: o ID do quantizador EFETIVO (parecer R49/E: nao escolher pelo numero do enum!)
++static uint32_t r50_quant_func_id(worker_callback_t f) {
++    if (f == quantize_f32_q8_0_tiled)       return 1;
++    if (f == quantize_f32_q8_1_tiled)       return 2;
++    if (f == quantize_f32_q8_0_tiled_block) return 3;
++    if (f == quantize_f32_q8_1_tiled_block) return 4;
++    if (f == quantize_f32_q8_0_flat)        return 5;
++    if (f == quantize_f32_q8_1_flat)        return 6;
++    if (f == quantize_f32_f32_flat)         return 7;
++    if (f == quantize_f32_f16_flat)         return 8;
++    if (f == quantize_f16_f16_flat)         return 9;
++    return 0;
++}
++
+ static int hvx_mm_matmul(struct htp_ops_context * octx) {
+     htp_matmul_tensors_preamble;
+ 
+@@ -1604,6 +1605,19 @@
+     mmctx->vtcm_src0_stride = src0_row_size_padded;
+     mmctx->vtcm_src1_stride = src1_row_size;
+ 
++    // R50: TRACE MINIMO DO QUANTIZADOR (o parecer R49/B/E!) — o DSP DECODIFICOU:
++    // campos reais no header (h[8..14]) ANTES de qualquer copia de payload.
++    if (octx->act_dump_ptr && octx->act_dump_cap >= 64) {
++        uint32_t * h = (uint32_t *) octx->act_dump_ptr;
++        h[8]  = src1_nrows;
++        h[9]  = octx->n_threads;
++        h[10] = need_quant ? 1u : 0u;
++        h[11] = n_quant_tasks;
++        h[12] = r50_quant_func_id(quant_task_func);
++        h[13] = 0xA5A50002u;   // R50: o DSP decodificou a decisao!
++        h[14] = src1_nrows * ((ne10 + QK_Q8_0_TILED - 1) / QK_Q8_0_TILED);   // total_nb (coverage!)
++    }
++
+     if (need_quant) {
+         mmctx->n_quant_rows_per_thread = (src1_nrows + n_quant_tasks - 1) / n_quant_tasks;
+         mmctx->quant_task_func = quant_task_func;
+@@ -1616,7 +1630,23 @@
+ 
+     htp_trace_event_stop(tr, HTP_TRACE_EVT_INIT, 0);
+ 
+-    worker_pool_run_func(octx->ctx->worker_pool, matmul_job_func, mmctx, octx->n_threads);
++    const bool r50_wq_ok = worker_pool_run_func(octx->ctx->worker_pool, matmul_job_func, mmctx, octx->n_threads);
++
++    // R50: A CAPTURA UNICA POS-BARREIRA (o parecer R49/E.5!) — cobre BLOCK E ROW:
++    // so' com a quantizacao REAL executada (quant_task_func!=NULL), runner OK e
++    // barreiras completas (o work_queue_run espera a task barrier!) — e a VTCM
++    // ainda nao foi reusada/liberada. Bounds da ORIGEM e do destino ANTES do memcpy.
++    if (r50_wq_ok && octx->act_dump_ptr && mmctx->quant_task_func && mmctx->n_quant_tasks > 0 &&
++        mmctx->vtcm_src1 && mmctx->vtcm_src1_stride > 0) {
++        const size_t r50_row   = mmctx->vtcm_src1_stride;
++        const size_t r50_cap   = octx->act_dump_cap;
++        const size_t r50_nrows = (size_t) src1_nrows;
++        if (r50_cap >= 64 && r50_row <= r50_cap - 64 && r50_nrows > 0 &&
++            r50_nrows <= (r50_cap - 64) / r50_row) {
++            memcpy(octx->act_dump_ptr + 64, mmctx->vtcm_src1, r50_row * r50_nrows);
++            atomic_fetch_add((atomic_uint *) &((uint32_t *) octx->act_dump_ptr)[3], (uint32_t) r50_nrows);
++        }
++    }
+ 
+     return HTP_STATUS_OK;
+ }

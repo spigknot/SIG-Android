@@ -1,0 +1,263 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 51 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [OFFLINE/LAB — SEM RUN NOVO NO DEVICE (condicional!)] | RODADA: 51 |
+| ESTADO: ✅ FONTES DO COHORT R50 AUTENTICADAS POR EQUIVALÊNCIA (4/5 pinned
+  byte-iguais; 2 com diferenças SÓ de adição; funções do decoder IDÊNTICAS!);
+  ✅ RE-DERIVAÇÃO DO DECODER COM O COHORT EXATO: label_trace BYTE-IDÊNTICO;
+  ✅ REPLAY RE-EXECUTADO (F64 byte-iguais, métricas recalculadas GREEN);
+  ✅ REPACK HOST DO canonweights R50 == tiled_raw R39 (PROVA do encoder!);
+  ✅ VACINAS: consumer 20/20, skel-capture 13/13, export 12/12, gerador RC1/RC1;
+  ✅ RECIBO DO PID 22208 OBTIDO (status idêntico + payload re-exportado);
+  🚧 BUNDLE 8-ARQUIVOS MESMO-RUN NO DEVICE: BLOQUEADO (run novo é condicional);
+  🚧 RAW TILED DO MESMO ATTEMPT: PENDENTE (não exportado no run; equivalência
+     demonstrada por recomputação — ver F). |
+================================================================================
+
+================================================================================
+SECAO 0 — FASE 0: CONGELAMENTO, RECIBOS, RETIFICAÇÕES (0.1–0.4)
+================================================================================
+(0.1) CONGELAMENTO: todos os inputs R50 reconferidos por fullSHA64+tamanho
+  (MANIFESTO-SHA256 do R50 revalidado 1:1; inputs intactos; nada sobrescrito).
+(0.2) RECIBOS (arquivados em smart-rodada51/recibos/):
+  - getprop: ro.serialno = ro.boot.serialno = 3B15BD00FVE00000 (BD, autorizado);
+    transporte 100.108.27.64:5555; modelo CPH2747.
+  - dumpsys: lastUpdateTime=2026-10-10 13:34:50 (a instalação do APK R50).
+  - **PID 22208 ENCONTRADO E ARQUIVADO**: files/r50/r40_1_22208/ existe no
+    device com act_payload.bin (221184 B) + status.txt; o status do 22208 é
+    IDÊNTICO ao do 22782 (status=2 version=3 epoch=1 rows_done=1 row_size=
+    221184 cap=262144 payload_off=64 meta_valid=1 firstcause=0 entered=1
+    n_hmx=0 kernel_type=10 decoded=1 qfn=3 nqt=8 src1_nrows=1 nthr=8
+    need_quant=1 total_nb=48 K=6144 N=2048 B=1 type=14).
+  - PAYLOAD POR RUN (material): act_payload_run22208.bin e
+    act_payload_run22782.bin re-exportados de CADA dir (exec-out run-as):
+    ambos 221184 B, SHA 0ac5805f... IDÊNTICOS. A independência dos dois runs
+    agora está FECHADA: attempts distintos, dirs distintos, status idênticos,
+    payloads idênticos. (O r50-capture-full é do 22782; o recibo do 22208 é
+    o status.txt + payload acima.)
+(0.3) RETIFICAÇÕES (números antigos preservados; texto corrigido AQUI):
+  B: a frase "a causa R49 era o GETTER CEGO, não o SKEL" fica CORRIGIDA: o
+  getter cego explica os defaults inconclusivos (e NÃO fabrica payload);
+  a R50 corrigiu o OBSERVADOR **e** a COBERTURA (hook ROW removido + captura
+  pós-barreira) — são duas mudanças, não uma causa única. O teste host R49
+  não provava retrospectivamente que o skel real escrevera — CONCORDO.
+  E: "8x por sub-bloco / 32x por bloco" fica CORRIGIDO: cada índice tem 32
+  réplicas DENTRO DE UM subtile (seu grupo de 32) e ZERO nos outros três.
+  O resíduo do fit = 352 bytes físicos = 11 ocorrências equivalentes (10
+  grupos; o grupo 12 perde 64) — não "10 valores". O reader R50 usava GRID
+  SEARCH (fit) — reconhecido e substituído, ver E. O diagnóstico causal do
+  resíduo como "pipeline qf16" fica REBAIXADO a hipótese (sem modelo ISA).
+(0.4) STAGED: 9 do R37 com hashes de índice E worktree separadamente
+  conferidos NESTA rodada — inalterados (preservation no manifesto R51).
+
+================================================================================
+SECAO A — FONTES EXATAS DO COHORT R50 + ABI (FASE 1.1/1.2)
+================================================================================
+(1.1) O servidor vivo /root/sigcand2 == SNAPSHOT R50 (PROVADO: ggml-hexagon.cpp
+  =0aba3b97..., matmul-ops.c=1f27274a..., libs host=5d7fee30.../skel=247f5d54...
+  batem com os declarados no R50). PACOTE DE FONTES EXATAS copiado para
+  docs/npu-hymt2/smart-rodada51/sources/ (17 arquivos: ggml-hexagon.cpp +
+  htp/{matmul-ops.c,.h, hvx-mm-kernels-tiled.h, hvx-base.h, hvx-repl.h,
+  hvx-reduce.h, hvx-inverse.h, htp-ops.h, htp-ctx.h, main.c, work-queue.{c,h},
+  hex-fastdiv.h, hex-common.h, hvx-types.h, CMakeLists.txt} + CMakeLists host).
+  FLAGS do build (CMakeCache): NDK android-28, arm64-v8a, Release, GGML_HEXAGON=ON,
+  HEXAGON SDK 6.6.0.0 / Tools 19.0.07; ninja -j20; C_FLAGS vazio (host CXX com
+  includes vulkan/spirv). ELF: libggml-hexagon.so build-id
+  **b112db1099ea35bf912cd0096488d09e7b23e0bf** (= o empacotado no APK!);
+  libggml-htp-v81.so SEM NT_GNU_BUILD_ID (tem .note.llvm.cgmdinfo); npuprobe
+  build-id 5cd767d7d38338c25bf05ba9bf58062a0453932d.
+(1.2) ABI COMPILADO DO COHORT (abi_probe_cohort.cpp, extração literal dos
+  headers reais; BUILD_RC=0/RUN ok; saída em r51_abi_out.txt):
+  - sizeof(struct htp_mm_kernel_params) = **128** (no limite do static_assert!);
+    offsets: kernel_type=0 pipeline=4 n_threads=16 n_hmx=24 src1_row_size=40
+    vtcm_size=44 **act_dump_bi=68** div_ne12_ne1=72.
+  - ENUM completo: UNSUPPORTED=0 HMX_2D=1 HMX_F16_BATCHED=2 F16_F16_VTCM=3
+    F16_F16_DDR=4 F16_F32_DDR=5 F32_F32_VTCM=6 F32_F32_DDR=7 F32_F16_DDR=8
+    **ROW=9 BLOCK=10 ROW_FLAT=11**.
+  - sizeof(status v3)=128; off r49_n_hmx=72 / r50_meta_valid=88 / r50_total_nb=120
+    (o handshake >= sizeof(struct) e o probe usam os MESMOS offsets).
+(1.3) PINNED vs COHORT (o ponto que o parecer marcou como aberto):
+  - hvx-repl.h / hvx-base.h / hvx-reduce.h / hvx-inverse.h: **BYTE-IGUAIS**
+    (cmp -s == 0) aos do cohort. (Nota: o "file" reporta CRLF nos locais — é
+    falso-positivo de heurística; os BYTES batem; hashes crus conferidos.)
+  - htp-ops.h: DIFERE SÓ pela adição de HTP_TYPE_Q4_K=12 e HTP_TYPE_Q6_K=14
+    (o port KQ); QK_Q8_0_TILED=128 inalterado.
+  - hvx-mm-kernels-tiled.h: DIFERE por **2 hunks de ADIÇÃO** (helpers
+    unpack_q6_k_group/accum_q6_k/scale_q6_k + dots Q6_K/Q4_K novos), em
+    ~378-452 e ~842-905 — **DEPOIS** das funções usadas pelo decoder.
+    PROVA POR EXTRAÇÃO: quantize_block_f32_q8_0_tiled (sha dos textos
+    5201e4a6b111906e) e quantize_row_f32_q8_0_tiled (5b977b8808c67182)
+    são **byte-idênticas** entre pinned e cohort — e as repl masks estão
+    DENTRO da função extraída. Ambas as versões preservadas em sources/.
+(1.4) vround — CONTRAVERSÃO PRESERVADA (prosa l.33743 vs tabela Behavior
+  l.33768 do manual V81 80-N3040-23): o protótipo segue a TABELA (fixada
+  ANTES de qualquer controle). **TESTE ISA PROPOSTO (NÃO executado — condicional
+  a autorização)**: dois vectors int32 alinhados 128 com palavras
+  (100+i)<<16 e (200+i)<<16, vround do helper, readback 64 int16; a tabela
+  prevê [200,100,201,101,...]; hipóteses fixadas antes do run; somente no
+  probe privado autorizado; nunca instalar sobre o SIG.
+
+================================================================================
+SECAO B — OBSERVER (mantido do R50 + ajuste de narrativa)
+================================================================================
+- Getter v3 mantido: metadata visível em PENDING (meta_valid/firstcause),
+  cap-check antes do load, CAPTURED exige entered; vacina GREEN (R50).
+- A narrativa corrigida está em 0.3/B: observabilidade + cobertura são as
+  duas mudanças; a “prova retroativa” da escrita do skel no R49 NÃO existe.
+
+================================================================================
+SECAO C — GATE DO QUANTIZADOR (FASE 2.2) — novo, estrito
+================================================================================
+O gate `qfn!=0` do R50 foi considerádo INSUFICIENTE pelo parecer — ACEITO.
+O probe (C:/npu-probe/app/src/main/cpp/probe.cpp, test-only) foi atualizado
+para o R51: `qfn == 3 && 1 <= nthr <= 16 && nqt == min(48, nthr) &&
+src1_nrows == 1 && total_nb == 48` (+ tudo do R50). Vacina com o predicate
+LITERAL extraído do probe (r51_consumer_v51.cpp): POSITIVO (3/8/8) aceito;
+NEGATIVOS rejeitados: qfn 0,1,2,4,5,6,7,8,9; nqt=999; nqt=7; nthr=16+nqt=8
+(INCONSISTENTE); nthr=0; nthr=17; total_nb=47; rows=2; entered=0; n_hmx=1.
+**20/20 GREEN** (executado; saída r51_consumer_out.txt).
+NOTA: o APK R50 (a0fb84d0...16855419 B) NÃO foi rebuildado — o probe R51 é
+trabalho de harness; um run novo é CONDICIONAL (FASE 3.5).
+
+================================================================================
+SECAO D — CAPTURA E EXPORT: VACINAS FORMAIS (FASE 2.3/2.4/2.5)
+================================================================================
+(2.3/2.4) BLOCO DE CAPTURA (skel) — texto LITERAL extraído do matmul-ops.c do
+  cohort (o bloco pós-barreira) + stubs C: **13/13 GREEN** (r51_skel_out.txt):
+  P1 copia 221184 e rows=1; recusam (sem escrever nem incrementar rows):
+  runner=false, quant_task_func NULL, nqt=0, vtcm_src1 NULL, stride=0, ptr
+  NULL, cap=63, row>cap-64, nrows=0, overflow nrows=2; P2 row=2048 ok.
+  LIMITE DECLARADO: a checagem de SOURCE-SPAN pelo allocator real segue
+  PARCIAL (o guard cobre destino/cap/stride/nrows; o span de origem real
+  exige o allocator — hardening antes de ampliar).
+(2.5) EXPORT (probe) — bloco LITERAL com shims de IO controláveis: **12/12
+  GREEN** (r51_export_out.txt): OK→0; raiz mkdir falha→-3; **dir do attempt
+  EXISTE→-3 (no-clobber: EEXIST agora é ERRO** — mudança vs R50); fopen→-4;
+  fwrite curto→-6; fflush→-6; fclose payload→-6; rename→-5; status.txt
+  fopen→-7; ferror→-7; fclose status→-7; ambos→-6 (PRIMEIRO erro preservado).
+  O probe foi ajustado para preservar o primeiro erro (if (cap_rc48 == 0)).
+
+================================================================================
+SECAO E — DECODER POSICIONAL COM O COHORT EXATO (FASE 1.3/2.6)
+================================================================================
+- RE-DERIVAÇÃO (position_decoder_cohort.py, apontado para sources/htp EXATO,
+  hashes do cohort 2f91323c/d8e8ba67): decode do payload R50 IDÊNTICO —
+  q_replica_mismatches=0 (190464 comparações), scale=0 (12240), 196608
+  observações q, 12288 halfwords de escala; twin OK. **label_trace.json
+  BYTE-IDÊNTICO ao do pinned (d706ff3e...)** e decoded_q (deba67ea.../
+  b805c022.../5ba6a132...) idênticos → a derivação NÃO depende das partes
+  adicionadas pelo port KQ.
+- Suíte do decoder (6 testes, incluindo o CLI twin-negativo) re-executada na
+  versão cohort: 6/6 OK. O CLI hardened (o do filho, com gate de twin) foi o
+  usado; o CLI inicial falso-GREEN está arquivado e identificado.
+- LIMITES (mantidos): a associação lógica vem de fonte primária + pseudocódigo;
+  a réplica não arbitra a permutação; a contradição do vround segue aberta
+  (teste ISA proposto em A/1.4); NÃO chamar o grid search do reader R50 de
+  previsão exata (substituído pelo decode estrito acima).
+
+================================================================================
+SECAO F — REPLAY / NÚMEROS (FASE 3.1–3.3, 3.6) — RE-EXECUTADO
+================================================================================
+(3.1) Recompilado o replay_generated.cpp do coordenador (mesmo compilador
+  msys64 g++ 16.1.0, flags -fno-fast-math -ffp-contract=off) e RE-EXECUTADO:
+  F64 gerados BYTE-IGUAIS aos do coordenador (6/6 SHAs incl. half_converter);
+  métricas RECALCULADAS em Python independente: rel_diff=0 nas 6 conferidas;
+  2048/2048 finitas. Tabela (HTP observado vs referência):
+    Rscalar+F32  : nmse=4.967947948e-06 max=0.286581714 viol=50
+    Rtiled+F32   : nmse=4.809954054e-06 max=0.204642828 viol=54
+    Rscalar+ACT  : nmse=1.490299996e-07 max=0.084140610 viol=3
+    Rtiled+ACT   : nmse=1.152149206e-12 max=0.000263642 viol=0   <<<
+    swap-controle: nmse=4.475597418e-08 viol=0
+    CPU baseline : 13/13 (mantido; FINDOUT em replay_r51-run.log)
+(3.2) Baseline F32 (CPU 13/13, HTP 50/54) reproduzido ANTES de qualquer
+  diagnóstico novo; Wtiled rotulado RECONSTRUCAO (abaixo).
+(3.3) WRAW DO MESMO ATTEMPT: **PENDENTE** — o run R50 não exportou o tiled
+  bruto (o probe exporta canonweights + ACT + outs). MAS a EQUIVALÊNCIA foi
+  DEMONSTRADA: repack_q6_K_tiled (código LITERAL do host do cohort, extraído
+  e compilado no host) aplicado ao canonweights R50 gerou
+  fullSHA256=**66218735367089fbc9fe33f403c0c81e62214ef167779b88be644fa1104da1ff**
+  = IDÊNTICO ao tiled_raw R39 (o arquivo já arquivado no repo). Como o
+  canonweights R50 é byte-idêntico ao R39, o Wtiled do tuple R50 É o R39 —
+  demonstrado, não suposto (r51_repack_out.txt). Rótulo: RECONSTRUCAO_R39
+  com PROVA DE EQUIVALÊNCIA DE ENCODER.
+(3.5) BUNDLE MESMO-RUN (8 arquivos: canonweights, ACT F32, CPUout, HTPout,
+  Wraw TILED, ACT q8_0, meta.txt, status.txt): **BLOQUEADO/PENDENTE** — exige
+  run novo no device (condicional à aprovação explícita; nada executado).
+  A melhoria de ordem meta/status (escritos/fechados ANTES da conferência)
+  está ESPECIFICADA, não aplicada (seria no próximo ciclo de instrumentação).
+(3.6) As 4 variantes + controle executadas (tabela acima); verdict_legacy e
+  verdict_pin originais PRESERVADOS e SEPARADOS do diagnóstico operand-real.
+
+================================================================================
+SECAO G — ESTADOS POR FRONTEIRA (CCE/PARCIAL/PENDENTE/BLOQUEADO)
+================================================================================
+A_FONTES_COHORT/ABI: **CCE** (equivalência provada; 4/5 pinned byte-iguais;
+  diferenças documentadas com ambas versões preservadas; ABI/enum compilados).
+B_OBSERVER: **CCE** (vacina GREEN; narrativa retificada).
+C_GATE_QUANTIZADOR: **CCE** no harness (20/20); NO DEVICE: o APK R50 embarca
+  o consumer R50 (o estrito é do R51, pendente de build/run — condicional).
+D_CAPTURE/EXPORT: **CCE** no harness (13/13, 12/12); no device: o R50 provou
+  a rota; no-clobber/status-propagado entram no próximo run.
+E_DECODER_POSICIONAL: **CCE** (re-derivação cohort byte-idêntica). ISA vround:
+  **PROPOSTO** (não executado).
+F_REPLAY: **CCE condicional** — re-execução GREEN, F64 byte-iguais, repack
+  equivalence; RAW same-attempt: **PENDENTE**; bundle mesmo-run: **BLOQUEADO**.
+G_KERNEL/GRAPH/HANDOFF/PERF/SMART: **NÃO** (inalterado; nenhuma prova nova
+  promove além do que foi provado).
+
+================================================================================
+SECAO H — PRÓXIMO TESTE MÍNIMO (R52) E CONDICIONAIS
+================================================================================
+CONDICIONAL-A (aprovação explícita de device): build do probe R51 (gate
+  estrito + no-clobber + status propagado) e UM run na rota ACT → bundle novo
+  com os OITO arquivos (incl. Wraw tiled exportado NO attempt) → replay com
+  tuple 100% mesmo-run (substitui a reconstrução por observação direta).
+CONDICIONAL-B (aprovação explícita): teste ISA do vround no probe privado
+  (desenho em A/1.4), hipóteses fixadas antes; readback 64 int16.
+OFFLINE-PRÓXIMO: Q6 K2048/N6144 B1 sintético + controles F32/Q4_0/Q8_0 no
+  MESMO shape da rota (COBERTURA CONTROLADA, sem presumir tensor real do
+  c4bf); FFN Q4 real e head Q6 têm gates próprios (inventário do GGUF antes).
+NÃO FAZER: promover Smart/Graph/Handoff/Perf; mexer em produto/Whisper/R2.
+
+================================================================================
+TOTAIS POR SCRIPT E RCs (execução final)
+================================================================================
+r51_vacinas.py (gerou consumer+skel): python RC0.
+  r51_consumer_v51.cpp -> g++ RC0; bin RC0; 20 checks GREEN (r51_consumer_out.txt).
+  r51_skel_capture.c   -> gcc RC0; bin RC0; 13 checks GREEN (r51_skel_out.txt).
+r51_vacina_export.py (gerou export): python RC0.
+  r51_export_v51.c     -> gcc RC0; bin RC0; 12 checks GREEN (r51_export_out.txt).
+r51_repack.py (gerou repack): python RC0.
+  r51_repack.cpp       -> g++ RC0; bin RC0; sha tiled == R39 (r51_repack_out.txt).
+r50_patch.py (gerador, revalidado): fixture normal RC1; fixture -O RC1 (RED
+  correto em ambos; r51_ger_normal.txt / r51_ger_opt.txt).
+r51_abi compile: g++ RC0; run RC0 (r51_abi_out.txt).
+position_decoder_cohort.py: decode RC0 + suíte 6/6 OK (cohort-verified/*).
+replay_r51.exe: g++ RC0; run RC0 (replay_r51-run.log).
+r51_replay_check.py: RC0; REPLAY_R51_CHECK GREEN (F64 6/6 iguais).
+Recibos device (read-only): re-coleta RC0 (recibos-device-r51.txt).
+Total: 7 builds host (6 g++/gcc + 1 python-gerado) RC0 + 2 fixtures RED esperados.
+
+================================================================================
+MANIFESTO
+================================================================================
+Integral em: docs/npu-hymt2/smart-rodada51/MANIFESTO-SHA256.txt
+(64 arquivos: sha256+size+path [sources/, recibos/, verify/, replay/, vacinas/,
+abi, apk-buildids]; o manifesto não se auto-hasheia).
+Destaques: act_payload_run22208/22782.bin = 0ac5805f... (ambos!);
+tiled recomputado = 66218735... (== R39); label_trace cohort = d706ff3e...;
+decoded_q = deba67ea...; F64 do rerun byte-iguais; r51_abi_out.txt.
+
+================================================================================
+LIMITES DECLARADOS (nada fabricado)
+================================================================================
+- Wraw do mesmo attempt NÃO observado (equivalência demonstrada por recomputação
+  do encoder com o canonweights idêntico, rotulada).
+- Bundle 8-arquivos mesmo-run NÃO existe (run novo condicional; nada executado).
+- Teste ISA vround NÃO executado (proposto com hipóteses fixadas).
+- Source-span/owner-por-handle por alocador real: PARCIAL (harness de destino).
+- O probe R51 NÃO foi buildado/instalado; o APK R50 a0fb84d0 fica preservado.
+- Produto/Whisper/UI/default/modelo c4bf/R2/WIP/9 staged: INTOCADOS; sem
+  commit/push/staging/remoção nesta rodada.
+================================================================================
+FIM DA ENTREGA R51
+================================================================================

@@ -1,0 +1,8 @@
+{
+  "secV_manifest": "4/4 OK",
+  "normal_exit": 0,
+  "label": "R44_LOADER_DONE",
+  "viol": "13/13/50/54",
+  "runs_in_battery": 4,
+  "scope": "host-only; kq2 sources and /root evidence not accessible from this host"
+}

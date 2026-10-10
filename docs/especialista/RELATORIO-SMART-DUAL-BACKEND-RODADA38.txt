@@ -1,0 +1,69 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 38
+=========================================================================
+Data: 09/10/2026. Prompt: "FECHAR TEMPORAL; SNAPSHOTS Q6/Q4 ACOPLADOS;
+COBRIR FFN_UP/GATE". Copia isolada/probe. SEM commit/staging (o §2!).
+
+RESUMO EXECUTIVO — A MATRIZ TEMPORAL (§3!) EXECUTADA NO DEVICE: (T2,
+init=3 default!) getter=3 (known=1!) => PERMITE + executa (PASS!);
+(T1, init=1 via p4-tune!) getter=1 => OPSTAGE_RECUSADO (retido=1!) +
+EXEC_FAIL (hrc=-998!) + ZERO I/O HTP (compute_calls=3 = somente o CPU —
+os 3 casos!) — e A PROVA ANTI-GETENV: no T1 o env foi MUDADO para 3
+POS-INIT e a RE-CONSULTA devolveu 1 (RETIDO-CONFIRMADO (nao getenv!)!)
+=> O GETTER RETORNA O RETIDO (o mutante getenv-vs-retido esta'
+DETECTADO em runtime: um getenv teria devolvido 3 e PERMITIDO!).
+RETIFICACOES §1 APLICADAS: o log agora separa BACKEND=CPU consulta=N/A
+(rota CPU nao depende da extensao — o "known=0" anterior era a passagem
+CPU, nao falha de bootstrap!) vs ENV_AT_CALL/BACKEND_EFFECTIVE (HTP!).
+O capture tem ZERO OPSTAGE_DIAG_FAIL. Cobertura re-rotulada (dimensoes
+do GGUF com pesos/act SINTETICOS — nao modelo executado!). Q6 K2048/N2048
+= teste adicional (nao o shape do produto — o do produto e' K=2048/N=512
+e K=6144/N=2048!). KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. MATRIZ TEMPORAL (§3 — o entregavel!) — EXECUTADA (T1/T2/T5!; T3/T4
+   declarados!)
+-----------------------------------------------------------------------
+A.1 T2 (init=3!): OPSTAGE: ENV_AT_CALL=(unset!) BACKEND_EFFECTIVE=3
+    (known=1!) => permitiu; a run normal PASS (nmse 2.54e-08!); TEMPORAL:
+    env-pos-init=3 re-consulta=3 => RETIDO-CONFIRMADO!
+A.2 T1 (init=1! — p4-tune): getter=1 (ritido!) => OPSTAGE_RECUSADO
+    (retido=1!) + EXEC_FAIL (hrc=-998!) + compute_calls=3 (SO o CPU —
+    ZERO I/O HTP!) + TEMPORAL: env-pos-init=3 re-consulta=1 =>
+    RETIDO-CONFIRMADO (nao getenv!) — o MUTANTE (getenv) teria permitido!
+A.3 T5 (CPU): log "BACKEND=CPU consulta=N/A (rota CPU nao depende da
+    extensao!)" — a retificacao pedida!
+A.4 T3 (init 0/2 recusam) e T4 (getter ausente => -999): o mecanismo
+    esta' pronto (o tune com OPSTAGE=0/2!); o T4 exige a remocao do nome
+    do registry (impossivel no cohort normal!) — declarado.
+
+-----------------------------------------------------------------------
+B. EXPORT/SNAPSHOTS (§4!) — ESTADO (declarado, sem disfarce!)
+-----------------------------------------------------------------------
+B.1 O export R37 (nomes fixos 9216/...! + o RAW sobrescrivel!) NAO foi
+    parametrizado nesta rodada (o foco foi o TEMPORAL!) — a versao
+    parametrizada por diretorio unico (PID/attempt/K/N/B!) + as vacinas
+    (short-write/close/RAW-stale!) + a flag com parse explicito (o '0'
+    nao desliga hoje!) ficam para o proximo ciclo — o snapshot R36
+    ARQUIVADO permanece integro (nao misturado!).
+B.2 Os oraculos Q6/Q4 K6144 (§5!) + o ffn K2048/N6144 (§6!): PENDENTES
+    (o tempo foi da matriz — o design/estrutura prontos: os leitores
+    validados + o casos_c4 ampliavel com {2048,6144}!).
+
+-----------------------------------------------------------------------
+C. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+C.1 MATRIZ TEMPORAL: CCE (T1/T2 com a prova anti-getenv no device!).
+    RETIFICACOES: CCE (CPU N/A + rotulos!). EXPORT_PARAM: PENDENTE.
+    ORACULOS_Q6/Q4-K6144: PENDENTE. FFN_SHAPE: PENDENTE. KERNEL_VALIDATED:
+    NAO. COMPILED: sim (probe R38!).
+C.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; os docs staged pela
+    outra atividade PRESERVADOS (nao tocados!); WIP FfmpegPreview
+    intocado; PJA110 nao tocado; SEM commit/staging (o §2! — os novos
+    arquivos ficam apenas no disco!); device = probe R38.
+H.1 PROXIMOS: (1) export parametrizado + vacinas; (2) oraculos Q6/Q4
+    K6144 + ffn {2048,6144}; (3) T3/T4; (4) counters/pipeline; (5)
+    fused; (6) minigrafo/placement!
+=========================================================================
+Evidencias (no DISCO — sem staging!): docs/npu-hymt2/smart-rodada38/
+(r38-capture-full.txt com a MATRIZ (30 linhas TEMPORAL/RECUSA/CPU!),
+probe-r38-com-temporal.cpp, r38-probe-build.log) + PROMPT-RELATORIO.

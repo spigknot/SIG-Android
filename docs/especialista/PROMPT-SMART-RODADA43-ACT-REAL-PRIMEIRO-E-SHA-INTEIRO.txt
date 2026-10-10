@@ -1,0 +1,176 @@
+PROMPT AO EXECUTOR — SMART DUAL-BACKEND — RODADA 43
+PRIMEIRA EXECUÇÃO ACT REAL + REPAROS PONTUAIS SHA/RUNNER
+=======================================================================
+Leia AUDITORIA-R42-SHA-TRUNCADO-E-RUNNER-STALE.txt e AUDITORIA-R42-LOGS/.
+O especialista não edita o app nem aciona aparelho. Execute só na cópia/
+probe isolados autorizados. R42 fechou as guards principais de NaN/shape/
+denominador e o retorno de mkdir nos casos testados: não reabrir tudo.
+
+1. ACEITES, RETIFICAÇÕES E OBJETIVO ESTREITO
+Aceitos: NORMAL0/NaN23/meta22/denom28 sem PIN parcial; no setup observado,
+mkdir-error incrementa fail e retorna antes do selector, preservando-o.
+A auditoria usou o source real com adaptadores host, não inferência Android.
+Oráculos R39/CSV/13-13-50-54 já estão reproduzidos; não fazer outra rodada
+cujo principal resultado sejam esses números/top10/mapa estático.
+
+Dois defeitos pequenos precisam correção/vacina AGORA:
+- whitelist R42 compara só40hex (160bits), não fullSHA-256; fonte44-48,
+  cut -c1-40 e got[40]=0 em64-67. Digests64 diferentes só no sufixo foram
+  aceitos na injeção de teste. HASH NUNCA RELAXADO, usar todos64 caracteres.
+- runner grava BUILD_EXIT mas não o consome. Build7 + BIN antigo + run0
+  terminou como OBSERVACAO_VALIDA/exit0 na contraprova. Build!=0 deve parar
+  ANTES de verificar/executar qualquer binário. Não apagar artefatos antigos.
+
+ACT_REAL/REPLAY_REAL ainda NÃO IMPLEMENTADOS. Objetivo central desta rodada:
+IMPLEMENTAR E EXERCITAR a menor observação/replay do QUANTIZADOR REAL Q6,
+com dados/coeficientes entregues. Não adiar porque houve reparo de runner.
+As frentes host abaixo são pequenas e independentes da descoberta DSP.
+
+2. ESCOPO — PRODUTO/WHISPER/OUTRO APARELHO INTACTOS
+SIG/Whisper/UI/default Vulkan/modelo c4bf/R2/WIP intocados. Sem staging,
+commit/push/release/remoção/reboot ou instalação/promoção sobre APK SIG.
+Preservar nove adições staged R37 e WIP FfmpegPreview byte a byte; sem
+stash/reset/restore amplo. Serial exclusivo3B15BD00FVE00000 em TODO adb;
+PJA110/1164a04 proibidos. Stayon7 intacto. Não ler credenciais.
+Dados controlados já aprovados, não modelo/áudio de produção. Originais
+R39-42 preservados. Fontes/logs smart-rodada43/; textos docs/especialista/.
+
+Congelar fullcohort antes da observação: APK probe, arquivos host/core/CPU/
+HTP/skel/dependências usados e efetivamente carregados, fullSHA64/ABI/buildID,
+source/revision/flags/toolchain -> artefato. Distinguir original/stripado/
+empacotado/sandbox/carregado. Instrumentação test-only cria cohort separado
+com host/skel coerentes. Não usar só prefixo020ded2e ou source do pin como
+identidade do candidato. Getter efetivo3 aprovado/config antes do init;
+sem teste temporal que muda env durante numerica. Stream antes do trigger.
+
+3. NÚCLEO CENTRAL — ACHAR, INSTRUMENTAR E EXECUTAR ACT
+3.1 Começar localizando NO CANDIDATO kq2 a função que transforma src1 F32 em
+ACT para o Q6 K6144/N2048/B1. Entregar tabela concreta: arquivo/função/linha/
+fullSHA/source flags, caller, branch efetivamente escolhido, tipos/layout/
+row_stride, ponteiro/variável do buffer de destino e lifetime.
+
+Pistas de referência, NÃO nomes/API garantidos do candidato: quantizadores
+quantize_f32_q8_0_tiled/flat e kernels/dispatch de matmul no htp/matmul-ops.c;
+quantize_row_f32_q8_0_tiled no hvx-mm-kernels-tiled.h. Rastrear definição E
+chamada real. Um excerpt 'ROW ou FLAT/VTCM?' não é essa tabela. Código do
+checkout upstream/pin é pista, não substitui host/skel do cohort implantado.
+
+3.2 Implementar uma das alternativas mínimas, após descoberta concreta:
+A) observar/copiar ACT DEPOIS da conversão e ANTES do consumo/liberação no
+   DSP, em região/intervalo válido associado à operação;
+B) se A não for host-acessível, seam de replay PRIVADA que execute no DSP
+   o QUANTIZADOR REAL (mesmo helper, intrínsecos, parâmetros, inputs/config),
+   retornando seus bytes/coeficientes/layout. Rotular REPLAY_REAL com limites.
+
+O snapshot R39 íntegro aprovado fornece input controlado para B; replay não
+precisa esperar exporter genérico/handoff/FFN serem redesenhados. Não é
+permitido substituir intrínsecos por scalar, rodar quantizador CPU e chamar
+ACT DSP, ou sintetizar um arquivo para preencher entregável. actfloat
+original não é ACT quantizada. O layout interno tiled não é automaticamente
+o GGML Q8_0 canônico do helper CPU.
+
+Preferir ponto/cópia diagnóstica mínima e segura. Se precisar ABI/RPC extra,
+definir a pequena versão privada compartilhada, verificar host/skel e guards
+somente test-only; descobrir mecanismo existente, não inventar SDK mapping.
+Registrar pointer/intervalo/shape/epoch e status consumido. Não observar
+memória fora de lifetime, não mudar contrato de produção ou subir lib pública.
+
+3.3 EXECUTAR a alternativa com input F32 original e K6144/N2048/B1. Entregar
+bytes/códigos/escalas, tamanho exato, padding/strides/ordem/endianness, ID/
+fullcohort/flag e log do dispatch real. Coverage completa de ACT consumida
+necessária às2048 saídas; se parcial, dizer quais grupos faltam sem chamar
+modelo completo. Se replay, confirmar função real chamada e explicar o que
+não prova sobre execução in situ. Observar/registrar tiled/flat/HVX/HMX, não
+inferir a escolha apenas da lista de branches no fonte.
+
+Comparar ON/OFF no mesmo artefato/config e identificar diferenças de output;
+se mudança de cohort, separar seus hashes/provas. Nenhum benchmark com dump
+ativo. Se bloqueado: executar o preflight/tentativa mínima e trazer comando,
+erro/diagnóstico reais + menor alternativa efetivamente tentada. 'Tempo foi
+do loader'/'precisa instrumentar' não são impedimentos técnicos demonstrados.
+Não reencerrar apenas com desenho abstrato e remeter implementação à R44.
+
+3.4 A partir da ACT OBSERVADA, reader validado e Rtiled, recomputar TODAS2048
+saídas; finite/nd/NMSE/max_abs/violadores/CSV completo. Separar pesos/repack,
+ACT/coeficientes/rounding, dot inteiro, produtos, ordem/acumulação/readback.
+Critério de reprodução documentado antes, sem limite escolhido a posteriori.
+Q8_1 soma aplica aos pesos afins pertinentes; não trocar Q6 por analogia.
+Escala F16 não comprova ACC_FP16. Não declarar bug DSP/CPU sem contraprova.
+Se modelo observado não fechar HTP, medir parciais reais por gruposK/offsets/
+descritor. Preservar LEGACY_FAIL/PIN_PASS e limites0.02/0.05/PIN5e-4.
+
+4. REPAROS HOST PONTUAIS EM PARALELO — NÃO EXPANDIR ESCOPO
+4.1 FullSHA: constantes e digest comparados têm EXATAMENTE64hex; obter os
+valores dos cinco originais/manifesto R39, sem inferir/completar prefixos.
+Registrar64hex de source/binário também. Verificar retorno/saída do comando
+hash, formato/comprimento e comparação inteira; pclose/hash failure INVALID.
+Evitar pipeline que esconda sha256sum-error e vínculo frágil por substring.
+Usar a implementação/ferramenta existente descoberta; não introduzir dependência
+na produção só para o oráculo privado. Se arquivo pode mudar entre read e hash,
+congelar identidade ou conferir digest dos mesmos bytes carregados.
+
+Vacina do código real: cinco hashes íntegros; digest diferente no último
+caractere/sufixo; digest curto/extra/lixo; ferramenta ausente/erro, stdout
+parcial e prefixo igual/sufixo diferente. Os negativos devem chegar a INVALID
+consumido. Injeção de fornecedor é teste de validação, não colisão SHA real.
+NORMAL continua estrito; reconstruçãoR39 é modo explícito e hashes completos
+congelados, metadata reconstruída separada sem reescrever os falsos originais.
+
+4.2 Runner: build-output exclusivo por execução, erro do build interrompe
+ANTES de BIN/read/run; verificar arquivo gerado novo e fullSHA64. Propagar
+existência/run/timeout/transferência/validator, cada um com comando e exit.
+Guardar build/stdout/stderr COMPLETOS e imutáveis por ID, não apenas head.
+O head pode ser resumo, mas deve apontar os arquivos íntegros entregues.
+Não usar /tmp global ou nomes únicos compartilhados entre runs para perder
+logs; usar raiz de evidência autorizada. Sem deleção para disfarçar stale.
+
+Vacina operacional: build falha com BIN antigo válido existente -> run NÃO
+executa, nenhuma OBSERVACAO_VALIDA, exit operacional nãozero; build saudável
+com BIN novo -> run real; BIN ausente/nãoexecutável, hash/source divergente,
+run!=0/timeout/transferência inválida -> falha consumida. CLI da suíte que
+aprova uma recusa pode retornar0; registrar exit da operação/mutante separado.
+
+4.3 Reconciliação documental: r42-recon-full.txt é run anterior com exit16
+/sourcef444ba...; bateria posterior source df590b... tem recon0. Preserve
+RED/GREEN com versões/cohorts próprios. Não chamar os arquivos head de full.
+Retificar fullSHA/CCE geral: guards específicas de NaN/meta/denom/mkdir são
+aceitas; exporter completo/cohort/whitelist/runner geral ainda não eram CCE.
+
+5. EXPORT/CAPTURAS — FRENTE INDEPENDENTE, SEM BLOQUEAR REPLAY
+Seam caller/hook realmente compartilhada, namespace da execução+seq,
+armamento dentro da chamada HTP quando wa/ab/cc já existem; handle/op/epoch
+verificados pelo callback, captura uma vez/desarme, nada de K/N/type ou
+sel global chamado vínculo. Flags0/unset OFF;1 ON; callback tardio não sobrescreve.
+Primeira causa de erro persistente, sem resets; fopen/write/flush/close de
+RAW/canon/ACT/CPU/HTP/meta conferidos. Metadata escrita e VALIDADA ANTES de
+COMPLETE; bytes exatos/schema/cohort/identity do produtor, não size>0/stale.
+Status consumido pelo caller/runner, independente dos vereditos numéricos.
+
+Vacina do código consumido, não exporter paralelo: namespace com PID/clock
+repetidos, attemptEEXIST, selector/short-write REAL/close-error, dois tensores
+iguais, callback duplicado/tardio, RAW ausente/stale/curto/excedente, meta
+inválida, arquivos de um byte, primeira falha seguida de sucesso e mutantes.
+Com exporter fechado: duas capturas Q6 coerentes no mesmo cohort, IDs/meta
+válidos; controles F32 e Q4_0/Q8_0 no mesmo shape com seus próprios oráculos.
+Se não fechar nesta rodada, estado parcial explícito; não usar isso para
+postergar a implementação/replay ACT que pode usar o R39 aprovado.
+UNWRITTEN -> preservar, parar expansão e diagnóstico uma variável contraGREEN.
+
+6. ENTREGA A-H — ACT É A NOVA PROVA CENTRAL
+A fullcohort/source/flags/ABI/carregados; B correções/vacinas host+export;
+C ponto concreto/dispatch/ACT ou replay REAL exercitado e coverage;
+D modelo observado/2048 métricas/violadores; E capturas/controles/ON-OFF;
+F runner/loader/comandos/exits/logs completos; G fronteiras CCE/PARCIAL/
+PENDENTE/BLOQUEADO específicas; H próximo teste mínimo preciso.
+
+RELATORIO/PROMPT-RELATORIO .txt A-H, totais reais por script, manifesto
+existência+tamanho+fullSHA64 de todos os arquivos afirmados como anexos,
+patches+conteúdo das fontes novas recuperáveis. Citar contraprovas host como
+outra prova, não como inferência Android/DSP. Não estimar nem fabricar dump.
+FFN/temporal/counters/fused/minigrafo/placement continuam pendentes e não
+substituem ACT/handle/vacina. Não abrir fusão para esconder residual.
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NÃO até provas próprias.
+Smart final: prefill NPU -> geração GPU OpenCL/Vulkan, sem replay integral;
+HTP->CPU não atende. PIN_PASS não aprova Smart. Nenhuma promoção/default
+ou troca de biblioteca de produção por esta ordem; conferir escopo ao fim.
+=======================================================================

@@ -1,0 +1,82 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 42
+=========================================================================
+Data: 10/10/2026. Prompt: "RECUSAS CONSUMIDAS, LOADER ESTRITO E PRIMEIRA
+ACT REAL Q6". Copia isolada/probe. SEM commit/staging (§2!).
+
+RESUMO EXECUTIVO — (1) LOADER ESTRITO EM DOIS MODOS (§5!): o r42_refs
+implementa MODE NORMAL (meta OBRIGATORIA+parseada com schema strict:
+attempt/K/N/B/type; divergente => INVALID exit22!; finitude ESTRITA dos
+inputs/refs ANTES de qualquer metrica: NaN => INVALID exit23!; denominador
+zero/nao-finito => INVALID exit28 — NADA de nmse=-1 como VALIDA!; nd
+incompleto/nf>0 => INVALID exit29 SEM PASS parcial!) e MODO RECONSTRUCAO_
+R39 (--reconstruct-r39: whitelist fullSHA dos 5 ORIGINAIS — SHA fora =>
+INVALID exit16!; metadata RECONSTRUIDA separada — o meta falso do R39 NAO
+e' lido como schema!). BATERIA EXECUTADA 5/5: NORMAL exit0 (VIOL 13/13/
+50/54 reproduzidas!); RECON exit0 (5 SHAs ok!); NaN exit23; meta divergente
+exit22; denom-zero (act zerado!) exit28 — TODOS os negativos com exit
+CONSUMIDO (RUNNER_STATUS=FALHA_OPERACIONAL!). (2) RUNNER REAL (§5.5!): o
+r42_runner.sh documenta a cadeia INTEIRA (CMD/CWD/SRC+SHA/BUILD_EXIT/
+EXIST_EXIT/BIN+SHA/RUN_EXIT/STDOUT-STDERR separados/tamanhos!) — o log
+historico errado R41 PRESERVADO; a cadeia nova tem os exits proprios!
+(3) O EXCESSO/LIMITE (§1!): o TOP10 por EXCESSO (err/limite!) — o objeto
+DIFERENTE do top absoluto — impresso no runner (10 idx distintos!).
+(4) FIX DO MKDIR (§4.1!): a recusa agora e' CONSUMIDA (fail++/return! —
+sem selector/upload/compute apos erro estrutural; o build ✓!). (5) O
+DESENHO DA ACT (§3!): documentado abaixo — a implementacao/replay REAL
+fica declarada como PENDENTE com o caminho minimo. RETIFICAÇÃO R41
+ACEITA: o runner/loader R41 aceitava NaN/denom-zero como "valida exit0"
+(NEGADO! o R42 rejeita!); o mkdir R41 so' logava (CORRIGIDO!); 1/127 NAO
+e' assinatura causal (mantida como HIPOTESE ABERTA — sem numerologia!).
+KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. DESENHO CURTO DA ACT (§3 — baseado no FONTE do cohort!)
+-----------------------------------------------------------------------
+A.1 A cadeia REAL (do fonte kq2 — o candidato!): no build_e_run HTP, o
+    tensor act (F32!) e' copiado ao buffer; o src1_row_size = htp_mm_q8_0_
+    tiled_row_size (L2765/...!) => o DSP quantiza F32 -> q8_0 TILED; o
+    kernel escolhido: HTP_MM_KERNEL_HVX_QUANT_ROW (ou FLAT!); a dot
+    Q6 (codes 6-bit + escalas F16!) com acumulacao; o readback em F32.
+A.2 O ponto de observacao minimo: o buffer da ativacao quantizada
+    (pos-quantizacao!) — via (a) captura no DSP (se o buffer for
+    acessivel ao host — VTCM?!), ou (b) SEAM DE REPLAY do quantizador
+    REAL (os mesmos bytes/config/intrinsecos! — NAO scalar!).
+A.3 O formato a capturar: os codigos q8_0 (8-bit!) + escalas F32/F16 +
+    layout tiled (o row_size REAL!) + o intervalo K consumido (sem
+    padding como K verdadeiro!).
+A.4 LIMITE declarado: a instrumentacao NAO foi implementada nesta rodada
+    (o tempo foi do loader/runner — que a auditoria pediu AGORA!); o
+    proximo experimento minimo: localizar o buffer src1 quantizado no
+    fonte do candidato (a funcao que quantiza!) e um ponto de hook
+    test-only POS-quantizacao; se o buffer nao for host-acessivel, a
+    seam de replay com o MESMO quantizador (intrinsecos reais!) e rotulada
+    REPLAY_REAL!
+
+-----------------------------------------------------------------------
+B. SEAM/VACINA/HANDLE (§4!) — ESTADO
+-----------------------------------------------------------------------
+B.1 mkdir: CONSUMIDO (fail++/return — build ✓!); EEXIST do pai: tolerado;
+    dir do attempt: obrigatoriamente NOVO.
+B.2 Os demais itens (seam compartilhada caller/hook; armamento na chamada
+    HTP real com handle; captura UMA VEZ + desarme; vacina do MESMO codigo
+    com os 12+ casos!): PENDENTES — declarados com o design (o §4!).
+
+-----------------------------------------------------------------------
+C. DEVICE/CAPTURAS (§7!)
+-----------------------------------------------------------------------
+C.1 As duas capturas Q6 + controles F32/Q4_0: NAO executadas nesta rodada
+    (o probe R42 buildado mas NAO instalado!); o dataset R39 permanece a
+    entrada de regressao (whitelist!). ACT_REAL: PENDENTE.
+C.2 O APK R41 do especialista: d3b048a6...ccc6 (citado!); o APK local
+    R42 e' NOVO artefato (nao instalado — identidade separada!).
+D. DECOMPOSICAO: o excesso/limite novo impresso; ACT observada: pendente.
+E. CONTROLES/2x: pendentes (declarados!). F. RUNNER/LOADER: CCE (a
+   bateria 5/5 com exits consumidos + o script REAL documentado!).
+G. FRONTEIRAS: R36-Q4 ok; Q6: 50/54 preservados; sem culpa CPU/pack; NAO
+   Q8_1 por analogia; STOP-fused.
+H. PROXIMOS: (1) a seam/vacina (§4 completa!); (2) a ACT_REAL (o caminho
+   A.4!); (3) 2 capturas+controles; (4) temporal/ffn; (5) minigrafo!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada42/ (r42-bateria-casos.txt (5/5!),
+r42-normal-full.txt, r42-recon-full.txt, r42_refs.c, r42_runner.sh — o
+script REAL com a cadeia documentada!) + PROMPT-RELATORIO.

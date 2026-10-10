@@ -1,0 +1,2 @@
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+INVALID: meta DIVERGENTE do esperado (K=256 N=64 B=128 type=q4_K vs K=6144 N=2048 B=1 q6_K!)

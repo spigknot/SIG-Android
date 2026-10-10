@@ -1,0 +1,427 @@
+--- /root/r45_backup_sigcand2/ggml-hexagon.cpp	2026-10-10 04:36:19.141820271 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp	2026-10-10 05:57:51.212464473 -0300
+@@ -240,6 +240,7 @@
+ 
+ struct ggml_hexagon_session;
+ 
++
+ static void ggml_hexagon_precompute_matmul_params(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+@@ -426,6 +427,17 @@
+     }
+ };
+ 
++// R46 (test-only!): o OWNER do sbuf do dump (uma vez por processo; o bi e' POR BATCH!)
++static ggml_hexagon_shared_buffer * g_r46_act_dump_sbuf = nullptr;
++static int g_r46_armed = -1;
++static bool g_r46_act_dump_armed(void) {
++    if (g_r46_armed < 0) {   // INIT-ONLY (declarado!): a primeira leitura decide!
++        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
++        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;   // so' "1" (o resto OFF!)
++    }
++    return g_r46_armed == 1;
++}
++
+ static ggml_hexagon_session * ggml_backend_hexagon_buffer_get_sess(ggml_backend_buffer_t buffer) {
+     return static_cast<ggml_backend_hexagon_buffer_type_context *>(buffer->buft->context)->sess;
+ }
+@@ -1644,6 +1656,8 @@
+     unsigned int n_ops_max;
+     size_t       b_vmem_max;
+ 
++    int r46_dump_bi = -1;   // R46: o bi do dump NESTE batch (-1 = nenhum!)
++
+     void reset() {
+         n_bufs = 0;
+         n_tens = 0;
+@@ -1653,6 +1667,8 @@
+         b_map.clear();
+         t_map.clear();
+         d_map.clear();
++
++        r46_dump_bi = -1;   // R46: re-derivado a cada batch (sem stale!)
+     }
+ 
+     ggml_hexagon_opbatch(ggml_hexagon_session *sess, size_t batch_size, size_t max_vmem) {
+@@ -1839,6 +1855,29 @@
+         o.opcode = node.opcode;
+         o.flags  = 0;
+ 
++        // R46 (test-only!): o dump da ACT — selecao POR OPERACAO + bi DESTE batch!
++        // (DEPOIS do memcpy — o memset do precompute nao o alcanca mais!)
++        if (o.opcode == HTP_OP_MUL_MAT) {
++            struct htp_mm_kernel_params * k46 = (struct htp_mm_kernel_params *) o.kernel_params;
++            k46->act_dump_bi = -1;   // OFF por default (sentinela!)
++            const ggml_tensor * s0 = node.node->src[0];
++            const ggml_tensor * s1 = node.node->src[1];
++            if (s0 && s1 && g_r46_act_dump_armed() &&
++                s0->type == GGML_TYPE_Q6_K && s0->ne[0] == 6144 && s0->ne[1] == 2048 &&
++                s1->type == GGML_TYPE_F32 && s1->ne[1] == 1) {
++                if (!g_r46_act_dump_sbuf) {
++                    g_r46_act_dump_sbuf = new ggml_hexagon_shared_buffer(sess, 262144);   // OWNER (processo!)
++                }
++                if (r46_dump_bi < 0) {
++                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
++                }
++                if (r46_dump_bi >= 0) {
++                    k46->act_dump_bi = r46_dump_bi;
++                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: batch bi=%d fd=%d\n", r46_dump_bi, g_r46_act_dump_sbuf->fd);
++                }
++            }
++        }
++
+         if (!(opt_opstage & HTP_OPSTAGE_COMPUTE)) {
+             o.flags |= HTP_OPFLAGS_SKIP_COMPUTE;
+         }
+@@ -2970,6 +3009,7 @@
+     }
+ }
+ 
++
+ static void ggml_hexagon_precompute_matmul_params_impl(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+--- /root/r45_backup_sigcand2/matmul-ops.c	2026-10-10 04:36:19.143420420 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c	2026-10-10 05:58:07.555373053 -0300
+@@ -839,6 +839,13 @@
+     uint8_t * restrict dst_data = (uint8_t *) dst + (dst_row_size * ir_first);                             \
+     uint8_t * restrict tmp_data = (uint8_t *) mmctx->vtcm_dst + (mmctx->vtcm_dst_size_per_thread * ith);   \
+     kernel_fn(src_data, dst_data, tmp_data, ne0, ir_last - ir_first, src_row_size, dst_row_size);          \
++    if (mmctx->octx->act_dump_ptr) {                                                                       \
++        const size_t d46_off = (size_t) dst_row_size * ir_first;                                           \
++        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               \
++        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      \
++            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                \
++        }                                                                                                  \
++    }                                                                                                      \
+                                                                                                            \
+     htp_trace_event_stop(tr, HTP_TRACE_EVT_HVX_A_QUANT, ir_first);                                         \
+ }
+@@ -3428,6 +3435,16 @@
+ int op_matmul(struct htp_ops_context * octx) {
+     const struct htp_mm_kernel_params * kparams = (const struct htp_mm_kernel_params *) octx->kernel_params;
+ 
++    // R46 (test-only!): o dump da ACT — resolvido pelo DESCRITOR do request
++    // (bufs[bi].base do prep_op_bufs — NAO ctx->mmap[bi]! numeracoes DIFERENTES!)
++    // + bounds + somente o caminho HVX (o HMX desvia e nao usa!)
++    octx->act_dump_ptr = NULL;
++    octx->act_dump_cap = 0;
++    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < (int) octx->ctx->r46_nbufs && octx->ctx->r46_bufs && !kparams->n_hmx) {
++        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->r46_bufs[kparams->act_dump_bi].base;
++        octx->act_dump_cap = (size_t) octx->ctx->r46_bufs[kparams->act_dump_bi].size;
++    }
++
+     if (kparams->n_hmx) {
+         return hmx_mm_op_matmul(octx, kparams);
+     }
+diff: /root/r45_backup_sigcand2/main.c: No such file or directory
+--- /root/r45_backup_sigcand2/htp-ctx.h	2026-10-10 04:36:19.144601851 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h	2026-10-10 05:58:07.555373053 -0300
+@@ -1,145 +1,151 @@
+-#ifndef HTP_CTX_H
+-#define HTP_CTX_H
+-
+-#include "hex-dma.h"
+-#include "hmx-queue.h"
+-#include "htp-ops.h"
+-#include "hex-profile.h"
+-#include "work-queue.h"
+-#include "hex-fastdiv.h"
+-
+-#include <assert.h>
+-#include <dspqueue.h>
+-#include <stdatomic.h>
+-#include <stdint.h>
+-#include <stdbool.h>
+-
+-#ifndef HTP_MAX_NTHREADS
+-#define HTP_MAX_NTHREADS 10
+-#endif
+-#define HTP_MAX_MMAPS    16
+-
+-#define HTP_MAX_DIRTY_RANGES 16
+-
+-// Memory mapping
+-struct htp_mmap {
+-    uint64_t size;
+-    uint64_t base;
+-    uint32_t fd;
+-    uint32_t reserved;
+-};
+-
+-// Scratchpad state
+-struct htp_spad {
+-    const struct htp_tensor * src;             // original src of the data (for reuse)
+-    uint8_t *                 data;            // pointer to an area in vtcm
+-    uint32_t                  stride;          // stride used inside this spad
+-    uint32_t                  size;            // total size
+-    uint32_t                  size_per_thread; // size per thread
+-};
+-
+-struct htp_context;
+-
+-// Context while processing an Op
+-// TODO: fold this into the main context
+-struct htp_ops_context {
+-    struct htp_context * ctx;
+-
+-    enum htp_op_code    op; // FIXME: rename to opcode
+-    int32_t             op_params[HTP_OP_MAX_PARAMS];
+-    int32_t             kernel_params[HTP_OP_MAX_KERN_PARAMS];
+-
+-    const struct htp_tensor * src[HTP_OP_MAX_INPUTS];
+-    union {
+-        const struct htp_tensor * dst;
+-        const struct htp_tensor * dsts[HTP_OP_MAX_OUTPUTS];
+-    };
+-
+-    dma_queue **    src_dma[HTP_OP_MAX_INPUTS];
+-    dma_queue **    dst_dma[HTP_OP_MAX_OUTPUTS];
+-
+-    // TODO convert these to an array
+-    struct htp_spad src0_spad;
+-    struct htp_spad src1_spad;
+-    struct htp_spad src2_spad;
+-    struct htp_spad src3_spad;
+-    struct htp_spad dst_spad;
+-
+-    uint32_t n_threads;
+-    uint32_t flags;
+-};
+-
+-// Main context for htp DSP backend
+-struct htp_context {
+-    dspqueue_t             dsp_queue;
+-
+-    struct htp_mmap        mmap[HTP_MAX_MMAPS];
+-    dma_queue_t            dma[HTP_MAX_NTHREADS];
+-    dma_queue_t            dma_cached[HTP_MAX_NTHREADS];
+-    work_queue_t           work_queue;
+-    hmx_queue_t            hmx_queue;
+-
+-    uint32_t               n_threads;
+-    struct fastdiv_values  n_threads_div;
+-
+-    int                    thread_id;
+-    int                    thread_prio;
+-
+-    bool                   hmx_enabled;
+-    bool                   etm;
+-    uint32_t               profiler;
+-    struct htp_thread_trace trace[HTP_MAX_NTHREADS + 1];
+-
+-    uint8_t *              vtcm_base;
+-    size_t                 vtcm_size;
+-    uint32_t               vtcm_rctx;
+-    atomic_bool            vtcm_valid;
+-    atomic_bool            vtcm_needs_release;
+-
+-    uint64_t               max_vmem;
+-    struct htp_dirty_range {
+-        uint32_t start;
+-        uint32_t end;
+-        uint32_t bi;
+-    } dirty_ranges[HTP_MAX_DIRTY_RANGES];
+-
+-    // Persistent DDR scratchpad for MUL_MAT_ID mappings
+-    void *                 ddr_spad_base;
+-    size_t                 ddr_spad_size;
+-
+-    struct htp_ops_context octx;
+-
+-    qurt_thread_t          main_thread;
+-    void *                 main_stack;
+-    atomic_bool            killed;
+-    size_t                 footprint;
+-};
+-
+-int op_matmul(struct htp_ops_context * octx);
+-int op_matmul_id(struct htp_ops_context * octx);
+-int op_matmul_qkv(struct htp_ops_context * octx);
+-int op_matmul_ffn(struct htp_ops_context * octx);
+-int op_binary(struct htp_ops_context * octx);
+-int op_unary(struct htp_ops_context * octx);
+-int op_sum_rows(struct htp_ops_context * octx);
+-int op_activations(struct htp_ops_context * octx);
+-int op_softmax(struct htp_ops_context * octx);
+-int op_add_id(struct htp_ops_context * octx);
+-int op_rope(struct htp_ops_context * octx);
+-int op_flash_attn_ext(struct htp_ops_context * octx);
+-int op_set_rows(struct htp_ops_context * octx);
+-int op_get_rows(struct htp_ops_context * octx);
+-int op_cpy(struct htp_ops_context * octx);
+-int op_repeat(struct htp_ops_context * octx);
+-int op_argsort(struct htp_ops_context * octx);
+-int op_ssm_conv(struct htp_ops_context * octx);
+-int op_cumsum(struct htp_ops_context * octx);
+-int op_fill(struct htp_ops_context * octx);
+-int op_concat(struct htp_ops_context * octx);
+-int op_diag(struct htp_ops_context * octx);
+-int op_solve_tri(struct htp_ops_context * octx);
+-int op_gated_delta_net(struct htp_ops_context * octx);
+-int op_pad(struct htp_ops_context * octx);
+-int op_im2col(struct htp_ops_context * octx);
+-
+-#endif /* HTP_CTX_H */
++#ifndef HTP_CTX_H
++#define HTP_CTX_H
++
++#include "hex-dma.h"
++#include "hmx-queue.h"
++#include "htp-ops.h"
++#include "hex-profile.h"
++#include "work-queue.h"
++#include "hex-fastdiv.h"
++
++#include <assert.h>
++#include <dspqueue.h>
++#include <stdatomic.h>
++#include <stdint.h>
++#include <stdbool.h>
++
++#ifndef HTP_MAX_NTHREADS
++#define HTP_MAX_NTHREADS 10
++#endif
++#define HTP_MAX_MMAPS    16
++
++#define HTP_MAX_DIRTY_RANGES 16
++
++// Memory mapping
++struct htp_mmap {
++    uint64_t size;
++    uint64_t base;
++    uint32_t fd;
++    uint32_t reserved;
++};
++
++// Scratchpad state
++struct htp_spad {
++    const struct htp_tensor * src;             // original src of the data (for reuse)
++    uint8_t *                 data;            // pointer to an area in vtcm
++    uint32_t                  stride;          // stride used inside this spad
++    uint32_t                  size;            // total size
++    uint32_t                  size_per_thread; // size per thread
++};
++
++struct htp_context;
++
++// Context while processing an Op
++// TODO: fold this into the main context
++struct htp_ops_context {
++    struct htp_context * ctx;
++
++    enum htp_op_code    op; // FIXME: rename to opcode
++    int32_t             op_params[HTP_OP_MAX_PARAMS];
++    int32_t             kernel_params[HTP_OP_MAX_KERN_PARAMS];
++
++    const struct htp_tensor * src[HTP_OP_MAX_INPUTS];
++    union {
++        const struct htp_tensor * dst;
++        const struct htp_tensor * dsts[HTP_OP_MAX_OUTPUTS];
++    };
++
++    dma_queue **    src_dma[HTP_OP_MAX_INPUTS];
++    dma_queue **    dst_dma[HTP_OP_MAX_OUTPUTS];
++
++    // TODO convert these to an array
++    struct htp_spad src0_spad;
++    struct htp_spad src1_spad;
++    struct htp_spad src2_spad;
++    struct htp_spad src3_spad;
++    struct htp_spad dst_spad;
++
++    uint32_t n_threads;
++    uint32_t flags;
++
++    uint8_t * act_dump_ptr;   // R46 (test-only!): o dump da ACT Q6 (NULL = OFF!)
++    size_t    act_dump_cap;   // R46: a CAPACIDADE do buffer (bounds!)
++};
++
++// Main context for htp DSP backend
++struct htp_context {
++    dspqueue_t             dsp_queue;
++
++    struct htp_mmap        mmap[HTP_MAX_MMAPS];
++    dma_queue_t            dma[HTP_MAX_NTHREADS];
++    dma_queue_t            dma_cached[HTP_MAX_NTHREADS];
++    work_queue_t           work_queue;
++    hmx_queue_t            hmx_queue;
++
++    uint32_t               n_threads;
++    struct fastdiv_values  n_threads_div;
++
++    int                    thread_id;
++    int                    thread_prio;
++
++    bool                   hmx_enabled;
++    bool                   etm;
++    uint32_t               profiler;
++    struct htp_thread_trace trace[HTP_MAX_NTHREADS + 1];
++
++    const struct htp_buf_desc * r46_bufs;   // R46: os descs do request (resolvidos!)
++    uint32_t                    r46_nbufs;
++
++    uint8_t *              vtcm_base;
++    size_t                 vtcm_size;
++    uint32_t               vtcm_rctx;
++    atomic_bool            vtcm_valid;
++    atomic_bool            vtcm_needs_release;
++
++    uint64_t               max_vmem;
++    struct htp_dirty_range {
++        uint32_t start;
++        uint32_t end;
++        uint32_t bi;
++    } dirty_ranges[HTP_MAX_DIRTY_RANGES];
++
++    // Persistent DDR scratchpad for MUL_MAT_ID mappings
++    void *                 ddr_spad_base;
++    size_t                 ddr_spad_size;
++
++    struct htp_ops_context octx;
++
++    qurt_thread_t          main_thread;
++    void *                 main_stack;
++    atomic_bool            killed;
++    size_t                 footprint;
++};
++
++int op_matmul(struct htp_ops_context * octx);
++int op_matmul_id(struct htp_ops_context * octx);
++int op_matmul_qkv(struct htp_ops_context * octx);
++int op_matmul_ffn(struct htp_ops_context * octx);
++int op_binary(struct htp_ops_context * octx);
++int op_unary(struct htp_ops_context * octx);
++int op_sum_rows(struct htp_ops_context * octx);
++int op_activations(struct htp_ops_context * octx);
++int op_softmax(struct htp_ops_context * octx);
++int op_add_id(struct htp_ops_context * octx);
++int op_rope(struct htp_ops_context * octx);
++int op_flash_attn_ext(struct htp_ops_context * octx);
++int op_set_rows(struct htp_ops_context * octx);
++int op_get_rows(struct htp_ops_context * octx);
++int op_cpy(struct htp_ops_context * octx);
++int op_repeat(struct htp_ops_context * octx);
++int op_argsort(struct htp_ops_context * octx);
++int op_ssm_conv(struct htp_ops_context * octx);
++int op_cumsum(struct htp_ops_context * octx);
++int op_fill(struct htp_ops_context * octx);
++int op_concat(struct htp_ops_context * octx);
++int op_diag(struct htp_ops_context * octx);
++int op_solve_tri(struct htp_ops_context * octx);
++int op_gated_delta_net(struct htp_ops_context * octx);
++int op_pad(struct htp_ops_context * octx);
++int op_im2col(struct htp_ops_context * octx);
++
++#endif /* HTP_CTX_H */
+--- /root/r45_backup_sigcand2/matmul-ops.h	2026-10-10 04:36:19.142146780 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.h	2026-10-10 05:58:07.555373053 -0300
+@@ -94,6 +94,7 @@
+     int32_t  vtcm_src2_size;     // src2 scratchpad size in VTCM (fused only)
+     int32_t  vtcm_src3_size;     // src3 scratchpad size in VTCM (fused only)
+     int32_t  vtcm_dst_size;      // dst scratchpad size in VTCM
++    int32_t  act_dump_bi;        // R45 (test-only): buffer index do dump da ACT (-1 = OFF!)
+ 
+     // Precomputed division values
+     struct fastdiv_values div_ne12_ne1;

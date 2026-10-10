@@ -1,0 +1,4 @@
+AUDITORIA HOST R43 — ler AUDITORIA-R43-LOADER-OK-ACT-PENDENTE.txt primeiro.
+Nao sao capturas Android/DSP: regressoes do loader real sobre copias do snapshot R39 aprovado.
+r43_refs.exe/short-inject: builds host MinGW do fonte entregue (short-provider.h e diagnostico de teste, -include apenas).
+normal/recon/tamper/short .out/.err: saidas reais. results.json: consolidado. MANIFESTO: SHA-256 integral.

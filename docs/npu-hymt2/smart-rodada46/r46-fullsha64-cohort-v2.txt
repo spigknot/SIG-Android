@@ -1,0 +1,6 @@
+ab11d6244ff0e2ffc54812e63acf9da9fd5d9b0dea96eb588525d2124bee7d37  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+fe2ae59d57bf66b5213ebbdf9e5310b81d86740dc2b5cc07212264db234922d7  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+e904030a11448486f25397ccb484f8228b9fd5333dd5f43f862fb6006c442d28  /root/sigcand2/ggml/src/ggml-hexagon/htp/main.c
+4db38dd26a87e3e534b567539484b91f2b85539619a3d445cefadea40eedba90  /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+c5771e650a76574413b32b4d88700c0fad5d48662e56e30c2517d125c30df079  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+d3987e51823462146f43e9c9114af6afdd3d318831c4460053967dca342749b8  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so

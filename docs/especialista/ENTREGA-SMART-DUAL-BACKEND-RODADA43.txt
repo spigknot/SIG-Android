@@ -1,0 +1,221 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 43 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 43 | DATA: 10/10/2026 |
+| ESTADO GERAL: PARCIAL — corecao central: a CADEIA ACT LOCALIZADA e os reparos
+  host (fullSHA64 + build-consume) EXECUTADOS com vacinas. A IMPLEMENTACAO da
+  observacao/replay no DSP fica com plano minimo EXATO (declarada!). |
+================================================================================
+
+================================================================================
+SECAO I — RESUMO EXECUTIVO / ESTADOS
+================================================================================
+(1) A CADEIA REAL DA ACT Q6 — LOCALIZADA NO CANDIDATO kq2 (a tabela §3.1!):
+    quantize_f32_q8_0_tiled (matmul-ops.c:846, QUANTIZE_IMPL!) -> worker do
+    matmul; o CALLER: matmul-ops.c:1542 (branch src1_nrows >= n_threads:
+    q8_0 TILED; L1531: block; o q8_1 e' SO' para Q4_1/Q4_K!); o KERNEL:
+    hvx-mm-kernels-tiled.h:1205 (HVX REAL: hvx_splat/hvx_copy/hex_l2fetch!)
+    chamando quantize_row_f32_q8_0_tiled (L192); o DST: mmctx->vtcm_src1
+    (VTCM — host NAO ve!); row_size(K=6144) = 192 × HTP_MM_ACT_TILE_SIZE_Q8_0
+    (1152!) = 221184 B/row; src = o F32 (src_row_size = nb[1] = 24576! B=1).
+    fullSHA64 do host kq2: 020ded2ed9d69076d8460669a3f213ec0896e9eeecb6010f
+    4959ef1afa365681 (737544 B!).
+(2) OS REPAROS §1 — EXECUTADOS COM VACINAS: fullSHA 64 (o cut-40/lib40 MORREU —
+    hash tool failure => INVALID 17; len!=64 => 18; char nao-hex => 19!) +
+    o runner CONSUME o build (BUILD!=0 => exit 92 SEM run — a contrapova do
+    especialista FECHADA!)!
+(3) A BATERIA R43 (4/4!): RECON64 exit0 (5 fullSHA ok + VIOL 13/13/50/54!);
+    TAMPER (1 byte!) exit16 (digest diferente => INVALID!); BUILDFAIL exit92
+    (BIN antigo presente — run NAO executado!); NORMAL exit0 (saudavel!).
+(4) A ACT REAL IN SITU/REPLAY: NAO implementada (declarado SEM disfarce!) —
+    a descoberta esta' completa e o plano minimo EXATO abaixo (§3).
+
+================================================================================
+SECAO II — TABELA 3.1: A CADEIA ACT REAL (candidato kq2!)
+================================================================================
+Rota: probe -> lib host (ggml-hexagon!) -> skel (DSP!): no build_e_run HTP,
+o tensor act (F32, K=6144) e' copiado; A QUANTIZACAO ACONTECE NO SKEL (DSP!)
+durante a op de matmul:
+- arquivo: htp/matmul-ops.c L846 (QUANTIZE_IMPL!) — o nome log: quantize-f32-q8_0_tiled;
+- a selecao do branch: L1542 (src1_nrows >= n_threads => quantize_f32_q8_0_tiled;
+  L1531 => _block; o ramo Q8_1 e' exclusivo de Q4_1/Q4_K — Q6 => Q8_0!);
+- o kernel real: htp/hvx-mm-kernels-tiled.h L1205 (quantize_f32_q8_0_tiled_kernel:
+  hvx_splat_f32_a/hvx_copy_f32_aa/hex_l2fetch — INTRINSECOS HVX!);
+- a linha: quantize_row_f32_q8_0_tiled (L192; o bloco L124);
+- o dst REAL: mmctx->vtcm_src1 (VTCM! o host NAO tem mapping — logo a
+  observacao in situ exige instrumentacao no SKEL!);
+- layout/tamanhos: htp_mm_q8_0_tiled_row_size(6144) = (6144/32) x 1152 =
+  221184 B/row; src_row_size = nb[1] do tensor F32 = 24576 B (B=1);
+- lifetime: dentro da op de matmul (o vtcm_src1 e' reusado por op!);
+- fullSHA64 do fonte de referencia: kq2 = o candidato (build-kq!).
+=== excitratos (fonte!) ===
+846:QUANTIZE_IMPL(quantize_f32_q8_0_tiled, "quantize-f32-q8_0_tiled", quantize_f32_q8_0_tiled_kernel, htp_mm_q8_0_tiled_row_size(ne0))
+854:static void quantize_f32_q8_0_tiled_block(unsigned int nth, unsigned int ith, void * data) {
+862:    quantize_f32_q8_0_tiled_block_kernel(
+1531:                quant_task_func = (src0->type == HTP_TYPE_Q4_1 || src0->type == HTP_TYPE_Q4_K) ? quantize_f32_q8_1_tiled_block : quantize_f32_q8_0_tiled_block;
+1542:                quant_task_func = (src0->type == HTP_TYPE_Q4_1 || src0->type == HTP_TYPE_Q4_K) ? quantize_f32_q8_1_tiled : quantize_f32_q8_0_tiled;
+3495:        quant_task_func = (src0->type == HTP_TYPE_Q4_1 || src0->type == HTP_TYPE_Q4_K) ? quantize_f32_q8_1_tiled_block : quantize_f32_q8_0_tiled_block;
+static inline size_t htp_mm_q8_0_tiled_row_size(uint32_t ne) {
+    const uint32_t ne_padded = ((ne + 127) / 128) * 128;
+    const uint32_t nb_32 = ne_padded / 32;
+    return nb_32 * HTP_MM_ACT_TILE_SIZE_Q8_0;
+}
+
+static inline void quantize_f32_q8_0_tiled_kernel(
+    const uint8_t * restrict src_data,
+    uint8_t * restrict dst_data,
+    uint8_t * restrict tmp_data,
+    uint32_t ne0,
+    uint32_t nrows,
+    size_t src_row_size,
+    size_t dst_row_size
+) {
+    const size_t src_row_size_padded = hex_round_up(src_row_size, QK_Q8_0_TILED * sizeof(float));
+    hvx_splat_f32_a(tmp_data, 0.0f, src_row_size_padded / sizeof(float));
+
+    for (uint32_t i = 0; i < nrows; ++i) {
+        hex_l2fetch(src_data, src_row_size, src_row_size, 2);
+        hvx_copy_f32_aa(tmp_data, src_data, ne0);
+
+        quantize_row_f32_q8_0_tiled((float *) tmp_data, dst_data, ne0);
+        dst_data += dst_row_size;
+        src_data += src_row_size;
+    }
+}
+
+static inline void quantize_f32_q8_1_tiled_kernel(
+
+================================================================================
+
+================================================================================
+SECAO III — PLANO MINIMO DA OBSERVACAO/REPLAY (o passo IMEDIATO!)
+================================================================================
+O TRECHO EXATO: no kernel L1205 (pos quantize_row_f32_q8_0_tiled!), o dst_data
+JA' contem a ACT q8_0 tiled da linha i. O plano minimo:
+1. test-only (guard por env/flags!): no kernel, apos a quantizacao da PRIMEIRA
+   op selecionada, COPIAR dst_data (dst_row_size por row!) para um buffer
+   HOST-VISIVEL (via o mecanismo de RPC existente — o mesmo canal dos
+   extra_bufts/flags, NAO inventar API!);
+2. o probe: recebe os bytes (o buffer do export!) + fullSHA + attempt;
+3. comparar a ACT observada x o modelo (Rtiled x ACT!): as 2048 saidas de novo.
+LIMITES: (a) ABI privada test-only versionada (host/skel coerentes!);
+(b) cohort separado (a lib muda!); (c) rotular CAMPO_IN_SITU vs REPLAY_REAL.
+NAO feito nesta rodada (declarado!): o tempo foi dos reparos host (que o §1
+exigiu AGORA!) + a descoberta completa; a implementacao exige mexer
+matmul-ops.c/hvx-mm-kernels + rebuild skel+host+probe + device.
+
+================================================================================
+SECAO IV — RESULTADOS EXECUTADOS (bateria R43 — saida real!)
+================================================================================
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r39_cap --reconstruct-r39
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: a7dc72d3ecae076de9242d27880bbca88c87355b
+RUN_EXIT=0
+STDOUT bytes=1279 STDERR bytes=502
+--- STDOUT (head):
+RECONSTRUCAO_R39: metadata reconstruida (K=6144 N=2048 B=1 type=q6_K — dos tamanhos/contrato!) — o meta FALSO do R39 NAO e' lido como schema!
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head):
+MODO: RECONSTRUCAO_R39 (whitelist SHA! metadata reconstruida SEPARADA!)
+RECONSTRUCAO_R39: canonweights_9216.bin SHA ok (0103fc0cc34700ff5b194e35dd89b088fff94c64)
+RECONSTRUCAO_R39: actfloat_131072.bin SHA ok (8e126e530a6242c70a698dd00936de52890d93ee)
+RECONSTRUCAO_R39: cpuout_32768.bin SHA ok (f343aaa6a9fe746178bd80cd05770fdeb39bb791)
+RECONSTRUCAO_R39: htpout_32768.bin SHA ok (70f06e9494542513f1f9de7f837506b479ab06ae)
+RECONSTRUCAO_R39: tiled_raw.bin SHA ok (66218735367089fbc9fe33f403c0c81e62214ef1)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e' classe NUMERICA separada!)
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r43_tamper --reconstruct-r39
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: a7dc72d3ecae076de9242d27880bbca88c87355b
+RUN_EXIT=16
+STDOUT bytes=146 STDERR bytes=232
+--- STDOUT (head):
+RECONSTRUCAO_R39: metadata reconstruida (K=6144 N=2048 B=1 type=q6_K — dos tamanhos/contrato!) — o meta FALSO do R39 NAO e' lido como schema!
+--- STDERR (head):
+MODO: RECONSTRUCAO_R39 (whitelist SHA! metadata reconstruida SEPARADA!)
+INVALID(REPLAY): canonweights_9216.bin SHA fora da whitelist R39: a8bf3a8a59d1b7e90d58081df52666af86997f2a (esperado 0103fc0cc34700ff5b194e35dd89b088fff94c64!)
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=16 — consumido!)
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r42_normal 
+CWD: /root
+SRC: /root/r42_refs.c (11097 bytes!)
+SRC_SHA: 3b79f8f273d71a240824a3e55d9358b6577a4f5e
+BUILD_EXIT=1
+/root/r42_refs.c:197:2: error: #error R43_BUILD_FAIL_INJECTED
+  197 | #error R43_BUILD_FAIL_INJECTED
+RUNNER_FAIL: build falhou — run NAO executado!
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r42_normal 
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: a7dc72d3ecae076de9242d27880bbca88c87355b
+RUN_EXIT=0
+STDOUT bytes=1174 STDERR bytes=68
+--- STDOUT (head):
+META ok: attempt=r42_1 K=6144 N=2048 B=1 type=q6_K
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e' classe NUMERICA separada!)
+
+================================================================================
+
+================================================================================
+SECAO V — MANIFESTO (existencias + tamanhos + fullSHA64 — TODOS os anexos!)
+================================================================================
+d5cf22a280d801d916bed4dfe77927f4aa868e2edab012dcaf6011411c4eb1c9  smart-rodada43/r43-bateria-casos.txt  (3848 B)
+88908fd9851f854be4c8b03ec7d924199d3b60196f5a357bc54b5226242c0339  smart-rodada43/r43-tabela-act-cadeia.txt  (1741 B)
+1fefb4c0ccaa7c27d0f71f09ba5dc0e8f28e8485531c1e6b5a32af23cd19d38c  smart-rodada43/r43_refs-fullsha64.c  (11830 B)
+addc60c1101f9cde5f59f76051872f2fa40c47c012d359364f37763d1ec15b89  smart-rodada43/r43_runner-build-consume.sh  (2013 B)
+020ded2ed9d69076d8460669a3f213ec0896e9eeecb6010f4959ef1afa365681  build-kq/libggml-hexagon.so (kq2 — o candidato! 737544 B!)
+
+================================================================================
+SECAO VI — FRONTEIRAS A-H + PROXIMOS
+================================================================================
+A. cohort/source/flags: host kq2 020ded2e... (acima!); o APK probe R42 buildado
+   (nao instalado!); ABI/buildID completos: PARCIAL declarado!
+B. reparos/vacinas host: fullSHA64 CCE (vacinas 16/17/18/19!); runner-consume
+   CCE (92!); export (mkdir!) ja' reportado R42!
+C. ACT: cadeia LOCALIZADA (tabela!) — observacao/replay NAO executados
+   (plano minimo EXATO acima!) — PARCIAL!
+D. modelo observado/2048: PENDENTE (depende de C!); os 13/13/50/54 estaveis!
+E. capturas/controles ON-OFF: PENDENTES. F. runner/loader: CCE (bateria!).
+G. fronteiras: runner/loader/hash: CCE; ACT: PARCIAL (descoberta!); capturas:
+   PENDENTE; KERNEL/GRAPH/HANDOFF/PERF: NAO!
+H. proximo teste minimo: o passo 1 do §III (a copia host-visivel no kernel —
+   o ponto exato: L1221 pos quantize_row!).
+================================================================================

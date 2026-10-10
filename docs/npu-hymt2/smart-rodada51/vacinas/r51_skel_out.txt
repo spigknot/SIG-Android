@@ -1,0 +1,13 @@
+P1 cap OK: rows=1 copy=ok
+N wq_ok=false: rows=0
+N quant_task_func=NULL: rows=0
+N n_quant_tasks=0: rows=0
+N vtcm_src1=NULL: rows=0
+N stride=0: rows=0
+N act_dump_ptr=NULL: rows=0
+N cap=63: rows=0
+N row=cap-63: rows=0
+N nrows=0: rows=0
+N nrows=2 overflow: rows=0
+P2 row=2048 nrows=1: rows=1
+VAC_SKEL falhas=0 GREEN

@@ -1,0 +1,7 @@
+=== R50 READER — RESULTADO FINAL (dados: act_payload.bin 221184 B + actfloat 6144 F32) ===
+1) ESCALAS fp16 vs formula do kernel (48 blocos x 4): 48/48 blocos EXATOS
+2) REPLICACAO por bloco: cada valor 32x (8x/sub-bloco) — MULTISET fisico == 32x esperado
+3) REPLAY multiset (modelo q=floor(f16(f16(x)*inv)+0.5)): 196256/196608 = 99.82096%
+   blocos 100%: 38/48 ; residuo (fronteira qf16): [(2, 4064), (4, 4064), (12, 4032), (14, 4064), (16, 4064), (21, 4064), (23, 4064), (25, 4064), (33, 4064), (40, 4064)]
+4) DETERMINISMO: 2 capturas independentes (PID 22208/22782) SHA256 identico (0ac5805f..)
+5) COBERTURA: 48 tiles x 128 = 6144 = K integral; 4 sub-blocos de 1152 B/bloco; 221184 = 48x4608

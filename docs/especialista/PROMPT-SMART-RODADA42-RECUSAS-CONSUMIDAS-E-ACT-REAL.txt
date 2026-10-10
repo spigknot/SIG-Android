@@ -1,0 +1,185 @@
+PROMPT AO EXECUTOR — SMART DUAL-BACKEND — RODADA 42
+RECUSAS CONSUMIDAS, LOADER ESTRITO E PRIMEIRA ACT REAL Q6
+=======================================================================
+Leia AUDITORIA-R41-LOADER-ACEITA-NAN-E-EXPORT-CONTINUA.txt e seus logs.
+R41 trouxe reprodução numérica completa válida do dataset R39. Esse avanço
+está ACEITO e não precisa de mais uma rodada imprimindo50/54 ou top10.
+O especialista não edita app nem aciona aparelho; execução só na cópia/probe
+isolados autorizados. A missão agora é sair do ciclo de fixes só no log.
+
+1. RETIFICAÇÕES E PONTO DE PARTIDA
+Oito hashes R41/CSV2048 conferem; CPU13/13, HTP50/54 reproduzidos. CSV bate
+com a referência independente na precisão de impressão. Isso não é ACT_REAL.
+Retirar CCE geral de RUNNER/LOADER: o C entregue foi compilado e testado,
+e aceita meta de outro shape, NaN HTP (nd2047/nf1, quatro PIN PASS!) e
+ACTzero/denominadorzero como observação VALIDA/exit0. Rejeita byte excedente
+com exit11: controle de tamanho é avanço limitado aceito.
+
+O novo mkdir marca mk41 mas :944 só LOGA. :946-951 continua escrevendo o
+selector e o fluxo prossegue. EEXIST não produz a recusa prometida.
+O status ainda consulta meta em :1204-1211 ANTES de escrevê-la em :1213-1220;
+aceita arquivos/meta de UM BYTE; exfail ainda é resetado por componente.
+O arquivo r39-nmse-nota-fix.txt contém No such file, não execução corrigida.
+O r41-build.log arquivado não documenta a cadeia/comandos/exits do runner.
+
+Top10 absoluto tem erro relativo0.7485-0.9576% e ZERO violações pontuais.
+1/127 não é assinatura causal de rounding da ativação. Manter a hipótese
+ACT-conversão aberta, sem reforço por numerologia. Estudar também excesso
+sobre o limite: top absoluto e top de violadores são objetos diferentes.
+Não culpar CPU, trocar Q8_0 por Q8_1 ou proclamar ACC_FP16/bug DSP.
+
+2. ESCOPO E COHORT — SEM QUALQUER PROMOÇÃO
+SIG/Whisper/UI/default Vulkan/modelo c4bf/R2/WIP intocados. Sem staging,
+commit/push/release/remoção/reboot/instalação sobre SIG. Nove adições staged
+R37 e WIP FfmpegPreview preservados byte a byte; sem stash/reset/restore amplo.
+Serial exclusivo3B15BD00FVE00000 em TODO adb; PJA110/1164a04 proibidos.
+Stayon7 intacto. Não ler credenciais, usar dados de produção ou apagar R39-41.
+Fontes/evidências novas smart-rodada42/; textos docs/especialista/.
+
+APK LOCAL R41 observado pelo especialista:16855419 B, SHA completo
+d3b048a6ba1f81ca1fc89d5cbf87c055ade2c4ea7370d001ad00fba01341ccc6;
+libnpuprobe empacotada ae0019e4a6dba156c38b5e8095c64041cf091bb258b99ea6467fd7be24036795.
+Isso não é prova de carregamento no device. Congelar APK/host/core/CPU/HTP/
+skel, originais e stripados, ABI/buildID, fontes/revision/flags/toolchain e
+hash dos realmente implantados/carregados. Alteração diagnóstica cria cohort
+novo explicitamente nomeado. Não usar prefixo020ded2e como prova completa.
+Getter efetivo3 aprovado; não reabrir. Config antes do primeiro init; temporal
+que muda env desativado na numerica. Stream antes do trigger, mesmo PID/ID.
+
+3. ORGANIZAÇÃO PARA NÃO ADIAR ACT NOVAMENTE
+No início, entregar desenho curto baseado NO FONTE do cohort: função efetiva
+que quantiza ACT para o Q6, branch K6144/N2048/B1, buffer e lifetime, ponto de
+observação, formato de bytes/coefs, método de acesso/replay e alterações ABI
+mínimas se necessárias. Não basta listar HVX_QUANT_ROW/FLAT possíveis.
+
+Preparar em paralelo host: (A) seam de export/loader/testes e (B) observação
+ou replay DSP real. No aparelho uma única fila pesada. O dataset R39 aprovado
+já permite entrada controlada para replay do quantizador: não condicionar
+o planejamento/instrumentação de ACT a reimprimir oráculos ou abrir FFN.
+Não substituir a entrega B por 'o tempo foi do runner/fixes'.
+
+4. NÚCLEO A — SEAM CONSUMIDA, NÃO UM NOVO LOG DE ERRO
+4.1 Compartilhar uma seam pequena de estado/resultado entre caller, hook e
+fixtures REALMENTE incluídas. Localizar APIs/registry/callbacks existentes
+antes de definir pequena interface privada NOVA. Não inventar SDK mapping.
+Escolher fonte única de namespace POR EXECUÇÃO + seq monotônica; compartilhar
+com consumidor. PID repetido/clockfixo/caso repetido não pode reutilizar attempt.
+Attempt-dir criado uma vez e retorno consumido; pai EEXIST permitido só como
+pai válido. Attempt EEXIST/erro/path truncado/selector fail -> erro estrutural
+RETORNADO e consumido antes de escrita/arm/upload/compute. Não rep(FAIL) seguido
+de SEL ok. Fechar recursos sem abort/fallback silencioso/success posterior.
+
+4.2 ARMAR dentro da chamada HTP real, quando wa/ab/cc já existem; CPU não é
+a mesma operação. Selector deve conferir tensor/operação/epoch/tipo/K/N/B e
+origem do RAW, capturar exatamente UMA VEZ, desarmar em sucesso/erro e impedir
+callback tardio/reuso de handle/segundo tensor igual de sobrescrever.
+B vem de ACT/output/operação, não da segunda dimensão do peso. Não chamar
+K/N/type ou sel.txt global de vínculo que o callback não verificou.
+
+4.3 Resultado persistente: primeira causa + erros de seleção/RAW/canon/ACT/
+CPU/HTP/meta; nunca reset que esqueça a falha anterior. Conferir fopen/fwrite/
+fprintf/fflush/fclose pertinentes. Escrever/fechar/VALIDAR metadata ANTES da
+finalização; não só checar que talvez exista um meta antigo positivo.
+Validar bytes EXATOS/shape/type/strides/layout/cohort/hashes e identidade de
+cada componente com o produtor. RAW precisa status REAL do hook da tentativa.
+Hash fresco sobre stale não certifica origem. COMPLETE só depois de tudo.
+Status de captura/erro operacional deve ser consumido pelo caller/runner;
+verdict_pin/legacy e pass/fail numérico não podem mascarar export inválido.
+
+4.4 Vacina PERMANENTE DO CÓDIGO QUE O PROBE/HOOK CONSOMEM, RED/GREEN:
+- attempt existente: preserva selector/RAW/arquivos e não chega a upload/compute;
+- namespace entre execuções com mesmoPID e relógio fixo; mesmo caso repetido;
+- dois pesos iguais/handles diferentes; callback duplicado/tardio; flags0/1/unset;
+- short-write REAL e close-error injetados; erro inicial seguido de sucesso;
+- RAW ausente/stale/tamanho curto/excedente; meta ausente/divergente/erro;
+- cinco arquivos/meta de um byte; attempt novo finaliza DEPOIS da meta válida;
+- mutante apenas loga erro/ignora identidade -> validator/teste FALHA consumida.
+Testes negativos têm observed-op-exit separado do exit da suíte que aprovou
+a recusa esperada. Fixture não pode reimplementar o predicado ideal em paralelo.
+Demonstrar seam incluída e build target real, não só helper standalone.
+
+5. RUNNER/LOADER — DOIS MODOS EXPLÍCITOS, NENHUM WARN QUE LAVE ERRO
+Normal/novas capturas: metadata parseada com schema/type/K/N/B/strides/layout/
+bytes/attempt/cohort/hash e vínculo consistentes; ausente/divergente -> INVALID.
+Histórico R39: modo RECONSTRUCAO_R39 explícito, whitelist fullSHA dos originais,
+metadata reconstruída SEPARADA e limites declarados. Não reescrever os falsos
+originais nem chamar WARN genérico de validação do schema. Tamanho não prova tipo.
+
+Antes de emitir qualquer PASS/VALIDA/CSV definitivo: checar TODAS as aberturas,
+allocs/dequant/ref arrays, seek/read/close, bytes inclusive excedentes,
+endianness e finitude de inputs/refs/outputs. nf>0 ou nd incompleto -> INVALID,
+sem PASS calculado só no subconjunto. Denominadorzero/não-finito -> INVALID
+conforme o contrato já pedido, não nmse=-1 mais 'VALIDA exit0'.
+Arquivo operacional inválido deve retornar erro consumido. LEGACY_FAIL com
+dados/observação válidos é classe NUMÉRICA separada; pode ser observado sem
+fingir falha operacional, mas nunca promove KERNEL_VALIDATED.
+
+Regressões do EXECUTÁVEL real: NaN/Inf por componente, meta divergente/ausente,
+truncado/excedente, denominadorzero, alocação/fopen/fseek/read/close falhos;
+CSV fopen/write/flush/close fail; estado parcial não fica CSV final válido.
+Mutante remove guard -> suíte reprova. Reusar cópias controladas do R39 como
+entrada e manter originais intactos. Contagens13/13/50/54 na regressão saudável.
+Guardar precisão suficiente para replay; seis casas são apresentação, não
+substituto do dump original ou precisão integral dos coeficientes.
+
+Entregar script runner REAL, comando/cwd/binário produzido, fullSHA e exits
+build/existência/run/transferência/validator; stdout/stderr separados. Não
+inferir exit do processo de printf('exit0'). Log de warnings sozinho não é
+cadeia de sucesso. Arquivo com No such file rotulado falha histórica, não fix.
+
+6. NÚCLEO B — IMPLEMENTAR E EXERCITAR ACT REAL/REPLAY REAL
+Instrumentação apenas privada/test-only no cohort autorizado. Observar ACT
+após a quantização RELEVANTE ao kernel efetivamente escolhido, no intervalo
+que ele consome: códigos/coefs/blocos/layout/padding/strides/IDs. actfloat
+original não é ACT quantizada. Quantizador CPU/ACT scalar hipotética não é
+SDK/HVX real nem emulação bit-exata. Capturar ramo/params/dispatch HVX/HMX.
+
+Se VTCM/buffer não estiver acessível ao host, executar a menor seam de replay
+do QUANTIZADOR REAL com mesmos bytes/config, funções/intrínsecos reais e ABI
+host/skel privada consistente. Rotular REPLAY_REAL versus captura in situ,
+com limite causal. Não trocar intrínsecos por scalar para preencher arquivo.
+Congelar quantizador/reader/skel/source/flags. Preferir observação mínima antes
+de alterar protocolo. Se precisar ABI nova, versionar/verificar ambos os lados.
+
+Exercitar a alternativa de fato. Bloqueio exige comando/erro real e próximo
+experimento mínimo; 'requer instrumentação' não é impeditivo demonstrado.
+Diagnostic ON/OFF no mesmo build/config para avaliar alteração de resultado;
+cohorts separados identificados. Sem benchmark com dump/log ativo.
+
+Modelar Rtiled x ACT observada, todas2048 saídas, excluir padding de K verdadeiro,
+finitude/nd/NMSE/max_abs/violadores completos. Mesmas referências/limites
+0.02/0.05 e PIN5e-4, nenhum ajuste para obter verde. Analisar b0/n1111 e
+ranking por EXCESSO/razão ao limite, além de top absoluto. Não descobrir
+novamente os54 pontos: arquivos já existem e são regressão congelada.
+
+Separar: pesos/coeficientes F16, ACT/códigos/rounding, dot inteiro, produtos,
+ordem/acumulação e saída. Q8_1 soma serve a pesos afins pertinentes; Q6 não
+necessariamente precisa. Nome de helper f32 ou escala F16 não prova todas
+as operações/intrínsecos. Se modelo observado não fechar HTP, medir parcial
+por gruposK/descritores/offsets com dados reais; não culpar pack/CPU sem prova.
+Critério de reprodução definido antes, não escolhido pelo resultado.
+
+7. PROVAS DEVICE E FECHAMENTO A-H
+Com A operacional, duas tentativas Q6 K6144/N2048/B1 independentes no mesmo
+cohort, IDs próprios/meta/status válidos; controles F32 e Q4_0 ou Q8_0 no
+mesmo shape com referências das PRÓPRIAS entradas. Novos readers validados
+antes de alegar Rtiled. UNWRITTEN -> preservar e parar expansão, comparar
+uma variável contra GREEN, sem logging ternário chamado de fix causal.
+Preparações de FFN/temporal/counters/minigrafo só independentes e depois dos
+núcleos, nunca substituto de ACT/vacina. Não abrir fusão para esconder residual.
+
+RELATORIO e PROMPT-RELATORIO .txt A-H:
+A cohort/source/flags/ABI/carregados; B seam/recusas/vacinas/handle;
+C ACT/branch/observação ou replay realmente executado + coverage;
+D decomposição numérica; E duas capturas+controles; F runner/loader/exits;
+G fronteiras CCE/PARCIAL/PENDENTE/BLOQUEADO com critérios específicos;
+H próximos passos exatos. Logs completos/totais por script, fontes novas e
+patches recuperáveis, manifesto existência+tamanho+fullSHA, anexos reais.
+Não chamar compile ou WARN de CCE runtime. Auditores host são contraprovas,
+não execução Android/DSP. Declarar o que não fez e o bloqueio material.
+
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NÃO até provas próprias.
+Smart = prefill NPU -> geração GPU OpenCL/Vulkan sem replay integral;
+HTP->CPU não atende. PIN_PASS não aprova Smart. Nenhuma promoção/default
+ou mudança de produto por esta ordem. Conferir invariantes de escopo ao fim.
+=======================================================================

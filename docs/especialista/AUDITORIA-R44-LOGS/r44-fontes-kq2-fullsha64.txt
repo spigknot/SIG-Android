@@ -1,0 +1,5 @@
+fa53ff4b511ae99a1db6e27be0117b6cb22ddb41f31ccf04c49e974918820d64  /root/kq2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+2f91323c36e99dd61d08024feac51d81622ce9d66f745bcf17eee31fb22f75f6  /root/kq2/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h
+90eea5c1341a7badfb5d178a7bfd3794ce8ea11f7d442b3c1b9528fad277588e  /root/kq2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+d8e8ba67b4979eda5603ea617dfb33866542a72252e9b687c3c0c67ade91ab41  /root/kq2/ggml/src/ggml-hexagon/htp/htp-ops.h
+54291169024e391dee9c0873adfb2bb99f4a4e638b81a1bc20faaad74824de54  /root/kq2/ggml/src/ggml-hexagon/ggml-hexagon.cpp

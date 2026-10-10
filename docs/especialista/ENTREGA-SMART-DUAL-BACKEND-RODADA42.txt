@@ -1,0 +1,282 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 42 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 42 | DATA: 10/10/2026 |
+| ESTADO GERAL: PARCIAL — loader estrito/runner CCE; seam/ACT pendentes! |
+| REGRA: este e' o UNICO arquivo da rodada (relatorio + resultados executados +
+  manifesto SHA-256 + evidencias). Os fragmentos anteriores ficam so' como
+  historico; rodadas futuras seguem este formato. |
+================================================================================
+
+================================================================================
+SECAO I — RESUMO EXECUTIVO / ESTADOS
+================================================================================
+
+PROMPT-RELATORIO — SMART DUAL-BACKEND — RODADA 42
+=====================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 42 | DATA: 10/10/2026 |
+| ESTADO GERAL: PARCIAL — loader estrito/runner CCE; seam/ACT pendentes! |
+
+A. COHORT/DESENHO ACT (§3)
+- Desenho curto da ACT documentado (a cadeia real do fonte: F32→q8_0
+  tiled→HVX_QUANT_ROW→dot Q6→readback!); implementação/replay: PENDENTE
+  com o caminho mínimo (A.4!) e o limite declarado!
+
+B. SEAM/RECUSAS/VACINAS/HANDLE (§4)
+- mkdir CONSUMIDO (fail++/return! build ✓); EEXIST pai ok; attempt NOVO!
+- Seam compartilhada/vacina do mesmo código/armamento por handle: PENDENTES
+  (design declarado!)!
+
+C. ACT/REPLAY (§6)
+- NÃO executado (declarado!): o experimento mínimo = localizar o buffer
+  src1 quantizado + hook pós-quantização; alternativa = REPLAY_REAL do
+  quantizador real (intrínsecos reais — nunca scalar!)!
+
+D. DECOMPOSIÇÃO
+- TOP10 por EXCESSO/limite (o objeto NOVO — diferente do top absoluto!)
+  no runner; 50/54 preservados; CPU 13/13; PIN separado!
+
+E. CAPTURAS/CONTROLES (§7 — PENDENTES declarados!)
+- 2×Q6 + F32/Q4_0: não executados (probe R42 buildado, não instalado!);
+  dataset R39 = entrada de regressão (whitelist!)!
+
+F. RUNNER/LOADER (§5 — CCE!)
+- 2 modos (NORMAL estrito! RECONSTRUCAO_R39 com whitelist 5 SHA!)!
+- Bateria 5/5: NORMAL=0; RECON=0; NaN=23; BADMETA=22; DENOM0=28 — todos
+  os negativos com exit CONSUMIDO (RUNNER_STATUS explícito!)!
+- r42_runner.sh REAL (cadeia documentada: CMD/CWD/SRC/BUILD/EXIST/BIN/RUN/
+  stdout-stderr separados!)!
+
+G. FRONTEIRAS (critérios específicos!)
+- RUNNER/LOADER: CCE (bateria+script!). EXPORT(mkdir): CCE-parcial.
+  SEAM/VACINA: PENDENTE. ACT_REAL: PENDENTE. CAPTURAS/CONTROLES: PENDENTE.
+  KERNEL/GRAPH/HANDOFF/PERF: NÃO!
+
+H. PRÓXIMOS EXATOS
+1. Seam/vacina §4 completa (12+ casos!); 2. ACT (buffer src1 post-quant
+   ou REPLAY_REAL!); 3. 2 capturas+controles; 4. temporal/ffn; 5. minigrafo!
+
+ESPELHO: os 54 pontos NÃO redescobertos (regressão congelada!); 1/127 =
+hipótese aberta (sem numerologia!); log errado R41 preservado!
+=====================================================================
+
+
+================================================================================
+SECAO II — RELATORIO A-H COMPLETO
+================================================================================
+RELATORIO SMART DUAL-BACKEND — RODADA 42
+=========================================================================
+Data: 10/10/2026. Prompt: "RECUSAS CONSUMIDAS, LOADER ESTRITO E PRIMEIRA
+ACT REAL Q6". Copia isolada/probe. SEM commit/staging (§2!).
+
+RESUMO EXECUTIVO — (1) LOADER ESTRITO EM DOIS MODOS (§5!): o r42_refs
+implementa MODE NORMAL (meta OBRIGATORIA+parseada com schema strict:
+attempt/K/N/B/type; divergente => INVALID exit22!; finitude ESTRITA dos
+inputs/refs ANTES de qualquer metrica: NaN => INVALID exit23!; denominador
+zero/nao-finito => INVALID exit28 — NADA de nmse=-1 como VALIDA!; nd
+incompleto/nf>0 => INVALID exit29 SEM PASS parcial!) e MODO RECONSTRUCAO_
+R39 (--reconstruct-r39: whitelist fullSHA dos 5 ORIGINAIS — SHA fora =>
+INVALID exit16!; metadata RECONSTRUIDA separada — o meta falso do R39 NAO
+e' lido como schema!). BATERIA EXECUTADA 5/5: NORMAL exit0 (VIOL 13/13/
+50/54 reproduzidas!); RECON exit0 (5 SHAs ok!); NaN exit23; meta divergente
+exit22; denom-zero (act zerado!) exit28 — TODOS os negativos com exit
+CONSUMIDO (RUNNER_STATUS=FALHA_OPERACIONAL!). (2) RUNNER REAL (§5.5!): o
+r42_runner.sh documenta a cadeia INTEIRA (CMD/CWD/SRC+SHA/BUILD_EXIT/
+EXIST_EXIT/BIN+SHA/RUN_EXIT/STDOUT-STDERR separados/tamanhos!) — o log
+historico errado R41 PRESERVADO; a cadeia nova tem os exits proprios!
+(3) O EXCESSO/LIMITE (§1!): o TOP10 por EXCESSO (err/limite!) — o objeto
+DIFERENTE do top absoluto — impresso no runner (10 idx distintos!).
+(4) FIX DO MKDIR (§4.1!): a recusa agora e' CONSUMIDA (fail++/return! —
+sem selector/upload/compute apos erro estrutural; o build ✓!). (5) O
+DESENHO DA ACT (§3!): documentado abaixo — a implementacao/replay REAL
+fica declarada como PENDENTE com o caminho minimo. RETIFICAÇÃO R41
+ACEITA: o runner/loader R41 aceitava NaN/denom-zero como "valida exit0"
+(NEGADO! o R42 rejeita!); o mkdir R41 so' logava (CORRIGIDO!); 1/127 NAO
+e' assinatura causal (mantida como HIPOTESE ABERTA — sem numerologia!).
+KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. DESENHO CURTO DA ACT (§3 — baseado no FONTE do cohort!)
+-----------------------------------------------------------------------
+A.1 A cadeia REAL (do fonte kq2 — o candidato!): no build_e_run HTP, o
+    tensor act (F32!) e' copiado ao buffer; o src1_row_size = htp_mm_q8_0_
+    tiled_row_size (L2765/...!) => o DSP quantiza F32 -> q8_0 TILED; o
+    kernel escolhido: HTP_MM_KERNEL_HVX_QUANT_ROW (ou FLAT!); a dot
+    Q6 (codes 6-bit + escalas F16!) com acumulacao; o readback em F32.
+A.2 O ponto de observacao minimo: o buffer da ativacao quantizada
+    (pos-quantizacao!) — via (a) captura no DSP (se o buffer for
+    acessivel ao host — VTCM?!), ou (b) SEAM DE REPLAY do quantizador
+    REAL (os mesmos bytes/config/intrinsecos! — NAO scalar!).
+A.3 O formato a capturar: os codigos q8_0 (8-bit!) + escalas F32/F16 +
+    layout tiled (o row_size REAL!) + o intervalo K consumido (sem
+    padding como K verdadeiro!).
+A.4 LIMITE declarado: a instrumentacao NAO foi implementada nesta rodada
+    (o tempo foi do loader/runner — que a auditoria pediu AGORA!); o
+    proximo experimento minimo: localizar o buffer src1 quantizado no
+    fonte do candidato (a funcao que quantiza!) e um ponto de hook
+    test-only POS-quantizacao; se o buffer nao for host-acessivel, a
+    seam de replay com o MESMO quantizador (intrinsecos reais!) e rotulada
+    REPLAY_REAL!
+
+-----------------------------------------------------------------------
+B. SEAM/VACINA/HANDLE (§4!) — ESTADO
+-----------------------------------------------------------------------
+B.1 mkdir: CONSUMIDO (fail++/return — build ✓!); EEXIST do pai: tolerado;
+    dir do attempt: obrigatoriamente NOVO.
+B.2 Os demais itens (seam compartilhada caller/hook; armamento na chamada
+    HTP real com handle; captura UMA VEZ + desarme; vacina do MESMO codigo
+    com os 12+ casos!): PENDENTES — declarados com o design (o §4!).
+
+-----------------------------------------------------------------------
+C. DEVICE/CAPTURAS (§7!)
+-----------------------------------------------------------------------
+C.1 As duas capturas Q6 + controles F32/Q4_0: NAO executadas nesta rodada
+    (o probe R42 buildado mas NAO instalado!); o dataset R39 permanece a
+    entrada de regressao (whitelist!). ACT_REAL: PENDENTE.
+C.2 O APK R41 do especialista: d3b048a6...ccc6 (citado!); o APK local
+    R42 e' NOVO artefato (nao instalado — identidade separada!).
+D. DECOMPOSICAO: o excesso/limite novo impresso; ACT observada: pendente.
+E. CONTROLES/2x: pendentes (declarados!). F. RUNNER/LOADER: CCE (a
+   bateria 5/5 com exits consumidos + o script REAL documentado!).
+G. FRONTEIRAS: R36-Q4 ok; Q6: 50/54 preservados; sem culpa CPU/pack; NAO
+   Q8_1 por analogia; STOP-fused.
+H. PROXIMOS: (1) a seam/vacina (§4 completa!); (2) a ACT_REAL (o caminho
+   A.4!); (3) 2 capturas+controles; (4) temporal/ffn; (5) minigrafo!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada42/ (r42-bateria-casos.txt (5/5!),
+r42-normal-full.txt, r42-recon-full.txt, r42_refs.c, r42_runner.sh — o
+script REAL com a cadeia documentada!) + PROMPT-RELATORIO.
+
+
+================================================================================
+SECAO III — RESULTADOS EXECUTADOS (bateria 5/5 — saida real do runner!)
+================================================================================
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r42_normal 
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: a7dc72d3ecae076de9242d27880bbca88c87355b
+RUN_EXIT=0
+STDOUT bytes=1174 STDERR bytes=68
+--- STDOUT (head):
+META ok: attempt=r42_1 K=6144 N=2048 B=1 type=q6_K
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e' classe NUMERICA separada!)
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r39_cap --reconstruct-r39
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: a7dc72d3ecae076de9242d27880bbca88c87355b
+RUN_EXIT=0
+STDOUT bytes=1279 STDERR bytes=502
+--- STDOUT (head):
+RECONSTRUCAO_R39: metadata reconstruida (K=6144 N=2048 B=1 type=q6_K — dos tamanhos/contrato!) — o meta FALSO do R39 NAO e' lido como schema!
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head):
+MODO: RECONSTRUCAO_R39 (whitelist SHA! metadata reconstruida SEPARADA!)
+RECONSTRUCAO_R39: canonweights_9216.bin SHA ok (0103fc0cc34700ff5b194e35dd89b088fff94c64)
+RECONSTRUCAO_R39: actfloat_131072.bin SHA ok (8e126e530a6242c70a698dd00936de52890d93ee)
+RECONSTRUCAO_R39: cpuout_32768.bin SHA ok (f343aaa6a9fe746178bd80cd05770fdeb39bb791)
+RECONSTRUCAO_R39: htpout_32768.bin SHA ok (70f06e9494542513f1f9de7f837506b479ab06ae)
+RECONSTRUCAO_R39: tiled_raw.bin SHA ok (66218735367089fbc9fe33f403c0c81e62214ef1)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e' classe NUMERICA separada!)
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r42_nan2 
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: a7dc72d3ecae076de9242d27880bbca88c87355b
+RUN_EXIT=23
+STDOUT bytes=51 STDERR bytes=120
+--- STDOUT (head):
+META ok: attempt=r42_1 K=6144 N=2048 B=1 type=q6_K
+--- STDERR (head):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+INVALID: finitude dos inputs (act_bad=0 out_bad=1!)
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=23 — consumido!)
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r42_badmeta 
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: a7dc72d3ecae076de9242d27880bbca88c87355b
+RUN_EXIT=22
+STDOUT bytes=0 STDERR bytes=163
+--- STDOUT (head):
+--- STDERR (head):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+INVALID: meta DIVERGENTE do esperado (K=2048 N=512 B=128 type=q4_K vs K=6144 N=2048 B=1 q6_K!)
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=22 — consumido!)
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r42_zero 
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: df590bbf9495cf394c9ca5ce70b50bee2fc91940
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: a7dc72d3ecae076de9242d27880bbca88c87355b
+RUN_EXIT=28
+STDOUT bytes=51 STDERR bytes=153
+--- STDOUT (head):
+META ok: attempt=r42_1 K=6144 N=2048 B=1 type=q6_K
+--- STDERR (head):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+INVALID: DENOMINADOR zero/nao-finito (d1=0 d2=0!) — nao emito nmse=-1 como valido!
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=28 — consumido!)
+
+
+================================================================================
+SECAO IV — MANIFESTO SHA-256 (existencias + tamanhos — entregues nesta rodada)
+================================================================================
+2f65f3b122d5679f296e1d80fab540ccf34a8c36883e303a3c628c6c31da3d73  smart-rodada42/r42-bateria-casos.txt  (4511 B)
+7b6dfab07ea9bf74c2f162303b00484f40b0d28efc31b9da12502f1ae53e3613  smart-rodada42/r42-normal-full.txt  (1085 B)
+b823fde40c9644d1e6c2abd3930e3f0f43abf2f8b9f085f3632b9df06c5c964c  smart-rodada42/r42-recon-full.txt  (814 B)
+df590bbf9495cf394c9ca5ce70b50bee2fc91940d1dabb5ed80080340763596e  smart-rodada42/r42_refs.c  (11065 B)
+db21bc2b61de4b09bf43dc7c13191b8b358e0875b906537e072c4b9fecf07de4  smart-rodada42/r42_runner.sh  (1843 B)
+387c83e76cea20465c39fd89a7e8fc2a904e37958870db2d7d622f05b10b2569  docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA42.txt  (5247 B)
+e16751dbbb50c364c653c94c13b0ead2d7cd476a872dd21aeb1fa0632e05a3d6  docs/especialista/PROMPT-RELATORIO-SMART-RODADA42.txt  (2206 B)
+
+================================================================================
+SECAO V — EVIDENCIAS (caminhos)
+================================================================================
+- smart-rodada42/ : r42_refs.c, r42_runner.sh, r42-bateria-casos.txt,
+  r42-normal-full.txt, r42-recon-full.txt, MANIFESTO-SHA256.txt
+- docs/especialista/ : este arquivo + os 2 fragmentos historicos
+- Device: probe R42 buildado (NAO instalado!) — capturas pendentes declaradas.
+================================================================================

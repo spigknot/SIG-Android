@@ -1,0 +1,17 @@
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r39_cap --reconstruct-r39
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: f444ba352211d6d067c380249cae5db14b4d493a
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: 2c957051872f72a5b5c5e9fa7e143633f5ffaea2
+RUN_EXIT=16
+STDOUT bytes=146 STDERR bytes=232
+--- STDOUT (head):
+RECONSTRUCAO_R39: metadata reconstruida (K=6144 N=2048 B=1 type=q6_K — dos tamanhos/contrato!) — o meta FALSO do R39 NAO e' lido como schema!
+--- STDERR (head):
+MODO: RECONSTRUCAO_R39 (whitelist SHA! metadata reconstruida SEPARADA!)
+INVALID(REPLAY): canonweights_9216.bin SHA fora da whitelist R39: 0103fc0cc34700ff5b194e35dd89b088fff94c64 (esperado 8e126e530a6242c70a698dd00936de52890d93ee!)
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=16 — consumido!)

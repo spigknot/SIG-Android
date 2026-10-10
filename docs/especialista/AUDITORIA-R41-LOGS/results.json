@@ -1,0 +1,164 @@
+{
+  "manifest": [
+    {
+      "name": "probe-r41-mkdir-meta.cpp",
+      "size": 103531,
+      "sha256": "1b0b36c0189a3d229e473bf8ba90a8f7b10b0667de8847cb8afdbdbe29f68609"
+    },
+    {
+      "name": "r39-nmse-nota-fix.txt",
+      "size": 62,
+      "sha256": "0ccdf582d743df03ae0530a352abaae4af2462ef8baa6035860332930f667503"
+    },
+    {
+      "name": "r41-build.log",
+      "size": 17125,
+      "sha256": "f51a9935616aa5aa6ecb5d310d94c0bb355c3f25cac9132b0198694d89bb1340"
+    },
+    {
+      "name": "r41-referencias-completas.csv",
+      "size": 201140,
+      "sha256": "8a5f2aacfb528aeb6788c87d246698af3a7a49d8212b2d4fff84464cc85058a6"
+    },
+    {
+      "name": "r41-runner-err.txt",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "r41-runner-out.txt",
+      "size": 1607,
+      "sha256": "f808860d244fe2e7c76e97f42f6ff59ccd2e8ad6d2e674139014c4c73d184280"
+    },
+    {
+      "name": "r41_refs.c",
+      "size": 8897,
+      "sha256": "b8fa0a3837af048f80c38dc6280833e96d26e71d01d3d3f502351c2b28580b2e"
+    },
+    {
+      "name": "relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA41.txt",
+      "size": 5073,
+      "sha256": "2bd41f6b181d8e58144dd93d14d3fe907dab2c5cd781f4009b0a1e73edae7040"
+    }
+  ],
+  "csv_rows": 2048,
+  "csv_diff_to_r39_exact": {
+    "cpu": 4.99511713769607e-07,
+    "htp": 4.999999987376214e-07,
+    "rscalar": 4.995513194216983e-07,
+    "rtiled": 4.999680953687857e-07
+  },
+  "metrics": {
+    "cpu_rscalar": {
+      "nmse": 4.302223350862282e-07,
+      "max_abs": 0.06510236325577523,
+      "viol": 13
+    },
+    "cpu_rtiled": {
+      "nmse": 6.133970417476967e-07,
+      "max_abs": 0.13529151558893204,
+      "viol": 13
+    },
+    "htp_rscalar": {
+      "nmse": 4.967947948058238e-06,
+      "max_abs": 0.286581714374492,
+      "viol": 50
+    },
+    "htp_rtiled": {
+      "nmse": 4.809954054115071e-06,
+      "max_abs": 0.20464282825307123,
+      "viol": 54
+    }
+  },
+  "top10": {
+    "indices": [
+      536,
+      1164,
+      1010,
+      1006,
+      694,
+      852,
+      62,
+      1877,
+      1634,
+      1715
+    ],
+    "relative_percent_min": 0.7485084429094716,
+    "relative_percent_max": 0.9575600494425501,
+    "legacy_violators_in_top10": 0,
+    "one_over_127_percent": 0.7874015748031497
+  },
+  "loader_cases": [
+    {
+      "case": "original_r39",
+      "exit": 0,
+      "valid_claim": true,
+      "nd_nf": [
+        "nd=2048 nf=0"
+      ],
+      "pin_line": "PIN (5e-4!): CPU/Rscalar=PASS CPU/Rtiled=PASS HTP/Rscalar=PASS HTP/Rtiled=PASS",
+      "stderr": ""
+    },
+    {
+      "case": "wrong_meta",
+      "exit": 0,
+      "valid_claim": true,
+      "nd_nf": [
+        "nd=2048 nf=0"
+      ],
+      "pin_line": "PIN (5e-4!): CPU/Rscalar=PASS CPU/Rtiled=PASS HTP/Rscalar=PASS HTP/Rtiled=PASS",
+      "stderr": ""
+    },
+    {
+      "case": "htp_nan",
+      "exit": 0,
+      "valid_claim": true,
+      "nd_nf": [
+        "nd=2047 nf=1"
+      ],
+      "pin_line": "PIN (5e-4!): CPU/Rscalar=PASS CPU/Rtiled=PASS HTP/Rscalar=PASS HTP/Rtiled=PASS",
+      "stderr": ""
+    },
+    {
+      "case": "zero_act",
+      "exit": 0,
+      "valid_claim": true,
+      "nd_nf": [
+        "nd=2048 nf=0"
+      ],
+      "pin_line": "PIN (5e-4!): CPU/Rscalar=FAIL CPU/Rtiled=FAIL HTP/Rscalar=FAIL HTP/Rtiled=FAIL",
+      "stderr": ""
+    },
+    {
+      "case": "extra_byte",
+      "exit": 11,
+      "valid_claim": false,
+      "nd_nf": [],
+      "pin_line": "",
+      "stderr": "INVALID: act tem 24577 bytes (esperado 24576!)"
+    }
+  ],
+  "filesystem_cases": [
+    {
+      "case": "fresh_no_meta",
+      "exit": 0,
+      "stdout": "R41 SNAPSHOT_FAIL attempt=new-attempt (5/5 meta=-1 exfail=0 — agregado!)"
+    },
+    {
+      "case": "old_meta_one_byte",
+      "exit": 0,
+      "stdout": "R41 SNAPSHOT_COMPLETE attempt=new-attempt (5/5+meta! exfail=0!)"
+    },
+    {
+      "case": "last_error_active",
+      "exit": 0,
+      "stdout": "R41 SNAPSHOT_FAIL attempt=new-attempt (5/5 meta=1 exfail=1 — agregado!)"
+    }
+  ],
+  "setup_case": {
+    "exit": 0,
+    "stdout": "R41 SEL_FAIL (mkdir: File exists!)\nR39 SEL: attempt=new-attempt K=6144 N=2048 B=1 type=q6_K\nAFTER_SETUP_REACHED",
+    "selector_after": "new-attempt 6144 2048 1 q6_K"
+  },
+  "scope": "host replay of R39 and source-fragment counterexamples; no app/ADB/DSP changes"
+}

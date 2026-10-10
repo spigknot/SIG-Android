@@ -1,0 +1,70 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 36
+=======================================================================
+Escopo: leitura dos anexos e fontes, compilação/reexecução em scratch Windows.
+Não alterei app, probe, candidato, Whisper, bibliotecas nem aparelho.
+
+1. SNAPSHOT REAL: ACEITO PARA ESTE CASO
+- K=256, N=64, B=128; 8.192 saídas, índice b*N+n; PID 27773 no meta.
+- Canon=9.216 B; ativações F32=131.072 B; CPU/HTP=32.768 B cada;
+  tiled físico=10.240 B. Tamanhos verificados, não apenas nomes dos arquivos.
+- Seis hashes do SHA256-BINARIOS (cinco binários + meta): 6/6 conferem.
+- Manifesto da rodada: 12 arquivos enumerados/12 hashes conferem.
+- Todas as ativações/saídas F32 lidas são finitas.
+
+2. REPRODUÇÃO NUMÉRICA SOBRE OS BYTES ENTREGUES
+Compilei ggml-quants.c local e o leitor tiled entregue, com os caminhos
+corrigidos somente em scratch. Ambos os builds e a execução retornaram 0.
+As quatro comparações abrangem 8.192 entradas finitas cada:
+Comparação                    NMSE          max_abs      violações abs+rel
+CPUout vs RscalarCanonical     7.564e-08      0.103656026  8
+CPUout vs RtiledReader         8.746e-08      0.118527476  10
+HTPout vs RscalarCanonical     5.618e-08      0.094743729  0
+HTPout vs RtiledReader         4.858e-08      0.080030323  0
+Limite aplicado sem alteração: |out-ref| > 0.02 + 0.05*|ref|.
+As contagens acima aplicam esse componente pontual, não proclamam execução
+do gate inteiro do probe. Os veredictos originais contra CPU ficam preservados.
+Rtiled vs Rscalar: NMSE=9.227273362529691e-09; max_abs=0.04253981517067018.
+Há diferenças entre as duas representações; não são byte-idênticas nem exatas.
+
+3. MECANISMO DA APROXIMAÇÃO CPU: REPRODUZIDO INDEPENDENTEMENTE
+A tabela CPU para Q4_K usa vec_dot_q4_K_q8_K e vec_dot_type=Q8_K
+(ggml/src/ggml-cpu/ggml-cpu.c:310-318).
+Quantizei as MESMAS ativações com quantize_row_q8_K_ref, dequantizei-as com
+dequantize_row_q8_K e acumulei em double com os pesos canônicos dequantizados.
+Comparação desse modelo com o CPUout capturado, nas 8.192 entradas:
+NMSE=1.747860557927e-15; max_abs=2.107277805408e-05; violações abs+rel=0.
+(10,22): CPU=0.892908752; modelo Q8_K-act=0.892909849.
+(42,45): CPU=-0.094327398; modelo Q8_K-act=-0.094325020.
+Essa reprodução, junto ao contrato da tabela CPU, explica a divergência por
+quantização intermediária Q8_K das ativações. Não comprova defeito da CPU;
+não justifica modificar CPU/Whisper nem relaxar tolerâncias.
+HTP-Rtiled também não comprova precisão interna de acumulação FP16.
+
+4. ENTREGA E ROBUSTEZ: DISTINGUIR DO RESULTADO NUMÉRICO ACEITO
+- r36-refs-out.txt entregue contém apenas erro de execução: No such file or
+  directory. O hash confere, mas esse arquivo não sustenta as métricas.
+  A reprodução independente foi arquivada em AUDITORIA-R36-LOGS/run.log.
+- No probe arquivado :1113/:1120/:1126/:1132, fclose retorna sem verificação.
+  O exfail é reiniciado por arquivo; meta :1137-1142 não tem erro agregado.
+  No r36_cand.py, o hook RAW também ignora fwrite/fclose.
+  Portanto a captura entregue é válida; o export geral fail-closed não está
+  comprovado, apesar da afirmação de validações de close no relatório.
+- OPSTAGE continua ENV_AT_CALL; valor retido no backend não foi consultado.
+  String no .so sem evento/log não comprova execução da instrumentação.
+
+5. CONSEQUÊNCIA E PRÓXIMA ETAPA
+O caso sintético Q4_K K256/N64/B128 ganha prova numérica independente positiva.
+Não reabrir pack/helper/leitor desse caso nem tratar os dez desacordos com CPU
+como prova automática de defeito DSP. Manter o histórico LEGACY_CPU_FAIL e
+acrescentar referências independentes identificadas, sem mudar o limite.
+KERNEL_VALIDATED global=NÃO; Q6 independente, shapes reais, fused, estabilidade,
+grafo e handoff NPU->GPU ainda não estão aceitos.
+A Rodada 37 deve fechar consulta efetiva/entrega e avançar em cobertura real,
+sem repetir indefinidamente apenas a fixture K256/N64.
+
+6. EVIDÊNCIAS DO ESPECIALISTA
+Diretório: docs/especialista/AUDITORIA-R36-LOGS/
+audit.py, q8check.py, refs.cpp, refs-q8.cpp, run.log, q8-run.log,
+results.json, rscalar.f64 e rtiled.f64; MANIFESTO-SHA256.txt.
+Os F64 são referências calculadas localmente, NÃO novos arquivos do device.
+Git ao terminar: main, sem modificações em arquivos rastreados.

@@ -1,0 +1,3 @@
+libggml-hexagon.so: build-id=b112db1099ea35bf912cd0096488d09e7b23e0bf
+libggml-htp-v81.so: build-id=None
+libnpuprobe.so: build-id=5cd767d7d38338c25bf05ba9bf58062a0453932d

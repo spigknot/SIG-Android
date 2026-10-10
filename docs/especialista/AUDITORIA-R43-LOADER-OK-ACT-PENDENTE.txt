@@ -1,0 +1,83 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 43
+=======================================================================
+Escopo: leitura de arquivos, compilacao e regressoes host do loader real,
+injecao controlada de digest curto e aritmetica verificada por ferramenta.
+Sem edicao de app/probe/Whisper, sem ADB/staging/commit/push/publicacao.
+
+A. MANIFESTO SEC V — 4 ARQUIVOS CONFEREM
+Hashes SHA-256 e tamanhos recalculados no host batem exatamente com a Sec V:
+r43-bateria-casos.txt (3848 B), r43-tabela-act-cadeia.txt (1741 B),
+r43_refs-fullsha64.c (11830 B), r43_runner-build-consume.sh (2013 B).
+O quinto item (build-kq/libggml-hexagon.so 737544 B, 020ded2e...) NAO esta
+nos arquivos locais e nao e verificavel deste host. O prefixo de 8 hex
+coincide com o prefixo da lib R39, mas a R39 registrou so o prefixo — a
+igualdade integral entre rodadas nao pode ser checada. Exigir fullSHA64 da
+lib em TODAS as rodadas daqui em diante, mais fullSHA dos dois fontes
+(matmul-ops.c, hvx-mm-kernels-tiled.h) que a R43 nao entrega.
+
+B. LOADER FULLSHA64 — FUNCIONA NOS CASOS TESTADOS
+Compilacao independente host (ggml-quants.c local + r43_refs-fullsha64.c):
+build exit0. NORMAL exit0 com 13/13/50/54 e TOP10 por excesso identicos aos
+da bateria (n=718 exc=9.3231 e n=244 exc=9.0989 na frente). RECON exit0 com
+os 5 fullSHA64 impressos e iguais aos originais R39. Tamper de 1 byte no
+canon => exit16 com digest integral obtido vs esperado lado a lado.
+Injecao controlada de digest curto ("ABCDEF") => INVALID exit18. O check de
+pclose (:68), len!=64 (:72/exit18) e char nao-hex (:73-78/exit19) existem no
+fonte entregue e o caminho de len foi exercitado de verdade.
+ACEITE: FULLSHA_WHITELIST=CCE_HOST_LIMITADO aos casos exercitados.
+
+Ressalvas pequenas, nao bloqueantes do aceite host:
+- O binario imprime "R42_DONE" (higiene de rotulo herdada; sem efeito).
+- Path com backslash (Windows) quebra o parse do sha256sum via popen e
+  retorna exit19. No /root Linux isso nao ocorre; registrar como limite de
+  portabilidade do oraculo, nao defeito da whitelist.
+- O mapeamento nome->hash esperado usa substring (strstr "canon"/"act"/...);
+  com os 5 nomes fixos do contrato e inofensivo, mas um nome desconhecido
+  cairia em want==NULL e passaria sem whitelist. Travar schema dos nomes.
+
+C. RUNNER — CONSUME BUILD, MAS RASTREABILIDADE PARCIAL
+O guard R43 existe no script entregue (:23-24: BUILD!=0 => exit92 sem run).
+ACEITE da correcao do falso-sucesso R42 no nivel do script.
+Porem: (1) a bateria chama o executado de "r42_runner.sh" enquanto o anexo
+entregue se chama "r43_runner-build-consume.sh" — sem hash do script
+executado, nao ha como afirmar que o entregue == o executado byte a byte;
+(2) SRC_SHA/BIN_SHA continuam exibidos com cut -c1-40; (3) logs seguem em
+/tmp global com apenas head arquivado; (4) o caso BUILDFAIL mostra a falha
+mas o exit92 nao aparece impresso no excerto. ESTADO: RUNNER_CONSUME=CCE
+no script entregue; RUNNER_TRACEABILIDADE=PARCIAL.
+
+D. CADEIA ACT — LOCALIZACAO PLAUSIVEL, PROVENIENCIA PENDENTE
+Aritmetica conferida por ferramenta: row 192x1152=221184 B/row, tiled total
+11010048 B, src_row F32 24576 B. Os nomes (quantize_f32_q8_0_tiled,
+quantize_row_f32_q8_0_tiled, hvx_splat/copy/l2fetch, q8_1 so para Q4_1/Q4_K)
+existem na referencia upstream local, MAS com linhas diferentes (652/1411/
+748-755 vs 846/1205/1531-1542/3495 alegados no kq2). Divergencia de linhas
+e esperada entre fork e upstream — nao e refutacao — mas os fontes do kq2
+nao sao acessiveis deste host, entao a tabela 3.1 fica como PARCIAL:
+falta fullSHA de matmul-ops.c + hvx-mm-kernels-tiled.h do cohort, caller
+confirmado no binario implantado e branch executado no K6144/N2048/B1.
+O destino vtcm_src1 (VTCM, host-invisivel) implica, como o proprio relatorio
+declara, que a observacao in situ exige instrumentacao no SKEL + rebuild
+host/skel/probe + device. ACT_REAL/REPLAY_REAL=NAO_EXECUTADOS (declarado,
+sem disfarce — aceito como honestidade, nao como prova).
+
+E. NUMEROS — ESTAVEIS, SEM INFORMACAO NOVA
+13/13/50/54 e PIN 4 PASS reproduzidos pela terceira vez sobre o mesmo
+snapshot R39. Corretos como regressao; nao avancam a fronteira. A R44 nao
+pode ter como resultado principal esses mesmos numeros.
+
+F. ESTADOS
+FULLSHA_LOADER=CCE_HOST_LIMITADO. RUNNER_CONSUME=CCE(script). RUNNER_TRACE=
+PARCIAL. ACT_CADEIA=PARCIAL (nomes plausiveis, proveniencia pendente).
+ACT_EXEC=NAO_EXECUTADO. EXPORT/HANDLE/VACINA/CAPTURAS/CONTROLES=PENDENTES
+conforme R42. KERNEL_VALIDATED/GRAPH/HANDOFF/PERF globais=NAO. Staged R37
+(9 entradas 'A ') preservado; nada tocado alem dos arquivos novos desta
+auditoria e do prompt R44.
+
+G. DIRECAO R44
+Uma unica prioridade: EXECUTAR a observacao/replay da ACT no DSP com o
+ponto exato ja desenhado (pos quantize_row, L1221 do relato) OU trazer
+erro/comando real que demonstre o bloqueio. Em paralelo, fechar a
+rastreabilidade (hash do script executado, SHAs integrais, logs por ID) e
+congelar o fullcohort com hashes dos fontes. Detalhes no prompt R44.
+=======================================================================

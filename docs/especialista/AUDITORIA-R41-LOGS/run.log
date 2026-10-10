@@ -1,0 +1,17 @@
+MANIFEST_OK 8
+CSV_ROWS 2048 MAX_ROUNDING_DIFF {'cpu': 4.99511713769607e-07, 'htp': 4.999999987376214e-07, 'rscalar': 4.995513194216983e-07, 'rtiled': 4.999680953687857e-07}
+METRICS {"cpu_rscalar": {"nmse": 4.302223350862282e-07, "max_abs": 0.06510236325577523, "viol": 13}, "cpu_rtiled": {"nmse": 6.133970417476967e-07, "max_abs": 0.13529151558893204, "viol": 13}, "htp_rscalar": {"nmse": 4.967947948058238e-06, "max_abs": 0.286581714374492, "viol": 50}, "htp_rtiled": {"nmse": 4.809954054115071e-06, "max_abs": 0.20464282825307123, "viol": 54}}
+TOP10_CHECK {"indices": [536, 1164, 1010, 1006, 694, 852, 62, 1877, 1634, 1715], "relative_percent_min": 0.7485084429094716, "relative_percent_max": 0.9575600494425501, "legacy_violators_in_top10": 0, "one_over_127_percent": 0.7874015748031497}
+BUILD 0 RC 0
+BUILD 1 RC 0
+LOADER_CASE {"case": "original_r39", "exit": 0, "valid_claim": true, "nd_nf": ["nd=2048 nf=0"], "pin_line": "PIN (5e-4!): CPU/Rscalar=PASS CPU/Rtiled=PASS HTP/Rscalar=PASS HTP/Rtiled=PASS", "stderr": ""}
+LOADER_CASE {"case": "wrong_meta", "exit": 0, "valid_claim": true, "nd_nf": ["nd=2048 nf=0"], "pin_line": "PIN (5e-4!): CPU/Rscalar=PASS CPU/Rtiled=PASS HTP/Rscalar=PASS HTP/Rtiled=PASS", "stderr": ""}
+LOADER_CASE {"case": "htp_nan", "exit": 0, "valid_claim": true, "nd_nf": ["nd=2047 nf=1"], "pin_line": "PIN (5e-4!): CPU/Rscalar=PASS CPU/Rtiled=PASS HTP/Rscalar=PASS HTP/Rtiled=PASS", "stderr": ""}
+LOADER_CASE {"case": "zero_act", "exit": 0, "valid_claim": true, "nd_nf": ["nd=2048 nf=0"], "pin_line": "PIN (5e-4!): CPU/Rscalar=FAIL CPU/Rtiled=FAIL HTP/Rscalar=FAIL HTP/Rtiled=FAIL", "stderr": ""}
+LOADER_CASE {"case": "extra_byte", "exit": 11, "valid_claim": false, "nd_nf": [], "pin_line": "", "stderr": "INVALID: act tem 24577 bytes (esperado 24576!)"}
+FRAGMENT_BUILD_RC 0
+FS_CASE {"case": "fresh_no_meta", "exit": 0, "stdout": "R41 SNAPSHOT_FAIL attempt=new-attempt (5/5 meta=-1 exfail=0 \u2014 agregado!)"}
+FS_CASE {"case": "old_meta_one_byte", "exit": 0, "stdout": "R41 SNAPSHOT_COMPLETE attempt=new-attempt (5/5+meta! exfail=0!)"}
+FS_CASE {"case": "last_error_active", "exit": 0, "stdout": "R41 SNAPSHOT_FAIL attempt=new-attempt (5/5 meta=1 exfail=1 \u2014 agregado!)"}
+SETUP_CASE {"exit": 0, "stdout": "R41 SEL_FAIL (mkdir: File exists!)\nR39 SEL: attempt=new-attempt K=6144 N=2048 B=1 type=q6_K\nAFTER_SETUP_REACHED", "selector_after": "new-attempt 6144 2048 1 q6_K"}
+AUDIT_DONE_RC0

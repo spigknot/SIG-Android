@@ -1,0 +1,202 @@
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q2_K(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:1215:36: warning: invalid conversion from 'void*' to 'block_q2_K*' [-fpermissive]
+ 1215 |         quantize_row_q2_K_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:891:86: note: initializing argument 2 of 'void quantize_row_q2_K_ref(const float*, block_q2_K*, int64_t)'
+  891 | void quantize_row_q2_K_ref(const float * GGML_RESTRICT x, block_q2_K * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q3_K(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:1443:36: warning: invalid conversion from 'void*' to 'block_q3_K*' [-fpermissive]
+ 1443 |         quantize_row_q3_K_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:1230:86: note: initializing argument 2 of 'void quantize_row_q3_K_ref(const float*, block_q3_K*, int64_t)'
+ 1230 | void quantize_row_q3_K_ref(const float * GGML_RESTRICT x, block_q3_K * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q4_K(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:1630:36: warning: invalid conversion from 'void*' to 'block_q4_K*' [-fpermissive]
+ 1630 |         quantize_row_q4_K_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:1458:86: note: initializing argument 2 of 'void quantize_row_q4_K_ref(const float*, block_q4_K*, int64_t)'
+ 1458 | void quantize_row_q4_K_ref(const float * GGML_RESTRICT x, block_q4_K * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q5_K(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:1855:36: warning: invalid conversion from 'void*' to 'block_q5_K*' [-fpermissive]
+ 1855 |         quantize_row_q5_K_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:1645:86: note: initializing argument 2 of 'void quantize_row_q5_K_ref(const float*, block_q5_K*, int64_t)'
+ 1645 | void quantize_row_q5_K_ref(const float * GGML_RESTRICT x, block_q5_K * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q6_K(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2058:36: warning: invalid conversion from 'void*' to 'block_q6_K*' [-fpermissive]
+ 2058 |         quantize_row_q6_K_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:1870:86: note: initializing argument 2 of 'void quantize_row_q6_K_ref(const float*, block_q6_K*, int64_t)'
+ 1870 | void quantize_row_q6_K_ref(const float * GGML_RESTRICT x, block_q6_K * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q1_0(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2101:36: warning: invalid conversion from 'void*' to 'block_q1_0*' [-fpermissive]
+ 2101 |         quantize_row_q1_0_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:40:86: note: initializing argument 2 of 'void quantize_row_q1_0_ref(const float*, block_q1_0*, int64_t)'
+   40 | void quantize_row_q1_0_ref(const float * GGML_RESTRICT x, block_q1_0 * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q2_0(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2116:36: warning: invalid conversion from 'void*' to 'block_q2_0*' [-fpermissive]
+ 2116 |         quantize_row_q2_0_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:74:86: note: initializing argument 2 of 'void quantize_row_q2_0_ref(const float*, block_q2_0*, int64_t)'
+   74 | void quantize_row_q2_0_ref(const float * GGML_RESTRICT x, block_q2_0 * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q4_0(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2131:36: warning: invalid conversion from 'void*' to 'block_q4_0*' [-fpermissive]
+ 2131 |         quantize_row_q4_0_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:113:86: note: initializing argument 2 of 'void quantize_row_q4_0_ref(const float*, block_q4_0*, int64_t)'
+  113 | void quantize_row_q4_0_ref(const float * GGML_RESTRICT x, block_q4_0 * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q4_1(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2176:36: warning: invalid conversion from 'void*' to 'block_q4_1*' [-fpermissive]
+ 2176 |         quantize_row_q4_1_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:150:86: note: initializing argument 2 of 'void quantize_row_q4_1_ref(const float*, block_q4_1*, int64_t)'
+  150 | void quantize_row_q4_1_ref(const float * GGML_RESTRICT x, block_q4_1 * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q5_0(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2230:36: warning: invalid conversion from 'void*' to 'block_q5_0*' [-fpermissive]
+ 2230 |         quantize_row_q5_0_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:187:86: note: initializing argument 2 of 'void quantize_row_q5_0_ref(const float*, block_q5_0*, int64_t)'
+  187 | void quantize_row_q5_0_ref(const float * GGML_RESTRICT x, block_q5_0 * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q5_1(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2283:36: warning: invalid conversion from 'void*' to 'block_q5_1*' [-fpermissive]
+ 2283 |         quantize_row_q5_1_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                    ^~~
+      |                                    |
+      |                                    void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:231:86: note: initializing argument 2 of 'void quantize_row_q5_1_ref(const float*, block_q5_1*, int64_t)'
+  231 | void quantize_row_q5_1_ref(const float * GGML_RESTRICT x, block_q5_1 * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_q8_0(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2299:32: warning: invalid conversion from 'void*' to 'block_q8_0*' [-fpermissive]
+ 2299 |     quantize_row_q8_0_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                ^~~
+      |                                |
+      |                                void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:276:86: note: initializing argument 2 of 'void quantize_row_q8_0_ref(const float*, block_q8_0*, int64_t)'
+  276 | void quantize_row_q8_0_ref(const float * GGML_RESTRICT x, block_q8_0 * GGML_RESTRICT y, int64_t k) {
+      |                                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_mxfp4(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2305:33: warning: invalid conversion from 'void*' to 'block_mxfp4*' [-fpermissive]
+ 2305 |     quantize_row_mxfp4_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                 ^~~
+      |                                 |
+      |                                 void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:350:88: note: initializing argument 2 of 'void quantize_row_mxfp4_ref(const float*, block_mxfp4*, int64_t)'
+  350 | void quantize_row_mxfp4_ref(const float * GGML_RESTRICT x, block_mxfp4 * GGML_RESTRICT y, int64_t k) {
+      |                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_nvfp4(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2311:33: warning: invalid conversion from 'void*' to 'block_nvfp4*' [-fpermissive]
+ 2311 |     quantize_row_nvfp4_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                 ^~~
+      |                                 |
+      |                                 void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:384:88: note: initializing argument 2 of 'void quantize_row_nvfp4_ref(const float*, block_nvfp4*, int64_t)'
+  384 | void quantize_row_nvfp4_ref(const float * GGML_RESTRICT x, block_nvfp4 * GGML_RESTRICT y, int64_t k) {
+      |                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_tq1_0(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2418:33: warning: invalid conversion from 'void*' to 'block_tq1_0*' [-fpermissive]
+ 2418 |     quantize_row_tq1_0_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                 ^~~
+      |                                 |
+      |                                 void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2317:88: note: initializing argument 2 of 'void quantize_row_tq1_0_ref(const float*, block_tq1_0*, int64_t)'
+ 2317 | void quantize_row_tq1_0_ref(const float * GGML_RESTRICT x, block_tq1_0 * GGML_RESTRICT y, int64_t k) {
+      |                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'size_t quantize_tq2_0(const float*, void*, int64_t, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2425:33: warning: invalid conversion from 'void*' to 'block_tq2_0*' [-fpermissive]
+ 2425 |     quantize_row_tq2_0_ref(src, dst, (int64_t)nrow*n_per_row);
+      |                                 ^~~
+      |                                 |
+      |                                 void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:2383:88: note: initializing argument 2 of 'void quantize_row_tq2_0_ref(const float*, block_tq2_0*, int64_t)'
+ 2383 | void quantize_row_tq2_0_ref(const float * GGML_RESTRICT x, block_tq2_0 * GGML_RESTRICT y, int64_t k) {
+      |                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'void quantize_row_iq2_xxs_impl(const float*, void*, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:3313:25: warning: invalid conversion from 'void*' to 'block_iq2_xxs*' [-fpermissive]
+ 3313 |     block_iq2_xxs * y = vy;
+      |                         ^~
+      |                         |
+      |                         void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'void quantize_row_iq2_xs_impl(const float*, void*, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:3491:24: warning: invalid conversion from 'void*' to 'block_iq2_xs*' [-fpermissive]
+ 3491 |     block_iq2_xs * y = vy;
+      |                        ^~
+      |                        |
+      |                        void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'void quantize_row_iq3_xxs_impl(int, const float*, void*, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:3962:29: warning: invalid conversion from 'void*' to 'block_iq3_xxs*' [-fpermissive]
+ 3962 |         block_iq3_xxs * y = vy;
+      |                             ^~
+      |                             |
+      |                             void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:3967:27: warning: invalid conversion from 'void*' to 'block_iq3_s*' [-fpermissive]
+ 3967 |         block_iq3_s * y = vy;
+      |                           ^~
+      |                           |
+      |                           void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'void quantize_row_iq3_s_impl(int, const float*, void*, int, const float*, float*, float*, float*, int8_t*, int8_t*, float*, bool*, bool*, uint8_t*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:4198:23: warning: invalid conversion from 'void*' to 'block_iq3_s*' [-fpermissive]
+ 4198 |     block_iq3_s * y = vy;
+      |                       ^~
+      |                       |
+      |                       void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'int iq1_sort_helper(const void*, const void*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:4502:23: warning: invalid conversion from 'const void*' to 'const float*' [-fpermissive]
+ 4502 |     const float * l = left;
+      |                       ^~~~
+      |                       |
+      |                       const void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:4503:23: warning: invalid conversion from 'const void*' to 'const float*' [-fpermissive]
+ 4503 |     const float * r = right;
+      |                       ^~~~~
+      |                       |
+      |                       const void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'void quantize_row_iq1_s_impl(const float*, void*, int64_t, const float*, float*, float*, float*, float*, float*, int8_t*, uint16_t*, int8_t*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:4531:23: warning: invalid conversion from 'void*' to 'block_iq1_s*' [-fpermissive]
+ 4531 |     block_iq1_s * y = vy;
+      |                       ^~
+      |                       |
+      |                       void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'void quantize_row_iq1_m_impl(const float*, void*, int64_t, const float*, float*, float*, float*, int8_t*, uint16_t*, int8_t*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:4713:23: warning: invalid conversion from 'void*' to 'block_iq1_m*' [-fpermissive]
+ 4713 |     block_iq1_m * y = vy;
+      |                       ^~
+      |                       |
+      |                       void*
+/root/llama-cpp-npu/ggml/src/ggml-quants.c: In function 'void quantize_row_iq2_s_impl(const float*, void*, int64_t, const float*)':
+/root/llama-cpp-npu/ggml/src/ggml-quants.c:5131:23: warning: invalid conversion from 'void*' to 'block_iq2_s*' [-fpermissive]
+ 5131 |     block_iq2_s * y = vy;
+      |                       ^~
+      |                       |
+      |                       void*

@@ -1,0 +1,9 @@
+[0/2] Re-checking globbed directories...
+[1/4] Performing build step for 'htp-v81'
+[1/2] Building C object CMakeFiles/ggml-htp-v81.dir/matmul-ops.c.obj
+[2/2] Linking C shared library libggml-htp-v81.so
+[2/4] Performing install step for 'htp-v81'
+[0/1] Install the project...
+-- Install configuration: "Release"
+-- Installing: /workspace/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+[3/4] Completed 'htp-v81'

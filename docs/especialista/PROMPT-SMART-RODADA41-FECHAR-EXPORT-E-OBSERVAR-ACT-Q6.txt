@@ -1,0 +1,209 @@
+PROMPT AO EXECUTOR — SMART DUAL-BACKEND — RODADA 41
+FECHAR EXPORT/ERROS CONSUMIDOS E OBSERVAR ACT Q6 NO COHORT REAL
+=======================================================================
+Leia AUDITORIA-R40-STATUS-NAO-FAIL-CLOSED-E-TRACE-ESTATICO.txt e
+AUDITORIA-R40-LOGS/. Não reabrir a auditoria R39 ou recuperar os mesmos54
+violadores como substituto da execução. O especialista não edita o app nem
+aciona o aparelho; o executor trabalha na cópia/probe isolados autorizados.
+
+1. RETIFICAÇÃO R40 E ACEITE LIMITADO
+Build local e substituição do metadata hardcoded são avanços reais.
+O contador gerou10000 IDs distintos no fragmento real sob PID fixo; resolveu
+a colisão INTRAPROCESSO. Não resolve namespace entre execuções/PID reutilizado.
+:939/:940/:1158 fazem (void)mkdir, ignorando EEXIST e demais erros.
+Retificar 'EEXIST não tolerado' e IDS/META/STATUS=CCE; são fronteiras parciais.
+
+O status :1185-1202 aceita cinco arquivos de UM BYTE sem meta, aceita a flag
+exfail=1 e aceita meta divergente/RAW sem identidade. Foi compilado/testado
+sobre o bloco real, não só sugerido. COMPLETE sai ANTES da escrita do meta.
+exfail é resetado; fclose é ignorado; o okc local e o log não propagam erro
+ao pass/fail atualizado ANTES do export. Isso NÃO é status fail-closed.
+Seis hashes do manifesto conferem, mas r39-nmse-nota.txt está vazio.
+Os logs/comandos da auditoria são host, não execução Android/DSP.
+
+ACT_REAL permanece pendente. O excerpt de escolhas estático não prova qual
+branch/quantizador/skel executou K6144/N2048/B1. A coordenada n1111 é R39.
+Q8_0 não 'perde correção Q8_1' automaticamente: Q6 é tratado sem o termo
+afim nessa referência. Não trocar o caminho para Q8_1 por analogia.
+ACC_FP16 também NÃO é comprovada por escalas F16; separar as etapas.
+CPU Q8_K explicada, HTP50/54 preservados, PIN_PASS limitado, globais NÃO.
+
+2. ESCOPO/PREREQUISITOS — ZERO ALTERAÇÃO DO PRODUTO
+SIG/Whisper/UI/default Vulkan/modelo c4bf/R2/WIP intocados. Sem staging,
+commit/push/release/remoção/reboot/promoção ou instalação sobre APK SIG.
+Preservar as nove adições staged R37 e qualquer WIP FfmpegPreview byte a byte.
+Serial exclusivo3B15BD00FVE00000 em TODO adb; PJA110/1164a04 proibidos.
+Stayon7 intacto. Não ler credenciais. Não usar dados de produção.
+Fontes/logs novos smart-rodada41/; textos docs/especialista/; originais R39/R40
+preservados. Nenhum restore/stash/reset amplo para contornar estado alheio.
+Rechecar HEAD/status e hashes dos itens protegidos antes/depois.
+
+Congelar ANTES de inferir resultado: fullSHA do APK probe e arquivo realmente
+carregado, host/core/CPU/HTP/skel e dependências pertinentes, ABI/buildID,
+fontes/flags/toolchain/revision e mapa fonte -> binário. Distinguir original,
+stripado, APK empacotado, sandbox/device e processo carregado. O APK local
+conferido pelo especialista é1765963669c8092079df5aba152b1fd8c05602956e9ee6d1a7cf7a28e63a16c9;
+se reconstruído, é outro artefato e precisa identidade nova. Não tratar prefixo
+020ded2e como fullcohort. Troca diagnóstica test-only cria cohort separado.
+Getter efetivo3 aprovado, configurações antes do primeiro init e sem teste
+que muda env por matmul durante numerica; não reabrir getter/opstage retido.
+Stream de logs antes do trigger, IDs/PID/processo de mesma execução.
+
+3. PRIMEIRO NÚCLEO — EXPORT REALMENTE FECHADO, NÃO SÓ MAIS LOG
+3.1 Namespace exclusivo POR EXECUÇÃO, com contador monotônico por processo;
+incluir tipo/shapes na metadata/legibilidade. Não depender apenas de relógio
+ou PID; repetição do mesmo caso deve ter ID novo. Definir fonte da identidade
+de execução e compartilhá-la com consumidor, não gerar tokens desconexos.
+Criar attempt-dir exclusivo e CONSUMIR resultado de mkdir; EEXIST não pode
+prosseguir em diretório antigo nem aceitar arquivos positivos preexistentes.
+Checar todos os erros de diretório/selector/truncamento de caminho antes de
+escrever/upload; recusar com erro operacional explícito, sem 'SEL ok' falso.
+
+3.2 Vincular AO TENSOR/OPERAÇÃO REAL, não K/N/type. No build_e_run o wa/ab/cc
+só existe depois que se entra na lambda (:953-957 R40); o armamento anterior
+não conhece esse handle. Localizar os objetos/callbacks existentes e armar
+na chamada HTP real antes de tensor_set, não na chamada CPU independente.
+B pertence à operação/ACT/output, não à segunda dimensão dos pesos.
+O consumidor deve conferir handle/identidade/epoch/metadata e confirmar o
+peso esperado. Outro tensor igual não captura/sobrescreve. Consumir exatamente
+uma vez e desarmar mesmo em erro; callbacks tardios/reuso de pointer devem
+ser discriminados pela identidade de execução/operação, não só endereço.
+
+Se usar registry privado, descobrir mecanismo existente e definir a pequena
+API NOVA realmente necessária, header/signaturas compartilhados e guards
+somente diagnóstico/test-only; não presumir função SDK/API pronta.
+Selector em arquivo só é vínculo se o consumidor o verificar. Evitar global
+sel.txt compartilhado entre tentativas. Registrar o status REAL do hook,
+não inferi-lo por existência/size do RAW depois.
+
+3.3 Status persistente por tentativa: armamento/RAW/canon/ACT/CPU/HTP/meta e
+identidade do cohort. Guardar primeira causa e agregar todas as falhas,
+sem resets de exfail que apaguem falhas anteriores. Conferir fopen/fwrite/
+fprintf quando aplicável/fflush/fclose. Meta escrita/fechada/validada ANTES
+de COMPLETE. Não é obrigatório fsync/powerloss; a exigência é erro de escrita
+observável e nenhum COMPLETE sobre dados inválidos neste processo.
+
+Verificar tipos/K/N/B/strides/layout/bytes EXATOS derivados de contratos reais,
+vínculo dos componentes, RAW da tentativa, integridade e limites de acesso.
+Tamanho>0 não basta; hash calculado de arquivo stale não prova origem.
+Arquivos do consumidor devem bater com metadata produzida e identidade do
+hook. O renderer/runner deve consumir o resultado estruturado; erro de captura
+não fica só em rep() nem vira PASS no agregado. Separar capture_status de
+verdict_legacy/pin: operação com LEGACY_FAIL e captura válida é caso numérico;
+export inválido é falha operacional e não prova numérica apta para auditoria.
+Setup inválido recusa antes de upload/compute; se erro posterior, não emitir
+COMPLETE nem promover o caso como amostra íntegra.
+
+3.4 VACINA PERMANENTE DO MESMO CÓDIGO CONSUMIDO
+Extrair/compartilhar seam pequena realmente incluída por probe/hook e tests;
+não escrever um exporter paralelo que simule sucesso. Compilar target real
++ fixture; demonstrar que mutante no trecho consumido mata o teste/validator.
+Casos: relógio fixo; casos repetidos; nova execução com PID reutilizado;
+EEXIST; dois tensores mesmo shape/type mas handles diferentes; callback
+repetido/tardio; flagunset/0/1; short-write REAL injetado; close-error;
+RAW ausente/stale/tamanho curto E excedente; meta ausente/divergente/falha;
+cinco arquivos de um byte; erro prévio seguido de escritas válidas.
+
+Arquivo inválido/erro -> COMPLETE ausente, status operacional inválido,
+resultado consumido (nãozero no runner/validator), sem overwrite do outro
+attempt. Teste negativo pode ter exit0 se VALIDOU a recusa esperada; anexar
+exit observado da operação/mutante separadamente. Mutante ignora erro ou
+identidade -> TESTE FINAL FALHA, não apenas mensagem diferente.
+Preservar GREEN/RED, fontes/headers consumidos, hashes e totais por script.
+Os auditores R40 do especialista são CONTRAPROVAS, não essa vacina integrada.
+
+4. RUNNER/LOADER — CORRIGIR AGORA, ANTES DE NOVO ORÁCULO
+Não deixar o runner para mais uma rodada. Resolver o executável realmente
+produzido pelo build; build/run/transferência/stdout/stderr com exits próprios
+consumidos. Não repetir './root/...' nem arquivar erro de scp como resultado.
+Preservar logs históricos errados e distinguir a reprodução do especialista.
+
+Loader valida schema/identidade/tipo/shape/bytes exatos inclusive excesso,
+endianness, todos os fopen/allocs, finitude/nd/denominador/overlap/unwritten.
+Não deduzir tipo por nome/sufixo de bytes ignorando meta. Vetores calculados
+uma vez; imprimir NMSE, finitude, contagens de TODAS as violações HTP contra
+cada oráculo, e top10 de dez índices distintos com ordenação declarada.
+Critérios originais0.02/0.05 e PIN5e-4 intactos; CPU Q8_K não é oráculo exato
+universal. Falha operacional é diferente de observação válida LEGACY_FAIL.
+NF/nd incompleto/denom inválido -> INVALID consumido, não return0 com printf.
+
+5. SEGUNDO NÚCLEO — ACT REAL Q6, NÃO OUTRO TRACE SÓ ESTÁTICO
+Depois de fechar3/4, executar captura de base Q6 K6144/N2048/B1 duas vezes
+no mesmo cohort, IDs exclusivos/meta corretos/status agregado, todas2048
+saídas. Comparar finitude/PIN/legado/Rscalar/Rtiled e variação real entre runs;
+reemitir o mesmo report duas vezes não conta como duas capturas.
+No mesmo shape, controles F32 e um quant antigo suportado Q4_0 ou Q8_0,
+com referências canônicas das PRÓPRIAS entradas e dispatch/estado reais.
+Se RAW do controle exigir leitor novo, validar primeiro e não chamar scalar
++título tiled de Rtiled. UNWRITTEN -> preservar, parar expansão, diagnóstico
+uma variável por vez contra GREEN. Sem ternário de log chamado fix causal.
+
+5.1 Trace dinâmico do cohort: fonte/função/params efetivos src1 F32 ->
+quantizador/conversor -> row_size/layout -> kernel escolhido -> dot/scales/
+acumulação -> readback. Registrar que ramo de MM/B1 foi efetivamente usado,
+HVX/HMX, tiled/flat, strides/tiling/thread/VTCM pertinentes e intrínsecos reais.
+Trecho do pin/upstream é pista; referência local consultada pelo especialista
+está em HEAD5e03bdd8700948b9c41c54dd1b00f28a2aebc03f, não é o pin1ec818 e
+não prova identidade com o candidato implantado. Congelar source do cohort.
+
+5.2 OBSERVAR bytes/códigos/coeficientes/layout de ACT DEPOIS da quantização
+que o matmul realmente consome, identidade da MESMA operação e intervalos
+completos necessários. actfloat original não é ACT quantizada. q8_0 tiled
+interno não é automaticamente o layout canônico ggml Q8_0 do quantizadorCPU.
+Não sintetizar bytes nem chamar quantize_row_q8_0_ref de quantizador DSP real.
+
+Design antes do patch mínimo: achar o buffer/lifetime real e uma observação
+privada segura. Se VTCM/DSP inacessível diretamente, instrumentação test-only
+em cópia privada ou seam de replay executando o quantizador REAL do cohort,
+mesmos inputs/config/intrínsecos. Não emular intrínsecos com scalar para
+chamar o replay 'real'. Mudança privada ABI host/skel com versionamento e
+verificação dos dois lados, sem afetar protocolo de produção.
+Exercitar de fato a menor opção; documentar comando/erro quando houver
+bloqueio. 'Exige instrumentação' e 'tempo foi dos fixes' são trabalho por
+fazer, não impedimento técnico demonstrado. Não entregar só outro mapa.
+
+Comparar diagnóstico/exportON versus OFF no mesmo build/config e separar
+efeitos de mudança de cohort. Sem benchmark com dump/log ativo. Se não puder
+capturar toda ACT, declarar coverage/limite da observação; coeficientes de
+uma coordenada não fecham modelo completo2048. Alternativa replay deve ser
+rotulada REPLAY_REAL versus captura in situ, com limite causal explícito.
+
+5.3 MODELO A PARTIR DOS DADOS OBSERVADOS
+Reconstruir Rtiled x ACT_observada com reader validado, todas2048 saídas,
+sem incluir padding como K verdadeiro. Comparar com HTP: finite/nd/NMSE/
+max_abs/contagens de violadores; CSV completo e top10. Usar b0/n1111 como
+âncora sem substituir coverage por um ponto. Separar pesos/repack, ACT,
+coeficientes/rounding, ordem/acumulação e output. Critério de reprodução
+predefinido e justificado, não escolhido depois para fabricar concordância.
+
+A soma extra do Q8_1 serve ao termo afim dos pesos pertinentes. Verificar
+no próprio kernel a interpretação signed/offset/scales do Q6 antes de sugerir
+correção. A referência consultada retira32 do código Q6 e usa dot inteiro +
+combinação de escala F16 para f32 + soma por helpers f32. Isso NÃO prova
+ACC_FP16 nem descarta diferenças do cohort/SDK. Observar/provar cada etapa.
+Se modelo observado fechar HTP, explicar aproximação esperada e preservar
+LEGACY_FAIL/PIN_PASS. Se continuar residual, medir parciais reais por grupos
+K/offsets/descritor; não voltar a culpar CPU, pack/reader aprovado sem nova
+contraprova. Não ajustar tolerância, modelo produto ou fusion para esconder.
+
+6. FECHAMENTO — A-H E FRONTEIRAS SEPARADAS
+A: cohort/fontes/flags/builds/ABI/hashes dos carregados.
+B: export/IDs/selector/meta/status consumidos, vacina+mutantes+exits.
+C: trace dinâmico e ACT/replay realmente exercitado, coverage/limites.
+D: decomposição com ACT observada e2048 saídas, métricas e CSVs completos.
+E: duas capturas Q6 + controles F32/quant antigo coerentes.
+F: runner/loader, falhas operacionais versus numéricas, injeções reais.
+G: CCE/PARCIAL/PENDENTE/BLOQUEADO por fronteira, não CCE só por build.
+H: próximos passos restantes. FFN Q4 K2048/N6144 B1/B128, matriz temporal
+restante/counters/pipeline/fused/minigrafo/placement continuam pendentes;
+preparações offline independentes permitidas, não substituem os núcleos3/5.
+
+RELATORIO e PROMPT-RELATORIO .txt A-H, logs completos/totais por script,
+manifesto tamanho+SHA-256 completo com arquivos realmente entregues, patches
++ conteúdo de fontes novas recuperáveis. Citar a auditoria host como outra
+prova, nunca como nova execução device. Declarar exatamente o não executado
+e motivo material, sem repetir pendências como se fossem critérios fechados.
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NÃO até provas próprias.
+Smart final = prefill NPU -> geração GPU OpenCL/Vulkan sem replay integral;
+HTP->CPU não atende. PIN_PASS não é aprovação automática do Smart.
+=======================================================================

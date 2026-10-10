@@ -1,0 +1,35 @@
+846:QUANTIZE_IMPL(quantize_f32_q8_0_tiled, "quantize-f32-q8_0_tiled", quantize_f32_q8_0_tiled_kernel, htp_mm_q8_0_tiled_row_size(ne0))
+854:static void quantize_f32_q8_0_tiled_block(unsigned int nth, unsigned int ith, void * data) {
+862:    quantize_f32_q8_0_tiled_block_kernel(
+1531:                quant_task_func = (src0->type == HTP_TYPE_Q4_1 || src0->type == HTP_TYPE_Q4_K) ? quantize_f32_q8_1_tiled_block : quantize_f32_q8_0_tiled_block;
+1542:                quant_task_func = (src0->type == HTP_TYPE_Q4_1 || src0->type == HTP_TYPE_Q4_K) ? quantize_f32_q8_1_tiled : quantize_f32_q8_0_tiled;
+3495:        quant_task_func = (src0->type == HTP_TYPE_Q4_1 || src0->type == HTP_TYPE_Q4_K) ? quantize_f32_q8_1_tiled_block : quantize_f32_q8_0_tiled_block;
+static inline size_t htp_mm_q8_0_tiled_row_size(uint32_t ne) {
+    const uint32_t ne_padded = ((ne + 127) / 128) * 128;
+    const uint32_t nb_32 = ne_padded / 32;
+    return nb_32 * HTP_MM_ACT_TILE_SIZE_Q8_0;
+}
+
+static inline void quantize_f32_q8_0_tiled_kernel(
+    const uint8_t * restrict src_data,
+    uint8_t * restrict dst_data,
+    uint8_t * restrict tmp_data,
+    uint32_t ne0,
+    uint32_t nrows,
+    size_t src_row_size,
+    size_t dst_row_size
+) {
+    const size_t src_row_size_padded = hex_round_up(src_row_size, QK_Q8_0_TILED * sizeof(float));
+    hvx_splat_f32_a(tmp_data, 0.0f, src_row_size_padded / sizeof(float));
+
+    for (uint32_t i = 0; i < nrows; ++i) {
+        hex_l2fetch(src_data, src_row_size, src_row_size, 2);
+        hvx_copy_f32_aa(tmp_data, src_data, ne0);
+
+        quantize_row_f32_q8_0_tiled((float *) tmp_data, dst_data, ne0);
+        dst_data += dst_row_size;
+        src_data += src_row_size;
+    }
+}
+
+static inline void quantize_f32_q8_1_tiled_kernel(

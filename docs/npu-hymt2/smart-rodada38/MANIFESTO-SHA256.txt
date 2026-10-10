@@ -1,0 +1,12 @@
+MANIFESTO — smart-rodada38 (MATRIZ TEMPORAL CCE no device! — sem commit, §2!)
+
+T1 (init=1): getter=1 => RECUSA (rc=-998!) + ZERO I/O HTP + TEMPORAL env=3 re-consulta=1 (RETIDO, nao getenv! MUTANTE MORTO!)
+T2 (init=3): permitiu+PASS; TEMPORAL env=3 re-consulta=3 RETIDO-CONFIRMADO!
+Retificações: CPU N/A no log!; zero OPSTAGE_DIAG_FAIL!
+Pendentes: export param, oráculos Q6/Q4 K6144, ffn {2048,6144}, T3/T4, counters. KERNEL_VALIDATED: NAO.
+
+af08c8299051bba42debd064567d993f58630966fc7d94aa20e2019bb585a534  probe-r38-com-temporal.cpp  (100595 B)
+4cf60d85948415abe0d85325305936416f72925dc8d9329af5a4ca6f1d278973  r38-capture-full.txt  (26097 B)
+c95320952402f594ebad38e86a6be704c2d7eac2435833822c20c39a8dbe23ac  r38-probe-build.log  (3148 B)
+
+db5a5c8b98b4004e5e15b12a38dcbc19da1ea3e4b9f6143660d3c8abb6d1b747  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA38.txt

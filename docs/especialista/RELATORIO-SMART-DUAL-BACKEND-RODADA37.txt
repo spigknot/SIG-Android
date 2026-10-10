@@ -1,0 +1,85 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 37
+=========================================================================
+Data: 09/10/2026. Prompt: "CONSULTA EFETIVA, ORACULOS CORRETOS E COBERTURA
+DE SHAPES REAIS". Copia isolada/probe.
+
+RESUMO EXECUTIVO — OS DOIS MINIMOS DA RODADA: (1) CONSULTA EFETIVA
+IMPLEMENTADA E TESTADA NO DEVICE: a lib isolada (78372baf!) expoe agora
+uma consulta diagnostica PRIVADA via o mecanismo REAL do fork
+(ggml_backend_hexagon_get_proc_address por NOME — como o extra_bufts!):
+"ggml_hexagon_get_opstage_effective" devolve o opt_opstage RETIDO pela
+lib inicializada; o PROBE consulta via registry ANTES do upload e
+CONSOME no preflight (recusa -998 se faltar QUEUE|COMPUTE!); ausente =>
+-999 OPSTAGE_DIAG_FAIL (NUNCA fallback silencioso!). RESULTADO NO DEVICE:
+"ENV_AT_CALL=(unset!) BACKEND_EFFECTIVE=3 (known=1!)" + o log do init
+"[hex] OPSTAGE_AT_INIT efetivo=3" => a consulta RETORNA O RETIDO (o
+default QUEUE|COMPUTE confirmado por MEDICAO, nao por inferencia!; as
+primeiras chamadas mostraram known=0 (o registro ainda nao inicializado
+no 1o caso) — o diag e' observavel e honesto (known=0/1 no log!).
+(2) COBERTURA DE SHAPES REAIS: inventario do GGUF PRODUTO (c4bf1015...
+SHA completo!) por metadados: 354 tensores; 2D MUL_MAT = Q4_K 192 +
+Q6_K 33!; shapes unicos reais: Q4_K (2048,512)/(2048,2048)/(2048,6144)/
+(6144,2048); Q6_K (2048,512)/(2048,120818 lm_head!)/(6144,2048) — K
+DIFERENTE de 256 como exigido! E O ENSAIO c4 NO DEVICE (o probe ja' tinha
+o casos_c4!): K=2048xN2048xB128 (q4_0/q8_0/q4_K/q6_K!) e K=6144xN2048xB1
+rodaram COMPLETOS (nd=262144/262144 e 2048/2048!) com nmse_pin=1.45e-07
+(K2048!) e 3.93e-06 (K6144!) — TODOS << 5e-4 (PIN-PASS!); f32 K6144 =
+1.9e-13 (PASS!) — os "viol" LEGADO tem a assinatura conhecida (ref CPU
+Q8_K-act aprovada pelo especialista!). KERNEL_VALIDATED: NAO (a matriz
+temporal a/b/c + os mutantes do §4 + export robusto (§5) + counter
+suite ficam declarados!). PROMPT-RELATORIO anexo no padrao combinado.
+
+-----------------------------------------------------------------------
+A. CONSULTA EFETIVA (§3!) — EXECUTADA
+-----------------------------------------------------------------------
+A.1 lib: getter privado (test-only!) + o NOME no get_proc_address (o
+    mecanismo REAL — localizado ANTES em L4772: o padrao do extra_bufts!).
+A.2 probe: consulta via ggml_backend_dev_backend_reg/reg_get_proc_address
+    ANTES do upload; consome no preflight; ENV_AT_CALL/BACKEND_EFFECTIVE/
+    known no log (separados!).
+A.3 Device: BACKEND_EFFECTIVE=3 (known=1!) + AT_INIT=3 (o log da lib
+    apareceu!); a ausencia por instante (known=0 no 1o caso) = diagnostico
+    observavel (nao fallback!).
+A.4 Matriz temporal (a/b/c) + o mutante getenv-em-vez-de-retido: a
+    instrumentacao esta' pronta; a matriz em processos isolados fica
+    como execucao declarada (nao fabricada!) — o device pode ser
+    re-ensaiado com envs (o mecanismo do tune p4-tune.txt!).
+
+-----------------------------------------------------------------------
+B. INVENTARIO GGUF + COBERTURA (§6!) — EXECUTADA
+-----------------------------------------------------------------------
+B.1 c4bf1015... (SHA completo no r37-inventario!): 354 tensores; Q4_K
+    192 2D!; Q6_K 33; shapes reais (K!=256!) listados!
+B.2 Ensaio c4 no device: os 8 casos (2 shapes x f32/q4_0/q8_0/q4_K/q6_K!)
+    — nmse_pin todos << 5e-4! (O limhead 2048x120818 fica FORA por
+    memoria — declarado!).
+B.3 Q6 fisico (snapshot com o leitor!): pendente (o hook tem o tipo —
+    proximo ciclo!).
+
+-----------------------------------------------------------------------
+C. ORACULOS (§4!) — ESTADO
+-----------------------------------------------------------------------
+C.1 A reproducao do especialista (CPU=Q8_K-act: 1.75e-15!) esta' CITADA
+    e o LEGACY_CPU_FAIL preservado (sem reclassificar o CPU!).
+C.2 O log r36-refs-out regenerado (proveniencia corrigida!). A vacina do
+    loader (tamanho/endian/coverage!) + os mutantes (transposto/
+    corrompido/truncado/coverage!) + counters da suite: PENDENTES
+    declarados (o foco foi a consulta + a cobertura!).
+
+-----------------------------------------------------------------------
+D. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+D.1 OPSTAGE_EFETIVO: CCE (consulta+consumo+log no device!). COBERTURA
+    REAL: CCE (K=2048/6144 rodaram!). INVENT: CCE. Matriz temporal:
+    PENDENTE. Export robusto (§5): PENDENTE (fclose! declarado).
+    Pipeline/counters: PENDENTES. KERNEL_VALIDATED: NAO. COMPILED: sim.
+D.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; WIP alheio intocado;
+    PJA110 nao tocado; dados sinteticos; sem reboots; device com o
+    probe R37 (cohort novo 78372baf!).
+H.1 PROXIMOS: (1) matriz temporal + mutante; (2) Q6 snapshot; (3)
+    export robusto + counters + pipeline; (4) fused real; (5) minigrafo!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada37/ (r37-capture-full.txt com a
+CONSULTA+BACKEND_EFFECTIVE+o ensaio c4!, r37-inventario-gguf.txt (o
+inventario+SHA do c4bf!), probe-r37-com-consulta.cpp, r37_cand.py,
+r37_gguf_invent.py!) + manifesto + PROMPT-RELATORIO.

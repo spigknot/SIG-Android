@@ -1,0 +1,148 @@
+PROMPT AO EXECUTOR — SMART DUAL-BACKEND — RODADA 38
+FECHAR TEMPORAL; SNAPSHOTS Q6/Q4 ACOPLADOS; COBRIR FFN_UP/GATE
+=======================================================================
+Leia docs/especialista/AUDITORIA-R37-GETTER-OBSERVADO-SHAPES-E-EXPORT-PENDENTE.txt
+antes de executar. Você altera somente probe/candidato isolados; o especialista
+coordena, não modifica app nem aciona aparelho. Entregue provas executadas.
+
+1. ACEITES DA R37 — NÃO REABRIR ESTES ITENS
+- Getter privado retorna opt_opstage, aparece no get_proc_address e é
+  consumido antes do upload. Retorno interno=3 observado no device, com
+  AT_INIT=3 e ENV unset. CONSULTA_DEFAULT3_INTEGRADA_OBSERVADA=CCE.
+- GGUF produto confirmado pelo especialista:
+  c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+  1.133.080.544 B, arquitetura hunyuan-dense, 354 tensores.
+- Inventário 192 Q4_K 2D/33 Q6_K 2D reproduzido.
+- TRÊS shapes maiores executados, cinco tipos cada: 2048/512/B1,
+  2048/2048/B128, 6144/2048/B1. nd total, finitude e hrc=0 observados.
+- A prova Q4 K256/N64/B128 da R36 permanece aprovada; CPU Q8_K-act
+  reproduzido com NMSE 1.75e-15. NÃO alterar CPU/Whisper/tolerâncias.
+
+RETIFIQUE os rótulos sem desfazer o avanço:
+known=0 aparece na passagem CPU (!is_htp), onde não há consulta. Não é falha
+HTP de primeiro init: o capture tem ZERO OPSTAGE_DIAG_FAIL. O ramo de recusa
+existe, mas o seu exercício na rota HTP permanece pendente.
+Cobertura = dimensões derivadas do GGUF com pesos/act sintéticos (sin/cos),
+não pesos reais carregados nem modelo executado. Q6 K2048/N2048 é teste
+adicional, não shape/tipo Q6 presente no produto. Report reemitido ≠ repetição.
+
+2. ESCOPO E PREREQUISITOS
+SIG principal, Whisper, UI/default Vulkan, modelo produto, R2 e WIP intocados.
+Sem release, commit/push/staging, APK SIG, promoção de lib, remoção ou reboot.
+Existem documentos/evidências staged por outra atividade: preserve exatamente.
+Aparelho exclusivo 3B15BD00FVE00000; serial explícito em cada adb; PJA110 proibido.
+Stayon=7 preservado. Não ler credenciais. Limites de autorização anteriores
+continuam; ensaios somente na cópia/probe já autorizados, sem instalar sobre SIG.
+Congele fullSHA de APK probe + ELFs host/core/CPU/HTP/skel e fontes/patches;
+não identidade por prefixo 78372baf ou pelo sourcehash. Arquive versões/paths.
+Stream antes do trigger, PID e attempt_id único. Não misturar cohorts normais
+com cohorts mutantes, nem medir desempenho com export/log diagnóstico ativo.
+Evidências smart-rodada38/; textos do especialista docs/especialista/.
+
+3. PRIMEIRO ENTREGÁVEL: MATRIZ TEMPORAL DO GETTER REAL
+Use o MESMO getter/preflight integrados. Não uma reescrita auxiliar que lê
+uma variável fake e afirma simular o backend. Config deve entrar ANTES do
+primeiro init real (rastreie JNI/static initializer/registry/onCreate/tune).
+Em processos independentes e com o mesmo cohort normal:
+T1: init=1; depois mudar env para3; getter continua1 -> recusa, rc=-998,
+    ZERO upload/compute HTP. CPUref, se executada, tem contadores separados.
+T2: init=3; depois mudar env para1; getter continua3 -> permite e executa
+    upload/compute HTP com saída coberta/finita, não só bool de permissão.
+T3: init0/init1/init2 recusam; init3 permite, sem reaproveitar init entre casos.
+T4: getter ausente na rota HTP -> OPSTAGE_DIAG_FAIL, rc=-999 e zero I/O HTP.
+T5: rota CPU não depende da extensão; logue BACKEND=CPU/consulta=N/A, não
+    BACKEND_EFFECTIVE=0 known0 que parece falha de bootstrap.
+Mutante focal: getter devolve getenv atual em vez do retido. T1 e/ou T2 devem
+falhar com evento/decisão observados. Registre build/run exits e alvo preciso.
+Se teste offline usar seam de injeção, limite sua conclusão à seam e execute
+as trajetórias temporais reais no probe antes de chamar matriz integrada CCE.
+Não reprojetar getter que já funciona: adicione apenas instrumentação/injeção
+necessárias; estado inicializado precisa ser distinguido se a API ficar
+acessível antes de construir o backend. No caller atual o backend já existe.
+
+4. ANTES DE CAPTURAR: ELIMINAR RISCO DE SNAPSHOT MISTURADO
+O export R37 filtra só B128/Q4_K e escreve em files/r36 com nomes 9216 etc.
+O log já registra 2.359.296 B de canon e 1.048.576 B de saída sob esses nomes.
+O hook RAW escreve tiled_raw.bin com wb para qualquer upload Q4_K, podendo
+sobrescrever o RAW com B1/outro shape. O RAW final da R37 NÃO foi verificado
+pelo especialista; não afirmar mistura observada nem reutilizá-lo como coerente.
+O snapshot R36 LOCAL arquivado e hashado permanece íntegro.
+Faça export parametrizado em diretório único por PID/attempt/type/K/N/B/tensor.
+O hook deve reconhecer exatamente o tensor/tentativa selecionados pelo probe
+antes do upload. RAW e canon/act/CPU/HTP têm a MESMA identidade de execução.
+Conclua apenas após todos os componentes escritos e fechados com sucesso;
+valide fwrite integral, fclose/fflush, metadata e RAW, erro agregado consumido
+pelo probe. Não 'EXPORT_OK' se um componente falhar ou vier de arquivo velho.
+Escolha nomes neutros ou derive os tamanhos reais; metadata declara bytes,
+layout/nb, endian, intervalos do payload tiled e fullcohort.
+Flag de export OFF precisa realmente desligar: no hook herdado, presença de
+getenv inclui a string '0'. Remova a variável ou faça parse explícito testado.
+Não usar tensor_get que faz unpack para chamar bytes de payload RAW.
+Vacina permanente mínima: short-write, close-error, RAW ausente/stale e duas
+matmuls seguidas em que só a selecionada deve formar o snapshot completo.
+Loader deve recusar truncado/tamanho errado/não finito e retornar exit nonzero.
+
+5. SEGUNDO ENTREGÁVEL: Q6 E Q4 K6144/N2048/B1 COM ORÁCULOS
+Esses casos atuais têm PIN_PASS contra CPU, mas legado viola 37 (Q6) e22
+(Q4). Capturar ambos em tentativas separadas com o export acima, incluindo
+RAW Q6 do pack REAL (não roundtrip pack->unpack do mesmo código).
+Sobre os MESMOS bytes/act: RscalarCanonical e RtiledReader independentes,
+produtos/somas em double e cobertura completa das 2.048 saídas.
+Reporte CPU/HTP contra ambos, max_abs, NMSE, finitude/coverage e quantidade
+abs+rel com limites 0.02/0.05 intactos. Preserve LEGACY_CPU_FAIL no histórico.
+Para o CPU, confirme vec_dot_type Q6 e reproduza sua quantização intermediária
+sem assumir CPU exata. Não generalizar o diagnóstico Q4 pequeno sem medir.
+Se ainda houver violações HTP contra os oráculos, localizar separadamente
+repack/descritivo/ativação/arredondamento/datapath antes de atribuir bug DSP;
+nenhuma mudança automática de tolerância ou fix de CPU.
+Arquive resultados calculados + códigos/inputs/exits; erro de execução no
+arquivo de resultados não sustenta métricas, mesmo com SHA conferindo.
+
+6. TERCEIRO ENTREGÁVEL: SHAPE FALTANTE FFN E REPETIÇÕES
+Q4_K K2048/N6144 aparece em 64 pesos ffn_gate/ffn_up e não foi exercitado.
+Teste B1 eB128, após suporte/alocação/opstage. F32 é controle; Q4_K o alvo.
+Faça pelo menos duas execuções independentes por caso no mesmo cohort.
+Registre nd esperado/real, nf/unwritten/rc, PIN/legado e indicadores reais.
+Não misturar candidatos ou adicionar fusão durante esta série não fused.
+Se orçamento limitar scalar full B128, compute em blocos; amostra deve ser
+rotulada AMOSTRA e não validação completa. Snapshot das tentativas deve
+permanecer coerente; o tamanho do caso não autoriza reaproveitar o RAW pequeno.
+Também repita os casos K6144/N2048/B1 Q4/Q6 do §5, sem contar report duplicado.
+UNWRITTEN -> preservar e parar expansão desse cohort; A/B com uma variável,
+GREEN anterior preservado. Não usar ternário de log como 'correção causal'.
+
+7. INVENTÁRIO/PLACEMENT E SEQUÊNCIA SMART
+Tensores 2D não são operações. No produto há token_embd Q6 K2048/N120818;
+fonte hunyuan-dense herda hunyuan-vl, que reutiliza TOKEN_EMBD como output
+quando output.weight falta e usa model.output no lm_head. Considere papéis
+GET_ROWS e LM_HEAD, não exclua pelo nome nem conte duas vezes o tensor físico.
+Consulte suporte desse shape sem alocar todo payload; documente orçamento,
+limite de memória antecipado vs OOM efetivamente observado e possível
+placement/fallback. NÃO afirmar NPU inteira pronta ignorando o head.
+Inventário é de pesos/shapes; placement executado exige grafo/scheduler real.
+Counters por backend/tentativa: PIN, LEGACY_CPU, INVALID, SKIP e CONTROL_Q5
+separados. compute_calls global soma CPU+HTP e não prova execução DSP.
+Pipeline permanece pendente: feche checks de exits/export e injeções M6,
+TOTAL ausente/CT2/crash, sem varrer comentário como chamada GGML_ABORT.
+São pendências próprias, não invalidam consulta e casos já comprovados.
+Fused completo só após estabilidade não fused; predicado/row_size R30 não
+valida precompute/offsets/descritores/execução. Mantenha Q6 fora da fusão se
+esse é o contrato atual. Minigrafo após temporal e numerica independentes.
+Smart final continua prefill NPU -> geração GPU OpenCL ou Vulkan sem replay
+integral; HTP->CPU não atende. GRAPH/HANDOFF/PERFORMANCE ainda NÃO aceitos.
+
+8. ENTREGA/ACEITE DA R38 — A-H
+A: patch/cohort/paths/fullSHA, build real e comandos.
+B: matriz temporal, getter ausente HTP, mutante getenv e exits.
+C: export selecionado/robusto e vacinas permanentes, arquivos/hash/metadata.
+D: oráculos Q6+Q4 K6144 e decomposição CPU, cobertura e critérios congelados.
+E: Q4 K2048/N6144 B1/B128 + repetições, sem duplicar linhas de report.
+F: counters/pipeline/fused/minigrafo — só o executado, com limites próprios.
+G: bloqueios reais e estado de cada fronteira; não reabrir aceites R36/R37.
+H: próximo passo específico para minigrafo/placement, não propaganda Smart.
+Entregue RELATORIO e PROMPT-RELATORIO .txt A-H, CCE/PARCIAL/PENDENTE/BLOQUEADO,
+logs completos e totais por script, SHA-256 completo dos arquivos efetivos.
+Não declarar conclusão global CCE se matriz/oráculos/repetições ainda faltam.
+Se indisponibilidade externa impedir device, entregue provas offline reais e
+marque Android BLOQUEADO; não chamar arquivo/programa não executado de CCE.
+Nenhum APK/lib de produto, commit ou publicação autorizado por este prompt.

@@ -1,0 +1,139 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 47 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 47 | DATA: 10/10/2026 |
+| ESTADO: O CONTRATO MÍNIMO B1 DO PARECER FINAL — CORRIGIDO, COMPILADO E
+  EXERCITADO (vacinas 8/8 R46-refeita SEM UB + 8/8 R47!); O CONSUMIDOR REAL
+  DO PROBE IMPLEMENTADO E COMPILADO; a captura no device = o próximo (gates
+  prontos!). RETIFICACOES do parecer aplicadas (a frase 'sem bloqueio' foi
+  substituída pela lista de gates EXECUTADOS!)! |
+================================================================================
+
+================================================================================
+SECAO I — RESUMO (cada item do parecer → o fix executado!)
+================================================================================
+(1) C5 UB (o pedido 262144 na origem 221184!): CORRIGIDA — a origem agora e'
+    a big_row (400000 >= 262144!) para TODAS as chamadas; o `untouched` foi
+    CONSUMIDO e reforçado em SEQUENCIA (un1/un2/un3: após cada recusa, o dump
+    INTEIRO deve estar 0xEE — 'nada-escrito'! o válido escreve TUDO!);
+    reexecutada: 8/8 (com os sentinels provados: 'nada-escrito/nada-escrito/
+    write=ok'!).
+(2) CAPTURED PERMISSIVO: o getter agora valida ANTES do status 2:
+    op_seen (1=sem captura!); rows 0 => 1 (não capturou!); B!=1 => -1;
+    rows != B (EXATO — excesso!)=> -1; row_size==0 => -1, 64+row > cap => -1.
+    As contraprovas do parecer (row0/cap64/rows2!) todas viram -1 (K3!).
+(3) CHECKED MULTIPLY: no worker (skel!): divisão ANTES dos produtos:
+    row>0 && cap>=64 && row<=cap-64 && ir_first>=0 && ir_last>ir_first &&
+    ir_last <= (cap-64)/row — TODOS os produtos provados <= cap (sem wrap!).
+    O caso WRAPPED (row=2^63+9!) agora RECUSA (K2!).
+(4) IRMÃOS OFF: no add_op: TODOS os 5 opcodes do mm_kernel_params
+    (MUL_MAT/ID/QKV/FFN/ADD!) recebem default -1 DEPOIS do memcpy; a seleção
+    SÓ no MUL_MAT (K4: MAT=0, ID/QKV/FFN/ADD=-1!).
+(5) B1 ESTRITO: ne2==1 e ne3==1 EXIGIDOS em src0 E src1 (K5: ne2=2 => não
+    arma!); o B vem do src1->ne[1] (o ne1==1 do F32!).
+(6) OWNER: UMA sessão autorizada (a do sbuf!); sessão diferente => RECUSADA
+    antes de re-add (K6: sess1=0, sess2=-1!); one-shot PRESERVADO (K7!).
+(7) HANDSHAKE: a API agora é ggml_hexagon_get_act_dump(void*, size_t) — se
+    out_size < sizeof(struct) => -2 (K8!) — o struct copiado menor morre.
+(8) O CONSUMIDOR REAL DO PROBE: IMPLEMENTADO (C:/npu-probe/probe.cpp: o
+    bloco R47 no mmtest — o padrão registry L1039 do R37!): chama a API
+    (get_proc_address!) APÓS o compute+readback do HTP; lê o status; valida
+    (magic/status==2/B==1/rows==1/row>0/off64/64+row<=cap/ptr!); SÓ ENTÃO
+    exporta o payload (write/fflush/fclose CONFERIDOS!) para files/r47/;
+    qualquer outro status: RECUSA sem arquivo (R47 EXPORT_RECUSADO!).
+    BUILD do probe: RC=0 (BUILD SUCCESSFUL!).
+(9) MAIN.C: o source FINAL COMPLETO anexado (r47-main-final.c! SHA na lista!);
+    o diff vs o v11 tem 724 linhas (o fork evoluiu desde o v11 — NAO é a
+    prova do patch R46/R47: a prova sao os DOIS BLOCOS documentados no
+    r46_patch.py (recuperável!) + o source final integral!).
+================================================================================
+
+================================================================================
+SECAO II — AS SAIDAS EXECUTADAS (integral!)
+================================================================================
+=== as vacinas R47 (8/8!): ===
+K1 C5-safe: src=400000 pedido=262144 ok=SIM (sem UB!)
+K2 checked: row-huge=0 b1-real=1 row>cap=0 (exigido 0/1/0!)
+K3 getter: op_seen0=1 rows0=1 excesso=-1 row0=-1 cap64=-1 ok=2 (exigido 1/1/-1/-1/-1/2!)
+K4 irmãos: MAT=0 ID=-1 QKV=-1 FFN=-1 ADD=-1 (exigido 0/-1/-1/-1/-1!)
+K5 ne2/ne3: ne2-2=-1 ne3-2=-1 (exigido -1/-1!)
+K6 owner: sess1=0 sess2=-1 (exigido 0/-1!)
+K7 one-shot: first=0 second=0 used=1 (exigido 0/0/1 — a 2ª não recaptura!)
+K8 handshake: size-1=-2 size-ok=0 (exigido -2/0!)
+
+VACINAS_R47: TODAS PASS (8/8!) (0 falhas!)
+
+=== a suite R46 REFEITA (8/8 — sem UB! sentinels consumidos!): ===
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+C5 len>cap=0(nada-escrito) off+len>cap=0(nada-escrito) exact=262144(write=ok) (exigido 0/0/262144/SIM!)
+C6 hmx_ptr=NULL (exigido NULL!)
+C7 flag0: bi=-1 (exigido -1! OFF total!)
+C8 flag01: bi=-1 (exigido -1!)
+
+VACINAS_R46: TODAS PASS (8/8!) (0 falhas!)
+
+================================================================================
+
+================================================================================
+SECAO III — fullSHA64 (cohort COMPLETO — fontes + libs + dependencias!)
+================================================================================
+35c0df748f467bdf57bf4e6a18af2a1543d391f236e6064a25333b5547bd643a  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+b42fd39a4bdeeb71b1fad51bd8046cbdddc724ac03e228a3cd50c024595d8b82  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+e904030a11448486f25397ccb484f8228b9fd5333dd5f43f862fb6006c442d28  /root/sigcand2/ggml/src/ggml-hexagon/htp/main.c
+4db38dd26a87e3e534b567539484b91f2b85539619a3d445cefadea40eedba90  /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+7e01bc70430752aa14169501204b87ebf94488df6c61375590c1d94f9ed8398d  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.h
+bdcad412c0e0514c19d45caeaeac2064fba0430af69d9fd788cb158575970429  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+5da659b8c6dcbd2f82fed512a53a3a0bcf504a423b90128336de58e7b5227f68  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+8ab003eb1fdd0643367b4d8ff25f1f6c91697c3a9d3dac9ab68d1251f7ede2cb  /root/sigcand2/build-kq/bin/libllama.so
+33c3ed672d35e9159cbad94f64f7317604ec451282fe3ab6c60a8d21b67b742d  /root/sigcand2/build-kq/bin/libggml-base.so
+b7ef45c389aa8ed83f8451b52349dbfe19f16a8b7246fd065b70e0ad39e7a96d  /root/sigcand2/build-kq/bin/libggml-cpu.so
+43aec1d1c325358d1e991fdfc849adbd10e72fb401143739f898a33a1a82b2a3  /root/sigcand2/build-kq/bin/libggml.so
+
+CHECKS: libllama.so = 8ab003eb... (INALTERADA! a mesma do R14/R46!); htp-ctx.h
+e matmul-ops.h = os MESMOS do R46 (o R47 nao os tocou!); libggml-hexagon e o
+skel = NOVOS (os fixes R47!); base/cpu/ggml: listados (o parecer §6!).
+================================================================================
+
+================================================================================
+SECAO IV — MANIFESTO (existencias + tamanhos + fullSHA64 — TODOS os anexos!)
+================================================================================
+2b86710cb973a9a14319da8b4932adf53f1ac3071c87987ffbb35f6af4ebe60e  smart-rodada47/probe-r47-consumer.cpp  (106346 B)
+8130949096808b2cd95d55f4a7b7109f3561b5eafbb72491ab22d9e317c9ce34  smart-rodada47/r46-vacinas-fixed-out.txt  (420 B)
+9667051bf07286a65925aecd286b2e4b438b7ca734c71cec8ed12eef0a58c525  smart-rodada47/r47-main-724linhas.diff  (26635 B)
+e904030a11448486f25397ccb484f8228b9fd5333dd5f43f862fb6006c442d28  smart-rodada47/r47-main-final.c  (38681 B)
+9be466815fbbdf5400fe2498c973f1ccc2d436e79005dd1aa0ba7dd378340587  smart-rodada47/r47-probe-build.log  (3148 B)
+32bdc9a7c55539f4e99756daeb3e266d57dfe96affef3498c228784afe67fe60  smart-rodada47/r47-shas-cohort-completo.txt  (1265 B)
+1b8b33d48872f978ccf73f843011ac1913c331b8937d834d235e3e1664f43a4b  smart-rodada47/r47-vacinas-out.txt  (536 B)
+fe11944c5d48d7c974238a899851bd905c366f7de8aa022158242b925e8ef5e3  smart-rodada47/r47_patch.py  (10849 B)
+eb4a1e3ca780e34e26fcce205f38c146ec3cc2354818580ab4d55cac8c456e6d  smart-rodada47/r47_vacinas.c  (9517 B)
+f05ecb14cbb3a49a1bd2fbbb6bc8c5327a17834faa389178b5152ae622f6c643  smart-rodada47/builds/r47-host-build.log  (1525 B)
+419382a88071d90997744c5c669630735906cb4f4fea269003a7d206c0d011a6  smart-rodada47/builds/r47-skel-build.log  (413 B)
+
+================================================================================
+SECAO V — FRONTEIRAS A-H (retificadas!)
+================================================================================
+A. fullcohort: os 11 itens acima + o probe final (probe-r47-consumer.cpp!) —
+   o APK do probe: build local OK (o device: pendente!).
+B. correcoes/vacinas: C5-refeita (8/8 SEM UB — sentinels CONSUMIDOS!); R47
+   (8/8: getter estrito/checked/irmãos/ne2/owner/one-shot/handshake!); os
+   geradores R46/R46b: asserts (o parecer reproduziu o RED normal + o -O —
+   a troca assert->if/raise: PENDENTE declarada!).
+C. ACT/replay: codigo COMPLETO (host+skel+probe!) compilado; a captura no
+   device = o próximo passo — os GATES das secao I estao TODOS verdes (o que
+   muda vs a R46: o consumidor EXISTE e o getter é ESTRITO!).
+D. 2048 metricas: PENDENTE (pós-captura!). E. capturas/controles: idem.
+F. runner/loader: CCE (R44+!) + o gerador RED (R46!).
+G. fronteiras: fixes+getter+consumer = CCE-HOST (o build do probe!); a
+   execucao no device = PENDENTE (o runtime OFf/ON!); KERNEL/GRAPH/HANDOFF/
+   PERF = NÃO.
+H. o proximo teste minimo: (1) instalar o cohort R47 no device (os SHA da
+   secao III!); (2) o probe R47 (o APK!); (3) tune GGML_HEXAGON_ACT_DUMP=1;
+   (4) mmtest:q4k (o caso Q6 K6144/N2048/B1!); (5) o probe consome a API
+   (o bloco R47!) e exporta; (6) puxar o act_payload.bin + SHA; (7) as 2048!
+   RISCOS DECLARADOS: o flush/coerencia do sbuf (o flush global do batch
+   existe!); a visibilidade do payload (header+payload!) — o consumo SO'
+   pos-resposta e' a precondicao (implementada!); o branch real (Q6-alvo!)
+   — o probe registra o dispatch (o branch ROW!) no log!
+================================================================================

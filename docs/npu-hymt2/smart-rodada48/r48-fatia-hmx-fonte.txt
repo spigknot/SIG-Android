@@ -1,0 +1,52 @@
+    kparams->n_hmx = 1;
+    kparams->pipeline = pipeline ? 1 : 0;
+    kparams->m_chunk = m_chunk;
+    kparams->n_chunk = n_chunk;
+    kparams->n_threads = n_threads;
+    kparams->n_act_threads = act_threads_selected;
+    kparams->tile_size = htp_mm_get_weight_tile_size(wtype);
+    kparams->aligned_tile_size = aligned_tile_size;
+    kparams->src1_row_size = (wtype == GGML_TYPE_Q4_1 || wtype == GGML_TYPE_Q4_K) ? htp_mm_q8_1_tiled_row_size(ne10) : htp_mm_q8_0_tiled_row_size(ne10);
+    kparams->vtcm_size = vtcm_size;
+    kparams->vtcm_src0_size = 0;
+    kparams->div_n_act_threads = init_fastdiv_values(act_threads_selected);
+    kparams->div_ne00_padded   = init_fastdiv_values(ne00_padded);
+    kparams->vtcm_src1_size = 0;
+    kparams->vtcm_dst_size = 0;
+
+    if (is_batched && !is_matmul_id) {
+        kparams->kernel_type = HTP_MM_KERNEL_HMX_F16_BATCHED;
+static int hmx_mm_op_matmul(struct htp_ops_context * octx, const struct htp_mm_kernel_params * kparams) {
+    htp_matmul_tensors_preamble;
+
+    int k = (int) src0->ne[0];
+    int n = (int) src0->ne[1];
+    const int m_total    = (int) src1->ne[1];
+    const int act_stride = (int)(src1->nb[1] / sizeof(float));
+    const int wgt_stride = (int)(src0->nb[1] / sizeof(__fp16));
+
+    const float * src2_ptr = NULL;
+    uint32_t src2_stride = 0;
+    size_t src2_nb2 = 0;
+    size_t src2_nb3 = 0;
+    if (src2) {
+        src2_ptr = (const float *) src2->data;
+        src2_stride = (src2->ne[1] == 1) ? 0 : (uint32_t) (src2->nb[1] / sizeof(float));
+        src2_nb2 = (src2->ne[2] == 1) ? 0 : src2->nb[2];
+        src2_nb3 = (src2->ne[3] == 1) ? 0 : src2->nb[3];
+    }
+
+    int ret = -1;
+    const int n_threads = MIN(kparams->n_threads, (int) octx->n_threads);
+    if (kparams->kernel_type == HTP_MM_KERNEL_HMX_F16_BATCHED) {
+        hmx_mm_f16_f32_batched_params_t batch_params = {
+            .dst             = (float *) dst->data,
+            .src2            = src2_ptr,
+            .activation      = (float *) src1->data,
+            .weight          = (const __fp16 *) src0->data,
+            .m               = m_total,
+            .k               = k,
+            .n               = n,
+            .act_stride      = act_stride,
+            .weight_stride   = wgt_stride,
+            .dst_stride      = (int) (dst->nb[1] / sizeof(float)),

@@ -1,0 +1,57 @@
+PROMPT AO EXECUTOR — SMART DUAL-BACKEND — RODADA 45
+DO MAPA A EXECUCAO: P1-P2 COMPILADOS, DEPOIS ACT NO DSP
+=======================================================================
+Leia AUDITORIA-R44-RASTREABILIDADE-CCE-ACT-PENDENTE.txt e AUDITORIA-R44-LOGS/.
+So copia/probe isolados. Loader fullSHA+schema e rastreabilidade de conteudo
+aceitos: nao reabrir. Os 13/13/50/54 estao estaveis ha 4 snapshots: a R45 nao
+pode ter esses numeros como resultado principal.
+
+1. P1-P2 COMPILADOS (sem device, sem risco DSP — exigivel nesta rodada)
+Implementar no fonte do candidato: shared_buffer global de dump (221184+ B)
+guard test-only GGML_HEXAGON_ACT_DUMP=1 (P1) + add_buffer(dump)->bi_dump no
+ponto de montagem do batch quando armado e op==matmul Q6-alvo (P2).
+Entregar: diff completo do patch, build host+skel do cohort separado com
+log exit0, sizes/ABI verificados, fullSHA64 dos fontes alterados e das libs.
+Sem device ainda: provar que compila e que com flag OFF o comportamento e
+byte-identico (build OFF vs ON sem armar => mesmos binarios ou diff
+justificado). Se P1-P2 nao compilarem, trazer erro real — nao desenho.
+
+2. P3-P8: EXECUCAO OU BLOQUEIO REAL
+Na sequencia: propagar bi_dump via kernel_params (P3), copia pos-quantize_row
+no skel (P4-P5), rebuild cohort separado (P6), probe arma + roda K6144/N2048/B1
+com actfloat R39 (P7), entregar 221184 B + fullSHA64 + RUN_ID e recomputar as
+2048 saidas (P8). Alternativa B (replay do quantizador real no DSP) se o
+mapeamento falhar, rotulada REPLAY_REAL. Proibido scalar-por-intrinseco,
+quantizador CPU como ACT DSP, arquivo sintetizado. Se bloquear: comando +
+erro/diagnostico reais + menor tentativa executada. Nao remeter a R46 sem
+execucao nem prova de bloqueio.
+
+3. HIGIENE DA BATERIA (pequeno, junto)
+Contar runs com exatidao (a R44 disse 5/5 com 4 RUN_IDs); incluir vacina
+BUILDFAIL exercitada (exit92, run nao executado); renomear SRC executado
+(r42_refs.c com conteudo novo confunde — versionar o nome); RUN_ID com PID
+alem de epoch; checar erro do mkdir -p do EVID; anexar os arquivos por RUN_ID
+(build/out/err integrais) ou declarar o limite de transferencia.
+
+4. FULLCOHORT E EXPORT (paralelo, sem bloquear a ACT)
+Completar ABI/buildID efetivamente carregados; fullSHA64 da lib em toda
+rodada. Export: seam compartilhada, handle/op/epoch, captura unica com
+desarme, metadata validada antes de COMPLETE, status consumido; vacina do
+codigo consumido. Com exporter fechado: duas capturas Q6 + controles F32 e
+Q4_0/Q8_0 no mesmo shape.
+
+5. ENTREGA A-H — ACT EXECUTADA E A PROVA CENTRAL
+A fullcohort; B patch P1-P2 compilado + vacinas; C ACT/replay exercitado e
+coverage; D 2048 metricas/violadores a partir da ACT observada; E capturas/
+controles/ON-OFF; F runner/loader/logs integrais; G CCE/PARCIAL/PENDENTE/
+BLOQUEADO especificos; H proximo teste minimo. Manifesto existencia+tamanho+
+fullSHA64 de tudo afirmado como anexo; patches recuperaveis. Sem estimar nem
+fabricar dump. FFN/temporal/fused/minigrafo/placement pendentes, nao
+substituem ACT/handle/vacina. KERNEL/GRAPH/HANDOFF/PERF=NAO ate provas
+proprias. Smart final: prefill NPU -> geracao GPU OpenCL/Vulkan, sem replay
+integral; HTP->CPU nao atende; PIN_PASS nao aprova Smart. Sem promocao/
+default/troca de lib de producao. Escopo ao fim: SIG/Whisper/UI/default
+Vulkan/modelo c4bf/R2/WIP intactos; 9 staged R37 + FfmpegPreview byte a byte;
+serial 3B15BD00FVE00000; PJA110 proibido; stayon7; sem credenciais; sem
+commit/push/release/remocao.
+=======================================================================

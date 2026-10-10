@@ -1,0 +1,3219 @@
+PARECER INDEPENDENTE R46 FINAL (§5) + PROMPT AO EXECUTOR R47
+=======================================================================
+CAPTURED NÃO PODE SER APENAS UM HEADER ACEITO
+
+Escopo: ENTREGA final pasted_content_2026-10-10_12-41-45-755_8985ed.txt.
+As versões11-42-41 e11-53-36 são idênticas byte a byte; a versão12-41-45
+ACRESCENTA a API. Este parecer incorpora a versão final e substitui o
+rascunho sobre a entrega parcial. UM TXT com parecer A–H, prompt, fontes,
+saídas dos testes executados e manifesto completo.
+Especialista: somente auditoria local/host e diretrizes. Não editei código
+do app/probe/Whisper; não conectei servidor/device/ADB/R2, não instalei,
+não movi staging, não comitei/publiquei/removi arquivos.
+
+VEREDITO
+A R46 fez avanços concretos, inclusive a API de registry e a captura única
+host-side. Aceito esses avanços limitados. Mas NÃO aceito o salto para
+'7 fixes/API CCE-HOST' e 'device sem bloqueio técnico conhecido'.
+Há defeitos verificáveis na própria vacina C5 e no contrato de CAPTURED.
+Não recomendo executar a candidata final inalterada no aparelho. R47 deve
+corrigir o contrato mínimo e INTEGRAR o consumer real, para executar a
+primeira ACT real no probe isolado após os gates; não redesenhar tudo.
+Nada aqui prova bug do kernel DSP ou culpa da CPU.
+
+=======================================================================
+PARTE I — PARECER A–H SOBRE A VERSÃO FINAL
+=======================================================================
+
+A. IDENTIDADE / MANIFESTO / BUILD / PATCH
+A.1 SeçãoV do anexo final:13 registros. Validei formato64hex, existência,
+tamanho e SHA-256 dos13:13/13 conferem. Pasta local tem13 arquivos.
+Os resultados8/8 e6/6 foram reproduzidos, com suas limitações adiante.
+Reconstrução do NOVO htp-ctx.h a partir do diff completo também confere
+com fullSHA4db38dd26a87e3e534b567539484b91f2b85539619a3d445cefadea40eedba90.
+Não é prova dos outros sources nem dos ELFs remotos.
+
+A.2 Buildv2: logs de17 linhas(host) e35(SKEL) documentam compile/link,
+mas não trazem CMD/cwd/flags/toolchain/buildRC explícito. RC=0 é declaração
+do relato. Não reproduzi Android/Hexagon nem tenho os ELFs locais.
+§5final: hashes de2sources+2libs e sizes/timestamps são RELATADOS. Os13
+anexos NÃO incluem logs de build específicos do§5. Não atribuir os logs
+v2 ao source33f187.../libs5138... e0b8c... sem vincular a coleta.
+Relato não é falso por isso; a evidência independente continua parcial.
+O hostlogv2:16–17 mostra RELINK de libggml.so e libllama.so. 'Fonte não
+mudou' não prova ELF imutado: coletar fullSHA/tamanho atuais de libllama,
+core/base/CPU e dependências do probe realmente carregadas, sem rebuild
+inútil de tudo. Não relaxarSHA ou substituir strings inválidas.
+
+A.3 main.c NÃO está recuperável como patch no diff dito integral:
+ r46-v2.diff:118 = diff: /root/r45_backup_sigcand2/main.c: No such file or directory
+O SCRIPT r46_patch.py:188–204 tem publicação r46_bufs e limpeza central,
+e o logSKEL mostra main.c.obj. Isso não prova ausência da implementação;
+mostra ausência da evidência do sourcefinal/patch aplicável de main.c.
+Entregar sourcefinal exato com hash, ou diff sobre baseline verificável;
+NÃO fabricar o backup ausente. Incluir matmul-ops.h: o wire mudou no
+r46-v2.diff:418–427, mas não está listado no cohortv2/final.
+
+A.4 Os r46b-host-api.diff e r46b-skel-opseen.diff comparam o MESMO backup
+histórico, não a saída v2 como baseline. Eles contêm também fixes v2,
+não só inserções§5. Não aplicar mecanicamente v2+os dois r46bdiffs em série.
+Fornecer série realmente aplicável OU snapshots finais/overlay com baseline
+identificado.164/41 são linhas dos diffs entregues, não205 linhas únicas
+adicionadas à v2. Preservar as evidências históricas intactas.
+
+B. O QUE A R46 FINAL CORRIGIU — NÃO REABRIR O JÁ SAUDÁVEL
+B.1 Nos trechos entregues: índice porbatch com reset=-1, bi0 válido,
+seletor no add_op(MUL_MAT), índice atribuído depois da cópia do blob e
+resolução r46_bufs[bi].base em vez de ctx->mmap[bi].base. São avanços
+concretos. Dispatcher em main.c continua evidência PARCIAL, pois só há
+script/log, não mainfinal no diff. !n_hmx está no trecho do mapper.
+
+B.2 API agora EXISTE no diff final: ggml_hexagon_get_act_dump(void*out),
+registrada por strcmp em get_proc_address; há status/type/K/N/B/epoch/
+rows_done/payload_off/ptr/capacity/row_size. Não diga mais 'API não foi
+implementada'. O CONSUMIDOR REAL do probe, porém, segue explicitamente
+pendente: o relato fornece uma sequência de uso, não integração executada.
+
+B.3 §5 traz used=1 ANTES do enqueue e impede armar outra opMUL_MAT
+matching. Meu teste extraindo o seletor FINAL confirma:
+ NEW_ONE_SHOT first_bi=0 second_bi=-1 epoch=1 used=1
+Retiro a crítica de 'duas MUL_MAT iguais sobrescrevem sem desarme' para
+este seletor FINAL. Esse defeito existia na v2 e sua contraprova foi mantida
+no apêndice como HISTÓRICA/SUPERADA. Não cobrar de novo a correção básica.
+used marca RESERVA, não captura concluída. Ainda faltam vínculo ao handle/
+request escolhido e lifecycle/erro por sessão. API global não recebe token.
+
+B.4 Getter rejeita magic/epoch errados: WRONG_EPOCH status=-1 reproduzido
+com o corpo final extraído. São proteções reais e úteis. magic/version
+emitidos no status não provam tamanho/layout de um caller que recebe void*;
+header compartilhado ou handshake de size antes da escrita é necessário
+para evitar ABI por struct copiado às cegas.
+
+C. C5 DA SUÍTE8/8 CONTINUA INVÁLIDA (MESMO ARQUIVO/HASH NA FINAL)
+C.1 Compilei e executei r46_vacinas.c SEM MODIFICAR com GCC/gnu11 -O2
+-Wall -Wextra:build0/run0; saída idêntica ao anexo e8/8 impressos.
+Isso é saída real, não validação de segurança. Em:
+ r46_vacinas.c:80: uint8_t row_data[221184]
+ r46_vacinas.c:120: worker_copy(row_data,262144,0,1)
+a origem tem221184 e memcpy solicita262144. Excesso40960 bytes calculado
+por ferramenta. É undefined behavior da VACINA, não prova de overread no
+quantizadorDSP. Não promover esse8/8 a 'tudo exercitado'.
+
+C.2 Uma cópia diagnóstica em scratch registra endereço e capacidade REAL
+da origem e intercepta apenas o memcpy do worker. AtéC4 mesmo resultado;
+C5 é bloqueado ANTES de ler o excesso:
+ SOURCE_OOB_BLOCKED requested=262144 src_capacity=221184 excess=40960
+ RUN_EXIT=86
+86 é recusa esperada do adapter do auditor, não sucesso da captura.
+Não é ASan/DSP; fontes integrais incorporadas nesteTXT. Arquivo original
+intocado. O teste original retornou0 mesmo tendo o UB descrito.
+
+C.3 'untouched' em:121–122 é atribuído e nunca consumido;:124 compara só
+números de retorno. GCC emite unused-but-set-variable. Os8casos são modelos
+C com tipos porstrcmp, flagreset manual, sbuf boolean e FD77 do adapter,
+não execução do C++ real/session/dispatcher/memset→memcpy integrado.
+Corrigir origem do caso exato e checar sentinel inteiro IMEDIATAMENTE após
+cada recusa. Consumir o check. Não mudar produção para acomodar fixture
+errada. C7/C8 provam o resultado de seleção modelado, não os contadores de
+alloc/mapa/cópia nem o freeze init-only runtime em todos os opcodes.
+
+D. API6/6: LÓGICA POSITIVA REPRODUZIDA, CAPTURED AINDA PERMISSIVO
+D.1 r46_api_vacina.c inalterado:build0/run0, saída idêntica à fornecida,
+6/6. N3 preenche os4words do header manualmente; não chama quantizador,
+worker, queue/barreira/cache nem probe. Isso é teste legítimo da lógica do
+getter, não reader end-to-end ou capturaACT real. Seus estados não são
+aprovados automaticamente porque os6 casos escolhidos passaram.
+
+D.2 Extraí literalmente o getter C++ FINAL e o hook de cópia§5 dos diffs.
+Compilei em host com sbuf/session/batch mocks e atomic serial adapter
+DECLARADOS; não verifiquei atomicidade/coerência Android/Hexagon.
+CasoB1 válido: cópia221184 do padrãoA5, retorno2/rows1/payload_match1.
+Esse padrão é fixture host, NÃO ACTDSP; prova que o caminho de cópia/estado
+modelado funciona, não que o quantizador foi executado.
+
+D.3 Estados negativos injetados no mesmo accessor extraído:
+ ROWS_EXCESS rows=2 expected_B=1 status=2
+ ZERO_ROW_SIZE row=0 status=2
+ PAYLOAD_EXCEEDS_CAP offset=64 row=221184 capacity=64 status=2
+São contraprovas de VALIDAÇÃO do getter, não prova de que o app já gerou
+esses estados em hardware. O código aceita>=B, enquanto o relato descreve
+'rows==B'; não testa row_size>0 ou payload_off+B*row_size dentro decapacity.
+O consumer planejado pode rejeitar depois, mas ainda NÃO foi implementado.
+Para estado2 significar CAPTURED confiável, validar contrato dos metadados
+antes de retorná-lo, ou renomear o estado paraHEADER_READY e exigir validação
+formal do consumer. A preferência mínima é validação no getter+consumer.
+
+D.4 Produtos não são checked. A SOMA segura por len<=cap-off vem DEPOIS
+das multiplicações e, agora, da adição64. No hook FINAL, size_t64:
+ row=9223372036854775816, ir_first=2, ir_last=4, cap96.
+ off=80,len=16 após wrap; memcpy16 dentro da alocação host é feito, counter
+incrementa1 e getterstatus2. Sem escrita fora do objeto físico:
+ WRAPPED_COPY off=80 len=16 rows=1 status=2 capacity=96
+Prova isolada do guard/hook/getter com range inválido, NÃO prova de request
+real chegar a esse row noDSP. Macro real também calcula dst_data e chama
+quantizador antes do hook; portanto os ranges absurdos NÃO devem ser rodados
+no device. Validar seleção/intervalos antes dos acessos e guard checked no
+hook; testar limites reais da toolchainHexagon, não presumir size_t64 noDSP.
+
+D.5 O atomic_fetch_add incrementa1 por invocação do worker, não o número
+ir_last-ir_first. ParaB1 verdadeiro e umainvocação isso pode ser correto;
+não declarar 'rows completas' genericamente sem provar a divisão de trabalho.
+Na referência, QUANTIZE_IMPL calcula nrows=ne1*ne2*ne3 (:816–824), mas o
+seletor FINAL só exige s1.ne1==1 (:118). ne2/ne3 extras não são B1.
+FIX: restringir o experimento a2D/ne2=ne3=1 nos tensores pertinentes,
+marcar coverage exata da únicarow/intervalo; proibir extra/duplicata/range
+inválido. Não ampliarB2/B128 só para justificar uma API universal agora.
+
+E. FRONTEIRAS QUE O§5 NÃO FECHOU
+E.1 OFF e opcodes irmãos: o selectorFINAL só define act_dump_bi=-1 dentro
+ifMUL_MAT (hostdiff:111–113). Na contraprova v2, outroopcode com blobzerado
+permanecebi0; esse if não mudou na final. Na referência main.c:697–699,
+MUL_MAT eMUL_MAT_ADD chegam aoMESMO op_matmul, e precompute zera parâmetros.
+Se o candidato mantém essa estrutura, limpeza central não impede op_matmul
+rearmar descritor0, agora com possibilidade de escrever h[2] em buffer que
+NÃO é dump. Conferir sourceEXATO e inicializar OFF em todo opcode consumidor
+desse struct. NÃO afirmar que ocorreu noDSP; é risco integrado verificável
+por source e vacina focal, não problema resolvido por C6(hmx_ptr=NULL).
+
+E.2 Owner/lifetime: sbuf global criado com a primeira sess é associado aela;
+o novo seletor ainda add_buffer antes de testar used (:119–125). One-shot
+não prova teardown/segunda sessão/callback tardio/serialização. Meu adapter
+v2 demonstrou owner antigo≠sess solicitada. Final não muda a política doowner,
+embora bloqueie uma segunda capturaMUL_MAT. Para o mínimo, vincular UMA
+sessão autorizada e RECUSAR qualquer segunda antes de re-add; lifespan até
+fim do reader. Não exigir grande framework multissessão, nem alegar crash
+ou invalidade doFD real pelo mock. FD77 é fixture, não observação do device.
+
+E.3 Flush: CONFIRMO a referência main.c:1067–1070 executa flush/invalidate
+GLOBAL DSPD-cache antes da resposta(:1074ss). NÃO dizer 'falta todo flush'
+e NÃO criar rotinaSDK de nome presumido. Isso NÃO demonstra sozinho a
+invalidação/visibilidade da CPU no sbuf separado, nem o source exato final.
+A API só consulta memória plain; não espera compute, não recebe fence/status,
+não distingue error/earlycall. Uso SOMENTE APÓS resposta pode ser precondição
+válida, mas deve ser implementado/testado no consumerreal, com wait e status
+consumidos. O comentário no r46b_patch.py:104–105 não é um consumer.
+Checar contratoRPCmem/dspqueue/SDK usados e caminho host. Provar visibilidade
+headerEpayload, não sómagic. Payloadoff64 coloca dados em linha distinta.
+
+E.4 Falhas de bounds no hook são silenciosas. op_seen pode ser1 com copy
+recusada; rows permanece0, API retornaARMED_NO_CAPTURE em vez deINVALID com
+primeira causa. Nada publica bytes_written/branchlayout/inputhash/ophandle/
+RUN_ID/request/statusCompute. Completar metadados mínimos, evitar payload
+stale/parcial; export só se ligado à operação e ao input do snapshotR39.
+Notcaptured por branch nãoinstrumentado é distinto de erro decontrato.
+
+E.5 Geradores: testei os2 scripts ATUAIS em fixtures existentes semanchor.
+ r46_patch.py normalexit1(A1anchor); -Oexit0/PATCH V2 COMPLETO.
+ r46b_patch.py normalexit1(A1anchor); -Oexit0/PATCH§5 COMPLETO.
+Assim o relato NOANCHOR_EXIT1 é corroborado no modo normal. Não é uma vacina
+fail-closed contraassert removido. -O é contraprova explícita, não o modo
+atribuído ao executor. Substituirassert por if/raise nos gates críticos;
+testar stages posteriores e runner consumirexit, sem partialGREEN.
+Não herdar a falha do scriptR45 para classificar falsamente o novo script
+normal, nem chamar -O seguro porque normal falha.
+
+F. TOTAIS / ESTADOS
+Últimaexecução REGISTRADA por script, não contagem cumulativa de retries:
+ audit46.py:3 builds0;3runs (0/86esperado/0);2runs do geradorR46(1/0).
+ audit46b.py:2builds0;2runs0;2runs do gerador§5(1/0).
+ Total5 builds host e5runs,4invocações degeradores emfixture; logs integrais.
+Manifesto13/13, vacinas saídas8/8e6/6;C5UB invalidatestatus8globalseguro.
+
+Estados específicos:
+ MANIFESTO13 + CTX_RECONSTRUIDO = CCE_HOST.
+ BI0/RESET/PÓS_BLOB/DESCRITOR = TRECHOS_VERIFICADOS; integração PARCIAL.
+ ONE_SHOT_HOST_MULMAT + EPOCH_REJEITADO = VERIFICADOS em modelo comtrechos.
+ API_REGISTRADA = IMPLEMENTADA_NO_DIFF, consumidorPROBE PENDENTE.
+ API6 = SAÍDA_REPRODUZIDA; validaçãoranges/size/coverage INSUFICIENTE.
+ VACINA8 = SAÍDA_REPRODUZIDA, C5UB; não CCEglobalseguro.
+ BOUNDSCHECKED = PARCIAL; produto/headeraddition não checked.
+ OFF_IRMÃOS/OWNER/ABI/COERÊNCIACPU/CONCLUSÃOCONSUMER = PENDENTES/PARCIAIS.
+ BUILDv2 = SUPORTADO_POR_LOGS; BUILD§5 = RELATADO semlog específico/ELFs.
+ ACT_REAL / REPLAY_REAL / MÉTRICAS2048COMACT = NÃOEXECUTADOS.
+ KERNEL_VALIDATED / GRAPH / HANDOFF / PERFORMANCEglobais = NÃO.
+PIN_PASS é resultado limitado; não aprovação automática doSmart.
+
+G. PRESERVAÇÃO
+Repo branchmain. Snapshot de9stagedR37 preservado na verificação final
+(anexo com hashes). Apenas scratch/esteTXT e lições taskskill escritos.
+Sem app/probe/Whisper, semdevice/servidor/staging/produção.
+Hashes deartefatos remotos relatados não são observações do especialista.
+No apêndice audit46.py (v2), twoopsé SUPERADO peloone-shot§5; não misturar
+saídasv2 com a candidataFINAL para reabrir bugjáresolvido.
+
+H. DECISÃO / OBJETIVO R47
+Preservar API existente eone-shot. RepararC5/guard/getter/OFFirmãos/owner
+mínimos, entregar source/cohort verificáveis, integrarconsumerreal comawait/
+coerência e obter PRIMEIRA ACTB1 no probeisolado após gates. Próximo teste
+não é simplesmente instalar§5 como está. Não esperar kitgenérico/minigrafo/
+fusão/SmartUI para essa primeira evidência. SemACT fake; sem culparCPU/DSP.
+
+=======================================================================
+PARTE II — PROMPT DETALHADO AO EXECUTOR R47
+CONSOLIDAR O§5, INTEGRAR PROBE E CAPTURAR ACT REAL COM CONTRATO FECHADO
+=======================================================================
+
+0. DIREÇÃO / LIMITES
+Leia A–H e contraprovas nos apêndices. Não executar a candidataR46final
+inalterada. Não recriar readerdozero: a API de registry é baseimplementada.
+Scope só cópia/probeisolados autorizados; SIG principal, Whisper, modelo
+c4bf, UI/defaultVulkan, WIP/9stagedR37, R2 intocados. Semstaging/commit/push/
+release/remoção/reboot. TodosADB SERIAL3B15BD00FVE00000, NUNCA PJA110/1164a04;
+stayon7 inalterado. Nenhuma instalação/troca em produção por estaordem.
+Não executar etapascondicionais fora dasautorizações; preservarGREENeRED.
+Não benchmarkar comdumpON. Negativos de memória/overflow sóhost/mocks.
+
+1. CORRIGIR A VACINA EXISTENTE, SEM PERDER OQUEPASSOU
+C5exact262144 deve usarorigem>=262144, padrãoexpectedválido (big_row400000
+já existe). Após cada recusadestino/origem, validar sentinelinteiro antes do
+casoseguinte. Consumir untouched/asserts. Reexecutarsuíte livre desseUB;
+registrarcmd/build/run/diff/hash. Testeorigeminsuficiente recusa ANTES de ler.
+Adapterguard/sanitizer disponível deve fechar esse caso, não saída8/8sozinha.
+Conectarseam consumida àprodução; se extração/adapters, declarar diferenças
+e validarcorpo/sourcehash. Cmodel FD77/sbufboolean não é backendreal.
+
+2. CONTRATOMÍNIMO B1, NÃO FRAMEWORK GENÉRICO
+2.1 Corrigir checkedmultiply e headeraddition no dump: row*first, row*rows,
+64+off, len<=cap-off, rangesfirst/last e capacidade daorigemquantizada.
+Só calcular ponteiros apósvalidação. Primeiro verificar row/layout e todos
+ne de alvo2D: K6144/N2048/B1,F32input; ne2=ne3=1 nos tensores pertinentes,
+ne0compatível/strides/branchq8_0tiled. Não aceitarne1=1 ne2=2 comoB1.
+Produtosabsurdos testados host, nunca requestsperigosos nodevice.
+Não refatorar quantizador para o negativo: restrição doprobe+guard/seam
+checked pode resolver oexperimento pequeno. Consumir erroINVALID noprimeiro
+boundsfail, não ignorar e deixarARMED para sempre.
+
+2.2 Todosopcodes que carregam htp_mm_kernel_params precisam defaultOFF=-1
+DEPOIS doprecompute/blocopy; verificarMUL_MAT_ADD e irmãosID/fused nofork
+EXATO. Dispatcher limpa mas mapper pode rearmarbi0; em§5 também h[2] precisa
+proteger o buffer certo. TesteOFF no caminhoirmão integrado; manter !n_hmx.
+Nenhuma fusão nova para mascararresidual. Mediralloc/add/map/copy/OFF, não
+sólog/bi. Flaginit-only definida ANTES daprimeira consulta emprocessofresco.
+ON/OFF mesmoartefato podem serprocessosnovos; resetmanualde g_armed não é
+freeze-runtime. Zero callback/outputdump quandoOFF, sempayloadantigo.
+
+2.3 Manterone-shot§5: a segunda matchingMUL_MAT foi corretamente desarmada,
+não revertê-lo. used=RESERVADA atéconfirmado: vincularrequest/token/ophandle/
+inputhash/sessão à única op escolhida. Owner válido atéawait+readback;
+para mínimo sóUMA sessão autorizada, outrasRECUSADAS ANTES dere-add.
+Não reutilizar silenciosamente sbuf com firstsess numa novasess; sem grande
+refactor multissessão. Recusar concorrência/tardycallback/duplicata.
+Erro de compute/captura deve invalidar ou permitir rearmamento EXPLÍCITO
+emprocessofresco, não mudar cacheglobal para fingirrecaptura.
+
+3. FORTALECER GETTER/STATUS, NÃO SÓ IMPRESSÃO
+3.1 Usar o getter existente ggml_hexagon_get_act_dump e registryreal.
+Antes de retornar2, validar headercapacity>=header, magic/epoch, op_seen,
+B=1alvo, row_size válida221184 APENAS SE layouttiledconfirmado, payloadoff64,
+byteschecked dentro decapacity, rows/coverageEXATA, branch/input/request
+esperados, primeira causa/bytes_written/statusCompute. Zero/excesso/duplicata/
+partial/stale/earlycall/falhacontrato sãoINVALID ouNOT_CAPTURED como apropriado,
+nuncaCAPTURED. O erro row0/cap64/rows2 passa noaccessor atual: vaciná-los.
+Não confiar em>=B nem chamarworker-count de rowcoveragegeral. ParaB1 fixo,
+provar ir_first0/ir_last1 euma commit exatamente; não abrirB128 para estaAPI.
+
+3.2 Header comum producer/consumer ou handshakeversion+out_capacity ANTES
+escrita; statusmagic/versionapós chamada não protege structcopiado menor.
+Na auditoriahost size72/ptr48/row64: valores deHOST, não presumir ARM/Hexagon.
+Wirehtp_mm_kernel_params: conferirsizeof/offsetof hostAndroid+SKEL e blob128;
+parhost/skelcompatível, misturaABI recusada ANTES decompute. Se instrumentação
+separada dessablob melhor, discutir designfocal, não crescerblob àscegas.
+
+3.3 Getter pode serread-only com PRECONDIÇÃO pósbatch: então consumerreal
+DEVE cumprir/consumirwait+status e código testável garantir earlycalls não
+exportam. Alternativa: guardar conclusão correspondente no backend e
+querytokenvalidado. Não inventarAPIQURT/RPC(cache) nem esconder waitnulo.
+Confirmar contrato existenteflushGLOBALDSP (eleexiste) e hostCPUvisibility
+sbuffer: doc/headers doSDK e mecanismosREALMENTEusados. HeaderEpayload
+visíveis apósbarreira, não header-only. Se doc não for suficiente, menor
+contraprova/controlereal test-only do mesmo mapping, sem acesso deprodução.
+Não transformaruma suspeita deCPUinvalidate em causa demonstrada.
+
+4. IMPLEMENTAR O CONSUMIDOR REAL DO PROBE NESTA RODADA
+Resolver eCHAMAR registrygetter existenteno caminho realHTP do probeisolado,
+não outro harness que fabricaheader. Padrão registrygetter jáusado em
+C:/npu-probe/app/src/main/cpp/probe.cpp:1041/1067. Inspecionar build_e_run/
+wait/caminhographsnapshotalvos; nenhumaAPIinventada.
+Depoiscompute/await VALIDOS e leitura coerente, consumir status, session/
+token/input/fullcohort/metadados/dados; só CAPTURED validado exporta.
+Status0/1/-1/unknown recusa arquivo, propagaexit/primeira causa. Pointer
+não escapa doowner; readtocópiaestável, payloadlen REAL(semheader/padding
+espúrio) efullSHA. Write/flush/close/manifest+runner consomemfailures.
+Reader não captura peso, actF32 ou payloadantigo e chama deACTquantizada.
+Não escreverACT sintética nemsubstituirDSP porquantizadorCPU.
+
+5. GATES FOCAIS (SEMOUTRA RODADA SÓ COMPLANEJAMENTO)
+Reusarpositivos reais; adicionar précisément:
+ C5safe+sentinelconsumido/origembounds; checkedmultiply+off64;
+ row0/capmenor/rows_excesso/earlyquery/partial/stale/errorINVALID;
+ OFFMUL_MAT_ADD ebranchesirmãos; ne2/ne3extrasneg;
+ one-shotpreservado+handle/token correto; segunda sessãoREFUSADA;
+ consumerreal exigeawait/status/visibilidade/headerEpayload;
+ ABItoolchains+cohortmix recusado; exportinvalidsemarquivo.
+Ligar testes àmesma seamconsumida e mutantefocal que morre nela. Não afirmar
+cache/atomicity/DSP peloatomicserialadapterdesteauditor.
+Geradores2scripts: trocarassertgates porif/raise e validar normalE-O; stage
+posteriorfail não viraGREENparcial. Runner consomeerroANTES debuild, BIN,
+instalação/execução. Idempotência sóbloco final completoigual.
+
+6. RECUPERAR A EVIDÊNCIA E CONGELAR CANDIDATA
+SourceFINAL main.c+htp-ctx.h+matmul-ops.h+host+matmulC+probe e todosmudados,
+baseline/revision/fullSHA/tamanho. No patchseries usarbaselines corretos;
+diffs r46b não sãoinserts aplicáveis após v2 automaticamente. Seoriginais
+indisponíveis, snapshots comcohort verificável, nunca inventarbackup.
+Logs específicos dafinalcorrigida host/SKEL/probe, CMD/cwd/flags/toolchain,
+exits, ELFsize/buildID/SHA, SDKpin, libsquerealmenteentraramnoAPK/carregaram.
+Hashatual libllama/libggml/core/base/CPU e dependências; 'semfontealterada'
+não é imutabilidade doELF. Fullcohort4itemssóhost/c/2libs éPARCIAL, nãoAfinal.
+Manifestoconsomeexistência+tamanho+fullSHA, valoresliterais; staged9intacto.
+
+7. PRIMEIRA ACTB1 NO DEVICE ISOLADO — CONDICIONAL A1–6
+Somente candidata corrigida+consumerreal, nenhum teste dafinalR46unsafe.
+Host/SKEL/probe doMESMOcohort. Semrepublicação/APKSIG/UI/defaults/nativoprod.
+Logstream antesdotrigger, serial emTODOSadb, inputACTF32R39/canon/tiled
+pesosidentificados porhash, únicaopQ6K6144N2048B1. O nome mmtest:q4k não
+substitui type/handle runtime. ON/OFF MESMOartefato/config comprocessosfrescos
+seinit-only; não rodarsuítegenérica comdumpglobal livre.
+Obter ACTDSP pósquantização REAL: status/coverage/branch/layout/tile/rowbytes/
+scales/code/padding,221184seconfirmado, input/ACT/cohorthashes, RUN_ID/epoch/
+op/request, outputHTP damESMAop. Payload64+221184 cabe no262144, mascap
+NÃO é len. Rawexec-out/bintransfer semcorromperbytes; reader/exportvalidado.
+Sehooknãoforatingido: NOT_CAPTURED comtrace debranch; mínimoDSP/replay
+REAL do MESMOquantizador/intrínsecos, nãoCPUemulação e não fakebuffer.
+Se bloqueio: comando/preflight+erro real+menoralternativa executada, não
+'faltoutempo/APIaindaaconstruir' tratado como bloqueiotécnico inexistente.
+Unwritten/ABI/queue/crash estrutural: parar expansão, uma variável contra
+GREEN, preservarlog/tombstone autorizado; semreboot automático.
+
+8. RECOMPUTAR TODAS2048 E ENTREGAR UM TXT A–H
+SóapósCAPTUREDválido: decodificarACTnoLAYOUTobservado, calcular as2048saídas,
+CSV completo/unique0..2047/finite, NMSE/max_abs/legacyviolations0.02/0.05 e
+PIN5e-4 intactos. CompararoutputHTP dacaptura/candidate/input atual; R39é
+histórico sequalquercohort/captura mudou. EscalaF16≠ACC_FP16 comprovada;
+PIN_PASS não aprovaSmart. Persistindoresidual, gruposK/parciais/descritor
+observáveis antesdeabrirfusão. CPU não é culpada poranalogia.
+
+UMTXT emD:/Projetos/SIG/docs/especialista comA–H/estadosporfronteira/totaispor
+script/CMD+exit+saídas/fontesrecuperáveis/manifestocompleto; evidências em
+smart-rodada47 porRUN_ID, referidas COMHASH eexistência. Retificações:
+8/8antigo tinhaC5UB, APIimplementada simmasconsumerpendente/statuspermissivo,
+mainpatchausente, normalgeneratorREDnãoimplica-Oseguro, one-shot§5corrigiu
+sobrescritaMUL_MAT. Não dizer ainda 'sem bloqueio' ou 'todosCCE'.
+Entrega prioritária: consumer real+primeiraACT validada e2048, não só design.
+Capturascontroles/endtoend/temporal/minigrafo/placement depoisdesta fronteira,
+sem fingir queACTautorizaSmart. MetaSmart continuaNPUpréfill→GPUOpenCL/Vulkan
+semreplayintegral; HTP→CPU nãoatende. Release/default/númerosglobaisproibidos
+semprovaspróprias e autorizações. KERNEL/GRAPH/HANDOFF/PERFglobais aindaNÃO.
+
+=======================================================================
+PARTE III — APÊNDICES, SAÍDAS E MANIFESTO DE ARQUIVOS OBSERVADOS
+=======================================================================
+Todos os sources/logs/JSON/13anexos incorporados abaixo. audit46.py é v2,
+audit46b.py é a API FINAL: não promover twoopsv2 ao§5 jáoneshot.
+Asfixtures host/markers/padrões são DECLARADAS, não payloads DSP inventados.
+Atomicserialadapter verifica lógica, não atomics/cache em hardware.
+O TXT próprio não entra em seu manifesto: evita hash autorreferente.
+
+APÊNDICE1 — EXECUÇÕES REGISTRADAS
+executor-vaccine
+BUILD_CMD=["C:/msys64/mingw64/bin/gcc.exe", "-std=gnu11", "-O2", "-Wall", "-Wextra", "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada46\\r46_vacinas.c", "-o", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\executor-vaccine.exe"]
+BUILD_EXIT=0 RUN_EXIT=0
+vaccine-source-guard
+BUILD_CMD=["C:/msys64/mingw64/bin/gcc.exe", "-std=gnu11", "-O2", "-Wall", "-Wextra", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\vaccine-source-guard.c", "-o", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\vaccine-source-guard.exe"]
+BUILD_EXIT=0 RUN_EXIT=86
+r46-fragment-counterexamples
+BUILD_CMD=["C:/msys64/mingw64/bin/g++.exe", "-std=c++17", "-O2", "-Wall", "-Wextra", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\r46-fragment-counterexamples.cpp", "-o", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\r46-fragment-counterexamples.exe"]
+BUILD_EXIT=0 RUN_EXIT=0
+executor-api-vaccine
+BUILD_CMD=["C:/msys64/mingw64/bin/gcc.exe", "-std=gnu11", "-O2", "-Wall", "-Wextra", "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada46\\r46_api_vacina.c", "-o", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\executor-api-vaccine.exe"]
+BUILD_EXIT=0 RUN_EXIT=0
+r46b-api-fragments
+BUILD_CMD=["C:/msys64/mingw64/bin/g++.exe", "-std=c++17", "-O2", "-Wall", "-Wextra", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\r46b-api-fragments.cpp", "-o", "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\r46b-api-fragments.exe"]
+BUILD_EXIT=0 RUN_EXIT=0
+Entradas dos scripts: python C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46.py e python C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46b.py; PATH prefixado com C:/msys64/mingw64/bin; TMP/TEMP/TMPDIR=scratch. Geradores só sobre fixtures de scratch.
+
+APÊNDICE2 — CONTRAPROVAS/SAÍDAS/HASHCHECKS INTEGRAIS
+
+===== BEGIN audit46.py | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46.py =====
+from pathlib import Path
+import os,subprocess,json,ast,hashlib
+S=Path(__file__).resolve().parent
+R=Path('D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46')
+env=os.environ.copy();env['PATH']='C:/msys64/mingw64/bin;'+env.get('PATH','')
+for k in ['TMP','TEMP','TMPDIR']:env[k]=str(S)
+results={'scope':'host only; original vaccines plus explicitly adapted/extracted R46 fragment tests; no app/remote/device edit or quantizer execution'}
+
+def compile_run(label,src,cxx=False):
+ compiler='C:/msys64/mingw64/bin/'+('g++.exe' if cxx else 'gcc.exe')
+ cmd=[compiler,'-std='+('c++17' if cxx else 'gnu11'),'-O2','-Wall','-Wextra',str(src),'-o',str(S/(label+'.exe'))]
+ p=subprocess.run(cmd,capture_output=True,text=True,env=env)
+ (S/(label+'-build.log')).write_text(p.stdout+p.stderr)
+ results[label]={'build_command':cmd,'build_exit':p.returncode}
+ print('BUILD',label,p.returncode)
+ assert p.returncode==0,p.stderr[-1600:]
+ p=subprocess.run([str(S/(label+'.exe'))],capture_output=True,text=True,env=env,timeout=30)
+ (S/(label+'-out.txt')).write_text(p.stdout);(S/(label+'-err.txt')).write_text(p.stderr)
+ results[label].update({'run_exit':p.returncode,'stdout':p.stdout,'stderr':p.stderr});print('RUN',label,p.returncode);print(p.stdout.strip());print(p.stderr.strip())
+ return p
+
+p=compile_run('executor-vaccine',R/'r46_vacinas.c');assert p.returncode==0
+# Diagnostics-only read-capacity guard. Original vaccine and all control
+# flow are preserved; only register original row_data capacity and replace
+# its worker memcpy with a checked adapter. No out-of-object read is done.
+original=(R/'r46_vacinas.c').read_text()
+helper='''\nstatic const void *audit_src=NULL; static size_t audit_src_cap=0;
+static void *audit_copy(void*d,const void*s,size_t n){
+ if(s==audit_src && n>audit_src_cap){fprintf(stderr,"SOURCE_OOB_BLOCKED requested=%zu src_capacity=%zu excess=%zu\\n",n,audit_src_cap,n-audit_src_cap);fflush(stdout);exit(86);}
+ return memcpy(d,s,n);
+}\n'''
+adapted=original.replace('// ============ os FRAGMENTOS',helper+'// ============ os FRAGMENTOS',1)
+adapted=adapted.replace('uint8_t row_data[221184]; memset(row_data, 0xA5, sizeof(row_data));','uint8_t row_data[221184]; memset(row_data, 0xA5, sizeof(row_data)); audit_src=row_data; audit_src_cap=sizeof(row_data);',1)
+adapted=adapted.replace('memcpy(octx_act_dump_ptr + off, dst_data, len);','audit_copy(octx_act_dump_ptr + off, dst_data, len);',1)
+assert adapted!=original and 'audit_copy(octx_act_dump_ptr' in adapted
+(S/'vaccine-source-guard.c').write_text(adapted)
+p=compile_run('vaccine-source-guard',S/'vaccine-source-guard.c');assert p.returncode==86 and 'excess=40960' in p.stderr
+
+def block(t,s):
+ i=t.index(s);j=t.index('{',i)+1;d=1
+ while d:
+  if t[j]=='{':d+=1
+  elif t[j]=='}':d-=1
+  j+=1
+ return t[i:j]
+added='\n'.join(l[1:] for l in (R/'r46-v2.diff').read_text().splitlines() if l.startswith('+') and not l.startswith('+++'))
+flag=block(added,'static bool g_r46_act_dump_armed(')
+select=block(added,'if (o.opcode == HTP_OP_MUL_MAT)')
+copy=block(added.replace('\\\n','\n'),'if (mmctx->octx->act_dump_ptr)')
+code=r'''#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstdint>
+#include <cstddef>
+#include <map>
+#define GGML_LOG_DEBUG(...) ((void)0)
+enum {HTP_OP_MUL_MAT=1,HTP_OP_MUL_MAT_ADD=2,GGML_TYPE_Q6_K=14,GGML_TYPE_F32=0};
+struct ggml_hexagon_session{int id;};
+struct ggml_hexagon_shared_buffer{ggml_hexagon_session*sess;size_t size;int fd;ggml_hexagon_shared_buffer(ggml_hexagon_session*s,size_t n):sess(s),size(n),fd(77){}};
+static ggml_hexagon_shared_buffer*g_r46_act_dump_sbuf=nullptr;static int g_r46_armed=-1;
+'''+flag+r'''
+struct ggml_tensor{int type;long long ne[4];ggml_tensor*src[4];};
+struct Node{ggml_tensor*node;};
+struct htp_mm_kernel_params{int act_dump_bi;};
+struct Op{int opcode=HTP_OP_MUL_MAT;int kernel_params[32]={0};};
+struct Batch{ggml_hexagon_session*sess;int r46_dump_bi=-1;int next_bi=0;std::map<int,int>byfd;
+ int add_buffer(ggml_hexagon_shared_buffer*b){if(byfd.count(b->fd))return byfd[b->fd];return byfd[b->fd]=next_bi++;}
+ void select_op(Node&node,Op&o){
+'''+select+r'''
+ }
+};
+struct Octx{uint8_t*act_dump_ptr;size_t act_dump_cap;};struct Mmctx{Octx*octx;};
+static int copy_calls=0;
+static void *counted_copy(void*d,const void*s,size_t n){copy_calls++;return std::memcpy(d,s,n);}
+#define memcpy counted_copy
+void real_copy_fragment(Mmctx*mmctx,uint8_t*dst_data,size_t dst_row_size,int ir_first,int ir_last){
+'''+copy+r'''
+}
+#undef memcpy
+int main(){
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","1");
+ ggml_hexagon_session s1{1},s2{2};Batch b1{&s1},b2{&s2};
+ ggml_tensor w{GGML_TYPE_Q6_K,{6144,2048,1,1},{}};
+ ggml_tensor a{GGML_TYPE_F32,{6144,1,1,1},{}};
+ ggml_tensor out1{},out2{};out1.src[0]=out2.src[0]=&w;out1.src[1]=out2.src[1]=&a;
+ Node n1{&out1},n2{&out2};Op o1,o2,o3,o4;
+ b1.select_op(n1,o1);b1.select_op(n2,o2);
+ auto bi1=((htp_mm_kernel_params*)o1.kernel_params)->act_dump_bi;
+ auto bi2=((htp_mm_kernel_params*)o2.kernel_params)->act_dump_bi;
+ printf("TWO_DISTINCT_OPS first_bi=%d second_bi=%d SAME_BUFFER=%d\\n",bi1,bi2,bi1==bi2);
+ if(bi1!=0||bi2!=0)return 11;
+ a.ne[2]=2;b1.select_op(n1,o3);
+ auto bi3=((htp_mm_kernel_params*)o3.kernel_params)->act_dump_bi;
+ printf("HIGHER_DIM ne1=1 ne2=2 ACCEPTED_BI=%d (not genuinely B1)\\n",bi3);
+ if(bi3<0)return 12;
+ a.ne[2]=1;b2.select_op(n1,o4);
+ printf("OWNER original_session=%d requested_session=%d SAME_OWNER=%d\\n",g_r46_act_dump_sbuf->sess->id,s2.id,g_r46_act_dump_sbuf->sess==&s2);
+ if(g_r46_act_dump_sbuf->sess==&s2)return 13;
+ Op fused;fused.opcode=HTP_OP_MUL_MAT_ADD;b1.select_op(n1,fused);
+ auto fused_bi=((htp_mm_kernel_params*)fused.kernel_params)->act_dump_bi;
+ printf("OTHER_OPCODE_MUL_MAT_ADD retained_bi=%d (zero-filled blob; OFF -1 not assigned)\\n",fused_bi);
+ if(fused_bi!=0)return 15;
+ uint8_t dst[32]={0},src[16];std::memset(src,0xa5,sizeof(src));Octx oc{dst,32};Mmctx mm{&oc};
+ size_t row=SIZE_MAX/2+9;int ir_first=2,ir_last=4;
+ size_t off=row*ir_first,len=row*(ir_last-ir_first);
+ real_copy_fragment(&mm,src,row,ir_first,ir_last);
+ printf("MULTIPLICATION_OVERFLOW row=%zu off=%zu len=%zu capacity=32 COPY_CALLS=%d\\n",row,off,len,copy_calls);
+ if(row<=SIZE_MAX/2 || off!=16 || len!=16 || copy_calls!=1 || dst[16]!=0xa5)return 14;
+ puts("R46_COUNTEREXAMPLES_CONFIRMED (host adapters; not Android/DSP)");return 0;
+}
+'''
+# Raw C++ literals use newline escapes, not a literal backslash+n stdout.
+code=code.replace('\\\\n','\\n')
+(S/'r46-fragment-counterexamples.cpp').write_text(code)
+p=compile_run('r46-fragment-counterexamples',S/'r46-fragment-counterexamples.cpp',True);assert p.returncode==0
+# Current generator A1 missing-anchor refusal, NOT old R45 patch5.
+missing=S/'generator-missing-A1';(missing/'htp').mkdir(parents=True,exist_ok=True)
+for n in ['ggml-hexagon.cpp','htp/htp-ctx.h','htp/matmul-ops.c','htp/main.c']:(missing/n).write_text('/* scratch fixture: A1 anchor absent */\n')
+p=subprocess.run([os.sys.executable,str(R/'r46_patch.py'),missing.as_posix()],capture_output=True,text=True,env=env)
+(S/'generator-missing-A1-out.txt').write_text(p.stdout);(S/'generator-missing-A1-err.txt').write_text(p.stderr)
+results['generator-missing-A1']={'exit':p.returncode,'stdout':p.stdout,'stderr':p.stderr};print('CURRENT_GENERATOR_MISSING_A1_EXIT',p.returncode);assert p.returncode!=0 and 'A1 anchor' in p.stderr
+p=subprocess.run([os.sys.executable,'-O',str(R/'r46_patch.py'),missing.as_posix()],capture_output=True,text=True,env=env)
+(S/'generator-optimized-out.txt').write_text(p.stdout);(S/'generator-optimized-err.txt').write_text(p.stderr)
+results['generator-optimized']={'exit':p.returncode,'stdout':p.stdout,'stderr':p.stderr};print('OPTIMIZED_GENERATOR_MISSING_ANCHORS_EXIT',p.returncode);assert p.returncode==0 and 'PATCH V2 COMPLETO' in p.stdout
+# Main.c modifications are a missing diff entry, not a checked-in patch hunk.
+results['missing_main_diff']='diff: /root/r45_backup_sigcand2/main.c: No such file or directory' in (R/'r46-v2.diff').read_text()
+results['source_read_excess']=262144-221184
+(S/'results.json').write_text(json.dumps(results,indent=2,ensure_ascii=False))
+print('AUDIT46_EXIT0')
+
+===== END audit46.py =====
+
+===== BEGIN audit46b.py | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46b.py =====
+from pathlib import Path
+import os,subprocess,json
+S=Path(__file__).resolve().parent;R=Path('D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46')
+env=os.environ.copy();env['PATH']='C:/msys64/mingw64/bin;'+env.get('PATH','')
+for k in ['TMP','TEMP','TMPDIR']:env[k]=str(S)
+res={'scope':'latest R46b API + worker fragments extracted literally; mocked owner/batch and serial atomic adapter, no Android/DSP/cache/ABI validation'}
+def block(t,s):
+ i=t.index(s);j=t.index('{',i)+1;d=1
+ while d:
+  if t[j]=='{':d+=1
+  elif t[j]=='}':d-=1
+  j+=1
+ return t[i:j]
+def added(p):return '\n'.join(l[1:] for l in p.read_text().splitlines() if l.startswith('+') and not l.startswith('+++'))
+def run(label,src,cxx=False):
+ cmd=['C:/msys64/mingw64/bin/'+('g++.exe' if cxx else 'gcc.exe'),'-std='+('c++17' if cxx else 'gnu11'),'-O2','-Wall','-Wextra',str(src),'-o',str(S/(label+'.exe'))]
+ p=subprocess.run(cmd,capture_output=True,text=True,env=env);(S/(label+'-build.log')).write_text(p.stdout+p.stderr);print('BUILD',label,p.returncode);assert p.returncode==0,p.stderr[-2000:]
+ p=subprocess.run([str(S/(label+'.exe'))],capture_output=True,text=True,env=env,timeout=30);(S/(label+'-out.txt')).write_text(p.stdout);(S/(label+'-err.txt')).write_text(p.stderr);print('RUN',label,p.returncode);print(p.stdout.strip());assert p.returncode==0
+ res[label]={'build_command':cmd,'build_exit':0,'run_exit':p.returncode,'stdout':p.stdout,'stderr':p.stderr}
+run('executor-api-vaccine',R/'r46_api_vacina.c')
+h=added(R/'r46b-host-api.diff');d=added(R/'r46b-skel-opseen.diff')
+status=block(h,'struct ggml_hexagon_act_dump_status {')+';';flag=block(h,'static bool g_r46_act_dump_armed(');getter=block(h,'static int ggml_hexagon_get_act_dump(');select=block(h,'if (o.opcode == HTP_OP_MUL_MAT)')
+worker=block(d.replace('\\\n','\n'),'if (mmctx->octx->act_dump_ptr)')
+code=r'''#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstdint>
+#include <cstddef>
+#include <vector>
+#include <map>
+#define GGML_LOG_DEBUG(...) ((void)0)
+#define R46_MAGIC 0x52343644u
+struct ggml_hexagon_session{int id;};
+struct ggml_hexagon_shared_buffer{ggml_hexagon_session*sess;uint8_t*base;size_t size;int fd;
+ ggml_hexagon_shared_buffer(ggml_hexagon_session*s,size_t n):sess(s),base(new uint8_t[n]{}),size(n),fd(77){} };
+static ggml_hexagon_shared_buffer*g_r46_act_dump_sbuf=nullptr;
+static int g_r46_armed=-1;
+'''+flag+'\n'+status+r'''
+static struct {int used;uint32_t epoch;int K,N,B,type;size_t row_size;}g_r46_meta={0};
+'''+getter+r'''
+// Serial adapter substitutes atomic update for logic-only host regression.
+using atomic_uint=uint32_t;
+static uint32_t atomic_fetch_add(atomic_uint*p,uint32_t n){uint32_t old=*p;*p+=n;return old;}
+struct Octx{uint8_t*act_dump_ptr;size_t act_dump_cap;};struct Mmctx{Octx*octx;};
+void worker_fragment(Mmctx*mmctx,uint8_t*dst_data,size_t dst_row_size,int ir_first,int ir_last){
+'''+worker+r'''
+}
+enum{HTP_OP_MUL_MAT=1,GGML_TYPE_Q6_K=14,GGML_TYPE_F32=0};
+struct ggml_tensor{int type;long long ne[4];ggml_tensor*src[4];};struct Node{ggml_tensor*node;};
+struct htp_mm_kernel_params{int act_dump_bi;uint32_t src1_row_size;};
+struct Op{int opcode=HTP_OP_MUL_MAT;int kernel_params[32]={0};};
+struct Batch{ggml_hexagon_session*sess;int r46_dump_bi=-1,next=0;std::map<int,int>byfd;
+ int add_buffer(ggml_hexagon_shared_buffer*b){if(byfd.count(b->fd))return byfd[b->fd];return byfd[b->fd]=next++;}
+ void select_op(Node&node,Op&o){
+'''+select+r'''
+ }
+};
+void setup(size_t cap=262144,size_t row=221184,uint32_t rows=1){
+ g_r46_act_dump_sbuf->size=cap;g_r46_meta={1,1,6144,2048,1,14,row};
+ uint32_t*hdr=(uint32_t*)g_r46_act_dump_sbuf->base;hdr[0]=R46_MAGIC;hdr[1]=1;hdr[2]=1;hdr[3]=rows;
+}
+int main(){
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","1");ggml_hexagon_session sess{1};
+ g_r46_act_dump_sbuf=new ggml_hexagon_shared_buffer(&sess,262144);
+ ggml_hexagon_act_dump_status st;
+ setup(262144,221184,0);std::vector<uint8_t> src(221184,0xa5);
+ Octx oc{g_r46_act_dump_sbuf->base,262144};Mmctx mm{&oc};worker_fragment(&mm,src.data(),221184,0,1);ggml_hexagon_get_act_dump(&st);
+ printf("LEGAL_B1 status=%d rows=%u payload_match=%d\\n",st.status,st.rows_done,std::memcmp(g_r46_act_dump_sbuf->base+64,src.data(),src.size())==0);
+ if(st.status!=2||st.rows_done!=1)return 11;
+ setup(262144,221184,2);ggml_hexagon_get_act_dump(&st);
+ printf("ROWS_EXCESS rows=%u expected_B=%d status=%d (accepts >= not ==)\\n",st.rows_done,st.B,st.status);if(st.status!=2)return 12;
+ setup(262144,0,1);ggml_hexagon_get_act_dump(&st);printf("ZERO_ROW_SIZE row=%llu status=%d\\n",(unsigned long long)st.row_size,st.status);if(st.status!=2)return 13;
+ setup(64,221184,1);ggml_hexagon_get_act_dump(&st);printf("PAYLOAD_EXCEEDS_CAP offset=%u row=%llu capacity=%llu status=%d\\n",st.payload_off,(unsigned long long)st.row_size,(unsigned long long)st.capacity,st.status);if(st.status!=2)return 14;
+ setup(262144,221184,1);((uint32_t*)g_r46_act_dump_sbuf->base)[1]=2;ggml_hexagon_get_act_dump(&st);printf("WRONG_EPOCH status=%d\\n",st.status);if(st.status!=-1)return 15;
+ size_t row=SIZE_MAX/2+9;setup(96,row,0);uint8_t tiny[16];std::memset(tiny,0x5a,sizeof(tiny));oc.act_dump_cap=96;
+ worker_fragment(&mm,tiny,row,2,4);ggml_hexagon_get_act_dump(&st);
+ printf("WRAPPED_COPY off=%zu len=%zu rows=%u status=%d capacity=%llu (physical copy within allocation)\\n",64+row*2,row*2,st.rows_done,st.status,(unsigned long long)st.capacity);if(st.rows_done!=1||st.status!=2)return 16;
+ // One-shot is confirmed in the NEW R46b selector. Fresh fixture state,
+ // not an implemented re-arm API and not a DSP execution.
+ g_r46_meta={0};g_r46_act_dump_sbuf->size=262144;Batch batch{&sess};
+ ggml_tensor w{GGML_TYPE_Q6_K,{6144,2048,1,1},{}},a{GGML_TYPE_F32,{6144,1,1,1},{}},out1{},out2{};
+ out1.src[0]=out2.src[0]=&w;out1.src[1]=out2.src[1]=&a;Node n1{&out1},n2{&out2};Op o1,o2;
+ ((htp_mm_kernel_params*)o1.kernel_params)->src1_row_size=221184;((htp_mm_kernel_params*)o2.kernel_params)->src1_row_size=221184;
+ batch.select_op(n1,o1);batch.select_op(n2,o2);
+ int first=((htp_mm_kernel_params*)o1.kernel_params)->act_dump_bi,second=((htp_mm_kernel_params*)o2.kernel_params)->act_dump_bi;
+ printf("NEW_ONE_SHOT first_bi=%d second_bi=%d epoch=%u used=%d\\n",first,second,g_r46_meta.epoch,g_r46_meta.used);if(first!=0||second!=-1)return 17;
+ printf("STATUS_LAYOUT_HOST sizeof=%zu ptr_offset=%zu row_offset=%zu\\n",sizeof(st),offsetof(ggml_hexagon_act_dump_status,ptr),offsetof(ggml_hexagon_act_dump_status,row_size));
+ puts("R46B_API_COUNTEREXAMPLES_CONFIRMED (host serial adapters; no SDK/DSP claims)");return 0;
+}
+'''
+code=code.replace('\\\\n','\\n');(S/'r46b-api-fragments.cpp').write_text(code);run('r46b-api-fragments',S/'r46b-api-fragments.cpp',True)
+for mode in ['normal','optimized']:
+ fixture=S/('generator-r46b-'+mode);(fixture/'htp').mkdir(parents=True,exist_ok=True)
+ for name in ['ggml-hexagon.cpp','htp/matmul-ops.c']:(fixture/name).write_text('/* scratch: no anchors */\n')
+ cmd=[os.sys.executable]+(['-O'] if mode=='optimized' else [])+[str(R/'r46b_patch.py'),fixture.as_posix()]
+ p=subprocess.run(cmd,capture_output=True,text=True,env=env)
+ (S/('generator-r46b-'+mode+'-out.txt')).write_text(p.stdout);(S/('generator-r46b-'+mode+'-err.txt')).write_text(p.stderr)
+ res['generator-r46b-'+mode]={'command':cmd,'exit':p.returncode,'stdout':p.stdout,'stderr':p.stderr}
+ print('LATEST_API_GENERATOR',mode,'EXIT',p.returncode)
+ assert p.returncode==(0 if mode=='optimized' else 1)
+(S/'r46b-results.json').write_text(json.dumps(res,indent=2,ensure_ascii=False));print('AUDIT_R46B_EXIT0')
+
+===== END audit46b.py =====
+
+===== BEGIN r46-fragment-counterexamples.cpp | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples.cpp =====
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstdint>
+#include <cstddef>
+#include <map>
+#define GGML_LOG_DEBUG(...) ((void)0)
+enum {HTP_OP_MUL_MAT=1,HTP_OP_MUL_MAT_ADD=2,GGML_TYPE_Q6_K=14,GGML_TYPE_F32=0};
+struct ggml_hexagon_session{int id;};
+struct ggml_hexagon_shared_buffer{ggml_hexagon_session*sess;size_t size;int fd;ggml_hexagon_shared_buffer(ggml_hexagon_session*s,size_t n):sess(s),size(n),fd(77){}};
+static ggml_hexagon_shared_buffer*g_r46_act_dump_sbuf=nullptr;static int g_r46_armed=-1;
+static bool g_r46_act_dump_armed(void) {
+    if (g_r46_armed < 0) {   // INIT-ONLY (declarado!): a primeira leitura decide!
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;   // so' "1" (o resto OFF!)
+    }
+    return g_r46_armed == 1;
+}
+struct ggml_tensor{int type;long long ne[4];ggml_tensor*src[4];};
+struct Node{ggml_tensor*node;};
+struct htp_mm_kernel_params{int act_dump_bi;};
+struct Op{int opcode=HTP_OP_MUL_MAT;int kernel_params[32]={0};};
+struct Batch{ggml_hexagon_session*sess;int r46_dump_bi=-1;int next_bi=0;std::map<int,int>byfd;
+ int add_buffer(ggml_hexagon_shared_buffer*b){if(byfd.count(b->fd))return byfd[b->fd];return byfd[b->fd]=next_bi++;}
+ void select_op(Node&node,Op&o){
+if (o.opcode == HTP_OP_MUL_MAT) {
+            struct htp_mm_kernel_params * k46 = (struct htp_mm_kernel_params *) o.kernel_params;
+            k46->act_dump_bi = -1;   // OFF por default (sentinela!)
+            const ggml_tensor * s0 = node.node->src[0];
+            const ggml_tensor * s1 = node.node->src[1];
+            if (s0 && s1 && g_r46_act_dump_armed() &&
+                s0->type == GGML_TYPE_Q6_K && s0->ne[0] == 6144 && s0->ne[1] == 2048 &&
+                s1->type == GGML_TYPE_F32 && s1->ne[1] == 1) {
+                if (!g_r46_act_dump_sbuf) {
+                    g_r46_act_dump_sbuf = new ggml_hexagon_shared_buffer(sess, 262144);   // OWNER (processo!)
+                }
+                if (r46_dump_bi < 0) {
+                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
+                }
+                if (r46_dump_bi >= 0) {
+                    k46->act_dump_bi = r46_dump_bi;
+                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: batch bi=%d fd=%d\n", r46_dump_bi, g_r46_act_dump_sbuf->fd);
+                }
+            }
+        }
+ }
+};
+struct Octx{uint8_t*act_dump_ptr;size_t act_dump_cap;};struct Mmctx{Octx*octx;};
+static int copy_calls=0;
+static void *counted_copy(void*d,const void*s,size_t n){copy_calls++;return std::memcpy(d,s,n);}
+#define memcpy counted_copy
+void real_copy_fragment(Mmctx*mmctx,uint8_t*dst_data,size_t dst_row_size,int ir_first,int ir_last){
+if (mmctx->octx->act_dump_ptr) {                                                                       
+        const size_t d46_off = (size_t) dst_row_size * ir_first;                                           
+        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               
+        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      
+            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                
+        }                                                                                                  
+    }
+}
+#undef memcpy
+int main(){
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","1");
+ ggml_hexagon_session s1{1},s2{2};Batch b1{&s1},b2{&s2};
+ ggml_tensor w{GGML_TYPE_Q6_K,{6144,2048,1,1},{}};
+ ggml_tensor a{GGML_TYPE_F32,{6144,1,1,1},{}};
+ ggml_tensor out1{},out2{};out1.src[0]=out2.src[0]=&w;out1.src[1]=out2.src[1]=&a;
+ Node n1{&out1},n2{&out2};Op o1,o2,o3,o4;
+ b1.select_op(n1,o1);b1.select_op(n2,o2);
+ auto bi1=((htp_mm_kernel_params*)o1.kernel_params)->act_dump_bi;
+ auto bi2=((htp_mm_kernel_params*)o2.kernel_params)->act_dump_bi;
+ printf("TWO_DISTINCT_OPS first_bi=%d second_bi=%d SAME_BUFFER=%d\n",bi1,bi2,bi1==bi2);
+ if(bi1!=0||bi2!=0)return 11;
+ a.ne[2]=2;b1.select_op(n1,o3);
+ auto bi3=((htp_mm_kernel_params*)o3.kernel_params)->act_dump_bi;
+ printf("HIGHER_DIM ne1=1 ne2=2 ACCEPTED_BI=%d (not genuinely B1)\n",bi3);
+ if(bi3<0)return 12;
+ a.ne[2]=1;b2.select_op(n1,o4);
+ printf("OWNER original_session=%d requested_session=%d SAME_OWNER=%d\n",g_r46_act_dump_sbuf->sess->id,s2.id,g_r46_act_dump_sbuf->sess==&s2);
+ if(g_r46_act_dump_sbuf->sess==&s2)return 13;
+ Op fused;fused.opcode=HTP_OP_MUL_MAT_ADD;b1.select_op(n1,fused);
+ auto fused_bi=((htp_mm_kernel_params*)fused.kernel_params)->act_dump_bi;
+ printf("OTHER_OPCODE_MUL_MAT_ADD retained_bi=%d (zero-filled blob; OFF -1 not assigned)\n",fused_bi);
+ if(fused_bi!=0)return 15;
+ uint8_t dst[32]={0},src[16];std::memset(src,0xa5,sizeof(src));Octx oc{dst,32};Mmctx mm{&oc};
+ size_t row=SIZE_MAX/2+9;int ir_first=2,ir_last=4;
+ size_t off=row*ir_first,len=row*(ir_last-ir_first);
+ real_copy_fragment(&mm,src,row,ir_first,ir_last);
+ printf("MULTIPLICATION_OVERFLOW row=%zu off=%zu len=%zu capacity=32 COPY_CALLS=%d\n",row,off,len,copy_calls);
+ if(row<=SIZE_MAX/2 || off!=16 || len!=16 || copy_calls!=1 || dst[16]!=0xa5)return 14;
+ puts("R46_COUNTEREXAMPLES_CONFIRMED (host adapters; not Android/DSP)");return 0;
+}
+
+===== END r46-fragment-counterexamples.cpp =====
+
+===== BEGIN r46b-api-fragments.cpp | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments.cpp =====
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstdint>
+#include <cstddef>
+#include <vector>
+#include <map>
+#define GGML_LOG_DEBUG(...) ((void)0)
+#define R46_MAGIC 0x52343644u
+struct ggml_hexagon_session{int id;};
+struct ggml_hexagon_shared_buffer{ggml_hexagon_session*sess;uint8_t*base;size_t size;int fd;
+ ggml_hexagon_shared_buffer(ggml_hexagon_session*s,size_t n):sess(s),base(new uint8_t[n]{}),size(n),fd(77){} };
+static ggml_hexagon_shared_buffer*g_r46_act_dump_sbuf=nullptr;
+static int g_r46_armed=-1;
+static bool g_r46_act_dump_armed(void) {
+    if (g_r46_armed < 0) {   // INIT-ONLY (declarado!): a primeira leitura decide!
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;   // so' "1" (o resto OFF!)
+    }
+    return g_r46_armed == 1;
+}
+struct ggml_hexagon_act_dump_status {
+    uint32_t magic;        // 0x52343644
+    uint32_t version;      // 1
+    int32_t  status;       // 0=NOT_ARMED; 1=ARMED_NO_CAPTURE; 2=CAPTURED; -1=INVALIDO
+    int32_t  type;         // ggml_type do peso (o Q6_K!)
+    int32_t  K, N, B;
+    uint32_t epoch;        // a captura (1,2,...)
+    uint32_t rows_done;    // do header (LIDO AGORA!)
+    uint32_t payload_off;  // 64 (payload!)
+    uint32_t reserved;
+    uint64_t ptr;          // o buffer (para o probe ler!)
+    uint64_t capacity;     // total do sbuf
+    uint64_t row_size;     // da op capturada
+};
+static struct {int used;uint32_t epoch;int K,N,B,type;size_t row_size;}g_r46_meta={0};
+static int ggml_hexagon_get_act_dump(void * out_v) {
+    struct ggml_hexagon_act_dump_status * out = (struct ggml_hexagon_act_dump_status *) out_v;
+    if (!out) return -1;
+    out->magic = R46_MAGIC; out->version = 1;
+    out->type = 0; out->K = 0; out->N = 0; out->B = 0;
+    out->epoch = g_r46_meta.epoch; out->rows_done = 0; out->payload_off = 64;
+    out->reserved = 0; out->ptr = 0; out->capacity = 0; out->row_size = 0;
+    if (!g_r46_act_dump_armed()) { out->status = 0; return 0; }          // NOT_ARMED (a flag!)
+    if (g_r46_meta.epoch == 0 || !g_r46_act_dump_sbuf) { out->status = 1; return 0; }   // ARMED, sem captura
+    out->ptr = (uint64_t) (uintptr_t) g_r46_act_dump_sbuf->base;
+    out->capacity = g_r46_act_dump_sbuf->size;
+    out->type = g_r46_meta.type; out->K = g_r46_meta.K; out->N = g_r46_meta.N; out->B = g_r46_meta.B;
+    out->row_size = g_r46_meta.row_size;
+    const uint32_t * hdr = (const uint32_t *) g_r46_act_dump_sbuf->base;
+    if (hdr[0] != R46_MAGIC || hdr[1] != g_r46_meta.epoch) { out->status = -1; return 0; }   // INVALIDO (o header!)
+    out->rows_done = hdr[3];
+    const int op_seen = hdr[2] == 1;
+    out->status = (op_seen && (int) hdr[3] >= g_r46_meta.B && g_r46_meta.B > 0) ? 2 : 1;
+    return 0;
+}
+// Serial adapter substitutes atomic update for logic-only host regression.
+using atomic_uint=uint32_t;
+static uint32_t atomic_fetch_add(atomic_uint*p,uint32_t n){uint32_t old=*p;*p+=n;return old;}
+struct Octx{uint8_t*act_dump_ptr;size_t act_dump_cap;};struct Mmctx{Octx*octx;};
+void worker_fragment(Mmctx*mmctx,uint8_t*dst_data,size_t dst_row_size,int ir_first,int ir_last){
+if (mmctx->octx->act_dump_ptr) {                                                                       
+        const size_t d46_off = 64 + (size_t) dst_row_size * ir_first;    /* OFF 64 (o header!) */          
+        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               
+        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      
+            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                
+            atomic_fetch_add((atomic_uint *) &((uint32_t *) mmctx->octx->act_dump_ptr)[3], 1u);            
+        }                                                                                                  
+    }
+}
+enum{HTP_OP_MUL_MAT=1,GGML_TYPE_Q6_K=14,GGML_TYPE_F32=0};
+struct ggml_tensor{int type;long long ne[4];ggml_tensor*src[4];};struct Node{ggml_tensor*node;};
+struct htp_mm_kernel_params{int act_dump_bi;uint32_t src1_row_size;};
+struct Op{int opcode=HTP_OP_MUL_MAT;int kernel_params[32]={0};};
+struct Batch{ggml_hexagon_session*sess;int r46_dump_bi=-1,next=0;std::map<int,int>byfd;
+ int add_buffer(ggml_hexagon_shared_buffer*b){if(byfd.count(b->fd))return byfd[b->fd];return byfd[b->fd]=next++;}
+ void select_op(Node&node,Op&o){
+if (o.opcode == HTP_OP_MUL_MAT) {
+            struct htp_mm_kernel_params * k46 = (struct htp_mm_kernel_params *) o.kernel_params;
+            k46->act_dump_bi = -1;   // OFF por default (sentinela!)
+            const ggml_tensor * s0 = node.node->src[0];
+            const ggml_tensor * s1 = node.node->src[1];
+            if (s0 && s1 && g_r46_act_dump_armed() &&
+                s0->type == GGML_TYPE_Q6_K && s0->ne[0] == 6144 && s0->ne[1] == 2048 &&
+                s1->type == GGML_TYPE_F32 && s1->ne[1] == 1) {
+                if (!g_r46_act_dump_sbuf) {
+                    g_r46_act_dump_sbuf = new ggml_hexagon_shared_buffer(sess, 262144);   // OWNER (processo!)
+                }
+                if (r46_dump_bi < 0) {
+                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
+                }
+                if (r46_dump_bi >= 0 && !g_r46_meta.used) {   // UMA captura (desarma!)
+                    g_r46_meta.used = 1;
+                    g_r46_meta.epoch++;
+                    g_r46_meta.K = (int) s0->ne[0]; g_r46_meta.N = (int) s0->ne[1]; g_r46_meta.B = (int) s1->ne[1];
+                    g_r46_meta.type = (int) s0->type;
+                    g_r46_meta.row_size = (size_t) (uint32_t) k46->src1_row_size;   // da op (o precompute!)
+                    // O HEADER (16 B!): magic/epoch/op_seen=0/rows_done=0 — o host prepara
+                    // ANTES do enqueue (a shared mem: o DSP vai setar o op_seen/rows_done!)
+                    uint32_t * hdr = (uint32_t *) g_r46_act_dump_sbuf->base;
+                    hdr[0] = R46_MAGIC; hdr[1] = g_r46_meta.epoch; hdr[2] = 0; hdr[3] = 0;
+                    k46->act_dump_bi = r46_dump_bi;
+                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: epoch=%u bi=%d K=%d N=%d B=%d row=%zu\n",
+                                   g_r46_meta.epoch, r46_dump_bi, g_r46_meta.K, g_r46_meta.N, g_r46_meta.B, g_r46_meta.row_size);
+                } else {
+                    k46->act_dump_bi = -1;   // ja capturou (as demais nao sobrescrevem!)
+                }
+            }
+        }
+ }
+};
+void setup(size_t cap=262144,size_t row=221184,uint32_t rows=1){
+ g_r46_act_dump_sbuf->size=cap;g_r46_meta={1,1,6144,2048,1,14,row};
+ uint32_t*hdr=(uint32_t*)g_r46_act_dump_sbuf->base;hdr[0]=R46_MAGIC;hdr[1]=1;hdr[2]=1;hdr[3]=rows;
+}
+int main(){
+ _putenv_s("GGML_HEXAGON_ACT_DUMP","1");ggml_hexagon_session sess{1};
+ g_r46_act_dump_sbuf=new ggml_hexagon_shared_buffer(&sess,262144);
+ ggml_hexagon_act_dump_status st;
+ setup(262144,221184,0);std::vector<uint8_t> src(221184,0xa5);
+ Octx oc{g_r46_act_dump_sbuf->base,262144};Mmctx mm{&oc};worker_fragment(&mm,src.data(),221184,0,1);ggml_hexagon_get_act_dump(&st);
+ printf("LEGAL_B1 status=%d rows=%u payload_match=%d\n",st.status,st.rows_done,std::memcmp(g_r46_act_dump_sbuf->base+64,src.data(),src.size())==0);
+ if(st.status!=2||st.rows_done!=1)return 11;
+ setup(262144,221184,2);ggml_hexagon_get_act_dump(&st);
+ printf("ROWS_EXCESS rows=%u expected_B=%d status=%d (accepts >= not ==)\n",st.rows_done,st.B,st.status);if(st.status!=2)return 12;
+ setup(262144,0,1);ggml_hexagon_get_act_dump(&st);printf("ZERO_ROW_SIZE row=%llu status=%d\n",(unsigned long long)st.row_size,st.status);if(st.status!=2)return 13;
+ setup(64,221184,1);ggml_hexagon_get_act_dump(&st);printf("PAYLOAD_EXCEEDS_CAP offset=%u row=%llu capacity=%llu status=%d\n",st.payload_off,(unsigned long long)st.row_size,(unsigned long long)st.capacity,st.status);if(st.status!=2)return 14;
+ setup(262144,221184,1);((uint32_t*)g_r46_act_dump_sbuf->base)[1]=2;ggml_hexagon_get_act_dump(&st);printf("WRONG_EPOCH status=%d\n",st.status);if(st.status!=-1)return 15;
+ size_t row=SIZE_MAX/2+9;setup(96,row,0);uint8_t tiny[16];std::memset(tiny,0x5a,sizeof(tiny));oc.act_dump_cap=96;
+ worker_fragment(&mm,tiny,row,2,4);ggml_hexagon_get_act_dump(&st);
+ printf("WRAPPED_COPY off=%zu len=%zu rows=%u status=%d capacity=%llu (physical copy within allocation)\n",64+row*2,row*2,st.rows_done,st.status,(unsigned long long)st.capacity);if(st.rows_done!=1||st.status!=2)return 16;
+ // One-shot is confirmed in the NEW R46b selector. Fresh fixture state,
+ // not an implemented re-arm API and not a DSP execution.
+ g_r46_meta={0};g_r46_act_dump_sbuf->size=262144;Batch batch{&sess};
+ ggml_tensor w{GGML_TYPE_Q6_K,{6144,2048,1,1},{}},a{GGML_TYPE_F32,{6144,1,1,1},{}},out1{},out2{};
+ out1.src[0]=out2.src[0]=&w;out1.src[1]=out2.src[1]=&a;Node n1{&out1},n2{&out2};Op o1,o2;
+ ((htp_mm_kernel_params*)o1.kernel_params)->src1_row_size=221184;((htp_mm_kernel_params*)o2.kernel_params)->src1_row_size=221184;
+ batch.select_op(n1,o1);batch.select_op(n2,o2);
+ int first=((htp_mm_kernel_params*)o1.kernel_params)->act_dump_bi,second=((htp_mm_kernel_params*)o2.kernel_params)->act_dump_bi;
+ printf("NEW_ONE_SHOT first_bi=%d second_bi=%d epoch=%u used=%d\n",first,second,g_r46_meta.epoch,g_r46_meta.used);if(first!=0||second!=-1)return 17;
+ printf("STATUS_LAYOUT_HOST sizeof=%zu ptr_offset=%zu row_offset=%zu\n",sizeof(st),offsetof(ggml_hexagon_act_dump_status,ptr),offsetof(ggml_hexagon_act_dump_status,row_size));
+ puts("R46B_API_COUNTEREXAMPLES_CONFIRMED (host serial adapters; no SDK/DSP claims)");return 0;
+}
+
+===== END r46b-api-fragments.cpp =====
+
+===== BEGIN vaccine-source-guard.c | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard.c =====
+// r46_vacinas.c — R46 §6: AS VACINAS HOST (o código CONSUMIDO — os fixes!)
+// Testa: (1) bi=0 ACEITO (era o defeito!); (2) bi POR BATCH (reset -> re-add!);
+// (3) seleção não-Q6 -> -1 (OFF!); (4) bounds (fim > cap -> NÃO copia!);
+// (5) OFF total (flag '0' -> nunca arma!); (6) o memset do impl NÃO apaga mais
+// (a atribuição é DEPOIS!); (7) o descritor (bufs[bi].base — não mmap!).
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#define HTP_OP_MAX_BUFS 16
+#define HTP_MAX_MMAPS   16
+
+struct htp_buf_desc { uint64_t base; uint32_t fd; uint64_t size; };
+
+
+static const void *audit_src=NULL; static size_t audit_src_cap=0;
+static void *audit_copy(void*d,const void*s,size_t n){
+ if(s==audit_src && n>audit_src_cap){fprintf(stderr,"SOURCE_OOB_BLOCKED requested=%zu src_capacity=%zu excess=%zu\n",n,audit_src_cap,n-audit_src_cap);fflush(stdout);exit(86);}
+ return memcpy(d,s,n);
+}
+// ============ os FRAGMENTOS REAIS do patch v2 (extraídos!) ============
+// (o add_op — a lógica de seleção/owner/bi!)
+static int g_r46_armed = -1;
+static int g_sbuf_created = 0;
+static int g_sbuf_fd = 77;
+static bool g_r46_act_dump_armed(void) {
+    if (g_r46_armed < 0) {
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;
+    }
+    return g_r46_armed == 1;
+}
+// o batch (o fragmento!)
+static unsigned n_bufs = 0;
+static uint64_t b_map_fds[16];
+static int b_map_bi[16]; static int b_map_n = 0;
+static int r46_dump_bi = -1;
+static int add_buffer_sbuf(int fd, uint64_t base, uint64_t size) {
+    for (int i = 0; i < b_map_n; i++) if (b_map_fds[i] == fd) return b_map_bi[i];
+    int bi = n_bufs++;
+    b_map_fds[b_map_n] = fd; b_map_bi[b_map_n] = bi; b_map_n++;
+    (void)base; (void)size;
+    return bi;
+}
+static void batch_reset(void) { n_bufs = 0; b_map_n = 0; r46_dump_bi = -1; }
+// a selecao (do add_op!)
+static int add_op_selecao(const char * s0_type, long s0_ne0, long s0_ne1, const char * s1_type, long s1_ne1, uint64_t base, uint64_t size) {
+    int out_bi = -1;
+    if (g_r46_act_dump_armed() && strcmp(s0_type, "Q6_K") == 0 && s0_ne0 == 6144 && s0_ne1 == 2048 &&
+        strcmp(s1_type, "F32") == 0 && s1_ne1 == 1) {
+        if (!g_sbuf_created) { g_sbuf_created = 1; }
+        if (r46_dump_bi < 0) r46_dump_bi = add_buffer_sbuf(g_sbuf_fd, base, size);
+        if (r46_dump_bi >= 0) out_bi = r46_dump_bi;
+    }
+    return out_bi;
+}
+// o op_matmul do skel (o fragmento!)
+static uint8_t * octx_act_dump_ptr = NULL;
+static size_t octx_act_dump_cap = 0;
+static const struct htp_buf_desc * r46_bufs = NULL; static uint32_t r46_nbufs = 0;
+static void op_matmul_map(int act_dump_bi, int n_hmx) {
+    octx_act_dump_ptr = NULL; octx_act_dump_cap = 0;
+    if (act_dump_bi >= 0 && act_dump_bi < (int)r46_nbufs && r46_bufs && !n_hmx) {
+        octx_act_dump_ptr = (uint8_t *)(uintptr_t)r46_bufs[act_dump_bi].base;
+        octx_act_dump_cap = (size_t)r46_bufs[act_dump_bi].size;
+    }
+}
+// o worker (o fragmento!)
+static size_t worker_copy(uint8_t * dst_data, size_t dst_row_size, int ir_first, int ir_last) {
+    if (!octx_act_dump_ptr) return 0;
+    const size_t off = (size_t)dst_row_size * ir_first;
+    const size_t len = (size_t)dst_row_size * (ir_last - ir_first);
+    if (off <= octx_act_dump_cap && len <= octx_act_dump_cap - off) {
+        audit_copy(octx_act_dump_ptr + off, dst_data, len);
+        return len;
+    }
+    return 0;   // RECUSA (sem overflow!)
+}
+// =====================================================================
+
+int main(void) {
+    int fails = 0;
+    uint8_t dump_storage[262144]; memset(dump_storage, 0xEE, sizeof(dump_storage));
+    uint8_t row_data[221184]; memset(row_data, 0xA5, sizeof(row_data)); audit_src=row_data; audit_src_cap=sizeof(row_data);
+    struct htp_buf_desc bufs[4]; memset(bufs, 0, sizeof(bufs));
+    bufs[0].base = (uint64_t)(uintptr_t)dump_storage; bufs[0].size = 262144; bufs[0].fd = 77;
+    r46_bufs = bufs; r46_nbufs = 1;
+
+    // ---- C1: bi=0 ACEITO (o defeito R45: 'if (bi > 0)' rejeitava!) ----
+    putenv("GGML_HEXAGON_ACT_DUMP=1");
+    g_r46_armed = -1; g_sbuf_created = 0; batch_reset();
+    int bi0 = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, bufs[0].base, bufs[0].size);
+    printf("C1 bi_do_batch=%d (exigido 0! — ACEITO!)\n", bi0);
+    if (bi0 != 0) { fails++; printf("C1 FAIL\n"); }
+
+    // ---- C2: POR BATCH: reset -> re-add (novo bi 0 — sem stale!) ----
+    batch_reset();
+    int bi1 = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, bufs[0].base, bufs[0].size);
+    printf("C2 apos reset: bi=%d n_bufs=%u (re-add OK!)\n", bi1, n_bufs);
+    if (bi1 != 0 || n_bufs != 1) { fails++; printf("C2 FAIL\n"); }
+
+    // ---- C3: selecao NAO-Q6 -> -1 (outro shape!) ----
+    batch_reset();
+    int bi_bad = add_op_selecao("Q4_K", 6144, 2048, "F32", 1, 0, 0);
+    int bi_bad2 = add_op_selecao("Q6_K", 2048, 512, "F32", 1, 0, 0);
+    int bi_bad3 = add_op_selecao("Q6_K", 6144, 2048, "F32", 2, 0, 0);   // B=2!
+    printf("C3 nao-Q6=%d K2048=%d B2=%d (exigido -1/-1/-1!)\n", bi_bad, bi_bad2, bi_bad3);
+    if (bi_bad != -1 || bi_bad2 != -1 || bi_bad3 != -1) { fails++; printf("C3 FAIL\n"); }
+
+    // ---- C4: o fluxo COMPLETO: map + copy com bounds! ----
+    batch_reset();
+    int bi = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, bufs[0].base, bufs[0].size);
+    op_matmul_map(bi, 0);
+    size_t copied = worker_copy(row_data, 221184, 0, 1);
+    int ok_c4 = (copied == 221184 && octx_act_dump_cap == 262144 && memcmp(dump_storage, row_data, 221184) == 0);
+    printf("C4 copy=%zu cap=%zu match=%s\n", copied, octx_act_dump_cap, ok_c4 ? "SIM" : "NAO");
+    if (!ok_c4) { fails++; printf("C4 FAIL\n"); }
+
+    // ---- C5: BOUNDS: len > cap -> NAO copia! off+len > cap -> NAO copia! ----
+    memset(dump_storage, 0xEE, sizeof(dump_storage));
+    static uint8_t big_row[400000]; memset(big_row, 0x5A, sizeof(big_row));
+    size_t bad = worker_copy(big_row, 400000, 0, 1);    // len 400000 > cap 262144!
+    size_t bad2 = worker_copy(row_data, 200000, 1, 2);  // off=200000 + len=200000 > cap!
+    size_t exact = worker_copy(row_data, 262144, 0, 1); // == cap: COPIA (valido!)
+    int untouched = 1;
+    for (size_t i = 0; i < sizeof(dump_storage); i++) if (dump_storage[i] != 0xA5 && dump_storage[i] != 0xEE) { untouched = 0; break; }
+    printf("C5 len>cap=%zu off+len>cap=%zu exact==cap=%zu (exigido 0/0/262144!)\n", bad, bad2, exact);
+    if (bad != 0 || bad2 != 0 || exact != 262144) { fails++; printf("C5 FAIL\n"); }
+
+    // ---- C6: HMX desvia -> ptr NULL! ----
+    op_matmul_map(bi, 1);   // n_hmx=1!
+    printf("C6 hmx_ptr=%s (exigido NULL!)\n", octx_act_dump_ptr ? "SETADO" : "NULL");
+    if (octx_act_dump_ptr) { fails++; printf("C6 FAIL\n"); }
+
+    // ---- C7: flag '0' -> nunca arma (mesmo com Q6!) ----
+    putenv("GGML_HEXAGON_ACT_DUMP=0");
+    g_r46_armed = -1; batch_reset();
+    int bi_off = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, 0, 0);
+    printf("C7 flag0: bi=%d (exigido -1! OFF total!)\n", bi_off);
+    if (bi_off != -1) { fails++; printf("C7 FAIL\n"); }
+
+    // ---- C8: flag lixo ('01') -> OFF! ----
+    putenv("GGML_HEXAGON_ACT_DUMP=01");
+    g_r46_armed = -1; batch_reset();
+    int bi_g = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, 0, 0);
+    printf("C8 flag01: bi=%d (exigido -1!)\n", bi_g);
+    if (bi_g != -1) { fails++; printf("C8 FAIL\n"); }
+
+    printf("\n%s (%d falhas!)\n", fails == 0 ? "VACINAS_R46: TODAS PASS (8/8!)" : "VACINAS_R46: HOUVE FALHA!", fails);
+    return fails == 0 ? 0 : 1;
+}
+
+===== END vaccine-source-guard.c =====
+
+===== BEGIN audit46-run.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46-run.log =====
+BUILD executor-vaccine 0
+RUN executor-vaccine 0
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+C5 len>cap=0 off+len>cap=0 exact==cap=262144 (exigido 0/0/262144!)
+C6 hmx_ptr=NULL (exigido NULL!)
+C7 flag0: bi=-1 (exigido -1! OFF total!)
+C8 flag01: bi=-1 (exigido -1!)
+
+VACINAS_R46: TODAS PASS (8/8!) (0 falhas!)
+
+BUILD vaccine-source-guard 0
+RUN vaccine-source-guard 86
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+SOURCE_OOB_BLOCKED requested=262144 src_capacity=221184 excess=40960
+BUILD r46-fragment-counterexamples 0
+RUN r46-fragment-counterexamples 0
+TWO_DISTINCT_OPS first_bi=0 second_bi=0 SAME_BUFFER=1
+HIGHER_DIM ne1=1 ne2=2 ACCEPTED_BI=0 (not genuinely B1)
+OWNER original_session=1 requested_session=2 SAME_OWNER=0
+OTHER_OPCODE_MUL_MAT_ADD retained_bi=0 (zero-filled blob; OFF -1 not assigned)
+MULTIPLICATION_OVERFLOW row=9223372036854775816 off=16 len=16 capacity=32 COPY_CALLS=1
+R46_COUNTEREXAMPLES_CONFIRMED (host adapters; not Android/DSP)
+
+CURRENT_GENERATOR_MISSING_A1_EXIT 1
+OPTIMIZED_GENERATOR_MISSING_ANCHORS_EXIT 0
+AUDIT46_EXIT0
+
+===== END audit46-run.log =====
+
+===== BEGIN audit46b-run.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46b-run.log =====
+BUILD executor-api-vaccine 0
+RUN executor-api-vaccine 0
+N1 flag0: status=0 (exigido 0!)
+N2 armed-sem-captura: status=1 (exigido 1!)
+N3 completo: status=2 rows=1 K=6144 N=2048 B=1 row=221184 cap=262144 (exigido 2/1/6144/2048/1/221184/262144!)
+N4 header-invalido: status=-1 (exigido -1!)
+N5 op_seen0: status=1 (exigido 1!)
+N6 rows0: status=1 (exigido 1!)
+
+API_VACINA_R46: TODAS PASS (6/6!) (0 falhas!)
+BUILD r46b-api-fragments 0
+RUN r46b-api-fragments 0
+LEGAL_B1 status=2 rows=1 payload_match=1
+ROWS_EXCESS rows=2 expected_B=1 status=2 (accepts >= not ==)
+ZERO_ROW_SIZE row=0 status=2
+PAYLOAD_EXCEEDS_CAP offset=64 row=221184 capacity=64 status=2
+WRONG_EPOCH status=-1
+WRAPPED_COPY off=80 len=16 rows=1 status=2 capacity=96 (physical copy within allocation)
+NEW_ONE_SHOT first_bi=0 second_bi=-1 epoch=1 used=1
+STATUS_LAYOUT_HOST sizeof=72 ptr_offset=48 row_offset=64
+R46B_API_COUNTEREXAMPLES_CONFIRMED (host serial adapters; no SDK/DSP claims)
+LATEST_API_GENERATOR normal EXIT 1
+LATEST_API_GENERATOR optimized EXIT 0
+AUDIT_R46B_EXIT0
+
+===== END audit46b-run.log =====
+
+===== BEGIN results.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/results.json =====
+{
+  "scope": "host only; original vaccines plus explicitly adapted/extracted R46 fragment tests; no app/remote/device edit or quantizer execution",
+  "executor-vaccine": {
+    "build_command": [
+      "C:/msys64/mingw64/bin/gcc.exe",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada46\\r46_vacinas.c",
+      "-o",
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\executor-vaccine.exe"
+    ],
+    "build_exit": 0,
+    "run_exit": 0,
+    "stdout": "C1 bi_do_batch=0 (exigido 0! — ACEITO!)\nC2 apos reset: bi=0 n_bufs=1 (re-add OK!)\nC3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)\nC4 copy=221184 cap=262144 match=SIM\nC5 len>cap=0 off+len>cap=0 exact==cap=262144 (exigido 0/0/262144!)\nC6 hmx_ptr=NULL (exigido NULL!)\nC7 flag0: bi=-1 (exigido -1! OFF total!)\nC8 flag01: bi=-1 (exigido -1!)\n\nVACINAS_R46: TODAS PASS (8/8!) (0 falhas!)\n",
+    "stderr": ""
+  },
+  "vaccine-source-guard": {
+    "build_command": [
+      "C:/msys64/mingw64/bin/gcc.exe",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\vaccine-source-guard.c",
+      "-o",
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\vaccine-source-guard.exe"
+    ],
+    "build_exit": 0,
+    "run_exit": 86,
+    "stdout": "C1 bi_do_batch=0 (exigido 0! — ACEITO!)\nC2 apos reset: bi=0 n_bufs=1 (re-add OK!)\nC3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)\nC4 copy=221184 cap=262144 match=SIM\n",
+    "stderr": "SOURCE_OOB_BLOCKED requested=262144 src_capacity=221184 excess=40960\n"
+  },
+  "r46-fragment-counterexamples": {
+    "build_command": [
+      "C:/msys64/mingw64/bin/g++.exe",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\r46-fragment-counterexamples.cpp",
+      "-o",
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\r46-fragment-counterexamples.exe"
+    ],
+    "build_exit": 0,
+    "run_exit": 0,
+    "stdout": "TWO_DISTINCT_OPS first_bi=0 second_bi=0 SAME_BUFFER=1\nHIGHER_DIM ne1=1 ne2=2 ACCEPTED_BI=0 (not genuinely B1)\nOWNER original_session=1 requested_session=2 SAME_OWNER=0\nOTHER_OPCODE_MUL_MAT_ADD retained_bi=0 (zero-filled blob; OFF -1 not assigned)\nMULTIPLICATION_OVERFLOW row=9223372036854775816 off=16 len=16 capacity=32 COPY_CALLS=1\nR46_COUNTEREXAMPLES_CONFIRMED (host adapters; not Android/DSP)\n",
+    "stderr": ""
+  },
+  "generator-missing-A1": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada46\\r46_patch.py\", line 19, in <module>\n    assert t.count(old) == 1, \"A1 anchor\"\n           ^^^^^^^^^^^^^^^^^\nAssertionError: A1 anchor\n"
+  },
+  "generator-optimized": {
+    "exit": 0,
+    "stdout": "A) HOST v2 ok (7 fixes: global->owner; por-batch; selecao; apos-memcpy; =0; init-only!)\nB1/B2) skel ctx ok\nB3/B4) skel matmul ok\nB5/B6) skel main ok\n=== PATCH V2 COMPLETO (todos os 7 fixes + extras!)\n",
+    "stderr": ""
+  },
+  "missing_main_diff": true,
+  "source_read_excess": 40960
+}
+===== END results.json =====
+
+===== BEGIN r46b-results.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-results.json =====
+{
+  "scope": "latest R46b API + worker fragments extracted literally; mocked owner/batch and serial atomic adapter, no Android/DSP/cache/ABI validation",
+  "executor-api-vaccine": {
+    "build_command": [
+      "C:/msys64/mingw64/bin/gcc.exe",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada46\\r46_api_vacina.c",
+      "-o",
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\executor-api-vaccine.exe"
+    ],
+    "build_exit": 0,
+    "run_exit": 0,
+    "stdout": "N1 flag0: status=0 (exigido 0!)\nN2 armed-sem-captura: status=1 (exigido 1!)\nN3 completo: status=2 rows=1 K=6144 N=2048 B=1 row=221184 cap=262144 (exigido 2/1/6144/2048/1/221184/262144!)\nN4 header-invalido: status=-1 (exigido -1!)\nN5 op_seen0: status=1 (exigido 1!)\nN6 rows0: status=1 (exigido 1!)\n\nAPI_VACINA_R46: TODAS PASS (6/6!) (0 falhas!)\n",
+    "stderr": ""
+  },
+  "r46b-api-fragments": {
+    "build_command": [
+      "C:/msys64/mingw64/bin/g++.exe",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\r46b-api-fragments.cpp",
+      "-o",
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\cache\\scratch\\r46-specialist-audit\\r46b-api-fragments.exe"
+    ],
+    "build_exit": 0,
+    "run_exit": 0,
+    "stdout": "LEGAL_B1 status=2 rows=1 payload_match=1\nROWS_EXCESS rows=2 expected_B=1 status=2 (accepts >= not ==)\nZERO_ROW_SIZE row=0 status=2\nPAYLOAD_EXCEEDS_CAP offset=64 row=221184 capacity=64 status=2\nWRONG_EPOCH status=-1\nWRAPPED_COPY off=80 len=16 rows=1 status=2 capacity=96 (physical copy within allocation)\nNEW_ONE_SHOT first_bi=0 second_bi=-1 epoch=1 used=1\nSTATUS_LAYOUT_HOST sizeof=72 ptr_offset=48 row_offset=64\nR46B_API_COUNTEREXAMPLES_CONFIRMED (host serial adapters; no SDK/DSP claims)\n",
+    "stderr": ""
+  },
+  "generator-r46b-normal": {
+    "command": [
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\tools\\python-3.14.7+20260901-win32-x64\\python.exe",
+      "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada46\\r46b_patch.py",
+      "C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-normal"
+    ],
+    "exit": 1,
+    "stdout": "",
+    "stderr": "Traceback (most recent call last):\n  File \"D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada46\\r46b_patch.py\", line 18, in <module>\n    assert t.count(anc) == 1, \"A1 anchor\"\n           ^^^^^^^^^^^^^^^^^\nAssertionError: A1 anchor\n"
+  },
+  "generator-r46b-optimized": {
+    "command": [
+      "C:\\Users\\Gustavo\\AppData\\Local\\hermes\\tools\\python-3.14.7+20260901-win32-x64\\python.exe",
+      "-O",
+      "D:\\Projetos\\SIG\\docs\\npu-hymt2\\smart-rodada46\\r46b_patch.py",
+      "C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-optimized"
+    ],
+    "exit": 0,
+    "stdout": "A) HOST: struct+meta+header+API+registry ok\nB) SKEL: op_seen+rows_done+off64 ok\n=== PATCH §5 COMPLETO (a API + o header + o consumidor no host!)\n",
+    "stderr": ""
+  }
+}
+===== END r46b-results.json =====
+
+===== BEGIN manifest-final-version.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/manifest-final-version.json =====
+[
+  {
+    "name": "r46-fullsha64-cohort-v2.txt",
+    "expected_sha": "e0bcbfb7ba701b06eba1d6a52fec49f003fa83c930b70721049ab7233297ecb3",
+    "sha_format_valid": true,
+    "observed_sha": "e0bcbfb7ba701b06eba1d6a52fec49f003fa83c930b70721049ab7233297ecb3",
+    "expected_bytes": 715,
+    "observed_bytes": 715,
+    "ok": true
+  },
+  {
+    "name": "r46-host-build.log",
+    "expected_sha": "94d2317fd157b81cf8bae7a688ed2c4401996d6449af2605d59390f14f370e02",
+    "sha_format_valid": true,
+    "observed_sha": "94d2317fd157b81cf8bae7a688ed2c4401996d6449af2605d59390f14f370e02",
+    "expected_bytes": 1338,
+    "observed_bytes": 1338,
+    "ok": true
+  },
+  {
+    "name": "r46-skel-build.log",
+    "expected_sha": "22bebb3a084aeec0109f44781cb565c88b44f2ca38961beed4290be405042a2a",
+    "sha_format_valid": true,
+    "observed_sha": "22bebb3a084aeec0109f44781cb565c88b44f2ca38961beed4290be405042a2a",
+    "expected_bytes": 2252,
+    "observed_bytes": 2252,
+    "ok": true
+  },
+  {
+    "name": "r46-v2.diff",
+    "expected_sha": "6744c31076165c66191130bb2ae50aed349f64c580c71a25ba9a5e87b09c83d9",
+    "sha_format_valid": true,
+    "observed_sha": "6744c31076165c66191130bb2ae50aed349f64c580c71a25ba9a5e87b09c83d9",
+    "expected_bytes": 16034,
+    "observed_bytes": 16034,
+    "ok": true
+  },
+  {
+    "name": "r46-vacinas-out.txt",
+    "expected_sha": "da7d4bfdc78bebdf5bef439d6002e5af6a76bbacc8057ae069c8cd9670dd258c",
+    "sha_format_valid": true,
+    "observed_sha": "da7d4bfdc78bebdf5bef439d6002e5af6a76bbacc8057ae069c8cd9670dd258c",
+    "expected_bytes": 383,
+    "observed_bytes": 383,
+    "ok": true
+  },
+  {
+    "name": "r46_api_vacina.c",
+    "expected_sha": "0650d125ec300ec45832c9b423a44a637f8b237803493c71d9ba7232dc8ef457",
+    "sha_format_valid": true,
+    "observed_sha": "0650d125ec300ec45832c9b423a44a637f8b237803493c71d9ba7232dc8ef457",
+    "expected_bytes": 4480,
+    "observed_bytes": 4480,
+    "ok": true
+  },
+  {
+    "name": "r46_patch.py",
+    "expected_sha": "e512152b37b1baffd8356803d356f646295c23266a4e6548f3d57a8b48d45b0f",
+    "sha_format_valid": true,
+    "observed_sha": "e512152b37b1baffd8356803d356f646295c23266a4e6548f3d57a8b48d45b0f",
+    "expected_bytes": 10405,
+    "observed_bytes": 10405,
+    "ok": true
+  },
+  {
+    "name": "r46_vacinas.c",
+    "expected_sha": "bc7880d0b8330b06542ed7e326602d3722b2a3e098737fa6e8feef7611d813a0",
+    "sha_format_valid": true,
+    "observed_sha": "bc7880d0b8330b06542ed7e326602d3722b2a3e098737fa6e8feef7611d813a0",
+    "expected_bytes": 7146,
+    "observed_bytes": 7146,
+    "ok": true
+  },
+  {
+    "name": "r46b-api-vacina-out.txt",
+    "expected_sha": "e864e3542b47f145a329cb3e262caf9889bacb0e3267a97103f6f60e83a06683",
+    "sha_format_valid": true,
+    "observed_sha": "e864e3542b47f145a329cb3e262caf9889bacb0e3267a97103f6f60e83a06683",
+    "expected_bytes": 344,
+    "observed_bytes": 344,
+    "ok": true
+  },
+  {
+    "name": "r46b-fullsha64-final.txt",
+    "expected_sha": "3f40066e920903facceeafdc47a31014fcdb8723f195d4fd493eef6d540b2a50",
+    "sha_format_valid": true,
+    "observed_sha": "3f40066e920903facceeafdc47a31014fcdb8723f195d4fd493eef6d540b2a50",
+    "expected_bytes": 484,
+    "observed_bytes": 484,
+    "ok": true
+  },
+  {
+    "name": "r46b-host-api.diff",
+    "expected_sha": "5c3c96da654f9d21ca8d41ebdcc90cc4547397ce1795e507735ef2b2c4775c7f",
+    "sha_format_valid": true,
+    "observed_sha": "5c3c96da654f9d21ca8d41ebdcc90cc4547397ce1795e507735ef2b2c4775c7f",
+    "expected_bytes": 7570,
+    "observed_bytes": 7570,
+    "ok": true
+  },
+  {
+    "name": "r46b-skel-opseen.diff",
+    "expected_sha": "bb08e1e6acdcead772a50ae7d209a3e0128e8b77fc62bc119d63baa08609db1c",
+    "sha_format_valid": true,
+    "observed_sha": "bb08e1e6acdcead772a50ae7d209a3e0128e8b77fc62bc119d63baa08609db1c",
+    "expected_bytes": 2852,
+    "observed_bytes": 2852,
+    "ok": true
+  },
+  {
+    "name": "r46b_patch.py",
+    "expected_sha": "126b8c571a2c6da89aba454e27bbc28c08b9e1adce2b8f48ca726abcb7bf3939",
+    "sha_format_valid": true,
+    "observed_sha": "126b8c571a2c6da89aba454e27bbc28c08b9e1adce2b8f48ca726abcb7bf3939",
+    "expected_bytes": 9626,
+    "observed_bytes": 9626,
+    "ok": true
+  }
+]
+===== END manifest-final-version.json =====
+
+===== BEGIN header-check.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/header-check.json =====
+{
+  "reconstructed_sha": "4db38dd26a87e3e534b567539484b91f2b85539619a3d445cefadea40eedba90",
+  "declared": "4db38dd26a87e3e534b567539484b91f2b85539619a3d445cefadea40eedba90"
+}
+===== END header-check.json =====
+
+===== BEGIN preservation-final.json | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/preservation-final.json =====
+{
+  "staged_count": 9,
+  "worktree_byte_identical_before_after": true,
+  "index_names_same": true,
+  "index_matches_worktree_after_git_newline_conversion": {
+    "docs/especialista/PROMPT-SMART-RODADA37-CPU-Q8K-ESTADO-EFETIVO-E-SHAPES-REAIS.txt": true,
+    "docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA37.txt": true,
+    "docs/npu-hymt2/smart-rodada37/MANIFESTO-SHA256.txt": true,
+    "docs/npu-hymt2/smart-rodada37/probe-r37-com-consulta.cpp": true,
+    "docs/npu-hymt2/smart-rodada37/r37-capture-full.txt": true,
+    "docs/npu-hymt2/smart-rodada37/r37-inventario-gguf.txt": true,
+    "docs/npu-hymt2/smart-rodada37/r37-probe-build.log": true,
+    "docs/npu-hymt2/smart-rodada37/r37_cand.py": true,
+    "docs/npu-hymt2/smart-rodada37/r37_gguf_invent.py": true
+  },
+  "worktree_sha256": {
+    "docs/especialista/PROMPT-SMART-RODADA37-CPU-Q8K-ESTADO-EFETIVO-E-SHAPES-REAIS.txt": "efdea59eb7a2caf3d0f31e56166c94eb210bb57d76f1418a11c1fc92fb81e3ea",
+    "docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA37.txt": "15e2c5810aafa43b22efe13a33ec40ed456c05eaa6a0d56461d0d1232c361f4d",
+    "docs/npu-hymt2/smart-rodada37/MANIFESTO-SHA256.txt": "aa8a34ff02b26d20276ee5631deb8c9645f3046b02d94cf447fc1ffeb305efa6",
+    "docs/npu-hymt2/smart-rodada37/probe-r37-com-consulta.cpp": "31ef1cf61f663a3c8a9b294f91d47e7026a31b4703329bf3b345987a635ed530",
+    "docs/npu-hymt2/smart-rodada37/r37-capture-full.txt": "b122170f3d57d541e5d0013cf7b87190685071137630dbc22362d5a8544225ea",
+    "docs/npu-hymt2/smart-rodada37/r37-inventario-gguf.txt": "893082f33ecedcd52846e3a3ee564d3d0f09cc9c8af93a064f70d5c055ef74b8",
+    "docs/npu-hymt2/smart-rodada37/r37-probe-build.log": "2cda873e27be4c76c3e97ba24cb58e7432c08e0504c41089b9d39946a2f4f18f",
+    "docs/npu-hymt2/smart-rodada37/r37_cand.py": "24b423801fe6dc56b0f261c8610b40589d52a9ddc9a4037d5d1bb011bb6caea5",
+    "docs/npu-hymt2/smart-rodada37/r37_gguf_invent.py": "412edb9400a53a01aefff392548e54cc6c1ff9d77ae714ab9e5cf62f27cc449e"
+  },
+  "index_blob_sha256_at_delivery": {
+    "docs/especialista/PROMPT-SMART-RODADA37-CPU-Q8K-ESTADO-EFETIVO-E-SHAPES-REAIS.txt": "efdea59eb7a2caf3d0f31e56166c94eb210bb57d76f1418a11c1fc92fb81e3ea",
+    "docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA37.txt": "15e2c5810aafa43b22efe13a33ec40ed456c05eaa6a0d56461d0d1232c361f4d",
+    "docs/npu-hymt2/smart-rodada37/MANIFESTO-SHA256.txt": "aa8a34ff02b26d20276ee5631deb8c9645f3046b02d94cf447fc1ffeb305efa6",
+    "docs/npu-hymt2/smart-rodada37/probe-r37-com-consulta.cpp": "31ef1cf61f663a3c8a9b294f91d47e7026a31b4703329bf3b345987a635ed530",
+    "docs/npu-hymt2/smart-rodada37/r37-capture-full.txt": "b122170f3d57d541e5d0013cf7b87190685071137630dbc22362d5a8544225ea",
+    "docs/npu-hymt2/smart-rodada37/r37-inventario-gguf.txt": "727fe45ab2f7286cfc8646e9d95fdddc4da85edc21d6ef6bfd0d3b17cf2a7676",
+    "docs/npu-hymt2/smart-rodada37/r37-probe-build.log": "819f5d33a19266b63c591cb3c612a319a8617b113ecc6dc5f1da3ba5e5c03aab",
+    "docs/npu-hymt2/smart-rodada37/r37_cand.py": "24b423801fe6dc56b0f261c8610b40589d52a9ddc9a4037d5d1bb011bb6caea5",
+    "docs/npu-hymt2/smart-rodada37/r37_gguf_invent.py": "412edb9400a53a01aefff392548e54cc6c1ff9d77ae714ab9e5cf62f27cc449e"
+  },
+  "note": "7 index blobs byte-equal worktree, 2 differ only CRLF/LF. No index mutation tool was called. Do not compare SHA256 of LF index to CRLF worktree as if identical bytes."
+}
+===== END preservation-final.json =====
+
+===== BEGIN executor-vaccine-build.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-vaccine-build.log =====
+D:\Projetos\SIG\docs\npu-hymt2\smart-rodada46\r46_vacinas.c: In function 'add_buffer_sbuf':
+D:\Projetos\SIG\docs\npu-hymt2\smart-rodada46\r46_vacinas.c:35:56: warning: comparison of integer expressions of different signedness: 'uint64_t' {aka 'long long unsigned int'} and 'int' [-Wsign-compare]
+   35 |     for (int i = 0; i < b_map_n; i++) if (b_map_fds[i] == fd) return b_map_bi[i];
+      |                                                        ^~
+D:\Projetos\SIG\docs\npu-hymt2\smart-rodada46\r46_vacinas.c: In function 'main':
+D:\Projetos\SIG\docs\npu-hymt2\smart-rodada46\r46_vacinas.c:121:9: warning: variable 'untouched' set but not used [-Wunused-but-set-variable=]
+  121 |     int untouched = 1;
+      |         ^~~~~~~~~
+
+===== END executor-vaccine-build.log =====
+
+===== BEGIN executor-vaccine-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-vaccine-out.txt =====
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+C5 len>cap=0 off+len>cap=0 exact==cap=262144 (exigido 0/0/262144!)
+C6 hmx_ptr=NULL (exigido NULL!)
+C7 flag0: bi=-1 (exigido -1! OFF total!)
+C8 flag01: bi=-1 (exigido -1!)
+
+VACINAS_R46: TODAS PASS (8/8!) (0 falhas!)
+
+===== END executor-vaccine-out.txt =====
+
+===== BEGIN executor-vaccine-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-vaccine-err.txt =====
+
+===== END executor-vaccine-err.txt =====
+
+===== BEGIN vaccine-source-guard-build.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard-build.log =====
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\vaccine-source-guard.c: In function 'add_buffer_sbuf':
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\vaccine-source-guard.c:41:56: warning: comparison of integer expressions of different signedness: 'uint64_t' {aka 'long long unsigned int'} and 'int' [-Wsign-compare]
+   41 |     for (int i = 0; i < b_map_n; i++) if (b_map_fds[i] == fd) return b_map_bi[i];
+      |                                                        ^~
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\vaccine-source-guard.c: In function 'main':
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\vaccine-source-guard.c:127:9: warning: variable 'untouched' set but not used [-Wunused-but-set-variable=]
+  127 |     int untouched = 1;
+      |         ^~~~~~~~~
+
+===== END vaccine-source-guard-build.log =====
+
+===== BEGIN vaccine-source-guard-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard-out.txt =====
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+
+===== END vaccine-source-guard-out.txt =====
+
+===== BEGIN vaccine-source-guard-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard-err.txt =====
+SOURCE_OOB_BLOCKED requested=262144 src_capacity=221184 excess=40960
+
+===== END vaccine-source-guard-err.txt =====
+
+===== BEGIN r46-fragment-counterexamples-build.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples-build.log =====
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46-fragment-counterexamples.cpp: In function 'int main()':
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46-fragment-counterexamples.cpp:64:47: warning: missing initializer for member 'Batch::byfd' [-Wmissing-field-initializers]
+   64 |  ggml_hexagon_session s1{1},s2{2};Batch b1{&s1},b2{&s2};
+      |                                               ^
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46-fragment-counterexamples.cpp:64:55: warning: missing initializer for member 'Batch::byfd' [-Wmissing-field-initializers]
+   64 |  ggml_hexagon_session s1{1},s2{2};Batch b1{&s1},b2{&s2};
+      |                                                       ^
+
+===== END r46-fragment-counterexamples-build.log =====
+
+===== BEGIN r46-fragment-counterexamples-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples-out.txt =====
+TWO_DISTINCT_OPS first_bi=0 second_bi=0 SAME_BUFFER=1
+HIGHER_DIM ne1=1 ne2=2 ACCEPTED_BI=0 (not genuinely B1)
+OWNER original_session=1 requested_session=2 SAME_OWNER=0
+OTHER_OPCODE_MUL_MAT_ADD retained_bi=0 (zero-filled blob; OFF -1 not assigned)
+MULTIPLICATION_OVERFLOW row=9223372036854775816 off=16 len=16 capacity=32 COPY_CALLS=1
+R46_COUNTEREXAMPLES_CONFIRMED (host adapters; not Android/DSP)
+
+===== END r46-fragment-counterexamples-out.txt =====
+
+===== BEGIN r46-fragment-counterexamples-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples-err.txt =====
+
+===== END r46-fragment-counterexamples-err.txt =====
+
+===== BEGIN executor-api-vaccine-build.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-api-vaccine-build.log =====
+
+===== END executor-api-vaccine-build.log =====
+
+===== BEGIN executor-api-vaccine-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-api-vaccine-out.txt =====
+N1 flag0: status=0 (exigido 0!)
+N2 armed-sem-captura: status=1 (exigido 1!)
+N3 completo: status=2 rows=1 K=6144 N=2048 B=1 row=221184 cap=262144 (exigido 2/1/6144/2048/1/221184/262144!)
+N4 header-invalido: status=-1 (exigido -1!)
+N5 op_seen0: status=1 (exigido 1!)
+N6 rows0: status=1 (exigido 1!)
+
+API_VACINA_R46: TODAS PASS (6/6!) (0 falhas!)
+
+===== END executor-api-vaccine-out.txt =====
+
+===== BEGIN executor-api-vaccine-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-api-vaccine-err.txt =====
+
+===== END executor-api-vaccine-err.txt =====
+
+===== BEGIN r46b-api-fragments-build.log | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments-build.log =====
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:36:85: warning: missing initializer for member '<unnamed struct>::epoch' [-Wmissing-field-initializers]
+   36 | static struct {int used;uint32_t epoch;int K,N,B,type;size_t row_size;}g_r46_meta={0};
+      |                                                                                     ^
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:36:85: warning: missing initializer for member '<unnamed struct>::K' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:36:85: warning: missing initializer for member '<unnamed struct>::N' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:36:85: warning: missing initializer for member '<unnamed struct>::B' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:36:85: warning: missing initializer for member '<unnamed struct>::type' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:36:85: warning: missing initializer for member '<unnamed struct>::row_size' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp: In function 'int main()':
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:134:15: warning: missing initializer for member '<unnamed struct>::epoch' [-Wmissing-field-initializers]
+  134 |  g_r46_meta={0};g_r46_act_dump_sbuf->size=262144;Batch batch{&sess};
+      |               ^
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:134:15: warning: missing initializer for member '<unnamed struct>::K' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:134:15: warning: missing initializer for member '<unnamed struct>::N' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:134:15: warning: missing initializer for member '<unnamed struct>::B' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:134:15: warning: missing initializer for member '<unnamed struct>::type' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:134:15: warning: missing initializer for member '<unnamed struct>::row_size' [-Wmissing-field-initializers]
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r46-specialist-audit\r46b-api-fragments.cpp:134:67: warning: missing initializer for member 'Batch::byfd' [-Wmissing-field-initializers]
+  134 |  g_r46_meta={0};g_r46_act_dump_sbuf->size=262144;Batch batch{&sess};
+      |                                                                   ^
+
+===== END r46b-api-fragments-build.log =====
+
+===== BEGIN r46b-api-fragments-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments-out.txt =====
+LEGAL_B1 status=2 rows=1 payload_match=1
+ROWS_EXCESS rows=2 expected_B=1 status=2 (accepts >= not ==)
+ZERO_ROW_SIZE row=0 status=2
+PAYLOAD_EXCEEDS_CAP offset=64 row=221184 capacity=64 status=2
+WRONG_EPOCH status=-1
+WRAPPED_COPY off=80 len=16 rows=1 status=2 capacity=96 (physical copy within allocation)
+NEW_ONE_SHOT first_bi=0 second_bi=-1 epoch=1 used=1
+STATUS_LAYOUT_HOST sizeof=72 ptr_offset=48 row_offset=64
+R46B_API_COUNTEREXAMPLES_CONFIRMED (host serial adapters; no SDK/DSP claims)
+
+===== END r46b-api-fragments-out.txt =====
+
+===== BEGIN r46b-api-fragments-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments-err.txt =====
+
+===== END r46b-api-fragments-err.txt =====
+
+===== BEGIN generator-missing-A1-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-missing-A1-out.txt =====
+
+===== END generator-missing-A1-out.txt =====
+
+===== BEGIN generator-missing-A1-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-missing-A1-err.txt =====
+Traceback (most recent call last):
+  File "D:\Projetos\SIG\docs\npu-hymt2\smart-rodada46\r46_patch.py", line 19, in <module>
+    assert t.count(old) == 1, "A1 anchor"
+           ^^^^^^^^^^^^^^^^^
+AssertionError: A1 anchor
+
+===== END generator-missing-A1-err.txt =====
+
+===== BEGIN generator-optimized-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-optimized-out.txt =====
+A) HOST v2 ok (7 fixes: global->owner; por-batch; selecao; apos-memcpy; =0; init-only!)
+B1/B2) skel ctx ok
+B3/B4) skel matmul ok
+B5/B6) skel main ok
+=== PATCH V2 COMPLETO (todos os 7 fixes + extras!)
+
+===== END generator-optimized-out.txt =====
+
+===== BEGIN generator-optimized-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-optimized-err.txt =====
+
+===== END generator-optimized-err.txt =====
+
+===== BEGIN generator-r46b-normal-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-normal-out.txt =====
+
+===== END generator-r46b-normal-out.txt =====
+
+===== BEGIN generator-r46b-normal-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-normal-err.txt =====
+Traceback (most recent call last):
+  File "D:\Projetos\SIG\docs\npu-hymt2\smart-rodada46\r46b_patch.py", line 18, in <module>
+    assert t.count(anc) == 1, "A1 anchor"
+           ^^^^^^^^^^^^^^^^^
+AssertionError: A1 anchor
+
+===== END generator-r46b-normal-err.txt =====
+
+===== BEGIN generator-r46b-optimized-out.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-optimized-out.txt =====
+A) HOST: struct+meta+header+API+registry ok
+B) SKEL: op_seen+rows_done+off64 ok
+=== PATCH §5 COMPLETO (a API + o header + o consumidor no host!)
+
+===== END generator-r46b-optimized-out.txt =====
+
+===== BEGIN generator-r46b-optimized-err.txt | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-optimized-err.txt =====
+
+===== END generator-r46b-optimized-err.txt =====
+
+APÊNDICE3 — 13 ANEXOS ORIGINAIS INTEGRAIS
+
+===== BEGIN r46-fullsha64-cohort-v2.txt =====
+ab11d6244ff0e2ffc54812e63acf9da9fd5d9b0dea96eb588525d2124bee7d37  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+fe2ae59d57bf66b5213ebbdf9e5310b81d86740dc2b5cc07212264db234922d7  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+e904030a11448486f25397ccb484f8228b9fd5333dd5f43f862fb6006c442d28  /root/sigcand2/ggml/src/ggml-hexagon/htp/main.c
+4db38dd26a87e3e534b567539484b91f2b85539619a3d445cefadea40eedba90  /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+c5771e650a76574413b32b4d88700c0fad5d48662e56e30c2517d125c30df079  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+d3987e51823462146f43e9c9114af6afdd3d318831c4460053967dca342749b8  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+===== END r46-fullsha64-cohort-v2.txt =====
+
+===== BEGIN r46-host-build.log =====
+[0/2] Re-checking globbed directories...
+[1/8] Performing build step for 'vulkan-shaders-gen'
+ninja: no work to do.
+[2/8] Performing install step for 'vulkan-shaders-gen'
+-- Up-to-date: /workspace/build-kq/Release/./vulkan-shaders-gen
+[3/8] Completed 'vulkan-shaders-gen'
+[4/8] Building CXX object ggml/src/ggml-hexagon/CMakeFiles/ggml-hexagon.dir/ggml-hexagon.cpp.o
+/workspace/ggml/src/ggml-hexagon/ggml-hexagon.cpp:1424:92: warning: address of array 'tensor->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+ 1424 |             fprintf(stderr, "KQSET: q4_K name=%s size=%zu -> repack_q4_K_tiled\n", tensor->name ? tensor->name : "?", size);
+      |                                                                                    ~~~~~~~~^~~~ ~
+/workspace/ggml/src/ggml-hexagon/ggml-hexagon.cpp:1438:92: warning: address of array 'tensor->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+ 1438 |             fprintf(stderr, "KQSET: q6_K name=%s size=%zu -> repack_q6_K_tiled\n", tensor->name ? tensor->name : "?", size);
+      |                                                                                    ~~~~~~~~^~~~ ~
+2 warnings generated.
+[5/8] Linking CXX shared library bin/libggml-hexagon.so
+[6/8] Linking CXX shared library bin/libggml.so
+[7/8] Linking CXX shared library bin/libllama.so
+
+===== END r46-host-build.log =====
+
+===== BEGIN r46-skel-build.log =====
+[0/2] Re-checking globbed directories...
+[1/4] Performing build step for 'htp-v81'
+[1/28] Building C object CMakeFiles/ggml-htp-v81.dir/dma-queue.c.obj
+[2/28] Building C object CMakeFiles/ggml-htp-v81.dir/work-queue.c.obj
+[3/28] Building C object CMakeFiles/ggml-htp-v81.dir/hmx-queue.c.obj
+[4/28] Building C object CMakeFiles/ggml-htp-v81.dir/diag-ops.c.obj
+[5/28] Building C object CMakeFiles/ggml-htp-v81.dir/htp-tensor.c.obj
+[6/28] Building C object CMakeFiles/ggml-htp-v81.dir/get-rows-ops.c.obj
+[7/28] Building C object CMakeFiles/ggml-htp-v81.dir/repeat-ops.c.obj
+[8/28] Building C object CMakeFiles/ggml-htp-v81.dir/fill-ops.c.obj
+[9/28] Building C object CMakeFiles/ggml-htp-v81.dir/cumsum-ops.c.obj
+[10/28] Building C object CMakeFiles/ggml-htp-v81.dir/sum-rows-ops.c.obj
+[11/28] Building C object CMakeFiles/ggml-htp-v81.dir/cpy-ops.c.obj
+[12/28] Building C object CMakeFiles/ggml-htp-v81.dir/solve-tri-ops.c.obj
+[13/28] Building C object CMakeFiles/ggml-htp-v81.dir/set-rows-ops.c.obj
+[14/28] Building C object CMakeFiles/ggml-htp-v81.dir/concat-ops.c.obj
+[15/28] Building C object CMakeFiles/ggml-htp-v81.dir/ssm-conv.c.obj
+[16/28] Building C object CMakeFiles/ggml-htp-v81.dir/main.c.obj
+[17/28] Building C object CMakeFiles/ggml-htp-v81.dir/softmax-ops.c.obj
+[18/28] Building C object CMakeFiles/ggml-htp-v81.dir/pad-ops.c.obj
+[19/28] Building C object CMakeFiles/ggml-htp-v81.dir/rope-ops.c.obj
+[20/28] Building C object CMakeFiles/ggml-htp-v81.dir/act-ops.c.obj
+[21/28] Building C object CMakeFiles/ggml-htp-v81.dir/im2col-ops.c.obj
+[22/28] Building C object CMakeFiles/ggml-htp-v81.dir/argsort-ops.c.obj
+[23/28] Building C object CMakeFiles/ggml-htp-v81.dir/gated-delta-net-ops.c.obj
+[24/28] Building C object CMakeFiles/ggml-htp-v81.dir/binary-ops.c.obj
+[25/28] Building C object CMakeFiles/ggml-htp-v81.dir/flash-attn-ops.c.obj
+[26/28] Building C object CMakeFiles/ggml-htp-v81.dir/unary-ops.c.obj
+[27/28] Building C object CMakeFiles/ggml-htp-v81.dir/matmul-ops.c.obj
+[28/28] Linking C shared library libggml-htp-v81.so
+[2/4] Performing install step for 'htp-v81'
+[0/1] Install the project...
+-- Install configuration: "Release"
+-- Installing: /workspace/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+[3/4] Completed 'htp-v81'
+
+===== END r46-skel-build.log =====
+
+===== BEGIN r46-v2.diff =====
+--- /root/r45_backup_sigcand2/ggml-hexagon.cpp	2026-10-10 04:36:19.141820271 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp	2026-10-10 05:57:51.212464473 -0300
+@@ -240,6 +240,7 @@
+ 
+ struct ggml_hexagon_session;
+ 
++
+ static void ggml_hexagon_precompute_matmul_params(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+@@ -426,6 +427,17 @@
+     }
+ };
+ 
++// R46 (test-only!): o OWNER do sbuf do dump (uma vez por processo; o bi e' POR BATCH!)
++static ggml_hexagon_shared_buffer * g_r46_act_dump_sbuf = nullptr;
++static int g_r46_armed = -1;
++static bool g_r46_act_dump_armed(void) {
++    if (g_r46_armed < 0) {   // INIT-ONLY (declarado!): a primeira leitura decide!
++        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
++        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;   // so' "1" (o resto OFF!)
++    }
++    return g_r46_armed == 1;
++}
++
+ static ggml_hexagon_session * ggml_backend_hexagon_buffer_get_sess(ggml_backend_buffer_t buffer) {
+     return static_cast<ggml_backend_hexagon_buffer_type_context *>(buffer->buft->context)->sess;
+ }
+@@ -1644,6 +1656,8 @@
+     unsigned int n_ops_max;
+     size_t       b_vmem_max;
+ 
++    int r46_dump_bi = -1;   // R46: o bi do dump NESTE batch (-1 = nenhum!)
++
+     void reset() {
+         n_bufs = 0;
+         n_tens = 0;
+@@ -1653,6 +1667,8 @@
+         b_map.clear();
+         t_map.clear();
+         d_map.clear();
++
++        r46_dump_bi = -1;   // R46: re-derivado a cada batch (sem stale!)
+     }
+ 
+     ggml_hexagon_opbatch(ggml_hexagon_session *sess, size_t batch_size, size_t max_vmem) {
+@@ -1839,6 +1855,29 @@
+         o.opcode = node.opcode;
+         o.flags  = 0;
+ 
++        // R46 (test-only!): o dump da ACT — selecao POR OPERACAO + bi DESTE batch!
++        // (DEPOIS do memcpy — o memset do precompute nao o alcanca mais!)
++        if (o.opcode == HTP_OP_MUL_MAT) {
++            struct htp_mm_kernel_params * k46 = (struct htp_mm_kernel_params *) o.kernel_params;
++            k46->act_dump_bi = -1;   // OFF por default (sentinela!)
++            const ggml_tensor * s0 = node.node->src[0];
++            const ggml_tensor * s1 = node.node->src[1];
++            if (s0 && s1 && g_r46_act_dump_armed() &&
++                s0->type == GGML_TYPE_Q6_K && s0->ne[0] == 6144 && s0->ne[1] == 2048 &&
++                s1->type == GGML_TYPE_F32 && s1->ne[1] == 1) {
++                if (!g_r46_act_dump_sbuf) {
++                    g_r46_act_dump_sbuf = new ggml_hexagon_shared_buffer(sess, 262144);   // OWNER (processo!)
++                }
++                if (r46_dump_bi < 0) {
++                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
++                }
++                if (r46_dump_bi >= 0) {
++                    k46->act_dump_bi = r46_dump_bi;
++                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: batch bi=%d fd=%d\n", r46_dump_bi, g_r46_act_dump_sbuf->fd);
++                }
++            }
++        }
++
+         if (!(opt_opstage & HTP_OPSTAGE_COMPUTE)) {
+             o.flags |= HTP_OPFLAGS_SKIP_COMPUTE;
+         }
+@@ -2970,6 +3009,7 @@
+     }
+ }
+ 
++
+ static void ggml_hexagon_precompute_matmul_params_impl(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+--- /root/r45_backup_sigcand2/matmul-ops.c	2026-10-10 04:36:19.143420420 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c	2026-10-10 05:58:07.555373053 -0300
+@@ -839,6 +839,13 @@
+     uint8_t * restrict dst_data = (uint8_t *) dst + (dst_row_size * ir_first);                             \
+     uint8_t * restrict tmp_data = (uint8_t *) mmctx->vtcm_dst + (mmctx->vtcm_dst_size_per_thread * ith);   \
+     kernel_fn(src_data, dst_data, tmp_data, ne0, ir_last - ir_first, src_row_size, dst_row_size);          \
++    if (mmctx->octx->act_dump_ptr) {                                                                       \
++        const size_t d46_off = (size_t) dst_row_size * ir_first;                                           \
++        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               \
++        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      \
++            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                \
++        }                                                                                                  \
++    }                                                                                                      \
+                                                                                                            \
+     htp_trace_event_stop(tr, HTP_TRACE_EVT_HVX_A_QUANT, ir_first);                                         \
+ }
+@@ -3428,6 +3435,16 @@
+ int op_matmul(struct htp_ops_context * octx) {
+     const struct htp_mm_kernel_params * kparams = (const struct htp_mm_kernel_params *) octx->kernel_params;
+ 
++    // R46 (test-only!): o dump da ACT — resolvido pelo DESCRITOR do request
++    // (bufs[bi].base do prep_op_bufs — NAO ctx->mmap[bi]! numeracoes DIFERENTES!)
++    // + bounds + somente o caminho HVX (o HMX desvia e nao usa!)
++    octx->act_dump_ptr = NULL;
++    octx->act_dump_cap = 0;
++    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < (int) octx->ctx->r46_nbufs && octx->ctx->r46_bufs && !kparams->n_hmx) {
++        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->r46_bufs[kparams->act_dump_bi].base;
++        octx->act_dump_cap = (size_t) octx->ctx->r46_bufs[kparams->act_dump_bi].size;
++    }
++
+     if (kparams->n_hmx) {
+         return hmx_mm_op_matmul(octx, kparams);
+     }
+diff: /root/r45_backup_sigcand2/main.c: No such file or directory
+--- /root/r45_backup_sigcand2/htp-ctx.h	2026-10-10 04:36:19.144601851 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h	2026-10-10 05:58:07.555373053 -0300
+@@ -1,145 +1,151 @@
+-#ifndef HTP_CTX_H
+-#define HTP_CTX_H
+-
+-#include "hex-dma.h"
+-#include "hmx-queue.h"
+-#include "htp-ops.h"
+-#include "hex-profile.h"
+-#include "work-queue.h"
+-#include "hex-fastdiv.h"
+-
+-#include <assert.h>
+-#include <dspqueue.h>
+-#include <stdatomic.h>
+-#include <stdint.h>
+-#include <stdbool.h>
+-
+-#ifndef HTP_MAX_NTHREADS
+-#define HTP_MAX_NTHREADS 10
+-#endif
+-#define HTP_MAX_MMAPS    16
+-
+-#define HTP_MAX_DIRTY_RANGES 16
+-
+-// Memory mapping
+-struct htp_mmap {
+-    uint64_t size;
+-    uint64_t base;
+-    uint32_t fd;
+-    uint32_t reserved;
+-};
+-
+-// Scratchpad state
+-struct htp_spad {
+-    const struct htp_tensor * src;             // original src of the data (for reuse)
+-    uint8_t *                 data;            // pointer to an area in vtcm
+-    uint32_t                  stride;          // stride used inside this spad
+-    uint32_t                  size;            // total size
+-    uint32_t                  size_per_thread; // size per thread
+-};
+-
+-struct htp_context;
+-
+-// Context while processing an Op
+-// TODO: fold this into the main context
+-struct htp_ops_context {
+-    struct htp_context * ctx;
+-
+-    enum htp_op_code    op; // FIXME: rename to opcode
+-    int32_t             op_params[HTP_OP_MAX_PARAMS];
+-    int32_t             kernel_params[HTP_OP_MAX_KERN_PARAMS];
+-
+-    const struct htp_tensor * src[HTP_OP_MAX_INPUTS];
+-    union {
+-        const struct htp_tensor * dst;
+-        const struct htp_tensor * dsts[HTP_OP_MAX_OUTPUTS];
+-    };
+-
+-    dma_queue **    src_dma[HTP_OP_MAX_INPUTS];
+-    dma_queue **    dst_dma[HTP_OP_MAX_OUTPUTS];
+-
+-    // TODO convert these to an array
+-    struct htp_spad src0_spad;
+-    struct htp_spad src1_spad;
+-    struct htp_spad src2_spad;
+-    struct htp_spad src3_spad;
+-    struct htp_spad dst_spad;
+-
+-    uint32_t n_threads;
+-    uint32_t flags;
+-};
+-
+-// Main context for htp DSP backend
+-struct htp_context {
+-    dspqueue_t             dsp_queue;
+-
+-    struct htp_mmap        mmap[HTP_MAX_MMAPS];
+-    dma_queue_t            dma[HTP_MAX_NTHREADS];
+-    dma_queue_t            dma_cached[HTP_MAX_NTHREADS];
+-    work_queue_t           work_queue;
+-    hmx_queue_t            hmx_queue;
+-
+-    uint32_t               n_threads;
+-    struct fastdiv_values  n_threads_div;
+-
+-    int                    thread_id;
+-    int                    thread_prio;
+-
+-    bool                   hmx_enabled;
+-    bool                   etm;
+-    uint32_t               profiler;
+-    struct htp_thread_trace trace[HTP_MAX_NTHREADS + 1];
+-
+-    uint8_t *              vtcm_base;
+-    size_t                 vtcm_size;
+-    uint32_t               vtcm_rctx;
+-    atomic_bool            vtcm_valid;
+-    atomic_bool            vtcm_needs_release;
+-
+-    uint64_t               max_vmem;
+-    struct htp_dirty_range {
+-        uint32_t start;
+-        uint32_t end;
+-        uint32_t bi;
+-    } dirty_ranges[HTP_MAX_DIRTY_RANGES];
+-
+-    // Persistent DDR scratchpad for MUL_MAT_ID mappings
+-    void *                 ddr_spad_base;
+-    size_t                 ddr_spad_size;
+-
+-    struct htp_ops_context octx;
+-
+-    qurt_thread_t          main_thread;
+-    void *                 main_stack;
+-    atomic_bool            killed;
+-    size_t                 footprint;
+-};
+-
+-int op_matmul(struct htp_ops_context * octx);
+-int op_matmul_id(struct htp_ops_context * octx);
+-int op_matmul_qkv(struct htp_ops_context * octx);
+-int op_matmul_ffn(struct htp_ops_context * octx);
+-int op_binary(struct htp_ops_context * octx);
+-int op_unary(struct htp_ops_context * octx);
+-int op_sum_rows(struct htp_ops_context * octx);
+-int op_activations(struct htp_ops_context * octx);
+-int op_softmax(struct htp_ops_context * octx);
+-int op_add_id(struct htp_ops_context * octx);
+-int op_rope(struct htp_ops_context * octx);
+-int op_flash_attn_ext(struct htp_ops_context * octx);
+-int op_set_rows(struct htp_ops_context * octx);
+-int op_get_rows(struct htp_ops_context * octx);
+-int op_cpy(struct htp_ops_context * octx);
+-int op_repeat(struct htp_ops_context * octx);
+-int op_argsort(struct htp_ops_context * octx);
+-int op_ssm_conv(struct htp_ops_context * octx);
+-int op_cumsum(struct htp_ops_context * octx);
+-int op_fill(struct htp_ops_context * octx);
+-int op_concat(struct htp_ops_context * octx);
+-int op_diag(struct htp_ops_context * octx);
+-int op_solve_tri(struct htp_ops_context * octx);
+-int op_gated_delta_net(struct htp_ops_context * octx);
+-int op_pad(struct htp_ops_context * octx);
+-int op_im2col(struct htp_ops_context * octx);
+-
+-#endif /* HTP_CTX_H */
++#ifndef HTP_CTX_H
++#define HTP_CTX_H
++
++#include "hex-dma.h"
++#include "hmx-queue.h"
++#include "htp-ops.h"
++#include "hex-profile.h"
++#include "work-queue.h"
++#include "hex-fastdiv.h"
++
++#include <assert.h>
++#include <dspqueue.h>
++#include <stdatomic.h>
++#include <stdint.h>
++#include <stdbool.h>
++
++#ifndef HTP_MAX_NTHREADS
++#define HTP_MAX_NTHREADS 10
++#endif
++#define HTP_MAX_MMAPS    16
++
++#define HTP_MAX_DIRTY_RANGES 16
++
++// Memory mapping
++struct htp_mmap {
++    uint64_t size;
++    uint64_t base;
++    uint32_t fd;
++    uint32_t reserved;
++};
++
++// Scratchpad state
++struct htp_spad {
++    const struct htp_tensor * src;             // original src of the data (for reuse)
++    uint8_t *                 data;            // pointer to an area in vtcm
++    uint32_t                  stride;          // stride used inside this spad
++    uint32_t                  size;            // total size
++    uint32_t                  size_per_thread; // size per thread
++};
++
++struct htp_context;
++
++// Context while processing an Op
++// TODO: fold this into the main context
++struct htp_ops_context {
++    struct htp_context * ctx;
++
++    enum htp_op_code    op; // FIXME: rename to opcode
++    int32_t             op_params[HTP_OP_MAX_PARAMS];
++    int32_t             kernel_params[HTP_OP_MAX_KERN_PARAMS];
++
++    const struct htp_tensor * src[HTP_OP_MAX_INPUTS];
++    union {
++        const struct htp_tensor * dst;
++        const struct htp_tensor * dsts[HTP_OP_MAX_OUTPUTS];
++    };
++
++    dma_queue **    src_dma[HTP_OP_MAX_INPUTS];
++    dma_queue **    dst_dma[HTP_OP_MAX_OUTPUTS];
++
++    // TODO convert these to an array
++    struct htp_spad src0_spad;
++    struct htp_spad src1_spad;
++    struct htp_spad src2_spad;
++    struct htp_spad src3_spad;
++    struct htp_spad dst_spad;
++
++    uint32_t n_threads;
++    uint32_t flags;
++
++    uint8_t * act_dump_ptr;   // R46 (test-only!): o dump da ACT Q6 (NULL = OFF!)
++    size_t    act_dump_cap;   // R46: a CAPACIDADE do buffer (bounds!)
++};
++
++// Main context for htp DSP backend
++struct htp_context {
++    dspqueue_t             dsp_queue;
++
++    struct htp_mmap        mmap[HTP_MAX_MMAPS];
++    dma_queue_t            dma[HTP_MAX_NTHREADS];
++    dma_queue_t            dma_cached[HTP_MAX_NTHREADS];
++    work_queue_t           work_queue;
++    hmx_queue_t            hmx_queue;
++
++    uint32_t               n_threads;
++    struct fastdiv_values  n_threads_div;
++
++    int                    thread_id;
++    int                    thread_prio;
++
++    bool                   hmx_enabled;
++    bool                   etm;
++    uint32_t               profiler;
++    struct htp_thread_trace trace[HTP_MAX_NTHREADS + 1];
++
++    const struct htp_buf_desc * r46_bufs;   // R46: os descs do request (resolvidos!)
++    uint32_t                    r46_nbufs;
++
++    uint8_t *              vtcm_base;
++    size_t                 vtcm_size;
++    uint32_t               vtcm_rctx;
++    atomic_bool            vtcm_valid;
++    atomic_bool            vtcm_needs_release;
++
++    uint64_t               max_vmem;
++    struct htp_dirty_range {
++        uint32_t start;
++        uint32_t end;
++        uint32_t bi;
++    } dirty_ranges[HTP_MAX_DIRTY_RANGES];
++
++    // Persistent DDR scratchpad for MUL_MAT_ID mappings
++    void *                 ddr_spad_base;
++    size_t                 ddr_spad_size;
++
++    struct htp_ops_context octx;
++
++    qurt_thread_t          main_thread;
++    void *                 main_stack;
++    atomic_bool            killed;
++    size_t                 footprint;
++};
++
++int op_matmul(struct htp_ops_context * octx);
++int op_matmul_id(struct htp_ops_context * octx);
++int op_matmul_qkv(struct htp_ops_context * octx);
++int op_matmul_ffn(struct htp_ops_context * octx);
++int op_binary(struct htp_ops_context * octx);
++int op_unary(struct htp_ops_context * octx);
++int op_sum_rows(struct htp_ops_context * octx);
++int op_activations(struct htp_ops_context * octx);
++int op_softmax(struct htp_ops_context * octx);
++int op_add_id(struct htp_ops_context * octx);
++int op_rope(struct htp_ops_context * octx);
++int op_flash_attn_ext(struct htp_ops_context * octx);
++int op_set_rows(struct htp_ops_context * octx);
++int op_get_rows(struct htp_ops_context * octx);
++int op_cpy(struct htp_ops_context * octx);
++int op_repeat(struct htp_ops_context * octx);
++int op_argsort(struct htp_ops_context * octx);
++int op_ssm_conv(struct htp_ops_context * octx);
++int op_cumsum(struct htp_ops_context * octx);
++int op_fill(struct htp_ops_context * octx);
++int op_concat(struct htp_ops_context * octx);
++int op_diag(struct htp_ops_context * octx);
++int op_solve_tri(struct htp_ops_context * octx);
++int op_gated_delta_net(struct htp_ops_context * octx);
++int op_pad(struct htp_ops_context * octx);
++int op_im2col(struct htp_ops_context * octx);
++
++#endif /* HTP_CTX_H */
+--- /root/r45_backup_sigcand2/matmul-ops.h	2026-10-10 04:36:19.142146780 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.h	2026-10-10 05:58:07.555373053 -0300
+@@ -94,6 +94,7 @@
+     int32_t  vtcm_src2_size;     // src2 scratchpad size in VTCM (fused only)
+     int32_t  vtcm_src3_size;     // src3 scratchpad size in VTCM (fused only)
+     int32_t  vtcm_dst_size;      // dst scratchpad size in VTCM
++    int32_t  act_dump_bi;        // R45 (test-only): buffer index do dump da ACT (-1 = OFF!)
+ 
+     // Precomputed division values
+     struct fastdiv_values div_ne12_ne1;
+
+===== END r46-v2.diff =====
+
+===== BEGIN r46-vacinas-out.txt =====
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+C5 len>cap=0 off+len>cap=0 exact==cap=262144 (exigido 0/0/262144!)
+C6 hmx_ptr=NULL (exigido NULL!)
+C7 flag0: bi=-1 (exigido -1! OFF total!)
+C8 flag01: bi=-1 (exigido -1!)
+
+VACINAS_R46: TODAS PASS (8/8!) (0 falhas!)
+
+===== END r46-vacinas-out.txt =====
+
+===== BEGIN r46_api_vacina.c =====
+// r46_api_vacina.c — R46 §5: a vacina da API (o fluxo REAL extraído!)
+// N1 flag off -> NOT_ARMED; N2 armed sem captura -> 1; N3 completo -> CAPTURED;
+// N4 header inválido -> -1; N5 op_seen=0 -> 1; N6 rows_done=0 -> 1.
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#define R46_MAGIC 0x52343644u
+struct ggml_hexagon_act_dump_status {
+    uint32_t magic; uint32_t version; int32_t status; int32_t type;
+    int32_t K, N, B; uint32_t epoch; uint32_t rows_done; uint32_t payload_off; uint32_t reserved;
+    uint64_t ptr; uint64_t capacity; uint64_t row_size;
+};
+// ===== os fragmentos REAIS do patch §5 (adaptados: o sbuf vira um array!) =====
+static int g_r46_armed = -1;
+static bool g_r46_act_dump_armed(void) {
+    if (g_r46_armed < 0) {
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;
+    }
+    return g_r46_armed == 1;
+}
+static uint8_t g_sbuf[262144];
+static int g_sbuf_exists = 0;
+static struct { int used; uint32_t epoch; int K, N, B, type; size_t row_size; } g_r46_meta = {0};
+static int ggml_hexagon_get_act_dump(void * out_v) {
+    struct ggml_hexagon_act_dump_status * out = (struct ggml_hexagon_act_dump_status *) out_v;
+    if (!out) return -1;
+    out->magic = R46_MAGIC; out->version = 1;
+    out->type = 0; out->K = 0; out->N = 0; out->B = 0;
+    out->epoch = g_r46_meta.epoch; out->rows_done = 0; out->payload_off = 64;
+    out->reserved = 0; out->ptr = 0; out->capacity = 0; out->row_size = 0;
+    if (!g_r46_act_dump_armed()) { out->status = 0; return 0; }
+    if (g_r46_meta.epoch == 0 || !g_sbuf_exists) { out->status = 1; return 0; }
+    out->ptr = (uint64_t)(uintptr_t) g_sbuf;
+    out->capacity = sizeof(g_sbuf);
+    out->type = g_r46_meta.type; out->K = g_r46_meta.K; out->N = g_r46_meta.N; out->B = g_r46_meta.B;
+    out->row_size = g_r46_meta.row_size;
+    const uint32_t * hdr = (const uint32_t *) g_sbuf;
+    if (hdr[0] != R46_MAGIC || hdr[1] != g_r46_meta.epoch) { out->status = -1; return 0; }
+    out->rows_done = hdr[3];
+    const int op_seen = hdr[2] == 1;
+    out->status = (op_seen && (int) hdr[3] >= g_r46_meta.B && g_r46_meta.B > 0) ? 2 : 1;
+    return 0;
+}
+// =============================================================================
+int main(void) {
+    int fails = 0;
+    struct ggml_hexagon_act_dump_status st;
+    // N1: flag off!
+    putenv("GGML_HEXAGON_ACT_DUMP=0"); g_r46_armed = -1;
+    ggml_hexagon_get_act_dump(&st);
+    printf("N1 flag0: status=%d (exigido 0!)\n", st.status);
+    if (st.status != 0) { fails++; printf("N1 FAIL\n"); }
+    // N2: armed sem captura!
+    putenv("GGML_HEXAGON_ACT_DUMP=1"); g_r46_armed = -1; g_r46_meta.used = 0;
+    ggml_hexagon_get_act_dump(&st);
+    printf("N2 armed-sem-captura: status=%d (exigido 1!)\n", st.status);
+    if (st.status != 1) { fails++; printf("N2 FAIL\n"); }
+    // N3: captura completa (header+op_seen+rows_done!)
+    g_sbuf_exists = 1;
+    g_r46_meta.epoch = 1; g_r46_meta.K = 6144; g_r46_meta.N = 2048; g_r46_meta.B = 1; g_r46_meta.type = 14; g_r46_meta.row_size = 221184;
+    uint32_t * hdr = (uint32_t *) g_sbuf;
+    hdr[0] = R46_MAGIC; hdr[1] = 1; hdr[2] = 1; hdr[3] = 1;   // op_seen + 1 row!
+    ggml_hexagon_get_act_dump(&st);
+    printf("N3 completo: status=%d rows=%u K=%d N=%d B=%d row=%llu cap=%llu (exigido 2/1/6144/2048/1/221184/262144!)\n",
+           st.status, st.rows_done, st.K, st.N, st.B, (unsigned long long) st.row_size, (unsigned long long) st.capacity);
+    if (st.status != 2 || st.rows_done != 1 || st.K != 6144 || st.N != 2048) { fails++; printf("N3 FAIL\n"); }
+    // N4: header invalido!
+    hdr[0] = 0xDEADBEEF;
+    ggml_hexagon_get_act_dump(&st);
+    printf("N4 header-invalido: status=%d (exigido -1!)\n", st.status);
+    if (st.status != -1) { fails++; printf("N4 FAIL\n"); }
+    // N5: op_seen=0 (a op nao chegou!)
+    hdr[0] = R46_MAGIC; hdr[2] = 0; hdr[3] = 0;
+    ggml_hexagon_get_act_dump(&st);
+    printf("N5 op_seen0: status=%d (exigido 1!)\n", st.status);
+    if (st.status != 1) { fails++; printf("N5 FAIL\n"); }
+    // N6: rows_done=0 (os workers nao copiaram!)
+    hdr[2] = 1; hdr[3] = 0;
+    ggml_hexagon_get_act_dump(&st);
+    printf("N6 rows0: status=%d (exigido 1!)\n", st.status);
+    if (st.status != 1) { fails++; printf("N6 FAIL\n"); }
+    printf("\n%s (%d falhas!)\n", fails == 0 ? "API_VACINA_R46: TODAS PASS (6/6!)" : "API_VACINA_R46: FALHA!", fails);
+    return fails == 0 ? 0 : 1;
+}
+
+===== END r46_api_vacina.c =====
+
+===== BEGIN r46_patch.py =====
+#!/usr/bin/env python3
+# r46_patch.py — R46: O PATCH V2 (corrigido contra as 7 contraprovas!)
+# FIXES: bi=0 valido; bi POR BATCH (nao global!); selecao NA OP (Q6_K K6144/
+# N2048/B1 F32!); atribuicao APOS o impl (o memset do impl apagava!); DSP
+# resolve pelo DESCRITOR (bufs[bi].base, nao mmap!); bounds checados (cap!);
+# limpeza central no dispatcher (execute_op!); flag init-only declarada!
+import sys
+HEX = sys.argv[1] if len(sys.argv) > 1 else "/root/sigcand2/ggml/src/ggml-hexagon"
+HTP = f"{HEX}/htp"
+
+# ============================================================
+# A) HOST (ggml-hexagon.cpp): remover o R45 global+arm; FIX no add_op!
+# ============================================================
+p = f"{HEX}/ggml-hexagon.cpp"
+t = open(p, encoding="utf-8", errors="replace").read()
+
+# A.1 remover a linha P3 do R45 (o precompute wrapper — ela era APAGADA pelo memset!)
+old = "    kparams->act_dump_bi = g_r45_act_dump_bi;   // R45: P3 (test-only: -1 = OFF!)\n    ggml_hexagon_precompute_matmul_params_impl(sess, src0, src1, dst, 0, kparams);"
+assert t.count(old) == 1, "A1 anchor"
+t = t.replace(old, "    ggml_hexagon_precompute_matmul_params_impl(sess, src0, src1, dst, 0, kparams);", 1)
+
+# A.2 trocar o global do bi pelo OWNER do sbuf + a flag init-only!
+old = """// R45 (test-only!): o bi global do dump da ACT (-1 = OFF!)
+static int g_r45_act_dump_bi = -1;
+"""
+assert t.count(old) == 1, "A2 anchor"
+t = t.replace(old, """// R46 (test-only!): o OWNER do sbuf do dump (uma vez por processo; o bi e' POR BATCH!)
+static ggml_hexagon_shared_buffer * g_r46_act_dump_sbuf = nullptr;
+static int g_r46_armed = -1;
+static bool g_r46_act_dump_armed(void) {
+    if (g_r46_armed < 0) {   // INIT-ONLY (declarado!): a primeira leitura decide!
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;   // so' "1" (o resto OFF!)
+    }
+    return g_r46_armed == 1;
+}
+""", 1)
+
+# A.3 remover o r45_act_dump_arm (a funcao R45 do batch!)
+old = """    // R45 (test-only!): arma o dump UMA vez (P1: criacao; P2: add_buffer!)
+    void r45_act_dump_arm(ggml_hexagon_session * sess) {
+        if (g_r45_act_dump_bi >= 0) return;
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        if (!(e && e[0] == '1' && e[1] == 0)) return;   // parse explicito (so' "1"!)
+        ggml_hexagon_shared_buffer * d = new ggml_hexagon_shared_buffer(sess, 262144);   // 256KB >= 221184!
+        const int bi = add_buffer(d);
+        if (bi > 0) {
+            g_r45_act_dump_bi = bi;
+            GGML_LOG_DEBUG("ggml-hex: R45 ACT_DUMP: bi=%d fd=%d size=%zu\\n", bi, d->fd, d->size);
+        }
+    }
+
+"""
+assert t.count(old) == 1, "A3 anchor"
+t = t.replace(old, "", 1)
+
+# A.4 remover a chamada no add_tensor (o R45!)
+old = """        auto sbuf = static_cast<ggml_hexagon_shared_buffer *>(t->buffer->context);
+        r45_act_dump_arm(sbuf->sess);   // R45: P2 (antes dos tensores — bi estavel!)
+"""
+assert t.count(old) == 1, "A4 anchor"
+t = t.replace(old, """        auto sbuf = static_cast<ggml_hexagon_shared_buffer *>(t->buffer->context);
+""", 1)
+
+# A.5 o membro do BI POR BATCH (junto do reset!)
+old = """    void reset() {
+        n_bufs = 0;
+        n_tens = 0;
+        n_ops  = 0;
+        b_vmem = 0;
+
+        b_map.clear();
+        t_map.clear();
+        d_map.clear();
+    }"""
+assert t.count(old) == 1, "A5 anchor"
+t = t.replace(old, """    int r46_dump_bi = -1;   // R46: o bi do dump NESTE batch (-1 = nenhum!)
+
+    void reset() {
+        n_bufs = 0;
+        n_tens = 0;
+        n_ops  = 0;
+        b_vmem = 0;
+
+        b_map.clear();
+        t_map.clear();
+        d_map.clear();
+
+        r46_dump_bi = -1;   // R46: re-derivado a cada batch (sem stale!)
+    }""", 1)
+
+# A.6 O FIX CENTRAL: no add_op (apos o memcpy!) — a selecao POR OPERACAO + o wire!
+old = """        htp_op_desc &o = h_ops[n];
+        memcpy(o.params,        node.node->op_params, sizeof(node.node->op_params));
+        memcpy(o.kernel_params, node.kernel_params,   sizeof(o.kernel_params));
+        o.opcode = node.opcode;
+        o.flags  = 0;
+"""
+assert t.count(old) == 1, "A6 anchor"
+t = t.replace(old, """        htp_op_desc &o = h_ops[n];
+        memcpy(o.params,        node.node->op_params, sizeof(node.node->op_params));
+        memcpy(o.kernel_params, node.kernel_params,   sizeof(o.kernel_params));
+        o.opcode = node.opcode;
+        o.flags  = 0;
+
+        // R46 (test-only!): o dump da ACT — selecao POR OPERACAO + bi DESTE batch!
+        // (DEPOIS do memcpy — o memset do precompute nao o alcanca mais!)
+        if (o.opcode == HTP_OP_MUL_MAT) {
+            struct htp_mm_kernel_params * k46 = (struct htp_mm_kernel_params *) o.kernel_params;
+            k46->act_dump_bi = -1;   // OFF por default (sentinela!)
+            const ggml_tensor * s0 = node.node->src[0];
+            const ggml_tensor * s1 = node.node->src[1];
+            if (s0 && s1 && g_r46_act_dump_armed() &&
+                s0->type == GGML_TYPE_Q6_K && s0->ne[0] == 6144 && s0->ne[1] == 2048 &&
+                s1->type == GGML_TYPE_F32 && s1->ne[1] == 1) {
+                if (!g_r46_act_dump_sbuf) {
+                    g_r46_act_dump_sbuf = new ggml_hexagon_shared_buffer(sess, 262144);   // OWNER (processo!)
+                }
+                if (r46_dump_bi < 0) {
+                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
+                }
+                if (r46_dump_bi >= 0) {
+                    k46->act_dump_bi = r46_dump_bi;
+                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: batch bi=%d fd=%d\\n", r46_dump_bi, g_r46_act_dump_sbuf->fd);
+                }
+            }
+        }
+""", 1)
+open(p, "w", encoding="utf-8", newline="\n").write(t)
+print("A) HOST v2 ok (7 fixes: global->owner; por-batch; selecao; apos-memcpy; =0; init-only!)")
+
+# ============================================================
+# B) SKEL: htp-ctx.h (campos!), matmul-ops.c (descritor+bounds!), main.c (limpa!)
+# ============================================================
+p2 = f"{HTP}/htp-ctx.h"
+t2 = open(p2, encoding="utf-8", errors="replace").read()
+old = "    uint8_t * act_dump_ptr;   // R45 (test-only!): o dump da ACT Q6 (NULL = OFF!)"
+assert t2.count(old) == 1, "B1 anchor"
+t2 = t2.replace(old, """    uint8_t * act_dump_ptr;   // R46 (test-only!): o dump da ACT Q6 (NULL = OFF!)
+    size_t    act_dump_cap;   // R46: a CAPACIDADE do buffer (bounds!)""", 1)
+# + os bufs do request (a resolucao OFICIAL!)
+old = "    uint8_t *              vtcm_base;"
+assert t2.count(old) == 1, "B2 anchor"
+t2 = t2.replace(old, """    const struct htp_buf_desc * r46_bufs;   // R46: os descs do request (resolvidos!)
+    uint32_t                    r46_nbufs;
+
+    uint8_t *              vtcm_base;""", 1)
+open(p2, "w", encoding="utf-8", newline="\n").write(t2)
+print("B1/B2) skel ctx ok")
+
+p3 = f"{HTP}/matmul-ops.c"
+t3 = open(p3, encoding="utf-8", errors="replace").read()
+# B3: o op_matmul — resolver pelo DESCRITOR + bounds + !n_hmx!
+old = """    // R45 (test-only!): P4 — o dump da ACT: bi -> endereco DSP (o fd ja' mapeado!)
+    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < HTP_MAX_MMAPS && octx->ctx->mmap[kparams->act_dump_bi].size) {
+        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->mmap[kparams->act_dump_bi].base;
+    } else {
+        octx->act_dump_ptr = NULL;
+    }
+"""
+assert t3.count(old) == 1, "B3 anchor"
+t3 = t3.replace(old, """    // R46 (test-only!): o dump da ACT — resolvido pelo DESCRITOR do request
+    // (bufs[bi].base do prep_op_bufs — NAO ctx->mmap[bi]! numeracoes DIFERENTES!)
+    // + bounds + somente o caminho HVX (o HMX desvia e nao usa!)
+    octx->act_dump_ptr = NULL;
+    octx->act_dump_cap = 0;
+    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < (int) octx->ctx->r46_nbufs && octx->ctx->r46_bufs && !kparams->n_hmx) {
+        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->r46_bufs[kparams->act_dump_bi].base;
+        octx->act_dump_cap = (size_t) octx->ctx->r46_bufs[kparams->act_dump_bi].size;
+    }
+""", 1)
+# B4: o worker — bounds checados (fim <= cap!)
+old = """    if (mmctx->octx->act_dump_ptr) {                                                                       \\
+        uint8_t * d45 = mmctx->octx->act_dump_ptr + ((size_t) dst_row_size * ir_first);                    \\
+        memcpy(d45, dst_data, (size_t) dst_row_size * (ir_last - ir_first));                               \\
+    }                                                                                                      \\"""
+assert t3.count(old) == 1, "B4 anchor"
+t3 = t3.replace(old, """    if (mmctx->octx->act_dump_ptr) {                                                                       \\
+        const size_t d46_off = (size_t) dst_row_size * ir_first;                                           \\
+        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               \\
+        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      \\
+            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                \\
+        }                                                                                                  \\
+    }                                                                                                      \\""", 1)
+open(p3, "w", encoding="utf-8", newline="\n").write(t3)
+print("B3/B4) skel matmul ok")
+
+# B5: main.c — os bufs no ctx (apos o prep!) + limpeza central no execute_op!
+p4 = f"{HTP}/main.c"
+t4 = open(p4, encoding="utf-8", errors="replace").read()
+old = "    prep_op_bufs(ctx, bufs, n_bufs);"
+assert t4.count(old) == 1, "B5 anchor"
+t4 = t4.replace(old, """    prep_op_bufs(ctx, bufs, n_bufs);
+    ctx->r46_bufs  = bufs;     // R46 (test-only!): os descs RESOLVIDOS do request!
+    ctx->r46_nbufs = n_bufs;""", 1)
+old = """static int execute_op(struct htp_ops_context * octx) {
+    switch (octx->op) {"""
+assert t4.count(old) == 1, "B6 anchor"
+t4 = t4.replace(old, """static int execute_op(struct htp_ops_context * octx) {
+    octx->act_dump_ptr = NULL;   // R46: limpeza CENTRAL entre ops (sem stale!)
+    octx->act_dump_cap = 0;
+    switch (octx->op) {""", 1)
+open(p4, "w", encoding="utf-8", newline="\n").write(t4)
+print("B5/B6) skel main ok")
+print("=== PATCH V2 COMPLETO (todos os 7 fixes + extras!)")
+
+===== END r46_patch.py =====
+
+===== BEGIN r46_vacinas.c =====
+// r46_vacinas.c — R46 §6: AS VACINAS HOST (o código CONSUMIDO — os fixes!)
+// Testa: (1) bi=0 ACEITO (era o defeito!); (2) bi POR BATCH (reset -> re-add!);
+// (3) seleção não-Q6 -> -1 (OFF!); (4) bounds (fim > cap -> NÃO copia!);
+// (5) OFF total (flag '0' -> nunca arma!); (6) o memset do impl NÃO apaga mais
+// (a atribuição é DEPOIS!); (7) o descritor (bufs[bi].base — não mmap!).
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <stdbool.h>
+
+#define HTP_OP_MAX_BUFS 16
+#define HTP_MAX_MMAPS   16
+
+struct htp_buf_desc { uint64_t base; uint32_t fd; uint64_t size; };
+
+// ============ os FRAGMENTOS REAIS do patch v2 (extraídos!) ============
+// (o add_op — a lógica de seleção/owner/bi!)
+static int g_r46_armed = -1;
+static int g_sbuf_created = 0;
+static int g_sbuf_fd = 77;
+static bool g_r46_act_dump_armed(void) {
+    if (g_r46_armed < 0) {
+        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
+        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;
+    }
+    return g_r46_armed == 1;
+}
+// o batch (o fragmento!)
+static unsigned n_bufs = 0;
+static uint64_t b_map_fds[16];
+static int b_map_bi[16]; static int b_map_n = 0;
+static int r46_dump_bi = -1;
+static int add_buffer_sbuf(int fd, uint64_t base, uint64_t size) {
+    for (int i = 0; i < b_map_n; i++) if (b_map_fds[i] == fd) return b_map_bi[i];
+    int bi = n_bufs++;
+    b_map_fds[b_map_n] = fd; b_map_bi[b_map_n] = bi; b_map_n++;
+    (void)base; (void)size;
+    return bi;
+}
+static void batch_reset(void) { n_bufs = 0; b_map_n = 0; r46_dump_bi = -1; }
+// a selecao (do add_op!)
+static int add_op_selecao(const char * s0_type, long s0_ne0, long s0_ne1, const char * s1_type, long s1_ne1, uint64_t base, uint64_t size) {
+    int out_bi = -1;
+    if (g_r46_act_dump_armed() && strcmp(s0_type, "Q6_K") == 0 && s0_ne0 == 6144 && s0_ne1 == 2048 &&
+        strcmp(s1_type, "F32") == 0 && s1_ne1 == 1) {
+        if (!g_sbuf_created) { g_sbuf_created = 1; }
+        if (r46_dump_bi < 0) r46_dump_bi = add_buffer_sbuf(g_sbuf_fd, base, size);
+        if (r46_dump_bi >= 0) out_bi = r46_dump_bi;
+    }
+    return out_bi;
+}
+// o op_matmul do skel (o fragmento!)
+static uint8_t * octx_act_dump_ptr = NULL;
+static size_t octx_act_dump_cap = 0;
+static const struct htp_buf_desc * r46_bufs = NULL; static uint32_t r46_nbufs = 0;
+static void op_matmul_map(int act_dump_bi, int n_hmx) {
+    octx_act_dump_ptr = NULL; octx_act_dump_cap = 0;
+    if (act_dump_bi >= 0 && act_dump_bi < (int)r46_nbufs && r46_bufs && !n_hmx) {
+        octx_act_dump_ptr = (uint8_t *)(uintptr_t)r46_bufs[act_dump_bi].base;
+        octx_act_dump_cap = (size_t)r46_bufs[act_dump_bi].size;
+    }
+}
+// o worker (o fragmento!)
+static size_t worker_copy(uint8_t * dst_data, size_t dst_row_size, int ir_first, int ir_last) {
+    if (!octx_act_dump_ptr) return 0;
+    const size_t off = (size_t)dst_row_size * ir_first;
+    const size_t len = (size_t)dst_row_size * (ir_last - ir_first);
+    if (off <= octx_act_dump_cap && len <= octx_act_dump_cap - off) {
+        memcpy(octx_act_dump_ptr + off, dst_data, len);
+        return len;
+    }
+    return 0;   // RECUSA (sem overflow!)
+}
+// =====================================================================
+
+int main(void) {
+    int fails = 0;
+    uint8_t dump_storage[262144]; memset(dump_storage, 0xEE, sizeof(dump_storage));
+    uint8_t row_data[221184]; memset(row_data, 0xA5, sizeof(row_data));
+    struct htp_buf_desc bufs[4]; memset(bufs, 0, sizeof(bufs));
+    bufs[0].base = (uint64_t)(uintptr_t)dump_storage; bufs[0].size = 262144; bufs[0].fd = 77;
+    r46_bufs = bufs; r46_nbufs = 1;
+
+    // ---- C1: bi=0 ACEITO (o defeito R45: 'if (bi > 0)' rejeitava!) ----
+    putenv("GGML_HEXAGON_ACT_DUMP=1");
+    g_r46_armed = -1; g_sbuf_created = 0; batch_reset();
+    int bi0 = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, bufs[0].base, bufs[0].size);
+    printf("C1 bi_do_batch=%d (exigido 0! — ACEITO!)\n", bi0);
+    if (bi0 != 0) { fails++; printf("C1 FAIL\n"); }
+
+    // ---- C2: POR BATCH: reset -> re-add (novo bi 0 — sem stale!) ----
+    batch_reset();
+    int bi1 = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, bufs[0].base, bufs[0].size);
+    printf("C2 apos reset: bi=%d n_bufs=%u (re-add OK!)\n", bi1, n_bufs);
+    if (bi1 != 0 || n_bufs != 1) { fails++; printf("C2 FAIL\n"); }
+
+    // ---- C3: selecao NAO-Q6 -> -1 (outro shape!) ----
+    batch_reset();
+    int bi_bad = add_op_selecao("Q4_K", 6144, 2048, "F32", 1, 0, 0);
+    int bi_bad2 = add_op_selecao("Q6_K", 2048, 512, "F32", 1, 0, 0);
+    int bi_bad3 = add_op_selecao("Q6_K", 6144, 2048, "F32", 2, 0, 0);   // B=2!
+    printf("C3 nao-Q6=%d K2048=%d B2=%d (exigido -1/-1/-1!)\n", bi_bad, bi_bad2, bi_bad3);
+    if (bi_bad != -1 || bi_bad2 != -1 || bi_bad3 != -1) { fails++; printf("C3 FAIL\n"); }
+
+    // ---- C4: o fluxo COMPLETO: map + copy com bounds! ----
+    batch_reset();
+    int bi = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, bufs[0].base, bufs[0].size);
+    op_matmul_map(bi, 0);
+    size_t copied = worker_copy(row_data, 221184, 0, 1);
+    int ok_c4 = (copied == 221184 && octx_act_dump_cap == 262144 && memcmp(dump_storage, row_data, 221184) == 0);
+    printf("C4 copy=%zu cap=%zu match=%s\n", copied, octx_act_dump_cap, ok_c4 ? "SIM" : "NAO");
+    if (!ok_c4) { fails++; printf("C4 FAIL\n"); }
+
+    // ---- C5: BOUNDS: len > cap -> NAO copia! off+len > cap -> NAO copia! ----
+    memset(dump_storage, 0xEE, sizeof(dump_storage));
+    static uint8_t big_row[400000]; memset(big_row, 0x5A, sizeof(big_row));
+    size_t bad = worker_copy(big_row, 400000, 0, 1);    // len 400000 > cap 262144!
+    size_t bad2 = worker_copy(row_data, 200000, 1, 2);  // off=200000 + len=200000 > cap!
+    size_t exact = worker_copy(row_data, 262144, 0, 1); // == cap: COPIA (valido!)
+    int untouched = 1;
+    for (size_t i = 0; i < sizeof(dump_storage); i++) if (dump_storage[i] != 0xA5 && dump_storage[i] != 0xEE) { untouched = 0; break; }
+    printf("C5 len>cap=%zu off+len>cap=%zu exact==cap=%zu (exigido 0/0/262144!)\n", bad, bad2, exact);
+    if (bad != 0 || bad2 != 0 || exact != 262144) { fails++; printf("C5 FAIL\n"); }
+
+    // ---- C6: HMX desvia -> ptr NULL! ----
+    op_matmul_map(bi, 1);   // n_hmx=1!
+    printf("C6 hmx_ptr=%s (exigido NULL!)\n", octx_act_dump_ptr ? "SETADO" : "NULL");
+    if (octx_act_dump_ptr) { fails++; printf("C6 FAIL\n"); }
+
+    // ---- C7: flag '0' -> nunca arma (mesmo com Q6!) ----
+    putenv("GGML_HEXAGON_ACT_DUMP=0");
+    g_r46_armed = -1; batch_reset();
+    int bi_off = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, 0, 0);
+    printf("C7 flag0: bi=%d (exigido -1! OFF total!)\n", bi_off);
+    if (bi_off != -1) { fails++; printf("C7 FAIL\n"); }
+
+    // ---- C8: flag lixo ('01') -> OFF! ----
+    putenv("GGML_HEXAGON_ACT_DUMP=01");
+    g_r46_armed = -1; batch_reset();
+    int bi_g = add_op_selecao("Q6_K", 6144, 2048, "F32", 1, 0, 0);
+    printf("C8 flag01: bi=%d (exigido -1!)\n", bi_g);
+    if (bi_g != -1) { fails++; printf("C8 FAIL\n"); }
+
+    printf("\n%s (%d falhas!)\n", fails == 0 ? "VACINAS_R46: TODAS PASS (8/8!)" : "VACINAS_R46: HOUVE FALHA!", fails);
+    return fails == 0 ? 0 : 1;
+}
+
+===== END r46_vacinas.c =====
+
+===== BEGIN r46b-api-vacina-out.txt =====
+N1 flag0: status=0 (exigido 0!)
+N2 armed-sem-captura: status=1 (exigido 1!)
+N3 completo: status=2 rows=1 K=6144 N=2048 B=1 row=221184 cap=262144 (exigido 2/1/6144/2048/1/221184/262144!)
+N4 header-invalido: status=-1 (exigido -1!)
+N5 op_seen0: status=1 (exigido 1!)
+N6 rows0: status=1 (exigido 1!)
+
+API_VACINA_R46: TODAS PASS (6/6!) (0 falhas!)
+
+===== END r46b-api-vacina-out.txt =====
+
+===== BEGIN r46b-fullsha64-final.txt =====
+33f187101b03f456d40118a9c4f0b2366c411239b51133bf28e146b5a637723b  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+70ba2210adc89f8baf41f469adb96461348aab866df2194d71fdb129f6c189f0  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+5138cb3bd6fe3f8900f6e863b0dd387b23c7e9efaee2fe96f6b09d73ffaa921e  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+0b8c6dc95c2cf7bccc931626e97a03e7ca8388c5e55bd2e16b7a6b437795dc2b  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+===== END r46b-fullsha64-final.txt =====
+
+===== BEGIN r46b-host-api.diff =====
+--- /root/r45_backup_sigcand2/ggml-hexagon.cpp	2026-10-10 04:36:19.141820271 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp	2026-10-10 09:35:00.838588918 -0300
+@@ -88,6 +88,7 @@
+ static int ggml_hexagon_get_opstage_effective(void) {
+     return opt_opstage;
+ }
++
+ static int opt_opbatch  = 1024; // max number of ops in a batch
+ static int opt_opqueue  = 16;   // max number of pending batches
+ static int opt_optrace  = 0;    // trace buffer size per thread (0 means default)
+@@ -240,6 +241,7 @@
+ 
+ struct ggml_hexagon_session;
+ 
++
+ static void ggml_hexagon_precompute_matmul_params(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+@@ -426,6 +428,67 @@
+     }
+ };
+ 
++// R46 (test-only!): o OWNER do sbuf do dump (uma vez por processo; o bi e' POR BATCH!)
++static ggml_hexagon_shared_buffer * g_r46_act_dump_sbuf = nullptr;
++static int g_r46_armed = -1;
++static bool g_r46_act_dump_armed(void) {
++    if (g_r46_armed < 0) {   // INIT-ONLY (declarado!): a primeira leitura decide!
++        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
++        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;   // so' "1" (o resto OFF!)
++    }
++    return g_r46_armed == 1;
++}
++
++// R46 §5 (test-only!): O STATUS DA CAPTURA DA ACT — layout ACORDADO com o
++// consumidor (o probe copia o struct + confere o magic/version!)!
++struct ggml_hexagon_act_dump_status {
++    uint32_t magic;        // 0x52343644
++    uint32_t version;      // 1
++    int32_t  status;       // 0=NOT_ARMED; 1=ARMED_NO_CAPTURE; 2=CAPTURED; -1=INVALIDO
++    int32_t  type;         // ggml_type do peso (o Q6_K!)
++    int32_t  K, N, B;
++    uint32_t epoch;        // a captura (1,2,...)
++    uint32_t rows_done;    // do header (LIDO AGORA!)
++    uint32_t payload_off;  // 64 (payload!)
++    uint32_t reserved;
++    uint64_t ptr;          // o buffer (para o probe ler!)
++    uint64_t capacity;     // total do sbuf
++    uint64_t row_size;     // da op capturada
++};
++
++// Os metadados da captura (host!): a UMA captura (sem sobrescrever!)
++static struct {
++    int      used;         // 1 = ja capturou (desarma as demais!)
++    uint32_t epoch;
++    int      K, N, B, type;
++    size_t   row_size;
++} g_r46_meta = {0};
++
++#define R46_MAGIC 0x52343644u   // "R46D"
++
++// R46 §5 (test-only!): A API DE LEITURA da captura da ACT (o consumidor!)
++// Retorna 0 e preenche o struct (status!); o magic/version conferem o layout.
++static int ggml_hexagon_get_act_dump(void * out_v) {
++    struct ggml_hexagon_act_dump_status * out = (struct ggml_hexagon_act_dump_status *) out_v;
++    if (!out) return -1;
++    out->magic = R46_MAGIC; out->version = 1;
++    out->type = 0; out->K = 0; out->N = 0; out->B = 0;
++    out->epoch = g_r46_meta.epoch; out->rows_done = 0; out->payload_off = 64;
++    out->reserved = 0; out->ptr = 0; out->capacity = 0; out->row_size = 0;
++    if (!g_r46_act_dump_armed()) { out->status = 0; return 0; }          // NOT_ARMED (a flag!)
++    if (g_r46_meta.epoch == 0 || !g_r46_act_dump_sbuf) { out->status = 1; return 0; }   // ARMED, sem captura
++    out->ptr = (uint64_t) (uintptr_t) g_r46_act_dump_sbuf->base;
++    out->capacity = g_r46_act_dump_sbuf->size;
++    out->type = g_r46_meta.type; out->K = g_r46_meta.K; out->N = g_r46_meta.N; out->B = g_r46_meta.B;
++    out->row_size = g_r46_meta.row_size;
++    const uint32_t * hdr = (const uint32_t *) g_r46_act_dump_sbuf->base;
++    if (hdr[0] != R46_MAGIC || hdr[1] != g_r46_meta.epoch) { out->status = -1; return 0; }   // INVALIDO (o header!)
++    out->rows_done = hdr[3];
++    const int op_seen = hdr[2] == 1;
++    out->status = (op_seen && (int) hdr[3] >= g_r46_meta.B && g_r46_meta.B > 0) ? 2 : 1;
++    return 0;
++}
++
+ static ggml_hexagon_session * ggml_backend_hexagon_buffer_get_sess(ggml_backend_buffer_t buffer) {
+     return static_cast<ggml_backend_hexagon_buffer_type_context *>(buffer->buft->context)->sess;
+ }
+@@ -1644,6 +1707,8 @@
+     unsigned int n_ops_max;
+     size_t       b_vmem_max;
+ 
++    int r46_dump_bi = -1;   // R46: o bi do dump NESTE batch (-1 = nenhum!)
++
+     void reset() {
+         n_bufs = 0;
+         n_tens = 0;
+@@ -1653,6 +1718,8 @@
+         b_map.clear();
+         t_map.clear();
+         d_map.clear();
++
++        r46_dump_bi = -1;   // R46: re-derivado a cada batch (sem stale!)
+     }
+ 
+     ggml_hexagon_opbatch(ggml_hexagon_session *sess, size_t batch_size, size_t max_vmem) {
+@@ -1839,6 +1906,41 @@
+         o.opcode = node.opcode;
+         o.flags  = 0;
+ 
++        // R46 (test-only!): o dump da ACT — selecao POR OPERACAO + bi DESTE batch!
++        // (DEPOIS do memcpy — o memset do precompute nao o alcanca mais!)
++        if (o.opcode == HTP_OP_MUL_MAT) {
++            struct htp_mm_kernel_params * k46 = (struct htp_mm_kernel_params *) o.kernel_params;
++            k46->act_dump_bi = -1;   // OFF por default (sentinela!)
++            const ggml_tensor * s0 = node.node->src[0];
++            const ggml_tensor * s1 = node.node->src[1];
++            if (s0 && s1 && g_r46_act_dump_armed() &&
++                s0->type == GGML_TYPE_Q6_K && s0->ne[0] == 6144 && s0->ne[1] == 2048 &&
++                s1->type == GGML_TYPE_F32 && s1->ne[1] == 1) {
++                if (!g_r46_act_dump_sbuf) {
++                    g_r46_act_dump_sbuf = new ggml_hexagon_shared_buffer(sess, 262144);   // OWNER (processo!)
++                }
++                if (r46_dump_bi < 0) {
++                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
++                }
++                if (r46_dump_bi >= 0 && !g_r46_meta.used) {   // UMA captura (desarma!)
++                    g_r46_meta.used = 1;
++                    g_r46_meta.epoch++;
++                    g_r46_meta.K = (int) s0->ne[0]; g_r46_meta.N = (int) s0->ne[1]; g_r46_meta.B = (int) s1->ne[1];
++                    g_r46_meta.type = (int) s0->type;
++                    g_r46_meta.row_size = (size_t) (uint32_t) k46->src1_row_size;   // da op (o precompute!)
++                    // O HEADER (16 B!): magic/epoch/op_seen=0/rows_done=0 — o host prepara
++                    // ANTES do enqueue (a shared mem: o DSP vai setar o op_seen/rows_done!)
++                    uint32_t * hdr = (uint32_t *) g_r46_act_dump_sbuf->base;
++                    hdr[0] = R46_MAGIC; hdr[1] = g_r46_meta.epoch; hdr[2] = 0; hdr[3] = 0;
++                    k46->act_dump_bi = r46_dump_bi;
++                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: epoch=%u bi=%d K=%d N=%d B=%d row=%zu\n",
++                                   g_r46_meta.epoch, r46_dump_bi, g_r46_meta.K, g_r46_meta.N, g_r46_meta.B, g_r46_meta.row_size);
++                } else {
++                    k46->act_dump_bi = -1;   // ja capturou (as demais nao sobrescrevem!)
++                }
++            }
++        }
++
+         if (!(opt_opstage & HTP_OPSTAGE_COMPUTE)) {
+             o.flags |= HTP_OPFLAGS_SKIP_COMPUTE;
+         }
+@@ -2970,6 +3072,7 @@
+     }
+ }
+ 
++
+ static void ggml_hexagon_precompute_matmul_params_impl(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+@@ -4802,6 +4905,9 @@
+ }
+ 
+ static void * ggml_backend_hexagon_get_proc_address(ggml_backend_reg_t reg, const char * name) {
++    if (strcmp(name, "ggml_hexagon_get_act_dump") == 0) {
++        return (void *) ggml_hexagon_get_act_dump;   // R46 §5 (test-only!)
++    }
+     if (strcmp(name, "ggml_hexagon_get_opstage_effective") == 0) {
+         // R37: consulta test-only (o valor RETIDO — para o preflight do caller!)
+         return (void *) ggml_hexagon_get_opstage_effective;
+
+===== END r46b-host-api.diff =====
+
+===== BEGIN r46b-skel-opseen.diff =====
+--- /root/r45_backup_sigcand2/matmul-ops.c	2026-10-10 04:36:19.143420420 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c	2026-10-10 09:35:17.859227920 -0300
+@@ -839,6 +839,14 @@
+     uint8_t * restrict dst_data = (uint8_t *) dst + (dst_row_size * ir_first);                             \
+     uint8_t * restrict tmp_data = (uint8_t *) mmctx->vtcm_dst + (mmctx->vtcm_dst_size_per_thread * ith);   \
+     kernel_fn(src_data, dst_data, tmp_data, ne0, ir_last - ir_first, src_row_size, dst_row_size);          \
++    if (mmctx->octx->act_dump_ptr) {                                                                       \
++        const size_t d46_off = 64 + (size_t) dst_row_size * ir_first;    /* OFF 64 (o header!) */          \
++        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               \
++        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      \
++            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                \
++            atomic_fetch_add((atomic_uint *) &((uint32_t *) mmctx->octx->act_dump_ptr)[3], 1u);            \
++        }                                                                                                  \
++    }                                                                                                      \
+                                                                                                            \
+     htp_trace_event_stop(tr, HTP_TRACE_EVT_HVX_A_QUANT, ir_first);                                         \
+ }
+@@ -3428,6 +3436,23 @@
+ int op_matmul(struct htp_ops_context * octx) {
+     const struct htp_mm_kernel_params * kparams = (const struct htp_mm_kernel_params *) octx->kernel_params;
+ 
++    // R46 (test-only!): o dump da ACT — resolvido pelo DESCRITOR do request
++    // (bufs[bi].base do prep_op_bufs — NAO ctx->mmap[bi]! numeracoes DIFERENTES!)
++    // + bounds + somente o caminho HVX (o HMX desvia e nao usa!)
++    octx->act_dump_ptr = NULL;
++    octx->act_dump_cap = 0;
++    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < (int) octx->ctx->r46_nbufs && octx->ctx->r46_bufs && !kparams->n_hmx) {
++        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->r46_bufs[kparams->act_dump_bi].base;
++        octx->act_dump_cap = (size_t) octx->ctx->r46_bufs[kparams->act_dump_bi].size;
++        if (octx->act_dump_ptr && octx->act_dump_cap >= 64) {
++            uint32_t * h = (uint32_t *) octx->act_dump_ptr;
++            h[2] = 1;   // R46: op_seen (a op SELECIONADA chegou ao op_matmul!)
++        } else {
++            octx->act_dump_ptr = NULL;   // cap < 64: recusa!
++            octx->act_dump_cap = 0;
++        }
++    }
++
+     if (kparams->n_hmx) {
+         return hmx_mm_op_matmul(octx, kparams);
+     }
+
+===== END r46b-skel-opseen.diff =====
+
+===== BEGIN r46b_patch.py =====
+#!/usr/bin/env python3
+# r46b_patch.py — R46 §5: A API DE LEITURA (o consumidor!) + o header no buffer!
+# HOST: struct do status (layout acordado!) + g_r46_meta (epoch/metadados!) +
+#   o header preparado no add_op (magic/epoch!) + a API no registry!
+# SKEL: op_seen (no op_matmul!) + rows_done (atomic nos workers!) + payload OFF64!
+import sys
+HEX = sys.argv[1] if len(sys.argv) > 1 else "/root/sigcand2/ggml/src/ggml-hexagon"
+HTP = f"{HEX}/htp"
+
+# ============================================================
+# A) HOST: o struct + os metadados + o header + a API!
+# ============================================================
+p = f"{HEX}/ggml-hexagon.cpp"
+t = open(p, encoding="utf-8", errors="replace").read()
+
+# A.1 o struct do status + os metadados (antes do getter do opstage — L88!)
+anc = "static int ggml_hexagon_get_opstage_effective(void)"
+assert t.count(anc) == 1, "A1 anchor"
+t = t.replace(anc, """// R46 §5 (test-only!): O STATUS DA CAPTURA DA ACT — layout ACORDADO com o
+// consumidor (o probe copia o struct + confere o magic/version!)!
+struct ggml_hexagon_act_dump_status {
+    uint32_t magic;        // 0x52343644
+    uint32_t version;      // 1
+    int32_t  status;       // 0=NOT_ARMED; 1=ARMED_NO_CAPTURE; 2=CAPTURED; -1=INVALIDO
+    int32_t  type;         // ggml_type do peso (o Q6_K!)
+    int32_t  K, N, B;
+    uint32_t epoch;        // a captura (1,2,...)
+    uint32_t rows_done;    // do header (LIDO AGORA!)
+    uint32_t payload_off;  // 64 (payload!)
+    uint32_t reserved;
+    uint64_t ptr;          // o buffer (para o probe ler!)
+    uint64_t capacity;     // total do sbuf
+    uint64_t row_size;     // da op capturada
+};
+
+// Os metadados da captura (host!): a UMA captura (sem sobrescrever!)
+static struct {
+    int      used;         // 1 = ja capturou (desarma as demais!)
+    uint32_t epoch;
+    int      K, N, B, type;
+    size_t   row_size;
+} g_r46_meta = {0};
+
+#define R46_MAGIC 0x52343644u   // "R46D"
+
+""" + anc, 1)
+
+# A.2 no add_op: preparar o header + guardar os metadados (a UMA captura!)
+old = """                if (r46_dump_bi < 0) {
+                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
+                }
+                if (r46_dump_bi >= 0) {
+                    k46->act_dump_bi = r46_dump_bi;
+                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: batch bi=%d fd=%d\\n", r46_dump_bi, g_r46_act_dump_sbuf->fd);
+                }"""
+assert t.count(old) == 1, "A2 anchor"
+t = t.replace(old, """                if (r46_dump_bi < 0) {
+                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
+                }
+                if (r46_dump_bi >= 0 && !g_r46_meta.used) {   // UMA captura (desarma!)
+                    g_r46_meta.used = 1;
+                    g_r46_meta.epoch++;
+                    g_r46_meta.K = (int) s0->ne[0]; g_r46_meta.N = (int) s0->ne[1]; g_r46_meta.B = (int) s1->ne[1];
+                    g_r46_meta.type = (int) s0->type;
+                    g_r46_meta.row_size = (size_t) (uint32_t) k46->src1_row_size;   // da op (o precompute!)
+                    // O HEADER (16 B!): magic/epoch/op_seen=0/rows_done=0 — o host prepara
+                    // ANTES do enqueue (a shared mem: o DSP vai setar o op_seen/rows_done!)
+                    uint32_t * hdr = (uint32_t *) g_r46_act_dump_sbuf->base;
+                    hdr[0] = R46_MAGIC; hdr[1] = g_r46_meta.epoch; hdr[2] = 0; hdr[3] = 0;
+                    k46->act_dump_bi = r46_dump_bi;
+                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: epoch=%u bi=%d K=%d N=%d B=%d row=%zu\\n",
+                                   g_r46_meta.epoch, r46_dump_bi, g_r46_meta.K, g_r46_meta.N, g_r46_meta.B, g_r46_meta.row_size);
+                } else {
+                    k46->act_dump_bi = -1;   // ja capturou (as demais nao sobrescrevem!)
+                }"""
+, 1)
+
+# A.3 A API (o getter!) — depois do getter do opstage!
+old = "static int ggml_hexagon_get_opstage_effective(void) {"
+i = t.find(old)
+assert i > 0, "A3 anchor"
+# achar o fim da funcao (o proximo "\n}\n"!)
+j = t.find("\n}\n", i)
+assert j > 0, "A3 end"
+t = t[:j+3] + """
+// R46 §5 (test-only!): A API DE LEITURA da captura da ACT (o consumidor!)
+// Retorna 0 e preenche o struct (status!); o magic/version conferem o layout.
+static int ggml_hexagon_get_act_dump(void * out_v) {
+    struct ggml_hexagon_act_dump_status * out = (struct ggml_hexagon_act_dump_status *) out_v;
+    if (!out) return -1;
+    out->magic = R46_MAGIC; out->version = 1;
+    out->type = 0; out->K = 0; out->N = 0; out->B = 0;
+    out->epoch = g_r46_meta.epoch; out->rows_done = 0; out->payload_off = 64;
+    out->reserved = 0; out->ptr = 0; out->capacity = 0; out->row_size = 0;
+    if (!g_r46_act_dump_armed()) { out->status = 0; return 0; }          // NOT_ARMED (a flag!)
+    if (g_r46_meta.epoch == 0 || !g_r46_act_dump_sbuf) { out->status = 1; return 0; }   // ARMED, sem captura
+    out->ptr = (uint64_t) (uintptr_t) g_r46_act_dump_sbuf->base;
+    out->capacity = g_r46_act_dump_sbuf->size;
+    out->type = g_r46_meta.type; out->K = g_r46_meta.K; out->N = g_r46_meta.N; out->B = g_r46_meta.B;
+    out->row_size = g_r46_meta.row_size;
+    const uint32_t * hdr = (const uint32_t *) g_r46_act_dump_sbuf->base;
+    if (hdr[0] != R46_MAGIC || hdr[1] != g_r46_meta.epoch) { out->status = -1; return 0; }   // INVALIDO (o header!)
+    out->rows_done = hdr[3];
+    // CAPTURED: a op chegou (op_seen!), as rows completaram e o compute acabou (quem
+    // chama: SO' depois da resposta do batch — o flush global do DSP ja' ocorreu!)!
+    const int op_seen = hdr[2] == 1;
+    out->status = (op_seen && (int) hdr[3] >= g_r46_meta.B && g_r46_meta.B > 0) ? 2 : 1;
+    return 0;
+}
+""" + t[j+3:]
+
+# A.4 O registro no get_proc_address!
+old = """    if (strcmp(name, "ggml_hexagon_get_opstage_effective") == 0) {"""
+assert t.count(old) == 1, "A4 anchor"
+t = t.replace(old, """    if (strcmp(name, "ggml_hexagon_get_act_dump") == 0) {
+        return (void *) ggml_hexagon_get_act_dump;   // R46 §5 (test-only!)
+    }
+    if (strcmp(name, "ggml_hexagon_get_opstage_effective") == 0) {""", 1)
+
+open(p, "w", encoding="utf-8", newline="\n").write(t)
+print("A) HOST: struct+meta+header+API+registry ok")
+
+# ============================================================
+# B) SKEL: op_seen + rows_done (atomic!) + payload OFF 64!
+# ============================================================
+p2 = f"{HTP}/matmul-ops.c"
+t2 = open(p2, encoding="utf-8", errors="replace").read()
+
+# B.1 no op_matmul: marcar o op_seen (a op CHEGOU — header[2] = 1!)
+old = """    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < (int) octx->ctx->r46_nbufs && octx->ctx->r46_bufs && !kparams->n_hmx) {
+        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->r46_bufs[kparams->act_dump_bi].base;
+        octx->act_dump_cap = (size_t) octx->ctx->r46_bufs[kparams->act_dump_bi].size;
+    }"""
+assert t2.count(old) == 1, "B1 anchor"
+t2 = t2.replace(old, """    if (kparams->act_dump_bi >= 0 && kparams->act_dump_bi < (int) octx->ctx->r46_nbufs && octx->ctx->r46_bufs && !kparams->n_hmx) {
+        octx->act_dump_ptr = (uint8_t *) (uintptr_t) octx->ctx->r46_bufs[kparams->act_dump_bi].base;
+        octx->act_dump_cap = (size_t) octx->ctx->r46_bufs[kparams->act_dump_bi].size;
+        if (octx->act_dump_ptr && octx->act_dump_cap >= 64) {
+            uint32_t * h = (uint32_t *) octx->act_dump_ptr;
+            h[2] = 1;   // R46: op_seen (a op SELECIONADA chegou ao op_matmul!)
+        } else {
+            octx->act_dump_ptr = NULL;   // cap < 64: recusa!
+            octx->act_dump_cap = 0;
+        }
+    }""", 1)
+
+# B.2 no worker: o atomic (rows_done!) + o payload no OFF 64!
+old = """    if (mmctx->octx->act_dump_ptr) {                                                                       \\
+        const size_t d46_off = (size_t) dst_row_size * ir_first;                                           \\
+        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               \\
+        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      \\
+            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                \\
+        }                                                                                                  \\
+    }                                                                                                      \\"""
+assert t2.count(old) == 1, "B2 anchor"
+t2 = t2.replace(old, """    if (mmctx->octx->act_dump_ptr) {                                                                       \\
+        const size_t d46_off = 64 + (size_t) dst_row_size * ir_first;    /* OFF 64 (o header!) */          \\
+        const size_t d46_len = (size_t) dst_row_size * (ir_last - ir_first);                               \\
+        if (d46_off <= mmctx->octx->act_dump_cap && d46_len <= mmctx->octx->act_dump_cap - d46_off) {      \\
+            memcpy(mmctx->octx->act_dump_ptr + d46_off, dst_data, d46_len);                                \\
+            atomic_fetch_add((atomic_uint *) &((uint32_t *) mmctx->octx->act_dump_ptr)[3], 1u);            \\
+        }                                                                                                  \\
+    }                                                                                                      \\""", 1)
+open(p2, "w", encoding="utf-8", newline="\n").write(t2)
+print("B) SKEL: op_seen+rows_done+off64 ok")
+print("=== PATCH §5 COMPLETO (a API + o header + o consumidor no host!)")
+
+===== END r46b_patch.py =====
+
+APÊNDICE4 — ENTRADA FINAL (A VERSÃO§5)
+ENTREGA — SMART DUAL-BACKEND — RODADA 46 (VERSÃO FINAL — §5 INCLUÍDO!)
+================================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 46 (completa!) | DATA: 10/10/2026 |
+| ESTADO: OS 7 FIXES + A API DE LEITURA (§5!) IMPLEMENTADOS, COMPILADOS
+  (host+skel RC=0!) E EXERCITADOS (vacinas 8/8 + 6/6 + o gerador RED!);
+  o device (§7) é o próximo passo — sem bloqueio técnico pendente! |
+================================================================================
+
+================================================================================
+SECAO I — RESUMO EXECUTIVO (a rodada completa!)
+================================================================================
+(1) OS 7 DEFEITOS DO PARECER (R45): TODOS CORRIGIDOS (bi=0!; por batch!;
+    seleção na op!; atribuição após o memcpy [o memset!]; descritor; bounds;
+    limpeza no dispatcher!) + init-only + owner — com 8 vacinas PASS.
+(2) A API DE LEITURA (§5!): IMPLEMENTADA no padrao REAL do fork (registry:
+    strcmp em get_proc_address — como o getter R37!):
+    - struct ggml_hexagon_act_dump_status (layout ACORDADO: magic/version +
+      status/type/K/N/B/epoch/rows_done/payload_off/ptr/capacity/row_size!);
+    - o HEADER de 16 B no buffer (host prepara: magic/epoch!; skel marca:
+      op_seen [no op_matmul!] + rows_done [atomic nos workers!]) — o payload
+      no OFF 64!;
+    - status: 0=NOT_ARMED, 1=ARMED_NO_CAPTURE, 2=CAPTURED (op_seen+rows==B!),
+      -1=INVALIDO (header!) — o consumidor confere magic/version!
+    - CAPTURED exige: op chegou + rows completas + a chamada SO' depois da
+      resposta do batch (o flush global do DSP ja' ocorreu — o contrato
+      existente, confirmado no main.c:1067-1070 pelo parecer!);
+    - a UMA captura: g_r46_meta.used desarma as demais (sem sobrescrever!).
+(3) AS VACINAS: FIXES 8/8 PASS + API 6/6 PASS + o GERADOR: missing-anchor
+    agora FALHA (AssertionError! exit=1! — bloqueia o build!) — o defeito do
+    R45 (exit0 silencioso!) CORRIGIDO na prática!
+(4) BUILD: host RC=0 (lib 5.826.440 B — 12:35!) + skel RC=0 (747.336 B —
+    12:36!) + os diffs (164+41 = 205 linhas do §5!) + fullSHA64 (4 itens!).
+
+================================================================================
+SECAO II — AS SAIDAS EXECUTADAS (todas!)
+================================================================================
+=== as vacinas dos FIXES (8/8!): ===
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+C5 len>cap=0 off+len>cap=0 exact==cap=262144 (exigido 0/0/262144!)
+C6 hmx_ptr=NULL (exigido NULL!)
+C7 flag0: bi=-1 (exigido -1! OFF total!)
+C8 flag01: bi=-1 (exigido -1!)
+
+VACINAS_R46: TODAS PASS (8/8!) (0 falhas!)
+
+=== as vacinas da API (§5 — 6/6!): ===
+N1 flag0: status=0 (exigido 0!)
+N2 armed-sem-captura: status=1 (exigido 1!)
+N3 completo: status=2 rows=1 K=6144 N=2048 B=1 row=221184 cap=262144 (exigido 2/1/6144/2048/1/221184/262144!)
+N4 header-invalido: status=-1 (exigido -1!)
+N5 op_seen0: status=1 (exigido 1!)
+N6 rows0: status=1 (exigido 1!)
+
+API_VACINA_R46: TODAS PASS (6/6!) (0 falhas!)
+
+=== a vacina do gerador (missing-anchor!): ===
+NOANCHOR_EXIT=1 (AssertionError: A1 anchor!) — FALHA consumida (bloqueia!)
+================================================================================
+
+================================================================================
+SECAO III — O CONSUMIDOR (como o probe usa a API no P7!)
+================================================================================
+1) ggml_backend_reg_get_proc_address(reg, "ggml_hexagon_get_act_dump");
+2) struct (layout copiado!): magic/version conferem;
+3) se status==2: ler payload_off (64) + B*row_size bytes do ptr;
+4) validar rows_done==B + os tamanhos (221184!) + SHA; exportar;
+5) status 0/1/-1: NOT_ARMED/ARMED/INVALIDO — sem arquivo!
+(pendente: o probe real + o device — o §7!)
+
+================================================================================
+SECAO IV — fullSHA64 (fontes + libs do cohort §5!)
+================================================================================
+33f187101b03f456d40118a9c4f0b2366c411239b51133bf28e146b5a637723b  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+70ba2210adc89f8baf41f469adb96461348aab866df2194d71fdb129f6c189f0  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+5138cb3bd6fe3f8900f6e863b0dd387b23c7e9efaee2fe96f6b09d73ffaa921e  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+0b8c6dc95c2cf7bccc931626e97a03e7ca8388c5e55bd2e16b7a6b437795dc2b  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+================================================================================
+
+================================================================================
+SECAO V — MANIFESTO (existencias + tamanhos + fullSHA64 — TODOS os anexos!)
+================================================================================
+e0bcbfb7ba701b06eba1d6a52fec49f003fa83c930b70721049ab7233297ecb3  smart-rodada46/r46-fullsha64-cohort-v2.txt  (715 B)
+94d2317fd157b81cf8bae7a688ed2c4401996d6449af2605d59390f14f370e02  smart-rodada46/r46-host-build.log  (1338 B)
+22bebb3a084aeec0109f44781cb565c88b44f2ca38961beed4290be405042a2a  smart-rodada46/r46-skel-build.log  (2252 B)
+6744c31076165c66191130bb2ae50aed349f64c580c71a25ba9a5e87b09c83d9  smart-rodada46/r46-v2.diff  (16034 B)
+da7d4bfdc78bebdf5bef439d6002e5af6a76bbacc8057ae069c8cd9670dd258c  smart-rodada46/r46-vacinas-out.txt  (383 B)
+0650d125ec300ec45832c9b423a44a637f8b237803493c71d9ba7232dc8ef457  smart-rodada46/r46_api_vacina.c  (4480 B)
+e512152b37b1baffd8356803d356f646295c23266a4e6548f3d57a8b48d45b0f  smart-rodada46/r46_patch.py  (10405 B)
+bc7880d0b8330b06542ed7e326602d3722b2a3e098737fa6e8feef7611d813a0  smart-rodada46/r46_vacinas.c  (7146 B)
+e864e3542b47f145a329cb3e262caf9889bacb0e3267a97103f6f60e83a06683  smart-rodada46/r46b-api-vacina-out.txt  (344 B)
+3f40066e920903facceeafdc47a31014fcdb8723f195d4fd493eef6d540b2a50  smart-rodada46/r46b-fullsha64-final.txt  (484 B)
+5c3c96da654f9d21ca8d41ebdcc90cc4547397ce1795e507735ef2b2c4775c7f  smart-rodada46/r46b-host-api.diff  (7570 B)
+bb08e1e6acdcead772a50ae7d209a3e0128e8b77fc62bc119d63baa08609db1c  smart-rodada46/r46b-skel-opseen.diff  (2852 B)
+126b8c571a2c6da89aba454e27bbc28c08b9e1adce2b8f48ca726abcb7bf3939  smart-rodada46/r46b_patch.py  (9626 B)
+
+================================================================================
+SECAO VI — FRONTEIRAS A-H (atualizadas!)
+================================================================================
+A. fullcohort: os 4 arquivos com fullSHA64 (secao IV!); diffs acumulados
+   (r46-v2.diff = 427; r46b-host-api.diff = 164; r46b-skel-opseen.diff = 41!)
+   — recuperáveis; o APK/probe do device: PENDENTE (o P7!).
+B. correções/vacinas: 7 fixes CCE-HOST (8/8!); API CCE-HOST (6/6!); o gerador
+   RED (missing-anchor = exit1!); as vacinas host usam os FRAGMENTOS REAIS
+   (adapters declarados — não DSP!).
+C. ACT/replay: código COMPLETO (host+skel!) compilado; a captura NO DEVICE
+   (§7!): o próximo passo — sem bloqueio técnico conhecido!
+D. 2048 métricas: PENDENTE (pós-captura!). E. capturas/controles: PENDENTES.
+F. runner/loader: CCE (R44!) + o gerador agora RED-correto!
+G. fronteiras: fixes+API = CCE-HOST; build = EVIDENCIADO (os logs!); ACT
+   device = PENDENTE; KERNEL/GRAPH/HANDOFF/PERF = NÃO.
+H. o próximo teste mínimo: (1) instalar o cohort §5 no device (libs: os SHA
+   da seção IV!); (2) GGML_HEXAGON_ACT_DUMP=1 (o tune!); (3) mmtest:q4k;
+   (4) chamar a API (registry!) e ler o status (CAPTURED!); (5) exportar os
+   221184 B + validar; (6) as 2048 com a ACT observada!
+================================================================================
+
+APÊNDICE5 — MANIFESTO COMPLETO DAS EVIDÊNCIAS REFERIDAS
+fullSHA-256 | bytes | absolute_path | papel. Sem equivalente remoto presumido. TXT próprio excluído por autorreferência.
+9134f53f3f09159a22cdcd51d3197fd93a7246229f2c28cc35393e32587dfab7 | 7869 | C:/Users/Gustavo/AppData/Local/hermes/attachments/pasted_content_2026-10-10_12-41-45-755_8985ed.txt | OBSERVADO: relato final; hash não valida sozinho suas afirmações
+ffe93de7d471fd1ed567f62d2d5ea3b718c9ab90e98328e3c67db6ba7a4cae20 | 7251 | C:/Users/Gustavo/AppData/Local/hermes/attachments/pasted_content_2026-10-10_11-42-41-627_443cd0.txt | OBSERVADO: versão parcial idêntica à outra parcial, não à final
+ffe93de7d471fd1ed567f62d2d5ea3b718c9ab90e98328e3c67db6ba7a4cae20 | 7251 | C:/Users/Gustavo/AppData/Local/hermes/attachments/pasted_content_2026-10-10_11-53-36-563_7aadbb.txt | OBSERVADO: versão parcial idêntica à outra parcial, não à final
+e0bcbfb7ba701b06eba1d6a52fec49f003fa83c930b70721049ab7233297ecb3 | 715 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46-fullsha64-cohort-v2.txt | OBSERVADO: anexoR46 incorporado no apêndice3
+94d2317fd157b81cf8bae7a688ed2c4401996d6449af2605d59390f14f370e02 | 1338 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46-host-build.log | OBSERVADO: anexoR46 incorporado no apêndice3
+22bebb3a084aeec0109f44781cb565c88b44f2ca38961beed4290be405042a2a | 2252 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46-skel-build.log | OBSERVADO: anexoR46 incorporado no apêndice3
+6744c31076165c66191130bb2ae50aed349f64c580c71a25ba9a5e87b09c83d9 | 16034 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46-v2.diff | OBSERVADO: anexoR46 incorporado no apêndice3
+da7d4bfdc78bebdf5bef439d6002e5af6a76bbacc8057ae069c8cd9670dd258c | 383 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46-vacinas-out.txt | OBSERVADO: anexoR46 incorporado no apêndice3
+0650d125ec300ec45832c9b423a44a637f8b237803493c71d9ba7232dc8ef457 | 4480 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46_api_vacina.c | OBSERVADO: anexoR46 incorporado no apêndice3
+e512152b37b1baffd8356803d356f646295c23266a4e6548f3d57a8b48d45b0f | 10405 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46_patch.py | OBSERVADO: anexoR46 incorporado no apêndice3
+bc7880d0b8330b06542ed7e326602d3722b2a3e098737fa6e8feef7611d813a0 | 7146 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46_vacinas.c | OBSERVADO: anexoR46 incorporado no apêndice3
+e864e3542b47f145a329cb3e262caf9889bacb0e3267a97103f6f60e83a06683 | 344 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46b-api-vacina-out.txt | OBSERVADO: anexoR46 incorporado no apêndice3
+3f40066e920903facceeafdc47a31014fcdb8723f195d4fd493eef6d540b2a50 | 484 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46b-fullsha64-final.txt | OBSERVADO: anexoR46 incorporado no apêndice3
+5c3c96da654f9d21ca8d41ebdcc90cc4547397ce1795e507735ef2b2c4775c7f | 7570 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46b-host-api.diff | OBSERVADO: anexoR46 incorporado no apêndice3
+bb08e1e6acdcead772a50ae7d209a3e0128e8b77fc62bc119d63baa08609db1c | 2852 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46b-skel-opseen.diff | OBSERVADO: anexoR46 incorporado no apêndice3
+126b8c571a2c6da89aba454e27bbc28c08b9e1adce2b8f48ca726abcb7bf3939 | 9626 | D:/Projetos/SIG/docs/npu-hymt2/smart-rodada46/r46b_patch.py | OBSERVADO: anexoR46 incorporado no apêndice3
+1eef00444ff16abce1cf6e1286718316ded5f46ad2a5b33fc3b41304b1196aaa | 8089 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46.py | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+2aa5018be3c97799ca768cb39d050790ca6f72b5a01ae134c1d1362dce9b2d4e | 7511 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46b.py | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+318358a9f162236d4d12f65526e22e5fc4ac8d8dc40291e2f4398e78c4a2947e | 5323 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples.cpp | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+a7eccd9df1913cab573b8c655f2f9830fb15d54732f08b32e5e6f39da62e7db4 | 9770 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments.cpp | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+5c541575b736f37cecc6c0e728ce6efc6ddcaa509da26ac7c9dc0039d078a963 | 7678 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard.c | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+707e0f5c2c7a58e01df713b287caf8e9719565abe3fcbbdd77a007c1ef5f7707 | 1321 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46-run.log | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+87c5f52afb4f019b42dd0b334f77759c67b3e164cfe1033acdf4325200b75155 | 1056 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/audit46b-run.log | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+823dd345bde507b9deb51518082232951eed59b1fef8c2314cdafd3033bbff2f | 3344 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/results.json | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+c1d715bfa96f5fd6dca347092bf3bdb6d23e42f873bc1de95c148e57948700d6 | 3173 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-results.json | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+3f85ea7f3173d13a908ae8e76dcd7754a8fab8184e11888b6bc245ffc85f2e31 | 4275 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/manifest-final-version.json | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+f1d0db5bca45deb89035386e7b2278556f3d3fa108a27079da8eb96b93c165f9 | 178 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/header-check.json | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+44093e0aeb5f07c8117697911b78e3fe81c92d53cc7cd4f9a91e93eeef74f761 | 3403 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/preservation-final.json | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+6e7e8e9be21099609bd87179deae13592aeb1113a96c24f00ceb1c06369f174e | 741 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-vaccine-build.log | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+a142987765ab4a78d0b0647497392ee306f664717235d977938e2c6913d29b58 | 393 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-vaccine-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-vaccine-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+6f4fe1ef5aec8cfbe04d295ce651dd39800e97e91a79191570512ae12eadbd4c | 885 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard-build.log | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+b8c770475f14be519a60e1e1a3fe24784029ae5806087fcfeff47ba094a34428 | 172 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+04954ee421b75bc0962f1e14c3fdc52b1ef5825eda7328c544561402c64d47a7 | 70 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+ac415bb2bca5b5753764a9c6942a43cf6d7e5e6b17253ea52418667a8a185cca | 786 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples-build.log | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+faad1464d136ea7f450acb77b01a7f00ca53d918f3c17d1f75ee0c096b2ac4ba | 403 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-api-vaccine-build.log | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+c0b253318dbb3a0221d5bc4834492f1eca4ad3c1eb034ec8f05901aa82dfbd7e | 352 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-api-vaccine-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-api-vaccine-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+75311cd5135db8fbeabc5a79d8dd7d7e4d805edbe7023ae57e6fc6e84b8d9e3f | 3161 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments-build.log | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+40a9b1db3dde6cd784b9776185d53649732a15fe744f0bcdad017357c7ee2b3c | 499 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-missing-A1-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+8acd6bf98b458e18dea657f5be4ed7751e8943215cf68ac5956d924bb791a51a | 227 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-missing-A1-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+f89c416de1d64830cbe3cbc9d2aec3bba9912f982a79d6d1c1c0d1ddc6b8682b | 205 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-optimized-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-optimized-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-normal-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+25494dd6d8e6ac56c9dd3749c7eae949d678785173636042555e83379e4ff7e4 | 228 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-normal-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+9f32be05db9bec8a9cc17e5a42789791f7b90d6fd74e48bfc2611dde13295bfb | 149 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-optimized-out.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 | 0 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-optimized-err.txt | OBSERVADO: auditoriaHOST, incorporada no apêndice2; nãoDSP
+f1f1d5fe21e72d648851ec8d01e0aaaacd7d510ff0e2a0d0b423b4245937e3c1 | 271028 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-vaccine.exe | OBSERVADO: binárioHOST do teste, não candidatoAndroid/Hexagon
+1c7800c18fd62196013697f35d05d0efdba0d69680a3789850163dd06c719388 | 274227 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/vaccine-source-guard.exe | OBSERVADO: binárioHOST do teste, não candidatoAndroid/Hexagon
+64b5d52af65ad9ea87fec824843c333033bbe30a737fb8d2fa9dee644437f943 | 274731 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46-fragment-counterexamples.exe | OBSERVADO: binárioHOST do teste, não candidatoAndroid/Hexagon
+fe67f6768e2653bfab1547d587fc71b257068fb4016a5721feccc1fa8d48e56d | 269218 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/executor-api-vaccine.exe | OBSERVADO: binárioHOST do teste, não candidatoAndroid/Hexagon
+e7ac60da63812c805757359c531213a5321d972208a5361e198ff0e62a2e85dc | 277452 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/r46b-api-fragments.exe | OBSERVADO: binárioHOST do teste, não candidatoAndroid/Hexagon
+b7a2b098a503050fe7c802be32a688d190a8c523fccd30bad29cbb3c6264d3ad | 40 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-missing-A1/ggml-hexagon.cpp | OBSERVADO: fixture negativa gerador; sem app/produção
+b7a2b098a503050fe7c802be32a688d190a8c523fccd30bad29cbb3c6264d3ad | 40 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-missing-A1/htp/htp-ctx.h | OBSERVADO: fixture negativa gerador; sem app/produção
+b7a2b098a503050fe7c802be32a688d190a8c523fccd30bad29cbb3c6264d3ad | 40 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-missing-A1/htp/main.c | OBSERVADO: fixture negativa gerador; sem app/produção
+b7a2b098a503050fe7c802be32a688d190a8c523fccd30bad29cbb3c6264d3ad | 40 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-missing-A1/htp/matmul-ops.c | OBSERVADO: fixture negativa gerador; sem app/produção
+d6a0d5a6e6c8557336d646a2d0615d02a5f84aeb49605a44c44d3f7ad9d56e8a | 27 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-normal/ggml-hexagon.cpp | OBSERVADO: fixture negativa gerador; sem app/produção
+d6a0d5a6e6c8557336d646a2d0615d02a5f84aeb49605a44c44d3f7ad9d56e8a | 27 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-normal/htp/matmul-ops.c | OBSERVADO: fixture negativa gerador; sem app/produção
+48abd476b72a6c49fa205b67461088317d529e90ff1543592e329e01cf4172b0 | 1604 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-optimized/ggml-hexagon.cpp | OBSERVADO: fixture negativa gerador; sem app/produção
+c01ece1b8b5e02de5485f12442d8bdff30febb8ccb5570fe01ff00327839d715 | 26 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/generator-r46b-optimized/htp/matmul-ops.c | OBSERVADO: fixture negativa gerador; sem app/produção
+9779fb9f9e82a483a64ba936a83343fce9bdd4abc08b9285de64be34c682577b | 170105 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/ggml-hexagon.cpp | OBSERVADO: referência local, NÃO snapshot candidato remoto
+81998896b9c011c15dcd7f755999a07a50175063c76a41faabc4fd533f63cd6c | 39639 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/main.c | OBSERVADO: referência local, NÃO snapshot candidato remoto
+7e8c017989831075789c80bd202997ebb45c9d886d6a53cf750794ece07d4a8a | 231595 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/matmul-ops.c | OBSERVADO: referência local, NÃO snapshot candidato remoto
+2f8540993aa0f18aa0fa889aa00b6c13b76d14c77a142c384bc1956d6df0844a | 33247 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/matmul-ops.h | OBSERVADO: referência local, NÃO snapshot candidato remoto
+90eea5c1341a7badfb5d178a7bfd3794ce8ea11f7d442b3c1b9528fad277588e | 4536 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/htp-ctx.h | OBSERVADO: referência local, NÃO snapshot candidato remoto
+27e22efbfbd0e6eef7a5ceedff87add690c3ba638db6c510ebb66cb0f6ab6ab3 | 1170 | D:/Projetos/SIG/app/src/main/cpp/llama/ggml/src/ggml-hexagon/htp/hex-fastdiv.h | OBSERVADO: referência local, NÃO snapshot candidato remoto
+b802ac7e4349ad7f88244e8fd688715c1e611d3c0be3f01116994fdd6c8edcf2 | 103683 | C:/npu-probe/app/src/main/cpp/probe.cpp | OBSERVADO: referência getter/consumer anterior; não editada
+523fd6052848dc97104bf5cf0438210a72a878141b4504ad9b5fec122e530fa7 | 1165 | C:/Users/Gustavo/AppData/Local/hermes/cache/scratch/r46-specialist-audit/staged-before.json | OBSERVADO: baseline de preservação
+TOTAL_REGISTROS_OBSERVADOS=72
+
+COHORT REMOTO DECLARADO (não verificado contra ELFs/source remotos; preserve literal):
+ab11d6244ff0e2ffc54812e63acf9da9fd5d9b0dea96eb588525d2124bee7d37  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+fe2ae59d57bf66b5213ebbdf9e5310b81d86740dc2b5cc07212264db234922d7  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+e904030a11448486f25397ccb484f8228b9fd5333dd5f43f862fb6006c442d28  /root/sigcand2/ggml/src/ggml-hexagon/htp/main.c
+4db38dd26a87e3e534b567539484b91f2b85539619a3d445cefadea40eedba90  /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+c5771e650a76574413b32b4d88700c0fad5d48662e56e30c2517d125c30df079  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+d3987e51823462146f43e9c9114af6afdd3d318831c4460053967dca342749b8  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+33f187101b03f456d40118a9c4f0b2366c411239b51133bf28e146b5a637723b  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+70ba2210adc89f8baf41f469adb96461348aab866df2194d71fdb129f6c189f0  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+5138cb3bd6fe3f8900f6e863b0dd387b23c7e9efaee2fe96f6b09d73ffaa921e  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+0b8c6dc95c2cf7bccc931626e97a03e7ca8388c5e55bd2e16b7a6b437795dc2b  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+PRESERVAÇÃO: STAGED_COUNT=9; nomes e worktree bytes iguais ao baseline; índice igual ao snapshot de entrega. Dois blobs do índice são LF onde o worktree é CRLF (equivalência integral após conversão de newline, não igualdade de SHA); diferenças não foram reparadas. Nenhuma ação de staging executada.
+WORKTREE_SHA256=efdea59eb7a2caf3d0f31e56166c94eb210bb57d76f1418a11c1fc92fb81e3ea INDEX_BLOB_SHA256=efdea59eb7a2caf3d0f31e56166c94eb210bb57d76f1418a11c1fc92fb81e3ea  docs/especialista/PROMPT-SMART-RODADA37-CPU-Q8K-ESTADO-EFETIVO-E-SHAPES-REAIS.txt
+WORKTREE_SHA256=15e2c5810aafa43b22efe13a33ec40ed456c05eaa6a0d56461d0d1232c361f4d INDEX_BLOB_SHA256=15e2c5810aafa43b22efe13a33ec40ed456c05eaa6a0d56461d0d1232c361f4d  docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA37.txt
+WORKTREE_SHA256=aa8a34ff02b26d20276ee5631deb8c9645f3046b02d94cf447fc1ffeb305efa6 INDEX_BLOB_SHA256=aa8a34ff02b26d20276ee5631deb8c9645f3046b02d94cf447fc1ffeb305efa6  docs/npu-hymt2/smart-rodada37/MANIFESTO-SHA256.txt
+WORKTREE_SHA256=31ef1cf61f663a3c8a9b294f91d47e7026a31b4703329bf3b345987a635ed530 INDEX_BLOB_SHA256=31ef1cf61f663a3c8a9b294f91d47e7026a31b4703329bf3b345987a635ed530  docs/npu-hymt2/smart-rodada37/probe-r37-com-consulta.cpp
+WORKTREE_SHA256=b122170f3d57d541e5d0013cf7b87190685071137630dbc22362d5a8544225ea INDEX_BLOB_SHA256=b122170f3d57d541e5d0013cf7b87190685071137630dbc22362d5a8544225ea  docs/npu-hymt2/smart-rodada37/r37-capture-full.txt
+WORKTREE_SHA256=893082f33ecedcd52846e3a3ee564d3d0f09cc9c8af93a064f70d5c055ef74b8 INDEX_BLOB_SHA256=727fe45ab2f7286cfc8646e9d95fdddc4da85edc21d6ef6bfd0d3b17cf2a7676  docs/npu-hymt2/smart-rodada37/r37-inventario-gguf.txt
+WORKTREE_SHA256=2cda873e27be4c76c3e97ba24cb58e7432c08e0504c41089b9d39946a2f4f18f INDEX_BLOB_SHA256=819f5d33a19266b63c591cb3c612a319a8617b113ecc6dc5f1da3ba5e5c03aab  docs/npu-hymt2/smart-rodada37/r37-probe-build.log
+WORKTREE_SHA256=24b423801fe6dc56b0f261c8610b40589d52a9ddc9a4037d5d1bb011bb6caea5 INDEX_BLOB_SHA256=24b423801fe6dc56b0f261c8610b40589d52a9ddc9a4037d5d1bb011bb6caea5  docs/npu-hymt2/smart-rodada37/r37_cand.py
+WORKTREE_SHA256=412edb9400a53a01aefff392548e54cc6c1ff9d77ae714ab9e5cf62f27cc449e INDEX_BLOB_SHA256=412edb9400a53a01aefff392548e54cc6c1ff9d77ae714ab9e5cf62f27cc449e  docs/npu-hymt2/smart-rodada37/r37_gguf_invent.py
+
+FIM — ACT_REAL=NÃO_EXECUTADA pelo especialista. FonteAPI existe; consumer/device pendentes.

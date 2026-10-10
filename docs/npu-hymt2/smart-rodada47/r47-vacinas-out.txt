@@ -1,0 +1,10 @@
+K1 C5-safe: src=400000 pedido=262144 ok=SIM (sem UB!)
+K2 checked: row-huge=0 b1-real=1 row>cap=0 (exigido 0/1/0!)
+K3 getter: op_seen0=1 rows0=1 excesso=-1 row0=-1 cap64=-1 ok=2 (exigido 1/1/-1/-1/-1/2!)
+K4 irmãos: MAT=0 ID=-1 QKV=-1 FFN=-1 ADD=-1 (exigido 0/-1/-1/-1/-1!)
+K5 ne2/ne3: ne2-2=-1 ne3-2=-1 (exigido -1/-1!)
+K6 owner: sess1=0 sess2=-1 (exigido 0/-1!)
+K7 one-shot: first=0 second=0 used=1 (exigido 0/0/1 — a 2ª não recaptura!)
+K8 handshake: size-1=-2 size-ok=0 (exigido -2/0!)
+
+VACINAS_R47: TODAS PASS (8/8!) (0 falhas!)

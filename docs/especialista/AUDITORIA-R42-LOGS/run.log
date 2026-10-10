@@ -1,0 +1,10 @@
+MANIFEST 6 ALL_OK
+BUILD 0 RC 0
+BUILD 1 RC 0
+CASE {"case": "normal", "exit": 0, "pin_emitted": true, "stderr": "MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)", "stdout_lines": 22}
+CASE {"case": "nan", "exit": 23, "pin_emitted": false, "stderr": "MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)\nINVALID: finitude dos inputs (act_bad=0 out_bad=1!)", "stdout_lines": 1}
+CASE {"case": "badmeta", "exit": 22, "pin_emitted": false, "stderr": "MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)\nINVALID: meta DIVERGENTE do esperado (K=256 N=64 B=128 type=q4_K vs K=6144 N=2048 B=1 q6_K!)", "stdout_lines": 0}
+CASE {"case": "zeroact", "exit": 28, "pin_emitted": false, "stderr": "MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)\nINVALID: DENOMINADOR zero/nao-finito (d1=0 d2=0!) \u2014 nao emito nmse=-1 como valido!", "stdout_lines": 1}
+DIFFERENT_FULL_SHA_SAME_40_PREFIX_ACCEPTED 0 FILES 5
+RUNNER_FAILED_BUILD {"exit": 0, "build7": true, "run0": true, "stale_executed": true, "valid_claim": true, "scope": "paths adapted + injected compiler failure + controlled stale diagnostic executable"}
+AUDIT_DONE_RC0

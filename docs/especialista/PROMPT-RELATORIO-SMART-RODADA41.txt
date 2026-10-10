@@ -1,0 +1,38 @@
+PROMPT-RELATORIO — SMART DUAL-BACKEND — RODADA 41
+=====================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 41 | DATA: 10/10/2026 |
+| ESTADO GERAL: PARCIAL — runner/loader CCE; export parcial; ACT_REAL pendente! |
+
+A. COHORT/IDENTIDADE (PARCIAL!)
+- APK do especialista citado (não re-verificado!); probe R41 buildado
+  (APK local NOVO — não instalado!); fullSHA/mapa fonte->binário: declarado.
+
+B. EXPORT (§3 — PARCIAL!)
+- mkdir CONSUMIDO (R41!); STATUS agrega meta+exfail (SNAPSHOT_COMPLETE
+  exige 5/5+meta!); retificações R40 aceitas (EEXIST/fail-closed R40!).
+- Vínculo por handle (§3.2) + fonte única da identidade (§3.1) + vacina
+  (§3.4): PENDENTES!
+
+C. TRACE/ACT (§5 — PARCIAL!)
+- Runner dinâmico COMPLETO (2048 saídas!); TOP10 com 10 distintos
+  (|err| abs!): padrão ~0.95% (a assinatura q8_0!) — hipótese reforçada,
+  NÃO proclamada!
+- ACT_REAL: PENDENTE (obs. do quantizador real — design não implementado!).
+
+D. DECOMPOSIÇÃO (parcial — os números completos agora impressos: 50/54!)
+
+E. CONTROLES/2x (PENDENTES — declarados!)
+
+F. RUNNER/LOADER (CCE — o §4 fechado! exits consumidos; log errado
+   preservado; CSV 2048!)
+
+G. FRONTEIRAS: Q6 residual próprio (50/54!, padrão novo!); sem culpa
+   CPU/pack; STOP-fused; R36 ok.
+
+H. PRÓXIMOS: ACT_REAL → vínculo por handle → vacina → 2 capturas+controles
+   → temporal/ffn/counters → minigrafo/placement!
+
+ESTADOS: RUNNER/LOADER: CCE | EXPORT (mkdir/status): CCE-PARCIAL | ACT_REAL:
+PENDENTE | VÍNCULO/VACINA: PENDENTE | 2CAPTURAS/CONTROLES: PENDENTE |
+KERNEL/GRAPH/HANDOFF/PERF: NÃO!
+=====================================================================

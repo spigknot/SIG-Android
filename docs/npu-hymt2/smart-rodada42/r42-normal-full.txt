@@ -1,0 +1,27 @@
+=== R42 RUNNER ===
+CMD: r42_runner.sh /root/r42_normal 
+CWD: /root
+SRC: /root/r42_refs.c (11065 bytes!)
+SRC_SHA: f444ba352211d6d067c380249cae5db14b4d493a
+BUILD_EXIT=0
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (194848 bytes!)
+BIN_SHA: 2c957051872f72a5b5c5e9fa7e143633f5ffaea2
+RUN_EXIT=0
+STDOUT bytes=1174 STDERR bytes=68
+--- STDOUT (head):
+META ok: attempt=r42_1 K=6144 N=2048 B=1 type=q6_K
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e' classe NUMERICA separada!)

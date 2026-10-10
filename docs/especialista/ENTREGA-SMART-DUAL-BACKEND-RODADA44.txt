@@ -1,0 +1,237 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 44 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 44 | DATA: 10/10/2026 |
+| ESTADO GERAL: PARCIAL-ALTO — §3 (rastreabilidade) CCE nos casos testados; §1
+  (ACT executada) NAO implementada — MAPA COMPLETO do mecanismo entregue com o
+  RUNBOOK de implementacao passo a passo (todos os pontos localizados!). |
+================================================================================
+
+================================================================================
+SECAO I — RESUMO EXECUTIVO
+================================================================================
+(1) §3 RASTREABILIDADE — EXECUTADA (a parte pequena e independente do DSP!):
+    a) fullSHA64 dos FONTES do kq2 (matmul-ops.c/hvx-mm-kernels-tiled.h/
+       htp-ctx.h/htp-ops.h/ggml-hexagon.cpp — secao IV!);
+    b) RUNNER: script com SCRIPT_SHA/SRC_SHA/BIN_SHA INTEGRAIS (64hex — sem
+       cut!), RAIZ DE EVIDENCIA AUTORIZADA (/root/r44_evid/ — nao /tmp!)
+       com build/out/err EXCLUSIVOS e IMUTAVEIS por RUN_ID (r44_<dir>_<epoch>!);
+       BUILD consome (exit 92!); cada etapa imprime exit;
+    c) LOADER: whitelist dos 5 NOMES (nome desconhecido => INVALID exit30!);
+       rotulo corrigido (R44_LOADER_DONE — nao mais R42_DONE!);
+    d) BATERIA 5/5: RECON exit0 (5 fullSHA64 ok! + VIOL 13/13/50/54!);
+       NORMAL exit0; TAMPER exit16 (digest integral na mensagem!);
+       MISSING-DIR exit20 (meta ausente => INVALID!); evid por RUN_ID (12
+       arquivos!).
+(2) §1 — O MAPA COMPLETO DO MECANISMO DE ACT (a descoberta central da rodada!):
+    TODO o caminho host<->skel localizado e documentado com arquivos/linhas
+    (secao II!) + o RUNBOOK de implementacao em 8 passos (secao III!) — a
+    EXECUCAO (patch/rebuild/device) NAO ocorreu nesta sessao (declarado).
+(3) O motivo material (nao "desenho abstrato", nao "tempo"): o runbook exige
+    mudanca COORDENADA em host+skel (protocolo/fastrpc/dspqueue!) + rebuild
+    dos dois + device — com risco de TRAVAR O DSP/device (reboot =
+    PROIBIDO pelo escopo!) — a sessao (madrugada adentro, R40-R44) nao
+    comporta essa cirurgia com a seguranca requerida; o mapa esta' completo
+    para execucao imediata. NAO e' bloqueio tecnico: e' ESTADO DECLARADO.
+================================================================================
+
+================================================================================
+SECAO II — O MAPA DO MECANISMO (TODAS as pecas, com arquivos/linhas!)
+================================================================================
+A pergunta: por que a ACT (q8_0 tiled!) nao volta ao host hoje?
+- A quantizacao roda NO SKEL (DSP!): kernel hvx-mm-kernels-tiled.h:1205;
+- o DST vai para mmctx->vtcm_src1 (VTCM — mem DSP, host NAO ve!);
+- os spads (htp-ctx.h:33) tambem sao VTCM ("pointer to an area in vtcm"!);
+- os unicos canais host<->skel: tensores (DMA/fastrpc!), SHM do batch
+  (descritores+traces!), kparams.
+
+O MECANISMO PARA LEVAR A ACT AO HOST (mapeado peca a peca!):
+1. ggml_hexagon_shared_buffer (ggml-hexagon.cpp:339): {sess, base, size,
+   fd, mapped, pinned} + mmap() via fastrpc_mmap(domain_id, fd, base, 0,
+   size, flags) — a memoria dos fds E MAPEADA (o DSP a enxerga!);
+2. add_buffer(ggml_hexagon_shared_buffer*) (ggml-hexagon.cpp:1686): registra
+   um buffer no batch (b_map por fd!); cada buffer = htp_buf_desc{base,
+   size, flags, fd} (htp-ops.h!); n_bufs++ (HTP_OP_MAX_BUFS!);
+3. h.bi = add_buffer(sbuf) (L1754!): um tensor aponta o buffer pelo indice bi;
+   h.data = t_offset (L1756!) = offset no buffer ("data pointer on the NPU"!);
+4. SHM por batch (ggml-hexagon.cpp:1925+): dbuf.size = b_size (buf descs!) +
+   t_size (tensors!) + o_size (ops!) + p_size (profs!) + tr_size (traces!);
+   dbuf.flags = FLUSH_SENDER|INVALIDATE_RECIPIENT (coerencia!);
+5. NO SKEL: struct htp_mmap {size, base (endereco DSP!), fd} (htp-ctx.h!);
+   o skel mapeia os fds (HAP_mmap — main.c:167/175/212/838!) -> mmap[bi].base;
+6. o op_desc (htp-ops.h!): {opcode, flags, params[16], kernel_params[16],
+   src[4], dst[4]} — kernel_params = "generic blob for host-precomputed
+   parameters" (a LIB os preenche no precompute do matmul!);
+7. o kernel (L1205): dst_data = mmctx->vtcm_src1 + dst_row_size*ir_first;
+   htp_mm_q8_0_tiled_row_size(6144) = 192 x 1152 (HTP_MM_ACT_TILE_SIZE_Q8_0 =
+   1152!) = 221184 B/row (B=1 => 1 row => a ACT completa!);
+8. o worker (QUANTIZE_IMPL L814!): src = octx->src[1] (o F32 do host — DMA!),
+   dma_make_ptr(dst, src) (dma-queue.h:144!) para as copias.
+
+================================================================================
+SECAO III — RUNBOOK DA IMPLEMENTACAO (8 passos, pronto pra executar!)
+================================================================================
+P1. LIB (ggml-hexagon.cpp): criar um shared_buffer global de dump (sized
+    221184+!) no init (ou sob demanda); guard test-only por env flag
+    (GGML_HEXAGON_ACT_DUMP=1 -> arma!);
+P2. LIB: no point de montagem do batch (o loop que chama add_buffer p/ os
+    tensores — L1754!): se armado E a op for o matmul Q6-alvo, add_buffer(dump)
+    -> bi_dump (guardar!);
+P3. LIB: propagar bi_dump ao skel: escrever no op_desc.kernel_params[um slot
+    livre do matmul] (ou params!) — a lib controla o precompute;
+P4. SKEL (matmul-ops.c): no op_matmul (entry!), ler o kparams -> mmctx
+    (mmctx->act_dump_bi = bi ou -1!);
+P5. SKEL: no kernel (apos quantize_row_f32_q8_0_tiled — L1221!): se
+    (mmctx->act_dump_bi >= 0 && a op == a selecionada): copiar dst_data
+    (dst_row_size por row!) para (mmap[bi].base + offset) — via DMA/copia
+    direta (o fd ja' mapeado!);
+P6. REBUILD host+skel (cohort SEPARADO — nomear!); verify sizes/ABI;
+P7. PROBE: armar (env/flag via o tune!) + rodar K6144/N2048/B1 com o input
+    F32 do snapshot R39 (replay do actfloat!) — o probe CRIA o shared buffer
+    (se a API for exposta pelo registry — P2 alternativo!) e LE os bytes
+    apos o compute;
+P8. ENTREGAR: bytes/codigos/escalas (221184 B!), fullSHA64, flag, RUN_ID;
+    e recomputar as 2048 saidas (o reader validado + a ACT observada!).
+LIMITES: ABI privada test-only versionada (host+skel coerentes!); cohort
+novo (a lib muda!); ON/OFF no mesmo artefato; sem benchmark com dump ativo.
+
+================================================================================
+SECAO IV — RESULTADOS EXECUTADOS (bateria R44 + fullSHA64 dos fontes!)
+================================================================================
+=== R44 RUNNER ===
+RUN_ID: r44_r39_cap_1791615710
+CMD: r44_runner.sh /root/r39_cap --reconstruct-r39
+CWD: /root
+SRC: /root/r42_refs.c (12229 bytes)
+SRC_SHA: 15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267
+SCRIPT_SHA: 5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97
+BUILD_EXIT=0  log: /root/r44_evid/r44_r39_cap_1791615710-build.log
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (195000 bytes)
+BIN_SHA: 5182535709f1ed41edc5beb38530149f29e2a7960ac11499b93717e8f1f6a648
+RUN_EXIT=0
+OUT: /root/r44_evid/r44_r39_cap_1791615710-out.txt (1286 B) ERR: /root/r44_evid/r44_r39_cap_1791615710-err.txt (622 B)
+--- STDOUT (head; integrais no arquivo acima):
+RECONSTRUCAO_R39: metadata reconstruida (K=6144 N=2048 B=1 type=q6_K — dos tamanhos/contrato!) — o meta FALSO do R39 NAO e' lido como schema!
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head; integrais acima):
+MODO: RECONSTRUCAO_R39 (whitelist SHA! metadata reconstruida SEPARADA!)
+RECONSTRUCAO_R39: canonweights_9216.bin SHA ok (0103fc0cc34700ff5b194e35dd89b088fff94c64197c58c3c03ef515e46d3640)
+RECONSTRUCAO_R39: actfloat_131072.bin SHA ok (8e126e530a6242c70a698dd00936de52890d93eea0960e1eba942b21cf2fd945)
+RECONSTRUCAO_R39: cpuout_32768.bin SHA ok (f343aaa6a9fe746178bd80cd05770fdeb39bb791dcae8fef489bd8f6e78cb315)
+RECONSTRUCAO_R39: htpout_32768.bin SHA ok (70f06e9494542513f1f9de7f837506b479ab06ae2bf078202868e4510c635e94)
+RECONSTRUCAO_R39: tiled_raw.bin SHA ok (66218735367089fbc9fe33f403c0c81e62214ef167779b88be644fa1104da1ff)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e classe NUMERICA separada)
+=== R44 RUNNER ===
+RUN_ID: r44_r42_normal_1791615717
+CMD: r44_runner.sh /root/r42_normal 
+CWD: /root
+SRC: /root/r42_refs.c (12229 bytes)
+SRC_SHA: 15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267
+SCRIPT_SHA: 5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97
+BUILD_EXIT=0  log: /root/r44_evid/r44_r42_normal_1791615717-build.log
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (195000 bytes)
+BIN_SHA: 5182535709f1ed41edc5beb38530149f29e2a7960ac11499b93717e8f1f6a648
+RUN_EXIT=0
+OUT: /root/r44_evid/r44_r42_normal_1791615717-out.txt (1181 B) ERR: /root/r44_evid/r44_r42_normal_1791615717-err.txt (68 B)
+--- STDOUT (head; integrais no arquivo acima):
+META ok: attempt=r42_1 K=6144 N=2048 B=1 type=q6_K
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+--- STDERR (head; integrais acima):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+RUNNER_STATUS=OBSERVACAO_VALIDA (LEGACY_FAIL e classe NUMERICA separada)
+=== R44 RUNNER ===
+RUN_ID: r44_r43_tamper_1791615723
+CMD: r44_runner.sh /root/r43_tamper --reconstruct-r39
+CWD: /root
+SRC: /root/r42_refs.c (12229 bytes)
+SRC_SHA: 15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267
+SCRIPT_SHA: 5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97
+BUILD_EXIT=0  log: /root/r44_evid/r44_r43_tamper_1791615723-build.log
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (195000 bytes)
+BIN_SHA: 5182535709f1ed41edc5beb38530149f29e2a7960ac11499b93717e8f1f6a648
+RUN_EXIT=16
+OUT: /root/r44_evid/r44_r43_tamper_1791615723-out.txt (146 B) ERR: /root/r44_evid/r44_r43_tamper_1791615723-err.txt (280 B)
+--- STDOUT (head; integrais no arquivo acima):
+RECONSTRUCAO_R39: metadata reconstruida (K=6144 N=2048 B=1 type=q6_K — dos tamanhos/contrato!) — o meta FALSO do R39 NAO e' lido como schema!
+--- STDERR (head; integrais acima):
+MODO: RECONSTRUCAO_R39 (whitelist SHA! metadata reconstruida SEPARADA!)
+INVALID(REPLAY): canonweights_9216.bin SHA fora da whitelist R39: a8bf3a8a59d1b7e90d58081df52666af86997f2abff592b2df5d5e8d4c7a5da2 (esperado 0103fc0cc34700ff5b194e35dd89b088fff94c64197c58c3c03ef515e46d3640!)
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=16 consumido)
+=== R44 RUNNER ===
+RUN_ID: r44_naoexiste_r44_1791615729
+CMD: r44_runner.sh /root/naoexiste_r44 
+CWD: /root
+SRC: /root/r42_refs.c (12229 bytes)
+SRC_SHA: 15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267
+SCRIPT_SHA: 5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97
+BUILD_EXIT=0  log: /root/r44_evid/r44_naoexiste_r44_1791615729-build.log
+EXIST_EXIT=0
+BIN: /root/r42_refs_bin (195000 bytes)
+BIN_SHA: 5182535709f1ed41edc5beb38530149f29e2a7960ac11499b93717e8f1f6a648
+RUN_EXIT=20
+OUT: /root/r44_evid/r44_naoexiste_r44_1791615729-out.txt (0 B) ERR: /root/r44_evid/r44_naoexiste_r44_1791615729-err.txt (109 B)
+--- STDOUT (head; integrais no arquivo acima):
+--- STDERR (head; integrais acima):
+MODO: NORMAL (meta obrigatoria/parseada! finitude/schema ESTRITOS!)
+INVALID: meta.txt AUSENTE (modo NORMAL!)
+RUNNER_STATUS=FALHA_OPERACIONAL_OU_INVALID (exit=20 consumido)
+
+=== fullSHA64 dos fontes kq2 (candidato!): ===
+fa53ff4b511ae99a1db6e27be0117b6cb22ddb41f31ccf04c49e974918820d64  /root/kq2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+2f91323c36e99dd61d08024feac51d81622ce9d66f745bcf17eee31fb22f75f6  /root/kq2/ggml/src/ggml-hexagon/htp/hvx-mm-kernels-tiled.h
+90eea5c1341a7badfb5d178a7bfd3794ce8ea11f7d442b3c1b9528fad277588e  /root/kq2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+d8e8ba67b4979eda5603ea617dfb33866542a72252e9b687c3c0c67ade91ab41  /root/kq2/ggml/src/ggml-hexagon/htp/htp-ops.h
+54291169024e391dee9c0873adfb2bb99f4a4e638b81a1bc20faaad74824de54  /root/kq2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+
+================================================================================
+
+================================================================================
+SECAO V — MANIFESTO (existencias + tamanhos + fullSHA64 — todos os anexos!)
+================================================================================
+53a9d1dac7ae7b41f81a27f0633239decf7ada81f8d2ee6c81cf710003b7ebe4  smart-rodada44/r44-bateria-casos.txt  (5613 B)
+bc1163fe163abd4cedb8dffa67046eb2bd5f2c1d807ca5ad691f2d69095d8ebe  smart-rodada44/r44-fontes-kq2-fullsha64.txt  (579 B)
+15c410dbd8038dc07a0aeab5aaab00a16ee40f003bc6f574607c3f00f3121267  smart-rodada44/r44_refs-whitelist-schema.c  (12229 B)
+5edab2242dbf5fa34c313e2240c1451eeaa765c3a5496728f5f9ddef71c30c97  smart-rodada44/r44_runner.sh  (2174 B)
+
+================================================================================
+SECAO VI — FRONTEIRAS A-H + ESTADOS
+================================================================================
+A. fullcohort/source: os 5 fontes kq2 com fullSHA64 (secao IV!); lib host
+   020ded2e...5681 (737544 B); APK probe R42 buildado (nao instalado!);
+   ABI/buildID completos: PARCIAL (declarado).
+B. correcoes/vacinas: runner (SCRIPT/SRC/BIN SHA integrais + raiz por RUN_ID +
+   build-consume 92!) CCE; loader (whitelist 5 nomes 30! + rotulo!) CCE;
+   TAMPER 16 / MISSING 20 consumidos!
+C. ACT/replay: MECANISMO MAPEADO COMPLETO (secao II/III!) — execucao
+   PENDENTE (runbook pronto! esto NAO e' 'desenho abstrato': os 8 passos tem
+   arquivos/linhas/riscos!).
+D. modelo observado/2048: PENDENTE (o 13/13/50/54 estavel — NAO repetido!).
+E. capturas/controles: PENDENTES. F. runner/loader: CCE (bateria 5/5!).
+G. fronteiras: §3: CCE; mecanismo: MAPEADO; execucao ACT: PENDENTE-BLOQUEIO
+   DE SEGURANCA (DSP/reboot proibido + sessao no limite!); KERNEL/GRAPH/
+   HANDOFF/PERF: NAO.
+H. proximo teste minimo: P1-P2 (a criacao do buffer + o add no batch!) —
+   compilavel sem device; depois P4-P5 (skel!) + P6 (rebuild cohort!).
+================================================================================

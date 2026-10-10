@@ -1,0 +1,3 @@
+attempt=r40_1_22782 K=6144 N=2048 B=1 type=q6_K pid=22782
+wbytes=10321920 act_bytes=24576 out_floats=2048 (indice b*N+n!)
+cpu_nb0=4 cpu_nb1=8192 htp_nb0=4 htp_nb1=8192

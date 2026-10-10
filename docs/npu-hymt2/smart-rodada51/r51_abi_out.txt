@@ -1,0 +1,5 @@
+ABI sizeof(htp_mm_kernel_params)=128 (static_assert<=128!)
+ABI off kernel_type=0 pipeline=4 n_threads=16 n_hmx=24
+ABI off src1_row_size=40 vtcm_size=44 act_dump_bi=68 div_ne12_ne1=72
+ENUM kt: UNSUPPORTED=0 HMX_2D=1 HMX_F16_BATCHED=2 ROW=9 BLOCK=10 ROW_FLAT=11
+ABI sizeof(act_dump_status v3)=128 off r49_n_hmx=72 off r50_meta_valid=88 off r50_total_nb=120

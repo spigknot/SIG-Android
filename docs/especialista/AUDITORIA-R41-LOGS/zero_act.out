@@ -1,0 +1,27 @@
+R41 RUNNER: schema K=6144 N=2048 B=1 | canon=10321920 act=24576 out=8192 tiled=11010048
+META (WARN: o R39 tem rotulo historico hardcoded!):
+  attempt=wrong K=256 N=64 B=128 type=q4_K pid=999
+5 binarios: tamanhos EXATOS ok (identidade por conteudo!) — stress: dir argumento
+
+nd=2048 nf=0 (de 2048!)
+=====================================================
+CPU vs Rscalar: nmse=-1.000e+00 max_abs=92.701286 VIOL=2048
+CPU vs Rtiled : nmse=-1.000e+00 max_abs=92.701286 VIOL=2048
+HTP vs Rscalar: nmse=-1.000e+00 max_abs=92.650177 VIOL=2048
+HTP vs Rtiled : nmse=-1.000e+00 max_abs=92.650177 VIOL=2048
+PIN (5e-4!): CPU/Rscalar=FAIL CPU/Rtiled=FAIL HTP/Rscalar=FAIL HTP/Rtiled=FAIL
+CSV completo: C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r41-specialist-audit\cases\zero_act/r41-referencias-completas.csv (2048 linhas!)
+
+TOP10 |HTP-Rtiled| (absoluto — ordenacao DECLARADA!):
+  #1 n= 874: HTP=+92.650177 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.650177
+  #2 n=1818: HTP=-92.412674 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.412674
+  #3 n=1198: HTP=+92.315140 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.315140
+  #4 n= 643: HTP=+92.250732 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.250732
+  #5 n=1903: HTP=-92.249901 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.249901
+  #6 n=  92: HTP=-92.232681 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.232681
+  #7 n=1267: HTP=+92.227509 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.227509
+  #8 n= 165: HTP=+92.224472 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.224472
+  #9 n= 562: HTP=-92.215691 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.215691
+  #10 n=   7: HTP=-92.210373 Rscalar=+0.000000 Rtiled=+0.000000 |err_t|=92.210373
+
+R41_LOADER_DONE exit=0 (observacao numerica VALIDA — LEGACY_FAIL preservado!)

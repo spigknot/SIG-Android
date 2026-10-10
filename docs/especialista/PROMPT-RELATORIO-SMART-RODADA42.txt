@@ -1,0 +1,47 @@
+PROMPT-RELATORIO — SMART DUAL-BACKEND — RODADA 42
+=====================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 42 | DATA: 10/10/2026 |
+| ESTADO GERAL: PARCIAL — loader estrito/runner CCE; seam/ACT pendentes! |
+
+A. COHORT/DESENHO ACT (§3)
+- Desenho curto da ACT documentado (a cadeia real do fonte: F32→q8_0
+  tiled→HVX_QUANT_ROW→dot Q6→readback!); implementação/replay: PENDENTE
+  com o caminho mínimo (A.4!) e o limite declarado!
+
+B. SEAM/RECUSAS/VACINAS/HANDLE (§4)
+- mkdir CONSUMIDO (fail++/return! build ✓); EEXIST pai ok; attempt NOVO!
+- Seam compartilhada/vacina do mesmo código/armamento por handle: PENDENTES
+  (design declarado!)!
+
+C. ACT/REPLAY (§6)
+- NÃO executado (declarado!): o experimento mínimo = localizar o buffer
+  src1 quantizado + hook pós-quantização; alternativa = REPLAY_REAL do
+  quantizador real (intrínsecos reais — nunca scalar!)!
+
+D. DECOMPOSIÇÃO
+- TOP10 por EXCESSO/limite (o objeto NOVO — diferente do top absoluto!)
+  no runner; 50/54 preservados; CPU 13/13; PIN separado!
+
+E. CAPTURAS/CONTROLES (§7 — PENDENTES declarados!)
+- 2×Q6 + F32/Q4_0: não executados (probe R42 buildado, não instalado!);
+  dataset R39 = entrada de regressão (whitelist!)!
+
+F. RUNNER/LOADER (§5 — CCE!)
+- 2 modos (NORMAL estrito! RECONSTRUCAO_R39 com whitelist 5 SHA!)!
+- Bateria 5/5: NORMAL=0; RECON=0; NaN=23; BADMETA=22; DENOM0=28 — todos
+  os negativos com exit CONSUMIDO (RUNNER_STATUS explícito!)!
+- r42_runner.sh REAL (cadeia documentada: CMD/CWD/SRC/BUILD/EXIST/BIN/RUN/
+  stdout-stderr separados!)!
+
+G. FRONTEIRAS (critérios específicos!)
+- RUNNER/LOADER: CCE (bateria+script!). EXPORT(mkdir): CCE-parcial.
+  SEAM/VACINA: PENDENTE. ACT_REAL: PENDENTE. CAPTURAS/CONTROLES: PENDENTE.
+  KERNEL/GRAPH/HANDOFF/PERF: NÃO!
+
+H. PRÓXIMOS EXATOS
+1. Seam/vacina §4 completa (12+ casos!); 2. ACT (buffer src1 post-quant
+   ou REPLAY_REAL!); 3. 2 capturas+controles; 4. temporal/ffn; 5. minigrafo!
+
+ESPELHO: os 54 pontos NÃO redescobertos (regressão congelada!); 1/127 =
+hipótese aberta (sem numerologia!); log errado R41 preservado!
+=====================================================================

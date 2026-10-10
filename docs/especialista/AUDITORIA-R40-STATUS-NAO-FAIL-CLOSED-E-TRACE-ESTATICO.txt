@@ -1,0 +1,135 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 40
+=======================================================================
+Escopo: leitura de evidências e contraprovas de fragmentos REAIS em scratch
+Windows. Não alterei app/probe/candidato/Whisper, não usei ADB e não fiz
+staging, commit ou publicação. Build MinGW é de auditor host, não do probe.
+
+A. ENTREGA/BUILD — AVANÇO HOST, NÃO NOVA PROVA DEVICE
+Os seis registros SHA-256 do manifesto R40 conferem, inclusive o relatório
+ali referenciado. O arquivo r39-nmse-nota.txt tem ZERO bytes: hash íntegro
+não o torna evidência numérica. PROMPT-RELATORIO-SMART-RODADA40.txt existe
+em docs/especialista; não está dentro da pasta de seis arquivos da rodada.
+
+O log arquivado registra BUILD SUCCESSFUL, com link nativo e assembleDebug.
+O probe arquivado e C:/npu-probe/app/src/main/cpp/probe.cpp são byte a byte
+iguais por SHA-256:
+fea4a57764e378292b42514ad9e8ea76a8c1299d5f384f5140b53a574bb6c907.
+No APK local encontrado, libnpuprobe.so contém o marcador R40. Esse aceite
+é HOST/local. O executor declara não ter reinstalado: não há nova captura
+R40 Android para validar IDs/meta/status efetivamente exercitados.
+
+Identidade LOCAL observada, não cohort carregado no aparelho:
+APK: 16855419 B, SHA-256
+1765963669c8092079df5aba152b1fd8c05602956e9ee6d1a7cf7a28e63a16c9.
+Nove bibliotecas empacotadas, com hashes completos em results.json.
+Não presumir equivalência de SHA entre arquivo original e versão stripada.
+Esta conferência não supre hash/origem das fontes DSP/skel efetivamente
+implantadas nem demonstra qual biblioteca o processo Android carregou.
+
+B. IDs — CORRIGIDO DENTRO DO PROCESSO, NAMESPACE AINDA PARCIAL
+Fonte: probe-r40-com-ids.cpp:933-940.
+O contador static atomic elimina dependência do relógio e distingue casos
+no mesmo processo. Compilei o trecho EXATO :934-936, com adaptador de PID
+fixo4242: 10000 chamadas produziram 10000 IDs únicos.
+Mas o formato r40_<seq>_<pid> não inclui namespace exclusivo da EXECUÇÃO.
+Dois processos simulados com o mesmo PID reiniciam o contador e produzem
+r40_1_4242. É contraprova determinística de reuso de PID, não observação de
+colisão nova no aparelho. O estado entre execuções continua sem proteção.
+
+A afirmação 'EEXIST não é tolerado (mkdir direto)' é contradita pelo fonte:
+:939/:940/:1158 usam (void) mkdir(...); ignoram TODOS os retornos.
+Na contraprova do statement real :940, mkdir sobre diretório existente
+retornou -1/errno17 e a execução alcançou a próxima instrução, exit0.
+Ignorar mkdir não transforma EEXIST em recusa. Reuso/stale/wb ainda possível.
+ID_HELPER_INTRAPROCESS=CCE_HOST_LIMITADO; ID_NAMESPACE/CAPTURE_ID=PARCIAL.
+
+C. METADATA — FORMATO MELHOR, VALIDAÇÃO/FINALIZAÇÃO NÃO FECHADAS
+:1207 substitui o hardcoded por attempt/K/N/B/type=ty.nm/pid.
+:1208-1209 incluem bytes e strides de saída: avanço real de implementação.
+Porém meta é escrita DEPOIS da emissão de SNAPSHOT_COMPLETE; não participa
+do status, não tem erro de abertura/escrita/close propagado, não congela
+fullcohort e não há captura nova que exercite essa metadata.
+META_IMPLEMENTADA=SIM; META_RUNTIME_VALIDADA=PARCIAL, não CCE device.
+
+D. STATUS — NÃO É FAIL-CLOSED
+Fonte :1159-1183: exfail é resetado por componente; fclose é ignorado;
+a falha só imprime EXPORT_FAIL, sem erro agregado persistente.
+Fonte :1184-1202: o status abre cinco nomes, verifica APENAS ftell>0 e
+imprime COMPLETE/FAIL. Não verifica tamanhos exatos, vínculo/RAW/status do
+hook, hash/identidade/stale, finitude/schema/meta ou exfail. Meta só vem
+em :1203-1210. O okc desse bloco é uma variável LOCAL diferente da decisão
+numérica. pass/fail do matmul já foi atualizado em :1138, antes do export.
+rep(:35-43) apenas adiciona texto/log: imprimir não consome erro de captura.
+
+Compilei o BLOCO :1185-1202 sem mudar seu predicado; só adaptadores host
+stdio/PID/mkdir, sem Android/DSP. Quatro cenários de filesystem sintético:
+1. Cinco arquivos de UM BYTE, meta AUSENTE -> SNAPSHOT_COMPLETE, exit0.
+2. Mesmos arquivos, exfail=1 -> SNAPSHOT_COMPLETE, exit0.
+   É injeção da flag persistente de falha, NÃO short-write real de fwrite.
+3. Arquivos de um byte/RAW sem identidade e meta de outro caso -> COMPLETE.
+4. RAW ausente -> imprime SNAPSHOT_FAIL; o fragmento não propaga erro.
+O exit0 é do harness; não é resultado Android. A não propagação no caller
+é constatada no fonte/contadores, não execução completa do probe Windows.
+
+Essas contraprovas bastam para refutar STATUS_CCE/fail-closed geral.
+Não são snapshots de inferência, não são vacina de integração e não testam
+o hook. O original foi preservado. STATUS_EXPORT=PARCIAL/INSEGURO.
+
+E. SELECTOR/TRACE/ACT — PRINCIPAIS ENTREGÁVEIS AINDA PENDENTES
+Selector segue global sel.txt, erro fopen/fprintf/fclose ignorado :942-947;
+a emissão R39 SEL ocorre mesmo se não abriu. Hook continua K/N/type, sem
+handle de tensor/operação, sem consumo único e sem status consumido.
+A pendência foi corretamente declarada pelo executor; não retificá-la a CCE.
+
+r40-trace-q6-cadeia.txt é excerpt ESTÁTICO com possibilidades de escolha de
+kernel/row_size. Sem mapa completo fonte/hash/flags -> artefato carregado,
+sem ramo/despacho observado para K6144/N2048/B1 e sem conteúdo de ACT após
+quantização. ACT_REAL=PENDENTE continua correto. b0/n1111 é dado R39, não
+observação adicional da fronteira de conversão em R40.
+'Exige instrumentação adicional' descreve trabalho por fazer; não é comando
+ou erro demonstrando que a instrumentação seja impossível nesta rodada.
+
+F. RETIFICAR A HIPÓTESE 'Q8_0 PERDE CORREÇÃO Q8_1'
+Q8_1 fornece soma para termos afins de certos pesos. Q6_K não requer
+automaticamente esse termo: não trocar o caminho para Q8_1 por analogia.
+Na REFERÊNCIA LOCAL upstream, HEAD verificado
+5e03bdd8700948b9c41c54dd1b00f28a2aebc03f, árvore rastreada limpa:
+htp/matmul-ops.h:268-270 usa offset para Q4_1/Q4_K/Q5_K/Q2_K, não Q6_K.
+htp/hvx-mm-kernels-tiled.h:531 retira32 do código Q6; :535-553 acumula dots
+inteiros signed, :586-590 combina escalas F16 -> f32; :1058-1077 acumula
+por helpers f32 e escreve float. Isso é pista matemática, NÃO prova de
+identidade do cohort do candidato ou de todos os intrínsecos do SDK.
+A escolha Q8_0 é intencional nessa referência; a ausência do termo extra
+não é evidência suficiente de contribuição faltante/bug no Q6 real.
+
+Escalas/coefs F16 não provam ACC_FP16 global. Separar quantização de ACT,
+coeficientes/pesos, dot inteiro, produtos/escalas, soma entre blocos e saída.
+A referência local consultada não é o pin1ec818 nem necessariamente o
+candidato isolado/R39. Não misturar revisions silenciosamente.
+Para concluir sobre residual, precisam bytes/coeficientes REALMENTE usados,
+ou replay instrumentado do quantizador REAL do mesmo cohort, com limites.
+
+G. ESTADOS HONESTOS
+BUILD_PROBE_R40=CCE_HOST_LIMITADO.
+ID_COUNTER=CCE_HOST_LIMITADO; ID_NAMESPACE/EEXIST=PARCIAL.
+META=PARCIAL; STATUS_FAIL_CLOSED=NAO; SELECTOR_UNICO=NAO.
+TRACE_Q6=PARCIAL_ESTATICO; FULLCOHORT/ACT_REAL=PENDENTES.
+VACINA_EXPORT/CONTROLES_F32_QUANT_ANTIGO/DUAS_CAPTURAS_Q6=PENDENTES.
+RUNNER/LOADER robustos=PENDENTES. NMSE/50/54/Rscalar/Rtiled são R39.
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NAO.
+O getter retido aprovado não precisa ser reaberto; CPU Q8_K não é culpada.
+
+H. PRÓXIMA RODADA E ANEXOS REAIS
+R41: fechar exporter/runner com seam consumida + vacinas, congelar cohort,
+executar captura coerente 2x e observar/replay ACT real. Não substituir por
+mais trace estático, expansão de shapes ou fusão para esconder residual.
+O relatório específico de R41 dá a ordem e critérios. SIG/Whisper/Vulkan
+default/modelo c4bf/R2 e staged R37 permanecem fora do escopo.
+
+AUDITORIA-R40-LOGS/ contém audit.py, fonte extraída, executável host, logs
+incluindo a primeira tentativa de compile e results.json/fullSHAs locais.
+Primeiro MinGW compile: exit1 sem stderr, PATH faltando toolchain DLLs;
+mesmo fonte compilou exit0 após prepend da pasta MinGW. Retentativa mantida.
+Auditor final: build0/run0, quatro contraprovas FS, teste de 10000 IDs,
+reuso de PID e EEXIST. Não há alegação de novo build/device/DSP exercitado.
+=======================================================================

@@ -1,0 +1,16 @@
+hblock_anchor==skel: True
+traceblock_anchor==skel: True
+gerado: /root/r50_vac/vac_getter.cpp 10980 bytes
+getter extraido (sha256): a846ccafa83fd66d
+BUILD_RC= 0
+----- RUN off EXIT=0
+VAC_OFF ret=0 status=0 (esperado 0/0)
+----- RUN on EXIT=0
+VAC_ON_NOCAP ret=0 status=1 (esperado 0/1)
+VAC_PENDING ret=0 status=1 meta_valid=1 firstcause=2 n_hmx=0 kernel=10 entered=1 decoded=1 qid=3 nqt=8 rows_done=0
+VAC_CAPSHORT ret=0 status=-1 (esperado -1)
+VAC_STALE ret=0 status=-1 (esperado -1)
+VAC_NOENTER ret=0 status=-1 firstcause=7 (esperado -1/7)
+VAC_CAPTURED ret=0 status=2 rows=1 (esperado 0/2/1)
+VAC_HANDSHAKE ret=-2 (esperado -2)
+VAC_RESULTADO falhas=0 GREEN

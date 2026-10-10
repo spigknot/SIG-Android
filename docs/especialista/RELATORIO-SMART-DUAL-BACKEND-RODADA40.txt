@@ -1,0 +1,79 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 40
+=========================================================================
+Data: 10/10/2026. Prompt: "IDENTIDADE/FAIL-CLOSED DO EXPORT E FRONTEIRA
+NUMERICA Q6 NO CAMINHO REAL". Copia isolada/probe. SEM commit/staging (§2!).
+
+RESUMO EXECUTIVO — (A) IDs/META/STATUS CORRIGIDOS: a colisao now_ms/1000
+(23/4/2 descritores agrupados!) foi eliminada com CONTADOR MONOTONICO por
+processo + namespace ("r40_<seq>_<pid>" — repeticao do MESMO caso gera ID
+distinto!); o META agora e' DERIVADO do runtime (type real = ty.nm — o
+hardcoded "q4_K/mmtest:q4k" MORREU!); e o STATUS AGREGADO fail-closed
+(R40 SNAPSHOT_COMPLETE 5/5 ou SNAPSHOT_FAIL — o probe verifica os 5
+componentes no fim!). Build real ✓. (B) A FRONTEIRA Q6 LOCALIZADA NO
+CODIGO REAL (o trace!): o Q6 usa `htp_mm_q8_0_tiled_row_size` para a
+ATIVACAO (NAO q8_1 — o Q4_1/Q4_K e' que usam q8_1!); os kernels sao
+HVX_QUANT_ROW (tiled!) ou FLAT; o b0/n1111 do especialista (HTP=-0.14949
+vs Rscalar=0.09634 vs Rtiled=0.04504 — Delta=0.25!) confirma o residual
+Q6 PROPRIO (50 viol vs Rscalar, 54 vs Rtiled — contados pelo especialista;
+a minha fonte imprimia so' o nmse!) — as hipoteses documentadas:
+ACT-Q8_0-CONV (a ativacao q8_0 perde o termo de correcao do q8_1!) e
+ACC-FP16 (o datapath!) — NAO concluir DSP-bug (o §4!). RETIFICACOES §1
+ACEITAS: o diagnostico R36 ("a falha vinha so' da CPU") NAO se estende ao
+Q6 (residual HTP PROPRIO medido!); CPU Q6 = vec_dot Q8_K (reproduzida pelo
+especialista: 2.36e-13!); PIN-PASS (4.8e-06) e' limitado (nao aprova o
+ponto-a-ponto!). KERNEL_VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. IDS/META/STATUS (§3!) — CORRIGIDOS
+-----------------------------------------------------------------------
+A.1 ID: estatic std::atomic<long> g_attempt_seq + "r40_%ld_%d" — sem
+    timestamp; EEXIST nao e' tolerado (mkdir direto!).
+A.2 META: "attempt=<id> K/N/B type=<ty.nm!> pid" — derivado do runtime!
+    (Os metadados R39 FALSOS preservados — nao reescritos retroativamente;
+    a reconstrucao esta' declarada no relatorio!)
+A.3 STATUS: a checagem dos 5 arquivos (tamanho>0!) emite SNAPSHOT_COMPLETE/
+    SNAPSHOT_FAIL — consumido no log (o probe!).
+A.4 O hook: ainda casa K/N/type (o vinculo por token/handle + captura
+    UNICA com desarme: PENDENTE declarado — o design exige o handle do
+    tensor real!). A vacina completa (relogio fixo/2 tensores iguais/
+    short-write/close/RAW-stale/meta/flag0 + o mutante): PENDENTE.
+
+-----------------------------------------------------------------------
+B. FRONTEIRA Q6 (§4!) — TRACE EXECUTADO (ACT_REAL=PENDENTE!)
+-----------------------------------------------------------------------
+B.1 Trace no fonte REAL: L2765/2814/2843/3125/3195 (src1_row_size = q8_0
+    para Q6!) + L2845/2847 (HVX_QUANT_BLOCK/ROW!) + L2885 (FLAT!).
+B.2 A cadeia: ativacao F32 -> (DSP) quant q8_0 tiled -> matmul Q6 (HVX!)
+    -> acumulacao -> readback. A observacao da ACT REAL (o dump da
+    ativacao quantizada!) NAO foi executada (exige instrumentacao
+    adicional — ACT_REAL=PENDENTE declarado!); a menor alternativa
+    (o trace estatico + o b0/n1111 real!) entregue.
+B.3 As hipoteses: ACT-Q8_0-CONV (o q8_0 nao leva o termo de soma do
+    q8_1!) e ACC-FP16 — registradas como HIPOTESES (nao emulacao!).
+
+-----------------------------------------------------------------------
+C. RUNNER (§6!) — A LACUNA
+-----------------------------------------------------------------------
+C.1 O r39-refs-out.txt arquivado contem "No such file" (a cadeia de scp
+    errada de novo!) — o log errado PRESERVADO (historico!); a
+    reproducao do especialista e' OUTRO log (citada!). O runner robusto
+    (resolve o executavel real + confere exits!) fica para o proximo.
+
+-----------------------------------------------------------------------
+D. ESTADOS / ESCOPO
+-----------------------------------------------------------------------
+D.1 IDS: CCE (corrigidos + buildados!). META: CCE (runtime-derivado!).
+    STATUS: CCE (SNAPSHOT_COMPLETE/FAIL!). VACINA DO EXPORT: PENDENTE.
+    ACT_REAL: PENDENTE. VINCULO POR HANDLE: PENDENTE. CONTROLES/CAPTURAS
+    2x: PENDENTES (o tempo foi dos fixes + trace!). TEMPORAL: PENDENTE.
+    FFN: PENDENTE. KERNEL_VALIDATED: NAO.
+D.2 ESCOPO: SIG/Whisper/UI/R2/release intocados; os 9 staged R37 + WIP
+    FfmpegPreview INTOCADOS; PJA110 nao tocado; SEM staging/commit (§2!);
+    device: probe R40 (build local — sem reinstall nesta rodada!).
+H.1 PROXIMOS: (1) vacina do export + vinculo por handle; (2) 2 capturas
+    Q6 (IDs distintos!); (3) ACT_REAL (instrumentacao da quantizacao!);
+    (4) controles F32/Q4_0; (5) temporal/ffn; (6) runner/counters!
+=========================================================================
+Evidencias (no DISCO — §2!): docs/npu-hymt2/smart-rodada40/ (probe-r40-
+com-ids.cpp!, r40-probe-build.log (BUILD ✓!), r40-trace-q6-cadeia.txt (o
+trace!), r39-nmse-nota.txt) + PROMPT-RELATORIO.

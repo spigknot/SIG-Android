@@ -1,0 +1,9 @@
+BUILD_EXIT 0
+baseline EXIT 0
+MM[q4_K] TEMPORAL: env-pos-init=3 getter_reconsulta=1 (known=1!) => RETIDO-CONFIRMADO (nao getenv!)
+GATE_USES_FIRST_READ=1 permission=0 ENV_RESTORED=1
+getter_env_mutant EXIT 0
+MM[q4_K] TEMPORAL: env-pos-init=3 getter_reconsulta=3 (known=1!) => DIVERGIU (mutante?)
+GATE_USES_FIRST_READ=1 permission=0 ENV_RESTORED=1
+HASH_MATCH 3 NORMAL_METRICS 3 REFUSED_CASES 3
+SCOPE: offline fragment counterexample only; not Android mutated cohort or backend-init validation.

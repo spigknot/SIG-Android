@@ -1,0 +1,3 @@
+canonweights sz=10321920 => ne=[6144,2048]
+tiled escrito: 11010048 bytes
+66218735367089fbc9fe33f403c0c81e62214ef167779b88be644fa1104da1ff  /root/r51_tiled.bin

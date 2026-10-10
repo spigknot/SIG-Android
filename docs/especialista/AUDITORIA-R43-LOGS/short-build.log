@@ -1,0 +1,14 @@
+In file included from <command-line>:
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r43-specialist-audit\short-provider.h:5:9: warning: 'popen' redefined
+    5 | #define popen audit_popen
+      |         ^~~~~
+In file included from C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r43-specialist-audit\short-provider.h:1:
+C:/msys64/mingw64/include/stdio.h:617:9: note: this is the location of the previous definition
+  617 | #define popen   _popen
+      |         ^~~~~
+C:\Users\Gustavo\AppData\Local\hermes\cache\scratch\r43-specialist-audit\short-provider.h:6:9: warning: 'pclose' redefined
+    6 | #define pclose audit_pclose
+      |         ^~~~~~
+C:/msys64/mingw64/include/stdio.h:618:9: note: this is the location of the previous definition
+  618 | #define pclose  _pclose
+      |         ^~~~~~

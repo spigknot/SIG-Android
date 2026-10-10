@@ -1,0 +1,20 @@
+[0/2] Re-checking globbed directories...
+[1/8] Performing build step for 'vulkan-shaders-gen'
+ninja: no work to do.
+[2/8] Performing install step for 'vulkan-shaders-gen'
+-- Up-to-date: /workspace/build-kq/Release/./vulkan-shaders-gen
+[3/8] Completed 'vulkan-shaders-gen'
+[4/8] Building CXX object ggml/src/ggml-hexagon/CMakeFiles/ggml-hexagon.dir/ggml-hexagon.cpp.o
+/workspace/ggml/src/ggml-hexagon/ggml-hexagon.cpp:465:18: warning: missing field 'epoch' initializer [-Wmissing-field-initializers]
+  465 | } g_r46_meta = {0};
+      |                  ^
+/workspace/ggml/src/ggml-hexagon/ggml-hexagon.cpp:1485:92: warning: address of array 'tensor->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+ 1485 |             fprintf(stderr, "KQSET: q4_K name=%s size=%zu -> repack_q4_K_tiled\n", tensor->name ? tensor->name : "?", size);
+      |                                                                                    ~~~~~~~~^~~~ ~
+/workspace/ggml/src/ggml-hexagon/ggml-hexagon.cpp:1499:92: warning: address of array 'tensor->name' will always evaluate to 'true' [-Wpointer-bool-conversion]
+ 1499 |             fprintf(stderr, "KQSET: q6_K name=%s size=%zu -> repack_q6_K_tiled\n", tensor->name ? tensor->name : "?", size);
+      |                                                                                    ~~~~~~~~^~~~ ~
+3 warnings generated.
+[5/8] Linking CXX shared library bin/libggml-hexagon.so
+[6/8] Linking CXX shared library bin/libggml.so
+[7/8] Linking CXX shared library bin/libllama.so

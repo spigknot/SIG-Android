@@ -1,0 +1,2 @@
+R50_ANCHOR_FAIL: A1-struct: ancora com count=0 (exige 1!)
+GER_O_RC=1

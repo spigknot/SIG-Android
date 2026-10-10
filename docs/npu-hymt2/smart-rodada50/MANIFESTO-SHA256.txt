@@ -1,0 +1,35 @@
+MANIFESTO R50 — SHA-256
+======================================================================
+0ac5805fd2076f1477ff68f99472fc9706d6e515eb34a544db96c3d9a8cb65ec      221184  smart-rodada50/act_payload.bin
+0ac5805fd2076f1477ff68f99472fc9706d6e515eb34a544db96c3d9a8cb65ec      221184  smart-rodada50/act_payload_2.bin
+8e126e530a6242c70a698dd00936de52890d93eea0960e1eba942b21cf2fd945       24576  smart-rodada50/actfloat_131072.bin
+528ccc773f7ccafd9a2e63bc34dba199201e884b96d57e227ccd82661a40bdaa         836  smart-rodada50/apk-entries-r50.txt
+0103fc0cc34700ff5b194e35dd89b088fff94c64197c58c3c03ef515e46d3640    10321920  smart-rodada50/canonweights_9216.bin
+f343aaa6a9fe746178bd80cd05770fdeb39bb791dcae8fef489bd8f6e78cb315        8192  smart-rodada50/cpuout_32768.bin
+1d3f7a9d6925f35989ad4f587c9fa2cc179c7dca842b3dce0d2e21b00e4c3d04        1525  smart-rodada50/host-r50.log
+70f06e9494542513f1f9de7f837506b479ab06ae2bf078202868e4510c635e94        8192  smart-rodada50/htpout_32768.bin
+99db52662498ba125112ad9a74554a52a030ad4b9eb59b29f5fb3f609fdb9f2f         168  smart-rodada50/meta.txt
+df9ea6ab16c06aa651354246ed64674a4fb81d5ce8b59fd5a398e2218157ec3f       15636  smart-rodada50/r50-capture-full.txt
+0cfee6da76653221f56500f3f35e62634c24852c6453793e6ae06b4856d01928         704  smart-rodada50/r50-reader-out.txt
+e869d0788a9979b147a013104036598cb42b0d75e4c25f5a75571ace56457c92       11716  smart-rodada50/r50.diff
+5c23632901203352545dd9a277e5beecf171b3f427fcb0e684e5776c789b6e04        1908  smart-rodada50/r50_enum_map.cpp
+ae7f3495904c762f82d4aeddb639e97cdd49b71667887c739c87e9901e4c920a        1133  smart-rodada50/r50_enum_map.py
+2172f0b1eb21722efdfef9d09090920cf59305615ec8017b88f5cc483dd816b6         577  smart-rodada50/r50_enum_map_out.txt
+655cc59ec1ac0ed7e0a56b056583ef8c7aac27aa108dd199d5ee4ec059f2b7b5       12255  smart-rodada50/r50_patch.py
+fc1c1cc0b1f4519f64234ddbac50cd1381eb60feb9b790c614d5c999de52e8c7        3260  smart-rodada50/r50_reader_final.py
+006a2aad041cbdb2595062ee34e12b4d01a76353e20cf12725a0c7453d1dce43        7964  smart-rodada50/r50_vacina_getter.py
+419382a88071d90997744c5c669630735906cb4f4fea269003a7d206c0d011a6         413  smart-rodada50/skel-r50.log
+089373189fc2cee8af8b44c202a51b1eb67e151cad163c6224443156f7458e63         233  smart-rodada50/status_r40_1_22782.txt
+9966894adc90cdf6bfff9b0def41d6e5a2b74182b047676726b563eada2175d4         653  smart-rodada50/vac-out.txt
+6895577626a13e0fd5477d02fcda5cb4416a92a9eb73a4bcf10b7c5e82d55c12       10987  smart-rodada50/vac_getter.cpp
+a0fb84d000ae990ef5b34dcbd39e4c729d19e642f35abee6c30b42e66feb045e    16855419  (fora do repo) app-debug.apk R50
+
+REMOTOS (servidor /root — pós-patch R50)
+======================================================================
+0aba3b97da6658c8c4c58f777e5f3fb23cdcca290fc03622732f855945aa6dba  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+1f27274a92bb514b64d9a0581ab80c9ed0f2edec82fc05bcfc6cc036912e258c  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+5d7fee30787034d0dedacce23763bec7f554613d8f1e62e103003a0a77ad2fa0  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+247f5d540badacde4a99407fd7951971e87c964bfdd745b9b2f905ad1fdbc419  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+655cc59ec1ac0ed7e0a56b056583ef8c7aac27aa108dd199d5ee4ec059f2b7b5  /root/r50_patch.py
+006a2aad041cbdb2595062ee34e12b4d01a76353e20cf12725a0c7453d1dce43  /root/r50_vacina_getter.py
+ae7f3495904c762f82d4aeddb639e97cdd49b71667887c739c87e9901e4c920a  /root/r50_enum_map.py

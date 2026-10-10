@@ -1,0 +1,164 @@
+--- /root/r45_backup_sigcand2/ggml-hexagon.cpp	2026-10-10 04:36:19.141820271 -0300
++++ /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp	2026-10-10 09:35:00.838588918 -0300
+@@ -88,6 +88,7 @@
+ static int ggml_hexagon_get_opstage_effective(void) {
+     return opt_opstage;
+ }
++
+ static int opt_opbatch  = 1024; // max number of ops in a batch
+ static int opt_opqueue  = 16;   // max number of pending batches
+ static int opt_optrace  = 0;    // trace buffer size per thread (0 means default)
+@@ -240,6 +241,7 @@
+ 
+ struct ggml_hexagon_session;
+ 
++
+ static void ggml_hexagon_precompute_matmul_params(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+@@ -426,6 +428,67 @@
+     }
+ };
+ 
++// R46 (test-only!): o OWNER do sbuf do dump (uma vez por processo; o bi e' POR BATCH!)
++static ggml_hexagon_shared_buffer * g_r46_act_dump_sbuf = nullptr;
++static int g_r46_armed = -1;
++static bool g_r46_act_dump_armed(void) {
++    if (g_r46_armed < 0) {   // INIT-ONLY (declarado!): a primeira leitura decide!
++        const char * e = getenv("GGML_HEXAGON_ACT_DUMP");
++        g_r46_armed = (e && e[0] == '1' && e[1] == 0) ? 1 : 0;   // so' "1" (o resto OFF!)
++    }
++    return g_r46_armed == 1;
++}
++
++// R46 §5 (test-only!): O STATUS DA CAPTURA DA ACT — layout ACORDADO com o
++// consumidor (o probe copia o struct + confere o magic/version!)!
++struct ggml_hexagon_act_dump_status {
++    uint32_t magic;        // 0x52343644
++    uint32_t version;      // 1
++    int32_t  status;       // 0=NOT_ARMED; 1=ARMED_NO_CAPTURE; 2=CAPTURED; -1=INVALIDO
++    int32_t  type;         // ggml_type do peso (o Q6_K!)
++    int32_t  K, N, B;
++    uint32_t epoch;        // a captura (1,2,...)
++    uint32_t rows_done;    // do header (LIDO AGORA!)
++    uint32_t payload_off;  // 64 (payload!)
++    uint32_t reserved;
++    uint64_t ptr;          // o buffer (para o probe ler!)
++    uint64_t capacity;     // total do sbuf
++    uint64_t row_size;     // da op capturada
++};
++
++// Os metadados da captura (host!): a UMA captura (sem sobrescrever!)
++static struct {
++    int      used;         // 1 = ja capturou (desarma as demais!)
++    uint32_t epoch;
++    int      K, N, B, type;
++    size_t   row_size;
++} g_r46_meta = {0};
++
++#define R46_MAGIC 0x52343644u   // "R46D"
++
++// R46 §5 (test-only!): A API DE LEITURA da captura da ACT (o consumidor!)
++// Retorna 0 e preenche o struct (status!); o magic/version conferem o layout.
++static int ggml_hexagon_get_act_dump(void * out_v) {
++    struct ggml_hexagon_act_dump_status * out = (struct ggml_hexagon_act_dump_status *) out_v;
++    if (!out) return -1;
++    out->magic = R46_MAGIC; out->version = 1;
++    out->type = 0; out->K = 0; out->N = 0; out->B = 0;
++    out->epoch = g_r46_meta.epoch; out->rows_done = 0; out->payload_off = 64;
++    out->reserved = 0; out->ptr = 0; out->capacity = 0; out->row_size = 0;
++    if (!g_r46_act_dump_armed()) { out->status = 0; return 0; }          // NOT_ARMED (a flag!)
++    if (g_r46_meta.epoch == 0 || !g_r46_act_dump_sbuf) { out->status = 1; return 0; }   // ARMED, sem captura
++    out->ptr = (uint64_t) (uintptr_t) g_r46_act_dump_sbuf->base;
++    out->capacity = g_r46_act_dump_sbuf->size;
++    out->type = g_r46_meta.type; out->K = g_r46_meta.K; out->N = g_r46_meta.N; out->B = g_r46_meta.B;
++    out->row_size = g_r46_meta.row_size;
++    const uint32_t * hdr = (const uint32_t *) g_r46_act_dump_sbuf->base;
++    if (hdr[0] != R46_MAGIC || hdr[1] != g_r46_meta.epoch) { out->status = -1; return 0; }   // INVALIDO (o header!)
++    out->rows_done = hdr[3];
++    const int op_seen = hdr[2] == 1;
++    out->status = (op_seen && (int) hdr[3] >= g_r46_meta.B && g_r46_meta.B > 0) ? 2 : 1;
++    return 0;
++}
++
+ static ggml_hexagon_session * ggml_backend_hexagon_buffer_get_sess(ggml_backend_buffer_t buffer) {
+     return static_cast<ggml_backend_hexagon_buffer_type_context *>(buffer->buft->context)->sess;
+ }
+@@ -1644,6 +1707,8 @@
+     unsigned int n_ops_max;
+     size_t       b_vmem_max;
+ 
++    int r46_dump_bi = -1;   // R46: o bi do dump NESTE batch (-1 = nenhum!)
++
+     void reset() {
+         n_bufs = 0;
+         n_tens = 0;
+@@ -1653,6 +1718,8 @@
+         b_map.clear();
+         t_map.clear();
+         d_map.clear();
++
++        r46_dump_bi = -1;   // R46: re-derivado a cada batch (sem stale!)
+     }
+ 
+     ggml_hexagon_opbatch(ggml_hexagon_session *sess, size_t batch_size, size_t max_vmem) {
+@@ -1839,6 +1906,41 @@
+         o.opcode = node.opcode;
+         o.flags  = 0;
+ 
++        // R46 (test-only!): o dump da ACT — selecao POR OPERACAO + bi DESTE batch!
++        // (DEPOIS do memcpy — o memset do precompute nao o alcanca mais!)
++        if (o.opcode == HTP_OP_MUL_MAT) {
++            struct htp_mm_kernel_params * k46 = (struct htp_mm_kernel_params *) o.kernel_params;
++            k46->act_dump_bi = -1;   // OFF por default (sentinela!)
++            const ggml_tensor * s0 = node.node->src[0];
++            const ggml_tensor * s1 = node.node->src[1];
++            if (s0 && s1 && g_r46_act_dump_armed() &&
++                s0->type == GGML_TYPE_Q6_K && s0->ne[0] == 6144 && s0->ne[1] == 2048 &&
++                s1->type == GGML_TYPE_F32 && s1->ne[1] == 1) {
++                if (!g_r46_act_dump_sbuf) {
++                    g_r46_act_dump_sbuf = new ggml_hexagon_shared_buffer(sess, 262144);   // OWNER (processo!)
++                }
++                if (r46_dump_bi < 0) {
++                    r46_dump_bi = add_buffer(g_r46_act_dump_sbuf);   // bi DESTE batch (0 e' valido!)
++                }
++                if (r46_dump_bi >= 0 && !g_r46_meta.used) {   // UMA captura (desarma!)
++                    g_r46_meta.used = 1;
++                    g_r46_meta.epoch++;
++                    g_r46_meta.K = (int) s0->ne[0]; g_r46_meta.N = (int) s0->ne[1]; g_r46_meta.B = (int) s1->ne[1];
++                    g_r46_meta.type = (int) s0->type;
++                    g_r46_meta.row_size = (size_t) (uint32_t) k46->src1_row_size;   // da op (o precompute!)
++                    // O HEADER (16 B!): magic/epoch/op_seen=0/rows_done=0 — o host prepara
++                    // ANTES do enqueue (a shared mem: o DSP vai setar o op_seen/rows_done!)
++                    uint32_t * hdr = (uint32_t *) g_r46_act_dump_sbuf->base;
++                    hdr[0] = R46_MAGIC; hdr[1] = g_r46_meta.epoch; hdr[2] = 0; hdr[3] = 0;
++                    k46->act_dump_bi = r46_dump_bi;
++                    GGML_LOG_DEBUG("ggml-hex: R46 ACT_DUMP: epoch=%u bi=%d K=%d N=%d B=%d row=%zu\n",
++                                   g_r46_meta.epoch, r46_dump_bi, g_r46_meta.K, g_r46_meta.N, g_r46_meta.B, g_r46_meta.row_size);
++                } else {
++                    k46->act_dump_bi = -1;   // ja capturou (as demais nao sobrescrevem!)
++                }
++            }
++        }
++
+         if (!(opt_opstage & HTP_OPSTAGE_COMPUTE)) {
+             o.flags |= HTP_OPFLAGS_SKIP_COMPUTE;
+         }
+@@ -2970,6 +3072,7 @@
+     }
+ }
+ 
++
+ static void ggml_hexagon_precompute_matmul_params_impl(
+     const struct ggml_hexagon_session * sess,
+     const struct ggml_tensor * src0,
+@@ -4802,6 +4905,9 @@
+ }
+ 
+ static void * ggml_backend_hexagon_get_proc_address(ggml_backend_reg_t reg, const char * name) {
++    if (strcmp(name, "ggml_hexagon_get_act_dump") == 0) {
++        return (void *) ggml_hexagon_get_act_dump;   // R46 §5 (test-only!)
++    }
+     if (strcmp(name, "ggml_hexagon_get_opstage_effective") == 0) {
+         // R37: consulta test-only (o valor RETIDO — para o preflight do caller!)
+         return (void *) ggml_hexagon_get_opstage_effective;

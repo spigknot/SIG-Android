@@ -1,0 +1,7 @@
+CPU_Rscalar_F32 nd=2048 nf=0 max_abs=0.065102363255775231 nmse=4.3022233508622758e-07 legacy_viol=13
+CPU_Rtiled_F32 nd=2048 nf=0 max_abs=0.13529151558893204 nmse=6.1339704174769619e-07 legacy_viol=13
+HTP_Rscalar_F32 nd=2048 nf=0 max_abs=0.28658171437449198 nmse=4.9679479480582286e-06 legacy_viol=50
+HTP_Rtiled_F32 nd=2048 nf=0 max_abs=0.20464282825307123 nmse=4.809954054115067e-06 legacy_viol=54
+HTP_Rscalar_ACT_REAL nd=2048 nf=0 max_abs=0.084140610062604537 nmse=1.4902999957643133e-07 legacy_viol=3
+HTP_Rtiled_ACT_REAL nd=2048 nf=0 max_abs=0.00026364174846094102 nmse=1.1521492056351512e-12 legacy_viol=0
+HTP_Rtiled_ACT_REAL_adjacent_swap_control nd=2048 nf=0 max_abs=0.033803099111537449 nmse=4.4755974175293361e-08 legacy_viol=0

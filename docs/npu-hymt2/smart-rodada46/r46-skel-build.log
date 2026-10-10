@@ -1,0 +1,35 @@
+[0/2] Re-checking globbed directories...
+[1/4] Performing build step for 'htp-v81'
+[1/28] Building C object CMakeFiles/ggml-htp-v81.dir/dma-queue.c.obj
+[2/28] Building C object CMakeFiles/ggml-htp-v81.dir/work-queue.c.obj
+[3/28] Building C object CMakeFiles/ggml-htp-v81.dir/hmx-queue.c.obj
+[4/28] Building C object CMakeFiles/ggml-htp-v81.dir/diag-ops.c.obj
+[5/28] Building C object CMakeFiles/ggml-htp-v81.dir/htp-tensor.c.obj
+[6/28] Building C object CMakeFiles/ggml-htp-v81.dir/get-rows-ops.c.obj
+[7/28] Building C object CMakeFiles/ggml-htp-v81.dir/repeat-ops.c.obj
+[8/28] Building C object CMakeFiles/ggml-htp-v81.dir/fill-ops.c.obj
+[9/28] Building C object CMakeFiles/ggml-htp-v81.dir/cumsum-ops.c.obj
+[10/28] Building C object CMakeFiles/ggml-htp-v81.dir/sum-rows-ops.c.obj
+[11/28] Building C object CMakeFiles/ggml-htp-v81.dir/cpy-ops.c.obj
+[12/28] Building C object CMakeFiles/ggml-htp-v81.dir/solve-tri-ops.c.obj
+[13/28] Building C object CMakeFiles/ggml-htp-v81.dir/set-rows-ops.c.obj
+[14/28] Building C object CMakeFiles/ggml-htp-v81.dir/concat-ops.c.obj
+[15/28] Building C object CMakeFiles/ggml-htp-v81.dir/ssm-conv.c.obj
+[16/28] Building C object CMakeFiles/ggml-htp-v81.dir/main.c.obj
+[17/28] Building C object CMakeFiles/ggml-htp-v81.dir/softmax-ops.c.obj
+[18/28] Building C object CMakeFiles/ggml-htp-v81.dir/pad-ops.c.obj
+[19/28] Building C object CMakeFiles/ggml-htp-v81.dir/rope-ops.c.obj
+[20/28] Building C object CMakeFiles/ggml-htp-v81.dir/act-ops.c.obj
+[21/28] Building C object CMakeFiles/ggml-htp-v81.dir/im2col-ops.c.obj
+[22/28] Building C object CMakeFiles/ggml-htp-v81.dir/argsort-ops.c.obj
+[23/28] Building C object CMakeFiles/ggml-htp-v81.dir/gated-delta-net-ops.c.obj
+[24/28] Building C object CMakeFiles/ggml-htp-v81.dir/binary-ops.c.obj
+[25/28] Building C object CMakeFiles/ggml-htp-v81.dir/flash-attn-ops.c.obj
+[26/28] Building C object CMakeFiles/ggml-htp-v81.dir/unary-ops.c.obj
+[27/28] Building C object CMakeFiles/ggml-htp-v81.dir/matmul-ops.c.obj
+[28/28] Linking C shared library libggml-htp-v81.so
+[2/4] Performing install step for 'htp-v81'
+[0/1] Install the project...
+-- Install configuration: "Release"
+-- Installing: /workspace/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+[3/4] Completed 'htp-v81'

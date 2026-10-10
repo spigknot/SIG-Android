@@ -1,0 +1,22 @@
+== RECIBO R51 — read-only, 2026-10-10 (recoleta pos-parecer) ==
+
+--- getprop ro.serialno / ro.boot.serialno:
+3B15BD00FVE00000
+3B15BD00FVE00000
+
+--- dumpsys install:
+    codePath=/data/app/~~KcbXI5eplNj9W40xtkv-Gg==/br.gov.sp.pcsp.npuprobe-WqQnanqOx9j-aXvUz-wbnw==
+    versionName=1.0
+    lastUpdateTime=2026-10-10 13:34:50
+
+--- files/r50 (run-as):
+total 12
+drwx------ 4 u0_a554 u0_a554 3452 2026-10-10 13:37 .
+drwx------ 5 u0_a554 u0_a554 3452 2026-10-10 13:35 ..
+drwx------ 2 u0_a554 u0_a554 3452 2026-10-10 13:35 r40_1_22208
+drwx------ 2 u0_a554 u0_a554 3452 2026-10-10 13:37 r40_1_22782
+
+--- status r40_1_22208:
+status=2 version=3 epoch=1 rows_done=1 row_size=221184 cap=262144 payload_off=64
+meta_valid=1 firstcause=0 entered=1 n_hmx=0 kernel_type=10 decoded=1
+qfn=3 nqt=8 src1_nrows=1 nthr=8 need_quant=1 total_nb=48 K=6144 N=2048 B=1 type=14

@@ -1,0 +1,150 @@
+PROMPT AO EXECUTOR — SMART DUAL-BACKEND — RODADA 39
+PRIORIDADE: IMPLEMENTAR EXPORT ACOPLADO E ENTREGAR SNAPSHOT/ORÁCULO Q6
+=======================================================================
+Leia AUDITORIA-R38-RETENCAO-REAL-MATRIZ-PARCIAL-E-MUTANTE-LOGADO.txt e os
+logs do especialista em docs/especialista/AUDITORIA-R38-LOGS/.
+Não executar no produto. Você é o executor da cópia/probe isolados.
+
+1. ACEITES E RETIFICAÇÃO — SEM RECOMEÇAR A INVESTIGAÇÃO DO GETTER
+Aceitos: getter retido1 sob env temporário3 observado no device; modo1
+recusado com -998 antes de upload/compute HTP; CPU rotulada consulta=N/A;
+getter default3 integrado; snapshot/oráculos Q4 pequeno da R36 preservados.
+Não reabrir getter/pack/helper/leitor aprovados para obter mais uma rodada
+só de diagnóstico de opstage.
+Retifique MATRIZ_TEMPORAL=PARCIAL. No R38, o env é restaurado antes do
+preflight, que usa a primeira leitura ops_retained; a reconsulta só imprime
+DIVERGIU. Mutante getenv não foi executado no Android, e no caller atual ele
+não 'teria permitido' obrigatoriamente: primeira leitura1 continua recusando.
+T2 init3/env3 não testa init3/env1. Uma contraprova do fragmento entregue,
+com adaptadores explícitos, produziu DIVERGIU mas terminou normalmente e
+manteve a mesma recusa. Não chamar isso de mutante morto.
+O modo normal mantém B128 LEGACY_CPU_FAIL; PIN e oráculos têm nomes separados.
+Não alterar CPU/Whisper, tolerâncias abs0.02/rel0.05 ou limite PIN5e-4.
+
+2. ESCOPO/PREFLIGHT PARA ESTA RODADA
+Somente probe/candidato isolados já autorizados. SIG/Whisper/UI/default
+Vulkan/R2/modelo produto/WIP alheio intocados. Sem staging/commit/push/release,
+APK SIG, promoção de lib, remoção de arquivos ou reboot. Preserve as nove
+adições staged R37 e o WIP FfmpegPreview, sem stash/reset/restore amplo.
+Serial exclusivo 3B15BD00FVE00000, explícito em cada adb; PJA110 proibido;
+Stayon=7 intacto. Não ler credenciais. Textos do especialista docs/especialista.
+Logs/fontes/binários novos: docs/npu-hymt2/smart-rodada39/.
+Congele hashes COMPLETOS do APK probe/ELFs host/core/HTP/CPU/skel e fontes.
+Before/after dos arquivos protegidos; build real e paths de artefatos carregados.
+Restaure/configure baseline permitido3 ANTES do primeiro init: a rodada
+anterior usou tune OPSTAGE=1. Não presumir que o processo/device voltou ao
+baseline; logue getenv/init/getter da nova sessão. Getter ausente/inválido
+continua recusa sem fallback. Stream antes do trigger, PID/attempt únicos.
+
+3. ENTREGÁVEL PRINCIPAL A — IMPLEMENTAR AGORA EXPORT ACOPLADO
+Não mais encerrar com 'estrutura pronta para próxima rodada'. O patch
+está no escopo autorizado; localizar os callbacks/APIs e fazer a mudança.
+Antes de qualquer nova captura, retire o esquema files/r36 com nomes de
+9216 bytes e RAW global sobrescrito por qualquer Q4_K.
+Defina uma interface diagnóstica mínima compartilhada entre probe/backend:
+- seleção explícita da tentativa/tensor/quantização/K/N/B;
+- destino único, sem reusar pasta de execução anterior;
+- identidade do tensor/attempt vinculada ANTES do upload ao hook;
+- resultado RAW consumido pelo probe. Não inventar uma API como existente;
+  use o mecanismo real de registry já disponível para nova extensão privada
+  test-only se necessário, ou outra solução focal documentada e verificável.
+O callback de pesos não conhece B sozinho: não selecionar o RAW apenas por
+K/N nem capturar todo upload. Incluir Q6 no ponto POS-repack real correto.
+O RAW é o payload físico necessário, pelo helper/contrato atual, não memória
+extra do ctx/padding, nem tensor_get que desempacota. Não fixar size de Q6
+pequeno para shape K6144. Não alterar nb lógico/packs como efeito colateral.
+Arquivos por tentativa: canonweights.bin, actfloat.bin, cpuout.bin,
+htpout.bin, tiled_raw.bin e meta com tamanhos/layout/nb/endian/identidade/cohort.
+Checar abrir/escrever tudo/fflush ou close/meta e RAW; acumular erro global.
+Uma falha -> SNAPSHOT_FAIL consumido, sem SNAPSHOT_COMPLETE nem falso 'ok'.
+Não permitir RAW velho/tensor errado como sucesso; diretório novo e seleção
+única devem impedir contaminação por matrizes seguintes. Não apagar originais.
+Flag OFF realmente OFF: presença de getenv também ativa com string '0' no
+hook velho; parse explícito0/1 ou unset com teste. Diagnóstico OFF por padrão.
+Buildar e executar antes de declarar implementado; registrar diff focal.
+
+4. VACINA MÍNIMA DO EXPORT/LOADER — EXECUTADA, NÃO SÓ PRINT
+Use helper/seam REAL do writer/loader, não modelo paralelo desacoplado.
+Casos: export completo válido; short-write; erro no fechamento; RAW ausente
+ou de outra identidade; arquivo truncado; duas matmuls seguidas com seleção
+somente de uma; flag0 desligada. Asserções e status finais consumidos.
+Erro de um componente deve impedir sucesso da tentativa. Loader valida
+bytes exatos, endian, indexação b*N+n, leitura total, finitude e cobertura.
+Introduza mutante que ignora erro RAW/close: teste precisa retornar falha
+consumida. Compile os arquivos realmente arquivados; logs/exits/hashes.
+Se alguma injeção exige adaptador, declarar o limite. Não exigir que o
+arquivo truncado produza kernel válido; deve ser recusado antes da referência.
+
+5. ENTREGÁVEL PRINCIPAL B — SNAPSHOT Q6 K6144/N2048/B1 E ORÁCULOS
+Este caso já rodou na R37: nd2048/2048, NMSE_PIN2.863562e-06, 37 violações
+contra CPU. É um alvo representativo real e menor que uma referência B128.
+No baseline3 verificado, capture os cinco binários+meta+SHA completos,
+mesma tentativa/mesmos pesos/mesmas ativações. Use dados sintéticos atuais,
+rotulados como tal; não afirmar que carregou pesos reais do GGUF.
+RscalarCanonical: dequantização canônica e produto/soma double sobre act.
+RtiledReader: leitor independente do RAW físico Q6 com layout do cohort.
+Todas as 2.048 saídas, sem amostragem ou prefixo chamado cobertura total.
+CPU e HTP contra AMBOS: nd esperado/real, finitude, max_abs, NMSE e violações
+abs0.02+rel0.05*|ref|. Denominador inválido/arquivo incompleto -> INVALID,
+exit nonzero; score sentinela não PASS. Limite PIN fica documentado separado.
+Inspecione vec_dot_type da CPU Q6 e reproduza quantização intermediária das
+mesmas ativações, se ela for aproximada. Não assumir erro da CPU nem herdar
+a conclusão Q4 pequena sem medição. Não inferir acumulação FP16 pelo residual.
+Divergência HTP contra referências -> localizar repack/layout/descritor/
+ativação/datapath antes de mudar kernel/tolerância. Preserve o caso negativo.
+Extraia com caminho binário seguro/mesmo UID, tamanho/hash no host; log de
+'No such file' não é resultado numérico. Compile e execute o leitor entregue.
+Faça duas tentativas independentes no mesmo cohort, sem contabilizar REPORT
+reemitido como repetição. Em UNWRITTEN: preserve, pare expansão e compare
+uma variável com GREEN anterior; não tratar ternário de log como fix causal.
+Se o tempo permitir, capture Q4 K6144/N2048/B1 pelo mesmo export (22 violações
+CPU na R37) e execute as mesmas referências. Não substitua a captura Q6 por
+mais uma repetição apenas do caso Q4 K256/N64 já aprovado.
+
+6. TEMPORAL RESTANTE — CORRIGIR FOCALMENTE, SEM TOMAR TODA A RODADA
+Copie getenv em string própria antes de setenv; o ponteiro antigo pode ser
+invalidado. Cheque retorno das operações e restaure com valor copiado.
+Desligue o diagnóstico que muda env a cada matmul nas execuções de snapshot,
+ou isole-o em modo próprio. Não introduzir mutações de ambiente no benchmark.
+Para teste temporal real: init1, env3 mantido, NOVA consulta/preflight/I/O;
+init3, env1 mantido, NOVA consulta/preflight/I/O. Restaurar só ao fim da prova.
+DIVERGIU/lookup ausente na reconsulta deve falhar o teste, não só imprimir.
+Mutante getenv precisa ser aplicado ao alvo real ou seam efetivamente
+consumida e produzir falha específica do validator, com baseline verde.
+Init0/2 e ausência HTP podem ser testes focais. T4 não exige remover símbolo
+do cohort normal: permita injeção test-only que faz o lookup escolhido devolver
+NULL na rota HTP. Rotule LOOKUP_NULL_INJETADO, não lib fisicamente sem getter.
+Counters upload/compute separados CPU/HTP; globais somados não medem DSP.
+Essas pendências NÃO bloqueiam coleta diagnóstica no baseline3 já observado;
+continuam bloqueando declarar matriz inteira validada. Não reabrir o aceite
+real da propriedade retida1 apenas porque faltam as trajetórias complementares.
+
+7. COBERTURA/GRAFO — APÓS SNAPSHOT Q6, NÃO NO LUGAR DELE
+Q4 K2048/N6144 ffn_gate/up está faltando (64 tensores do inventário).
+Quando A+B estiverem entregues, executar B1/B128 e repetições, com F32 controle,
+no mesmo cohort. Se referências forem caras, blocos sem perder cobertura;
+amostragem deve ser explicitamente parcial. Q6 K2048/N2048 é teste extra,
+não shape Q6 do produto. Embedding Q6 K2048/N120818 também pode ser lm_head
+compartilhado; consultar suporte/orçamento sem presumir OOM observado.
+Counters/pipeline/fused continuam itens próprios. Não proclamar fusion pelo
+predicado R30; caminho precompute/offsets/descritor/output inteiro ainda falta.
+Minigrafo depois de numerica/cobertura/estabilidade. Smart final = prefill NPU
+-> geração GPU OpenCL ou Vulkan, sem replay do prompt; HTP->CPU não atende.
+Não mexer nas opções do produto nem promover APK/lib como atalho.
+
+8. ENTREGUE A-H — CRITÉRIO PARA NÃO REPETIR A RODADA ANTERIOR
+A: patch/export parametrizado e fullcohort/build real.
+B: vacina writer/loader, mutantes aplicados, status/exits por caso.
+C: SNAPSHOT Q6 cinco binários+meta, tamanhos/identidade/SHA.
+D: referências executadas das 2.048 saídas; CPU/HTP/ambos os oráculos.
+E: segunda tentativa Q6 e Q4/K6144 se executado.
+F: temporal complementar/FFN/counters/pipeline/fused: só o executado.
+G: CCE/PARCIAL/PENDENTE/BLOQUEADO por fronteira, sem rótulo global indevido.
+H: próximo degrau específico rumo a minigrafo/placement/handoff.
+RELATORIO e PROMPT-RELATORIO .txt A-H + logs completos com totais por script
++ manifesto SHA-256 de inputs/fontes/outputs efetivamente entregues.
+Se não houver bloqueio externo, não entregar somente mais um ajuste de
+opstage: EXPORT IMPLEMENTADO/EXERCITADO e Q6 SNAPSHOT/REFS são o núcleo.
+Se aparelho/build/rede bloquear, registrar comando/erro real e alternativa
+executada; não fabricar captura nem chamar 'design pronto' de execução.
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NÃO até as provas próprias.

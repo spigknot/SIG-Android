@@ -1,0 +1,18 @@
+P1 baseline qfn=3 nqt=8 nthr=8: aceito=1
+N qfn=0: aceito=0
+N qfn=1: aceito=0
+N qfn=2: aceito=0
+N qfn=4: aceito=0
+N qfn=5: aceito=0
+N qfn=6: aceito=0
+N qfn=7: aceito=0
+N qfn=8: aceito=0
+N qfn=9: aceito=0
+N nqt=999: aceito=0
+N qfn=3 nqt=7: aceito=0
+N nthr=16 nqt=8 (exige 16): aceito=0
+P nthr=16 nqt=16: aceito=1
+N nthr=0: aceito=0
+N nthr=17: aceito=0
+N total_nb=47: aceito=0
+VAC_CONSUMER falhas=0 GREEN

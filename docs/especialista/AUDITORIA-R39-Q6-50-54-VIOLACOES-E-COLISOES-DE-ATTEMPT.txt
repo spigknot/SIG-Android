@@ -1,0 +1,105 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 39
+=======================================================================
+Escopo: leitura e recomputação sobre arquivos arquivados, em scratch Windows.
+Não alterei app/probe/candidato/Whisper, não acionei aparelho nem fiz staging.
+
+A. BINÁRIOS Q6 — ÍNTEGROS PARA ANÁLISE
+Cinco binários presentes; bytes reais conferidos: canon10321920,
+act24576, CPU8192, HTP8192, tiled11010048. Ativações/outputs finitos.
+Seis hashes de captura (incluindo meta) e doze do manifesto raiz conferem.
+A interpretação Q6 K6144/N2048/B1 é sustentada pelo caso no capture,
+tamanhos e reprodução numérica, não apenas pelo nome da pasta.
+Meta original é contraditório: type=q4_K e attempt=mmtest:q4k, embora
+K/N/B e bytes sejam do alvo Q6. Não corrigir esse arquivo histórico em
+silêncio; preservar original e registrar reconstrução/captura nova correta.
+
+B. ORÁCULOS — REPRODUZIDOS, COM RESULTADO PONTUAL ANTES OMITIDO
+Compilei ggml-quants.c local + leitor Q6 entregue, ajustando só caminhos
+em scratch e adicionando export de referências/contagens. Dois builds0,
+run0 e audit0. Todas as 2048 saídas finitas, sem amostra.
+Comparação              NMSE                  max_abs       viol abs+rel
+CPU vs Rscalar          4.302223350862282e-07   0.065102363   13
+CPU vs Rtiled           6.133970417476967e-07   0.135291516   13
+HTP vs Rscalar          4.967947948058238e-06   0.286581714   50
+HTP vs Rtiled           4.809954054115071e-06   0.204642828   54
+Limite intacto: abs_error > 0.02 + 0.05*|ref|.
+NMSE satisfaz a comparação ao limite PIN5e-4, mas NÃO torna os critérios
+pontuais verdes. O programa R39 calcula viol_htp_s/t em :98-99 e não os
+imprime; o relatório tampouco os enumera. Isso não equivale a zero violações.
+A referência tiled também difere da canônica: NMSE1.4888221845005155e-07,
+max_abs0.08418628449051369; duas violações nesse comparativo.
+HTP vs CPU reproduz NMSE2.863562399519547e-06 e 37 violações da R37.
+
+Pior excesso legado HTP no CSV, b0/n1111:
+HTP=-0.1494922637939453; Rscalar=0.09633673164076129;
+abs_error0.2458289954347066; limite0.024816836582038065.
+Rtiled=0.04504355677811134; abs_error0.19453582057205665;
+limite0.022252177838905568.
+Listas completas de 50/54 violações entregues, ordenadas por excesso sobre
+limite; não são o top10 de erro CPU absoluto impresso no programa original.
+
+C. CPU Q8_K-ACT — AGORA INSPECIONADA E REPRODUZIDA PARA Q6
+ggml/src/ggml-cpu/ggml-cpu.c:326-329 usa vec_dot_q6_K_q8_K/Q8_K.
+Quantização/dequantização Q8_K das mesmas ativações e soma double dos
+pesos canônicos reproduzem CPUout: NMSE2.3641884306682864e-13,
+max_abs0.00011351328618047773 e ZERO violações abs+rel.
+Explica a aproximação CPU, não o residual HTP independente. Não culpar
+CPU nem mudar CPU/Whisper/tolerância. Não generalizar o zero HTP da R36.
+
+D. HIPÓTESES HTP — TESTADAS, NÃO FECHADAS
+Experimentei modelos matemáticos Q8 por grupos32, com escala F16/F32 e
+pesos canônicos/tiled: melhor combinação aqui teve NMSE9.593502430774e-07,
+max_abs0.09252061416919 e 11 violações contra HTP; nenhuma coincidiu
+na precisão residual do modelo CPU Q8_K.
+Outro modelo com passos half, inspirado em hvx-quant.h do pin, teve contra
+HTP/tiled NMSE5.786423821926e-06 e 57 violações: tampouco fecha o caso.
+São hipóteses escalares, não dump do quantizador DSP nem emulação bit-exata
+de intrínsecos/recíproco HVX. Nem provam nem descartam todos os mecanismos
+FP16. Próximo passo: trace do caminho ACT real no cohort e dados reais desse
+caminho, antes de fix do kernel ou atribuição de precisão de acumulação.
+
+E. EXPORT — AVANÇO REAL, IDENTIDADE AINDA PARCIAL
+Hook cobre Q4 e Q6 pós-repack, aceita flag exatamente '1' e verifica
+fwrite/fflush/fclose do RAW. Melhor que o hook global antigo.
+Porém não existe diretório único POR CASO:
+probe :934 usa p<PID>_<now_ms()/1000>, sem contador nem token único.
+O capture mostra colissões efetivas de ID entre descritores diferentes:
+p27216_39587 -> 23; p27216_39588 -> 4; p27216_39589 -> 2.
+Quatro nomes de pasta não são quatro tentativas exclusivas. O alvo final
+p27216_39590 tem um descritor no log e o dataset local é numericamente
+reproduzível; esse aceite específico não torna o export geral fail-closed.
+Hook :29 lê B, mas :33 só compara K/N/type; não vincula tensor único nem
+consome seleção após um upload. Outro tensor igual pode sobrescrever RAW.
+sel.txt global e mkdir/EEXIST não conferidos ampliam risco de stale/reuso.
+Hook void só loga erro; probe não consome status RAW/erro agregado e ainda
+ignora fclose dos outros arquivos. SNAPSHOT_COMPLETE/vacina continuam pendentes.
+
+F. LOADER/ENTREGA
+r39-refs-out.txt é erro: '/bin/bash: line 1: ./root/r39_refs: No such file or directory'.
+Os números foram confirmados pela reprodução independente, não por esse log.
+Loader :51 valida fopen só de canon; outras aberturas podem passar NULL a
+fread. Leituras de prefixo não rejeitam arquivo com bytes excedentes.
+Finitude/cobertura/denominador são impressos, não plenamente assertados
+como falha global; return0 ao fim permite resultados numericamente inválidos.
+Arquivo 'top10' imprime uma coordenada por break explícito. Não recomputar
+N*K dez vezes para ordenar: calcule referências uma vez e ordene os vetores.
+
+G. ACEITE E PRÓXIMA RODADA
+DATASET_Q6_PARA_ANALISE e ORACULOS_EXECUTADOS: aceitos.
+PIN_NMSE dessas comparações: positivo; LEGACY_ORACLE_HTP: FAIL50/54.
+EXPORT_SELECIONADO: implementado parcialmente; EXPORT_IDENTIDADE_FAILCLOSED:
+pendente. Não resumir ambos como CCE nem fazer 'conteúdo manda' virar licença
+para ignorar metadata em novas capturas.
+R40: IDs/metadata/status robustos + localizar residual HTP por ACT/descritor/
+controles no MESMO shape. Não reabrir CPU aproximada já explicada, nem fazer
+fusion/FFN/Smart em substituição à localização do residual.
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NÃO.
+
+H. EVIDÊNCIAS DO ESPECIALISTA
+AUDITORIA-R39-LOGS/: 18 arquivos + MANIFESTO-SHA256.txt. Inclui source/scripts,
+logs de execução, results.json, refs F64 calculadas localmente e CSVs completos.
+Os F64/modelos são cálculos locais, NÃO capturas adicionais do device.
+Uma primeira invocação do audit parou por escape de printf no gerador Python;
+corrigido antes de compilar; execução final exit0 registrada em audit-run.log.
+Git observado: nove adições staged R37 preservadas, sem alterações rastreadas
+adicionais causadas por esta auditoria.

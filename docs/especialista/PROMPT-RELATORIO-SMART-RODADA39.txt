@@ -1,0 +1,44 @@
+PROMPT-RELATORIO — SMART DUAL-BACKEND — RODADA 39
+=====================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 39 | DATA: 09-10/10/2026 |
+| ESTADO GERAL: CCE(PARCIAL) — export acoplado + snapshot/oráculo Q6 FEITOS! |
+
+A. PATCH/EXPORT (§3 — CCE!)
+- lib 020ded2e (hook ACOPLADO: sel.txt + dir por attempt + Q4&Q6 + parse!)
+- probe R39 (sel ANTES do upload + dir do attempt!)
+- build real + exercitado no device (4 attempts!); SEM commit (§2!)
+
+B. VACINA DO EXPORT (PENDENTE declarada!)
+- short-write/close/RAW-stale + SNAPSHOT_COMPLETE agregado: proximo!
+
+C. SNAPSHOT Q6 (CCE!)
+- K6144/N2048/B1: canon 10321920! act 24576! cpu/htp 8192!
+  tiled_raw 11010048 (=192x64x896! o RAW FISICO!) + SHA dos 5!
+- O meta tem rótulo HARDCODED ("q4_K") — FALHO: registrar (o tamanho manda!)
+
+D. ORÁCULOS (CCE — 2048 saídas!)
+- CPU vs Rscalar 4.30e-07/13 viol; CPU vs Rtiled 6.13e-07/13 viol;
+  HTP vs Rscalar 4.97e-06; HTP vs Rtiled 4.81e-06 (PIN-PASS!)
+- nd=2048 nf=0; vec_dot Q6 da CPU: não inspecionada (declarado!)
+
+E. TEMPORAL/FFN (PENDENTES!)
+- T3/T4/init3-env1 + mutante: mecanismo pronto (declarado!)
+- FFN {2048,6144} B1/B128: próximo!
+
+F. RETIFICAÇÕES ACEITAS
+- MATRIZ_TEMPORAL=PARCIAL (a reconsulta só imprime! o mutante não
+  executado no Android!); SEM "mutante morto" no vocabulário!
+
+G. LIMITES
+- device OK; os 9 staged R37 + WIP FfmpegPreview INTOCADOS; PJA110 ausente;
+  sem staging/commit (o §2!); evidências no disco (smart-rodada39/!)
+
+H. PRÓXIMO DEGRAU
+1. meta corrigido + SNAPSHOT_COMPLETE; 2. vacina do export; 3. temporal
+restante; 4. ffn {2048,6144}; 5. Q4 K6144; 6. counters/pipeline -> só
+depois minigrafo/placement!
+
+ESTADOS: EXPORT_ACOPLADO: CCE | SNAPSHOT_Q6: CCE | ORACULOS_Q6: CCE |
+VACINA_EXPORT: PENDENTE | TEMPORAL_COMPLEMENTAR: PENDENTE | FFN: PENDENTE |
+KERNEL/GRAPH/HANDOFF/PERFORMANCE: NAO!
+=====================================================================

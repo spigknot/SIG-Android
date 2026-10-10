@@ -1,0 +1,83 @@
+PROMPT AO EXECUTOR — SMART DUAL-BACKEND — RODADA 44
+EXECUTAR A ACT NO DSP + FECHAR RASTREABILIDADE DO COHORT
+=======================================================================
+Leia AUDITORIA-R43-LOADER-OK-ACT-PENDENTE.txt e AUDITORIA-R43-LOGS/.
+O especialista nao edita o app nem aciona aparelho. Execute so na copia/
+probe isolados autorizados. O loader fullSHA64 e o consume-build estao
+aceitos no host nos casos testados: nao reabrir. Os 13/13/50/54 estao
+reproduzidos tres vezes sobre o mesmo snapshot: nao fazer da R44 uma
+quarta repeticao desses numeros.
+
+1. OBJETIVO CENTRAL UNICO — ACT EXECUTADA
+Implementar no SKEL, no ponto exato do plano R43 (kernel
+quantize_f32_q8_0_tiled, pos quantize_row_f32_q8_0_tiled — o "L1221" do
+relato), a copia da ACT q8_0 tiled da primeira op selecionada para buffer
+host-visivel via mecanismo RPC existente, com guard test-only por env/flag.
+Rebuild skel+host+probe do cohort separado, rodar K6144/N2048/B1 com o
+snapshot R39 como input, e entregar: bytes/codigos/escalas, tamanho exato,
+strides/padding/ordem/endianness, ID/fullcohort/flag e log do dispatch real.
+Coverage necessaria as 2048 saidas; se parcial, dizer quais grupos faltam.
+Se o buffer se mostrar inacessivel, executar a alternativa B (seam de replay
+privada que chame o QUANTIZADOR REAL no DSP, mesmos helper/intrinsecos/
+parametros) rotulada REPLAY_REAL com limites explicitos. Proibido: scalar
+passando por intrinseco, quantizador CPU chamado de ACT DSP, arquivo
+sintetizado, actfloat original como "ACT quantizada".
+Se bloqueado de verdade: trazer comando, erro/diagnostico reais e a menor
+tentativa efetivamente executada. "Tempo foi dos reparos" nao e bloqueio
+tecnico. Nao encerrar com desenho e remeter a R45.
+
+2. A PARTIR DA ACT OBSERVADA
+Reader validado + Rtiled, recomputar TODAS as 2048 saidas: finite/nd/NMSE/
+max_abs/violadores/CSV. Separar pesos/repack, ACT/coeficientes/rounding,
+dot inteiro, ordem/acumulacao/readback. Criterio documentado antes, sem
+limite a posteriori. Q8_1 nao se aplica ao Q6 por analogia; escala F16 nao
+prova ACC_FP16. Nao declarar bug DSP/CPU sem contraprova. Preservar
+LEGACY_FAIL/PIN_PASS e limites 0.02/0.05/PIN 5e-4.
+
+3. RASTREABILIDADE — FECHAR EM PARALELO (pequeno, independente do DSP)
+3.1 Congelar fullcohort ANTES da observacao: APK probe, host/core/CPU/HTP/
+skel/dependencias usados E efetivamente carregados, fullSHA64/ABI/buildID,
+source/revision/flags/toolchain, INCLUINDO fullSHA64 de htp/matmul-ops.c e
+htp/hvx-mm-kernels-tiled.h do kq2 e fullSHA64 da lib em toda rodada (a R39
+registrou so prefixo — nao repetir). Distinguir original/stripado/
+empacotado/carregado. Instrumentacao test-only = cohort separado com
+host/skel coerentes.
+3.2 Runner: registrar fullSHA64 do SCRIPT executado (o executado tem de ser
+identificavel byte a byte com o entregue); exibir SRC_SHA/BIN_SHA integrais
+(aposentar o cut -c1-40 tambem no display); artefato+logs exclusivos por ID
+de execucao em raiz de evidencia autorizada (nao /tmp global); guardar
+build/stdout/stderr COMPLETOS e imutaveis por ID, com exit de cada etapa
+impresso (inclusive o 92). Head pode resumir desde que aponte os integrais.
+3.3 Loader: travar schema dos 5 nomes de arquivo (nome desconhecido nao pode
+passar sem whitelist); rotulo "R42_DONE" -> identificador correto da rodada.
+
+4. EXPORT/CAPTURAS — FRENTE INDEPENDENTE
+Seam compartilhada caller/hook, namespace execucao+seq, armamento dentro da
+chamada HTP, handle/op/epoch verificados, captura unica com desarme, flags
+0/unset OFF e 1 ON, primeira causa persistente, fopen/write/flush/close
+conferidos, metadata escrita e VALIDADA antes de COMPLETE, status consumido
+pelo caller/runner. Vacina do codigo consumido (namespace/PID repetidos,
+attempt EEXIST, short-write/close-error reais, callback duplicado/tardio,
+RAW stale/curto/excedente, meta invalida, arquivos de um byte, mutantes).
+Com exporter fechado: duas capturas Q6 coerentes no mesmo cohort + controles
+F32 e Q4_0/Q8_0 no mesmo shape com oraculos proprios. Nao usar pendencia do
+exporter para postergar a ACT, que pode usar o R39 aprovado.
+
+5. ENTREGA A-H
+A fullcohort/source/flags/ABI/carregados; B correcoes/vacinas host+export;
+C ponto/dispatch/ACT ou replay REAL exercitado e coverage; D modelo
+observado/2048 metricas/violadores; E capturas/controles/ON-OFF; F runner/
+loader/comandos/exits/logs completos; G fronteiras CCE/PARCIAL/PENDENTE/
+BLOQUEADO especificas; H proximo teste minimo preciso.
+RELATORIO/PROMPT-RELATORIO .txt A-H, totais reais por script, manifesto
+existencia+tamanho+fullSHA64 de tudo afirmado como anexo, patches+conteudo
+das fontes novas recuperaveis. Sem estimar nem fabricar dump. FFN/temporal/
+fused/minigrafo/placement pendentes e nao substituem ACT/handle/vacina.
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERF globais=NAO ate provas proprias. Smart
+final: prefill NPU -> geracao GPU OpenCL/Vulkan, sem replay integral;
+HTP->CPU nao atende. PIN_PASS nao aprova Smart. Nenhuma promocao/default ou
+troca de lib de producao por esta ordem. Escopo ao fim: SIG/Whisper/UI/
+default Vulkan/modelo c4bf/R2/WIP intactos; 9 staged R37 e FfmpegPreview
+preservados byte a byte; serial exclusivo 3B15BD00FVE00000; PJA110 proibido;
+stayon7 intacto; sem credenciais; sem commit/push/release/remocao.
+=======================================================================

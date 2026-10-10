@@ -1,0 +1,15 @@
+MANIFESTO — smart-rodada42 (LOADER ESTRITO 2 modos + RUNNER REAL! — sem commit, §2!)
+
+LOADER: NORMAL estrito (fail-closed: NaN→23! meta div→22! denom0→28! nd incompleto→29!)
+RECONSTRUCAO_R39: whitelist 5 SHA (fora→16!) + metadata reconstruída separada!
+BATERIA 5/5: NORMAL=0 RECON=0 NAN=23 BADMETA=22 DENOM0=28 (exits consumidos!)
+RUNNER REAL documentado (CMD/CWD/SRC_SHA/BUILD/EXIST/BIN_SHA/RUN!); mkdir consumido (fail++/return!)
+TOP10 excesso/limite (objeto novo!); 1/127 = hipótese aberta; ACT_REAL = PENDENTE (desenho no relatório!)
+
+2f65f3b122d5679f296e1d80fab540ccf34a8c36883e303a3c628c6c31da3d73  r42-bateria-casos.txt  (4511 B)
+7b6dfab07ea9bf74c2f162303b00484f40b0d28efc31b9da12502f1ae53e3613  r42-normal-full.txt  (1085 B)
+b823fde40c9644d1e6c2abd3930e3f0f43abf2f8b9f085f3632b9df06c5c964c  r42-recon-full.txt  (814 B)
+df590bbf9495cf394c9ca5ce70b50bee2fc91940d1dabb5ed80080340763596e  r42_refs.c  (11065 B)
+db21bc2b61de4b09bf43dc7c13191b8b358e0875b906537e072c4b9fecf07de4  r42_runner.sh  (1843 B)
+
+387c83e76cea20465c39fd89a7e8fc2a904e37958870db2d7d622f05b10b2569  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA42.txt

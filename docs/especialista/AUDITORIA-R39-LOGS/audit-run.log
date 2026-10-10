@@ -1,0 +1,32 @@
+HASHES capture 6 MATCH 6
+HASHES root 12 MATCH 12
+BUILD 0 EXIT 0
+BUILD 1 EXIT 0
+RUN_EXIT 0
+canon: 10321920 (esperado 10321920!)
+act: 24576 (esperado 24576! = 6144 floats!)
+outs: 8192/8192 (esperado 8192 cada = 2048 floats!)
+tiled: 11010048 (esperado 11010048!)
+
+TODAS as 2048 saidas (B=1!): nd=2048 nf=0
+CPU vs Rscalar: max_abs=0.065102 nmse=4.302e-07 viol=13
+CPU vs Rtiled : max_abs=0.135292 nmse=6.134e-07 viol=13
+HTP vs Rscalar: (ver acima!) 
+HTP vs Rscalar: max_abs=0.286582 nmse=4.968e-06
+HTP vs Rtiled : max_abs=0.204643 nmse=4.810e-06
+
+Coords com maior |CPU-Rtiled| (top10!):
+  n=1763: CPU=18.337170 HTP=18.378529 Rscalar=18.276987 Rtiled=18.201878 |CPU-Rtiled|=0.135292
+ACTUAL_HTP_VIOLATIONS scalar=50 tiled=54
+
+R39_REFS_DONE
+
+PAIR cpu scalar {'nmse': 4.302223350862282e-07, 'max_abs': 0.06510236325577523, 'legacy_violations': 13, 'nd': 2048, 'nf': 0}
+PAIR cpu tiled {'nmse': 6.133970417476967e-07, 'max_abs': 0.13529151558893204, 'legacy_violations': 13, 'nd': 2048, 'nf': 0}
+PAIR htp scalar {'nmse': 4.967947948058238e-06, 'max_abs': 0.286581714374492, 'legacy_violations': 50, 'nd': 2048, 'nf': 0}
+PAIR htp tiled {'nmse': 4.809954054115071e-06, 'max_abs': 0.20464282825307123, 'legacy_violations': 54, 'nd': 2048, 'nf': 0}
+PAIR cpu q8act {'nmse': 2.3641884306682864e-13, 'max_abs': 0.00011351328618047773, 'legacy_violations': 0, 'nd': 2048, 'nf': 0}
+PAIR tiled scalar {'nmse': 1.4888221845005155e-07, 'max_abs': 0.08418628449051369, 'legacy_violations': 2, 'nd': 2048, 'nf': 0}
+PAIR htp cpu {'nmse': 2.863562399519547e-06, 'max_abs': 0.23238754272460938, 'legacy_violations': 37, 'nd': 2048, 'nf': 0}
+ATTEMPT_ID_COLLISIONS [('p27216_39587', 23), ('p27216_39588', 4), ('p27216_39589', 2)]
+SCOPE: all refs computed locally; no new device capture.

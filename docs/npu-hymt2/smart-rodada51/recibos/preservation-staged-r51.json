@@ -1,0 +1,51 @@
+{
+  "metodo": "hash-object (worktree) + ls-files -s (index) por arquivo; 9 staged R37",
+  "arquivos": {
+    "docs/especialista/PROMPT-SMART-RODADA37-CPU-Q8K-ESTADO-EFETIVO-E-SHAPES-REAIS.txt": {
+      "worktree": "ed5934f030236c81",
+      "index": "ed5934f030236c81",
+      "igual": true
+    },
+    "docs/especialista/RELATORIO-SMART-DUAL-BACKEND-RODADA37.txt": {
+      "worktree": "7d626bb25910de30",
+      "index": "7d626bb25910de30",
+      "igual": true
+    },
+    "docs/npu-hymt2/smart-rodada37/MANIFESTO-SHA256.txt": {
+      "worktree": "596cab786bd8cc3b",
+      "index": "596cab786bd8cc3b",
+      "igual": true
+    },
+    "docs/npu-hymt2/smart-rodada37/probe-r37-com-consulta.cpp": {
+      "worktree": "7bd4236e3d34bd8b",
+      "index": "7bd4236e3d34bd8b",
+      "igual": true
+    },
+    "docs/npu-hymt2/smart-rodada37/r37-capture-full.txt": {
+      "worktree": "431060380a2b853f",
+      "index": "431060380a2b853f",
+      "igual": true
+    },
+    "docs/npu-hymt2/smart-rodada37/r37-inventario-gguf.txt": {
+      "worktree": "5d3074254853c454",
+      "index": "5d3074254853c454",
+      "igual": true
+    },
+    "docs/npu-hymt2/smart-rodada37/r37-probe-build.log": {
+      "worktree": "ac9f2f2ebac6b099",
+      "index": "ac9f2f2ebac6b099",
+      "igual": true
+    },
+    "docs/npu-hymt2/smart-rodada37/r37_cand.py": {
+      "worktree": "5713240292899c2c",
+      "index": "5713240292899c2c",
+      "igual": true
+    },
+    "docs/npu-hymt2/smart-rodada37/r37_gguf_invent.py": {
+      "worktree": "1af10113c2d7be4c",
+      "index": "1af10113c2d7be4c",
+      "igual": true
+    }
+  },
+  "iguais": true
+}

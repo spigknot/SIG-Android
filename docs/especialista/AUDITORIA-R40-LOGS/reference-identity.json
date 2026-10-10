@@ -1,0 +1,16 @@
+{
+  "scope": "upstream reference only, NOT deployed cohort identity",
+  "head": "5e03bdd8700948b9c41c54dd1b00f28a2aebc03f",
+  "files": [
+    {
+      "path": "C:\\llama-npu\\llama.cpp\\ggml\\src\\ggml-hexagon\\htp\\matmul-ops.h",
+      "size": 37741,
+      "sha256": "6442da0ba79e6e9170cf0c071635f31eb7ceb7d615dde773179b00ceaf81f0d7"
+    },
+    {
+      "path": "C:\\llama-npu\\llama.cpp\\ggml\\src\\ggml-hexagon\\htp\\hvx-mm-kernels-tiled.h",
+      "size": 68264,
+      "sha256": "35a9d5d1361662c6db77736702852bae21f689012013c3952164dfab576b53ce"
+    }
+  ]
+}

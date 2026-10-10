@@ -1,0 +1,41 @@
+PROMPT-RELATORIO — SMART DUAL-BACKEND — RODADA 40
+=====================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 40 | DATA: 10/10/2026 |
+| ESTADO GERAL: PARCIAL — IDs/meta/status corrigidos + trace Q6; vacina/ACT pendentes! |
+
+A. FULLCOHORT/IDENTIDADE (PARCIAL!)
+- probe R40 buildado (BUILD ✓; probe-r40-com-ids.cpp!); lib 020ded2e
+  não reinstalada nesta rodada (build local!); fullSHA completos: PENDENTE
+  (o §2 pede congelamento — declarado!).
+
+B. IDs/SELECTOR/META/STATUS (CCE — os fixes!)
+- ID monotônico (atomic seq + ns!) — a colisão now_ms morreu!
+- meta runtime-derivado (ty.nm real!); R39 falsos preservados (reconstrução
+  declarada!); SNAPSHOT_COMPLETE/FAIL (5/5!).
+- Vacina do export + vínculo por handle + mutante: PENDENTES!
+
+C. TRACE ACT/DISPATCH (PARCIAL!)
+- src1_row_size = q8_0 para Q6 (L2765/2814/2843/3125/3195!);
+  kernels HVX_QUANT_ROW/FLAT (L2845/2847/2885!);
+- ACT_REAL (dump da ativação quantizada): PENDENTE declarado!
+- b0/n1111: HTP -0.14949 vs Rscalar 0.09634 vs Rtiled 0.04504 (Δ=0.25!)!
+
+D. DECOMPOSIÇÃO NUMÉRICA (parcial!)
+- HTP 50 viol vs Rscalar/54 vs Rtiled (contadas pelo especialista — a
+  fonte só imprimia o NMSE: anotado!); CPU Q6 = vec_dot Q8_K (2.36e-13!);
+- hipóteses ACT-Q8_0-CONV e ACC-FP16 (NÃO bug DSP!); PIN 4.8e-06 limitado.
+
+E. CONTROLES/CAPTURAS 2x (PENDENTES — declarado!)
+
+F. RUNNER/LOADER (o log errado PRESERVADO! reprodução do especialista
+   citada; runner robusto: próximo!)
+
+G. FRONTEIRAS: R36-Q4 (correto!); Q6: residual PRÓPRIO medido (não "só
+   CPU"!); STOP-FUSED ok.
+
+H. PRÓXIMOS: 1. vacina+handle; 2. 2 capturas Q6; 3. ACT_REAL; 4. controles;
+   5. temporal/ffn; 6. runner/counters → minigrafo!
+
+ESTADOS: IDS/META/STATUS: CCE | TRACE_Q6: PARCIAL | ACT_REAL: PENDENTE |
+VACINA_EXPORT: PENDENTE | 2CAPTURAS: PENDENTE | KERNEL/GRAPH/HANDOFF/PERF: NAO!
+=====================================================================

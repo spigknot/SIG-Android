@@ -1,0 +1,140 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 41
+=======================================================================
+Escopo: revisão de arquivos arquivados, reexecução HOST do C entregue e
+contraprovas de fragmentos reais em scratch. Não alterei o app/probe/Whisper,
+não acionei aparelho, não fiz staging/commit/push e não publiquei artefatos.
+
+A. AVANÇO NUMÉRICO ACEITO — R39 REPRODUZIDO, NÃO NOVA CAPTURA
+Oito registros SHA-256 do manifesto R41 conferem. CSV tem2048 linhas de dados,
+indices0..2047 únicos, valores finitos. Vetores CPU/HTP/Rscalar/Rtiled batem
+com o snapshot/referências independentes R39 na precisão de impressão:
+diferença máxima por campo <5.01e-7. Cobertura é integral, não amostra.
+
+Métricas recalculadas dos vetores originais, preservando limites0.02/0.05:
+CPU/Rscalar NMSE4.302223350862282e-07 max_abs0.06510236325577523 viol13;
+CPU/Rtiled  NMSE6.133970417476967e-07 max_abs0.13529151558893204 viol13;
+HTP/Rscalar NMSE4.967947948058238e-06 max_abs0.286581714374492 viol50;
+HTP/Rtiled  NMSE4.809954054115071e-06 max_abs0.20464282825307123 viol54.
+A fonte agora imprime as contagens antes omitidas e computa refs uma vez.
+Esse avanço é aceito. CPU Q8_K segue explicada; não há bug CPU demonstrado.
+O sucesso offline não prova ACT quantizada/dispatch do dispositivo R41.
+
+B. RUNNER/LOADER — REPRODUÇÃO GREEN, ROBUSTEZ NÃO CCE
+Compilei r41_refs.c SEM editar seu conteúdo, com GCC C11 e ggml-quants.c
+local/header real. Dois builds exit0; uso de C evita os warnings void* de
+compilar fontes C como C++ permissivo. Reexecutei em cópias dos binários R39.
+Nada foi escrito nos originais. Cinco cenários reais do executável:
+1. Snapshot histórico R39 original: exit0, nd2048/nf0, contagens reproduzidas.
+2. Mesmos binários, meta de outro tipo/shape/attempt: exit0, observação VALIDA.
+3. UM NaN injetado no primeiro float da saída HTP: exit0, nd2047/nf1,
+   OS QUATRO PIN PASS e observação numerica VALIDA. CSV contém a região inválida.
+4. ACT zerada na cópia (denominadores de referência zero): exit0, quatro PIN
+   FAIL, NMSE sentinela -1 e observação VALIDA. Deveria ser INVALID operacional.
+5. Um byte excedente na ACT: exit11, INVALID antes do cálculo. Esse controle
+   de tamanho exato funciona e é avanço aceito.
+
+Fonte: r41_refs.c:68-75 apenas imprime qualquer meta e WARN se ausente.
+Não faz parse/schema/identidade/cohort/hash; K/N/B são hardcoded em :59-65.
+Uma exceção histórica R39 é admissível com modo RECONSTRUCAO explícito,
+manifesto/hash congelado e limites; não é loader estrito de novas capturas.
+:111 pula coordenada não-finita e continua a métrica; :124-132 não invalida
+nd incompleto/nf. :160-161 chama observação VALIDA e retorna0 sem guard.
+:90/:94/:95 têm malloc de refs/dequant sem verificação. fseek/ftell e fclose
+dos inputs não são conferidos; endianness/identity não são validadas.
+Não atribuir 'CCE runner/loader' geral à execução do caso saudável.
+
+O arquivo r41-build.log arquivado possui202 linhas de warnings do build C/C++:
+não contém BUILD SUCCESSFUL, BINARIO_OK ou registros explícitos dos exits
+build/run. A execução saudável é sustentada por CSV/stdout e pelo replay
+independente, mas a CADEIA COMPLETA de runner/comandos/exits não foi entregue.
+O source do runner operacional/script não está entre os oito arquivos da
+pasta. Imprimir 'exit=0' no programa não prova status do processo externo.
+
+r39-nmse-nota-fix.txt não é uma correção bem-sucedida: contém literalmente
+'/bin/bash: line 1: ./root/r39_refs: No such file or directory'. Preservar e
+rotular falha histórica/copied-log; o nome 'fix' não o transforma em resultado.
+
+C. EXPORT — MAIS CONDIÇÕES NO LOG, AINDA SEM FALHA CONSUMIDA
+probe-r41-mkdir-meta.cpp:942-944 agora observa o retorno de mkdir e marca
+mk41; porém só chama rep(SEL_FAIL). NÃO há return/abort/guard antes de
+:946 abrir sel.txt com w e :951 emitir SEL. O fluxo segue para build_e_run.
+
+Compilei o bloco de setup REAL, apenas adaptando paths/mkdir para filesystem
+host: em attempt-dir existente, imprimiu SEL_FAIL, sobrescreveu selector
+antigo por new-attempt e chegou à instrução seguinte, exit0. Não é teste
+Android/GPU; prova que o próprio bloco não consome a recusa anunciada.
+A promessa 'SEL_FAIL + sem escrita' é contradita pelo fonte e contraprova.
+
+:1170/:1177/:1183 continuam resetando exfail; o teste final observa só o
+último estado. fclose continua ignorado. Erro anterior desaparece com uma
+escrita posterior bem-sucedida. RAW/status do hook não entram no agregado.
+:1189-1212 ainda verifica só arquivos >0 e meta>0; não bytes/shape/hash/cohort.
+
+Meta é ESCRITA em :1213-1220, DEPOIS do status :1210-1211. Portanto:
+- Num attempt realmente novo, meta ainda não existe na hora da checagem;
+  o fluxo normal anuncia FAIL antes de escrever sua própria meta.
+- Meta antiga positiva pode satisfazer o status sobre arquivos inválidos;
+  não pertence necessariamente ao mesmo attempt/tensor.
+
+Contraprovas do bloco exato compilado:
+1. Cinco arquivos de um byte sem meta -> SNAPSHOT_FAIL, fragmento exit0.
+2. Cinco arquivos de um byte + meta de UM BYTE -> SNAPSHOT_COMPLETE, exit0.
+3. Os mesmos arquivos + exfail1 -> SNAPSHOT_FAIL. Esta guarda do ÚLTIMO erro
+   funciona, mas não é histórico persistente de todos os erros do exporter.
+O exit é do harness host; não é run Android. Não há vacina integrada/hook.
+IDs ainda seq+PID sem fonte única de namespace de execução; vínculo por
+handle/captura única continua pendente. Retificar o manifesto que anuncia
+'fail-closed R41' apesar de o relatório geral marcar fronteiras parciais.
+
+D. TOP10 — DESCRIÇÃO CORRETA, INFERÊNCIA CAUSAL NÃO SUSTENTADA
+Os dez indices distintos e a ordenação absoluta HTP/Rtiled conferem:
+536,1164,1010,1006,694,852,62,1877,1634,1715.
+Erro relativo contra |Rtiled| vai de0.7485084429% a0.9575600494%; não é
+uniformemente0.9-1.0%. Valor100/127=0.7874015748% está nesse intervalo,
+mas proximidade numérica não identifica o quantizador/rounding executado.
+
+ZERO desses dez pontos viola abs_error>0.02+0.05*|Rtiled|. São os maiores
+erros ABSOLUTOS em saídas grandes, não os50/54 violadores pontuais que
+motivam a fronteira aberta. Em n1111, Rtiled é positivo e HTP negativo;
+isso também não é explicável por mero rescaling positivo global da saída.
+Quantização de ACT continua hipótese possível, não causa reforçada por
+assinatura inequívoca. Erro de dot é soma ponderada das alterações de ACT;
+o passo amax/127 por bloco não determina porcentagem fixa do output,
+especialmente com cancelamento entre termos.
+Usar ranking de excesso/razão ao limite para estudar violadores, além do
+ranking absoluto; não gastar nova rodada recomputando os mesmos vetores.
+
+E. IDENTIDADE LOCAL, NÃO COHORT DEVICE
+Source arquivado R41 e C:/npu-probe/.../probe.cpp conferem byte a byte:
+1b0b36c0189a3d229e473bf8ba90a8f7b10b0667de8847cb8afdbdbe29f68609.
+APK local observado:16855419 B, SHA-256
+d3b048a6ba1f81ca1fc89d5cbf87c055ade2c4ea7370d001ad00fba01341ccc6.
+libnpuprobe.so empacotada:283080 B, SHA-256
+ae0019e4a6dba156c38b5e8095c64041cf091bb258b99ea6467fd7be24036795;
+contém o marcador R41 SNAPSHOT_COMPLETE. Há artefato local novo.
+Não é o APK176596...R40; não prova instalação/carregamento nem skel/host
+que executaram os dados R39. fullcohort real segue pendente. Sem novo ADB.
+As nove entradas staged R37 permanecem9A; não as modifiquei.
+
+F. ESTADOS
+ORACULOS/CSV_R39_REPROCESSADO=CCE_HOST_LIMITADO.
+LOADER_TAMANHO_EXATO=CCE_HOST_LIMITADO; LOADER_VALIDACAO_COMPLETA=NAO.
+RUNNER_CADEIA_AUDITAVEL=PARCIAL; EXPORT_FAIL_CLOSED=NAO.
+ID_NAMESPACE/HANDLE_UNICO/VACINA/FULLCOHORT=PARCIAL/PENDENTE conforme item.
+ACT_REAL/REPLAY_REAL=NAO_EXECUTADOS; CONTROLES/DUAS_CAPTURAS=PENDENTES.
+KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NAO.
+
+G. PRÓXIMA RODADA — SAIR DO CICLO LOG/REFS
+R42 deve consumir a recusa de fato, compartilhar a seam realmente usada,
+validar loader estrito com casos negativos e implementar a menor observação
+ou replay REAL de ACT no cohort. Preparar essas frentes independentes em
+paralelo host; uma fila device só. Já há dados/contagens/ref/top10 suficientes:
+não aceitá-los novamente como substituto de ACT/handle/vacinas.
+
+H. ANEXOS REAIS
+AUDITORIA-R41-LOGS/ contém auditor executado, fontes/executáveis host,
+logs dos builds e cinco runs, contraprovas FS/setup, results/local-identity
+e manifesto SHA-256. Entradas numéricas grandes permanecem no R39; cópias
+mutadas só em scratch e explicitamente testes negativos, não novas capturas.
+Todos os outputs acima vieram de execução real; nenhum dump DSP foi criado.
+=======================================================================

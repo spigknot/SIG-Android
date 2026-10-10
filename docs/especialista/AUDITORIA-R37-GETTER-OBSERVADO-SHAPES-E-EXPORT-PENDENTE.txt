@@ -1,0 +1,99 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 37
+=======================================================================
+Escopo: leitura de fontes/logs; hash completo do GGUF; reexecução do
+inventário; agregação dos resultados. Sem executar/tocar aparelho, app,
+probe, candidato ou Whisper. Não houve commit nem alteração do staging.
+
+A. INTEGRIDADE E COMPILAÇÃO
+Os seis arquivos enumerados no manifesto local conferem SHA-256 (6/6).
+O build arquivado terminou BUILD SUCCESSFUL, 37 tasks, 5 executadas.
+O manifesto contém prefixo descritivo de lib, não fullcohort ELF/APK/skel.
+Não confundir esses hashes de fontes/logs com identidade completa da lib.
+
+B. CONSULTA RETIDA: INTEGRAÇÃO E OBSERVAÇÃO POSITIVA ACEITAS
+r37_cand.py:15-17 adiciona getter que retorna opt_opstage (não getenv).
+:21-24 o registra no get_proc_address. O probe :1016-1020 consulta o
+registry somente se is_htp; :1025-1038 recusa ausência ou valor incompatível
+antes do upload em :1046. O log mostra getter conhecido retornando 3,
+ENV_AT_CALL unset e OPSTAGE_AT_INIT=3.
+Estado aceito: GETTER_INTEGRADO_E_OBSERVADO_NO_DEFAULT_3.
+A matriz temporal real 1->env3 / 3->env1 e o mutante getter=getenv continuam
+pendentes. Estado observado em 3 não é validação dessas trajetórias.
+
+Retificação necessária: known=0 aparece nas passagens CPU do build_e_run.
+O ramo !is_htp não tenta o getter, mantém zero e só imprime o estado.
+Isso não é 'primeira chamada HTP ainda não inicializada' nem teste do
+OPSTAGE_DIAG_FAIL. O capture contém ZERO eventos OPSTAGE_DIAG_FAIL.
+A recusa por getter ausente está no código, mas não foi exercitada no HTP.
+
+C. INVENTÁRIO DO PRODUTO: REPRODUZIDO
+Arquivo: docs/vulkan-hymt2-fusion-round/logs-rodada13/hymt2_app.gguf
+Tamanho: 1.133.080.544 B.
+SHA-256: c4bf1015b01fcc97b1510f58eca78604eb45758470e83f317ffbfae29dbe4559
+GGUF v3, 354 tensores, 35 kv; arquitetura hunyuan-dense.
+A saída do parser reproduz o inventário entregue, excluída apenas a linha
+SHA de rodapé adicionada separadamente (ela também confere).
+São 192 tensores Q4_K 2D e 33 Q6_K 2D, não contagens de operações executadas.
+Distribuição (tipo,K,N -> quantidade de tensores):
+Q4_K 2048,512 -> 48; 2048,2048 -> 64; 2048,6144 -> 64; 6144,2048 -> 16.
+Q6_K 2048,512 -> 16; 6144,2048 -> 16; 2048,120818 -> 1.
+O último é token_embd.weight. NÃO o excluir automaticamente de MUL_MAT:
+hunyuan-dense herda hunyuan-vl (models/models.h:1835-1836); o loader usa
+TOKEN_EMBD quando output.weight falta (hunyuan-vl.cpp:30-34), e o grafo usa
+model.output no lm_head (:183-184). O tensor tem papel compartilhado.
+Esse head grande não foi testado; antecipar memória não equivale a OOM real.
+
+D. EXECUÇÃO EM SHAPES DERIVADOS DO MODELO: ACEITA, PARCIAL
+Deduplicação por PID+K+N+B+tipo, verificando ausência de resultados conflitantes:
+33 linhas de resultado únicas: PID11905 tem 3; PID13688 tem 30.
+O PID13688 inclui 15 casos mínimos e 15 casos maiores, cinco tipos em cada
+um de TRÊS shapes (não apenas dois):
+K2048/N512/B1, K2048/N2048/B128, K6144/N2048/B1.
+Todas as linhas finais coletadas têm hrc=0, post=1, nf_ref=nf_out=0 e nd total.
+Seis casos K-quant maiores:
+K,N,B                 tipo   NMSE_PIN       viol_CPU  veredicto legado
+2048,512,1             Q4_K   1.774983e-07   0         PASS
+2048,512,1             Q6_K   3.028786e-07   3         FAIL
+2048,2048,128          Q4_K   1.448240e-07   383       FAIL
+2048,2048,128          Q6_K   1.427399e-07   327       FAIL
+6144,2048,1            Q4_K   3.930321e-06   22        FAIL
+6144,2048,1            Q6_K   2.863562e-06   37        FAIL
+São valores abaixo do limite PIN=5e-4, mas o legado contra CPU não ficou verde.
+O caso Q6_K 2048/2048 é teste adicional: esse shape/tipo não aparece no GGUF.
+Falta Q4_K K2048/N6144, representando 64 pesos ffn_gate/ffn_up no inventário.
+Os dados são sintéticos: probe :905-918 gera sin para pesos e cos para act.
+Portanto: dimensões reais exercitadas, NÃO pesos reais nem inferência do modelo.
+Resultados reemitidos no relatório/log não são repetições independentes.
+Não generalizar a prova R36 de zero violações contra oráculos aos novos shapes.
+
+E. EXPORT: RISCO CONCRETO DE SOBRESCRITA/ACOPLAMENTO ERRADO
+O probe R37 :1120 mantém filtro B==128 && Q4_K, sem limitar K/N.
+O caminho/nomes continuam files/r36/canonweights_9216.bin etc.
+O capture :256/:259 mostra export de 2.359.296 B de pesos e 1.048.576 B de
+saída para o caso grande, sob os mesmos nomes/dir usados no caso pequeno.
+O hook R36 :23-28, herdado pelo candidato, escreve tiled_raw.bin com wb
+para cada upload Q4_K, inclusive B1/B2 e outros shapes; não verifica close.
+GGML_HEXAGON_EXPORT_TILED=1 consta no tune R37, mas não há linhas
+R36_TILED_EXPORT no capture. Logo não observei o arquivo RAW final do device:
+coerência dele com os exports atuais NÃO está comprovada e a sobrescrita é
+um risco demonstrado pelo fluxo. Não alegar uma mistura específica como
+captura observada. O snapshot R36 local, já arquivado/hashado, continua válido.
+Antes de novos snapshots: diretório único, identidade da tentativa/tensor,
+seleção do hook e erro agregado, sem reaproveitar o RAW de outra matmul.
+
+F. ACEITE E PRÓXIMO DEGRAU
+Consulta default3: CCE. Matriz temporal/ausência HTP: PENDENTE.
+Inventário+ensaio de dimensões reais: CCE; cobertura numérica ampla: PARCIAL.
+Q6 snapshot, export robusto, counters/pipeline, repetições, fused e minigrafo
+continuam pendentes. KERNEL_VALIDATED/GRAPH/HANDOFF/PERFORMANCE globais=NÃO.
+Rodada 38: temporal real; snapshots acoplados Q6/Q4 K6144B1 com oráculos;
+Q4 K2048N6144 e repetições no mesmo cohort. Não reabrir o getter default3
+nem o snapshot Q4 pequeno aprovados; não modificar CPU/Whisper.
+
+G. EVIDÊNCIAS DO ESPECIALISTA
+AUDITORIA-R37-LOGS/audit.py, audit-run.log, inventory-run.log, results.json
++ MANIFESTO-SHA256.txt. Audit final exit=0. Uma primeira comparação textual
+parou pelo rodapé SHA adicional; diferença localizada e validada, não ocultada
+com comparação permissiva dos tensores.
+Git ao terminar: main, nove adições staged de documentos/evidências preexistentes;
+não alterei esses itens nem fiz staging. Não declarar árvore limpa.

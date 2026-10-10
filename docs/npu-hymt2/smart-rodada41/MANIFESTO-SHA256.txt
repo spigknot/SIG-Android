@@ -1,0 +1,17 @@
+MANIFESTO — smart-rodada41 (RUNNER/LOADER CCE + fixes do export! — sem commit, §2!)
+
+RUNNER/LOADER (§4!): r41_refs com cadeia completa (build=0/BINARIO_OK/run=0/stderr vazio!)
+RESULTADOS: VIOL HTP 50 (Rscalar!) / 54 (Rtiled!) reproduzidas!; CPU 13/13; PIN 4x PASS!
+TOP10 (10 distintos, |err| abs HTP-Rtiled!): TODOS ~0.2033-0.2046 em |v|≈21-27 (~0.95%! => q8_0?)
+FIXES: mkdir consumido + SNAPSHOT agrega meta/exfail (fail-closed R41!); r39-nota refeita!
+PENDENTES: ACT_REAL, vínculo por handle, vacina, 2 capturas, controles. KERNEL_VALIDATED: NAO.
+
+1b0b36c0189a3d229e473bf8ba90a8f7b10b0667de8847cb8afdbdbe29f68609  probe-r41-mkdir-meta.cpp  (103531 B)
+0ccdf582d743df03ae0530a352abaae4af2462ef8baa6035860332930f667503  r39-nmse-nota-fix.txt  (62 B)
+f51a9935616aa5aa6ecb5d310d94c0bb355c3f25cac9132b0198694d89bb1340  r41-build.log  (17125 B)
+8a5f2aacfb528aeb6788c87d246698af3a7a49d8212b2d4fff84464cc85058a6  r41-referencias-completas.csv  (201140 B)
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  r41-runner-err.txt  (0 B)
+f808860d244fe2e7c76e97f42f6ff59ccd2e8ad6d2e674139014c4c73d184280  r41-runner-out.txt  (1607 B)
+b8fa0a3837af048f80c38dc6280833e96d26e71d01d3d3f502351c2b28580b2e  r41_refs.c  (8897 B)
+
+2bd41f6b181d8e58144dd93d14d3fe907dab2c5cd781f4009b0a1e73edae7040  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA41.txt

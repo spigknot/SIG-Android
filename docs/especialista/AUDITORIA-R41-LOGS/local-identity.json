@@ -1,0 +1,22 @@
+{
+  "source_sha": "1b0b36c0189a3d229e473bf8ba90a8f7b10b0667de8847cb8afdbdbe29f68609",
+  "source_matches_live": true,
+  "local_apk": {
+    "size": 16855419,
+    "sha256": "d3b048a6ba1f81ca1fc89d5cbf87c055ade2c4ea7370d001ad00fba01341ccc6",
+    "scope": "local artifact, not device-loaded identity"
+  },
+  "local_probe": {
+    "size": 283080,
+    "sha256": "ae0019e4a6dba156c38b5e8095c64041cf091bb258b99ea6467fd7be24036795",
+    "R41_marker": true
+  },
+  "archived_build_log": {
+    "lines": 202,
+    "has_BUILD_SUCCESSFUL": false,
+    "has_explicit_exit_marker": false
+  },
+  "tracked_status_counts": {
+    "A ": 9
+  }
+}

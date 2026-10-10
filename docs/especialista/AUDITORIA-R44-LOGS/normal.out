@@ -1,0 +1,22 @@
+META ok: attempt=audit44 K=6144 N=2048 B=1 type=q6_K
+
+nd=2048 nf=0 (completo!)
+CPU vs Rscalar: nmse=4.302223e-07 max=0.065102 VIOL=13
+CPU vs Rtiled : nmse=6.133970e-07 max=0.135292 VIOL=13
+HTP vs Rscalar: nmse=4.967948e-06 max=0.286582 VIOL=50
+HTP vs Rtiled : nmse=4.809954e-06 max=0.204643 VIOL=54
+PIN(5e-4): CPU/Rs=PASS CPU/Rt=PASS HTP/Rs=PASS HTP/Rt=PASS (LEGACY_FAIL preservado separado!)
+
+TOP10 EXCESSO/limite (HTP vs Rtiled — o objeto novo!):
+  #1 n= 718 excesso=9.3231 (err=0.192824 lim=0.020682 ref=-0.013648!)
+  #2 n= 244 excesso=9.0989 (err=0.193056 lim=0.021218 ref=-0.024351!)
+  #3 n=1111 excesso=8.7423 (err=0.194536 lim=0.022252 ref=0.045044!)
+  #4 n=1585 excesso=7.2592 (err=0.193977 lim=0.026721 ref=-0.134428!)
+  #5 n= 402 excesso=5.5332 (err=0.194444 lim=0.035141 ref=0.302823!)
+  #6 n= 560 excesso=4.9596 (err=0.195072 lim=0.039332 ref=0.386647!)
+  #7 n=  86 excesso=4.9015 (err=0.194166 lim=0.039614 ref=0.392275!)
+  #8 n=1901 excesso=4.8486 (err=0.194663 lim=0.040148 ref=-0.402967!)
+  #9 n=1427 excesso=3.6001 (err=0.193998 lim=0.053887 ref=0.677749!)
+  #10 n=1034 excesso=3.5218 (err=0.194530 lim=0.055236 ref=-0.704730!)
+
+R44_LOADER_DONE modo=NORMAL exit=0

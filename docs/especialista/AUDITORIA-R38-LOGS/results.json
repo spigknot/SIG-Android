@@ -1,0 +1,69 @@
+{
+  "checks": [
+    {
+      "file": "probe-r38-com-temporal.cpp",
+      "match": true
+    },
+    {
+      "file": "r38-capture-full.txt",
+      "match": true
+    },
+    {
+      "file": "r38-probe-build.log",
+      "match": true
+    }
+  ],
+  "reproduction": [
+    {
+      "scenario": "baseline",
+      "exit": 0,
+      "stdout": "MM[q4_K] TEMPORAL: env-pos-init=3 getter_reconsulta=1 (known=1!) => RETIDO-CONFIRMADO (nao getenv!)\nGATE_USES_FIRST_READ=1 permission=0 ENV_RESTORED=1\n"
+    },
+    {
+      "scenario": "getter_env_mutant",
+      "exit": 0,
+      "stdout": "MM[q4_K] TEMPORAL: env-pos-init=3 getter_reconsulta=3 (known=1!) => DIVERGIU (mutante?)\nGATE_USES_FIRST_READ=1 permission=0 ENV_RESTORED=1\n"
+    }
+  ],
+  "device_log_aggregation": {
+    "metrics": [
+      [
+        "15087",
+        "MM[K=256 N=64 B=1 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=64/64 max_abs=0.05263 nrmse=0.00016 nmse_pin=2.536685e-08 viol=0 PASS"
+      ],
+      [
+        "15087",
+        "MM[K=256 N=64 B=2 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=128/128 max_abs=0.10385 nrmse=0.00034 nmse_pin=1.187797e-07 viol=0 PASS"
+      ],
+      [
+        "15087",
+        "MM[K=256 N=64 B=128 q4_K] hrc=0 pre=1 post=1 nf_ref=0 nf_out=0 nd=8192/8192 max_abs=0.16718 nrmse=0.00037 nmse_pin=1.337495e-07 viol=10 FAIL"
+      ]
+    ],
+    "exec_fail": [
+      [
+        "26881",
+        "MM[K=256 N=64 B=1 q4_K] EXEC_FAIL (hrc=-998)"
+      ],
+      [
+        "26881",
+        "MM[K=256 N=64 B=2 q4_K] EXEC_FAIL (hrc=-998)"
+      ],
+      [
+        "26881",
+        "MM[K=256 N=64 B=128 q4_K] EXEC_FAIL (hrc=-998)"
+      ]
+    ],
+    "totals": [
+      [
+        "15087",
+        "MMTOTAL pass=3 fail=1 skip=0 compute_calls=6"
+      ],
+      [
+        "26881",
+        "MMTOTAL pass=1 fail=3 skip=0 compute_calls=3"
+      ]
+    ]
+  },
+  "scope": "exact temporal diagnostic block + frozen R35 predicate, mocked registry/env; no real backend or device execution"
+}

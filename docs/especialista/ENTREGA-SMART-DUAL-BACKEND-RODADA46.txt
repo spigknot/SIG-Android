@@ -1,0 +1,119 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 46 (VERSÃO FINAL — §5 INCLUÍDO!)
+================================================================================
+| TIPO: [EXECUCAO-REAL] | RODADA: 46 (completa!) | DATA: 10/10/2026 |
+| ESTADO: OS 7 FIXES + A API DE LEITURA (§5!) IMPLEMENTADOS, COMPILADOS
+  (host+skel RC=0!) E EXERCITADOS (vacinas 8/8 + 6/6 + o gerador RED!);
+  o device (§7) é o próximo passo — sem bloqueio técnico pendente! |
+================================================================================
+
+================================================================================
+SECAO I — RESUMO EXECUTIVO (a rodada completa!)
+================================================================================
+(1) OS 7 DEFEITOS DO PARECER (R45): TODOS CORRIGIDOS (bi=0!; por batch!;
+    seleção na op!; atribuição após o memcpy [o memset!]; descritor; bounds;
+    limpeza no dispatcher!) + init-only + owner — com 8 vacinas PASS.
+(2) A API DE LEITURA (§5!): IMPLEMENTADA no padrao REAL do fork (registry:
+    strcmp em get_proc_address — como o getter R37!):
+    - struct ggml_hexagon_act_dump_status (layout ACORDADO: magic/version +
+      status/type/K/N/B/epoch/rows_done/payload_off/ptr/capacity/row_size!);
+    - o HEADER de 16 B no buffer (host prepara: magic/epoch!; skel marca:
+      op_seen [no op_matmul!] + rows_done [atomic nos workers!]) — o payload
+      no OFF 64!;
+    - status: 0=NOT_ARMED, 1=ARMED_NO_CAPTURE, 2=CAPTURED (op_seen+rows==B!),
+      -1=INVALIDO (header!) — o consumidor confere magic/version!
+    - CAPTURED exige: op chegou + rows completas + a chamada SO' depois da
+      resposta do batch (o flush global do DSP ja' ocorreu — o contrato
+      existente, confirmado no main.c:1067-1070 pelo parecer!);
+    - a UMA captura: g_r46_meta.used desarma as demais (sem sobrescrever!).
+(3) AS VACINAS: FIXES 8/8 PASS + API 6/6 PASS + o GERADOR: missing-anchor
+    agora FALHA (AssertionError! exit=1! — bloqueia o build!) — o defeito do
+    R45 (exit0 silencioso!) CORRIGIDO na prática!
+(4) BUILD: host RC=0 (lib 5.826.440 B — 12:35!) + skel RC=0 (747.336 B —
+    12:36!) + os diffs (164+41 = 205 linhas do §5!) + fullSHA64 (4 itens!).
+
+================================================================================
+SECAO II — AS SAIDAS EXECUTADAS (todas!)
+================================================================================
+=== as vacinas dos FIXES (8/8!): ===
+C1 bi_do_batch=0 (exigido 0! — ACEITO!)
+C2 apos reset: bi=0 n_bufs=1 (re-add OK!)
+C3 nao-Q6=-1 K2048=-1 B2=-1 (exigido -1/-1/-1!)
+C4 copy=221184 cap=262144 match=SIM
+C5 len>cap=0 off+len>cap=0 exact==cap=262144 (exigido 0/0/262144!)
+C6 hmx_ptr=NULL (exigido NULL!)
+C7 flag0: bi=-1 (exigido -1! OFF total!)
+C8 flag01: bi=-1 (exigido -1!)
+
+VACINAS_R46: TODAS PASS (8/8!) (0 falhas!)
+
+=== as vacinas da API (§5 — 6/6!): ===
+N1 flag0: status=0 (exigido 0!)
+N2 armed-sem-captura: status=1 (exigido 1!)
+N3 completo: status=2 rows=1 K=6144 N=2048 B=1 row=221184 cap=262144 (exigido 2/1/6144/2048/1/221184/262144!)
+N4 header-invalido: status=-1 (exigido -1!)
+N5 op_seen0: status=1 (exigido 1!)
+N6 rows0: status=1 (exigido 1!)
+
+API_VACINA_R46: TODAS PASS (6/6!) (0 falhas!)
+
+=== a vacina do gerador (missing-anchor!): ===
+NOANCHOR_EXIT=1 (AssertionError: A1 anchor!) — FALHA consumida (bloqueia!)
+================================================================================
+
+================================================================================
+SECAO III — O CONSUMIDOR (como o probe usa a API no P7!)
+================================================================================
+1) ggml_backend_reg_get_proc_address(reg, "ggml_hexagon_get_act_dump");
+2) struct (layout copiado!): magic/version conferem;
+3) se status==2: ler payload_off (64) + B*row_size bytes do ptr;
+4) validar rows_done==B + os tamanhos (221184!) + SHA; exportar;
+5) status 0/1/-1: NOT_ARMED/ARMED/INVALIDO — sem arquivo!
+(pendente: o probe real + o device — o §7!)
+
+================================================================================
+SECAO IV — fullSHA64 (fontes + libs do cohort §5!)
+================================================================================
+33f187101b03f456d40118a9c4f0b2366c411239b51133bf28e146b5a637723b  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+70ba2210adc89f8baf41f469adb96461348aab866df2194d71fdb129f6c189f0  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+5138cb3bd6fe3f8900f6e863b0dd387b23c7e9efaee2fe96f6b09d73ffaa921e  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+0b8c6dc95c2cf7bccc931626e97a03e7ca8388c5e55bd2e16b7a6b437795dc2b  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+
+================================================================================
+
+================================================================================
+SECAO V — MANIFESTO (existencias + tamanhos + fullSHA64 — TODOS os anexos!)
+================================================================================
+e0bcbfb7ba701b06eba1d6a52fec49f003fa83c930b70721049ab7233297ecb3  smart-rodada46/r46-fullsha64-cohort-v2.txt  (715 B)
+94d2317fd157b81cf8bae7a688ed2c4401996d6449af2605d59390f14f370e02  smart-rodada46/r46-host-build.log  (1338 B)
+22bebb3a084aeec0109f44781cb565c88b44f2ca38961beed4290be405042a2a  smart-rodada46/r46-skel-build.log  (2252 B)
+6744c31076165c66191130bb2ae50aed349f64c580c71a25ba9a5e87b09c83d9  smart-rodada46/r46-v2.diff  (16034 B)
+da7d4bfdc78bebdf5bef439d6002e5af6a76bbacc8057ae069c8cd9670dd258c  smart-rodada46/r46-vacinas-out.txt  (383 B)
+0650d125ec300ec45832c9b423a44a637f8b237803493c71d9ba7232dc8ef457  smart-rodada46/r46_api_vacina.c  (4480 B)
+e512152b37b1baffd8356803d356f646295c23266a4e6548f3d57a8b48d45b0f  smart-rodada46/r46_patch.py  (10405 B)
+bc7880d0b8330b06542ed7e326602d3722b2a3e098737fa6e8feef7611d813a0  smart-rodada46/r46_vacinas.c  (7146 B)
+e864e3542b47f145a329cb3e262caf9889bacb0e3267a97103f6f60e83a06683  smart-rodada46/r46b-api-vacina-out.txt  (344 B)
+3f40066e920903facceeafdc47a31014fcdb8723f195d4fd493eef6d540b2a50  smart-rodada46/r46b-fullsha64-final.txt  (484 B)
+5c3c96da654f9d21ca8d41ebdcc90cc4547397ce1795e507735ef2b2c4775c7f  smart-rodada46/r46b-host-api.diff  (7570 B)
+bb08e1e6acdcead772a50ae7d209a3e0128e8b77fc62bc119d63baa08609db1c  smart-rodada46/r46b-skel-opseen.diff  (2852 B)
+126b8c571a2c6da89aba454e27bbc28c08b9e1adce2b8f48ca726abcb7bf3939  smart-rodada46/r46b_patch.py  (9626 B)
+
+================================================================================
+SECAO VI — FRONTEIRAS A-H (atualizadas!)
+================================================================================
+A. fullcohort: os 4 arquivos com fullSHA64 (secao IV!); diffs acumulados
+   (r46-v2.diff = 427; r46b-host-api.diff = 164; r46b-skel-opseen.diff = 41!)
+   — recuperáveis; o APK/probe do device: PENDENTE (o P7!).
+B. correções/vacinas: 7 fixes CCE-HOST (8/8!); API CCE-HOST (6/6!); o gerador
+   RED (missing-anchor = exit1!); as vacinas host usam os FRAGMENTOS REAIS
+   (adapters declarados — não DSP!).
+C. ACT/replay: código COMPLETO (host+skel!) compilado; a captura NO DEVICE
+   (§7!): o próximo passo — sem bloqueio técnico conhecido!
+D. 2048 métricas: PENDENTE (pós-captura!). E. capturas/controles: PENDENTES.
+F. runner/loader: CCE (R44!) + o gerador agora RED-correto!
+G. fronteiras: fixes+API = CCE-HOST; build = EVIDENCIADO (os logs!); ACT
+   device = PENDENTE; KERNEL/GRAPH/HANDOFF/PERF = NÃO.
+H. o próximo teste mínimo: (1) instalar o cohort §5 no device (libs: os SHA
+   da seção IV!); (2) GGML_HEXAGON_ACT_DUMP=1 (o tune!); (3) mmtest:q4k;
+   (4) chamar a API (registry!) e ler o status (CAPTURED!); (5) exportar os
+   221184 B + validar; (6) as 2048 com a ACT observada!
+================================================================================

@@ -1,0 +1,10 @@
+{
+  "observed_source_sha256": "b802ac7e4349ad7f88244e8fd688715c1e611d3c0be3f01116994fdd6c8edcf2",
+  "local_apk_sha256": "e2bc92b9309e78d8b3fb002fd5feba6d56dc1c47725c6822871ceb11f5bc7e66",
+  "scope": "local artifact, not device-loaded cohort",
+  "mkdir_guard_test_exit": 0,
+  "mkdir_stdout": "R42 SEL_FAIL_ESTRUTURAL (mkdir: File exists!)\nfail=1",
+  "selector_preserved": true,
+  "packaged_probe_sha256": "5f323884a038b96d43e1b56157eab359da13ddbdbef028d695c37cc8570df870",
+  "R42_mkdir_marker": true
+}

@@ -1,0 +1,28 @@
+enum htp_mm_kernel_type {
+    HTP_MM_KERNEL_UNSUPPORTED = 0,
+
+    // HMX paths
+    HTP_MM_KERNEL_HMX_2D,
+    HTP_MM_KERNEL_HMX_F16_BATCHED,
+
+    // HVX floating-point paths
+    HTP_MM_KERNEL_HVX_F16_F16_VTCM,
+    HTP_MM_KERNEL_HVX_F16_F16_DDR,
+    HTP_MM_KERNEL_HVX_F16_F32_DDR,
+
+    HTP_MM_KERNEL_HVX_F32_F32_VTCM,
+    HTP_MM_KERNEL_HVX_F32_F32_DDR,
+    HTP_MM_KERNEL_HVX_F32_F16_DDR,
+
+    // HVX quantized paths
+    HTP_MM_KERNEL_HVX_QUANT_ROW,      // standard row-wise parallel quantization
+    HTP_MM_KERNEL_HVX_QUANT_BLOCK,    // parallel block-wise quantization
+    HTP_MM_KERNEL_HVX_QUANT_ROW_FLAT, // row-wise fallback flat quantization
+};
+
+// Op-specific struct for precomputed matmul params
+843:        /* R49: a COPIA e' HVX-only (h[4]==0 — o n_hmx REAL do op_matmul!)!                  */          \
+3449:    // R49: METADATA DO RAMO (o parecer R48/H!): SEMPRE que armado, registrar os
+3460:            h[4] = (uint32_t) kparams->n_hmx;        // R49: o ramo REAL!
+3461:            h[5] = (uint32_t) kparams->kernel_type;  // R49!
+3463:            h[7] = 0xA5A50001u;                      // R49: op_matmul entrou!

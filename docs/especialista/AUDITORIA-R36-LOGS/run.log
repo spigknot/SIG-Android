@@ -1,0 +1,25 @@
+canon: 9216 bytes (esperado 9216!)
+act: 131072 bytes (esperado 131072!)
+tiled: 10240 bytes (esperado 10240!)
+CPUout vs Rscalar: nd=8192 nf=0 max_abs=0.103656026 nmse=7.564e-08
+  legacy_viol=8
+CPUout vs Rtiled : nd=8192 nf=0 max_abs=0.118527476 nmse=8.746e-08
+  legacy_viol=10
+HTPout vs Rscalar: nd=8192 nf=0 max_abs=0.094743729 nmse=5.618e-08
+  legacy_viol=0
+HTPout vs Rtiled : nd=8192 nf=0 max_abs=0.080030323 nmse=4.858e-08
+  legacy_viol=0
+
+10 coords (b,n): CPUout | HTPout | Rscalar | Rtiled:
+  ( 10,22): 0.892909 | 0.984375 | 0.976789 | 0.985721   dHTP-Rtiled=-0.001346 dHTP-Rscalar=0.007586
+  ( 22,21): 0.184086 | 0.134521 | 0.150793 | 0.144109   dHTP-Rtiled=-0.009587 dHTP-Rscalar=-0.016271
+  ( 31,33): -0.172790 | -0.129883 | -0.154146 | -0.132748   dHTP-Rtiled=0.002865 dHTP-Rscalar=0.024263
+  ( 39,34): -0.342198 | -0.387695 | -0.391700 | -0.394692   dHTP-Rtiled=0.006997 dHTP-Rscalar=0.004004
+  ( 42,45): -0.094327 | -0.168335 | -0.157245 | -0.166225   dHTP-Rtiled=-0.002110 dHTP-Rscalar=-0.011090
+  ( 50,54): -0.187566 | -0.239014 | -0.235728 | -0.241992   dHTP-Rtiled=0.002978 dHTP-Rscalar=-0.003285
+  ( 56,47): -0.871457 | -0.940918 | -0.940452 | -0.932895   dHTP-Rtiled=-0.008023 dHTP-Rscalar=-0.000466
+  ( 66, 2): 0.288361 | 0.240723 | 0.242737 | 0.243125   dHTP-Rtiled=-0.002402 dHTP-Rscalar=-0.002015
+  (110, 1): 0.882331 | 0.812012 | 0.827156 | 0.812112   dHTP-Rtiled=-0.000100 dHTP-Rscalar=-0.015145
+  (123, 8): 0.214987 | 0.258057 | 0.246577 | 0.254066   dHTP-Rtiled=0.003991 dHTP-Rscalar=0.011480
+
+R36_REFS_DONE

@@ -1,0 +1,4 @@
+AUDITORIA HOST R44 — ler AUDITORIA-R44-RASTREABILIDADE-CCE-ACT-PENDENTE.txt primeiro.
+Regressoes do loader novo sobre copias do snapshot R39; plausibilidade do mapa vs upstream local C:/llama-npu.
+Nao sao capturas DSP; kq2 e /root/r44_evid inacessiveis deste host (proveniencia servidor).
+r44_refs.exe: build MinGW do fonte entregue. normal.out/err: NORMAL exit0 13/13/50/54 rotulo novo.

@@ -1,0 +1,21 @@
+MANIFESTO — smart-rodada39 (EXPORT ACOPLADO + SNAPSHOT/ORÁCULO Q6! — sem commit, §2!)
+
+EXPORT ACOPLADO: sel.txt + dir por attempt + hook casa K/N/type + Q4&Q6 + parse '1'! (lib 020ded2e!)
+SNAPSHOT Q6 K6144/N2048/B1: 5 binários (10321920/24576/8192/8192/11010048!) + SHA!
+ORÁCULOS 2048: HTP vs Rtiled 4.81e-06 (PIN-PASS!); CPU 4.30e-07/13 viol (Q8_K-act!)
+Meta do probe hardcoded (falho — registrado!); pendentes: vacina export, temporal, ffn. KERNEL_VALIDATED: NAO.
+
+0d4bf7efd36b0c4e8a18b2a443243ae1d21ad1f03978f0b632d7081514b94792  probe-r39-com-hook.cpp  (101480 B)
+e909a428f89f4b42d69c15693c83de3f307e8369594cc5e740426ba5d2cfacba  r39-capture-full.txt  (106590 B)
+0ccdf582d743df03ae0530a352abaae4af2462ef8baa6035860332930f667503  r39-refs-out.txt  (62 B)
+ec00b621496b9d1a8b6ab2288eb3d0b20c8fc8a5c6c59ce16f4717f452adfbcd  r39_cand.py  (4167 B)
+4a964ea90c9edea0072808c3da64629d812c5818de1aae47d80a73fee020ee7a  r39_refs.c  (7468 B)
+3ae995390120332fe3112d20c263971ca4c20be532ea1be9f2fed776bb32526b  captura-q6-k6144/SHA256-BINARIOS.txt  (495 B)
+8e126e530a6242c70a698dd00936de52890d93eea0960e1eba942b21cf2fd945  captura-q6-k6144/actfloat_131072.bin  (24576 B)
+0103fc0cc34700ff5b194e35dd89b088fff94c64197c58c3c03ef515e46d3640  captura-q6-k6144/canonweights_9216.bin  (10321920 B)
+f343aaa6a9fe746178bd80cd05770fdeb39bb791dcae8fef489bd8f6e78cb315  captura-q6-k6144/cpuout_32768.bin  (8192 B)
+70f06e9494542513f1f9de7f837506b479ab06ae2bf078202868e4510c635e94  captura-q6-k6144/htpout_32768.bin  (8192 B)
+8118318d30498a15ed23b275b72236308f1379191f36f5b9841b94927a04dd63  captura-q6-k6144/meta.txt  (167 B)
+66218735367089fbc9fe33f403c0c81e62214ef167779b88be644fa1104da1ff  captura-q6-k6144/tiled_raw.bin  (11010048 B)
+
+c058c1b8f2fc000c29a0c4eb3271558e4c98d43f23ff8b04c4c680fc1594868d  relatorio:RELATORIO-SMART-DUAL-BACKEND-RODADA39.txt

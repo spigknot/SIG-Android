@@ -1,0 +1,69 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 38
+=======================================================================
+Escopo: leitura de fontes/logs e contraprova de fragmento em scratch.
+Sem alterar app/probe/candidato/Whisper nem acionar aparelho. Sem staging/commit.
+
+1. ACEITO — GETTER RETIDO E RECUSA DO MODO 1
+Os três arquivos do manifesto local conferem SHA-256 (3/3); build arquivado:
+BUILD SUCCESSFUL em 22s. Dois processos observados:
+- PID15087: efetivo3; casos Q4 K256/N64 B1/B2/B128 executados. NMSE:
+  2.536685e-08 / 1.187797e-07 / 1.337495e-07; legado PASS/PASS/FAIL,
+  B128 mantém 10 violações CPU. Não chamar todos de PASS legado.
+  MMTOTAL pass3/fail1/compute6 inclui controle Q5 e chamadas CPU+HTP.
+- PID26881: init1; reconsulta sob env temporário3 retorna1; três casos
+  B1/B2/B128 recusam com hrc=-998. MMTOTAL pass1/fail3/compute3.
+  Fonte :1086-1099 executa CPU primeiro; guard :1053-1058 retorna antes
+  de tensor_set :1066 e graph_compute :1076. Portanto zero upload/compute
+  HTP nesses casos é coerente com fonte+log; não confundir com zero RPC
+  de inicialização/alocação nem dizer que compute_calls mede DSP.
+- Rótulo CPU consulta=N/A corrigido. Zero OPSTAGE_DIAG_FAIL no capture.
+Resultado: GETTER_RETIDO_1_SOB_ENV_TEMPORARIO_3_OBSERVADO = CCE;
+RECUSA_MODO1_ANTES_UPLOAD_COMPUTE = CCE.
+
+2. NÃO ACEITO — 'MATRIZ COMPLETA' / 'MUTANTE MORTO'
+O bloco temporal :1039-1052 segue esta ordem:
+a) salva primeira leitura ops_retained;
+b) altera env para3 e reconsulta em re_retained;
+c) RESTAURA o ambiente em :1048;
+d) apenas imprime RETIDO-CONFIRMADO ou DIVERGIU em :1049-1051;
+e) preflight :1053 usa ops_retained ORIGINAL, não a reconsulta.
+Assim foi observada a propriedade do getter sob ambiente transitório.
+Não foi executado o cenário de decisão com env divergente mantido até
+consulta/preflight/I/O. Init3 -> env1 também não ocorreu: T2 usa env3.
+O getter mutante não foi compilado/executado no Android nesta entrega.
+
+Contraprova offline, compilada e executada:
+extraí o bloco diagnóstico exatamente do R38; adaptei registry/env com
+strings estáveis para isolar controle de fluxo; usei predicado R35 congelado.
+Baseline: getter reconsulta1, RETIDO-CONFIRMADO, gate original1 -> recusa.
+Getter hipotético getenv: reconsulta3, DIVERGIU, MESMO gate original1 -> recusa.
+Ambos os drivers terminam exit0. Build0; audit final0.
+Isso demonstra o limite do bloco: divergência só logada não reprova o teste,
+e a afirmação 'getenv teria permitido' não descreve o caller R38 entregue.
+Não é teste do backend/DSP nem execução de um cohort Android mutante.
+Logs/código/escopo estão em AUDITORIA-R38-LOGS/.
+
+Há ainda risco de lifetime: :1040 guarda const char* de getenv e reutiliza
+após setenv. Copie o valor antes da mutação e cheque operações de ambiente.
+Não observei restauração incorreta no device; é correção de robustez/portabilidade.
+
+3. ESTADO HONESTO E PRÓXIMO TRABALHO
+Matriz temporal completa: PARCIAL (propriedade1->env3 observada + modo1 recusado).
+3->env1, init0/2, getter ausente HTP e mutante com falha consumida: PENDENTES.
+T4 não exige destruir o cohort normal: uma injeção test-only no lookup do
+caller pode devolver NULL só para essa extensão na tentativa negativa.
+Rotule a injeção como tal; não como biblioteca realmente sem o símbolo.
+
+Export parametrizado, snapshots Q6/Q4 K6144, FFN K2048/N6144, repetições,
+counters/pipeline, fused/grafo/handoff/performance continuam pendentes.
+Não reabrir getter retido aprovado nem snapshot R36. A Rodada39 deve priorizar
+EXPORT + SNAPSHOT/ORÁCULO Q6, não mais encerrar só com teste de opstage.
+KERNEL_VALIDATED global=NÃO.
+
+4. EVIDÊNCIAS E ÁRVORE
+AUDITORIA-R38-LOGS/: audit.py, diagnostic-block.cpp, build.log,
+baseline.log, getter_env_mutant.log, audit-run.log, results.json,
+MANIFESTO-SHA256.txt. O build.log vazio significa compiler sem diagnóstico;
+o exit0 foi registrado em audit-run.log/results da execução, não inferido.
+Git: nove adições staged R37 permanecem; não alterei staging nem arquivos
+rastreados. Novos artefatos do especialista estão em docs/especialista/.

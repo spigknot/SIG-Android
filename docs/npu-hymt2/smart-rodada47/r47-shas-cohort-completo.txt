@@ -1,0 +1,11 @@
+35c0df748f467bdf57bf4e6a18af2a1543d391f236e6064a25333b5547bd643a  /root/sigcand2/ggml/src/ggml-hexagon/ggml-hexagon.cpp
+b42fd39a4bdeeb71b1fad51bd8046cbdddc724ac03e228a3cd50c024595d8b82  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.c
+e904030a11448486f25397ccb484f8228b9fd5333dd5f43f862fb6006c442d28  /root/sigcand2/ggml/src/ggml-hexagon/htp/main.c
+4db38dd26a87e3e534b567539484b91f2b85539619a3d445cefadea40eedba90  /root/sigcand2/ggml/src/ggml-hexagon/htp/htp-ctx.h
+7e01bc70430752aa14169501204b87ebf94488df6c61375590c1d94f9ed8398d  /root/sigcand2/ggml/src/ggml-hexagon/htp/matmul-ops.h
+bdcad412c0e0514c19d45caeaeac2064fba0430af69d9fd788cb158575970429  /root/sigcand2/build-kq/bin/libggml-hexagon.so
+5da659b8c6dcbd2f82fed512a53a3a0bcf504a423b90128336de58e7b5227f68  /root/sigcand2/build-kq/ggml/src/ggml-hexagon/libggml-htp-v81.so
+8ab003eb1fdd0643367b4d8ff25f1f6c91697c3a9d3dac9ab68d1251f7ede2cb  /root/sigcand2/build-kq/bin/libllama.so
+33c3ed672d35e9159cbad94f64f7317604ec451282fe3ab6c60a8d21b67b742d  /root/sigcand2/build-kq/bin/libggml-base.so
+b7ef45c389aa8ed83f8451b52349dbfe19f16a8b7246fd065b70e0ad39e7a96d  /root/sigcand2/build-kq/bin/libggml-cpu.so
+43aec1d1c325358d1e991fdfc849adbd10e72fb401143739f898a33a1a82b2a3  /root/sigcand2/build-kq/bin/libggml.so

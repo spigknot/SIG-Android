@@ -1,0 +1,66 @@
+AUDITORIA INDEPENDENTE — SMART DUAL-BACKEND — RODADA 44
+=======================================================================
+Escopo: leitura de arquivos, manifesto refeito por ferramenta, compilacao e
+regressao NORMAL host do loader novo, plausibilidade do mapa contra a
+referencia upstream local. Sem edicao de app/probe/Whisper, sem ADB,
+staging, commit, push ou publicacao.
+
+A. MANIFESTO SEC V — 4/4 CONFEREM (retifico meu rascunho: a primeira
+comparacao desta auditoria usou literal com um nibble digitado errado por
+mim; refeita por ferramenta, GOT==EXP nos 4 + tamanhos).
+Bateria, fontes-kq2, loader 12229 B e runner 2174 B: hashes e tamanhos OK.
+
+B. RASTREABILIDADE — FECHADA NO NIVEL DE CONTEUDO
+SRC_SHA dos 4 runs (15c410db...) == hash do loader entregue; SCRIPT_SHA
+(5edab224...) == hash do runner entregue. Runner com SHAs integrais
+(cut -d' ' -f1, sem -c1-40), RUN_ID por execucao, raiz /root/r44_evid com
+build/out/err por ID, consume-build exit92, exits impressos. Loader com
+whitelist exata dos 5 nomes (exit30) e rotulo R44_LOADER_DONE.
+ACEITE: RASTREABILIDADE_SCRIPT+COTEUDO=CCE nos casos testados.
+Ressalvas: (1) o SRC executado ainda se chama /root/r42_refs.c com conteudo
+novo — renomear para evitar confusao; (2) mkdir -p do EVID e sha do script
+sem checagem de erro (menores); (3) RUN_ID com epoch em segundos pode colidir
+no mesmo diretorio (somar PID); (4) os 12 arquivos de evidencia nao vieram
+como anexos locais — heads apenas, como nas rodadas anteriores.
+
+C. BATERIA — 4 RUNS, NAO 5
+Ha 4 blocos RUN_ID (RECON 0, NORMAL 0, TAMPER 16, MISSING-DIR 20). O "5/5"
+das secoes I/VI esta errado: e 4/4. O caso BUILDFAIL (exit92) nao foi
+demonstrado nesta bateria — o codigo existe mas segue sem vacina executada
+na R44. TAMPER traz digests integrais; MISSING-DIR exit20 cobre meta ausente.
+
+D. MAPA DO MECANISMO — PLAUSIVEL, PROVENIENCIA SERVIDOR
+Vocabulario confirmado na referencia upstream local: HAP_mmap (main.c),
+HTP_MM_ACT_TILE_SIZE_Q8_0=1152 (matmul-ops.h:59; 192x1152=221184 confere),
+ggml_hexagon_shared_buffer (ggml-hexagon.cpp), vtcm_src1 como campo de
+kparams. Linhas alegadas do kq2 divergem do upstream (fork — esperado, nao
+refutacao). Mas fullSHA64 dos 5 fontes e todo o mapa L339/L1686/L1754/1925/
+htp-ctx.h:33/main.c/skEL L814-1221/dma-queue.h:144 dependem de leitura no
+servidor, inacessivel deste host: MAPA=PARCIAL (plausivel, nao verificado).
+O runbook P1-P8 e coerente e declara limites (ABI privada, cohort novo,
+ON/OFF, sem benchmark com dump). P1-P2 sao compilaveis sem device e mesmo
+assim nao foram entregues — cobrar na R45 antes de qualquer cirurgia com
+device.
+
+E. ACT — AINDA NAO EXECUTADA (declarado; aceito como honestidade)
+A justificativa (risco DSP/reboot proibido + sessao no limite) e
+organizacional, nao tecnica — valida como estado, nao como prova. A R45 tem
+de trazer P1-P2 compilados no minimo, e na sequencia a execucao P3-P8 ou
+erro/comando real do bloqueio.
+
+F. NUMEROS — ESTAVEIS (13/13/50/54, 4o snapshot seguido). Regressao host
+desta auditoria: NORMAL exit0, mesmos VIOL, rotulo novo. Sem informacao
+numerica nova — correto como regressao.
+
+G. ESTADOS
+RASTREABILIDADE=CCE (conteudo). BATERIA_RUNNER=PARCIAL (4/4 real, 5/5
+errado, BUILDFAIL sem vacina). LOADER_SCHEMA=CCE_HOST. MAPA_MECANISMO=
+PARCIAL-PLAUSIVEL. ACT_EXEC=NAO_EXECUTADO. FULLCOHORT=PARCIAL (ABI/buildID
+faltam). EXPORT/CAPTURAS/CONTROLES=PENDENTES. KERNEL/GRAPH/HANDOFF/PERF=NAO.
+Staged R37 preservado (9 'A '); produto intocado.
+
+H. DIRECAO R45 (detalhes no prompt)
+P1-P2 compilados + diff do patch; depois P3-P8 executados ou bloqueio real;
+fullcohort com ABI/buildID; bateria com contagem exata e vacina BUILDFAIL;
+anexar evidencias por RUN_ID ou declarar o limite.
+=======================================================================

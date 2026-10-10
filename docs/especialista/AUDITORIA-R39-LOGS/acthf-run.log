@@ -1,0 +1,19 @@
+canon: 10321920 (esperado 10321920!)
+act: 24576 (esperado 24576! = 6144 floats!)
+outs: 8192/8192 (esperado 8192 cada = 2048 floats!)
+tiled: 11010048 (esperado 11010048!)
+HTP_HF_Q8_ACT_MODEL weight=CANON nmse=5.980449651621e-06 max_abs=3.049825023675e-01 legacy_viol=55
+HTP_HF_Q8_ACT_MODEL weight=TILED nmse=5.786423821926e-06 max_abs=2.237203054028e-01 legacy_viol=57
+
+TODAS as 2048 saidas (B=1!): nd=2048 nf=0
+CPU vs Rscalar: max_abs=0.065102 nmse=4.302e-07 viol=13
+CPU vs Rtiled : max_abs=0.135292 nmse=6.134e-07 viol=13
+HTP vs Rscalar: (ver acima!) 
+HTP vs Rscalar: max_abs=0.286582 nmse=4.968e-06
+HTP vs Rtiled : max_abs=0.204643 nmse=4.810e-06
+
+Coords com maior |CPU-Rtiled| (top10!):
+  n=1763: CPU=18.337170 HTP=18.378529 Rscalar=18.276987 Rtiled=18.201878 |CPU-Rtiled|=0.135292
+ACTUAL_HTP_VIOLATIONS scalar=50 tiled=54
+
+R39_REFS_DONE

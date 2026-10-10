@@ -1,0 +1,28 @@
+AUDITORIA HOST R42 — COMO INTERPRETAR OS ARQUIVOS
+
+Não são capturas Android/DSP. O auditor usa entradas R39 aprovadas e cópias
+em scratch; os casos NaN/zero/meta são explicitamente regressões negativas.
+
+audit.py compila o C original, executa quatro casos, testa validação do
+sufixo SHA por digest-provider-injection.h e testa controle do runner com
+paths exclusivamente adaptados para scratch, compilador-falha injetado e
+executável diagnóstico stale que só imprime STALE_BIN_EXECUTED.
+
+r42_refs.c/r42_runner.sh são cópias dos originais entregues pelo executor.
+runner-path-adapter.sh é DERIVADO para a contraprova, não correção do runner.
+fixture-stale-bin.sh é o executável diagnóstico simulado, não oráculo de
+inferência; não confundir com r42_refs.exe.
+
+mkdir-guard.cpp é fragmento do setup observado com adaptações host para
+filesystem; mkdir-run.log/identity-and-mkdir.json documentam retorno fail1,
+selector preservado e ausência de continuação. Não exercita upload/compute.
+probe-current-observed.cpp é snapshot somente leitura do source local, não
+arquivo corrigido pelo especialista. A identidade APK é local, não de aparelho.
+
+Executáveis Windows dependem da toolchain MinGW; audit.py prepara PATH para
+seus subprocessos. Os logs são de execução real; entradas grandes de teste
+permanecem em scratch/R39 e não estão duplicadas neste ZIP.
+
+SHA-256 no manifesto desta auditoria é inteiro64hex. O fornecedor de teste
+com prefixo igual/sufixo diferente não simula uma colisão SHA real: verifica
+se o validador compara todos os caracteres, sem alterar o original.

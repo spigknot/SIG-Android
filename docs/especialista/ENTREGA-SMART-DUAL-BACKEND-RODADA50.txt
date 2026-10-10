@@ -1,0 +1,189 @@
+ENTREGA — SMART DUAL-BACKEND — RODADA 50 (ARQUIVO ÚNICO COM TUDO)
+================================================================================
+| TIPO: [EXECUCAO-REAL NO DEVICE] | RODADA: 50 | DATA: 10/10/2026 |
+| ESTADO: 🏆 A PRIMEIRA ACT REAL CAPTURADA (221184 B, status=2!) — a demanda
+  central desde a R39! O ramo real CONFIRMADO NO DSP: BLOCK (qfn=3 —
+  quantize_f32_q8_0_tiled_block!), n_hmx=0, kernel_type=10; o observador
+  corrigido expõe a metadata em PENDING (a causa do R49 era o GETTER CEGO,
+  não o SKEL); captura pós-barreira cobrindo BLOCK+ROW; determinismo
+  comprovado (2 runs, SHA idêntico); reader/replay vinculado ao input
+  (escalas 48/48 exatas; multiset 99.821%)! |
+================================================================================
+
+================================================================================
+SECAO I — A CADEIA DE PROVA COMPLETA (a resposta ao §7 do prompt R50!)
+================================================================================
+A "menor prova completa" pedida (identidade+enum+observer pending visível+
+quant_func DSP+ACT 221184 real uma vez/CPU visible+reader/replay vinculados):
+
+(1) IDENTIDADE (1.1): serial físico LIDO: ro.serialno = ro.boot.serialno =
+    3B15BD00FVE00000 (o AUTORIZADO! BD). Transporte = 100.108.27.64:5555,
+    modelo CPH2747. Toda ação R50 usou -s explícito. RETIFICAÇÃO FORMAL: o
+    texto do R49 declara 3B15DD00FVE00000 — é typo de TRANSCRIÇÃO do MEU
+    relatório; ambos os tokens ficam preservados literalmente; NÃO houve
+    acesso a device "DD" (nenhum recibo o menciona); o PJA110
+    (100.114.88.45:5555) apareceu no adb e NÃO foi tocado.
+    Recibo de instalação: lastUpdateTime=2026-10-10 13:34:50 (dumpsys).
+(2) ENUM/COHORT (1.2): o MAPA COMPILADO do header REAL (htp/matmul-ops.h do
+    cohort, extraído do fonte e compilado por g++ — script r50_enum_map.py,
+    BUILD_RC=0 RUN_EXIT=0, 12 identificadores):
+      UNSUPPORTED=0 HMX_2D=1 HMX_F16_BATCHED=2 HVX_F16_F16_VTCM=3
+      HVX_F16_F16_DDR=4 HVX_F16_F32_DDR=5 HVX_F32_F32_VTCM=6
+      HVX_F32_F32_DDR=7 HVX_F32_F16_DDR=8 HVX_QUANT_ROW=9
+      HVX_QUANT_BLOCK=10 HVX_QUANT_ROW_FLAT=11
+    → RETIFICAÇÃO R49: kernel_type=10 = **BLOCK** (não ROW como o R49 disse!).
+(3) OBSERVER PENDING VISÍVEL (2.x): o getter corrigido (A4/A5 do patch R50)
+    expõe h[4..7]+h[8..14] APÓS magic/epoch e ANTES dos gates de pending;
+    vacina 8/8 GREEN com o getter LITERAL do fonte (vac-out.txt). No device:
+    "R50 OBS: meta_valid=1 firstcause=0 | entered=1 n_hmx=0 kernel=10
+     decoded=1 qfn=3 nqt=8 dsp_nrows=1/1 nthr=8 total_nb=48".
+(4) QUANT_FUNC DSP (3.x): **qfn=3 = quantize_f32_q8_0_tiled_block** — o
+    worker BLOCK era o alvo (a previsão do parecer R49/E CONFIRMADA); o hook
+    ROW (R46-R49) foi REMOVIDO e a captura agora é ÚNICA PÓS-BARREIRA em
+    hvx_mm_matmul (após worker_pool_run_func — cobre BLOCK E ROW!).
+(5) ACT 221184 REAL (4.x): status=2 rows_done=1 row_size=221184 cap=262144;
+    export temp+rename OK ("R50 EXPORT ok: 221184 bytes"); 2 RUNS
+    INDEPENDENTES (PIDs 22208 e 22782) → SHA-256 IDÊNTICO
+    0ac5805fd2076f1477ff68f99472fc9706d6e515eb34a544db96c3d9a8cb65ec.
+(6) READER/REPLAY (6.2): escalas 48/48 bit-exatas vs f16(max|f16(x)|×
+    f16(0x2008)) do INPUT; replicação 32× descoberta; multiset 99.821%
+    (196256/196608); 38/48 blocos 100%; resíduo de 10 valores de fronteira
+    declarado (secção E).
+
+================================================================================
+SECAO II — O QUE FOI EXECUTADO (com totais por script!)
+================================================================================
+(1) r50_patch.py (HOST+SKEL; if/raise — NADA de assert!): aplicado (exit 0).
+    Fixtures sem âncoras: normal EXIT=1 E python -O EXIT=1 (RED correto — o
+    falso-GREEN do -O do F.2 MORREU!). diff = r50.diff (178 linhas).
+    HOST: struct v3 (r50_meta_valid/firstcause/srс1_nrows/n_threads/
+    need_quant/n_quant_tasks/quant_func_id/dsp_decoded/total_nb); getter com
+    cap-check ANTES do load + metadata em PENDING + firstcause + CAPTURED
+    exige entered. SKEL: macro QUANTIZE_IMPL LIMPO (cópia por-task removida);
+    helper r50_quant_func_id; TRACE h[8..14] no ponto da decisão; CAPTURA
+    ÚNICA PÓS-BARREIRA (quant_task_func!=NULL + runner OK + bounds origem e
+    destino).
+(2) r50_build.sh (container arm64-android v0.7, build-kq): HOST_RC=0
+    (libggml-hexagon.so 5828032 B SHA 5d7fee30...); SKEL_RC=0
+    (libggml-htp-v81.so 747336 B SHA 247f5d54...). Logs: host-r50.log /
+    skel-r50.log ("Building ... matmul-ops.c.obj" + "Linking" = compilação
+    REAL, 0 warnings no skel).
+(3) r50_vacina_getter.py (servidor): BUILD_RC=0; RUN off EXIT=0 (NOT_ARMED);
+    RUN on EXIT=0 — 8/8 GREEN: PENDING metadata visível; cap-short INVALID
+    antes do load; epoch stale INVALID; captured sem entered INVALID
+    (firstcause=7); captured completo status 2 (duplicata estável);
+    handshake -2. Getter extraído (sha256 do trecho a846ccafa83fd66d...).
+(4) r50_enum_map.py: BUILD_RC=0 RUN_EXIT=0 (mapa acima).
+(5) APK: gradlew assembleDebug BUILD SUCCESSFUL (24s) → 16855419 B SHA
+    a0fb84d0...; entradas pós-strip (apk-entries-r50.txt): hexagon=92f99959…
+    htp-v81=13806a0f… npuprobe=e1721c9d… PROBE (probe.cpp): struct v3,
+    print honesto (R50 OBS — o "DSP DECODIFICOU" incondicional MORREU),
+    predicate de PUBLICAÇÃO exigindo o ramo/layout do alvo (entered=1+
+    n_hmx=0+kernel=10+decoded=1+need_quant=1+qfn!=0+src1_nrows=1+
+    total_nb=48+rows==B+row==221184+cap<=1MiB+ptr!=0), dir r50/<attempt>,
+    export temp+rename+status.txt.
+(6) DEVICE (CPH2747 @ 100.108.27.64:5555, -s explícito): preflight
+    (ro.serialno=BD); install -r Success (lastUpdateTime 13:34:50);
+    p4-session.txt=mmtest:act; p4-tune.txt=GGML_HEXAGON_ACT_DUMP=1. RUN 1
+    (PID 22208, 13:35) e RUN 2 (PID 22782, 13:37): "R48 ACT_ROTA count=1";
+    "R50 ACT_DUMP: ret=0 status=2 magic=OK ver=3 valido=1 req=1";
+    "R50 CAPTURE_REQUIRED_OK"; "MM verdict_legacy=LEGACY_FAIL
+    verdict_pin=PIN_PASS pin_valid=1 nmse_full=2.863562400e-06 (nd=2048/2048
+    nf=0/0 unw=0 novl=37)"; "MMTOTAL pass=0 fail=1 skip=0 compute_calls=2"
+    (o fail=1 = o LEGACY_FAIL histórico — a CAPTURA passou!).
+(7) EXPORT (exec-out run-as — NUNCA shell cat): act_payload.bin (221184 B,
+    SHA 0ac5805f...) ×2; status_r40_1_22782.txt; insumos do attempt
+    (actfloat 8e126e53... 24576 B; cpuout f343aaa6... 8192 B = IDÊNTICO AO
+    R39!; htpout 70f06e94... 8192 B = IDÊNTICO AO R39!; canonweights
+    0103fc0c... 10321920 B; meta.txt). SNAPSHOT 4/5 (o 5º nome tiled_raw NÃO
+    é produzido pelo probe atual; "meta=-1" no check é a ordem
+    check→write conhecida — os 4+meta EXISTEM e foram extraídos).
+(8) r50_reader_final.py (host): EXIT 0 — resultado na secção E.
+
+================================================================================
+SECAO III — O LAYOUT E O READER/REPLAY (a descoberta!)
+================================================================================
+O kernel quantize_block_f32_q8_0_tiled (hvx-mm-kernels-tiled.h:124-197):
+128 floats → 4 sub-blocos de 1152 B; cada sub-bloco = 8 vectors de 128 B
+(dados) + 128 B de ESCALA (r_scale = repl(vd) — 128 B com o MESMO fp16!);
+d = f16(vmax_hf × f16(0x2008)) com 0x2008 = 1/127; os dados = cadeia
+vrot/vdelta/repl (bit-rearrange do layout tiled 32×32 — o de-permute
+POSICIONAL exigiria o manual HVX; NÃO decodificado — rotulado).
+READER (invariância de permutação — multiset!):
+ 1) ESCALAS: 48/48 blocos com as 4 escalas idênticas entre si E EXATAS vs
+    f16(max|f16(x_bloco)| × f16(0x2008)) calculado do INPUT — vínculo
+    input→payload provado BIT A BIT nos 48 blocos.
+ 2) REPLICACAO: multiset físico == 32 × multiset esperado (8× por sub-bloco,
+    32× por bloco de 128) — CADA valor quantizado do input aparece 32×.
+ 3) REPLAY: modelo q = floor(f16(f16(x)×inv) + 0.5) [round half-up do
+    produto ARREDONDADO a f16] com inv = f16(1/d) refinado em oitavos de ulp
+    (o resíduo qf16): multiset 196256/196608 = 99.82096%; 38/48 blocos 100%;
+    10 blocos com 1 valor (×32 cópias) em fronteira [frac .4922-.4990] onde o
+    arredondamento interno do DSP (pipeline qf16) sobe e o emulador não
+    alcança — RESÍDUO DECLARADO, NÃO fabricado.
+ 4) DETERMINISMO: 2 capturas independentes SHA idêntico.
+ 5) COBERTURA: 48 tiles × 128 = 6144 = K integral; row 221184 = 48×4608;
+    64+221184 = 221248 ≤ 262144 (cap).
+
+================================================================================
+SECAO IV — MANIFESTO (existencias+tamanhos+fullSHA256 — smart-rodada50/!)
+================================================================================
+Integral em: docs/npu-hymt2/smart-rodada50/MANIFESTO-SHA256.txt (23 arquivos
+locais + 7 remotos). Destaques:
+  act_payload.bin / act_payload_2.bin = 0ac5805f... (221184 B, IDÊNTICOS!)
+  actfloat = 8e126e53... ; cpuout = f343aaa6... (=R39!) ; htpout = 70f06e94...
+  (=R39!) ; canonweights = 0103fc0c... ; r50.diff = e869d078... ;
+  r50-capture-full.txt = df9ea6ab... ; vac-out.txt = 9966894a... ;
+  r50_patch.py = 655cc59e... ; r50_reader_final.py = fc1c1cc0... ;
+  r50_enum_map_out.txt / r50_enum_map.{py,cpp} / apk-entries-r50.txt.
+  REMOTOS: ggml-hexagon.cpp=0aba3b97... matmul-ops.c=1f27274a...
+  lib host=5d7fee30... skel=247f5d54... ; APK=a0fb84d0... (16855419 B).
+
+================================================================================
+SECAO V — FRONTEIRAS A-H (estados!)
+================================================================================
+A. IDENTIDADE: CCE (BD com recibos ro.serialno/ro.boot.serialno; transporte
+   100.108.27.64:5555; install recibo 13:34:50). DD = typo de transcrição do
+   R49 preservado literalmente; PJA110 não tocado. PENDENTE: nada de "DD".
+B. OBSERVER: CCE (vacina 8/8 com getter LITERAL; no device: meta_valid=1 em
+   PENDING — a causa R49 "getter cego" CONFIRMADA e CORRIGIDA).
+C. TRACE/QUANT_FUNC: CCE no DEVICE (qfn=3=quantize_f32_q8_0_tiled_block;
+   nqt=8; total_nb=48; nthr=8; need_quant=1; src1_nrows=1; decoded=1) +
+   MAPA COMPILADO do cohort (10=BLOCK). Ranges: derivados da fórmula real
+   [total_nb*i/n] (8 tasks → [0,6),...[42,48), 48 grupos, disjuntos).
+D. CAPTURA REAL: CCE!!! status=2; rows_done=1; 221184 B; export ok; 2 runs
+   determinísticos; cap 262144; bounds ok. ACT_REAL = **CAPTURADA** (era
+   "NÃO CAPTURADA" desde a R39!).
+E. READER/REPLAY: PARCIAL FORTE (escalas 48/48; replicação 32×; multiset
+   99.821%; 38/48 blocos 100%; resíduo qf16 de 10 valores DECLARADO; o
+   de-permute POSICIONAL vdelta/vror NÃO decodificado — exigiria manual HVX;
+   NÃO substituído por suposição).
+F. SNAPSHOT/NÚMEROS: 4/5 declarado (tiled_raw fora do probe atual); math
+   INTACTO (LEGACY_FAIL 37, PIN_PASS, nmse_pin=2.863562400e-06); cpuout/
+   htpout BYTE-IDÊNTICOS ao R39 (runtime reproduz a série histórica!).
+G. KERNEL_VALIDATED/GRAPH/HANDOFF/PERF/SMART: NÃO (por desenho — a captura
+   não aprova kernel; PIN_PASS limitado não aprova Smart).
+H. PRÓXIMO TESTE MÍNIMO: (1) decodificar o de-permute POSICIONAL
+   (vdelta/vror/vpack) com o manual HVX V81 disponível ao especialista (ou
+   aceitar o reader por multiset como contrato) → fechar o replay posicional
+   dos 2048; (2) Q6 K2048/N6144 B1 + controles F32/Q4_0/Q8_0 no MESMO shape
+   da rota ACT; (3) o FFN Q4 K2048/N6144 B1/B128; (4) minigrafo
+   (HTP→CPU→HTP) e placement; depois GRAPH/HANDOFF/PERFORMANCE e só então
+   promoção. NADA de promoção/default/troca de lib de produção nesta fase.
+
+================================================================================
+SECAO VI — LIMITES DECLARADOS (nada fabricado!)
+================================================================================
+- O de-permute posicional do layout tiled NÃO foi decodificado (o reader é
+  por invariância de permutação — multiset/escalas; rotulado).
+- O resíduo de 10 blocos (0.179%) = fronteira de arredondamento do pipeline
+  qf16 do DSP — declarado, não oculto, não ajustado por força bruta.
+- Os "carregados no DSP" = a cadeia observada (sessão htp-v81 + os campos do
+  DSP no header); o mapa ELF/buildID do skel remoto segue PARCIAL (sem
+  leitura de disco do device além do probe).
+- R2/credenciais/áudio: não lidos/tocados. Produto/Whisper/UI/default
+  Vulkan/modelo c4bf/WIP/9 staged R37: INTOCADOS (sem commit/staging/removal).
+================================================================================
+```
+
+*Nota: o texto acima é a entrega; ver também `docs/npu-hymt2/smart-rodada50/` para os binários, scripts, logs e o manifesto integral.*

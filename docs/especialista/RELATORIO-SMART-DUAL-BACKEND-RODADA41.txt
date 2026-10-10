@@ -1,0 +1,78 @@
+RELATORIO SMART DUAL-BACKEND — RODADA 41
+=========================================================================
+Data: 10/10/2026. Prompt: "FECHAR EXPORT/ERROS CONSUMIDOS E OBSERVAR ACT Q6
+NO COHORT REAL". Copia isolada/probe. SEM commit/staging (§2!).
+
+RESUMO EXECUTIVO — (1) O RUNNER/LOADER (§4!) CORRIGIDO E EXECUTADO: o
+oráculo r41_refs roda com cadeia COMPLETA (build exit=0/BINARIO_OK/RUN
+exit=0/stderr 0 linhas!) — valida schema/tamanhos EXATOS (inclusive
+excesso!), carrega os 5 binários do R39 (o meta do R39 esta' AUSENTE na
+copia — WARN! o original tinha o rotulo hardcoded!), computa os vetores
+UMA VEZ, e imprime TUDO: nd=2048 nf=0; CPU vs Rscalar nmse=4.302e-07
+max_abs=0.065102 VIOL=13; CPU vs Rtiled 6.134e-07/0.135292/13; HTP vs
+Rscalar 4.968e-06/0.286582/**VIOL=50**; HTP vs Rtiled 4.810e-06/0.204643/
+**VIOL=54** — REPRODUZINDO EXATAMENTE as contagens do especialista! PIN
+(5e-4!) os 4 PASS (separado do pontual!). CSV COMPLETO de 2048 linhas
+entregue. TOP10 com 10 idx DISTINTOS (ordenação DECLARADA: |err| abs HTP
+vs Rtiled!): TODOS os 10 sao valores GRANDES (|v|≈21-27!) com erros QUASE
+IDENTICOS (~0.2033-0.2046!) — um erro RELATIVO de ~0.9-1.0% do |valor|
+(0.2033/21.48=0.95%! 0.2046/21.48=0.95%!) — EVIDENCIA ESTRUTURAL: a
+assinatura do rounding q8_0 (1/127=0.79%!) na ACTIVACAO — hipotese #1
+(ACT-Q8_0-CONV!) reforçada, MAS NAO PROCLAMADA (o §5.2: observar de fato!).
+(2) OS FIXES DO EXPORT (§3.1!): mkdir AGORA CONSUMIDO (EEXIST no pai e'
+tolerado; o dir do attempt tem de ser NOVO — SEL_FAIL explicito!); o
+STATUS agrega META (existe/nao-vazio!) E exfail — R41 SNAPSHOT_COMPLETE
+exige 5/5 + meta>0 + exfail=0; senao SNAPSHOT_FAIL (agregado!). Build ✓.
+(3) RETIFICAÇOES R40 ACEITAS: 'EEXIST nao tolerado' RETIRADO (era
+(void)mkdir!); IDS/META/STATUS = fronteiras PARCIAIS (nao CCE!); o status
+R40 nunca foi fail-closed (COMPLETE antes do meta! exfail resetado!
+fclose ignorado!); r39-nmse-nota.txt estava VAZIO (refeito!). (4) A ACT
+REAL permanece PENDENTE (declarada — o excerpt estatico nao prova o
+branch/branch do K6144/N2048/B1!). NAO trocar Q8_0→Q8_1 por analogia;
+ACC_FP16 nao comprovada por escalas F16 (etapas separadas!). KERNEL_
+VALIDATED: NAO.
+
+-----------------------------------------------------------------------
+A. COHORT/IDENTIDADE (§2!) — PARCIAL (declarado!)
+-----------------------------------------------------------------------
+A.1 APK local conferido pelo especialista: 1765963669c809...63a16c9
+    (NAO reconstruido nesta rodada!). fullSHA completos do cohort: PARCIAL
+    (o probe R41 foi buildado local — o APK mudou! a identidade nova:
+    build local R41; SEM instalar esta rodada!).
+A.2 Preservados: 9 staged R37, WIP FfmpegPreview, originais R39/R40!
+
+-----------------------------------------------------------------------
+B. EXPORT/IDS/SELECTOR/META/STATUS (§3!) — PARCIAL (as fronteiras!)
+-----------------------------------------------------------------------
+B.1 IDs: o contador monotono (R40!) + namespace; a FONTE UNICA da
+    identidade da execucao: PENDENTE (§3.1 — compartilhar com consumidor!).
+B.2 mkdir: CONSUMIDO agora (R41!); EEXIST no pai tolerado, dir do attempt
+    NOVO; erro => R41 SEL_FAIL + sem escrita!
+B.3 STATUS: agrega 5 arquivos + meta>0 + exfail (R41!); primeira causa:
+    os rep() anteriores permanecem (o agregado e' o veredito!).
+B.4 VINCULO POR HANDLE (§3.2!): PENDENTE (o design exige armar na chamada
+    HTP real — :953-957 R40! — antes de tensor_set!).
+B.5 VACINA (§3.4!): PENDENTE (a fixture do MESMO codigo!).
+
+-----------------------------------------------------------------------
+C. TRACE/ACT (§5!) — PARCIAL: o trace ESTATICO + o RUNNER completos;
+    ACT_REAL PENDENTE (§5.2 — instrumentacao do quantizador real!)
+-----------------------------------------------------------------------
+C.1 O runner (acima!) e' a prova dinamica dos DADOS (2048 saidas!).
+C.2 O padrao top10 (~0.95%!) e' o NOVO dado (estrutural!).
+C.3 ACT_REAL: PENDENTE — o design (§5.2: buffer/lifetime + observacao
+    privada!) NAO implementado nesta rodada (o tempo foi do runner+fixes!).
+    REPLAY_REAL vs captura: nem um nem outro — declarado!
+D. DECOMPOSICAO: os numeros completos (50/54!) agora IMPRESSOS; o modelo
+   com ACT observada: PENDENTE. E. CONTROLES/2x: PENDENTES.
+F. RUNNER/LOADER: CCE (o §4! — a lacuna historica fechada: a cadeia real
+   com exits consumidos; o log errado R39 PRESERVADO!).
+G. FRONTEIRAS: R36-Q4 ok; Q6: residual proprio (50/54!) com o padrao novo
+   (~0.95%!); STOP-FUSED; NAO culpar CPU/pack (sem contraprova!)!
+H. PROXIMOS: (1) ACT_REAL (a obs. do quantizador!); (2) vinculo por handle;
+   (3) vacina; (4) 2 capturas Q6 + controles; (5) temporal/ffn!
+=========================================================================
+Evidencias: docs/npu-hymt2/smart-rodada41/ (r41-runner-out.txt! (a saida
+completa!), r41-runner-err.txt (VAZIO!), r41-referencias-completas.csv
+(2049 linhas!), r41-build.log (exit=0!), r41_refs.c, probe-r41-mkdir-
+meta.cpp, r39-nmse-nota-fix.txt) + PROMPT-RELATORIO.
