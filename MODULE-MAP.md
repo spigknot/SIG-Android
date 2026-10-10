@@ -84,6 +84,7 @@ também é bloqueado.
 | `SttKeywordProfiles.kt` | Perfis de keywords (listas nomeadas) e a seleção ativa do app. |
 | `SttKeywordsHelp.kt` | Texto da ajuda das keywords (o que faz e o limite de cada modelo). |
 | `AssemblyAiAsyncFlow.kt` | Decisão sync/async + polling da AssemblyAI. |
+| `GrokSttRequestPolicy.kt` | Grok STT na Transcrição: pacing compartilhado, cooldown, Retry-After, backoff, métricas e aviso de limite. |
 | `LiveDiagnosticContext.kt` | Correlação de diagnóstico da sessão ao vivo. |
 | `SttLiveAudioFlow.kt` | Cadência PCM, pausa com silêncio e política de replay por provedor ao vivo. |
 | `TranscriptionReport.kt` | Relatório HTML, log de terminal, nomes e tamanhos. |
@@ -153,6 +154,7 @@ também é bloqueado.
 | Arquivo | Responsabilidade |
 |---|---|
 | `SigApplication.kt` | `Application`: bootstrap do app. |
+| `GrokSttHttpClient.kt` | Transporte Grok STT do lote: pacing nos headers e bloqueio de retentativas HTTP implícitas. |
 | `FfmpegPreviewSource.kt` | Abertura e liberação serializadas das fontes do MediaPlayer fora da UI. |
 | `FfmpegRecoveryUi.kt` | Oferta de retomada, opções da tela e integração dos checkpoints com FFmpegKit. |
 | `CancelExitGuard.kt` | Extensão: confirmar saída durante tarefa. |

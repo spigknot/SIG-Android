@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="grok_stt_rate_limit_description">Grok STT: limite de 10 requisições por segundo. Toque para saber mais.</string>
+</resources>

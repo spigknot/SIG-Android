@@ -134,6 +134,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var buttonReadyFiles: TextView? = null
     private var buttonOriginalFiles: TextView? = null
     private lateinit var advancedModel: TextView
+    private var buttonGrokRateLimitHelp: TextView? = null
     private var selectedFile: TextView? = null
     private var selectedListBox: View? = null
     private var selectedList: TextView? = null
@@ -226,6 +227,11 @@ class RemoteSttActivity : AppCompatActivity() {
         .pingInterval(15, TimeUnit.SECONDS)
         .build()
 
+    private var grokBatchMetrics = GrokSttRequestPolicy.Metrics()
+    private val grokBatchClient = GrokSttHttpClient.create(
+        client, checkCancelled = { ensureNotCancelled() }, metrics = { grokBatchMetrics },
+    )
+
     private var previewPlayer: MediaPlayer? = null
     private var audioPlayer: MediaPlayer? = null
     private var previewSurface: Surface? = null
@@ -235,7 +241,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var playbackSpeed = 1f
     private var syncingFields = false
     private var isProcessing = false
-    private var cancelRequested = false
+    @Volatile private var cancelRequested = false
     private val currentCalls = Collections.synchronizedSet(mutableSetOf<Call>())
     private var currentFfmpegSessionId: Long? = null
     private var preSelectedOutputDirUri: Uri? = null
@@ -469,6 +475,14 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonReadyFiles = findViewById(R.id.button_ready_files)
         buttonOriginalFiles = findViewById(R.id.button_original_files)
         advancedModel = findViewById(R.id.advanced_model)
+        buttonGrokRateLimitHelp = findViewById(R.id.button_grok_rate_limit_help)
+        buttonGrokRateLimitHelp?.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Grok STT — limite de requisições")
+                .setMessage(GrokSttRequestPolicy.HELP_TEXT)
+                .setPositiveButton("OK", null)
+                .show()
+        }
         selectedFile = findViewById(R.id.selected_file)
         selectedListBox = findViewById(R.id.selected_list_box)
         selectedList = findViewById(R.id.selected_list)
@@ -811,6 +825,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        cancelRequested = true
         saveInMemoryDraft()
         synchronized(currentCalls) {
             currentCalls.forEach { it.cancel() }
@@ -2812,7 +2827,9 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
-    private fun sendGrokApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
+    private fun sendGrokApiTranscription(
+        uploadFile: UploadFile, isLiveFinal: Boolean? = null, terminalLines: StringBuilder? = null
+    ): String {
         val apiKey = GrokApiSettings.apiKey()
         require(GrokApiSettings.isPlausibleXaiKey(apiKey)) { "A chave API da xAI salva nas configurações é inválida." }
         val requestSpec = SttRequestBuilders.grokRest(
@@ -2823,36 +2840,57 @@ class RemoteSttActivity : AppCompatActivity() {
             keywords = activeSttKeywords(),
         )
         val requestBody = buildMultipartBody(requestSpec, uploadFile)
-        val call = client.newCall(
-            buildPostRequest(requestSpec, requestBody)
-        )
-        currentCalls.add(call)
-        if (isLiveFinal != null) {
-            synchronized(liveRequestLock) {
-                liveCurrentCall = call
-                liveCurrentCallIsFinal = isLiveFinal
-            }
-        }
-        try {
-            call.execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) throw IllegalStateException("Grok respondeu ${response.code}: ${body.take(240)}")
-                val payload = JSONObject(body)
-                val rawText = payload.optString("text").trim()
-                if (rawText.isBlank()) throw IllegalStateException("O Grok retornou uma transcrição vazia.")
-                return SttResponseParsers.formatGrokDiarizedTranscript(payload, rawText, checkboxLiveDiarize.isChecked)
-            }
-        } finally {
-            currentCalls.remove(call)
+        val request = buildPostRequest(requestSpec, requestBody)
+        val protectedBatch = transcriptionMode && isLiveFinal == null
+        val metrics = grokBatchMetrics
+        fun executeOnce(): GrokSttRequestPolicy.Reply<String> {
+            val call = (if (protectedBatch) grokBatchClient else client).newCall(request)
+            currentCalls.add(call)
             if (isLiveFinal != null) {
                 synchronized(liveRequestLock) {
-                    if (liveCurrentCall == call) {
-                        liveCurrentCall = null
-                        liveCurrentCallIsFinal = false
+                    liveCurrentCall = call
+                    liveCurrentCallIsFinal = isLiveFinal
+                }
+            }
+            try {
+                if (protectedBatch) ensureNotCancelled()
+                call.execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    return GrokSttRequestPolicy.Reply(response.code, body, response.header("Retry-After"))
+                }
+            } finally {
+                if (protectedBatch) GrokSttRequestPolicy.sharedPacer.end()
+                currentCalls.remove(call)
+                if (isLiveFinal != null) {
+                    synchronized(liveRequestLock) {
+                        if (liveCurrentCall == call) {
+                            liveCurrentCall = null
+                            liveCurrentCallIsFinal = false
+                        }
                     }
                 }
             }
         }
+        fun logPolicy(line: String) {
+            Log.i(TAG, line)
+            if (terminalLines != null) {
+                appendTerminal(terminalLines, line)
+                runOnUiThread { updateTerminalText(terminalLines) }
+            }
+        }
+        val reply = if (protectedBatch) {
+            GrokSttRequestPolicy.execute(
+                checkCancelled = { ensureNotCancelled() }, request = ::executeOnce,
+                metrics = metrics, onRetry = ::logPolicy, onResponse = ::logPolicy,
+            )
+        } else executeOnce()
+        if (reply.status !in 200..299) {
+            throw IllegalStateException("Grok respondeu ${reply.status}: ${reply.value.take(240)}")
+        }
+        val payload = JSONObject(reply.value)
+        val rawText = payload.optString("text").trim()
+        if (rawText.isBlank()) throw IllegalStateException("O Grok retornou uma transcrição vazia.")
+        return SttResponseParsers.formatGrokDiarizedTranscript(payload, rawText, checkboxLiveDiarize.isChecked)
     }
 
     private fun sendDeepgramApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
@@ -3663,6 +3701,8 @@ class RemoteSttActivity : AppCompatActivity() {
 
     private fun refreshGrokApiControls() {
         val config = TranscriptionModelStore.selectedConfig()
+        buttonGrokRateLimitHelp?.visibility =
+            if (GrokSttRequestPolicy.showWarning(transcriptionMode, config.isGrokApi)) View.VISIBLE else View.GONE
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
             config.isAssemblyaiApi || config.isElevenlabsApi || config.isMetamuseApi ||
             config.isAlibabaApi || config.isGeminiApi
@@ -4403,6 +4443,7 @@ class RemoteSttActivity : AppCompatActivity() {
 
         clearOutputResult()
         setProcessing(true)
+        grokBatchMetrics = GrokSttRequestPolicy.Metrics()
         val startedAt = SystemClock.elapsedRealtime()
         val terminalLines = newTerminalSession(
             "$ stt-remoto --server ${TranscriptionModelStore.selectedConfig().url} --endpoint /transcribe"
@@ -5073,7 +5114,7 @@ class RemoteSttActivity : AppCompatActivity() {
         ensureNotCancelled()
         if (config.isGrokApi) {
             return preparedUploads.sortedBy { it.index }.map { prepared ->
-                val text = sendGrokApiTranscription(prepared.uploadFile)
+                val text = sendGrokApiTranscription(prepared.uploadFile, terminalLines = terminalLines)
                 TranscriptionResult(prepared.index, prepared.item.name, text)
             }
         }
