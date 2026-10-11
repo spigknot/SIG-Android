@@ -16,6 +16,27 @@ internal object GeminiSttProtocol {
     const val FINISH_TIMEOUT_MS = 20_000L
     const val ROTATE_AFTER_MS = 540_000L
 
+    fun quotaErrorDetails(raw: String): Pair<Boolean, Long> {
+        val details = runCatching { JSONObject(raw).optJSONObject("error")?.optJSONArray("details") }.getOrNull()
+            ?: return false to 0L
+        var daily = false
+        var delay = 0L
+        for (i in 0 until details.length()) {
+            val detail = details.optJSONObject(i) ?: continue
+            val violations = detail.optJSONArray("violations") ?: JSONArray()
+            for (j in 0 until violations.length()) {
+                val violation = violations.optJSONObject(j) ?: continue
+                val metric = (violation.optString("quotaMetric") + violation.optString("quotaId")).lowercase()
+                daily = daily || "per_day" in metric || "perday" in metric
+            }
+            if (detail.optString("@type").endsWith("RetryInfo")) {
+                val seconds = detail.optString("retryDelay").removeSuffix("s").toDoubleOrNull()
+                if (seconds != null && seconds.isFinite() && seconds >= 0) delay = maxOf(delay, (seconds * 1000).toLong())
+            }
+        }
+        return daily to delay
+    }
+
     fun plausibleKey(value: String): Boolean = value.trim().let {
         it.length == 39 && it.startsWith("AIza") && it.all { c -> c.isLetterOrDigit() || c == '-' || c == '_' }
     }
@@ -33,16 +54,29 @@ internal object GeminiSttProtocol {
     }
 
     private fun vocabulary(values: List<String>): List<String> =
-        values.map { it.trim() }.filter { it.isNotEmpty() }.distinct().take(100)
+        values.map { it.trim() }.filter { it.isNotEmpty() }.distinct().also {
+            require(it.size <= 1000) { "Gemini aceita no máximo 1.000 termos de vocabulário." }
+        }
 
-    fun restBody(uri: String, mime: String, languages: List<String>, diarize: Boolean, keywords: List<String>): String {
-        require(!diarize || vocabulary(keywords).isEmpty()) {
-            "Gemini: desligue Keywords para usar diarização."
+    private fun validateLanguages(languages: List<String>) {
+        require(languages.all { it in SttLanguageSettings.GEMINI_CODES }) {
+            "Código de idioma inválido para Gemini."
+        }
+    }
+
+    fun restBody(uri: String, mime: String, languages: List<String>, diarize: Boolean,
+                 keywords: List<String>, timestamps: Boolean = false): String {
+        validateLanguages(languages)
+        val terms = vocabulary(keywords)
+        require(!(diarize || timestamps) || terms.isEmpty()) {
+            "Gemini: desligue Keywords para usar diarização ou timestamps."
         }
         val mode = JSONObject().put("type", "verbatim")
         if (diarize) mode.put("diarization_mode", "speaker")
-        val config = JSONObject().put("language_codes", JSONArray(languages)).put("mode", mode)
-        vocabulary(keywords).takeIf { it.isNotEmpty() }?.let { config.put("custom_vocabulary", JSONArray(it)) }
+        if (timestamps) mode.put("timestamp_granularities", JSONArray().put("word"))
+        val config = JSONObject().put("mode", mode)
+        if (languages.isNotEmpty()) config.put("language_codes", JSONArray(languages))
+        terms.takeIf { it.isNotEmpty() }?.let { config.put("custom_vocabulary", JSONArray(it)) }
         return JSONObject().put("model", REST_MODEL)
             .put("input", JSONArray().put(JSONObject().put("type", "audio").put("uri", uri).put("mime_type", mime)))
             .put("generation_config", JSONObject().put("transcription_config", config))
@@ -50,7 +84,9 @@ internal object GeminiSttProtocol {
     }
 
     fun setup(languages: List<String>, keywords: List<String>): String {
-        val config = JSONObject().put("languageCodes", JSONArray(languages)).put("mode", "VERBATIM")
+        validateLanguages(languages)
+        val config = JSONObject().put("mode", "VERBATIM")
+        if (languages.isNotEmpty()) config.put("languageCodes", JSONArray(languages))
         vocabulary(keywords).takeIf { it.isNotEmpty() }?.let { config.put("customVocabulary", JSONArray(it)) }
         return JSONObject().put("setup", JSONObject().put("model", "models/$LIVE_MODEL")
             .put("generationConfig", JSONObject().put("responseModalities", JSONArray().put("TEXT")))

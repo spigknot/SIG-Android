@@ -66,6 +66,8 @@ object GrokApiSettings {
     fun googleAiStudioApiKey(): String = ApiKeyStore.get(preferences(), "g_ai_studio_api_key")
     fun setGoogleAiStudioApiKey(value: String) = ApiKeyStore.put(preferences(), "g_ai_studio_api_key", value)
     fun hasGoogleAiStudioApiKey(): Boolean = GeminiSttProtocol.plausibleKey(googleAiStudioApiKey())
+    fun geminiTimestamps(): Boolean = preferences().getBoolean("gemini_timestamps", false)
+    fun setGeminiTimestamps(value: Boolean) { preferences().edit().putBoolean("gemini_timestamps", value).apply() }
     fun geminiLanguageMode(): String = preferences().getString("gemini_language_mode", "pt-BR").orEmpty()
     fun setGeminiLanguageMode(value: String) { preferences().edit().putString("gemini_language_mode", value).apply() }
     fun geminiCustomLanguage(): String = preferences().getString("gemini_language_custom", "").orEmpty()

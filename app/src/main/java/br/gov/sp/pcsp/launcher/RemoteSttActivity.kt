@@ -135,6 +135,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var buttonOriginalFiles: TextView? = null
     private lateinit var advancedModel: TextView
     private var buttonGrokRateLimitHelp: TextView? = null
+    private var buttonGeminiRateLimitHelp: TextView? = null
     private var selectedFile: TextView? = null
     private var selectedListBox: View? = null
     private var selectedList: TextView? = null
@@ -197,6 +198,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var buttonLiveLanguage: TextView
     private lateinit var grokDiarizeRow: View
     private lateinit var checkboxLiveDiarize: CheckBox
+    private var checkboxGeminiTimestamps: CheckBox? = null
     private lateinit var buttonLiveDiarizeHelp: TextView
     private lateinit var buttonLiveDiarizeRealtimeHelp: TextView
     private lateinit var buttonLiveKeywords: TextView
@@ -476,6 +478,8 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonOriginalFiles = findViewById(R.id.button_original_files)
         advancedModel = findViewById(R.id.advanced_model)
         buttonGrokRateLimitHelp = findViewById(R.id.button_grok_rate_limit_help)
+        buttonGeminiRateLimitHelp = findViewById(R.id.button_gemini_rate_limit_help)
+        buttonGeminiRateLimitHelp?.setOnClickListener { showGeminiRateLimitHelp() }
         buttonGrokRateLimitHelp?.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("Grok STT — limite de requisições")
@@ -502,6 +506,11 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonLiveLanguage = findViewById(R.id.button_live_language)
         grokDiarizeRow = findViewById(R.id.grok_diarize_row)
         checkboxLiveDiarize = findViewById(R.id.checkbox_live_diarize)
+        checkboxGeminiTimestamps = findViewById(R.id.checkbox_gemini_timestamps)
+        checkboxGeminiTimestamps?.apply {
+            isChecked = GrokApiSettings.geminiTimestamps()
+            setOnCheckedChangeListener { _, checked -> GrokApiSettings.setGeminiTimestamps(checked) }
+        }
         buttonLiveDiarizeHelp = findViewById(R.id.button_live_diarize_help)
         buttonLiveDiarizeRealtimeHelp = findViewById(R.id.button_live_diarize_realtime_help)
         buttonLiveKeywords = findViewById(R.id.button_live_keywords)
@@ -3097,7 +3106,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
-    private fun sendGeminiApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null): String {
+    private fun sendGeminiApiTranscription(uploadFile: UploadFile, isLiveFinal: Boolean? = null, terminalLines: StringBuilder? = null): String {
         val apiKey = GrokApiSettings.googleAiStudioApiKey()
         require(GeminiSttProtocol.plausibleKey(apiKey)) { "Insira a chave API do Google AI Studio nas configurações." }
         require(uploadFile.file.length() in 1..2_000_000_000L) { "Gemini aceita arquivos de até 2 GB." }
@@ -3105,30 +3114,65 @@ class RemoteSttActivity : AppCompatActivity() {
         val diarize = checkboxLiveDiarize.isChecked && checkboxLiveDiarize.isEnabled
         val keywords = activeSttKeywords()
         // Valida incompatibilidades antes de subir o áudio.
-        GeminiSttProtocol.restBody("", uploadFile.mime, languages, diarize, keywords)
-        val http = client.newBuilder().connectTimeout(20, TimeUnit.SECONDS)
+        val timestamps = transcriptionMode && GrokApiSettings.geminiTimestamps()
+        GeminiSttProtocol.restBody("", uploadFile.mime, languages, diarize, keywords, timestamps)
+        val limitMs = if (diarize || timestamps) 1_800_000L else 3_600_000L
+        val durationMs = probeDurationMs(uploadFile.file)
+        require(durationMs == null || durationMs <= limitMs) {
+            "Gemini aceita até ${limitMs / 60_000} minutos por arquivo nesta configuração. Divida o áudio."
+        }
+        val protectedBatch = transcriptionMode && isLiveFinal == null
+        val quota = if (protectedBatch) GeminiSttQuotaStore.policy(apiKey) else null
+        quota?.checkAvailable()
+        val baseHttp = client.newBuilder().connectTimeout(20, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS).callTimeout(180, TimeUnit.SECONDS)
             .followRedirects(false).followSslRedirects(false).build()
+        // A espera por uma permissão pode durar minutos. Read/connect timeout
+        // continuam ativos; o deadline total não deve cancelar a fila de pacing.
+        val http = if (quota != null) GeminiSttHttpClient.create(
+            baseHttp.newBuilder().callTimeout(0, TimeUnit.SECONDS).build(), quota, { ensureNotCancelled() },
+        ) else baseHttp
         fun execute(request: Request, cleanup: Boolean = false): Pair<String, String?> {
-            if (!cleanup && cancelRequested) throw CancellationException()
-            val call = (if (cleanup) http.newBuilder().callTimeout(10, TimeUnit.SECONDS).build() else http).newCall(request)
-            if (!cleanup) currentCalls.add(call)
-            if (!cleanup && isLiveFinal != null) synchronized(liveRequestLock) {
-                liveCurrentCall = call
-                liveCurrentCallIsFinal = isLiveFinal
-            }
-            try {
-                if (!cleanup && cancelRequested) { call.cancel(); throw CancellationException() }
-                call.execute().use { response ->
-                    if (!response.isSuccessful) throw IllegalStateException("Gemini respondeu HTTP ${response.code}.")
-                    return response.body?.string().orEmpty() to response.header("X-Goog-Upload-URL")
+            val inference = quota != null && !cleanup && request.method == "POST" && request.url.toString() == GeminiSttProtocol.REST_URL
+            fun executeOnce(): GeminiSttRequestPolicy.Reply<Pair<String, String?>> {
+                if (!cleanup && cancelRequested) throw CancellationException()
+                val call = (if (cleanup) http.newBuilder().callTimeout(10, TimeUnit.SECONDS).build() else http).newCall(request)
+                if (!cleanup) currentCalls.add(call)
+                if (!cleanup && isLiveFinal != null) synchronized(liveRequestLock) {
+                    liveCurrentCall = call
+                    liveCurrentCallIsFinal = isLiveFinal
                 }
-            } finally {
-                currentCalls.remove(call)
-                synchronized(liveRequestLock) {
-                    if (liveCurrentCall === call) { liveCurrentCall = null; liveCurrentCallIsFinal = false }
+                try {
+                    if (!cleanup && cancelRequested) { call.cancel(); throw CancellationException() }
+                    call.execute().use { response ->
+                        val raw = response.body?.string().orEmpty()
+                        val details = if (response.code == 429) GeminiSttProtocol.quotaErrorDetails(raw) else false to 0L
+                        return GeminiSttRequestPolicy.Reply(response.code, raw to response.header("X-Goog-Upload-URL"),
+                            response.headers.toMultimap().mapValues { it.value.last() }, details.first, details.second)
+                    }
+                } finally {
+                    if (inference) quota?.end()
+                    currentCalls.remove(call)
+                    synchronized(liveRequestLock) {
+                        if (liveCurrentCall === call) { liveCurrentCall = null; liveCurrentCallIsFinal = false }
+                    }
                 }
             }
+            val reply = if (inference) quota!!.execute(
+                checkCancelled = { ensureNotCancelled() }, request = ::executeOnce,
+                onRetry = { line ->
+                    Log.i(TAG, line)
+                    if (terminalLines != null) {
+                        appendTerminal(terminalLines, line)
+                        runOnUiThread { updateTerminalText(terminalLines) }
+                    }
+                },
+            ) else executeOnce()
+            if (reply.status !in 200..299) {
+                throw IllegalStateException(if (reply.dailyExhausted) "Gemini: cota diária esgotada; novos envios bloqueados até a meia-noite do Pacífico."
+                    else "Gemini respondeu HTTP ${reply.status}.")
+            }
+            return reply.value
         }
         fun builder(url: String): Request.Builder = Request.Builder().url(url).header("x-goog-api-key", apiKey)
         val jsonMime = "application/json".toMediaType()
@@ -3155,7 +3199,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 file = JSONObject(polled)
             }
             require(file.optString("state") != "FAILED") { "Gemini não conseguiu processar o arquivo." }
-            val body = GeminiSttProtocol.restBody(file.getString("uri"), uploadFile.mime, languages, diarize, keywords)
+            val body = GeminiSttProtocol.restBody(file.getString("uri"), uploadFile.mime, languages, diarize, keywords, timestamps)
             val (result, _) = execute(builder(GeminiSttProtocol.REST_URL).post(body.toRequestBody(jsonMime)).build())
             return GeminiSttProtocol.restText(JSONObject(result), diarize)
         } finally {
@@ -3233,7 +3277,16 @@ class RemoteSttActivity : AppCompatActivity() {
 
     // Labels de exibição do idioma (SOMENTE cosmético): o usuário vê "auto",
     // mas o valor salvo/enviado continua sendo "multi". Nunca mude os valores.
-    private fun languageLabel(value: String): String = if (value == "multi") "auto" else value
+    private fun languageLabel(value: String, provider: String? = null): String = when {
+        value == "multi" -> "auto"
+        provider == "gemini" -> when (value) {
+            "pt-BR" -> "pt"
+            "en-US" -> "en"
+            "es-419" -> "es"
+            else -> value
+        }
+        else -> value
+    }
     private fun languageValue(label: String): String = if (label == "auto") "multi" else label
 
     private fun showLiveLanguageMenu() {
@@ -3261,7 +3314,7 @@ class RemoteSttActivity : AppCompatActivity() {
             return
         }
         val options = when (apiProvider) {
-            "gemini" -> listOf("multi", "pt-BR", "en-US", "es-419", "custom")
+            "gemini" -> listOf("multi", "pt", "en", "es", "custom")
             "deepgram" -> listOf("multi", "pt-BR", "en", "es", "custom")
             else -> listOf("multi", "pt", "es", "en", "custom")
         }
@@ -3304,7 +3357,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "grok" -> GrokApiSettings.grokLanguageMode() to GrokApiSettings.grokCustomLanguage()
             else -> return selectedLiveLanguage.shortLabel
         }
-        return if (mode == "custom" && custom.isNotBlank()) custom else languageLabel(mode)
+        return if (mode == "custom" && custom.isNotBlank()) custom else languageLabel(mode, provider)
     }
 
     private fun showCustomLanguageDialog(provider: String) {
@@ -3313,6 +3366,7 @@ class RemoteSttActivity : AppCompatActivity() {
             setPadding(48, 24, 48, 8)
         }
         val edit = EditText(this).apply {
+            if (provider == "gemini") setText(GrokApiSettings.geminiCustomLanguage())
             hint = when (provider) {
                 "gemini" -> "Ex: pt-BR, en-US"
                 "deepgram" -> "código do idioma (ex.: fr-CA)"
@@ -3699,10 +3753,35 @@ class RemoteSttActivity : AppCompatActivity() {
             .show()
     }
 
+    private fun showGeminiRateLimitHelp() {
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Gemini — 10 por minuto / 100 por dia")
+            .setMessage(GeminiSttRequestPolicy.HELP_TEXT)
+            .setPositiveButton("Fechar", null).create()
+        val refresh = object : Runnable {
+            override fun run() {
+                if (!dialog.isShowing) return
+                val key = GrokApiSettings.googleAiStudioApiKey()
+                val stats = if (key.isBlank()) "Configure a chave Google AI Studio para acompanhar a cota."
+                    else runCatching { GeminiSttQuotaStore.policy(key).statistics() }
+                        .getOrDefault("Não foi possível ler o registro local de cota.")
+                dialog.setMessage(GeminiSttRequestPolicy.HELP_TEXT + stats)
+                handler.postDelayed(this, 1000)
+            }
+        }
+        dialog.setOnDismissListener { handler.removeCallbacks(refresh) }
+        dialog.show()
+        refresh.run()
+    }
+
     private fun refreshGrokApiControls() {
         val config = TranscriptionModelStore.selectedConfig()
         buttonGrokRateLimitHelp?.visibility =
             if (GrokSttRequestPolicy.showWarning(transcriptionMode, config.isGrokApi)) View.VISIBLE else View.GONE
+        buttonGeminiRateLimitHelp?.visibility =
+            if (GeminiSttRequestPolicy.showWarning(transcriptionMode, config.isGeminiApi)) View.VISIBLE else View.GONE
+        checkboxGeminiTimestamps?.visibility =
+            if (transcriptionMode && config.isGeminiApi) View.VISIBLE else View.GONE
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
             config.isAssemblyaiApi || config.isElevenlabsApi || config.isMetamuseApi ||
             config.isAlibabaApi || config.isGeminiApi
@@ -5144,7 +5223,7 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         if (config.isGeminiApi) {
             return preparedUploads.sortedBy { it.index }.map { prepared ->
-                val text = sendGeminiApiTranscription(prepared.uploadFile)
+                val text = sendGeminiApiTranscription(prepared.uploadFile, terminalLines = terminalLines)
                 TranscriptionResult(prepared.index, prepared.item.name, text)
             }
         }

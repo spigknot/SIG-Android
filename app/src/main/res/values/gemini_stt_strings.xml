@@ -1,0 +1,4 @@
+<resources>
+    <string name="gemini_stt_rate_limit_description">Gemini: limite de 10 requisições por minuto e 100 por dia. Ver cota e estatísticas.</string>
+    <string name="gemini_word_timestamps">Tempos por palavra (Gemini)</string>
+</resources>

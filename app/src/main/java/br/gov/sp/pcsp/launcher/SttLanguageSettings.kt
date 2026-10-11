@@ -23,12 +23,18 @@ object SttLanguageSettings {
     "tr-TR", "uk-UA", "id-ID", "uz-UZ", "it-IT", "vi-VN",
 )
     fun geminiLanguageCodes(mode: String, custom: String): List<String> {
-        val codes = when (mode) {
-            "multi" -> listOf("multi")
-            "custom" -> parseCodes(custom).distinct()
-            else -> listOf(mode)
+        val resolved = when (mode) {
+            "pt" -> "pt-BR"
+            "en" -> "en-US"
+            "es" -> "es-419"
+            else -> mode
         }
-        require(codes.isNotEmpty() && (codes == listOf("multi") || codes.all { it in GEMINI_CODES })) {
+        if (resolved == "multi" || resolved == "auto") return emptyList()
+        val codes = when (resolved) {
+            "custom" -> parseCodes(custom).distinct()
+            else -> listOf(resolved)
+        }
+        require(codes.isNotEmpty() && codes.all { it in GEMINI_CODES }) {
             "Código de idioma inválido para Gemini."
         }
         return codes

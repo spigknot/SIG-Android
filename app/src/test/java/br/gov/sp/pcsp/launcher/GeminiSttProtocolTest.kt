@@ -18,7 +18,7 @@ class GeminiSttProtocolTest {
     }
 
     @Test fun restDiarizationIsInsideMode() {
-        val body = JSONObject(GeminiSttProtocol.restBody("uri", "audio/wav", listOf("multi"), true, emptyList()))
+        val body = JSONObject(GeminiSttProtocol.restBody("uri", "audio/wav", emptyList(), true, emptyList()))
         val mode = body.getJSONObject("generation_config").getJSONObject("transcription_config").getJSONObject("mode")
         assertEquals("speaker", mode.getString("diarization_mode"))
     }
@@ -40,9 +40,9 @@ class GeminiSttProtocolTest {
         assertFalse(config.has("diarizationMode"))
     }
 
-    @Test fun vocabularyIsLimitedToOneHundredTerms() {
-        val setup = JSONObject(GeminiSttProtocol.setup(listOf("multi"), (1..120).map { "termo $it" }))
-        assertEquals(100, setup.getJSONObject("setup").getJSONObject("inputAudioTranscription").getJSONArray("customVocabulary").length())
+    @Test fun vocabularySupportsApiLimitWithoutSilentlyTruncating() {
+        val setup = JSONObject(GeminiSttProtocol.setup(emptyList(), (1..120).map { "termo $it" }))
+        assertEquals(120, setup.getJSONObject("setup").getJSONObject("inputAudioTranscription").getJSONArray("customVocabulary").length())
     }
 
     @Test fun liveAudioUsesExactSliceWithoutHeadersOrNewlines() {
@@ -101,10 +101,60 @@ class GeminiSttProtocolTest {
 
     @Test fun languageUsesBcp47AndMulti() {
         assertEquals(listOf("pt-BR"), SttLanguageSettings.geminiLanguageCodes("pt-BR", ""))
-        assertEquals(listOf("multi"), SttLanguageSettings.geminiLanguageCodes("multi", ""))
+        assertEquals(emptyList<String>(), SttLanguageSettings.geminiLanguageCodes("multi", ""))
         assertEquals(listOf("en-US", "pt-BR"), SttLanguageSettings.geminiLanguageCodes("custom", "en-US,pt-BR,en-US"))
         assertEquals(listOf("pt"), SttLanguageSettings.invalidCodes("gemini", listOf("pt", "pt-BR")))
         assertTrue(runCatching { SttLanguageSettings.geminiLanguageCodes("custom", "") }.isFailure)
+    }
+
+    @Test fun selectorUsesLocalesAndAutoOmitsBothWireFields() {
+        mapOf("pt" to "pt-BR", "en" to "en-US", "es" to "es-419").forEach { (option, locale) ->
+            val languages = SttLanguageSettings.geminiLanguageCodes(option, "")
+            assertEquals(listOf(locale), languages)
+            val rest = JSONObject(GeminiSttProtocol.restBody("uri", "audio/wav", languages, false, emptyList()))
+            assertEquals(locale, rest.getJSONObject("generation_config").getJSONObject("transcription_config")
+                .getJSONArray("language_codes").getString(0))
+            val live = JSONObject(GeminiSttProtocol.setup(languages, emptyList()))
+            assertEquals(locale, live.getJSONObject("setup").getJSONObject("inputAudioTranscription")
+                .getJSONArray("languageCodes").getString(0))
+        }
+        listOf("multi", "auto").forEach { option ->
+            val languages = SttLanguageSettings.geminiLanguageCodes(option, "")
+            val rest = JSONObject(GeminiSttProtocol.restBody("uri", "audio/wav", languages, false, emptyList()))
+            assertFalse(rest.getJSONObject("generation_config").getJSONObject("transcription_config").has("language_codes"))
+            assertFalse(JSONObject(GeminiSttProtocol.setup(languages, emptyList()))
+                .getJSONObject("setup").getJSONObject("inputAudioTranscription").has("languageCodes"))
+        }
+    }
+
+    @Test fun wordTimesAndDiarizationUseVerbatimModeAndCannotMixVocabulary() {
+        val rest = JSONObject(GeminiSttProtocol.restBody("uri", "audio/wav", emptyList(), true, emptyList(), timestamps = true))
+        val mode = rest.getJSONObject("generation_config").getJSONObject("transcription_config").getJSONObject("mode")
+        assertEquals("verbatim", mode.getString("type"))
+        assertEquals("speaker", mode.getString("diarization_mode"))
+        assertEquals("word", mode.getJSONArray("timestamp_granularities").getString(0))
+        assertTrue(runCatching {
+            GeminiSttProtocol.restBody("uri", "audio/wav", emptyList(), false, listOf("SIG"), timestamps = true)
+        }.isFailure)
+        val live = JSONObject(GeminiSttProtocol.setup(emptyList(), listOf("SIG")))
+            .getJSONObject("setup").getJSONObject("inputAudioTranscription")
+        assertEquals("SIG", live.getJSONArray("customVocabulary").getString(0))
+        assertFalse(live.has("timestampGranularities"))
+        assertFalse(live.has("diarizationMode"))
+    }
+
+    @Test fun manualCatalogWorksInBothContractsAndInvalidCodesFailBeforeNetwork() {
+        SttLanguageSettings.GEMINI_CODES.forEach { code ->
+            val languages = SttLanguageSettings.geminiLanguageCodes("custom", code)
+            assertEquals(listOf(code), languages)
+            GeminiSttProtocol.restBody("uri", "audio/wav", languages, false, emptyList())
+            GeminiSttProtocol.setup(languages, emptyList())
+        }
+        listOf("pt", "auto", "multi", "xx-ZZ").forEach { invalid ->
+            assertTrue(runCatching { GeminiSttProtocol.setup(listOf(invalid), emptyList()) }.isFailure)
+            assertTrue(runCatching { GeminiSttProtocol.restBody("uri", "audio/wav", listOf(invalid), false, emptyList()) }.isFailure)
+        }
+        assertTrue(runCatching { GeminiSttProtocol.setup(emptyList(), (1..1001).map { "termo $it" }) }.isFailure)
     }
 
     @Test fun diarizationOnlyRestAndKeywordsSupported() {

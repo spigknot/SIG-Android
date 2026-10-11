@@ -85,6 +85,7 @@ também é bloqueado.
 | `SttKeywordsHelp.kt` | Texto da ajuda das keywords (o que faz e o limite de cada modelo). |
 | `AssemblyAiAsyncFlow.kt` | Decisão sync/async + polling da AssemblyAI. |
 | `GrokSttRequestPolicy.kt` | Grok STT na Transcrição: pacing compartilhado, cooldown, Retry-After, backoff, métricas e aviso de limite. |
+| `GeminiSttRequestPolicy.kt` | Cota REST Gemini: pacing 8/min, teto 100/dia no Pacifico, backoff e estatisticas locais. |
 | `LiveDiagnosticContext.kt` | Correlação de diagnóstico da sessão ao vivo. |
 | `SttLiveAudioFlow.kt` | Cadência PCM, pausa com silêncio e política de replay por provedor ao vivo. |
 | `TranscriptionReport.kt` | Relatório HTML, log de terminal, nomes e tamanhos. |
@@ -137,6 +138,7 @@ também é bloqueado.
 | `TranscriptionModelStore.kt` | Modelos de transcrição selecionados. |
 | `PromptTemplateStore.kt` | Prompts em uso da ferramenta Ocorrência + prompts legados de partes/qualificação. |
 | `GrokApiSettings.kt` | Preferências e chaves das integrações de API. |
+| `GeminiSttQuotaStore.kt` | Persistencia privada da cota Gemini por hash da chave, sem segredos. |
 | `ApiKeyStore.kt` | Armazenamento cifrado das chaves digitadas. |
 | `ImeiApiSettings.kt` | Chave da consulta de IMEI. |
 | `PartsExtractionSettings.kt` | Método/modelo/config da extração de partes. |
@@ -155,6 +157,7 @@ também é bloqueado.
 |---|---|
 | `SigApplication.kt` | `Application`: bootstrap do app. |
 | `GrokSttHttpClient.kt` | Transporte Grok STT do lote: pacing nos headers e bloqueio de retentativas HTTP implícitas. |
+| `GeminiSttHttpClient.kt` | Transporte Gemini: pacing nos headers da inferencia e tentativas explicitas. |
 | `FfmpegPreviewSource.kt` | Abertura e liberação serializadas das fontes do MediaPlayer fora da UI. |
 | `FfmpegRecoveryUi.kt` | Oferta de retomada, opções da tela e integração dos checkpoints com FFmpegKit. |
 | `CancelExitGuard.kt` | Extensão: confirmar saída durante tarefa. |
