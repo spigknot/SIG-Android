@@ -118,6 +118,7 @@ também é bloqueado.
 | `GraniteBinarySupport.kt` | Byte↔codepoint, cadeia de erro, WAV 16k mono, floats. |
 | `HyMt2Translator.kt` | Tradução Hy-MT2: prompt oficial e template de chat do modelo. |
 | `HyMt2ModelSupport.kt` | Política de backend por modelo do Hy-MT2 (1.25bit sem GPU). |
+| `HyMt2BackendPolicy.kt` | Capabilities/política das rotas do menu Hy-MT2: seis entradas, ids estáveis e motivo de indisponibilidade. |
 | `HyMt2Native.kt` | Ponte JNI do Hy-MT2 (carregar modelo, traduzir, liberar). |
 | `HyMt2RequestIsolation.kt` | Isolamento de pedidos Hy-MT2: reset antes de cada prefill (contrato testável). |
 

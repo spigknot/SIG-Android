@@ -24,4 +24,15 @@ class HyMt2ModelSupportTest {
         assertTrue(HyMt2ModelSupport.supportsGpu("Hy-MT2-1.8B-Q4_0.gguf"))
         assertTrue(HyMt2ModelSupport.supportsGpu("Hy-MT2-1.8B-Q4_K_M.gguf"))
     }
+
+    @Test
+    fun modeloStq_naoSuportaNpu() {
+        assertFalse(HyMt2ModelSupport.supportsNpu("Hy-MT2-1.8B-1.25Bit.gguf"))
+    }
+
+    @Test
+    fun modelosQ4_suportamNpu() {
+        assertTrue(HyMt2ModelSupport.supportsNpu("Hy-MT2-1.8B-Q4_0.gguf"))
+        assertTrue(HyMt2ModelSupport.supportsNpu("Hy-MT2-1.8B-Q4_K_M.gguf"))
+    }
 }

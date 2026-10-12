@@ -15,4 +15,13 @@ object HyMt2ModelSupport {
 
     /** `true` quando o modelo pode rodar acelerado em GPU (OpenCL/Vulkan). */
     fun supportsGpu(fileName: String): Boolean = !fileName.contains(STQ_MODEL_MARKER)
+
+    /** `true` quando o modelo pode rodar no backend NPU (Hexagon/HTP).
+     *
+     * Regra atual coincide com a de GPU (o único caso sem kernel acelerado é o
+     * STQ do 1.25bit; a matriz de suporte de 06/10 confirma Q4_0/Q4_K/Q6_K/Q8_0
+     * etc. no ggml-hexagon). Separada para as duas noções poderem divergir sem
+     * tocar nos chamadores.
+     */
+    fun supportsNpu(fileName: String): Boolean = !fileName.contains(STQ_MODEL_MARKER)
 }

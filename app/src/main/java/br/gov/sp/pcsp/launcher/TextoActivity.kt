@@ -28,7 +28,9 @@ import java.text.SimpleDateFormat
  *
  * Inferência no aparelho via `HyMt2Native` (libsig_llama.so do pacote nativo).
  * Modelo é escolhido num menu (1.25bit / Q4_0 / Q4_K_M) e baixado sob demanda,
- * como no Whisper; backend CPU / GPU OpenCL / GPU Vulkan (NPU fica para depois).
+ * como no Whisper; o backend segue o menu final de seis rotas (Smart (OpenCL),
+ * Smart (Vulkan), CPU, GPU (OpenCL), GPU (Vulkan), NPU) — cada rota habilita
+ * conforme `HyMt2BackendPolicy` (modelo/runtime) e mostra o motivo quando não.
  * O rodapé mostra um log numerado de cada passo para acompanhamento.
  */
 class TextoActivity : AppCompatActivity() {
@@ -45,10 +47,10 @@ class TextoActivity : AppCompatActivity() {
     private lateinit var terminalScroll: ScrollView
 
     private var selectedModel: HyMt2Model? = null
-    private var selectedBackend = HyMt2Backend.CPU
+    private var selectedBackend = HyMt2BackendPolicy.Route.CPU
     private var selectedTarget: HyMt2Translator.TargetLanguage = HyMt2Translator.TARGET_LANGUAGES.first()
     private var loadedModelFile: File? = null
-    private var loadedBackend: HyMt2Backend? = null
+    private var loadedBackend: HyMt2BackendPolicy.Route? = null
     private var threadsLabel: String = "Auto"
     private var translating = false
     private var logCounter = 0
@@ -68,13 +70,6 @@ class TextoActivity : AppCompatActivity() {
         /** Espelho oficial (HuggingFace) usado se a fonte primaria falhar. */
         val downloadUrlAlternativa: String? = null
     )
-
-    private enum class HyMt2Backend(val label: String, val shortLabel: String, val nativeKind: Int) {
-        CPU("CPU", "CPU", 0),
-        OPENCL("GPU (OpenCL)", "OpenCL", 1),
-        VULKAN("GPU (Vulkan)", "Vulkan", 2),
-        NPU("NPU", "NPU", 3);
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -438,30 +433,28 @@ class TextoActivity : AppCompatActivity() {
 
     private fun showBackendMenu() {
         val model = selectedModel ?: return
-        val gpuDisponivel = HyMt2ModelSupport.supportsGpu(model.fileName)
+        val rotas = HyMt2BackendPolicy.availability(model.fileName, runtimeSupport())
         PopupMenu(this, buttonBackend).apply {
-            HyMt2Backend.values().forEachIndexed { index, backend ->
-                when {
-                    // Sem kernel de GPU no modelo (1.25bit): GPU e NPU nem aparecem.
-                    !gpuDisponivel && backend != HyMt2Backend.CPU -> Unit
-                    // NPU: aparece desabilitado (ainda não implementado).
-                    backend == HyMt2Backend.NPU ->
-                        menu.add(0, index + 1, 0, backend.label).isEnabled = false
-                    else -> menu.add(0, index + 1, 0, backend.label)
-                }
+            // As SEIS rotas aparecem sempre; a indisponível fica desabilitada com o
+            // motivo no próprio item (nada de esconder o que existe).
+            rotas.forEachIndexed { index, disponibilidade ->
+                val titulo = if (disponibilidade.available) disponibilidade.route.label
+                else "${disponibilidade.route.label} — ${disponibilidade.reason}"
+                menu.add(0, index + 1, 0, titulo).isEnabled = disponibilidade.available
             }
             setOnMenuItemClickListener { item ->
-                val backend = HyMt2Backend.values().getOrNull(item.itemId - 1)
+                val disponibilidade = rotas.getOrNull(item.itemId - 1)
                     ?: return@setOnMenuItemClickListener true
-                if (backend != selectedBackend) {
-                    selectedBackend = backend
-                    buttonBackend.text = backend.shortLabel
-                    // O modelo precisa recarregar no backend novo na próxima tradução.
+                if (disponibilidade.route != selectedBackend) {
+                    selectedBackend = disponibilidade.route
+                    buttonBackend.text = disponibilidade.route.shortLabel
+                    // O modelo precisa recarregar na rota nova na próxima tradução.
                     loadedModelFile = null
                     loadedBackend = null
                     getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                        .edit().putString(PREF_BACKEND, backend.name).apply()
-                    appendLog("Backend selecionado: ${backend.shortLabel} (modelo será recarregado)")
+                        .edit().putString(PREF_BACKEND, disponibilidade.route.id).apply()
+                    appendLog("Backend selecionado: ${disponibilidade.route.shortLabel} (modelo será recarregado)")
+                    ajudaDaRota(disponibilidade.route)
                 }
                 true
             }
@@ -471,34 +464,65 @@ class TextoActivity : AppCompatActivity() {
 
     /** Alinha o backend com o modelo escolhido.
      *
-     * Se o modelo não tem kernel de GPU (1.25bit) e a preferência aponta para
-     * GPU, volta para CPU e avisa — o menu já não oferece GPU nesse caso. */
+     * Se a rota selecionada não vale para o modelo (ex.: 1.25bit sem kernel
+     * acelerado), volta para CPU e avisa com o motivo — o menu mostra o mesmo
+     * motivo em cada rota indisponível (nada de degradar em silêncio). */
     private fun syncBackendWithModel() {
         val model = selectedModel ?: return
-        if (HyMt2ModelSupport.supportsGpu(model.fileName) || selectedBackend == HyMt2Backend.CPU) return
-        selectedBackend = HyMt2Backend.CPU
+        if (selectedBackend == HyMt2BackendPolicy.Route.CPU) return
+        val disponibilidade =
+            HyMt2BackendPolicy.availability(selectedBackend, model.fileName, runtimeSupport())
+        if (disponibilidade.available) return
+        val motivo = disponibilidade.reason ?: "indisponível"
+        selectedBackend = HyMt2BackendPolicy.Route.CPU
         buttonBackend.text = selectedBackend.shortLabel
         loadedModelFile = null
         loadedBackend = null
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit().putString(PREF_BACKEND, selectedBackend.name).apply()
-        appendLog("${model.label} não tem kernel de GPU — backend voltou para CPU.")
+            .edit().putString(PREF_BACKEND, selectedBackend.id).apply()
+        appendLog("${disponibilidade.route.label} indisponível ($motivo) — backend voltou para CPU.")
     }
 
-    /** Backend persistido; valor desconhecido volta para CPU. */
-    private fun savedBackend(): HyMt2Backend {
-        val name = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    /** Backend persistido (id estável); id desconhecido/ausente volta para CPU. */
+    private fun savedBackend(): HyMt2BackendPolicy.Route {
+        val id = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(PREF_BACKEND, null)
-        return HyMt2Backend.values().firstOrNull { it.name == name } ?: HyMt2Backend.CPU
+        return HyMt2BackendPolicy.Route.fromId(id)
     }
 
-    /** Backend efetivo para um modelo.
+    /** Rota efetiva para um modelo: a selecionada quando disponível; senão CPU.
      *
-     * O 1.25bit (tensores STQ1_0) não tem kernel de GPU: o menu já não oferece
-     * GPU para ele, e esta guarda cobre o caso de a preferência persistida
-     * apontar para um backend de GPU. */
-    private fun effectiveBackend(model: HyMt2Model): HyMt2Backend =
-        if (HyMt2ModelSupport.supportsGpu(model.fileName)) selectedBackend else HyMt2Backend.CPU
+     * A diferença nunca é silenciosa: [translate] registra o motivo no log. */
+    private fun effectiveBackend(model: HyMt2Model): HyMt2BackendPolicy.Route {
+        val disponibilidade =
+            HyMt2BackendPolicy.availability(selectedBackend, model.fileName, runtimeSupport())
+        return if (disponibilidade.available) selectedBackend else HyMt2BackendPolicy.Route.CPU
+    }
+
+    /** Recursos de runtime para a política de rotas.
+     *
+     * NPU: passa a `true` quando o modo NPU/Smart existir no pacote nativo + JNI
+     * (etapas E4/E5 da R68) — até lá as rotas aceleradas aparecem com motivo.
+     * GPU: os devices não são pré-checados aqui (o load reporta o diagnóstico
+     * real na primeira tradução, como hoje). */
+    private fun runtimeSupport() = HyMt2BackendPolicy.RuntimeSupport(
+        npu = false,
+        gpuOpenCl = true,
+        gpuVulkan = true,
+    )
+
+    /** Ajuda curta da rota, no padrão aprovado ("NPU processa o prompt; GPU gera a resposta"). */
+    private fun ajudaDaRota(rota: HyMt2BackendPolicy.Route) {
+        when (rota) {
+            HyMt2BackendPolicy.Route.SMART_OPENCL ->
+                appendLog("Smart (OpenCL): a NPU processa o prompt; a GPU OpenCL gera a resposta.")
+            HyMt2BackendPolicy.Route.SMART_VULKAN ->
+                appendLog("Smart (Vulkan): a NPU processa o prompt; a GPU Vulkan gera a resposta.")
+            HyMt2BackendPolicy.Route.NPU ->
+                appendLog("NPU: prompt e resposta no HTP; operações não suportadas ficam visíveis no log.")
+            else -> Unit
+        }
+    }
 
     private fun showLanguageMenu() {
         PopupMenu(this, buttonLanguage).apply {
@@ -646,10 +670,10 @@ class TextoActivity : AppCompatActivity() {
         val backendVez = effectiveBackend(model)
         appendLog("Traduzindo com ${model.label} (${backendVez.shortLabel}) para ${selectedTarget.label}...")
         if (backendVez != selectedBackend) {
-            appendLog(
-                "1.25bit não tem kernel de GPU — executando em CPU " +
-                    "(escolha Q4_0/Q4_K_M para usar ${selectedBackend.shortLabel})."
-            )
+            val motivo = HyMt2BackendPolicy
+                .availability(selectedBackend, model.fileName, runtimeSupport()).reason
+                ?: "indisponível para este modelo"
+            appendLog("${selectedBackend.label} indisponível ($motivo) — executando em CPU.")
         }
 
         Thread {
