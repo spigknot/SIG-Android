@@ -1,0 +1,36 @@
+{
+  "recibo": "0.4-e4-motor-build",
+  "rodada": "R68/E4",
+  "data": "2026-10-12",
+  "objetivo": "Motor NPU/Smart implementado no llama_jni do produto e COMPILADO no container.",
+  "fonte": [
+    "app/src/main/cpp/llama-jni/llama_jni.cpp: device lookup 1/2/3 (HTP0 por nome/registro); ensure_adsp_library_path (dladdr -> ADSP_LIBRARY_PATH p/ o skel via FastRPC); setup_smart_source (2o modelo+contexto no HTP0; n_batch/n_ubatch=128; flash_attn OFF; fail-closed); generate_smart (ponte: prefill chunked -> export c/ gate de tamanho -> tok1 amostrado UMA vez -> emissao unica -> import c/ gate -> gate de posicao -> decode no destino; EOG tok1 = erro claro); hasNpu()",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/TextoActivity.kt: runtimeSupport() usa HyMt2Native.hasNpu() (runCatching; pacote antigo -> false)",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/HyMt2Native.kt: external hasNpu(); KDoc dos kinds 0..5"
+  ],
+  "referencia": "probe validado C:/npu-probe (smartv2::run_bridge, R65 Bloco III Handoff CCE; ordem R4-B; gate EOG_tok1). Espelho teacher-forcing NAO roda em producao.",
+  "build": {
+    "container": "ghcr.io/snapdragon-toolchain/arm64-android:v0.7",
+    "dir": "/root/r68-cpp-full (build-r68d, GGML_HEXAGON=ON, SDK 6.6.0.0)",
+    "cmd": "cmake --build build-r68d -j 20 --target sig_llama",
+    "rc": 0
+  },
+  "artefato": {
+    "libsig_llama_so": {
+      "bytes": 93467192,
+      "sha256": "64c8e3eda1f287c0ea9a87285cab942dfca7f7683dd7250e430ce4844be81286",
+      "needed": ["liblog.so", "libdl.so", "libandroid.so", "libvulkan.so", "libm.so", "libc.so"],
+      "exporta": ["Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate", "Java_br_gov_sp_pcsp_launcher_HyMt2Native_hasNpu"],
+      "observacao": "NAO stripped (93 MB). O libsig_llama.so do pacote oficial tem ~31 MB (stripped): no E5 aplicar o mesmo padrao de strip antes de compor o pacote."
+    }
+  },
+  "gates": {
+    "compilacao_container": "OK (rc=0; unico TU compilado: llama_jni.cpp -> link)",
+    "suite_kotlin": "EM EXECUCAO (testDebugUnitTest pos-mudancas Kotlin) — registrar resultado na sequencia"
+  },
+  "pendente": [
+    "E5: pacote nativo v12 FINAL — composicao corrigida: libsig_llama.so do motor (stripped conforme padrao) + skel; REMOVER as libs modulares do pacote (libggml-hexagon.so nao e usada pela arquitetura mono) e atualizar manager/testes/fixtures",
+    "F8: aceitacao em device (requer autorizacao propria; SIG de producao intocado)"
+  ],
+  "evidencia": "docs/npu-hymt2/smart-rodada68/logs/r68-motor-build.log"
+}

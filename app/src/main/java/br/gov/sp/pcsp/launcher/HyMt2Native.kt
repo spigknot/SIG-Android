@@ -13,9 +13,10 @@ object HyMt2Native {
 
     /** Carrega o modelo GGUF e cria o contexto de inferência.
      *
-     * @param backendKind 0 = CPU, 1 = GPU OpenCL, 2 = GPU Vulkan (3 = NPU, não
-     *  implementado). GPU exige o device correspondente no aparelho; sem ele a
-     *  carga falha com diagnóstico em `lastError()`.
+     * @param backendKind 0 = CPU, 1 = GPU OpenCL, 2 = GPU Vulkan, 3 = NPU (HTP),
+     *  4 = Smart (OpenCL), 5 = Smart (Vulkan). NPU e Smart exigem o device HTP0;
+     *  Smart exigir também o device da GPU destino — sem eles a carga falha com
+     *  diagnóstico em `lastError()` (nunca fallback silencioso).
      * @param nThreads 0 deixa o llama.cpp escolher.
      * @param nCtx tamanho do contexto (0 = 8192). */
     external fun loadModel(modelPath: String, backendKind: Int, nThreads: Int, nCtx: Int): Boolean
@@ -35,6 +36,11 @@ object HyMt2Native {
 
     /** Backend realmente usado no último carregamento (ex.: "GPU Vulkan (Vulkan / Vulkan0)"). */
     external fun backendDescription(): String
+
+    /** R68/E4: `true` quando o device NPU (HTP0) existe no runtime — usado pela
+     *  política de rotas da ferramenta Texto (NPU e Smart). Não abre sessão DSP:
+     *  o load do modo escolhido sonda e reporta a falha real em `lastError()`. */
+    external fun hasNpu(): Boolean
 
     /** Linhas de memória do último carregamento (tamanhos de buffer, VRAM do device). */
     external fun loadSummary(): String

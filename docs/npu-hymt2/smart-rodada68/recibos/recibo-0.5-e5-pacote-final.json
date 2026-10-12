@@ -1,0 +1,33 @@
+{
+  "recibo": "0.5-e5-pacote-final",
+  "rodada": "R68/E5",
+  "data": "2026-10-12",
+  "objetivo": "Pacote nativo v12 FINAL na composicao da arquitetura mono (host Hexagon embutido no libsig_llama.so + skel), verificado pela porta oficial.",
+  "composicao": {
+    "arm64-v8a": "v11 base + skel libggml-htp-v81.so (auditado em campo) + libsig_llama.so DO MOTOR (strippado); a lib modular libggml-hexagon.so saiu do pacote",
+    "x86_64": "INALTERADO (mesmo pacote do candidato; sem NPU/Hexagon)"
+  },
+  "artefatos": {
+    "arm64_zip": {"arquivo": "sig-android-dependencies-v12-arm64-v8a.zip", "bytes": 44216824, "sha256": "1ba7a6014a89d84301544a05088ddfa5926a59790575507efd24d2669c2f3507", "entradas": 19},
+    "x86_zip": {"arquivo": "sig-android-dependencies-v12-x86_64.zip", "bytes": 50006446, "sha256": "b104cde15c5afa3639a5fee3836e5c28d8d8d21c4943e404cdd73a1c62a54652", "entradas": 18},
+    "libsig_llama_so_motor": {"bytes": 30194632, "sha256": "8383995f097974cc2a129dc699146df842363bb5a8f88d23d66a75ddf2f1f6f8", "nota": "strip --strip-all; .dynsym/exports preservados; NEEDED log/dl/android/vulkan/m/c"}
+  },
+  "provas": {
+    "composicao": "prova byte-a-byte dos arquivos herdados contra o candidato v12b (r68_make_v12c.py; backup .v12b.bak); manifest: bloco do hexagon removido, entrada do libsig_llama atualizada",
+    "verify_native_dependencies": "ACEITO em 2026-10-12 (arm64 44216824 / x86_64 50006446)",
+    "testes": "NativeDepsOfficialFixturesTest + DownloadPlanTablesTest verdes (focal, 20s); suite completa em confirmacao por job; falha inicial (manifest.json 3562 vs ZIP 3377) corrigida na tabela do manager"
+  },
+  "decisoes": [
+    "skel mantido no hash auditado em campo (03b0ece6): mesmos fontes do build do motor — a diferenca de hash do rebuild e' de metadados de compilacao",
+    "x86 fica sem o motor (sem NPU; a lib antiga nao exporta hasNpu e o runCatching cobre na UI)"
+  ],
+  "pendente": [
+    "F8: aceitacao em device (requer autorizacao propria)",
+    "publicacao R2 do v12 final (somente com aprovacao explicita)"
+  ],
+  "evidencia": [
+    "docs/npu-hymt2/smart-rodada68/recibos/recibo-0.4-e4-motor-build.json (lib do motor)",
+    "docs/npu-hymt2/smart-rodada68/logs/r68-motor-build.log",
+    "script de composicao: r68_make_v12c.py (scratch da sessao)"
+  ]
+}

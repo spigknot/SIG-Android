@@ -57,8 +57,9 @@ class DownloadPlanTablesTest {
     @Test
     fun `o conteudo interno do nativo tem a contagem esperada por ABI`() {
         val esperado = mapOf(
-            // 18 do pacote base + libggml-hexagon.so + libggml-htp-v81.so (backend Hexagon, R68/v12).
-            "arm64-v8a" to 20,
+            // 18 do pacote base + o skel do Hexagon (R68/v12 final; o host do
+            // Hexagon vai EMBUTIDO no libsig_llama.so — arquitetura mono).
+            "arm64-v8a" to 19,
             // Sem backend Hexagon (NPU nao existe em x86).
             "x86_64" to 18,
         )
@@ -74,10 +75,11 @@ class DownloadPlanTablesTest {
                 conteudo.any { it.nome.startsWith("ggml-silero") },
             )
         }
-        // O arm64 leva o backend Hexagon (NPU/Smart); o x86_64 nao.
+        // O arm64 leva o backend Hexagon (NPU/Smart) na arquitetura MONO: skel
+        // como arquivo separado + host embutido no libsig_llama.so.
         val arm64 = NativeDependencyManager.conteudoInstalado("arm64-v8a")
-        assertTrue("arm64: pacote tem de conter libggml-hexagon.so",
-            arm64.any { it.nome == "libggml-hexagon.so" })
+        assertTrue("arm64: pacote NAO deve levar o host modular do Hexagon",
+            arm64.none { it.nome == "libggml-hexagon.so" })
         assertTrue("arm64: pacote tem de conter o skel libggml-htp-v81.so",
             arm64.any { it.nome == "libggml-htp-v81.so" })
         val x86 = NativeDependencyManager.conteudoInstalado("x86_64")

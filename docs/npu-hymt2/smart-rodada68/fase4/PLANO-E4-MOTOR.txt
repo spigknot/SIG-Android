@@ -1,0 +1,78 @@
+PLANO E4 — MOTOR NPU/SMART NO llama_jni (R68/F7)
+================================================
+Data: 2026-10-12. Base: commit 7aa0d1d. Referencia validada: probe.cpp (C:/npu-probe)
+— smartv2::run_bridge (R65 Bloco III Handoff, CCE) + chunk_plan.h (R10) + seeds.
+Design: docs/npu-hymt2/DESIGN-SMART-DUAL-BACKEND.md (secoes 1, 4, 5-F7, 8).
+
+1. ESTADO ATUAL DO PRODUTO
+--------------------------
+- llama_jni.cpp (874 linhas): kinds 0=CPU, 1=GPU_OPENCL, 2=GPU_VULKAN funcionam;
+  3=NPU = erro claro ("ainda nao implementado"); 4/5 (Smart) nao existem no motor
+  (a politica/UI E1+E2 ja os oferece; falta o motor).
+- Capability do device: llama_jni.cpp:247 backend_diagnostics (devices=N);
+  Kotlin: HyMt2ModelSupport.supportsNpu(fileName) = !STQ (regra de MODELO).
+- libsig_llama.so com Hexagon EMBUTIDO: PROVADO (recibo-0.3-e3d; 93.328.144 B,
+  build container com GGML_HEXAGON=ON; NEEDED sem libggml-base).
+
+2. SEMANTICA (design SS1 — nao negociavel)
+------------------------------------------
+- NPU: prefill E geracao predominantemente no HTP0; ops nao suportadas explicitas.
+- Smart (X): prefill no HTP0 -> ponte de estado -> geracao no device X
+  (X=OpenCL "GPUOpenCL" ou Vulkan "Vulkan0"); SEM replay integral; tok1 amostrado
+  UMA vez na origem e emitido UMA vez; jamais rotular NPU+CPU como Smart.
+- Fallback nunca silencioso: indisponivel => erro claro com diagnostico.
+
+3. DESENHO DO MOTOR (port do probe, adaptado ao monolito)
+---------------------------------------------------------
+3.1 Device lookup (substitui is_gpu_device/find_gpu_device):
+    - nomes reais: "HTP0" (NPU), "Vulkan0", "GPUOpenCL", "CPU".
+    - nova funcao find_device_by_name(kind) + device_matches_backend estendido
+      ("htp" no kind NPU).
+3.2 NPU (kind 3):
+    - dev = dev_by_name("HTP0"); ausente => erro "NPU (HTP0) indisponivel" (nao silencioso).
+    - 1 contexto: devices={dev,0}, n_gpu_layers=-1 (igual GPU hoje).
+    - setenv ADSP_LIBRARY_PATH=<dir das libs nativas> ANTES do primeiro uso do HTP
+      (o FastRPC acha o skel libggml-htp-v81.so por ele; seed do probe.cpp:130-133).
+      Dir: derivado do modelPath/dir das libs do pacote (a confirmar na interface).
+3.3 Smart (kinds 4/5):
+    - 2 contextos do MESMO modelo: cs (HTP0) + cd (GPUOpenCL/Vulkan0 do kind).
+      Estrategia A do design (2 contextos + export/import) — validada no probe.
+    - Fluxo de geracao (ordem R4-B, do run_bridge):
+      (0) reset por pedido (hymt2_begin_fresh_request) nos dois contextos;
+      (1) prefill no cs em CHUNKS de 128 (chunk_plan portado; nt>128 => lotes;
+          erro em chunk => ABORTA);
+      (2) export: sz=llama_state_get_size(cs); got=llama_state_get_data(...);
+          gate got==sz (senao erro export_invalido);
+      (3) tok1 = sampler_sample(cs) — MESMA cadeia de sampler do produto;
+          EOG em tok1 => erro "EOG_tok1_sem_handoff" (gate R4-B);
+      (4) emit tok1 UMA vez (streaming) e contar emissao;
+      (5) import: rd=llama_state_set_data(cd,...); gate rd==st.size();
+      (6) pos gate: seq_pos_max(cd)==nt-1;
+      (7) loop: decode(cd) do ultimo token -> sample -> emit -> EOG/cap.
+      Espelho teacher-forcing: NAO em producao (so diagnostico opcional/anotado).
+    - Memoria: 2x pesos (~1,1GB cada)+KV — risco R3 do design: medir no aceite;
+      carregamento sob demanda (smart so quando escolhido) e liberado no unload.
+3.4 Interface com o Kotlin:
+    - generate mantem assinatura; kind 3/4/5 entram pelos mesmos parametros.
+    - Capability NPU para a politica: nova funcao JNI hasNpu() (dev_by_name HTP0
+      != null) para o runtime; STQ continua barrado por supportsNpu (modelo).
+3.5 chunk_plan: portar chunk_plan.h para llama-jni/ (helper PURO, mesmo contrato:
+    lotes contiguos de ate nb; ultimo termina em nt-1; nt<=nb => 1 lote).
+
+4. BUILD E VERIFICACAO POR ITERACAO
+-----------------------------------
+- Compilacao SEMPRE no container (probe5 provou o caminho):
+  cmake ... -DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT/TOOLS_ROOT -DPREBUILT_LIB_DIR=android_aarch64
+  -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28; build sig_llama + htp-v81.
+- Testes locais: testDebugUnitTest (suite) + lintDebug + assembleDebug (gates).
+- Testes do motor smart: seams puros no estilo do probe (mutantes: export vazio/trunc,
+  import falha, pos errada, ponte omitida/dup, EOG tok1) — implementar onde o produto
+  testa nativo; no minimo: chunk_plan com fixture e os gates fail-closed cobertos.
+- Device: smokes SO no probe/aceite autorizado (F8); SIG de producao intocado.
+
+5. RISCO/STOP
+-------------
+- Estado KV cross-backend: VALIDADO no probe (espelho ok); no produto revalidar por
+  contrato (tamanho/pos) nos testes; divergencia => erro claro, nunca aceitar.
+- Memoria/temp: se o aceite medir risco de LMK => parar e registrar (design SS6).
+- Nada de speculacao: logar solicitado/efetivo/transfer (design F7).

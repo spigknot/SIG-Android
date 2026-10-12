@@ -1,0 +1,16 @@
+== [1] enviar llama-jni atualizado (motor E4) ==
+SEND_OK
+== [2] enviar server script ==
+SCP_OK
+== [3] build incremental no container ==
+BUILD_SIGLLAMA_RC=0
+ninja: no work to do.
+[2/6] Performing install step for 'vulkan-shaders-gen'
+-- Up-to-date: /workspace/build-r68d/Release/./vulkan-shaders-gen
+[3/6] Completed 'vulkan-shaders-gen'
+[4/6] Building CXX object CMakeFiles/sig_llama.dir/llama_jni.cpp.o
+[5/6] Linking CXX shared library libsig_llama.so
+-rwxr-xr-x 1 root root 93467192 Oct 12 18:16 /workspace/build-r68d/libsig_llama.so
+64c8e3eda1f287c0ea9a87285cab942dfca7f7683dd7250e430ce4844be81286  /workspace/build-r68d/libsig_llama.so
+MOTOR_BUILD_DONE
+build-motor-rc=0

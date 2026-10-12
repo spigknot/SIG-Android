@@ -15,6 +15,7 @@
 
 #include <jni.h>
 #include <android/log.h>
+#include <dlfcn.h>
 #include <sys/system_properties.h>
 
 #include <atomic>
@@ -59,6 +60,16 @@ static std::atomic<int> g_threads_cache{0};
 // sonda; 1 = pula a sonda p/ A/B controlado). Remover quando a rodada fechar.
 static bool g_skip_probe = false;
 static double g_probe_s = 0.0, g_model_s = 0.0, g_ctx_s = 0.0;
+
+// R68/E4 — Motor NPU/Smart: kind carregado (0=CPU,1=OC,2=VK,3=NPU,4/5=Smart) e o
+// par de origem HTP do Smart (prefill no HTP0 -> ponte de estado -> decode no
+// destino g_model/g_ctx). O espelho de validacao do probe NAO roda em producao.
+static int g_backend_kind = 0;
+static bool g_smart_active = false;
+static llama_model * g_smart_src_model = nullptr;
+static llama_context * g_smart_src_ctx = nullptr;
+static std::string g_smart_src_desc;
+static std::string g_smart_stats;   // fases da ultima ponte (diagnostico do stats)
 
 // Contadores do backend OpenCL (ggml-opencl.cpp): upload/alocacao na carga.
 extern "C" double ggml_opencl_diag_set_s(void);
@@ -219,6 +230,8 @@ static const char * backend_label(int kind) {
         case 1: return "GPU OpenCL";
         case 2: return "GPU Vulkan";
         case 3: return "NPU";
+        case 4: return "Smart (OpenCL)";
+        case 5: return "Smart (Vulkan)";
         default: return "CPU";
     }
 }
@@ -234,14 +247,26 @@ static std::string lower_copy(const char * value) {
     return text;
 }
 
+// kind efetivo do device: 1=OpenCL, 2=Vulkan, 3=NPU/HTP. O device do HTP e' do
+// tipo accelerator (nao GPU), entao o TIPO so' filtra 1/2; o nome/registro decide
+// tudo. "HTP0" (device) / "hexagon" (registro) identificam o NPU.
 static bool device_matches_backend(ggml_backend_dev_t dev, int kind) {
-    if (kind != 1 && kind != 2) return false;
     ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dev);
     std::string haystack = lower_copy(ggml_backend_dev_name(dev));
     haystack += " ";
     haystack += lower_copy(reg != nullptr ? ggml_backend_reg_name(reg) : nullptr);
-    if (kind == 2) return haystack.find("vulkan") != std::string::npos;
-    return haystack.find("opencl") != std::string::npos;
+    switch (kind) {
+        case 3: return haystack.find("htp") != std::string::npos ||
+                       haystack.find("hexagon") != std::string::npos;
+        case 2: return haystack.find("vulkan") != std::string::npos;
+        case 1: return haystack.find("opencl") != std::string::npos;
+        default: return false;
+    }
+}
+
+static bool device_type_ok_for_kind(ggml_backend_dev_t dev, int kind) {
+    if (kind == 3) return true;   // HTP0 = accelerator
+    return is_gpu_device(dev);
 }
 
 static std::string backend_diagnostics() {
@@ -264,10 +289,10 @@ static std::string backend_diagnostics() {
     return output.str();
 }
 
-static ggml_backend_dev_t find_gpu_device(int kind, std::string * name) {
+static ggml_backend_dev_t find_backend_device(int kind, std::string * name) {
     for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
         ggml_backend_dev_t dev = ggml_backend_dev_get(i);
-        if (dev != nullptr && is_gpu_device(dev) && device_matches_backend(dev, kind)) {
+        if (dev != nullptr && device_type_ok_for_kind(dev, kind) && device_matches_backend(dev, kind)) {
             if (name != nullptr) {
                 ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dev);
                 const char * reg_name = reg != nullptr ? ggml_backend_reg_name(reg) : nullptr;
@@ -300,6 +325,104 @@ static void configure_vulkan_memory_limit() {
     unsetenv("GGML_VULKAN_MEMORY_LIMIT");
 }
 
+// R68/E4 — Motor NPU/Smart.
+//
+// (1) O FastRPC procura o skel do HTP (libggml-htp-v81.so) pelo ADSP_LIBRARY_PATH
+//     (seed do probe validado: C:/npu-probe probe.cpp:130-133). Apontamos para o
+//     dir do proprio libsig_llama.so — o pacote extrai o skel ao lado dele;
+//     dladdr evita mudar a interface com o Kotlin.
+// (2) A origem do Smart e' um 2o modelo+contexto no HTP0 (n_batch/n_ubatch=128,
+//     flash_attn OFF — parametros do probe R65-R67); fail-closed sem HTP.
+static void ensure_adsp_library_path() {
+    static bool done = false;
+    if (done) return;
+    Dl_info info;
+    if (dladdr((void *) &ensure_adsp_library_path, &info) != 0 && info.dli_fname != nullptr) {
+        std::string lib_path = info.dli_fname;
+        size_t pos = lib_path.find_last_of('/');
+        if (pos != std::string::npos) {
+            std::string dir = lib_path.substr(0, pos);
+            setenv("ADSP_LIBRARY_PATH", dir.c_str(), 1);
+            LOGI("ADSP_LIBRARY_PATH=%s (skel do HTP)", dir.c_str());
+            done = true;
+        }
+    }
+}
+
+static bool setup_smart_source(const std::string & model_path, jint nCtx, jint nThreads) {
+    std::string src_name;
+    ggml_backend_dev_t src = find_backend_device(3, &src_name);
+    if (src == nullptr) {
+        set_error(std::string("Smart requer NPU (HTP0) e o device nao esta disponivel.\n\ndiagnostico:\n") + backend_diagnostics());
+        return false;
+    }
+    ggml_backend_t probe = ggml_backend_dev_init(src, nullptr);
+    if (probe == nullptr) {
+        set_error("Smart: nao consegui abrir a sessao HTP (DSP).\n\ndiagnostico:\n" + backend_diagnostics());
+        return false;
+    }
+    ggml_backend_free(probe);
+
+    static ggml_backend_dev_t sdev[2] = { nullptr, nullptr };
+    sdev[0] = src;
+    sdev[1] = nullptr;
+    llama_model_params sp = llama_model_default_params();
+    sp.devices = sdev;
+    sp.n_gpu_layers = -1;
+    llama_model * smodel = nullptr;
+    try {
+        smodel = llama_model_load_from_file(model_path.c_str(), sp);
+    } catch (const std::exception & e) {
+        set_error(std::string("Smart: origem HTP falhou ao carregar o modelo (driver): ") + e.what());
+        return false;
+    } catch (...) {
+        set_error("Smart: origem HTP falhou ao carregar o modelo (excecao desconhecida).");
+        return false;
+    }
+    if (smodel == nullptr) {
+        set_error("Smart: origem HTP falhou ao carregar o modelo GGUF.");
+        return false;
+    }
+    llama_context_params cp = llama_context_default_params();
+    cp.n_ctx = nCtx > 0 ? (uint32_t) nCtx : 8192;
+    cp.n_batch = 128;     // limite do HTP (probe R65-R67: 128/128)
+    cp.n_ubatch = 128;
+    cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+    {
+        char vprof[8] = {0};
+        __system_property_get("debug.sig.hymt2.prof", vprof);
+        cp.no_perf = !(vprof[0] == '1');
+    }
+    if (nThreads > 0) {
+        cp.n_threads = nThreads;
+        cp.n_threads_batch = nThreads;
+    }
+    llama_context * sctx = nullptr;
+    try {
+        sctx = llama_init_from_model(smodel, cp);
+    } catch (const std::exception & e) {
+        llama_model_free(smodel);
+        set_error(std::string("Smart: origem HTP falhou ao criar o contexto (driver): ") + e.what());
+        return false;
+    } catch (...) {
+        llama_model_free(smodel);
+        set_error("Smart: origem HTP falhou ao criar o contexto (excecao desconhecida).");
+        return false;
+    }
+    if (sctx == nullptr) {
+        llama_model_free(smodel);
+        set_error("Smart: origem HTP falhou ao criar o contexto de inferencia.");
+        return false;
+    }
+    if (g_smart_src_ctx != nullptr) llama_free(g_smart_src_ctx);
+    if (g_smart_src_model != nullptr) llama_model_free(g_smart_src_model);
+    g_smart_src_model = smodel;
+    g_smart_src_ctx = sctx;
+    g_smart_src_desc = "HTP (" + src_name + ")";
+    LOGI("smart: origem montada: %s n_ctx=%u n_batch=%u", g_smart_src_desc.c_str(), cp.n_ctx, cp.n_batch);
+    return true;
+}
+
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM * vm, void * reserved) {
     static CerrRedirect cerr_to_logcat;  // ggml-vulkan diagnostica em std::cerr
     llama_log_set(sig_log_callback, nullptr);
@@ -312,11 +435,7 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
         JNIEnv * env, jobject /* this */,
         jstring modelPath, jint backendKind, jint nThreads, jint nCtx) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    if (backendKind == 3) {
-        set_error("Backend NPU ainda nao implementado (use CPU, OpenCL ou Vulkan).");
-        return JNI_FALSE;
-    }
-    if (backendKind < 0 || backendKind > 2) {
+    if (backendKind < 0 || backendKind > 5) {
         set_error("Backend desconhecido.");
         return JNI_FALSE;
     }
@@ -325,6 +444,7 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
         set_error("Caminho do modelo vazio.");
         return JNI_FALSE;
     }
+    std::string model_path_saved(path);   // Smart usa o caminho apos o Release
 
     // CPU precisa desligar o offload explicitamente: o default do llama.cpp é
     // n_gpu_layers=99 e agora os backends GPU existem no binário.
@@ -334,9 +454,10 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
     ggml_backend_dev_t gpu_dev = nullptr;
 
     if (backendKind != 0) {
-        if (backendKind == 2) configure_vulkan_memory_limit();
+        if (backendKind == 2 || backendKind == 5) configure_vulkan_memory_limit();
+        if (backendKind >= 3) ensure_adsp_library_path();   // skel do HTP via FastRPC
         std::string device_name;
-        ggml_backend_dev_t dev = find_gpu_device(backendKind, &device_name);
+        ggml_backend_dev_t dev = find_backend_device(backendKind == 4 ? 1 : (backendKind == 5 ? 2 : backendKind), &device_name);
         if (dev == nullptr) {
             set_error(std::string(backend_label(backendKind)) +
                       " nao disponivel neste dispositivo.\n\ndiagnostico:\n" + backend_diagnostics());
@@ -466,6 +587,26 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_loadModel(
         g_backend_desc = used_desc;
         g_last_error.clear();
     }
+    // ===== R68/E4 — Smart (X): origem NPU/HTP (ponte HTP -> destino). =====
+    // Fail-closed: sem a origem HTP o carregamento inteiro falha e o destino
+    // recem-criado e' liberado — nunca fica um "Smart" com uma ponta so'.
+    g_smart_active = false;
+    g_backend_kind = backendKind;
+    if (backendKind == 4 || backendKind == 5) {
+        if (!setup_smart_source(model_path_saved, nCtx, nThreads)) {
+            llama_free(ctx);
+            llama_model_free(model);
+            g_model = nullptr;
+            g_ctx = nullptr;
+            g_backend_kind = 0;
+            return JNI_FALSE;
+        }
+        g_smart_active = true;
+        {
+            std::lock_guard<std::mutex> lock(g_ui_mutex);
+            g_backend_desc = used_desc + " + " + g_smart_src_desc;
+        }
+    }
     LOGI("modelo carregado: backend=%s n_ctx=%u n_threads=%d",
          used_desc.c_str(), cparams.n_ctx, llama_n_threads(ctx));
     // DIAG (rodada OpenCL): fases da carga no resumo do app (visivel no log)
@@ -504,6 +645,16 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_releaseModel(JNIEnv *, jobject) {
         llama_model_free(g_model);
         g_model = nullptr;
     }
+    if (g_smart_src_ctx != nullptr) {   // origem do Smart (HTP)
+        llama_free(g_smart_src_ctx);
+        g_smart_src_ctx = nullptr;
+    }
+    if (g_smart_src_model != nullptr) {
+        llama_model_free(g_smart_src_model);
+        g_smart_src_model = nullptr;
+    }
+    g_smart_active = false;
+    g_backend_kind = 0;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -526,10 +677,223 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_backendDescription(JNIEnv * env, jobjec
     return env->NewStringUTF(copy.c_str());
 }
 
+// R68/E4 — capability do NPU para a politica/UI (E1): presenca do device HTP0.
+// Nao abre sessao (a sessao e' sondada/provada no loadModel do modo escolhido);
+// a presenca e' condicao necessaria, nao suficiente — falha real vira erro claro.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_br_gov_sp_pcsp_launcher_HyMt2Native_hasNpu(JNIEnv *, jobject) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    std::string name;
+    return find_backend_device(3, &name) != nullptr ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_br_gov_sp_pcsp_launcher_HyMt2Native_systemInfo(JNIEnv * env, jobject) {
     std::string info = std::string("llama.cpp ") + llama_print_system_info();
     return env->NewStringUTF(info.c_str());
+}
+
+// R68/E4 — GERACAO SMART (port fiel do probe homologado smartv2::run_bridge):
+// prefill no HTP (origem) -> export do estado -> tok1 amostrado UMA vez na origem
+// -> emissao unica -> import no destino -> gate de posicao -> decode no destino.
+// Gates fail-closed (nunca aceita estado invalido; EOG no tok1 = SEM handoff).
+// O espelho teacher-forcing do probe NAO roda em producao (bancada).
+static jstring generate_smart(
+        JNIEnv * env, jstring prompt, jint maxTokens,
+        jfloat temperature, jfloat topP, jint topK, jfloat repeatPenalty) {
+    llama_context * cs = g_smart_src_ctx;   // HTP
+    llama_context * cd = g_ctx;             // destino (GPU)
+    try {
+    // Isolamento por pedido nos DOIS contextos (a fronteira e' a mesma do pedido).
+    {
+        std::string reset_error;
+        if (!hymt2_begin_fresh_request(cs, &reset_error)) {
+            set_error(std::string("Smart: ") + reset_error);
+            return nullptr;
+        }
+        if (!hymt2_begin_fresh_request(cd, &reset_error)) {
+            set_error(std::string("Smart: ") + reset_error);
+            return nullptr;
+        }
+    }
+    const char * prompt_chars = env->GetStringUTFChars(prompt, nullptr);
+    if (prompt_chars == nullptr) {
+        set_error("Prompt invalido.");
+        return nullptr;
+    }
+    std::string prompt_text(prompt_chars);
+    env->ReleaseStringUTFChars(prompt, prompt_chars);
+
+    const llama_vocab * vocab = llama_model_get_vocab(g_model);
+    int32_t n_prompt_max = (int32_t) prompt_text.size() + 8;
+    std::vector<llama_token> prompt_tokens(n_prompt_max);
+    int32_t n_prompt = llama_tokenize(
+            vocab, prompt_text.c_str(), (int32_t) prompt_text.size(),
+            prompt_tokens.data(), n_prompt_max,
+            /*add_special=*/false, /*parse_special=*/true);
+    if (n_prompt < 0) {
+        set_error("Smart: falha ao tokenizar o prompt.");
+        return nullptr;
+    }
+    prompt_tokens.resize(n_prompt);
+
+    const uint32_t n_ctx = llama_n_ctx(cd);
+    int32_t max_out = maxTokens > 0 ? maxTokens : 4096;
+    if ((uint32_t) n_prompt + max_out > n_ctx) {
+        max_out = (int32_t) n_ctx - n_prompt - 8;
+    }
+    if (max_out <= 0) {
+        set_error("Smart: texto longo demais para o contexto do modelo.");
+        return nullptr;
+    }
+
+    // Samplers SEPARADOS (probe ordem R4-B): a origem amostra o tok1; o destino
+    // segue a geracao. Mesma cadeia do produto nos dois (0.7 / 0.6 / 20 / 1.05).
+    auto make_sampler = [&]() {
+        llama_sampler * s = llama_sampler_chain_init(llama_sampler_chain_default_params());
+        llama_sampler_chain_add(s, llama_sampler_init_penalties(
+                llama_vocab_n_tokens(vocab), 64,
+                repeatPenalty > 0.0f ? repeatPenalty : 1.05f, 0.0f, 0.0f));
+        llama_sampler_chain_add(s, llama_sampler_init_top_k(topK > 0 ? topK : 20));
+        llama_sampler_chain_add(s, llama_sampler_init_top_p(topP > 0.0f ? topP : 0.6f, 1));
+        llama_sampler_chain_add(s, llama_sampler_init_temp(temperature > 0.0f ? temperature : 0.7f));
+        llama_sampler_chain_add(s, llama_sampler_init_dist(42));
+        return s;
+    };
+    llama_sampler * smpl_s = make_sampler();
+    llama_sampler * smpl_d = make_sampler();
+    auto cleanup = [&]() { llama_sampler_free(smpl_s); llama_sampler_free(smpl_d); };
+    const auto ms_desde = [](std::chrono::steady_clock::time_point t0) {
+        return std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - t0).count() / 1000.0;
+    };
+
+    // (1) prefill na ORIGEM em lotes do n_batch do HTP (128 — probe R65-R67).
+    const auto t_pref0 = std::chrono::steady_clock::now();
+    const int32_t n_batch_s = (int32_t) llama_n_batch(cs);
+    for (int32_t i = 0; i < n_prompt; i += n_batch_s) {
+        int32_t chunk = n_prompt - i < n_batch_s ? n_prompt - i : n_batch_s;
+        llama_batch b = llama_batch_get_one(prompt_tokens.data() + i, chunk);
+        if (llama_decode(cs, b) != 0) {
+            cleanup();
+            set_error("Smart: falha no prefill do HTP.");
+            return nullptr;
+        }
+    }
+    const double prefill_ms = ms_desde(t_pref0);
+
+    // (2) export — contrato: tamanho EXATO reportado pela API (gate).
+    std::vector<uint8_t> st;
+    double export_ms = 0.0, import_ms = 0.0;
+    {
+        size_t sz = llama_state_get_size(cs);
+        st.assign(sz ? sz : 1, 0);
+        const auto t0 = std::chrono::steady_clock::now();
+        size_t got = llama_state_get_data(cs, st.data(), sz);
+        export_ms = ms_desde(t0);
+        if (got == 0 || got != sz) {
+            cleanup();
+            set_error("Smart: export de estado invalido (tamanho fora do contrato).");
+            return nullptr;
+        }
+        st.resize(got);
+    }
+
+    // (3) tok1 — amostrado UMA vez na origem; EOG aqui = sem handoff (gate R4-B).
+    llama_token token = llama_sampler_sample(smpl_s, cs, -1);
+    const int tok1_id = (int) token;
+    if (llama_vocab_is_eog(vocab, token)) {
+        cleanup();
+        set_error("Smart: o HTP terminou no primeiro token (EOG) — sem handoff; nada foi gerado.");
+        return nullptr;
+    }
+    std::string result;
+    result.reserve(4096);
+    std::vector<char> piece(512);
+    int32_t n_out = 0;
+    {   // (4) emissao UNICA do tok1 (gate do probe: sem duplicar/perder)
+        int32_t n = llama_token_to_piece(vocab, token, piece.data(), (int32_t) piece.size(), 0, true);
+        if (n < 0) {
+            piece.resize((size_t) -n + 8);
+            n = llama_token_to_piece(vocab, token, piece.data(), (int32_t) piece.size(), 0, true);
+        }
+        if (n > 0) result.append(piece.data(), (size_t) n);
+        ++n_out;
+    }
+
+    // (5) import no destino + (6) gate de posicao.
+    {
+        const auto t0 = std::chrono::steady_clock::now();
+        size_t rd = llama_state_set_data(cd, st.data(), st.size());
+        import_ms = ms_desde(t0);
+        if (rd != st.size()) {
+            cleanup();
+            set_error("Smart: import de estado no destino falhou (tamanho divergente).");
+            return nullptr;
+        }
+    }
+    {
+        llama_pos pmax = llama_memory_seq_pos_max(llama_get_memory(cd), 0);
+        if ((int32_t) pmax != n_prompt - 1) {
+            cleanup();
+            set_error("Smart: posicao do destino incorreta apos o handoff.");
+            return nullptr;
+        }
+    }
+
+    // (7) decode do tok1 + geracao no destino (cap TOTAL inclui a ponte).
+    const auto t_gen0 = std::chrono::steady_clock::now();
+    const llama_token eos = llama_vocab_eos(vocab);
+    for (int32_t i = 0; i < max_out - 1; ++i) {
+        llama_batch b = llama_batch_get_one(&token, 1);
+        if (llama_decode(cd, b) != 0) {
+            cleanup();
+            set_error("Smart: falha ao decodificar no destino.");
+            return nullptr;
+        }
+        token = llama_sampler_sample(smpl_d, cd, -1);
+        if (token == eos) break;
+        int32_t n = llama_token_to_piece(vocab, token, piece.data(), (int32_t) piece.size(), 0, true);
+        if (n > 0) {
+            result.append(piece.data(), (size_t) n);
+        } else if (n < 0) {
+            piece.resize((size_t) -n + 8);
+            n = llama_token_to_piece(vocab, token, piece.data(), (int32_t) piece.size(), 0, true);
+            if (n > 0) result.append(piece.data(), (size_t) n);
+        }
+        ++n_out;
+    }
+    const double gen_ms = ms_desde(t_gen0);
+    cleanup();
+    {
+        std::lock_guard<std::mutex> lock(g_ui_mutex);
+        g_last_error.clear();
+    }
+    {
+        // Design F7: log de transfer por pedido (solicitado/efetivo/fases).
+        char stats[320];
+        snprintf(stats, sizeof(stats),
+                 "smart: prefill=%.0fms export=%.2fms (%zu B) import=%.2fms decode=%.0fms "
+                 "| tok1=%d saida=%d tokens | %s -> %s",
+                 prefill_ms, export_ms, st.size(), import_ms, gen_ms,
+                 tok1_id, n_out, g_smart_src_desc.c_str(), ui_copy_backend_desc().c_str());
+        {
+            std::lock_guard<std::mutex> lock(g_ui_mutex);
+            g_last_stats = stats;
+        }
+        summary_append_line(stats);
+        LOGI("%s", stats);
+    }
+    LOGI("geracao smart concluida: %d tokens de saida (destino=%s)",
+         n_out, ui_copy_backend_desc().c_str());
+    return env->NewStringUTF(result.c_str());
+    } catch (const std::exception & e) {
+        set_error(std::string("Excecao na inferencia Smart (") + ui_copy_backend_desc() + "): " + e.what());
+        return nullptr;
+    } catch (...) {
+        set_error(std::string("Excecao desconhecida na inferencia Smart (") + ui_copy_backend_desc() + ").");
+        return nullptr;
+    }
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -541,6 +905,10 @@ Java_br_gov_sp_pcsp_launcher_HyMt2Native_generate(
     if (g_model == nullptr || g_ctx == nullptr) {
         set_error("Modelo nao carregado.");
         return nullptr;
+    }
+    // R68/E4: no Smart o pedido inteiro vai para o fluxo da ponte (HTP -> destino).
+    if (g_smart_active) {
+        return generate_smart(env, prompt, maxTokens, temperature, topP, topK, repeatPenalty);
     }
 
     // try/catch: no Vulkan o driver pode lancar (vk::SystemError na criacao de

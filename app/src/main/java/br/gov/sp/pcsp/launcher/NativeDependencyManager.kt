@@ -30,8 +30,8 @@ object NativeDependencyManager {
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
             "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v12-arm64-v8a.zip",
-            "9e0900b189863e53901cecd478349e106fc25dbb369fd320695e91913f093a85",
-            45_744_019L
+            "1ba7a6014a89d84301544a05088ddfa5926a59790575507efd24d2669c2f3507",
+            44_216_824L
         ),
         "x86_64" to PackageSpec(
             "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v12-x86_64.zip",
@@ -81,11 +81,16 @@ object NativeDependencyManager {
      * DESCOMPRIMIDOS e por isso é MAIOR que o ZIP: não deve ser comparada com ele
      * (o comentário antigo dizia o contrário e estava errado — no v8 a soma era
      * 70.962.219 contra um ZIP de 70.964.325, e a diferença era só compressão).
+     *
+     * R68/E5 (v12 final): no arm64 o backend Hexagon segue a arquitetura MONO —
+     * o host vai EMBUTIDO no libsig_llama.so (que agora é o build do motor);
+     * o pacote leva apenas o SKEL (libggml-htp-v81.so) e a lib modular
+     * libggml-hexagon.so saiu.
      */
     private val conteudoPorAbi = mapOf(
         "arm64-v8a" to listOf(
             "lib/libsig_whisper.so" to 36_168_384L,
-            "lib/libsig_llama.so" to 30_764_464L,
+            "lib/libsig_llama.so" to 30_194_632L,
             "lib/libonnxruntime.so" to 23_990_744L,
             "lib/libavcodec.so" to 15_143_992L,
             "lib/libavfilter.so" to 4_241_064L,
@@ -101,9 +106,8 @@ object NativeDependencyManager {
             "lib/libswresample.so" to 101_136L,
             "lib/libavdevice.so" to 63_192L,
             "lib/libffmpegkit_abidetect.so" to 30_392L,
-            "lib/libggml-hexagon.so" to 5_830_968L,
             "lib/libggml-htp-v81.so" to 747_440L,
-            "manifest.json" to 3_562L,
+            "manifest.json" to 3_377L,
         ),
         "x86_64" to listOf(
             // Mesmo conjunto de libs do arm64, com os tamanhos reais deste
@@ -132,7 +136,7 @@ object NativeDependencyManager {
     /**
      * Plano de download do pacote nativo: **um arquivo**, o próprio ZIP.
      *
-     * O app baixa UM `.zip` e extrai; listar as 18 libs de dentro mentiria sobre
+     * O app baixa UM `.zip` e extrai; listar os arquivos de dentro mentiria sobre
      * o que está sendo baixado. Então o plano tem um item só, com o tamanho
      * real do ZIP publicado ([PackageSpec.downloadBytes], o mesmo número que o
      * SHA-256 confere).

@@ -501,15 +501,19 @@ class TextoActivity : AppCompatActivity() {
 
     /** Recursos de runtime para a política de rotas.
      *
-     * NPU: passa a `true` quando o modo NPU/Smart existir no pacote nativo + JNI
-     * (etapas E4/E5 da R68) — até lá as rotas aceleradas aparecem com motivo.
+     * NPU (R68/E4): `hasNpu()` = device HTP0 presente no runtime (backend Hexagon
+     * embutido na lib do pacote). Antes do pacote com o motor, retorna false e as
+     * rotas aceleradas aparecem com motivo — nunca em silêncio.
      * GPU: os devices não são pré-checados aqui (o load reporta o diagnóstico
      * real na primeira tradução, como hoje). */
-    private fun runtimeSupport() = HyMt2BackendPolicy.RuntimeSupport(
-        npu = false,
-        gpuOpenCl = true,
-        gpuVulkan = true,
-    )
+    private fun runtimeSupport(): HyMt2BackendPolicy.RuntimeSupport {
+        val npuPresente = runCatching { HyMt2Native.hasNpu() }.getOrDefault(false)
+        return HyMt2BackendPolicy.RuntimeSupport(
+            npu = npuPresente,
+            gpuOpenCl = true,
+            gpuVulkan = true,
+        )
+    }
 
     /** Ajuda curta da rota, no padrão aprovado ("NPU processa o prompt; GPU gera a resposta"). */
     private fun ajudaDaRota(rota: HyMt2BackendPolicy.Route) {
