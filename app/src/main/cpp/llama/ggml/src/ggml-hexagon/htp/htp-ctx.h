@@ -67,6 +67,9 @@ struct htp_ops_context {
 
     uint32_t n_threads;
     uint32_t flags;
+
+    uint8_t * act_dump_ptr;   // R46 (test-only!): o dump da ACT Q6 (NULL = OFF!)
+    size_t    act_dump_cap;   // R46: a CAPACIDADE do buffer (bounds!)
 };
 
 // Main context for htp DSP backend
@@ -89,6 +92,9 @@ struct htp_context {
     bool                   etm;
     uint32_t               profiler;
     struct htp_thread_trace trace[HTP_MAX_NTHREADS + 1];
+
+    const struct htp_buf_desc * r46_bufs;   // R46: os descs do request (resolvidos!)
+    uint32_t                    r46_nbufs;
 
     uint8_t *              vtcm_base;
     size_t                 vtcm_size;

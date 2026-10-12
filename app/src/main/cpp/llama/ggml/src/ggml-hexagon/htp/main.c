@@ -693,6 +693,8 @@ static inline void profile_stop(uint32_t mode, struct profile_data * d) {
 }
 
 static int execute_op(struct htp_ops_context * octx) {
+    octx->act_dump_ptr = NULL;   // R46: limpeza CENTRAL entre ops (sem stale!)
+    octx->act_dump_cap = 0;
     switch (octx->op) {
         case HTP_OP_MUL_MAT:
         case HTP_OP_MUL_MAT_ADD:
@@ -1023,6 +1025,8 @@ static void process_opbatch(struct htp_context * ctx, const struct htp_opbatch_r
 
     htp_trace_event_start(&ctx->trace[0], HTP_TRACE_EVT_BUFF, 0);
     prep_op_bufs(ctx, bufs, n_bufs);
+    ctx->r46_bufs  = bufs;     // R46 (test-only!): os descs RESOLVIDOS do request!
+    ctx->r46_nbufs = n_bufs;
     htp_trace_event_stop(&ctx->trace[0], HTP_TRACE_EVT_BUFF, 0);
 
     prep_tensors(ctx, bufs, tens, n_tens);
