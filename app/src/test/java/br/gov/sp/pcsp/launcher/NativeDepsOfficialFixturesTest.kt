@@ -7,7 +7,7 @@ import org.junit.Assume
 import org.junit.Test
 
 /**
- * Validação OFFICIAL: tabela de produção x ZIPs REAIS v10 (≈50 MB por ABI).
+ * Validação OFFICIAL: tabela de produção x ZIPs REAIS v12 (≈50 MB por ABI).
  *
  * Os ZIPs reais ficam em `app/src/test/resources/native-deps/` e NÃO são
  * versionados (são os artefatos de release). Por isso este teste é PULADO
@@ -22,8 +22,8 @@ import org.junit.Test
 class NativeDepsOfficialFixturesTest {
 
     private val fixturesPorAbi = listOf(
-        "arm64-v8a" to "sig-android-dependencies-v11-arm64-v8a.zip",
-        "x86_64" to "sig-android-dependencies-v11-x86_64.zip",
+        "arm64-v8a" to "sig-android-dependencies-v12-arm64-v8a.zip",
+        "x86_64" to "sig-android-dependencies-v12-x86_64.zip",
     )
 
     private fun fixtureBytes(nome: String): ByteArray? =
@@ -40,7 +40,7 @@ class NativeDepsOfficialFixturesTest {
 
     @Test
     fun `a tabela de conteudo bate com o ZIP real, arquivo a arquivo`() {
-        Assume.assumeTrue("ZIPs reais v10 ausentes (checkout limpo) — teste official pulado", fixturePresente())
+        Assume.assumeTrue("ZIPs reais v12 ausentes (checkout limpo) — teste official pulado", fixturePresente())
         for ((abi, fixture) in fixturesPorAbi) {
             val entradas = NativeDepsTestSupport.lerZip(exigir(abi, fixture))
             assertTrue("$abi: o ZIP fixtureado tem de ter conteúdo", entradas.isNotEmpty())
@@ -53,7 +53,7 @@ class NativeDepsOfficialFixturesTest {
 
     @Test
     fun `a soma do conteudo declarado e a soma das entradas do ZIP real`() {
-        Assume.assumeTrue("ZIPs reais v10 ausentes (checkout limpo) — teste official pulado", fixturePresente())
+        Assume.assumeTrue("ZIPs reais v12 ausentes (checkout limpo) — teste official pulado", fixturePresente())
         for ((abi, fixture) in fixturesPorAbi) {
             val doZip = NativeDepsTestSupport.lerZip(exigir(abi, fixture)).sumOf { it.tamanho }
             val declarado = NativeDependencyManager.conteudoInstalado(abi).sumOf { it.bytes }
@@ -69,7 +69,7 @@ class NativeDepsOfficialFixturesTest {
      */
     @Test
     fun `as fixtures sao os ZIPs que o codigo de producao declara (sha256)`() {
-        Assume.assumeTrue("ZIPs reais v10 ausentes (checkout limpo) — teste official pulado", fixturePresente())
+        Assume.assumeTrue("ZIPs reais v12 ausentes (checkout limpo) — teste official pulado", fixturePresente())
         for ((abi, fixture) in fixturesPorAbi) {
             val bytes = exigir(abi, fixture)
             val sha = NativeDepsTestSupport.sha256(bytes)
@@ -92,7 +92,7 @@ class NativeDepsOfficialFixturesTest {
      */
     @Test
     fun `a conferencia arquivo-a-arquivo REJEITA um tamanho divergente no ZIP real`() {
-        Assume.assumeTrue("ZIPs reais v10 ausentes (checkout limpo) — teste official pulado", fixturePresente())
+        Assume.assumeTrue("ZIPs reais v12 ausentes (checkout limpo) — teste official pulado", fixturePresente())
         val (abi, fixture) = fixturesPorAbi.first()
         val bytesReais = exigir(abi, fixture)
         val original = NativeDepsTestSupport.lerZip(bytesReais)

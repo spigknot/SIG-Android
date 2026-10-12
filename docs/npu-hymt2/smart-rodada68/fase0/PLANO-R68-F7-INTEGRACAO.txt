@@ -1,0 +1,77 @@
+PLANO R68 — F7: INTEGRACAO LOCAL NO PRODUTO — TODAS AS ROTAS; ESCOLHA DO USUARIO EM USO
+================================================================================
+Rodada: 68 (continua a numeracao da campanha: 63=Bloco I, 64=Bloco II, 65=Bloco III,
+66=conserto Q4_K, 67=Bloco IV). Data: 2026-10-12. Fixado ANTES do trabalho (padrao da
+campanha). Recibo de acceptance ao lado: receibo-0.1.
+
+ORDEM DO USUARIO (2026-10-12)
+--------------------------------------------------------------------------------
+"faça tudo. vamos trabalhar em todas, o usuario final decide na hora de usar."
+Decisao de produto registrada: as SEIS rotas do menu final (Smart (OpenCL), Smart
+(Vulkan), CPU, GPU (OpenCL), GPU (Vulkan), NPU); nenhuma rota e' eleita como unica;
+nao ha Smart automatico; a escolha e' do usuario final na hora do uso.
+
+BASE NORMATIVA (lida na integra em 2026-10-12)
+--------------------------------------------------------------------------------
+- PROMPT-META-FINAL-SMART-OPENCL-VULKAN-NPU-PLANO-EXECUTOR.txt (ordens consolidadas;
+  §9 = Fase 7 integracao; §10 = Fase 8 aceitacao; §12 = entrega A-H ao especialista).
+- ADENDO-BACKENDS-SMART-NPU-PREFILL-GPU-GERACAO.txt (semantica Smart/NPU obrigatoria).
+- ADENDO-SMART-OPENCL-E-SMART-VULKAN-PROPOSTA.txt (menu, IDs, habilitacao por suporte).
+- DESIGN-SMART-DUAL-BACKEND.md (§1 meta/identidade; §5 F7/F8; §8 criterio conservador).
+- Provas concluidas: R63/R65/R67 = CCE (blocos I/III/IV); R64 = entregue (Bloco II;
+  apresentacao ao especialista ainda pendente — unico item formal em aberto das provas).
+
+ESTADO FRESCO (2026-10-12, antes de qualquer escrita)
+--------------------------------------------------------------------------------
+- Repo: HEAD 63fb05ad; 0 arquivos modificados; 87 untracked (docs das rodadas).
+- Produto: HyMt2Native kinds 0=CPU/1=OpenCL/2=Vulkan; kind 3 = erro explicito ("nao
+  implementado"); TextoActivity com menu CPU/OC/VK (modelo-dependente) + NPU
+  desabilitado; persistencia por name do enum interno.
+- Fork: app/src/main/cpp/llama/ggml/src/ggml-hexagon presente; GGML_HEXAGON=OFF (L269).
+- Pacote nativo: v11 (NativeDependencyManager COMPONENT_VERSION="11"); sem hexagon/skel.
+- Probe (C:/npu-probe): modos validados no device (puro:cpu/htp/vulkan/opencl +
+  smart:vulkan/opencl; handoff S-ACEITO; pos-ponte=0); base do port para o produto.
+
+ETAPAS
+--------------------------------------------------------------------------------
+E1 Seam puro de capabilities/politica Smart + dois IDs novos + testes de migracao/
+   persistencia (HyMt2BackendPolicy.kt; MODULE-MAP area C). [a rodada comeca aqui]
+E2 TextoActivity: menu 6 entradas (ordem da meta), habilitadas so quando suportadas,
+   com motivo de indisponibilidade; persistencia por id estavel; ajuda ("NPU processa o
+   prompt; GPU gera a resposta"); logs solicitado/efetivo.
+E3 Fork/build: GGML_HEXAGON ON no build Android do produto; libs hexagon+skel no pacote
+   candidato; auditoria DT_NEEDED/16KB page/licenses/tamanho; nao-Qualcomm segue CPU/GPU
+   (npu ausente nao quebra dlopen); v81 testada != prometer outras archs.
+E4 Motor (llama_jni.cpp): implementar kind 3 (NPU) e kinds 4/5 (Smart OpenCL/Vulkan) —
+   handoff HTP->GPU conforme contrato validado no probe (export/import; sem replay;
+   decode pos-ponte=0), fallback explicito, logs (solicitado/efetivo/SHA/backends/
+   transfer/fallback).
+E5 Pacote nativo v12 (novo; v11 imutavel) + NativeDependencyManager (hashes/tamanhos/
+   ABIs; mensagem clara para lib antiga incompativel). R2/publicacao = etapa externa.
+E6 Gates/aceitacao (F8): testDebugUnitTest/lintDebug/assembleDebug + build nativo;
+   testes focais (selecao/persistencia/capabilities/fallback); smokes Whisper/VAD se
+   binario mudar; 2 ABIs (x86 = NAO TESTADO EM RUNTIME); hooks de teste ausentes.
+E7 Entrega A-H ao especialista (§12) quando concluida.
+
+APROVACOES (nada externo e' automatico por este plano; ordens §0/§10)
+--------------------------------------------------------------------------------
+Requerem apresentacao/formulario agrupado antes de executar: instalacao no SIG principal
+(device); hot-swap de lib; upload R2/publicacao; release/APK; commit/push de
+apresentacao. Execucao local de codigo/testes segue normalmente (gates do harness).
+
+CRITERIOS DE PARADA (ordens §11)
+--------------------------------------------------------------------------------
+P4/transfer falhou => localizar causa com reproducer; memoria/temperatura invalida =>
+parar e registrar; permissao faltando => completar design/testes offline e pedir SO a
+decisao bloqueante. Distinguir OBSERVADO/MEDIDO/DERIVADO/HIPOTESE/NAO EXECUTADO.
+
+CHECKPOINTS
+--------------------------------------------------------------------------------
+C1 fase0 (este plano + recibo 0.1) ........................ este passo
+C2 E1 verde (testes unitarios) ............................
+C3 E2 verde (test + lint) .................................
+C4 E3-E5 candidato (builds nativo/pacote) .................
+C5 E6 aceitacao local .....................................
+C6 E7 entrega A-H .........................................
+
+Pare ao cumprir; nenhum trabalho adicional inventado.

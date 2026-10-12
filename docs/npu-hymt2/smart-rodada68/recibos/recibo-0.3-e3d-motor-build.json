@@ -1,0 +1,36 @@
+{
+  "recibo": "0.3-e3d-motor-build",
+  "rodada": "R68/E3.d",
+  "data": "2026-10-12",
+  "objetivo": "Provar o caminho do motor: backend Hexagon embutido no libsig_llama.so (monolito) buildavel a partir do REPO no container oficial.",
+  "contexto": "Auditoria ELF mostrou que o pacote do probe usa stack MODULAR (libggml-hexagon.so com DT_NEEDED libggml-base.so), enquanto o produto e MONOLITO (BUILD_SHARED_LIBS OFF, GGML_BACKEND_DL OFF). Decisao de engenharia: embutir o backend no libsig_llama.so via GGML_HEXAGON=ON (exige Hexagon SDK, presente no container /opt/hexagon/6.6.0.0).",
+  "metodo": {
+    "container": "ghcr.io/snapdragon-toolchain/arm64-android:v0.7",
+    "fonte": "repo D:/Projetos/SIG app/src/main/cpp (llama fork HEAD d2f4122 + llama-jni + android-opencl-loader.cpp + opencl/vulkan/spirv headers) enviado a /root/r68-cpp-full",
+    "configure": "cmake -S llama-jni -B build-r68d -G Ninja -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_ROOT/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-28 -DCMAKE_BUILD_TYPE=Release -DGGML_HEXAGON=ON -DHEXAGON_SDK_ROOT=/opt/hexagon/6.6.0.0 -DHEXAGON_TOOLS_ROOT=/opt/hexagon/6.6.0.0/tools/HEXAGON_Tools/19.0.07 -DPREBUILT_LIB_DIR=android_aarch64",
+    "build": "cmake --build build-r68d -j 20 --target sig_llama ; cmake --build build-r68d -j 20 --target htp-v81",
+    "licoes_de_configure": [
+      "HEXAGON_SDK_ROOT/HEXAGON_TOOLS_ROOT sao variaveis CMake (-D), nao env",
+      "PREBUILT_LIB_DIR=android_aarch64 e exigido por hexagon_fun.cmake:99-106 (string FIND com args vazios falha)",
+      "llama-jni referencia ../android-opencl-loader.cpp e headers opencl/vulkan/spirv do repo: enviar o conjunto completo"
+    ]
+  },
+  "resultados": {
+    "configure": "OK (Including CPU/Vulkan/OpenCL/Hexagon backend; Configuring done)",
+    "build_sig_llama": "OK",
+    "build_htp_v81": "OK",
+    "libsig_llama_so": {
+      "bytes": 93328144,
+      "sha256": "354fdba544363e8a5a22c71f8dff3ddafe1af8538a82333524ec77a5d31f05cb",
+      "needed": ["liblog.so", "libdl.so", "libandroid.so", "libvulkan.so", "libm.so", "libc.so"],
+      "observacao": "Hexagon EMBUTIDO: sem NEEDED de libggml-base.so nem de libggml-hexagon.so — arquitetura monolito confirmada em runtime de linker."
+    },
+    "libggml_htp_v81_so": {
+      "bytes": 747440,
+      "sha256": "2062ac642cad2cef7b243e0f384776bb771db68ce1735eeb32b4ab695776d31a",
+      "observacao": "Skel rebuildado no build-r68d a partir dos fontes do repo (port R68 byte-a-byte). Tamanho identico ao auditado (03b0ece6...); diferenca de hash esperada por metadados de build (path/build-id) entre arvores distintas."
+    }
+  },
+  "evidencia": "docs/npu-hymt2/smart-rodada68/logs/r68-motor-build-container.log (configure integral + build + skel + stat + stdout do probe)",
+  "implicacao": "Caminho do motor PROVADO. E4 segue: modos NPU/Smart no llama_jni sobre esta lib; composicao final do pacote v12 a reavaliar (host embutido no libsig_llama.so; skel separado)."
+}

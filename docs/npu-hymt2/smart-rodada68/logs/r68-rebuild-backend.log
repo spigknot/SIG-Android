@@ -1,0 +1,25 @@
+R68 / E3 — REBUILD DE VERIFICACAO DO BACKEND HEXAGON (prova de fidelidade do port)
+================================================================================
+Data: 2026-10-12 14:25-14:26 (servidor; docker ghcr.io/snapdragon-toolchain/arm64-android:v0.7)
+Fontes: REPO do produto apos o port (9 arquivos da era B; exportados LF para /root/sigcand2)
+
+RESULTADO: HOST_RC=0  SKEL_RC=0
+  bin/libggml-hexagon.so                         5830968 B  056c9364c9acaae27c384060704662051c75279217e7157729de9d87764cbb98
+  ggml/src/ggml-hexagon/libggml-htp-v81.so        747440 B  03b0ece6fa3309a7a3ccad69fa533f2e5958ba213ed0b07fe176724c5405f43b
+
+PROVA: os fontes do repo portado reproduzem BYTE-A-BYTE as libs auditadas na campanha
+(R65/R66/R67) — port fiel de ponta a ponta; build reproduzivel.
+
+SHA-256 dos 9 fontes portados (working tree do repo, CRLF):
+  820955d1aae8d9ddafed87b42270203940f3f383e0af50c7dd2fa72129a995a1  ggml-hexagon.cpp
+  16d04bafca41b0039060b69303341f5d5fb5bed4e18187250c35649a4a8e2bc6  htp/hmx-mm-kernels-tiled.h
+  30ad10e8de4169363c78de403698d5ff68e83eedaab8012aeb3fb93ae9e6fa5c  htp/htp-ctx.h
+  36e169db3e492e6f2174106e5a5e97a21ef4b10401f624ef2d1d4c9f3dd0c7a1  htp/htp-ops.h
+  b37b8f96cd6c01f3fbe0b42b6ac422e18fb3accd27fdafcbbd8e80611e28d1cf  htp/hvx-mm-kernels-flat.h
+  d249048efdd7ba1afc8598df3bbad7f14bab56a4c41074648bde353f03e4ba0d  htp/hvx-mm-kernels-tiled.h
+  dbc9137318fa437a7902c98b1d57ddc0d7974d17e6677a6254a29138c691a95f  htp/main.c
+  5e0e1009b4a9fab904e8b6d7af0c82f494dd88bf46f616d7f5df004c768e3dae  htp/matmul-ops.c
+  4943821aba3034dec7dc3ccef149f6579084636304e2a7524fc1e5534c8bc097  htp/matmul-ops.h
+
+Referencias auditadas preservadas no servidor: *.pre-r68 (copiadas com cp -n antes do rebuild).
+O delta era A->B = exatamente estes 9 arquivos (diff -rq normalizado; demais arquivos identicos).

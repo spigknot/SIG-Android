@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
  */
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "11"
+    const val COMPONENT_VERSION = "12"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
     private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
@@ -29,14 +29,14 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v11-arm64-v8a.zip",
-            "66eecc516d17d28e29f8b908abaad59e18b22be15a17c22097ac9dcd0d65ea40",
-            43_878_781L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v12-arm64-v8a.zip",
+            "9e0900b189863e53901cecd478349e106fc25dbb369fd320695e91913f093a85",
+            45_744_019L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v11-x86_64.zip",
-            "cfdc828af8726ca6fd32f03ed0e8386f6044110cbcaa9dd60c27a001f3033169",
-            50_006_445L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v12-x86_64.zip",
+            "b104cde15c5afa3639a5fee3836e5c28d8d8d21c4943e404cdd73a1c62a54652",
+            50_006_446L
         )
     )
 
@@ -101,7 +101,9 @@ object NativeDependencyManager {
             "lib/libswresample.so" to 101_136L,
             "lib/libavdevice.so" to 63_192L,
             "lib/libffmpegkit_abidetect.so" to 30_392L,
-            "manifest.json" to 3_193L,
+            "lib/libggml-hexagon.so" to 5_830_968L,
+            "lib/libggml-htp-v81.so" to 747_440L,
+            "manifest.json" to 3_562L,
         ),
         "x86_64" to listOf(
             // Mesmo conjunto de libs do arm64, com os tamanhos reais deste

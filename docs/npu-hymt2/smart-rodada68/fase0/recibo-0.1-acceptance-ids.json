@@ -1,0 +1,42 @@
+{
+  "recibo": "R68-FASE0.1-ACCEPTANCE-IDS",
+  "fase": "produto — F7/F8: integracao local das SEIS rotas do menu final no SIG (Smart dual-backend + NPU), com escolha do usuario final em uso",
+  "fixado_antes_do_trabalho": true,
+  "data": "2026-10-12",
+  "ordem_usuario": "Ordem explicita em conversa (2026-10-12): 'faça tudo. vamos trabalhar em todas, o usuario final decide na hora de usar.' — decide pela inclusao de TODAS as rotas (menu final de 6), sem eleger rota unica e sem Smart automatico.",
+  "base_normativa": [
+    "docs/especialista/PROMPT-META-FINAL-SMART-OPENCL-VULKAN-NPU-PLANO-EXECUTOR.txt (§9=F7 integracao; §10=F8 aceitacao; §12=entrega A-H)",
+    "docs/especialista/ADENDO-BACKENDS-SMART-NPU-PREFILL-GPU-GERACAO.txt",
+    "docs/especialista/ADENDO-SMART-OPENCL-E-SMART-VULKAN-PROPOSTA.txt",
+    "docs/npu-hymt2/DESIGN-SMART-DUAL-BACKEND.md (§1, §5-F7/F8, §8)",
+    "Provas: R63/R65/R67=CCE; R64 entregue (Bloco II; apresentacao pendente)"
+  ],
+  "meta": "Menu final (ordem): Smart (OpenCL), Smart (Vulkan), CPU, GPU (OpenCL), GPU (Vulkan), NPU. Cada rota habilitada SO quando suportada/validada para modelo/dispositivo/runtime, com motivo de indisponibilidade; fallback explicito (nunca Smart silencioso com CPU/NPU inteira).",
+  "escopo": "Execucao local: seam puro de capabilities/politica+IDs+testes; menu 6 entradas na Activity; fork Hexagon ON+build nativo; motor JNI (kind 3 NPU + kinds 4/5 Smart) com handoff; pacote v12 candidato; gates de aceitacao; entrega A-H.",
+  "fora_do_escopo_sem_aprovacao": [
+    "instalacao no SIG principal (device)",
+    "hot-swap de lib do SIG",
+    "upload R2 / publicacao",
+    "release/APK",
+    "commit/push de apresentacao",
+    "mudanca de default (Vulkan continua default atual)",
+    "mudanca de modelo/peso"
+  ],
+  "acceptance_ids": [
+    "R68-P1_SEAM_CAPABILITIES_POLITICA_COM_IDS_ESTAVEIS_E_TESTES_DE_MIGRACAO",
+    "R68-P2_MENU_SEIS_ENTRADAS_COM_MOTIVO_E_PERSISTENCIA_POR_ID",
+    "R68-P3_FORK_HEXAGON_ON_E_LIBS_NO_PACOTE_CANDIDATO_AUDITADAS",
+    "R68-P4_JNI_KINDS_NPU_E_SMART_COM_HANDOFF_E_LOGS_SOLICITADO_EFETIVO",
+    "R68-P5_PACOTE_V12_E_DOWNLOADER_COM_MENSAGEM_DE_INCOMPATIBILIDADE",
+    "R68-P6_GATES_TEST_LINT_ASSEMBLE_E_BUILD_NATIVO_E_SMOKES",
+    "R68-P7_ENTREGA_AH_AO_ESPECIALISTA"
+  ],
+  "estado_base": {
+    "repo_head": "63fb05ada76d8871f972cde73513a8bbfd77a9c7",
+    "produto_kinds": "0=CPU, 1=OpenCL, 2=Vulkan (kind 3 = erro explicito)",
+    "fork_hexagon": "ggml/src/ggml-hexagon presente; GGML_HEXAGON=OFF (ggml/CMakeLists.txt:269)",
+    "pacote_nativo": "v11 (imutavel; v12 sera' nova versao)",
+    "probe": "C:/npu-probe (modos validados no device; base do port)"
+  },
+  "checkpoints": ["C1 fase0", "C2 E1 verde", "C3 E2 verde", "C4 E3-E5 candidato", "C5 E6 aceitacao", "C6 E7 entrega A-H"]
+}

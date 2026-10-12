@@ -55,10 +55,16 @@ class DownloadPlanTablesTest {
     }
 
     @Test
-    fun `o conteudo interno do nativo tem 18 itens por ABI`() {
-        for (abi in listOf("arm64-v8a", "x86_64")) {
+    fun `o conteudo interno do nativo tem a contagem esperada por ABI`() {
+        val esperado = mapOf(
+            // 18 do pacote base + libggml-hexagon.so + libggml-htp-v81.so (backend Hexagon, R68/v12).
+            "arm64-v8a" to 20,
+            // Sem backend Hexagon (NPU nao existe em x86).
+            "x86_64" to 18,
+        )
+        for ((abi, n) in esperado) {
             val conteudo = NativeDependencyManager.conteudoInstalado(abi)
-            assertEquals("$abi com contagem diferente", 18, conteudo.size)
+            assertEquals("$abi com contagem diferente", n, conteudo.size)
             assertTrue(
                 "$abi: o pacote tem de conter a lib do llama",
                 conteudo.any { it.nome == "libsig_llama.so" },
@@ -68,6 +74,15 @@ class DownloadPlanTablesTest {
                 conteudo.any { it.nome.startsWith("ggml-silero") },
             )
         }
+        // O arm64 leva o backend Hexagon (NPU/Smart); o x86_64 nao.
+        val arm64 = NativeDependencyManager.conteudoInstalado("arm64-v8a")
+        assertTrue("arm64: pacote tem de conter libggml-hexagon.so",
+            arm64.any { it.nome == "libggml-hexagon.so" })
+        assertTrue("arm64: pacote tem de conter o skel libggml-htp-v81.so",
+            arm64.any { it.nome == "libggml-htp-v81.so" })
+        val x86 = NativeDependencyManager.conteudoInstalado("x86_64")
+        assertTrue("x86_64 NAO deve levar o backend Hexagon",
+            x86.none { it.nome.startsWith("libggml-") })
     }
 
     /** Comprova que a leitura de ZIP e as somas funcionam em casos extremos. */

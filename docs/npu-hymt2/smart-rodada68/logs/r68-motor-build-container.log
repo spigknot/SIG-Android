@@ -1,0 +1,506 @@
+=====CONFIGURE (cfg-r68d.log)=====
+-- The C compiler identification is Clang 21.0.0
+-- The CXX compiler identification is Clang 21.0.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /opt/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/clang - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /opt/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+CMAKE_BUILD_TYPE=Release
+-- Found Git: /usr/bin/git (found version "2.47.3")
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+-- The ASM compiler identification is Clang with GNU-like command-line
+-- Found assembler: /opt/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/clang
+-- Setting GGML_NATIVE_DEFAULT to OFF
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Failed
+-- Check if compiler accepts -pthread
+-- Check if compiler accepts -pthread - yes
+-- Found Threads: TRUE
+-- Warning: ccache not found - consider installing it for faster compilation or disable this warning with GGML_CCACHE=OFF
+-- CMAKE_SYSTEM_PROCESSOR: aarch64
+-- GGML_SYSTEM_ARCH: ARM
+-- Including CPU backend
+-- ARM detected
+-- Performing Test GGML_COMPILER_SUPPORTS_FP16_FORMAT_I3E
+-- Performing Test GGML_COMPILER_SUPPORTS_FP16_FORMAT_I3E - Failed
+-- Checking for ARM features using flags:
+-- Performing Test HAVE_DOTPROD
+-- Performing Test HAVE_DOTPROD - Failed
+-- Performing Test HAVE_SVE
+-- Performing Test HAVE_SVE - Failed
+-- Performing Test HAVE_MATMUL_INT8
+-- Performing Test HAVE_MATMUL_INT8 - Failed
+-- Performing Test HAVE_FMA
+-- Performing Test HAVE_FMA - Success
+-- Performing Test HAVE_FP16_VECTOR_ARITHMETIC
+-- Performing Test HAVE_FP16_VECTOR_ARITHMETIC - Failed
+-- Performing Test HAVE_SME
+-- Performing Test HAVE_SME - Failed
+-- Adding CPU backend variant ggml-cpu:  
+-- Found Vulkan: /opt/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/28/libvulkan.so (found version "1.3.275") found components: glslc missing components: glslangValidator
+-- Vulkan found
+-- GL_KHR_cooperative_matrix not supported by glslc
+-- GL_NV_cooperative_matrix2 not supported by glslc
+-- GL_NV_cooperative_matrix_decode_vector not supported by glslc
+-- GL_EXT_integer_dot_product not supported by glslc
+-- GL_EXT_bfloat16 not supported by glslc
+-- GL_EXT_float_e2m1 not supported by glslc
+-- GL_EXT_float_e4m3 not supported by glslc
+-- Host compiler: /opt/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/clang /opt/android-ndk-r29/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++
+-- vulkan-shaders-gen toolchain file: /workspace/build-r68d/host-toolchain.cmake
+-- Including Vulkan backend
+-- Found Python3: /usr/bin/python3 (found version "3.13.5") found components: Interpreter
+-- OpenCL will use matmul kernels optimized for Adreno
+-- opencl: embedding kernel add
+-- opencl: embedding kernel add_id
+-- opencl: embedding kernel argsort
+-- opencl: embedding kernel tri
+-- opencl: embedding kernel fill
+-- opencl: embedding kernel clamp
+-- opencl: embedding kernel cpy
+-- opencl: embedding kernel cvt
+-- opencl: embedding kernel diag_mask_inf
+-- opencl: embedding kernel diag
+-- opencl: embedding kernel div
+-- opencl: embedding kernel gelu
+-- opencl: embedding kernel get_rows
+-- opencl: embedding kernel glu
+-- opencl: embedding kernel group_norm
+-- opencl: embedding kernel solve_tri
+-- opencl: embedding kernel im2col_f32
+-- opencl: embedding kernel im2col_f16
+-- opencl: embedding kernel mean
+-- opencl: embedding kernel mul_mv_f16_f16
+-- opencl: embedding kernel mul_mv_f16_f32_1row
+-- opencl: embedding kernel mul_mv_f16_f32_l4
+-- opencl: embedding kernel mul_mv_f16_f32
+-- opencl: embedding kernel mul_mv_f32_f32
+-- opencl: embedding kernel mul_mv_q1_0_f32
+-- opencl: embedding kernel mul_mv_q1_0_f32_flat
+-- opencl: embedding kernel mul_mv_q4_0_f32
+-- opencl: embedding kernel mul_mv_q4_0_f32_v
+-- opencl: embedding kernel mul_mv_q4_0_f32_8x_flat
+-- opencl: embedding kernel mul_mv_q4_0_f32_1d_8x_flat
+-- opencl: embedding kernel mul_mv_q4_0_f32_1d_16x_flat
+-- opencl: embedding kernel mul_mv_q4_1_f32
+-- opencl: embedding kernel mul_mv_q4_1_f32_flat
+-- opencl: embedding kernel mul_mv_q4_k_f32
+-- opencl: embedding kernel mul_mv_q4_k_f32_flat
+-- opencl: embedding kernel mul_mv_q5_0_f32
+-- opencl: embedding kernel mul_mv_q5_0_f32_flat
+-- opencl: embedding kernel mul_mv_q5_1_f32
+-- opencl: embedding kernel mul_mv_q5_1_f32_flat
+-- opencl: embedding kernel mul_mv_q5_k_f32
+-- opencl: embedding kernel mul_mv_q5_k_f32_flat
+-- opencl: embedding kernel mul_mv_q6_k_f32
+-- opencl: embedding kernel mul_mv_q6_k_f32_flat
+-- opencl: embedding kernel mul_mv_q8_0_f32
+-- opencl: embedding kernel mul_mv_q8_0_f32_flat
+-- opencl: embedding kernel mul_mv_iq4_nl_f32
+-- opencl: embedding kernel mul_mv_iq4_nl_f32_flat
+-- opencl: embedding kernel mul_mv_mxfp4_f32
+-- opencl: embedding kernel mul_mv_mxfp4_f32_flat
+-- opencl: embedding kernel mul_mv_id_q4_0_f32_8x_flat
+-- opencl: embedding kernel mul_mv_id_q8_0_f32
+-- opencl: embedding kernel mul_mv_id_q8_0_f32_flat
+-- opencl: embedding kernel mul_mv_id_mxfp4_f32
+-- opencl: embedding kernel mul_mv_id_mxfp4_f32_flat
+-- opencl: embedding kernel gemm_moe_q4_0_f32_ns
+-- opencl: embedding kernel gemm_moe_q4_0_q8_1_dp4a
+-- opencl: embedding kernel gemv_moe_q4_0_f32_ns
+-- opencl: embedding kernel gemm_moe_q8_0_f32_ns
+-- opencl: embedding kernel gemm_moe_q4_1_f32_ns
+-- opencl: embedding kernel gemv_moe_q4_1_f32_ns
+-- opencl: embedding kernel gemm_moe_q5_0_f32_ns
+-- opencl: embedding kernel gemv_moe_q5_0_f32_ns
+-- opencl: embedding kernel gemm_moe_q5_1_f32_ns
+-- opencl: embedding kernel gemv_moe_q5_1_f32_ns
+-- opencl: embedding kernel gemm_moe_q4_k_f32_ns
+-- opencl: embedding kernel gemm_moe_q4_k_q8_1_dp4a
+-- opencl: embedding kernel gemm_moe_q6_k_q8_1_dp4a
+-- opencl: embedding kernel gemm_moe_q8_1_dp4a
+-- opencl: embedding kernel moe_reorder_quant_a_q8_1
+-- opencl: embedding kernel gemm_noshuffle_q4_k_q8_1_dp4a
+-- opencl: embedding kernel gemm_noshuffle_q5_k_q8_1_dp4a
+-- opencl: embedding kernel gemm_noshuffle_q6_k_q8_1_dp4a
+-- opencl: embedding kernel gemm_noshuffle_q8_0_q8_1_dp4a
+-- opencl: embedding kernel gemm_noshuffle_q5_0_q8_1_dp4a
+-- opencl: embedding kernel gemm_noshuffle_iq4_nl_q8_1_dp4a
+-- opencl: embedding kernel gemm_noshuffle_q4_0_q8_1_dp4a
+-- opencl: embedding kernel quant_a_q8_1
+-- opencl: embedding kernel gemv_moe_q4_k_f32_ns
+-- opencl: embedding kernel gemm_moe_q5_k_f32_ns
+-- opencl: embedding kernel gemv_moe_q5_k_f32_ns
+-- opencl: embedding kernel gemm_moe_q6_k_f32_ns
+-- opencl: embedding kernel gemv_moe_q6_k_f32_ns
+-- opencl: embedding kernel gemm_moe_mxfp4_f32
+-- opencl: embedding kernel gemv_moe_mxfp4_f32
+-- opencl: embedding kernel gemm_moe_mxfp4_f32_ns
+-- opencl: embedding kernel gemm_moe_mxfp4_q8_1_dp4a
+-- opencl: embedding kernel gemv_moe_mxfp4_f32_ns
+-- opencl: embedding kernel moe_reorder_b
+-- opencl: embedding kernel moe_combine
+-- opencl: embedding kernel moe_sort_by_expert
+-- opencl: embedding kernel mul_mm_f32_f32_l4_lm
+-- opencl: embedding kernel mul_mm_f16_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q1_0_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q4_0_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q4_1_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q5_0_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q5_1_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q8_0_f32_l4_lm
+-- opencl: embedding kernel mul_mm_iq4_nl_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q4_k_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q5_k_f32_l4_lm
+-- opencl: embedding kernel mul_mm_q6_k_f32_l4_lm
+-- opencl: embedding kernel gemv_noshuffle_q1_0_f32
+-- opencl: embedding kernel gemm_noshuffle_q1_0_f32
+-- opencl: embedding kernel gemv_noshuffle_q4_0_f32
+-- opencl: embedding kernel gemv_noshuffle_q4_0_f32_spec
+-- opencl: embedding kernel gemm_noshuffle_q4_0_f32
+-- opencl: embedding kernel gemv_noshuffle_q4_1_f32
+-- opencl: embedding kernel gemm_noshuffle_q4_1_f32
+-- opencl: embedding kernel gemv_noshuffle_q5_0_f32
+-- opencl: embedding kernel gemm_noshuffle_q5_0_f32
+-- opencl: embedding kernel gemv_noshuffle_q5_1_f32
+-- opencl: embedding kernel gemm_noshuffle_q5_1_f32
+-- opencl: embedding kernel gemv_noshuffle_iq4_nl_f32
+-- opencl: embedding kernel gemm_noshuffle_iq4_nl_f32
+-- opencl: embedding kernel gemv_noshuffle_q8_0_f32
+-- opencl: embedding kernel gemm_noshuffle_q8_0_f32
+-- opencl: embedding kernel gemv_noshuffle_q4_k_f32
+-- opencl: embedding kernel gemm_noshuffle_q4_k_f32
+-- opencl: embedding kernel gemv_noshuffle_q6_k_f32
+-- opencl: embedding kernel gemm_noshuffle_q6_k_f32
+-- opencl: embedding kernel gemv_noshuffle_q5_k_f32
+-- opencl: embedding kernel gemm_noshuffle_q5_k_f32
+-- opencl: embedding kernel mul
+-- opencl: embedding kernel neg
+-- opencl: embedding kernel norm
+-- opencl: embedding kernel relu
+-- opencl: embedding kernel l2_norm
+-- opencl: embedding kernel rms_norm
+-- opencl: embedding kernel rope
+-- opencl: embedding kernel scale
+-- opencl: embedding kernel set_rows
+-- opencl: embedding kernel sigmoid
+-- opencl: embedding kernel silu
+-- opencl: embedding kernel softmax_4_f32
+-- opencl: embedding kernel softmax_4_f16
+-- opencl: embedding kernel softmax_f32
+-- opencl: embedding kernel softmax_f16
+-- opencl: embedding kernel sqr
+-- opencl: embedding kernel sqrt
+-- opencl: embedding kernel ssm_conv
+-- opencl: embedding kernel gated_delta_net
+-- opencl: embedding kernel sub
+-- opencl: embedding kernel sum_rows
+-- opencl: embedding kernel cumsum
+-- opencl: embedding kernel transpose
+-- opencl: embedding kernel concat
+-- opencl: embedding kernel tsembd
+-- opencl: embedding kernel upscale
+-- opencl: embedding kernel tanh
+-- opencl: embedding kernel exp
+-- opencl: embedding kernel expm1
+-- opencl: embedding kernel abs
+-- opencl: embedding kernel softplus
+-- opencl: embedding kernel pad
+-- opencl: embedding kernel repeat
+-- opencl: embedding kernel mul_mat_f16_f32
+-- opencl: embedding kernel mul_mm_f16_f32_kq_kqv
+-- opencl: embedding kernel conv2d
+-- opencl: embedding kernel conv2d_f16_f32
+-- opencl: embedding kernel flash_attn_pre_f16
+-- opencl: embedding kernel flash_attn_f32_f16
+-- opencl: embedding kernel flash_attn_f32_q8_0
+-- opencl: embedding kernel flash_attn_f32_q4_0
+-- opencl: embedding kernel flash_attn_f16
+-- opencl: embedding kernel flash_attn_f32
+-- opencl: embedding kernel gemm_xmem_f16_f32_os8
+-- Including OpenCL backend
+-- hexagon: using /opt/hexagon/6.6.0.0 and /opt/hexagon/6.6.0.0/tools/HEXAGON_Tools/19.0.07 for building libggml-htp skels
+-- Including Hexagon backend
+-- ggml version: 0.19.0
+-- ggml commit:  unknown
+-- Configuring done (2.0s)
+-- Generating done (0.1s)
+-- Build files have been written to: /workspace/build-r68d
+
+=====BUILD (build-r68d.log, ultimas 120 linhas)=====
+[543/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/exaone4.cpp.o
+[544/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/exaone-moe.cpp.o
+[545/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/llama-quant.cpp.o
+[546/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/deepseek4.cpp.o
+[547/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/ernie4-5.cpp.o
+[548/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/falcon.cpp.o
+[549/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gemma-embedding.cpp.o
+[550/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/falcon-h1.cpp.o
+[551/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/eurobert.cpp.o
+[552/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gemma3.cpp.o
+[553/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gemma4-assistant.cpp.o
+[554/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gemma3n.cpp.o
+[555/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gemma.cpp.o
+[556/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/glm4-moe.cpp.o
+[557/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gemma2.cpp.o
+[558/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/llama-model.cpp.o
+[559/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/glm4.cpp.o
+[560/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gpt2.cpp.o
+[561/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/granite-moe.cpp.o
+[562/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/unicode.cpp.o
+[563/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/grovemoe.cpp.o
+[564/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/grok.cpp.o
+[565/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/glm-dsa.cpp.o
+[566/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/hunyuan-dense.cpp.o
+[567/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/granite.cpp.o
+[568/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gemma4.cpp.o
+[569/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/gptneox.cpp.o
+[570/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/hunyuan-moe.cpp.o
+[571/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/granite-hybrid.cpp.o
+[572/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/hunyuan-vl.cpp.o
+[573/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/internlm2.cpp.o
+[574/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/jais.cpp.o
+[575/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/jais2.cpp.o
+[576/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/jamba.cpp.o
+[577/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/jina-bert-v3.cpp.o
+[578/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/jina-bert-v2.cpp.o
+[579/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/kimi-linear.cpp.o
+[580/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/llada-moe.cpp.o
+[581/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/hy-v3.cpp.o
+[582/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/lfm2.cpp.o
+[583/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/llama4.cpp.o
+[584/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/maincoder.cpp.o
+[585/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/mamba.cpp.o
+[586/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/laguna.cpp.o
+[587/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/mamba-base.cpp.o
+[588/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/mamba2.cpp.o
+[589/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/llama.cpp.o
+[590/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/minicpm.cpp.o
+[591/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/llada.cpp.o
+[592/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/mellum.cpp.o
+[593/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/llama-embed.cpp.o
+[594/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/lfm2moe.cpp.o
+[595/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/mimo2.cpp.o
+[596/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/minicpm3.cpp.o
+[597/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/minimax-m2.cpp.o
+[598/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/mistral4.cpp.o
+[599/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/mpt.cpp.o
+[600/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/modern-bert.cpp.o
+[601/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/nomic-bert-moe.cpp.o
+[602/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/nemotron-h.cpp.o
+[603/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/nemotron.cpp.o
+[604/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/neo-bert.cpp.o
+[605/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/olmoe.cpp.o
+[606/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/olmo2.cpp.o
+[607/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/mistral3.cpp.o
+[608/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/openai-moe.cpp.o
+[609/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/openelm.cpp.o
+[610/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/nemotron-h-moe.cpp.o
+[611/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/orion.cpp.o
+[612/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/nanbeige.cpp.o
+[613/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/minimax-m3.cpp.o
+[614/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/paddleocr.cpp.o
+[615/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/nomic-bert.cpp.o
+[616/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/olmo.cpp.o
+[617/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/phi2.cpp.o
+[618/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/pangu-embed.cpp.o
+[619/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/phimoe.cpp.o
+[620/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/phi3.cpp.o
+[621/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/plamo.cpp.o
+[622/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/plamo3.cpp.o
+[623/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/plamo2.cpp.o
+[624/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen2.cpp.o
+[625/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen3.cpp.o
+[626/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen3tts.cpp.o
+[627/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen35.cpp.o
+[628/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/plm.cpp.o
+[629/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen.cpp.o
+[630/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen35moe.cpp.o
+[631/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen3vlmoe.cpp.o
+[632/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen3vl.cpp.o
+[633/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rnd1.cpp.o
+[634/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/refact.cpp.o
+[635/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen2moe.cpp.o
+[636/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv6-base.cpp.o
+[637/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen3moe.cpp.o
+[638/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv6.cpp.o
+[639/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen2vl.cpp.o
+[640/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv6qwen2.cpp.o
+[641/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen3next.cpp.o
+[642/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv7-base.cpp.o
+[643/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv7.cpp.o
+[644/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/seed-oss.cpp.o
+[645/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/stablelm.cpp.o
+[646/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/starcoder.cpp.o
+[647/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/smollm3.cpp.o
+[648/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/starcoder2.cpp.o
+[649/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/smallthinker.cpp.o
+[650/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/xverse.cpp.o
+[651/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/t5encoder.cpp.o
+[652/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/step35.cpp.o
+[653/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/wavtokenizer-dec.cpp.o
+[654/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/t5.cpp.o
+[655/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/talkie.cpp.o
+[656/663] Building CXX object CMakeFiles/sig_llama.dir/llama_jni.cpp.o
+[657/663] Building CXX object llama-build/ggml/src/ggml-vulkan/CMakeFiles/ggml-vulkan.dir/mul_mm.comp.cpp.o
+[658/663] Building CXX object llama-build/ggml/src/ggml-vulkan/CMakeFiles/ggml-vulkan.dir/ggml-vulkan.cpp.o
+[659/663] Linking CXX static library llama-build/ggml/src/ggml-vulkan/libggml-vulkan.a
+[660/663] Linking CXX static library llama-build/ggml/src/libggml.a
+[661/663] Linking CXX static library llama-build/src/libllama.a
+[662/663] Linking CXX shared library libsig_llama.so
+
+=====SKEL (skel-r68d.log)=====
+[0/2] Re-checking globbed directories...
+[1/9] Creating directories for 'htp-v81'
+[2/9] No download step for 'htp-v81'
+[3/9] No update step for 'htp-v81'
+[4/9] No patch step for 'htp-v81'
+[5/9] Performing configure step for 'htp-v81'
+-- The C compiler identification is Clang 19.0.0
+-- The CXX compiler identification is Clang 19.0.0
+-- The ASM compiler identification is unknown
+-- Found assembler: /opt/hexagon/6.6.0.0/tools/HEXAGON_Tools/19.0.07/Tools/bin/hexagon-clang++
+System is unknown to cmake, create:
+Platform/QURT to use this system, please post your config file on discourse.cmake.org so it can be added to cmake
+-- Detecting C compiler ABI info
+System is unknown to cmake, create:
+Platform/QURT to use this system, please post your config file on discourse.cmake.org so it can be added to cmake
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /opt/hexagon/6.6.0.0/tools/HEXAGON_Tools/19.0.07/Tools/bin/hexagon-clang - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+System is unknown to cmake, create:
+Platform/QURT to use this system, please post your config file on discourse.cmake.org so it can be added to cmake
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /opt/hexagon/6.6.0.0/tools/HEXAGON_Tools/19.0.07/Tools/bin/hexagon-clang++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Warning: Did not find file Compiler/-ASM
+-- Warning: Did not find file Compiler/-ASM
+-- Configuring done (1.3s)
+-- Generating done (0.0s)
+-- Build files have been written to: /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/htp-v81-prefix/src/htp-v81-build
+[6/9] Performing build step for 'htp-v81'
+[1/30] Generating htp_iface_skel.c, htp_iface_stub.c, htp_iface.h
+[2/30] Building C object CMakeFiles/ggml-htp-v81.dir/dma-queue.c.obj
+[3/30] Building C object CMakeFiles/ggml-htp-v81.dir/hmx-queue.c.obj
+[4/30] Building C object CMakeFiles/ggml-htp-v81.dir/htp_iface_skel.c.obj
+[5/30] Building C object CMakeFiles/ggml-htp-v81.dir/work-queue.c.obj
+[6/30] Building C object CMakeFiles/ggml-htp-v81.dir/diag-ops.c.obj
+[7/30] Building C object CMakeFiles/ggml-htp-v81.dir/fill-ops.c.obj
+[8/30] Building C object CMakeFiles/ggml-htp-v81.dir/set-rows-ops.c.obj
+[9/30] Building C object CMakeFiles/ggml-htp-v81.dir/htp-tensor.c.obj
+[10/30] Building C object CMakeFiles/ggml-htp-v81.dir/concat-ops.c.obj
+[11/30] Building C object CMakeFiles/ggml-htp-v81.dir/repeat-ops.c.obj
+[12/30] Building C object CMakeFiles/ggml-htp-v81.dir/sum-rows-ops.c.obj
+[13/30] Building C object CMakeFiles/ggml-htp-v81.dir/get-rows-ops.c.obj
+[14/30] Building C object CMakeFiles/ggml-htp-v81.dir/solve-tri-ops.c.obj
+[15/30] Building C object CMakeFiles/ggml-htp-v81.dir/cumsum-ops.c.obj
+[16/30] Building C object CMakeFiles/ggml-htp-v81.dir/ssm-conv.c.obj
+[17/30] Building C object CMakeFiles/ggml-htp-v81.dir/cpy-ops.c.obj
+[18/30] Building C object CMakeFiles/ggml-htp-v81.dir/main.c.obj
+[19/30] Building C object CMakeFiles/ggml-htp-v81.dir/rope-ops.c.obj
+[20/30] Building C object CMakeFiles/ggml-htp-v81.dir/pad-ops.c.obj
+[21/30] Building C object CMakeFiles/ggml-htp-v81.dir/argsort-ops.c.obj
+[22/30] Building C object CMakeFiles/ggml-htp-v81.dir/act-ops.c.obj
+[23/30] Building C object CMakeFiles/ggml-htp-v81.dir/softmax-ops.c.obj
+[24/30] Building C object CMakeFiles/ggml-htp-v81.dir/im2col-ops.c.obj
+[25/30] Building C object CMakeFiles/ggml-htp-v81.dir/gated-delta-net-ops.c.obj
+[26/30] Building C object CMakeFiles/ggml-htp-v81.dir/binary-ops.c.obj
+[27/30] Building C object CMakeFiles/ggml-htp-v81.dir/flash-attn-ops.c.obj
+[28/30] Building C object CMakeFiles/ggml-htp-v81.dir/unary-ops.c.obj
+[29/30] Building C object CMakeFiles/ggml-htp-v81.dir/matmul-ops.c.obj
+[30/30] Linking C shared library libggml-htp-v81.so
+[7/9] Performing install step for 'htp-v81'
+[0/1] Install the project...
+-- Install configuration: "Release"
+-- Installing: /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/libggml-htp-v81.so
+[8/9] Completed 'htp-v81'
+
+=====STAT (tamanhos)=====
+-rwxr-xr-x 1 root root 93328144 Oct 12 14:03 /root/r68-cpp-full/build-r68d/libsig_llama.so
+-rwxr-xr-x 1 root root   747440 Oct 12 14:04 /root/r68-cpp-full/build-r68d/llama-build/ggml/src/ggml-hexagon/libggml-htp-v81.so
+== [1] enviar app/src/main/cpp (conjunto completo) ==
+SEND_OK
+== [2] enviar server script v5 ==
+SCP_OK
+== [3] probe5 no servidor ==
+== configure ==
+CONFIGURE_RC=0
+-- Including CPU backend
+-- Including Vulkan backend
+-- Including OpenCL backend
+-- hexagon: using /opt/hexagon/6.6.0.0 and /opt/hexagon/6.6.0.0/tools/HEXAGON_Tools/19.0.07 for building libggml-htp skels
+-- Including Hexagon backend
+
+== build sig_llama ==
+BUILD_SIGLLAMA_RC=0
+[638/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv6.cpp.o
+[639/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen2vl.cpp.o
+[640/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv6qwen2.cpp.o
+[641/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/qwen3next.cpp.o
+[642/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv7-base.cpp.o
+[643/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/rwkv7.cpp.o
+[644/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/seed-oss.cpp.o
+[645/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/stablelm.cpp.o
+[646/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/starcoder.cpp.o
+[647/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/smollm3.cpp.o
+[648/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/starcoder2.cpp.o
+[649/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/smallthinker.cpp.o
+[650/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/xverse.cpp.o
+[651/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/t5encoder.cpp.o
+[652/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/step35.cpp.o
+[653/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/wavtokenizer-dec.cpp.o
+[654/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/t5.cpp.o
+[655/663] Building CXX object llama-build/src/CMakeFiles/llama.dir/models/talkie.cpp.o
+[656/663] Building CXX object CMakeFiles/sig_llama.dir/llama_jni.cpp.o
+[657/663] Building CXX object llama-build/ggml/src/ggml-vulkan/CMakeFiles/ggml-vulkan.dir/mul_mm.comp.cpp.o
+[658/663] Building CXX object llama-build/ggml/src/ggml-vulkan/CMakeFiles/ggml-vulkan.dir/ggml-vulkan.cpp.o
+[659/663] Linking CXX static library llama-build/ggml/src/ggml-vulkan/libggml-vulkan.a
+[660/663] Linking CXX static library llama-build/ggml/src/libggml.a
+[661/663] Linking CXX static library llama-build/src/libllama.a
+[662/663] Linking CXX shared library libsig_llama.so
+
+== build skel htp-v81 ==
+BUILD_SKEL_RC=0
+[26/30] Building C object CMakeFiles/ggml-htp-v81.dir/binary-ops.c.obj
+[27/30] Building C object CMakeFiles/ggml-htp-v81.dir/flash-attn-ops.c.obj
+[28/30] Building C object CMakeFiles/ggml-htp-v81.dir/unary-ops.c.obj
+[29/30] Building C object CMakeFiles/ggml-htp-v81.dir/matmul-ops.c.obj
+[30/30] Linking C shared library libggml-htp-v81.so
+[7/9] Performing install step for 'htp-v81'
+[0/1] Install the project...
+-- Install configuration: "Release"
+-- Installing: /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/libggml-htp-v81.so
+[8/9] Completed 'htp-v81'
+
+== artefatos ==
+== /workspace/build-r68d/libsig_llama.so
+-rwxr-xr-x 1 root root 93328144 Oct 12 17:03 /workspace/build-r68d/libsig_llama.so
+354fdba544363e8a5a22c71f8dff3ddafe1af8538a82333524ec77a5d31f05cb  /workspace/build-r68d/libsig_llama.so
+== /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/libggml-htp-v81.so
+-rwxr-xr-x 1 root root 747440 Oct 12 17:04 /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/libggml-htp-v81.so
+2062ac642cad2cef7b243e0f384776bb771db68ce1735eeb32b4ab695776d31a  /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/libggml-htp-v81.so
+== /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/htp-v81-prefix/src/htp-v81-build/libggml-htp-v81.so
+-rwxr-xr-x 1 root root 747440 Oct 12 17:04 /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/htp-v81-prefix/src/htp-v81-build/libggml-htp-v81.so
+2062ac642cad2cef7b243e0f384776bb771db68ce1735eeb32b4ab695776d31a  /workspace/build-r68d/llama-build/ggml/src/ggml-hexagon/htp-v81-prefix/src/htp-v81-build/libggml-htp-v81.so
+== NEEDED (hexagon embutido?) ==
+  0x0000000000000001 (NEEDED)          Shared library: [liblog.so]
+  0x0000000000000001 (NEEDED)          Shared library: [libdl.so]
+  0x0000000000000001 (NEEDED)          Shared library: [libandroid.so]
+  0x0000000000000001 (NEEDED)          Shared library: [libvulkan.so]
+  0x0000000000000001 (NEEDED)          Shared library: [libm.so]
+  0x0000000000000001 (NEEDED)          Shared library: [libc.so]
+  0x000000000000000e (SONAME)          Library soname: [libsig_llama.so]
+HEXPROBE5_DONE
+probe5-rc=0
