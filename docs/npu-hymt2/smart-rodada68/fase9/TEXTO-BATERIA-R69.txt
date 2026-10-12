@@ -1,0 +1,29 @@
+TEXTO-BATERIA R69 — ENTRADA CONTROLADA UNICA (mesmo texto em TODAS as rotas)
+================================================================================
+Uso: bateria da ordem 5 (fase9/PROTOCOLO-R69-BATERIAS.txt). Idioma: ingles;
+alvo: Portugues (configuracao do app). ~180 palavras / ~1.100 caracteres.
+Nao editar sem nova versao deste arquivo (o sha256 entra no recibo da bateria).
+
+--------------------------------------------------------------------------------
+The city council approved on Tuesday a comprehensive plan to modernize the
+municipal water network over the next five years. According to the proposal,
+aging pipes in the central district will be replaced first, since recent
+inspections found leaks responsible for nearly a third of the city's daily
+water loss. Engineers estimate that the project will reduce consumption by
+about eighteen percent once the first phase is complete.
+
+Local businesses welcomed the announcement, although some owners asked for
+clearer schedules to avoid disruptions during the busiest months of the year.
+The council promised weekly updates and a public dashboard showing the
+progress of each street. Environmental groups, in turn, requested that the
+plan include stricter controls on industrial discharge, arguing that pipe
+replacement alone will not protect the rivers that cross the region.
+
+The mayor said the investment will be funded through a combination of
+municipal savings and a long-term loan, and insisted that household bills
+will not increase before the second phase. A public hearing is scheduled for
+next month, when residents will be able to present suggestions and formally
+question the technical team responsible for the project.
+
+--------------------------------------------------------------------------------
+FIM DO TEXTO (conteudo acima; sem traducoes neste arquivo).

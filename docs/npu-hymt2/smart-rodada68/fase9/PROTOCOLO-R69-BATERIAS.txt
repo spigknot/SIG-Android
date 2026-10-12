@@ -1,0 +1,73 @@
+PROTOCOLO R69 — BATERIAS DE MEDICAO (SMART OPENCL n=5 + TEXTO GRANDE 6 ROTAS)
+================================================================================
+Data: 2026-10-12. Status: PREPARADO — execucao somente em fase device com ordem
+explicita em mensagem propria. Nada aqui autoriza tocar o aparelho.
+
+--------------------------------------------------------------------------------
+§1. DEFINICAO EXATA DO "tok/s DO DISPLAY" DO APP (ordem 5 — resolvida no codigo)
+--------------------------------------------------------------------------------
+FONTE: app/src/main/cpp/llama-jni/llama_jni.cpp (rota normal) —
+  l.1041 `geracao_inicio` e' capturado DEPOIS do prefill (o prefill acontece
+  antes do loop) e ANTES do loop de geracao;
+  l.1089-1093: stats = "%d tokens em %.1f s (%.1f tokens/s)" com
+  tokens = n_out (APENAS tokens de saida) e tempo = do geracao_inicio ao fim do
+  loop (sample + detokenize + decode POR token).
+
+  => tok/s do display = tokens_DE_SAIDA / tempo_do_LOOP_DE_DECODE.
+     EXCLUI: carga do modelo, contexto e PREFILL do prompt.
+     INCLUI: sampler + detokenize + decode de cada token de saida.
+
+  IMPLICACAO DIRETA: o display NAO e' "throughput do pedido". Em texto grande,
+  o prefill (grande) fica FORA do numero exibido — um Vulkan puro com prefill
+  lento pode exibir tok/s alto de decode enquanto o tempo total do pedido e'
+  dominado pelo prefill. NENHUM numero de display e' comparavel a bateria R67
+  (que media fases nativas) sem esta definicao.
+
+  No SMART o display mostra o stats de fases ("smart: prefill=.. export=..
+  import=.. decode=.. | tok1=.. saida=..") — SEM tok/s formatado.
+
+--------------------------------------------------------------------------------
+§2. RE-MEDICAO FORMAL SMART OPENCL (ordem 4; a contradicao 3769.82ms x 82ms)
+--------------------------------------------------------------------------------
+OBJETIVO: confirmar ou refutar a divergencia entre a medicao formal R67
+  (smart:opencl@bench: TOTAL 3840.10 ms / 8 tokens; decode 3769.82 ms) e o
+  smoke F8 (smart OpenCL: decode=82 ms / 3 tokens; n=1, texto curto).
+
+METODO PROPOSTO (produto, sem probe/bench — o produto nao tem modo bench):
+  - Rota: Smart (OpenCL), uma partida de app por rodada (force-stop).
+  - Entrada: TEXTO FIXO = "Good morning, how are you?" (default do probe;
+    prompt_hash R67 a5de647b1ff84e74 correspondia a este default) -> Portugues.
+  - n=5 rodadas; por rodada coletar do logcat o stats
+    `smart: prefill=.. export=..(..B) import=.. decode=.. | tok1=.. saida=..`.
+  - CONDICOES obrigatorias por rodada: temperatura (/sys/class/thermal ||
+    dumpsys thermalservice), bateria (dumpsys battery), tela ligada e fixa,
+    sem apps concorrentes, mesmo inicio (frio termico documentado).
+  - CRITERIO: se o decode divergir da R67 de novo, REGISTRAR as condicoes
+    (tamanho do prompt, thermal, throttling, estado do cache de kernels) e NAO
+    escolher um numero. A comparacao por pedido real (2-3 tokens de saida) e'
+    limitada por desenho — a R67 media 8 tokens no probe; anotar a diferenca.
+  - NENHUMA conclusao sobre a rota antes desta bateria (ordem do parecer).
+
+--------------------------------------------------------------------------------
+§3. BATERIA TEXTO GRANDE (ordem 5)
+--------------------------------------------------------------------------------
+MOTIVACAO: display do app indica NPU ~24 tok/s x Vulkan puro ~40 tok/s em texto
+  grande; a medicao formal (8 tokens) da' NPU 33.7 x Vulkan puro 8.0 tok/s —
+  contradicao de 5x sem explicacao. (Com §1: o display exclui o prefill; a
+  comparacao display x display e' legitima, display x R67 NAO e'.)
+
+ENTRADA CONTROLADA: fase9/TEXTO-BATERIA-R69.txt (texto longo unico, ~180
+  palavras, mesmo em todas as rotas; sha256 no recibo da bateria).
+
+ROTAS (ordem fixa): NPU | Smart Vulkan | Smart OpenCL | CPU | Vulkan puro |
+  OpenCL puro. n=3 por rota (mesma partida de app por rodada; force-stop).
+
+POR RODADA COLETAR:
+  (a) texto do display: valor exato do item "Desempenho" do log do app (XML dump);
+  (b) tempos nativos do logcat (fases; no Smart o stats de fases);
+  (c) cruzar display x medicao e anotar a razao;
+  (d) thermal + bateria (antes/depois);
+  (e) memoria HTP quando aplicavel (REPACK 972 MiB + KV crescente por contexto);
+  (f) corretude: comparacao do TEXTO TRADUZIDO entre rotas (A-B-A onde couber).
+TEMPO ESTIMADO: ~30-45 min (6 rotas x 3, cargas de modelo inclusas).
+PROIBIDO: concluir "Vulkan vence em texto grande" sem esta bateria (parecer).

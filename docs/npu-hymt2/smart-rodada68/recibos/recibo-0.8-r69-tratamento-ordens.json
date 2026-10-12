@@ -1,0 +1,50 @@
+{
+  "recibo": "0.8-r69-tratamento-ordens",
+  "rodada": "R69 (pos-R68)",
+  "data": "2026-10-12",
+  "base": "main = f9a10ce; parecer R68 (CCE F7/F8 + recomendacao) processado",
+  "ordens": {
+    "1_r64": {
+      "acao": "ENTREGA R64 localizada e verificada para o operador apresentar ao especialista (sem reexecutar nada)",
+      "arquivo": "docs/especialista/ENTREGA-SMART-DUAL-BACKEND-RODADA64.txt",
+      "bytes": 17559,
+      "sha256": "051ccf5816022c14b91791e76f1e6dca4970a2cef822401a741f357116ea6dbc",
+      "pacote": "docs/npu-hymt2/smart-rodada64/ presente (bundle-r40_1_31814/ etc.)"
+    },
+    "2_fixtures": {
+      "status": "RESOLVIDO (causa-raiz eliminada)",
+      "diagnostico": "NativeDepsOfficialFixturesTest.kt hardcodava os NOMES v12; com fixtures v13 no diretorio o teste nao achava os ZIPs e o Assume pulava o caso official EM SILENCIO (a divergencia R68-D3 do parecer)",
+      "correcao": "nomes derivados de NativeDependencyManager.COMPONENT_VERSION + VACINA nova 'nao ha fixtures de versao antiga no diretorio de testes' (falha em vez de pular quando sobra ZIP de outra versao)",
+      "prova": "focal pos-correcao: tests=5 failures=0 errors=0 skipped=0 (antes: 4 pulados por Assume); gate arquivado em logs/gates/focal-fixtures-reancoradas-v13.log",
+      "nota": "fixtures nao sao versionadas por desenho (gitignored); a ancora e' o proprio teste (sha/tamanho declarados) + verify oficial"
+    },
+    "3_gates": {
+      "status": "APLICADO (retroativo ao R68 + regra permanente)",
+      "arquivos": "logs/gates/ = suite-testDebugUnitTest-v12final.log, focal-fixtures-tabela-v13.log, focal-fixtures-reancoradas-v13.log, lintDebug.log, assembleDebug-v13.log, assembleDebug-v13b.log, verify-v13.log (RE-EXECUTADO para arquivo; ACEITO)",
+      "contagem_697": "confirmada pelos XMLs de resultado: tests=697 failures=0 errors=0 skipped=6 (o gradle so imprime 'tests completed' com falhas/skips)",
+      "regra": "todo pacote futuro de rodada com build arquiva stdout integral dos gates + contagem via XMLs (registrada tambem na skill sig-android-dev)"
+    },
+    "4_smart_opencl": {
+      "status": "PROTOCOLO PRONTO — execucao aguarda ordem device",
+      "doc": "fase9/PROTOCOLO-R69-BATERIAS.txt (secao 2): n=5, texto fixo 'Good morning, how are you?' (default do probe; hash R67 a5de647b1ff84e74), thermal+bateria por rodada, registrar condicoes se divergir"
+    },
+    "5_texto_grande": {
+      "status": "PROTOCOLO PRONTO — execucao aguarda ordem device",
+      "doc": "fase9/PROTOCOLO-R69-BATERIAS.txt (secao 3) + entrada controlada fase9/TEXTO-BATERIA-R69.txt",
+      "entrada": {"arquivo": "fase9/TEXTO-BATERIA-R69.txt", "sha256": "6698db7167220490e50820e455128e4807c77ecd499c78d674f120f40f4cd591", "bytes": 1844},
+      "definicao_do_display": "RESOLVIDA no codigo (llama_jni.cpp:1041,1089-1093): tok/s exibido = tokens_DE_SAIDA / tempo do LOOP de decode; EXCLUI prefill e carga; INCLUI sample+detokenize+decode por token; no Smart o display mostra o stats de fases (sem tok/s formatado)"
+    },
+    "6_confirmacoes": {
+      "v13_no_r2": "AUTORIZADO pelo operador em 2026-10-12 ('autorizo'/'pode' — mensagens no chat; H2 verbal) e EXECUTADO via upload_v13.py (auth em release/r2_config.json, que nao entra no pacote); prova publica: HTTP 200 + Content-Length 44216742 + SHA-256 do arquivo BAIXADO do endereco publico == 8d53e8f8f877...3b",
+      "h1_h2": "H1 (aceite F8) EXECUTADO com evidencia por rota (f8/); H2 parcial: v12+v13 publicados no R2 pelo canal autorizado; APK de RELEASE ainda NAO publicado (decisao do operador)",
+      "r64": "ver ordem 1 (sha 051ccf58... para o operador apresentar)",
+      "decisao_smart": "aguarda KERNEL_VALIDATED=SIM do especialista + ordem explicita; nada promovido; default do menu inalterado"
+    }
+  },
+  "sem_commit": "working tree: NativeDepsOfficialFixturesTest.kt (re-ancorado+vacina) + fase9/ (3 docs) + logs/gates/ (7) + recibos 0.8 — AGUARDANDO ORDEM para stage/commit/push (limite R69)",
+  "contagem_artefatos_f8": "11 PNG + 12 XML (contagem oficial, corrige '8+8')",
+  "shas_documentos": {
+    "DIVERGENCIAS-R69-TRATAMENTO.txt": "6fb7e460c056be8410ae427ebdee11dc759961bafd4a526921a39722137eebf0",
+    "PROTOCOLO-R69-BATERIAS.txt": "0746dc27a11727f8517d60e3b9f8cbf568e56f2f3f50932ea9208fa8db858968"
+  }
+}

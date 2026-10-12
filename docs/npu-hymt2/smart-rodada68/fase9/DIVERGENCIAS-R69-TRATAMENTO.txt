@@ -1,0 +1,75 @@
+TRATAMENTO DAS ORDENS/ DIVERGENCIAS DO R69 (pos-R68)
+================================================================================
+Data: 2026-10-12. Base: main = f9a10ce. Escopo: ORDENS 1,2,3 (executadas);
+ORDENS 4,5 (protocolos preparados; execucao = fase device com ordem propria);
+ORDEM 6 (confirmacoes ao operador — em mensagem).
+
+--------------------------------------------------------------------------------
+D1/D2 — GATES SEM LOG ARQUIVADO (lacuna de evidencia) — TRATADO
+--------------------------------------------------------------------------------
+REGRA PERMANENTE (ordem 3): todo pacote futuro arquiva o stdout INTEGRAL dos
+gates (suite/lint/assemble/verify) — nao apenas a afirmacao em commit/recibo.
+
+Aplicado ja' ao R68: docs/npu-hymt2/smart-rodada68/logs/gates/
+  suite-testDebugUnitTest-v12final.log   (suite integral; BUILD SUCCESSFUL 4m56s)
+  focal-fixtures-tabela-v13.log          (focais v13; 28s)
+  focal-fixtures-reancoradas-v13.log     (focal pos-reancoragem; 33s; R69)
+  lintDebug.log                          (lint integral; 2m31s)
+  assembleDebug-v13.log / assembleDebug-v13b.log (assemble integral; 19s/3s)
+  verify-v13.log                         (verify RE-EXECUTADO para arquivo; ACEITO)
+  <a criar na bateria: resumo dos XMLs de resultado>
+
+CONTAGEM DA SUITE (numero 697 questionado): confirmada pelos XMLs de resultado
+  do ultimo run completo: tests=697 failures=0 errors=0 skipped=6
+  (o gradle so' imprime "X tests completed" quando ha failed/skipped — por isso
+  o numero nao aparecia no stdout; a fonte e' app/build/test-results/**/*.xml).
+
+--------------------------------------------------------------------------------
+D3 — FIXTURES v12 x MANAGER v13 (dessincronizacao do teste official) — TRATADO
+--------------------------------------------------------------------------------
+DIAGNOSTICO (confirmado no codigo): NativeDepsOfficialFixturesTest.kt tinha os
+NOMES das fixtures HARDCODED como v12 (linhas 24-27). Com as fixtures em v13 no
+diretorio, o teste NAO acha os ZIPs, o `Assume` dispara e o caso official era
+PULADO em silencio — foi exatamente o que o parecer apontou.
+
+CORRECAO (re-ancoragem com eliminacao da causa-raiz):
+  1. Os nomes das fixtures agora DERIVAM do manager:
+     `private val VERSAO = NativeDependencyManager.COMPONENT_VERSION`
+     `"sig-android-dependencies-v$VERSAO-<abi>.zip"` — nunca mais dessincroniza.
+  2. VACINA nova (teste): `nao ha fixtures de versao antiga no diretorio de
+     testes` — se sobrar ZIP de OUTRA versao no diretorio, FALHA (em vez de
+     pular por Assume). Assinatura da regressao v12: ZIP v12 + teste procurando
+     v13 nunca passaria em silencio de novo.
+  3. Vocabulario/Assume atualizados (v$VERSAO).
+
+PROVA (pos-correcao, com as fixtures v13 no diretorio):
+  focal NativeDepsOfficialFixturesTest: tests=5 failures=0 skipped=0 errors=0 —
+  TODOS rodaram (antes: 4 pulados por Assume + a vacina inexistente).
+  Gate arquivado: logs/gates/focal-fixtures-reancoradas-v13.log
+
+NOTA DE ESCOPO (resposta a ORDEM 2): as fixtures NAO sao versionadas por desenho
+(gitignored; ~45/50 MB cada; sao os artefatos de release). O que "ancora" a
+fixture ao manager e' o proprio teste (sha256/tamanho declarados) + a porta
+verify-native-dependencies — ambos apontando para o COMPONENT_VERSION corrente.
+
+--------------------------------------------------------------------------------
+D4 — CADEIA DE CUSTODIA (auto-declaracao) — NOTA
+--------------------------------------------------------------------------------
+Hashes v13/APK: declaracao nos recibos 0.6/0.7 + corroboracao device-side
+(logcat + modal do app + sha no device via run-as). Upload R2: autorizado pelo
+operador ("autorizo"/"pode", 2026-10-12) e executado com prova publica
+(HTTP 200 + Content-Length + SHA-256 do arquivo BAIXADO do endereco publico
+== sha declarado). Sem meio offline de provar persistencia do bucket alem disso;
+registrado como fato confirmado pelo operador (ordem 6).
+
+--------------------------------------------------------------------------------
+CONTAGEM DE ARTEFATOS (correcao documental) — NOTA
+--------------------------------------------------------------------------------
+O pacote f8/ tem 11 PNG + 12 XML (o parecer corrige "8+8"). Nenhuma acao de
+codigo; contagem registrada aqui como a oficial do F8.
+
+--------------------------------------------------------------------------------
+ORDENS 4 e 5 — PROTOCOLOS PREPARADOS (fase9/PROTOCOLO-R69-BATERIAS.txt)
+--------------------------------------------------------------------------------
+Execucao = fase device, aguardando ordem explicita em mensagem propria
+(limite reafirmado no R69). Nada foi tocado no aparelho para estas ordens.

@@ -7,7 +7,8 @@ import org.junit.Assume
 import org.junit.Test
 
 /**
- * Validação OFFICIAL: tabela de produção x ZIPs REAIS v12 (≈50 MB por ABI).
+ * Validação OFFICIAL: tabela de produção x ZIPs REAIS da versão corrente
+ * (COMPONENT_VERSION; ≈50 MB por ABI).
  *
  * Os ZIPs reais ficam em `app/src/test/resources/native-deps/` e NÃO são
  * versionados (são os artefatos de release). Por isso este teste é PULADO
@@ -21,9 +22,13 @@ import org.junit.Test
  */
 class NativeDepsOfficialFixturesTest {
 
+    /** Versão corrente do pacote — derivada do manager (R69/D3: nada de literal
+     *  que dessincronize quando o COMPONENT_VERSION muda). */
+    private val VERSAO = NativeDependencyManager.COMPONENT_VERSION
+
     private val fixturesPorAbi = listOf(
-        "arm64-v8a" to "sig-android-dependencies-v12-arm64-v8a.zip",
-        "x86_64" to "sig-android-dependencies-v12-x86_64.zip",
+        "arm64-v8a" to "sig-android-dependencies-v$VERSAO-arm64-v8a.zip",
+        "x86_64" to "sig-android-dependencies-v$VERSAO-x86_64.zip",
     )
 
     private fun fixtureBytes(nome: String): ByteArray? =
@@ -40,7 +45,7 @@ class NativeDepsOfficialFixturesTest {
 
     @Test
     fun `a tabela de conteudo bate com o ZIP real, arquivo a arquivo`() {
-        Assume.assumeTrue("ZIPs reais v12 ausentes (checkout limpo) — teste official pulado", fixturePresente())
+        Assume.assumeTrue("ZIPs reais v$VERSAO ausentes (checkout limpo) — teste official pulado", fixturePresente())
         for ((abi, fixture) in fixturesPorAbi) {
             val entradas = NativeDepsTestSupport.lerZip(exigir(abi, fixture))
             assertTrue("$abi: o ZIP fixtureado tem de ter conteúdo", entradas.isNotEmpty())
@@ -53,7 +58,7 @@ class NativeDepsOfficialFixturesTest {
 
     @Test
     fun `a soma do conteudo declarado e a soma das entradas do ZIP real`() {
-        Assume.assumeTrue("ZIPs reais v12 ausentes (checkout limpo) — teste official pulado", fixturePresente())
+        Assume.assumeTrue("ZIPs reais v$VERSAO ausentes (checkout limpo) — teste official pulado", fixturePresente())
         for ((abi, fixture) in fixturesPorAbi) {
             val doZip = NativeDepsTestSupport.lerZip(exigir(abi, fixture)).sumOf { it.tamanho }
             val declarado = NativeDependencyManager.conteudoInstalado(abi).sumOf { it.bytes }
@@ -69,7 +74,7 @@ class NativeDepsOfficialFixturesTest {
      */
     @Test
     fun `as fixtures sao os ZIPs que o codigo de producao declara (sha256)`() {
-        Assume.assumeTrue("ZIPs reais v12 ausentes (checkout limpo) — teste official pulado", fixturePresente())
+        Assume.assumeTrue("ZIPs reais v$VERSAO ausentes (checkout limpo) — teste official pulado", fixturePresente())
         for ((abi, fixture) in fixturesPorAbi) {
             val bytes = exigir(abi, fixture)
             val sha = NativeDepsTestSupport.sha256(bytes)
@@ -92,7 +97,7 @@ class NativeDepsOfficialFixturesTest {
      */
     @Test
     fun `a conferencia arquivo-a-arquivo REJEITA um tamanho divergente no ZIP real`() {
-        Assume.assumeTrue("ZIPs reais v12 ausentes (checkout limpo) — teste official pulado", fixturePresente())
+        Assume.assumeTrue("ZIPs reais v$VERSAO ausentes (checkout limpo) — teste official pulado", fixturePresente())
         val (abi, fixture) = fixturesPorAbi.first()
         val bytesReais = exigir(abi, fixture)
         val original = NativeDepsTestSupport.lerZip(bytesReais)
@@ -107,6 +112,31 @@ class NativeDepsOfficialFixturesTest {
         assertTrue(
             "$abi: a conferência ACEITOU tamanho divergente — o teste arquivo-a-arquivo não verifica nada: $divergencias",
             divergencias.any { it.contains("tamanho diverge") },
+        )
+    }
+
+    /**
+     * VACINA R69/D3 (anti-dessincronização silenciosa): se houver ZIPs de
+     * dependências de OUTRA versão no diretório de fixtures, FALHA em vez de
+     * pular por Assume. Foi assim que o v12 escapou: as fixtures ficaram no
+     * diretório enquanto o teste procurava outro nome e o `Assume` pulava o
+     * caso oficial sem avisar.
+     */
+    @Test
+    fun `nao ha fixtures de versao antiga no diretorio de testes`() {
+        val base = javaClass.classLoader?.getResource("native-deps") ?: return
+        if (base.protocol != "file") return
+        val dir = java.io.File(base.toURI())
+        val zipDeDependencias = dir.listFiles { f ->
+            f.isFile && f.name.startsWith("sig-android-dependencies-") && f.name.endsWith(".zip")
+        }?.map { it.name }.orEmpty()
+        if (zipDeDependencias.isEmpty()) return
+        val esperados = fixturesPorAbi.map { it.second }.toSet()
+        val intrusos = zipDeDependencias.filter { it !in esperados }
+        assertTrue(
+            "fixtures de OUTRA versao presentes: $intrusos (v$VERSAO esperado: $esperados) — " +
+                "re-ancore as fixtures ao COMPONENT_VERSION atual",
+            intrusos.isEmpty(),
         )
     }
 }
