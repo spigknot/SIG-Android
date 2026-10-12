@@ -1,0 +1,64 @@
+{
+  "recibo": "0.7-f8-aceitacao-concluida",
+  "rodada": "R68/F8",
+  "data": "2026-10-12",
+  "veredito": "F8 EXECUTADO COM SUCESSO no device: as rotas NPU (nativa) e Smart (dual-backend HTP->GPU, vulkan e opencl) funcionam de ponta a ponta no produto, com o pacote v13; sanidade das rotas classicas sem regressao.",
+  "device": {"serial": "3B15BD00FVE00000 (wireless 100.108.27.64:5555)", "modelo": "CPH2747", "vulkan": "Adreno (TM) 840", "opencl": "QUALCOMM Adreno(TM) 840 (OpenCL 3.0)"},
+  "pre_condicoes": {
+    "apk": "app-debug.apk sha256 337555019b408063f83819b66ad687e8c29b7edd5954464ba329b35c62cb3ff0",
+    "pacote": "v13 (marker .installed=13; libsig_llama.so 09c28252ac9703336d1d1316ad380bcc8bc397d5e65388c8a3a405cc820e3de9; skel 03b0ece6...); instalado pelo app via R2 (clique do operador, autorizado)",
+    "protocolo": "uma partida de app por rodada (force-stop); logcat isolado; texto fixo 'Guten Morgen' -> Portugues; UMA traducao por rota"
+  },
+  "resultados": [
+    {
+      "rota": "NPU",
+      "menu": "habilitada (sem motivos de indisponibilidade em todas as 6 rotas)",
+      "traducao": "'Guten Morgen' -> 'Bom dia'",
+      "backend_efetivo": "NPU (HTP / HTP0)",
+      "carga": "1.8s (sonda=0.0s modelo=1.5s contexto=0.3s)",
+      "geracao": "3 tokens em 0.1s (25.4 tok/s); traducao pronta em 2.2s",
+      "memoria": "HTP0 model 0.54 MiB + HTP0-REPACK 972.00 MiB; CPU_Mapped 193.57 MiB; compute HTP0 282.01 MiB + CPU 239.97 MiB; graph splits 3",
+      "erros": 0
+    },
+    {
+      "rota": "Smart (Vulkan)",
+      "backend_efetivo": "Smart (Vulkan) (Vulkan / Vulkan0) + origem HTP (HTP / HTP0)",
+      "ponte": "prefill=134ms export=1.25ms (1836145 B) import=10.64ms decode=449ms | tok1=33 saida=3 tokens",
+      "traçado": "state_write_data (export) -> state_read_data (import) visiveis no logcat; gates de tamanho/posicao aprovados",
+      "erros": 0
+    },
+    {
+      "rota": "Smart (OpenCL)",
+      "backend_efetivo": "Smart (OpenCL) (OpenCL / GPUOpenCL) + origem HTP (HTP / HTP0)",
+      "ponte": "prefill=70ms export=1.10ms (1836145 B) import=23.80ms decode=82ms | tok1=33 saida=3 tokens",
+      "erros": 0
+    },
+    {
+      "rota": "GPU (OpenCL)",
+      "tipo": "sanidade (nao-regressao)",
+      "backend_efetivo": "GPU OpenCL (OpenCL / GPUOpenCL)",
+      "carga": "4.7s (upload 4.0s/354 chamadas/1076 MiB)",
+      "geracao": "3 tokens; sem regressao",
+      "erros": 0
+    }
+  ],
+  "correcao_que_destravou": {
+    "achado": "sessao HTP0 falhava no registro do backend (JNI_OnLoad) com error 0x80000406 por ADSP_LIBRARY_PATH ausente naquele momento",
+    "fix": "ensure_adsp_library_path() no JNI_OnLoad (antes do llama_backend_init) + LD_LIBRARY_PATH (como no probe); sem regressao nos backends classicos",
+    "lib": "build 71640b5192... (93467624 B) -> strip 09c28252ac... (30194712 B)",
+    "pacote": "v13 arm64 8d53e8f8... (44216742 B) / x86 14334629... (50006445 B); verify ACEITO; R2 ETags 6587704a... / 6e760f71..."
+  },
+  "evidencia": [
+    "docs/npu-hymt2/smart-rodada68/f8/logcat-f8.txt (logcat consolidado do device)",
+    "docs/npu-hymt2/smart-rodada68/f8/f8-npu.png",
+    "docs/npu-hymt2/smart-rodada68/f8/f8-smartvk.png",
+    "docs/npu-hymt2/smart-rodada68/f8/f8-smartoc.png",
+    "docs/npu-hymt2/smart-rodada68/f8/f8-gpuoc.png",
+    "docs/npu-hymt2/smart-rodada68/f8/f8-0*-*.xml (hierarquias de UI por passo)"
+  ],
+  "higiene": "v12/v13 publicados intocados; nada promovido; PJA110 nunca tocado; app do device atualizado por install -r (dados preservados).",
+  "pendente": [
+    "REV.2 da ENTREGA-68 incluindo o F8 (com manifesto atualizado)",
+    "decisao do operador: promocao (APK de release + pacote ja' no R2) ou reverts"
+  ]
+}

@@ -343,6 +343,7 @@ static void ensure_adsp_library_path() {
         if (pos != std::string::npos) {
             std::string dir = lib_path.substr(0, pos);
             setenv("ADSP_LIBRARY_PATH", dir.c_str(), 1);
+            setenv("LD_LIBRARY_PATH", dir.c_str(), 1);   // como no probe (FastRPC)
             LOGI("ADSP_LIBRARY_PATH=%s (skel do HTP)", dir.c_str());
             done = true;
         }
@@ -425,6 +426,11 @@ static bool setup_smart_source(const std::string & model_path, jint nCtx, jint n
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM * vm, void * reserved) {
     static CerrRedirect cerr_to_logcat;  // ggml-vulkan diagnostica em std::cerr
+    // R68/F8 (achado no device): o registro do backend Hexagon roda AQUI —
+    // llama_backend_init -> load_all -> ggml_backend_hexagon_reg -> htpdrv_init —
+    // e o htpdrv_init FALHA sem o ADSP_LIBRARY_PATH setado (o probe setava antes
+    // de tudo; no app o env chegava tarde e o HTP0 nunca aparecia). Env ANTES.
+    ensure_adsp_library_path();
     llama_log_set(sig_log_callback, nullptr);
     llama_backend_init();
     return JNI_VERSION_1_6;

@@ -1,0 +1,36 @@
+{
+  "recibo": "0.6-f8-aceitacao-em-andamento",
+  "rodada": "R68/F8",
+  "data": "2026-10-12",
+  "objetivo": "Aceitacao em device das rotas NPU/Smart (EM ANDAMENTO — nao fechar antes dos smokes).",
+  "device": {"serial": "3B15BD00FVE00000 (wireless 100.108.27.64:5555)", "modelo": "CPH2747", "vulkan": "Adreno (TM) 840", "opencl": "QUALCOMM Adreno(TM) 840 (OpenCL 3.0)"},
+  "apk_teste": {"arquivo": "app-debug.apk", "bytes": 9636351, "sha256": "337555019b408063f83819b66ad687e8c29b7edd5954464ba329b35c62cb3ff0", "instalado": "2026-10-12 ~16:41, adb install -r (Success; dados preservados)"},
+  "pacote_v12": {"status": "instalado pelo app via R2 (clique do operador, autorizado)", "shas_no_device": {"libsig_llama.so": "8383995f097974cc2a129dc699146df842363bb5a8f88d23d66a75ddf2f1f6f8", "libggml-htp-v81.so": "03b0ece6fa3309a7a3ccad69fa533f2e5958ba213ed0b07fe176724c5405f43b"}},
+  "achado_critico": {
+    "sintoma": "menu com NPU/Smart desabilitados (hasNpu=false) com o pacote v12 ativo",
+    "prova_no_logcat_16h29": [
+      "ggml-hex: Loading driver libcdsprpc.so (driver OK)",
+      "ggml-hex: allocated new registry : ndev 1",
+      "ggml-hex: Hexagon Arch version v81",
+      "ggml-hex: HTP0 allocating new session",
+      "ggml-hex: failed to open session 0 : error 0x80000406",
+      "ggml-hex: failed to create device/session 0"
+    ],
+    "causa": "o registro do backend (JNI_OnLoad -> llama_backend_init -> load_all -> ggml_backend_hexagon_reg -> htpdrv_init) abre a sessao HTP ANTES do ADSP_LIBRARY_PATH estar setado; no app o env so era setado no loadModel (tarde). O probe setava antes de tudo.",
+    "correcao_v13": "ensure_adsp_library_path() movido para o JNI_OnLoad (antes do llama_backend_init) + LD_LIBRARY_PATH (como no probe). Lib do motor v2: build 71640b5192539b0bc0690d46ee5325266c025ebbd5a8e818e81ae55910043ae8 (93467624 B) -> stripada 09c28252ac9703336d1d1316ad380bcc8bc397d5e65388c8a3a405cc820e3de9 (30194712 B)."
+  },
+  "pacote_v13": {
+    "arm64": {"arquivo": "sig-android-dependencies-v13-arm64-v8a.zip", "bytes": 44216742, "sha256": "8d53e8f8771a7164f05cf45e7a57dc662944c5b291f8ae482cd58aecf64bbb3b", "r2_etag": "6587704aa515127c5d58de0c637e03bc"},
+    "x86": {"arquivo": "sig-android-dependencies-v13-x86_64.zip", "bytes": 50006445, "sha256": "143346290963e3a2f9a2ea6c4117d76589ad742f30e7c4e08ab272695be93136", "r2_etag": "6e760f7126cf038e4e361eee23d8201a"},
+    "verify": "ACEITO (porta oficial, 2026-10-12)",
+    "focais": "NativeDepsOfficialFixturesTest + DownloadPlanTablesTest verdes com fixtures v13"
+  },
+  "roteiro_executavel": "scratch: f8_smoke.sh (passos: status|baixar|menu|npu|smartvk|smartoc|cpu|gpuoc|gpuvk)",
+  "pendente": [
+    "download do v13 pelo app (modal pendente no device)",
+    "reteste do menu: NPU/Smart HABILITADOS (com a lib do v13, o ADSP entra antes do registro e a sessao HTP0 deve abrir; sem o erro 0x80000406)",
+    "smokes por rota (NPU puro; Smart Vulkan; Smart OpenCL; sanidade CPU/GPU) + A-B-A + cancelamento",
+    "recibo final do F8 + REV da entrega"
+  ],
+  "higiene": "v12 publicado permanece intocavel (v13 e' o sucessor); app do device atualizado via install -r (autorizado; update no lugar, dados preservados); PJA110 nunca tocado."
+}

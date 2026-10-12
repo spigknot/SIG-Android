@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
  */
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "12"
+    const val COMPONENT_VERSION = "13"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
     private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
@@ -29,14 +29,14 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v12-arm64-v8a.zip",
-            "1ba7a6014a89d84301544a05088ddfa5926a59790575507efd24d2669c2f3507",
-            44_216_824L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v13-arm64-v8a.zip",
+            "8d53e8f8771a7164f05cf45e7a57dc662944c5b291f8ae482cd58aecf64bbb3b",
+            44_216_742L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v12-x86_64.zip",
-            "b104cde15c5afa3639a5fee3836e5c28d8d8d21c4943e404cdd73a1c62a54652",
-            50_006_446L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v13-x86_64.zip",
+            "143346290963e3a2f9a2ea6c4117d76589ad742f30e7c4e08ab272695be93136",
+            50_006_445L
         )
     )
 
@@ -90,7 +90,7 @@ object NativeDependencyManager {
     private val conteudoPorAbi = mapOf(
         "arm64-v8a" to listOf(
             "lib/libsig_whisper.so" to 36_168_384L,
-            "lib/libsig_llama.so" to 30_194_632L,
+            "lib/libsig_llama.so" to 30_194_712L,
             "lib/libonnxruntime.so" to 23_990_744L,
             "lib/libavcodec.so" to 15_143_992L,
             "lib/libavfilter.so" to 4_241_064L,
