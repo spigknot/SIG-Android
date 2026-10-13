@@ -1725,7 +1725,10 @@ class FfmpegJoinVideosActivity : AppCompatActivity() {
         check((directory.parentFile == root && directory.name.startsWith("smart_join_")) || recovery.job?.owns(directory)==true) {
             "Diretório temporário inválido para SmartJoin."
         }
-        check(directory.mkdirs()) { "Não foi possível criar o diretório temporário do SmartJoin." }
+        // recovery.work já cria a pasta e a reutiliza quando a tarefa é retomada.
+        check(directory.isDirectory) {
+            "Não foi possível criar o diretório temporário do SmartJoin."
+        }
         return directory
     }
 
