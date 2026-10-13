@@ -14,7 +14,7 @@
     {"rota": "smartvk", "n": 3, "pos_load_s": 10.3, "tokens": 344, "fases": "prefill=193ms export=3.18ms(14683553 B) import=12.33ms decode=10079ms"},
     {"rota": "smartoc", "n": 1, "pos_load_s": 14.6, "tokens": 369, "fases": "prefill=194ms export=2.93ms(15076841 B) import=57.48ms decode=14308ms"},
     {"rota": "smartoc", "n": 2, "pos_load_s": 13.7, "tokens": 322, "fases": "prefill=174ms export=4.22ms(13634785 B) import=47.79ms decode=13412ms"},
-    {"rota": "smartoc", "n": 3, "pos_load_s": 11.1, "tokens": 369},
+    {"rota": "smartoc", "n": 3, "pos_load_s": 11.1, "tokens": 369, "fases": "prefill=298ms export=5.27ms (15076841 B) import=50.39ms decode=10662ms [REV.2: fases transcritas do f9-bateria-texto-emenda.log]"},
     {"rota": "vulkan", "n": 1, "pos_load_s": 13.6, "tokens": 304},
     {"rota": "vulkan", "n": 2, "pos_load_s": 14.2, "tokens": 343},
     {"rota": "vulkan", "n": 3, "pos_load_s": 14.7, "tokens": 360},
@@ -32,12 +32,14 @@
     "Smart OpenCL (13.7s) supera as GPUs puras e MUITO supera a medicao R67 (n=5 do recibo 0.9: 220ms/8tok vs R67 3769.82ms/8tok - a R67 nao reproduz)",
     "Vulkan puro (14.2s) x OpenCL puro (14.5s): praticamente empatados; o '40 tok/s' do display (que exclui o prefill) NAO virou wall menor",
     "Ponte barata e escalavel: export 2.5-4.2ms para 13.5-15.3 MB de estado; import 10-57ms",
-    "tok1=46 em todas as rodadas com texto (determinismo do sampler)",
+    "tok1=46 em 6/6 rodadas SMART com texto (determinismo do sampler; as rotas puras npu/cpu/vulkan/opencl NAO logam tok1) [REV.2: corrige o overclaim 'todas as rodadas']",
     "Teste manual do operador (Vulkan puro ~15-16s; Smart Vulkan ~10s) CONFIRMADO pelo automatico (13.9-14.7s e 9.3-10.7s)"
   ],
   "condicoes": {
-    "thermal": "device esquentou ao longo da bateria; pico registrado 58.9C (cpu-0-0-1, rodada cpu#3); bateria em 40-58%",
-    "nota": "as 18 rodadas foram executadas em duas sessoes (pausa do operador entre elas); thermal coletado por rodada em ambos os logs"
+    "thermal": "device esquentou ao longo da bateria; pico registrado 58.9C (cpu-0-0-1, rodada cpu#3); bateria em 40-59% [REV.2: faixa corrigida de 40-58% para 40-59%; pausada2 tinha level 59 no inicio]",
+    "nota": "as 18 rodadas foram executadas em duas sessoes (pausa do operador entre elas); thermal coletado por rodada em ambos os logs",
+    "nota_npu1_xml": "REV.2/D-N6: o f9-npu-1.xml registra o app Instagram (troca de app pelo operador durante a rodada) — o wall da npu#1 (20.7s/369 tokens) e' VALIDO pelo logcat, mas o display da npu#1 nao tem prova em XML; contagem pratica: 17 dumps validos + 1 trocado",
+    "entrada_palavras": "REV.2/D-N5: 189 palavras por split-whitespace do corpo util (o cabecalho do TEXTO-BATERIA-R69.txt menciona ~180)"
   },
   "conclusao_por_tamanho_de_texto": {
     "texto_curto": "NPU (F8: 3 tokens; backend NPU (HTP/HTP0); ~25 tok/s)",

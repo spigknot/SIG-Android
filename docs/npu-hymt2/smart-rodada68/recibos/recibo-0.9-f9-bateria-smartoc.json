@@ -20,8 +20,8 @@
   },
   "veredito": "O numero da R67 (decode 3769.82ms/8tok; 471ms/tok) NAO reproduz no produto: mediana 220ms/8tok (27.5ms/tok), estabilidade de 5%. O F8 (82ms/3tok ~= 27ms/tok) e' CONFIRMADO. A divergencia e' do ambiente de medicao da R67 (probe/bancada), nao da rota.",
   "condicoes_registradas": {
-    "thermal": "device quente durante a bateria: cpu-0-2-1 ate 53.1C (r4); cpu ~43-48C no fim; battery 37.2-37.4C",
-    "bateria": "51-52% durante toda a bateria",
+    "thermal": "device quente durante a bateria: cpu-0-2-1 ate 53.1C (r4); cpu ~43-48C no fim; battery 39.6C (antes) -> 37.2C (depois); board 46.5C (antes) -> 41.2C (depois)",
+    "bateria": "41% (antes, status=2 em carga) -> 51% (depois); carregando durante toda a bateria [REV.2: corrige '51-52%'; leitura real do f9-bateria-smartoc.log]",
     "hipoteses_da_divergencia_R67": [
       "probe x produto: cache de kernels OpenCL por processo (o produto tem cl-program-cache persistente; uma partida de app por rodada no probe poderia recompilar kernels)",
       "contexto/ambiente do bench R67 (n_ctx 2048, harness proprio) x produto (n_ctx 8192, mono)",

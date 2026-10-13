@@ -1,0 +1,16 @@
+R69-REV.2 - PROVA PUBLICA DO UPLOAD v13 (ordem 6 / D4)
+data: seg, 12 de out de 2026 23:49:40
+
+-- HEAD --
+HTTP/1.1 200 OK
+Date: Tue, 13 Oct 2026 02:50:19 GMT
+Content-Type: application/zip
+Content-Length: 44216742
+Connection: keep-alive
+Accept-Ranges: bytes
+
+-- download integral do endereco publico + sha256 --
+-rw-r--r-- 1 Gustavo 197121 44216742 out 12 23:49 C:\Users\Gustavo\AppData\Local/Temp/v13-prova.zip
+\8d53e8f8771a7164f05cf45e7a57dc662944c5b291f8ae482cd58aecf64bbb3b *C:\\Users\\Gustavo\\AppData\\Local/Temp/v13-prova.zip
+
+esperado (recibo 0.6): 8d53e8f8771a7164f05cf45e7a57dc662944c5b291f8ae482cd58aecf64bbb3b

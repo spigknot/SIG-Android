@@ -17,7 +17,7 @@ Aplicado ja' ao R68: docs/npu-hymt2/smart-rodada68/logs/gates/
   lintDebug.log                          (lint integral; 2m31s)
   assembleDebug-v13.log / assembleDebug-v13b.log (assemble integral; 19s/3s)
   verify-v13.log                         (verify RE-EXECUTADO para arquivo; ACEITO)
-  <a criar na bateria: resumo dos XMLs de resultado>
+  suite-stats.txt + suite-test-results-r69.tar.gz (66 XMLs) + prova-r2-v13.txt (R69-REV.2)
 
 CONTAGEM DA SUITE (numero 697 questionado): confirmada pelos XMLs de resultado
   do ultimo run completo: tests=697 failures=0 errors=0 skipped=6
@@ -28,7 +28,7 @@ CONTAGEM DA SUITE (numero 697 questionado): confirmada pelos XMLs de resultado
 D3 — FIXTURES v12 x MANAGER v13 (dessincronizacao do teste official) — TRATADO
 --------------------------------------------------------------------------------
 DIAGNOSTICO (confirmado no codigo): NativeDepsOfficialFixturesTest.kt tinha os
-NOMES das fixtures HARDCODED como v12 (linhas 24-27). Com as fixtures em v13 no
+NOMES das fixtures HARDCODED como v12 (linhas 25-26 do blob; o mapa abi->nome). Com as fixtures em v13 no
 diretorio, o teste NAO acha os ZIPs, o `Assume` dispara e o caso official era
 PULADO em silencio — foi exatamente o que o parecer apontou.
 
@@ -73,3 +73,42 @@ ORDENS 4 e 5 — PROTOCOLOS PREPARADOS (fase9/PROTOCOLO-R69-BATERIAS.txt)
 --------------------------------------------------------------------------------
 Execucao = fase device, aguardando ordem explicita em mensagem propria
 (limite reafirmado no R69). Nada foi tocado no aparelho para estas ordens.
+
+================================================================================
+REV.2 (2026-10-13) — TRATAMENTO DAS DIVERGENCIAS DO PARECER R69 (N1-N6, D1-D5)
+================================================================================
+Parecer: PARECER-R69-CCE-BATERIAS-E-ORDENS.txt — R69 = CCE (ordens 1-5 com
+evidencia; 6 documental); 11 divergencias documentais menores, nenhuma muda
+medianas/ordenacao/vereditos. Tratamento:
+
+N1 (bateria % do recibo 0.9): CORRIGIDO para a leitura real do log —
+   41% (antes, status=2 em carga) -> 51% (depois); battery 39.6C -> 37.2C;
+   board 46.5C -> 41.2C.
+N2 (tok1 "em todas as rodadas"): CORRIGIDO — tok1=46 em 6/6 rodadas SMART;
+   as rotas puras (npu/cpu/vulkan/opencl) nao logam tok1.
+N3 (fases do smartoc n=3 omitidas): TRANSCRITAS do f9-bateria-texto-emenda.log:
+   prefill=298ms export=5.27ms (15076841 B) import=50.39ms decode=10662ms.
+N4 (faixa de bateria): CORRIGIDA de 40-58% para 40-59% (pausada2 com level 59
+   no inicio).
+N5 (188 x 189 palavras): REGISTRADO o metodo — 189 palavras por split-whitespace
+   do corpo util (cabecalho fala ~180).
+N6 (f9-npu-1.xml do Instagram): ANOTADO no recibo 1.0 — o wall da npu#1 (20.7s)
+   e' valido pelo logcat; o display da npu#1 nao tem prova em XML (troca de app
+   pelo operador; 17 dumps validos + 1 trocado).
+
+D1 (snapshot 697 sem XML arquivado): ARQUIVADOS — logs/gates/suite-stats.txt
+   (estado 698/0/0/2 + reconciliacao 697+1-4=698) e
+   logs/gates/suite-test-results-r69.tar.gz (66 XMLs de resultado). O snapshot do
+   run de 697 nao existe mais (XMLs sobrescritos); registrado com transparencia.
+D2 (prosa do commit "27 dumps"): NOTA — a contagem real e' 26 XMLs raiz + 8 em
+   tentativa1-tap-bug = 34 arquivos; o manifesto sempre esteve correto; a
+   mensagem do commit nao se edita sem reescrever historia.
+D3 (linha citada 24-27): CORRIGIDO acima para 25-26.
+D4 (prova do download R2 sem log): ARQUIVADA — logs/gates/prova-r2-v13.txt com
+   HTTP 200 + Content-Length 44216742 + sha256 do arquivo BAIXADO do endereco
+   publico = 8d53e8f8f877...3b (== recibo 0.6), re-executado em 2026-10-13.
+D5 (serial adb sem transcricao nos logs): MELHORIA APLICADA — os scripts do
+   roteiro passam a ecoar o alvo/serial no inicio do job; mantida a corroboracao
+   por ausencia (PJA110|100.114.88.45 nao ocorrem em f9/*.log; grep exit 1).
+
+Nenhuma correcao altera numeros, medianas, ordenacao ou vereditos.

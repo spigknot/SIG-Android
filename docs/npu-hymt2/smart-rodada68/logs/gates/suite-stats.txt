@@ -1,0 +1,8 @@
+R69-REV.2 - suite-stats dos XMLs de resultado (app/build/test-results/testDebugUnitTest/*.xml)
+ESTADO ATUAL (pos-reancoragem+vacina): tests=698 failures=0 errors=0 skipped=2
+
+RECONCILIACAO do 697 (citado no commit 88a8604 e na entrega R69):
+  697 (pre-vacina) +1 (vacina nova) -4 (official que passou a RODAR em vez de pular) = 698 atual;
+  skipped 6-4=2. O snapshot XML do run de 697 nao foi arquivado na ocasiao (limite D1 do parecer).
+  Este arquivo + suite-test-results-r69.tar.gz registram o estado verificavel de agora (regra da ordem 3).
+arquivos XML no tar:  66
