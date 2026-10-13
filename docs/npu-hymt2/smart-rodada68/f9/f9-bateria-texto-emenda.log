@@ -1,0 +1,92 @@
+input: 1415 chars
+[antes] bateria/thermal:
+     level: 44
+     temperature: 378
+     Capacity level: 3
+   th battery 37800
+   th board_temp 42223
+   th camera-0 45100
+   th camera-1 44800
+   th cpu-0-0-0 50400
+   th cpu-0-0-1 49200
+===== rodada smartoc #3 =====
+digitando o texto...
+validacao do input: OK
+tap Traduzir em (636 1246)
+aguardando 120s...
+--- logcat (smartoc #3):
+   10-12 21:46:36.264 26802 20188 I SIGLlama: smart: origem montada: HTP (HTP / HTP0) n_ctx=8192 n_batch=128
+   10-12 21:46:36.264 26802 20188 I SIGLlama: modelo carregado: backend=Smart (OpenCL) (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=6
+   10-12 21:46:47.315 26802 20188 I SIGLlama: smart: prefill=298ms export=5.27ms (15076841 B) import=50.39ms decode=10662ms | tok1=46 saida=369 tokens | HTP (HTP / HTP0) -> Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0)
+   10-12 21:46:47.315 26802 20188 I SIGLlama: geracao smart concluida: 369 tokens de saida (destino=Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0))
+[smartoc#3] bateria/thermal:
+     level: 43
+     temperature: 381
+     Capacity level: 3
+   th battery 38100
+   th board_temp 45151
+   th camera-0 50500
+   th camera-1 50200
+   th cpu-0-0-0 57400
+   th cpu-0-0-1 58500
+===== rodada cpu #3 =====
+digitando o texto...
+tap Traduzir em (636 1246)
+aguardando 160s...
+--- logcat (cpu #3):
+   10-12 21:49:53.215 28099 22244 I SIGLlama: geracao concluida: 365 tokens de saida (backend=CPU)
+[cpu#3] bateria/thermal:
+     level: 42
+     temperature: 387
+     Capacity level: 3
+   th battery 38700
+   th board_temp 45917
+   th camera-0 51700
+   th camera-1 50900
+   th cpu-0-0-0 57700
+   th cpu-0-0-1 58900
+===== rodada vulkan #3 =====
+digitando o texto...
+tap Traduzir em (636 1246)
+aguardando 160s...
+--- logcat (vulkan #3):
+   10-12 21:52:56.670 19848 27236 I SIGLlama: modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+   10-12 21:53:11.335 19848 27236 I SIGLlama: geracao concluida: 360 tokens de saida (backend=GPU Vulkan (Vulkan / Vulkan0))
+[vulkan#3] bateria/thermal:
+     level: 41
+     temperature: 394
+     Capacity level: 3
+   th battery 39400
+   th board_temp 46399
+   th camera-0 52900
+   th camera-1 52500
+   th cpu-0-0-0 57400
+   th cpu-0-0-1 57700
+===== rodada opencl #3 =====
+digitando o texto...
+tap Traduzir em (636 1246)
+aguardando 300s...
+--- logcat (opencl #3):
+   10-12 21:56:31.676 21838 29667 I SIGLlama: modelo carregado: backend=GPU OpenCL (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=6
+   10-12 21:56:46.156 21838 29667 I SIGLlama: geracao concluida: 364 tokens de saida (backend=GPU OpenCL (OpenCL / GPUOpenCL))
+[opencl#3] bateria/thermal:
+     level: 40
+     temperature: 391
+     Capacity level: 3
+   th battery 38800
+   th board_temp 42740
+   th camera-0 45900
+   th camera-1 45900
+   th cpu-0-0-0 49200
+   th cpu-0-0-1 47700
+[depois] bateria/thermal:
+     level: 40
+     temperature: 391
+     Capacity level: 3
+   th battery 38800
+   th board_temp 42799
+   th camera-0 46300
+   th camera-1 46300
+   th cpu-0-0-0 46900
+   th cpu-0-0-1 46900
+F9_EMENDA_DONE

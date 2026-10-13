@@ -1,0 +1,187 @@
+[antes] bateria:
+     status: 3
+     level: 41
+     temperature: 396
+     Capacity level: 3
+[antes] thermal (top):
+   battery 39500
+   board_temp 46512
+   camera-0 50900
+   camera-1 50900
+   cpu-0-0-0 55000
+   cpu-0-0-1 53900
+   cpu-0-1-0 51900
+   cpu-0-1-1 54300
+   cpu-0-2-0 54300
+   cpu-0-2-1 52700
+===== rodada 1/5 =====
+aguardando 75s (load+prefill+ponte+decode)...
+--- logcat rodada 1:
+   10-12 18:11:17.859 17938 10020 I SIGLlama: smart: origem montada: HTP (HTP / HTP0) n_ctx=8192 n_batch=128
+   10-12 18:11:17.859 17938 10020 I SIGLlama: modelo carregado: backend=Smart (OpenCL) (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=4
+   10-12 18:11:18.261 17938 10020 I SIGLlama: smart: prefill=92ms export=2.20ms (2032789 B) import=45.50ms decode=229ms | tok1=33 saida=8 tokens | HTP (HTP / HTP0) -> Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0)
+   10-12 18:11:18.261 17938 10020 I SIGLlama: geracao smart concluida: 8 tokens de saida (destino=Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0))
+--- display (XML) rodada 1:
+   [r1] Smart (OC)
+   [r1] Tradução pronta.
+   [r1]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Vulkan | Idioma alvo: Português
+ 3. Backend selecionado: Smart (OC) (modelo será recarregado)
+ 4. Smart (OpenCL): a NPU processa o prompt; a GPU OpenCL gera a re
+[r1] bateria:
+     status: 2
+     level: 42
+     temperature: 395
+     Capacity level: 3
+[r1] thermal (top):
+   battery 38900
+   board_temp 44535
+   camera-0 47100
+   camera-1 47100
+   cpu-0-0-0 48400
+   cpu-0-0-1 48000
+   cpu-0-1-0 47700
+   cpu-0-1-1 47700
+   cpu-0-2-0 48400
+   cpu-0-2-1 48400
+===== rodada 2/5 =====
+aguardando 75s (load+prefill+ponte+decode)...
+--- logcat rodada 2:
+   10-12 18:13:13.842 23105 13093 I SIGLlama: smart: origem montada: HTP (HTP / HTP0) n_ctx=8192 n_batch=128
+   10-12 18:13:13.842 23105 13093 I SIGLlama: modelo carregado: backend=Smart (OpenCL) (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=4
+   10-12 18:13:14.200 23105 13093 I SIGLlama: smart: prefill=66ms export=1.96ms (2032789 B) import=40.76ms decode=220ms | tok1=33 saida=8 tokens | HTP (HTP / HTP0) -> Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0)
+   10-12 18:13:14.200 23105 13093 I SIGLlama: geracao smart concluida: 8 tokens de saida (destino=Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0))
+--- display (XML) rodada 2:
+   [r2] Smart (OC)
+   [r2] Tradução pronta.
+   [r2]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Smart (OC) | Idioma alvo: Português
+ 3. Traduzindo com Q4_K_M (Smart (OC)) para Português...
+ 4. Carregando modelo Q4_K_M (Smart (OC))...
+ 5. Modelo carregado em
+[r2] bateria:
+     status: 2
+     level: 44
+     temperature: 382
+     Capacity level: 3
+[r2] thermal (top):
+   battery 37900
+   board_temp 42921
+   camera-0 45500
+   camera-1 45100
+   cpu-0-0-0 46100
+   cpu-0-0-1 45700
+   cpu-0-1-0 46100
+   cpu-0-1-1 45700
+   cpu-0-2-0 46100
+   cpu-0-2-1 46100
+===== rodada 3/5 =====
+aguardando 75s (load+prefill+ponte+decode)...
+--- logcat rodada 3:
+   10-12 18:15:11.776  8760 14698 I SIGLlama: smart: origem montada: HTP (HTP / HTP0) n_ctx=8192 n_batch=128
+   10-12 18:15:11.776  8760 14698 I SIGLlama: modelo carregado: backend=Smart (OpenCL) (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=4
+   10-12 18:15:12.141  8760 14698 I SIGLlama: smart: prefill=65ms export=3.57ms (2032789 B) import=41.69ms decode=228ms | tok1=33 saida=8 tokens | HTP (HTP / HTP0) -> Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0)
+   10-12 18:15:12.141  8760 14698 I SIGLlama: geracao smart concluida: 8 tokens de saida (destino=Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0))
+--- display (XML) rodada 3:
+   [r3] Smart (OC)
+   [r3] Tradução pronta.
+   [r3]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Smart (OC) | Idioma alvo: Português
+ 3. Traduzindo com Q4_K_M (Smart (OC)) para Português...
+ 4. Carregando modelo Q4_K_M (Smart (OC))...
+ 5. Modelo carregado em
+[r3] bateria:
+     status: 2
+     level: 46
+     temperature: 372
+     Capacity level: 3
+[r3] thermal (top):
+   battery 37100
+   board_temp 42899
+   camera-0 45500
+   camera-1 45100
+   cpu-0-0-0 46100
+   cpu-0-0-1 45700
+   cpu-0-1-0 44900
+   cpu-0-1-1 46100
+   cpu-0-2-0 46500
+   cpu-0-2-1 46100
+===== rodada 4/5 =====
+aguardando 75s (load+prefill+ponte+decode)...
+--- logcat rodada 4:
+   10-12 18:17:05.768 12625 16479 I SIGLlama: smart: origem montada: HTP (HTP / HTP0) n_ctx=8192 n_batch=128
+   10-12 18:17:05.768 12625 16479 I SIGLlama: modelo carregado: backend=Smart (OpenCL) (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=4
+   10-12 18:17:06.120 12625 16479 I SIGLlama: smart: prefill=65ms export=2.94ms (2032789 B) import=39.45ms decode=218ms | tok1=33 saida=8 tokens | HTP (HTP / HTP0) -> Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0)
+   10-12 18:17:06.120 12625 16479 I SIGLlama: geracao smart concluida: 8 tokens de saida (destino=Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0))
+--- display (XML) rodada 4:
+   [r4] Smart (OC)
+   [r4] Tradução pronta.
+   [r4]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Smart (OC) | Idioma alvo: Português
+ 3. Traduzindo com Q4_K_M (Smart (OC)) para Português...
+ 4. Carregando modelo Q4_K_M (Smart (OC))...
+ 5. Modelo carregado em
+[r4] bateria:
+     status: 2
+     level: 49
+     temperature: 374
+     Capacity level: 3
+[r4] thermal (top):
+   battery 37400
+   board_temp 41752
+   camera-0 45500
+   camera-1 45500
+   cpu-0-0-0 46100
+   cpu-0-0-1 46100
+   cpu-0-1-0 45300
+   cpu-0-1-1 44900
+   cpu-0-2-0 46100
+   cpu-0-2-1 53100
+===== rodada 5/5 =====
+aguardando 75s (load+prefill+ponte+decode)...
+--- logcat rodada 5:
+   10-12 18:19:00.760 14429 19473 I SIGLlama: smart: origem montada: HTP (HTP / HTP0) n_ctx=8192 n_batch=128
+   10-12 18:19:00.760 14429 19473 I SIGLlama: modelo carregado: backend=Smart (OpenCL) (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=4
+   10-12 18:19:01.112 14429 19473 I SIGLlama: smart: prefill=63ms export=1.99ms (2032789 B) import=40.91ms decode=220ms | tok1=33 saida=8 tokens | HTP (HTP / HTP0) -> Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0)
+   10-12 18:19:01.112 14429 19473 I SIGLlama: geracao smart concluida: 8 tokens de saida (destino=Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0))
+--- display (XML) rodada 5:
+   [r5] Smart (OC)
+   [r5] Tradução pronta.
+   [r5]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Smart (OC) | Idioma alvo: Português
+ 3. Traduzindo com Q4_K_M (Smart (OC)) para Português...
+ 4. Carregando modelo Q4_K_M (Smart (OC))...
+ 5. Modelo carregado em
+[r5] bateria:
+     status: 2
+     level: 51
+     temperature: 373
+     Capacity level: 3
+[r5] thermal (top):
+   battery 37200
+   board_temp 41158
+   camera-0 44000
+   camera-1 43600
+   cpu-0-0-0 46500
+   cpu-0-0-1 44600
+   cpu-0-1-0 43800
+   cpu-0-1-1 43800
+   cpu-0-2-0 44900
+   cpu-0-2-1 44200
+[depois] bateria:
+     status: 2
+     level: 51
+     temperature: 372
+     Capacity level: 3
+[depois] thermal (top):
+   battery 37200
+   board_temp 41153
+   camera-0 44800
+   camera-1 44800
+   cpu-0-0-0 47700
+   cpu-0-0-1 48400
+   cpu-0-1-0 47300
+   cpu-0-1-1 45300
+   cpu-0-2-0 46500
+   cpu-0-2-1 46500
+F9_SMARTOC_DONE

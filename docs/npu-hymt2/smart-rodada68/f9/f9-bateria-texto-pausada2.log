@@ -1,0 +1,321 @@
+frase chars: 1227 | input chars: 1415
+input pronto: 1415 chars
+[antes] bateria/thermal:
+     level: 59
+     temperature: 355
+     Capacity level: 3
+   th battery 35400
+   th board_temp 41436
+   th camera-0 47500
+   th camera-1 47100
+   th cpu-0-0-0 49200
+   th cpu-0-0-1 49600
+===== rodada npu #1 =====
+digitando o texto (pode levar ~1-2 min)...
+validacao do input: OK
+tap Traduzir em (636 1246)
+aguardando 100s...
+--- logcat (npu #1):
+   10-12 20:33:34.197  7386  7420 I SIGLlama: modelo carregado: backend=NPU (HTP / HTP0) n_ctx=8192 n_threads=6
+   10-12 20:33:54.897  7386  7420 I SIGLlama: geracao concluida: 369 tokens de saida (backend=NPU (HTP / HTP0))
+[npu#1] bateria/thermal:
+     level: 59
+     temperature: 340
+     Capacity level: 3
+   th battery 33900
+   th board_temp 39233
+   th camera-0 40500
+   th camera-1 40500
+   th cpu-0-0-0 41800
+   th cpu-0-0-1 42200
+===== rodada smartvk #1 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 120s...
+--- logcat (smartvk #1):
+   10-12 20:36:03.690  4441 14278 I SIGLlama: modelo carregado: backend=Smart (Vulkan) (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+   10-12 20:36:14.398  4441 14278 I SIGLlama: smart: prefill=319ms export=3.24ms (15273485 B) import=11.01ms decode=10345ms | tok1=46 saida=370 tokens | HTP (HTP / HTP0) -> Smart (Vulkan) (Vulkan / Vulkan0) + HTP (HTP / HTP0)
+   10-12 20:36:14.398  4441 14278 I SIGLlama: geracao smart concluida: 370 tokens de saida (destino=Smart (Vulkan) (Vulkan / Vulkan0) + HTP (HTP / HTP0))
+   [disp smartvk#1]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: NPU | Idioma alvo: Português
+ 3. Backend selecionado: Smart (VK) (modelo será recarregado)
+ 4. Smart (Vulkan): a NPU processa o prompt; a GPU Vulkan gera a resposta.
+ 5. T
+[smartvk#1] bateria/thermal:
+     level: 58
+     temperature: 342
+     Capacity level: 3
+   th battery 34000
+   th board_temp 39120
+   th camera-0 42400
+   th camera-1 42400
+   th cpu-0-0-0 42600
+   th cpu-0-0-1 43000
+===== rodada smartoc #1 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 120s...
+--- logcat (smartoc #1):
+   10-12 20:38:58.288 13603 18440 I SIGLlama: modelo carregado: backend=Smart (OpenCL) (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=6
+   10-12 20:39:12.883 13603 18440 I SIGLlama: smart: prefill=194ms export=2.93ms (15076841 B) import=57.48ms decode=14308ms | tok1=46 saida=369 tokens | HTP (HTP / HTP0) -> Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0)
+   10-12 20:39:12.883 13603 18440 I SIGLlama: geracao smart concluida: 369 tokens de saida (destino=Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0))
+   [disp smartoc#1]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Smart (VK) | Idioma alvo: Português
+ 3. Backend selecionado: Smart (OC) (modelo será recarregado)
+ 4. Smart (OpenCL): a NPU processa o prompt; a GPU OpenCL gera a resposta
+[smartoc#1] bateria/thermal:
+     level: 57
+     temperature: 334
+     Capacity level: 3
+   th battery 33400
+   th board_temp 38210
+   th camera-0 41700
+   th camera-1 41700
+   th cpu-0-0-0 43400
+   th cpu-0-0-1 42600
+===== rodada cpu #1 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 160s...
+--- logcat (cpu #1):
+   10-12 20:42:10.880 16469 20414 I SIGLlama: geracao concluida: 366 tokens de saida (backend=CPU)
+   [disp cpu#1]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Smart (OC) | Idioma alvo: Português
+ 3. Backend selecionado: CPU (modelo será recarregado)
+ 4. Traduzindo com Q4_K_M (CPU) para Português...
+ 5. Carregando modelo Q4_K_M (
+[cpu#1] bateria/thermal:
+     level: 56
+     temperature: 331
+     Capacity level: 3
+   th battery 33000
+   th board_temp 37831
+   th camera-0 40900
+   th camera-1 40900
+   th cpu-0-0-0 41100
+   th cpu-0-0-1 41500
+===== rodada vulkan #1 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 160s...
+--- logcat (vulkan #1):
+   10-12 20:45:26.025 17981 26491 I SIGLlama: modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+   10-12 20:45:39.667 17981 26491 I SIGLlama: geracao concluida: 304 tokens de saida (backend=GPU Vulkan (Vulkan / Vulkan0))
+   [disp vulkan#1]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: CPU | Idioma alvo: Português
+ 3. Backend selecionado: Vulkan (modelo será recarregado)
+ 4. Traduzindo com Q4_K_M (Vulkan) para Português...
+ 5. Carregando modelo Q4_K_M (V
+[vulkan#1] bateria/thermal:
+     level: 56
+     temperature: 328
+     Capacity level: 3
+   th battery 32700
+   th board_temp 36972
+   th camera-0 40100
+   th camera-1 40100
+   th cpu-0-0-0 40300
+   th cpu-0-0-1 42600
+===== rodada opencl #1 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 300s...
+--- logcat (opencl #1):
+   10-12 20:49:08.092 19945 28544 I SIGLlama: modelo carregado: backend=GPU OpenCL (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=6
+   10-12 20:49:23.243 19945 28544 I SIGLlama: geracao concluida: 340 tokens de saida (backend=GPU OpenCL (OpenCL / GPUOpenCL))
+   [disp opencl#1]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Vulkan | Idioma alvo: Português
+ 3. Backend selecionado: OpenCL (modelo será recarregado)
+ 4. Traduzindo com Q4_K_M (OpenCL) para Português...
+ 5. Carregando modelo Q4_K_M
+[opencl#1] bateria/thermal:
+     level: 55
+     temperature: 317
+     Capacity level: 3
+   th battery 31600
+   th board_temp 35229
+   th camera-0 38600
+   th camera-1 38600
+   th cpu-0-0-0 39100
+   th cpu-0-0-1 39100
+===== rodada npu #2 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 100s...
+--- logcat (npu #2):
+   10-12 20:55:01.512 26064 30677 I SIGLlama: modelo carregado: backend=NPU (HTP / HTP0) n_ctx=8192 n_threads=6
+   10-12 20:55:19.581 26064 30677 I SIGLlama: geracao concluida: 348 tokens de saida (backend=NPU (HTP / HTP0))
+   [disp npu#2]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: OpenCL | Idioma alvo: Português
+ 3. Backend selecionado: NPU (modelo será recarregado)
+ 4. NPU: prompt e resposta no HTP; operações não suportadas ficam visíveis no log.
+ 
+[npu#2] bateria/thermal:
+     level: 54
+     temperature: 314
+     Capacity level: 3
+   th battery 31500
+   th board_temp 36097
+   th camera-0 39300
+   th camera-1 39300
+   th cpu-0-0-0 39500
+   th cpu-0-0-1 39500
+===== rodada smartvk #2 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 120s...
+--- logcat (smartvk #2):
+   10-12 20:57:43.497 28191  2915 I SIGLlama: modelo carregado: backend=Smart (Vulkan) (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+   10-12 20:57:52.837 28191  2915 I SIGLlama: smart: prefill=221ms export=2.50ms (13503689 B) import=10.33ms decode=9076ms | tok1=46 saida=316 tokens | HTP (HTP / HTP0) -> Smart (Vulkan) (Vulkan / Vulkan0) + HTP (HTP / HTP0)
+   10-12 20:57:52.838 28191  2915 I SIGLlama: geracao smart concluida: 316 tokens de saida (destino=Smart (Vulkan) (Vulkan / Vulkan0) + HTP (HTP / HTP0))
+   [disp smartvk#2]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: NPU | Idioma alvo: Português
+ 3. Backend selecionado: Smart (VK) (modelo será recarregado)
+ 4. Smart (Vulkan): a NPU processa o prompt; a GPU Vulkan gera a resposta.
+ 5. T
+[smartvk#2] bateria/thermal:
+     level: 54
+     temperature: 319
+     Capacity level: 3
+   th battery 32000
+   th board_temp 36534
+   th camera-0 39700
+   th camera-1 39700
+   th cpu-0-0-0 39900
+   th cpu-0-0-1 40300
+===== rodada smartoc #2 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 120s...
+--- logcat (smartoc #2):
+   10-12 21:00:45.420 30389  5013 I SIGLlama: modelo carregado: backend=Smart (OpenCL) (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=6
+   10-12 21:00:59.091 30389  5013 I SIGLlama: smart: prefill=174ms export=4.22ms (13634785 B) import=47.79ms decode=13412ms | tok1=46 saida=322 tokens | HTP (HTP / HTP0) -> Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0)
+   10-12 21:00:59.091 30389  5013 I SIGLlama: geracao smart concluida: 322 tokens de saida (destino=Smart (OpenCL) (OpenCL / GPUOpenCL) + HTP (HTP / HTP0))
+   [disp smartoc#2]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Smart (VK) | Idioma alvo: Português
+ 3. Backend selecionado: Smart (OC) (modelo será recarregado)
+ 4. Smart (OpenCL): a NPU processa o prompt; a GPU OpenCL gera a resposta
+[smartoc#2] bateria/thermal:
+     level: 53
+     temperature: 323
+     Capacity level: 3
+   th battery 32300
+   th board_temp 36868
+   th camera-0 40100
+   th camera-1 40100
+   th cpu-0-0-0 39900
+   th cpu-0-0-1 41500
+===== rodada cpu #2 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 160s...
+--- logcat (cpu #2):
+   10-12 21:03:51.054  2553  6492 I SIGLlama: geracao concluida: 340 tokens de saida (backend=CPU)
+   [disp cpu#2]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Smart (OC) | Idioma alvo: Português
+ 3. Backend selecionado: CPU (modelo será recarregado)
+ 4. Traduzindo com Q4_K_M (CPU) para Português...
+ 5. Carregando modelo Q4_K_M (
+[cpu#2] bateria/thermal:
+     level: 53
+     temperature: 327
+     Capacity level: 3
+   th battery 32700
+   th board_temp 40280
+   th camera-0 42000
+   th camera-1 42000
+   th cpu-0-0-0 41800
+   th cpu-0-0-1 42200
+===== rodada vulkan #2 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 160s...
+--- logcat (vulkan #2):
+   10-12 21:07:09.046  4683 13813 I SIGLlama: modelo carregado: backend=GPU Vulkan (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+   10-12 21:07:23.200  4683 13813 I SIGLlama: geracao concluida: 343 tokens de saida (backend=GPU Vulkan (Vulkan / Vulkan0))
+   [disp vulkan#2]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: CPU | Idioma alvo: Português
+ 3. Backend selecionado: Vulkan (modelo será recarregado)
+ 4. Traduzindo com Q4_K_M (Vulkan) para Português...
+ 5. Carregando modelo Q4_K_M (V
+[vulkan#2] bateria/thermal:
+     level: 53
+     temperature: 336
+     Capacity level: 3
+   th battery 33600
+   th board_temp 41241
+   th camera-0 43200
+   th camera-1 42800
+   th cpu-0-0-0 43000
+   th cpu-0-0-1 43800
+===== rodada opencl #2 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 300s...
+--- logcat (opencl #2):
+   10-12 21:10:51.333  6183 16792 I SIGLlama: modelo carregado: backend=GPU OpenCL (OpenCL / GPUOpenCL) n_ctx=8192 n_threads=6
+   10-12 21:11:05.748  6183 16792 I SIGLlama: geracao concluida: 340 tokens de saida (backend=GPU OpenCL (OpenCL / GPUOpenCL))
+   [disp opencl#2]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: Vulkan | Idioma alvo: Português
+ 3. Backend selecionado: OpenCL (modelo será recarregado)
+ 4. Traduzindo com Q4_K_M (OpenCL) para Português...
+ 5. Carregando modelo Q4_K_M
+[opencl#2] bateria/thermal:
+     level: 53
+     temperature: 344
+     Capacity level: 3
+   th battery 34400
+   th board_temp 42303
+   th camera-0 44000
+   th camera-1 44000
+   th cpu-0-0-0 44200
+   th cpu-0-0-1 44200
+===== rodada npu #3 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 100s...
+--- logcat (npu #3):
+   10-12 21:16:46.939 13510 20387 I SIGLlama: modelo carregado: backend=NPU (HTP / HTP0) n_ctx=8192 n_threads=6
+   10-12 21:17:11.315 13510 20387 I SIGLlama: geracao concluida: 346 tokens de saida (backend=NPU (HTP / HTP0))
+   [disp npu#3]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: OpenCL | Idioma alvo: Português
+ 3. Backend selecionado: NPU (modelo será recarregado)
+ 4. NPU: prompt e resposta no HTP; operações não suportadas ficam visíveis no log.
+ 
+[npu#3] bateria/thermal:
+     level: 53
+     temperature: 347
+     Capacity level: 3
+   th battery 34800
+   th board_temp 42731
+   th camera-0 44800
+   th camera-1 44400
+   th cpu-0-0-0 44600
+   th cpu-0-0-1 44600
+===== rodada smartvk #3 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 120s...
+--- logcat (smartvk #3):
+   10-12 21:19:33.853 16048 24141 I SIGLlama: modelo carregado: backend=Smart (Vulkan) (Vulkan / Vulkan0) n_ctx=8192 n_threads=6
+   10-12 21:19:44.178 16048 24141 I SIGLlama: smart: prefill=193ms export=3.18ms (14683553 B) import=12.33ms decode=10079ms | tok1=46 saida=344 tokens | HTP (HTP / HTP0) -> Smart (Vulkan) (Vulkan / Vulkan0) + HTP (HTP / HTP0)
+   10-12 21:19:44.178 16048 24141 I SIGLlama: geracao smart concluida: 344 tokens de saida (destino=Smart (Vulkan) (Vulkan / Vulkan0) + HTP (HTP / HTP0))
+   [disp smartvk#3]  1. Ferramenta Texto pronta.
+ 2. Modelo: Q4_K_M | Backend: NPU | Idioma alvo: Português
+ 3. Backend selecionado: Smart (VK) (modelo será recarregado)
+ 4. Smart (Vulkan): a NPU processa o prompt; a GPU Vulkan gera a resposta.
+ 5. T
+[smartvk#3] bateria/thermal:
+     level: 52
+     temperature: 355
+     Capacity level: 3
+   th battery 35600
+   th board_temp 43717
+   th camera-0 45500
+   th camera-1 45100
+   th cpu-0-0-0 45300
+   th cpu-0-0-1 45700
+===== rodada smartoc #3 =====
+digitando o texto (pode levar ~1-2 min)...
+tap Traduzir em (636 1246)
+aguardando 120s...

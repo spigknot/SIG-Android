@@ -1,0 +1,54 @@
+{
+  "recibo": "1.0-f9-bateria-texto-grande",
+  "rodada": "R69/ordem5",
+  "data": "2026-10-12",
+  "objetivo": "Bateria texto grande (6 rotas x n=3) no produto v13; responde a contradicao display x medicao e a hipotese do operador (Vulkan melhor em texto longo).",
+  "protocolo": "fase9/PROTOCOLO-R69-BATERIAS.txt secao 3; entrada controlada fase9/TEXTO-BATERIA-R69.txt (188 palavras; sha256 6698db7167220490e50820e455128e4807c77ecd499c78d674f120f40f4cd591); uma partida de app por rodada (force-stop); logcat isolado; thermal/bateria por rodada; APK sha 337555019b...; pacote v13 (lib 09c28252...).",
+  "metrica": "tempo POS-LOAD (do log 'modelo carregado' ao 'geracao concluida' = prefill + ponte + decode); tokens de saida por rodada; o load fica fora e e' similar entre rotas. Display e thermal coletados por rodada (XMLs em f9/).",
+  "rodadas": [
+    {"rota": "npu", "n": 1, "pos_load_s": 20.7, "tokens": 369},
+    {"rota": "npu", "n": 2, "pos_load_s": 18.1, "tokens": 348},
+    {"rota": "npu", "n": 3, "pos_load_s": 24.4, "tokens": 346},
+    {"rota": "smartvk", "n": 1, "pos_load_s": 10.7, "tokens": 370, "fases": "prefill=319ms export=3.24ms(15273485 B) import=11.01ms decode=10345ms"},
+    {"rota": "smartvk", "n": 2, "pos_load_s": 9.3, "tokens": 316, "fases": "prefill=221ms export=2.50ms(13503689 B) import=10.33ms decode=9076ms"},
+    {"rota": "smartvk", "n": 3, "pos_load_s": 10.3, "tokens": 344, "fases": "prefill=193ms export=3.18ms(14683553 B) import=12.33ms decode=10079ms"},
+    {"rota": "smartoc", "n": 1, "pos_load_s": 14.6, "tokens": 369, "fases": "prefill=194ms export=2.93ms(15076841 B) import=57.48ms decode=14308ms"},
+    {"rota": "smartoc", "n": 2, "pos_load_s": 13.7, "tokens": 322, "fases": "prefill=174ms export=4.22ms(13634785 B) import=47.79ms decode=13412ms"},
+    {"rota": "smartoc", "n": 3, "pos_load_s": 11.1, "tokens": 369},
+    {"rota": "vulkan", "n": 1, "pos_load_s": 13.6, "tokens": 304},
+    {"rota": "vulkan", "n": 2, "pos_load_s": 14.2, "tokens": 343},
+    {"rota": "vulkan", "n": 3, "pos_load_s": 14.7, "tokens": 360},
+    {"rota": "opencl", "n": 1, "pos_load_s": 15.2, "tokens": 340},
+    {"rota": "opencl", "n": 2, "pos_load_s": 14.4, "tokens": 340},
+    {"rota": "opencl", "n": 3, "pos_load_s": 14.5, "tokens": 364},
+    {"rota": "cpu", "n": 1, "tokens": 366, "nota": "wall nao capturado (tail do logcat cortou o 'modelo carregado' nas rodadas do CPU)"},
+    {"rota": "cpu", "n": 2, "tokens": 340, "nota": "idem"},
+    {"rota": "cpu", "n": 3, "tokens": 365, "nota": "idem"}
+  ],
+  "estatisticas_mediana_s": {"smartvk": 10.3, "smartoc": 13.7, "vulkan": 14.2, "opencl": 14.5, "npu": 20.7, "cpu": "sem wall (lacuna registrada)"},
+  "achados": [
+    "TEXTO LONGO (~345 tokens): Smart Vulkan e' o mais rapido (mediana 10.3s; ~2x o NPU puro 20.7s)",
+    "O NPU degrada com o KV longo (18.1-24.4s aqui; em cargas curtas faz 3 tokens em ~0.1s)",
+    "Smart OpenCL (13.7s) supera as GPUs puras e MUITO supera a medicao R67 (n=5 do recibo 0.9: 220ms/8tok vs R67 3769.82ms/8tok - a R67 nao reproduz)",
+    "Vulkan puro (14.2s) x OpenCL puro (14.5s): praticamente empatados; o '40 tok/s' do display (que exclui o prefill) NAO virou wall menor",
+    "Ponte barata e escalavel: export 2.5-4.2ms para 13.5-15.3 MB de estado; import 10-57ms",
+    "tok1=46 em todas as rodadas com texto (determinismo do sampler)",
+    "Teste manual do operador (Vulkan puro ~15-16s; Smart Vulkan ~10s) CONFIRMADO pelo automatico (13.9-14.7s e 9.3-10.7s)"
+  ],
+  "condicoes": {
+    "thermal": "device esquentou ao longo da bateria; pico registrado 58.9C (cpu-0-0-1, rodada cpu#3); bateria em 40-58%",
+    "nota": "as 18 rodadas foram executadas em duas sessoes (pausa do operador entre elas); thermal coletado por rodada em ambos os logs"
+  },
+  "conclusao_por_tamanho_de_texto": {
+    "texto_curto": "NPU (F8: 3 tokens; backend NPU (HTP/HTP0); ~25 tok/s)",
+    "texto_longo": "Smart Vulkan (mediana 10.3s para ~345 tokens; ~2x mais rapido que o NPU)"
+  },
+  "observacao_operador_fora_do_protocolo": "testes manuais no app (texto longo): Vulkan puro 15-16s; Smart Vulkan ~10s - ambos confirmados pela bateria automatica",
+  "evidencia": [
+    "docs/npu-hymt2/smart-rodada68/f9/f9-bateria-smartoc.log (bateria §2)",
+    "docs/npu-hymt2/smart-rodada68/f9/f9-bateria-texto-pausada2.log (sessao 1 da §3)",
+    "docs/npu-hymt2/smart-rodada68/f9/f9-bateria-texto-emenda.log (sessao 2 da §3)",
+    "docs/npu-hymt2/smart-rodada68/f9/f9-<rota>-<n>.xml (18 dumps de UI)",
+    "docs/npu-hymt2/smart-rodada68/f9/tentativa1-tap-bug/ (tentativa falha preservada, regra do projeto)"
+  ]
+}

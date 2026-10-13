@@ -1,0 +1,36 @@
+{
+  "recibo": "0.9-f9-bateria-smartoc",
+  "rodada": "R69/ordem4",
+  "data": "2026-10-12",
+  "objetivo": "Re-medicao formal do Smart OpenCL no PRODUTO (n=5) contra a contradicao R67 (3769.82ms/8tok) x F8 (82ms/3tok).",
+  "protocolo": "fase9/PROTOCOLO-R69-BATERIAS.txt secao 2 (texto fixo do probe; uma partida de app por rodada; thermal/bateria por rodada; sem probe/bench). APK sha 33755501.../pacote v13 (lib 09c28252...).",
+  "rodadas": [
+    {"n": 1, "prefill_ms": 92, "export_ms": 2.20, "export_b": 2032789, "import_ms": 45.50, "decode_ms": 229, "tok1": 33, "saida": 8},
+    {"n": 2, "prefill_ms": 66, "export_ms": 1.96, "export_b": 2032789, "import_ms": 40.76, "decode_ms": 220, "tok1": 33, "saida": 8},
+    {"n": 3, "prefill_ms": 65, "export_ms": 3.57, "export_b": 2032789, "import_ms": 41.69, "decode_ms": 228, "tok1": 33, "saida": 8},
+    {"n": 4, "prefill_ms": 65, "export_ms": 2.94, "export_b": 2032789, "import_ms": 39.45, "decode_ms": 218, "tok1": 33, "saida": 8},
+    {"n": 5, "prefill_ms": 63, "export_ms": 1.99, "export_b": 2032789, "import_ms": 40.91, "decode_ms": 220, "tok1": 33, "saida": 8}
+  ],
+  "estatistica": {
+    "prefill_ms": {"mediana": 65, "min": 63, "max": 92},
+    "export_ms": {"mediana": 2.20, "min": 1.96, "max": 3.57},
+    "import_ms": {"mediana": 40.91, "min": 39.45, "max": 45.50},
+    "decode_ms_8tok": {"mediana": 220, "min": 218, "max": 229, "ms_por_token": 27.5},
+    "determinismo": "tok1=33 e saida=8 tokens em 5/5 (sampler deterministico)"
+  },
+  "veredito": "O numero da R67 (decode 3769.82ms/8tok; 471ms/tok) NAO reproduz no produto: mediana 220ms/8tok (27.5ms/tok), estabilidade de 5%. O F8 (82ms/3tok ~= 27ms/tok) e' CONFIRMADO. A divergencia e' do ambiente de medicao da R67 (probe/bancada), nao da rota.",
+  "condicoes_registradas": {
+    "thermal": "device quente durante a bateria: cpu-0-2-1 ate 53.1C (r4); cpu ~43-48C no fim; battery 37.2-37.4C",
+    "bateria": "51-52% durante toda a bateria",
+    "hipoteses_da_divergencia_R67": [
+      "probe x produto: cache de kernels OpenCL por processo (o produto tem cl-program-cache persistente; uma partida de app por rodada no probe poderia recompilar kernels)",
+      "contexto/ambiente do bench R67 (n_ctx 2048, harness proprio) x produto (n_ctx 8192, mono)",
+      "thermal/uptime do aparelho na data da R67 (nao reproduzivel offline)"
+    ],
+    "nota": "conforme o protocolo: condicoes registradas em vez de escolher um numero; nenhuma conclusao sobre a rota Smart OpenCL alem do que a bateria mostra no produto"
+  },
+  "evidencia": [
+    "scratch: f9_bat_smartoc.log (saida integral do job)",
+    "docs/npu-hymt2/smart-rodada68/f9/f9-smartoc-r{1..5}.xml (dumps de UI por rodada)"
+  ]
+}
