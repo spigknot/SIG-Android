@@ -294,7 +294,7 @@ class WhisperActivity : AppCompatActivity() {
 
         if (selectedModel == null) {
             val available = officialModels()
-            selectedModel = available.firstOrNull { it.file.exists() } ?: available.first()
+            selectedModel = available.firstOrNull { DownloadFileStorage.isComplete(it.file, it.bytes) } ?: available.first()
             buttonModel.text = selectedModel?.label ?: "Modelo"
         }
         buttonModel.visibility = View.VISIBLE
@@ -643,7 +643,7 @@ class WhisperActivity : AppCompatActivity() {
         val models = officialModels()
         PopupMenu(this, buttonModel).apply {
             models.forEachIndexed { index, model ->
-                val display = if (model.file.exists()) "✓ ${model.label}" else model.label
+                val display = if (DownloadFileStorage.isComplete(model.file, model.bytes)) "✓ ${model.label}" else model.label
                 menu.add(0, index + 1, 0, display)
             }
             menu.add(0, models.size + 1, 0, "Selecionar arquivo de modelo...")
@@ -654,7 +654,7 @@ class WhisperActivity : AppCompatActivity() {
                     return@setOnMenuItemClickListener true
                 }
                 val model = models.getOrNull(itemId - 1) ?: return@setOnMenuItemClickListener true
-                if (model.file.exists()) {
+                if (DownloadFileStorage.isComplete(model.file, model.bytes)) {
                     selectModel(model)
                 } else {
                     confirmModelDownload(model)
@@ -680,7 +680,7 @@ class WhisperActivity : AppCompatActivity() {
             plano = DownloadSizeFormat.Plano(
                 rotulo = "Modelo Whisper ${model.label}",
                 arquivos = listOf(
-                    DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = model.file.exists())
+                    DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = DownloadFileStorage.isComplete(model.file, model.bytes))
                 ),
             ),
             negativo = "Cancelar",
@@ -720,7 +720,7 @@ class WhisperActivity : AppCompatActivity() {
         val backend = selectedBackend
         val settings = readAdvancedSettings()
         if (items.isEmpty()) return
-        if (!modelFile(model).exists()) {
+        if (!DownloadFileStorage.isComplete(modelFile(model), model.bytes)) {
             model.downloadUrl?.let {
                 confirmModelDownload(model)
                 return
@@ -729,7 +729,7 @@ class WhisperActivity : AppCompatActivity() {
             updateTranscribeEnabled()
             return
         }
-        if (settings.vadFilter && !vadModelFile().exists()) {
+        if (settings.vadFilter && !DownloadFileStorage.isComplete(vadModelFile(), VAD_MODEL_BYTES)) {
             confirmVadDownload { transcribeSelectedMedia() }
             return
         }
@@ -1513,7 +1513,7 @@ class WhisperActivity : AppCompatActivity() {
             plano = DownloadSizeFormat.Plano(
                 rotulo = "VAD Silero",
                 arquivos = listOf(
-                    DownloadSizeFormat.Arquivo(VAD_MODEL_NAME, VAD_MODEL_BYTES, jaBaixado = destino.isFile)
+                    DownloadSizeFormat.Arquivo(VAD_MODEL_NAME, VAD_MODEL_BYTES, jaBaixado = DownloadFileStorage.isComplete(destino, VAD_MODEL_BYTES))
                 ),
             ),
             negativo = "Não",
@@ -1539,12 +1539,17 @@ class WhisperActivity : AppCompatActivity() {
      *  [destination]. Usado pelo VAD Silero: se a fonte primaria estiver
      *  indisponivel, a alternativa assume sem intervencao do usuario. */
     private fun downloadFile(label: String, urls: List<String>, destination: File, onSuccess: () -> Unit) {
+        if (DownloadFileStorage.isComplete(destination, VAD_MODEL_BYTES)) { onSuccess(); return }
+        val plano = DownloadSizeFormat.Plano(label, listOf(DownloadSizeFormat.Arquivo(destination.name, VAD_MODEL_BYTES)))
+        val progresso = DownloadPlanDialog.progresso(this, plano, titulo = "Baixando $label")
         Thread {
             var ultimaFalha: Throwable? = null
             var sucesso = false
             for (url in urls) {
                 try {
-                    baixarUmaFonte(label, url, destination)
+                    baixarUmaFonte(url, destination) { downloaded, total ->
+                        runOnUiThread { progresso.atualizarPacote(downloaded, total, "Baixando $label", true) }
+                    }
                     sucesso = true
                     break
                 } catch (e: Throwable) {
@@ -1554,27 +1559,31 @@ class WhisperActivity : AppCompatActivity() {
             }
             if (sucesso) {
                 runOnUiThread {
+                    progresso.concluirContinuando(destination.length())
                     status.text = "$label pronto."
                     onSuccess()
                 }
             } else {
                 val erro = ultimaFalha
                 Log.e(TAG, "Download failed", erro)
-                runOnUiThread { status.text = "Erro ao baixar $label: ${erro?.message ?: "falha inesperada"}" }
+                runOnUiThread {
+                    progresso.fechar()
+                    status.text = "Erro ao baixar $label: ${erro?.message ?: "falha inesperada"}"
+                }
             }
         }.start()
     }
 
     /** Baixa UMA fonte para [destination] (via temporario .download). Lanca
      *  excecao em falha — o chamador decide se tenta a proxima fonte. */
-    private fun baixarUmaFonte(label: String, url: String, destination: File) {
+    private fun baixarUmaFonte(url: String, destination: File, onProgress: (Long, Long) -> Unit) {
         destination.parentFile?.mkdirs()
         val temp = File(destination.parentFile, "${destination.name}.download")
         URL(url).openConnection().apply {
             connectTimeout = 15000
             readTimeout = 30000
         }.let { connection ->
-            val total = connection.contentLengthLong
+            val total = connection.contentLengthLong.takeIf { it > 0L } ?: VAD_MODEL_BYTES
             connection.getInputStream().use { input ->
                 FileOutputStream(temp).use { output ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -1588,23 +1597,13 @@ class WhisperActivity : AppCompatActivity() {
                         val now = SystemClock.elapsedRealtime()
                         if (now - lastUi > 500L) {
                             lastUi = now
-                            val progressText = if (total > 0L) {
-                                val percent = (copied * 100L / total).coerceIn(0L, 100L)
-                                "$label: baixando $percent%"
-                            } else {
-                                "$label: baixando ${copied / 1048576L} MB"
-                            }
-                            runOnUiThread { status.text = progressText }
+                            onProgress(copied, total)
                         }
                     }
                 }
             }
         }
-        if (destination.exists()) destination.delete()
-        if (!temp.renameTo(destination)) {
-            temp.copyTo(destination, overwrite = true)
-            temp.delete()
-        }
+        DownloadFileStorage.activate(temp, destination, VAD_MODEL_BYTES)
     }
 
     /**
@@ -1621,10 +1620,12 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun downloadModelWithProgress(label: String, url: String, destination: File, onSuccess: () -> Unit) {
+        val expectedBytes = bytesConhecidos(url, destination)
+        if (DownloadFileStorage.isComplete(destination, expectedBytes)) { onSuccess(); return }
         val plano = DownloadSizeFormat.Plano(
             rotulo = "Modelo Whisper $label",
             arquivos = listOf(
-                DownloadSizeFormat.Arquivo(destination.name, bytesConhecidos(url, destination))
+                DownloadSizeFormat.Arquivo(destination.name, expectedBytes)
             ),
         )
         val progresso = DownloadPlanDialog.progresso(this, plano, titulo = "Baixando modelo $label")
@@ -1638,7 +1639,7 @@ class WhisperActivity : AppCompatActivity() {
                     connectTimeout = 15000
                     readTimeout = 30000
                 }.let { connection ->
-                    total = connection.contentLengthLong
+                    total = connection.contentLengthLong.takeIf { it > 0L } ?: expectedBytes
                     connection.getInputStream().use { input ->
                         FileOutputStream(temp).use { output ->
                             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -1653,23 +1654,16 @@ class WhisperActivity : AppCompatActivity() {
                                 if (now - lastUi > 300L) {
                                     lastUi = now
                                     val percent = if (total > 0L) (copied * 100L / total).coerceIn(0L, 100L) else -1L
+                                    val downloaded = copied
                                     runOnUiThread {
-                                        progresso.atualizar(
-                                            copied, total, percent.toInt(),
-                                            // Arquivo único: vira ✓ ao chegar em 100%.
-                                            if (percent >= 100L) plano.arquivos.map { it.nome }.toSet() else emptySet(),
-                                        )
+                                        progresso.atualizar(downloaded, total, percent.toInt())
                                     }
                                 }
                             }
                         }
                     }
                 }
-                if (destination.exists()) destination.delete()
-                if (!temp.renameTo(destination)) {
-                    temp.copyTo(destination, overwrite = true)
-                    temp.delete()
-                }
+                DownloadFileStorage.activate(temp, destination, expectedBytes.takeIf { it > 0L } ?: total)
                 runOnUiThread {
                     progresso.atualizar(
                         if (total > 0L) total else destination.length(),
@@ -1850,7 +1844,7 @@ class WhisperActivity : AppCompatActivity() {
     private fun updateTranscribeEnabled() {
         val hasMedia = selectedItems.isNotEmpty()
         buttonTranscribe.visibility = if (hasMedia) View.VISIBLE else View.GONE
-        val enabled = !isBusy && hasMedia && selectedModel?.let { modelFile(it).exists() } == true && !whiteRecordingActive && !liveMicActive
+        val enabled = !isBusy && hasMedia && selectedModel?.let { DownloadFileStorage.isComplete(modelFile(it), it.bytes) } == true && !whiteRecordingActive && !liveMicActive
         buttonTranscribe.alpha = if (enabled) 1f else 0.45f
         buttonTranscribe.isClickable = enabled
         buttonTranscribe.isFocusable = enabled
@@ -2107,7 +2101,7 @@ class WhisperActivity : AppCompatActivity() {
                 status.text = "Selecione um modelo."
                 return@checkAudioPermission
             }
-            if (!modelFile(model).exists()) {
+            if (!DownloadFileStorage.isComplete(modelFile(model), model.bytes)) {
                 confirmModelDownload(model)
                 return@checkAudioPermission
             }
@@ -2328,7 +2322,7 @@ class WhisperActivity : AppCompatActivity() {
                 status.text = "Selecione um modelo."
                 return@checkAudioPermission
             }
-            if (!modelFile(model).exists()) {
+            if (!DownloadFileStorage.isComplete(modelFile(model), model.bytes)) {
                 confirmModelDownload(model)
                 return@checkAudioPermission
             }

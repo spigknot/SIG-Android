@@ -128,7 +128,7 @@ class TextoActivity : AppCompatActivity() {
             "Modelo: ${selectedModel!!.label} | Backend: ${selectedBackend.shortLabel} | " +
                 "Idioma alvo: ${selectedTarget.label}"
         )
-        if (!selectedModel!!.file.exists()) {
+        if (!DownloadFileStorage.isComplete(selectedModel!!.file, selectedModel!!.bytes)) {
             appendLog("Modelo ainda não baixado — toque em Traduzir para baixar.")
         }
         carregarTextoCompartilhado(intent)
@@ -247,12 +247,12 @@ class TextoActivity : AppCompatActivity() {
         val models = officialModels()
         PopupMenu(this, buttonModel).apply {
             models.forEachIndexed { index, model ->
-                val display = if (model.file.exists()) "✓ ${model.label}" else model.label
+                val display = if (DownloadFileStorage.isComplete(model.file, model.bytes)) "✓ ${model.label}" else model.label
                 menu.add(0, index + 1, 0, display)
             }
             setOnMenuItemClickListener { item ->
                 val model = models.getOrNull(item.itemId - 1) ?: return@setOnMenuItemClickListener true
-                if (model.file.exists()) {
+                if (DownloadFileStorage.isComplete(model.file, model.bytes)) {
                     selectModel(model)
                 } else {
                     confirmModelDownload(model)
@@ -277,7 +277,7 @@ class TextoActivity : AppCompatActivity() {
             plano = DownloadSizeFormat.Plano(
                 rotulo = "Modelo Hy-MT2 ${model.label}",
                 arquivos = listOf(
-                    DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = model.file.exists())
+                    DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = DownloadFileStorage.isComplete(model.file, model.bytes))
                 ),
             ),
             negativo = "Cancelar",
@@ -290,12 +290,13 @@ class TextoActivity : AppCompatActivity() {
     }
 
     private fun downloadModelWithProgress(model: HyMt2Model, onSuccess: () -> Unit) {
+        if (DownloadFileStorage.isComplete(model.file, model.bytes)) { onSuccess(); return }
         // Lista que acumula (item 1 do plano): o usuário vê o ✓ no fim e rola
         // para cima para ler tudo antes de continuar.
         val plano = DownloadSizeFormat.Plano(
             rotulo = "Modelo Hy-MT2 ${model.label}",
             arquivos = listOf(
-                DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = model.file.exists())
+                DownloadSizeFormat.Arquivo(model.fileName, model.bytes, jaBaixado = DownloadFileStorage.isComplete(model.file, model.bytes))
             ),
         )
         val progresso = DownloadPlanDialog.progresso(this, plano, titulo = "Baixando modelo ${model.label}")
@@ -381,7 +382,7 @@ class TextoActivity : AppCompatActivity() {
                     if (code != 200) {
                         throw IllegalStateException("O servidor respondeu HTTP $code.")
                     }
-                    val total = conn.contentLengthLong
+                    val total = conn.contentLengthLong.takeIf { it > 0L } ?: model.bytes
                     conn.getInputStream().use { input ->
                         FileOutputStream(temp).use { output ->
                             val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -396,11 +397,9 @@ class TextoActivity : AppCompatActivity() {
                                 if (now - lastUi > 300L) {
                                     lastUi = now
                                     val percent = if (total > 0L) (copied * 100L / total).coerceIn(0L, 100L) else -1L
+                                    val downloaded = copied
                                     runOnUiThread {
-                                        progresso.atualizar(
-                                            copied, total, percent.toInt(),
-                                            if (percent >= 100L) plano.arquivos.map { it.nome }.toSet() else emptySet(),
-                                        )
+                                        progresso.atualizar(downloaded, total, percent.toInt())
                                     }
                                 }
                             }
@@ -409,11 +408,7 @@ class TextoActivity : AppCompatActivity() {
                 } finally {
                     conn.disconnect()
                 }
-                if (model.file.exists()) model.file.delete()
-                if (!temp.renameTo(model.file)) {
-                    temp.copyTo(model.file, overwrite = true)
-                    temp.delete()
-                }
+                DownloadFileStorage.activate(temp, model.file, model.bytes)
                 runOnUiThread {
                     progresso.atualizar(model.file.length(), model.file.length(), 100, plano.arquivos.map { it.nome }.toSet())
                     progresso.concluirContinuando(model.file.length())
@@ -682,7 +677,7 @@ class TextoActivity : AppCompatActivity() {
 
         Thread {
             try {
-                if (!model.file.exists()) {
+                if (!DownloadFileStorage.isComplete(model.file, model.bytes)) {
                     runOnUiThread {
                         translating = false
                         buttonTranslate.isEnabled = true

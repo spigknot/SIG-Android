@@ -148,7 +148,7 @@ object DownloadSizeFormat {
      * O `✓` marca o que já está íntegro no aparelho; a lista mostra o plano
      * inteiro, então essa marca é o que permite ao usuário ver o que falta.
      */
-    fun linhas(arquivos: List<Arquivo>): String {
+    fun linhas(arquivos: List<Arquivo>, arquivoAtual: String? = null): String {
         if (arquivos.isEmpty()) return ""
         // O nome é TRUNCADO no meio (não só padEnd): um `lib/libQnnHtpPrepare.so`
         // de 30 caracteres estoura a largura útil do diálogo, e o padding sozinho
@@ -156,7 +156,11 @@ object DownloadSizeFormat {
         val largura = arquivos.maxOf { it.nome.length }.coerceAtMost(38)
         val cab = StringBuilder()
         for (item in arquivos) {
-            cab.append(if (item.jaBaixado) "✓" else " ").append(' ')
+            cab.append(when {
+                item.jaBaixado -> "✓"
+                item.nome == arquivoAtual -> "↓"
+                else -> " "
+            }).append(' ')
             cab.append(item.nome.truncado(largura).padEnd(largura))
             cab.append(' ').append(legivel(item.bytes))
             cab.append('\n')
@@ -178,17 +182,47 @@ object DownloadSizeFormat {
         return "${plano.rotulo}: ${plano.arquivos.size} arquivo(s)$sufixo"
     }
 
-    /**
-     * Acumulador do LOG do download, escrito linha a linha como o SigUpdater.
-     *
-     * A tela vai "colando" as linhas conforme o download avança: primeiro a
-     * intenção ("Iniciando download"), depois uma linha por arquivo concluído, e
-     * no fim o total. O usuário rola para cima e lê tudo antes de continuar.
-     *
-     * É PURO (sem Android) para o comportamento ser testável na JVM: o que se
-     * testa aqui é a ordem das linhas e a ausência de duplicata — a colagem na
-     * tela é responsabilidade do [DownloadPlanDialog].
-     */
+    /** Receber todos os bytes é distinto de validar e salvar o arquivo. */
+    enum class EstadoArquivo { BAIXANDO, VALIDANDO, CONCLUIDO }
+
+    /** Evento do gerenciador: CONCLUIDO só é emitido após validar e salvar o arquivo. */
+    data class Etapa(
+        val indice: Int,
+        val total: Int,
+        val nome: String,
+        val percentArquivo: Int,
+        val downloaded: Long,
+        val totalBytes: Long,
+        val estado: EstadoArquivo = EstadoArquivo.BAIXANDO,
+    ) {
+        val percentTotal: Int get() = if (totalBytes > 0L) {
+            ((downloaded * 100L) / totalBytes).coerceIn(0L, 100L).toInt()
+        } else -1
+    }
+
+    /** Estado por nome de arquivo, sem inferir conclusões a partir de bytes ou percentuais. */
+    class Sequencia {
+        private val concluidos = linkedSetOf<String>()
+
+        data class Atualizacao(val linha: String, val concluidos: Set<String>, val arquivoAtual: String?)
+
+        fun atualizar(etapa: Etapa): Atualizacao {
+            if (etapa.estado == EstadoArquivo.CONCLUIDO) concluidos.add(etapa.nome)
+            val linha = when (etapa.estado) {
+                EstadoArquivo.BAIXANDO -> if (etapa.percentArquivo >= 0) {
+                    arquivoAtual(etapa.indice, etapa.total, etapa.nome, etapa.percentArquivo)
+                } else arquivoAtualSemPercentual(etapa.indice, etapa.total, etapa.nome)
+                EstadoArquivo.VALIDANDO -> "Validando arquivo ${etapa.indice}/${etapa.total}: ${etapa.nome}"
+                EstadoArquivo.CONCLUIDO -> "Arquivo salvo ${etapa.indice}/${etapa.total}: ${etapa.nome}"
+            }
+            return Atualizacao(
+                linha, concluidos.toSet(),
+                etapa.nome.takeUnless { etapa.estado == EstadoArquivo.CONCLUIDO },
+            )
+        }
+    }
+
+    /** Acumulador do log, na ordem dos arquivos efetivamente concluídos. */
     class Log {
         private val linhas = mutableListOf<String>()
 
@@ -239,12 +273,11 @@ object DownloadSizeFormat {
      * Cabeçalho do progresso durante o download (a linha que o SigUpdater escreve
      * em `status_var`): "Baixando: 68% (45,2 MB de 67,7 MB)".
      */
-    fun progresso(downloaded: Long, total: Long, percent: Int): String =
-        if (total > 0L) {
-            "Baixando: $percent% (${legivel(downloaded)} de ${legivel(total)})"
-        } else {
-            "Baixando: $percent% (${legivel(downloaded)})"
-        }
+    fun progresso(downloaded: Long, total: Long, percent: Int): String {
+        val percentual = if (percent >= 0) " ${percent.coerceAtMost(100)}%" else ""
+        val quantidade = if (total > 0L) "${legivel(downloaded)} de ${legivel(total)}" else legivel(downloaded)
+        return "Baixando:$percentual ($quantidade)"
+    }
 
     /**
      * Linha de "qual arquivo está indo agora" (o `sync_file` do SigUpdater):

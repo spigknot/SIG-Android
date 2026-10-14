@@ -191,9 +191,10 @@ object QairtDependencyManager {
      */
     internal fun somaConteudoVsZip(): Long = conteudo.sumOf { it.second } - PACKAGE_BYTES
 
-    data class Progress(val downloaded: Long, val total: Long, val stage: String)
+    data class Progress(val downloaded: Long, val total: Long, val stage: String, val baixando: Boolean = true)
 
     fun install(context: Context, onProgress: (Progress) -> Unit): Result<Unit> = runCatching {
+        if (isInstalled(context)) return@runCatching
         check(isQualcommDevice()) { "Este aparelho não tem processador Qualcomm." }
         check(PACKAGE_SHA256.length == 64) { "SHA-256 do pacote não configurado." }
 
@@ -201,7 +202,7 @@ object QairtDependencyManager {
         val archive = File(context.cacheDir, "qairt-v$PACKAGE_VERSION.zip.download")
 
         download(archive, onProgress)
-        onProgress(Progress(archive.length(), archive.length(), "Validando"))
+        onProgress(Progress(archive.length(), archive.length(), "Validando", baixando = false))
         check(sha256(archive).equals(PACKAGE_SHA256, ignoreCase = true)) {
             "SHA-256 do pacote QAIRT não confere."
         }
@@ -210,7 +211,7 @@ object QairtDependencyManager {
         staging.deleteRecursively()
         staging.mkdirs()
         try {
-            onProgress(Progress(archive.length(), archive.length(), "Instalando"))
+            onProgress(Progress(archive.length(), archive.length(), "Instalando", baixando = false))
             extractZip(archive, staging)
             val libDir = File(staging, "lib")
             val missing = requiredLibraries.filterNot { File(libDir, it).isFile }

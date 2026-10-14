@@ -111,7 +111,8 @@ object AppUpdateChecker {
         client: OkHttpClient,
         url: String,
         destination: File,
-        onProgress: (Long, Long) -> Unit = { _, _ -> }
+        expectedBytes: Long = 0L,
+        onProgress: (Long, Long) -> Unit = { _, _ -> },
     ): File {
         val parent = destination.parentFile
             ?: throw IllegalArgumentException("download_destination_missing")
@@ -121,6 +122,7 @@ object AppUpdateChecker {
         val partial = File(parent, destination.name + ".part")
         partial.delete()
         try {
+            var responseBytes = 0L
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", "SIG-Android")
@@ -131,6 +133,7 @@ object AppUpdateChecker {
                 }
                 val body = response.body ?: throw IllegalStateException("download_empty_body")
                 val total = body.contentLength()
+                responseBytes = total
                 var downloaded = 0L
                 body.byteStream().use { input ->
                     partial.outputStream().use { output ->
@@ -146,12 +149,7 @@ object AppUpdateChecker {
                     }
                 }
             }
-            if (destination.exists() && !destination.delete()) {
-                throw IllegalStateException("download_destination_replace_failed")
-            }
-            if (!partial.renameTo(destination)) {
-                throw IllegalStateException("download_move_failed")
-            }
+            DownloadFileStorage.activate(partial, destination, expectedBytes.takeIf { it > 0L } ?: responseBytes)
             return destination
         } catch (error: Exception) {
             partial.delete()
@@ -223,7 +221,7 @@ object AppUpdateChecker {
         )
         Thread {
             try {
-                val file = downloadApk(activity, apkUrl) { downloaded, total ->
+                val file = downloadApk(activity, apkUrl, plano.totalBytes) { downloaded, total ->
                     activity.runOnUiThread {
                         // Total desconhecido (sem Content-Length) não vira "de 0 B":
                         // a barra fica indeterminada e o texto mostra só o baixado.
@@ -232,8 +230,7 @@ object AppUpdateChecker {
                         } else {
                             -1
                         }
-                        val feitos = if (percent >= 100) plano.arquivos.map { it.nome }.toSet() else emptySet()
-                        progresso.atualizar(downloaded, total, percent, feitos)
+                        progresso.atualizar(downloaded, total, percent)
                     }
                 }
                 activity.runOnUiThread {
@@ -253,12 +250,13 @@ object AppUpdateChecker {
         }.start()
     }
 
-    private fun downloadApk(activity: Activity, url: String, onProgress: (Long, Long) -> Unit): File =
+    private fun downloadApk(activity: Activity, url: String, expectedBytes: Long, onProgress: (Long, Long) -> Unit): File =
         downloadApkToFile(
             client = createDownloadClient(),
             url = url,
             destination = File(activity.cacheDir, "sig-update.apk"),
-            onProgress = onProgress
+            onProgress = onProgress,
+            expectedBytes = expectedBytes,
         )
 
     private fun installApk(activity: Activity, file: File) {

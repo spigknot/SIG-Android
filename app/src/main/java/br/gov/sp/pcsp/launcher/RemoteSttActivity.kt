@@ -771,18 +771,10 @@ class RemoteSttActivity : AppCompatActivity() {
         Thread {
             val result = NativeDependencyManager.install(this) { progress ->
                 runOnUiThread {
-                    val percent = if (progress.total > 0L) {
-                        (progress.downloaded.coerceAtMost(progress.total) * 100 / progress.total).toInt()
-                    } else {
-                        -1
-                    }
-                    // ZIP = arquivo único: vira ✓ só quando o pacote inteiro chega.
-                    val feitos = if (percent >= 100) plano.arquivos.map { it.nome }.toSet() else emptySet()
-                    progresso.atualizar(progress.downloaded, progress.total, percent, feitos)
+                    progresso.atualizarPacote(progress.downloaded, progress.total, progress.stage, progress.baixando)
                 }
             }
             runOnUiThread {
-                progresso.fechar()
                 result.fold(
                     onSuccess = {
                         NativeDependencyManager.activateIfInstalled(this)

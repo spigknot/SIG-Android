@@ -4,6 +4,7 @@ import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -169,6 +170,38 @@ class AppUpdateCheckerTest {
             } finally {
                 directory.deleteRecursively()
             }
+        }
+    }
+
+    @Test
+    fun emptyApkIsRejectedAndKeepsPreviousDownload() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(""))
+            val directory = Files.createTempDirectory("sig-update-empty").toFile()
+            try {
+                val destination = File(directory, "sig.apk").apply { writeText("PREVIOUS-APK") }
+                org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                    AppUpdateChecker.downloadApkToFile(client, server.url("/empty").toString(), destination)
+                }
+                assertEquals("PREVIOUS-APK", destination.readText())
+                assertFalse(File(directory, "sig.apk.part").exists())
+            } finally { directory.deleteRecursively() }
+        }
+    }
+
+    @Test
+    fun apkWithSizeDifferentFromReleaseIsRejected() {
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("SHORT"))
+            val directory = Files.createTempDirectory("sig-update-short").toFile()
+            try {
+                val destination = File(directory, "sig.apk").apply { writeText("PREVIOUS-APK") }
+                org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+                    AppUpdateChecker.downloadApkToFile(client, server.url("/short").toString(), destination, expectedBytes = 100)
+                }
+                assertEquals("PREVIOUS-APK", destination.readText())
+                assertFalse(File(directory, "sig.apk.part").exists())
+            } finally { directory.deleteRecursively() }
         }
     }
 

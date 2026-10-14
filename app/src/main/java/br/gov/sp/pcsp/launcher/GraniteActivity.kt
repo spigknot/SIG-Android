@@ -927,22 +927,21 @@ class GraniteActivity : AppCompatActivity() {
     }
 
     private fun confirmNarVarianteDownload(variante: GraniteNarLlm.Variante) {
-        val plano = GraniteNarEngine.downloadPlan(this)
-        // Diálogo com lista rolável: o NAR tem 25 arquivos e a lista completa
-        // não cabe na tela — o usuário rola para ler tudo.
-        DownloadPlanDialog.confirmar(
-            activity = this,
-            plano = plano,
-            negativo = "Cancelar",
-            positivo = "Baixar",
-            prefacio = "Para usar \"${variante.rotulo}\":",
-            sufixo = buildString {
-                append("Tamanho do LLM desta opção: ${variante.tamanhoLegivel()}")
-                variante.ganhoLegivel().takeIf { it.isNotEmpty() }?.let { append(" · $it") }
-                append("\nO restante do modelo já está no aparelho e não será baixado de novo.")
-            },
-        ) {
-            downloadPackage(MODEL_NAR) { selectModel(selectedModel) }
+        prepararPlanoDownload(MODEL_NAR) { plano ->
+            DownloadPlanDialog.confirmar(
+                activity = this,
+                plano = plano,
+                negativo = "Cancelar",
+                positivo = "Baixar",
+                prefacio = "Para usar \"${variante.rotulo}\":",
+                sufixo = buildString {
+                    append("Tamanho do LLM desta opção: ${variante.tamanhoLegivel()}")
+                    variante.ganhoLegivel().takeIf { it.isNotEmpty() }?.let { append(" · $it") }
+                    append("\nArquivos já salvos serão reutilizados. As outras qualidades baixadas serão mantidas.")
+                },
+            ) {
+                downloadPackage(MODEL_NAR, plano) { selectModel(selectedModel) }
+            }
         }
     }
 
@@ -994,26 +993,45 @@ class GraniteActivity : AppCompatActivity() {
         val isNar = model == MODEL_NAR
         // O NAR tira o detalhamento do MANIFESTO publicado (fonte do SHA-256);
         // o 5.0 Turbo, da lista de arquivos com os tamanhos conferidos no R2.
-        val plano = if (isNar) {
-            GraniteNarEngine.downloadPlan(this)
-        } else {
-            GraniteEngine.downloadPlan()
+        prepararPlanoDownload(model) { plano ->
+            val aviso = if (isNar) {
+                "O Granite 4.1 NAR é multilíngue (EN/ES/FR/DE/PT); o 5.0 Turbo é só inglês."
+            } else {
+                "O Granite 5.0 Turbo reconhece apenas inglês."
+            }
+            DownloadPlanDialog.confirmar(
+                activity = this,
+                plano = plano,
+                negativo = "Não",
+                positivo = "Sim",
+                prefacio = "Baixar ${modelLabel(model)}?",
+                sufixo = aviso,
+            ) {
+                downloadPackage(model, plano) { selectModel(model) }
+            }
         }
-        val aviso = if (isNar) {
-            "O Granite 4.1 NAR é multilíngue (EN/ES/FR/DE/PT); o 5.0 Turbo é só inglês."
-        } else {
-            "O Granite 5.0 Turbo reconhece apenas inglês."
-        }
-        DownloadPlanDialog.confirmar(
-            activity = this,
-            plano = plano,
-            negativo = "Não",
-            positivo = "Sim",
-            prefacio = "Baixar ${modelLabel(model)}?",
-            sufixo = aviso,
-        ) {
-            downloadPackage(model) { selectModel(model) }
-        }
+    }
+
+    /** Consulta o manifesto e verifica arquivos grandes fora da thread da interface. */
+    private fun prepararPlanoDownload(model: String, aoPreparar: (DownloadSizeFormat.Plano) -> Unit) {
+        setProcessing(true)
+        status.text = "Verificando arquivos já salvos..."
+        Thread {
+            try {
+                val plano = if (model == MODEL_NAR) GraniteNarEngine.downloadPlan(this)
+                    else GraniteEngine.downloadPlan(GraniteEngine.packageDir(this))
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    setProcessing(false)
+                    aoPreparar(plano)
+                }
+            } catch (error: Exception) {
+                runOnUiThread {
+                    setProcessing(false)
+                    status.text = "Erro ao verificar arquivos: ${error.message}"
+                }
+            }
+        }.start()
     }
 
     private fun showBackendMenu() {
@@ -1082,11 +1100,7 @@ class GraniteActivity : AppCompatActivity() {
         Thread {
             val result = QairtDependencyManager.install(this) { progress ->
                 runOnUiThread {
-                    val pct = if (progress.total > 0L) (progress.downloaded * 100L / progress.total).toInt() else -1
-                    // O ZIP é arquivo único: a lista tem 1 item e ele só vira ✓
-                    // quando o pacote inteiro chega.
-                    val feitos = if (pct >= 100) plano.arquivos.map { it.nome }.toSet() else emptySet()
-                    progresso.atualizar(progress.downloaded, progress.total, pct, feitos)
+                    progresso.atualizarPacote(progress.downloaded, progress.total, progress.stage, progress.baixando)
                 }
             }
             runOnUiThread {
@@ -1118,13 +1132,8 @@ class GraniteActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun downloadPackage(model: String, onSuccess: () -> Unit) {
+    private fun downloadPackage(model: String, plano: DownloadSizeFormat.Plano, onSuccess: () -> Unit) {
         val isNar = model == MODEL_NAR
-        val plano = if (isNar) {
-            GraniteNarEngine.downloadPlan(this)
-        } else {
-            GraniteEngine.downloadPlan(GraniteEngine.packageDir(this))
-        }
         // Diálogo com a lista que ACUMULA: o usuário vê arquivo a arquivo sendo
         // marcado com ✓ e, no fim, rola para cima e lê o log inteiro.
         val progresso = DownloadPlanDialog.progresso(
@@ -1135,63 +1144,21 @@ class GraniteActivity : AppCompatActivity() {
         setProcessing(true)
         Thread {
             try {
-                val totalBytes = if (isNar) GraniteNarEngine.packageDownloadBytes(this) else GraniteEngine.packageDownloadBytes(this)
-                // Os dois engines têm a própria `Etapa`; esta é a forma comum
-                // para a tela não duplicar o tratamento (mesmos campos).
-                val download: (Context, (Int, Long) -> Unit, (Int, Int, String, Int, Int) -> Unit) -> Unit =
-                    if (isNar) { c, cb, et -> GraniteNarEngine.downloadPackage(c, cb) { e ->
-                            et(e.indice, e.total, e.nome, e.percentArquivo, e.percentTotal)
-                        }
+                var totalBaixado = 0L
+                val sequencia = DownloadSizeFormat.Sequencia()
+                val aoEtapa: (DownloadSizeFormat.Etapa) -> Unit = { etapa ->
+                    totalBaixado = etapa.downloaded
+                    val estado = sequencia.atualizar(etapa)
+                    runOnUiThread {
+                        progresso.atualizarArquivo(etapa, estado)
                     }
-                    else { c, cb, et -> GraniteEngine.downloadPackage(c, cb) { e ->
-                            et(e.indice, e.total, e.nome, e.percentArquivo, e.percentTotal)
-                        }
-                    }
-                var ultimaLinha = ""
-                val pendentes = plano.arquivos.map { it.nome }.toMutableSet()
-                download(
-                    this,
-                    { percent, mb ->
-                        runOnUiThread {
-                            // O engine passa `mb` em bytes-miB; a formatação é do
-                            // DownloadSizeFormat (decimal) para o texto não divergir
-                            // do total anunciado na confirmação.
-                            val baixado = mb * 1_048_576L
-                            val feitos = (baixado.toDouble() / totalBytes.coerceAtLeast(1L))
-                                .times(plano.arquivos.size).toInt().coerceIn(0, plano.arquivos.size)
-                            val concluidos = plano.arquivos.take(feitos).map { it.nome }.toSet()
-                            // Enquanto o engine não mandou etapa (o primeiro
-                            // arquivo ainda não começou), mostra o agregado.
-                            val linha = if (ultimaLinha.isEmpty()) {
-                                DownloadSizeFormat.progresso(baixado, totalBytes, percent)
-                            } else {
-                                ultimaLinha
-                            }
-                            progresso.atualizarComLinha(linha, baixado, totalBytes, percent, concluidos)
-                        }
-                    },
-                    { indice, total, nome, pctArquivo, pctTotal ->
-                        pendentes.remove(nome)
-                        val linha = if (pctArquivo >= 0) {
-                            DownloadSizeFormat.arquivoAtual(indice, total, nome, pctArquivo)
-                        } else {
-                            DownloadSizeFormat.arquivoAtualSemPercentual(indice, total, nome)
-                        }
-                        ultimaLinha = linha
-                        runOnUiThread {
-                            val baixado = totalBytes * pctTotal.coerceAtLeast(0) / 100L
-                            progresso.atualizarComLinha(
-                                linha, baixado, totalBytes, pctTotal,
-                                // Só o que ACABOU entra no log: marcar pelo
-                                // percentual global adiantaria arquivos.
-                                plano.arquivos.map { it.nome }.toSet() - pendentes,
-                            )
-                        }
-                    }
-                )
+                }
+                runOnUiThread { progresso.etapa("Verificando arquivos já salvos...") }
+                if (isNar) GraniteNarEngine.downloadPackage(this, { _, _ -> }, aoEtapa)
+                else GraniteEngine.downloadPackage(this, { _, _ -> }, aoEtapa)
                 runOnUiThread {
                     // "Continuar" em vez de fechar: o usuário rola e lê antes.
-                    progresso.concluirContinuando(totalBytes)
+                    progresso.concluirContinuando(totalBaixado)
                     setProcessing(false)
                     status.text = "Modelo pronto."
                     onSuccess()
@@ -2205,6 +2172,9 @@ class GraniteActivity : AppCompatActivity() {
             updateTranscribeEnabled()
         }
         val notProcessing = !processing
+        buttonModel.isEnabled = notProcessing
+        buttonNarVariante.isEnabled = notProcessing
+        buttonBackend.isEnabled = notProcessing
         timeline?.isEnabled = notProcessing
         buttonVadMode?.isEnabled = notProcessing
         buttonVadLevel?.isEnabled = notProcessing

@@ -420,35 +420,9 @@ object GraniteEngine {
     /** Backend da sessão criada com sucesso, incluindo eventual fallback. */
     fun loadedBackend(): GraniteExecutionBackend? = lastLoadedBackend
 
-    /**
-     * Tamanho total do download do pacote (para o diálogo).
-     *
-     * Consulta os tamanhos reais no R2 via HEAD (fonte de verdade) e soma apenas
-     * os arquivos que ainda faltam baixar — o mesmo cálculo usado em
-     * [downloadPackage]. O valor fixo é apenas fallback quando a rede falha.
-     */
-    fun packageDownloadBytes(context: Context? = null): Long {
-        val dir = context?.let { packageDir(it) }
-        val missing = dir?.let { d ->
-            packageFiles().filter { (name, _) ->
-                val f = File(d, name)
-                !(f.exists() && f.length() > 0L)
-            }
-        } ?: packageFiles()
-        val remote = missing.sumOf { (_, url) ->
-            runCatching {
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    requestMethod = "HEAD"
-                }
-                val len = conn.contentLengthLong.coerceAtLeast(0L)
-                conn.disconnect()
-                len
-            }.getOrDefault(0L)
-        }
-        return if (remote > 0L) remote else FALLBACK_PACKAGE_BYTES
-    }
+    /** Soma apenas os arquivos pendentes, usando a mesma tabela do plano e do download. */
+    fun packageDownloadBytes(context: Context? = null): Long =
+        downloadPlan(context?.let { packageDir(it) }).pendenteBytes
 
     /**
      * Plano de download do Granite 5.0 Turbo para o diálogo.
@@ -467,7 +441,7 @@ object GraniteEngine {
             DownloadSizeFormat.Arquivo(
                 nome = nome,
                 bytes = bytes,
-                jaBaixado = bytes > 0L && f != null && f.isFile && f.length() > 0L,
+                jaBaixado = f != null && DownloadFileStorage.isComplete(f, bytes),
             )
         }
         return DownloadSizeFormat.Plano(
@@ -521,7 +495,7 @@ object GraniteEngine {
             val dir = packageDir(context)
             return packageFiles().all { (name, _) ->
                 val f = File(dir, name)
-                f.exists() && f.length() > 0L
+                DownloadFileStorage.isComplete(f, TAMANHO_POR_ARQUIVO[name] ?: 0L)
             }
         }
 
@@ -538,49 +512,18 @@ object GraniteEngine {
             PUNCT_FILE_NAME to "$PACKAGE_BASE_URL/$PUNCT_FILE_NAME",
         )
 
-    /**
-     * Uma etapa do download, com o arquivo que está indo agora.
-     *
-     * Adicionado em 25/09/2026 para a tela mostrar a sequência "Baixando arquivo
-     * 3/25: x.onnx (12%)" — o mesmo formato do log do SigUpdater no SIG Windows.
-     * [bytes] e [percent] carregam o mesmo significado de sempre (o callback
-     * legado `(percent, mb)` continua existindo e é alimentado por aqui).
-     */
-    data class Etapa(
-        val indice: Int,
-        val total: Int,
-        val nome: String,
-        val bytes: Long,
-        val percentArquivo: Int,
-        val percentTotal: Int,
-    )
-
     /** Baixa o pacote completo do R2 (modelo + external data + front-end + vocab + punctuator). */
-    fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit, onEtapa: (Etapa) -> Unit = {}) {
+    fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit, onEtapa: (DownloadSizeFormat.Etapa) -> Unit = {}) {
         val dir = packageDir(context).apply { mkdirs() }
-        // Limpa downloads residuais de tentativas anteriores.
-        dir.listFiles()?.forEach { if (it.name.endsWith(".download")) it.delete() }
         val files = packageFiles()
         var totalBytes = 0L
         var copiedBytes = 0L
         // Soma apenas o que falta baixar.
         val missing = files.filter { (name, _) ->
             val f = File(dir, name)
-            !(f.exists() && f.length() > 0L)
+            !DownloadFileStorage.isComplete(f, TAMANHO_POR_ARQUIVO[name] ?: 0L)
         }
-        totalBytes = missing.sumOf { (_, url) ->
-            runCatching {
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    requestMethod = "HEAD"
-                }
-                val len = conn.contentLengthLong.coerceAtLeast(0L)
-                conn.disconnect()
-                len
-            }.getOrDefault(0L)
-        }
-        if (totalBytes <= 0L) totalBytes = FALLBACK_PACKAGE_BYTES
+        totalBytes = missing.sumOf { (name, _) -> TAMANHO_POR_ARQUIVO.getValue(name) }
         // Baixa cada arquivo que falta.
         for ((i, par) in missing.withIndex()) {
             val (name, url) = par
@@ -590,41 +533,39 @@ object GraniteEngine {
                 connectTimeout = 15000
                 readTimeout = 120000
             }
-            val total = connection.contentLengthLong.coerceAtLeast(0L)
-            // O nome com a pasta vai no log (é o que o usuário reconhece no R2);
-            // a lista da tela usa só o arquivo.
-            val rotulo = "lib/${File(name).name}"
-            connection.inputStream.use { input ->
-                FileOutputStream(temp).use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var copied = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        copied += read
-                        copiedBytes += read
-                        val pctArquivo = if (total > 0L) {
-                            ((copied * 100L) / total).coerceIn(0L, 100L).toInt()
-                        } else {
-                            -1
-                        }
-                        if (totalBytes > 0L) {
-                            val percent = ((copiedBytes * 100L) / totalBytes).coerceIn(0L, 100L).toInt()
-                            onProgress(percent, copiedBytes / 1048576L)
-                            onEtapa(Etapa(i + 1, missing.size, rotulo, total, pctArquivo, percent))
-                        } else {
-                            onProgress(-1, copiedBytes / 1048576L)
-                            onEtapa(Etapa(i + 1, missing.size, rotulo, total, pctArquivo, -1))
+            val total = TAMANHO_POR_ARQUIVO.getValue(name)
+            var ultimaAtualizacao = 0L
+            fun emitir(copied: Long, estado: DownloadSizeFormat.EstadoArquivo = DownloadSizeFormat.EstadoArquivo.BAIXANDO) {
+                val agora = System.nanoTime()
+                if (estado == DownloadSizeFormat.EstadoArquivo.BAIXANDO && ultimaAtualizacao != 0L && agora - ultimaAtualizacao < 300_000_000L) return
+                ultimaAtualizacao = agora
+                val pctArquivo = if (total > 0L) ((copied * 100L) / total).coerceIn(0L, 100L).toInt() else -1
+                val etapa = DownloadSizeFormat.Etapa(i + 1, missing.size, name, pctArquivo, copiedBytes, totalBytes, estado)
+                onProgress(etapa.percentTotal, copiedBytes / 1048576L)
+                onEtapa(etapa)
+            }
+            emitir(0L)
+            try {
+                connection.inputStream.use { input ->
+                    FileOutputStream(temp).use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var copied = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                            copied += read
+                            copiedBytes += read
+                            emitir(copied)
                         }
                     }
                 }
+            } finally {
+                connection.disconnect()
             }
-            if (dest.exists()) dest.delete()
-            if (!temp.renameTo(dest)) {
-                temp.copyTo(dest, overwrite = true)
-                temp.delete()
-            }
+            emitir(temp.length(), DownloadSizeFormat.EstadoArquivo.VALIDANDO)
+            DownloadFileStorage.activate(temp, dest, TAMANHO_POR_ARQUIVO[name] ?: total)
+            emitir(dest.length(), DownloadSizeFormat.EstadoArquivo.CONCLUIDO)
         }
     }
 

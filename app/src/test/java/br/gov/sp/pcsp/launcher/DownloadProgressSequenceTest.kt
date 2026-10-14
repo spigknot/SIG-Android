@@ -13,6 +13,50 @@ import org.junit.Test
  * para o usuário rolar e ler antes de continuar.
  */
 class DownloadProgressSequenceTest {
+    @Test fun `cem por cento transferido e validacao ainda nao concluem arquivo`() {
+        val sequencia = DownloadSizeFormat.Sequencia()
+        val etapa = DownloadSizeFormat.Etapa(1, 3, "pesos.data", 100, 9_000, 10_000)
+        assertTrue(sequencia.atualizar(etapa).concluidos.isEmpty())
+        val validando = sequencia.atualizar(etapa.copy(estado = DownloadSizeFormat.EstadoArquivo.VALIDANDO))
+        assertTrue(validando.concluidos.isEmpty())
+        assertTrue(validando.linha.startsWith("Validando arquivo 1/3: pesos.data"))
+        val salvo = sequencia.atualizar(etapa.copy(estado = DownloadSizeFormat.EstadoArquivo.CONCLUIDO))
+        assertEquals(setOf("pesos.data"), salvo.concluidos)
+    }
+
+    @Test fun `arquivo grande nao adianta arquivos pequenos e snapshots da UI sao imutaveis`() {
+        val sequencia = DownloadSizeFormat.Sequencia()
+        val etapa = DownloadSizeFormat.Etapa(1, 3, "pesos.data", 99, 9_900, 10_000)
+        val primeiro = sequencia.atualizar(etapa)
+        assertEquals(99, etapa.percentTotal)
+        assertTrue(primeiro.concluidos.isEmpty())
+        val salvo = sequencia.atualizar(etapa.copy(estado = DownloadSizeFormat.EstadoArquivo.CONCLUIDO))
+        val seguinte = sequencia.atualizar(etapa.copy(indice = 2, nome = "vocab.json", percentArquivo = 1))
+        assertEquals(setOf("pesos.data"), seguinte.concluidos)
+        assertEquals("vocab.json", seguinte.arquivoAtual)
+        assertEquals(setOf("pesos.data"), salvo.concluidos)
+        assertTrue(primeiro.concluidos.isEmpty())
+    }
+
+    @Test fun `lista distingue arquivo salvo atual e pendente pelo mesmo nome do evento`() {
+        val itens = listOf(
+            DownloadSizeFormat.Arquivo("encoder.data", 20, jaBaixado = true),
+            DownloadSizeFormat.Arquivo("llm.onnx", 100),
+            DownloadSizeFormat.Arquivo("vocab.json", 1),
+        )
+        val linhas = DownloadSizeFormat.linhas(itens, "llm.onnx").lines()
+        assertTrue(linhas[0].startsWith("✓ encoder.data"))
+        assertTrue(linhas[1].startsWith("↓ llm.onnx"))
+        assertTrue(linhas[2].startsWith("  vocab.json"))
+    }
+
+    @Test fun `todas as qualidades do NAR tem lista completa sem rede`() {
+        for (variante in GraniteNarLlm.TODAS) {
+            val plano = GraniteNarEngine.downloadPlan(null, variante, emptyMap())
+            assertEquals(GraniteNarEngine.nomesDoPacote(variante), plano.arquivos.map { it.nome })
+            assertTrue(plano.arquivos.all { it.bytes > 0L })
+        }
+    }
 
     /** Normaliza o separador decimal: a formatação usa a locale do sistema. */
     private fun num(s: String) = s.replace(',', '.')

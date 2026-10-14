@@ -140,6 +140,7 @@ object DownloadPlanDialog {
             total: Long,
             percentual: Int,
             concluidos: Set<String> = emptySet(),
+            arquivoAtual: String? = null,
         ) {
             val corpo = corpo ?: return
             corpo.status.text = linha
@@ -154,7 +155,8 @@ object DownloadPlanDialog {
             }
             // A lista acumula: o que já baixou vira `✓` e o texto é repintado.
             val itens = plano.arquivos.map { it.copy(jaBaixado = it.jaBaixado || it.nome in concluidos) }
-            corpo.lista.text = DownloadSizeFormat.linhas(itens)
+            corpo.resumo.text = DownloadSizeFormat.cabecalho(plano.copy(arquivos = itens))
+            corpo.lista.text = DownloadSizeFormat.linhas(itens, arquivoAtual)
             // Cada arquivo CONCLUÍDO vira uma linha no log acima da lista (o "colando
             // conforme baixa"); no fim o usuário rola para cima e lê a sequência.
             for (nome in concluidos) {
@@ -172,12 +174,34 @@ object DownloadPlanDialog {
         private val jaMarcados = mutableSetOf<String>()
         private val log = DownloadSizeFormat.Log()
 
+        /** O percentual do arquivo e a barra do total são identificados separadamente. */
+        fun atualizarArquivo(etapa: DownloadSizeFormat.Etapa, estado: DownloadSizeFormat.Sequencia.Atualizacao) {
+            val validando = etapa.estado == DownloadSizeFormat.EstadoArquivo.VALIDANDO
+            val total = if (!validando && etapa.totalBytes > 0L) {
+                "\nTotal: ${etapa.percentTotal}% (${DownloadSizeFormat.legivel(etapa.downloaded)} de ${DownloadSizeFormat.legivel(etapa.totalBytes)})"
+            } else ""
+            atualizarComLinha(
+                estado.linha + total, etapa.downloaded, etapa.totalBytes,
+                if (validando) -1 else etapa.percentTotal, estado.concluidos, estado.arquivoAtual,
+            )
+        }
+
         /**
          * Mantém a etapa visível até o próximo [atualizar] (o "Validando pacote"
          * do instalador não é progresso, é status).
          */
         fun etapa(texto: String) {
             corpo?.status?.text = texto
+        }
+
+        /** Separa transferência de validação/instalação; 100% recebido ainda não é sucesso. */
+        fun atualizarPacote(downloaded: Long, total: Long, etapa: String, baixando: Boolean) {
+            val percentual = if (baixando && total > 0L) {
+                ((downloaded.coerceAtMost(total) * 100L) / total).toInt()
+            } else -1
+            val linha = if (baixando) "$etapa\n${DownloadSizeFormat.progresso(downloaded, total, percentual)}"
+                else "$etapa..."
+            atualizarComLinha(linha, downloaded, total, percentual, arquivoAtual = plano.arquivos.singleOrNull()?.nome)
         }
 
         /** Fecha o diálogo. */
@@ -195,6 +219,8 @@ object DownloadPlanDialog {
          */
         fun concluirContinuando(totalBaixado: Long = 0L) {
             val corpo = corpo ?: run { fechar(); return }
+            // Só os chamadores que VALIDARAM e instalaram com sucesso chegam aqui.
+            atualizar(totalBaixado, totalBaixado, 100, plano.arquivos.filterNot { it.jaBaixado }.map { it.nome }.toSet())
             log.fim(totalBaixado)
             corpo.log.text = log.texto()
             corpo.log.visibility = View.VISIBLE
@@ -332,7 +358,7 @@ object DownloadPlanDialog {
             isFillViewport = false
             addView(content, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
-        return Corpo(scroll, status, lista, bar, log)
+        return Corpo(scroll, status, lista, bar, log, texto)
     }
 
     /** Limita a altura máxima, sem impor altura mínima aos planos pequenos. */
@@ -357,5 +383,6 @@ object DownloadPlanDialog {
         val lista: TextView,
         val bar: ProgressBar?,
         val log: TextView,
+        val resumo: TextView,
     )
 }

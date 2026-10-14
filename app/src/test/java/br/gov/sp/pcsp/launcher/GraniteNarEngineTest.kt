@@ -11,6 +11,47 @@ import kotlin.math.sin
  * Sem Android — roda na JVM (testDebugUnitTest).
  */
 class GraniteNarEngineTest {
+    @Test
+    fun `trocar qualidade e voltar reutiliza todos os arquivos e hashes anteriores`() {
+        val dir = java.nio.file.Files.createTempDirectory("granite-qualidades").toFile()
+        try {
+            val hashes = linkedMapOf<String, GraniteNarManifest.Item>()
+            for (variante in GraniteNarLlm.TODAS) {
+                for (nome in GraniteNarEngine.nomesDoPacote(variante)) {
+                    val file = java.io.File(dir, nome).apply { writeText("conteudo-$nome") }
+                    hashes[nome] = GraniteNarManifest.Item(nome, file.length(), GraniteNarManifest.sha256(file))
+                }
+            }
+            val legados = GraniteNarBuckets.LEGADOS.map { java.io.File(dir, it).apply { writeText("legado") } }
+            val parcialOutraQualidade = java.io.File(dir, "${GraniteNarLlm.FLOAT.data}.download").apply { writeText("parcial") }
+            for (variante in listOf(GraniteNarLlm.FLOAT, GraniteNarLlm.OITO_BITS, GraniteNarLlm.QUATRO_BITS, GraniteNarLlm.FLOAT)) {
+                GraniteNarEngine.limparPacoteLegado(dir, variante)
+                assertTrue("qualidade ${variante.id} foi apagada", GraniteNarEngine.packageComplete(dir, variante))
+                val plano = GraniteNarEngine.downloadPlan(dir, variante, hashes)
+                assertTrue("precisaria baixar novamente ${variante.id}", plano.completo)
+                assertEquals(0L, plano.pendenteBytes)
+            }
+            assertTrue(legados.none { it.exists() })
+            assertTrue(parcialOutraQualidade.exists())
+            for ((nome, item) in hashes) assertTrue(GraniteNarManifest.confereEstrito(java.io.File(dir, nome), item.sha256))
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test
+    fun `qualidade incompleta nao dispara limpeza e arquivo corrompido continua pendente`() {
+        val dir = java.nio.file.Files.createTempDirectory("granite-incompleto").toFile()
+        try {
+            val legado = java.io.File(dir, GraniteNarBuckets.LEGADOS.first()).apply { writeText("legado") }
+            assertEquals(0L, GraniteNarEngine.limparPacoteLegado(dir, GraniteNarLlm.FLOAT))
+            assertTrue(legado.exists())
+            val nome = GraniteNarLlm.FLOAT.onnx
+            val file = java.io.File(dir, nome).apply { writeText("abc") }
+            val item = GraniteNarManifest.Item(nome, 3L, GraniteNarManifest.sha256(file))
+            file.writeText("xyz")
+            val plano = GraniteNarEngine.downloadPlan(dir, GraniteNarLlm.FLOAT, mapOf(nome to item))
+            assertTrue(!plano.arquivos.single { it.nome == nome }.jaBaixado)
+        } finally { dir.deleteRecursively() }
+    }
 
     @Test
     fun `benchmark protocol emits valid escaped json`() {

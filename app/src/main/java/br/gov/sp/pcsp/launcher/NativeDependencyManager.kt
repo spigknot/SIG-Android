@@ -61,7 +61,7 @@ object NativeDependencyManager {
     private val loadedLibraries = ConcurrentHashMap.newKeySet<String>()
 
     data class PackageSpec(val url: String, val sha256: String, val downloadBytes: Long)
-    data class Progress(val downloaded: Long, val total: Long, val stage: String)
+    data class Progress(val downloaded: Long, val total: Long, val stage: String, val baixando: Boolean = true)
 
     fun supportedAbi(): String? = Build.SUPPORTED_ABIS.firstOrNull { packages.containsKey(it) }
 
@@ -403,6 +403,10 @@ object NativeDependencyManager {
     }
 
     fun install(context: Context, onProgress: (Progress) -> Unit): Result<Unit> = runCatching {
+        if (isInstalled(context)) {
+            check(activateIfInstalled(context)) { "Não foi possível ativar os componentes já instalados." }
+            return@runCatching
+        }
         val abi = supportedAbi() ?: error("Arquitetura não suportada: ${Build.SUPPORTED_ABIS.joinToString()}")
         val spec = packages.getValue(abi)
         check(spec.url.startsWith("https://") && spec.sha256.length == 64) {
@@ -412,7 +416,7 @@ object NativeDependencyManager {
         val root = File(context.noBackupFilesDir, ROOT_NAME).apply { mkdirs() }
         val archive = File(context.cacheDir, "sig-dependencies-$COMPONENT_VERSION-$abi.zip.download")
         download(spec, archive, onProgress)
-        onProgress(Progress(archive.length(), archive.length(), "Validando pacote"))
+        onProgress(Progress(archive.length(), archive.length(), "Validando pacote", baixando = false))
         check(sha256(archive).equals(spec.sha256, ignoreCase = true)) {
             "A assinatura SHA-256 do pacote não confere."
         }
@@ -421,7 +425,7 @@ object NativeDependencyManager {
         staging.deleteRecursively()
         staging.mkdirs()
         try {
-            onProgress(Progress(archive.length(), archive.length(), "Instalando componentes"))
+            onProgress(Progress(archive.length(), archive.length(), "Instalando componentes", baixando = false))
             extractSecurely(archive, staging)
             val libDir = File(staging, "lib")
             check(requiredLibraries.all { File(libDir, it).isFile }) { "Pacote incompleto." }

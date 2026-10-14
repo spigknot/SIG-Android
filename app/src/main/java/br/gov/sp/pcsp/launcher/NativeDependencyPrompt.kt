@@ -225,19 +225,15 @@ object NativeDependencyPrompt {
             val result = NativeDependencyManager.install(activity) { state ->
                 activity.runOnUiThread {
                     if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
-                    val percent = percentOf(state)
-                    // ZIP = arquivo único: vira ✓ só quando o pacote chega inteiro.
-                    val feitos = if (percent >= 100) plano.arquivos.map { it.nome }.toSet() else emptySet()
-                    progresso.atualizar(state.downloaded, state.total, percent, feitos)
+                    progresso.atualizarPacote(state.downloaded, state.total, state.stage, state.baixando)
                 }
             }
             activity.runOnUiThread {
                 sInstalando = false
                 if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
                 if (result.isSuccess) {
+                    progresso.concluirContinuando(plano.totalBytes)
                     progresso.etapa("Componentes instalados. O SIG está pronto.")
-                    // Deixa o ✓ e o total visíveis antes do diálogo sumir.
-                    progresso.fechar()
                     sPendente = false
                     sFaixa?.invoke(false)
                 } else {
@@ -256,17 +252,6 @@ object NativeDependencyPrompt {
                 }
             }
         }.start()
-    }
-
-    /**
-     * Percentual 0..100 a partir do [NativeDependencyManager.Progress].
-     *
-     * Total desconhecido devolve -1 — a barra fica indeterminada, nunca "0%"
-     * fingindo que não avançou.
-     */
-    private fun percentOf(state: NativeDependencyManager.Progress): Int {
-        if (state.total <= 0L) return -1
-        return ((state.downloaded.coerceAtMost(state.total) * 100L) / state.total).toInt()
     }
 
     /** Alerta com "Tentar novamente" / "Agora não", respeitando o descarte. */

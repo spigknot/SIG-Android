@@ -615,9 +615,18 @@ object GraniteNarEngine {
     fun downloadPlan(context: Context? = null): DownloadSizeFormat.Plano {
         val variante = context?.let { GraniteNarLlmSettings.selected(it) } ?: GraniteNarLlm.PADRAO
         val dir = context?.let { packageDir(it) }
-        val todos = packageFiles(variante)
         val hashes = runCatching { buscarManifest(requireNotNull(context)).porNome }
             .getOrDefault(emptyMap())
+        return downloadPlan(dir, variante, hashes)
+    }
+
+    /** Plano local testável, com os mesmos nomes e verificações usados pelo download. */
+    internal fun downloadPlan(
+        dir: File?,
+        variante: GraniteNarLlm.Variante,
+        hashes: Map<String, GraniteNarManifest.Item>,
+    ): DownloadSizeFormat.Plano {
+        val todos = packageFiles(variante)
         val itens = todos.mapNotNull { (nome, _) ->
             val publicado = hashes[nome]
             val remoto = publicado?.bytes
@@ -669,6 +678,8 @@ object GraniteNarEngine {
         PROJECTOR_PESOS to 159_535_104L,
         "granite-4.1-nar-llm-fp16.onnx" to 2_149_128L,
         "granite-4.1-nar-llm-fp16.onnx.data" to 3_263_500_288L,
+        "granite-4.1-nar-llm-int8b-blk128.onnx" to 2_221_414L,
+        "granite-4.1-nar-llm-int8b-blk128.onnx.data" to 1_657_409_536L,
         "granite-4.1-nar-llm-int4b-blk128.onnx" to 2_220_834L,
         "granite-4.1-nar-llm-int4b-blk128.onnx.data" to 841_617_408L,
         MEL_FILE to 82_240L,
@@ -702,37 +713,8 @@ object GraniteNarEngine {
         }
     }
 
-    /**
-     * Tamanho total do download do pacote (para o diálogo).
-     *
-     * Consulta os tamanhos reais no R2 via HEAD (fonte de verdade) e soma apenas
-     * os arquivos que ainda faltam baixar — o mesmo cálculo usado em
-     * [downloadPackage]. A soma fixa abaixo é apenas fallback quando a rede falha.
-     */
-    fun packageDownloadBytes(context: Context? = null): Long {
-        val variante = context?.let { GraniteNarLlmSettings.selected(it) } ?: GraniteNarLlm.PADRAO
-        val dir = context?.let { packageDir(it) }
-        val todos = packageFiles(variante)
-        val missing = dir?.let { d ->
-            todos.filter { (name, _) ->
-                val f = File(d, name)
-                !(f.exists() && f.length() > 0L)
-            }
-        } ?: todos
-        val remote = missing.sumOf { (_, url) ->
-            runCatching {
-                val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 8000
-                    readTimeout = 8000
-                    requestMethod = "HEAD"
-                }
-                val len = conn.contentLengthLong.coerceAtLeast(0L)
-                conn.disconnect()
-                len
-            }.getOrDefault(0L)
-        }
-        return if (remote > 0L) remote else fallbackPackageBytes(variante)
-    }
+    /** Soma apenas os arquivos pendentes, incluindo a variante escolhida, sem HEADs divergentes. */
+    fun packageDownloadBytes(context: Context? = null): Long = downloadPlan(context).pendenteBytes
 
     /**
      * Soma dos arquivos publicados (fallback quando os HEAD requests falham).
@@ -753,9 +735,13 @@ object GraniteNarEngine {
     fun packageComplete(context: Context): Boolean {
         val variante = GraniteNarLlmSettings.selected(context)
         val dir = packageDir(context)
+        return packageComplete(dir, variante)
+    }
+
+    internal fun packageComplete(dir: File, variante: GraniteNarLlm.Variante): Boolean {
         return packageFiles(variante).all { (name, _) ->
             val f = File(dir, name)
-            f.exists() && f.length() > 0L
+            DownloadFileStorage.isComplete(f)
         }
     }
 
@@ -842,16 +828,7 @@ object GraniteNarEngine {
      * (12%)" — o formato do log do SigUpdater no SIG Windows. O callback legado
      * `(percent, mb)` continua existindo e é alimentado por aqui.
      */
-    data class Etapa(
-        val indice: Int,
-        val total: Int,
-        val nome: String,
-        val bytes: Long,
-        val percentArquivo: Int,
-        val percentTotal: Int,
-    )
-
-    fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit, onEtapa: (Etapa) -> Unit = {}) {
+    fun downloadPackage(context: Context, onProgress: (percent: Int, mb: Long) -> Unit, onEtapa: (DownloadSizeFormat.Etapa) -> Unit = {}) {
         val variante = GraniteNarLlmSettings.selected(context)
         val dir = packageDir(context).apply { mkdirs() }
         val files = packageFiles(variante)
@@ -890,6 +867,10 @@ object GraniteNarEngine {
             val f = File(dir, name)
             !f.isFile || f.length() == 0L ||
                 !GraniteNarManifest.confereEstrito(f, hashes[name]?.sha256)
+        }
+        if (missing.isEmpty()) {
+            limparPacoteLegado(context)
+            return
         }
 
         // Parciais: preservados quando pertencem ao MESMO arquivo e cabem no tamanho esperado —
@@ -941,58 +922,54 @@ object GraniteNarEngine {
                 jaTemos = 0L
                 temp.delete()
             }
-            val restante = connection.contentLengthLong.coerceAtLeast(0L)
-            // Tamanho cheio do arquivo: o manifesto manda, e numa retomada o
-            // `restante` é só a parte que falta (serve para a checagem de disco,
-            // não para o percentual deste arquivo).
+            // O manifesto informa o tamanho completo, incluindo a parte já salva.
             val esperadoBytes = hashes[name]?.bytes ?: 0L
-            connection.inputStream.use { input ->
-                FileOutputStream(temp, jaTemos > 0L).use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var copied = jaTemos
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        copied += read
-                        copiedBytes += read
-                        // `esperado` é o tamanho CHEIO do arquivo; numa retomada o
-                        // `copied` já começa em `jaTemos`, então a conta fecha.
-                        val pctArquivo = if (esperadoBytes > 0L) {
-                            ((copied * 100L) / esperadoBytes).coerceIn(0L, 100L).toInt()
-                        } else {
-                            -1
-                        }
-                        if (restante > 0L) {
-                            val percent = ((copiedBytes * 100L) / totalBytes.coerceAtLeast(1L)).coerceIn(0L, 100L).toInt()
-                            onProgress(percent, copiedBytes / 1048576L)
-                            onEtapa(Etapa(i + 1, missing.size, name, esperadoBytes, pctArquivo, percent))
-                        } else {
-                            onProgress(-1, copiedBytes / 1048576L)
-                            onEtapa(Etapa(i + 1, missing.size, name, esperadoBytes, pctArquivo, -1))
+            copiedBytes += jaTemos
+            var ultimaAtualizacao = 0L
+            fun emitir(copied: Long, estado: DownloadSizeFormat.EstadoArquivo = DownloadSizeFormat.EstadoArquivo.BAIXANDO) {
+                val agora = System.nanoTime()
+                if (estado == DownloadSizeFormat.EstadoArquivo.BAIXANDO && ultimaAtualizacao != 0L && agora - ultimaAtualizacao < 300_000_000L) return
+                ultimaAtualizacao = agora
+                val pctArquivo = ((copied * 100L) / esperadoBytes.coerceAtLeast(1L)).coerceIn(0L, 100L).toInt()
+                val etapa = DownloadSizeFormat.Etapa(i + 1, missing.size, name, pctArquivo, copiedBytes, totalBytes, estado)
+                onProgress(etapa.percentTotal, copiedBytes / 1048576L)
+                onEtapa(etapa)
+            }
+            emitir(jaTemos)
+            try {
+                connection.inputStream.use { input ->
+                    FileOutputStream(temp, jaTemos > 0L).use { output ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        var copied = jaTemos
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            output.write(buffer, 0, read)
+                            copied += read
+                            copiedBytes += read
+                            emitir(copied)
                         }
                     }
                 }
+            } finally {
+                connection.disconnect()
             }
-            connection.disconnect()
+            emitir(temp.length(), DownloadSizeFormat.EstadoArquivo.VALIDANDO)
             // Verifica ANTES de tornar o arquivo definitivo: o `.download` só vira oficial se
             // conferir. Falha = apaga e aborta com mensagem clara (em vez de ativar em
             // silêncio um modelo que não transcreveria).
             // `confereEstrito` (e não o tolerante): no caminho de DOWNLOAD o hash é obrigatório —
-                        // a variante tolerante existe para USAR pacote já validado, não para ativar download.
-                        val esperado = hashes[name]?.sha256
-                        if (!GraniteNarManifest.confereEstrito(temp, esperado)) {
+            // a variante tolerante existe para USAR pacote já validado, não para ativar download.
+            val esperado = hashes[name]?.sha256
+            if (!GraniteNarManifest.confereEstrito(temp, esperado)) {
                 temp.delete()
                 throw IllegalStateException(
                     "Download corrompido: $name não confere com o SHA-256 publicado. " +
                         "Verifique a conexão e tente novamente."
                 )
             }
-            if (dest.exists()) dest.delete()
-            if (!temp.renameTo(dest)) {
-                temp.copyTo(dest, overwrite = true)
-                temp.delete()
-            }
+            DownloadFileStorage.activate(temp, dest, esperadoBytes)
+            emitir(dest.length(), DownloadSizeFormat.EstadoArquivo.CONCLUIDO)
         }
         // Depois de o pacote novo estar completo, os arquivos do pacote antigo viram lixo
         // (~1,34 GB). `limparPacoteLegado` confere `packageComplete` antes de apagar —
@@ -1009,13 +986,15 @@ object GraniteNarEngine {
      */
     fun limparPacoteLegado(context: Context): Long {
         val dir = packageDir(context)
-        if (!packageComplete(context)) {
+        return limparPacoteLegado(dir, GraniteNarLlmSettings.selected(context))
+    }
+
+    /** Limpa somente o pacote antigo; todas as qualidades atuais permanecem instaladas. */
+    internal fun limparPacoteLegado(dir: File, variante: GraniteNarLlm.Variante): Long {
+        if (!packageComplete(dir, variante)) {
             return 0L
         }
-        // Variantes do LLM que NÃO estão em uso viram lixo ao trocar (0,4 a 3 GB cada).
-        val ativa = GraniteNarLlmSettings.selected(context)
-        val obsoletos = GraniteNarBuckets.LEGADOS +
-            GraniteNarLlm.TODAS.filter { it.id != ativa.id }.flatMap { listOf(it.onnx, it.data) }
+        val obsoletos = GraniteNarBuckets.LEGADOS
         var liberados = 0L
         for (nome in obsoletos) {
             val f = File(dir, nome)
