@@ -50,9 +50,7 @@ object PartsExtractionSettings {
             // Seleções salvas com os nomes ANTIGOS dos modelos migram sozinhas
             // (grok-4.6 -> alias; nomes longos do servidor -> nomes curtos).
             "grok-4.6" -> MODEL_GROK
-            ModelServerStore.SERVER_GEMMA_LEGACY_NAME -> ModelServerStore.SERVER_GEMMA_NAME
-            ModelServerStore.SERVER_QWEN_LEGACY_NAME -> ModelServerStore.SERVER_QWEN_NAME
-            else -> stored
+            else -> ModelServerStore.migrateLocalTextName(stored)
         }
         if (migrated != stored) selectModel(context, migrated)
         return migrated

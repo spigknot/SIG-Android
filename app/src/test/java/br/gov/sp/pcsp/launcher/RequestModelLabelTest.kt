@@ -31,15 +31,9 @@ class RequestModelLabelTest {
     @Test
     fun formatsServerAndDeepseekModels() {
         val server = ModelServerStore.Config(
-            name = ModelServerStore.SERVER_GEMMA_NAME,
-            url = "http://servidor:8400/v1/chat/completions",
-            parameters = JSONObject().put("model", ModelServerStore.SERVER_GEMMA_MODEL),
-            provider = "servidor",
-        )
-        val qwen = ModelServerStore.Config(
-            name = ModelServerStore.SERVER_QWEN_NAME,
+            name = ModelServerStore.LOCAL_TEXT_SERVER_NAME,
             url = "http://servidor:8402/v1/chat/completions",
-            parameters = JSONObject().put("model", ModelServerStore.SERVER_QWEN_MODEL),
+            parameters = JSONObject().put("model", ModelServerStore.localModelId()),
             provider = "servidor",
         )
         val deepseek = ModelServerStore.Config(
@@ -48,8 +42,7 @@ class RequestModelLabelTest {
             parameters = JSONObject().put("model", GrokApiSettings.DEEPSEEK_TEXT_NAME),
         )
 
-        assertEquals("servidor", RequestModelLabel.from(server))
-        assertEquals("servidor", RequestModelLabel.from(qwen))
+        assertEquals(LocalTextModel.label(ModelServerStore.localModelId()), RequestModelLabel.from(server))
         assertEquals("deepseek-flash", RequestModelLabel.from(deepseek))
     }
 }

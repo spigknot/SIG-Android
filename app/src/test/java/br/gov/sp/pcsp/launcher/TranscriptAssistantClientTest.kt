@@ -98,7 +98,7 @@ class TranscriptAssistantClientTest {
     }
 
     @Test
-    fun proxyGrokUsesResponsesInputPayloadWithoutClientKey() {
+    fun proxyGrokUsesChatMessagesPayloadWithoutClientKey() {
         MockWebServer().use { server ->
             server.enqueue(
                 MockResponse().setBody(
@@ -134,8 +134,8 @@ class TranscriptAssistantClientTest {
             assertEquals("Histórico do proxy", result.get().getOrThrow())
             val request = server.takeRequest()
             val body = JSONObject(request.body.readUtf8())
-            assertTrue(body.has("input"))
-            assertTrue(!body.has("messages"))
+            assertTrue(body.has("messages"))
+            assertTrue(!body.has("input"))
             assertEquals("grok-latest", body.optString("model"))
             assertTrue(request.getHeader("Authorization") == null)
         }
@@ -222,21 +222,22 @@ class TranscriptAssistantClientTest {
     }
 
     @Test
-    fun servidorQwenMeasuresMaxTokensOnTokenizeLikeGemma() {
+    fun servidorGemmaMeasuresMaxTokensOnTokenize() {
         MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"data":[{"id":"/models/Modelo-Teste.gguf"}]}"""))
             server.enqueue(MockResponse().setBody("""{"count":20}"""))
             server.enqueue(
                 MockResponse().setBody(
-                    """{"choices":[{"message":{"content":"Histórico do qwen"}}]}"""
+                    """{"choices":[{"message":{"content":"Histórico do servidor"}}]}"""
                 )
             )
             val result = AtomicReference<Result<String>>()
             val completed = CountDownLatch(1)
             val config = ModelServerStore.Config(
-                name = ModelServerStore.SERVER_QWEN_NAME,
+                name = ModelServerStore.LOCAL_TEXT_SERVER_NAME,
                 url = server.url("/v1/chat/completions").toString(),
                 parameters = JSONObject()
-                    .put("model", ModelServerStore.SERVER_QWEN_MODEL)
+                    .put("model", ModelServerStore.localModelId())
                     .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
                     .put("temperature", 0.0)
                     .put("seed", 1)
@@ -257,9 +258,10 @@ class TranscriptAssistantClientTest {
             }
 
             assertTrue(completed.await(5, TimeUnit.SECONDS))
-            assertEquals("Histórico do qwen", result.get().getOrThrow())
-            // Igual ao gemma4: 1º mede o input no /tokenize, 2º faz o chat.
-            assertEquals(2, server.requestCount)
+            assertEquals("Histórico do servidor", result.get().getOrThrow())
+            // Servidor local: 1º mede o input no /tokenize, 2º faz o chat.
+            assertEquals(3, server.requestCount)
+            assertEquals("/v1/models", server.takeRequest().path)
             val tokenize = server.takeRequest()
             assertTrue(tokenize.path.orEmpty().endsWith("/tokenize"))
             assertEquals(
@@ -267,7 +269,7 @@ class TranscriptAssistantClientTest {
                 JSONObject(tokenize.body.readUtf8()).optString("content")
             )
             val body = JSONObject(server.takeRequest().body.readUtf8())
-            assertEquals(ModelServerStore.SERVER_QWEN_MODEL, body.optString("model"))
+            assertEquals(ModelServerStore.localModelId(), body.optString("model"))
             assertEquals(30, body.optInt("max_tokens")) // round(20 * 1.5)
             assertTrue(!body.getJSONObject("chat_template_kwargs").optBoolean("enable_thinking"))
             assertEquals(0.0, body.optDouble("temperature"), 0.0)
@@ -281,6 +283,7 @@ class TranscriptAssistantClientTest {
     @Test
     fun servidorWithoutDeclaredMaxTokensMeasuresInputOnTokenize() {
         MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody("""{"data":[{"id":"/models/Modelo-Teste.gguf"}]}"""))
             server.enqueue(MockResponse().setBody("""{"count":10}"""))
             server.enqueue(
                 MockResponse().setBody(
@@ -290,10 +293,10 @@ class TranscriptAssistantClientTest {
             val result = AtomicReference<Result<String>>()
             val completed = CountDownLatch(1)
             val config = ModelServerStore.Config(
-                name = ModelServerStore.SERVER_GEMMA_NAME,
+                name = ModelServerStore.LOCAL_TEXT_SERVER_NAME,
                 url = server.url("/v1/chat/completions").toString(),
                 parameters = JSONObject()
-                    .put("model", ModelServerStore.SERVER_GEMMA_MODEL)
+                    .put("model", ModelServerStore.localModelId())
                     .put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
                     .put("temperature", 0.0)
                     .put("seed", 1)
@@ -315,10 +318,11 @@ class TranscriptAssistantClientTest {
 
             assertTrue(completed.await(5, TimeUnit.SECONDS))
             assertEquals("Histórico do gemma", result.get().getOrThrow())
-            assertEquals(2, server.requestCount)
+            assertEquals(3, server.requestCount)
+            assertEquals("/v1/models", server.takeRequest().path)
             assertTrue(server.takeRequest().path.orEmpty().endsWith("/tokenize"))
             val body = JSONObject(server.takeRequest().body.readUtf8())
-            assertEquals(ModelServerStore.SERVER_GEMMA_MODEL, body.optString("model"))
+            assertEquals(ModelServerStore.localModelId(), body.optString("model"))
             assertEquals(15, body.optInt("max_tokens"))
         }
     }

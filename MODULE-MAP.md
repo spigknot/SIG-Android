@@ -114,6 +114,8 @@ também é bloqueado.
 | `SmartInsertWave.kt` | Montagem WAV/RF64 em limites de amostras por cópia de bytes PCM. |
 | `SmartInsertFlac.kt` | Remontagem de headers, CRCs e metadados FLAC sem recodificar subframes copiados. |
 | `RequestModelLabel.kt` | Rótulo curto do modelo usado numa requisição. |
+| `TextModelStream.kt` | Parsing incremental SSE/NDJSON dos modelos de texto, com prévias e validação de término. |
+| `LocalTextModel.kt` | Identificador e nome legível do modelo anunciado em /v1/models. |
 | `ServiceEndpoints.kt` | Endpoints oficiais embutidos no app. |
 | `LittleEndianIo.kt` | Leitura/escrita little-endian (WAV/pacotes). |
 | `GraniteBinarySupport.kt` | Byte↔codepoint, cadeia de erro, WAV 16k mono, floats. |

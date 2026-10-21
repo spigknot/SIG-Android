@@ -44,13 +44,19 @@ class GrokApiSettingsTest {
     fun textSelection_migratesLegacyModelNames() {
         assertEquals("grok-latest", GrokApiSettings.normalizeTextSelection("grok-4.6"))
         assertEquals(
-            ModelServerStore.SERVER_GEMMA_NAME,
-            GrokApiSettings.normalizeTextSelection(ModelServerStore.SERVER_GEMMA_LEGACY_NAME)
+            ModelServerStore.LOCAL_TEXT_SERVER_NAME,
+            GrokApiSettings.normalizeTextSelection(ModelServerStore.LEGACY_LOCAL_TEXT_NAME)
         )
         assertEquals(
-            ModelServerStore.SERVER_QWEN_NAME,
-            GrokApiSettings.normalizeTextSelection(ModelServerStore.SERVER_QWEN_LEGACY_NAME)
+            ModelServerStore.LOCAL_TEXT_SERVER_NAME,
+            GrokApiSettings.normalizeTextSelection("servidor (qwen-2.5-3B-Instruct-Abliterated)")
         )
+        for (old in listOf("servidor (qwen2.5)", "qwen2.5-7b")) {
+            assertEquals(ModelServerStore.LOCAL_TEXT_SERVER_NAME, GrokApiSettings.normalizeTextSelection(old))
+            val config = ModelServerStore.configForParts(old, "none")
+            assertEquals("http://servidor:8402/v1/chat/completions", config.url)
+            assertEquals(ModelServerStore.localModelId().ifBlank { "modelo não informado" }, config.modelName)
+        }
         // O 4.20 (não-reasoning) permanece igual; nomes válidos não mudam.
         assertEquals(
             GrokApiSettings.GROK_NON_REASONING_TEXT_NAME,

@@ -4,6 +4,10 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import okhttp3.Call
+import okhttp3.OkHttpClient
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -39,6 +43,23 @@ class ModelSettingsActivity : AppCompatActivity() {
     private lateinit var partsReasoningLabel: View
     private lateinit var partsReasoningGroup: RadioGroup
     private var populating = false
+    private val modelHandler = Handler(Looper.getMainLooper())
+    private val modelClient = OkHttpClient()
+    private var modelCall: Call? = null
+    private var modelRefreshGeneration = 0
+    private val modelRefresh = object : Runnable {
+        override fun run() {
+            val generation = modelRefreshGeneration
+            modelCall = TranscriptAssistantClient.refreshLocalModel(modelClient) { result ->
+                runOnUiThread {
+                    if (generation == modelRefreshGeneration && !isFinishing && !isDestroyed && result.isSuccess) {
+                        populateAll()
+                    }
+                }
+            }
+            modelHandler.postDelayed(this, 30000L)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -82,6 +103,14 @@ class ModelSettingsActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         populateAll()
+        modelHandler.post(modelRefresh)
+    }
+
+    override fun onPause() {
+        modelRefreshGeneration += 1
+        modelHandler.removeCallbacks(modelRefresh)
+        modelCall?.cancel()
+        super.onPause()
     }
 
     private fun populateAll() {
@@ -117,7 +146,7 @@ class ModelSettingsActivity : AppCompatActivity() {
     private fun populateText(purpose: TextModelPurpose, controls: TextModelControls) {
         controls.modelGroup.removeAllViews()
         ModelServerStore.readConfigs(purpose).forEach { config ->
-            controls.modelGroup.addView(radio(config.name, config.selected) {
+            controls.modelGroup.addView(radio(config.displayName, config.selected) {
                 ModelServerStore.select(purpose, config.name)
                 refreshVisibility()
             })
@@ -125,10 +154,6 @@ class ModelSettingsActivity : AppCompatActivity() {
         populateProxyModelGroup(controls.proxyGroup)
         refreshTextControls(purpose, controls)
     }
-
-    // O nome dos modelos do servidor local já embute o modelo
-    // ("servidor (gemma4)"), então o rótulo é o próprio nome; os demais
-    // configs também usam name direto — não há mais sufixo "(modelo)".
 
     private fun populateProxyModelGroup(group: RadioGroup) {
         group.removeAllViews()
@@ -218,7 +243,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                 PartsExtractionSettings.selectModel(this, it)
             }
         configs.forEach { config ->
-            partsModelGroup.addView(radio(config.name, config.name == resolvedModel) {
+            partsModelGroup.addView(radio(config.displayName, config.name == resolvedModel) {
                 PartsExtractionSettings.selectModel(this, config.name)
                 refreshVisibility()
             })

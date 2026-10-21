@@ -6,7 +6,7 @@ object RequestModelLabel {
         val model = config.parameters.optString("model").ifBlank { config.modelName }
         return when {
             config.isProxy -> "IA-Proxy/${displayModel(model)}"
-            config.provider == "servidor" || config.name == ModelServerStore.SERVER_GEMMA_NAME -> "servidor"
+            config.provider == "servidor" || config.name == ModelServerStore.LOCAL_TEXT_SERVER_NAME -> config.displayName
             else -> displayModel(config.name.ifBlank { model })
         }
     }

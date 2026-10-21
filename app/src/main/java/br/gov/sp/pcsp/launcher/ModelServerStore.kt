@@ -14,16 +14,25 @@ enum class TextModelPurpose {
 
 object ModelServerStore {
 
-    /** Referência exibida: nome curto já com o modelo embutido (regra do
-     *  usuário, 23/09). As REQUISIÇÕES continuam mandando
-     *  `SERVER_GEMMA_MODEL`; o nome longo antigo só existe para migrar prefs. */
-    const val SERVER_GEMMA_NAME = "servidor (gemma4)"
-    const val SERVER_GEMMA_MODEL = "gemma4"
-    const val SERVER_GEMMA_LEGACY_NAME = "servidor (gemma-4-26B-A4B-abliterated)"
-    const val SERVER_QWEN_NAME = "servidor (qwen2.5)"
-    /** `model` enviado nas requisições do Qwen (regra do usuário, 23/09). */
-    const val SERVER_QWEN_MODEL = "qwen2.5-7b"
-    const val SERVER_QWEN_LEGACY_NAME = "servidor (qwen-2.5-3B-Instruct-Abliterated)"
+    /** Identidade estável da seleção; o rótulo e o modelo vêm de /v1/models. */
+    const val LOCAL_TEXT_SERVER_NAME = "servidor (local)"
+    const val LEGACY_LOCAL_TEXT_NAME = "servidor (gemma-4-26B-A4B-abliterated)"
+    @Volatile private var discoveredLocalModel = ""
+
+    internal fun localModelId(): String = discoveredLocalModel
+
+    internal fun updateLocalModel(modelId: String) {
+        discoveredLocalModel = modelId.trim()
+    }
+
+    /** Nomes anteriores existem apenas para migrar seleções salvas. */
+    internal fun migrateLocalTextName(name: String): String = when (name.lowercase()) {
+        LEGACY_LOCAL_TEXT_NAME.lowercase(),
+        "servidor (gemma4)", "gemma4",
+        "servidor (qwen2.5)", "qwen2.5-7b",
+        "servidor (qwen-2.5-3b-instruct-abliterated)" -> LOCAL_TEXT_SERVER_NAME
+        else -> name
+    }
 
     data class Config(
         val name: String,
@@ -37,12 +46,13 @@ object ModelServerStore {
         val fallbackUrl: String = ""
     ) {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
+        val displayName: String get() = if (provider == "servidor") LocalTextModel.label(localModelId()) else name
     }
 
     fun defaultConfig() = selectedConfig(TextModelPurpose.HISTORY)
 
     fun readConfigs(purpose: TextModelPurpose = TextModelPurpose.HISTORY): List<Config> {
-        val available = mutableListOf(serverGemma(), serverQwen(), proxyConfig())
+        val available = mutableListOf(localServer(), proxyConfig())
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrok()
         if (GrokApiSettings.isPlausibleXaiKey()) available += directGrokNonReasoning()
         if (GrokApiSettings.isPlausibleDeepseekKey()) available += directDeepseek()
@@ -75,14 +85,13 @@ object ModelServerStore {
         }
     }
 
-    fun configForParts(name: String, reasoning: String): Config = when (name) {
+    fun configForParts(name: String, reasoning: String): Config = when (migrateLocalTextName(name)) {
         GrokApiSettings.IA_PROXY_NAME,
         GrokApiSettings.IA_PROXY_DEEPSEEK_NAME -> proxyConfig()
         GrokApiSettings.TEXT_NAME -> directGrok(reasoning)
         GrokApiSettings.GROK_NON_REASONING_TEXT_NAME -> directGrokNonReasoning()
         GrokApiSettings.DEEPSEEK_TEXT_NAME -> directDeepseek(reasoning)
-        SERVER_GEMMA_NAME, SERVER_GEMMA_LEGACY_NAME -> serverGemma()
-        SERVER_QWEN_NAME, SERVER_QWEN_LEGACY_NAME -> serverQwen()
+        LOCAL_TEXT_SERVER_NAME -> localServer()
         else -> proxyConfig()
     }
 
@@ -98,22 +107,15 @@ object ModelServerStore {
         )
     }
 
-    private fun serverGemma() = localServerConfig(
-        SERVER_GEMMA_NAME,
-        ServiceEndpoints.SERVER_GEMMA,
-        SERVER_GEMMA_MODEL,
-    )
-
-    private fun serverQwen() = localServerConfig(
-        SERVER_QWEN_NAME,
-        ServiceEndpoints.SERVER_QWEN,
-        SERVER_QWEN_MODEL,
+    private fun localServer() = localServerConfig(
+        LOCAL_TEXT_SERVER_NAME,
+        ServiceEndpoints.LOCAL_TEXT_SERVER,
+        localModelId(),
     )
 
     /** Parametros de texto dos modelos do servidor local — fonte unica.
      *
-     * Regra do usuario: os parametros do Qwen sao IDENTICOS aos do Gemma; so o
-     * `model` (e a porta) muda. `max_tokens` NUNCA vai aqui: os dois medem o
+     * `max_tokens` NUNCA vai aqui: o cliente mede o
      * input no /tokenize com margem x1.5 (TranscriptAssistantClient). */
     private fun localServerConfig(
         name: String,

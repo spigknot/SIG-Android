@@ -300,9 +300,7 @@ object GrokApiSettings {
             // Nomes antigos do DeepSeek (aposentados) migram para o nome atual.
             "deepseek-v4-flash", "deepseek-v4-pro", "deepseek-v4-flash-vision-exp" -> DEEPSEEK_TEXT_NAME
             "grok-4.6" -> TEXT_NAME
-            ModelServerStore.SERVER_GEMMA_LEGACY_NAME -> ModelServerStore.SERVER_GEMMA_NAME
-            ModelServerStore.SERVER_QWEN_LEGACY_NAME -> ModelServerStore.SERVER_QWEN_NAME
-            else -> stored
+            else -> ModelServerStore.migrateLocalTextName(stored)
         }
     fun selectText(name: String) {
         preferences().edit().putString(KEY_TEXT, name).apply()

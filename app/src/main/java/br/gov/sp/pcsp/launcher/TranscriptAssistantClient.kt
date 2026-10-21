@@ -29,16 +29,14 @@ object TranscriptAssistantClient {
         transcript: String,
         historySystemPrompt: String,
         historyUserPrompt: String,
+        onPartial: ((String) -> Unit)? = null,
         callback: (Result<String>) -> Unit
     ): Call {
-        val call = newCall(client, serverConfig, historySystemPrompt, historyUserPrompt)
+        val call = newCall(client, serverConfig, historySystemPrompt, historyUserPrompt, streaming = true)
         call.enqueue(
-            resultCallback(
-                parser = { body ->
-                    extractOutputText(body).trim().ifBlank {
-                        throw IllegalStateException("O servidor devolveu um histórico vazio.")
-                    }
-                },
+            textResultCallback(
+                emptyMessage = "O servidor devolveu um histórico vazio.",
+                onPartial = onPartial,
                 callback = callback
             )
         )
@@ -196,20 +194,50 @@ object TranscriptAssistantClient {
         material: String,
         statementSystemPrompt: String,
         statementUserPrompt: String,
+        onPartial: ((String) -> Unit)? = null,
         callback: (Result<String>) -> Unit
     ): Call {
-        val call = newCall(client, serverConfig, statementSystemPrompt, statementUserPrompt)
+        val call = newCall(client, serverConfig, statementSystemPrompt, statementUserPrompt, streaming = true)
         call.enqueue(
-            resultCallback(
-                parser = { body ->
-                    extractOutputText(body).trim().ifBlank {
-                        throw IllegalStateException("O servidor devolveu uma oitiva vazia.")
-                    }
-                },
+            textResultCallback(
+                emptyMessage = "O servidor devolveu uma oitiva vazia.",
+                onPartial = onPartial,
                 callback = callback
             )
         )
         return call
+    }
+
+    private fun textResultCallback(
+        emptyMessage: String,
+        onPartial: ((String) -> Unit)?,
+        callback: (Result<String>) -> Unit,
+    ): Callback = object : Callback {
+        override fun onFailure(call: Call, e: IOException) = callback(Result.failure(e))
+
+        override fun onResponse(call: Call, response: Response) {
+            val result = response.use {
+                runCatching {
+                    if (!response.isSuccessful) {
+                        throw IllegalStateException("Servidor respondeu HTTP ${response.code}: ${response.body?.string().orEmpty().take(400)}")
+                    }
+                    val body = response.body ?: throw IllegalStateException(emptyMessage)
+                    val contentType = response.header("Content-Type").orEmpty()
+                    val text = if (contentType.contains("text/event-stream", ignoreCase = true) ||
+                        contentType.contains("ndjson", ignoreCase = true)) {
+                        TextModelStream.read(body.charStream().buffered(), contentType, { partial ->
+                            check(!call.isCanceled()) { "Tarefa de texto cancelada." }
+                            onPartial?.invoke(partial)
+                        }, ::extractOutputText)
+                    } else {
+                        extractOutputText(body.string())
+                    }
+                    check(!call.isCanceled()) { "Tarefa de texto cancelada." }
+                    text.trim().ifBlank { throw IllegalStateException(emptyMessage) }
+                }
+            }
+            callback(result)
+        }
     }
 
     private fun <T> resultCallback(
@@ -252,8 +280,9 @@ object TranscriptAssistantClient {
             if (!payload.has("stream")) payload.put("stream", false)
         } else if (
             serverConfig.provider == "deepseek" ||
-            serverConfig.isDeepseekApi
+            serverConfig.isDeepseekApi || serverConfig.isProxy
         ) {
+            payload.remove("input")
             payload.put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put("content", systemPrompt))
                 .put(JSONObject().put("role", "user").put("content", transcript)))
@@ -261,11 +290,6 @@ object TranscriptAssistantClient {
             payload.put("messages", JSONArray()
                 .put(JSONObject().put("role", "system").put("content", systemPrompt))
                 .put(JSONObject().put("role", "user").put("content", transcript)))
-            // max_tokens NUNCA vem no catalogo (regra do usuario, 23/09): os DOIS
-            // (gemma4 e qwen2.5-7b) medem o input no /tokenize com margem x1.5.
-            if (!payload.has("max_tokens")) {
-                payload.put("max_tokens", countInputTokens(client, serverConfig, systemPrompt, transcript))
-            }
         } else {
             payload.put(
                 "input",
@@ -290,11 +314,15 @@ object TranscriptAssistantClient {
         serverConfig: ModelServerStore.Config,
         systemPrompt: String,
         material: String,
-        url: String = serverConfig.url
+        url: String = serverConfig.url,
+        streaming: Boolean = false,
     ): Request {
+        val payload = JSONObject(buildPayload(client, serverConfig, systemPrompt, material))
+        if (streaming) payload.put("stream", true)
         val builder = Request.Builder()
             .url(url)
-            .post(buildPayload(client, serverConfig, systemPrompt, material).toRequestBody(jsonMediaType))
+            .post(payload.toString().toRequestBody(jsonMediaType))
+        if (streaming) builder.header("Accept", "text/event-stream, application/x-ndjson, application/json")
         if (serverConfig.isGrokApi) {
             val key = GrokApiSettings.xaiApiKey()
             require(GrokApiSettings.isPlausibleXaiKey(key)) { "A chave API da xAI salva nas configurações é inválida." }
@@ -311,12 +339,59 @@ object TranscriptAssistantClient {
         client: OkHttpClient,
         serverConfig: ModelServerStore.Config,
         systemPrompt: String,
-        userPrompt: String
+        userPrompt: String,
+        streaming: Boolean = false,
     ): Call {
-        val primary = buildRequest(client, serverConfig, systemPrompt, userPrompt)
+        // Interceptores rodam na thread do OkHttp: descoberta e tokenização
+        // nunca bloqueiam a Activity que está montando a requisição.
+        val requestClient = if (serverConfig.provider == "servidor") client.newBuilder()
+            .addInterceptor { chain ->
+                if (chain.call().isCanceled()) throw IOException("Canceled")
+                val modelId = fetchLocalModel(client, serverConfig.url)
+                val parameters = JSONObject(serverConfig.parameters.toString()).put("model", modelId)
+                if (!parameters.has("max_tokens")) {
+                    parameters.put("max_tokens", countInputTokens(client, serverConfig, systemPrompt, userPrompt))
+                }
+                if (chain.call().isCanceled()) throw IOException("Canceled")
+                chain.proceed(buildRequest(client, serverConfig.copy(parameters = parameters),
+                    systemPrompt, userPrompt, chain.request().url.toString(), streaming))
+            }.build() else client
+        val primary = buildRequest(client, serverConfig, systemPrompt, userPrompt, streaming = streaming)
         val fallbackUrl = serverConfig.fallbackUrl.trim()
-        if (fallbackUrl.isBlank()) return client.newCall(primary)
-        return newFallbackCall(client, primary, buildRequest(client, serverConfig, systemPrompt, userPrompt, fallbackUrl))
+        if (fallbackUrl.isBlank()) return requestClient.newCall(primary)
+        return newFallbackCall(requestClient, primary, buildRequest(client, serverConfig, systemPrompt, userPrompt, fallbackUrl, streaming))
+    }
+
+    private fun modelRequest(url: String): Request = Request.Builder()
+        .url(url.substringBefore("/v1/chat/completions").trimEnd('/') + "/v1/models")
+        .header("Accept", "application/json").build()
+
+    private fun metadataClient(client: OkHttpClient) = client.newBuilder()
+        .callTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS).build()
+
+    private fun readLocalModel(response: Response): String {
+        check(response.isSuccessful) { "Não foi possível consultar o modelo do servidor local: HTTP ${response.code}." }
+        return LocalTextModel.parseId(response.body?.string().orEmpty()).also(ModelServerStore::updateLocalModel)
+    }
+
+    private fun fetchLocalModel(client: OkHttpClient, url: String): String = try {
+        metadataClient(client).newCall(modelRequest(url)).execute().use(::readLocalModel)
+    } catch (error: Exception) {
+        ModelServerStore.localModelId().ifBlank { throw IOException("Não foi possível identificar o modelo em /v1/models.", error) }
+    }
+
+    fun refreshLocalModel(
+        client: OkHttpClient,
+        callback: (Result<String>) -> Unit,
+    ): Call = metadataClient(client).newCall(modelRequest(ServiceEndpoints.LOCAL_TEXT_SERVER)).also { call ->
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = callback(Result.failure(e))
+            override fun onResponse(call: Call, response: Response) {
+                val result = response.use { runCatching { readLocalModel(response) } }
+                callback(result)
+            }
+        })
     }
 
     /** max_tokens = tokens do input com a margem do template do chat.

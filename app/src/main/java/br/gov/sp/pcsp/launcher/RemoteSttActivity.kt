@@ -826,6 +826,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        assistantRequestGeneration += 1
         cancelRequested = true
         saveInMemoryDraft()
         synchronized(currentCalls) {
@@ -858,6 +859,7 @@ class RemoteSttActivity : AppCompatActivity() {
     }
 
     private fun cancelRunningTaskForExit() {
+        assistantRequestGeneration += 1
         if (isProcessing) cancelTranscription()
         stopLiveMicTranscription(generateDefinitive = false)
         releaseRecorder()
@@ -6172,6 +6174,33 @@ class RemoteSttActivity : AppCompatActivity() {
         clearAssistantOutputViews()
     }
 
+    /** Agrupa trechos rápidos e mantém toda alteração dos editores na thread da UI. */
+    private fun assistantPreviewCallback(generation: Int, history: Boolean): (String) -> Unit {
+        val lock = Any()
+        var latest = ""
+        var pending = false
+        return { text ->
+            val schedule = synchronized(lock) {
+                latest = text
+                if (pending) false else { pending = true; true }
+            }
+            if (schedule) handler.postDelayed({
+                val snapshot = synchronized(lock) { pending = false; latest }
+                val running = if (history) historyTaskState else statementTaskState
+                if (generation == assistantRequestGeneration && !isFinishing && !isDestroyed &&
+                    running == AssistantTaskState.RUNNING) {
+                    if (history && historyRequestModel?.startsWith("servidor") == true) {
+                        historyRequestModel = LocalTextModel.label(ModelServerStore.localModelId())
+                    } else if (!history && statementRequestModel?.startsWith("servidor") == true) {
+                        statementRequestModel = LocalTextModel.label(ModelServerStore.localModelId())
+                    }
+                    if (history) showHistoryText(snapshot) else showStatementText(snapshot)
+                    renderLiveProgress()
+                }
+            }, 50L)
+        }
+    }
+
     private fun requestHistory() {
         val transcript = plainTranscriptForRequests()
         if (transcript.isBlank()) {
@@ -6209,6 +6238,7 @@ class RemoteSttActivity : AppCompatActivity() {
             transcript = transcript,
             historySystemPrompt = PromptTemplateStore.historySystemPrompt(),
             historyUserPrompt = PromptTemplateStore.historyUserPrompt(transcript),
+            onPartial = assistantPreviewCallback(generation, history = true),
         ) { result ->
             runOnUiThread {
                 if (generation != assistantRequestGeneration) return@runOnUiThread
@@ -6266,7 +6296,8 @@ class RemoteSttActivity : AppCompatActivity() {
             serverConfig = statementConfig,
             material = material,
             statementSystemPrompt = PromptTemplateStore.statementSystemPrompt(),
-            statementUserPrompt = PromptTemplateStore.statementUserPrompt(null, material)
+            statementUserPrompt = PromptTemplateStore.statementUserPrompt(null, material),
+            onPartial = assistantPreviewCallback(generation, history = false),
         ) { result ->
             runOnUiThread {
                 if (generation != assistantRequestGeneration) return@runOnUiThread

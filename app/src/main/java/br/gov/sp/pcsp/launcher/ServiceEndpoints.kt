@@ -25,9 +25,7 @@ object ServiceEndpoints {
     const val ALIBABA_STT_WEBSOCKET = "wss://dashscope-intl.aliyuncs.com/api-ws/v1/inference"
 
     const val IA_PROXY = "http://servidor:8500"
-    const val SERVER_GEMMA = "http://servidor:8400/v1/chat/completions"
-    /** Segundo modelo de texto do servidor local (qwen) — porta propria. */
-    const val SERVER_QWEN = "http://servidor:8402/v1/chat/completions"
+    const val LOCAL_TEXT_SERVER = "http://servidor:8402/v1/chat/completions"
     const val XAI_RESPONSES = "https://api.x.ai/v1/responses"
     const val DEEPSEEK_CHAT_COMPLETIONS = "https://api.deepseek.com/chat/completions"
 }
