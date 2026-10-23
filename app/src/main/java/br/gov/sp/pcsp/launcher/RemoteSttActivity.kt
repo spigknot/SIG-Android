@@ -6061,8 +6061,22 @@ class RemoteSttActivity : AppCompatActivity() {
         }
     }
 
-    private fun showHistoryText(text: String) {
-        historyTextView?.setText(text.trim())
+    private fun setAssistantText(editor: EditText?, text: String, streaming: Boolean) {
+        if (editor == null) return
+        if (!streaming) {
+            editor.setText(text.trim())
+            return
+        }
+        val current = editor.text
+        if (current != null && text.startsWith(current.toString())) {
+            if (text.length > current.length) current.append(text, current.length, text.length)
+        } else {
+            editor.setText(text)
+        }
+    }
+
+    private fun showHistoryText(text: String, streaming: Boolean = false) {
+        setAssistantText(historyTextView, text, streaming)
         historyTextView?.setMinLines(0)
         historyTextView?.visibility = View.VISIBLE
         historyOutputContainer?.visibility = View.VISIBLE
@@ -6070,8 +6084,8 @@ class RemoteSttActivity : AppCompatActivity() {
         historyPostActions?.visibility = View.VISIBLE
     }
 
-    private fun showStatementText(text: String) {
-        statementTextView?.setText(text.trim())
+    private fun showStatementText(text: String, streaming: Boolean = false) {
+        setAssistantText(statementTextView, text, streaming)
         statementTextView?.setMinLines(0)
         statementTextView?.visibility = View.VISIBLE
         statementOutputContainer?.visibility = View.VISIBLE
@@ -6174,7 +6188,7 @@ class RemoteSttActivity : AppCompatActivity() {
         clearAssistantOutputViews()
     }
 
-    /** Agrupa trechos rápidos e mantém toda alteração dos editores na thread da UI. */
+    /** Entrega trechos à UI sem espera artificial; mantém só a prévia mais recente na fila. */
     private fun assistantPreviewCallback(generation: Int, history: Boolean): (String) -> Unit {
         val lock = Any()
         var latest = ""
@@ -6184,7 +6198,7 @@ class RemoteSttActivity : AppCompatActivity() {
                 latest = text
                 if (pending) false else { pending = true; true }
             }
-            if (schedule) handler.postDelayed({
+            if (schedule) handler.post {
                 val snapshot = synchronized(lock) { pending = false; latest }
                 val running = if (history) historyTaskState else statementTaskState
                 if (generation == assistantRequestGeneration && !isFinishing && !isDestroyed &&
@@ -6194,10 +6208,11 @@ class RemoteSttActivity : AppCompatActivity() {
                     } else if (!history && statementRequestModel?.startsWith("servidor") == true) {
                         statementRequestModel = LocalTextModel.label(ModelServerStore.localModelId())
                     }
-                    if (history) showHistoryText(snapshot) else showStatementText(snapshot)
+                    if (history) showHistoryText(snapshot, streaming = true)
+                    else showStatementText(snapshot, streaming = true)
                     renderLiveProgress()
                 }
-            }, 50L)
+            }
         }
     }
 
