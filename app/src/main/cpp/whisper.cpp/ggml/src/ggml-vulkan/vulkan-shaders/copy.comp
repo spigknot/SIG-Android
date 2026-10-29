@@ -2,6 +2,10 @@
 
 #include "types.glsl"
 #include "generic_unary_head.glsl"
+// R16/D1 — include INCONDICIONAL: o depfile e gerado pela PRIMEIRA variante
+// (f32->f32); com o include dentro do #ifdef, alterar o header nao disparava
+// rebuild das variantes f32->f16. A funcao e eliminada quando nao usada.
+#include "sig_f32_to_f16_rne.glsl"
 
 layout(local_size_x = 512, local_size_y = 1, local_size_z = 1) in;
 
@@ -15,6 +19,9 @@ void main() {
 #if defined(DATA_D_BF16)
     float f = float(data_a[get_aoffset() + src0_idx(idx)]);
     data_d[get_doffset() + dst_idx(idx)] = D_TYPE(fp32_to_bf16(f));
+#elif defined(SIG_F32_TO_F16_BITS)
+    // R15/C2 — cast por bits (RNE, subnormais preservados): sem aritmetica f16.
+    data_d[get_doffset() + dst_idx(idx)] = D_TYPE(sig_f32_to_f16_bits(data_a[get_aoffset() + src0_idx(idx)]));
 #elif !defined(OPTIMIZATION_ERROR_WORKAROUND)
     data_d[get_doffset() + dst_idx(idx)] = D_TYPE(data_a[get_aoffset() + src0_idx(idx)]);
 #else

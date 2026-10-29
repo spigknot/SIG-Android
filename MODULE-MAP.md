@@ -124,6 +124,47 @@ também é bloqueado.
 | `HyMt2BackendPolicy.kt` | Capabilities/política das rotas do menu Hy-MT2: seis entradas, ids estáveis e motivo de indisponibilidade. |
 | `HyMt2Native.kt` | Ponte JNI do Hy-MT2 (carregar modelo, traduzir, liberar). |
 | `HyMt2RequestIsolation.kt` | Isolamento de pedidos Hy-MT2: reset antes de cada prefill (contrato testável). |
+| `WhisperSessionController.kt` | Sessão do Whisper: geração/ownership, release assíncrono e descarte de callbacks obsoletos. |
+| `WhisperResultParser.kt` | Resultado da transcrição: status estruturado vs prefixo legado (Ok/Cancelado/Erro/Sem fala). |
+| `LiveEventIdentity.kt` | Identidade de eventos ao vivo (run_id/act_id/job_id/seq/mono) gerada no PRODUTOR. |
+| `LiveJobSupport.kt` | Portão só-zero-digital, resultados tipados/contadores do job ao vivo (R7/E2: `LiveSegmentTime` = tempos reais de segmento do JNI no `Success`) e retrato terminal. |
+| `LivePcmPipeline.kt` | Pipeline leitor→spool→worker do caminho ao vivo (spool, contabilidade de amostras); R8/C: com planejador, o prefixo de contexto de cada chunk é ÁUDIO REAL imediatamente anterior no fluxo aceito (anel próprio), inclusive lacunas puladas — nunca tail distante colado como adjacente. |
+| `LiveVadSegmenter.kt` | Estratégia de janela do caminho ao vivo (`LiveStrategy`) e VAD por energia (frame 20 ms, histerese, corte de silêncio) + `FixedWindowPlanner`; R8/C: pico com memória LIMITADA (2 s) — fala baixa após pico não é suprimida — e preservação do incerto: só zero-digital é pulado; trecho não nulo vira pré-roll absorvido ou janela `uncertain` agrupada (decode), nunca silêncio. |
+| `LiveTextCommitter.kt` | Commit de texto do job ao vivo: provisório × comprometido por janela; R7: thread-safe (leitura da UI × mutação do worker no mesmo lock); R7/E2: reconciliação por INTERVALO de áudio (tempos reais de palavra/segmento quando válidos; sem alinhamento → hipóteses RETIDAS + dreno terminal tipado; fence de geração). |
+| `LiveTextPublication.kt` | R8/D (integridade): política PURA de promoção do texto do committer ATÉ a UI (commit/repair/terminal/cancel-drop) — sem ela o texto resolvido/reparado/drenado ficava só nos contadores. |
+| `LiveTranscriptionCoordinator.kt` | Coordenador do caminho ao vivo (reader/stop/dreno) sobre o LivePcmPipeline. |
+| `FlashAttentionNotice.kt` | Mensagem do que foi de fato aplicado/recusado em Flash Attention (seam puro). |
+| `MainTextCoalescer.kt` | R9/B2: publicador coalescido de texto na main (sem descartar linha) para tirar o layout O(n²) da thread de UI. |
+| `ModelImportSupport.kt` | R12/F1: importação SAF idempotente, com hash do conteúdo para cache/skip, temporário exclusivo, publicação atômica do modelo/sidecar e orçamento de espaço. |
+| `ModelLoadCache.kt` | R3/B2: cache do modelo carregado com dono/sessão explícito (fast-path só com chave e posse conferidas). |
+| `OpenClProfileNotice.kt` | R11/E: espelho puro do critério de recusa do perfil OpenCL (large/turbo em Adreno A7X) e parser da linha `SIG_OCL_GUARD`. |
+| `GravacaoResultadoFinal.kt` | Publicação idempotente do resultado final da gravação e pareamento do ACK com o terminal aceito pelo ledger. |
+| `WhisperBackendDisponibilidade.kt` | Política pura de disponibilidade CPU/Vulkan e pausa temporária do OpenCL, preservando IDs nativos. |
+| `WhisperJobLifecycle.kt` | R11/D4: contrato puro de vida do job (tipo de FGS por rota, posse por geração, teto do wake lock). |
+| `WhisperJobTerminalSink.kt` | R56/B01-B07: sink terminal por JOB com identidade imutável (geração capturada na admissão), `concluir()` idempotente por instância, emissor injetável e falha de encaminhamento observável — o ACK não depende de Activity viva nem de Runnable da main. |
+| `LoggerTeardownCoordinator.kt` | R56/F01-F02: coordena o dreno do logger no teardown — espera os produtores, conserva o writer enquanto houver produtor em voo, declara PERDA em vez de sucesso quando o teto vence e só então fecha o writer (uma vez), com pendência observável via `isAlive`. |
+| `TranscriptionJobResult.kt` | R12/A2: resultado por job (job_id/owner/input_id/attempt_id, terminal, origem decode/parcial/none), ledger que recusa callback atrasado e export que NUNCA herda texto de outro job — sem decode o export é vazio/sem resultado e inelegível a WER. |
+| `WhisperJobService.kt` | R11/D4: foreground service tipado (dataSync/microphone) + wake lock com teto e terminal por job — dono do lifecycle do job. |
+| `CancelStageGate.kt` | R16/D2: porta pura do estágio de cancelamento lido do terminal (`progress N%`/`calling_full`) com limiar de meio/fim; separa "estágio observado" de "clique disparado". |
+| `CaptureLog.kt` | R16/C1: leitor estrito do log de captura append-only do committer — `PASS`/`INCOMPLETE`/`FAIL` com o primeiro problema (truncada, buraco, ordem, campo, fase de reparo). |
+| `PcmBalance.kt` | R16/C1: balanço de PCM da captura (lido == único + reenvio); overlap de contexto nunca conta como áudio novo. |
+| `SessionBudget.kt` | R17/A2: orçamento ÚNICO da observação de ensaio — watcher do Drive e espera externa leem o MESMO valor, com origem (`extra`/`default`/`clamp`) registrada no JSONL. |
+| `JobProtection.kt` | R17/B1: política pura de proteção do worker — só término provado (ack) libera; quarentena esgotada sem ack e canal ausente viram CONTENÇÃO (lock/owner mantidos, admissão bloqueada). |
+| `WorkerReservation.kt` | R19/C1: RESERVA do worker antes do primeiro passo bloqueante — `reserve` idempotente por geração, `adopt` do serviço para a MESMA geração, `release` só pelo dono; recusa de admissão a outra geração e ACK atrasado não derruba o dono corrente. Store thread-safe compartilhado entre Activity e Service. |
+| `AudioCtxSeam.kt` | R18/E1: seam de `audio_ctx` do job — publica o valor vinculado ao dono/tentativa e recusa dono ausente (chamada legada vira no-op), sem canal global entre jobs. |
+| `AttemptRequest.kt` | R25/REQ: fotografia da tentativa (token/owner/gen/job/attempt, contexto, janela, submit/serial/K, captura, produtor) com `toWire`/`validate` — única fonte enviada NA chamada `transcribeOwnedReq`; `null`/ausente é DEFAULT explícito. |
+| `CommitCapture.kt` | R16/C1: captura do committer para replay — abre/fecha por job, grava PCM e diário de commits com `capture_id`, e fecha no terminal tipado. |
+| `JobCancelBridge.kt` | R18/B: ponte de cancelamento entre UI e worker — encaminha o pedido ao dono/generação correto e devolve ACK com o mesmo token. |
+| `LiveStopRequest.kt` | R17/B2: pedido de parada do live — estado tipado (pedido, aceito, terminal) para não confundir “stop pedido” com “job terminou”. |
+| `LiveTelemetry.kt` | R16/C2: telemetria do pipeline live — contadores e marcos por estágio (janela, VAD, commit) sem tocar a regra de texto. |
+| `LiveTerminalPolicy.kt` | R17/B2: política do terminal live — classifica o desfecho (SUCCESS/ERROR/cancelado) e decide a publicação do parcial antes do erro. |
+| `ModelIdentityGate.kt` | R18/A2: gate de identidade do modelo — exige SHA-256/bytes/arquitetura do arquivo realmente aberto antes do compute; divergência recusa a célula. |
+| `SubmissionFenceProfile.kt` | R17/D2: perfil de submissão Vulkan — quantum real por grafo (`submits`, nós despachados) e limites observados, sem decidir política. |
+
+| `sig_nodes_select.h` | R24/CAP: seleção explícita de intervalo `[begin,end)` para captura por nó (end exclusivo, step relativo ao begin, teto em capturas, parâmetro inválido recusado) — substitui a semântica de prefixo que nunca teve offset. |
+| `sig_attempt_opts.h` | R24/REQ: fotografia imutável por tentativa (owner/attempt → janela, submit_mb, k, serial) com publicação única, conflito recusado e `take` de uso único — substitui o `g_audio_ctx_window_samples` global. |
+| `sig_attempt_request.h` | R25/REQ: parser/validador puro do pedido da tentativa (`v=1;k=v;…`), com INVALID vs UNSUPPORTED, chave desconhecida/repetida recusada e identidade de 64 bits — validado antes de qualquer compute. |
+| `sig_vk_ledger.h` | R25/GPU-K1: ledger por unidade de submissão (fila, fence, geração, estado) com admissão K antes do `queue.submit`, conclusão só em SUCESSO e fence reciclada marcada STALE — em `whisper.cpp/ggml/src/ggml-vulkan/`. |
 
 ## D. Motores locais (inferência)
 

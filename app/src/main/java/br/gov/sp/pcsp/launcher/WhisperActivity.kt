@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.provider.DocumentsContract
+import android.system.Os
 import android.text.method.ScrollingMovementMethod
 import android.util.Log
 import android.view.Gravity
@@ -43,9 +44,9 @@ import androidx.documentfile.provider.DocumentFile
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.FFmpegSession
 import com.arthenica.ffmpegkit.ReturnCode
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.net.URL
 import java.text.SimpleDateFormat
@@ -64,7 +65,7 @@ import kotlin.math.sqrt
  * WhisperNative. Nenhuma regra de transcricao mora aqui.
  */
 
-class WhisperActivity : AppCompatActivity() {
+class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
 
     private lateinit var whisperScroll: ScrollView
     private lateinit var selectedFileView: TextView
@@ -75,6 +76,34 @@ class WhisperActivity : AppCompatActivity() {
     private lateinit var logToggle: TextView
     private lateinit var logText: TextView
     private lateinit var terminalText: TextView
+
+    /**
+     * R9/B2: publicadores coalescidos do terminal e do log global. O histórico
+     * inteiro é reconstruído/medido no máximo uma vez por janela de publicação
+     * (`MainTextCoalescer`), em vez de a cada linha anexada — o único snapshot de
+     * main_stall fora do renderer na R8-H é justamente medida/layout de texto
+     * grande na main (`Paint.nGetCharArrayBounds`, 423 ms). A escrita continua
+     * na main; nada de View/setText em worker.
+     */
+    private val terminalPublisher: MainTextCoalescer by lazy {
+        MainTextCoalescer(
+            minIntervalMs = MainTextCoalescer.DEFAULT_MIN_INTERVAL_MS,
+            now = { SystemClock.uptimeMillis() },
+            postDelayed = { delay, action -> terminalText.postDelayed(action, delay) },
+        ) { text ->
+            terminalText.text = text
+            // O scroll depende do layout, calculado no próximo traversal.
+            terminalText.post { scrollTerminalToBottom() }
+        }
+    }
+
+    private val globalLogPublisher: MainTextCoalescer by lazy {
+        MainTextCoalescer(
+            minIntervalMs = MainTextCoalescer.DEFAULT_MIN_INTERVAL_MS,
+            now = { SystemClock.uptimeMillis() },
+            postDelayed = { delay, action -> logText.postDelayed(action, delay) },
+        ) { text -> logText.text = text }
+    }
     private lateinit var buttonLanguage: TextView
     private lateinit var buttonBackend: TextView
     private lateinit var outputFileName: TextView
@@ -138,11 +167,127 @@ class WhisperActivity : AppCompatActivity() {
     @Volatile private var liveMicActive = false
     private var liveMicThread: Thread? = null
     private var liveMicAudioRecord: AudioRecord? = null
+    /** R3/C1: pipeline leitor->spool->worker do caminho ao vivo (cancel em
+     * teardown). R4/C1: resultado TIPADO por chunk (nada de String? ambíguo). */
+    private var liveMicPipeline: LivePcmPipeline<LiveChunkResult>? = null
+    /** R13/F2-fix: geração do job AO VIVO (capturada no início do laço) — o
+     * stop encaminha o cancelamento para ELA, nunca para a geração global lida
+     * tarde demais (um sucessor não pode ser atingido). */
+    @Volatile private var liveMicGeneration = 0L
+    // R56/B01-B07 (adendo8 §1-2) — ACK TERMINAL INDEPENDENTE DA ACTIVITY.
+    // Guarda a geração já confirmada para o terminal do live: o sink do worker
+    // e o caminho de UI podem chamar; só o primeiro emite, e só da própria
+    // geração (nunca libera dono alheio).
+    @Volatile private var liveAckGenEmitido = 0L
+    /** Sink terminal DESTE job (identidade imutável capturada na admissão). */
+    @Volatile private var terminalSinkAtual: WhisperJobTerminalSink? = null
+    /** R13/F2-fix: pedido ÚNICO de parada do job ao vivo (cancelar a janela em
+     * voo por-dono + descartar o pendente). Recriado a cada job. */
+    @Volatile private var liveStopRequest: LiveStopRequest? = null
+    /** R4/C1: snapshot imutável das configurações do job ao vivo (capturado no
+     * INÍCIO; encaminhado ao JNI a cada chunk). */
+    @Volatile private var liveMicSettings: LiveJobSettings? = null
+    /** R4/C1/C2: contadores por desfecho e retrato terminal do job ao vivo. */
+    @Volatile private var liveChunkTally: LiveChunkTally? = null
+    @Volatile private var liveTerminalSnapshot: LiveTerminalSummary? = null
+    private var liveTerminalLines: StringBuilder? = null
+    @Volatile private var liveReaderReason: String = ""
+    /** R4/C2: o pipeline terminou por cancel (teardown) — entra no retrato. */
+    @Volatile private var liveWasCancelled = false
+    /** R3/C1: teto VISÍVEL antes de anunciar "worker ainda ativo" no stop (inj.)
+     * — a espera continua e nada é liberado até o worker terminal. */
+    @Volatile private var liveMicDrainTimeoutMs: Long = LIVE_MIC_DRAIN_TIMEOUT_MS
     private var liveMicStartedAt = 0L
+    // R6/D2 — commit/janela do caminho ao vivo (por job; nada atravessa sessão).
+    @Volatile private var liveTextCommitter: LiveTextCommitter? = null
+    @Volatile private var liveFirstSpeechMs: Long = -1L
+    @Volatile private var liveFirstPartialMs: Long = -1L
+    /** R8/D — 1º texto INCREMENTAL publicado (candidata 2); -1 = nunca. */
+    @Volatile private var liveFirstIncrementalMs: Long = -1L
+    /** R8/D — o overlay incremental já apareceu NESTE job (cancel derruba). */
+    @Volatile private var liveIncrementalShown: Boolean = false
+    /** R8/D (integridade) — último texto publicado na UI pelo caminho ao vivo
+     * (commit/repair/terminal/incremental); base da promoção sem setText cego. */
+    @Volatile private var liveLastPublishedText: String? = null
+    @Volatile private var liveDecodeWallMsTotal: Long = 0L
+    @Volatile private var liveDecodeWindowsCount: Int = 0
+    /** R13/F1 — `attempt_id` do log de reparo (por job; NÃO é política de
+     * reparo: o committer continua decidindo quantas tentativas existem). */
+    private val liveRepairAttemptIds = LiveTelemetry.AttemptIds()
+    @Volatile private var liveWindowDesc: String = ""
+    /** R7/A1: identidade do PRODUTOR do job ao vivo (run/act/job/seq/mono) —
+     * carimbada em todo evento; NUNCA deduzida do arquivo do laboratório. */
+    private val activityInstanceId = LiveEventIdentity.nextActivityInstanceId()
+
+    /**
+     * R14/B2 — token de cancelamento DESTA Activity. Registrado no serviço e
+     * removido só ele mesmo no destroy: a instância vizinha não perde o seu.
+     */
+    /**
+     * R14/C2 — registra a ROTA FA efetiva (contadores do backend) no artefato do
+     * lab. Em produção `liveEvent` é inerte; a chamada é barata e não muda o job.
+     */
+    private fun logFaRoute(tag: String) {
+        runCatching {
+            val st = WhisperNative.faRouteStatus().replace("\"", "'")
+            liveEvent("fa_route", currentSessionGeneration,
+                      fields = "\"tag\":\"$tag\",\"status\":\"$st\"")
+            // R14/B4 — MEDIÇÃO do trabalho em voo (submits/nós/bytes do grafo).
+            runCatching {
+                val b4 = WhisperNative.b4InflightState().replace("\"", "'")
+                liveEvent("b4_inflight", currentSessionGeneration,
+                          fields = "\"tag\":\"$tag\",\"state\":\"$b4\"")
+            }
+        }
+    }
+
+    /**
+     * R15/B2 — o forwarder devolve ACK: `true` só quando a sessão DESTA geração
+     * aceitou o pedido. Um no-op (geração desconhecida/já terminada) devolve
+     * `false` e o serviço encerra localmente em vez de esperar para sempre.
+     */
+    /**
+     * R15/B3 — o forwarder agora é de PROCESSO (`JobCancelBridge`): ele não
+     * captura esta Activity e por isso NÃO precisa ser desregistrado no
+     * destroy. O serviço continua tendo quem aceite o cancelamento enquanto o
+     * worker existir, e a UI só é avisada se houver Activity viva.
+     */
+    private val jobCancelForwarder: (Long) -> Boolean = JobCancelBridge.forwarder
+
+    /**
+     * Chamado pela ponte quando um cancelamento foi ACEITO. Seguro depois do
+     * destroy (não mexe em views): só marca o pedido e atualiza status na UI
+     * viva, pela geração.
+     */
+    override fun onJobCancelForwarded(generation: Long) {
+        cancelRequested = true
+        if (isFinishing || isDestroyed) return
+        runOnUiThread {
+            whisperSession.runIfCurrent(generation) {
+                setTranscriptionStatus("Cancelando transcrição...")
+            }
+        }
+    }
+    private val liveStamp = LiveEventStamp(activityInstanceId)
 
     private val modelLoadLock = Any()
+    private val modelImportSelection = ModelImportSupport.SelectionGate()
     @Volatile private var currentlyLoadedModelKey: String? = null
+
+    /** R3/B2: cache do modelo carregado com dono/sessão + existência do contexto
+     * nativo (owned) — substitui o antigo fast-path só-por-chave. */
+    private val loadedModelCache = ModelLoadCache(
+        contextOwner = { WhisperNative.contextOwnerSafe() },
+        ownedNative = { whisperSession.ownershipAvailable() },
+    )
     private var pendingAudioAction: (() -> Unit)? = null
+
+    // W01/W02: ciclo de vida de sessão fora da UI thread.
+    private val whisperSession = WhisperSessions.shared
+    @Volatile private var currentSessionGeneration = 0L
+    // W03: encerramento da transcrição ao vivo sem join na UI thread.
+    private var liveMicStopping = false
+    private var liveMicStopStartedAt = 0L
 
     private val transcriptionTimer = object : Runnable {
         override fun run() {
@@ -294,7 +439,18 @@ class WhisperActivity : AppCompatActivity() {
 
         if (selectedModel == null) {
             val available = officialModels()
-            selectedModel = available.firstOrNull { DownloadFileStorage.isComplete(it.file, it.bytes) } ?: available.first()
+            // R15/A2 — o modelo pode ser pedido pelo ENSAIO (o lab sabe qual
+            // modelo a célula deve usar; sem isso o produto escolhe o primeiro
+            // que existe — o BASE — e a medição é do modelo errado).
+            // A identificação é conferida no evento `model_loaded` (key + sha).
+            val pedidoLabel = WhisperLabSeams.requestedModelLabel()
+                ?: intent?.getStringExtra("labModelLabel")
+            selectedModel = if (!pedidoLabel.isNullOrBlank()) {
+                available.firstOrNull { it.label == pedidoLabel }
+            } else null
+            selectedModel = selectedModel
+                ?: available.firstOrNull { DownloadFileStorage.isComplete(it.file, it.bytes) }
+                ?: available.first()
             buttonModel.text = selectedModel?.label ?: "Modelo"
         }
         buttonModel.visibility = View.VISIBLE
@@ -338,23 +494,115 @@ class WhisperActivity : AppCompatActivity() {
         resetAdvancedSettings()
 
         updateTranscribeEnabled()
+
+        // R11/D4 — pedido de POST_NOTIFICATIONS: SÓ em produção (no lab o diálogo
+        // do sistema roubaria o foco do roteiro; a célula mede o FGS, não a
+        // permissão). O serviço roda igual sem ela: o sistema só não exibe a
+        // notificação.
+        if (!WhisperLabSeams.isLab()) requestJobNotificationPermission()
+
+        // R11/D4 — o job passa a ter DONO DE LIFECYCLE (foreground service +
+        // wake lock com teto). O botão "Cancelar" da notificação chega à sessão
+        // desta Activity pelo mesmo caminho do botão na tela.
+        WhisperJobService.forceEnabled = WhisperLabSeams.jobServiceEnabled()
+        // R15/B3 — registro de PROCESSO (idempotente); sobrevive ao destroy.
+        JobCancelBridge.attach(this)
+
+        // R4/C3: gancho de laboratório no FIM do onCreate (produção: no-op —
+        // o objeto de produção é inerte e nenhum roteiro externo existe).
+        WhisperLabSeams.onActivityReady(this)
+
+        // R6/D3: rota de ARQUIVO injetável (SÓ flavor lab; produção = null) —
+        // entrega à MESMA callback do picker a Uri do provider de fixture do
+        // lab (sondagem→conversão→load→JNI→relatório idênticos ao produto).
+        WhisperLabSeams.injectedMediaUri(this)?.let { uri ->
+            val data = Intent().setData(uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            onActivityResult(REQUEST_PICK_MEDIA, Activity.RESULT_OK, data)
+            // Lab: a escolha de arquivo reseta o modelo (fluxo real do usuário);
+            // re-seleciona o primeiro modelo existente para o clique real de
+            // transcrever exercitar a rota completa. Produção nunca entra aqui.
+            // R15/A2 — mas a re-seleção NÃO pode trocar o modelo pedido pelo
+            // ensaio: aqui ela caía no BASE e anulava a escolha do turbo.
+            val pedidoLabel = WhisperLabSeams.requestedModelLabel()
+                ?: intent?.getStringExtra("labModelLabel")
+            if (selectedModel == null) {
+                val available = officialModels()
+                selectedModel = if (!pedidoLabel.isNullOrBlank()) {
+                    available.firstOrNull { it.label == pedidoLabel }
+                } else null
+                selectedModel = selectedModel
+                    ?: available.firstOrNull { DownloadFileStorage.isComplete(it.file, it.bytes) }
+                    ?: available.firstOrNull()
+                buttonModel.text = selectedModel?.label ?: "Modelo"
+            }
+            updateTranscribeEnabled()
+        }
     }
 
     override fun onDestroy() {
+        modelImportSelection.invalidate()
+        // R3/B2: INVALIDA o owner ANTES do cleanup — posts/callbacks tardios
+        // deste ciclo de vida morrem no runIfCurrent mesmo sem sucessor (a
+        // Activity destruída não recebe evento antigo).
+        val dyingGeneration = currentSessionGeneration
+        whisperSession.invalidateOwner(dyingGeneration)
+        // R4/C3: destroy visível no lab (produção: no-op).
+        // R55/B04 — ORIGEM do destroy explícita: `finishing` (usuário/back),
+        // `changing_config` (rotação/tema: o dono morre mas o processo fica) e
+        // `destroyed`. Sem estes três, "destroy" era um nome só para causas
+        // diferentes e a medição de UI não sabia o que estava medindo.
+        liveEvent(
+            "activity_destroy", dyingGeneration,
+            fields = "\"finishing\":$isFinishing," +
+                "\"changing_config\":$isChangingConfigurations," +
+                "\"destroyed\":$isDestroyed," +
+                "\"live_worker\":${liveMicPipeline?.isFinished() == false}"
+        )
+        // R9/B2: nada de texto final preso na janela de coalescência — o dump
+        // final do lab lê o widget do terminal.
+        terminalPublisher.flush()
+        globalLogPublisher.flush()
+        // R5/A3: CANCELAMENTO EFETIVO da sessão que está em inferência/carga —
+        // encaminhado ao BINDING do job (por token; inclui init pendente, que
+        // registra o pedido e o encaminha quando o owner nasce). Nunca atinge a
+        // sucessora; nada de await/join/free na main (cancel é não-bloqueante).
+        whisperSession.cancel(dyingGeneration)
+        liveEvent(
+            "destroy_cancel_forwarded",
+            dyingGeneration,
+            fields = "\"owner\":${whisperSession.bindingOwnerOf(dyingGeneration)}"
+        )
         if (whiteRecordingActive) {
             whiteRecordingActive = false
             try { whiteRecordingAudioRecord?.stop() } catch (_: Throwable) {}
             try { whiteRecordingAudioRecord?.release() } catch (_: Throwable) {}
+            whiteRecordingAudioRecord = null
         }
         if (liveMicActive) {
             liveMicActive = false
             try { liveMicAudioRecord?.stop() } catch (_: Throwable) {}
             try { liveMicAudioRecord?.release() } catch (_: Throwable) {}
+            // R5/A3: desregistra o handle já liberado — o laço ao vivo confere a
+            // identidade no finally e não libera o mesmo AudioRecord duas vezes.
+            liveMicAudioRecord = null
         }
-        try {
-            WhisperNative.releaseModel()
-        } catch (_: Throwable) {
-        }
+        // E1/R2: cancelar é estado distinto do stop — invalida callbacks do
+        // caminho ao vivo e descarta pendentes contados; a thread do worker
+        // termina sozinha depois do chunk em voo.
+        liveMicPipeline?.cancel()
+        liveMicPipeline = null
+        // R11/D4 — o dono do job morreu: libera lock/notificação AQUI (nunca
+        // deixa wake lock órfão se o sistema destruir a Activity do job).
+        // R14/B2: destroy da dona NÃO é terminal — o serviço pede o cancel e
+        // mantém FGS/wake lock até o worker reconhecer (prazo curto de segurança).
+        WhisperJobService.ownerGone(dyingGeneration)
+        // R15/B3 — NÃO desregistra: o forwarder é de processo e o cancelamento
+        // precisa continuar aceito enquanto o worker drenar. Só a UI é solta.
+        JobCancelBridge.detach(this)
+        // W01: release assíncrono — nada de esperar liberação do modelo na UI
+        // thread. O release leva o TOKEN da sessão que carregou o contexto.
+        whisperSession.releaseAsync(dyingGeneration)
+        loadedModelCache.clear()
         currentlyLoadedModelKey = null
         super.onDestroy()
     }
@@ -381,7 +629,18 @@ class WhisperActivity : AppCompatActivity() {
         when (requestCode) {
             REQUEST_PICK_MEDIA -> data?.let { loadPickedMedia(it) }
             REQUEST_PICK_FOLDER -> data?.let { loadPickedFolder(it) }
-            REQUEST_PICK_MODEL -> data?.let { loadPickedModel(it) }
+            REQUEST_PICK_MODEL -> {
+                // R14/E1 — no lab, o Uri do MODELO é entregue pela MESMA callback
+                // que o picker real usaria (o caminho SAF do produto, sem
+                // exportar o serviço nem contornar a importação).
+                val modelUri = WhisperLabSeams.injectedModelUri(this)
+                if (modelUri != null) {
+                    loadPickedModel(Intent().setData(modelUri)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                } else {
+                    data?.let { loadPickedModel(it) }
+                }
+            }
             REQUEST_CHOOSE_PRE_OUTPUT_DIR -> {
                 val treeUri = data?.data ?: return
                 try {
@@ -479,6 +738,10 @@ class WhisperActivity : AppCompatActivity() {
         status.text = "Escolha um modelo."
         clearOutput()
         updateTranscribeEnabled()
+        // R22/Q1 — ORDEM CORRETA: o picker acabou de zerar a seleção
+        // (resetModelSelection). A seleção pedida pela bancada entra AGORA, na
+        // main thread, e não antes da mídia chegar.
+        runCatching { WhisperLabSeams.applyPendingModelSelection(this) }
     }
 
     private fun loadPickedFolder(data: Intent) {
@@ -547,6 +810,7 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun resetModelSelection() {
+        modelImportSelection.invalidate()
         selectedModel = null
         buttonModel.text = "Modelo"
     }
@@ -576,7 +840,35 @@ class WhisperActivity : AppCompatActivity() {
         startActivityForResult(intent, REQUEST_PICK_FOLDER)
     }
 
+    /**
+     * R14/E1 — Importação de modelo pelo fluxo REAL, disparada pelo lab.
+     * Usa a MESMA função do produto ([loadPickedModel]): mesma leitura de
+     * tamanho, mesmo hash, mesma cópia atômica, mesmo sidecar de identidade.
+     * O shell não consegue navegar o DocumentsUI do SAF, então o lab entrega o
+     * Uri — o resto do caminho é o do produto, sem atalho.
+     */
+    fun labImportModel(uri: android.net.Uri) {
+        liveEvent("model_import_injected", currentSessionGeneration,
+            fields = "\"uri\":\"$uri\"")
+        loadPickedModel(Intent().setData(uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    }
+
     private fun openModelPicker() {
+        // R14/E1 — no lab, o Uri do modelo é entregue SEM abrir o SAF (o shell
+        // não consegue navegar o DocumentsUI): a MESMA rota de importação do
+        // produto é usada (`loadPickedModel`), com a mesma callback.
+        val injected = runCatching { WhisperLabSeams.injectedModelUri(this) }
+            .onFailure { Log.w(TAG, "seam de modelo indisponivel: $it") }
+            .getOrNull()
+        Log.i(TAG, "openModelPicker: injected=$injected")
+        if (injected != null) {
+            liveEvent("model_import_injected", currentSessionGeneration,
+                fields = "\"uri\":\"$injected\"")
+            loadPickedModel(Intent().setData(injected)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+            return
+        }
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
@@ -591,17 +883,100 @@ class WhisperActivity : AppCompatActivity() {
         val name = MediaUriSupport.queryDisplayName(contentResolver, uri)?.takeIf { it.lowercase(Locale.US).endsWith(".bin") }
             ?: "modelo_${System.currentTimeMillis()}.bin"
         val destination = File(modelsDir(), name)
+        val importToken = modelImportSelection.beginImport()
         Thread {
             try {
+                if (!modelImportSelection.isCurrent(importToken)) throw CancellationException("importação substituída")
                 modelsDir().mkdirs()
-                contentResolver.openInputStream(uri)?.use { input ->
-                    FileOutputStream(destination).use { output -> input.copyTo(output) }
-                } ?: throw IllegalStateException("não consegui abrir o modelo selecionado")
+                val sourceSize = contentResolver.openFileDescriptor(uri, "r")?.use { it.statSize } ?: -1L
+                val identitySidecar = ModelImportSupport.identityFile(destination)
+                val existing = ModelImportSupport.readIdentity(identitySidecar)
+                // R18/A2 — sha do arquivo PUBLICADO (COPY calcula; REUSE lê o sidecar).
+                var publicadoSha: String? = null
+                val sourceSha = if (destination.isFile && existing != null && sourceSize > 0L && existing.second == sourceSize) {
+                    contentResolver.openInputStream(uri)?.use { ModelImportSupport.sha256(it) }
+                } else {
+                    null
+                }
+                var freeBytes = -1L
+                val decision = ModelImportSupport.importDecision(
+                    destination,
+                    existing,
+                    sourceSha,
+                    sourceSize,
+                ) {
+                    freeBytes = destination.parentFile?.usableSpace ?: -1L
+                    freeBytes
+                }
+                when (decision) {
+                    ModelImportSupport.ImportDecision.REUSE -> Unit
+                    ModelImportSupport.ImportDecision.INSUFFICIENT_SPACE -> {
+                        throw IOException("espaço insuficiente para importar o modelo: precisa " +
+                            "${sourceSize / (1024 * 1024)} MB, livre ${freeBytes / (1024 * 1024)} MB")
+                    }
+                    ModelImportSupport.ImportDecision.COPY -> {
+                    val tmp = ModelImportSupport.partFile(destination)
+                    try {
+                        val sha = contentResolver.openInputStream(uri)?.use { input ->
+                            FileOutputStream(tmp).use { output ->
+                                val digest = ModelImportSupport.copyAndDigest(input, output)
+                                output.fd.sync()
+                                digest
+                            }
+                        } ?: throw IllegalStateException("não consegui abrir o modelo selecionado")
+                        if (sourceSize > 0L && tmp.length() != sourceSize) {
+                            throw IOException("tamanho copiado difere da origem: ${tmp.length()} != $sourceSize")
+                        }
+                        ModelImportSupport.publishAtomically(
+                            part = tmp,
+                            destination = destination,
+                            identity = sha to tmp.length(),
+                            commitIfCurrent = { action -> modelImportSelection.runIfCurrent(importToken, action) },
+                            atomicMove = { source, target ->
+                                synchronized(modelLoadLock) { Os.rename(source.absolutePath, target.absolutePath) }
+                            },
+                        )
+                        publicadoSha = sha
+                    } catch (e: Throwable) {
+                        tmp.delete()
+                        throw e
+                    }
+                }
+                }
+                if (publicadoSha == null) publicadoSha = existing?.first
                 val model = WhisperModel(name.removeSuffix(".bin"), name, destination, null)
-                runOnUiThread { selectModel(model) }
+                runOnUiThread {
+                    // R18/A2 — PUBLICAR não é SELECIONAR. Só emite "selecionado"
+                    // quando o callback corrente aceitou; stale/recusa vira
+                    // evento próprio, com o motivo.
+                    val aplicada = modelImportSelection.selectIfCurrent(importToken) { applyModelSelection(model) }
+                    val campos = "\"name\":\"$name\",\"bytes\":${destination.length()}," +
+                        "\"sha256\":\"${publicadoSha ?: ""}\",\"applied\":$aplicada,\"token\":$importToken"
+                    if (aplicada) {
+                        liveEvent("model_import_selected", currentSessionGeneration, fields = campos)
+                        // compatibilidade com o consumo antigo do lab
+                        liveEvent("model_imported", currentSessionGeneration,
+                            fields = "\"name\":\"$name\",\"bytes\":${destination.length()}," +
+                                "\"sha256\":\"${publicadoSha ?: ""}\"")
+                    } else {
+                        Log.i(TAG, "Ignoring stale model import selection: $name")
+                        liveEvent("model_import_stale", currentSessionGeneration,
+                            fields = campos + ",\"motivo\":\"callback_obsoleto\"")
+                    }
+                }
+            } catch (_: CancellationException) {
+                Log.i(TAG, "Model import superseded: $name")
             } catch (e: Throwable) {
                 Log.e(TAG, "Could not import model", e)
-                runOnUiThread { status.text = "Erro ao importar modelo: ${e.message ?: "falha inesperada"}" }
+                // R14/E1 — o erro da importação precisa ser OBSERVÁVEL pelo
+                // ensaio (o logcat some na rotação).
+                liveEvent("model_import_failed", currentSessionGeneration,
+                    fields = "\"error\":\"${e.javaClass.simpleName}: ${e.message}\",\"name\":\"$name\"")
+                runOnUiThread {
+                    if (modelImportSelection.isCurrent(importToken)) {
+                        status.text = "Erro ao importar modelo: ${e.message ?: "falha inesperada"}"
+                    }
+                }
             }
         }.start()
     }
@@ -666,6 +1041,11 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun selectModel(model: WhisperModel) {
+        modelImportSelection.invalidate()
+        applyModelSelection(model)
+    }
+
+    private fun applyModelSelection(model: WhisperModel) {
         selectedModel = model
         buttonModel.text = model.label
         status.text = "${model.label} pronto."
@@ -698,10 +1078,15 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun showBackendMenu() {
         PopupMenu(this, buttonBackend).apply {
-            WhisperBackend.values()
-                .forEach { backend -> menu.add(backend.label) }
+            // R56/adendo20 — política central: OpenCL (nativeKind 2) fica
+            // temporariamente desativado; o menu oferece só o que está ativo.
+            // O enum não é reindexado: reativar é mudar a política, não a UI.
+            val visiveis = WhisperBackend.values().filter {
+                WhisperBackendDisponibilidade.disponivel(it.nativeKind)
+            }
+            visiveis.forEach { backend -> menu.add(backend.label) }
             setOnMenuItemClickListener { item ->
-                val backend = WhisperBackend.values().first { it.label == item.title.toString() }
+                val backend = visiveis.first { it.label == item.title.toString() }
                 if (backend == WhisperBackend.VULKAN && !supportsVulkanCompute()) {
                     status.text = "Este aparelho não anuncia suporte a Vulkan Compute."
                     return@setOnMenuItemClickListener true
@@ -716,9 +1101,53 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun transcribeSelectedMedia() {
         val model = selectedModel ?: return
+        // R16/A2 — GATE DE IDENTIDADE (pedido x selecionado).
+        //
+        // A R15 rodou uma célula "Q5" em que o produto selecionou BASE e nada
+        // falhou: o relatório saiu como PASS. Aqui a divergência é terminal.
+        val esperado = WhisperLabSeams.expectedModelPath()
+        if (esperado != null) {
+            val selecionado = modelFile(model).absolutePath
+            // R16/A2 — compara pelo NOME: o ensaio pode apontar para outro
+            // diretório com o MESMO arquivo (files/whisperlab-model vs
+            // files/whisper_models), e comparar path literal gerava falso
+            // positivo, bloqueando célula legítima.
+            if (File(selecionado).name != File(esperado).name) {
+                status.text = "Modelo divergente do pedido — célula inválida."
+                runCatching { WhisperLabSeams.onModelIdentityMismatch(esperado, selecionado) }
+                Log.w(TAG, "model_identity_mismatch pedido=$esperado selecionado=$selecionado")
+                updateTranscribeEnabled()
+                return
+            }
+            Log.i(TAG, "model_identity_ok path=$selecionado")
+        }
         val items = selectedItems.toList()
-        val backend = selectedBackend
-        val settings = readAdvancedSettings()
+        // R19/A4 — backend/FA da CELULA tem precedencia sobre o default do
+        // produto; sem isso o job rodava CPU mesmo pedindo Vulkan.
+        val forcedKind = WhisperLabSeams.forcedBackendKind(this)
+        val forcedFa = WhisperLabSeams.forcedFlashAttention(this)
+        Log.i(TAG, "lab_forced_backend kind=$forcedKind fa=$forcedFa default=${selectedBackend.nativeKind}")
+        // R56/adendo20 — pedido EXPLÍCITO de backend pausado é RECUSADO de forma
+        // tipada antes de carregar/executar. Converter em CPU silenciosamente
+        // faria o ensaio registrar "OpenCL" tendo rodado em outro backend.
+        if (forcedKind != null) {
+            val motivoRecusa = WhisperBackendDisponibilidade.motivoIndisponivel(forcedKind)
+            if (motivoRecusa != null) {
+                WhisperLabSeams.onBackendRecusado(forcedKind, motivoRecusa)
+                Log.w(TAG, "backend_recusado kind=$forcedKind motivo=$motivoRecusa")
+                status.text = "Backend $forcedKind recusado: $motivoRecusa."
+                updateTranscribeEnabled()
+                return
+            }
+        }
+        val backend = forcedKind
+            ?.let { k -> WhisperBackend.values().firstOrNull { it.nativeKind == k } }
+            ?: WhisperBackend.values()
+                .firstOrNull { it.nativeKind == WhisperBackendDisponibilidade.resolver(selectedBackend.nativeKind) }
+            ?: WhisperBackend.CPU
+        val settings = readAdvancedSettings().let { st ->
+            WhisperLabSeams.forcedFlashAttention(this)?.let { fa -> st.copy(flashAttention = fa) } ?: st
+        }
         if (items.isEmpty()) return
         if (!DownloadFileStorage.isComplete(modelFile(model), model.bytes)) {
             model.downloadUrl?.let {
@@ -741,9 +1170,39 @@ class WhisperActivity : AppCompatActivity() {
 
         clearOutput()
         cancelRequested = false
+        // W02: nova sessão descarta cancelamentos e callbacks da anterior.
+        currentSessionGeneration = whisperSession.beginSession()
+        val sessionGeneration = currentSessionGeneration
+        // R12/A2: identidade do job no PRODUTOR — o resultado publicado leva
+        // job_id/owner/input_id/attempt_id; export e relatório leem daqui
+        // (nunca do widget, que pode estar vazio ou ser de outro job).
+        val jobId = TranscriptionJobResults.ledger.beginJob(
+            LiveEventIdentity.runId, activityInstanceId, sessionGeneration
+        )
         isTranscribing = true
         startTranscriptionTimer()
         setBusy(true)
+        // R11/D4 — execução INICIADA PELO USUÁRIO e OBSERVÁVEL: o job de arquivo
+        // ganha dono de lifecycle (FGS `dataSync` = processamento LOCAL de
+        // arquivo + wake lock com teto). Com a tela apagada o processo deixa de
+        // ser candidato ao congelador: o job vai a terminal em vez de congelar
+        // em "Carregando…".
+        val admissaoArquivo = WhisperJobService.startJobOutcome(
+            this, sessionGeneration, WhisperJobLifecycle.KIND_FILE, "Preparando arquivos…",
+            // R15/B1 — prazo curto só quando o ENSAIO pede (produção = padrão).
+            timeoutMs = WhisperLabSeams.leaseTimeoutMs()
+                ?: WhisperJobService.DEFAULT_LOCK_TIMEOUT_MS
+        )
+        // R56/B02 — admissão recusada NÃO pode seguir: a geração não é dona, o
+        // FGS não subiu e o terminal seria recusado depois. Antes, o fluxo
+        // continuava e deixava a reserva em quarentena.
+        if (admissaoArquivo == WhisperJobService.StartOutcome.ADMISSAO_RECUSADA) {
+            isTranscribing = false
+            stopTranscriptionTimer()
+            setBusy(false)
+            status.text = "Job recusado: outra geração é dona da reserva."
+            return
+        }
         val startedAt = SystemClock.elapsedRealtime()
         val liveText = StringBuilder()
         val logLines = StringBuilder()
@@ -751,6 +1210,9 @@ class WhisperActivity : AppCompatActivity() {
         val results = mutableListOf<TranscriptionResult>()
 
         Thread {
+            // R8/A2: marcador `faJobBegin` DESTE job no log nativo — o estado FA
+            // lido para cada arquivo só vale para linhas DEPOIS deste ponto.
+            whisperSession.faJobBegin("file")
             var sessionDir: File? = null
             var tempWavDir: File? = null
             var modelLoadMs = 0L
@@ -772,14 +1234,14 @@ class WhisperActivity : AppCompatActivity() {
                 TranscriptionReport.appendLog(logLines, WhisperNative.buildInfo())
                 TranscriptionReport.appendLog(logLines, "CPU: ${cpuName()}")
 
-                runOnUiThread {
+                postIfCurrent(sessionGeneration) {
                     logToggle.visibility = View.VISIBLE
                     updateGlobalLogText()
                     updateTerminalText(terminalLines)
                 }
 
                 TranscriptionReport.appendLog(logLines, "Convertendo arquivos para WAV temporário...")
-                val convertedItems = prepareWavFiles(items, tempWavDir, terminalLines, logLines)
+                val convertedItems = prepareWavFiles(items, tempWavDir, terminalLines, logLines, sessionGeneration)
                 checkNotCancelled()
                 val totalAudioSeconds = convertedItems.sumOf { it.durationSeconds }
                 currentTotalAudioSeconds = totalAudioSeconds
@@ -787,28 +1249,123 @@ class WhisperActivity : AppCompatActivity() {
                 appendTerminal(terminalLines, "")
                 appendTerminal(terminalLines, "loading model: ${modelFile(model).absolutePath}")
                 TranscriptionReport.appendLog(logLines, "Carregando modelo...")
-                runOnUiThread {
+                postIfCurrent(sessionGeneration) {
                     setTranscriptionStatus("Carregando modelo...")
                     updateGlobalLogText()
                 }
                 val modelStartedAt = SystemClock.elapsedRealtime()
-                val loaded = synchronized(modelLoadLock) { ensureModelLoaded(model, backend, settings.flashAttention) }
+                // R19/C1 — RESERVA antes do primeiro passo bloqueante. Se outra
+                // geração detém o worker, este job NÃO inicia compute. Antes
+                // disto a marca só chegava por startService, depois da carga.
+                // R55/B01 — a leitura da decisão é a MESMA do Serviço e do
+                // startJob (WhisperJobLifecycle.admission). Antes, o `else`
+                // aceitava qualquer decisão nova: uma geração JÁ ENCERRADA
+                // (REFUSED_STALE_GENERATION) passava e o job computava sem
+                // reserva, disputando o worker com a geração viva.
+                val porta = WhisperJobLifecycle.admission(
+                    WorkerReservationStore.reserve(sessionGeneration)
+                )
+                if (!porta.start) {
+                    liveEvent(
+                        "worker_reserve_refused", sessionGeneration,
+                        fields = "\"motivo\":\"${porta.reason}\"," +
+                            "\"dono\":${WorkerReservationStore.owner()}"
+                    )
+                    throw IllegalStateException(
+                        "worker indisponível (${porta.reason}; dono=${WorkerReservationStore.owner()}) — job não iniciado"
+                    )
+                }
+                liveEvent("worker_reserved", sessionGeneration)
+                runCatching { WhisperLabSeams.setCurrentGen(sessionGeneration) }
+                val loaded = synchronized(modelLoadLock) { ensureModelLoaded(model, backend, settings.flashAttention, sessionGeneration) }
                 modelLoadMs = SystemClock.elapsedRealtime() - modelStartedAt
                 checkNotCancelled()
-                if (!loaded) {
-                    val nativeError = WhisperNative.lastError().ifBlank {
-                        "não consegui carregar o modelo com ${backend.reportLabel}"
+                if (!loaded.ok) {
+                    // R5/A1: diagnóstico CAPTURADO na própria carga (worker) — a
+                    // UI/relatório nunca releem lastError global.
+                    throw IllegalStateException(loaded.failureText)
+                }
+                // R19/A4 — GATE DE ABORTO: o backend EFETIVO tem de ser o
+                // pedido. Antes disto a chave de cache registrava o PEDIDO
+
+                // ("|1|true|") e um fallback para CPU passava despercebido — a
+                // coorte da R18 media CPU achando que era Vulkan.
+                run {
+                    // R20/A2 — DUAS POLÍTICAS, um só evento:
+                    //  * LAB: identidade e coerência são REQUISITOS. Getter
+                    //    indisponível/desconhecido não passa; backend ou FA
+                    //    divergentes invalidam a célula antes do compute.
+                    //  * PRODUTO: fallback tipado continua permitido e é
+                    //    registrado — jamais vira "célula inválida".
+                    val getterOk = runCatching { WhisperNative.effectiveBackendKind() }.isSuccess
+                    val efetivo = runCatching { WhisperNative.effectiveBackendKind() }.getOrDefault(-1)
+                    val faGetterOk = runCatching { WhisperNative.effectiveFlashGraph() }.isSuccess
+                    val faEfetiva = runCatching { WhisperNative.effectiveFlashGraph() }.getOrNull()
+                    val lab = WhisperLabSeams.isLab()
+                    liveEvent(
+                        "backend_gate", sessionGeneration,
+                        fields = "\"pedido_backend\":${backend.nativeKind}," +
+                            "\"efetivo_backend\":$efetivo," +
+                            "\"pedido_fa\":${settings.flashAttention}," +
+                            "\"efetivo_fa\":${faEfetiva ?: -1}," +
+                            "\"getter_ok\":$getterOk," +
+                            "\"fa_getter_ok\":$faGetterOk," +
+                            "\"lab\":$lab"
+                    )
+                    if (lab) {
+                        if (!getterOk || efetivo < 0) {
+                            throw IllegalStateException(
+                                "backend efetivo desconhecido — célula inválida"
+                            )
+                        }
+                        if (efetivo != backend.nativeKind) {
+                            throw IllegalStateException(
+                                "backend divergente: pedido=${backend.reportLabel} efetivo=$efetivo — célula inválida"
+                            )
+                        }
+                        if (settings.flashAttention) {
+                            if (!faGetterOk || faEfetiva == null) {
+                                throw IllegalStateException(
+                                    "FA efetiva desconhecida — célula inválida"
+                                )
+                            }
+                            if (!faEfetiva) {
+                                throw IllegalStateException(
+                                    "FA pedida não executada (grafo sem FA) — célula inválida"
+                                )
+                            }
+                        }
+                    } else if (efetivo >= 0 && efetivo != backend.nativeKind) {
+                        // Produto: fallback suportado, registrado — não aborta.
+                        liveEvent(
+                            "backend_fallback_produto", sessionGeneration,
+                            fields = "\"pedido_backend\":${backend.nativeKind}," +
+                                "\"efetivo_backend\":$efetivo"
+                        )
                     }
-                    throw IllegalStateException(nativeError)
                 }
                 appendTerminal(terminalLines, "model loaded in ${formatElapsedCompact(modelLoadMs)}")
-                WhisperNative.lastLoadLog().trimEnd()
+                loaded.loadLog.trimEnd()
                     .lineSequence()
                     .filter { it.isNotBlank() }
                     .forEach { appendTerminal(terminalLines, it) }
+                // D3/R2: explica o FA efetivo (aplicado ou não + motivo) — a
+                // decisão de capacidade é do JNI; aqui só se reporta.
+                FlashAttentionNotice.message(settings.flashAttention, backend.nativeKind, loaded.loadLog)?.let {
+                    appendTerminal(terminalLines, it)
+                    TranscriptionReport.appendLog(logLines, it)
+                }
+                // R11/E (E1): a recusa de PERFIL OpenCL (quando houver) chega
+                // ESTRUTURADA do motor (`SIG_OCL_GUARD`): pedido/efetivo/motivo
+                // no terminal e no relatório. A decisão — e a troca para o
+                // backend seguro — é do JNI; aqui só se reporta.
+                OpenClProfileNotice.message(backend.nativeKind, loaded.loadLog)?.let {
+                    appendTerminal(terminalLines, it)
+                    TranscriptionReport.appendLog(logLines, it)
+                }
                 appendTerminal(terminalLines, "native backends:\n${WhisperNative.backendInfo()}")
                 TranscriptionReport.appendLog(logLines, "Modelo carregado em ${formatElapsedCompact(modelLoadMs)}")
-                WhisperNative.lastLoadLog().trimEnd().takeIf { it.isNotBlank() }?.let {
+                loaded.loadLog.trimEnd().takeIf { it.isNotBlank() }?.let {
                     TranscriptionReport.appendLog(logLines, "Log de carregamento do modelo:\n$it")
                 }
                 updateGlobalLogText()
@@ -819,15 +1376,33 @@ class WhisperActivity : AppCompatActivity() {
                     checkNotCancelled()
                     val item = converted.item
                     val fileNumber = index + 1
+                    // R12/A2: tentativa (entrada) DESTE job — segmentos de um
+                    // callback atrasado de outro job/tentativa são recusados.
+                    // R13/A2: beginAttempt é aquisição atômica — job
+                    // substituído/terminal/desconhecido devolve null ANTES de
+                    // tocar no estado; a Activity trata a recusa antes do
+                    // decode ou de qualquer escrita.
+                    val attemptKey = TranscriptionJobResults.ledger.beginAttempt(
+                        jobId, sessionGeneration, item.name, LiveEventIdentity.runId, activityInstanceId
+                    )
+                    if (attemptKey == null) {
+                        appendTerminal(terminalLines, "whisper.cpp: stale attempt recusado em ${item.name} (job substituído)")
+                        TranscriptionReport.appendLog(logLines, "Tentativa tardia recusada em ${item.name}: job substituído")
+                        postIfCurrent(sessionGeneration) {
+                            updateTerminalText(terminalLines)
+                            updateGlobalLogText()
+                        }
+                        return@forEachIndexed
+                    }
                     TranscriptionReport.appendTranscriptionHeader(liveText, item.name)
                     val fileText = StringBuilder()
                     appendTerminal(terminalLines, "whisper.cpp: begin ${item.name}")
-                    runOnUiThread {
+                    postIfCurrent(sessionGeneration) {
                         updateTerminalText(terminalLines)
                     }
 
                     TranscriptionReport.appendLog(logLines, "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name}")
-                    runOnUiThread {
+                    postIfCurrent(sessionGeneration) {
                         setTranscriptionStatus("Transcrevendo $fileNumber/${convertedItems.size}: ${item.name}")
                         updateGlobalLogText()
                     }
@@ -839,7 +1414,11 @@ class WhisperActivity : AppCompatActivity() {
                             if (force || now - lastTerminalUpdateMs[0] >= 250L) {
                                 lastTerminalUpdateMs[0] = now
                                 runOnUiThread {
-                                    updateTerminalText(terminalLines)
+                                    // R2/B2: re-checagem na EXECUÇÃO do post — uma nova
+                                    // sessão pode ter começado depois do agendamento.
+                                    whisperSession.runIfCurrent(sessionGeneration) {
+                                        updateTerminalText(terminalLines)
+                                    }
                                 }
                             }
                         }
@@ -847,19 +1426,27 @@ class WhisperActivity : AppCompatActivity() {
                             override fun onSegment(text: String, startMs: Long, endMs: Long) {
                                 val segment = text.trim()
                                 if (segment.isBlank()) return
+                                // R12/A2: o ledger do PRODUTOR recebe o segmento
+                                // com a identidade desta tentativa. Segmento de um
+                                // job/tentativa antiga é recusado (false) e NÃO
+                                // entra no resultado atual.
+                                TranscriptionJobResults.ledger.appendSegment(
+                                    attemptKey, segment, startMs, endMs)
                                 synchronized(liveText) {
                                     fileText.append(segment).append('\n')
                                     liveText.append(segment).append('\n')
                                 }
                                 runOnUiThread {
-                                    if (liveTranscriptContainer.visibility != View.VISIBLE) {
-                                        liveTranscriptContainer.visibility = View.VISIBLE
-                                        liveTranscriptClipboardActions.visibility = View.VISIBLE
+                                    whisperSession.runIfCurrent(sessionGeneration) {
+                                        if (liveTranscriptContainer.visibility != View.VISIBLE) {
+                                            liveTranscriptContainer.visibility = View.VISIBLE
+                                            liveTranscriptClipboardActions.visibility = View.VISIBLE
+                                        }
+                                        val cur = liveTranscriptText.text.toString()
+                                        val sep = if (cur.isEmpty() || cur.endsWith("\n") || cur.endsWith(" ")) "" else " "
+                                        liveTranscriptText.append(sep + segment)
+                                        liveTranscriptText.setSelection(liveTranscriptText.text.length)
                                     }
-                                    val cur = liveTranscriptText.text.toString()
-                                    val sep = if (cur.isEmpty() || cur.endsWith("\n") || cur.endsWith(" ")) "" else " "
-                                    liveTranscriptText.append(sep + segment)
-                                    liveTranscriptText.setSelection(liveTranscriptText.text.length)
                                 }
                                 appendTerminal(terminalLines, "${formatTime(startMs)} --> ${formatTime(endMs)}  $segment")
                                 updateTerminalThrottled()
@@ -869,10 +1456,12 @@ class WhisperActivity : AppCompatActivity() {
                                 val safeProgress = progress.coerceIn(0, 100)
                                 appendTerminal(terminalLines, "whisper.cpp: progress $safeProgress%")
                                 runOnUiThread {
-                                    setTranscriptionStatus(
-                                        "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name} ($languageLabel)... $safeProgress%",
-                                        safeProgress
-                                    )
+                                    whisperSession.runIfCurrent(sessionGeneration) {
+                                        setTranscriptionStatus(
+                                            "Transcrevendo $fileNumber/${convertedItems.size}: ${item.name} ($languageLabel)... $safeProgress%",
+                                            safeProgress
+                                        )
+                                    }
                                 }
                                 updateTerminalThrottled()
                             }
@@ -891,9 +1480,14 @@ class WhisperActivity : AppCompatActivity() {
                     appendTerminal(terminalLines, WhisperNative.buildInfo())
                     appendTerminal(terminalLines, "system_info: ${WhisperNative.systemInfo()}")
                     appendTerminal(terminalLines, "whisper.cpp: calling whisper_full_parallel")
-                    runOnUiThread { updateTerminalText(terminalLines) }
+                    postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
                     val transcribeStartedAt = SystemClock.elapsedRealtime()
-                    val returnedText = WhisperNative.transcribe(
+                    // R18/C1 — início real do worker (caminho de lote/import).
+                    runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, sessionGeneration) }
+                    // R2/B2: texto+status do MESMO job numa única chamada (par
+                    // protegido); o callback é envolvido pelo controller.
+                    val (returnedRaw, transcribeStatus) = whisperSession.transcribeAndStatus(
+                        sessionGeneration,
                         converted.wavFile.absolutePath,
                         selectedLanguage.code,
                         settings.beamSize,
@@ -902,20 +1496,61 @@ class WhisperActivity : AppCompatActivity() {
                         settings.vadFilter,
                         if (settings.vadFilter) vadModelFile().absolutePath else "",
                         makeCallback(selectedLanguage.code)
-                    ).trim()
+                    )
+                    val returnedText = returnedRaw.trim()
                     appendTerminal(terminalLines, "whisper.cpp: whisper_full_parallel returned in ${formatElapsedCompact(SystemClock.elapsedRealtime() - transcribeStartedAt)}")
-                    runOnUiThread { updateTerminalText(terminalLines) }
-                    if (returnedText.startsWith("Cancelado:")) throw CancellationException(returnedText.removePrefix("Cancelado:").trim())
-                    if (returnedText.startsWith("Erro:")) throw IllegalStateException(returnedText.removePrefix("Erro:").trim())
-                    checkNotCancelled()
-                    if (fileText.isBlank() && returnedText.isNotBlank()) {
-                        synchronized(liveText) {
-                            fileText.append(returnedText).append('\n')
-                            liveText.append(returnedText).append('\n')
+                    postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
+                    val parsed = WhisperResultParser.parse(returnedText, transcribeStatus)
+                    // R8/A2: o aviso de FA ATUALIZA com o estado ESTRUTURADO do
+                    // MESMO job (SIG_FA_EXEC deste transcribe) — distingue CARGA
+                    // (SIG_FA_STATUS) de EXECUÇÃO e não herda do job anterior.
+                    if (settings.flashAttention) {
+                        val faNow = runCatching { whisperSession.loadLogForDiagnostics() }.getOrDefault("")
+                        FlashAttentionNotice.message(true, backend.nativeKind, faNow)?.let { faMsg ->
+                            appendTerminal(terminalLines, "[FA exec] $faMsg")
+                            TranscriptionReport.appendLog(logLines, "[FA exec] $faMsg")
                         }
-                        appendTerminal(terminalLines, returnedText)
+                        FlashAttentionNotice.executionSummary(true, backend.nativeKind, faNow)?.let { execLine ->
+                            appendTerminal(terminalLines, "[FA estado] $execLine")
+                            TranscriptionReport.appendLog(logLines, "[FA estado] $execLine")
+                        }
+                        postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
                     }
-                    if (fileText.isBlank()) throw IllegalStateException("transcrição vazia em ${item.name}")
+                    when (parsed) {
+                        is WhisperTranscriptResult.Cancelled -> throw CancellationException(parsed.message)
+                        is WhisperTranscriptResult.Error -> throw IllegalStateException(parsed.message)
+                        is WhisperTranscriptResult.NoSpeech -> {
+                            // W10: sem fala não é erro genérico nem sucesso silencioso: pula o
+                            // arquivo com a causa explícita no terminal e no log.
+                            TranscriptionJobResults.ledger.finishAttempt(
+                                attemptKey, JobTerminalState.NO_SPEECH, transcribeStatus
+                            )
+                            appendTerminal(terminalLines, "sem fala detectada em ${item.name}")
+                            TranscriptionReport.appendLog(logLines, "Sem fala detectada em ${item.name}")
+                            postIfCurrent(sessionGeneration) {
+                                updateGlobalLogText()
+                                updateTerminalText(terminalLines)
+                            }
+                            return@forEachIndexed
+                        }
+                        is WhisperTranscriptResult.Success -> {
+                            checkNotCancelled()
+                            if (fileText.isBlank() && parsed.text.isNotBlank()) {
+                                TranscriptionJobResults.ledger.appendSegment(attemptKey, parsed.text)
+                                synchronized(liveText) {
+                                    fileText.append(parsed.text).append('\n')
+                                    liveText.append(parsed.text).append('\n')
+                                }
+                                appendTerminal(terminalLines, parsed.text)
+                            }
+                            if (fileText.isBlank()) throw IllegalStateException("transcrição vazia em ${item.name}")
+                            // R12/A2: fecha a tentativa no MESMO terminal em que o
+                            // texto foi aceito (SUCCESS + status nativo "ok").
+                            TranscriptionJobResults.ledger.finishAttempt(
+                                attemptKey, JobTerminalState.SUCCESS, transcribeStatus
+                            )
+                        }
+                    }
 
                     TranscriptionReport.appendTranscriptionSeparator(liveText)
                     appendTerminal(terminalLines, "whisper.cpp: end ${item.name}")
@@ -925,12 +1560,21 @@ class WhisperActivity : AppCompatActivity() {
                     results += TranscriptionResult(item.name, text, individual, converted.durationSeconds)
 
                     TranscriptionReport.appendLog(logLines, "Concluído: ${item.name}")
-                    runOnUiThread {
+                    postIfCurrent(sessionGeneration) {
                         updateGlobalLogText()
                         updateTerminalText(terminalLines)
                     }
                 }
 
+                // R12/A2: TERMINAL do job publicado pelo PRODUTOR, com
+                // identidade e origem do texto. `job.json` viaja junto do
+                // export do produto (transcricoes.txt/html) — quem consome
+                // sabe de QUAL job é o texto e se ele é elegível a métrica.
+                val jobResult = TranscriptionJobResults.ledger.publishJob(
+                    jobId, sessionGeneration, JobTerminalState.SUCCESS, "ok"
+                )
+                // R14/C2 — rota FA efetiva DESTE job no artefato.
+                logFaRoute("file")
                 releaseLoadedModel()
                 appendTerminal(terminalLines, "model released")
                 tempWavDir?.deleteRecursively()
@@ -942,6 +1586,14 @@ class WhisperActivity : AppCompatActivity() {
                 val sessionTerminalFile = File(sessionDir, "terminal.txt")
                 txtFile.writeText(liveText.toString(), Charsets.UTF_8)
                 htmlFile.writeText(TranscriptionReport.buildHtml(results.map { TranscriptionReport.Row(it.fileName, it.text) }), Charsets.UTF_8)
+                jobResult?.let {
+                    File(sessionDir, "job.json").writeText(it.toJsonString(), Charsets.UTF_8)
+                    TranscriptionReport.appendLog(
+                        logLines,
+                        "Resultado: job=${it.key.jobId} attempt=${it.key.attemptId} terminal=${it.terminal.wire} " +
+                            "origem=${it.origin.name.lowercase()} wer_eligivel=${it.werEligible}"
+                    )
+                }
 
                 val report = buildReport(model, backend, items.size, totalAudioSeconds, elapsedMs, modelLoadMs)
                 TranscriptionReport.appendLog(logLines, report)
@@ -951,6 +1603,7 @@ class WhisperActivity : AppCompatActivity() {
 
                 val outputSession = OutputSession(sessionDir, txtFile, htmlFile, sessionLogFile)
                 runOnUiThread {
+                    whisperSession.runIfCurrent(sessionGeneration) {
                     lastSession = outputSession
                     tempSessionDir = sessionDir
                     isTranscribing = false
@@ -977,9 +1630,20 @@ class WhisperActivity : AppCompatActivity() {
                     updateTerminalText(terminalLines)
                     whisperScroll.post { whisperScroll.smoothScrollTo(0, outputActions.bottom) }
                     updateTranscribeEnabled()
+                    }
                 }
+                // R11/D4 — TERMINAL do job de arquivo: libera lock/notificação.
+                WhisperJobService.finishJob(sessionGeneration, "SUCCESS")
             } catch (e: CancellationException) {
                 Log.i(TAG, "Transcription cancelled", e)
+                // R12/A2: terminal do PRODUTOR. Sem decode deste job o texto é
+                // NONE (export vazio/sem resultado); com fala já decodificada é
+                // PARTIAL e continua marcado como parcial — nunca vira o texto
+                // do job anterior nem "sucesso" para WER.
+                val cancelResult = TranscriptionJobResults.ledger.publishJob(
+                    jobId, sessionGeneration, JobTerminalState.CANCELLED, "cancelled"
+                )
+                val cancelExport = TranscriptionJobResults.ledger.exportOf(cancelResult)
                 releaseLoadedModel()
                 tempWavDir?.deleteRecursively()
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
@@ -996,23 +1660,48 @@ class WhisperActivity : AppCompatActivity() {
                     try {
                         File(it, "log.txt").writeText(logLines.toString(), Charsets.UTF_8)
                         File(it, "terminal.txt").writeText(snapshotText(terminalLines), Charsets.UTF_8)
+                        cancelResult?.let { r ->
+                            File(it, "job.json").writeText(r.toJsonString(), Charsets.UTF_8)
+                        }
                         appendGlobalLog(logLines.toString())
                     } catch (_: Throwable) {
                     }
                 }
                 runOnUiThread {
+                    whisperSession.runIfCurrent(sessionGeneration) {
                     isTranscribing = false
                     cancelRequested = false
                     stopTranscriptionTimer()
                     setBusy(false)
-                    status.text = cancelReport
+                    // R12/A2: a UI só mostra o que é DESTE job. Com parcial, o
+                    // painel exibe o parcial com a identidade do job; sem
+                    // parcial, o painel fica vazio (nada herdado do job anterior).
+                    if (!cancelExport.empty) {
+                        liveTranscriptText.setText(cancelExport.text)
+                        liveTranscriptContainer.visibility = View.VISIBLE
+                        liveTranscriptClipboardActions.visibility = View.VISIBLE
+                        status.text = cancelReport + "\nPARCIAL do job " +
+                            "${cancelResult?.key?.shortForm} — sem WER"
+                    } else {
+                        liveTranscriptText.setText("")
+                        liveTranscriptContainer.visibility = View.GONE
+                        liveTranscriptClipboardActions.visibility = View.GONE
+                        status.text = cancelReport + "\nSEM resultado do job atual (nada decodificado)"
+                    }
                     updateGlobalLogText()
                     updateTerminalText(terminalLines)
                     logToggle.visibility = View.VISIBLE
                     updateTranscribeEnabled()
+                    }
                 }
+                // R11/D4 — TERMINAL tipado (cancel): libera lock/notificação.
+                WhisperJobService.finishJob(sessionGeneration, "CANCELLED")
             } catch (e: Throwable) {
                 Log.e(TAG, "Transcription failed", e)
+                val errorResult = TranscriptionJobResults.ledger.publishJob(
+                    jobId, sessionGeneration, JobTerminalState.ERROR, "error"
+                )
+                val errorExport = TranscriptionJobResults.ledger.exportOf(errorResult)
                 releaseLoadedModel()
                 tempWavDir?.deleteRecursively()
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
@@ -1030,26 +1719,46 @@ class WhisperActivity : AppCompatActivity() {
                     try {
                         File(it, "log.txt").writeText(logLines.toString(), Charsets.UTF_8)
                         File(it, "terminal.txt").writeText(snapshotText(terminalLines), Charsets.UTF_8)
+                        errorResult?.let { r ->
+                            File(it, "job.json").writeText(r.toJsonString(), Charsets.UTF_8)
+                        }
                         appendGlobalLog(logLines.toString())
                     } catch (_: Throwable) {
                     }
                 }
                 runOnUiThread {
+                    whisperSession.runIfCurrent(sessionGeneration) {
                     isTranscribing = false
                     cancelRequested = false
                     stopTranscriptionTimer()
                     setBusy(false)
-                    status.text = errorReport
+                    // R12/A2: erro também não herda texto: só o parcial DESTE
+                    // job (marcado) ou painel vazio.
+                    if (!errorExport.empty) {
+                        liveTranscriptText.setText(errorExport.text)
+                        liveTranscriptContainer.visibility = View.VISIBLE
+                        liveTranscriptClipboardActions.visibility = View.VISIBLE
+                        status.text = errorReport + "\nPARCIAL do job " +
+                            "${errorResult?.key?.shortForm} — sem WER"
+                    } else {
+                        liveTranscriptText.setText("")
+                        liveTranscriptContainer.visibility = View.GONE
+                        liveTranscriptClipboardActions.visibility = View.GONE
+                        status.text = errorReport + "\nSEM resultado do job atual (nada decodificado)"
+                    }
                     updateGlobalLogText()
                     updateTerminalText(terminalLines)
                     logToggle.visibility = View.VISIBLE
                     updateTranscribeEnabled()
+                    }
                 }
+                // R11/D4 — TERMINAL tipado (erro): libera lock/notificação.
+                WhisperJobService.finishJob(sessionGeneration, "ERROR")
             }
         }.start()
     }
 
-    private fun convertToWav(inputFile: File, wavFile: File, originalName: String, terminalLines: StringBuilder) {
+    private fun convertToWav(inputFile: File, wavFile: File, originalName: String, terminalLines: StringBuilder, sessionGeneration: Long) {
         val arguments = arrayOf(
             "-y",
             "-i", inputFile.absolutePath,
@@ -1062,15 +1771,15 @@ class WhisperActivity : AppCompatActivity() {
         )
         appendTerminal(terminalLines, "# original: $originalName")
         appendTerminal(terminalLines, "ffmpeg ${arguments.joinToString(" ")}")
-        runOnUiThread { updateTerminalText(terminalLines) }
-        val convertSession = executeFfmpegWithTerminal(arguments, terminalLines)
+        postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
+        val convertSession = executeFfmpegWithTerminal(arguments, terminalLines, sessionGeneration)
         if (!ReturnCode.isSuccess(convertSession.returnCode) || !wavFile.exists() || wavFile.length() == 0L) {
             val logTail = convertSession.allLogsAsString.orEmpty().lines().takeLast(2).joinToString(" ")
             throw IllegalStateException("falha ao converter áudio. ${logTail.take(90)}")
         }
     }
 
-    private fun executeFfmpegWithTerminal(arguments: Array<String>, terminalLines: StringBuilder): FFmpegSession {
+    private fun executeFfmpegWithTerminal(arguments: Array<String>, terminalLines: StringBuilder, sessionGeneration: Long): FFmpegSession {
         val latch = CountDownLatch(1)
         val sessionRef = AtomicReference<FFmpegSession>()
         FFmpegKit.executeWithArgumentsAsync(
@@ -1081,11 +1790,11 @@ class WhisperActivity : AppCompatActivity() {
             },
             { log ->
                 appendTerminal(terminalLines, log.message.orEmpty().trimEnd())
-                runOnUiThread { updateTerminalText(terminalLines) }
+                postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
             },
             { statistics ->
                 appendTerminal(terminalLines, "ffmpeg stats: time=${statistics.time} size=${statistics.size} bitrate=${statistics.bitrate} speed=${statistics.speed}")
-                runOnUiThread { updateTerminalText(terminalLines) }
+                postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
             }
         )
         latch.await()
@@ -1096,14 +1805,15 @@ class WhisperActivity : AppCompatActivity() {
         items: List<MediaItem>,
         tempWavDir: File,
         terminalLines: StringBuilder,
-        logLines: StringBuilder
+        logLines: StringBuilder,
+        sessionGeneration: Long
     ): List<ConvertedMediaItem> {
         val copiedInputs = items.mapIndexed { index, item ->
             val fileNumber = index + 1
             appendTerminal(terminalLines, "")
             appendTerminal(terminalLines, "prepare input[$fileNumber/${items.size}]: ${item.name}")
             TranscriptionReport.appendLog(logLines, "Preparando $fileNumber/${items.size}: ${item.name}")
-            runOnUiThread {
+            postIfCurrent(sessionGeneration) {
                 status.text = "Preparando $fileNumber/${items.size}: ${item.name}"
                 updateGlobalLogText()
                 updateTerminalText(terminalLines)
@@ -1114,7 +1824,7 @@ class WhisperActivity : AppCompatActivity() {
             val wavFile = File(tempWavDir, "${index + 1}_${TranscriptionReport.safeBaseName(item.name)}.wav")
             val inputWavInfo = readWavInfo(inputFile)
             appendTerminal(terminalLines, "copy input done in ${formatElapsedCompact(SystemClock.elapsedRealtime() - copyStartedAt)}")
-            runOnUiThread { updateTerminalText(terminalLines) }
+            postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
             PreparedInput(index, item, inputFile, wavFile, inputWavInfo)
         }
 
@@ -1133,7 +1843,7 @@ class WhisperActivity : AppCompatActivity() {
             }
         )
         TranscriptionReport.appendLog(logLines, "Conversões FFmpeg necessárias: $needsFfmpeg; paralelismo: $parallelism")
-        runOnUiThread {
+        postIfCurrent(sessionGeneration) {
             status.text = if (needsFfmpeg > 1) {
                 "Convertendo $needsFfmpeg arquivos em paralelo..."
             } else {
@@ -1147,7 +1857,7 @@ class WhisperActivity : AppCompatActivity() {
         return try {
             val futures = copiedInputs.map { prepared ->
                 executor.submit<ConvertedMediaItem> {
-                    prepareSingleWav(prepared, terminalLines, logLines)
+                    prepareSingleWav(prepared, terminalLines, logLines, sessionGeneration)
                 }
             }
             futures.map { it.get() }.sortedBy { it.index }
@@ -1159,7 +1869,8 @@ class WhisperActivity : AppCompatActivity() {
     private fun prepareSingleWav(
         prepared: PreparedInput,
         terminalLines: StringBuilder,
-        logLines: StringBuilder
+        logLines: StringBuilder,
+        sessionGeneration: Long
     ): ConvertedMediaItem {
         val prepareStartedAt = SystemClock.elapsedRealtime()
         try {
@@ -1168,14 +1879,14 @@ class WhisperActivity : AppCompatActivity() {
                 prepared.inputFile.copyTo(prepared.wavFile, overwrite = true)
                 TranscriptionReport.appendLog(logLines, "FFmpeg dispensado: ${prepared.item.name} já está em WAV 16 kHz mono.")
             } else {
-                convertToWav(prepared.inputFile, prepared.wavFile, prepared.item.name, terminalLines)
+                convertToWav(prepared.inputFile, prepared.wavFile, prepared.item.name, terminalLines, sessionGeneration)
             }
             appendTerminal(terminalLines, "[${prepared.item.name}] wav preparation done in ${formatElapsedCompact(SystemClock.elapsedRealtime() - prepareStartedAt)}")
             val durationStartedAt = SystemClock.elapsedRealtime()
             val duration = wavDurationSeconds(prepared.wavFile)
             appendTerminal(terminalLines, "[${prepared.item.name}] wav duration read in ${formatElapsedCompact(SystemClock.elapsedRealtime() - durationStartedAt)} (${formatSeconds(duration)})")
             TranscriptionReport.appendLog(logLines, "WAV temporário pronto: ${prepared.item.name}")
-            runOnUiThread {
+            postIfCurrent(sessionGeneration) {
                 updateGlobalLogText()
                 updateTerminalText(terminalLines)
             }
@@ -1196,7 +1907,9 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun updateGlobalLogText() {
         if (logText.visibility == View.VISIBLE) {
-            logText.text = readGlobalLog()
+            // R9/B2: leitura do arquivo e layout do texto inteiro passam a
+            // ocorrer na publicação coalescida, não a cada chamada.
+            globalLogPublisher.request { readGlobalLog() }
         }
     }
 
@@ -1216,14 +1929,19 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     private fun updateTerminalText(builder: StringBuilder) {
-        synchronized(builder) {
-            terminalText.text = builder.toString().ifBlank { "$ whisper --aguardando arquivo" }
+        // R9/B2: o histórico inteiro é reconstruído/medido no máximo uma vez por
+        // janela de publicação (antes: a cada linha anexada).
+        terminalPublisher.request {
+            snapshotText(builder).ifBlank { "$ whisper --aguardando arquivo" }
         }
-        terminalText.post {
-            val layout = terminalText.layout ?: return@post
-            val scrollAmount = layout.getLineTop(terminalText.lineCount) - terminalText.height + terminalText.totalPaddingTop + terminalText.totalPaddingBottom
-            terminalText.scrollTo(0, scrollAmount.coerceAtLeast(0))
-        }
+    }
+
+    /** R9/B2: rolagem do terminal para o fim após a publicação coalescida. */
+    private fun scrollTerminalToBottom() {
+        val layout = terminalText.layout ?: return
+        val scrollAmount = layout.getLineTop(terminalText.lineCount) - terminalText.height +
+            terminalText.totalPaddingTop + terminalText.totalPaddingBottom
+        terminalText.scrollTo(0, scrollAmount.coerceAtLeast(0))
     }
 
     private fun toggleAdvancedSettings() {
@@ -1756,6 +2474,10 @@ class WhisperActivity : AppCompatActivity() {
             if (destHtml != null) savedCount++
             copyFileToDocument(logFile, "text/plain", sessionDestDir, "log.txt")
             copyFileToDocument(terminalFile, "text/plain", sessionDestDir, "terminal.txt")
+            // R12/A2: o payload estruturado (job/attempt/terminal/origem/WER
+            // elegível) viaja com o export — o texto exportado tem identidade.
+            val jobFile = File(sessionDir, "job.json")
+            copyFileToDocument(jobFile, "application/json", sessionDestDir, "job.json")
 
             // Copy Transcricoes subfolder
             val perFileDir = File(sessionDir, "Transcricoes")
@@ -1839,6 +2561,13 @@ class WhisperActivity : AppCompatActivity() {
         logText.text = readGlobalLog()
         logToggle.visibility = View.VISIBLE
         terminalText.text = "$ whisper --aguardando arquivo"
+        // R12/A2: o painel de transcrição é do JOB ATUAL. Sem esta limpeza um
+        // job cancelado/errado deixava na tela o texto do job anterior, sem
+        // identidade, copiável/exportável como se fosse o resultado deste job
+        // (foi o que o instrumento P4 da R11 exportou).
+        liveTranscriptText.setText("")
+        liveTranscriptContainer.visibility = View.GONE
+        liveTranscriptClipboardActions.visibility = View.GONE
     }
 
     private fun updateTranscribeEnabled() {
@@ -1908,6 +2637,9 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun setTranscriptionStatus(message: String, progressPercent: Int? = null) {
         currentTranscriptionStatus = message
+        // R11/D4 — o status vivo do job vira o texto da notificação do FGS
+        // (dono conferido lá dentro; nenhuma notificação de sessão antiga).
+        WhisperJobService.updateStatus(this, currentSessionGeneration, message)
         progressPercent?.let {
             currentTranscriptionProgress = it.coerceIn(0, 100)
             currentEstimatedMs = if (currentTranscriptionProgress > 0 && transcriptionStartedAt > 0L) {
@@ -1959,9 +2691,49 @@ class WhisperActivity : AppCompatActivity() {
         if (!isTranscribing || cancelRequested) return
         cancelRequested = true
         setTranscriptionStatus("Cancelando transcrição...")
-        try {
-            WhisperNative.cancelTranscription()
-        } catch (_: Throwable) {
+        // R3/B1: id CAPTURADO pelo solicitante — cancelar não lê a geração global.
+        whisperSession.cancel(currentSessionGeneration)
+        // R16/D2 — retrato do trabalho em voo no instante do ACEITE do cancel
+        // (última submissão/nós/bytes do grafo): alimenta a cadeia
+        // pedido→aceite→…→worker_end→terminal→release. Inerte em produção.
+        logFaRoute("cancel_pedido")
+    }
+
+    /**
+     * R16/C3 — troca a mídia selecionada no meio da sequência do lab (a mesma
+     * via de `loadPickedMedia` do picker; produção nunca chama). A troca limpa
+     * o modelo (comportamento do produto), então o rótulo pedido é reposto.
+     */
+    /**
+     * R21/Q1 — SEAM DE BANCADA: seleciona um modelo por ARQUIVO, sem passar pelo
+     * menu do catálogo. Necessário para o Turbo Q5, que não está em
+     * `officialModels()` — o menu não tem item e a seleção caía no BASE.
+     * Só existe no flavor de laboratório; `false` quando fora dele.
+     */
+    fun labSelectModelFile(fileName: String): Boolean {
+        if (!WhisperLabSeams.isLab()) return false
+        val f = File(modelsDir(), fileName)
+        if (!f.isFile) return false
+        selectedModel = WhisperModel(
+            label = fileName,
+            fileName = fileName,
+            file = f,
+            downloadUrl = null,
+            bytes = f.length()
+        )
+        buttonModel.text = fileName
+        return true
+    }
+
+    fun labReselectFixture(fixtureName: String, modelLabel: String?) {
+        if (!WhisperLabSeams.isLab()) return
+        val uri = android.net.Uri.parse("content://br.gov.sp.pcsp.whisperlab.fixtures/$fixtureName")
+        val data = Intent().setData(uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        loadPickedMedia(data)
+        if (selectedModel == null && !modelLabel.isNullOrBlank()) {
+            selectedModel = officialModels().firstOrNull { it.label == modelLabel }
+                ?: officialModels().firstOrNull { it.file.exists() }
+            buttonModel.text = selectedModel?.label ?: "Modelo"
         }
     }
 
@@ -1981,10 +2753,25 @@ class WhisperActivity : AppCompatActivity() {
             FFmpegKit.cancel()
             setBusy(false)
         }
-        try {
-            WhisperNative.cancelTranscription()
-        } catch (_: Throwable) {
+        // R3/B1: id capturado (não a geração global de outra sessão).
+        whisperSession.cancel(currentSessionGeneration)
+    }
+
+    /** R11/D4 — a notificação do FGS é o canal de OBSERVAÇÃO do job: pede
+     * POST_NOTIFICATIONS (API 33+) sem bloquear o job; o serviço roda mesmo sem
+     * a permissão (o sistema só não mostra a notificação). */
+    private fun requestJobNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
         }
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            REQUEST_POST_NOTIFICATIONS_PERMISSION
+        )
     }
 
     private fun checkAudioPermission(onGranted: () -> Unit) {
@@ -2034,22 +2821,140 @@ class WhisperActivity : AppCompatActivity() {
         }
     }
 
-    private fun ensureModelLoaded(model: WhisperModel, backend: WhisperBackend, flashAttention: Boolean): Boolean {
-        val key = "${model.file.absolutePath}|${backend.nativeKind}|$flashAttention"
-        if (currentlyLoadedModelKey == key) return true
-        if (currentlyLoadedModelKey != null) {
-            try { WhisperNative.releaseModel() } catch (_: Throwable) {}
-            currentlyLoadedModelKey = null
+    /** R3/B2: executa [block] na UI thread SOMENTE na execução (não basta o
+     * agendamento) e apenas se a sessão do JOB [sessionGeneration] ainda for a
+     * atual; sessionGeneration < 0 = sem checagem (chamadas de setup). */
+    private fun postIfCurrent(sessionGeneration: Long, block: () -> Unit) {
+        runOnUiThread {
+            if (sessionGeneration < 0L) {
+                block()
+            } else {
+                whisperSession.runIfCurrent(sessionGeneration) { block() }
+            }
         }
-        val ok = WhisperNative.loadModel(modelFile(model).absolutePath, backend.nativeKind, flashAttention)
-        if (ok) {
-            currentlyLoadedModelKey = key
+    }
+
+    /** R4/C1: atualiza o terminal se a geração do job [generation] ainda for a
+     * atual (post re-checado na execução). */
+    private fun updateTerminalTextForGeneration(generation: Long, builder: StringBuilder) {
+        postIfCurrent(generation) { updateTerminalText(builder) }
+    }
+
+    /** R7/A1: emite um evento do caminho ao vivo com a identidade CARIMBADA
+     * pelo produtor (run_id/act_id/job_id/gen/seq/mono[/window_index]) e os
+     * campos específicos em [fields] (JSON sem chaves externas). */
+    /** R8/B: escape JSON mínimo para texto de janela/reparo no JSONL do lab. */
+    private fun jsonEscape(v: String): String =
+        v.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ").replace("\r", " ")
+
+    private fun liveEvent(name: String, generation: Long, windowIndex: Int = -1, fields: String = "") {
+        val header = liveStamp.header(generation, windowIndex)
+        // Normaliza os campos: aceita com ou sem as chaves externas; NUNCA
+        // deixa o corpo sem o fechamento (payload inválido quebra o parser do
+        // consumidor — defeito real detectável pelo analisador).
+        val extras = fields.removePrefix("{").removeSuffix("}")
+        val body = if (extras.isBlank()) "{$header}" else "{$header,$extras}"
+        WhisperLabSeams.event(name, body)
+    }
+
+    /** R4/C2: acrescenta UMA linha ao terminal do job ao vivo e reflete na UI
+     * somente se a geração [generation] ainda for a atual. Chamado da thread do
+     * worker do pipeline — o builder é compartilhado com a UI e sincronizado. */
+    private fun appendLiveTerminal(generation: Long, line: String) {
+        val builder = liveTerminalLines ?: return
+        synchronized(builder) { appendTerminal(builder, line) }
+        updateTerminalTextForGeneration(generation, builder)
+    }
+
+    /** R8/D (integridade) — PROMOÇÃO do texto do committer ATÉ a UI: publica
+     * agora (main; fence de geração/destroy; política em [LiveTextPublication]).
+     * Fatia única usada pelo fim de janela (commit), pelo passe de reparo e
+     * pelo terminal — sem ela, o texto resolvido/reparado/drenado ficava só nos
+     * contadores e nunca no texto final visível (defeito R8-D w01/f05a/f03). */
+    private fun publishLiveTextNow(
+        gen: Long,
+        source: String,
+        windowIndex: Int = -1,
+        terminalNormal: Boolean = false,
+    ) {
+        if (isDestroyed || !whisperSession.isCurrent(gen)) return
+        val committer = liveTextCommitter ?: return
+        val text = LiveTextPublication.textToPublish(
+            source = source,
+            display = committer.displayText(),
+            lastPublished = liveLastPublishedText,
+            terminalNormal = terminalNormal,
+        ) ?: return
+        liveTranscriptText.setText(text)
+        liveTranscriptText.setSelection(liveTranscriptText.text.length)
+        liveLastPublishedText = text
+        liveEvent(
+            "clock_ui_publish",
+            gen,
+            windowIndex,
+            fields = "\"source\":\"$source\",\"chars\":${text.length}"
+        )
+    }
+
+    /** R5/A1: resultado da carga com diagnóstico ATRELADO À OPERAÇÃO (mesma
+     * seção crítica do controller). A UI NUNCA lê lastError/lastLoadLog globais
+     * depois de um load — o texto vem da MESMA carga (ou é recusa local). */
+    private class EnsureLoadResult(val ok: Boolean, val failureText: String, val loadLog: String)
+
+    private fun ensureModelLoaded(model: WhisperModel, backend: WhisperBackend, flashAttention: Boolean, sessionGeneration: Long): EnsureLoadResult {
+        // R12/F1: a chave inclui SHA-256 + tamanho dos bytes validados, não só
+        // tamanho/mtime. O hash é calculado uma vez na fronteira de carga/job
+        // (nunca por janela live), e trocar conteúdo no mesmo caminho força miss.
+        val key = "${model.file.absolutePath}|${backend.nativeKind}|$flashAttention|" +
+            ModelImportSupport.cacheIdentity(model.file)
+        // R3/B2: fast-path só com chave + contexto EXISTENTE + transferência
+        // atômica de posse (nativo reconfere a chave real sob g_mutex, sem
+        // recarga). Chave apontando para contexto destruído vira miss.
+        val hit = loadedModelCache.tryReuse(
+            sessionGeneration,
+            key,
+            { whisperSession.isCurrent(it) },
+            { generation -> whisperSession.assumeContext(generation, modelFile(model).absolutePath, backend.nativeKind, flashAttention) },
+        )
+        if (hit) {
+            // R4/C3: fast-path (cache-hit) visível no lab; produção: no-op.
+            liveEvent("model_cache_hit", sessionGeneration)
+            return EnsureLoadResult(ok = true, failureText = "", loadLog = "")
         }
-        return ok
+        // R2/B2 + R5/A1: load via controller (coordenado e atrelado à sessão do
+        // JOB) devolvendo o diagnóstico DA MESMA operação — nada de ler o
+        // diagnóstico global do sucessor.
+        val outcome = whisperSession.loadModelDetailed(
+            sessionGeneration,
+            modelFile(model).absolutePath,
+            backend.nativeKind,
+            flashAttention
+        )
+        if (outcome.ok) {
+            loadedModelCache.record(sessionGeneration, key)
+            liveEvent("model_loaded", sessionGeneration, fields = "\"key\":\"${key.replace("\"", "'")}\"")
+        } else {
+            loadedModelCache.clear()
+            liveEvent(
+                "model_load_failed",
+                sessionGeneration,
+                fields = "\"refusal\":\"${outcome.refusal.replace("\"", "'")}\"," +
+                    "\"native_error\":\"${outcome.nativeError.replace("\"", "'")}\""
+            )
+        }
+        currentlyLoadedModelKey = if (outcome.ok) key else null
+        val failure = outcome.refusal.ifBlank {
+            outcome.nativeError.ifBlank { "não consegui carregar o modelo com ${backend.reportLabel}" }
+        }
+        return EnsureLoadResult(outcome.ok, if (outcome.ok) "" else failure, outcome.loadLog)
     }
 
     private fun releaseLoadedModel() {
-        try { WhisperNative.releaseModel() } catch (_: Throwable) {}
+        // R2/B2: release assíncrono atrelado à sessão que CARREGOU o contexto
+        // (token do próprio dono); o nativo reconfere sob g_mutex — um release
+        // atrasado de outra sessão vira no-op e JAMAIS libera o contexto de B.
+        whisperSession.releaseAsync(loadedModelCache.loadedGeneration)
+        loadedModelCache.clear()
         currentlyLoadedModelKey = null
     }
 
@@ -2096,42 +3001,56 @@ class WhisperActivity : AppCompatActivity() {
 
     private fun startWhiteRecording() {
         if (liveMicActive || isBusy || isTranscribing) return
-        checkAudioPermission {
-            val model = selectedModel ?: run {
-                status.text = "Selecione um modelo."
-                return@checkAudioPermission
-            }
-            if (!DownloadFileStorage.isComplete(modelFile(model), model.bytes)) {
-                confirmModelDownload(model)
-                return@checkAudioPermission
-            }
-
-            whiteRecordingActive = true
-            whiteRecordingStartedAt = SystemClock.elapsedRealtime()
-            buttonRecordingAction.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
-            buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
-            buttonRecordingAction.contentDescription = "Parar gravação"
-
-            buttonLiveMicStop.isEnabled = false
-            buttonLiveMicStop.alpha = 0.4f
-            findViewById<View>(R.id.button_select_media).isEnabled = false
-            buttonTranscribe.isEnabled = false
-            buttonModel.isEnabled = false
-            buttonBackend.isEnabled = false
-
-            recordingPanel.visibility = View.VISIBLE
-            recordingTimer.text = "00:00.000"
-            timerHandler.post(recordingTicker)
-            status.text = "Gravando áudio do microfone..."
-
-            val stamp = System.currentTimeMillis()
-            whiteRecordingPcmFile = File(cacheDir, "whisper_mic_$stamp.pcm")
-            whiteRecordingWavFile = File(cacheDir, "whisper_mic_$stamp.wav")
-
-            whiteRecordingThread = Thread {
-                recordWhitePcm()
-            }.also { it.start() }
+        // R4/C3: no laboratório a fonte de gravação pode ser injetada (arquivo
+        // PCM); o caminho de permissão só é pulado quando HÁ injeção — em
+        // produção o seam devolve null e o AudioRecord segue obrigatório.
+        val injectedRecording = WhisperLabSeams.injectedRecordingSource(this)
+        if (injectedRecording != null) {
+            beginWhiteRecording(injectedRecording)
+        } else {
+            checkAudioPermission { beginWhiteRecording(null) }
         }
+    }
+
+    private fun beginWhiteRecording(injectedRecording: LivePcmSource?) {
+        val model = selectedModel ?: run {
+            status.text = "Selecione um modelo."
+            return
+        }
+        if (!DownloadFileStorage.isComplete(modelFile(model), model.bytes)) {
+            confirmModelDownload(model)
+            return
+        }
+
+        whiteRecordingActive = true
+        whiteRecordingStartedAt = SystemClock.elapsedRealtime()
+        buttonRecordingAction.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
+        buttonRecordingAction.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
+        buttonRecordingAction.contentDescription = "Parar gravação"
+
+        buttonLiveMicStop.isEnabled = false
+        buttonLiveMicStop.alpha = 0.4f
+        findViewById<View>(R.id.button_select_media).isEnabled = false
+        buttonTranscribe.isEnabled = false
+        buttonModel.isEnabled = false
+        buttonBackend.isEnabled = false
+
+        recordingPanel.visibility = View.VISIBLE
+        recordingTimer.text = "00:00.000"
+        timerHandler.post(recordingTicker)
+        status.text = if (injectedRecording == null) {
+            "Gravando áudio do microfone..."
+        } else {
+            "Gravando (fonte de laboratório injetada)..."
+        }
+
+        val stamp = System.currentTimeMillis()
+        whiteRecordingPcmFile = File(cacheDir, "whisper_mic_$stamp.pcm")
+        whiteRecordingWavFile = File(cacheDir, "whisper_mic_$stamp.wav")
+
+        whiteRecordingThread = Thread {
+            recordWhitePcm(injectedRecording)
+        }.also { it.start() }
     }
 
     private fun stopWhiteRecording() {
@@ -2178,7 +3097,41 @@ class WhisperActivity : AppCompatActivity() {
         }.start()
     }
 
-    private fun recordWhitePcm() {
+    /** R4/C3: laço leitura→PCM do produto alimentado pela fonte injetada do
+     * laboratório (em produção o seam devolve null e este caminho não roda).
+     * EOF da fonte encerra o laço; o WAV é fechado e o stop segue o fluxo
+     * normal (junção → transcribeRecordedWav). Sem microfone incidental. */
+    private fun recordWhitePcmFromSource(source: LivePcmSource) {
+        try {
+            val pcmFile = whiteRecordingPcmFile ?: return
+            FileOutputStream(pcmFile).use { output ->
+                val buffer = ByteArray(8192)
+                try {
+                    while (whiteRecordingActive) {
+                        val read = source.read(buffer)
+                        if (read > 0) {
+                            output.write(buffer, 0, read)
+                        } else if (read < 0) {
+                            break
+                        }
+                    }
+                } finally {
+                    output.flush()
+                }
+            }
+        } catch (e: Throwable) {
+            Log.e(TAG, "Injected PCM recording failed", e)
+        } finally {
+            runCatching { source.close() }
+        }
+    }
+
+    private fun recordWhitePcm(injectedRecording: LivePcmSource?) {
+        // R4/C3: fonte injetada do laboratório — mesmo laço leitura→PCM.
+        if (injectedRecording != null) {
+            recordWhitePcmFromSource(injectedRecording)
+            return
+        }
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             runOnUiThread {
                 whiteRecordingActive = false
@@ -2237,22 +3190,67 @@ class WhisperActivity : AppCompatActivity() {
         val model = selectedModel ?: return
         val backend = selectedBackend
         val settings = readAdvancedSettings()
-
+        // W02: nova sessão descarta cancelamentos e callbacks da anterior.
+        currentSessionGeneration = whisperSession.beginSession()
+        val sessionGeneration = currentSessionGeneration
+        // R11/D4 — a transcrição da gravação é um job de ARQUIVO de verdade:
+        // mesmo dono de lifecycle do caminho de arquivo (FGS `dataSync`).
+        val admissaoGravacao = WhisperJobService.startJobOutcome(
+            this, sessionGeneration, WhisperJobLifecycle.KIND_FILE, "Carregando modelo e transcrevendo…"
+        )
+        if (admissaoGravacao == WhisperJobService.StartOutcome.ADMISSAO_RECUSADA) {
+            status.text = "Job recusado: outra geração é dona da reserva."
+            progress.visibility = View.GONE
+            return
+        }
+        // R56/adendo18 — IDENTIDADE DO JOB NO PRODUTOR. A gravação publicava só
+        // o ACK; o texto saía pelo widget e o export virava
+        // `widget_sem_identidade` (job_id=0/owner=0, terminal NONE). Aqui o job
+        // admitido ganha identidade imutável e o resultado passa a ser
+        // publicado no MESMO ledger da rota de arquivo.
+        val jobIdGravacao = TranscriptionJobResults.ledger.beginJob(
+            LiveEventIdentity.runId, activityInstanceId, sessionGeneration
+        )
         liveTranscriptContainer.visibility = View.VISIBLE
         liveTranscriptClipboardActions.visibility = View.VISIBLE
         status.text = "Carregando modelo e transcrevendo..."
         progress.visibility = View.VISIBLE
 
         Thread {
+            // R56/B03 — DESFECHO TIPADO do job de gravação. `RECORDED_TERMINAL`
+            // não existe no contrato de `TerminalKind` (cai em UNKNOWN) e o dono
+            // nunca recebia ACK. Vai como o desfecho real, igual às demais
+            // rotas: SUCCESS/CANCELLED/ERROR.
+            var desfechoGravacao = "ERROR"
+            // R56/adendo19 — tentativa e finalizador criados ANTES da etapa que
+            // pode falhar. Todo desfecho de job ADMITIDO converge para uma única
+            // publicação; nenhum `return`/`catch` deixa o job sem resultado.
+            val chaveGravacao = TranscriptionJobResults.ledger.beginAttempt(
+                jobIdGravacao, sessionGeneration, wavFile.name,
+                LiveEventIdentity.runId, activityInstanceId
+            )
+            val segmentosGravacao = StringBuilder()
+            val finalizador = GravacaoResultadoFinal(
+                TranscriptionJobResults.ledger, jobIdGravacao, sessionGeneration
+            )
             try {
                 val modelLoaded = synchronized(modelLoadLock) {
-                    ensureModelLoaded(model, backend, settings.flashAttention)
+                    ensureModelLoaded(model, backend, settings.flashAttention, sessionGeneration)
                 }
-                if (!modelLoaded) {
-                    val err = WhisperNative.lastError().ifBlank { "Falha ao carregar modelo." }
+                if (!modelLoaded.ok) {
+                    // R56/adendo19 — falha PRÉ-PARSE também publica o resultado
+                    // do próprio job (antes só havia ACK ERROR, sem payload).
+                    finalizador.publicar(JobTerminalState.ERROR, "model_load_failed")
+                    // R5/A1: texto IMUTÁVEL capturado no worker; o post confere o
+                    // lease NA EXECUÇÃO — sessão substituída/destruída não muda a
+                    // UI nem consulta diagnóstico global de outra sessão.
+                    val err = modelLoaded.failureText.ifBlank { "Falha ao carregar modelo." }
                     runOnUiThread {
-                        status.text = "Erro: $err"
-                        progress.visibility = View.GONE
+                        if (isDestroyed) return@runOnUiThread
+                        whisperSession.runIfCurrent(sessionGeneration) {
+                            status.text = "Erro: $err"
+                            progress.visibility = View.GONE
+                        }
                     }
                     return@Thread
                 }
@@ -2261,24 +3259,49 @@ class WhisperActivity : AppCompatActivity() {
                     override fun onSegment(text: String, startMs: Long, endMs: Long) {
                         val segment = text.trim()
                         if (segment.isNotBlank()) {
+                            // R56/adendo18 — o segmento entra no ledger DESTE
+                            // job (por chave), independente da fila de UI.
+                            synchronized(segmentosGravacao) {
+                                if (segmentosGravacao.isNotEmpty()) segmentosGravacao.append('\n')
+                                segmentosGravacao.append(segment)
+                            }
+                            chaveGravacao?.let { chave ->
+                                runCatching {
+                                    TranscriptionJobResults.ledger.appendSegment(
+                                        chave, segment, startMs, endMs
+                                    )
+                                }
+                            }
                             runOnUiThread {
-                                val cur = liveTranscriptText.text.toString()
-                                val sep = if (cur.isEmpty() || cur.endsWith("\n") || cur.endsWith(" ")) "" else " "
-                                liveTranscriptText.append(sep + segment)
-                                liveTranscriptText.setSelection(liveTranscriptText.text.length)
+                                // R2/B2: re-checagem na EXECUÇÃO do post.
+                                whisperSession.runIfCurrent(sessionGeneration) {
+                                    val cur = liveTranscriptText.text.toString()
+                                    val sep = if (cur.isEmpty() || cur.endsWith("\n") || cur.endsWith(" ")) "" else " "
+                                    liveTranscriptText.append(sep + segment)
+                                    liveTranscriptText.setSelection(liveTranscriptText.text.length)
+                                }
                             }
                         }
                     }
                     override fun onProgress(progress: Int) {
                         runOnUiThread {
-                            status.text = "Transcrevendo gravação... $progress%"
+                            whisperSession.runIfCurrent(sessionGeneration) {
+                                status.text = "Transcrevendo gravação... $progress%"
+                            }
                         }
                     }
                     override fun onNativeLog(line: String) {}
                 }
 
-                val returnedText = synchronized(modelLoadLock) {
-                    WhisperNative.transcribe(
+                // R18/C1 — INÍCIO REAL do worker ANTES do trabalho nativo. O
+                // serviço passa a saber que existe worker por esta ação, não
+                // pelo primeiro status publicado.
+                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, sessionGeneration) }
+
+                // R2/B2: par texto+status do mesmo job, numa única chamada.
+                val (returnedRaw, transcribeStatus) = synchronized(modelLoadLock) {
+                    whisperSession.transcribeAndStatus(
+                        sessionGeneration,
                         wavFile.absolutePath,
                         selectedLanguage.code,
                         settings.beamSize,
@@ -2287,30 +3310,101 @@ class WhisperActivity : AppCompatActivity() {
                         settings.vadFilter,
                         if (settings.vadFilter) vadModelFile().absolutePath else "",
                         cb
-                    ).trim()
+                    )
                 }
+                val returnedText = returnedRaw.trim()
 
+                val parsed = WhisperResultParser.parse(returnedText, transcribeStatus)
+                // R56/B03 (checkpoint9) — DESFECHO CALCULADO UMA VEZ NO WORKER,
+                // ANTES de enfileirar qualquer atualização visual. Antes, quem
+                // atribuía era o Runnable da main, e o `finally` da própria
+                // thread lia o valor: o ACK dependia do escalonamento da UI
+                // (podia sair ERROR com a fila retida e SUCCESS depois).
+                // A UI recebe só um retrato imutável para exibir.
+                // R56/adendo18 — RESULTADO PUBLICADO NO PRODUTOR. O ACK sozinho
+                // não é resultado: o export precisa de job/owner/input/attempt e
+                // de terminal próprio. Publica ANTES de qualquer post de UI, para
+                // que fila retida ou Activity destruída não suprimam o payload.
+                val terminalGravacao = when (parsed) {
+                    is WhisperTranscriptResult.Success -> JobTerminalState.SUCCESS
+                    is WhisperTranscriptResult.NoSpeech -> JobTerminalState.NO_SPEECH
+                    is WhisperTranscriptResult.Cancelled -> JobTerminalState.CANCELLED
+                    else -> JobTerminalState.ERROR
+                }
+                // ACK e publicação saem da MESMA fonte (um só mapeamento).
+                desfechoGravacao = when (terminalGravacao) {
+                    JobTerminalState.SUCCESS, JobTerminalState.NO_SPEECH -> "SUCCESS"
+                    JobTerminalState.CANCELLED -> "CANCELLED"
+                    JobTerminalState.ERROR -> "ERROR"
+                }
+                // Fallback: se o callback não entregou nenhum segmento, o texto
+                // do PRÓPRIO resultado entra UMA vez. Nunca texto de widget.
+                val textoDoJob = synchronized(segmentosGravacao) { segmentosGravacao.toString() }
+                if (chaveGravacao != null && textoDoJob.isBlank()) {
+                    val textoFinal = (parsed as? WhisperTranscriptResult.Success)?.text?.trim().orEmpty()
+                    if (textoFinal.isNotEmpty()) {
+                        runCatching {
+                            TranscriptionJobResults.ledger.appendSegment(chaveGravacao, textoFinal)
+                        }
+                    }
+                }
+                runCatching { finalizador.publicar(terminalGravacao, transcribeStatus) }
+                    .onFailure { Log.w(TAG, "falha ao publicar resultado da gravacao: $it") }
                 runOnUiThread {
-                    progress.visibility = View.GONE
-                    if (returnedText.startsWith("Cancelado:")) {
-                        status.text = "Transcrição cancelada."
-                    } else if (returnedText.startsWith("Erro:")) {
-                        status.text = returnedText
-                    } else {
-                        status.text = "Transcrição concluída com sucesso!"
-                        if (liveTranscriptText.text.isEmpty() && returnedText.isNotBlank()) {
-                            liveTranscriptText.setText(returnedText)
+                    // Post visual: só exibe, nunca decide o terminal. Se a
+                    // Activity morreu ou a geração mudou, o retrato é
+                    // descartado — o ACK do worker segue valendo.
+                    if (isDestroyed) return@runOnUiThread
+                    whisperSession.runIfCurrent(sessionGeneration) {
+                        progress.visibility = View.GONE
+                        when (parsed) {
+                            is WhisperTranscriptResult.Cancelled ->
+                                status.text = "Transcrição cancelada."
+                            is WhisperTranscriptResult.Error ->
+                                status.text = "Erro: ${parsed.message}"
+                            is WhisperTranscriptResult.NoSpeech ->
+                                status.text = "Sem fala detectada."
+                            is WhisperTranscriptResult.Success -> {
+                                status.text = "Transcrição concluída com sucesso!"
+                                if (liveTranscriptText.text.isEmpty() && parsed.text.isNotBlank()) {
+                                    liveTranscriptText.setText(parsed.text)
+                                }
+                            }
                         }
                     }
                 }
             } catch (e: Throwable) {
                 Log.e(TAG, "Error transcribing recorded wav", e)
+                // R56/adendo19 — exceção no worker TAMBÉM publica o resultado do
+                // próprio job; sem isto o job admitido ficava só com ACK.
+                runCatching {
+                    finalizador.publicar(JobTerminalState.ERROR, e.message ?: "exception")
+                }.onFailure { Log.w(TAG, "falha ao publicar erro da gravacao: $it") }
                 runOnUiThread {
-                    progress.visibility = View.GONE
-                    status.text = "Erro: ${e.message}"
+                    if (isDestroyed) return@runOnUiThread
+                    whisperSession.runIfCurrent(sessionGeneration) {
+                        progress.visibility = View.GONE
+                        status.text = "Erro: ${e.message}"
+                    }
                 }
             } finally {
-                wavFile.delete()
+                // R56/adendo19 — CONVERGÊNCIA: se nenhum caminho publicou (ex.:
+                // retorno antecipado novo, erro fora do try), o resultado sai
+                // aqui UMA vez. O ACK é derivado do que foi realmente aceito.
+                if (finalizador.publicado == null) {
+                    runCatching {
+                        finalizador.publicar(JobTerminalState.ERROR, "sem_desfecho")
+                    }.onFailure { Log.w(TAG, "falha ao publicar desfecho final: $it") }
+                }
+                desfechoGravacao = finalizador.terminalDeAck()
+                // R56/B03 — cleanup NÃO pode pular o sink terminal: se
+                // `delete()` falhar, o ACK do worker ainda tem de sair.
+                runCatching { wavFile.delete() }
+                    .onFailure { Log.w(TAG, "falha ao apagar wav temporário: $it") }
+                // R11/D4 — TERMINAL do job de transcrição da gravação.
+                // R56/B03 — desfecho TIPADO (o literal antigo caía em UNKNOWN e
+                // o dono ficava sem ACK).
+                WhisperJobService.finishJob(sessionGeneration, desfechoGravacao)
             }
         }.start()
     }
@@ -2326,7 +3420,18 @@ class WhisperActivity : AppCompatActivity() {
                 confirmModelDownload(model)
                 return@checkAudioPermission
             }
+            // R4/C1: VAD pedido exige o modelo na MESMA rota do arquivo (download
+            // explícito); falta = config/erro explícito, nunca silêncio.
+            val settings = readAdvancedSettings()
+            if (settings.vadFilter && !vadModelFile().exists()) {
+                status.text = "VAD ativo, mas o modelo Silero não está baixado — baixe para transcrever."
+                confirmVadDownload { startLiveMicTranscription() }
+                return@checkAudioPermission
+            }
 
+            // R56/B02 — a admissão é feita depois da preparação e, em caso de
+            // recusa, a preparação é DESFEITA localmente (idempotente, sem
+            // tocar no dono antigo).
             liveMicActive = true
             liveMicStartedAt = SystemClock.elapsedRealtime()
             buttonLiveMicStop.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
@@ -2344,16 +3449,92 @@ class WhisperActivity : AppCompatActivity() {
             recordingTimer.text = "00:00.000"
             liveTranscriptContainer.visibility = View.VISIBLE
             liveTranscriptClipboardActions.visibility = View.VISIBLE
-            status.text = "Carregando modelo para tempo real..."
             timerHandler.post(recordingTicker)
 
             val backend = selectedBackend
-            val settings = readAdvancedSettings()
-
-            liveMicThread = Thread {
-                runLiveMicLoop(model, backend, settings)
-            }.also { it.start() }
+            // R4/C1: SNAPSHOT dos settings/idioma/modelo/backend no INÍCIO do job;
+            // este retrato (e nada além dele) alimenta o caminho live.
+            val liveSettings = LiveJobSettings(
+                language = selectedLanguage.code,
+                modelLabel = model.label,
+                backendLabel = backend.reportLabel,
+                beamSize = settings.beamSize,
+                bestOf = settings.bestOf,
+                wordTimestamps = settings.wordTimestamps,
+                vadFilter = settings.vadFilter,
+                vadModelPath = if (settings.vadFilter) vadModelFile().absolutePath else "",
+            )
+            liveMicSettings = liveSettings
+            liveChunkTally = LiveChunkTally()
+            liveTerminalSnapshot = null
+            liveReaderReason = ""
+            liveWasCancelled = false
+            val terminalLines = StringBuilder()
+            liveTerminalLines = terminalLines
+            appendTerminal(terminalLines, "$ whisper-live --model ${model.fileName} --language ${liveSettings.language}")
+            appendTerminal(terminalLines, "backend: ${backend.reportLabel}")
+            appendTerminal(terminalLines, "parametros efetivos (live): ${liveSettings.describe()}")
+            status.text = "Carregando modelo para tempo real... (${liveSettings.describe()})"
+            // W02: nova sessão descarta cancelamentos e callbacks da anterior.
+            currentSessionGeneration = whisperSession.beginSession()
+            val liveGeneration = currentSessionGeneration
+            updateTerminalTextForGeneration(liveGeneration, terminalLines)
+            // R11/D4 — execução iniciada pelo usuário e observável: FGS tipo
+            // `microphone` (RECORD_AUDIO já autorizado por checkAudioPermission),
+            // com wake lock e notificação de status/cancelar.
+            val admissaoLive = WhisperJobService.startJobOutcome(
+                this, liveGeneration, WhisperJobLifecycle.KIND_LIVE, "Preparando transcrição ao vivo…"
+            )
+            if (admissaoLive == WhisperJobService.StartOutcome.ADMISSAO_RECUSADA) {
+                // Tentativa NAO admitida: desfaz a preparação local e nao abre
+                // áudio nem worker. Nada do dono antigo é cancelado aqui.
+                desfazPreparacaoLive()
+                status.text = "Job recusado: outra geração é dona da reserva."
+            } else {
+                // R56/B01-B07 — sink com a geração IMUTÁVEL deste job, criado
+                // antes de qualquer trabalho que possa terminar cedo. A
+                // INSTÂNCIA viaja com o job (nota11 §2): nenhuma saída de A
+                // pode encontrar o sink de C por lookup em campo mutável.
+                val sinkDoJob = WhisperJobTerminalSink(liveGeneration) { g, d ->
+                    runCatching {
+                        WhisperJobService.finishJob(g, d)
+                        true
+                    }.getOrDefault(false)
+                }
+                terminalSinkAtual = sinkDoJob
+                liveMicThread = Thread {
+                    runLiveMicLoop(
+                        model, backend, settings, liveSettings, liveGeneration, sinkDoJob
+                    )
+                }.also { it.start() }
+            }
         }
+    }
+
+    /**
+     * R56/B02 — desfaz a PREPARAÇÃO local de uma tentativa live **não admitida**.
+     *
+     * Idempotente e estritamente local: não chama stop/cancel do job, não toca
+     * reserva nem dono de outra geração — só devolve a tela ao repouso para que
+     * o usuário possa tentar de novo. Ordem importa: `liveMicActive=false`
+     * ANTES de `setBusy(false)`, porque `setBusy` deriva o estado dos botões de
+     * `!busy && !liveMicActive`.
+     */
+    private fun desfazPreparacaoLive() {
+        liveMicActive = false
+        liveMicStartedAt = 0L
+        timerHandler.removeCallbacks(recordingTicker)
+        recordingTimer.text = "00:00.000"
+        recordingPanel.visibility = View.GONE
+        liveTranscriptContainer.visibility = View.GONE
+        liveTranscriptClipboardActions.visibility = View.GONE
+        buttonLiveMicStop.setImageResource(R.drawable.ic_mic_outline_red)
+        buttonLiveMicStop.contentDescription = "Transcrição ao vivo"
+        setBusy(false)
+        buttonRecordingAction.isEnabled = true
+        buttonRecordingAction.alpha = 1f
+        buttonTranscribe.isEnabled = true
+        findViewById<View>(R.id.button_select_media).isEnabled = true
     }
 
     private fun stopLiveMicTranscription() {
@@ -2361,159 +3542,1312 @@ class WhisperActivity : AppCompatActivity() {
         liveMicActive = false
         timerHandler.removeCallbacks(recordingTicker)
 
+        // R13/F2-fix (achado F2: pedido→terminal 29.044 ms): parar NÃO é só
+        // "parar de capturar". O pedido de cancelamento é encaminhado AGORA, ao
+        // owner do job EM VOO, antes de qualquer join: a janela de ~82 s
+        // observa o abort na próxima fronteira segura (nó do grafo CPU) em vez
+        // de terminar inteira. O pendente é descartado, senão o próximo chunk
+        // viraria um decode novo com o pedido já consumido. Nada é revogado: o
+        // texto já publicado permanece e o cancel é por-dono (nunca anônimo).
+        liveStopRequest?.request(liveMicGeneration)
+
+        val thread = liveMicThread
+        if (thread == null || !thread.isAlive) {
+            completeLiveMicStop()
+            return
+        }
+        if (liveMicStopping) return
+        liveMicStopping = true
+        liveMicStopStartedAt = SystemClock.elapsedRealtime()
+        status.text = LIVE_MIC_STOPPING_LABEL
+
+        // W03: o join acontece em thread própria, nunca na UI thread. A UI só é
+        // reabilitada quando a thread de live morrer (ou após o teto de 30s).
         Thread {
             try {
-                liveMicThread?.join(3000)
+                thread.join(3000)
             } catch (_: Throwable) {}
-            liveMicThread = null
-
-            runOnUiThread {
-                buttonLiveMicStop.setImageResource(R.drawable.ic_mic_outline_red)
-                buttonLiveMicStop.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
-                buttonLiveMicStop.contentDescription = "Transcrição ao vivo"
-                recordingPanel.visibility = View.GONE
-
-                buttonRecordingAction.isEnabled = true
-                buttonRecordingAction.alpha = 1.0f
-                findViewById<View>(R.id.button_select_media).isEnabled = true
-                buttonModel.isEnabled = true
-                buttonBackend.isEnabled = true
-                updateTranscribeEnabled()
-
-                status.text = "Transcrição ao vivo finalizada."
-            }
+            timerHandler.post { evaluateLiveMicStop() }
         }.start()
     }
 
-    private fun runLiveMicLoop(model: WhisperModel, backend: WhisperBackend, settings: WhisperAdvancedSettings) {
+    private fun evaluateLiveMicStop() {
+        if (isDestroyed) {
+            liveMicStopping = false
+            return
+        }
+        val thread = liveMicThread
+        // R3/C1: observar o coordenador INTEIRO — a thread do leitor pode morrer
+        // antes do worker; "finalizada" (e liberar controles) SÓ com o worker
+        // terminal, nunca só porque a thread acabou.
+        val pipeline = liveMicPipeline
+        val workerBusy = pipeline != null && !pipeline.isFinished()
+        val threadAlive = thread != null && thread.isAlive
+        if (!threadAlive && !workerBusy) {
+            completeLiveMicStop()
+            return
+        }
+        val elapsedMs = SystemClock.elapsedRealtime() - liveMicStopStartedAt
+        if (elapsedMs >= LIVE_MIC_STOP_TIMEOUT_MS || workerBusy) {
+            // R2/B2: com worker vivo NÃO se anuncia "finalizada" nem se libera a
+            // UI — mantém a referência ao worker, troca a mensagem e continua
+            // re-checando até ele morrer (só então completeLiveMicStop roda).
+            Log.w(TAG, "Thread/worker da transcrição ao vivo ainda vivos após ${elapsedMs}ms; aguardando o worker terminar.")
+            status.text = LIVE_MIC_STOPPING_WORKER_LABEL
+            timerHandler.postDelayed({ evaluateLiveMicStop() }, LIVE_MIC_STOP_POLL_MS)
+            return
+        }
+        status.text = LIVE_MIC_STOPPING_LABEL
+        timerHandler.postDelayed({ evaluateLiveMicStop() }, LIVE_MIC_STOP_POLL_MS)
+    }
+
+    /**
+     * R56/B01-B07 (adendo8 §1-2) — SINK TERMINAL do job ao vivo, independente da
+     * Activity viva.
+     *
+     * O caminho antigo só chamava `finishJob(...)` dentro de
+     * `completeLiveMicStop()`, alcançado por `runOnUiThread`: com a Activity
+     * destruída o post é descartado e o dono fica sem ACK
+     * (`job_owner_gone_sem_ack` → `job_stuck`). Este sink é chamado pelo próprio
+     * worker, DEPOIS do término real, e é idempotente por geração — repetição
+     * não libera nem reescreve geração alheia, e pedido de cancelamento não
+     * serve como prova de fim.
+     */
+    private fun ackTerminalLive(geracao: Long, desfecho: String) {
+        if (geracao <= 0L) return
+        // Caminho preferencial: o sink do JOB (idempotente por identidade).
+        val sink = terminalSinkAtual
+        if (sink != null && sink.geracao == geracao) {
+            sink.concluir(desfecho)
+            return
+        }
+        // Fallback (gravação/rotas sem sink): dedupe pela última geração.
+        synchronized(this) {
+            if (liveAckGenEmitido == geracao) return
+            liveAckGenEmitido = geracao
+        }
+        WhisperJobService.finishJob(geracao, desfecho)
+    }
+
+    private fun completeLiveMicStop() {
+        liveMicStopping = false
+        liveMicThread = null
+        // R13/F2-fix: o pedido é do job que terminou — o próximo job cria o seu.
+        liveStopRequest = null
+        // R55/B01 — o terminal pertence à geração DESTE laço, capturada ANTES
+        // de zerar o campo. Antes daqui o código zerava `liveMicGeneration` e
+        // chamava `finishJob(currentSessionGeneration, ...)`: se um job novo
+        // tinha começado na janela, o terminal ao vivo caía na geração do
+        // SUCESSOR (terminal de outra identidade).
+        val genDesteStop = liveMicGeneration
+        liveMicGeneration = 0L
+        // R11/D4 — TERMINAL do job ao vivo (stop do usuário, cancel pela
+        // notificação ou erro do worker): libera lock/notificação.
+        if (genDesteStop > 0L) {
+            ackTerminalLive(genDesteStop, "LIVE_TERMINAL")
+        }
+        buttonLiveMicStop.setImageResource(R.drawable.ic_mic_outline_red)
+        buttonLiveMicStop.setBackgroundResource(R.drawable.ffmpeg_outline_button_bg)
+        buttonLiveMicStop.contentDescription = "Transcrição ao vivo"
+        recordingPanel.visibility = View.GONE
+
+        buttonRecordingAction.isEnabled = true
+        buttonRecordingAction.alpha = 1.0f
+        findViewById<View>(R.id.button_select_media).isEnabled = true
+        buttonModel.isEnabled = true
+        buttonBackend.isEnabled = true
+        updateTranscribeEnabled()
+
+        // R4/C2: NUNCA sobrescrever erro/parcial/cancelado com "finalizada"
+        // genérica — o retrato terminal (preservado ANTES do pipeline sumir)
+        // manda na UI: veredito + duração + amostras falhas/perdidas/canceladas
+        // + motivo + parâmetros efetivos.
+        val snapshot = liveTerminalSnapshot
+        if (snapshot != null) {
+            status.text = snapshot.statusLine()
+            liveTerminalLines?.let { builder ->
+                appendTerminal(builder, snapshot.statusLine())
+                updateTerminalText(builder)
+            }
+            liveEvent("live_stop_ui", liveStamp.currentJobGeneration(), fields = "\"status\":\"${snapshot.statusLine().replace("\"", "'")}\"")
+        } else {
+            status.text = "Transcrição ao vivo finalizada."
+        }
+    }
+
+    /**
+     * R56/B01-B07 — WRAPPER de lifetime/termino do job ao vivo.
+     *
+     * Cobre por construção os caminhos que faltavam (adendo10 §1, lacuna "b"):
+     * fim normal, exceção do corpo e TODOS os retornos do pipeline, sem
+     * depender de `stopLiveMicTranscription()`/UI. O ACK é emitido no worker,
+     * com a geração da ADMISSÃO, e o sink o torna idempotente — os retornos
+     * precoces que já chamam `ackTerminalLive` não duplicam nada.
+     */
+    private fun runLiveMicLoop(
+        model: WhisperModel,
+        backend: WhisperBackend,
+        settings: WhisperAdvancedSettings,
+        liveSettings: LiveJobSettings,
+        geracaoJob: Long,
+        sinkDoJob: WhisperJobTerminalSink,
+    ) {
+        // R56/B01-B07 — o ACK só sai com término COMPROVADO e pela INSTÂNCIA do
+        // próprio job. Exceção no corpo pode acontecer com o pipeline em voo;
+        // nesse caso publicar PENDING e conservar a proteção é o honesto —
+        // fabricar ACK para "fechar o teste" é o que a ordem proíbe.
+        var corpoConcluiu = false
+        try {
+            runLiveMicLoopCorpo(
+                model, backend, settings, liveSettings, geracaoJob, sinkDoJob
+            )
+            corpoConcluiu = true
+        } catch (t: Throwable) {
+            Log.e(TAG, "worker live terminou com exceção sem dreno provado", t)
+        } finally {
+            if (corpoConcluiu) {
+                // Sem lookup em `terminalSinkAtual`: se C já substituiu o campo,
+                // A continua concluindo o SEU sink.
+                sinkDoJob.concluir("LIVE_TERMINAL")
+            } else if (geracaoJob > 0L) {
+                runCatching {
+                    liveEvent(
+                        "live_terminal_pendente", geracaoJob,
+                        fields = "\"why\":\"excecao_sem_dreno_provado\""
+                    )
+                }
+                Log.w(
+                    TAG,
+                    "job $geracaoJob: exceção sem dreno comprovado — ACK NÃO emitido; " +
+                        "proteção conservada para reconciliação"
+                )
+            }
+        }
+    }
+
+    private fun runLiveMicLoopCorpo(
+        model: WhisperModel,
+        backend: WhisperBackend,
+        settings: WhisperAdvancedSettings,
+        liveSettings: LiveJobSettings,
+        // R56/B01-B07 — geração e SINK capturados na ADMISSÃO, disponíveis
+        // ANTES de qualquer retorno precoce (inclusive checagem de buffer).
+        geracaoJob: Long,
+        sinkDoJob: WhisperJobTerminalSink,
+    ) {
         val sampleRate = 16000
         val channelConfig = AudioFormat.CHANNEL_IN_MONO
         val encoding = AudioFormat.ENCODING_PCM_16BIT
-        val minBuffer = AudioRecord.getMinBufferSize(sampleRate, channelConfig, encoding)
+        // R4/C3: fonte injetada SÓ no flavor de lab (produção devolve null e o
+        // caminho é AudioRecord puro). Nada de algoritmo próprio do lab: é o
+        // MESMO laço leitor->spool->worker do produto.
+        val injectedSource = WhisperLabSeams.injectedLiveSource(this)
+        val minBuffer = if (injectedSource != null) 8192 else AudioRecord.getMinBufferSize(sampleRate, channelConfig, encoding)
         if (minBuffer <= 0) {
             runOnUiThread {
                 status.text = "Microfone indisponível."
                 stopLiveMicTranscription()
             }
+            // Sink do worker: ACK mesmo se a Activity morrer antes do post.
+            // Pela INSTÂNCIA do job — sem lookup em campo mutável.
+            sinkDoJob.concluir("LIVE_TERMINAL")
             return
         }
 
-        val modelLoaded = synchronized(modelLoadLock) {
-            ensureModelLoaded(model, backend, settings.flashAttention)
+        // R3/B2: geração capturada no início do loop ao vivo (job do live);
+        // o load usa a geração do JOB, não a global lida tarde demais.
+        // R56/B01-B03 (nota11 §1) — a geração vem da ADMISSÃO (`geracaoJob`),
+        // nunca de `currentSessionGeneration`: reler a global aqui fazia carga,
+        // liveStamp e ACKs internos dependerem do valor vivo, enquanto o
+        // `finally` já usava a geração da admissão. A geração atual só pode ser
+        // consultada para COMPARAR validade (`isCurrent`), jamais para escolher
+        // o dono deste job.
+        val sessionGeneration = geracaoJob
+        // R13/F2-fix: o stop do usuário cancela O JOB DESTE laço. A geração e o
+        // pedido ficam ligados ao job (não à geração global) e são limpos no
+        // terminal; o pedido é idempotente (clique duplo/notificação).
+        liveMicGeneration = sessionGeneration
+        liveStopRequest = LiveStopRequest(
+            cancelNative = { gen -> whisperSession.cancel(gen) },
+            cancelPipeline = { liveMicPipeline?.cancel() },
+            onForwarded = { gen ->
+                liveEvent(
+                    "live_stop_cancel_forwarded",
+                    gen,
+                    fields = "\"owner\":${whisperSession.bindingOwnerOf(gen)}"
+                )
+            },
+        )
+        // R7/A1: abre o job NO PRODUTOR (job_id novo por job — parar e recomeçar
+        // na MESMA Activity não reusa id) e registra o início com identidade.
+        val liveJobId = liveStamp.beginJob(sessionGeneration)
+        // R8/A1: identidade IMUTÁVEL do job (run/act/job/gen) — usada em TODAS
+        // as saídas deste job; um sucessor NÃO muda este carimbo.
+        val jobIdentity = liveStamp.identitySnapshot(sessionGeneration)
+        val jobStartedAt = SystemClock.elapsedRealtime()
+        var jobPhase = LiveJobPhase.PREPARATION
+        var jobFailure: String? = null
+        // R8/A1: EMISSOR TERMINAL ÚNICO — qualquer saída do job (falha, cancel,
+        // sucesso, exceção) passa por aqui; exatamente UM live_terminal por job.
+        val terminalEmitter = LiveJobTerminalEmitter(
+            identity = jobIdentity,
+            emitEvent = { name, identity, fields -> emitLiveEventWithIdentity(name, identity, fields) },
+        )
+        liveEvent(
+            "live_job_start",
+            sessionGeneration,
+            fields = "\"job_id_local\":$liveJobId,\"sample_rate\":$sampleRate"
+        )
+        // R8/A2: marcador `faJobBegin` no log nativo — delimita o estado FA do
+        // job DO AO VIVO (leitura posterior nunca herda o job anterior).
+        whisperSession.faJobBegin("live")
+        try {
+        // R4/C3: atraso injetável ANTES do load (somente lab; 0 em produção) —
+        // alimenta os cenários de cancel/sair DURANTE o load.
+        jobPhase = LiveJobPhase.LOAD
+        val loadDelay = WhisperLabSeams.modelLoadDelayMs()
+        if (loadDelay > 0) {
+            try { Thread.sleep(loadDelay) } catch (_: InterruptedException) { Thread.currentThread().interrupt() }
         }
-        if (!modelLoaded) {
-            runOnUiThread {
-                val err = WhisperNative.lastError().ifBlank { "Falha ao carregar modelo para tempo real." }
-                status.text = "Erro no modelo: $err"
-                stopLiveMicTranscription()
+        val modelLoaded = synchronized(modelLoadLock) {
+            ensureModelLoaded(model, backend, settings.flashAttention, sessionGeneration)
+        }
+        if (!modelLoaded.ok) {
+            // R5/A1: diagnóstico capturado no WORKER e atrelado à operação; o
+            // post abaixo só entrega DADOS IMUTÁVEIS e re-checa o lease/destroy
+            // NA EXECUÇÃO — nada de lastError na main (g_mutex) e nada de
+            // montar string de erro do sucessor.
+            val reason = modelLoaded.failureText.ifBlank { "Falha ao carregar modelo para tempo real." }
+            // R8/A1: se a carga foi recusada PORQUE o job foi cancelado/encerrado
+            // (destroy, novo job, stop), o desfecho é CANCEL — erro continua erro,
+            // cancel continua cancel.
+            val supersededOnRefusal = when {
+                isDestroyed -> "destroy da Activity durante a carga"
+                !whisperSession.isCurrent(sessionGeneration) -> "cancel/destroy (lease invalidado) durante a carga"
+                liveStamp.currentJobId() != liveJobId -> "novo job iniciado nesta Activity durante a carga"
+                !liveMicActive -> "cancel/stop durante a carga"
+                else -> null
             }
+            jobFailure = if (supersededOnRefusal != null) null else "carga recusada: $reason"
+            liveEvent(
+                "live_load_refused",
+                sessionGeneration,
+                fields = "\"current_gen\":${whisperSession.currentGeneration()}," +
+                    "\"still_current\":${whisperSession.isCurrent(sessionGeneration)}," +
+                    "\"current_activity\":${!isDestroyed}," +
+                    "\"superseded\":\"${(supersededOnRefusal ?: "").replace("\"", "'")}\"," +
+                    "\"reason\":\"${reason.replace("\"", "'")}\""
+            )
+            // R8/A1: TERMINAL do job MESMO com o pipeline jamais criado —
+            // contadores ZERO (nunca inventados nem do sucessor).
+            terminalEmitter.emit(
+                outcome = if (supersededOnRefusal != null) LiveJobOutcome.CANCELLED else LiveJobOutcome.ERROR,
+                reason = if (supersededOnRefusal != null) "cancel durante a carga: $supersededOnRefusal"
+                         else "carga recusada: $reason",
+                phase = LiveJobPhase.LOAD,
+                durationMs = SystemClock.elapsedRealtime() - jobStartedAt,
+                decodeWindows = 0,
+                decodeWallMs = 0L,
+                summary = null,
+            )
+            runOnUiThread {
+                if (isDestroyed) {
+                    liveEvent("stale_post_dropped", sessionGeneration, fields = "\"kind\":\"live_load_refused\",\"why\":\"destroyed\"")
+                    return@runOnUiThread
+                }
+                val ran = whisperSession.runIfCurrent(sessionGeneration) {
+                    status.text = "Erro no modelo: $reason"
+                    stopLiveMicTranscription()
+                }
+                if (!ran) {
+                    liveEvent("stale_post_dropped", sessionGeneration, fields = "\"kind\":\"live_load_refused\",\"why\":\"stale\"")
+                }
+            }
+            // Sink do worker: a carga falhou/foi recusada, mas o job terminou —
+            // o ACK não pode depender do post de UI.
+            sinkDoJob.concluir("LIVE_TERMINAL")
             return
+        }
+        liveEvent(
+            "model_ready",
+            sessionGeneration,
+            fields = "\"owner\":${whisperSession.bindingOwnerOf(sessionGeneration)},\"delay_ms\":$loadDelay"
+        )
+
+        // R8/A1: re-checagem PÓS-CARGA em CADA saída assíncrona — a carga pode
+        // terminar DEPOIS de um cancel/destroy/novo job. Cancel durante a carga
+        // SUPRIME o início da captura, NÃO publica sucesso e NÃO libera contexto
+        // de dono novo (nada de release aqui: o lease do sucessor é intocado).
+        // Sem promessa de preempção do driver: a carga nativa conclui por si; o
+        // que se garante é o cleanup seguro + a VISIBILIDADE do resultado do job.
+        jobPhase = LiveJobPhase.CAPTURE
+        val superseded = when {
+            isDestroyed -> "destroy da Activity durante a carga"
+            !whisperSession.isCurrent(sessionGeneration) -> "cancel/destroy (lease invalidado) durante a carga"
+            liveStamp.currentJobId() != liveJobId -> "novo job iniciado nesta Activity durante a carga"
+            !liveMicActive -> "cancel/stop durante a carga"
+            else -> null
+        }
+        if (superseded != null) {
+            jobFailure = null
+            liveEvent(
+                "live_superseded_after_load",
+                sessionGeneration,
+                fields = "\"why\":\"${superseded.replace("\"", "'")}\"," +
+                    "\"still_current\":${whisperSession.isCurrent(sessionGeneration)}," +
+                    "\"current_job\":${liveStamp.currentJobId()},\"job\":$liveJobId"
+            )
+            terminalEmitter.emit(
+                outcome = LiveJobOutcome.CANCELLED,
+                reason = "cancel durante a carga: $superseded",
+                phase = LiveJobPhase.LOAD,
+                durationMs = SystemClock.elapsedRealtime() - jobStartedAt,
+                decodeWindows = 0,
+                decodeWallMs = 0L,
+                summary = null,
+            )
+            return
+        }
+
+        // D3/R2: registra o FA efetivo (aplicado ou não + motivo) do caminho
+        // ao vivo — a decisão de capacidade é do JNI; aqui só se reporta.
+        // R5/A1: usa o log CAPTURADO na própria carga (worker), não o global.
+        FlashAttentionNotice.message(settings.flashAttention, backend.nativeKind, modelLoaded.loadLog)?.let { faMessage ->
+            Log.i(TAG, faMessage)
         }
 
         runOnUiThread {
-            status.text = "Ouvindo e transcrevendo ao vivo..."
+            status.text = "Ouvindo e transcrevendo ao vivo... (${liveSettings.describe()})"
         }
 
         var recorder: AudioRecord? = null
-        val chunkIntervalMillis = 2000L
-        val chunkBytes = (sampleRate * 2 * chunkIntervalMillis / 1000).toInt()
-        val readBuffer = ByteArray(minBuffer.coerceAtLeast(4096))
-        val audioWindow = ByteArrayOutputStream(chunkBytes * 2)
-        var chunkIndex = 0
-
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            runOnUiThread {
-                status.text = "Permissão do microfone não concedida."
-                stopLiveMicTranscription()
-            }
-            return
+        // R5/A3: handle LOCAL do job — o onDestroy pode zerar o campo
+        // compartilhado liveMicPipeline; o terminal/cleanup do loop NUNCA pode
+        // ser pulado por isso.
+        var pipelineLocal: LivePcmPipeline<LiveChunkResult>? = null
+        // R6/D2: ESTRATÉGIA do caminho ao vivo — janela deslizante com contexto
+        // anterior limitado (default do produto; números = hipóteses iniciais
+        // medidas na fase D). O lab pode fixar o baseline 2 s (diagnóstico) ou
+        // outra janela via seam; nada disso existe no APK normal.
+        // R7/E3: ESTRATÉGIA do caminho ao vivo — (1)/(2) blocos fixos (2 s do
+        // controle, 4+4 do R6) e (3) VAD segmentando intervalos com padding e
+        // overlap contextual. O lab pode fixar qualquer uma via seam; o APK
+        // normal usa SEMPRE [DEFAULT_LIVE_STRATEGY] (nada externo aciona isto).
+        val strategy = WhisperLabSeams.liveStrategySpec()
+            ?: WhisperLabSeams.liveWindowSpec()?.let { LiveStrategy.Fixed(it.uniqueMs, it.contextMs) }
+            ?: DEFAULT_LIVE_STRATEGY
+        val contextMs = when (strategy) {
+            is LiveStrategy.Fixed -> strategy.contextMs
+            is LiveStrategy.VadSegment -> strategy.contextMs
         }
+        val chunkSamples = when (strategy) {
+            is LiveStrategy.Fixed -> (sampleRate * strategy.uniqueMs / 1000).toInt()
+            // No VAD a janela é o TRECHO DE FALA (≤ máximo); o chunk nominal é
+            // o teto — o corte real é decisão do planejador.
+            is LiveStrategy.VadSegment -> (sampleRate * strategy.maxSegmentMs / 1000).toInt()
+        }.coerceAtLeast(1)
+        val contextSamples = (sampleRate * contextMs / 1000).toInt()
+        liveWindowDesc = strategy.describe()
+        liveEvent(
+            "live_window_spec",
+            sessionGeneration,
+            fields = "\"strategy\":\"${strategy::class.simpleName?.lowercase() ?: "?"}\"," +
+                "\"unique_ms\":$chunkSamples,\"context_ms\":$contextMs," +
+                "\"chunk_samples\":$chunkSamples,\"context_samples\":$contextSamples," +
+                "\"strategy_desc\":\"${strategy.describe()}\""
+        )
+        // R6/D2: commit de texto do job (provisório×comprometido) — instância
+        // NOVA por job; cancel não publica provisório; stop/EOF drenam a cauda.
+        val committer = LiveTextCommitter()
+        liveTextCommitter = committer
+        liveFirstSpeechMs = -1L
+        liveFirstPartialMs = -1L
+        liveFirstIncrementalMs = -1L
+        liveIncrementalShown = false
+        liveLastPublishedText = null
+        liveDecodeWallMsTotal = 0L
+        liveDecodeWindowsCount = 0
+        liveRepairAttemptIds.reset()
 
         try {
-            val recordBufferSize = maxOf(minBuffer * 2, sampleRate * 2)
-            recorder = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig, encoding, recordBufferSize)
-            liveMicAudioRecord = recorder
-            recorder.startRecording()
-
-            while (liveMicActive) {
-                val read = recorder.read(readBuffer, 0, readBuffer.size)
-                if (read <= 0) continue
-                audioWindow.write(readBuffer, 0, read)
-
-                if (audioWindow.size() >= chunkBytes) {
-                    val pcmBytes = audioWindow.toByteArray()
-                    audioWindow.reset()
-                    processLiveChunk(pcmBytes, chunkIndex++, selectedLanguage.code)
+            val source: LivePcmSource
+            if (injectedSource != null) {
+                source = injectedSource
+            } else {
+                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    jobFailure = "permissão do microfone não concedida (fase=captura)"
+                    runOnUiThread {
+                        status.text = "Permissão do microfone não concedida."
+                        stopLiveMicTranscription()
+                    }
+                    sinkDoJob.concluir("LIVE_TERMINAL")
+                    return
                 }
+                val recordBufferSize = maxOf(minBuffer * 2, sampleRate * 2)
+                recorder = AudioRecord(MediaRecorder.AudioSource.MIC, sampleRate, channelConfig, encoding, recordBufferSize)
+                liveMicAudioRecord = recorder
+                recorder.startRecording()
+                source = AudioRecordPcmSource(recorder)
             }
 
-            // Processar áudio restante ao parar
-            if (audioWindow.size() >= (sampleRate * 2 * 0.5)) {
-                val remainingPcm = audioWindow.toByteArray()
-                audioWindow.reset()
-                processLiveChunk(remainingPcm, chunkIndex++, selectedLanguage.code)
+            // R3/C1: coordenador ÚNICO (mesma rota do laboratório): leitor ->
+            // SPOOL temporário -> worker. Nada de descartar o mais antigo: o
+            // aceito é preservado; perdas só por falha/limite, QUANTIFICADAS.
+            // R4/C1: resultado TIPADO por chunk — silêncio NUNCA é erro; erro
+            // NUNCA é silêncio; falha conta em failedSamples e o job CONTINUA
+            // (o trecho já aceito é conservado).
+            // R7/E3: (3) VAD segmentando intervalos — o planejador decide o
+            // corte; cada intervalo decidido vira EVENTO (mapa do áudio em
+            // amostras originais) e o que não é decodificado é contado.
+            val planner: LiveWindowPlanner? = when (strategy) {
+                is LiveStrategy.VadSegment -> LiveVadSegmenter(
+                    sampleRate = sampleRate,
+                    padMs = strategy.padMs,
+                    silenceCutMs = strategy.silenceCutMs,
+                    maxSegmentMs = strategy.maxSegmentMs,
+                    relativePeakFraction = strategy.relativePeakFraction,
+                    absoluteRmsFloor = strategy.absoluteRmsFloor,
+                    // R8/D (candidata 1): 1ª janela curta/adaptativa (0 = desligado).
+                    firstSegmentMs = strategy.firstSegmentMs,
+                    firstSilenceCutMs = strategy.firstSilenceCutMs,
+                    record = { iv ->
+                        liveEvent(
+                            "live_vad_interval",
+                            sessionGeneration,
+                            fields = "\"start_sample\":${iv.startSample},\"end_sample\":${iv.endSample}," +
+                                "\"samples\":${iv.endSample - iv.startSample},\"kind\":\"${iv.kind}\""
+                        )
+                    }
+                )
+                is LiveStrategy.Fixed -> null
+            }
+            // R14/A2 — IDENTIDADE DO PRODUTOR NO LIVE: o job ao vivo passa a
+            // publicar no MESMO ledger do job de arquivo, com job/owner/
+            // tentativa/terminal. Antes disto o live só existia no widget
+            // (widget_sem_identidade, wer_eligivel=false) e nenhum ensaio
+            // conseguia provar pertencimento do resultado.
+            val liveJobId = TranscriptionJobResults.ledger.beginJob(
+                LiveEventIdentity.runId, activityInstanceId, sessionGeneration
+            )
+            val liveAttemptKey = TranscriptionJobResults.ledger.beginAttempt(
+                liveJobId, sessionGeneration, "live-pcm", LiveEventIdentity.runId, activityInstanceId
+            )
+            val coordinator = LiveTranscriptionCoordinator<LiveChunkResult>(
+                spoolDir = cacheDir,
+                chunkSamples = chunkSamples,
+                contextSamples = contextSamples,
+                planner = planner,
+                readBufferBytes = minBuffer.coerceAtLeast(4096),
+                processChunk = { chunk -> transcribeLiveChunk(chunk, liveSettings, sessionGeneration) },
+                silenceCheck = { it is LiveChunkResult.NoSpeech },
+                failureCheck = { it is LiveChunkResult.Failed },
+                maxSpoolBytes = WhisperLabSeams.spoolLimitBytes() ?: DEFAULT_LIVE_SPOOL_MAX_BYTES,
+                deliver = { chunk, result, ok ->
+                    // R4/C3: falha de listener injetada (lab) atravessa o MESMO
+                    // listener do produto — o pipeline tem de sobreviver e ainda
+                    // garantir terminal/cleanup.
+                    if (WhisperLabSeams.listenerFaultFor(chunk.index)) {
+                        throw RuntimeException("lab: falha de listener injetada (chunk ${chunk.index})")
+                    }
+                    if (ok && result != null) {
+                        liveChunkTally?.count(result)
+                        when (result) {
+                            is LiveChunkResult.Success -> {
+                                // R6/D2: commit por alinhamento (contexto×único);
+                                // provisório é revisável, comprometido não.
+                                val info = committer.onWindow(
+                                    chunk.index, result.text,
+                                    chunk.uniqueStartSample, chunk.uniqueEndSample,
+                                    chunk.contextSamplesInChunk,
+                                    segments = result.segments,
+                                    generation = sessionGeneration,
+                                    // R8/B: áudio da janela p/ preservar região retida
+                                    // (re-decode restrito; cópia limitada no seam).
+                                    windowPcm = chunk.pcm
+                                )
+                                if (info != null) {
+                                    // R13/F1 — TELEMETRIA ADITIVA do replay: os
+                                    // segmentos REAIS (texto+ms) que alimentaram
+                                    // o commit, o sha256 do PCM entregue e o
+                                    // word_times explícito. Só no lab; nenhum
+                                    // destes campos é lido pelo pipeline.
+                                    val replayFields = if (WhisperLabSeams.isLab()) {
+                                        LiveTelemetry.join(
+                                            LiveTelemetry.segmentsField(result.segments),
+                                            LiveTelemetry.wordTimesField(null),
+                                            LiveTelemetry.pcmField(chunk.pcm),
+                                        )
+                                    } else ""
+                                    liveEvent(
+                                        "live_commit",
+                                        sessionGeneration,
+                                        chunk.index,
+                                        fields = "\"added\":${info.committedWordsAdded}," +
+                                            "\"provisional\":${info.provisionalWords},\"committed_words\":${info.committedWordCount}," +
+                                            "\"alignment\":\"${info.alignment}\"" +
+                                            (if (replayFields.isEmpty()) "" else ",$replayFields")
+                                    )
+                                    // R8/B: contabilidade por região (revisões, retidas,
+                                    // resoluções, reparo) — o analisador acompanha sem
+                                    // tocar no lock do committer.
+                                    liveEvent(
+                                        "live_commit_b",
+                                        sessionGeneration,
+                                        chunk.index,
+                                        fields = "\"revised\":${info.revisedWords},\"held\":${info.heldWords}," +
+                                            "\"conflicts_held\":${info.conflictsHeld},\"held_resolved\":${info.heldResolved}," +
+                                            "\"held_hypotheses\":${info.heldHypotheses},\"pending_repair\":${info.pendingRepairRegions}," +
+                                            "\"repair_attempts\":${info.repairAttempts},\"repair_ok\":${info.repairCompleted}," +
+                                            "\"repair_fail\":${info.repairFailed},\"retained_bytes\":${info.retainedAudioBytes}"
+                                    )
+                                }
+                                val elapsed = SystemClock.elapsedRealtime() - liveMicStartedAt
+                                if (liveFirstPartialMs < 0L) {
+                                    val display = committer.displayText()
+                                    if (display.isNotEmpty()) {
+                                        liveFirstPartialMs = elapsed
+                                        val sinceSpeech = if (liveFirstSpeechMs >= 0L) elapsed - liveFirstSpeechMs else -1L
+                                        liveEvent(
+                                            "live_first_partial",
+                                            sessionGeneration,
+                                            chunk.index,
+                                            fields = "\"ms_job\":$elapsed,\"ms_desde_1a_fala\":$sinceSpeech," +
+                                                "\"words\":${committer.committedWordCount() + committer.provisionalWordCount()}"
+                                        )
+                                    }
+                                }
+                                runOnUiThread {
+                                    // R2/B2: re-checagem na EXECUÇÃO do post (o chunk pode ter
+                                    // terminado depois de uma nova sessão começar).
+                                    whisperSession.runIfCurrent(sessionGeneration) {
+                                        // R8/D — clock de PUBLICAÇÃO na UI (executou na main).
+                                        publishLiveTextNow(sessionGeneration, LiveTextPublication.SOURCE_COMMIT, chunk.index)
+                                    }
+                                }
+                                // R8/B (R8/D-fix): a re-decodificação RESTRITA saiu
+                                // do deliver — o deliver roda SOB o lock do pipeline
+                                // (LivePcmPipeline.workerLoop) e o reparo de ~5,5 s
+                                // aqui DENTRO estancava o feed do leitor (medido no
+                                // d3pre: 4 stalls de 5,4–5,7 s, déficit 13,8 s).
+                                // Agora o passe roda no início de transcribeLiveChunk
+                                // e no terminal — FORA do lock, mesma thread do
+                                // worker (decodes serializados, captura não bloqueia).
+                            }
+                            is LiveChunkResult.Failed -> {
+                                // Erro de chunk NÃO encerra o job: trecho aceito
+                                // conservado; motivo visível no terminal/status.
+                                appendLiveTerminal(sessionGeneration, "chunk ${chunk.index}: ERRO — ${result.reason}")
+                                postIfCurrent(sessionGeneration) { status.text = "Falha em trecho ao vivo: ${result.reason}" }
+                            }
+                            is LiveChunkResult.Cancelled ->
+                                appendLiveTerminal(sessionGeneration, "chunk ${chunk.index}: cancelado (${result.reason})")
+                            is LiveChunkResult.NoSpeech -> {}
+                        }
+                    } else if (!ok) {
+                        appendLiveTerminal(sessionGeneration, "chunk ${chunk.index}: EXCEÇÃO no worker (contada em falha)")
+                    }
+                },
+                terminal = { cancelled ->
+                    liveWasCancelled = cancelled
+                    val c = liveMicPipeline?.counters()
+                    // R8/D (integridade): o reparo DEFERIDO do ÚLTIMO chunk roda
+                    // AQUI (terminal = pós-loop do worker, FORA do lock) ANTES do
+                    // finalize — o texto reparado entra no TEXTO FINAL; cancel
+                    // não repara (o cancel() descarta o retido).
+                    if (!cancelled) {
+                        val repairCommitter = liveTextCommitter
+                        if (repairCommitter != null && repairCommitter.pendingRepairCount() > 0) {
+                            runLiveRepairPass(repairCommitter, liveSettings, sessionGeneration)
+                        }
+                    }
+                    // R6/D2: stop/EOF DRENAM a cauda provisória; cancel NÃO a
+                    // publica (o comprometido permanece).
+                    val finInfo = if (cancelled) {
+                        committer.cancel()
+                        null
+                    } else {
+                        committer.finalize()
+                    }
+                    // R9/D2: CONTRATO de resultado PARCIAL por região (estados ≠).
+                    val regOut = committer.regionOutcome()
+                    // R14/A2 — PUBLICAÇÃO NO LEDGER com identidade do produtor:
+                    // terminal + texto realmente comprometido. Cancel mantém no
+                    // máximo a parcial válida DESTE job (nunca o texto do widget
+                    // nem o resultado de um job anterior). Recusa (null) é
+                    // silenciosa: significa que outro job tomou a posse.
+                    if (liveAttemptKey != null) {
+                        val committedNow = committer.committedText()
+                        if (committedNow.isNotBlank()) {
+                            runCatching {
+                                TranscriptionJobResults.ledger.appendSegment(liveAttemptKey, committedNow)
+                            }
+                        }
+                        // R16/B2 — TERMINAL TIPADO a partir dos fatos do committer.
+                        // Nao cancelado NAO significa sucesso: no-speech, reparo
+                        // falho e regiao pendente tem estados proprios.
+                        val temPendencia = !regOut.integral ||
+                            regOut.promotedRepairFailed > 0 ||
+                            regOut.promotedAudioMissing > 0 ||
+                            regOut.promotedNoRepair > 0 ||
+                            regOut.promotedRepairInvalidEvidence > 0
+                        val factsLive = LiveTerminalPolicy.Facts(
+                            cancelled = cancelled,
+                            integral = regOut.integral,
+                            repairFailed = regOut.promotedRepairFailed,
+                            audioMissing = regOut.promotedAudioMissing,
+                            noRepair = regOut.promotedNoRepair,
+                            invalidEvidence = regOut.promotedRepairInvalidEvidence,
+                            semTexto = committedNow.isBlank(),
+                            // R17/B2 — fatos do PIPELINE que o committer não vê:
+                            // chunk falho, perda de spool e amostras pendentes.
+                            failedSamples = c?.failedSamples ?: 0L,
+                            lostSamples = c?.lostSamples ?: 0L,
+                            pendingSamples = c?.pendingSamples() ?: 0L,
+                        )
+                        val terminalLive = LiveTerminalPolicy.decide(factsLive)
+                        val statusLive = LiveTerminalPolicy.nativeStatus(terminalLive)
+                        liveEvent(
+                            "live_terminal_tipado",
+                            sessionGeneration,
+                            fields = "\"terminal\":\"${terminalLive.wire}\"," +
+                                "\"pendencia\":$temPendencia," +
+                                "\"reparo_falho\":${regOut.promotedRepairFailed}," +
+                                "\"integral\":${regOut.integral}," +
+                                "\"texto_vazio\":${committedNow.isBlank()}," +
+                                // R17/B2 — fatos do pipeline no MESMO evento
+                                // que decide o terminal.
+                                "\"falha_pipeline\":${factsLive.falhaPipeline}," +
+                                "\"failed_samples\":${factsLive.failedSamples}," +
+                                "\"lost_samples\":${factsLive.lostSamples}," +
+                                "\"pending_samples\":${factsLive.pendingSamples}," +
+                                "\"motivo\":\"${LiveTerminalPolicy.motivo(factsLive)}\""
+                        )
+                        // R18/D1 — FECHO DA CAPTURA na fronteira do terminal
+                        // REAL. Antes disto ninguém chamava `fechar()`: toda
+                        // captura ficava sem `final`/`capture_end` e o leitor
+                        // (corretamente) a classificava INCOMPLETE.
+                        runCatching {
+                            CommitCapture.fechar(
+                                motivo = LiveTerminalPolicy.motivo(factsLive),
+                                terminal = terminalLive.wire,
+                                texto = committedNow
+                            )
+                        }.onFailure { Log.w(TAG, "capture_fechar_falhou: $it") }
+                        val pub = runCatching {
+                            TranscriptionJobResults.ledger.publishJob(
+                                liveJobId,
+                                sessionGeneration,
+                                terminalLive,
+                                // R15/A4 — o `nativeStatus` tem de satisfazer o
+                                // CONTRATO do audit ("ok"/"cancelled"); a R14
+                                // mandava "live-success"/"live-cancelled", o que
+                                // fazia o export marcar o sucesso como
+                                // INCOERENTE (motivo=incoerente, wer_eligivel=false).
+                                // A ROTA (live) fica como metadado separado, no
+                                // evento e no log — não no status nativo.
+                                nativeStatus = statusLive,
+                            )
+                        }.getOrNull()
+                        liveEvent(
+                            "live_ledger_publish",
+                            sessionGeneration,
+                            fields = "\"job_id\":$liveJobId,\"publicado\":${pub != null}," +
+                                "\"rota\":\"live\"," +
+                                // R17/B2 — o evento publica o terminal TIPADO,
+                                // não o `cancelled ? CANCELLED : SUCCESS` antigo.
+                                "\"terminal\":\"${terminalLive.wire}\"," +
+                                "\"status_nativo\":\"$statusLive\"," +
+                                "\"motivo\":\"${LiveTerminalPolicy.motivo(factsLive)}\"," +
+                                "\"audit_vazio\":${pub?.audit()?.isEmpty() ?: false}," +
+                                "\"wer_eligivel\":${pub?.werEligible ?: false}," +
+                                "\"chars\":${committedNow.length}"
+                        )
+                    }
+                    logFaRoute("live")
+                    val genNow = sessionGeneration
+                    // R8/D: se o overlay INCREMENTAL apareceu, cancel o derruba
+                    // (a parcial provisória nunca sobrevive a um cancelamento).
+                    if (cancelled && liveIncrementalShown) {
+                        runOnUiThread {
+                            if (!isDestroyed && whisperSession.isCurrent(genNow)) {
+                                publishLiveTextNow(
+                                    genNow,
+                                    LiveTextPublication.SOURCE_CANCEL_DROP
+                                )
+                            }
+                            liveIncrementalShown = false
+                        }
+                    }
+                    // R8/D (integridade): TERMINAL NORMAL publica o texto FINAL do
+                    // committer — promoção do que resolveu/reparou/drenou DEPOIS
+                    // da última janela. Sem isto, w01 (palavra única), f05a/f03
+                    // (cauda pós-fala) e d01-inject (frase re-decodificada)
+                    // terminavam invisíveis no texto final.
+                    if (!cancelled) {
+                        runOnUiThread {
+                            publishLiveTextNow(
+                                genNow,
+                                LiveTextPublication.SOURCE_TERMINAL,
+                                terminalNormal = true,
+                            )
+                        }
+                    }
+                    liveEvent(
+                        "live_text_final",
+                        genNow,
+                        fields = "\"cancelled\":$cancelled,\"committed_words\":${committer.committedWordCount()}," +
+                            "\"committed_len\":${committer.committedText().length}," +
+                            "\"display_len\":${committer.displayText().length}," +
+                            "\"held_words\":${committer.heldWordCount()},\"held_hypotheses\":${committer.heldHypothesisCount()}," +
+                            "\"pending_repair\":${committer.pendingRepairCount()}," +
+                            "\"unresolved_regions\":${finInfo?.unresolvedRegionsClosed ?: -1}," +
+                            // R9/D2: CONTRATO de resultado PARCIAL por região (estados ≠).
+                            "\"regions_resolved_confirmed\":${regOut.resolvedConfirmed}," +
+                            "\"regions_resolved_by_repair\":${regOut.resolvedByRepair}," +
+                            "\"regions_promoted_unconfirmed\":${regOut.promotedUnconfirmed}," +
+                            "\"regions_promoted_unconfirmed_words\":${regOut.promotedUnconfirmedWords}," +
+                            "\"regions_promoted_repair_partial\":${regOut.promotedRepairPartial}," +
+                            "\"regions_promoted_repair_failed\":${regOut.promotedRepairFailed}," +
+                            // R10/E1: reparo recusado por evidência de tempo inválida (tipado).
+                            "\"regions_promoted_repair_invalid_evidence\":${regOut.promotedRepairInvalidEvidence}," +
+                            "\"regions_promoted_audio_missing\":${regOut.promotedAudioMissing}," +
+                            "\"regions_promoted_no_repair\":${regOut.promotedNoRepair}," +
+                            "\"text_integral\":${regOut.integral}," +
+                            "\"pre_first_ms\":$liveFirstPartialMs,\"fs_ms\":$liveFirstSpeechMs," +
+                            "\"pre_inc_first_ms\":$liveFirstIncrementalMs," +
+                            "\"decode_wall_ms\":$liveDecodeWallMsTotal,\"decode_windows\":${liveDecodeWindowsCount}," +
+                            "\"repair_invalid_evidence\":${committer.repairInvalidEvidenceCount()}," +
+                            // R10/E3: contabilidade PCM do job (o mesmo resumo do Log.i) e
+                            // PCM preservado para reparo — export integral por job.
+                            "\"retained_audio_bytes\":${committer.retainedAudioBytes()}," +
+                            "\"pcm_counters\":\"${jsonEscape(c?.summary() ?: "")}\""
+                    )
+                    // R9/D2: terminal de PIPELINE com sucesso ≠ texto integralmente
+                    // resolvido. Estado parcial é TIPADO e VISÍVEL (nunca mudo).
+                    if (!regOut.integral || (finInfo != null && finInfo.unresolvedRegionsClosed > 0)) {
+                        appendLiveTerminal(
+                            genNow,
+                            "texto: RESULTADO PARCIAL — ${regOut.summary()}" +
+                                (if (finInfo != null && finInfo.unresolvedRegionsClosed > 0)
+                                    " (${finInfo.unresolvedRegionsClosed} região(ões) promovida(s) no terminal sem confirmação)"
+                                else "")
+                        )
+                    }
+                    Log.i(
+                        TAG,
+                        "live pcm finalizado (cancelled=$cancelled) counters=${c?.summary()} balanced=${c?.isBalanced()}"
+                    )
+                },
+            )
+            pipelineLocal = coordinator.pipeline
+            liveMicPipeline = pipelineLocal
+            coordinator.start()
+            // R8/D — clock de CAPTURA: instante em que o leitor COMEÇA a puxar
+            // áudio (depois da carga do modelo, antes da 1ª leitura).
+            liveEvent(
+                "clock_capture_start",
+                sessionGeneration,
+                fields = "\"strategy\":\"${strategy::class.simpleName?.lowercase() ?: "?"}\"," +
+                    "\"run_ms\":${SystemClock.elapsedRealtime() - jobStartedAt}"
+            )
+
+            val outcome = coordinator.runReader(source, { liveMicActive })
+            liveReaderReason = outcome.reason
+            // R8/D — clock de EOF do leitor (fim da fonte) + tamanho lido.
+            liveEvent(
+                "clock_reader_eof",
+                sessionGeneration,
+                fields = "\"reason\":\"${outcome.reason}\",\"samples_read\":${outcome.samplesRead}," +
+                    "\"odd_bytes\":${outcome.oddBytesDropped},\"fragment_dropped\":${outcome.fragmentDropped}"
+            )
+            appendLiveTerminal(
+                sessionGeneration,
+                "leitor terminou: reason=${outcome.reason} amostrasLidas=${outcome.samplesRead} " +
+                    "fragmentoFinal=${outcome.fragmentDropped} oddBytes=${outcome.oddBytesDropped}"
+            )
+            Log.i(
+                TAG,
+                "live pcm leitor terminou: reason=${outcome.reason} samplesRead=${outcome.samplesRead} oddBytes=${outcome.oddBytesDropped}"
+            )
+
+            // R3/C1: stop com estado pendente VISÍVEL; a espera CONTINUA até o
+            // worker TERMINAL — handle e controles não são liberados antes.
+            coordinator.stopAndAwait(
+                stopTimeoutMs = liveMicDrainTimeoutMs,
+                onPending = { elapsed ->
+                    Log.w(TAG, "live pcm: worker ainda ativo após ${elapsed}ms; aguardando o worker terminar (handle mantido).")
+                    runOnUiThread {
+                        if (!isDestroyed && liveMicStopping) status.text = LIVE_MIC_STOPPING_WORKER_LABEL
+                    }
+                },
+            )
+            val counters = coordinator.counters()
+            Log.i(TAG, "live pcm counters: ${counters.summary()} balanced=${counters.isBalanced()}")
+            if (counters.lossVisible() || !counters.isBalanced()) {
+                Log.w(TAG, "live pcm: perdas visíveis no relatório — ${counters.summary()}")
             }
         } catch (e: Throwable) {
             Log.e(TAG, "Error in live mic loop", e)
+            // R8/A1: exceção do job vira FAILURE TIPADA (nunca terminal ausente).
+            if (jobFailure == null) {
+                jobFailure = "exceção no pipeline: ${e.javaClass.simpleName}: ${e.message ?: "sem mensagem"}"
+            }
             if (liveMicActive) {
                 runOnUiThread {
                     status.text = "Erro na gravação ao vivo: ${e.message}"
                 }
             }
         } finally {
-            try { recorder?.stop() } catch (_: Throwable) {}
-            recorder?.release()
-            liveMicAudioRecord = null
+            // R3/C1: o handle/fonte só somem com o worker TERMINAL; no caminho
+            // de exceção ainda drenamos com stop (contado) antes de liberar.
+            // R5/A3: o handle vem do LOCAL do job (não do campo, que o
+            // onDestroy pode ter zerado).
+            val pipelineNow = pipelineLocal
+            if (pipelineNow != null && !pipelineNow.isFinished()) {
+                pipelineNow.requestStop()
+                var waitedMs = 0L
+                while (!pipelineNow.awaitFinished(1000)) {
+                    waitedMs += 1000
+                    Log.w(TAG, "live pcm: worker ainda ativo no teardown (${waitedMs}ms); aguardando.")
+                }
+            }
+            // R4/C2: RETRATO TERMINAL preservado ANTES de apagar o pipeline —
+            // é ele que a UI/relatório usam (nada de "finalizada" genérica).
+            val countersNow = pipelineNow?.counters()
+            var terminalSummary: LiveTerminalSummary? = null
+            var terminalExtra = ""
+            if (countersNow != null) {
+                // R7/E3: retrato do PLANO (VAD) — o corte é evidência e vai ao
+                // terminal (janelas, cortes forçados, silêncio contabilizado).
+                val planStats = pipelineNow.planStats()
+                val planSummary = if (planStats != null) {
+                    "plano: janelas=${planStats.windows} cortesForcados=${planStats.forcedCuts} " +
+                        "caudas=${planStats.tails} lacunas=${planStats.gaps} " +
+                        "incertas=${planStats.uncertainWindows}(${planStats.uncertainSamples}amostras) " +
+                        "silencioIgnorado=${planStats.skippedSilenceSamples}amostras"
+                } else ""
+                val snapshot = LiveTerminalSummary.of(
+                    cancelled = liveWasCancelled,
+                    durationMs = SystemClock.elapsedRealtime() - liveMicStartedAt,
+                    counters = countersNow,
+                    readerReason = liveReaderReason,
+                    tally = liveChunkTally ?: LiveChunkTally(),
+                    lastError = countersNow.workerError,
+                    effective = listOfNotNull(
+                        liveMicSettings?.describe().takeIf { !it.isNullOrBlank() },
+                        liveWindowDesc.takeIf { it.isNotBlank() }
+                    ).joinToString(" | "),
+                    identity = jobIdentity.shortForm,
+                    silenceSkippedSamples = countersNow.silenceSkippedSamples,
+                    planSummary = planSummary,
+                )
+                liveTerminalSnapshot = snapshot
+                terminalSummary = snapshot
+                // Campos extras (compat R7): SÓ do pipeline DESTE job.
+                terminalExtra = (planStats?.let {
+                    "\"vad_windows\":${it.windows},\"vad_forced_cuts\":${it.forcedCuts}," +
+                        "\"vad_tails\":${it.tails},\"vad_gaps\":${it.gaps}," +
+                        "\"vad_uncertain_windows\":${it.uncertainWindows}," +
+                        "\"vad_uncertain_samples\":${it.uncertainSamples}," +
+                        "\"vad_silence_intervals\":${it.silenceIntervals.size},"
+                } ?: "") +
+                    "\"idx_peak\":${countersNow.indexHighWatermark},\"spool_peak\":${countersNow.spoolBytesPeak}," +
+                    "\"pending_samples\":${countersNow.pendingSamples()}," +
+                    "\"first_partial_ms\":$liveFirstPartialMs,\"first_speech_ms\":$liveFirstSpeechMs"
+            }
+            // R8/A1: TERMINAL ÚNICO do job — emitido para TODOS os desfechos,
+            // inclusive quando o pipeline NUNCA existiu (cancel/erro na carga):
+            // nesse caso os contadores são ZERO (nunca inventados nem tomados
+            // do sucessor). Cancel continua cancel; erro continua erro.
+            val terminalOutcome = when {
+                liveWasCancelled -> LiveJobOutcome.CANCELLED
+                jobFailure != null -> LiveJobOutcome.ERROR
+                terminalSummary != null -> LiveJobTerminalEmitter.classify(terminalSummary!!)
+                else -> LiveJobOutcome.CANCELLED
+            }
+            val terminalReason = when {
+                liveWasCancelled -> "cancel/stop do job (fase=${jobPhase.wire})"
+                jobFailure != null -> jobFailure!!
+                terminalSummary != null -> terminalSummary!!.statusLine()
+                else -> "job encerrado antes do pipeline (fase=${jobPhase.wire})"
+            }
+            terminalEmitter.emit(
+                outcome = terminalOutcome,
+                reason = terminalReason,
+                phase = LiveJobPhase.TEARDOWN,
+                durationMs = SystemClock.elapsedRealtime() - jobStartedAt,
+                decodeWindows = liveDecodeWindowsCount,
+                decodeWallMs = liveDecodeWallMsTotal,
+                summary = terminalSummary,
+                extraFields = terminalExtra,
+            )
+            // R8/A2: o aviso de FA passa a refletir a EXECUÇÃO do MESMO job
+            // (delta real da SIG_FA_EXEC) — após o terminal, com identidade já
+            // carimbada; nenhum contador do sucessor entra aqui.
+            if (settings.flashAttention) {
+                val faNow = runCatching { whisperSession.loadLogForDiagnostics() }.getOrDefault("")
+                FlashAttentionNotice.executionSummary(true, backend.nativeKind, faNow)?.let { execLine ->
+                    appendLiveTerminal(sessionGeneration, "[FA estado] $execLine")
+                }
+            }
+            // R4/C2: cleanup do spool AGORA (worker terminal) e handle liberado.
+            try { pipelineNow?.close() } catch (_: Throwable) {}
+            liveMicPipeline = null
+            // R5/A3: AudioRecord encerrado EXATAMENTE uma vez — se o onDestroy
+            // já parou/liberou (e desregistrou do campo), o laço não libera de
+            // novo; liberar duas vezes quem ainda é dono.
+            if (recorder != null && liveMicAudioRecord === recorder) {
+                try { recorder.stop() } catch (_: Throwable) {}
+                try { recorder.release() } catch (_: Throwable) {}
+                liveMicAudioRecord = null
+            }
+        }
+        } catch (t: Throwable) {
+            // R8/A1: exceção ANTES/DEPOIS do pipeline (ex.: falha de setup antes
+            // do try interno) NUNCA deixa o job sem terminal — emite ERROR e
+            // segue (é a thread do worker do job; a UI reflete via status).
+            Log.e(TAG, "Error in live mic job (outer)", t)
+            if (jobFailure == null) {
+                jobFailure = "exceção no job: ${t.javaClass.simpleName}: ${t.message ?: "sem mensagem"}"
+            }
+            terminalEmitter.emit(
+                outcome = LiveJobOutcome.ERROR,
+                reason = jobFailure!!,
+                phase = jobPhase,
+                durationMs = SystemClock.elapsedRealtime() - jobStartedAt,
+                decodeWindows = 0,
+                decodeWallMs = 0L,
+                summary = null,
+            )
         }
     }
 
-    private fun processLiveChunk(pcm: ByteArray, index: Int, langCode: String) {
-        var sumSquares = 0.0
-        val numSamples = pcm.size / 2
-        for (i in 0 until numSamples) {
-            val sample = (pcm[i * 2].toInt() and 0xFF) or (pcm[i * 2 + 1].toInt() shl 8)
-            val sampleShort = sample.toShort()
-            sumSquares += sampleShort * sampleShort
+    /** R8/A1: emite um evento do caminho ao vivo com a identidade IMMUTABLE do
+     * job (run/act/job/gen do snapshot) — saídas tardias de um job NÃO são
+     * carimbadas com a identidade do sucessor. seq/mono continuam do carimbo. */
+    private fun emitLiveEventWithIdentity(name: String, identity: LiveJobIdentity, fields: String) {
+        val header = liveStamp.headerFor(identity)
+        val extras = fields.removePrefix("{").removeSuffix("}")
+        val body = if (extras.isBlank()) "{$header}" else "{$header,$extras}"
+        WhisperLabSeams.event(name, body)
+    }
+
+    /** R4/C1 (+R7/A2): inferência de UM chunk do job ao vivo — roda na thread do
+     * worker do pipeline. Resultado TIPADO: Success(texto), NoSpeech (silêncio
+     * legítimo do nativo OU portão de energia só-zero-digital), Failed (status
+     * error/perdido, exceção, chunkWav — conta em failedSamples) e Cancelled.
+     * TODOS os settings do snapshot vão ao JNI — nada fixado em beam=1/bestOf=1/
+     * timestamps=false/vad=false. */
+    private fun transcribeLiveChunk(
+        chunk: LivePcmPipeline.Chunk,
+        liveSettings: LiveJobSettings,
+        sessionGeneration: Long,
+    ): LiveChunkResult {
+        // R8/D (integridade/cadência): REPARO DEFERIDO — o passe de reparo do
+        // chunk ANTERIOR roda AQUI (thread do worker, FORA do lock do pipeline).
+        // O deliver roda sob o lock; o reparo de ~5,5 s lá dentro estancava o
+        // feed do leitor (d3pre: 4 stalls de 5,4–5,7 s → déficit 13,8 s). Aqui
+        // fica serializado com os decodes (mesma thread) — nunca concorrente.
+        val repairCommitter = liveTextCommitter
+        if (repairCommitter != null && repairCommitter.pendingRepairCount() > 0) {
+            runLiveRepairPass(repairCommitter, liveSettings, sessionGeneration)
+            postIfCurrent(sessionGeneration) {
+                publishLiveTextNow(sessionGeneration, LiveTextPublication.SOURCE_REPAIR)
+            }
         }
-        val rms = sqrt(sumSquares / numSamples)
-        if (rms < 250) {
-            return
+        val pcm = chunk.pcm
+        if (pcm.size < 2) return LiveChunkResult.NoSpeech("chunk vazio (0 amostras)")
+        // R6/D2: medição por janela (clock monotônico) — inclui o portão.
+        val t0 = SystemClock.elapsedRealtime()
+        // R8/D — clock de INÍCIO do worker para o chunk (chegada real ao decode):
+        // contra o clock_enqueue dá a espera de fila/backlog; contra o
+        // clock_worker_end (o próprio live_window) dá o decode.
+        liveEvent(
+            "clock_worker_start",
+            sessionGeneration,
+            chunk.index,
+            fields = "\"unique_start\":${chunk.uniqueStartSample},\"unique_end\":${chunk.uniqueEndSample}," +
+                "\"t_start_mono\":$t0"
+        )
+        // R7/A2: portão SÓ-ZERO-DIGITAL — decide sem-fala apenas quando o PCM é
+        // VÁLIDO (nº par de bytes, ≥1 amostra) e TODAS as amostras são zero.
+        // RMS/pico são MEDIDOS como diagnóstico (evento), NUNCA critério de
+        // descarte: fala fraca, onset curto e qualquer amostra não nula
+        // (inclusive -32768) seguem para o modelo/VAD. Fragmento inválido
+        // (nº ímpar de bytes) NÃO vira silêncio.
+        val energy = LiveEnergyGate.measure(pcm)
+        if (LiveEnergyGate.isDigitalSilence(energy)) {
+            liveEvent(
+                "live_window",
+                sessionGeneration,
+                chunk.index,
+                fields = "\"unique_start\":${chunk.uniqueStartSample}," +
+                    "\"unique_end\":${chunk.uniqueEndSample},\"context_samples\":${chunk.contextSamplesInChunk}," +
+                    "\"decode_samples\":${chunk.sampleCount},\"wall_ms\":0,\"kind\":\"gate\"," +
+                    "\"gate_reason\":\"zero-digital\",\"pcm_valid\":${energy.validPcm}," +
+                    "\"rms\":${String.format(Locale.US, "%.2f", energy.rms)},\"peak\":${energy.peak},\"text_len\":0}"
+            )
+            return LiveChunkResult.NoSpeech(
+                String.format(Locale.US, "zero-digital (%d amostras todas 0; pcm valido=%b)", energy.sampleCount, energy.validPcm)
+            )
+        }
+        if (liveFirstSpeechMs < 0L) {
+            // R7/A1: marcador honesto = 1ª JANELA ENERGÉTICA ENTREGUE ao worker
+            // (passou o portão só-zero, está indo para o modelo) — NÃO é o
+            // início da fala capturada nem latência da 1ª fala. Emitimos o nome
+            // legado (live_first_speech) e o nome correto (first_window_ready);
+            // o onset real de fala vem do fixture/PCM, não daqui.
+            liveFirstSpeechMs = SystemClock.elapsedRealtime() - liveMicStartedAt
+            val markerFields = "\"ms_job\":$liveFirstSpeechMs,\"unique_start\":${chunk.uniqueStartSample}"
+            liveEvent("live_first_speech", sessionGeneration, chunk.index, fields = markerFields)
+            liveEvent("first_window_ready", sessionGeneration, chunk.index, fields = markerFields)
         }
 
-        val chunkWav = File(cacheDir, "live_chunk_${System.currentTimeMillis()}_$index.wav")
+        val chunkWav = File(cacheDir, "live_chunk_${System.currentTimeMillis()}_${chunk.index}.wav")
         try {
+            // R4/C3: atraso injetável (lab) para worker comprovadamente lento.
+            val delayMs = WhisperLabSeams.chunkDelayMs()
+            if (delayMs > 0) {
+                try {
+                    Thread.sleep(delayMs)
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                }
+            }
             writeWavFile(chunkWav, pcm, 16000)
-            val dummyCallback = object : WhisperNative.Callback {
-                override fun onSegment(text: String, startMs: Long, endMs: Long) {}
+            // R7/E2: segmentos REAIS do JNI (texto+ms) sobem para o commit como
+            // evidência de INTERVALO. Só quando os tempos são relativos À JANELA
+            // (sem VAD: com filtro os tempos são do áudio filtrado, não do
+            // chunk) — senão o commit cai no caminho estimado.
+            val chunkSegments = ArrayList<LiveSegmentTime>()
+            val captureSegments = !liveSettings.vadFilter
+            // R8/D (candidata 2): publicação INCREMENTAL — o texto de cada
+            // onSegment VÁLIDO do job corrente vai à UI como parcial PROVISÓRIA,
+            // aproveitando o MESMO decode (nenhuma inferência nova, nenhum
+            // reload). O commit continua sendo do committer (reconciliação B):
+            // no fim da janela o texto é substituído pelo display oficial e o
+            // incremental morre; cancel descarta o overlay.
+            val incEnabled = WhisperLabSeams.incrementalPartialEnabled()
+            val incSegments = ArrayList<String>()
+            val incOnce = java.util.concurrent.atomic.AtomicBoolean(false)
+            val chunkCallback = object : WhisperNative.Callback {
+                override fun onSegment(text: String, startMs: Long, endMs: Long) {
+                    if (!captureSegments) return
+                    val t = text.trim()
+                    if (t.isEmpty() || startMs < 0 || endMs < startMs) return
+                    chunkSegments.add(LiveSegmentTime(t, startMs, endMs))
+                    if (!incEnabled) return
+                    incSegments.add(t)
+                    val incText = incSegments.joinToString(" ")
+                    val cbGeneration = sessionGeneration
+                    val cbChunk = chunk.index
+                    runOnUiThread {
+                        if (!isDestroyed && whisperSession.isCurrent(cbGeneration)) {
+                            val base = liveTextCommitter?.displayText().orEmpty()
+                            val merged = (if (base.isBlank()) incText else "$base $incText").trim()
+                            if (merged.isNotEmpty()) {
+                                liveTranscriptText.setText(merged)
+                                liveTranscriptText.setSelection(liveTranscriptText.text.length)
+                                liveLastPublishedText = merged
+                                liveIncrementalShown = true
+                                val isFirst = incOnce.compareAndSet(false, true)
+                                if (liveFirstIncrementalMs < 0L) {
+                                    liveFirstIncrementalMs = SystemClock.elapsedRealtime() - liveMicStartedAt
+                                }
+                                val sinceSpeech = if (liveFirstSpeechMs >= 0L) {
+                                    SystemClock.elapsedRealtime() - liveMicStartedAt - liveFirstSpeechMs
+                                } else -1L
+                                liveEvent(
+                                    "clock_ui_publish",
+                                    cbGeneration,
+                                    cbChunk,
+                                    fields = "\"source\":\"incremental\",\"chars\":${merged.length}," +
+                                        "\"first\":$isFirst,\"ms_job\":${SystemClock.elapsedRealtime() - liveMicStartedAt}," +
+                                        "\"ms_desde_1a_fala\":$sinceSpeech"
+                                )
+                                if (isFirst) {
+                                    liveEvent(
+                                        "live_first_incremental_partial",
+                                        cbGeneration,
+                                        cbChunk,
+                                        fields = "\"ms_job\":${liveFirstIncrementalMs}," +
+                                            "\"ms_desde_1a_fala\":$sinceSpeech," +
+                                            "\"ms_desde_capture_start\":${SystemClock.elapsedRealtime() - liveMicStartedAt}"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 override fun onProgress(progress: Int) {}
+
                 override fun onNativeLog(line: String) {}
             }
 
-            val text = synchronized(modelLoadLock) {
-                WhisperNative.transcribe(
+            // R2/B2: par texto+status do mesmo job, numa única chamada.
+            val (rawText, rawStatus) = synchronized(modelLoadLock) {
+                // R18/C1 — início real do worker (caminho ao vivo).
+                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, sessionGeneration) }
+                whisperSession.transcribeAndStatus(
+                    sessionGeneration,
                     chunkWav.absolutePath,
-                    langCode,
-                    1,
-                    1,
-                    false,
-                    false,
-                    "",
-                    dummyCallback
-                ).trim()
+                    liveSettings.language,
+                    liveSettings.beamSize,
+                    liveSettings.bestOf,
+                    liveSettings.wordTimestamps,
+                    liveSettings.vadFilter,
+                    liveSettings.vadModelPath,
+                    chunkCallback
+                )
             }
-
-            if (text.isNotBlank() && !text.startsWith("Cancelado:") && !text.startsWith("Erro:")) {
-                runOnUiThread {
-                    val current = liveTranscriptText.text.toString()
-                    val separator = if (current.isEmpty() || current.endsWith("\n") || current.endsWith(" ")) "" else " "
-                    liveTranscriptText.append(separator + text)
-                    liveTranscriptText.setSelection(liveTranscriptText.text.length)
-                }
+            // R4/C3: substituição injetada (lab) atravessa o MESMO parse e a
+            // MESMA classificação tipada do produto — nunca vira null/silêncio.
+            val (chunkText, chunkStatus) = WhisperLabSeams.overrideChunkResult(chunk.index, rawText, rawStatus)
+            val outcome = when (val parsed = WhisperResultParser.parse(chunkText, chunkStatus)) {
+                is WhisperTranscriptResult.Success ->
+                    if (parsed.text.isBlank()) LiveChunkResult.NoSpeech("texto vazio com status ok")
+                    else LiveChunkResult.Success(parsed.text, chunkSegments)
+                WhisperTranscriptResult.NoSpeech -> LiveChunkResult.NoSpeech("no_speech do modelo")
+                is WhisperTranscriptResult.Cancelled -> LiveChunkResult.Cancelled(parsed.message)
+                is WhisperTranscriptResult.Error -> LiveChunkResult.Failed(parsed.message)
             }
+            // R6/D2: medição por janela — wall real de inferência e desfecho.
+            val wallMs = SystemClock.elapsedRealtime() - t0
+            liveDecodeWallMsTotal += wallMs
+            liveDecodeWindowsCount += 1
+            val kind = when (outcome) {
+                is LiveChunkResult.Success -> "ok"
+                is LiveChunkResult.NoSpeech -> "silence"
+                is LiveChunkResult.Failed -> "fail"
+                is LiveChunkResult.Cancelled -> "cancel"
+            }
+            val textLen = (outcome as? LiveChunkResult.Success)?.text?.length ?: 0
+            // R8/B: o TEXTO da janela vai ao JSONL do lab (artefato privado do
+            // flavor; a produção usa o objeto inerte e nunca grava) — insumo da
+            // auditoria de reconciliação por janela.
+            val textField = (outcome as? LiveChunkResult.Success)?.text?.let { jsonEscape(it) } ?: ""
+            liveEvent(
+                "live_window",
+                sessionGeneration,
+                chunk.index,
+                fields = "\"unique_start\":${chunk.uniqueStartSample}," +
+                    "\"unique_end\":${chunk.uniqueEndSample},\"context_samples\":${chunk.contextSamplesInChunk}," +
+                    "\"decode_samples\":${chunk.sampleCount},\"wall_ms\":$wallMs,\"kind\":\"$kind\",\"text_len\":$textLen," +
+                    "\"text\":\"$textField\"," +
+                    "\"t_start_mono\":$t0,\"t_end_mono\":${t0 + wallMs}"
+            )
+            return outcome
         } catch (e: Throwable) {
-            Log.w(TAG, "Failed to transcribe live chunk $index", e)
+            Log.w(TAG, "Failed to transcribe live chunk ${chunk.index}", e)
+            return LiveChunkResult.Failed("excecao ao transcrever chunk: ${e.message ?: e.javaClass.simpleName}")
         } finally {
             chunkWav.delete()
+        }
+    }
+
+    /**
+     * R8/B — PASSE de reparo restrito do committer: pega regiões retidas com
+     * áudio preservado e re-decodifica SÓ o PCM recortado da região (nunca o
+     * histórico inteiro), no máximo [LIVE_REPAIR_MAX_PER_WINDOW] por janela e
+     * UMA tentativa por região. Roda na thread do worker (nunca sob o lock do
+     * committer e nunca na main); cancel/geração velha fecham a região tipada.
+     */
+    private fun runLiveRepairPass(
+        committer: LiveTextCommitter,
+        liveSettings: LiveJobSettings,
+        sessionGeneration: Long,
+    ) {
+        var passes = 0
+        while (passes < LIVE_REPAIR_MAX_PER_WINDOW) {
+            val req = committer.takeRepairRequest() ?: break
+            passes++
+            // R13/F1 — identidade do log: o MESMO regionId do committer + um
+            // attempt_id por job, para casar pedido/resposta no replay. Não é
+            // entrada de decisão: nada além do log lê este número.
+            val attemptId = liveRepairAttemptIds.next()
+            if (cancelRequested || !whisperSession.isCurrent(sessionGeneration)) {
+                committer.failRepair(req.regionId, "cancel/geracao")
+                break
+            }
+            val t0 = SystemClock.elapsedRealtime()
+            val outcome = transcribeLiveRepairPcm(req, liveSettings, sessionGeneration)
+            val wallMs = SystemClock.elapsedRealtime() - t0
+            val ok = when (outcome) {
+                is LiveChunkResult.Success -> committer.completeRepair(req.regionId, outcome.text, outcome.segments)
+                is LiveChunkResult.NoSpeech -> committer.failRepair(req.regionId, "no_speech do reparo")
+                is LiveChunkResult.Cancelled -> committer.failRepair(req.regionId, "cancelado")
+                is LiveChunkResult.Failed -> committer.failRepair(req.regionId, "falha do reparo")
+            }
+            val repairTextField = (outcome as? LiveChunkResult.Success)?.text?.let { jsonEscape(it) } ?: ""
+            val repairIdFields =
+                if (WhisperLabSeams.isLab()) LiveTelemetry.repairFields(req.regionId, attemptId) + "," else ""
+            liveEvent(
+                "live_repair",
+                sessionGeneration,
+                req.windowIndex,
+                fields = repairIdFields +
+                    "\"region\":${req.regionId},\"start\":${req.startSample},\"end\":${req.endSample}," +
+                    "\"bytes\":${req.pcm.size},\"words\":${req.wordCount},\"wall_ms\":$wallMs,\"ok\":$ok," +
+                    "\"text\":\"$repairTextField\""
+            )
+        }
+    }
+
+    /** R8/B — re-decode do PCM PRESERVADO de uma região (mesma fiação JNI do
+     * chunk: par texto+status, mesmo parse tipado e mesmos settings do job). */
+    private fun transcribeLiveRepairPcm(
+        req: LiveTextCommitter.RepairRequest,
+        liveSettings: LiveJobSettings,
+        sessionGeneration: Long,
+    ): LiveChunkResult {
+        val pcm = req.pcm
+        if (pcm.size < 2) return LiveChunkResult.NoSpeech("reparo vazio (0 amostras)")
+        val repairWav = File(cacheDir, "live_repair_${req.regionId}_${System.currentTimeMillis()}.wav")
+        return try {
+            writeWavFile(repairWav, pcm, 16000)
+            val chunkSegments = ArrayList<LiveSegmentTime>()
+            val captureSegments = !liveSettings.vadFilter
+            val callback = object : WhisperNative.Callback {
+                override fun onSegment(text: String, startMs: Long, endMs: Long) {
+                    if (!captureSegments) return
+                    val t = text.trim()
+                    if (t.isEmpty() || startMs < 0 || endMs < startMs) return
+                    chunkSegments.add(LiveSegmentTime(t, startMs, endMs))
+                }
+
+                override fun onProgress(progress: Int) {}
+
+                override fun onNativeLog(line: String) {}
+            }
+            val (rawText, rawStatus) = synchronized(modelLoadLock) {
+                // R18/C1 — início real do worker (caminho ao vivo).
+                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, sessionGeneration) }
+                whisperSession.transcribeAndStatus(
+                    sessionGeneration,
+                    repairWav.absolutePath,
+                    liveSettings.language,
+                    liveSettings.beamSize,
+                    liveSettings.bestOf,
+                    liveSettings.wordTimestamps,
+                    liveSettings.vadFilter,
+                    liveSettings.vadModelPath,
+                    callback
+                )
+            }
+            when (val parsed = WhisperResultParser.parse(rawText, rawStatus)) {
+                is WhisperTranscriptResult.Success ->
+                    if (parsed.text.isBlank()) LiveChunkResult.NoSpeech("texto vazio no reparo")
+                    else LiveChunkResult.Success(parsed.text, chunkSegments)
+                WhisperTranscriptResult.NoSpeech -> LiveChunkResult.NoSpeech("no_speech do reparo")
+                is WhisperTranscriptResult.Cancelled -> LiveChunkResult.Cancelled(parsed.message)
+                is WhisperTranscriptResult.Error -> LiveChunkResult.Failed(parsed.message)
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "Falha no reparo da região ${req.regionId}", e)
+            LiveChunkResult.Failed("excecao no reparo: ${e.message ?: e.javaClass.simpleName}")
+        } finally {
+            repairWav.delete()
         }
     }
 
@@ -2553,12 +4887,57 @@ class WhisperActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val LIVE_MIC_STOPPING_LABEL = "Encerrando transcrição ao vivo..."
+        /** R2/B2: estado honesto quando o teto de espera estoura com o worker
+         * ainda vivo (a UI só é reabilitada quando ele realmente morre). */
+        private const val LIVE_MIC_STOPPING_WORKER_LABEL = "Encerrando... (worker ainda ativo)"
+        private const val LIVE_MIC_STOP_POLL_MS = 500L
+        private const val LIVE_MIC_STOP_TIMEOUT_MS = 30_000L
+        /** R3/C1: teto do dreno visível; a espera real vai até o worker terminal. */
+        private const val LIVE_MIC_DRAIN_TIMEOUT_MS = 60_000L
+        /** R4/C1: teto do spool do caminho ao vivo (o lab injeta um menor). */
+        private const val DEFAULT_LIVE_SPOOL_MAX_BYTES = 256L * 1024L * 1024L
+        /** R8/B: teto de reparos restritos POR JANELA (cada região tem 1 tentativa). */
+        private const val LIVE_REPAIR_MAX_PER_WINDOW = 2
+        /** R6/D2: janela default do caminho ao vivo — único 4 s + contexto 4 s
+         * (hipóteses iniciais medidas na fase D; o lab pode trocar/fixar 2 s). */
+        private const val DEFAULT_LIVE_HOP_MS = 4_000L
+        private const val DEFAULT_LIVE_CONTEXT_MS = 4_000L
+
+        /** R7/E3 — ESTRATÉGIA DEFAULT do caminho ao vivo no APK NORMAL.
+         *
+         * ANTES (herdado da R6/D2, NÃO aprovado na fase E): bloco fixo de 4 s
+         * com contexto de 4 s (WER medido 46,5% em d01 com perda de 18 palavras
+         * por deleção; RTF decode 2,05).
+         * DEPOIS (vencedor medido na fase E, 3 estratégias × d01/n06/n07novo):
+         * VAD segmentando intervalos de fala — melhor WER nas três entradas
+         * (média 7,4% vs 17,6% do controle 2 s e 21,7% do 4+4), zero perda de
+         * texto, e o MENOR custo de decode (RTF 0,95–1,33 contra 3,33–3,48 do
+         * 2 s e 2,05–2,14 do 4+4). Nenhum outro default (modelo/backend/FA/VAD
+         * do modelo) muda por causa disto. */
+        private val DEFAULT_LIVE_STRATEGY: LiveStrategy = LiveStrategy.VadSegment(
+            contextMs = 2_000,
+            padMs = 300,
+            silenceCutMs = 3_000,
+            maxSegmentMs = 15_000,
+            // R9/D3 (candidata C1 — promovida do LAB ao PRODUTO): a 1ª janela é
+            // CURTA/adaptativa (teto 2 s de fala, corte de silêncio 600 ms) para
+            // entregar o 1º texto cedo; da 2ª em diante valem as janelas longas
+            // (15 s/3 s) — NÃO se reduz o teto geral a 4 s (isso reintroduz o
+            // atraso sustentado e a fragmentação medidos na R8). Medido na R8-D
+            // (mesmos fixtures base): 1ª parcial ~8,1–8,9 s vs ~17,2–19,5 s do
+            // cap (>2× mais cedo), WER igual/sub-1 pp, RTF 1,02–1,16.
+            firstSegmentMs = 2_000,
+            firstSilenceCutMs = 600,
+        )
         private const val REQUEST_PICK_MEDIA = 6101
         private const val REQUEST_PICK_FOLDER = 6102
         private const val REQUEST_PICK_MODEL = 6103
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 6104
         private const val REQUEST_CHOOSE_PRE_OUTPUT_DIR = 6105
         private const val REQUEST_RECORD_AUDIO_PERMISSION = 6106
+        /** R11/D4 — pedido de POST_NOTIFICATIONS (observabilidade do job). */
+        private const val REQUEST_POST_NOTIFICATIONS_PERMISSION = 6107
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val WHISPER_OUTPUT_FOLDER = "Whisper"
         private const val GLOBAL_LOG_NAME = "whisper_log.txt"

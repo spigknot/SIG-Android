@@ -18,8 +18,38 @@
 #include <inttypes.h>
 #include <string.h>
 
+// R17/D2 — CONTADOR DE SUBMISSÕES DO BACKEND OPENCL.
+// O diag b4 herdado mede o backend VULKAN; o produto executa no OpenCL, onde
+// não havia contador nenhum (medido: b4_submits=0 com b4_nodes=967). Aqui todo
+// clEnqueueNDRangeKernel passa por um wrapper contado — um ponto só, sem tocar
+// nas 37 chamadas — e o total é publicado para o perfil por job.
+#include <atomic>
+namespace sig_cl_state {
+static std::atomic<uint64_t> g_enqueues{0};
+static std::atomic<uint64_t> g_flushes{0};
+} // namespace sig_cl_state
+
+static inline cl_int sig_cl_enqueue_counted(cl_command_queue q, cl_kernel k, cl_uint d,
+        const size_t * goff, const size_t * go, const size_t * lo,
+        cl_uint nwl, const cl_event * wl, cl_event * e) {
+    sig_cl_state::g_enqueues.fetch_add(1, std::memory_order_relaxed);
+    // parênteses impedem a expansão da macro abaixo (sem recursão)
+    return (clEnqueueNDRangeKernel)(q, k, d, goff, go, lo, nwl, wl, e);
+}
+#define clEnqueueNDRangeKernel sig_cl_enqueue_counted
+
+extern "C" int sig_cl_submit_state(char * buf, int cap) {
+    if (buf == nullptr || cap <= 0) return 0;
+    return snprintf(buf, (size_t) cap, "cl_enqueues=%llu cl_flushes=%llu",
+        (unsigned long long) sig_cl_state::g_enqueues.load(std::memory_order_relaxed),
+        (unsigned long long) sig_cl_state::g_flushes.load(std::memory_order_relaxed));
+}
+
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>   // R11/fase E (E2): atoi/getenv
+#include <ctime>     // R11/fase E (E2): clock_gettime
+#include <unistd.h>  // R11/fase E (E2): usleep
 #include <fstream>
 #include <vector>
 #include <string>
@@ -29,6 +59,8 @@
 #include <charconv>
 #include <mutex>
 #include <regex>
+#include <tuple>
+#include <set>  // R3/fase E (E2): status de variantes FA indisponíveis
 
 #undef MIN
 #undef MAX
@@ -100,6 +132,10 @@ enum ADRENO_GPU_GEN {
 
 enum ADRENO_CL_COMPILER_TYPE {
     E031,
+    // R3/fase E (E2): port adaptado do upstream whisper.cpp d1be6fde
+    // (ggml-opencl) — o upstream distingue compiladores E17 porque eles
+    // segfaultam ao construir kernels FA (guarda em supports_op).
+    E17,
     DX,
 };
 
@@ -248,6 +284,19 @@ static ggml_cl_compiler_version get_adreno_cl_compiler_version(const char *drive
     size_t compiler_minor_offset = 8;
     size_t compiler_patch_offset = 11;
 
+    // R3/fase E (E2): port adaptado do upstream d1be6fde — detecção do
+    // compilador E17 (antes da checagem DX, como no upstream).
+    if (compiler_ver_pos == std::string::npos) {
+        compiler_ver_pos = driver_ver_str.find("E17");
+        if (compiler_ver_pos != std::string::npos) {
+            type = ADRENO_CL_COMPILER_TYPE::E17;
+            compiler_ver_len = 12;
+            compiler_major_offset = 4;
+            compiler_minor_offset = 7;
+            compiler_patch_offset = 10;
+        }
+    }
+
     if (compiler_ver_pos == std::string::npos) {
         compiler_ver_pos = driver_ver_str.find("DX");
         if (compiler_ver_pos == std::string::npos) {
@@ -285,8 +334,19 @@ struct ggml_cl_buffer {
             if (buffer) {
                 CL_CHECK(clReleaseMemObject(buffer));
             }
-            cl_int err;
-            CL_CHECK((buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, size, NULL, &err), err));
+            // R10/fase D (D1): DIAG tipado de ALOCACAO POR OBJETO. Buffers de
+            // trabalho reusados (prealloc quant/scales/act, im2col, FA) sao
+            // objetos OpenCL de primeira classe e entram na contabilidade.
+            if (size >= (size_t) 64 * 1024 * 1024) {
+                GGML_LOG_INFO("SIGOCL_ALLOC kind=work_buffer request_bytes=%zu\n", size);
+            }
+            cl_int err = CL_SUCCESS;
+            buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, size, NULL, &err);
+            if (buffer == NULL || err != CL_SUCCESS) {
+                GGML_LOG_ERROR("SIGOCL_ALLOC_FAIL kind=work_buffer request_bytes=%zu err=%d\n",
+                               size, (int) err);
+                CL_CHECK(err);
+            }
         }
     }
 };
@@ -356,6 +416,27 @@ static void populateProfilingInfo(
     info.output_size[3] = tensor->ne[3];
 }
 
+// ---------------------------------------------------------------------------
+// R11/fase E (E1) — FATOS DO DEVICE OpenCL, EXPORTADOS para a fronteira JNI.
+//
+// Por que existe: os fatos de família/geração (Adreno / A7X) são logados UMA
+// vez por processo, na enumeração/probe do registry, que normalmente acontece
+// ANTES de qualquer carga de modelo (systemInfo/backendInfo do produto). Parse
+// de log de carga, portanto, NÃO é fonte confiável para a guarda de perfil —
+// ela tem de perguntar ao backend. Estes acessores devolvem exatamente o que o
+// backend decidiu (mesmo critério que escolhe os kernels Adreno).
+// -1 = desconhecido (nunca recusa por desconhecimento); 1 = sim; 0 = não.
+// ---------------------------------------------------------------------------
+static int         g_sigocl_dev_is_adreno = -1;
+static int         g_sigocl_dev_is_a7x = -1;
+static std::string g_sigocl_dev_name;
+static std::string g_sigocl_dev_driver;
+
+extern "C" int sig_opencl_device_is_adreno(void)      { return g_sigocl_dev_is_adreno; }
+extern "C" int sig_opencl_device_is_adreno_a7x(void)  { return g_sigocl_dev_is_a7x; }
+extern "C" const char * sig_opencl_device_name(void)  { return g_sigocl_dev_name.c_str(); }
+extern "C" const char * sig_opencl_device_driver(void){ return g_sigocl_dev_driver.c_str(); }
+
 struct ggml_backend_opencl_context;
 
 // backend device context
@@ -378,6 +459,130 @@ struct ggml_backend_opencl_device_context {
 };
 
 // backend context
+// ---------------------------------------------------------------------------
+// R11/fase E (E2) — RASTRO POR EVENTO E OPERACAO (DIAG; off por default)
+//
+// Objetivo: distinguir SUBMITTED de COMPLETED. Um marcador impresso LOGO APOS
+// o enqueue NAO prova completion (R10 mediu 1.063 nos enfileirados em 41 ms com
+// o processo parado). Aqui cada enqueue do caminho de COMPUTE ganha:
+//   * id unico de enqueue (sequencia) e handle do evento;
+//   * kernel (nome) + programa (hash do binario compilado, cacheado);
+//   * work sizes global/local + ne/nb/offset/tipo/ponteiro do tensor e o cl_mem
+//     de destino (ID de buffer);
+//   * status REAL do evento por polling NAO BLOQUEANTE e LIMITADO
+//     (`clGetEventInfo(CL_EVENT_COMMAND_EXECUTION_STATUS)`); NUNCA usa
+//     clWaitForEvents/clFinish para observar (bloquear no mesmo comando nao
+//     devolve a GPU — R10/D2);
+//   * e, por nodo do grafo, um MARCADOR na MESMA fila in-order: se o marcador
+//     completa, TODOS os comandos anteriores completaram ⇒ ultimo evento
+//     completo e primeiro NAO completo ficam identificados.
+// Ligado por GGML_OPENCL_SIGOCL_TRACE=1 (produto: desligado).
+// R12/A3: TODO este instrumento (helpers, campos do contexto e emissoes) so
+// existe no build DIAG (SIG_WHISPER_OCL_TRACE, definido pelo CMake quando
+// SIG_WHISPER_DIAG=1). No NORMAL nao ha getenv, nao ha strings SIGOCL_* e nao
+// existe caminho para ativar o rastro.
+// ---------------------------------------------------------------------------
+#ifdef SIG_WHISPER_OCL_TRACE
+static int64_t sigocl_now_us() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t) ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
+static const char * sigocl_status_name(cl_int status) {
+    switch (status) {
+        case CL_QUEUED:    return "QUEUED";
+        case CL_SUBMITTED: return "SUBMITTED";
+        case CL_RUNNING:   return "RUNNING";
+        case CL_COMPLETE:  return "COMPLETE";
+        default:           return "ERROR";
+    }
+}
+
+// Hash FNV-1a do binario COMPILADO do programa (chave estavel do kernel
+// efetivamente executado), calculado UMA vez por cl_program.
+struct sigocl_program_hash {
+    cl_program program = nullptr;
+    cl_ulong   hash = 0;
+};
+
+static std::vector<sigocl_program_hash> g_sigocl_program_hashes;
+
+static cl_ulong sigocl_program_hash_of(cl_program program) {
+    if (program == nullptr) {
+        return 0;
+    }
+    for (const sigocl_program_hash & entry : g_sigocl_program_hashes) {
+        if (entry.program == program) {
+            return entry.hash;
+        }
+    }
+    cl_ulong hash = 0;
+    size_t binary_sizes = 0;
+    if (clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, 0, nullptr, &binary_sizes) == CL_SUCCESS &&
+        binary_sizes >= sizeof(size_t)) {
+        std::vector<size_t> sizes(binary_sizes / sizeof(size_t));
+        if (clGetProgramInfo(program, CL_PROGRAM_BINARY_SIZES, binary_sizes, sizes.data(), nullptr) == CL_SUCCESS &&
+            !sizes.empty() && sizes[0] > 0) {
+            std::vector<unsigned char> binary(sizes[0]);
+            std::vector<unsigned char *> pointers(1, binary.data());
+            if (clGetProgramInfo(program, CL_PROGRAM_BINARIES, sizeof(unsigned char *), pointers.data(), nullptr) == CL_SUCCESS) {
+                cl_ulong fnv = 1469598103934665603ULL;
+                for (size_t i = 0; i < binary.size(); ++i) {
+                    fnv ^= binary[i];
+                    fnv *= 1099511628211ULL;
+                }
+                hash = fnv;
+            }
+        }
+    }
+    g_sigocl_program_hashes.push_back({program, hash});
+    return hash;
+}
+
+// Polling NAO BLOQUEANTE e LIMITADO do status de execucao do evento.
+static cl_int sigocl_poll_status(cl_event evt, int budget_ms, cl_int * observed, int * elapsed_us) {
+    const int64_t t0 = sigocl_now_us();
+    cl_int status = CL_QUEUED;
+    cl_int last_error = CL_SUCCESS;
+    if (observed != nullptr) { *observed = CL_QUEUED; }
+    for (;;) {
+        const cl_int err = clGetEventInfo(evt, CL_EVENT_COMMAND_EXECUTION_STATUS, sizeof(cl_int), &status, nullptr);
+        if (err != CL_SUCCESS) {
+            last_error = err;
+            status = -1;
+            break;
+        }
+        if (observed != nullptr) { *observed = status; }
+        if (status == CL_COMPLETE || status < 0) {
+            break;
+        }
+        if (sigocl_now_us() - t0 >= (int64_t) budget_ms * 1000) {
+            break;
+        }
+        usleep(200);
+    }
+    if (elapsed_us != nullptr) { *elapsed_us = (int) (sigocl_now_us() - t0); }
+    return last_error;
+}
+
+// Orçamento de polling por evento (ms). DIAG: GGML_OPENCL_SIGOCL_POLL_MS.
+static int sigocl_poll_budget_ms() {
+    static int budget = -1;
+    if (budget < 0) {
+        budget = 50;
+        const char * env = getenv("GGML_OPENCL_SIGOCL_POLL_MS");
+        if (env != nullptr && env[0] != '\0') {
+            const int parsed = atoi(env);
+            if (parsed >= 0 && parsed <= 1000) {
+                budget = parsed;
+            }
+        }
+    }
+    return budget;
+}
+#endif // SIG_WHISPER_OCL_TRACE
+
 struct ggml_backend_opencl_context {
     int ref_count;
 
@@ -409,6 +614,10 @@ struct ggml_backend_opencl_context {
     size_t  image_max_buffer_size;
     size_t  image2d_max_width;
     size_t  image2d_max_height;
+
+    // R11/fase D3: distingue contexto VALIDADO (probe de devices, sem OpenCL
+    // compilado) de contexto COMPLETO (kernels compilados + buffers Adreno).
+    bool kernels_loaded = false;
 
     cl_context context;
     cl_command_queue queue;
@@ -534,6 +743,24 @@ struct ggml_backend_opencl_context {
     std::map<std::pair<int, int>, cl_kernel> kernels_flash_attn_f32_f16_q1;
     std::map<std::pair<int, int>, int>       kernels_flash_attn_bm;
     std::map<std::pair<int, int>, int>       kernels_flash_attn_bn;
+
+    // ---------------------------------------------------------------------
+    // R3/fase E (E2) — estado da compilação FA lazy (por (dk,dv) x variante).
+    // ---------------------------------------------------------------------
+    // A compilação dos programas FA saiu da init (load_cl_kernels) e passou a
+    // acontecer no PRIMEIRO USO da variante (supports_op do op FA). Estes
+    // campos vivem no contexto do device (morrem com o cl_context): um novo
+    // contexto/sessão recompila limpo; variantes reprovadas não são
+    // re-tentadas dentro do MESMO contexto (evita loop de builds com defeito).
+    std::mutex                        fa_mutex;
+    std::set<std::pair<int, int>>     fa_unavailable_f16;
+    std::set<std::pair<int, int>>     fa_unavailable_f32;
+    std::set<std::pair<int, int>>     fa_unavailable_f32_f16;
+    // Último build-log de FA preservado (diagnóstico; string vazia = nenhum).
+    std::string                       fa_last_build_log;
+    // Opções comuns de compilação (as mesmas calculadas na init), para a
+    // compilação lazy reproduzir EXATAMENTE a receita anterior.
+    std::string                       fa_compile_opts_base;
     cl_kernel kernel_get_rows_f32, kernel_get_rows_f16, kernel_get_rows_q4_0;
     cl_kernel kernel_set_rows_f32_i64, kernel_set_rows_f32_i32, kernel_set_rows_f16_i64, kernel_set_rows_f16_i32;
     cl_kernel kernel_rope_norm_f32, kernel_rope_norm_f16, kernel_rope_neox_f32, kernel_rope_neox_f16;
@@ -639,6 +866,22 @@ struct ggml_backend_opencl_context {
 
     std::vector<ProfilingInfo> profiling_info;
 
+    // R11/fase E (E2): RASTRO POR EVENTO (DIAG; ligado por GGML_OPENCL_SIGOCL_TRACE).
+#ifdef SIG_WHISPER_OCL_TRACE
+    bool     sigocl_trace = false;
+    uint64_t sigocl_enqueue_seq = 0;        // id unico de enqueue (compute)
+    uint64_t sigocl_node_seq = 0;           // id unico de nodo/marcador
+    uint64_t sigocl_last_event_id = 0;      // ultimo enqueue de compute
+    cl_event sigocl_last_event = nullptr;   // (nao retido: so diagnostico)
+    int      sigocl_nodes_complete = 0;     // marcadores que completaram
+    int      sigocl_nodes_stuck = 0;        // marcadores que NAO completaram (1o = reproducer)
+    uint64_t sigocl_first_stuck_node = 0;
+    // Eventos NAO completos retidos (limitado: memoria finita, DIAG).
+    cl_event sigocl_retained[4] = {nullptr, nullptr, nullptr, nullptr};
+    uint64_t sigocl_retained_node[4] = {0, 0, 0, 0};
+    int      sigocl_retained_n = 0;
+#endif // SIG_WHISPER_OCL_TRACE
+
     void write_profiling_info() {
         FILE * fperf = fopen("cl_profiling.csv", "w");
         if (!fperf) {
@@ -736,6 +979,78 @@ struct ggml_backend_opencl_context {
         profiling_info.emplace_back();
         populateProfilingInfo(profiling_info.back(), evt, kernel, work_dim, global_work_size, local_work_size, tensor);
 #else
+#ifdef SIG_WHISPER_OCL_TRACE
+        if (sigocl_trace) {
+            // R11/E (E2): enqueue COM evento + rastro tipado por operacao.
+            const uint64_t id = ++sigocl_enqueue_seq;
+            char kernel_name[256] = {0};
+            clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, sizeof(kernel_name), kernel_name, nullptr);
+            cl_program program = nullptr;
+            clGetKernelInfo(kernel, CL_KERNEL_PROGRAM, sizeof(program), &program, nullptr);
+            const cl_ulong program_hash = sigocl_program_hash_of(program);
+            cl_int err = CL_SUCCESS;
+            cl_event evt = nullptr;
+            const int64_t t_enqueue = sigocl_now_us();
+            err = clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL, global_work_size, local_work_size, 0, NULL, &evt);
+            const int enqueue_us = (int) (sigocl_now_us() - t_enqueue);
+            if (err != CL_SUCCESS) {
+                GGML_LOG_ERROR("SIGOCL_SUBMIT_FAIL id=%llu kernel=%s work_dim=%u err=%d (%s)\n",
+                               (unsigned long long) id, kernel_name, (unsigned) work_dim, (int) err,
+                               "enqueue recusado");
+                return;
+            }
+            const void * dst_mem = nullptr;
+            if (tensor != nullptr && tensor->extra != nullptr) {
+                // Identidade do tensor/buffer disponivel AQUI (a struct completa
+                // de extra so e definida mais adiante no arquivo): ponteiros
+                // estaveis por execucao + offsets/ne/nb bastam para ligar as
+                // linhas do rastro ao no do grafo.
+                dst_mem = (const void *) tensor->extra;
+            }
+            GGML_LOG_INFO("SIGOCL_SUBMIT id=%llu kernel=%s prog_hash=%016llx work_dim=%u "
+                          "gws=[%zu,%zu,%zu] lws=[%zu,%zu,%zu] enqueue_us=%d "
+                          "node=%s tensor=%p extra_buf=%p op_ne=[%lld,%lld,%lld,%lld] nb=[%zu,%zu,%zu,%zu] off=%zu ev=%p state=SUBMITTED\n",
+                          (unsigned long long) id, kernel_name, (unsigned long long) program_hash,
+                          (unsigned) work_dim,
+                          global_work_size != nullptr ? global_work_size[0] : 0,
+                          global_work_size != nullptr ? global_work_size[1] : 0,
+                          global_work_size != nullptr ? global_work_size[2] : 0,
+                          local_work_size != nullptr ? local_work_size[0] : 0,
+                          local_work_size != nullptr ? local_work_size[1] : 0,
+                          local_work_size != nullptr ? local_work_size[2] : 0,
+                          enqueue_us,
+                          tensor != nullptr ? tensor->name : "(null)",
+                          (const void *) tensor, dst_mem,
+                          tensor != nullptr ? (long long) tensor->ne[0] : 0,
+                          tensor != nullptr ? (long long) tensor->ne[1] : 0,
+                          tensor != nullptr ? (long long) tensor->ne[2] : 0,
+                          tensor != nullptr ? (long long) tensor->ne[3] : 0,
+                          tensor != nullptr ? tensor->nb[0] : (size_t) 0,
+                          tensor != nullptr ? tensor->nb[1] : (size_t) 0,
+                          tensor != nullptr ? tensor->nb[2] : (size_t) 0,
+                          tensor != nullptr ? tensor->nb[3] : (size_t) 0,
+                          tensor != nullptr ? (size_t) tensor->view_offs : (size_t) 0,
+                          (void *) evt);
+            // Polling LIMITADO (budget por evento; DIAG): distingue
+            // SUBMITTED/RUNNING de COMPLETE sem bloquear no comando.
+            cl_int observed = CL_QUEUED;
+            int waited_us = 0;
+            const int budget_ms = sigocl_poll_budget_ms();
+            sigocl_poll_status(evt, budget_ms, &observed, &waited_us);
+            GGML_LOG_INFO("SIGOCL_EVENT id=%llu kernel=%s state=%s waited_us=%d budget_ms=%d dep=all_prior(in-order)\n",
+                          (unsigned long long) id, kernel_name, sigocl_status_name(observed), waited_us, budget_ms);
+            sigocl_last_event = evt;
+            sigocl_last_event_id = id;
+            if (observed == CL_COMPLETE) {
+                clReleaseEvent(evt);
+                sigocl_last_event = nullptr;
+            }
+            // Nao completou dentro do budget: o evento fica sem release de
+            // proposito (DIAG; a fila in-order o mantem referencia) para que a
+            // CADEIA de dependencia seja atribuivel a ESTE id.
+            return;
+        }
+#endif // SIG_WHISPER_OCL_TRACE
         GGML_UNUSED(tensor);
         CL_CHECK(clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL, global_work_size, local_work_size, 0, NULL, NULL));
 #endif
@@ -830,6 +1145,464 @@ static cl_program build_program_from_source(cl_context ctx, cl_device_id dev, co
     return p;
 }
 
+// ---------------------------------------------------------------------------
+// R3/fase E (E2) — FA no OpenCL: compilação lazy, não-fatal, guardas e cache
+// ---------------------------------------------------------------------------
+// Port focal do upstream whisper.cpp d1be6fde (funções homólogas:
+// `build_program_from_source_ex`, `ggml_opencl_ensure_fa_variant`,
+// `adreno_e17_compiler_quirks` e o carve-out A7X dentro de `supports_op`),
+// adaptado à estrutura LOCAL (3 famílias de programa — f16 / f32 / f32_f16 —
+// x 9 pares dk/dv):
+//
+//  (a) LAZY: a init não compila mais FA (antes: 9 x 3 = 27 programas na
+//      init). O programa de uma variante só é construído no PRIMEIRO USO
+//      (primeiro supports_op de um op FA daquela classe e dk/dv). Runs FA-off
+//      e a init não pagam nenhum build FA.
+//  (b) NÃO-FATAL: falha de clBuildProgram/clCreateKernel loga o build-log
+//      COMPLETO (preservado em backend_ctx->fa_last_build_log) e marca a
+//      variante INDISPONÍVEL. Nenhum exit(1)/GGML_ASSERT por build de FA; os
+//      programas OBRIGATÓRIOS (não-FA) mantêm o erro explícito do caminho
+//      original (build_program_from_source acima).
+//  (c) RECUSA CORRETA ANTES DE AGENDAR: supports_op consulta `ensure` e
+//      devolve false quando a variante reprovou — o agendador roteia o op
+//      para o CPU. O dispatch nunca vê kernel nulo com a recusa correta
+//      (invariante re-checada lá, inalcançável nesse fluxo).
+//  (d) CACHE/LIBERAÇÃO/RECARGA: cache por contexto (backend_ctx) x classe x
+//      (dk,dv); o cl_program é liberado imediatamente após criar os kernels
+//      (igual à init antiga); kernels liberados no release final do contexto
+//      (ggml_cl_fa_release_all); contexto recriado = recompila limpo.
+//
+// Guardas (adaptadas do upstream; identificação local, sem superestimar):
+//  - adreno_e17_compiler_quirks: o upstream recusa FA em compiladores E17
+//    ("The E17 compilers segfault while building FA kernels"). O DRIVER DESTE
+//    PJA110 é E031.41 => esta guarda é INERTE AQUI por construção; NÃO
+//    afirmamos que E17/E031 resolvem o W12 sem prova. Desligável com
+//    GGML_OPENCL_ADRENO_E17_QUIRKS=0 (mesmo contrato do upstream).
+//  - adreno_a7x_fa_mixed_quirks: o upstream recusa as variantes FA de KV
+//    misto (f32_f16) no par Adreno 740 + compilador E031.41 (segfault de
+//    clBuildProgram). No PJA110 (driver E031.41.03.36) o build NÃO crasha
+//    (a init antiga compilava os 27 programas sem crash); o sintoma local é
+//    a transcrição vazia (W12), cuja causa NÃO é presumida aqui. A guarda é
+//    mantida e LIGADA por default (paridade com upstream + recusa específica
+//    por op), com A/B testável via GGML_OPENCL_ADRENO_A7X_QUIRKS=0|1.
+// ---------------------------------------------------------------------------
+
+struct ggml_cl_fa_dim {
+    int dk;
+    int dv;
+    int bm;
+    int bn;
+};
+
+// Mesma tabela/blocagens usadas pela init ansiosa (não alterar).
+static const ggml_cl_fa_dim g_ggml_cl_fa_dims[] = {
+    { 40,  40, 32, 32}, { 64,  64, 64, 64}, { 80,  80, 64, 32}, { 96,  96, 64, 32},
+    {112, 112, 32, 32}, {128, 128, 32, 32}, {192, 128, 16, 16},
+    {192, 192, 16, 16}, {256, 256, 16, 16},
+};
+
+enum GGML_CL_FA_VARIANT {
+    GGML_CL_FA_VARIANT_F16 = 0,
+    GGML_CL_FA_VARIANT_F32,
+    GGML_CL_FA_VARIANT_F32_F16,
+    GGML_CL_FA_VARIANT_COUNT,
+};
+
+static const char * ggml_cl_fa_variant_name(int variant) {
+    switch (variant) {
+        case GGML_CL_FA_VARIANT_F16:     return "f16";
+        case GGML_CL_FA_VARIANT_F32:     return "f32";
+        case GGML_CL_FA_VARIANT_F32_F16: return "f32_f16";
+        default:                         return "?";
+    }
+}
+
+// Port adaptado do upstream (`adreno_e17_compiler_quirks`).
+static bool adreno_e17_compiler_quirks(const ggml_backend_opencl_context * backend_ctx) {
+    if (backend_ctx == nullptr || backend_ctx->gpu_family != GPU_FAMILY::ADRENO ||
+        backend_ctx->adreno_cl_compiler_version.type != ADRENO_CL_COMPILER_TYPE::E17) {
+        return false;
+    }
+    const char * env = getenv("GGML_OPENCL_ADRENO_E17_QUIRKS");
+    return !(env != nullptr && env[0] == '0');
+}
+
+// Carve-out A7X adaptado do upstream (ver comentário acima).
+static bool adreno_a7x_fa_mixed_quirks(const ggml_backend_opencl_context * backend_ctx) {
+    if (backend_ctx == nullptr || backend_ctx->gpu_family != GPU_FAMILY::ADRENO ||
+        backend_ctx->adreno_gen != ADRENO_GPU_GEN::A7X) {
+        return false;
+    }
+    const char * env = getenv("GGML_OPENCL_ADRENO_A7X_QUIRKS");
+    if (env != nullptr && env[0] == '0') {
+        return false; // A/B: desliga a recusa específica
+    }
+    return true;
+}
+
+// Variante não-fatal do builder (port adaptado do
+// `build_program_from_source_ex` do upstream): erro de build NÃO aborta;
+// devolve nullptr e preserva o build-log.
+static cl_program build_program_from_source_ex(
+    ggml_backend_opencl_context * backend_ctx,
+    const char * program_buffer, const std::string & compile_opts,
+    bool fatal, const char * tag) {
+    cl_int err = CL_SUCCESS;
+    cl_program p = clCreateProgramWithSource(backend_ctx->context, 1, &program_buffer, nullptr, &err);
+    if (err != CL_SUCCESS || p == nullptr) {
+        GGML_LOG_ERROR("ggml_opencl: [FA lazy] clCreateProgramWithSource falhou para %s (err=%d)\n", tag, err);
+        if (fatal) {
+            GGML_ABORT("ggml_opencl: criacao de programa falhou");
+        }
+        return nullptr;
+    }
+
+    err = clBuildProgram(p, 1, &backend_ctx->device, compile_opts.c_str(), nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        size_t log_size = 0;
+        clGetProgramBuildInfo(p, backend_ctx->device, CL_PROGRAM_BUILD_LOG, 0, nullptr, &log_size);
+        std::string log(log_size + 1, '\0');
+        if (log_size > 0) {
+            clGetProgramBuildInfo(p, backend_ctx->device, CL_PROGRAM_BUILD_LOG, log_size, log.data(), nullptr);
+        }
+        log.resize(strlen(log.c_str()));
+        GGML_LOG_ERROR("ggml_opencl: [FA lazy] build falhou para %s (err=%d); variante sera marcada INDISPONIVEL\n", tag, err);
+        GGML_LOG_ERROR("ggml_opencl: [FA lazy] build-log (%s):\n%s\n", tag, log.c_str());
+        backend_ctx->fa_last_build_log = log; // build-log preservado (diagnostico)
+        clReleaseProgram(p);
+        if (fatal) {
+            GGML_ABORT("ggml_opencl: build de programa obrigatorio falhou");
+        }
+        return nullptr;
+    }
+
+    return p;
+}
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+// R5/fase C: fnv1a64 da fonte compilada (registro de identidade da variante FA).
+static uint64_t ggml_cl_fa_fnv1a64(const void * data, size_t len) {
+    const uint8_t * p = (const uint8_t *) data;
+    uint64_t h = 0xcbf29ce484222325ull;
+    for (size_t i = 0; i < len; ++i) {
+        h ^= (uint64_t) p[i];
+        h *= 0x100000001b3ull;
+    }
+    return h;
+}
+#endif
+
+// Cria kernel sem CL_CHECK (caminho FA: falha vira "variante indisponivel").
+static cl_kernel ggml_cl_fa_create_kernel_nonfatal(cl_program prog, const char * name, const char * tag, int dk, int dv) {
+    cl_int err = CL_SUCCESS;
+    cl_kernel k = clCreateKernel(prog, name, &err);
+    if (err != CL_SUCCESS || k == nullptr) {
+        GGML_LOG_ERROR("ggml_opencl: [FA lazy] clCreateKernel(%s) falhou (err=%d) para %s dk=%d dv=%d\n",
+                       name, err, tag, dk, dv);
+        return nullptr;
+    }
+    return k;
+}
+
+// Libera kernels FA de todas as classes para um (dk,dv) (best-effort; usado na
+// recusa/limpeza de falha e no release do contexto).
+static void ggml_cl_fa_release_variant_locked(ggml_backend_opencl_context * backend_ctx, const std::pair<int, int> & dk_dv) {
+    auto drop = [&](std::map<std::pair<int, int>, cl_kernel> & m) {
+        auto it = m.find(dk_dv);
+        if (it != m.end()) {
+            clReleaseKernel(it->second);
+            m.erase(it);
+        }
+    };
+    drop(backend_ctx->kernels_flash_attn_f16);
+    drop(backend_ctx->kernels_flash_attn_f16_q1);
+    drop(backend_ctx->kernels_flash_attn_f32);
+    drop(backend_ctx->kernels_flash_attn_f32_q1);
+    drop(backend_ctx->kernels_flash_attn_f32_f16);
+    drop(backend_ctx->kernels_flash_attn_f32_f16_q1);
+    backend_ctx->kernels_flash_attn_bm.erase(dk_dv);
+    backend_ctx->kernels_flash_attn_bn.erase(dk_dv);
+}
+
+// Libera TODOS os kernels FA (chamada quando o cl_context é destruído).
+static void ggml_cl_fa_release_all(ggml_backend_opencl_context * backend_ctx) {
+    std::lock_guard<std::mutex> lock(backend_ctx->fa_mutex);
+    auto drop_all = [&](std::map<std::pair<int, int>, cl_kernel> & m) {
+        for (auto & kv : m) {
+            clReleaseKernel(kv.second);
+        }
+        m.clear();
+    };
+    drop_all(backend_ctx->kernels_flash_attn_f16);
+    drop_all(backend_ctx->kernels_flash_attn_f16_q1);
+    drop_all(backend_ctx->kernels_flash_attn_f32);
+    drop_all(backend_ctx->kernels_flash_attn_f32_q1);
+    drop_all(backend_ctx->kernels_flash_attn_f32_f16);
+    drop_all(backend_ctx->kernels_flash_attn_f32_f16_q1);
+    backend_ctx->kernels_flash_attn_bm.clear();
+    backend_ctx->kernels_flash_attn_bn.clear();
+    backend_ctx->fa_unavailable_f16.clear();
+    backend_ctx->fa_unavailable_f32.clear();
+    backend_ctx->fa_unavailable_f32_f16.clear();
+}
+
+// Compila, se necessário, a variante FA pedida para (dk,dv). Memoizado:
+//   true  = kernels disponíveis (compilados agora ou antes);
+//   false = variante INDISPONÍVEL nesta variante+contexto (não re-tenta).
+// Chamado de supports_op (recusa ANTES do agendamento) e, defensivamente, do
+// dispatch. Compilação não-fatal: falha vira recusa visível.
+// from_dispatch = true SOMENTE na chamada vinda do despacho (R6/C3) — usada pela
+// injeção DIAG GGML_OPENCL_FA_FAIL_AT_DISPATCH (falha one-shot pós-assignment).
+static bool ggml_cl_fa_ensure_variant(ggml_backend_opencl_context * backend_ctx, int dk, int dv, int variant, bool from_dispatch) {
+    const std::pair<int, int> dk_dv = {dk, dv};
+    const char * variant_name = ggml_cl_fa_variant_name(variant);
+
+    std::lock_guard<std::mutex> lock(backend_ctx->fa_mutex);
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R5/fase C (C3): injeção DIAG "ensure falha TARDE" — depois das primeiras
+    // `budget` chamadas BEM-SUCEDIDAS por (dk,dv,variant), as seguintes devolvem
+    // false (simula disponibilidade perdida entre supports_op e o despacho).
+    // O despacho (ggml_cl_flash_attn) deve então devolver ERRO LIMPO, sem abort.
+    {
+        const char * late = getenv("GGML_OPENCL_FA_LATE_FAIL");
+        if (late != nullptr && late[0] != '\0' && late[0] != '0') {
+            static std::mutex fa_late_mutex;
+            static std::map<std::tuple<int, int, int>, int> fa_late_ok;
+            std::lock_guard<std::mutex> lk(fa_late_mutex);
+            int & ok_count = fa_late_ok[std::make_tuple(dk, dv, variant)];
+            const int budget = atoi(late);
+            if (ok_count >= budget) {
+                GGML_LOG_ERROR("ggml_opencl: [FA-C3] GGML_OPENCL_FA_LATE_FAIL: variante %s dk=%d dv=%d "
+                               "INDISPONIVEL na chamada #%d (ok=%d >= budget=%d) -> erro limpo no despacho\n",
+                               variant_name, dk, dv, ok_count + 1, ok_count, budget);
+                return false;
+            }
+            ok_count++;
+            GGML_LOG_WARN("ggml_opencl: [FA-C3] GGML_OPENCL_FA_LATE_FAIL ativo: chamada ok #%d/%d variante %s dk=%d dv=%d\n",
+                          ok_count, budget, variant_name, dk, dv);
+        }
+    }
+
+    // R6/fase C (C3): injeção DIAG de falha do `ensure` no CAMINHO DO DISPATCH
+    // (depois do assignment do escalonador). GGML_OPENCL_FA_FAIL_AT_DISPATCH=N:
+    // a N-esima chamada vinda do despacho devolve false UMA vez (one-shot) —
+    // erro limpo (rc/status falham), processo continua e as chamadas seguintes
+    // (inclusive apos release/reload dos backends) voltam a funcionar.
+    if (from_dispatch) {
+        const char * fad = getenv("GGML_OPENCL_FA_FAIL_AT_DISPATCH");
+        if (fad != nullptr && fad[0] != '\0' && fad[0] != '0') {
+            static std::mutex fa_dispatch_fail_mutex;
+            static int fa_dispatch_calls = 0;
+            std::lock_guard<std::mutex> lk(fa_dispatch_fail_mutex);
+            const int target = atoi(fad);
+            fa_dispatch_calls++;
+            if (target > 0 && fa_dispatch_calls == target) {
+                GGML_LOG_ERROR("ggml_opencl: [FA-C3] GGML_OPENCL_FA_FAIL_AT_DISPATCH: falha injetada na "
+                               "chamada #%d do ensure VINDA DO DISPATCH (variante %s dk=%d dv=%d, one-shot) "
+                               "-> erro limpo no despacho, sem abort\n",
+                               fa_dispatch_calls, variant_name, dk, dv);
+                return false;
+            }
+            GGML_LOG_WARN("ggml_opencl: [FA-C3] GGML_OPENCL_FA_FAIL_AT_DISPATCH ativo: chamada dispatch #%d (alvo %d) variante %s dk=%d dv=%d ok\n",
+                          fa_dispatch_calls, target, variant_name, dk, dv);
+        }
+    }
+#endif
+
+    auto & unavailable =
+        (variant == GGML_CL_FA_VARIANT_F16)     ? backend_ctx->fa_unavailable_f16 :
+        (variant == GGML_CL_FA_VARIANT_F32)     ? backend_ctx->fa_unavailable_f32 :
+                                                  backend_ctx->fa_unavailable_f32_f16;
+
+    // cache: kernels já criados neste contexto?
+    const bool compiled =
+        (variant == GGML_CL_FA_VARIANT_F16)     ? backend_ctx->kernels_flash_attn_f16.count(dk_dv) > 0 :
+        (variant == GGML_CL_FA_VARIANT_F32)     ? backend_ctx->kernels_flash_attn_f32.count(dk_dv) > 0 :
+                                                  backend_ctx->kernels_flash_attn_f32_f16.count(dk_dv) > 0;
+    if (compiled) {
+        return true;
+    }
+
+    // já reprovou neste contexto: recusa imediata (sem re-build em loop).
+    if (unavailable.count(dk_dv) > 0) {
+        return false;
+    }
+
+    // dims tabeladas (mesma validação que supports_op faz antes)
+    const ggml_cl_fa_dim * cfg = nullptr;
+    for (size_t i = 0; i < sizeof(g_ggml_cl_fa_dims)/sizeof(g_ggml_cl_fa_dims[0]); ++i) {
+        if (g_ggml_cl_fa_dims[i].dk == dk && g_ggml_cl_fa_dims[i].dv == dv) {
+            cfg = &g_ggml_cl_fa_dims[i];
+            break;
+        }
+    }
+    if (cfg == nullptr) {
+        GGML_LOG_ERROR("ggml_opencl: [FA lazy] dk=%d dv=%d fora da tabela; variante %s INDISPONIVEL\n", dk, dv, variant_name);
+        unavailable.insert(dk_dv);
+        return false;
+    }
+
+    // fonte do kernel embedada (mesma das outras famílias)
+#ifdef GGML_OPENCL_EMBED_KERNELS
+    const std::string src =
+        (variant == GGML_CL_FA_VARIANT_F16)     ? std::string {
+            #include "flash_attn_f16.cl.h"
+        } :
+        (variant == GGML_CL_FA_VARIANT_F32)     ? std::string {
+            #include "flash_attn_f32.cl.h"
+        } :
+                                                  std::string {
+            #include "flash_attn_f32_f16.cl.h"
+        };
+#else
+    const std::string src =
+        (variant == GGML_CL_FA_VARIANT_F16) ? read_file("flash_attn_f16.cl") :
+        (variant == GGML_CL_FA_VARIANT_F32) ? read_file("flash_attn_f32.cl") :
+                                              read_file("flash_attn_f32_f16.cl");
+#endif
+    if (src.empty()) {
+        GGML_LOG_ERROR("ggml_opencl: [FA lazy] fonte vazia para variante %s (kernels nao embedados?); INDISPONIVEL\n", variant_name);
+        unavailable.insert(dk_dv);
+        return false;
+    }
+
+    std::string src_build = src;
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R3/fase E (E2) — injeção de falha SOMENTE do build de diagnóstico
+    // (-PsigWhisperDiag=true): com GGML_OPENCL_FA_FAIL_INJECT != 0 o build da
+    // variante FA falha de forma determinística (#error), exercitando o
+    // caminho não-fatal + recusa antes de agendar (device test).
+    const char * fa_fail_inject = getenv("GGML_OPENCL_FA_FAIL_INJECT");
+    if (fa_fail_inject != nullptr && fa_fail_inject[0] != '\0' && fa_fail_inject[0] != '0') {
+        GGML_LOG_WARN("ggml_opencl: [FA lazy] GGML_OPENCL_FA_FAIL_INJECT ativo: build simulado com falha\n");
+        src_build = "#error GGML_OPENCL_FA_FAIL_INJECT: falha simulada de build FA\n" + src_build;
+    }
+#endif
+
+    std::string opts = backend_ctx->fa_compile_opts_base +
+        " -D DK=" + std::to_string(dk) +
+        " -D DV=" + std::to_string(dv) +
+        " -D BLOCK_M=" + std::to_string(cfg->bm) +
+        " -D BLOCK_N=" + std::to_string(cfg->bn);
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R5/fase C (C1) + R6/fase C (C1/C2): seletores DIAG do contraste de
+    // variantes FA (SÓ no build de diagnóstico; o NORMAL não tem este bloco):
+    //   GGML_OPENCL_FA_TAIL_FILL=0      -> kernel SEM o zero-fill do tail (pre-R5);
+    //   GGML_OPENCL_FA_TILE_BARRIER=0   -> kernel SEM a barreira de FIM DE CONSUMO
+    //     do tile (janela do R5; pre-R6-C1). Com 1 (default) TODAS as lanes
+    //     encontram a barreira B antes da recarga seguinte;
+    //   GGML_OPENCL_FA_DELAY_CONSUME=N  -> atraso DIAG do consumo (N mads seriais
+    //     por tile, por lane ativa) para expor o overwrite quando barrier=0;
+    //   GGML_OPENCL_FA_STRICT_MATH=1    -> controle ESTRITO: remove as QUATRO
+    //     opções de matemática agressiva (-cl-finite-math-only,
+    //     -cl-fast-relaxed-math, -cl-unsafe-math-optimizations, -cl-mad-enable)
+    //     SOMENTE deste programa FA (otimizações das demais famílias preservadas);
+    //     o valor EFETIVO devolvido pelo driver é logado em real_opts.
+    int fa_tail_fill_eff = 1;
+    int fa_strict_math_eff = 0;
+    int fa_tile_barrier_eff = 1;
+    int fa_delay_consume_eff = 0;
+    {
+        const char * tf = getenv("GGML_OPENCL_FA_TAIL_FILL");
+        if (tf != nullptr && tf[0] == '0') {
+            opts += " -D FA_TAIL_FILL=0";
+            fa_tail_fill_eff = 0;
+        }
+        const char * tb = getenv("GGML_OPENCL_FA_TILE_BARRIER");
+        if (tb != nullptr && tb[0] == '0') {
+            opts += " -D FA_TILE_BARRIER=0";
+            fa_tile_barrier_eff = 0;
+        }
+        const char * dc = getenv("GGML_OPENCL_FA_DELAY_CONSUME");
+        if (dc != nullptr && dc[0] != '\0' && dc[0] != '0') {
+            const int n = atoi(dc);
+            if (n > 0) {
+                opts += " -D FA_DELAY_CONSUME=" + std::to_string(n);
+                fa_delay_consume_eff = n;
+            }
+        }
+        const char * sm = getenv("GGML_OPENCL_FA_STRICT_MATH");
+        if (sm != nullptr && sm[0] == '1') {
+            fa_strict_math_eff = 1;
+            for (const char * strip : { " -cl-finite-math-only", " -cl-fast-relaxed-math",
+                                        " -cl-unsafe-math-optimizations", " -cl-mad-enable" }) {
+                const size_t pos = opts.find(strip);
+                if (pos != std::string::npos) {
+                    opts.erase(pos, strlen(strip));
+                }
+            }
+        }
+    }
+#endif
+
+    GGML_LOG_INFO("ggml_opencl: [FA lazy] compilando variante %s dk=%d dv=%d (primeiro uso)\n", variant_name, dk, dv);
+
+    cl_program prog = build_program_from_source_ex(backend_ctx, src_build.c_str(), opts, /*fatal=*/false, variant_name);
+    if (prog == nullptr) {
+        unavailable.insert(dk_dv);
+        return false;
+    }
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    {
+        // R5/fase C (C1): registra FONTE/FLAGS/opções REAIS do programa FA — o
+        // valor efetivo devolvido pelo driver em CL_PROGRAM_BUILD_OPTIONS — para
+        // o contraste de variantes (C0..C3).
+        std::string real_opts;
+        size_t ro_size = 0;
+        if (clGetProgramBuildInfo(prog, backend_ctx->device, CL_PROGRAM_BUILD_OPTIONS, 0, nullptr, &ro_size) == CL_SUCCESS && ro_size > 0) {
+            real_opts.resize(ro_size);
+            clGetProgramBuildInfo(prog, backend_ctx->device, CL_PROGRAM_BUILD_OPTIONS, ro_size, real_opts.data(), nullptr);
+            while (!real_opts.empty() && (real_opts.back() == '\0' || real_opts.back() == '\n')) {
+                real_opts.pop_back();
+            }
+        }
+        GGML_LOG_INFO("ggml_opencl: [FA-C-diag] variant=%s dk=%d dv=%d tail_fill=%d strict_math=%d "
+                      "tile_barrier=%d delay_consume=%d "
+                      "opts='%s' real_opts='%s' src_bytes=%zu src_fnv1a64=%016llx\n",
+                      variant_name, dk, dv, fa_tail_fill_eff, fa_strict_math_eff,
+                      fa_tile_barrier_eff, fa_delay_consume_eff,
+                      opts.c_str(), real_opts.c_str(), src_build.size(),
+                      (unsigned long long) ggml_cl_fa_fnv1a64(src_build.data(), src_build.size()));
+    }
+#endif
+
+    const char * kname = (variant == GGML_CL_FA_VARIANT_F16)     ? "flash_attn_f16" :
+                         (variant == GGML_CL_FA_VARIANT_F32)     ? "flash_attn_f32" :
+                                                                   "flash_attn_f32_f16";
+    const std::string kname_q1 = std::string(kname) + "_q1";
+
+    cl_kernel k    = ggml_cl_fa_create_kernel_nonfatal(prog, kname,          variant_name, dk, dv);
+    cl_kernel k_q1 = ggml_cl_fa_create_kernel_nonfatal(prog, kname_q1.c_str(), variant_name, dk, dv);
+    if (k == nullptr || k_q1 == nullptr) {
+        if (k    != nullptr) { clReleaseKernel(k); }
+        if (k_q1 != nullptr) { clReleaseKernel(k_q1); }
+        clReleaseProgram(prog);
+        unavailable.insert(dk_dv);
+        GGML_LOG_ERROR("ggml_opencl: [FA lazy] variante %s dk=%d dv=%d INDISPONIVEL (kernel falhou)\n", variant_name, dk, dv);
+        return false;
+    }
+
+    if (variant == GGML_CL_FA_VARIANT_F16) {
+        backend_ctx->kernels_flash_attn_f16[dk_dv]    = k;
+        backend_ctx->kernels_flash_attn_f16_q1[dk_dv] = k_q1;
+    } else if (variant == GGML_CL_FA_VARIANT_F32) {
+        backend_ctx->kernels_flash_attn_f32[dk_dv]    = k;
+        backend_ctx->kernels_flash_attn_f32_q1[dk_dv] = k_q1;
+    } else {
+        backend_ctx->kernels_flash_attn_f32_f16[dk_dv]    = k;
+        backend_ctx->kernels_flash_attn_f32_f16_q1[dk_dv] = k_q1;
+    }
+    backend_ctx->kernels_flash_attn_bm[dk_dv] = cfg->bm;
+    backend_ctx->kernels_flash_attn_bn[dk_dv] = cfg->bn;
+
+    clReleaseProgram(prog); // kernels mantêm o programa vivo (idioma da casa)
+    GGML_LOG_INFO("ggml_opencl: [FA lazy] variante %s dk=%d dv=%d pronta\n", variant_name, dk, dv);
+    return true;
+}
+
 static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx, ggml_cl_version opencl_c_version) {
     cl_int err;
 
@@ -843,6 +1616,11 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx, ggml_cl_ve
     if (backend_ctx->adreno_use_large_buffer) {
         compile_opts += " -qcom-enable-large-buffer ";
     }
+
+    // R3/fase E (E2): opções-base preservadas no contexto — a compilação FA
+    // lazy (primeiro uso; ggml_cl_fa_ensure_variant) usa EXATAMENTE a mesma
+    // receita de build que a init ansiosa usava aqui.
+    backend_ctx->fa_compile_opts_base = compile_opts;
 
     GGML_LOG_INFO("ggml_opencl: loading OpenCL kernels");
 
@@ -1975,71 +2753,13 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx, ggml_cl_ve
     }
 
     // flash_attn
-    {
-        #ifdef GGML_OPENCL_EMBED_KERNELS
-                const std::string kernel_src_f16 {
-                    #include "flash_attn_f16.cl.h"
-                };
-                const std::string kernel_src_f32 {
-                    #include "flash_attn_f32.cl.h"
-                };
-                const std::string kernel_src_f32_f16 {
-                    #include "flash_attn_f32_f16.cl.h"
-                };
-        #else
-                const std::string kernel_src_f16 = read_file("flash_attn_f16.cl");
-                const std::string kernel_src_f32 = read_file("flash_attn_f32.cl");
-                const std::string kernel_src_f32_f16 = read_file("flash_attn_f32_f16.cl");
-        #endif
-
-        if (!kernel_src_f16.empty() && !kernel_src_f32.empty() && !kernel_src_f32_f16.empty()) {
-            const struct { int dk; int dv; int bm; int bn; } fa_dims[] = {
-                { 40,  40, 32, 32}, { 64,  64, 64, 64}, { 80,  80, 64, 32}, { 96,  96, 64, 32},
-                {112, 112, 32, 32}, {128, 128, 32, 32}, {192, 128, 16, 16},
-                {192, 192, 16, 16}, {256, 256, 16, 16},
-            };
-
-            for (size_t i = 0; i < sizeof(fa_dims)/sizeof(fa_dims[0]); ++i) {
-                const int dk = fa_dims[i].dk;
-                const int dv = fa_dims[i].dv;
-                const int bm = fa_dims[i].bm;
-                const int bn = fa_dims[i].bn;
-                std::string OPTS = compile_opts +
-                    " -D DK=" + std::to_string(dk) +
-                    " -D DV=" + std::to_string(dv) +
-                    " -D BLOCK_M=" + std::to_string(bm) +
-                    " -D BLOCK_N=" + std::to_string(bn);
-
-                cl_program prog_f16 = build_program_from_source(backend_ctx->context, backend_ctx->device, kernel_src_f16.c_str(), OPTS);
-                cl_kernel k_f16, k_f16_q1;
-                CL_CHECK((k_f16 = clCreateKernel(prog_f16, "flash_attn_f16", &err), err));
-                CL_CHECK((k_f16_q1 = clCreateKernel(prog_f16, "flash_attn_f16_q1", &err), err));
-                backend_ctx->kernels_flash_attn_f16[{dk, dv}] = k_f16;
-                backend_ctx->kernels_flash_attn_f16_q1[{dk, dv}] = k_f16_q1;
-                CL_CHECK(clReleaseProgram(prog_f16));
-
-                cl_program prog_f32 = build_program_from_source(backend_ctx->context, backend_ctx->device, kernel_src_f32.c_str(), OPTS);
-                cl_kernel k_f32, k_f32_q1;
-                CL_CHECK((k_f32 = clCreateKernel(prog_f32, "flash_attn_f32", &err), err));
-                CL_CHECK((k_f32_q1 = clCreateKernel(prog_f32, "flash_attn_f32_q1", &err), err));
-                backend_ctx->kernels_flash_attn_f32[{dk, dv}] = k_f32;
-                backend_ctx->kernels_flash_attn_f32_q1[{dk, dv}] = k_f32_q1;
-                CL_CHECK(clReleaseProgram(prog_f32));
-
-                cl_program prog_f32_f16 = build_program_from_source(backend_ctx->context, backend_ctx->device, kernel_src_f32_f16.c_str(), OPTS);
-                cl_kernel k_f32_f16, k_f32_f16_q1;
-                CL_CHECK((k_f32_f16 = clCreateKernel(prog_f32_f16, "flash_attn_f32_f16", &err), err));
-                CL_CHECK((k_f32_f16_q1 = clCreateKernel(prog_f32_f16, "flash_attn_f32_f16_q1", &err), err));
-                backend_ctx->kernels_flash_attn_f32_f16[{dk, dv}] = k_f32_f16;
-                backend_ctx->kernels_flash_attn_f32_f16_q1[{dk, dv}] = k_f32_f16_q1;
-                CL_CHECK(clReleaseProgram(prog_f32_f16));
-
-                backend_ctx->kernels_flash_attn_bm[{dk, dv}] = bm;
-                backend_ctx->kernels_flash_attn_bn[{dk, dv}] = bn;
-            }
-            GGML_LOG_CONT(".");
-        }
-    }
+    // R3/fase E (E2): a compilação dos 27 programas FA (9 pares dk/dv x 3
+    // famílias) que existia aqui foi REMOVIDA — passou a ser LAZY, por
+    // variante e primeiro uso, em ggml_cl_fa_ensure_variant (acima). Init
+    // FA-off (e qualquer run sem op FA) não compila nenhum programa FA; o
+    // dispatch consulta supports_op -> ensure ANTES de agendar. Ver o bloco
+    // "R3/fase E (E2) — FA no OpenCL" perto do build_program_from_source
+    // para racional, guardas E17/A7X e cache/liberação.
 
     // argsort
     {
@@ -3227,7 +3947,11 @@ static void load_cl_kernels(ggml_backend_opencl_context *backend_ctx, ggml_cl_ve
 // XXX    static bool initialized = false;
 // XXX    static ggml_backend_opencl_context *backend_ctx = nullptr;
 
-static ggml_backend_opencl_context * ggml_cl2_init(ggml_backend_dev_t dev);
+// R11/fase D3: `build_kernels == false` cria/valida o contexto OpenCL SEM
+// compilar kernels (usado pela enumeracao de devices em ggml_opencl_probe_devices);
+// o backend real promove esse contexto a COMPLETO (load_cl_kernels + buffers Adreno)
+// no primeiro init efetivo do dispositivo.
+static ggml_backend_opencl_context * ggml_cl2_init(ggml_backend_dev_t dev, bool build_kernels = true);
 
 namespace /* anonymous */ {
 extern struct ggml_backend_device_i ggml_backend_opencl_device_i;
@@ -3271,8 +3995,24 @@ static std::vector<ggml_backend_device> ggml_opencl_probe_devices(ggml_backend_r
     unsigned           default_platform_number = 0;
 
     cl_platform_id platform_ids[NPLAT];
-    if (clGetPlatformIDs(NPLAT, platform_ids, &n_platforms) != CL_SUCCESS) {
-        GGML_LOG_ERROR("ggml_opencl: platform IDs not available.\n");
+    // R32/D — retorno EXATO do clGetPlatformIDs. "not available" não distingue
+    // erro de carga/símbolo de CL_PLATFORM_NOT_FOUND_KHR nem de count == 0.
+    const cl_int sig_rc = clGetPlatformIDs(NPLAT, platform_ids, &n_platforms);
+#ifndef CL_PLATFORM_NOT_FOUND_KHR
+#define CL_PLATFORM_NOT_FOUND_KHR (-1001)
+#endif
+    {
+        const char * sig_nome = sig_rc == CL_SUCCESS ? "CL_SUCCESS"
+            : sig_rc == CL_PLATFORM_NOT_FOUND_KHR ? "CL_PLATFORM_NOT_FOUND_KHR"
+            : sig_rc == CL_INVALID_VALUE ? "CL_INVALID_VALUE"
+            : sig_rc == CL_OUT_OF_HOST_MEMORY ? "CL_OUT_OF_HOST_MEMORY"
+            : "OUTRO";
+        GGML_LOG_INFO("[SIGOCL] ev=clGetPlatformIDs rc=%d nome=%s count_saida=%u nplat_pedido=%d\n",
+                      (int) sig_rc, sig_nome, (unsigned) n_platforms, (int) NPLAT);
+        fflush(stderr);
+    }
+    if (sig_rc != CL_SUCCESS) {
+        GGML_LOG_ERROR("ggml_opencl: platform IDs not available (rc=%d).\n", (int) sig_rc);
         return found_devices;
     }
 
@@ -3440,7 +4180,13 @@ static std::vector<ggml_backend_device> ggml_opencl_probe_devices(ggml_backend_r
             /* .context = */ dev_ctx.get(),
         });
 
-        if (!ggml_cl2_init(&found_devices.back())) {
+        // R11/fase D3: valida o device SEM compilar OpenCL. Antes, esta chamada
+        // compilava os ~125 kernels (load_cl_kernels -> clBuildProgram) e alocava
+        // os buffers de transposicao Adreno apenas para decidir se o device e
+        // suportado — inclusive em jobs 100% CPU e no prewarm/diagnostico
+        // (systemInfo), que enumeram devices via registry. A compilacao passou
+        // para ggml_backend_opencl_device_init() (primeiro uso real do backend).
+        if (!ggml_cl2_init(&found_devices.back(), /*build_kernels=*/false)) {
             found_devices.pop_back();
             GGML_LOG_INFO("ggml_opencl: drop unsupported device.\n");
             continue;
@@ -3463,8 +4209,84 @@ static std::vector<ggml_backend_device> ggml_opencl_probe_devices(ggml_backend_r
     return found_devices;
 }
 
+// R11/fase D3: parte PESADA do init do backend OpenCL — compilacao dos kernels
+// (load_cl_kernels -> ~125x clBuildProgram) + fila de comando + buffers de
+// transposicao Adreno. Extraida de ggml_cl2_init() para NAO rodar na enumeracao
+// de devices (probe) nem no prewarm/diagnostico; roda uma unica vez, quando o
+// backend OpenCL e de fato inicializado (ou promovido de contexto validado).
+static void ggml_opencl_ensure_kernels(
+    ggml_backend_opencl_context *        backend_ctx,
+    ggml_backend_opencl_device_context * dev_ctx,
+    ggml_cl_version                      opencl_c_version) {
+    GGML_ASSERT(backend_ctx != nullptr);
+    GGML_ASSERT(dev_ctx != nullptr);
+    if (backend_ctx->kernels_loaded) {
+        return;
+    }
+
+    // R11/fase E (E2): o rastro por evento vale para TODO o ciclo do backend
+    // (init/upload/compute/readback/finish), nao so para o graph_compute.
+#ifdef SIG_WHISPER_OCL_TRACE
+    backend_ctx->sigocl_trace = getenv("GGML_OPENCL_SIGOCL_TRACE") != nullptr;
+    if (backend_ctx->sigocl_trace) {
+        GGML_LOG_INFO("SIGOCL_STAGE name=init_kernels begin device=\"%s\"\n", backend_ctx->device_name.c_str());
+    }
+#endif
+
+    cl_int err;
+    // A local ref of cl_context for convenience
+    cl_context context = backend_ctx->context = dev_ctx->context;
+    cl_device_id device = backend_ctx->device ? backend_ctx->device : dev_ctx->device;
+
+    cl_command_queue_properties command_queue_props = 0;
+#ifdef GGML_OPENCL_PROFILING
+    command_queue_props |= CL_QUEUE_PROFILING_ENABLE;
+#endif
+    if (backend_ctx->queue == nullptr) {
+        CL_CHECK((backend_ctx->queue = clCreateCommandQueue(context, device, command_queue_props, &err), err));
+    }
+
+    // Load kernels
+    load_cl_kernels(backend_ctx, opencl_c_version);
+
+#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
+    // Allocate intermediate buffers and images
+    size_t required_A_q_d_bytes = 311164928;
+    size_t required_A_s_d_bytes = 38895616;
+    size_t required_B_d_bytes = 45088768;
+
+    // Ensure buffer sizes do not exceed the maximum allocation size
+    size_t max_A_q_d_bytes = MIN(required_A_q_d_bytes, backend_ctx->max_alloc_size);
+    size_t max_A_s_d_bytes = MIN(required_A_s_d_bytes, backend_ctx->max_alloc_size);
+    size_t max_B_d_bytes   = MIN(required_B_d_bytes, backend_ctx->max_alloc_size);
+    if (required_A_q_d_bytes > backend_ctx->max_alloc_size) {
+        GGML_LOG_WARN("ggml_opencl: A_q_d buffer size reduced from %zu to %zu due to device limitations.\n",
+                      required_A_q_d_bytes, max_A_q_d_bytes);
+    }
+    if (required_A_s_d_bytes > backend_ctx->max_alloc_size) {
+        GGML_LOG_WARN("ggml_opencl: A_s_d buffer size reduced from %zu to %zu due to device limitations.\n",
+                      required_A_s_d_bytes, max_A_s_d_bytes);
+    }
+    if (required_B_d_bytes > backend_ctx->max_alloc_size) {
+        GGML_LOG_WARN("ggml_opencl: B_d buffer size reduced from %zu to %zu due to device limitations.\n",
+                      required_B_d_bytes, max_B_d_bytes);
+    }
+
+    backend_ctx->prealloc_quant_trans.allocate(context, max_A_q_d_bytes);
+    backend_ctx->prealloc_scales_trans.allocate(context, max_A_s_d_bytes);
+    backend_ctx->prealloc_act_trans.allocate(context, max_B_d_bytes);
+#endif // GGML_OPENCL_USE_ADRENO_KERNELS
+
+    backend_ctx->kernels_loaded = true;
+}
+
 // Initialize device if it is supported (returns nullptr if it is not).
-static ggml_backend_opencl_context * ggml_cl2_init(ggml_backend_dev_t dev) {
+// `build_kernels == false`: apenas VALIDA o device (versao OpenCL/FP16/subgroups/
+// limites) e deixa o contexto pronto para execucao — sem compilar kernels. Usado
+// por ggml_opencl_probe_devices(). O init real (ggml_backend_opencl_device_init e
+// primeiro uso de buft OpenCL) chama com build_kernels == true e PROMOVE o
+// contexto validado (ggml_opencl_ensure_kernels) — ou compila direto, se novo.
+static ggml_backend_opencl_context * ggml_cl2_init(ggml_backend_dev_t dev, bool build_kernels) {
     GGML_ASSERT(dev);
     GGML_ASSERT(dev->context);
 
@@ -3473,6 +4295,12 @@ static ggml_backend_opencl_context * ggml_cl2_init(ggml_backend_dev_t dev) {
     GGML_ASSERT(dev_ctx->device);
 
     if (dev_ctx->backend_ctx) {
+        // Promocao: contexto validado no probe -> contexto COMPLETO no init real.
+        if (build_kernels && !dev_ctx->backend_ctx->kernels_loaded) {
+            ggml_cl_version platform_version = get_opencl_platform_version(dev_ctx->platform);
+            ggml_cl_version opencl_c_version = get_opencl_c_version(platform_version, dev_ctx->device);
+            ggml_opencl_ensure_kernels(dev_ctx->backend_ctx, dev_ctx, opencl_c_version);
+        }
         return dev_ctx->backend_ctx;
     }
 
@@ -3537,6 +4365,16 @@ static ggml_backend_opencl_context * ggml_cl2_init(ggml_backend_dev_t dev) {
     driver_version[driver_version_str_size] = '\0';
     GGML_LOG_INFO("ggml_opencl: OpenCL driver: %s\n", driver_version);
     backend_ctx->driver_version = driver_version;
+
+    // R11/fase E (E1): publica os FATOS do device validado (família + geração)
+    // para a fronteira JNI — a guarda de perfil NÃO depende de parse de log.
+    // Critério de geração: o mesmo enum do backend (A7X = carve-out medido);
+    // A6xx/A8X/desconhecido => 0/-1 => a guarda não recusa por esta via.
+    g_sigocl_dev_is_adreno = (backend_ctx->gpu_family == GPU_FAMILY::ADRENO) ? 1 : 0;
+    g_sigocl_dev_is_a7x = (backend_ctx->adreno_gen == ADRENO_GPU_GEN::A7X) ? 1
+                        : (backend_ctx->adreno_gen == ADRENO_GPU_GEN::ADRENO_UNKNOWN ? -1 : 0);
+    g_sigocl_dev_name = backend_ctx->device_name;
+    g_sigocl_dev_driver = backend_ctx->driver_version;
 
     backend_ctx->adreno_cl_compiler_version = get_adreno_cl_compiler_version(driver_version);
     backend_ctx->has_vector_subgroup_broadcast =
@@ -3650,51 +4488,15 @@ static ggml_backend_opencl_context * ggml_cl2_init(ggml_backend_dev_t dev) {
         }
     }
 
-    cl_int err;
-
     // A local ref of cl_context for convenience
-    cl_context context = backend_ctx->context = dev_ctx->context;
+    backend_ctx->context = dev_ctx->context;
 
-    //CL_CHECK((queue = clCreateCommandQueue(context, device, CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, &err),
-    //    (err != CL_INVALID_QUEUE_PROPERTIES && err != CL_INVALID_VALUE ? err :
-    //    (queue = clCreateCommandQueue(context, device, 0, &err), err)
-    //)));
-    cl_command_queue_properties command_queue_props = 0;
-#ifdef GGML_OPENCL_PROFILING
-    command_queue_props |= CL_QUEUE_PROFILING_ENABLE;
-#endif
-    CL_CHECK((backend_ctx->queue = clCreateCommandQueue(context, device, command_queue_props, &err), err));
-
-    // Load kernels
-    load_cl_kernels(backend_ctx.get(), opencl_c_version);
-
-#ifdef GGML_OPENCL_USE_ADRENO_KERNELS
-    // Allocate intermediate buffers and images
-    size_t required_A_q_d_bytes = 311164928;
-    size_t required_A_s_d_bytes = 38895616;
-    size_t required_B_d_bytes = 45088768;
-
-    // Ensure buffer sizes do not exceed the maximum allocation size
-    size_t max_A_q_d_bytes = MIN(required_A_q_d_bytes, backend_ctx->max_alloc_size);
-    size_t max_A_s_d_bytes = MIN(required_A_s_d_bytes, backend_ctx->max_alloc_size);
-    size_t max_B_d_bytes   = MIN(required_B_d_bytes, backend_ctx->max_alloc_size);
-    if (required_A_q_d_bytes > backend_ctx->max_alloc_size) {
-        GGML_LOG_WARN("ggml_opencl: A_q_d buffer size reduced from %zu to %zu due to device limitations.\n",
-                      required_A_q_d_bytes, max_A_q_d_bytes);
+    // R11/fase D3: fila de comando + compilacao dos kernels + buffers de
+    // transposicao Adreno saem do caminho de VALIDACAO. So rodam quando o
+    // backend OpenCL e efetivamente inicializado (build_kernels == true).
+    if (build_kernels) {
+        ggml_opencl_ensure_kernels(backend_ctx.get(), dev_ctx, opencl_c_version);
     }
-    if (required_A_s_d_bytes > backend_ctx->max_alloc_size) {
-        GGML_LOG_WARN("ggml_opencl: A_s_d buffer size reduced from %zu to %zu due to device limitations.\n",
-                      required_A_s_d_bytes, max_A_s_d_bytes);
-    }
-    if (required_B_d_bytes > backend_ctx->max_alloc_size) {
-        GGML_LOG_WARN("ggml_opencl: B_d buffer size reduced from %zu to %zu due to device limitations.\n",
-                      required_B_d_bytes, max_B_d_bytes);
-    }
-
-    backend_ctx->prealloc_quant_trans.allocate(context, max_A_q_d_bytes);
-    backend_ctx->prealloc_scales_trans.allocate(context, max_A_s_d_bytes);
-    backend_ctx->prealloc_act_trans.allocate(context, max_B_d_bytes);
-#endif // GGML_OPENCL_USE_ADRENO_KERNELS
 
     backend_ctx->disable_fusion = getenv("GGML_OPENCL_DISABLE_FUSION") != nullptr;
 
@@ -3722,6 +4524,9 @@ static void ggml_cl2_free(ggml_backend_t backend) {
     }
 
     if (should_release_opencl) {
+        // R3/fase E (E2): libera os kernels FA do caminho lazy antes de destruir
+        // o cl_context (recriação de contexto = recompilação limpa).
+        ggml_cl_fa_release_all(ctx);
         CL_CHECK(clReleaseContext(ctx->context));
     }
 }
@@ -4318,10 +5123,22 @@ static bool ggml_backend_opencl_cpy_tensor_async(ggml_backend_t backend, const g
 static void ggml_backend_opencl_synchronize(ggml_backend_t backend) {
     auto * backend_ctx = static_cast<ggml_backend_opencl_context *>(backend->context);
 
+    // R11/fase E (E2): marca o ponto de SINCRONIZACAO TOTAL (clFinish/barreira).
+    // E aqui que uma espera por comando que nao termina bloqueia o chamador.
+#ifdef SIG_WHISPER_OCL_TRACE
+    if (backend_ctx->sigocl_trace) {
+        GGML_LOG_INFO("SIGOCL_STAGE name=finish begin queue=%p\n", (void *) backend_ctx->queue);
+    }
+#endif
     cl_event evt;
     CL_CHECK(clEnqueueBarrierWithWaitList(backend_ctx->queue, 0, nullptr, &evt));
     CL_CHECK(clWaitForEvents(1, &evt));
     CL_CHECK(clReleaseEvent(evt));
+#ifdef SIG_WHISPER_OCL_TRACE
+    if (backend_ctx->sigocl_trace) {
+        GGML_LOG_INFO("SIGOCL_STAGE name=finish end\n");
+    }
+#endif
 }
 
 // Synchronizes the 'backend_ctx's device with others so that commands
@@ -4429,6 +5246,19 @@ static void ggml_opencl_op_group_norm_fused(ggml_backend_t backend, ggml_tensor 
 static ggml_status ggml_backend_opencl_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {
     ggml_backend_opencl_context *backend_ctx = (ggml_backend_opencl_context *)backend->context;
 
+    // R10/fase D (D1/D2): rastro TIPADO de nos do grafo. Objetivo: localizar a
+    // PRIMEIRA operacao que NAO termina (a ultima linha SIGOCL_NODE sem o
+    // SIGOCL_NODE end correspondente marca op/shape). Ligado por
+    // GGML_OPENCL_SIGOCL_TRACE=1 (off por default: nao afeta o produto).
+#ifdef SIG_WHISPER_OCL_TRACE
+    const bool sigocl_trace = getenv("GGML_OPENCL_SIGOCL_TRACE") != nullptr;
+    backend_ctx->sigocl_trace = sigocl_trace;
+    if (sigocl_trace) {
+        GGML_LOG_INFO("SIGOCL_GRAPH begin nodes=%d stage=compute poll_budget_ms=%d\n",
+                      cgraph->n_nodes, sigocl_poll_budget_ms());
+    }
+#endif
+
     for (int i = 0; i < cgraph->n_nodes; i++) {
         ggml_tensor * node = cgraph->nodes[i];
 
@@ -4461,12 +5291,106 @@ static ggml_status ggml_backend_opencl_graph_compute(ggml_backend_t backend, ggm
             continue;
         }
 
+#ifdef SIG_WHISPER_OCL_TRACE
+        if (sigocl_trace) {
+            GGML_LOG_INFO("SIGOCL_NODE begin i=%d op=%s name=%s ne=[%lld,%lld,%lld,%lld] "
+                          "type=%s nb=[%zu,%zu,%zu,%zu] off=%zu\n",
+                          i, ggml_op_name(node->op), node->name,
+                          (long long) node->ne[0], (long long) node->ne[1],
+                          (long long) node->ne[2], (long long) node->ne[3],
+                          ggml_type_name(node->type),
+                          node->nb[0], node->nb[1], node->nb[2], node->nb[3],
+                          (size_t) node->view_offs);
+        }
+#endif // SIG_WHISPER_OCL_TRACE
         bool ok = ggml_cl_compute_forward(backend, node);
+#ifdef SIG_WHISPER_OCL_TRACE
+        if (sigocl_trace) {
+            GGML_LOG_INFO("SIGOCL_NODE end i=%d op=%s ok=%d\n", i, ggml_op_name(node->op), (int) ok);
+            // R11/E (E2): MARCADOR na MESMA fila in-order. Se o marcador
+            // completa, TODOS os comandos anteriores (inclusive o no i)
+            // completaram — unica prova de completion sem bloquear no comando.
+            const uint64_t nid = ++backend_ctx->sigocl_node_seq;
+            cl_event marker = nullptr;
+            const cl_int mrc = clEnqueueMarkerWithWaitList(backend_ctx->queue, 0, nullptr, &marker);
+            if (mrc != CL_SUCCESS) {
+                GGML_LOG_ERROR("SIGOCL_NODE_MARK_FAIL node_id=%llu i=%d err=%d\n",
+                               (unsigned long long) nid, i, (int) mrc);
+            } else {
+                cl_int observed = CL_QUEUED;
+                int waited_us = 0;
+                sigocl_poll_status(marker, sigocl_poll_budget_ms(), &observed, &waited_us);
+                const bool complete = (observed == CL_COMPLETE);
+                if (complete) {
+                    backend_ctx->sigocl_nodes_complete++;
+                    clReleaseEvent(marker);
+                } else {
+                    backend_ctx->sigocl_nodes_stuck++;
+                    if (backend_ctx->sigocl_first_stuck_node == 0) {
+                        backend_ctx->sigocl_first_stuck_node = nid;
+                    }
+                    if (backend_ctx->sigocl_retained_n < 4) {
+                        backend_ctx->sigocl_retained[backend_ctx->sigocl_retained_n] = marker;
+                        backend_ctx->sigocl_retained_node[backend_ctx->sigocl_retained_n] = nid;
+                        backend_ctx->sigocl_retained_n++;
+                    } else {
+                        clReleaseEvent(marker);
+                    }
+                }
+                GGML_LOG_INFO("SIGOCL_NODE_STATE node_id=%llu i=%d op=%s name=%s state=%s waited_us=%d "
+                              "last_submit_id=%llu nodes_complete=%d nodes_stuck=%d\n",
+                              (unsigned long long) nid, i, ggml_op_name(node->op), node->name,
+                              sigocl_status_name(observed), waited_us,
+                              (unsigned long long) backend_ctx->sigocl_last_event_id,
+                              backend_ctx->sigocl_nodes_complete, backend_ctx->sigocl_nodes_stuck);
+            }
+        }
+#endif // SIG_WHISPER_OCL_TRACE
         if (!ok) {
             GGML_LOG_ERROR("%s: error: op not supported %s (%s)\n", __func__, node->name, ggml_op_name(node->op));
         }
+        if (!ok && node->op == GGML_OP_FLASH_ATTN_EXT) {
+            // R5/fase C (C3): FA indisponivel no despacho (falha tardia de
+            // ensure/kernel entre supports_op e dispatch) => erro LIMPO e
+            // recuperavel devolvido ao agendador (GGML_STATUS_FAILED), sem abort.
+            // Callee (ggml_cl_flash_attn) já logou o diagnóstico específico.
+            GGML_LOG_ERROR("%s: [FA-C3] flash_attn_ext falhou no despacho OpenCL; devolvendo GGML_STATUS_FAILED (sem abort)\n", __func__);
+            return GGML_STATUS_FAILED;
+        }
         GGML_ASSERT(ok);
     }
+
+#ifdef SIG_WHISPER_OCL_TRACE
+    if (sigocl_trace) {
+        GGML_LOG_INFO("SIGOCL_GRAPH end nodes=%d\n", cgraph->n_nodes);
+        // R11/E (E2): varredura FINAL dos eventos que NAO completaram dentro do
+        // budget. Se algum completou DEPOIS, o registro diz isso (nao se
+        // conclui "pendurado" de um poll curto); se nenhum completou, o par
+        // (ultimo_completo, primeiro_nao_completo) fecha o reproducer.
+        for (int r = 0; r < backend_ctx->sigocl_retained_n; ++r) {
+            cl_int observed = CL_QUEUED;
+            int waited_us = 0;
+            const cl_int err = sigocl_poll_status(backend_ctx->sigocl_retained[r], sigocl_poll_budget_ms(),
+                                                  &observed, &waited_us);
+            GGML_LOG_INFO("SIGOCL_SWEEP node_id=%llu state=%s waited_us=%d err=%d\n",
+                          (unsigned long long) backend_ctx->sigocl_retained_node[r],
+                          sigocl_status_name(observed), waited_us, (int) err);
+        }
+        GGML_LOG_INFO("SIGOCL_SUMMARY nodes=%d enqueues=%llu node_markers=%llu complete=%d stuck=%d "
+                      "first_stuck=%llu last_submit_id=%llu\n",
+                      cgraph->n_nodes,
+                      (unsigned long long) backend_ctx->sigocl_enqueue_seq,
+                      (unsigned long long) backend_ctx->sigocl_node_seq,
+                      backend_ctx->sigocl_nodes_complete,
+                      backend_ctx->sigocl_nodes_stuck,
+                      (unsigned long long) backend_ctx->sigocl_first_stuck_node,
+                      (unsigned long long) backend_ctx->sigocl_last_event_id);
+        backend_ctx->sigocl_nodes_complete = 0;
+        backend_ctx->sigocl_nodes_stuck = 0;
+        backend_ctx->sigocl_first_stuck_node = 0;
+        backend_ctx->sigocl_retained_n = 0;
+    }
+#endif // SIG_WHISPER_OCL_TRACE
 
     return GGML_STATUS_SUCCESS;
 }
@@ -4762,6 +5686,14 @@ static bool ggml_opencl_supports_op(ggml_backend_dev_t dev, const struct ggml_te
             return op->src[0]->type == GGML_TYPE_F32;
         case GGML_OP_FLASH_ATTN_EXT:
             {
+                // R3/fase E (E2): port focal do upstream d1be6fde.
+                // (1) Guardas adaptadas (E17 literal do upstream; carve-out A7X
+                //     misto adaptado — ver bloco "FA no OpenCL" acima). Ambas
+                //     são recusas ESPECÍFICAS e testáveis (env), não globais.
+                if (adreno_e17_compiler_quirks(backend_ctx)) {
+                    return false; // upstream: E17 segfaulta ao buildar kernels FA
+                }
+
                 const ggml_tensor * q = op->src[0];
                 const ggml_tensor * k = op->src[1];
                 const ggml_tensor * v = op->src[2];
@@ -4793,7 +5725,26 @@ static bool ggml_opencl_supports_op(ggml_backend_dev_t dev, const struct ggml_te
                 const bool is_f32_f16 = q->type == GGML_TYPE_F32 && k->type == GGML_TYPE_F16 &&
                                         v->type == GGML_TYPE_F16 && op->type == GGML_TYPE_F32;
 
-                return is_f32_f32 || is_f16_f16 || is_f32_f16;
+                if (!is_f32_f32 && !is_f16_f16 && !is_f32_f16) {
+                    return false;
+                }
+
+                // (2) carve-out A7X (adaptado do upstream ~linha 9244):
+                //     recusa específica da variante de KV misto (f32_f16) em
+                //     Adreno 740. O efeito LOCAL é medido no device (A/B com
+                //     GGML_OPENCL_ADRENO_A7X_QUIRKS); não presumimos a causa W12.
+                if (is_f32_f16 && adreno_a7x_fa_mixed_quirks(backend_ctx)) {
+                    return false;
+                }
+
+                // (3) compilação LAZY no primeiro uso (memoizada por
+                //     contexto/classe/dk/dv). Falha de build => false AQUI,
+                //     ANTES de agendar: o op vai para o CPU (recusa correta,
+                //     sem despacho de kernel nulo/não compilado).
+                const int variant = is_f16_f16 ? GGML_CL_FA_VARIANT_F16 :
+                                    is_f32_f16 ? GGML_CL_FA_VARIANT_F32_F16 :
+                                                 GGML_CL_FA_VARIANT_F32;
+                return ggml_cl_fa_ensure_variant(backend_ctx, dk, dv, variant, /*from_dispatch=*/false);
             }
         default:
             return false;
@@ -5257,6 +6208,15 @@ static enum ggml_status ggml_backend_opencl_buffer_init_tensor(ggml_backend_buff
 
 static void ggml_backend_opencl_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
     ggml_backend_opencl_context *backend_ctx = ggml_cl2_init(buffer->buft->device);
+
+    // R11/fase E (E2): estagio UPLOAD (conversao/transferencia para o device)
+    // marcado separadamente do compute.
+#ifdef SIG_WHISPER_OCL_TRACE
+    if (backend_ctx->sigocl_trace) {
+        GGML_LOG_INFO("SIGOCL_STAGE name=upload begin tensor=%s bytes=%zu offset=%zu dst=%p\n",
+                      tensor != nullptr ? tensor->name : "(null)", size, offset, (void *) tensor);
+    }
+#endif
 
     cl_context context = backend_ctx->context;
     cl_command_queue queue = backend_ctx->queue;
@@ -6333,6 +7293,14 @@ static void ggml_backend_opencl_buffer_get_tensor(ggml_backend_buffer_t buffer, 
 
     ggml_backend_opencl_context *backend_ctx = ggml_cl2_init(buffer->buft->device);
 
+    // R11/fase E (E2): estagio READBACK (logits/saida do device para o host).
+#ifdef SIG_WHISPER_OCL_TRACE
+    if (backend_ctx->sigocl_trace) {
+        GGML_LOG_INFO("SIGOCL_STAGE name=readback begin tensor=%s bytes=%zu offset=%zu\n",
+                      tensor->name, size, offset);
+    }
+#endif
+
     cl_context context = backend_ctx->context;
     cl_command_queue queue = backend_ctx->queue;
 
@@ -7116,15 +8084,50 @@ static ggml_backend_buffer_t ggml_backend_opencl_buffer_type_alloc_buffer(ggml_b
     // clCreateBuffer returns -61 for size 0
     size = std::max(size, (size_t)1);
 
-    cl_int err;
-    cl_mem mem = clCreateBuffer(backend_ctx->context, CL_MEM_READ_WRITE, size, NULL, &err);
-    if (err != CL_SUCCESS && backend_ctx->adreno_use_large_buffer) {
+    // R10/fase D (D1): GUARDA + ERRO TIPADO de ALOCACAO POR OBJETO.
+    //   - `max_alloc_size` (CL_DEVICE_MAX_MEM_ALLOC_SIZE = 1024 MiB neste Adreno
+    //     740) e limite POR OBJETO, nao do agregado; o agregado do modelo
+    //     (1623,92 MB no turbo) e fatiado pelo alocador (ggml-alloc.c, chunks
+    //     <= max_size, ate GGML_VBUFFER_MAX_CHUNKS=16).
+    //   - pedido > limite e registrado ANTES da chamada (SIGOCL_ALLOC
+    //     oversized=1) e nunca falha em silencio: a falha sai tipada.
+    //   - caminho FOCAL compativel com o alocador: se o driver expoe
+    //     cl_qcom_large_buffer, o objeto grande vai por CL_LARGE_BUFFER_QCOM
+    //     (medido no device: aceita ate 3072 MiB; 4096 MiB -> CL_OUT_OF_RESOURCES).
+    cl_int err = CL_SUCCESS;
+    cl_mem mem = NULL;
+    const size_t max_alloc = backend_ctx->max_alloc_size;
+    const bool oversized = size > max_alloc;
+    if (oversized || size >= (size_t) 64 * 1024 * 1024) {
+        GGML_LOG_INFO("SIGOCL_ALLOC kind=buffer request_bytes=%zu max_alloc_size=%zu oversized=%d "
+                      "frac=%.6f large_buffer_available=%d\n",
+                      size, max_alloc, (int) oversized,
+                      (double) size / (double) max_alloc,
+                      (int) backend_ctx->adreno_has_large_buffer);
+    }
+    const bool want_large = backend_ctx->adreno_has_large_buffer &&
+                            (oversized || backend_ctx->adreno_use_large_buffer);
+    if (!oversized || !backend_ctx->adreno_has_large_buffer) {
+        mem = clCreateBuffer(backend_ctx->context, CL_MEM_READ_WRITE, size, NULL, &err);
+    }
+    if ((mem == NULL || err != CL_SUCCESS) && want_large) {
         cl_mem_properties props[] = { 0x41A6 /* CL_LARGE_BUFFER_QCOM */, 1, 0 };
-        mem = clCreateBufferWithProperties(backend_ctx->context, props, CL_MEM_READ_WRITE, size, NULL, &err);
+        cl_int err2 = CL_SUCCESS;
+        cl_mem mem2 = clCreateBufferWithProperties(backend_ctx->context, props, CL_MEM_READ_WRITE, size, NULL, &err2);
+        if (mem2 != NULL && err2 == CL_SUCCESS) {
+            GGML_LOG_INFO("SIGOCL_ALLOC kind=buffer large_buffer=1 request_bytes=%zu ok=1\n", size);
+            mem = mem2;
+            err = CL_SUCCESS;
+        } else {
+            err = err2;
+        }
     }
 
-    if (err != CL_SUCCESS) {
+    if (mem == NULL || err != CL_SUCCESS) {
         GGML_LOG_INFO("%s: failed to allocate %.2f MiB\n", __func__, size / 1024.0 / 1024.0);
+        GGML_LOG_ERROR("SIGOCL_ALLOC_FAIL kind=buffer request_bytes=%zu max_alloc_size=%zu oversized=%d "
+                       "err=%d (%.2f MiB)\n", size, max_alloc, (int) oversized, (int) err,
+                       size / 1024.0 / 1024.0);
         return nullptr;
     }
 
@@ -7211,6 +8214,16 @@ static void ggml_backend_opencl_device_get_props(ggml_backend_dev_t dev, struct 
 
 static ggml_backend_t ggml_backend_opencl_device_init(ggml_backend_dev_t dev, const char * params) {
     ggml_backend_opencl_context * backend_ctx = ggml_cl2_init(dev);
+    // R11/fase D3: init tipado. O contexto pode ter sido apenas VALIDADO na
+    // enumeracao; aqui ele e promovido a COMPLETO. Se a inicializacao do
+    // dispositivo falhar (limite de recurso/driver), devolvemos nullptr —
+    // o chamador (whisper_backend_init / supports_buft) trata como falha de
+    // backend em vez de desreferenciar um ponteiro nulo.
+    if (backend_ctx == nullptr) {
+        GGML_LOG_ERROR("ggml_opencl: failed to initialize OpenCL backend for device '%s'\n",
+                       ggml_backend_opencl_device_get_description(dev));
+        return nullptr;
+    }
     // Getting a new reference to the backend, increase ref_count
     backend_ctx->ref_count++;
 
@@ -10305,7 +11318,198 @@ static void ggml_cl_timestep_embedding(ggml_backend_t backend, const ggml_tensor
     backend_ctx->enqueue_ndrange_kernel(kernel, 3, global_work_size, NULL, dst);
 }
 
-static void ggml_cl_flash_attn(ggml_backend_t backend, const ggml_tensor * q, const ggml_tensor * k, ggml_tensor * dst) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+// R5/fase C (C2/W12): dump das ENTRADAS REAIS de cada chamada FA (Q/K/V/mask) +
+// metadados (shapes/strides/offsets/tipos/scale/flags), lidos direto do device.
+// Env: SIG_WHISPER_FA_DUMP=<dir> (liga), SIG_WHISPER_FA_DUMP_MAX=<n> (default 8),
+// SIG_WHISPER_FA_DUMP_TAG=<tag>. O dir deve existir. Somente build DIAG.
+// R9/fase C (C1): + SIG_WHISPER_FA_DUMP_SKIP=<n> (descarta as n primeiras chamadas,
+// para alcancar o passo do decoder onde a transcricao degenera),
+// SIG_WHISPER_FA_DUMP_DST=0 (nao grava dst; default grava) e
+// SIG_WHISPER_FA_DUMP_CANARY=1 (preenche 777.0f ANTES do kernel e reporta quantos
+// sentinelas sobraram na leitura pos-kernel => detecta regiao nao escrita).
+static cl_ulong ggml_cl_fa_tensor_span_bytes(const ggml_tensor * t) {
+    const size_t ts = ggml_type_size(t->type);
+    return (cl_ulong)(t->ne[3] - 1) * (cl_ulong) t->nb[3] +
+           (cl_ulong)(t->ne[2] - 1) * (cl_ulong) t->nb[2] +
+           (cl_ulong)(t->ne[1] - 1) * (cl_ulong) t->nb[1] +
+           (cl_ulong) t->ne[0] * (cl_ulong) ts;
+}
+
+// R9/fase C (C1): canario de ESCRITA do dst (DIAG). Enfileira um fill 777.0f do
+// span do dst ANTES do kernel FA (mesma fila in-order => fill -> kernel).
+// Retorna true se o fill foi enfileirado.
+static bool ggml_cl_fa_dump_canary_fill(ggml_backend_opencl_context * backend_ctx, const ggml_tensor * dst, cl_mem mem, cl_ulong off) {
+    const char * c = getenv("SIG_WHISPER_FA_DUMP_CANARY");
+    if (c == nullptr || c[0] == '\0' || c[0] == '0' || dst == nullptr || mem == nullptr) {
+        return false;
+    }
+    const cl_ulong span = ggml_cl_fa_tensor_span_bytes(dst);
+    if (span == 0) {
+        return false;
+    }
+    std::vector<uint8_t> pat(span, 0);
+    if (dst->type == GGML_TYPE_F32) {
+        float * fp = (float *) pat.data();
+        for (size_t i = 0; i < pat.size() / sizeof(float); ++i) {
+            fp[i] = 777.0f;
+        }
+    }
+    // CL_TRUE: o fill PRECISA terminar antes do retorno (o buffer `pat` e local e
+    // o kernel FA e enfileirado em seguida; a fila e in-order => fill -> kernel).
+    const cl_int rc = clEnqueueWriteBuffer(backend_ctx->queue, mem, CL_TRUE, off, span, pat.data(), 0, nullptr, nullptr);
+    return rc == CL_SUCCESS;
+}
+
+// R9/fase C (C1): dump do dst REAL depois do kernel (leitura bloqueante na mesma
+// fila in-order = sincronizada com a conclusao do kernel). Grava o span CRU (com
+// os strides reais) + dstmeta com canario. Somente build DIAG.
+static void ggml_cl_fa_dump_dst(ggml_backend_opencl_context * backend_ctx, const ggml_tensor * dst, cl_mem mem, cl_ulong off, int idx) {
+    const char * dir = getenv("SIG_WHISPER_FA_DUMP");
+    if (dir == nullptr || dir[0] == '\0' || dir[0] == '0') {
+        return;
+    }
+    const char * d = getenv("SIG_WHISPER_FA_DUMP_DST");
+    if (d != nullptr && d[0] == '0') {
+        return;
+    }
+    if (dst == nullptr || mem == nullptr) {
+        return;
+    }
+    const char * tag_env = getenv("SIG_WHISPER_FA_DUMP_TAG");
+    const std::string tag_s = (tag_env != nullptr && tag_env[0] != '\0') ? tag_env : "fadump";
+    const cl_ulong span = ggml_cl_fa_tensor_span_bytes(dst);
+    std::vector<uint8_t> buf(span, 0);
+    const cl_int rc = clEnqueueReadBuffer(backend_ctx->queue, mem, CL_TRUE, off, span, buf.data(), 0, nullptr, nullptr);
+    if (rc != CL_SUCCESS) {
+        GGML_LOG_ERROR("ggml_opencl: [FA-C2] dump dst idx=%d falhou (rc=%d)\n", idx, rc);
+        return;
+    }
+    size_t sent = 0, total = 0;
+    if (dst->type == GGML_TYPE_F32) {
+        const float * fp = (const float *) buf.data();
+        total = span / sizeof(float);
+        for (size_t i = 0; i < total; ++i) {
+            if (fp[i] == 777.0f) {
+                sent++;
+            }
+        }
+    }
+    char name[256];
+    snprintf(name, sizeof(name), "%s-fa%03d-dst.bin", tag_s.c_str(), idx);
+    std::ofstream f(std::string(dir) + "/" + name, std::ios::binary);
+    if (!f) {
+        GGML_LOG_ERROR("ggml_opencl: [FA-C2] dump dst idx=%d: open falhou em %s\n", idx, dir);
+        return;
+    }
+    f.write((const char *) buf.data(), (std::streamsize) buf.size());
+    char b[512];
+    snprintf(b, sizeof(b),
+             "{\"idx\":%d,\"file\":\"%s\",\"type\":%d,\"ne\":[%lld,%lld,%lld,%lld],\"nb\":[%zu,%zu,%zu,%zu],"
+             "\"off\":%llu,\"view_offs\":%zu,\"span\":%llu,\"canary_left\":%zu,\"canary_total\":%zu}\n",
+             idx, name, (int) dst->type,
+             (long long) dst->ne[0], (long long) dst->ne[1], (long long) dst->ne[2], (long long) dst->ne[3],
+             dst->nb[0], dst->nb[1], dst->nb[2], dst->nb[3],
+             (unsigned long long) off, dst->view_offs, (unsigned long long) span, sent, total);
+    std::ofstream dm(std::string(dir) + "/" + tag_s + "-fa" + std::to_string(idx) + ".dstmeta.txt");
+    if (dm) {
+        dm << b;
+    }
+    GGML_LOG_INFO("ggml_opencl: [FA-C2] dump dst idx=%d file=%s span=%llu canary_left=%zu/%zu\n",
+                  idx, name, (unsigned long long) span, sent, total);
+}
+
+static int ggml_cl_fa_dump_inputs(
+    ggml_backend_opencl_context * backend_ctx,
+    const ggml_tensor * q, const ggml_tensor * k, const ggml_tensor * v, const ggml_tensor * mask,
+    cl_mem q_mem, cl_mem k_mem, cl_mem v_mem, cl_mem mask_mem,
+    cl_ulong q_off, cl_ulong k_off, cl_ulong v_off, cl_ulong mask_off,
+    float scale, float max_bias, float logit_softcap, int is_causal) {
+    const char * dir = getenv("SIG_WHISPER_FA_DUMP");
+    if (dir == nullptr || dir[0] == '\0' || dir[0] == '0') {
+        return -1;
+    }
+    static std::atomic<int> fa_dump_idx {0};
+    int max_n = 8;
+    if (const char * m = getenv("SIG_WHISPER_FA_DUMP_MAX"); m != nullptr && m[0] != '\0') {
+        max_n = atoi(m);
+    }
+    int skip_n = 0;
+    if (const char * s = getenv("SIG_WHISPER_FA_DUMP_SKIP"); s != nullptr && s[0] != '\0') {
+        skip_n = atoi(s);
+    }
+    const int raw_idx = fa_dump_idx.fetch_add(1);
+    const int idx = raw_idx - skip_n;
+    if (idx < 0 || idx >= max_n) {
+        return -1;
+    }
+    const char * tag_env = getenv("SIG_WHISPER_FA_DUMP_TAG");
+    const std::string tag_s = (tag_env != nullptr && tag_env[0] != '\0') ? tag_env : "fadump";
+
+    auto fa_dump_one = [&](const char * what, const ggml_tensor * t, cl_mem mem, cl_ulong off) -> std::string {
+        if (t == nullptr || mem == nullptr) {
+            return std::string();
+        }
+        const size_t ts = ggml_type_size(t->type);
+        const cl_ulong span = (cl_ulong)(t->ne[3] - 1) * (cl_ulong) t->nb[3] +
+                              (cl_ulong)(t->ne[2] - 1) * (cl_ulong) t->nb[2] +
+                              (cl_ulong)(t->ne[1] - 1) * (cl_ulong) t->nb[1] +
+                              (cl_ulong) t->ne[0] * (cl_ulong) ts;
+        std::vector<uint8_t> buf(span, 0);
+        const cl_int rc = clEnqueueReadBuffer(backend_ctx->queue, mem, CL_TRUE, off, span, buf.data(), 0, nullptr, nullptr);
+        if (rc != CL_SUCCESS) {
+            GGML_LOG_ERROR("ggml_opencl: [FA-C2] dump %s idx=%d falhou (rc=%d)\n", what, idx, rc);
+            return std::string();
+        }
+        char name[256];
+        snprintf(name, sizeof(name), "%s-fa%03d-%s.bin", tag_s.c_str(), idx, what);
+        std::ofstream f(std::string(dir) + "/" + name, std::ios::binary);
+        if (!f) {
+            GGML_LOG_ERROR("ggml_opencl: [FA-C2] dump %s idx=%d: open falhou em %s\n", what, idx, dir);
+            return std::string();
+        }
+        f.write((const char *) buf.data(), (std::streamsize) buf.size());
+        return std::string(name);
+    };
+
+    const std::string qf = fa_dump_one("q", q, q_mem, q_off);
+    const std::string kf = fa_dump_one("k", k, k_mem, k_off);
+    const std::string vf = fa_dump_one("v", v, v_mem, v_off);
+    const std::string mf = fa_dump_one("mask", mask, mask_mem, mask_off);
+
+    std::ofstream meta(std::string(dir) + "/" + tag_s + "-fa" + std::to_string(idx) + ".meta.txt");
+    if (!meta) {
+        return idx;
+    }
+    auto tinfo = [&](const ggml_tensor * t, const std::string & file, cl_ulong off) -> std::string {
+        if (t == nullptr) {
+            return "\"null\"";
+        }
+        char b[512];
+        snprintf(b, sizeof(b),
+                 "{\"file\":\"%s\",\"type\":%d,\"ne\":[%lld,%lld,%lld,%lld],\"nb\":[%zu,%zu,%zu,%zu],\"off\":%llu,\"view_offs\":%zu}",
+                 file.c_str(), (int) t->type,
+                 (long long) t->ne[0], (long long) t->ne[1], (long long) t->ne[2], (long long) t->ne[3],
+                 t->nb[0], t->nb[1], t->nb[2], t->nb[3], (unsigned long long) off, t->view_offs);
+        return std::string(b);
+    };
+    meta << "{\"idx\":" << idx
+         << ",\"tag\":\"" << tag_s << "\""
+         << ",\"q\":" << tinfo(q, qf, q_off)
+         << ",\"k\":" << tinfo(k, kf, k_off)
+         << ",\"v\":" << tinfo(v, vf, v_off)
+         << ",\"mask\":" << tinfo(mask, mf, mask_off)
+         << ",\"scale\":" << scale
+         << ",\"max_bias\":" << max_bias
+         << ",\"logit_softcap\":" << logit_softcap
+         << ",\"is_causal\":" << is_causal << "}\n";
+    GGML_LOG_INFO("ggml_opencl: [FA-C2] dump idx=%d tag=%s q=%s k=%s v=%s mask=%s\n",
+                  idx, tag_s.c_str(), qf.c_str(), kf.c_str(), vf.c_str(), mf.c_str());
+    return idx;
+}
+#endif // SIG_WHISPER_DUMP_HOOK
+
+static bool ggml_cl_flash_attn(ggml_backend_t backend, const ggml_tensor * q, const ggml_tensor * k, ggml_tensor * dst) {
     const ggml_tensor * v = dst->src[2];
     const ggml_tensor * mask = dst->src[3];
     const ggml_tensor * sinks = dst->src[4];
@@ -10335,6 +11539,27 @@ static void ggml_cl_flash_attn(ggml_backend_t backend, const ggml_tensor * q, co
     const bool is_f16 = q->type == GGML_TYPE_F16;
     const bool is_mixed = q->type == GGML_TYPE_F32 && k->type == GGML_TYPE_F16;
     const std::pair<int, int> dk_dv = {d_head_q, d_head_v};
+
+    // R3/fase E (E2): invariante — supports_op chama ensure (compilação lazy)
+    // ANTES de agendar; aqui o kernel DEVE existir. Defesa em profundidade:
+    // re-ensure barato (memoizado) e, se ainda assim faltar, NENHUM despacho
+    // com kernel nulo/não compilado: aborta com diagnóstico claro (inalcançável
+    // quando a recusa em supports_op funcionou; falha explícita é preferível a
+    // resultado parcial silencioso).
+    const int fa_variant = is_mixed ? GGML_CL_FA_VARIANT_F32_F16 :
+                           is_f16   ? GGML_CL_FA_VARIANT_F16 :
+                                      GGML_CL_FA_VARIANT_F32;
+    if (!ggml_cl_fa_ensure_variant(backend_ctx, d_head_q, d_head_v, fa_variant, /*from_dispatch=*/true)) {
+        // R5/fase C (C3): falha TARDIA de disponibilidade (entre supports_op e o
+        // despacho) vira ERRO LIMPO aqui — sem abort: o chamador devolve
+        // GGML_STATUS_FAILED e o diagnóstico fica no log. O abort anterior era
+        // inalcançável apenas POR CONSTRUÇÃO quando o caminho de recusa funcionava;
+        // este caminho agora tem prova de execução (injeção DIAG GGML_OPENCL_FA_LATE_FAIL).
+        GGML_LOG_ERROR("ggml_opencl: [FA-C3] variante %s dk=%d dv=%d INDISPONIVEL no dispatch "
+                       "(disponibilidade mudou apos supports_op) -> erro limpo, sem abort\n",
+                       ggml_cl_fa_variant_name(fa_variant), d_head_q, d_head_v);
+        return false;
+    }
 
     if (n_q == 1) {
         if (is_mixed) {
@@ -10387,7 +11612,21 @@ static void ggml_cl_flash_attn(ggml_backend_t backend, const ggml_tensor * q, co
     max_bias      = params[1];
     logit_softcap = params[2];
 
-    const int is_causal = (mask == NULL && n_q > 1 && n_q == n_kv);
+    // R9/fase C (C3 — correcao focal): o FLASH_ATTN_EXT do ggml NAO carrega flag
+    // de causalidade; o contrato do op (ggml-cpu ops.cpp: mask==NULL => NENHUM
+    // mascaramento) e o unico caller local (whisper.cpp: encoder self e decoder
+    // cross chamam com mask==NULL) exigem atencao PLENA nesses casos — a
+    // causalidade do decoder ja vem da MASCARA (-Inf F16). A heuristica antiga
+    // `(mask == NULL && n_q > 1 && n_q == n_kv)` aplicava CAUSAL ao ENCODER
+    // (bidirecional) do whisper: com os dumps R8-F (is_causal=1 nos fa0..fa5) e
+    // a ancora de semantica R9-C (dst real x f64 FULL = 2,3e-5; x causal = 3,2)
+    // isto e a divergencia semantica da op no caminho OpenCL.
+    // Legacy (so diagnostico/A-B): GGML_OPENCL_FA_CAUSAL_HEURISTIC=1 reproduz o
+    // comportamento antigo. Nenhuma guarda/quirk (A7X/E17) e alterada aqui.
+    int is_causal = 0;
+    if (const char * h = getenv("GGML_OPENCL_FA_CAUSAL_HEURISTIC"); h != nullptr && h[0] != '\0' && h[0] != '0') {
+        is_causal = (mask == NULL && n_q > 1 && n_q == n_kv);
+    }
 
     const int n_head_log2_val = n_head > 0 ? 1u << (int)floorf(log2f((float)n_head)) : 0;
     const float n_head_log2_f = n_head_log2_val > 0 ? (float)n_head_log2_val : 1.0f;
@@ -10427,6 +11666,22 @@ static void ggml_cl_flash_attn(ggml_backend_t backend, const ggml_tensor * q, co
     CL_CHECK(clSetKernelArg(kernel, 38, sizeof(cl_mem),   &sinks_buffer));
     CL_CHECK(clSetKernelArg(kernel, 39, sizeof(cl_ulong), &offset_sinks));
 
+    int fa_dump_idx = -1;
+    (void) fa_dump_idx;  // usado apenas em build DIAG (SIG_WHISPER_DUMP_HOOK)
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R5/fase C (C2/W12): captura das entradas REAIS desta chamada FA (Q/K/V/mask)
+    // para replay pareado GPU x CPU x atencao explicita (SIG_WHISPER_FA_DUMP=<dir>).
+    // R9/fase C (C1): devolve o idx capturado; canario 777.0f opcional ANTES do
+    // kernel; dst REAL lido depois do enqueue (ver ggml_cl_fa_dump_dst).
+    fa_dump_idx = ggml_cl_fa_dump_inputs(backend_ctx, q, k, v, mask,
+                           extra_q->data_device, extra_k->data_device, extra_v->data_device, mask_buffer,
+                           offset_q, offset_k, offset_v, offset_mask,
+                           scale, max_bias, logit_softcap, is_causal);
+    if (fa_dump_idx >= 0) {
+        ggml_cl_fa_dump_canary_fill(backend_ctx, dst, extra_o->data_device, offset_o);
+    }
+#endif
+
     if (n_q == 1) {
         const size_t wg_size = 64;
         size_t local_work_size[] = { wg_size, 1 };
@@ -10439,6 +11694,13 @@ static void ggml_cl_flash_attn(ggml_backend_t backend, const ggml_tensor * q, co
         size_t global_work_size[] = { (size_t)((n_q + block_m - 1) / block_m) * wg_size, (size_t)(n_head * n_batch) };
         backend_ctx->enqueue_ndrange_kernel(kernel, 2, global_work_size, local_work_size, dst);
     }
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R9/fase C (C1): dst REAL pos-kernel (leitura bloqueante; mesma fila in-order).
+    if (fa_dump_idx >= 0) {
+        ggml_cl_fa_dump_dst(backend_ctx, dst, extra_o->data_device, offset_o, fa_dump_idx);
+    }
+#endif
+    return true;
 }
 
 static void ggml_cl_mul_mat_f16_f32_tiled(ggml_backend_t backend, const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst) {
@@ -16363,8 +17625,9 @@ bool ggml_cl_compute_forward(ggml_backend_t backend, struct ggml_tensor * tensor
             if (!any_on_device) {
                 return false;
             }
-            ggml_cl_flash_attn(backend, tensor->src[0], tensor->src[1], tensor);
-            return true;
+            // R5/fase C (C3): propaga erro limpo quando o kernel FA nao esta
+            // disponivel no despacho (sem abort) — ver ggml_cl_flash_attn.
+            return ggml_cl_flash_attn(backend, tensor->src[0], tensor->src[1], tensor);
         default:
             return false;
     }

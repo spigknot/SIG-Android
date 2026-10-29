@@ -1,0 +1,178 @@
+#version 450
+// R7/fase G (G2) — Variante focal da FA compacta: BLOCO de Bc chaves por iteracao.
+//
+// Herda INTEGRALMENTE o contrato da fonte mantida `fa_r6.comp` (o CONTROLE):
+//   Q f32, K/V f16, head_dim D=64 (Q/K/V/O), output f32; UM workgroup por
+//   (linha n, head h); WG=64 com lane = dimensao d; dot por reducao de subgroup;
+//   online softmax m/l/o em F32; mascara com indice em INTEIRO (uint); push
+//   constants = MESMO layout de 128B do flash_attn_base.glsl; bindings
+//   0=Q,1=K,2=V,3=mask(f16),5=O; spec 0 = MASK_ENABLE; grid=(N,heads,batch).
+//
+// DIFERENCA (unica): o laco principal processa um BLOCO de Bc=BC_BLOCK chaves
+// por iteracao — reduz o overhead de laco e o numero de rescales do softmax
+// online (alpha/exp por bloco em vez de por chave), mantendo 1 reducao por
+// chave (mesma matematica do controle) e usando o maximo do bloco para
+// estabilidade. A CAUDA (KV % Bc chaves finais) usa o caminho de 1 chave por
+// iteracao IDENTICO ao controle; todos os bounds do laco sao RUNTIME.
+//
+// Bc escolhido na compilacao: -DBC_BLOCK=2 ou -DBC_BLOCK=4.
+#ifndef BC_BLOCK
+#define BC_BLOCK 4
+#endif
+
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_control_flow_attributes : enable
+#extension GL_KHR_shader_subgroup_arithmetic : enable
+#extension GL_KHR_shader_subgroup_shuffle : enable
+
+layout(local_size_x = 64) in;
+
+// spec 0 = MASK_ENABLE (0/1)  (mesma constante de especializacao do controle)
+layout(constant_id = 0) const uint MASK_ENABLE = 0;
+
+layout(push_constant) uniform parameter {
+    uint N;
+    uint KV;
+
+    uint ne1;   // dst->ne[1] = n_head (linhas de O por head)
+    uint ne2;   // dst->ne[2] = N (linhas de query)
+    uint ne3;   // dst->ne[3] = batch
+
+    uint neq2;
+    uint neq3;
+    uint nek2;
+    uint nek3;
+    uint nev2;
+    uint nev3;
+    uint nem1;
+    uint nem2;
+    uint nem3;
+
+    uint nb01;
+    uint nb02;
+    uint nb03;
+    uint nb11;
+    uint nb12;
+    uint nb13;
+    uint nb21;
+    uint nb22;
+    uint nb23;
+
+    float scale;
+    float max_bias;
+    float logit_softcap;
+
+    uint mask_n_head_log2;
+    float m0;
+    float m1;
+
+    uint gqa_ratio;
+    uint split_kv;
+    uint k_num;
+} p;
+
+layout(binding = 0) readonly buffer Q { float data_q[]; };
+layout(binding = 1) readonly buffer K { float16_t data_k[]; };
+layout(binding = 2) readonly buffer V { float16_t data_v[]; };
+layout(binding = 3) readonly buffer M { float16_t data_m[]; };
+layout(binding = 5) writeonly buffer O { float data_o[]; };
+
+const uint  D_HEAD = 64u;
+
+void main() {
+    // mesmo sentinela do flash_attn.comp do ggml (evita NaN em e^(Mold-M))
+    const float NEG_FLT_MAX_OVER_2 = uintBitsToFloat(0xFEFFFFFF);
+
+    const uint d     = gl_LocalInvocationIndex;   // dimensao do head (0..63)
+    const uint row   = gl_WorkGroupID.x;          // linha de query
+    const uint head  = gl_WorkGroupID.y;
+    const uint batch = gl_WorkGroupID.z;
+
+    const uint q_off = (batch * p.nb03 + head * p.nb02) / 4u + row * p.nb01 + d;
+    const uint k_off = (batch * p.nb13 + head * p.nb12) / 2u;
+    const uint v_off = (batch * p.nb23 + head * p.nb22) / 2u;
+
+    // indice da mascara SEMPRE em inteiro (uint) — igual ao controle
+    uint m_off = 0u;  // usado so com MASK_ENABLE=1
+    if (MASK_ENABLE == 1u) {
+        uint mo = 0u;
+        if (p.nem2 != 1u || p.nem3 != 1u) {
+            mo = ((batch % p.nem3) * p.nem2 + (head % p.nem2)) * p.nem1 * p.KV;
+        }
+        m_off = mo + row * p.KV;
+    }
+
+    const float qd = data_q[q_off];
+
+    float m = NEG_FLT_MAX_OVER_2;
+    float l = 0.0;
+    float acc = 0.0;
+
+    // ---- bloco principal: Bc chaves por iteracao (bounds runtime) ----
+    uint t = 0u;
+    for (; t + uint(BC_BLOCK) <= p.KV; t += uint(BC_BLOCK)) {
+        float s[BC_BLOCK];
+        [[unroll]] for (int i = 0; i < BC_BLOCK; ++i) {
+            const uint ti = t + uint(i);
+            const float kd = float(data_k[k_off + ti * p.nb11 + d]);
+#ifdef MANUAL_XOR_REDUCE
+            float v = qd * kd;
+            [[unroll]] for (uint off = 32u; off > 0u; off >>= 1) {
+                v += subgroupShuffleXor(v, off);
+            }
+            v *= p.scale;
+#else
+            float v = subgroupAdd(qd * kd) * p.scale;
+#endif
+            if (MASK_ENABLE == 1u) {
+                v += float(data_m[m_off + ti]);
+            }
+            s[i] = v;
+        }
+
+        // maximo do bloco; UMA rescale por bloco (mesma matematica do online)
+        float mb = s[0];
+        [[unroll]] for (int i = 1; i < BC_BLOCK; ++i) {
+            mb = max(mb, s[i]);
+        }
+        const float mn = max(m, mb);
+        const float alpha = exp(m - mn);
+        l *= alpha;
+        acc *= alpha;
+        [[unroll]] for (int i = 0; i < BC_BLOCK; ++i) {
+            const uint ti = t + uint(i);
+            const float w = exp(s[i] - mn);
+            l += w;
+            acc += w * float(data_v[v_off + ti * p.nb21 + d]);
+        }
+        m = mn;
+    }
+
+    // ---- cauda: KV % Bc chaves finais, caminho de 1 chave (== controle) ----
+    for (; t < p.KV; ++t) {
+        const float kd = float(data_k[k_off + t * p.nb11 + d]);
+#ifdef MANUAL_XOR_REDUCE
+        float s = qd * kd;
+        [[unroll]] for (uint off = 32u; off > 0u; off >>= 1) {
+            s += subgroupShuffleXor(s, off);
+        }
+        s *= p.scale;
+#else
+        float s = subgroupAdd(qd * kd) * p.scale;
+#endif
+        if (MASK_ENABLE == 1u) {
+            s += float(data_m[m_off + t]);
+        }
+        const float mn = max(m, s);
+        const float alpha = exp(m - mn);
+        const float w = exp(s - mn);
+        l = l * alpha + w;
+        acc = acc * alpha + w * float(data_v[v_off + t * p.nb21 + d]);
+        m = mn;
+    }
+
+    const float res = (l > 0.0) ? acc / l : 0.0;
+    // O: [D, n_head, N, batch] CONTIGUO (layout do dst do ggml FA)
+    const uint o_off = d + head * D_HEAD + row * p.ne1 * D_HEAD + batch * p.ne2 * p.ne1 * D_HEAD;
+    data_o[o_off] = res;
+}

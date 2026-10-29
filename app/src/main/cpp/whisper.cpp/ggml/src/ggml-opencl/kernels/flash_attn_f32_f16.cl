@@ -14,6 +14,56 @@
 #define DV_VEC (DV/4)
 #define WG_SIZE (BLOCK_M)
 #define Q1_WG_SIZE 64
+// R4/E2 (atualizado R6/C): kernels sao compilados com -cl-finite-math-only; um
+// operando -INFINITY e UB no driver Adreno (exp() mal compilado => NaN) — o
+// sentinel FINITO segue para running max/inicio (idioma do upstream llama.cpp).
+// A R5/C1 DEMONSTROU que os NaN da R4 vinham de memoria local NAO INICIALIZADA
+// no tail do tile (dot com l_k e p*V com l_v fora de [0, n_kv)), NAO do
+// sentinel; o zero-fill (FA_TAIL_FILL) e a barreira de fim de consumo
+// (FA_TILE_BARRIER) sao o contrato de memoria. Exclusao por mascara (-Inf) usa
+// BIT-TEST exato (as_uint), nunca aritmetica com -INFINITY.
+#define FA_M_INIT (-3.0e38f)
+// Deteccao EXATA de -Inf por BITS: imune as otimizacoes de -cl-finite-math-only
+// (comparacao aritmetica `x == -INFINITY` poderia ser dobrada para falso).
+#define FA_BIAS_IS_NEG_INF(x) (as_uint(x) == 0xFF800000u)
+
+// R5/fase C (C1): tail do tile com memoria DEFINIDA. Nos __local l_k/l_v, os
+// slots fora de [0, n_kv) do ultimo tile ficavam NAO INICIALIZADOS e eram
+// consumidos pelo compute (dot com l_k / p*V com l_v do tail). Aqui todo slot
+// invalido do tile recebe carga DEFINIDA (zero), de modo que o tail contribui
+// exatamente zero em V e nao ha leitura de memoria local indefinida.
+// A R6/C mantem o zero-fill OBRIGATORIO mesmo com validade explicita:
+// 0.0f * NaN = NaN — p=0 NAO substitui a carga definida do tile.
+// Selecionavel apenas no build DIAG (-D FA_TAIL_FILL=0 reproduz o caso pre-fix);
+// o build NORMAL compila sempre o caminho seguro (default 1).
+#ifndef FA_TAIL_FILL
+#define FA_TAIL_FILL 1
+#endif
+
+// R6/fase C (C1): barreira de fim de CONSUMO do tile. Fluxo por tile:
+//   [carga cooperativa de l_k/l_v — TODAS as lanes]
+//   barrier A (fim da carga)
+//   compute do tile SOB PREDICADO (my_query_row < n_q)
+//   barrier B (FIM DO CONSUMO — antes de qualquer store do proximo tile)
+// Sem a barrier B, lanes inativas (my_query_row >= n_q) seguiam para a recarga
+// do proximo tile enquanto as lanes ativas ainda liam o tile corrente:
+// overwrite de memoria local (classe distinta do tail nao inicializado R5).
+// Nenhum continue/return divergente pula barreira em iteracao ativa: o compute
+// fica sob predicado e TODAS as lanes alcancam A e B em toda iteracao.
+// Lockstep/subgroup NAO sao tratados como substituto deste contrato.
+// FA_TILE_BARRIER=0 (DIAG) compila a variante pre-fix (mesma janela do R5)
+// para o contraste; o build NORMAL compila sempre 1.
+#ifndef FA_TILE_BARRIER
+#define FA_TILE_BARRIER 1
+#endif
+
+// R6/fase C (C1) DIAG: atraso controlado do CONSUMO das lanes ativas — cadeia
+// serial alimentada por dado real (Q/my_query_row) + guarda opaca em bits
+// (nao eliminavel, resultado inalterado). Expõe o overwrite quando
+// FA_TILE_BARRIER=0. NORMAL compila 0.
+#ifndef FA_DELAY_CONSUME
+#define FA_DELAY_CONSUME 0
+#endif
 
 inline float get_alibi_slope(
     const float max_bias, const uint h, const uint n_head_log2, const float m0, const float m1
@@ -95,7 +145,7 @@ __kernel void flash_attn_f32_f16(
     for (int i = 0; i < DV_VEC; ++i) {
         o_acc[i] = (ACC_TYPE4)(0.0f);
     }
-    ACC_TYPE m_i = -INFINITY;
+    ACC_TYPE m_i = FA_M_INIT;
     ACC_TYPE l_i = 0.0f;
 
     float slope = get_alibi_slope(max_bias, head_idx, n_head_log2, m0, m1);
@@ -112,6 +162,13 @@ __kernel void flash_attn_f32_f16(
                 const ulong k_row_offset = batch_idx * k_nb3 + head_kv_idx * k_nb2 + k_row_idx * k_nb1;
                 l_k[row][col] = ((__global KV_DATA_TYPE4*)(k_base + k_row_offset))[col];
             }
+#if FA_TAIL_FILL
+            else {
+                // R5/C1: slot fora de [0, n_kv) -> carga DEFINIDA (zero), para o
+                // tail do tile nao consumir memoria local nao inicializada.
+                l_k[row][col] = (KV_DATA_TYPE4)(0.0f);
+            }
+#endif
         }
         for (int i = tid; i < BLOCK_N * DV_VEC; i += WG_SIZE) {
             const int row = i / DV_VEC;
@@ -121,58 +178,109 @@ __kernel void flash_attn_f32_f16(
                 const ulong v_row_offset = batch_idx * v_nb3 + head_kv_idx * v_nb2 + v_row_idx * v_nb1;
                 l_v[row][col] = ((__global KV_DATA_TYPE4*)(v_base + v_row_offset))[col];
             }
+#if FA_TAIL_FILL
+            else {
+                l_v[row][col] = (KV_DATA_TYPE4)(0.0f);
+            }
+#endif
         }
+        barrier(CLK_LOCAL_MEM_FENCE);   // A: fim da CARGA do tile (todas as lanes)
+
+        if (my_query_row < n_q) {
+#if FA_DELAY_CONSUME > 0
+            // R6/C1 DIAG (FA_DELAY_CONSUME>0): atraso serial do consumo; guarda
+            // opaca em bits impede a eliminacao do laco; resultado inalterado.
+            {
+                ACC_TYPE spin = q_priv[0].s0 + (ACC_TYPE)(my_query_row + 1);
+                #pragma unroll 1
+                for (int dl = 0; dl < FA_DELAY_CONSUME; ++dl) {
+                    spin = mad(spin, 1.0000001192f, 9.5367431640625e-07f);
+                }
+                if (as_uint(spin) == 0xDEADBEEFu) {
+                    o_acc[0] = (ACC_TYPE4)(spin);
+                }
+            }
+#endif
+            for (int j = 0; j < BLOCK_N; j += 2) {
+                const int k_row0 = k_start + j;
+                const int k_row1 = k_start + j + 1;
+
+                ACC_TYPE4 dot_acc0 = (ACC_TYPE4)(0.0f);
+                ACC_TYPE4 dot_acc1 = (ACC_TYPE4)(0.0f);
+                #pragma unroll
+                for (int k = 0; k < DK_VEC; k++) {
+                    dot_acc0 = mad(q_priv[k], CONVERT_KV_ACC4(l_k[j][k]), dot_acc0);
+                    dot_acc1 = mad(q_priv[k], CONVERT_KV_ACC4(l_k[j+1][k]), dot_acc1);
+                }
+                ACC_TYPE score0 = (dot_acc0.s0 + dot_acc0.s1 + dot_acc0.s2 + dot_acc0.s3) * scale;
+                ACC_TYPE score1 = (dot_acc1.s0 + dot_acc1.s1 + dot_acc1.s2 + dot_acc1.s3) * scale;
+
+                // R6/C2: validade EXPLICITA por key (nunca inferida do valor
+                // numerico do score). Causal/padding excluem independentemente do
+                // sentinel; mask -Inf e deteccao por BITS.
+                bool valid0 = (k_row0 < n_kv);
+                bool valid1 = (k_row1 < n_kv);
+                if (is_causal) {
+                    const int k_lim = n_kv - n_q + my_query_row;
+                    if (k_row0 > k_lim) valid0 = false;
+                    if (k_row1 > k_lim) valid1 = false;
+                }
+
+                // R6/C2: softcap sobre o score VALIDO e ANTES da mascara
+                // (contrato ggml-cpu ops.cpp FLASH_ATTN_EXT: s=dot*scale;
+                // s=softcap*tanh(s/softcap); s+=mask).
+                if (logit_softcap > 0.0f) {
+                    score0 = logit_softcap * tanh(score0 / logit_softcap);
+                    score1 = logit_softcap * tanh(score1 / logit_softcap);
+                }
+
+                ACC_TYPE bias0 = (ACC_TYPE)(0.0f);
+                ACC_TYPE bias1 = (ACC_TYPE)(0.0f);
+                if (mask_base != NULL) {
+                    const global MASK_DATA_TYPE* mask_ptr = (const global MASK_DATA_TYPE*)(mask_base + my_query_row * mask_nb1);
+                    // leituras ESTRITAMENTE dentro de [0, n_kv): nada de OOB
+                    if (k_row0 < n_kv) {
+                        bias0 = slope * (ACC_TYPE)mask_ptr[k_row0];
+                        if (FA_BIAS_IS_NEG_INF(bias0)) { valid0 = false; bias0 = (ACC_TYPE)(0.0f); }
+                    }
+                    if (k_row1 < n_kv) {
+                        bias1 = slope * (ACC_TYPE)mask_ptr[k_row1];
+                        if (FA_BIAS_IS_NEG_INF(bias1)) { valid1 = false; bias1 = (ACC_TYPE)(0.0f); }
+                    }
+                }
+                if (valid0) score0 += bias0;
+                if (valid1) score1 += bias1;
+
+                // running max apenas com keys VALIDAS; key invalida nao soma p no
+                // denominador nem desloca m (pre-fix: sentinel/softcap virava o
+                // proprio maximo finito => exp(0)=1 para key invalida).
+                ACC_TYPE m_new = m_i;
+                if (valid0 && score0 > m_new) m_new = score0;
+                if (valid1 && score1 > m_new) m_new = score1;
+
+                ACC_TYPE p0 = (ACC_TYPE)(0.0f);
+                ACC_TYPE p1 = (ACC_TYPE)(0.0f);
+                if (valid0) p0 = exp(score0 - m_new);
+                if (valid1) p1 = exp(score1 - m_new);
+                // nenhuma key valida vista => m_new == m_i (identidade) e p=0;
+                // primeira key valida em tile posterior => m_i e sentinel finito
+                // e exp(m_i - m_new) underflow a 0 (o/l sao 0 nesse ponto).
+                const ACC_TYPE scale_prev = exp(m_i - m_new);
+
+                #pragma unroll
+                for (int i = 0; i < DV_VEC; ++i) {
+                    o_acc[i] = o_acc[i] * scale_prev + p0 * CONVERT_KV_ACC4(l_v[j][i]) + p1 * CONVERT_KV_ACC4(l_v[j+1][i]);
+                }
+                l_i = l_i * scale_prev + p0 + p1;
+                m_i = m_new;
+            }
+        }
+
+#if FA_TILE_BARRIER
+        // B: FIM DO CONSUMO do tile — todas as lanes (ativas e inativas) passam
+        // por aqui antes de qualquer store do proximo tile (nenhum continue).
         barrier(CLK_LOCAL_MEM_FENCE);
-
-        if (my_query_row >= n_q) {
-            continue;
-        }
-
-        for (int j = 0; j < BLOCK_N; j += 2) {
-            const int k_row0 = k_start + j;
-            const int k_row1 = k_start + j + 1;
-
-            ACC_TYPE4 dot_acc0 = (ACC_TYPE4)(0.0f);
-            ACC_TYPE4 dot_acc1 = (ACC_TYPE4)(0.0f);
-            #pragma unroll
-            for (int k = 0; k < DK_VEC; k++) {
-                dot_acc0 = mad(q_priv[k], CONVERT_KV_ACC4(l_k[j][k]), dot_acc0);
-                dot_acc1 = mad(q_priv[k], CONVERT_KV_ACC4(l_k[j+1][k]), dot_acc1);
-            }
-            ACC_TYPE score0 = (dot_acc0.s0 + dot_acc0.s1 + dot_acc0.s2 + dot_acc0.s3) * scale;
-            ACC_TYPE score1 = (dot_acc1.s0 + dot_acc1.s1 + dot_acc1.s2 + dot_acc1.s3) * scale;
-
-            if (is_causal) {
-                if (k_row0 > (n_kv - n_q + my_query_row)) score0 = -INFINITY;
-                if (k_row1 > (n_kv - n_q + my_query_row)) score1 = -INFINITY;
-            }
-
-            if (k_row0 >= n_kv) score0 = -INFINITY;
-            if (k_row1 >= n_kv) score1 = -INFINITY;
-
-            if (mask_base != NULL) {
-                const global MASK_DATA_TYPE* mask_ptr = (const global MASK_DATA_TYPE*)(mask_base + my_query_row * mask_nb1);
-                if (k_row0 < n_kv) score0 += slope * (ACC_TYPE)mask_ptr[k_row0];
-                if (k_row1 < n_kv) score1 += slope * (ACC_TYPE)mask_ptr[k_row1];
-            }
-
-            if (logit_softcap > 0.0f) {
-                score0 = logit_softcap * tanh(score0 / logit_softcap);
-                score1 = logit_softcap * tanh(score1 / logit_softcap);
-            }
-
-            const ACC_TYPE m_new = max(m_i, max(score0, score1));
-            const ACC_TYPE p0 = exp(score0 - m_new);
-            const ACC_TYPE p1 = exp(score1 - m_new);
-            const ACC_TYPE scale_prev = exp(m_i - m_new);
-
-            #pragma unroll
-            for (int i = 0; i < DV_VEC; ++i) {
-                o_acc[i] = o_acc[i] * scale_prev + p0 * CONVERT_KV_ACC4(l_v[j][i]) + p1 * CONVERT_KV_ACC4(l_v[j+1][i]);
-            }
-            l_i = l_i * scale_prev + p0 + p1;
-            m_i = m_new;
-        }
+#endif
     }
 
     if (my_query_row < n_q) {
@@ -199,6 +307,8 @@ __kernel void flash_attn_f32_f16(
                 o_row[i] = CONVERT_O_DATA4(o_acc[i] * l_inv);
             }
         } else {
+            // R6/C2 (contrato, ref ggml-cpu S==0 => S_inv=0): linha totalmente
+            // mascarada sem sinks escreve ZERO — nao ha "NaN substituido por 0".
             #pragma unroll
             for (int i = 0; i < DV_VEC; ++i) {
                 o_row[i] = (O_DATA_TYPE4)(0.0f);
@@ -207,6 +317,10 @@ __kernel void flash_attn_f32_f16(
     }
 }
 
+// R6/C (auditoria C1 do q1): o kernel q1 NAO tem __local de tile de K/V (sem
+// carga/recarga -> nao existe a barreira A/B de C1); as reducoes usam barreiras
+// em fluxo UNIFORME (branch `l_final > 0` e uniforme entre as lanes). O ajuste
+// desta fase no q1 e o MESMO contrato C2 de mascara/softcap/validade.
 __kernel void flash_attn_f32_f16_q1(
     const global void * q_void, ulong q_offset,
     const global void * k_void, ulong k_offset,
@@ -273,7 +387,7 @@ __kernel void flash_attn_f32_f16_q1(
         sinks_ptr = (const global ACC_TYPE*)((const global char*)sinks_void + sinks_offset);
     }
 
-    ACC_TYPE m_i = (sinks_ptr != NULL) ? sinks_ptr[head_idx] : -INFINITY;
+    ACC_TYPE m_i = (sinks_ptr != NULL) ? sinks_ptr[head_idx] : FA_M_INIT;
     for (int k_idx = tid; k_idx < n_kv; k_idx += Q1_WG_SIZE) {
         const ulong k_row_offset = batch_idx * k_nb3 + head_kv_idx * k_nb2 + k_idx * k_nb1;
         const global KV_DATA_TYPE4* k_ptr = (const global KV_DATA_TYPE4*)(k_base + k_row_offset);
@@ -283,14 +397,21 @@ __kernel void flash_attn_f32_f16_q1(
             dot_acc = mad(q_priv[k], CONVERT_KV_ACC4(k_ptr[k]), dot_acc);
         }
         ACC_TYPE score = (dot_acc.s0 + dot_acc.s1 + dot_acc.s2 + dot_acc.s3) * scale;
+        // R6/C2: validade explicita + ordem softcap->mascara (mesmo contrato do geral)
+        bool valid = true;
+        ACC_TYPE bias = (ACC_TYPE)(0.0f);
         if (mask_base != NULL) {
             const global MASK_DATA_TYPE* mask_ptr = (const global MASK_DATA_TYPE*)(mask_base);
-            score += slope * (ACC_TYPE)mask_ptr[k_idx];
+            bias = slope * (ACC_TYPE)mask_ptr[k_idx];
+            if (FA_BIAS_IS_NEG_INF(bias)) { valid = false; bias = (ACC_TYPE)(0.0f); }
         }
-        if (logit_softcap > 0.0f) {
-            score = logit_softcap * tanh(score / logit_softcap);
+        if (valid) {
+            if (logit_softcap > 0.0f) {
+                score = logit_softcap * tanh(score / logit_softcap);
+            }
+            score += bias;
+            m_i = max(m_i, score);
         }
-        m_i = max(m_i, score);
     }
 
     __local ACC_TYPE local_m[Q1_WG_SIZE];
@@ -319,14 +440,22 @@ __kernel void flash_attn_f32_f16_q1(
             dot_acc = mad(q_priv[k], CONVERT_KV_ACC4(k_ptr[k]), dot_acc);
         }
         ACC_TYPE score = (dot_acc.s0 + dot_acc.s1 + dot_acc.s2 + dot_acc.s3) * scale;
+        // R6/C2: validade explicita; key invalida => p=0 (sem exp no denominador)
+        bool valid = true;
+        ACC_TYPE bias = (ACC_TYPE)(0.0f);
         if (mask_base != NULL) {
             const global MASK_DATA_TYPE* mask_ptr = (const global MASK_DATA_TYPE*)(mask_base);
-            score += slope * (ACC_TYPE)mask_ptr[k_idx];
+            bias = slope * (ACC_TYPE)mask_ptr[k_idx];
+            if (FA_BIAS_IS_NEG_INF(bias)) { valid = false; bias = (ACC_TYPE)(0.0f); }
         }
-        if (logit_softcap > 0.0f) {
-            score = logit_softcap * tanh(score / logit_softcap);
+        ACC_TYPE p = (ACC_TYPE)(0.0f);
+        if (valid) {
+            if (logit_softcap > 0.0f) {
+                score = logit_softcap * tanh(score / logit_softcap);
+            }
+            score += bias;
+            p = exp(score - m_final);
         }
-        const ACC_TYPE p = exp(score - m_final);
         l_i += p;
         #pragma unroll
         for (int i = 0; i < DV_VEC; i++) {

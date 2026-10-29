@@ -1,5 +1,45 @@
 #pragma OPENCL EXTENSION cl_khr_fp16 : enable
 
+// R17/F2 — CONVERSÃO f32 -> binary16 COM RNE EXPLÍCITO.
+// `dst[i] = src[i]` (float -> half implícito) depende do driver: no Adreno 740
+// ele TRUNCA (round toward zero). Medido com cast_probe: 2166/4096 casos
+// divergem do IEEE RNE, 2010 deles 1 ULP abaixo. Aqui o padrão de 16 bits é
+// montado em inteiro (round-to-nearest-even, subnormais preservados) e
+// reinterpretado com as_half — sem aritmética em half, então o driver não tem
+// onde aplicar outra regra.
+ushort sig_f32_to_f16_bits_rne(float f) {
+    uint x    = as_uint(f);
+    uint sign = (x >> 16) & 0x8000u;
+    uint absx = x & 0x7fffffffu;
+
+    if (absx >= 0x7f800000u) {
+        return (ushort)(sign | ((absx > 0x7f800000u) ? 0x7e00u : 0x7c00u));
+    }
+
+    int  e = (int)((absx >> 23) & 0xffu) - 127;
+    uint m = absx & 0x7fffffu;
+
+    if (e > 15)  return (ushort)(sign | 0x7c00u);          // overflow -> Inf
+
+    if (e >= -14) {                                        // normal
+        uint he   = (uint)(e + 15) << 10;
+        uint mant = m >> 13;
+        uint rem  = m & 0x1fffu;
+        if (rem > 0x1000u || (rem == 0x1000u && (mant & 1u) != 0u)) mant += 1u;
+        return (ushort)(sign | (he + mant));               // carry entra no expoente
+    }
+
+    if (e < -25) return (ushort)sign;                      // abaixo de half-ulp -> +-0
+
+    int  shift = -1 - e;                                   // 14 .. 24
+    uint full  = m | 0x800000u;
+    uint mant  = full >> (uint)shift;
+    uint rem   = full & ((1u << (uint)shift) - 1u);
+    uint mid   = 1u << (uint)(shift - 1);
+    if (rem > mid || (rem == mid && (mant & 1u) != 0u)) mant += 1u;
+    return (ushort)(sign | mant);
+}
+
 //------------------------------------------------------------------------------
 // cpy
 //------------------------------------------------------------------------------
@@ -134,7 +174,8 @@ kernel void kernel_cpy_f32_f16(
     for (int i00 = get_local_id(0); i00 < ne00; i00 += get_local_size(0)) {
         global const float * src = (global float *)((global char *) src0 + i03*nb03 + i02*nb02 + i01*nb01 + i00*nb00);
 
-        dst_data[i00] = src[0];
+        // R17/F2 — RNE EXPLÍCITO (o cast implícito trunca no Adreno 740).
+        dst_data[i00] = as_half(sig_f32_to_f16_bits_rne(src[0]));
     }
 }
 

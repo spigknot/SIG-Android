@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
  */
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "13"
+    const val COMPONENT_VERSION = "14"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
     private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
@@ -29,14 +29,14 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v13-arm64-v8a.zip",
-            "8d53e8f8771a7164f05cf45e7a57dc662944c5b291f8ae482cd58aecf64bbb3b",
-            44_216_742L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v14-arm64-v8a.zip",
+            "6509212f4d777a56d45131161e7bb2a42cf1d418dd4ed77ae29545d477ffa010",
+            49_747_591L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v13-x86_64.zip",
-            "143346290963e3a2f9a2ea6c4117d76589ad742f30e7c4e08ab272695be93136",
-            50_006_445L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v14-x86_64.zip",
+            "1e57bed133e7aa20beb654fa1c8c2ea6cda9b66757cab8eb3851a1eeb5dec110",
+            55_979_079L
         )
     )
 
@@ -89,48 +89,46 @@ object NativeDependencyManager {
      */
     private val conteudoPorAbi = mapOf(
         "arm64-v8a" to listOf(
-            "lib/libsig_whisper.so" to 36_168_384L,
-            "lib/libsig_llama.so" to 30_194_712L,
-            "lib/libonnxruntime.so" to 23_990_744L,
+            "manifest.json" to 2_900L,
             "lib/libavcodec.so" to 15_143_992L,
+            "lib/libavdevice.so" to 63_192L,
             "lib/libavfilter.so" to 4_241_064L,
             "lib/libavformat.so" to 3_987_320L,
-            "lib/libomp.so" to 961_440L,
-            "lib/libc++_shared.so" to 1_027_408L,
-            "lib/libsig_npu_probe.so" to 948_912L,
-            "models/ggml-silero-v6.2.0.bin" to 885_098L,
             "lib/libavutil.so" to 702_672L,
-            "lib/libswscale.so" to 594_472L,
+            "lib/libc++_shared.so" to 1_027_408L,
             "lib/libffmpegkit.so" to 470_040L,
-            "lib/libonnxruntime4j_jni.so" to 111_504L,
-            "lib/libswresample.so" to 101_136L,
-            "lib/libavdevice.so" to 63_192L,
             "lib/libffmpegkit_abidetect.so" to 30_392L,
+            "lib/libomp.so" to 961_440L,
+            "lib/libonnxruntime.so" to 23_990_744L,
+            "lib/libonnxruntime4j_jni.so" to 111_504L,
+            "lib/libsig_llama.so" to 30_194_712L,
+            "lib/libsig_npu_probe.so" to 948_912L,
+            "lib/libsig_whisper.so" to 64_567_856L,
+            "lib/libswresample.so" to 101_136L,
+            "lib/libswscale.so" to 594_472L,
+            "models/ggml-silero-v6.2.0.bin" to 885_098L,
             "lib/libggml-htp-v81.so" to 747_440L,
-            "manifest.json" to 3_377L,
         ),
         "x86_64" to listOf(
-            // Mesmo conjunto de libs do arm64, com os tamanhos reais deste
-            // artefato (medidos no central directory do ZIP publicado).
-            "lib/libsig_whisper.so" to 36_744_576L,
-            "lib/libonnxruntime.so" to 38_473_056L,
-            "lib/libsig_llama.so" to 31_874_632L,
+            "manifest.json" to 2_739L,
             "lib/libavcodec.so" to 19_066_072L,
+            "lib/libavdevice.so" to 63_504L,
             "lib/libavfilter.so" to 5_164_008L,
             "lib/libavformat.so" to 4_017_488L,
-            "lib/libomp.so" to 956_344L,
-            "lib/libc++_shared.so" to 1_045_960L,
-            "lib/libswscale.so" to 947_960L,
-            "lib/libsig_npu_probe.so" to 916_480L,
-            "models/ggml-silero-v6.2.0.bin" to 885_098L,
             "lib/libavutil.so" to 869_752L,
+            "lib/libc++_shared.so" to 1_045_960L,
             "lib/libffmpegkit.so" to 483_128L,
-            "lib/libswresample.so" to 141_808L,
-            "lib/libonnxruntime4j_jni.so" to 100_032L,
-            "lib/libavdevice.so" to 63_504L,
             "lib/libffmpegkit_abidetect.so" to 43_248L,
-            "manifest.json" to 3_190L,
-        ),
+            "lib/libomp.so" to 956_344L,
+            "lib/libonnxruntime.so" to 38_473_056L,
+            "lib/libonnxruntime4j_jni.so" to 100_032L,
+            "lib/libsig_llama.so" to 31_874_632L,
+            "lib/libsig_npu_probe.so" to 916_480L,
+            "lib/libsig_whisper.so" to 64_423_152L,
+            "lib/libswresample.so" to 141_808L,
+            "lib/libswscale.so" to 947_960L,
+            "models/ggml-silero-v6.2.0.bin" to 885_098L,
+        )
     )
 
     /**

@@ -12,6 +12,16 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- R11/D4 — job iniciado pelo usuário com lifecycle observável: foreground
+         service tipado + wake lock. Tipos por rota (doc oficial
+         background-work/services/fgs/service-types): `dataSync` = processamento
+         LOCAL de arquivo; `microphone` = captura autorizada (RECORD_AUDIO). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="SIG"
         android:name=".SigApplication"
@@ -175,6 +185,16 @@
             android:name=".WhisperActivity"
             android:screenOrientation="portrait"
             android:exported="false" />
+
+        <!-- R11/D4 — DONO do ciclo de vida do job de transcrição. Mantém o
+             processo perceptível (e o CPU ativo) com a tela apagada e publica
+             notificação com status/cancelar. Não exportado, sem intent-filter,
+             não-sticky: só inicia a partir da ação do usuário na Activity. -->
+        <service
+            android:name=".WhisperJobService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="dataSync|microphone" />
 
         <activity
             android:name=".GraniteActivity"

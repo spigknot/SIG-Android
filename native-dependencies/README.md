@@ -59,3 +59,7 @@ instrumentação do executor concorrente), mas o **artefato distribuído**
 via `NEEDED` (o loader usa `dlopen`/`dlsym` em runtime). O build do
 produto vem do worktree isolado (`D:/svr11`, allowlist aplicada), não
 de um rebuild direto do HEAD.
+
+## Atualização focal de Whisper
+
+`build-android-native-dependencies.ps1 -Version <nova> -WhisperOnlyBaseVersion <publicada> -OutputDirectory <candidato>` conserva todos os arquivos do pacote base autenticado, inclusive llama/HTP, e altera somente a biblioteca Whisper e o manifesto de versão. O helper `scripts/build-whisper-native-update.py` verifica SHA, CRC e ABI dos ELF e recusa sobrescrita. Atualizar o contrato com os hashes/tamanhos finais, aceitar com verify-native-dependencies e executar o gate comum antes da distribuição do APK.

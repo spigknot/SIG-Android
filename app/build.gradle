@@ -11,6 +11,64 @@ def zigToolsDir = rootProject.file(".tools/zig-${zigVersion}")
 def zigExecutable = new File(zigToolsDir, "zig.exe")
 def buildNativeComponents = providers.gradleProperty("buildNativeComponents")
         .orNull?.toBoolean() ?: false
+// Propriedade de teste do runner Whisper (somente ABI focal); vazio = todas.
+def whisperBenchAbi = providers.gradleProperty("whisperBenchAbi").orNull
+// R2/fase C: build de DIAGNÓSTICO — liga os hooks de teste (dumps C2 e falha
+// simulada de pipeline FA C1). Sem a propriedade, o binário não contém os
+// hooks (verificado por strings/nm no SUMMARY-C da fase C).
+//
+// R12/fase A3 — modo EXPLÍCITO e verificável:
+//   SIG_WHISPER_DIAG=ON|OFF   (env)   ou   -PsigWhisperDiag=true|false
+// Regras (falham o build, nunca caem em NORMAL em silêncio):
+//   1. valor fora de ON/OFF/true/false/1/0 => GradleException;
+//   2. env e propriedade presentes e divergentes => GradleException;
+//   3. ON sem -PbuildNativeComponents=true => GradleException. Sem essa flag o
+//      AGP não declara externalNativeBuild: nenhum configureCMake/buildCMake
+//      entra no grafo, o APK sai sem libsig_whisper.so e qualquer "cópia"
+//      posterior reaproveita a lib NORMAL antiga (foi a falha observada).
+def sigWhisperDiagEnv = System.getenv("SIG_WHISPER_DIAG")
+def sigWhisperDiagProp = providers.gradleProperty("sigWhisperDiag").orNull
+def parseDiagFlag = { String raw, String source ->
+    switch (raw.trim().toLowerCase(Locale.ROOT)) {
+        case "on":
+        case "true":
+        case "1":
+            return true
+        case "off":
+        case "false":
+        case "0":
+            return false
+        default:
+            throw new GradleException("${source} inválido: '${raw}' (use ON ou OFF)")
+    }
+}
+def sigWhisperDiag = false
+def sigWhisperDiagFromEnv = false
+if (sigWhisperDiagEnv != null && !sigWhisperDiagEnv.trim().isEmpty()) {
+    sigWhisperDiagFromEnv = parseDiagFlag(sigWhisperDiagEnv, "SIG_WHISPER_DIAG")
+    sigWhisperDiag = sigWhisperDiagFromEnv
+}
+if (sigWhisperDiagProp != null && !sigWhisperDiagProp.trim().isEmpty()) {
+    def fromProp = parseDiagFlag(sigWhisperDiagProp, "-PsigWhisperDiag")
+    if (sigWhisperDiagEnv != null && !sigWhisperDiagEnv.trim().isEmpty() && fromProp != sigWhisperDiagFromEnv) {
+        throw new GradleException("Conflito de modo: SIG_WHISPER_DIAG=${sigWhisperDiagEnv} " +
+                "e -PsigWhisperDiag=${sigWhisperDiagProp}. Use apenas um valor.")
+    }
+    sigWhisperDiag = fromProp
+}
+def sigWhisperDiagMode = sigWhisperDiag ? "diag" : "normal"
+if (sigWhisperDiag && !buildNativeComponents) {
+    throw new GradleException(
+            "SIG_WHISPER_DIAG=ON exige -PbuildNativeComponents=true. Sem essa flag o AGP não " +
+            "declara externalNativeBuild: nenhum configureCMake/buildCMake roda, o APK sai sem " +
+            "libsig_whisper.so e uma cópia posterior reutiliza a lib NORMAL antiga.")
+}
+logger.lifecycle("SIG_WHISPER_DIAG=${sigWhisperDiag ? 'ON' : 'OFF'} modo=${sigWhisperDiagMode} " +
+        "(CMake: ${sigWhisperDiag ? '-DSIG_WHISPER_DIAG=1' : 'sem defines de diagnóstico'})")
+// R2/B3: variante de LABORATÓRIO (applicationId próprio, somente debug).
+// Guardada por propriedade: sem -PwhisperLab=true o módulo fica SEM flavor
+// algum — o build/APK de produto é idêntico ao de antes (sem hooks do lab).
+def whisperLab = providers.gradleProperty("whisperLab").orNull?.toBoolean() ?: false
 
 tasks.register("prepareZig") {
     group = "build setup"
@@ -77,19 +135,59 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 76
-        versionName "1.513"
+        versionCode 77
+        versionName "1.514"
         // R6/VACINA: teste instrumentado de contrato de locks (ANR).
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         if (buildNativeComponents) {
             ndk {
-                abiFilters 'arm64-v8a', 'x86_64'
+                // whisperBenchAbi: propriedade de TESTE para compilar somente a ABI
+                // focal do runner (documentada no manifesto de execução). Sem a
+                // propriedade, mantém o comportamento do produto (arm64 + x86_64).
+                if (whisperBenchAbi != null) {
+                    abiFilters whisperBenchAbi
+                } else {
+                    abiFilters 'arm64-v8a', 'x86_64'
+                }
             }
             externalNativeBuild {
                 cmake {
                     arguments "-DSIG_ZIG_EXE=${zigExecutable.absolutePath.replace('\\', '/')}"
+                    if (sigWhisperDiag) {
+                        arguments += "-DSIG_WHISPER_DIAG=1"
+                    }
                 }
+            }
+        }
+    }
+
+    // R2/B3: o loader de produção vive em diretório de fontes dedicado
+    // (`src/main/loader-prod`) porque o AGP compila main+flavor juntos (não
+    // existe "override" de classe por source set em Java/Kotlin). Assim a
+    // variante de lab pode trocar a implementação do loader sem duplicar
+    // classes: com -PwhisperLab=true este diretório sai do build e o flavor
+    // traz o loader de laboratório de src/whisperlab/java.
+    sourceSets {
+        main {
+            java.srcDirs = ["src/main/java", "src/main/loader-prod"]
+        }
+        if (whisperLab) {
+            main.java.srcDirs = ["src/main/java"]
+            whisperlab.java.srcDirs = ["src/whisperlab/java"]
+        }
+    }
+
+    // R2/B3: flavor de laboratório (somente debug), definido apenas quando a
+    // propriedade -PwhisperLab=true é passada. applicationId PRÓPRIO para o
+    // app de lab não compartilhar dados/providers/caminho com o SIG instalado.
+    if (whisperLab) {
+        flavorDimensions "purpose"
+        productFlavors {
+            whisperlab {
+                dimension "purpose"
+                applicationId "br.gov.sp.pcsp.whisperlab"
+                versionNameSuffix "-lab"
             }
         }
     }
@@ -142,6 +240,190 @@ android {
 tasks.configureEach { task ->
     if (task.name.startsWith("configureCMake") || task.name.startsWith("buildCMake")) {
         task.dependsOn("prepareZig")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// R12/fase A3 — EXPORT + VERIFICAÇÃO DE IDENTIDADE do artefato nativo.
+//
+// Por que existe: o .so de uma tarefa CMake do AGP mora em
+// app/build/intermediates/cxx/<buildType>/<hash>/obj/<abi>, e o <hash> MUDA
+// quando os argumentos do CMake mudam (é assim que NORMAL e DIAG já ficam em
+// árvores distintas). Fixar esse caminho num script de cópia foi a origem do
+// "copiou o mesmo NORMAL": o build DIAG gravava na árvore do DIAG e a cópia lia
+// a árvore antiga. Aqui o caminho vem de Task.outputs da própria tarefa do AGP
+// (nunca de um hash literal) e o binário é VALIDADO contra o modo pedido.
+//
+// Saída: app/build/whisper-native/<normal|diag>/<abi>/{libsig_whisper.so,identity.json}
+// ---------------------------------------------------------------------------
+tasks.register("exportWhisperNativeLib") {
+    group = "sig"
+    description = "Exporta e valida libsig_whisper.so do output real da tarefa CMake (normal|diag)."
+    dependsOn { tasks.matching { it.name == "buildCMakeDebug" } }
+
+    doLast {
+        def mode = sigWhisperDiagMode
+        def diagOnlyMarkers = ["SIG_WHISPER_DUMP", "SIGOCL_NODE", "GGML_OPENCL_SIGOCL_TRACE", "SIG_VK_FA_FAIL_INJECT"]
+        def found = []
+        tasks.matching { it.name.startsWith("buildCMakeDebug[") }.each { t ->
+            t.outputs.files.files.each { d ->
+                def so = new File(d, "libsig_whisper.so")
+                if (so.isFile()) {
+                    found << [abi: d.name, so: so, objDir: d]
+                }
+            }
+        }
+        if (found.isEmpty()) {
+            throw new GradleException("exportWhisperNativeLib: nenhum libsig_whisper.so nos outputs de " +
+                    "buildCMakeDebug. Rode com -PbuildNativeComponents=true.")
+        }
+
+        def sha256 = { byte[] data ->
+            def md = java.security.MessageDigest.getInstance("SHA-256")
+            md.update(data)
+            return md.digest().encodeHex().toString()
+        }
+        def parseCache = { File cache ->
+            def map = [:]
+            if (cache.isFile()) {
+                cache.eachLine("UTF-8") { line ->
+                    if (line && !line.startsWith("#") && !line.startsWith("//")) {
+                        def eq = line.indexOf('=')
+                        if (eq > 0) {
+                            def key = line.substring(0, eq)
+                            def colon = key.indexOf(':')
+                            map[colon > 0 ? key.substring(0, colon) : key] = line.substring(eq + 1)
+                        }
+                    }
+                }
+            }
+            return map
+        }
+        def runGit = { List<String> args ->
+            try {
+                def pb = new ProcessBuilder(["git"] + args)
+                pb.directory(project.rootDir)
+                pb.redirectErrorStream(true)
+                def p = pb.start()
+                def out = p.inputStream.getText("UTF-8").trim()
+                p.waitFor()
+                return out
+            } catch (Exception ignored) {
+                return ""
+            }
+        }
+
+        def outRoot = layout.buildDirectory.dir("whisper-native/${mode}").get().asFile
+        def sourceFiles = [
+                "app/src/main/cpp/CMakeLists.txt",
+                "app/src/main/cpp/whisper_jni.cpp",
+                "app/src/main/cpp/sig_whisper_dump.cpp",
+                "app/src/main/cpp/whisper.cpp/src/whisper.cpp",
+                "app/src/main/cpp/whisper.cpp/ggml/src/ggml-opencl/ggml-opencl.cpp",
+        ]
+        def sourceHashes = [:]
+        sourceFiles.each { rel ->
+            def f = new File(project.rootDir, rel)
+            if (f.isFile()) sourceHashes[rel] = sha256(java.nio.file.Files.readAllBytes(f.toPath()))
+        }
+        def head = runGit(["rev-parse", "HEAD"])
+        def dirty = runGit(["status", "--porcelain"]).readLines().findAll { it.trim() }.size()
+
+        def identities = []
+        found.each { entry ->
+            byte[] bytes = java.nio.file.Files.readAllBytes(entry.so.toPath())
+            String text = new String(bytes, "ISO-8859-1")
+            def hits = diagOnlyMarkers.findAll { text.contains(it) }.sort()
+            boolean isDiag = (mode == "diag")
+            boolean verified = isDiag
+                    ? (hits.contains("SIG_WHISPER_DUMP") && hits.contains("SIGOCL_NODE"))
+                    : hits.isEmpty()
+            if (!verified) {
+                throw new GradleException("exportWhisperNativeLib: identidade INCONSISTENTE para modo=${mode} " +
+                        "abi=${entry.abi}. Marcadores DIAG encontrados=${hits}. " +
+                        "Isso significa que o binário não é do modo pedido — NÃO copie este arquivo.")
+            }
+
+            // Caminho do .cxx derivado do output da tarefa (sem hash literal).
+            def objDir = entry.objDir
+            def abiDir = objDir
+            def hashDir = abiDir.parentFile.parentFile
+            def buildTypeDir = hashDir.parentFile
+            def cxxAbiDir = new File(project.projectDir, ".cxx/${buildTypeDir.name}/${hashDir.name}/${entry.abi}")
+            def cache = parseCache(new File(cxxAbiDir, "CMakeCache.txt"))
+
+            def ccFile = new File(cxxAbiDir, "compile_commands.json")
+            def flags = [:]
+            if (ccFile.isFile()) {
+                def entries = new groovy.json.JsonSlurper().parse(ccFile)
+                ["whisper_jni.cpp", "ggml-opencl.cpp"].each { needle ->
+                    def hit = entries.find { (it.file ?: "").endsWith(needle) }
+                    if (hit != null) {
+                        flags[needle] = (hit.command ?: (hit.arguments ?: []).join(" "))
+                    }
+                }
+            }
+
+            def sha = sha256(bytes)
+            def compilerFromFlags = (flags["whisper_jni.cpp"] ?: "").split(" ").find { it != null && it != "" }
+            def identity = [
+                    schema         : 1,
+                    mode           : mode,
+                    abi            : entry.abi,
+                    lib            : [sha256: sha, bytes: bytes.length, file: entry.so.absolutePath.replace('\\', '/')],
+                    cmake          : [
+                            hash_dir       : hashDir.name,
+                            obj_dir        : objDir.absolutePath.replace('\\', '/'),
+                            build_type     : cache["CMAKE_BUILD_TYPE"] ?: "",
+                            sig_whisper_diag: cache["SIG_WHISPER_DIAG"] ?: "(ausente)",
+                            ndk            : cache["ANDROID_NDK"] ?: "",
+                            cxx_compiler   : (cache["CMAKE_CXX_COMPILER"] ?: compilerFromFlags ?: ""),
+                            cmake_command  : cache["CMAKE_COMMAND"] ?: "",
+                    ],
+                    flags          : flags,
+                    diag_markers   : hits,
+                    source_snapshot: [head: head, dirty_files: dirty, files: sourceHashes],
+                    built_at       : new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssXXX").format(new Date()),
+            ]
+            def abiOut = new File(outRoot, entry.abi)
+            abiOut.mkdirs()
+            java.nio.file.Files.copy(entry.so.toPath(), new File(abiOut, "libsig_whisper.so").toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            new File(abiOut, "identity.json").setText(
+                    groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(identity)) + "\n", "UTF-8")
+            identities << identity
+            logger.lifecycle("EXPORT mode=${mode} abi=${entry.abi} sha256=${sha} bytes=${bytes.length} " +
+                    "cxx=${hashDir.name} markers=${hits}")
+        }
+
+        def summary = new StringBuilder()
+        summary << "# SIG Whisper — identidade do artefato nativo (R12/A3)\n"
+        summary << "# modo: ${mode}\n"
+        summary << "# HEAD: ${head} (arquivos modificados: ${dirty})\n"
+        identities.each { id ->
+            summary << "\n[${id.abi}]\n"
+            summary << "  arquivo : ${id.lib.file}\n"
+            summary << "  sha256  : ${id.lib.sha256}\n"
+            summary << "  bytes   : ${id.lib.bytes}\n"
+            summary << "  cxx     : ${id.cmake.hash_dir} (SIG_WHISPER_DIAG=${id.cmake.sig_whisper_diag})\n"
+            summary << "  ndk     : ${id.cmake.ndk}\n"
+            summary << "  compilador: ${id.cmake.cxx_compiler}\n"
+            summary << "  marcadores DIAG: ${id.diag_markers.isEmpty() ? '(nenhum)' : id.diag_markers.join(', ')}\n"
+        }
+        new File(outRoot, "IDENTITY.txt").setText(summary.toString(), "UTF-8")
+        logger.lifecycle("EXPORT ok: ${outRoot.absolutePath} (modo ${mode})")
+    }
+}
+
+// R2/B3: a variante de laboratório é SOMENTE debug — o variant de release do
+// flavor whisperlab é desabilitado (não existe task de release do lab).
+if (whisperLab) {
+    androidComponents {
+        beforeVariants(selector().withFlavor("purpose", "whisperlab")) { variant ->
+            if (variant.buildType == "release") {
+                variant.enable = false
+            }
+        }
     }
 }
 

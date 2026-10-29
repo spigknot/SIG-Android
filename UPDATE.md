@@ -83,6 +83,28 @@ cd "D:/Projetos/SIG"
   nativos só entram se a etapa 2 detectar mudança em `NativeDependencyManager.kt`
   ou no contrato do pacote nativo.
 
+### 3.1 Atualização focal do Whisper nativo
+
+Quando somente o Whisper muda, preservar por conteúdo todos os demais componentes
+do último pacote publicado, inclusive o SKEL Hexagon da ferramenta Texto. Após
+o build nativo NORMAL, gerar o pacote focal com a base autenticada pelo contrato
+ainda vigente (exemplo desta versão: v13 → v14):
+
+```powershell
+.\gradlew.bat :app:assembleDebug -PbuildNativeComponents=true -PsigWhisperDiag=false --console=plain
+.\scripts\build-android-native-dependencies.ps1 -Version 14 -WhisperOnlyBaseVersion 13 -OutputDirectory native-dependencies\build\v14-candidate
+```
+
+O modo focal autentica os ZIPs base pelo SHA do NativeDependencyManager, verifica
+cada arquivo do manifesto e substitui apenas lib/libsig_whisper.so por ABI, além
+do manifesto de versão. Não sobrescreve ZIP preparado nem reconstrói o llama.
+Atualizar COMPONENT_VERSION/URLs/SHA/tamanhos e o detalhamento por ABI a partir
+dos ZIPs finais; executar verify-native-dependencies para a nova versão e depois
+repetir o gate completo **sem** buildNativeComponents para o APK distribuído.
+Não publicar o APK intermediário que embute as bibliotecas do build nativo.
+Usar sempre números de versão novos e verificar que os objetos remotos ainda não
+existem antes do upload; conservar os pacotes publicados anteriores.
+
 ## 4. APK no O:\ (opcional — falha pode ser ignorada)
 
 ```bash
@@ -176,6 +198,8 @@ a fonte da verdade e deve evoluir com a prática.
 
 | Sintoma | Causa | Resolução |
 |---|---|---|
+| NativeDepsOfficialFixturesTest acusa fixtures de OUTRA versão | COMPONENT_VERSION avançou, mas os ZIPs ignorados de teste/classpath ainda são da versão anterior | Preservar ZIPs antigos fora do diretório de fixtures e dos recursos de build; copiar os ZIPs novos aceitos para app/src/test/resources/native-deps e repetir os três gates. Nunca desativar o teste/Assume nem publicar com a falha. |
+| Build nativo falha no embed_kernel.py com UnicodeDecodeError/charmap/cp1252 | Python no Windows usou a codificação local para kernels UTF-8 | Abrir entrada e saída explicitamente com encoding="utf-8" no gerador; saída newline="\n". Repetir build NORMAL e gates antes da publicação; não remover kernels nem mudar a pausa OpenCL para contornar o erro. |
 | `'return' is prohibited here` no Kotlin | `return` não-local dentro de lambda de `use { }` | usar `return@use` (retorno local ao lambda) |
 | `Thread { }` não executa | faltou o `.start()` (build passa, bloco nunca roda) | `Thread { ... }.start()` sempre |
 | Asset na release com nome errado (`app-debug.apk`) | `gh release upload` usa o NOME DO ARQUIVO LOCAL | renomear para `sig.apk` antes do upload |

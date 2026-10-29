@@ -77,7 +77,7 @@ if (TARGET ggml-vulkan)
             "${CMAKE_CURRENT_SOURCE_DIR}/spirv-headers/include")
 endif()
 
-add_library(sig_whisper SHARED whisper_jni.cpp)
+add_library(sig_whisper SHARED whisper_jni.cpp whisper_wav_io.cpp whisper_mutf8.cpp)
 
 file(GLOB_RECURSE SIG_WEBRTC_VAD_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/webrtcvad/webrtc/common_audio/signal_processing/*.c"
@@ -99,6 +99,42 @@ target_compile_definitions(sig_whisper PRIVATE
         SIG_BUILD_GGML_OPENCL_EMBED_KERNELS=1
         SIG_BUILD_GGML_OPENCL_SOA_Q=1
         SIG_BUILD_GGML_OPENCL_USE_ADRENO_KERNELS=1)
+
+# R2/fase C — build de DIAGNÓSTICO (macros de teste, AUSENTES do build normal):
+#  - SIG_WHISPER_DUMP_HOOK : dumps mel/enc/logits (C2; env SIG_WHISPER_DUMP)
+#  - SIG_VK_FA_FAIL_INJECT : falha simulada da pipeline FA (C1; env SIG_VK_FA_FAIL_INJECT)
+# Ligado por -PsigWhisperDiag=true (Gradle -> -DSIG_WHISPER_DIAG=1).
+# A ausência das macros/strings no build normal é verificada por strings/nm
+# (evidência em build/whisper-rodada2/20261009-0149/fase-c/SUMMARY-C.md).
+if (SIG_WHISPER_DIAG)
+    message(STATUS "SIG_WHISPER_DIAG=1: hooks de diagnostico ATIVOS (somente teste)")
+    target_compile_definitions(sig_whisper PRIVATE SIG_WHISPER_DUMP_HOOK=1)
+    target_sources(sig_whisper PRIVATE sig_whisper_dump.cpp)
+    # R10/fase C: instrumento do PRODUTOR/bytes do cache K/V (C1) + canario (C2).
+    target_sources(sig_whisper PRIVATE sig_kv_trace.cpp)
+    target_include_directories(whisper PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_compile_definitions(whisper PRIVATE SIG_WHISPER_DUMP_HOOK=1)
+    if (TARGET ggml-opencl)
+        # R3/fase E (E2): habilita a injecao de falha do build FA lazy
+        # (GGML_OPENCL_FA_FAIL_INJECT) SOMENTE no build de diagnostico.
+        target_compile_definitions(ggml-opencl PRIVATE SIG_WHISPER_DUMP_HOOK=1)
+        # R12/A3: rastro por evento do OpenCL (SIGOCL_*) e injecao de falha do
+        # FA (GGML_OPENCL_FA_FAIL_INJECT) sao instrumentos de ENSAIO: so
+        # compilam no DIAG. No NORMAL nao existe getenv nem string SIGOCL_*
+        # (verificado por varredura de bytes no exportWhisperNativeLib).
+        target_compile_definitions(ggml-opencl PRIVATE SIG_WHISPER_OCL_TRACE=1)
+    endif()
+    if (TARGET ggml-vulkan)
+        # R13/B2 — DIAG de trabalho em voo (fence dedicada, submit_seq,
+        # dispatch_count, ponte de cancel owned). SOMENTE diagnostico: no build
+        # normal a macro, as strings e os simbolos sig_vk_inflight_* nao existem.
+        target_compile_definitions(ggml-vulkan PRIVATE SIG_WHISPER_DUMP_HOOK=1)
+        target_compile_definitions(ggml-vulkan PRIVATE SIG_VK_FA_FAIL_INJECT=1)
+        # R5/fase B (B2): trace de kernel x dispatch x copia da familia SOFT_MAX
+        # (SOMENTE diagnostico; nunca no build normal - ver strings/nm no aceite).
+        target_compile_definitions(ggml-vulkan PRIVATE SIG_VK_SOFTMAX_TRACE=1)
+    endif()
+endif()
 
 target_link_libraries(sig_whisper
         whisper

@@ -268,6 +268,13 @@ __kernel void mul_mm_f16_f32_kq(
     }
 
     uint subMatrixCStartInElements = depth_B * N * M + row * M + col;
-    mm_store_c_N(matrix_C, regC0, regC1, subMatrixCStartInElements, line_stride_matrix_C_in_bytes, (N-block_id_n*32));
+    // R7/fase C: M pode NAO ser multiplo de TILESIZE_M (whisper n_ctx=1500 => 1500%64!=0).
+    // Sem esta guarda, as lanes do ultimo tile com col+sub_block_id_m >= M leem a
+    // matrix_A fora do seu range (image OOB => regA=0) e ESCREVEM zeros em
+    // celulas validas da proxima linha n (word = (row+k)*M + col+lane), corrompendo
+    // a saida. Medido: probe isolado kq 1500x1500 zeros=423360 x 1536x1500 zeros=0.
+    if (col + get_local_id(0) < (uint) M) {
+        mm_store_c_N(matrix_C, regC0, regC1, subMatrixCStartInElements, line_stride_matrix_C_in_bytes, (N-block_id_n*32));
+    }
 }
 

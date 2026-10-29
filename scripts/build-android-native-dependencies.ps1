@@ -1,6 +1,7 @@
 param(
     [string]$Version = "1",
-    [string]$OutputDirectory = ""
+    [string]$OutputDirectory = "",
+    [int]$WhisperOnlyBaseVersion = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +12,13 @@ $apiJar = Join-Path $app "libs\ffmpeg-kit-api.jar"
 $nativeRoot = Join-Path $app "build\intermediates\merged_native_libs\debug\mergeDebugNativeLibs\out\lib"
 $silero = Join-Path $root "native-dependencies\silero\ggml-silero-v6.2.0.bin"
 $output = if ($OutputDirectory) { $OutputDirectory } else { Join-Path $root "build\native-dependencies" }
+
+# Atualização focal: conserva todos os demais componentes já aceitos/publicados.
+if ($WhisperOnlyBaseVersion -gt 0) {
+    & python -X utf8 -B (Join-Path $root "scripts\build-whisper-native-update.py") --root $root --version $Version --base-version $WhisperOnlyBaseVersion --output $output
+    if ($LASTEXITCODE -ne 0) { throw "Geração focal do pacote Whisper falhou." }
+    return
+}
 
 # ONNX Runtime (engine do Granite) — as libs nativas TAMBÉM vão no pacote
 # (o APK as exclui via packaging.jniLibs.excludes). O AAR fica no cache do Gradle

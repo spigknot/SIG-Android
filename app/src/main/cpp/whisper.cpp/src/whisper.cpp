@@ -1,10 +1,107 @@
 #include "whisper.h"
 #include "whisper-arch.h"
+#include "whisper-vad-compose.h"  // R7/fase F: composição VAD normalizada (fonte única)
 
 #include "ggml.h"
 #include "ggml-cpp.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
+
+// R2/fase C (C2): dumps diagnósticos (mel/encoder/logits) — somente no build
+// com -DSIG_WHISPER_DIAG=1 (macro SIG_WHISPER_DUMP_HOOK). O cabeçalho e os
+// pontos de chamada desaparecem por completo do build normal.
+#ifdef SIG_WHISPER_DUMP_HOOK
+#include "sig_whisper_dump.h"
+#include "sig_nodes_select.h"   // R24/CAP — intervalo explícito
+#include "sig_tf_json.h"  // R8/A4: float TF em JSON válido (não finito => null+classe)
+#include "sig_kv_trace.h" // R10/C: produtor + bytes do cache K/V (C1) e canario (C2)
+#endif
+
+
+// R3/fase A — diagnóstico do RNG de amostragem (hipótese R3-01: o estado de
+// decoders[0].rng atravessa jobs porque o reseed por job começa em j=1).
+// Compilado SOMENTE no build de diagnóstico (SIG_WHISPER_DUMP_HOOK, ligado por
+// -PsigWhisperDiag=true). Em runtime, ativação por env (ausente = silêncio):
+//   SIG_WHISPER_DIAG=1                  linhas "SIGRNG ..." no stderr
+//   SIG_WHISPER_DIAG_SAMPLES=1          1 linha por draw de amostragem
+//   SIG_WHISPER_DIAG_RESEED_DECODER0=1  reseed DIAGNÓSTICO do decoder0 (seed 0)
+//                                       no início de cada job (controle causal)
+#ifdef SIG_WHISPER_DUMP_HOOK
+#include <cstdarg>
+#include <cstdlib>
+#include <random>
+
+namespace sig_rng_diag {
+
+static std::atomic<uint64_t> g_draws_total{0}; // chamadas a dist(decoder.rng)
+static std::atomic<uint64_t> g_job_counter{0}; // jobs (whisper_full_with_state)
+
+inline bool enabled() {
+    static const bool value = [] {
+        const char * v = getenv("SIG_WHISPER_DIAG");
+        if (v == nullptr) return false;
+        // R12/A3: aceita ON/OFF explicito (OFF/0/false desligam). Assim o MESMO
+        // nome usado pelo build (SIG_WHISPER_DIAG=ON|OFF) tem semantica unica.
+        return !(strcmp(v, "OFF") == 0 || strcmp(v, "off") == 0 ||
+                 strcmp(v, "0") == 0 || strcmp(v, "false") == 0);
+    }();
+    return value;
+}
+
+inline bool verbose_samples() {
+    static const bool value = getenv("SIG_WHISPER_DIAG_SAMPLES") != nullptr;
+    return value;
+}
+
+inline bool reseed_decoder0() {
+    static const bool value = getenv("SIG_WHISPER_DIAG_RESEED_DECODER0") != nullptr;
+    return value;
+}
+
+inline void logv(const char * fmt, ...) {
+    if (!enabled()) {
+        return;
+    }
+    va_list args;
+    va_start(args, fmt);
+    fputs("SIGRNG ", stderr);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    fflush(stderr);
+}
+
+// Fingerprint do estado do RNG: FNV-1a 64 sobre os primeiros 64 valores de uma
+// CÓPIA do engine (não consome o rng real). Dois estados iguais => mesmo fp.
+inline uint64_t fingerprint(const std::mt19937 & rng) {
+    std::mt19937 copy = rng;
+    uint64_t hash = 14695981039346656037ULL;
+    for (int i = 0; i < 64; ++i) {
+        const uint32_t v = copy();
+        for (int b = 0; b < 4; ++b) {
+            hash ^= (v >> (8 * b)) & 0xffu;
+            hash *= 1099511628211ULL;
+        }
+    }
+    return hash;
+}
+
+inline const char * fp_hex(uint64_t value) {
+    static thread_local char buffer[24];
+    snprintf(buffer, sizeof(buffer), "0x%016llx", static_cast<unsigned long long>(value));
+    return buffer;
+}
+
+inline void note_draw(int token_id) {
+    const uint64_t abs_index = g_draws_total.fetch_add(1, std::memory_order_relaxed) + 1;
+    if (enabled() && verbose_samples()) {
+        logv("draw job=%llu abs=%llu token=%d\n",
+             static_cast<unsigned long long>(g_job_counter.load(std::memory_order_relaxed)),
+             static_cast<unsigned long long>(abs_index), token_id);
+    }
+}
+
+} // namespace sig_rng_diag
+#endif
 
 #ifdef WHISPER_USE_COREML
 #include "coreml/whisper-encoder.h"
@@ -165,6 +262,140 @@ static std::string format(const char * fmt, ...) {
 // ggml helpers
 //
 
+// ---------------------------------------------------------------------------
+// R6/fase E (E1) — propagação do abort_callback e vínculo RAII com os backends.
+// ---------------------------------------------------------------------------
+// O callback é instalado SOMENTE nos backends cujo registro expõe o proc
+// "ggml_backend_set_abort_callback" (hoje: CPU — inclusive o CPU de fallback
+// que o scheduler usa para as partes do grafo não suportadas pela GPU). Nada é
+// acessado por cast para tipo de backend específico: só o proc registrado.
+// Sem o proc (Vulkan/OpenCL), nada é instalado — dispatch de GPU em voo NÃO
+// tem preempção arbitrária; o abort só é observado nas fronteiras seguras
+// (fim do split/grafo no lado CPU; ver SUMMARY-E).
+//
+// release() roda SEMPRE (sucesso, GGML_STATUS_ABORTED ou falha): o scheduler e
+// seus backends são reusados e não podem ficar apontando para callback/dados
+// de um job que já terminou (nem cancelar trabalho de outro job).
+struct sig_abort_binding {
+    struct entry {
+        ggml_backend_t                    backend;
+        ggml_backend_set_abort_callback_t set_fn;
+    };
+    std::vector<entry> entries;
+
+    sig_abort_binding(ggml_backend_sched_t sched, ggml_abort_callback abort_callback, void * abort_callback_data) {
+        if (abort_callback == nullptr) {
+            return;
+        }
+        for (int i = 0; i < ggml_backend_sched_get_n_backends(sched); ++i) {
+            ggml_backend_t backend = ggml_backend_sched_get_backend(sched, i);
+            ggml_backend_dev_t dev = ggml_backend_get_device(backend);
+            ggml_backend_reg_t reg = dev != nullptr ? ggml_backend_dev_backend_reg(dev) : nullptr;
+
+            auto * set_fn = reg != nullptr
+                ? (ggml_backend_set_abort_callback_t) ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_abort_callback")
+                : nullptr;
+            if (set_fn != nullptr) {
+                set_fn(backend, abort_callback, abort_callback_data);
+                entries.push_back({ backend, set_fn });
+            }
+        }
+    }
+
+    ~sig_abort_binding() {
+        release();
+    }
+
+    void release() {
+        for (auto & entry : entries) {
+            entry.set_fn(entry.backend, nullptr, nullptr);
+        }
+        entries.clear();
+    }
+
+    sig_abort_binding(const sig_abort_binding &) = delete;
+    sig_abort_binding & operator=(const sig_abort_binding &) = delete;
+};
+
+// R6/fase E (E1) — desfecho explícito de um passo (encode/decode): abortar é
+// um resultado PRÓPRIO, nunca classificado como falha numérica/estrutural.
+enum sig_step_result {
+    SIG_STEP_OK      = 0,
+    SIG_STEP_ABORTED = 1,
+    SIG_STEP_FAILED  = 2,
+};
+
+// Retorno de whisper_full quando o abort_callback interrompeu o trabalho
+// (cancelamento; NÃO é falha numérica). Fora da faixa dos erros -1..-9 já
+// existentes; o JNI e o harness tratam este código como cancelamento.
+static constexpr int SIG_WHISPER_FULL_ABORTED = -100;
+
+static const char * sig_ggml_status_name(enum ggml_status status) {
+    switch (status) {
+        case GGML_STATUS_SUCCESS:      return "success";
+        case GGML_STATUS_ABORTED:      return "aborted";
+        case GGML_STATUS_ALLOC_FAILED: return "alloc_failed";
+        case GGML_STATUS_FAILED:       return "failed";
+        default:                       return "unknown";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// R6/fase E (E1) — rastro de cancelamento (SOMENTE build DIAG; env-gated).
+// ---------------------------------------------------------------------------
+// Ligado por SIG_WHISPER_CANCEL_TRACE=1 na lib DIAG. Emite em stderr com o
+// relógio monotônico do ggml as marcas que o harness de laboratório correlaciona
+// (pedido -> callback observado -> retorno do compute -> terminal). No build
+// NORMAL nada disto é compilado.
+#ifdef SIG_WHISPER_DUMP_HOOK
+namespace sig_cancel_trace {
+
+inline bool enabled() {
+    static const bool value = getenv("SIG_WHISPER_CANCEL_TRACE") != nullptr;
+    return value;
+}
+
+inline void emit(const char * kind, const char * ev, const char * detail = nullptr) {
+    if (!enabled()) {
+        return;
+    }
+    fprintf(stderr, "%s ev=%s", kind, ev);
+    if (detail != nullptr) {
+        fprintf(stderr, " %s", detail);
+    }
+    fprintf(stderr, " t_us=%lld\n", (long long) ggml_time_us());
+    fflush(stderr);
+}
+
+// Estágio do grafo do job (conv/enc/cross/dec) com o status do compute.
+// R25/ERR-NUM — o estágio corrente do thread (lido pelo rastro do compute).
+static thread_local const char * g_sig_stage = "?";
+// R18/B1 — símbolo FRACO: quando o backend Vulkan está na lib, publica o total
+// de submissões reais; sem ele, 0. Separa "bloco de GPU sem poll" de "bloco de
+// CPU" no mesmo rastro, sem segundo build.
+extern "C" uint64_t sig_vk_submits_real(void) __attribute__((weak));
+
+inline void stage(const char * phase, const char * stage_name, const char * status) {
+    // R25/ERR-NUM — estágio corrente do thread, lido pelo rastro do compute.
+    g_sig_stage = (stage_name != nullptr) ? stage_name : "?";
+    const unsigned long long subs =
+        (sig_vk_submits_real != nullptr) ? (unsigned long long) sig_vk_submits_real() : 0ULL;
+    char detail[128];
+    snprintf(detail, sizeof(detail), "stage=%s status=%s submits=%llu",
+             stage_name, status != nullptr ? status : "-", subs);
+    emit("SIGSTAGE", phase, detail);
+}
+
+// Rastro dos passos de decodificação (o decoder roda centenas de vezes num
+// job longo; o laboratório precisa dos primeiros passos, não de todos).
+inline bool decoder_trace_allowed() {
+    static std::atomic<int> seen(0);
+    return seen.fetch_add(1) < 8;
+}
+
+} // namespace sig_cancel_trace
+#endif // SIG_WHISPER_DUMP_HOOK
+
 static bool ggml_graph_compute_helper(
           struct ggml_cgraph * graph,
                          int   n_threads,
@@ -184,13 +415,23 @@ static bool ggml_graph_compute_helper(
         ggml_backend_set_n_threads_fn(backend.get(), n_threads);
     }
 
-    return ggml_backend_graph_compute(backend.get(), graph) == GGML_STATUS_SUCCESS;
+    const enum ggml_status status = ggml_backend_graph_compute(backend.get(), graph);
+
+    // R6/fase E (E1): limpa SEMPRE (sucesso/abort/erro) — este backend CPU é
+    // reutilizado por outros computes e não pode ficar com ponteiro pendurado.
+    if (set_abort_callback_fn) {
+        set_abort_callback_fn(backend.get(), nullptr, nullptr);
+    }
+
+    return status == GGML_STATUS_SUCCESS;
 }
 
-static bool ggml_graph_compute_helper(
+static enum ggml_status ggml_graph_compute_helper(
       ggml_backend_sched_t   sched,
         struct ggml_cgraph * graph,
                        int   n_threads,
+         ggml_abort_callback abort_callback,
+                        void * abort_callback_data,
                       bool   sched_reset = true) {
     for (int i = 0; i < ggml_backend_sched_get_n_backends(sched); ++i) {
         ggml_backend_t backend = ggml_backend_sched_get_backend(sched, i);
@@ -203,13 +444,74 @@ static bool ggml_graph_compute_helper(
         }
     }
 
-    const bool t = (ggml_backend_sched_graph_compute(sched, graph) == GGML_STATUS_SUCCESS);
+    // R6/fase E (E1): o abort segue o MESMO roteamento do compute — instalado em
+    // todo backend do scheduler que exponha o proc (o CPU, inclusive o CPU de
+    // fallback dos jobs de GPU); o vínculo é desfeito pelo RAII em TODOS os
+    // caminhos de saída (sucesso, GGML_STATUS_ABORTED, falha).
+    sig_abort_binding abort_binding(sched, abort_callback, abort_callback_data);
 
-    if (!t || sched_reset) {
+    const enum ggml_status status = [&]() -> enum ggml_status {
+        // ggml_cgraph e incompleto neste TU: usa o acessor publico.
+        const int n_nodes = ggml_graph_n_nodes(graph);
+#ifdef SIG_WHISPER_DUMP_HOOK
+        const int64_t t0 = ggml_time_us();
+#endif
+        try {
+            const enum ggml_status st = ggml_backend_sched_graph_compute(sched, graph);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // R26/GPU — INTERVENÇÃO DE DIAGNÓSTICO (E2): sync REAL na fronteira
+            // encoder->cross, só com SIG_WHISPER_SYNC_ENC_CROSS=1. Localiza, não
+            // prova a correção.
+            if (st == GGML_STATUS_SUCCESS && getenv("SIG_WHISPER_SYNC_ENC_CROSS") != nullptr &&
+                sig_cancel_trace::g_sig_stage != nullptr &&
+                std::strcmp(sig_cancel_trace::g_sig_stage, "enc") == 0) {
+                const int64_t ts = ggml_time_us();
+                ggml_backend_sched_synchronize(sched);
+                fprintf(stderr, "SIGGRAPH ev=sync_enc_cross us=%lld\n",
+                        (long long) (ggml_time_us() - ts));
+                fflush(stderr);
+            }
+            // R25/ERR-NUM — retorno REAL por grafo (stage/nós/FA/status).
+            fprintf(stderr, "SIGGRAPH ev=end stage=%s nodes=%d status=%d us=%lld\n",
+                    sig_cancel_trace::g_sig_stage, n_nodes, (int) st,
+                    (long long) (ggml_time_us() - t0));
+            fflush(stderr);
+#endif
+            return st;
+        } catch (const std::exception & e) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+            fprintf(stderr, "SIGGRAPH ev=exc stage=%s nodes=%d what=%s\n",
+                    sig_cancel_trace::g_sig_stage, n_nodes, e.what());
+            fflush(stderr);
+#endif
+            return GGML_STATUS_FAILED;
+        } catch (...) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+            fprintf(stderr, "SIGGRAPH ev=exc stage=%s nodes=%d what=desconhecida\n",
+                    sig_cancel_trace::g_sig_stage, n_nodes);
+            fflush(stderr);
+#endif
+            return GGML_STATUS_FAILED;
+        }
+    }();
+    // R25/FIX — rastro SÓ no DIAG. No NORMAL, fprintf/fflush por compute custa
+    // no caminho de produção e não tem consumidor.
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // enum real (ggml.h): ALLOC_FAILED=-2, FAILED=-1, SUCCESS=0, ABORTED=1
+    fprintf(stderr, "SIGSTAGE ev=compute status=%d graph=%p\n",
+            (int) status, (void *) graph);
+    fflush(stderr);
+#endif
+
+    // Libera o vínculo ANTES do reset: o scheduler é reusado e nenhum backend
+    // pode guardar callback/dados de um job terminado (nem cancelar outro job).
+    abort_binding.release();
+
+    if (status != GGML_STATUS_SUCCESS || sched_reset) {
         ggml_backend_sched_reset(sched);
     }
 
-    return t;
+    return status;
 }
 
 // TODO: move these functions to ggml-base with support for ggml-backend?
@@ -826,10 +1128,10 @@ struct whisper_aheads_masks {
     ggml_backend_buffer_t buffer = nullptr;
 };
 
-struct vad_time_mapping {
-    int64_t processed_time;  // Time in processed (VAD) audio
-    int64_t original_time;   // Corresponding time in original audio
-};
+// R7/fase F: o mapa temporal do VAD usa o MESMO tipo da composição
+// (sig_vad_compose::mapping_point): a lista normalizada de intervalos é a
+// fonte única para tamanho, cópia e mapa. Campos: processed_cs/original_cs.
+using vad_time_mapping = sig_vad_compose::mapping_point;
 
 struct whisper_state {
     int64_t t_sample_us = 0;
@@ -1482,6 +1784,13 @@ static ggml_backend_buffer_type_t select_weight_buft(const whisper_hparams & hpa
 //
 // see the convert-pt-to-ggml.py script for details
 //
+// R2/fase C (C1): pré-checagem de Flash Attention no backend Vulkan
+// (implementada em ggml-vulkan.cpp). Símbolo FRACO de propósito: builds sem o
+// backend Vulkan ligado continuam válidos (a checagem simplesmente não existe).
+extern "C" bool sig_vk_flash_attn_preflight(int gpu_device) __attribute__((weak));
+// R14/C2 — o R6 (kernel próprio) está disponível? 1 = sim, 0 = não, -1 = ausente.
+extern "C" int sig_vk_fa_r6_available(void) __attribute__((weak));
+
 static bool whisper_model_load(struct whisper_model_loader * loader, whisper_context & wctx) {
     WHISPER_LOG_INFO("%s: loading model\n", __func__);
 
@@ -1845,6 +2154,35 @@ static bool whisper_model_load(struct whisper_model_loader * loader, whisper_con
         ggml_free(ctx);
     }
 
+    // R2/fase C (C1): pré-checagem de FA em Vulkan ANTES de alocar/escrever os
+    // pesos. Se as pipelines FA não compilam neste driver, a carga é recusada
+    // AQUI com erro explícito (em vez de abortar na primeira inferência —
+    // ggml-backend.cpp:898); o chamador refaz com flash_attn=0. Ver
+    // whisper_jni.cpp (recarga) e fase-c/BTRACE-C1.md.
+    if (wctx.params.use_gpu && wctx.params.flash_attn && sig_vk_flash_attn_preflight != nullptr) {
+        if (!sig_vk_flash_attn_preflight(wctx.params.gpu_device)) {
+            // R14/C2 — CICLO INICIAL: a família FA GENÉRICA reprovou (o Adreno
+            // 740 não compila `flash_attn_f32_f16_aligned`). O latch
+            // `flash_attn_pipelines_failed` habilita a rota R6 (kernel
+            // próprio) — abortar a carga aqui MATAVA o R6 junto, e a Activity
+            // NORMAL nunca alcançava o caminho validado pelos ensaios.
+            // Se o R6 está disponível, a carga CONTINUA: o R6 é escolhido no
+            // dispatch (fa_r6_usable) e o FA é executado de fato.
+            const int r6_ok = (sig_vk_fa_r6_available != nullptr)
+                ? sig_vk_fa_r6_available() : -1;
+            if (r6_ok == 1) {
+                WHISPER_LOG_INFO("%s: familia FA generica reprovou, mas a rota R6 esta "
+                                 "disponivel — a carga CONTINUA e o FA segue pelo R6.\n",
+                                 __func__);
+            } else {
+                WHISPER_LOG_ERROR("%s: Flash Attention recusado na pre-checagem do Vulkan: "
+                                  "a compilacao das pipelines FA falhou neste dispositivo. "
+                                  "Repita com flash_attn desativado.\n", __func__);
+                return false;
+            }
+        }
+    }
+
     // allocate tensors in the backend buffers
     for (auto & p : ctx_map) {
         ggml_backend_buffer_type_t buft = p.first;
@@ -2052,7 +2390,12 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
 
     WHISPER_ASSERT(!!kv_pad.buffer);
 
-    const int n_ctx_pad = GGML_PAD(n_ctx, 256);
+    // R10/fase H — LIMPEZA: o patch de CONTRATO DE POSIÇÕES VÁLIDAS (R7/D1)
+    // trocou as views K/V de kv_pad de n_ctx_pad para n_ctx lógico e deixou
+    // esta declaração sem uso (warning -Wunused-variable). O buffer kv_pad
+    // continua alocado com n_ctx_pad (GGML_PAD(n_ctx,256)) via wstate.kv_pad,
+    // mas o número NUNCA é lido aqui. Removida a declaração morta; a semântica
+    // do grafo do encoder (view = n_ctx lógico) é idêntica.
 
     struct ggml_init_params params = {
         /*.mem_size   =*/ wstate.sched_encode.meta.size(),
@@ -2142,16 +2485,30 @@ static struct ggml_cgraph * whisper_build_graph_encoder(
                 ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcur, ggml_view_1d(ctx0, kv_pad.k, n_ctx*n_state, 0)));
                 ggml_build_forward_expand(gf, ggml_cpy(ctx0, Vcur, ggml_view_1d(ctx0, kv_pad.v, n_ctx*n_state, 0)));
 
+                // R7/fase D (D1) — CONTRATO DE POSIÇÕES VÁLIDAS: a view K/V expõe
+                // SOMENTE as n_ctx posições LÓGICAS. O buffer kv_pad continua
+                // alocado com n_ctx_pad (GGML_PAD(n_ctx,256)) como ARMAZENAMENTO,
+                // mas o padding NUNCA entra na atenção: com mask=nullptr e a view
+                // antiga de n_ctx_pad, as 36 chaves extras participavam da softmax
+                // (V=0 não elimina o denominador; K=0/estaleiro soma exp(0) — erro
+                // sistemático ~n_ctx/n_ctx_pad, e arbitrário se o padding estivesse
+                // sujo de uma chamada com n_ctx maior). O número válido vem do
+                // GRAFO (n_ctx lógico deste build), nunca de constante no shader.
+                // Custo: nenhum (a view é metadado; alguns kernels FA ficam até
+                // ~2,3% mais baratos por ler 1500 em vez de 1536 chaves). Todos os
+                // kernels FA envolvidos consomem KV com limite RUNTIME (CPU:
+                // laço over nek1; OpenCL: guarda `k_row >= n_kv`; Vulkan fa_r6:
+                // `for (t < p.KV)`), então tails são válidos por contrato.
                 struct ggml_tensor * K =
                     ggml_view_3d(ctx0, kv_pad.k,
-                            n_state_head, n_ctx_pad, n_head,
+                            n_state_head, n_ctx, n_head,
                             ggml_element_size(kv_pad.k)*n_state,
                             ggml_element_size(kv_pad.k)*n_state_head,
                             0);
 
                 struct ggml_tensor * V =
                     ggml_view_3d(ctx0, kv_pad.v,
-                            n_state_head, n_ctx_pad, n_head,
+                            n_state_head, n_ctx, n_head,
                             ggml_element_size(kv_pad.v)*n_state,
                             ggml_element_size(kv_pad.v)*n_state_head,
                             0);
@@ -2326,12 +2683,20 @@ static struct ggml_cgraph * whisper_build_graph_cross(
         } else {
             Vcross = ggml_transpose(ctx0, ggml_reshape_2d(ctx0, Vcross, n_state, n_ctx));
 
+            // R10/fase C (C3) — OFFSET DE CAMADA do cache cross = n_ctx_pad, igual ao FA
+            // e igual ao que a ALOCACAO usa (whisper_kv_cache_init recebe
+            // GGML_PAD(n_audio_ctx,256) => 512*6*1536*2 = 9.437.184 B por tensor, medido
+            // com o canario R10/C2). Antes o caminho FA-off indexava com n_ctx (=1500,
+            // nao-pad), ou seja o MESMO cache tinha DUAS plantas de armazenamento
+            // dependendo de `params.flash_attn`: o vizinho de camada (il+1) comecava em
+            // 1.536.000 no FA-off e em 1.572.864 no FA-on. Nenhum valor muda (o interior
+            // de cada camada continua com stride n_ctx); o que muda e o SLOT.
             k = ggml_view_1d(ctx0, wstate.kv_cross.k, n_state*n_ctx,
-                    (ggml_element_size(wstate.kv_cross.k)*n_state)*(il*n_ctx));
+                    (ggml_element_size(wstate.kv_cross.k)*n_state)*(il*n_ctx_pad));
 
             v = ggml_view_2d(ctx0, wstate.kv_cross.v, n_ctx, n_state,
                     (   n_ctx)*ggml_element_size(wstate.kv_cross.v),
-                    (il*n_ctx)*ggml_element_size(wstate.kv_cross.v)*n_state);
+                    (il*n_ctx_pad)*ggml_element_size(wstate.kv_cross.v)*n_state);
         }
 
         ggml_build_forward_expand(gf, ggml_cpy(ctx0, Kcross, k));
@@ -2355,7 +2720,611 @@ static struct ggml_cgraph * whisper_build_graph_cross(
 //   - n_threads:  number of threads to use
 //   - mel_offset: offset in the mel spectrogram (i.e. audio offset)
 //
-static bool whisper_encode_internal(
+// ---------------------------------------------------------------------------
+// R3/fase D (D1) — captura POR NÓ do grafo do encoder (SIG_WHISPER_DUMP=nodes)
+// ---------------------------------------------------------------------------
+// Usa o callback de avaliação do scheduler (ggml_backend_sched_set_eval_callback):
+// a cada nó o scheduler pergunta "ask=true" (antes de computar); quando a
+// captura pede o nó, o scheduler executa o lote, SINCRONIZA o backend e chama
+// "ask=false" com os dados prontos — a garantia de "execução sincronizada".
+//
+// Manifesto (nodes-<tag>-manifest.jsonl): linha por nó executado com nome,
+// índice topológico (= ordem de visita/execução do scheduler; o índice 0 é o
+// PRIMEIRO NÓ COMPUTADO do grafo), OP, ne/nb, tipo, view offsets,
+// backend/buffer e fontes (srcs: pesos/entradas).
+// ATENÇÃO (regra do prompt): enc[0] (primeiro elemento do tensor de saída do
+// encoder) NÃO é "a primeira OP" — o comparador classifica por índice de nó +
+// op e não confunde os dois.
+//
+// Dados (f32le, header textual; ver sig_whisper_dump): recorte por
+// SIG_WHISPER_DUMP_NODES_FIRST (default 48 — cobre conv1/conv2 (IM2COL+MUL_MAT),
+// positional embedding e entrada do primeiro bloco), IM2COL/CONV_2D sempre, e
+// amostragem a cada SIG_WHISPER_DUMP_NODES_STEP nós (default 0 = desligado;
+// cobre "camadas seguintes" quando ligado), teto SIG_WHISPER_DUMP_NODES_MAX
+// (default 96). Leitura PURA (sem mutação), F16->F32, linearização respeitando
+// strides.
+#ifdef SIG_WHISPER_DUMP_HOOK
+#include <cstdlib>
+#include <unordered_map>
+#include <vector>
+#include <string>
+
+namespace sig_nodes {
+
+struct capture_ctx {
+    // R37/B1 — cotas/contadores do recorte de softmax, por SESSAO.
+    int sm_slices = 0;
+    int sm_asked = 0;
+    int sm_recusados = 0;
+    std::map<ggml_tensor *, int> sm_want;
+    std::unordered_map<const struct ggml_tensor *, int> visit_index; // ordem de visita (topológica de execução)
+    std::unordered_map<const struct ggml_tensor *, int> comp_index;  // posição entre nós op != NONE
+    // R7/fase D (D2): quer-node (recorte "nodes") x quer-fa (kind "fa") por tensor.
+    std::unordered_map<const struct ggml_tensor *, int> node_want;
+    std::unordered_map<const struct ggml_tensor *, int> fa_want;
+    std::unordered_map<std::string, int> fa_seen; // chave = grafo + (mask? "/m" : "/n")
+    std::unordered_map<const struct ggml_tensor *, std::string> fa_stem; // dst -> stem
+    int fa_dumps = 0;
+    ggml_backend_sched_t sched = nullptr;
+    const char * graph = "enc"; // r4/A: fase do grafo (enc-conv | enc | decoder) — identidade lógica
+    int call = 0;               // r4/A: N-ésima execução deste grafo no processo (por fase)
+    int run = 0;
+    int next_topo = 0;
+    int next_comp = 0;
+    int manifest_seq = 0;
+    int dumps = 0;
+    int visited = 0;
+};
+
+static std::string sig_nodes_escape(const char * s) {
+    std::string out;
+    if (s == nullptr) {
+        return out;
+    }
+    for (const char * p = s; *p != '\0'; ++p) {
+        if (*p == '"' || *p == '\\') {
+            out.push_back('\\');
+            out.push_back(*p);
+        } else if ((unsigned char) *p < 0x20) {
+            out.push_back('?');
+        } else {
+            out.push_back(*p);
+        }
+    }
+    return out;
+}
+
+static int sig_nodes_comp_of(const capture_ctx & ctx, const struct ggml_tensor * t) {
+    const auto it = ctx.comp_index.find(t);
+    return it == ctx.comp_index.end() ? -1 : it->second;
+}
+
+static std::string sig_nodes_bin_name(const capture_ctx & ctx, int topo, int comp) {
+    return "nodes-r" + std::to_string(ctx.run) + "-t" + std::to_string(topo >= 0 ? topo : comp);
+}
+
+// ---------------------------------------------------------------------------
+// R7/fase D (D2) — captura da OP FA REAL (kind "fa").
+// Materializa Q/K/V/mask/dst em f32 (ordem lógica ggml i0 mais rápido) e o
+// contrato de shape/strides + hash fnv64 de cada tensor no manifesto
+// <DIR>/fa-<TAG>.jsonl. Os bytes capturados são o que a OP REALMENTE consumiu
+// (nb/offset do nó em execução) — a prova host-vs-device usa ESTES bytes.
+// ---------------------------------------------------------------------------
+static bool sig_fa_read_f32(const struct ggml_tensor * t, std::vector<float> & out) {
+    if (t == nullptr || t->data == nullptr) {
+        return false;
+    }
+    if (t->type != GGML_TYPE_F32 && t->type != GGML_TYPE_F16) {
+        return false;
+    }
+    const int64_t n_elem = ggml_nelements(t);
+    if (n_elem <= 0 || n_elem > (int64_t) (64ll << 20)) {
+        return false;
+    }
+    const size_t span = ggml_nbytes(t);
+    if (span == 0) {
+        return false;
+    }
+    std::vector<uint8_t> raw(span);
+    ggml_backend_tensor_get(t, raw.data(), 0, span);
+    out.assign((size_t) n_elem, 0.0f);
+    if (ggml_is_contiguous(t)) {
+        if (t->type == GGML_TYPE_F32) {
+            memcpy(out.data(), raw.data(), (size_t) n_elem * sizeof(float));
+        } else {
+            const ggml_fp16_t * p = (const ggml_fp16_t *) raw.data();
+            for (int64_t i = 0; i < n_elem; ++i) {
+                out[(size_t) i] = ggml_fp16_to_fp32(p[i]);
+            }
+        }
+    } else {
+        size_t idx = 0;
+        for (int64_t i3 = 0; i3 < t->ne[3]; ++i3) {
+            for (int64_t i2 = 0; i2 < t->ne[2]; ++i2) {
+                for (int64_t i1 = 0; i1 < t->ne[1]; ++i1) {
+                    for (int64_t i0 = 0; i0 < t->ne[0]; ++i0) {
+                        const size_t off = (size_t) (i0*t->nb[0] + i1*t->nb[1] + i2*t->nb[2] + i3*t->nb[3]);
+                        if (t->type == GGML_TYPE_F32) {
+                            float v = 0.0f;
+                            memcpy(&v, raw.data() + off, sizeof(float));
+                            out[idx] = v;
+                        } else {
+                            ggml_fp16_t v;
+                            memcpy(&v, raw.data() + off, sizeof(ggml_fp16_t));
+                            out[idx] = ggml_fp16_to_fp32(v);
+                        }
+                        idx++;
+                    }
+                }
+            }
+        }
+    }
+    return true;
+}
+
+static std::string sig_fa_ne_nb(const struct ggml_tensor * t) {
+    if (t == nullptr) {
+        return "null";
+    }
+    char buf[320];
+    snprintf(buf, sizeof(buf),
+             "{\"name\":\"%s\",\"type\":\"%s\",\"ne\":[%lld,%lld,%lld,%lld],\"nb\":[%lld,%lld,%lld,%lld]}",
+             sig_nodes_escape(t->name).c_str(), ggml_type_name(t->type),
+             (long long) t->ne[0], (long long) t->ne[1], (long long) t->ne[2], (long long) t->ne[3],
+             (long long) t->nb[0], (long long) t->nb[1], (long long) t->nb[2], (long long) t->nb[3]);
+    return std::string(buf);
+}
+
+// R7/fase D (D2): captura de ENTRADAS no ask=false — é o ponto em que o
+// scheduler SINCRONIZOU o backend (dados prontos). MEDIÇÃO: no ask=true as
+// entradas da OP vêm ZERADAS (o callback roda na fase de split, ANTES do
+// compute do grafo) — por isso a leitura é no ask=false.
+static void sig_fa_capture_inputs(capture_ctx & ctx, const struct ggml_tensor * t) {
+    const int seq = ctx.fa_dumps;
+    // stem ÚNICO por (grafo, call, seq) — encoder e decoder têm contextos de
+    // captura separados e ambos começam em seq=0; sem o prefixo de grafo os
+    // arquivos colidiriam (a 1ª captura seria sobrescrita).
+    char stem[64];
+    snprintf(stem, sizeof(stem), "fa-%s-c%d-%d", ctx.graph, ctx.call, seq);
+    ctx.fa_stem[t] = stem;
+
+    std::vector<float> q, k, v, m;
+    const bool ok_q = sig_fa_read_f32(t->src[0], q);
+    const bool ok_k = sig_fa_read_f32(t->src[1], k);
+    const bool ok_v = sig_fa_read_f32(t->src[2], v);
+    const bool ok_m = (t->src[3] != nullptr) && sig_fa_read_f32(t->src[3], m);
+    const bool ok_o = true; // dst é escrito no ask=false (sig_fa_capture_dst)
+
+    auto write_part = [&](const char * suffix, const std::vector<float> & data, bool ok) {
+        if (!ok || data.empty()) {
+            return;
+        }
+        const std::string name = std::string(stem) + "-" + suffix;
+        sig_dump::fa_data(name.c_str(), data.data(), data.size());
+    };
+    write_part("q", q, ok_q);
+    write_part("k", k, ok_k);
+    write_part("v", v, ok_v);
+    write_part("m", m, ok_m);
+
+    float fa_scale = 0.0f, fa_max_bias = 0.0f, fa_softcap = 0.0f;
+    if (t->op_params != nullptr) {
+        memcpy(&fa_scale,    (const char *) t->op_params + 0*sizeof(float), sizeof(float));
+        memcpy(&fa_max_bias, (const char *) t->op_params + 1*sizeof(float), sizeof(float));
+        memcpy(&fa_softcap,  (const char *) t->op_params + 2*sizeof(float), sizeof(float));
+    }
+    const struct ggml_tensor * qs = t->src[0];
+    const struct ggml_tensor * ks = t->src[1];
+    char line[4096];
+    snprintf(line, sizeof(line),
+             "{\"kind\":\"fa_op\",\"graph\":\"%s\",\"call\":%d,\"seq\":%d,\"op\":\"%s\",\"node\":\"%s\","
+             "\"scale\":%.9g,\"max_bias\":%.9g,\"softcap\":%.9g,"
+             "\"n_q\":%lld,\"n_kv\":%lld,\"head_dim\":%lld,\"heads\":%lld,\"batch\":%lld,"
+             "\"q\":%s,\"k\":%s,\"v\":%s,\"mask\":%s,\"dst\":%s,"
+             "\"files\":{\"q\":%s,\"k\":%s,\"v\":%s,\"m\":%s,\"o\":%s}}",
+             ctx.graph, ctx.call, seq, ggml_op_name(t->op), sig_nodes_escape(t->name).c_str(),
+             (double) fa_scale, (double) fa_max_bias, (double) fa_softcap,
+             (long long) qs->ne[1], (long long) ks->ne[1], (long long) qs->ne[0], (long long) qs->ne[2], (long long) qs->ne[3],
+             sig_fa_ne_nb(qs).c_str(), sig_fa_ne_nb(ks).c_str(), sig_fa_ne_nb(t->src[2]).c_str(),
+             sig_fa_ne_nb(t->src[3]).c_str(), sig_fa_ne_nb(t).c_str(),
+             ok_q ? ("\"" + std::string(stem) + "-q.bin\"").c_str() : "null",
+             ok_k ? ("\"" + std::string(stem) + "-k.bin\"").c_str() : "null",
+             ok_v ? ("\"" + std::string(stem) + "-v.bin\"").c_str() : "null",
+             ok_m ? ("\"" + std::string(stem) + "-m.bin\"").c_str() : "null",
+             ok_o ? ("\"" + std::string(stem) + "-o.bin\"").c_str() : "null");
+    sig_dump::fa_manifest(line);
+    fprintf(stderr, "[sig_fa] seq=%d graph=%s call=%d n_q=%lld n_kv=%lld hd=%lld heads=%lld mask=%d scale=%.6g (inputs no ask)\n",
+            seq, ctx.graph, ctx.call, (long long) qs->ne[1], (long long) ks->ne[1],
+            (long long) qs->ne[0], (long long) qs->ne[2], ok_m ? 1 : 0, (double) fa_scale);
+}
+
+// Dst (saída da OP): só existe DEPOIS do compute — lido no ask=false.
+static void sig_fa_capture_dst(capture_ctx & ctx, const struct ggml_tensor * t) {
+    const auto it = ctx.fa_stem.find(t);
+    if (it == ctx.fa_stem.end()) {
+        return;
+    }
+    std::vector<float> o;
+    if (sig_fa_read_f32(t, o) && !o.empty()) {
+        const std::string name = it->second + "-o";
+        sig_dump::fa_data(name.c_str(), o.data(), o.size());
+    }
+}
+
+static bool sig_nodes_callback(struct ggml_tensor * t, bool ask, void * user_data) {
+    capture_ctx * ctx = static_cast<capture_ctx *>(user_data);
+    if (ctx == nullptr || t == nullptr) {
+        return false;
+    }
+
+    // registra a visita UMA vez: índice topológico = ordem de visita/execução.
+    if (ctx->visit_index.find(t) == ctx->visit_index.end()) {
+        const int idx = ctx->next_topo++;
+        ctx->visit_index[t] = idx;
+        if (t->op != GGML_OP_NONE) {
+            ctx->comp_index[t] = ctx->next_comp++;
+        }
+        ctx->visited++;
+    }
+    const int topo = ctx->visit_index[t];
+    const int comp = sig_nodes_comp_of(*ctx, t);
+
+    if (ask) {
+        if (t->op == GGML_OP_NONE) {
+            return false; // entrada/nó NONE não é "OP"; entrada tem dumps próprios (mel)
+        }
+        const size_t span = ggml_nbytes(t);
+        const bool dtype_ok = (t->type == GGML_TYPE_F32 || t->type == GGML_TYPE_F16);
+
+        // R24/CAP — SELECAO EXPLICITA. `nodes_first` era quantidade de
+        // prefixo, nao offset: FIRST=48/STEP=1 recapturava 0..23. Agora o
+        // intervalo [begin,end) e real (end EXCLUSIVO) e o legado continua
+        // valendo quando SIG_WHISPER_DUMP_NODES_END nao e informado.
+        const sig_nodes::Sel sel = sig_nodes::from_env(
+            sig_dump::nodes_first(), sig_dump::nodes_step(), sig_dump::nodes_max());
+        bool want = sig_nodes::want(sel, comp, (int) ctx->dumps, dtype_ok);
+        if (!want && sel.valida && comp >= 0 && t->op != GGML_OP_NONE
+            && (t->op == GGML_OP_IM2COL || t->op == GGML_OP_CONV_2D)) {
+            // alvo explicito (conv1/conv2) fora do intervalo, respeitando o teto
+            if (!(sel.max > 0 && (int) ctx->dumps >= sel.max)) {
+                want = true;
+            }
+        }
+
+        // R7/fase D (D2): captura da OP FA real (kind "fa") — independente do
+        // recorte de nós. O tensor FA é pedido mesmo com "nodes" desligado.
+        // Seleção default: a PRIMEIRA op FA de cada (grafo, com/sem máscara)
+        // — cobre encoder self (graph=enc, sem máscara), cross (decoder, sem
+        // máscara) e self do decoder (decoder, com máscara). Para capturar
+        // todas: SIG_WHISPER_DUMP_FA_ALL=1 (até SIG_WHISPER_DUMP_FA_MAX).
+        const bool fa_all = getenv("SIG_WHISPER_DUMP_FA_ALL") != nullptr;
+        const std::string fa_key = std::string(ctx->graph) + (t->src[3] != nullptr ? "/m" : "/n");
+        const bool want_fa = (t->op == GGML_OP_FLASH_ATTN_EXT) &&
+                             sig_dump::fa_enabled() &&
+                             (ctx->fa_dumps < sig_dump::fa_max()) &&
+                             (fa_all || ctx->fa_seen.find(fa_key) == ctx->fa_seen.end());
+        // "nodes" desligado => não escrever dados de nó (só o FA).
+        if (!sig_dump::nodes_enabled()) {
+            want = false;
+        }
+        // R37/B1 — RECORTE DE SOFTMAX na fase ASK, independente de "nodes" e do
+        // teto de 64 MiB (que vale para o dump INTEGRAL). A cota pertence ao
+        // contexto da sessao (nao a um static que ignora configure).
+        bool want_sm_slice = false;
+        if (t->op == GGML_OP_SOFT_MAX && sig_dump::softmax_slice_enabled()) {
+            const int cota = sig_dump::softmax_slice_max();
+            if (cota > 0 && ctx->sm_slices < cota &&
+                sig_dump::softmax_slice_rows() > 0 &&
+                sig_dump::softmax_slice_head() >= 0 &&
+                sig_dump::softmax_slice_query0() >= 0) {
+                want_sm_slice = true;
+                want = true;                      // ASK precisa devolver true
+                ctx->sm_asked++;
+                ctx->sm_want[t] = 1;              // marca ESTE tensor para o DONE
+            } else {
+                ctx->sm_recusados++;
+            }
+        }
+        if (want_fa) {
+            ctx->fa_want[t] = 1;
+            ctx->fa_seen[fa_key] = 1;
+        }
+
+        const char * note = "";
+        if (!dtype_ok) {
+            want = false;
+            note = "tipo-nao-capturado";
+        } else if (span > sig_dump::nodes_span_max()) {
+            want = false;
+            note = "span-acima-do-limite";
+        }
+        ctx->node_want[t] = want ? 1 : 0;
+
+        const char * backend_name = "";
+        ggml_backend_t backend = ctx->sched != nullptr ? ggml_backend_sched_get_tensor_backend(ctx->sched, t) : nullptr;
+        if (backend != nullptr) {
+            backend_name = ggml_backend_name(backend);
+        }
+        const char * buffer_name = (t->buffer != nullptr) ? ggml_backend_buffer_name(t->buffer) : "";
+
+        std::string srcs;
+        for (int i = 0; i < GGML_MAX_SRC; ++i) {
+            const struct ggml_tensor * s = t->src[i];
+            if (s == nullptr) {
+                continue;
+            }
+            if (!srcs.empty()) {
+                srcs += ",";
+            }
+            srcs += "{\"name\":\"" + sig_nodes_escape(s->name) + "\",\"op\":\"" + ggml_op_name(s->op) +
+                    "\",\"type\":\"" + ggml_type_name(s->type) + "\",\"ne\":[" +
+                    std::to_string(s->ne[0]) + "," + std::to_string(s->ne[1]) + "," +
+                    std::to_string(s->ne[2]) + "," + std::to_string(s->ne[3]) + "]}";
+        }
+
+        const std::string bin_name = sig_nodes_bin_name(*ctx, topo, comp);
+        const std::string line =
+            std::string("{\"kind\":\"node\",\"run\":") + std::to_string(ctx->run) +
+            ",\"graph\":\"" + sig_nodes_escape(ctx->graph) + "\"" +
+            ",\"call\":" + std::to_string(ctx->call) +
+            ",\"seq\":" + std::to_string(ctx->manifest_seq) +
+            ",\"topo\":" + std::to_string(topo) +
+            ",\"comp\":" + std::to_string(comp) +
+            ",\"name\":\"" + sig_nodes_escape(t->name) + "\"" +
+            ",\"op\":\"" + ggml_op_name(t->op) + "\"" +
+            ",\"type\":\"" + ggml_type_name(t->type) + "\"" +
+            ",\"ne\":[" + std::to_string(t->ne[0]) + "," + std::to_string(t->ne[1]) + "," +
+                          std::to_string(t->ne[2]) + "," + std::to_string(t->ne[3]) + "]" +
+            ",\"nb\":[" + std::to_string((long long) t->nb[0]) + "," + std::to_string((long long) t->nb[1]) + "," +
+                          std::to_string((long long) t->nb[2]) + "," + std::to_string((long long) t->nb[3]) + "]" +
+            ",\"view\":\"" + (t->view_src != nullptr ? sig_nodes_escape(t->view_src->name) : "") + "\"" +
+            ",\"view_offs\":" + std::to_string((long long) t->view_offs) +
+            ",\"backend\":\"" + sig_nodes_escape(backend_name) + "\"" +
+            ",\"buffer\":\"" + sig_nodes_escape(buffer_name) + "\"" +
+            ",\"span\":" + std::to_string((long long) span) +
+            ",\"srcs\":[" + srcs + "]" +
+            ",\"data\":" + (want ? ("\"" + sig_dump::node_data_filename(bin_name.c_str()) + "\"") : std::string("null")) +
+            ",\"note\":\"" + note + "\"}";
+
+        sig_dump::node_manifest(line.c_str());
+        ctx->manifest_seq++;
+        if (want) {
+            ctx->dumps++;
+        }
+        // R38/D1 — o ASK precisa incluir o recorte: o filtro de 64 MiB zera `want`
+        // para o tensor integral, mas o recorte pequeno continua valido.
+        return want || want_fa || want_sm_slice;
+    }
+
+    // ask == false: o scheduler já sincronizou o backend; dados prontos.
+    const size_t span = ggml_nbytes(t);
+    const bool dtype_ok = (t->type == GGML_TYPE_F32 || t->type == GGML_TYPE_F16);
+    const bool node_wanted = (ctx->node_want.find(t) != ctx->node_want.end()) && (ctx->node_want[t] != 0);
+    const bool fa_wanted = ctx->fa_want.find(t) != ctx->fa_want.end();
+
+    // R7/fase D (D2): captura da OP FA real (Q/K/V/mask/dst) — usa os MESMOS
+    // bytes do nó em execução (get respeitando buffer do backend).
+    if (fa_wanted) {
+        // ask=false: dados sincronizados. Entradas (q/k/v/m) + dst da OP.
+        sig_fa_capture_inputs(*ctx, t);
+        sig_fa_capture_dst(*ctx, t);
+        ctx->fa_dumps++;
+    }
+
+    // R37/B1 — RECORTE de softmax com os EIXOS do operador: ne[0] = chaves (eixo
+    // reduzido), ne[1] = queries, ne[2] = heads. Exporta ordem canonica
+    // [head][query][key] para head H e queries [q0, q0+rows). Exige contiguidade
+    // f32 (nb[0]==4): stride nao contiguo e RECUSADO explicitamente, nao lido
+    // errado. Le em UM bloco (rows * nb[1]) em vez de um head inteiro.
+    const bool sm_slice_wanted = ctx->sm_want.find(t) != ctx->sm_want.end();
+    if (t->op == GGML_OP_SOFT_MAX && sig_dump::softmax_slice_enabled() && sm_slice_wanted) {
+        const int head = sig_dump::softmax_slice_head();
+        const int q0 = sig_dump::softmax_slice_query0();
+        const int rows = sig_dump::softmax_slice_rows();
+        const int64_t chaves = t->ne[0];
+        const int64_t queries = t->ne[1];
+        const int64_t heads = t->ne[2];
+        // R38/D2 — leitura por LINHA com offsets absolutos do plano; a base
+        // passada ao backend e o tensor real, nunca um buffer ja deslocado.
+        std::vector<size_t> offs;
+        size_t row_bytes = 0;
+        const sig_dump::SliceErr plan_err = sig_dump::softmax_slice_plan(
+            t->ne, t->nb, sizeof(float), head, q0, rows, span, offs, row_bytes);
+        if (plan_err != sig_dump::SliceErr::OK) {
+            ctx->sm_recusados++;
+            fprintf(stderr, "[sig_nodes] softmax-recorte-recusado comp=%d motivo=%s ne=[%lld,%lld,%lld] nb0=%zu\n",
+                    comp, sig_dump::slice_err_name(plan_err), (long long) t->ne[0], (long long) t->ne[1],
+                    (long long) t->ne[2], (size_t) t->nb[0]);
+            fflush(stderr);
+            return true;
+        }
+        std::vector<float> vals((size_t) rows * (size_t) chaves, 0.0f);
+        bool leitura_ok = true;
+        for (int r = 0; r < rows; ++r) {
+            ggml_backend_tensor_get(t, vals.data() + (size_t) r * (size_t) chaves,
+                                    offs[(size_t) r], row_bytes);
+        }
+        if (!leitura_ok) {
+            ctx->sm_recusados++;
+            return true;
+        }
+        char nome[192];
+        snprintf(nome, sizeof(nome), "%s-sm-h%d-q%d-%d-k0-%lld", t->name, head, q0, q0 + rows - 1,
+                 (long long) (chaves - 1));
+        const std::size_t escrito = sig_dump::slice_data(nome, vals.data(), vals.size());
+        if (escrito == vals.size()) {
+            ctx->sm_slices++;
+        } else {
+            ctx->sm_recusados++;
+        }
+        fprintf(stderr, "[sig_nodes] softmax-recorte comp=%d nome=%s head=%d q0=%d rows=%d chaves=%lld "
+                        "floats=%zu escrito=%zu slices=%d recusados=%d\n",
+                comp, nome, head, q0, rows, (long long) chaves, vals.size(), escrito,
+                ctx->sm_slices, ctx->sm_recusados);
+        fflush(stderr);
+        return true;
+    }
+
+    if (!node_wanted) {
+        return true; // sem recorte de nós para este tensor: nada a escrever
+    }
+    if (!dtype_ok || span == 0 || span > sig_dump::nodes_span_max()) {
+        return true; // nunca interromper o compute (retorno false quebraria o grafo)
+    }
+
+    std::vector<uint8_t> raw(span);
+    ggml_backend_tensor_get(t, raw.data(), 0, span);
+
+    const int64_t n_elem = ggml_nelements(t);
+    std::vector<float> vals((size_t) n_elem);
+    if (ggml_is_contiguous(t)) {
+        if (t->type == GGML_TYPE_F32) {
+            memcpy(vals.data(), raw.data(), (size_t) n_elem * sizeof(float));
+        } else {
+            const ggml_fp16_t * p = (const ggml_fp16_t *) raw.data();
+            for (int64_t i = 0; i < n_elem; ++i) {
+                vals[(size_t) i] = ggml_fp16_to_fp32(p[i]);
+            }
+        }
+    } else {
+        // linearização respeitando strides (ordem lógica ggml: i0 mais rápido)
+        size_t idx = 0;
+        for (int64_t i3 = 0; i3 < t->ne[3]; ++i3) {
+            for (int64_t i2 = 0; i2 < t->ne[2]; ++i2) {
+                for (int64_t i1 = 0; i1 < t->ne[1]; ++i1) {
+                    for (int64_t i0 = 0; i0 < t->ne[0]; ++i0) {
+                        const size_t off = (size_t) (i0*t->nb[0] + i1*t->nb[1] + i2*t->nb[2] + i3*t->nb[3]);
+                        if (t->type == GGML_TYPE_F32) {
+                            float v = 0.0f;
+                            memcpy(&v, raw.data() + off, sizeof(float));
+                            vals[idx] = v;
+                        } else {
+                            ggml_fp16_t v;
+                            memcpy(&v, raw.data() + off, sizeof(ggml_fp16_t));
+                            vals[idx] = ggml_fp16_to_fp32(v);
+                        }
+                        idx++;
+                    }
+                }
+            }
+        }
+    }
+
+    const std::string bin_name = sig_nodes_bin_name(*ctx, topo, comp);
+    const std::size_t escrito = sig_dump::node_data(bin_name.c_str(), vals.data(), vals.size());
+    // R25/FIX 3.2 — RESULTADO DA ESCRITA, verificavel. O `data` anunciado no
+    // ask NAO e prova de arquivo; esta linha e (floats escritos x esperados).
+    {
+        const std::string linha =
+            std::string("{\"kind\":\"node_write\",\"run\":") + std::to_string(ctx->run) +
+            ",\"graph\":\"" + sig_nodes_escape(ctx->graph) + "\"" +
+            ",\"call\":" + std::to_string(ctx->call) +
+            ",\"comp\":" + std::to_string(comp) +
+            ",\"data\":\"" + sig_dump::node_data_filename(bin_name.c_str()) + "\"" +
+            ",\"floats\":" + std::to_string(escrito) +
+            ",\"esperado\":" + std::to_string(vals.size()) +
+            ",\"ok\":" + (escrito == vals.size() ? "true" : "false") + "}";
+        sig_dump::node_manifest(linha.c_str());
+    }
+    return true;
+}
+
+// r4/A: fase do grafo + N-ésima chamada => identidade lógica estável para o
+// comparador (graph/run/call; topo/comp de execução são só informação).
+static bool sig_nodes_graph_allowed(const char * graph) {
+    const char * value = getenv("SIG_WHISPER_DUMP_GRAPHS");
+    const std::string list = (value != nullptr && value[0] != '\0') ? value : "enc";
+    if (list == "all") {
+        return true;
+    }
+    size_t pos = 0;
+    while (pos <= list.size()) {
+        const size_t comma = list.find(',', pos);
+        const std::string tok = list.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos);
+        if (tok == graph) {
+            return true;
+        }
+        if (comma == std::string::npos) {
+            break;
+        }
+        pos = comma + 1;
+    }
+    return false;
+}
+
+static int sig_nodes_dec_calls() {
+    const char * value = getenv("SIG_WHISPER_DUMP_DEC_CALLS");
+    return (value != nullptr && value[0] != '\0') ? atoi(value) : 3;
+}
+
+static int sig_nodes_next_call(const char * graph) {
+    static std::unordered_map<std::string, int> counter;
+    auto it = counter.find(graph);
+    const int v = (it == counter.end()) ? 0 : it->second;
+    counter[graph] = v + 1;
+    return v;
+}
+
+static void sig_nodes_prepare(ggml_backend_sched_t sched, capture_ctx & ctx, const char * graph, int call) {
+    static int run_counter = 0;
+    ctx.run = run_counter++;
+    ctx.graph = graph;
+    ctx.call = call;
+    ctx.sched = sched;
+    fprintf(stderr, "[sig_nodes] run=%d graph=%s call=%d iniciando captura por no (SIG_WHISPER_DUMP=nodes)\n",
+            ctx.run, ctx.graph, ctx.call);
+}
+
+static void sig_nodes_finish(const capture_ctx & ctx) {
+    fprintf(stderr, "[sig_nodes] run=%d graph=%s call=%d fim: visitados=%d manifest=%d dumps=%d\n",
+            ctx.run, ctx.graph, ctx.call, ctx.visited, ctx.manifest_seq, ctx.dumps);
+}
+
+// FNV-1a 64 (leitura pura): prova de NÃO-mutação de pesos/mel entre pre/post.
+static uint64_t sig_nodes_fnv64(const void * data, size_t len) {
+    const uint8_t * p = (const uint8_t *) data;
+    uint64_t h = 1469598103934665603ull;
+    for (size_t i = 0; i < len; ++i) {
+        h ^= p[i];
+        h *= 1099511628211ull;
+    }
+    return h;
+}
+
+static void sig_nodes_probe_tensor(const char * phase, const char * role, const struct ggml_tensor * t) {
+    if (t == nullptr || t->buffer == nullptr) {
+        return;
+    }
+    const size_t span = ggml_nbytes(t);
+    if (span == 0 || span > (64u << 20)) {
+        return;
+    }
+    std::vector<uint8_t> raw(span);
+    ggml_backend_tensor_get(t, raw.data(), 0, span);
+    fprintf(stderr, "[sig_nodes] probe %s %s span=%zu fnv64=%016llx\n",
+            phase, role, span, (unsigned long long) sig_nodes_fnv64(raw.data(), span));
+}
+
+static void sig_nodes_probe(whisper_context & wctx, whisper_state & wstate, const char * phase) {
+    if (!sig_dump::nodes_enabled()) {
+        return;
+    }
+    // pesos-alvo (conv1/conv2/positional embedding) — podem estar em buffer de GPU
+    sig_nodes_probe_tensor(phase, "e_conv_1_w", wctx.model.e_conv_1_w);
+    sig_nodes_probe_tensor(phase, "e_conv_2_w", wctx.model.e_conv_2_w);
+    sig_nodes_probe_tensor(phase, "e_pe",       wctx.model.e_pe);
+    // mel de entrada (buffer de host)
+    if (!wstate.inp_mel.empty()) {
+        fprintf(stderr, "[sig_nodes] probe %s inp_mel_bytes=%zu fnv64=%016llx\n",
+                phase, wstate.inp_mel.size()*sizeof(float),
+                (unsigned long long) sig_nodes_fnv64(wstate.inp_mel.data(), wstate.inp_mel.size()*sizeof(float)));
+    }
+}
+
+} // namespace sig_nodes
+#endif // SIG_WHISPER_DUMP_HOOK
+
+static sig_step_result whisper_encode_internal(
         whisper_context & wctx,
           whisper_state & wstate,
               const int   mel_offset,
@@ -2363,6 +3332,14 @@ static bool whisper_encode_internal(
     ggml_abort_callback   abort_callback,
                    void * abort_callback_data) {
     const int64_t t_start_us = ggml_time_us();
+
+    // R6/fase E (E1): cancelamento já pendente não espera o primeiro grafo.
+    if (abort_callback != nullptr && abort_callback(abort_callback_data)) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+        sig_cancel_trace::emit("SIGCANCEL", "pre_step", "stage=conv status=aborted");
+#endif
+        return SIG_STEP_ABORTED;
+    }
 
     // conv
     {
@@ -2372,7 +3349,7 @@ static bool whisper_encode_internal(
 
         if (!ggml_backend_sched_alloc_graph(sched, gf)) {
             // should never happen as we pre-allocate the memory
-            return false;
+            return SIG_STEP_FAILED;
         }
 
         struct ggml_tensor * mel = ggml_graph_get_tensor(gf, "mel");
@@ -2402,9 +3379,44 @@ static bool whisper_encode_internal(
             ggml_backend_tensor_set(mel, wstate.inp_mel.data(), 0, ggml_nelements(mel)*sizeof(float));
         }
 
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // R2/fase C (C2): dump diagnóstico do mel de entrada do encoder.
+        sig_dump::dump_f32("mel", wstate.inp_mel.data(), wstate.inp_mel.size());
+#endif
+
         if (!whisper_encode_external(wstate)) {
-            if (!ggml_graph_compute_helper(sched, gf, n_threads)) {
-                return false;
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // r4/A: captura opt-in do grafo conv (fase "enc-conv"); default desligada —
+            // ligue com SIG_WHISPER_DUMP_GRAPHS="enc,enc-conv,decoder" em baterias.
+            sig_nodes::capture_ctx sig_nodes_capture_conv;
+            const bool sig_nodes_on_conv = sig_dump::nodes_enabled() && sig_nodes::sig_nodes_graph_allowed("enc-conv");
+            if (sig_nodes_on_conv) {
+                sig_nodes::sig_nodes_prepare(sched, sig_nodes_capture_conv, "enc-conv",
+                                             sig_nodes::sig_nodes_next_call("enc-conv"));
+                ggml_backend_sched_set_eval_callback(sched, sig_nodes::sig_nodes_callback, &sig_nodes_capture_conv);
+            }
+#endif
+            // R6/fase E (E1): o abort do job segue para o compute do conv.
+#ifdef SIG_WHISPER_DUMP_HOOK
+            if (sig_cancel_trace::enabled()) {
+                sig_cancel_trace::stage("enter", "conv", nullptr);
+            }
+#endif
+            const enum ggml_status sig_conv_status = ggml_graph_compute_helper(sched, gf, n_threads, abort_callback, abort_callback_data);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            if (sig_cancel_trace::enabled()) {
+                sig_cancel_trace::stage("exit", "conv", sig_ggml_status_name(sig_conv_status));
+            }
+            if (sig_nodes_on_conv) {
+                ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
+                sig_nodes::sig_nodes_finish(sig_nodes_capture_conv);
+            }
+#endif
+            if (sig_conv_status == GGML_STATUS_ABORTED) {
+                return SIG_STEP_ABORTED;
+            }
+            if (sig_conv_status != GGML_STATUS_SUCCESS) {
+                return SIG_STEP_FAILED;
             }
         } else {
             ggml_backend_sched_reset(sched);
@@ -2425,12 +3437,68 @@ static bool whisper_encode_internal(
 
         if (!ggml_backend_sched_alloc_graph(sched, gf)) {
             // should never happen as we pre-allocate the memory
-            return false;
+            return SIG_STEP_FAILED;
         }
 
-        if (!ggml_graph_compute_helper(sched, gf, n_threads)) {
-            return false;
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // R3/fase D (D1): captura por nó (SIG_WHISPER_DUMP=nodes). O callback
+        // é SEMPRE limpo após o compute (mesmo em falha) para não deixar
+        // ponteiro pendurado no scheduler.
+        sig_nodes::capture_ctx sig_nodes_capture;
+        const bool sig_fa_only = sig_dump::fa_enabled() && !sig_dump::nodes_enabled();
+        // R37/B1 — o kind "softmax" TAMBEM instala o callback (era o defeito raiz:
+        // com kinds mel,enc,softmax o callback nunca era registrado e nao havia
+        // ASK nem DONE).
+        const bool sig_sm_only = sig_dump::softmax_slice_enabled() && !sig_dump::nodes_enabled() &&
+                                 !sig_dump::fa_enabled();
+        const bool sig_nodes_on = (sig_dump::nodes_enabled() || sig_dump::fa_enabled() ||
+                                   sig_dump::softmax_slice_enabled()) &&
+                                  (sig_fa_only || sig_sm_only || sig_nodes::sig_nodes_graph_allowed("enc"));
+        if (sig_nodes_on) {
+            sig_nodes::sig_nodes_prepare(sched, sig_nodes_capture, "enc", sig_nodes::sig_nodes_next_call("enc"));
+            sig_nodes::sig_nodes_probe(wctx, wstate, "pre");
+            ggml_backend_sched_set_eval_callback(sched, sig_nodes::sig_nodes_callback, &sig_nodes_capture);
         }
+#endif
+
+        // R6/fase E (E1): o abort do job segue para o compute do encoder.
+#ifdef SIG_WHISPER_DUMP_HOOK
+        if (sig_cancel_trace::enabled()) {
+            sig_cancel_trace::stage("enter", "enc", nullptr);
+        }
+#endif
+        const enum ggml_status sig_encode_status = ggml_graph_compute_helper(sched, gf, n_threads, abort_callback, abort_callback_data);
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+        if (sig_cancel_trace::enabled()) {
+            sig_cancel_trace::stage("exit", "enc", sig_ggml_status_name(sig_encode_status));
+        }
+        if (sig_nodes_on) {
+            ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
+            sig_nodes::sig_nodes_finish(sig_nodes_capture);
+            if (sig_encode_status == GGML_STATUS_SUCCESS) {
+                sig_nodes::sig_nodes_probe(wctx, wstate, "post");
+            }
+        }
+#endif
+
+        if (sig_encode_status == GGML_STATUS_ABORTED) {
+            return SIG_STEP_ABORTED;
+        }
+        if (sig_encode_status != GGML_STATUS_SUCCESS) {
+            return SIG_STEP_FAILED;
+        }
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // R2/fase C (C2): dump diagnóstico da saída do encoder (embd_enc),
+        // lida de volta do backend efetivo (Vulkan/OpenCL/CPU).
+        if (wstate.embd_enc != nullptr) {
+            const size_t n_el = (size_t) ggml_nelements(wstate.embd_enc);
+            std::vector<float> enc_buf(n_el);
+            ggml_backend_tensor_get(wstate.embd_enc, enc_buf.data(), 0, n_el*sizeof(float));
+            sig_dump::dump_f32("enc", enc_buf.data(), n_el);
+        }
+#endif
     }
 
     // cross
@@ -2441,18 +3509,56 @@ static bool whisper_encode_internal(
 
         if (!ggml_backend_sched_alloc_graph(sched, gf)) {
             // should never happen as we pre-allocate the memory
-            return false;
+            return SIG_STEP_FAILED;
         }
 
-        if (!ggml_graph_compute_helper(sched, gf, n_threads)) {
-            return false;
+        // R6/fase E (E1): o abort do job segue para o compute do cross.
+#ifdef SIG_WHISPER_DUMP_HOOK
+        const int sig_cross_call = sig_kv::next_call("cross");
+        sig_kv::trace_graph(gf, "cross", "before", sig_cross_call);
+        // R10/C1: captura POR NO do grafo CROSS (o PRODUTOR do cache cross K/V que
+        // alimenta as views leaf_2/leaf_5 do 1o decoder). Antes este grafo nao era
+        // capturado => o 1o delta (view do cache) ficava sem produtor identificado.
+        sig_nodes::capture_ctx sig_nodes_capture_cross;
+        bool sig_nodes_on_cross = false;
+        if (sig_dump::nodes_enabled() && sig_nodes::sig_nodes_graph_allowed("cross")) {
+            sig_nodes::sig_nodes_prepare(sched, sig_nodes_capture_cross, "cross",
+                                         sig_nodes::sig_nodes_next_call("cross"));
+            ggml_backend_sched_set_eval_callback(sched, sig_nodes::sig_nodes_callback, &sig_nodes_capture_cross);
+            sig_nodes_on_cross = true;
+        }
+        if (sig_cancel_trace::enabled()) {
+            sig_cancel_trace::stage("enter", "cross", nullptr);
+        }
+#endif
+        const enum ggml_status sig_cross_status = ggml_graph_compute_helper(sched, gf, n_threads, abort_callback, abort_callback_data);
+#ifdef SIG_WHISPER_DUMP_HOOK
+        if (sig_nodes_on_cross) {
+            ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
+            sig_nodes::sig_nodes_finish(sig_nodes_capture_cross);
+        }
+        sig_kv::trace_graph(gf, "cross", "after", sig_cross_call);
+        if (sig_cancel_trace::enabled()) {
+            sig_cancel_trace::stage("exit", "cross", sig_ggml_status_name(sig_cross_status));
+        }
+#endif
+        if (sig_cross_status == GGML_STATUS_ABORTED) {
+            return SIG_STEP_ABORTED;
+        }
+        if (sig_cross_status != GGML_STATUS_SUCCESS) {
+            return SIG_STEP_FAILED;
         }
     }
 
     wstate.t_encode_us += ggml_time_us() - t_start_us;
     wstate.n_encode++;
 
-    return !(abort_callback && abort_callback(abort_callback_data));
+    // R6/fase E (E1): cancelamento chegando entre fases também é desfecho
+    // explícito de abort (nunca "falha numérica").
+    if (abort_callback != nullptr && abort_callback(abort_callback_data)) {
+        return SIG_STEP_ABORTED;
+    }
+    return SIG_STEP_OK;
 }
 
 static struct ggml_cgraph * whisper_build_graph_decoder(
@@ -2678,16 +3784,24 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
                         0, 2, 1, 3);
 
             if (wctx.params.flash_attn) {
+                // R7/fase D (D1) — mesmo contrato do encoder: a view cross expõe
+                // SOMENTE n_audio_ctx posições LÓGICAS. Antes (n_audio_ctx_pad,
+                // GGML_PAD(·,256)) as 36 chaves extras do padding do cache cross
+                // participavam da softmax com mask=nullptr — erro sistemático
+                // (K=0 → exp(0) no denominador) e arbitrário com padding sujo
+                // (ctx dinâmico menor após uma chamada maior). O offset POR
+                // CAMADA (il*n_state*n_audio_ctx_pad) NÃO muda: é armazenamento;
+                // o que muda é quantas chaves a atenção enxerga.
                 struct ggml_tensor * Kcross =
                     ggml_view_3d(ctx0, wstate.kv_cross.k,
-                            n_state_head, n_audio_ctx_pad, n_head,
+                            n_state_head, n_audio_ctx, n_head,
                             ggml_element_size(wstate.kv_cross.k)*n_state,
                             ggml_element_size(wstate.kv_cross.k)*n_state_head,
                             ggml_element_size(wstate.kv_cross.k)*n_state*n_audio_ctx_pad*il);
 
                 struct ggml_tensor * Vcross =
                     ggml_view_3d(ctx0, wstate.kv_cross.v,
-                            n_state_head, n_audio_ctx_pad, n_head,
+                            n_state_head, n_audio_ctx, n_head,
                             ggml_element_size(wstate.kv_cross.v)*n_state,
                             ggml_element_size(wstate.kv_cross.v)*n_state_head,
                             ggml_element_size(wstate.kv_cross.v)*n_state*n_audio_ctx_pad*il);
@@ -2696,19 +3810,26 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 
                 cur = ggml_reshape_2d(ctx0, cur, n_state, n_tokens);
             } else {
+                // R10/fase C (C3) — mesmo SLOT de camada do PRODUTOR (n_audio_ctx_pad):
+                // o cache cross e alocado com GGML_PAD(n_audio_ctx,256) posicoes por
+                // camada (canario C2: 9.437.184 B = 512*6*1536*2). O produtor do grafo
+                // cross (FA-off) e esta view FA-off usavam n_audio_ctx como passo de
+                // camada — uma segunda planta para o mesmo cache. O interior da camada
+                // (nb1/nb2 abaixo) continua com n_audio_ctx: so o deslocamento por
+                // camada passa a coincidir com a alocacao e com o caminho FA.
                 struct ggml_tensor * Kcross =
                     ggml_view_3d(ctx0, wstate.kv_cross.k,
                             n_state_head, n_audio_ctx, n_head,
                             ggml_element_size(wstate.kv_cross.k)*n_state,
                             ggml_element_size(wstate.kv_cross.k)*n_state_head,
-                            ggml_element_size(wstate.kv_cross.k)*n_state*n_audio_ctx*il);
+                            ggml_element_size(wstate.kv_cross.k)*n_state*n_audio_ctx_pad*il);
 
                 struct ggml_tensor * Vcross =
                     ggml_view_3d(ctx0, wstate.kv_cross.v,
                             n_audio_ctx, n_state_head, n_head,
                             n_audio_ctx*ggml_element_size(wstate.kv_cross.v),
                             n_audio_ctx*ggml_element_size(wstate.kv_cross.v)*n_state_head,
-                            n_audio_ctx*ggml_element_size(wstate.kv_cross.v)*n_state*il);
+                            n_audio_ctx_pad*ggml_element_size(wstate.kv_cross.v)*n_state*il);
 
                 // ------
 
@@ -2845,7 +3966,7 @@ static struct ggml_cgraph * whisper_build_graph_decoder(
 //   - n_tokens:   number of tokens in the prompt
 //   - n_past:     number of past tokens to prefix the prompt with
 //
-static bool whisper_decode_internal(
+static sig_step_result whisper_decode_internal(
         whisper_context & wctx,
           whisper_state & wstate,
     const whisper_batch & batch,
@@ -2854,6 +3975,14 @@ static bool whisper_decode_internal(
     ggml_abort_callback   abort_callback,
                    void * abort_callback_data) {
     const int64_t t_start_us = ggml_time_us();
+
+    // R6/fase E (E1): cancelamento já pendente não espera o grafo do decoder.
+    if (abort_callback != nullptr && abort_callback(abort_callback_data)) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+        sig_cancel_trace::emit("SIGCANCEL", "pre_step", "stage=dec status=aborted");
+#endif
+        return SIG_STEP_ABORTED;
+    }
 
     const auto & model   = wctx.model;
     const auto & hparams = model.hparams;
@@ -2870,7 +3999,7 @@ static bool whisper_decode_internal(
         auto & kv_self = wstate.kv_self;
 
         if (!whisper_kv_cache_find_slot(kv_self, batch)) {
-            return false;
+            return SIG_STEP_FAILED;
         }
 
         const uint32_t pad = whisper_kv_cache_get_padding(wctx);
@@ -2888,7 +4017,7 @@ static bool whisper_decode_internal(
 
         if (!ggml_backend_sched_alloc_graph(sched, gf)) {
             // should never happen as we pre-allocate the memory
-            return false;
+            return SIG_STEP_FAILED;
         }
 
         // set the inputs
@@ -2941,8 +4070,48 @@ static bool whisper_decode_internal(
 
         logits = ggml_graph_node(gf, -1);
 
-        if (!ggml_graph_compute_helper(sched, gf, n_threads)) {
-            return false;
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // r4/A: captura opt-in do grafo decoder por passo (SIG_WHISPER_DUMP_GRAPHS
+        // precisa conter "decoder"; limite SIG_WHISPER_DUMP_DEC_CALLS, default 3).
+        sig_nodes::capture_ctx sig_nodes_capture_dec;
+        bool sig_nodes_on_dec = false;
+        const bool sig_fa_only_dec = sig_dump::fa_enabled() && !sig_dump::nodes_enabled();
+        if ((sig_dump::nodes_enabled() || sig_dump::fa_enabled()) &&
+            (sig_fa_only_dec || sig_nodes::sig_nodes_graph_allowed("decoder"))) {
+            const int sig_dec_call = sig_nodes::sig_nodes_next_call("decoder");
+            if (sig_fa_only_dec ? (sig_dec_call < sig_dump::fa_calls()) : (sig_dec_call < sig_nodes::sig_nodes_dec_calls())) {
+                sig_nodes::sig_nodes_prepare(sched, sig_nodes_capture_dec, "decoder", sig_dec_call);
+                ggml_backend_sched_set_eval_callback(sched, sig_nodes::sig_nodes_callback, &sig_nodes_capture_dec);
+                sig_nodes_on_dec = true;
+            }
+        }
+        const int sig_dec_call_kv = sig_kv::next_call("decoder");
+        sig_kv::trace_graph(gf, "decoder", "before", sig_dec_call_kv);
+#endif
+
+        // R6/fase E (E1): o abort do job segue para o compute do decoder.
+#ifdef SIG_WHISPER_DUMP_HOOK
+        const bool sig_dec_trace = sig_cancel_trace::enabled() && sig_cancel_trace::decoder_trace_allowed();
+        if (sig_dec_trace) {
+            sig_cancel_trace::stage("enter", "dec", nullptr);
+        }
+#endif
+        const enum ggml_status sig_dec_status = ggml_graph_compute_helper(sched, gf, n_threads, abort_callback, abort_callback_data);
+#ifdef SIG_WHISPER_DUMP_HOOK
+        if (sig_dec_trace) {
+            sig_cancel_trace::stage("exit", "dec", sig_ggml_status_name(sig_dec_status));
+        }
+        if (sig_nodes_on_dec) {
+            ggml_backend_sched_set_eval_callback(sched, nullptr, nullptr);
+            sig_nodes::sig_nodes_finish(sig_nodes_capture_dec);
+        }
+        sig_kv::trace_graph(gf, "decoder", "after", sig_dec_call_kv);
+#endif
+        if (sig_dec_status == GGML_STATUS_ABORTED) {
+            return SIG_STEP_ABORTED;
+        }
+        if (sig_dec_status != GGML_STATUS_SUCCESS) {
+            return SIG_STEP_FAILED;
         }
     }
 
@@ -2953,6 +4122,17 @@ static bool whisper_decode_internal(
         }
         ggml_backend_tensor_get(logits, logits_out.data() + (n_vocab*i), sizeof(float)*(n_vocab*i), sizeof(float)*n_vocab);
     }
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R2/fase C (C2): dump diagnóstico dos logits crus do grafo por passo de
+    // decoder (os primeiros SIG_WHISPER_DUMP_STEPS passos; default 3).
+    for (int i = 0; i < n_tokens; i++) {
+        if (batch.logits[i] == 0) {
+            continue;
+        }
+        sig_dump::dump_f32_step("logits", logits_out.data() + (n_vocab*i), n_vocab);
+    }
+#endif
 
     if (batch.n_tokens > 1) {
         //printf("%s: used_mem = %f MB, %f MB, %f MB %f MB %f MB\n", __func__,
@@ -2974,7 +4154,12 @@ static bool whisper_decode_internal(
         wstate.n_prompt += n_tokens;
     }
 
-    return !(abort_callback && abort_callback(abort_callback_data));
+    // R6/fase E (E1): cancelamento chegando entre fases também é desfecho
+    // explícito de abort (nunca "falha numérica").
+    if (abort_callback != nullptr && abort_callback(abort_callback_data)) {
+        return SIG_STEP_ABORTED;
+    }
+    return SIG_STEP_OK;
 }
 
 //  500 -> 00:05.000
@@ -3425,6 +4610,16 @@ struct whisper_state * whisper_init_state(whisper_context * ctx) {
         const size_t memory_size = ggml_nbytes(state->kv_pad.k) + ggml_nbytes(state->kv_pad.v);
         WHISPER_LOG_INFO("%s: kv pad  size  = %7.2f MB\n", __func__, memory_size / 1e6);
     }
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R10/C (C1+C2): registra os buffers do cache (mapeia offset->posicao) e, se
+    // SIG_WHISPER_KV_CANARY estiver ativo, enche-os com um padrao CONHECIDO antes do
+    // 1o grafo (distingue regiao escrita/usada/padding/guarda). Diagnostico puro: nao
+    // ha nenhuma correcao de comportamento aqui (o clear=0 normal ja ocorreu em init).
+    sig_kv::register_kv("self",  state->kv_self.k,  state->kv_self.v);
+    sig_kv::register_kv("cross", state->kv_cross.k, state->kv_cross.v);
+    sig_kv::canary_go();
+#endif
 
     // [EXPERIMENTAL] Token-level timestamps with DTW
     if (ctx->params.dtw_token_timestamps) {
@@ -3915,7 +5110,7 @@ int whisper_set_mel(
 }
 
 int whisper_encode_with_state(struct whisper_context * ctx, struct whisper_state * state, int offset, int n_threads) {
-    if (!whisper_encode_internal(*ctx, *state, offset, n_threads, nullptr, nullptr)) {
+    if (whisper_encode_internal(*ctx, *state, offset, n_threads, nullptr, nullptr) != SIG_STEP_OK) {
         WHISPER_LOG_ERROR("%s: failed to eval\n", __func__);
         return -1;
     }
@@ -3924,7 +5119,7 @@ int whisper_encode_with_state(struct whisper_context * ctx, struct whisper_state
 }
 
 int whisper_encode(struct whisper_context * ctx, int offset, int n_threads) {
-    if (!whisper_encode_internal(*ctx, *ctx->state, offset, n_threads, nullptr, nullptr)) {
+    if (whisper_encode_internal(*ctx, *ctx->state, offset, n_threads, nullptr, nullptr) != SIG_STEP_OK) {
         WHISPER_LOG_ERROR("%s: failed to eval\n", __func__);
         return -1;
     }
@@ -3937,7 +5132,7 @@ int whisper_decode_with_state(struct whisper_context * ctx, struct whisper_state
 
     whisper_kv_cache_seq_rm(state->kv_self, 0, n_past, -1);
 
-    if (!whisper_decode_internal(*ctx, *state, state->batch, n_threads, false, nullptr, nullptr)) {
+    if (whisper_decode_internal(*ctx, *state, state->batch, n_threads, false, nullptr, nullptr) != SIG_STEP_OK) {
         WHISPER_LOG_ERROR("%s: failed to eval\n", __func__);
         return 1;
     }
@@ -5147,7 +6342,11 @@ bool whisper_vad_detect_speech_no_reset(
         ggml_backend_tensor_set(frame, window.data(), 0, ggml_nelements(frame) * sizeof(float));
 
         // do not reset the scheduler - we will reuse the graph in the next chunk
-        if (!ggml_graph_compute_helper(sched, gf, vctx->n_threads, false)) {
+        // R6/fase E (E1): VAD mantém seu próprio compute SEM o callback de
+        // transcrição (fragmentos curtos, fora do job); o argumento explícito
+        // evita ambiguidade com os parâmetros novos do helper. O helper devolve
+        // ggml_status (0 = SUCCESS) — nada de `!status`.
+        if (ggml_graph_compute_helper(sched, gf, vctx->n_threads, nullptr, nullptr, false) != GGML_STATUS_SUCCESS) {
             WHISPER_LOG_ERROR("%s: failed to compute VAD graph\n", __func__);
             break;
         }
@@ -6451,6 +7650,302 @@ static bool whisper_sequence_tokens_equal(const whisper_sequence & a, const whis
     return true;
 }
 
+#ifdef SIG_WHISPER_DUMP_HOOK
+// ---------------------------------------------------------------------------
+// R6/fase B (B1) — teacher forcing / replay de prefixo fixo (SOMENTE DIAG).
+// Este bloco NÃO existe no build normal (SIG_WHISPER_DUMP_HOOK ausente).
+//
+// Ponto de intervenção: imediatamente após a amostragem normal de cada passo
+// do decoder (whisper_sample_token / whisper_sample_token_topk). O token
+// amostrado é REGISTRADO (modo record) e, em modo replay, é SUBSTITUÍDO pelo
+// próximo id da sequência gravada — sem re-escolher por argmax/sampling. O
+// sampler normal continua sendo chamado antes (preserva RNG/estado), e nada
+// mais do decode (prompt/KV/timestamps/filtros/temperatura) é alterado.
+//
+// Envs (ver sig_whisper_dump.h): SIG_WHISPER_TF_FILE, SIG_WHISPER_TF_RECORD.
+// Hashes: FNV-1a 64 (offset 14695981039346656037, prime 1099511628211) sobre
+// bytes: token ids como int32 LE; vetores f32 como bytes crus; os campos
+// "pre"/"post" cobrem a lista COMPLETA de ids consumidos (prompt + tokens já
+// amostrados, e + o token escolhido neste passo, respectivamente).
+namespace sig_tf_impl {
+
+static const uint64_t kFnvOff = 14695981039346656037ULL;
+static const uint64_t kFnvPrime = 1099511628211ULL;
+
+static uint64_t fnv_bytes(uint64_t h, const void * data, std::size_t n) {
+    const uint8_t * p = reinterpret_cast<const uint8_t *>(data);
+    for (std::size_t i = 0; i < n; ++i) {
+        h ^= p[i];
+        h *= kFnvPrime;
+    }
+    return h;
+}
+
+static uint64_t fnv_i32(const whisper_token * v, std::size_t n) {
+    uint64_t h = kFnvOff;
+    for (std::size_t i = 0; i < n; ++i) {
+        const int32_t x = static_cast<int32_t>(v[i]);
+        h = fnv_bytes(h, &x, sizeof(x));
+    }
+    return h;
+}
+
+static uint64_t fnv_f32(const float * v, std::size_t n) {
+    return fnv_bytes(kFnvOff, v, n * sizeof(float));
+}
+
+static const char * hex64(uint64_t value) {
+    // ring de 4 buffers: permite usar hex64() varias vezes nos args do MESMO
+    // snprintf (ex.: pre/post/raw/proc) sem que um sobrescreva o outro.
+    static thread_local char buffer[4][24];
+    static thread_local int slot = 0;
+    char * b = buffer[slot++ & 3];
+    snprintf(b, 24, "0x%016llx", static_cast<unsigned long long>(value));
+    return b;
+}
+
+// Estado do prompt em vigor (reconstruído no início de cada segmento/tentativa
+// de temperatura e usado para hashear o prefixo consumido por passo).
+struct tf_prompt {
+    uint64_t fnv = 0;
+    int n = 0;
+    int seek = 0;
+    int valid = 0;
+};
+static tf_prompt g_tf_prompt;
+
+static std::atomic<uint64_t> g_tf_call {0};
+
+static void note_prompt(const whisper_token * ids, int n, int seek, float temp, int iter) {
+    g_tf_prompt.fnv = (n > 0) ? fnv_i32(ids, static_cast<std::size_t>(n)) : kFnvOff;
+    g_tf_prompt.n = n;
+    g_tf_prompt.seek = seek;
+    g_tf_prompt.valid = 1;
+    if (!sig_tf::record_active()) {
+        return;
+    }
+    std::string ids_csv;
+    ids_csv.reserve(static_cast<std::size_t>(n) * 6);
+    for (int i = 0; i < n; ++i) {
+        if (i > 0) ids_csv += ',';
+        ids_csv += std::to_string(ids[i]);
+    }
+    char line[8192];
+    snprintf(line, sizeof(line),
+             "{\"ev\":\"prompt\",\"seek\":%d,\"iter\":%d,\"temp\":%.9g,\"pn\":%d,\"pfnv\":\"%s\",\"ids\":\"%s\"}",
+             seek, iter, temp, n, hex64(g_tf_prompt.fnv), ids_csv.c_str());
+    sig_tf::note_step_line(line);
+}
+
+// Chamado APÓS a amostragem normal de um passo do decoder (qualquer strategy).
+// - record: grava evento do passo + id escolhido em <pref>.ids.txt.
+// - replay: id forçado substitui o amostrado; retorna pelo parâmetro.
+// Retorna o id efetivamente escolhido.
+static whisper_token_data note_and_maybe_force(
+        whisper_context & ctx,
+        whisper_state * state,
+        whisper_decoder & decoder,
+        whisper_token_data sampled,
+        bool sampled_is_random_draw,
+        int n_cand,
+        int dec_idx, int i_step, int iter, float temp, int n_past, int prompt_n) {
+    if (n_cand > 1) {
+        // TF só é definido para beam_size=1 (1 candidato por passo). Com mais
+        // candidatos o replay não teria uma sequência única — recusa explícita.
+        static std::atomic<int> warned {0};
+        if (warned.fetch_add(1) == 0) {
+            fprintf(stderr, "[TF] %d candidatos por passo: teacher forcing NAO suportado; amostragem normal\n", n_cand);
+        }
+        return sampled;
+    }
+    const int n_vocab = static_cast<int>(ctx.vocab.n_vocab);
+    const whisper_token sampled_id = sampled.id;
+
+    const int forced_raw = sig_tf::next_forced();
+    const bool forced_ok = (forced_raw >= 0 && forced_raw < n_vocab);
+
+    whisper_token_data chosen = sampled;
+    if (forced_ok) {
+        chosen.id   = static_cast<whisper_token>(forced_raw);
+        chosen.p    = decoder.probs[chosen.id];
+        chosen.plog = decoder.logprobs[chosen.id];
+        if (chosen.id >= ctx.vocab.token_beg) {
+            chosen.tid = chosen.id;
+            chosen.pt  = chosen.p;
+        }
+        // o token amostrado "sorteado" mantém tid/pt originais (só o id muda)
+    } else if (forced_raw >= 0) {
+        static std::atomic<int> warned {0};
+        if (warned.fetch_add(1) == 0) {
+            fprintf(stderr, "[TF] id forçado %d fora do vocab (%d); ignorado\n", forced_raw, n_vocab);
+        }
+    }
+
+    if (!sig_tf::record_active()) {
+        return chosen;
+    }
+
+    const uint64_t call = g_tf_call.fetch_add(1);
+    const uint64_t pre = (g_tf_prompt.valid ? g_tf_prompt.fnv : kFnvOff);
+
+    uint64_t h = pre;
+    for (const auto & t : decoder.sequence.tokens) {
+        const int32_t x = static_cast<int32_t>(t.id);
+        h = fnv_bytes(h, &x, sizeof(x));
+    }
+    const uint64_t post = [&]() {
+        uint64_t hh = h;
+        const int32_t x = static_cast<int32_t>(chosen.id);
+        return fnv_bytes(hh, &x, sizeof(x));
+    }();
+
+    uint64_t raw_fnv = 0;
+    if (state != nullptr && decoder.i_batch >= 0) {
+        const float * raw = state->logits.data() + static_cast<std::size_t>(decoder.i_batch) * n_vocab;
+        raw_fnv = fnv_f32(raw, static_cast<std::size_t>(n_vocab));
+    }
+    const uint64_t proc_fnv = fnv_f32(decoder.logits.data(), static_cast<std::size_t>(decoder.logits.size()));
+
+    char plog_json[96];
+    sig_tf_json_float("plog", static_cast<double>(chosen.plog), plog_json, sizeof(plog_json));
+    char line[1024];
+    snprintf(line, sizeof(line),
+             "{\"ev\":\"step\",\"call\":%llu,\"dec\":%d,\"i\":%d,\"iter\":%d,\"temp\":%.9g,"
+             "\"kv\":%d,\"pn\":%d,\"ib\":%d,\"nv\":%d,"
+             "\"pre\":\"%s\",\"post\":\"%s\",\"raw\":\"%s\",\"proc\":\"%s\","
+             "\"sampled\":%d,\"forced\":%d,\"chosen\":%d,\"honored\":%s,\"rng_draw\":%s,%s}",
+             static_cast<unsigned long long>(call), dec_idx, i_step, iter, temp,
+             n_past, prompt_n, decoder.i_batch, n_vocab,
+             hex64(pre), hex64(post), hex64(raw_fnv), hex64(proc_fnv),
+             static_cast<int>(sampled_id), forced_ok ? forced_raw : -1, static_cast<int>(chosen.id),
+             forced_ok ? "true" : "false",
+             sampled_is_random_draw ? "true" : "false",
+             plog_json);
+    sig_tf::note_step_line(line);
+    sig_tf::note_id(static_cast<int>(chosen.id));
+    return chosen;
+}
+
+// R13/fase C (C2): OBSERVADOR de beam search (SOMENTE DIAG, nunca forca).
+// Diferente do teacher forcing (que recusa n_cand>1), este observador grava
+// um evento por passo para CADA sequencia/beam SEM alterar RNG, candidatos,
+// ordenacao ou tokens: somente leitura + append JSONL (mutex do TF).
+// Ativacao (custo zero quando ausente): SIG_WHISPER_TF_RECORD=<pref> (record
+// ativo) E SIG_WHISPER_BEAMOBS=1. Teto opcional: SIG_WHISPER_BEAM_STEPS_MAX
+// (default 0 = ilimitado; decode beam5 turbo cheio ~= 2,2k eventos, ~2 MB).
+static bool beamobs_on() {
+    static const bool v = []() {
+        const char * e = getenv("SIG_WHISPER_BEAMOBS");
+        return e != nullptr && e[0] == '1';
+    }();
+    return v;
+}
+static int beamobs_max() {
+    static const int v = []() {
+        const char * e = getenv("SIG_WHISPER_BEAM_STEPS_MAX");
+        return (e != nullptr && e[0] != '\0') ? atoi(e) : 0;
+    }();
+    return v;
+}
+static std::atomic<uint64_t> g_beamobs_n {0};
+
+// Leitura pura apos whisper_sample_token_topk no ramo BEAM_SEARCH.
+static void note_beam_step(
+        const whisper_decoder & decoder,
+        const std::vector<whisper_token_data> & cands,
+        int beam_size,
+        int dec_idx, int i_step, int iter, float temp, int n_past, int prompt_n) {
+    if (!beamobs_on() || !sig_tf::record_active()) {
+        return;
+    }
+    const int mx = beamobs_max();
+    const uint64_t n = g_beamobs_n.fetch_add(1);
+    if (mx > 0 && (int64_t) n >= mx) {
+        return;
+    }
+    uint64_t h = (g_tf_prompt.valid ? g_tf_prompt.fnv : kFnvOff);
+    for (const auto & t : decoder.sequence.tokens) {
+        const int32_t x = static_cast<int32_t>(t.id);
+        h = fnv_bytes(h, &x, sizeof(x));
+    }
+    const uint64_t lg = decoder.logits.empty()
+        ? kFnvOff : fnv_f32(decoder.logits.data(), decoder.logits.size());
+    const uint64_t draws = sig_rng_diag::g_draws_total.load(std::memory_order_relaxed);
+    char top[2048];
+    std::size_t used = 0;
+    const std::size_t lim = cands.size() > 16 ? 16 : cands.size();
+    for (std::size_t k = 0; k < lim && used + 48 < sizeof(top); ++k) {
+        char plog_json[96];
+        sig_tf_json_float("pl", static_cast<double>(cands[k].plog), plog_json, sizeof(plog_json));
+        used += static_cast<std::size_t>(snprintf(top + used, sizeof(top) - used,
+            "%s{\"id\":%d,\"p\":%.9g,%s}",
+            k > 0 ? "," : "", static_cast<int>(cands[k].id),
+            static_cast<double>(cands[k].p), plog_json));
+    }
+    // R15/C4 — ESCOPO DO OBSERVADOR (correção de NOME, não de algoritmo).
+    //
+    // `cands` é o retorno de `whisper_sample_token_topk`: o TOP-K da
+    // distribuição JÁ FILTRADA, na ordem de sorteio. Ordenar por plog dá o
+    // top-k ordenado DESSA amostra — não "o topo da distribuição". O nome
+    // `sorted` sugeria o contrário; agora é `sampled_sorted` e o escopo vai
+    // explícito no JSON (`dist_scope=topk_sample`). Nada aqui toca sort,
+    // amostragem ou RNG: é cópia pura para leitura.
+    std::vector<whisper_token_data> sampled_sorted = cands;
+    std::stable_sort(sampled_sorted.begin(), sampled_sorted.end(),
+                     [](const whisper_token_data & a, const whisper_token_data & b) {
+                         return a.plog > b.plog;
+                     });
+    char ord[2048];
+    std::size_t used_o = 0;
+    for (std::size_t k = 0; k < lim && used_o + 48 < sizeof(ord); ++k) {
+        used_o += static_cast<std::size_t>(snprintf(ord + used_o, sizeof(ord) - used_o,
+            "%s{\"id\":%d,\"pl\":%.9g}",
+            k > 0 ? "," : "", static_cast<int>(sampled_sorted[k].id),
+            static_cast<double>(sampled_sorted[k].plog)));
+    }
+    const int sampled0 = cands.empty() ? -1 : static_cast<int>(cands[0].id);
+    const int sampled_sorted0 = sampled_sorted.empty()
+        ? -1 : static_cast<int>(sampled_sorted[0].id);
+    char line[6144];
+    snprintf(line, sizeof(line),
+             "{\"ev\":\"beam_step\",\"n\":%llu,\"dec\":%d,\"step\":%d,\"iter\":%d,\"temp\":%.9g,"
+             "\"ncand\":%d,\"beam\":%d,\"npast\":%d,\"pn\":%d,"
+             "\"seq\":\"%s\",\"logits\":\"%s\",\"draws\":%llu,\"top\":[%s],"
+             "\"sampled_sorted\":[%s],\"dist_scope\":\"topk_sample\",\"topk\":%d,\"sampled0\":%d,\"sampled_sorted0\":%d,\"ordem_difere\":%s}",
+             static_cast<unsigned long long>(n), dec_idx, i_step, iter, temp,
+             static_cast<int>(cands.size()), beam_size, n_past, prompt_n,
+             hex64(h), hex64(lg),
+             static_cast<unsigned long long>(draws), top, ord,
+             static_cast<int>(cands.size()),
+             sampled0, sampled_sorted0,
+             (sampled0 != sampled_sorted0) ? "true" : "false");
+    sig_tf::note_step_line(line);
+}
+
+// Leitura pura apos a ordenacao/selecao dos beams (single-thread).
+static void note_beam_pick(
+        int dec_idx, int parent_idx, int tok_id, double sum_lp, int tie,
+        int i_step, int iter) {
+    if (!beamobs_on() || !sig_tf::record_active()) {
+        return;
+    }
+    const int mx = beamobs_max();
+    const uint64_t n = g_beamobs_n.fetch_add(1);
+    if (mx > 0 && (int64_t) n >= mx) {
+        return;
+    }
+    char line[1024];
+    snprintf(line, sizeof(line),
+             "{\"ev\":\"beam_pick\",\"n\":%llu,\"dec\":%d,\"from\":%d,\"id\":%d,"
+             "\"sumlp\":%.9g,\"tie\":%d,\"step\":%d,\"iter\":%d}",
+             static_cast<unsigned long long>(n), dec_idx, parent_idx, tok_id,
+             sum_lp, tie, i_step, iter);
+    sig_tf::note_step_line(line);
+}
+
+} // namespace sig_tf_impl
+#endif // SIG_WHISPER_DUMP_HOOK
+
 static whisper_token_data whisper_sample_token(
             whisper_context & ctx,
       const whisper_decoder & decoder,
@@ -6500,6 +7995,10 @@ static whisper_token_data whisper_sample_token(
         result.id   = dist(decoder.rng);
         result.p    = probs[result.id];
         result.plog = logprobs[result.id];
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+        sig_rng_diag::note_draw(result.id);
+#endif
     }
 
     if (result.id >= vocab.token_beg) {
@@ -6573,6 +8072,10 @@ static std::vector<whisper_token_data> whisper_sample_token_topk(
     for (int i = 0; i < k; ++i) {
         const auto id = dist(decoder.rng);
         //printf("XXX %d %d %f %f %f %f\n", id, tid, probs[id], logprobs[id], pt, ptsum);
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+        sig_rng_diag::note_draw(id);
+#endif
 
         result.push_back({ id, tid, probs[id], logprobs[id], pt, ptsum, -1, -1, -1, 0.0f, });
 
@@ -6678,116 +8181,83 @@ static bool whisper_vad(
 
         WHISPER_LOG_INFO("%s: detected %d speech segments\n", __func__, (int)vad_segments->data.size());
         float overlap_seconds = vad_params.samples_overlap;
-        int overlap_samples = overlap_seconds * WHISPER_SAMPLE_RATE;
-
-        for (int i = 0; i < (int)vad_segments->data.size(); i++) {
-            int segment_start_samples = cs_to_samples(vad_segments->data[i].start);
-            int segment_end_samples   = cs_to_samples(vad_segments->data[i].end);
-
-            if (i < (int)vad_segments->data.size() - 1) {
-                segment_end_samples += overlap_samples;
-            }
-            segment_end_samples = std::min(segment_end_samples, n_samples - 1);
-            filtered_n_samples  += (segment_end_samples - segment_start_samples);
-
-            WHISPER_LOG_INFO("%s: Including segment %d: %.2f - %.2f (duration: %.2f)\n",
-                __func__, i, vad_segments->data[i].start/100.0,
-                (vad_segments->data[i].end/100.0 + (i < (int)vad_segments->data.size() - 1 ? overlap_seconds : 0)),
-                (vad_segments->data[i].end - vad_segments->data[i].start)/100.0 +
-                (i < (int)vad_segments->data.size() - 1 ? overlap_seconds : 0));
+        int overlap_samples = (int) (overlap_seconds * WHISPER_SAMPLE_RATE);
+        if (overlap_samples < 0) {
+            overlap_samples = 0;
         }
 
-        int silence_samples = 0.1 * WHISPER_SAMPLE_RATE;
-        int total_silence_samples = (vad_segments->data.size() > 1) ? (vad_segments->data.size() - 1) * silence_samples : 0;
-        int total_samples_needed = filtered_n_samples + total_silence_samples;
+        // R8/fase E: composição por lista NORMALIZADA de intervalos half-open
+        // [start, end) em amostras do original — FONTE ÚNICA para tamanho, cópia
+        // e mapa temporal. Junção = variante "margem de junção" da R8-E: contexto
+        // real ±samples_overlap SOMENTE nas junções (bordas globais intactas),
+        // união de intervalos sobrepostos sem cópia dupla, silêncio de 0,1 s
+        // mantido entre intervalos separados (parâmetro upstream inalterado) e
+        // canário de tamanho (bytes escritos == tamanho alocado). Medições E1
+        // (fase E): a margem-z da R7 (margens nas duas pontas, inclusive bordas)
+        // regredia n06/d01/d1long; a margem só nas junções corrige o n08 e mantém
+        // os controles (a remoção do silêncio foi medida e rejeitada: corrompe o
+        // n06 — ver SUMMARY-F/SUMMARY-E).
+        const int silence_samples = (int) (0.1 * WHISPER_SAMPLE_RATE);  // 100 ms (upstream)
+        std::vector<sig_vad_compose::raw_segment> raw_segments;
+        raw_segments.reserve(vad_segments->data.size());
+        for (const auto & seg : vad_segments->data) {
+            raw_segments.push_back({seg.start, seg.end});
+        }
 
-        WHISPER_LOG_INFO("%s: total duration of speech segments: %.2f seconds\n",
-                        __func__, (float)filtered_n_samples / WHISPER_SAMPLE_RATE);
-
+        std::vector<sig_vad_compose::interval> composed_intervals;
+        std::vector<sig_vad_compose::mapping_point> composed_mapping;
+        bool composed_ok = false;
         try {
-            filtered_samples.resize(total_samples_needed);
+            composed_ok = sig_vad_compose::compose(samples, n_samples, WHISPER_SAMPLE_RATE, raw_segments,
+                                                   overlap_samples, silence_samples, filtered_samples,
+                                                   composed_intervals, composed_mapping);
         } catch (const std::bad_alloc & /* e */) {
             WHISPER_LOG_ERROR("%s: failed to allocate memory for filtered samples\n", __func__);
             whisper_vad_free_segments(vad_segments);
             return false;
         }
-
-        int offset = 0;
-        for (int i = 0; i < (int)vad_segments->data.size(); i++) {
-            int segment_start_samples = cs_to_samples(vad_segments->data[i].start);
-            int segment_end_samples   = cs_to_samples(vad_segments->data[i].end);
-
-            segment_start_samples = std::min(segment_start_samples, n_samples - 1);
-            segment_end_samples = std::min(segment_end_samples, n_samples - 1);
-            int original_segment_length = segment_end_samples - segment_start_samples;
-
-            if (i < (int)vad_segments->data.size() - 1) {
-                segment_end_samples = std::min(segment_end_samples + overlap_samples, n_samples - 1);
-            }
-            int segment_length = segment_end_samples - segment_start_samples;
-            if (segment_length > 0) {
-                whisper_state::vad_segment_info segment;
-
-                segment.orig_start = vad_segments->data[i].start;
-                segment.orig_end   = vad_segments->data[i].end;
-
-                segment.vad_start = samples_to_cs(offset);
-                segment.vad_end   = samples_to_cs(offset + original_segment_length);
-
-                // Add segment boundaries to mapping table
-                vad_time_mapping start_mapping = {segment.vad_start, segment.orig_start};
-                vad_time_mapping end_mapping = {segment.vad_end, segment.orig_end};
-
-                state->vad_mapping_table.push_back(start_mapping);
-                state->vad_mapping_table.push_back(end_mapping);
-
-                WHISPER_LOG_INFO("%s: vad_segment_info: orig_start: %.2f, orig_end: %.2f, vad_start: %.2f, vad_end: %.2f\n",
-                    __func__, segment.orig_start/100.0, segment.orig_end/100.0, segment.vad_start/100.0, segment.vad_end/100.0);
-                ctx->state->vad_segments.push_back(segment);
-
-                // Copy this speech segment
-                memcpy(filtered_samples.data() + offset, samples + segment_start_samples, segment_length * sizeof(float));
-                offset += segment_length;
-
-                // Add silence after this segment (except after the last segment)
-                if (i < (int)vad_segments->data.size() - 1) {
-                    // Calculate the start and end time of the silence gap in processed audio
-                    int64_t silence_start_vad = samples_to_cs(offset);
-                    int64_t silence_end_vad = samples_to_cs(offset + silence_samples);
-                    // Calculate the corresponding original times
-                    int64_t orig_silence_start = segment.orig_end;
-                    int64_t orig_silence_end = vad_segments->data[i+1].start;
-
-                    // Add mapping points for silence boundaries
-                    state->vad_mapping_table.push_back({silence_start_vad, orig_silence_start});
-                    state->vad_mapping_table.push_back({silence_end_vad, orig_silence_end});
-
-                    // Fill with zeros (silence)
-                    memset(filtered_samples.data() + offset, 0, silence_samples * sizeof(float));
-                    offset += silence_samples;
-                }
-            }
+        if (!composed_ok) {
+            WHISPER_LOG_ERROR("%s: inconsistent VAD composition (size/copy mismatch or out-of-range segments)\n", __func__);
+            whisper_vad_free_segments(vad_segments);
+            filtered_samples.clear();
+            return false;
         }
 
-        // Sort the mapping table by processed time
-        std::sort(state->vad_mapping_table.begin(), state->vad_mapping_table.end(),
-            [](const vad_time_mapping& a, const vad_time_mapping& b) {
-                return a.processed_time < b.processed_time;
-        });
-
-        // Remove any duplicate processed times to ensure monotonicity which is
-        // needed for binary search and interpolation later.
-        if (!state->vad_mapping_table.empty()) {
-            auto last = std::unique(state->vad_mapping_table.begin(), state->vad_mapping_table.end(),
-                [](const vad_time_mapping& a, const vad_time_mapping& b) {
-                    return a.processed_time == b.processed_time;
-                });
-            state->vad_mapping_table.erase(last, state->vad_mapping_table.end());
+        for (size_t i = 0; i < composed_intervals.size(); i++) {
+            const auto & iv = composed_intervals[i];
+            WHISPER_LOG_INFO("%s: interval %d: orig [%.2f, %.2f) -> composed [%.2f, %.2f) (%d samples, margem real +-%.0f ms)\n",
+                __func__, (int) i,
+                iv.orig_start / (double) WHISPER_SAMPLE_RATE, iv.orig_end / (double) WHISPER_SAMPLE_RATE,
+                iv.comp_start / (double) WHISPER_SAMPLE_RATE, (iv.comp_start + iv.length) / (double) WHISPER_SAMPLE_RATE,
+                (int) iv.length, overlap_samples * 1000.0 / WHISPER_SAMPLE_RATE);
         }
 
-        WHISPER_LOG_INFO("%s: Created time mapping table with %d points\n", __func__, (int)state->vad_mapping_table.size());
+        state->vad_mapping_table = composed_mapping;
+        state->has_vad_segments = !composed_intervals.empty();
 
-        filtered_n_samples = offset;
+        ctx->state->vad_segments.clear();
+        ctx->state->vad_segments.reserve(composed_intervals.size());
+        for (const auto & iv : composed_intervals) {
+            whisper_state::vad_segment_info segment;
+            segment.orig_start = sig_vad_compose::samples_to_cs(iv.orig_start, WHISPER_SAMPLE_RATE);
+            segment.orig_end   = sig_vad_compose::samples_to_cs(iv.orig_end,   WHISPER_SAMPLE_RATE);
+            segment.vad_start  = sig_vad_compose::samples_to_cs(iv.comp_start,             WHISPER_SAMPLE_RATE);
+            segment.vad_end    = sig_vad_compose::samples_to_cs(iv.comp_start + iv.length, WHISPER_SAMPLE_RATE);
+
+            WHISPER_LOG_INFO("%s: vad_segment_info: orig_start: %.2f, orig_end: %.2f, vad_start: %.2f, vad_end: %.2f\n",
+                __func__, segment.orig_start / 100.0, segment.orig_end / 100.0,
+                segment.vad_start / 100.0, segment.vad_end / 100.0);
+            ctx->state->vad_segments.push_back(segment);
+        }
+
+        WHISPER_LOG_INFO("%s: composed %d normalized interval(s) from %d VAD segment(s)\n",
+                        __func__, (int) composed_intervals.size(), (int) raw_segments.size());
+        WHISPER_LOG_INFO("%s: total duration of speech segments: %.2f seconds\n",
+                        __func__, (float) filtered_samples.size() / WHISPER_SAMPLE_RATE);
+        WHISPER_LOG_INFO("%s: Created time mapping table with %d points\n",
+                        __func__, (int) state->vad_mapping_table.size());
+
+        filtered_n_samples = (int) filtered_samples.size();
         WHISPER_LOG_INFO("%s: Reduced audio from %d to %d samples (%.1f%% reduction)\n",
                         __func__, n_samples, filtered_n_samples, 100.0f * (1.0f - (float)filtered_n_samples / n_samples));
     }
@@ -6806,6 +8276,29 @@ int whisper_full_with_state(
     auto & result_all = state->result_all;
 
     result_all.clear();
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R3/fase A: rastreio do RNG por job — fingerprint do estado (antes/depois),
+    // contagem de draws e fallbacks de temperatura — e reseed DIAGNÓSTICO
+    // opcional do decoder0 no início do job (controle causal, env-gated).
+    const uint64_t sig_job_id = sig_rng_diag::g_job_counter.fetch_add(1) + 1;
+    const uint64_t sig_draws_base = sig_rng_diag::g_draws_total.load();
+    const int sig_fail_p_base = state->n_fail_p;
+    const int sig_fail_h_base = state->n_fail_h;
+    const uint64_t sig_rng0_pre = sig_rng_diag::fingerprint(state->decoders[0].rng);
+    uint64_t sig_rng0_begin = sig_rng0_pre;
+    if (sig_rng_diag::reseed_decoder0()) {
+        state->decoders[0].rng = std::mt19937(0);
+        sig_rng0_begin = sig_rng_diag::fingerprint(state->decoders[0].rng);
+    }
+    std::string sig_chosen;
+    int sig_temp_attempts = 0;
+    int sig_temp_fail_p = 0;
+    sig_rng_diag::logv("job=%llu begin draws_base=%llu n_fail_p=%d n_fail_h=%d reseed0=%d rng0_pre=%s rng0_begin=%s\n",
+        static_cast<unsigned long long>(sig_job_id), static_cast<unsigned long long>(sig_draws_base),
+        sig_fail_p_base, sig_fail_h_base, sig_rng_diag::reseed_decoder0() ? 1 : 0,
+        sig_rng_diag::fp_hex(sig_rng0_pre), sig_rng_diag::fp_hex(sig_rng0_begin));
+#endif
 
     if (n_samples > 0) {
         // compute log mel spectrogram
@@ -6888,7 +8381,21 @@ int whisper_full_with_state(
     }
 
     // TAGS: WHISPER_DECODER_INIT
-    for (int j = 1; j < n_decoders; j++) {
+    // R3/fase A (F-01): o estado de amostragem agora é RESETADO no início de
+    // CADA transcrição para TODOS os decoders usados (j = 0..n_decoders-1),
+    // com seed estável = índice do decoder (decoder0 => seed 0). Contrato:
+    //  - um job começa sempre do mesmo estado de RNG (jobs independentes da
+    //    ordem/chamadas anteriores no MESMO contexto);
+    //  - a evolução do RNG ENTRE janelas e temperaturas do MESMO job é
+    //    preservada (o reset ocorre uma única vez, aqui);
+    //  - o fallback de temperatura permanece ativo.
+    // Antes o loop começava em j = 1: decoders[1..] eram re-semeados por job,
+    // mas decoders[0].rng (o único usado com beam=best_of=1) ficava com o
+    // estado deixado pela transcrição ANTERIOR — em BEAM_SEARCH a amostragem
+    // via whisper_sample_token_topk() consome RNG a cada token, em qualquer
+    // temperatura, então o mesmo áudio no mesmo contexto gerava texto
+    // diferente por índice de chamada (F-01, rodada 2).
+    for (int j = 0; j < n_decoders; j++) {
         auto & decoder = state->decoders[j];
 
         decoder.sequence.tokens.reserve(state->decoders[0].sequence.tokens.capacity());
@@ -6986,6 +8493,35 @@ int whisper_full_with_state(
 
     int seek = seek_start;
 
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R6/fase B (B1): evento de início de job (teacher forcing/record) — params
+    // REAIS efetivos + janela [seek_start, seek_end] + tamanho do áudio.
+    if (sig_tf::record_active()) {
+        char sig_tf_begin[1536];
+        snprintf(sig_tf_begin, sizeof(sig_tf_begin),
+                 "{\"ev\":\"begin\",\"job\":%llu,\"strategy\":\"%s\",\"beam\":%d,\"best_of\":%d,"
+                 "\"temperature\":%.9g,\"temperature_inc\":%.9g,\"language\":\"%s\",\"translate\":%d,"
+                 "\"no_timestamps\":%d,\"single_segment\":%d,\"n_max_text_ctx\":%d,\"n_samples\":%d,"
+                 "\"n_threads\":%d,\"seek_start\":%d,\"seek_end\":%d,\"replay_ids\":%d,"
+                 "\"logprob_thold\":%.9g,\"entropy_thold\":%.9g,\"no_speech_thold\":%.9g,"
+                 "\"max_tokens\":%d,\"rng_contract\":\"mt19937(j)\",\"rng_seed_decoder0\":0,\"n_decoders\":%d,"
+                 "\"suppress_blank\":%d,\"n_file\":%d}",
+                 static_cast<unsigned long long>(sig_job_id),
+                 params.strategy == WHISPER_SAMPLING_GREEDY ? "greedy" : "beam_search",
+                 params.beam_search.beam_size, params.greedy.best_of,
+                 static_cast<double>(params.temperature), static_cast<double>(params.temperature_inc),
+                 params.language != nullptr ? params.language : "(null)", params.translate ? 1 : 0,
+                 params.no_timestamps ? 1 : 0, params.single_segment ? 1 : 0,
+                 params.n_max_text_ctx, n_samples, params.n_threads, seek_start, seek_end,
+                 sig_tf::replay_active() ? 1 : 0,
+                 static_cast<double>(params.logprob_thold), static_cast<double>(params.entropy_thold),
+                 static_cast<double>(params.no_speech_thold),
+                 params.n_max_text_ctx, n_decoders,
+                 params.suppress_blank ? 1 : 0, (int) seek_end);
+        sig_tf::note_step_line(sig_tf_begin);
+    }
+#endif
+
     std::vector<whisper_token> prompt;
     prompt.reserve(whisper_n_text_ctx(ctx));
 
@@ -7024,7 +8560,13 @@ int whisper_full_with_state(
         }
 
         // encode audio features starting at offset seek
-        if (!whisper_encode_internal(*ctx, *state, seek, params.n_threads, params.abort_callback, params.abort_callback_user_data)) {
+        // R6/fase E (E1): abort é desfecho PRÓPRIO — não é falha de encode.
+        const sig_step_result sig_enc_status = whisper_encode_internal(*ctx, *state, seek, params.n_threads, params.abort_callback, params.abort_callback_user_data);
+        if (sig_enc_status == SIG_STEP_ABORTED) {
+            WHISPER_LOG_INFO("%s: encode abortado pelo abort_callback\n", __func__);
+            return SIG_WHISPER_FULL_ABORTED;
+        }
+        if (sig_enc_status != SIG_STEP_OK) {
             WHISPER_LOG_ERROR("%s: failed to encode\n", __func__);
             return -6;
         }
@@ -7125,6 +8667,12 @@ int whisper_full_with_state(
                 }
                 WHISPER_LOG_DEBUG("\n\n");
 
+#ifdef SIG_WHISPER_DUMP_HOOK
+                // R6/fase B (B1): evento de prompt (teacher forcing/record) —
+                // prompt COMPLETO em vigor (sot/lang/task/notimestamps/past).
+                sig_tf_impl::note_prompt(prompt.data(), (int) prompt.size(), seek, t_cur, it);
+#endif
+
                 // recreate the KV cache if the number of decoders has changed
                 if (state->kv_self_n_dec < n_decoders_cur) {
                     WHISPER_LOG_DEBUG("%s: recreating KV cache: n_decoders_cur = %d\n", __func__, n_decoders_cur);
@@ -7150,7 +8698,13 @@ int whisper_full_with_state(
 
                 whisper_batch_prep_legacy(state->batch, prompt.data(), prompt.size(), 0, 0);
 
-                if (!whisper_decode_internal(*ctx, *state, state->batch, params.n_threads, false, params.abort_callback, params.abort_callback_user_data)) {
+                // R6/fase E (E1): abort é desfecho PRÓPRIO — não é falha de decode.
+                const sig_step_result sig_dec_p_status = whisper_decode_internal(*ctx, *state, state->batch, params.n_threads, false, params.abort_callback, params.abort_callback_user_data);
+                if (sig_dec_p_status == SIG_STEP_ABORTED) {
+                    WHISPER_LOG_INFO("%s: decode (prompt) abortado pelo abort_callback\n", __func__);
+                    return SIG_WHISPER_FULL_ABORTED;
+                }
+                if (sig_dec_p_status != SIG_STEP_OK) {
                     WHISPER_LOG_ERROR("%s: failed to decode\n", __func__);
                     return -8;
                 }
@@ -7219,17 +8773,36 @@ int whisper_full_with_state(
                             switch (params.strategy) {
                                 case whisper_sampling_strategy::WHISPER_SAMPLING_GREEDY:
                                     {
-                                        if (t_cur < 1e-6f) {
-                                            decoder.sequence.tokens.push_back(whisper_sample_token(*ctx, decoder, true));
-                                        } else {
-                                            decoder.sequence.tokens.push_back(whisper_sample_token(*ctx, decoder, false));
-                                        }
+                                        const bool sig_best = t_cur < 1e-6f;
+                                        whisper_token_data sig_td = whisper_sample_token(*ctx, decoder, sig_best);
+#ifdef SIG_WHISPER_DUMP_HOOK
+                                        sig_td = sig_tf_impl::note_and_maybe_force(
+                                                *ctx, state, decoder, sig_td, !sig_best, 1,
+                                                j, i, it, t_cur, (int) prompt.size() + i, (int) prompt.size());
+#endif
+                                        decoder.sequence.tokens.push_back(sig_td);
 
                                         decoder.sequence.sum_logprobs_all += decoder.sequence.tokens.back().plog;
                                     } break;
                                 case whisper_sampling_strategy::WHISPER_SAMPLING_BEAM_SEARCH:
                                     {
+#ifdef SIG_WHISPER_DUMP_HOOK
+                                        std::vector<whisper_token_data> tokens_new =
+                                                whisper_sample_token_topk(*ctx, decoder, params.beam_search.beam_size);
+                                        if (!tokens_new.empty()) {
+                                            tokens_new[0] = sig_tf_impl::note_and_maybe_force(
+                                                    *ctx, state, decoder, tokens_new[0], true,
+                                                    params.beam_search.beam_size,
+                                                    j, i, it, t_cur, (int) prompt.size() + i, (int) prompt.size());
+                                        }
+                                        // R13/C2: observador beam (leitura pura: nao forca,
+                                        // nao altera RNG/candidatos/ordenacao).
+                                        sig_tf_impl::note_beam_step(
+                                                decoder, tokens_new, params.beam_search.beam_size,
+                                                j, i, it, t_cur, (int) prompt.size() + i, (int) prompt.size());
+#else
                                         const auto tokens_new = whisper_sample_token_topk(*ctx, decoder, params.beam_search.beam_size);
+#endif
 
                                         for (const auto & token : tokens_new) {
                                             bc_per_dec[j].push_back({ j, decoder.seek_delta, decoder.has_ts, decoder.sequence, decoder.grammar, });
@@ -7304,6 +8877,18 @@ int whisper_full_with_state(
                         decoder.has_ts     = cur.has_ts;
                         decoder.sequence   = cur.sequence;
                         decoder.grammar    = cur.grammar;
+#ifdef SIG_WHISPER_DUMP_HOOK
+                        // R13/C2: escolha do beam (leitura pura; tie=1 quando o
+                        // proximo candidato empata em sum_logprobs, i.e. a ordem
+                        // foi decidida pelo desempate decoder_idx).
+                        sig_tf_impl::note_beam_pick(j, cur.decoder_idx,
+                                (int) decoder.sequence.tokens.back().id,
+                                (double) decoder.sequence.sum_logprobs_all,
+                                (cur_c < beam_candidates.size() &&
+                                 beam_candidates[cur_c].sequence.sum_logprobs_all ==
+                                     cur.sequence.sum_logprobs_all) ? 1 : 0,
+                                i, it);
+#endif
 
                         whisper_kv_cache_seq_cp(state->kv_self, cur.decoder_idx, WHISPER_MAX_DECODERS + j, -1, -1);
 
@@ -7462,7 +9047,13 @@ int whisper_full_with_state(
 
                     assert(batch.n_tokens > 0);
 
-                    if (!whisper_decode_internal(*ctx, *state, state->batch, params.n_threads, false, params.abort_callback, params.abort_callback_user_data)) {
+                    // R6/fase E (E1): abort é desfecho PRÓPRIO — não é falha de decode.
+                    const sig_step_result sig_dec_t_status = whisper_decode_internal(*ctx, *state, state->batch, params.n_threads, false, params.abort_callback, params.abort_callback_user_data);
+                    if (sig_dec_t_status == SIG_STEP_ABORTED) {
+                        WHISPER_LOG_INFO("%s: decode (token) abortado pelo abort_callback\n", __func__);
+                        return SIG_WHISPER_FULL_ABORTED;
+                    }
+                    if (sig_dec_t_status != SIG_STEP_OK) {
                         WHISPER_LOG_ERROR("%s: failed to decode\n", __func__);
                         return -9;
                     }
@@ -7566,7 +9157,51 @@ int whisper_full_with_state(
                 }
             }
 
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // R3/fase A: temperatura tentada neste seek + decisão (falha logprob/entropia).
+            // R7/fase D (D3): o MESMO ponto emite o evento "attempt" no record TF —
+            // estratégia/temperatura efetiva/fallback/limiares/stop reason por tentativa.
+            {
+                const auto & dec = state->decoders[best_decoder_id];
+                sig_temp_attempts++;
+                if (!success) sig_temp_fail_p++;
+                sig_rng_diag::logv("temp job=%llu seek=%d it=%d t=%.2f nd=%d success=%d failed=%d avg_lp=%.5f entropy=%.5f no_speech=%.5f n_fail_p=%d n_fail_h=%d\n",
+                    static_cast<unsigned long long>(sig_job_id), seek, it, t_cur, n_decoders_cur,
+                    success ? 1 : 0, dec.failed ? 1 : 0,
+                    dec.sequence.avg_logprobs, dec.sequence.entropy, state->no_speech_prob,
+                    state->n_fail_p, state->n_fail_h);
+                if (sig_tf::record_active()) {
+                    const char * stop_reason = dec.completed ? "eot"
+                                             : dec.has_ts   ? "timestamp"
+                                             : "max_tokens";
+                    char avg_lp_json[96];
+                    char entropy_json[96];
+                    sig_tf_json_float("avg_lp", static_cast<double>(dec.sequence.avg_logprobs), avg_lp_json, sizeof(avg_lp_json));
+                    sig_tf_json_float("entropy", static_cast<double>(dec.sequence.entropy), entropy_json, sizeof(entropy_json));
+                    char sig_tf_attempt[768];
+                    snprintf(sig_tf_attempt, sizeof(sig_tf_attempt),
+                             "{\"ev\":\"attempt\",\"job\":%llu,\"seek\":%d,\"it\":%d,\"temp\":%.9g,\"nd\":%d,"
+                             "\"success\":%d,\"failed\":%d,%s,%s,\"no_speech\":%.9g,"
+                             "\"ntok\":%d,\"result_len\":%d,\"has_ts\":%d,\"completed\":%d,\"stop_reason\":\"%s\","
+                             "\"best_decoder\":%d,\"n_fail_p\":%d,\"n_fail_h\":%d}",
+                             static_cast<unsigned long long>(sig_job_id), seek, it,
+                             static_cast<double>(t_cur), n_decoders_cur,
+                             success ? 1 : 0, dec.failed ? 1 : 0,
+                             avg_lp_json, entropy_json,
+                             static_cast<double>(state->no_speech_prob),
+                             (int) dec.sequence.tokens.size(), dec.sequence.result_len,
+                             dec.has_ts ? 1 : 0, dec.completed ? 1 : 0, stop_reason,
+                             best_decoder_id, state->n_fail_p, state->n_fail_h);
+                    sig_tf::note_step_line(sig_tf_attempt);
+                }
+            }
+#endif
+
             if (success) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+                if (!sig_chosen.empty()) sig_chosen += ",";
+                sig_chosen += std::to_string(seek) + ":" + std::to_string(it) + ":" + std::to_string((int) (t_cur*100));
+#endif
                 //for (auto & token : ctx->decoders[best_decoder_id].sequence.tokens) {
                 //    WHISPER_LOG_DEBUG("%s: token = %d, p = %6.3f, pt = %6.3f, ts = %s, str = %s\n", __func__, token.id, token.p, token.pt, ctx->vocab.id_to_token.at(token.tid).c_str(), ctx->vocab.id_to_token.at(token.id).c_str());
                 //}
@@ -7752,8 +9387,285 @@ int whisper_full_with_state(
         }
     }
 
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R3/fase A: fim de job — draws consumidos, fallbacks, janelas aceitas e
+    // fingerprint final do RNG do decoder0 (estado que vaza para o próximo job).
+    sig_rng_diag::logv("job=%llu end draws=%llu temp_attempts=%d temp_fail_p=%d n_fail_p=%d n_fail_h=%d chosen=[%s] rng0=%s\n",
+        static_cast<unsigned long long>(sig_job_id),
+        static_cast<unsigned long long>(sig_rng_diag::g_draws_total.load() - sig_draws_base),
+        sig_temp_attempts, sig_temp_fail_p,
+        state->n_fail_p - sig_fail_p_base,
+        state->n_fail_h - sig_fail_h_base,
+        sig_chosen.c_str(),
+        sig_rng_diag::fp_hex(sig_rng_diag::fingerprint(state->decoders[0].rng)));
+#endif
+
     return 0;
 }
+
+// ===========================================================================
+// R10/fase F (F2) — ID NATIVO DO JOB VAD (correlação attempt ↔ job/sessão).
+// ===========================================================================
+// Sequencial monotônico, 1 por chamada de whisper_full. O chamador (JNI) é
+// single-flight (g_mutex serializa transcribe), então o n-ésimo id nativo
+// corresponde ao n-ésimo job do dono; o JNI loga o dono no mesmo fluxo. Assim
+// as tentativas nativas (attempt=1/2) ficam amarradas ao job/sessão sem alterar
+// a API pública. Nenhum contador é resetado entre jobs (recovery = novo job).
+static std::atomic<uint64_t> g_sig_vad_job_seq(0);
+static uint64_t sig_vad_job_seq_fetch() { return g_sig_vad_job_seq.fetch_add(1) + 1; }
+
+// <<< SIG_PUBLISH_COMMIT_GATE_BEGIN
+// ---------------------------------------------------------------------------
+// D1 — PONTO DE COMMIT LINEARIZADO DA PUBLICAÇÃO (por job/attempt).
+//
+// Corrida que este ponto fecha: o decoder pode retornar 0 (sucesso) e um pedido
+// de cancelamento chegar ENTRE esse retorno e o flush dos segmentos retidos.
+// Sem ponto de commit o motor publica o que o pedido já não autoriza.
+//
+// Contrato: NENHUMA publicação retida da tentativa VAD ocorre fora de um ponto
+// de commit. O dono do cancelamento (JNI) registra aqui um par begin/end; o
+// begin decide, sob a MESMA exclusão que o pedido de cancelamento usa,
+// "publica" ou "descarta", e mantém a exclusão presa até o end — que só corre
+// DEPOIS dos callbacks de segmento. Assim:
+//   * pedido antes do begin  => begin nega; NADA é emitido;
+//   * pedido durante a zona  => o pedido espera a zona fechar e só então fica
+//     visível; nenhum segmento sai depois de um pedido visível.
+// A ordem entre "publicado" e "pedido" é total (linearizada) no begin.
+//
+// Propriedades deliberadas:
+//   * NÃO usa o mutex do compute: o escopo é curto e cobre só decisão +
+//     emissão dos callbacks retidos (nunca o decode).
+//   * NÃO revoga segmento publicado: o begin nunca é consultado depois de um
+//     flush; o que saiu antes do pedido continua válido.
+//   * Sem dono registrado (consumidor puro da lib) o comportamento é o legado:
+//     publica. Rotas de STREAMING (VADoff) não passam por aqui.
+//   * Sem poll e sem sleep: uma decisão, uma vez, por tentativa aceita.
+// ---------------------------------------------------------------------------
+typedef int  (*sig_publish_commit_begin_fn)(unsigned long long job, int attempt, void * opaque);
+typedef void (*sig_publish_commit_end_fn)(unsigned long long job, int attempt, void * opaque);
+
+static sig_publish_commit_begin_fn g_sig_publish_commit_begin = nullptr;
+static sig_publish_commit_end_fn   g_sig_publish_commit_end   = nullptr;
+static void * g_sig_publish_commit_opaque = nullptr;
+static std::atomic<int> g_sig_publish_commit_ready{0};
+
+// Registro do dono (JNI). begin/end nulos = remove; devolve 1 se há dono
+// instalado e 0 se removido. Chamado com o job parado (single-flight do
+// chamador), como o gancho DIAG da tentativa 2.
+extern "C" int sig_whisper_publish_commit_set(
+        sig_publish_commit_begin_fn begin,
+        sig_publish_commit_end_fn   end,
+        void * opaque) {
+    if (begin == nullptr || end == nullptr) {
+        g_sig_publish_commit_ready.store(0, std::memory_order_release);
+        g_sig_publish_commit_begin = nullptr;
+        g_sig_publish_commit_end = nullptr;
+        g_sig_publish_commit_opaque = nullptr;
+        return 0;
+    }
+    g_sig_publish_commit_begin = begin;
+    g_sig_publish_commit_end = end;
+    g_sig_publish_commit_opaque = opaque;
+    g_sig_publish_commit_ready.store(1, std::memory_order_release);
+    return 1;
+}
+
+// RAII da zona de commit: abre no begin, fecha no destrutor (depois da
+// emissão). Sem dono registrado => não é gated e publica como antes.
+class sig_publish_commit_scope {
+public:
+    sig_publish_commit_scope(unsigned long long job, int attempt) : job_(job), attempt_(attempt) {
+        if (g_sig_publish_commit_ready.load(std::memory_order_acquire) == 0) {
+            return;   // consumidor puro da lib: sem dono, sem gate
+        }
+        const auto begin = g_sig_publish_commit_begin;
+        if (begin == nullptr) {
+            return;
+        }
+        gated_ = true;
+        granted_ = begin(job_, attempt_, g_sig_publish_commit_opaque) != 0;
+        open_ = granted_;
+        end_ = g_sig_publish_commit_end;   // par capturado: o end é sempre o do begin
+    }
+    ~sig_publish_commit_scope() {
+        if (open_ && end_ != nullptr) {
+            end_(job_, attempt_, g_sig_publish_commit_opaque);
+        }
+    }
+    sig_publish_commit_scope(const sig_publish_commit_scope &) = delete;
+    sig_publish_commit_scope & operator=(const sig_publish_commit_scope &) = delete;
+    bool may_publish() const { return !gated_ || granted_; }
+    bool gated() const { return gated_; }
+private:
+    unsigned long long job_ = 0;
+    int attempt_ = 0;
+    bool gated_ = false;
+    bool granted_ = false;
+    bool open_ = false;
+    sig_publish_commit_end_fn end_ = nullptr;
+};
+// <<< SIG_PUBLISH_COMMIT_GATE_END
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+// ---------------------------------------------------------------------------
+// D1-físico — GATILHO DIAG DETERMINÍSTICO do ramo COMMIT DENIED.
+// <<< SIG_COMMIT_RACE_HOOK_BEGIN
+//
+// O gate só pode NEGAR um pedido que chegue na janela entre o rc=0 do decode e
+// o flush da publicação. Um pedido externo ("chega quando der") não mede isso de
+// forma determinística: numa máquina rápida chega depois do flush, numa lenta
+// antes do decode — a célula mede a sorte, não o gate. Este gancho entrega ao
+// DONO do pedido UM PONTO EXATO nessa janela: o motor avisa aqui, dentro de
+// whisper_full, imediatamente ANTES de sig_publish_retained_segments e DEPOIS de
+// o rc do decode já ser conhecido e igual a 0.
+//
+// O gancho NÃO decide nada, não cria pedido e não toca no gate: entrega job e
+// attempt REAIS ao registrante (JNI), que insere o pedido pelo entrypoint OWNED
+// real (request_cancel_owned). Nada aqui forja estado de cancelamento.
+// Em NORMAL (sem a macro) não existe declaração, variável, gancho nem chamada.
+typedef void (*sig_commit_race_fn)(unsigned long long job, int attempt, void * opaque);
+
+static sig_commit_race_fn g_sig_commit_race_fn = nullptr;
+static void * g_sig_commit_race_opaque = nullptr;
+static std::atomic<int> g_sig_commit_race_ready{0};
+
+// Registro idempotente; devolve 1 com gancho instalado (0 = removido).
+extern "C" int sig_whisper_commit_race_set(sig_commit_race_fn fn, void * opaque);
+extern "C" int sig_whisper_commit_race_set(sig_commit_race_fn fn, void * opaque) {
+    g_sig_commit_race_opaque = opaque;
+    g_sig_commit_race_fn = fn;
+    g_sig_commit_race_ready.store(fn != nullptr ? 1 : 0, std::memory_order_release);
+    return fn != nullptr ? 1 : 0;
+}
+
+// Chamado na thread do compute, sem nenhum lock do motor preso e ANTES de a zona
+// de commit ser aberta — por isso o pedido registrado aqui é VISTO pelo
+// gate_begin seguinte (não há zona aberta: o pedido não espera nada).
+static void sig_commit_race_point(unsigned long long job, int attempt) {
+    if (g_sig_commit_race_ready.load(std::memory_order_acquire) == 0) return;
+    const sig_commit_race_fn fn = g_sig_commit_race_fn;
+    if (fn == nullptr) return;
+    fn(job, attempt, g_sig_commit_race_opaque);
+}
+// <<< SIG_COMMIT_RACE_HOOK_END
+#endif // SIG_WHISPER_DUMP_HOOK
+
+// R9/fase E (E2) — TRANSAÇÃO POR TENTATIVA do decode VAD.
+//
+// O decode do PCM COMPOSTO é uma tentativa PROVISÓRIA: os segmentos que ele
+// produz NÃO podem ser publicados ao consumidor antes de o gate de qualidade
+// decidir (o texto cru pode conter junk ESTRUTURAL). Enquanto a tentativa está
+// em curso os callbacks de SEGMENTO do usuário ficam RETIDOS (params com
+// new_segment_callback nulo). Se a tentativa for ACEITA, os segmentos retidos
+// são publicados de uma vez (flush único) — já em coordenadas do mapa composto
+// (a tentativa aceita) e SEM duplicar/misturar tentativas. Se for REJEITADA,
+// nada é publicado e o áudio ORIGINAL é re-decodificado sem VAD. Os callbacks
+// de segmento do fallback também ficam retidos até retorno zero (flush único).
+// D1: o flush é um PONTO DE COMMIT — ver sig_publish_commit_scope abaixo. Um
+// cancel pedido entre o retorno do decode e o flush NEGA o commit e nada é
+// emitido (não existe janela entre "ler o cancel" e "emitir callbacks").
+//
+// R10/fase F (F1): o gate rejeita SÓ junk ESTRUTURAL. Mistura de alfabetos
+// (suspeita linguística) é texto UTF-8 VÁLIDO — registrada, nunca motivo de
+// retry. R10/fase F (F2): o terminal de cada tentativa deriva do RETORNO REAL
+// (accepted/cancelled/failed), nunca assumido.
+//
+// O que NÃO é alterado: o callback de PROGRESSO segue ativo na tentativa (é
+// indicador de UI, não artefato; no caso raro de retry a barra reinicia — sem
+// corromper texto) e as rotas sem VAD continuam streamando sem buffering.
+// D1: resultado do flush retido (o consumidor distingue "nada a publicar" de
+// "descartado no ponto de commit" — os logs não podem mentir sobre publicação).
+enum sig_publish_outcome {
+    sig_publish_none      = 0,  // sem callback de segmento ou sem segmentos
+    sig_publish_committed = 1,  // emitido dentro da zona de commit
+    sig_publish_denied    = 2,  // cancel pendente no ponto de commit: descartado
+};
+
+static sig_publish_outcome sig_publish_retained_segments(
+        struct whisper_context * ctx,
+        struct whisper_state   * state,
+        const whisper_full_params & params,
+        unsigned long long job,
+        int attempt) {
+    // DTW alignment has already completed when the decoder returns successfully.
+    // The accepted state is therefore safe to flush for DTW as well.
+    if (params.new_segment_callback == nullptr) {
+        return sig_publish_none;
+    }
+    const int total = (int) state->result_all.size();
+    if (total <= 0) {
+        return sig_publish_none;
+    }
+    // D1 — PONTO DE COMMIT: a decisão (ler o pedido) e a emissão dos callbacks
+    // acontecem DENTRO da mesma zona de exclusão do dono. Não há intervalo
+    // entre "o pedido não estava pendente" e "os segmentos saíram": um pedido
+    // que chegue depois do begin espera a zona fechar (fica, portanto, DEPOIS
+    // da publicação e não a revoga); um pedido que já estava pendente nega o
+    // commit e nada é emitido.
+    sig_publish_commit_scope commit(job, attempt);
+    if (!commit.may_publish()) {
+        WHISPER_LOG_WARN("%s: VAD job=%llu attempt=%d COMMIT DENIED (pedido de cancelamento pendente no ponto de commit) - %d segmento(s) descartado(s), nada publicado\n",
+                         __func__, job, attempt, total);
+        return sig_publish_denied;
+    }
+    // n_new = total ⇒ o consumidor relê os segmentos 0..total-1 do estado (o
+    // estado ainda é o da tentativa ACEITA). Nenhuma cópia de texto aqui.
+    params.new_segment_callback(ctx, state, total, params.new_segment_callback_user_data);
+    return sig_publish_committed;
+}
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+// ============================================================================
+// R13/B2 §1.3 — GANCHO DIAG DE INICIO DA TENTATIVA 2 (ponte "dispatch em voo").
+// A tentativa 2 do B3 NASCE AQUI: retry sem VAD depois de a tentativa 1 ser
+// rejeitada por junk ESTRUTURAL. Este e o MESMO ponto que emite
+// "SIGVAD ev=begin job=N attempt=2" — o unico lugar do motor onde a tentativa 2
+// existe, portanto o unico capaz de informar job/attempt REAIS para a JNI armar
+// a captura. Em NORMAL (sem a macro) nem a declaracao, nem o gancho, nem a
+// chamada existem: custo e simbolos sao zero.
+// <<< SIG_ATTEMPT2_HOOK_BEGIN
+typedef void (*sig_whisper_attempt_hook_fn)(unsigned long long job, int attempt, void * opaque);
+
+static sig_whisper_attempt_hook_fn g_sig_attempt_hook = nullptr;
+static void * g_sig_attempt_hook_opaque = nullptr;
+static std::atomic<int> g_sig_attempt_hook_ready{0};
+
+// Registro idempotente; devolve 1 quando ha gancho instalado (0 = removido).
+extern "C" int sig_whisper_inflight_diag_set_attempt_hook(
+        sig_whisper_attempt_hook_fn fn, void * opaque);
+extern "C" int sig_whisper_inflight_diag_set_attempt_hook(
+        sig_whisper_attempt_hook_fn fn, void * opaque) {
+    g_sig_attempt_hook_opaque = opaque;
+    g_sig_attempt_hook = fn;
+    g_sig_attempt_hook_ready.store(fn != nullptr ? 1 : 0, std::memory_order_release);
+    return fn != nullptr ? 1 : 0;
+}
+
+// Chamado na thread do compute e FORA de qualquer lock do motor (o gancho nao
+// pode bloquear o caminho quente nem inverter ordem de lock).
+static void sig_whisper_attempt_begin(unsigned long long job, int attempt) {
+    if (g_sig_attempt_hook_ready.load(std::memory_order_acquire) == 0) return;
+    const sig_whisper_attempt_hook_fn fn = g_sig_attempt_hook;
+    if (fn == nullptr) return;
+    fn(job, attempt, g_sig_attempt_hook_opaque);
+}
+
+// §2 — backend Vulkan REAL do contexto. O arm exige o backend DESTE ctx: um
+// backend inicializado a parte nao teria lote compute do job para capturar.
+extern "C" void * sig_whisper_vk_backend(struct whisper_context * ctx);
+extern "C" void * sig_whisper_vk_backend(struct whisper_context * ctx) {
+    if (ctx == nullptr || ctx->state == nullptr) return nullptr;
+    for (ggml_backend_t backend : ctx->state->backends) {
+        if (backend == nullptr) continue;
+        const char * name = ggml_backend_name(backend);
+        if (name != nullptr && strstr(name, "Vulkan") != nullptr) {
+            return (void *) backend;
+        }
+    }
+    return nullptr;
+}
+// <<< SIG_ATTEMPT2_HOOK_END
+#endif // SIG_WHISPER_DUMP_HOOK
 
 int whisper_full(
         struct whisper_context * ctx,
@@ -7762,6 +9674,13 @@ int whisper_full(
                            int   n_samples) {
 
     std::vector<float> vad_samples;
+
+    const bool vad_requested = params.vad;
+    const float * orig_samples = samples;
+    const int     orig_n_samples = n_samples;
+    // R9/fase E (E2): timing das tentativas — as métricas contam o custo das DUAS.
+    int64_t sig_attempt1_us = 0;
+
     if (params.vad) {
         WHISPER_LOG_INFO("%s: VAD is enabled, processing speech segments only\n", __func__);
         if (!whisper_vad(ctx, ctx->state, params, samples, n_samples, vad_samples)) {
@@ -7775,7 +9694,158 @@ int whisper_full(
         samples = vad_samples.data();
         n_samples = vad_samples.size();
     }
-    return whisper_full_with_state(ctx, ctx->state, params, samples, n_samples);
+
+    // Tentativa 1 (COMPOSTA): segmentos RETIDOS (transação) — só publicados se aceita.
+    whisper_full_params params_attempt = params;
+    if (vad_requested) {
+        params_attempt.new_segment_callback           = nullptr;
+        params_attempt.new_segment_callback_user_data = nullptr;
+    }
+    // R10/fase F (F2): correlaciona o job nativo ao job/sessão do chamador.
+    const uint64_t sig_vad_job = vad_requested ? sig_vad_job_seq_fetch() : 0;
+#ifdef SIG_WHISPER_DUMP_HOOK
+    if (vad_requested) {
+        fprintf(stderr, "SIGVAD ev=begin job=%llu attempt=1\n", (unsigned long long) sig_vad_job);
+        fflush(stderr);
+    }
+#endif
+    const int64_t sig_t1_begin = ggml_time_us();
+    int ret = whisper_full_with_state(ctx, ctx->state, params_attempt, samples, n_samples);
+    const int ret_attempt1 = ret;
+    sig_attempt1_us = ggml_time_us() - sig_t1_begin;
+
+    // R10/fase F (F2): terminal da tentativa 1 pelo RETORNO REAL. Um cancel
+    // (rc=-100) ou erro (rc!=0) NÃO publica nada e NÃO dispara retry (nenhuma
+    // tentativa 2 indevida); o terminal do job segue esse retorno.
+    if (vad_requested && ret_attempt1 != 0) {
+        const sig_vad_compose::vad_attempt_terminal t1 =
+            sig_vad_compose::classify_vad_attempt_rc(ret_attempt1);
+        WHISPER_LOG_WARN("%s: VAD job=%llu attempt=1 %s (attempt_id=1, rc=%d) - nada publicado, SEM retry\n",
+                         __func__, (unsigned long long) sig_vad_job,
+                         sig_vad_compose::vad_attempt_terminal_name(t1), ret_attempt1);
+    }
+
+    // R8/fase E (E2) + R9/fase E (E1) + R10/fase F (F1): gate de sanidade do
+    // decode do PCM COMPOSTO. Só junk ESTRUTURAL (UTF-8 inválido/U+FFFD/controle/
+    // uso privado/não-caractere/surrogate) rejeita a tentativa. MISTURA DE
+    // ALFABETOS é SUSPEITA LINGUÍSTICA (texto UTF-8 válido) — REGISTRADA e NUNCA
+    // motivo de retry por si só. Se rejeitado, a tentativa é DESCARTADA (nada
+    // publicado) e o áudio ORIGINAL é re-decodificado SEM VAD (1 retry; mapa VAD
+    // limpo — tempos do fallback são originais).
+    if (ret_attempt1 == 0 && vad_requested) {
+        const char * language = (params.language != nullptr && params.language[0] != '\0')
+                                    ? params.language : "auto";
+        const bool translate_task = params.translate;
+        bool junk = false;
+        sig_vad_compose::text_junk_reason junk_reason = sig_vad_compose::text_junk_reason::none;
+        sig_vad_compose::text_suspicion suspicion = sig_vad_compose::text_suspicion::none;
+        std::string suspicion_token;
+        for (const auto & seg : ctx->state->result_all) {
+            const sig_vad_compose::text_gate g = sig_vad_compose::analyze_text_for_job(seg.text, language, translate_task);
+            if (g.junk) {
+                junk = true;
+                junk_reason = g.reason;
+                break;   // defeito ESTRUTURAL tem precedência sobre qualquer suspeita
+            }
+            if (suspicion == sig_vad_compose::text_suspicion::none &&
+                g.suspicion != sig_vad_compose::text_suspicion::none) {
+                suspicion = g.suspicion;
+                suspicion_token = g.suspicion_token;
+            }
+        }
+        if (suspicion != sig_vad_compose::text_suspicion::none) {
+            WHISPER_LOG_INFO("%s: VAD job=%llu attempt=1 SUSPICION recorded (reason=%s token='%s') - texto UTF-8 VALIDO; suspeita sozinha NAO dispara re-decode\n",
+                             __func__, (unsigned long long) sig_vad_job,
+                             sig_vad_compose::text_suspicion_name(suspicion), suspicion_token.c_str());
+        }
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // DIAG only: override the gate decision, never PCM/text/token bytes.
+        // This block is reachable only after a successful VAD attempt 1.
+        const char * sig_force_junk = getenv("SIG_WHISPER_VAD_FORCE_JUNK");
+        if (sig_force_junk != nullptr && strcmp(sig_force_junk, "1") == 0) {
+            junk = true;
+            fprintf(stderr, "SIGVAD ev=force_junk job=%llu attempt=1 rc=0 decision_only=1\n",
+                    (unsigned long long) sig_vad_job);
+            fflush(stderr);
+        }
+#endif
+        // Contrato de publicação da tentativa (fonte única: header).
+        const sig_vad_compose::vad_attempt_plan plan =
+            sig_vad_compose::plan_vad_attempt(vad_requested, ret_attempt1 == 0, junk);
+        if (plan.retry_no_vad) {
+            WHISPER_LOG_WARN("%s: VAD job=%llu attempt=1 REJECTED (structural reason=%s) - falling back to a no-VAD decode of the original audio\n",
+                             __func__, (unsigned long long) sig_vad_job,
+                             sig_vad_compose::text_junk_reason_name(junk_reason));
+            ctx->state->has_vad_segments = false;
+            ctx->state->vad_mapping_table.clear();
+            // Fallback remains provisional until its real decoder return code.
+            // Inherit retained segment callbacks, not the original streaming ones.
+            auto params_no_vad = params_attempt;
+            params_no_vad.vad = false;
+#ifdef SIG_WHISPER_DUMP_HOOK
+            fprintf(stderr, "SIGVAD ev=begin job=%llu attempt=2\n", (unsigned long long) sig_vad_job);
+            fflush(stderr);
+            // R13/B2 §1.3: MESMO evento -> a ponte arma com o job e o attempt
+            // REAIS desta tentativa (nada de tentativa suposta pelo chamador).
+            sig_whisper_attempt_begin((unsigned long long) sig_vad_job, 2);
+#endif
+            const int64_t sig_t2_begin = ggml_time_us();
+            ret = whisper_full_with_state(ctx, ctx->state, params_no_vad, orig_samples, orig_n_samples);
+            const int64_t sig_attempt2_us = ggml_time_us() - sig_t2_begin;
+            // R10/fase F (F2): o TERMINAL deriva do RETORNO REAL da tentativa 2 —
+            // um cancel (rc=-100) ou erro (rc!=0) NUNCA é reportado como ACCEPTED
+            // nem lido como transcrição válida/tempo de uma tentativa.
+            const sig_vad_compose::vad_attempt_terminal t2 =
+                sig_vad_compose::classify_vad_attempt_rc(ret);
+            if (t2 == sig_vad_compose::vad_attempt_terminal::accepted) {
+                // D1: o flush é o ponto de commit; se o pedido de cancelamento
+                // chegou entre o rc=0 e aqui, ele é NEGADO e nada é emitido.
+#ifdef SIG_WHISPER_DUMP_HOOK
+                // D1-físico: janela REAL rc=0 -> flush, ver SIG_COMMIT_RACE_HOOK.
+                sig_commit_race_point((unsigned long long) sig_vad_job, 2);
+#endif
+                const sig_publish_outcome sig_pub = sig_publish_retained_segments(
+                    ctx, ctx->state, params, (unsigned long long) sig_vad_job, 2);
+                if (sig_pub == sig_publish_denied) {
+                    WHISPER_LOG_WARN("%s: VAD job=%llu attempt=2 decoded rc=0 but NOT published (commit denied: cancel pending); attempt1_ms=%.1f attempt2_ms=%.1f - nada publicado\n",
+                                     __func__, (unsigned long long) sig_vad_job,
+                                     sig_attempt1_us / 1000.0, sig_attempt2_us / 1000.0);
+                } else {
+                    WHISPER_LOG_INFO("%s: VAD job=%llu attempt=2 ACCEPTED (attempt_id=2, rc=0); attempt1_ms=%.1f attempt2_ms=%.1f total_ms=%.1f (custo dobrado)\n",
+                                     __func__, (unsigned long long) sig_vad_job,
+                                     sig_attempt1_us / 1000.0, sig_attempt2_us / 1000.0,
+                                     (sig_attempt1_us + sig_attempt2_us) / 1000.0);
+                }
+            } else if (t2 == sig_vad_compose::vad_attempt_terminal::cancelled) {
+                WHISPER_LOG_WARN("%s: VAD job=%llu attempt=2 CANCELLED (attempt_id=2, rc=%d); attempt1_ms=%.1f attempt2_ms=%.1f - cancelamento, nada publicado\n",
+                                 __func__, (unsigned long long) sig_vad_job, ret,
+                                 sig_attempt1_us / 1000.0, sig_attempt2_us / 1000.0);
+            } else {
+                WHISPER_LOG_ERROR("%s: VAD job=%llu attempt=2 FAILED (attempt_id=2, rc=%d); attempt1_ms=%.1f attempt2_ms=%.1f - erro de motor, NENHUMA transcricao valida\n",
+                                  __func__, (unsigned long long) sig_vad_job, ret,
+                                  sig_attempt1_us / 1000.0, sig_attempt2_us / 1000.0);
+            }
+        } else if (plan.publish_attempt1) {
+            // Tentativa ACEITA: publicar os segmentos RETIDOS (flush único, sem duplicar).
+            // D1: mesmo ponto de commit da tentativa 2 — a corrida entre rc=0 e
+            // o flush não depende de qual tentativa foi aceita.
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // D1-físico: janela REAL rc=0 -> flush, ver SIG_COMMIT_RACE_HOOK.
+            sig_commit_race_point((unsigned long long) sig_vad_job, 1);
+#endif
+            const sig_publish_outcome sig_pub = sig_publish_retained_segments(
+                ctx, ctx->state, params, (unsigned long long) sig_vad_job, 1);
+            if (sig_pub == sig_publish_denied) {
+                WHISPER_LOG_WARN("%s: VAD job=%llu attempt=1 decoded rc=0 but NOT published (commit denied: cancel pending); attempt1_ms=%.1f - nada publicado\n",
+                                 __func__, (unsigned long long) sig_vad_job, sig_attempt1_us / 1000.0);
+            } else {
+                WHISPER_LOG_INFO("%s: VAD job=%llu attempt=1 ACCEPTED (attempt_id=1, rc=0, %d segment(s) publicados, attempt1_ms=%.1f)\n",
+                                 __func__, (unsigned long long) sig_vad_job,
+                                 (int) ctx->state->result_all.size(), sig_attempt1_us / 1000.0);
+            }
+        }
+    }
+    return ret;
 }
 
 int whisper_full_parallel(
@@ -7924,45 +9994,11 @@ int whisper_full_lang_id(struct whisper_context * ctx) {
     return ctx->state->lang_id;
 }
 
+// R7/fase F: busca no mapa processed->original delegada ao cabeçalho da
+// composição (aceita dois pontos com o MESMO processed_time nas junções: para
+// t == pt devolve o ponto pós-junção; interpolação apenas dentro de um trecho).
 static int64_t map_processed_to_original_time(int64_t processed_time, const std::vector<vad_time_mapping> & mapping_table) {
-    if (mapping_table.empty()) {
-        return processed_time;
-    }
-
-    if (processed_time <= mapping_table.front().processed_time) {
-        return mapping_table.front().original_time; // Before first mapping point
-    }
-
-    if (processed_time >= mapping_table.back().processed_time) {
-        return mapping_table.back().original_time; // After last mapping point
-    }
-
-    // Binary search over the time map that finds the first entry that has a
-    // processed time greater than or equal to the current processed time.
-    auto upper = std::lower_bound(mapping_table.begin(), mapping_table.end(), processed_time,
-        [](const vad_time_mapping & entry, int64_t time) {
-            return entry.processed_time < time;
-        }
-    );
-
-    // If exact match found
-    if (upper->processed_time == processed_time) {
-        return upper->original_time;
-    }
-
-    // Need to interpolate between two points
-    auto lower = upper - 1;
-
-    int64_t processed_diff = upper->processed_time - lower->processed_time;
-    int64_t original_diff = upper->original_time - lower->original_time;
-    int64_t offset = processed_time - lower->processed_time;
-
-    if (processed_diff == 0) {
-        return lower->original_time;
-    }
-
-    // Perform linear interpolation
-    return lower->original_time + (offset * original_diff) / processed_diff;
+    return sig_vad_compose::map_processed_to_original(processed_time, mapping_table);
 }
 
 // Function to get the starting timestamp of a segment
@@ -8868,7 +10904,7 @@ static void whisper_exp_compute_token_level_timestamps_dtw(
     whisper_kv_cache_clear(state->kv_self);
     whisper_batch_prep_legacy(state->batch, tokens.data(), tokens.size(), 0, 0);
     whisper_kv_cache_seq_rm(state->kv_self, 0, 0, -1);
-    if (!whisper_decode_internal(*ctx, *state, state->batch, n_threads, true, nullptr, nullptr)) {
+    if (whisper_decode_internal(*ctx, *state, state->batch, n_threads, true, nullptr, nullptr) != SIG_STEP_OK) {
         WHISPER_LOG_INFO("DECODER FAILED\n");
         WHISPER_ASSERT(0);
     }

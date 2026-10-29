@@ -9,6 +9,7 @@
 #include "vec.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cfloat>
 #include <cmath>
 
@@ -8211,6 +8212,31 @@ void ggml_compute_forward_top_k(
     }
 }
 
+// R8/fase G (G2-a): V F16 -> F32 + FMA em UM passo, sem o buffer V32
+// intermediario (o par antigo ggml_fp16_to_fp32_row + ggml_vec_mad_f32
+// escrevia/lia DV floats de scratch por chave). Mesma matematica por elemento:
+// conversao exata + FMA por lane nos blocos SIMD e cauda escalar identica ao
+// mad F32 — muda apenas o trafego de memoria do scratch por thread.
+static void ggml_sig_vec_mad_f16_to_f32(int64_t n, float * GGML_RESTRICT acc,
+                                        const ggml_fp16_t * GGML_RESTRICT src, const float mult) {
+    int64_t i = 0;
+#if defined(__ARM_NEON)
+    const float32x4_t vx = vdupq_n_f32(mult);
+    for (; i + 8 <= n; i += 8) {
+        const float16x8_t hv = vld1q_f16((const __fp16 *) (src + i));
+        float32x4_t a0 = vld1q_f32(acc + i + 0);
+        float32x4_t a1 = vld1q_f32(acc + i + 4);
+        a0 = vfmaq_f32(a0, vcvt_f32_f16(vget_low_f16(hv)),  vx);
+        a1 = vfmaq_f32(a1, vcvt_f32_f16(vget_high_f16(hv)), vx);
+        vst1q_f32(acc + i + 0, a0);
+        vst1q_f32(acc + i + 4, a1);
+    }
+#endif
+    for (; i < n; ++i) {
+        acc[i] += GGML_FP16_TO_FP32(src[i]) * mult;
+    }
+}
+
 static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
         const ggml_compute_params * params,
         ggml_tensor * dst,
@@ -8307,16 +8333,19 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
         float S = 0.0f;      // sum
         float M = -INFINITY; // maximum KQ value
 
-        float       * VKQ32 = (float       *) params->wdata + ith*(1*DK + 2*DV + CACHE_LINE_SIZE_F32); // FP32 VKQ accumulator
-        float       * V32   =                 (VKQ32 + 1*DV); // (temporary) FP32 V buffer
-        ggml_fp16_t * VKQ16 = (ggml_fp16_t *) (VKQ32 + 1*DV); // (temporary) FP16 VKQ accumulator
+        // R7/fase B (B2): o acumulador de saida VKQ e SEMPRE F32. A versao anterior
+        // acumulava VKQ em F16 quando V era F16 (ggml_vec_scale_f16/mad_f16 arredondam
+        // o acumulador a CADA chave) e so convertia para F32 no final; o arredondamento
+        // reiterado estourava o envelope kv-f16 (cross real da R6-B: max_abs 3,7e-2).
+        // Layout do scratch por thread (inalterado desde a R6): [VKQ32: DV][V32: DV]
+        // [Q_q: DK/2..DK]; stride DK + 2*DV + CACHE_LINE_SIZE_F32 floats (o tamanho do
+        // workspace que cobre este layout e checado no ggml-cpu.c e com GGML_ASSERT no
+        // wrapper ggml_compute_forward_flash_attn_ext_f16).
+        float       * VKQ32 = (float       *) params->wdata + ith*(1*DK + 2*DV + CACHE_LINE_SIZE_F32); // FP32 VKQ accumulator (sempre)
+        float       * V32   =                 (VKQ32 + 1*DV); // (temporary) FP32 V buffer (V F16/quantizado convertido)
         ggml_fp16_t * Q_q   = (ggml_fp16_t *) (VKQ32 + 2*DV); // (temporary) buffer for Q converted to quantized/FP16
 
-        if (v->type == GGML_TYPE_F16) {
-            memset(VKQ16, 0, DV*sizeof(ggml_fp16_t));
-        } else {
-            memset(VKQ32, 0, DV*sizeof(float));
-        }
+        memset(VKQ32, 0, DV*sizeof(float));
 
         const ggml_fp16_t * mp = mask ? (ggml_fp16_t *)((char *) mask->data + iq1*mask->nb[1] + (iq2%mask->ne[2])*mask->nb[2] + (iq3%mask->ne[3])*mask->nb[3]) : NULL;
 
@@ -8361,51 +8390,32 @@ static void ggml_compute_forward_flash_attn_ext_f16_one_chunk(
 
             const char * v_data = ((const char *) v->data + (ic*nbv1 + iv2*nbv2 + iv3*nbv3));
 
-            if (v->type == GGML_TYPE_F16) {
-                if (s > M) {
-                    // s is new maximum, ms < 1.0f, vs == expf(s - s) == 1.0f
-                    M = s;
-                    ms = expf(Mold - M);
+            if (s > M) {
+                // s is new maximum, ms < 1.0f, vs == expf(s - s) == 1.0f
+                M = s;
+                ms = expf(Mold - M);
 
-                    // V = V*expf(Mold - M)
-                    ggml_vec_scale_f16(DV, VKQ16, ms);
-                } else {
-                    // no new maximum, ms == 1.0f, vs != 1.0f
-                    vs = expf(s - M);
-                }
-
-                // V += v*expf(s - M)
-                ggml_vec_mad_f16(DV, VKQ16, (const ggml_fp16_t *) v_data, vs);
+                // V = V*expf(Mold - M)  (reescala SEMPRE em F32)
+                ggml_vec_scale_f32(DV, VKQ32, ms);
             } else {
-                if (s > M) {
-                    // s is new maximum, ms < 1.0f, vs == expf(s - s) == 1.0f
-                    M = s;
-                    ms = expf(Mold - M);
+                // no new maximum, ms == 1.0f, vs != 1.0f
+                vs = expf(s - M);
+            }
 
-                    // V = V*expf(Mold - M)
-                    ggml_vec_scale_f32(DV, VKQ32, ms);
-                } else {
-                    // no new maximum, ms == 1.0f, vs != 1.0f
-                    vs = expf(s - M);
-                }
-
-                // V += v*expf(s - M)
-                if (v_to_float) {
-                    v_to_float(v_data, V32, DV);
-                    ggml_vec_mad_f32(DV, VKQ32, V32, vs);
-                } else {
-                    // V is F32
-                    ggml_vec_mad_f32(DV, VKQ32, (const float *) v_data, vs);
-                }
+            // V += v*expf(s - M)  (V F16/quantizado convertido p/ V32 F32; soma em F32)
+            // R8/G (G2-a): para V F16 a conversao funde direto no FMA (sem V32);
+            // demais tipos (F32/quantizados) mantem o par convert+mad inalterado.
+            if (v->type == GGML_TYPE_F16) {
+                ggml_sig_vec_mad_f16_to_f32(DV, VKQ32, (const ggml_fp16_t *) v_data, vs);
+            } else if (v_to_float) {
+                v_to_float(v_data, V32, DV);
+                ggml_vec_mad_f32(DV, VKQ32, V32, vs);
+            } else {
+                // V is F32
+                ggml_vec_mad_f32(DV, VKQ32, (const float *) v_data, vs);
             }
 
             S = S*ms + vs; // scale and increment sum with partial sum
-        }
-
-        if (v->type == GGML_TYPE_F16) {
-            for (int64_t d = 0; d < DV; ++d) {
-                VKQ32[d] = GGML_CPU_FP16_TO_FP32(VKQ16[d]);
-            }
         }
 
         // sinks - apply only on the first kv-chunk
@@ -8867,6 +8877,11 @@ static void ggml_compute_forward_flash_attn_ext_f16(
         const int64_t partial_size  = 2 + DV;
         float *       partials_base = (float *) params->wdata + nth * (DK + 2*DV + CACHE_LINE_SIZE_F32);
 
+        // R7/fase B (B2): invariante de workspace do caminho split-KV — o consumo real
+        // (scratch com stride DK+2*DV+CLS_F32 por thread + partials neq2*(2+DV) por
+        // thread) nao pode exceder o wsize planejado (fonte unica: ggml-cpu.c).
+        GGML_ASSERT((size_t)(nth*(DK + 2*DV + (int64_t) CACHE_LINE_SIZE_F32) + nth*neq2*(2 + DV))*sizeof(float) <= params->wsize);
+
         const int64_t ic_start = ith * chunk_size;
         const int64_t ic_end   = std::min(ic_start + chunk_size, nek1);
 
@@ -8923,6 +8938,18 @@ static void ggml_compute_forward_flash_attn_ext_f16(
 #ifdef GGML_SIMD
         use_tiled &= (DV % GGML_F32_EPR == 0);
 #endif
+
+        // R7/fase B (B2): invariante de workspace dos caminhos nao-split (tiled com
+        // scratch Q/KQ/mask/VKQ/V/K por thread, ou one_chunk com VKQ32/V32/Q_q) — o
+        // consumo com o pad de cacheline do stride nao pode exceder o wsize planejado.
+        {
+            const int64_t KV_TILE_SZ = ggml_fa_tile_config::KV;
+            const int64_t per_thread = use_tiled
+                ? (Q_TILE_SZ*DK + 2*Q_TILE_SZ*KV_TILE_SZ + Q_TILE_SZ*DV + KV_TILE_SZ*DV + KV_TILE_SZ*DK + (int64_t) CACHE_LINE_SIZE_F32)
+                : (DK + 2*DV + (int64_t) CACHE_LINE_SIZE_F32);
+            GGML_ASSERT((size_t)(per_thread*nth)*sizeof(float) <= params->wsize);
+        }
+
         int current_chunk = ith;
 
         while (current_chunk < nchunk) {
@@ -8940,9 +8967,24 @@ static void ggml_compute_forward_flash_attn_ext_f16(
     }
 }
 
+// R8/fase A (A2) — contador ESTRUTURADO de execução de FA no CPU (NORMAL e
+// DIAG, custo: 1 atomic por op FA no CPU, que é raro). O JNI o lê via símbolo
+// opcional [sig_fa_cpu_exec_count] para o delta POR JOB.
+static std::atomic<uint64_t> g_sig_fa_cpu_exec{0};
+extern "C" uint64_t sig_fa_cpu_exec_count(void) {
+    return g_sig_fa_cpu_exec.load(std::memory_order_relaxed);
+}
+
 void ggml_compute_forward_flash_attn_ext(
         const ggml_compute_params * params,
         ggml_tensor * dst) {
+    // R8/fase A (A2) — EXECUÇÃO REAL de FA no CPU: UMA contagem por op
+    // (thread 0; cada op roda uma vez por dispatch). É esta contagem — e
+    // SOMENTE ela — que autoriza dizer "CPU executou" no SIG_FA_EXEC: recusa
+    // de placement no Vulkan NUNCA conta como execução.
+    if (params->ith == 0) {
+        g_sig_fa_cpu_exec.fetch_add(1, std::memory_order_relaxed);
+    }
     switch (dst->op_params[3]) {
         case GGML_PREC_DEFAULT:
         case GGML_PREC_F32:

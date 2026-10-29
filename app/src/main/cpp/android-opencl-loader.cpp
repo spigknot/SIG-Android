@@ -7,6 +7,7 @@
 #include <dlfcn.h>
 
 #include <atomic>
+#include <type_traits>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -94,8 +95,22 @@ void * opencl_handle() {
     return handle;
 }
 
+// R33/A1 — o cache era `static std::atomic<Fn>` DENTRO do template: um slot por
+// TIPO, nao por simbolo. `clFlush_fn` e `clFinish_fn` sao o MESMO tipo
+// (`cl_int (CL_API_CALL *)(cl_command_queue)`), entao o primeiro resolvido
+// respondia pelos dois — clFlush chamava flush e clFinish chamava flush.
+// Agora o slot vem do PONTO DE CHAMADA (um por wrapper, via lambda no macro),
+// o que da identidade de simbolo sem mapa global e sem `call_once` que congele
+// a primeira resolucao nula.
+// R33/E2 — origem REAL do simbolo: o endereco resolvido por dlsym, nao o do
+// wrapper do shim. Guardado quando clGetPlatformIDs e resolvido.
+static std::atomic<void *> g_sig_clGetPlatformIDs_addr{nullptr};
+
 template <typename Fn>
-Fn load_opencl_fn(const char * name) {
+inline void sig_note_symbol(std::atomic<Fn> *) {}
+
+template <typename Fn>
+Fn load_opencl_fn(const char * name, std::atomic<Fn> & cached) {
     // SIG (F15/F17): cache de simbolos do shim OpenCL - ENDURECIDO para produto:
     // - publicacao ATOMICA (nenhum ponteiro parcial observavel);
     // - FALHAS nunca cacheadas (retry a cada chamada; primeiro acesso antes do
@@ -108,7 +123,6 @@ Fn load_opencl_fn(const char * name) {
     const bool cache_on = sig_loadercache_enabled();
     const bool counting = sig_clcount_enabled();
     if (counting) g_sig_shim_calls.fetch_add(1, std::memory_order_relaxed);
-    static std::atomic<Fn> cached{nullptr};
     if (cache_on) {
         Fn hit = cached.load(std::memory_order_acquire);
         if (hit != nullptr) return hit;
@@ -132,6 +146,30 @@ Fn load_opencl_fn(const char * name) {
 } // namespace
 
 extern "C" long long sig_opencl_shim_calls()  { return g_sig_shim_calls.load(std::memory_order_relaxed); }
+// R32/D — identidade do DSO carregado e origem do símbolo. Sem isto, o endereço
+// do wrapper local seria confundido com a biblioteca vendor.
+extern "C" const char * sig_opencl_lib_path(void) {
+    static char caminho[512] = {0};
+    if (caminho[0] != 0) {
+        return caminho;
+    }
+    // R33/E2 — a origem tem de ser o ponteiro RESOLVIDO por dlsym para
+    // clGetPlatformIDs. Usar o endereco deste helper apontaria sempre o DSO do
+    // shim, nunca a biblioteca vendor (erro da R32).
+    void * resolvido = g_sig_clGetPlatformIDs_addr.load(std::memory_order_acquire);
+    if (resolvido == nullptr) {
+        snprintf(caminho, sizeof(caminho), "%s", "simbolo_nao_resolvido");
+        return caminho;
+    }
+    Dl_info info;
+    if (dladdr(resolvido, &info) != 0 && info.dli_fname != nullptr) {
+        snprintf(caminho, sizeof(caminho), "%s", info.dli_fname);
+    } else {
+        snprintf(caminho, sizeof(caminho), "%s", "dladdr_indisponivel");
+    }
+    return caminho;
+}
+
 extern "C" long long sig_opencl_dlsym_calls() { return g_sig_dlsym_calls.load(std::memory_order_relaxed); }
 extern "C" void      sig_opencl_counters_reset() { g_sig_shim_calls = 0; g_sig_dlsym_calls = 0; }
 
@@ -139,7 +177,16 @@ extern "C" const char * sig_opencl_loader_last_error() {
     return g_opencl_loader_error.c_str();
 }
 
-#define OPENCL_FN(name) load_opencl_fn<name##_fn>(#name)
+#define OPENCL_FN(name)                                                        \
+    ([]() {                                                                    \
+        static std::atomic<name##_fn> sig_slot{nullptr};                       \
+        name##_fn sig_fn = load_opencl_fn<name##_fn>(#name, sig_slot);         \
+        if constexpr (std::is_same<name##_fn, clGetPlatformIDs_fn>::value) {   \
+            g_sig_clGetPlatformIDs_addr.store(reinterpret_cast<void *>(sig_fn),\
+                                              std::memory_order_release);      \
+        }                                                                      \
+        return sig_fn;                                                         \
+    }())
 #define OPENCL_MISSING_ERROR CL_INVALID_OPERATION
 #define OPENCL_PLATFORM_NOT_FOUND -1001
 

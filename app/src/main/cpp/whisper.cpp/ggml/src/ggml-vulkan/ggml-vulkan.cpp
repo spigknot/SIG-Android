@@ -1,7 +1,13 @@
 #include "ggml-vulkan.h"
 #include <vulkan/vulkan_core.h>
+// R6/fase F (F2): SPIR-V embutido da variante compacta fa_r6 (streaming por
+// query/head, WG64, online softmax; Q f32 / K,V f16 / head_dim 64 / O f32).
+#include "ggml-vulkan-fa-r6-spv.h"
+#include "ggml-vulkan-fa-r6-bc-spv.h"
+#include "ggml-vulkan-fa-r6-guards.h"
 #if defined(GGML_VULKAN_RUN_TESTS) || defined(GGML_VULKAN_CHECK_RESULTS)
 #include <chrono>
+#include <set>   // R3/fase D (D2): registro de pipelines reprovadas
 #include "ggml-cpu.h"
 #endif
 
@@ -20,6 +26,16 @@ DispatchLoaderDynamic & ggml_vk_default_dispatcher();
 #define VULKAN_HPP_DEFAULT_DISPATCHER ggml_vk_default_dispatcher()
 
 #include <vulkan/vulkan.hpp>
+// R30/A - o adaptador do ciclo e o ledger NAO sao telemetria: o cancelamento
+// vale tambem no build NORMAL. Incluidos fora de qualquer #ifdef (na R29 eles
+// estavam dentro do bloco DIAG e o NORMAL nao compilava).
+#include "sig_vk_ledger.h"
+#include "sig_vk_submit_cycle.h"
+// R55/MM-PLAN - pedido/alvo/familia/plano do laboratorio de MUL_MAT. Header
+// puro (sem Vulkan/ggml): o MESMO arquivo e' compilado pelo teste HOST.
+#include "sig-whisper-lab-mm-plan.h"
+#include <cstdarg>
+#include <cstdio>
 
 // SPIR-V Headers: different SDK installations expose different include paths.
 // LunarG Vulkan SDK on Windows typically provides <spirv-headers/spirv.hpp>.
@@ -53,6 +69,7 @@ DispatchLoaderDynamic & ggml_vk_default_dispatcher();
 #include <mutex>
 #include <future>
 #include <thread>
+#include <type_traits>
 
 #if defined(_MSC_VER)
 # define NOMINMAX 1
@@ -80,6 +97,15 @@ DispatchLoaderDynamic & ggml_vk_default_dispatcher();
 #include "ggml-backend-impl.h"
 
 #include "ggml-vulkan-shaders.hpp"
+
+// R13/D1 — decisão de cancelamento em fronteira segura (seam puro, testável no
+// host por tests/seam_test.cpp: sem Vulkan, sem ggml).
+#include "ggml-vulkan-abort.h"
+
+// O contrato de abort do ggml e o do seam têm de ser o MESMO tipo: o backend
+// recebe o ponteiro pelo proc "ggml_backend_set_abort_callback" (igual ao CPU).
+static_assert(std::is_same<ggml_abort_callback, sig_vk_abort_cb>::value,
+              "ggml_abort_callback e sig_vk_abort_cb precisam ter a mesma assinatura");
 
 // remove this once it's more widely available in the SDK
 #if !defined(VK_KHR_shader_bfloat16)
@@ -143,6 +169,10 @@ struct vk_pipeline_struct {
     uint32_t push_constant_size;
     uint32_t parameter_count;
     std::array<uint32_t, 3> wg_denoms;
+    // R6/fase A (A1): constantes de especializacao REAIS usadas na criacao desta
+    // pipeline (ex.: soft_max_f32_wg64 => {64}; wg512 => {512}; large => {128,4}).
+    // Reportadas no trace SM-TRACE; nunca inferidas de nome/ncols.
+    std::vector<uint32_t> spec_constants;
     uint32_t align;
     // true if fields have been set by ggml_vk_create_pipeline
     bool initialized {};
@@ -150,6 +180,9 @@ struct vk_pipeline_struct {
     std::atomic<bool> needed {};
     // set to true when the shader has been compiled
     std::atomic<bool> compiled {};
+    // R3/fase D (D2): pipeline reprovada (qualquer família) -> não re-tentar
+    // compilação em load_shaders e servir de base para a recusa/detecção.
+    bool failed {};
     // number of registers used, extracted from pipeline executable properties
     uint32_t register_count {};
 
@@ -225,6 +258,14 @@ struct vk_command_pool {
             [](const auto& cb) { return cb.in_use; });
     }
 };
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+// R25/GPU-K1 — RECURSO DE CONCLUSAO POR SUBMISSAO (timeline monotonica do
+// dispositivo). Criada uma vez, destruida no teardown do dispositivo.
+static vk::Device g_diag_device;
+static vk::Semaphore g_diag_completion_tl;
+static std::atomic<uint64_t> g_diag_completion_value{0};
+#endif
 
 // Prevent simultaneous submissions to the same queue.
 // This could be per vk_queue if we stopped having two vk_queue structures
@@ -645,6 +686,39 @@ struct vk_device_struct {
     // scheduler routes everything to the CPU backend.
     std::atomic<uint32_t> pipeline_failures {};
 
+    // R2/fase C (C1): falha da FAMÍLIA Flash Attention ao compilar. Diferente
+    // do contador global acima, NÃO recusa o dispositivo inteiro: supports_op
+    // recusa apenas as ops FA. Recusar tudo abortava o agendador quando já
+    // havia tensor residente em buffer Vulkan (ggml-backend.cpp:898 — ver
+    // build/whisper-rodada2/20261009-0149/fase-c/BTRACE-C1.md).
+    std::atomic<bool> flash_attn_pipelines_failed {false};
+    // R2/fase C (C1): verdadeiro SOMENTE enquanto sig_vk_flash_attn_preflight
+    // executa sua minicomputação. É a única janela em que a falha simulada
+    // (SIG_VK_FA_FAIL_INJECT) pode disparar: fora dela a injeção fica
+    // DESARMADA e runs FA-off (recuperação) não são poluídos por
+    // re-tentativas de compilação de pipelines FA remanescentes.
+    std::atomic<bool> flash_attn_preflight_running {false};
+    // R2/fase C (C1): a pré-checagem de FA já rodou neste dispositivo/processo.
+    std::atomic<bool> flash_attn_preflight_done {false};
+    // R3/fase D (D2): veredito da pré-checagem (-1 desconhecido/em curso,
+    // 0 reprovado, 1 aprovado). Publicado SOMENTE após a conclusão.
+    std::atomic<int> flash_attn_preflight_verdict {-1};
+
+    // R3/fase D (D2) — recuperação ALÉM de FA (a recusa global ingênua era a
+    // causa do abort do agendador; a recusa específica de FA não cobria os
+    // demais pipelines). Regras:
+    //  - non_fa_pipelines_failed: alguma pipeline NÃO-FA reprovou. supports_op
+    //    recusa ops cujo tensor de SAÍDA é móvel; op com output residente NÃO
+    //    é recusado (ggml-backend.cpp:898 abortava com tensor pré-alocado).
+    //  - failed_pipeline_names: registro textual p/ diagnóstico e recusa.
+    //  - dispatch_skipped: despacho pulado por pipeline indisponível =>
+    //    ggml_backend_vk_graph_compute devolve GGML_STATUS_FAILED (fim do
+    //    resultado parcial silencioso).
+    std::atomic<bool> non_fa_pipelines_failed {false};
+    std::mutex failed_pipelines_mutex;
+    std::set<std::string> failed_pipeline_names;
+    std::atomic<uint32_t> dispatch_skipped {0};
+
     bool integer_dot_product;
     // 0: default, 1: force mmvq, -1: disable mmvq
     int32_t mmvq_mode;
@@ -827,6 +901,10 @@ struct vk_device_struct {
     vk_pipeline pipeline_diag_mask_inf_f32;
     vk_pipeline pipeline_soft_max_f32, pipeline_soft_max_f32_f16;
     vk_pipeline pipeline_soft_max_f32_wg512, pipeline_soft_max_f32_f16_wg512;
+    // R6/fase A (A1): variantes SEGURAS (spec real 64) da familia simples de SOFT_MAX,
+    // criadas SOMENTE no contexto da quirk W13 (vendor+driver+nome). Substituem a
+    // _wg512 na selecao (spec 512 nao escreve neste driver - replay R5-B, mesmo SPIR-V).
+    vk_pipeline pipeline_soft_max_f32_wg64, pipeline_soft_max_f32_f16_wg64;
     vk_pipeline pipeline_soft_max_back_f32;
 
     vk_pipeline pipeline_soft_max_large1_f32, pipeline_soft_max_large1_f32_f16;
@@ -870,6 +948,23 @@ struct vk_device_struct {
     vk_pipeline pipeline_conv2d_dw_cwhn_f32, pipeline_conv2d_dw_cwhn_f16_f32;
 
     std::map<vk_fa_pipeline_state, vk_pipeline> pipeline_flash_attn_f32_f16;
+
+    // R6/fase F (F2): variante compacta fa_r6. Criada DIRETO do SPIR-V embutido
+    // (sem gerador universal); mask0/mask1 = spec_id0 MASK_ENABLE.
+    vk_pipeline pipeline_fa_r6_mask0;
+    vk_pipeline pipeline_fa_r6_mask1;
+    // R7/fase G (G2d): variantes focais BC2/BC4 (bloco de chaves por iteracao) do
+    // mesmo contrato da fa_r6; selecao por SHAPE no dispatch (N>=1024 e KV>=1024
+    // SEM mascara = shape do encoder -> BC2; demais (decoder/cross) -> BC4),
+    // deterministica por ne — nunca pelo conteudo reconhecido. Env
+    // GGML_VK_FA_R6_BC: "0"=SO o controle R6 (byte a byte) como opcao,
+    // "2"/"4"=forca variante (diagnostico), vazio=auto por shape.
+    vk_pipeline pipeline_fa_r6_bc2_mask0, pipeline_fa_r6_bc2_mask1;
+    vk_pipeline pipeline_fa_r6_bc4_mask0, pipeline_fa_r6_bc4_mask1;
+    std::atomic<int> fa_r6_bc_mode {-1};
+    // modo: -1 nao lido, 0 desligado (env GGML_VK_FA_R6=0), 1 auto (usa quando a
+    // familia FA generica falhou), 2 forcado (env=1).
+    std::atomic<int> fa_r6_mode {-1};
 
     std::map<std::pair<uint32_t, uint32_t>, vk_pipeline> pipeline_fa_mask_opt;
 
@@ -1674,6 +1769,16 @@ struct vk_context_struct {
     std::vector<vk_staging_memset> memsets;
 
     vk_command_pool * p {};
+    // R29/P0 — DONO deste contexto de comandos. O pedido de cancelamento é
+    // consultado no gate DESTE backend context (owner/tentativa daquele envio) e
+    // não num "último gate instalado" global. nullptr só em contexto temporário
+    // sem dono (transfer imediato), onde não há unidade de ledger.
+    ggml_backend_vk_context * owner {};
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R13/B2 — DIAG: dispatches compute GRAVADOS neste contexto desde o ultimo
+    // submit (zerado no submit). Nao existe como membro no build normal.
+    uint32_t diag_dispatch_count = 0;
+#endif
 };
 typedef std::shared_ptr<vk_context_struct> vk_context;
 typedef std::weak_ptr<vk_context_struct> vk_context_ref;
@@ -1914,12 +2019,41 @@ struct ggml_backend_vk_context {
     vk::Fence fence, almost_ready_fence;
     bool submit_pending {};
     bool almost_ready_fence_pending {};
+    // R13/D1 — pedido de cancelamento. O callback é instalado pelo dono do
+    // scheduler (whisper.cpp: sig_abort_binding) por meio do proc
+    // "ggml_backend_set_abort_callback", no MESMO thread que roda o compute, e
+    // é lido sem tocar no mutex do compute (a flag de quem pede é atômica).
+    // `observed` é pegajoso: depois de observado, este grafo não submete mais
+    // nenhuma unidade nova (ver ggml-vulkan-abort.h).
+    sig_vk_abort_gate abort_gate;
+    // R55/MM-PLAN — pedido do laboratorio lido UMA vez por entrada de grafo e
+    // estado POR TENTATIVA (run/attempt/contadores/dedupe). Nada global: dois
+    // contextos (ou dois jobs) nao compartilham contador nem erro pegajoso.
+    sig_lab_mm::State lab;
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R13/B2 — DIAG: identidade do graph e indice do lote compute atual.
+    uint64_t diag_graph_seq = 0;
+    uint32_t diag_batch_idx = 0;
+#endif
     // Set before op_add and unset after op_rms_norm to indicate that the add should
     // write partial sums to accumulate the square of the vector components
     bool do_add_rms_partials_offset_calculation;
     bool do_add_rms_partials;
 
     uint64_t last_total_mul_mat_bytes {};
+
+    // R14/B4 — MEDIÇÃO do trabalho em voo: quantos submits o grafo fez, quantos
+    // nós e quantos bytes de mul_mat. É OBSERVAÇÃO pura (não muda a política de
+    // submit nem o backlog); o valor só é lido no build DIAG.
+    uint32_t diag_submit_count = 0;
+    uint64_t diag_nodes_total = 0;
+    uint64_t diag_mul_mat_bytes = 0;
+    uint32_t diag_max_nodes_per_submit = 0;
+    // R15/C3 — nós EFETIVAMENTE submetidos (não o total do grafo) e tempo de submit.
+    uint64_t diag_nodes_submitted = 0;
+    int64_t  diag_t_first_submit_us = 0;
+    int64_t  diag_t_last_submit_us = 0;
+    int64_t  diag_lote_max_us = 0;
 
     // Cache most recent tensor that was converted into prealloc_y, and what pipeline it used to convert.
     vk_pipeline_struct * prealloc_y_last_pipeline_used {};
@@ -1969,6 +2103,521 @@ struct ggml_backend_vk_context {
     int32_t num_queries {};
     int32_t query_idx {};
 };
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+// ============================================================================
+// >>> SIG_VK_INFLIGHT_DIAG_BEGIN
+// R13/B2 — DIAG de TRABALHO EM VOO. Esta macro NAO existe no build normal
+// (CMakeLists: target_compile_definitions(ggml-vulkan ...) so dentro de
+// if (SIG_WHISPER_DIAG)): em NORMAL nao ha membro, contador, getenv, leitura
+// nem simbolo desta secao.
+//
+// Prova pretendida: anexar uma fence DIAG DEDICADA ao lote COMPUTE escolhido,
+// na MESMA fila, registrar o submit REAL (submit_seq/dispatch_count) e ler
+// getFenceStatus() ANTES e IMEDIATAMENTE DEPOIS de um pedido de cancel owned.
+// NOT_READY depois do pedido, na mesma fence/geracao, prova que o lote compute
+// estava submetido e ainda incompleto no instante do pedido.
+//
+// Limite: isso NAO prova que o shader ja executava em unidades GPU (para isso
+// exigir timestamps/query GPU); e uma fence vazia nao prova nada — por isso o
+// arm exige dispatch_count > 0.
+//
+// Nao cria trabalho, nao altera ordem, nao reusa/reseta fence em voo e nunca
+// substitui as fences existentes: a fence DIAG ocupa apenas o lugar da fence
+// VAZIA de um submit que ja ocorreria. Ativacao em runtime:
+// SIG_WHISPER_VK_INFLIGHT_DIAG=1 (string EXATA; ausente ou "0" desliga).
+// Saida: sink registrado, senao SIG_WHISPER_VK_INFLIGHT_DIAG_PATH (append),
+// senao GGML_LOG_WARN.
+#include "sig_vk_ledger.h"   // R25/GPU-K1 — ledger por unidade/fila/geração
+#include "sig_vk_submit_cycle.h"   // R29/P0 — adaptador do ciclo real de submit
+
+namespace sig_vk_inflight {
+
+// R17/D2 — CONTAGEM REAL DE SUBMISSÕES À GPU.
+// Fica FORA do gate `enabled()` de propósito: o diag de in-flight é opcional,
+// mas o denominador do quantum precisa existir sempre. Medido na R17: o
+// contador `ctx->diag_submit_count` ficava 0 no caminho executado (b4_nodes=967,
+// b4_submits=0), porque o ramo `submit && enqueued` não é o usado.
+static std::atomic<uint64_t> g_submits_real{0};
+// R20/B1 — TESTEMUNHA de trabalho pendente: issued x completed x outstanding.
+static std::atomic<uint64_t> g_completed{0};
+static std::atomic<uint64_t> g_outstanding{0};
+static std::atomic<uint64_t> g_max_outstanding{0};
+// R21/B1 — WATERMARK: o numero de submits emitidos ANTES da espera. O que for
+// submetido DURANTE a espera (outra thread/contexto) nao esta coberto por ela.
+static inline uint64_t submit_watermark() {
+    return g_submits_real.load(std::memory_order_relaxed);
+}
+static inline uint64_t outstanding_now();
+static inline void note_completion_after_wait(uint64_t watermark) {
+    // R22/B1 — MAX MONOTONO de verdade: load/if/store nao e atomico entre
+    // threads. completion(20) -> completion(10) nao pode "desconcluir" nada.
+    uint64_t c = g_completed.load(std::memory_order_relaxed);
+    while (watermark > c &&
+           !g_completed.compare_exchange_weak(c, watermark, std::memory_order_relaxed,
+                                              std::memory_order_relaxed)) {
+    }
+    g_outstanding.store(outstanding_now(), std::memory_order_relaxed);
+}
+
+// R22/B1 — PENDENTE DERIVADO: uma unica expressao alimenta snapshot e politica,
+// para que os dois nao possam discordar (o defeito apontado na revisao).
+static inline uint64_t outstanding_now() {
+    const uint64_t i = g_submits_real.load(std::memory_order_relaxed);
+    const uint64_t c = g_completed.load(std::memory_order_relaxed);
+    return i > c ? i - c : 0;
+}
+// R21/B1 — geracao de fence REAL: conta apenas submits com fence nao nula.
+static std::atomic<uint64_t> g_fence_gen{0};
+// R25/GPU-K1 — geracao do ultimo resetFences: unidade submetida em geracao
+// <= este valor teve a fence RECICLADA depois de si (nao e prova).
+static std::atomic<uint64_t> g_fence_reset_gen{0};
+static inline uint64_t outstanding() {
+    const uint64_t i = g_submits_real.load(std::memory_order_relaxed);
+    const uint64_t c = g_completed.load(std::memory_order_relaxed);
+    return i > c ? i - c : 0;
+}
+// R17/D2 — QUANTUM: dispatches do grafo por submissão real à GPU.
+static std::atomic<uint32_t> g_quantum_last{0};
+static std::atomic<uint64_t> g_quantum_sum{0};
+static std::atomic<uint32_t> g_quantum_count{0};
+static uint64_t g_last_graph_submits = 0;   // só na thread de compute
+
+static bool enabled() {
+    static const bool on = []() {
+        const char * v = getenv("SIG_WHISPER_VK_INFLIGHT_DIAG");
+        return v != nullptr && v[0] == '1' && v[1] == '\0';
+    }();
+    return on;
+}
+
+// Ponte de cancel OWNED: a JNI registra aqui o MESMO helper que o entrypoint
+// owned usa; o ggml NUNCA acessa estaticos da JNI nem JNIEnv (a thread que
+// submete nao e a thread Java). O opaque e do registrante.
+typedef void (*cancel_bridge_fn)(void * opaque, const char * owner,
+                                 unsigned long long job, int attempt);
+typedef void (*event_sink_fn)(const char * line, void * opaque);
+
+static std::recursive_mutex g_lock;
+static std::mutex g_io_lock;
+static cancel_bridge_fn g_cancel_bridge = nullptr;
+static void * g_cancel_bridge_opaque = nullptr;
+static event_sink_fn g_event_sink = nullptr;
+static void * g_event_sink_opaque = nullptr;
+static uint64_t g_submit_seq = 0;
+static uint64_t g_fence_generation = 0;
+
+struct capture {
+    bool armed = false;
+    bool attached = false;   // fence DIAG anexada a um submit real
+    bool probed = false;     // sondas ja feitas para ESTA fence (nao repetir)
+    bool witness = false;    // NOT_READY observado DEPOIS do pedido
+    std::string owner;
+    uint64_t job = 0;
+    int attempt = 0;
+    uint64_t graph = 0;
+    uint32_t batch = 0;
+    uint64_t fence_generation = 0;
+    uint64_t submit_seq = 0;
+    uint32_t dispatch_count = 0;
+    // R14/B4 — MEDIÇÃO do trabalho em voo por grafo.
+    uint32_t b4_submits = 0;
+    uint64_t b4_nodes = 0;
+    uint64_t b4_mulmat_bytes = 0;
+    uint32_t b4_max_nodes_per_submit = 0;
+    // R15/C3 — separa EXECUTADO de TOTAL e mede o tempo dos lotes.
+    uint64_t b4_nodes_total = 0;
+    uint32_t b4_lote_max_ms = 0;
+    uint64_t b4_t_first_ms = 0;
+    uint64_t b4_t_last_ms = 0;
+    vk::Fence fence {};
+    vk::Device device {};
+    const char * state = "IDLE";
+};
+static capture g_cap;
+
+static const char * fence_state_name(vk::Result r) {
+    switch (r) {
+        case vk::Result::eSuccess:  return "SUCCESS";
+        case vk::Result::eNotReady: return "NOT_READY";
+        case vk::Result::eTimeout:  return "TIMEOUT";
+        default:                    return "ERROR";
+    }
+}
+
+static void emit(const char * stage, const char * event, const std::string & owner,
+                 uint64_t job, int attempt, uint64_t graph, uint32_t batch,
+                 uint32_t dispatch_count, uint64_t submit_seq,
+                 uint64_t fence_generation, const char * fence_state) {
+    if (!enabled()) return;
+    char buf[1024];
+    const int n = snprintf(buf, sizeof(buf),
+        "[VK-INFLIGHT] schema=1 source=PHYSICAL owner=%s job=%llu attempt=%d stage=%s event=%s "
+        "graph=%llu batch=%u queue=compute fence_generation=%llu dispatch_count=%u "
+        "submit_seq=%llu fence_state=%s t_us=%lld",
+        owner.c_str(), (unsigned long long) job, attempt, stage, event,
+        (unsigned long long) graph, (unsigned) batch,
+        (unsigned long long) fence_generation, (unsigned) dispatch_count,
+        (unsigned long long) submit_seq, fence_state, (long long) ggml_time_us());
+    if (n <= 0) return;
+
+    event_sink_fn sink = nullptr;
+    void * sink_opaque = nullptr;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        sink = g_event_sink;
+        sink_opaque = g_event_sink_opaque;
+    }
+    if (sink != nullptr) {
+        sink(buf, sink_opaque);
+        return;
+    }
+    const char * path = getenv("SIG_WHISPER_VK_INFLIGHT_DIAG_PATH");
+    if (path != nullptr && path[0] != '\0') {
+        std::lock_guard<std::mutex> io(g_io_lock);
+        FILE * f = fopen(path, "a");
+        if (f != nullptr) {
+            fprintf(f, "%s\n", buf);
+            fclose(f);
+            return;
+        }
+    }
+    GGML_LOG_WARN("%s\n", buf);
+}
+
+// Usado com g_lock tomado (mutex recursivo).
+static void emit_cap(const char * stage, const char * event, const char * fence_state) {
+    emit(stage, event, g_cap.owner, g_cap.job, g_cap.attempt, g_cap.graph,
+         g_cap.batch, g_cap.dispatch_count, g_cap.submit_seq,
+         g_cap.fence_generation, fence_state);
+}
+
+// ANTES do queue.submit do lote compute real, na thread que submete.
+// Devolve a fence DEDICADA (mesma fila) ou {} para manter o submit como estava.
+static vk::Fence prepare(ggml_backend_vk_context * ctx, vk_context & subctx) {
+    if (!enabled()) return {};
+    if (ctx == nullptr || ctx->device == nullptr) return {};
+    if (subctx == nullptr || subctx->p == nullptr) return {};
+    // somente a fila COMPUTE deste backend: transfer/marker nao servem de prova
+    if (subctx->p->q != &ctx->device->compute_queue) return {};
+    std::lock_guard<std::recursive_mutex> lk(g_lock);
+    if (!g_cap.armed || g_cap.attached) return {};
+    if (subctx->diag_dispatch_count == 0) return {};   // nada de submit vazio
+    vk::Fence fence;
+    try {
+        fence = ctx->device->device.createFence({});
+    } catch (...) {
+        g_cap.state = "ERROR_FENCE_CREATE";
+        emit_cap("FENCE_ERROR", "fence_error", "ERROR");
+        return {};
+    }
+    g_cap.fence = fence;
+    g_cap.device = ctx->device->device;
+    g_cap.attached = true;
+    g_cap.dispatch_count = subctx->diag_dispatch_count;
+    // R14/B4 — MEDIÇÃO: submits/nós/bytes do grafo que originou este submit.
+    g_cap.b4_submits = ctx->diag_submit_count;
+    // R15/C3 — ATENCAO: antes isto publicava diag_nodes_total (o grafo inteiro)
+    // com o nome de "nos". Agora b4_nodes e' o EXECUTADO e o total tem campo proprio.
+    g_cap.b4_nodes = ctx->diag_nodes_submitted;
+    g_cap.b4_nodes_total = ctx->diag_nodes_total;
+    g_cap.b4_mulmat_bytes = ctx->diag_mul_mat_bytes;
+    g_cap.b4_max_nodes_per_submit = ctx->diag_max_nodes_per_submit;
+    g_cap.b4_lote_max_ms = (uint32_t) ((ctx->diag_lote_max_us + 500) / 1000);
+    g_cap.b4_t_first_ms = ctx->diag_t_first_submit_us > 0
+        ? (uint64_t) (ctx->diag_t_first_submit_us / 1000) : 0;
+    g_cap.b4_t_last_ms = ctx->diag_t_last_submit_us > 0
+        ? (uint64_t) (ctx->diag_t_last_submit_us / 1000) : 0;
+    g_cap.graph = ctx->diag_graph_seq;
+    g_cap.batch = ctx->diag_batch_idx;
+    g_cap.fence_generation = ++g_fence_generation;
+    g_cap.submit_seq = 0;
+    return fence;
+}
+
+// DEPOIS de queue.submit() retornar (registro de recording/EXEC nao e prova).
+static void note_queue_submit(vk::Fence fence) {
+    // R17/D2 — conta ANTES do gate: toda submissão real entra no denominador.
+    sig_vk_inflight::g_submits_real.fetch_add(1, std::memory_order_relaxed);
+    if (fence) {
+        sig_vk_inflight::g_fence_gen.fetch_add(1, std::memory_order_relaxed);
+    }
+    {
+        // R22/B1 — o pendente e DERIVADO (issued-completed). Aqui so atualizamos
+        // o maximo observado, a partir da mesma expressao da politica.
+        const uint64_t out = sig_vk_inflight::outstanding_now();
+        uint64_t maxv = sig_vk_inflight::g_max_outstanding.load(std::memory_order_relaxed);
+        while (out > maxv && !sig_vk_inflight::g_max_outstanding.compare_exchange_weak(
+                   maxv, out, std::memory_order_relaxed)) {
+        }
+    }
+    if (!enabled()) return;
+    std::lock_guard<std::recursive_mutex> lk(g_lock);
+    ++g_submit_seq;
+    if (g_cap.attached && !g_cap.probed && fence
+        && static_cast<VkFence>(fence) == static_cast<VkFence>(g_cap.fence)) {
+        g_cap.submit_seq = g_submit_seq;
+    }
+}
+
+// Sondas apos o submit real: pre-pedido -> pedido owned -> pos-pedido imediata.
+static void after_submit(ggml_backend_vk_context * ctx) {
+    if (!enabled()) return;
+    if (ctx == nullptr || ctx->device == nullptr) return;
+    vk::Fence fence;
+    std::string owner;
+    unsigned long long job = 0;
+    int attempt = 0;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        if (!g_cap.attached || !g_cap.fence || g_cap.submit_seq == 0) return;
+        if (g_cap.probed) return;   // lotes seguintes do mesmo graph nao repitam
+        g_cap.probed = true;
+        fence = g_cap.fence;
+        owner = g_cap.owner;
+        job = (unsigned long long) g_cap.job;
+        attempt = g_cap.attempt;
+        emit_cap("SUBMIT_WORK", "submit_work", "NONE");
+    }
+
+    vk::Result pre = vk::Result::eErrorUnknown;
+    try {
+        pre = ctx->device->device.getFenceStatus(fence);
+    } catch (...) {
+        pre = vk::Result::eErrorUnknown;
+    }
+    if (pre == vk::Result::eSuccess) {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        // Lote ja concluido: NAO e PASS e nao ha voo a cancelar.
+        g_cap.state = "RACE_ALREADY_COMPLETED";
+        emit_cap("RACE_ALREADY_COMPLETED", "race_already_completed", "SUCCESS");
+        return;
+    }
+    if (pre != vk::Result::eNotReady) {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        g_cap.state = "ERROR_FENCE_STATUS";
+        emit_cap("FENCE_ERROR", "fence_error", fence_state_name(pre));
+        return;
+    }
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        emit_cap("FENCE_PRE", "fence_not_ready", "NOT_READY");
+    }
+
+    cancel_bridge_fn bridge = nullptr;
+    void * bridge_opaque = nullptr;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        bridge = g_cancel_bridge;
+        bridge_opaque = g_cancel_bridge_opaque;
+    }
+    if (bridge == nullptr) {
+        // Sem ponte nao existe pedido: INCONCLUSIVO. Nunca fabricar "cancelado".
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        g_cap.state = "INCONCLUSIVE_NO_BRIDGE";
+        emit_cap("INCONCLUSIVE", "bridge_missing", "NOT_READY");
+        return;
+    }
+
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        g_cap.state = "REQUESTED";
+        emit_cap("CANCEL_REQUEST", "request", "NOT_READY");
+    }
+    // PEDIDO OWNED no mesmo helper da JNI. Chamado fora do lock; sem JNIEnv.
+    bridge(bridge_opaque, owner.c_str(), job, attempt);
+
+    // Sonda pos-pedido imediata: nenhuma espera entre o pedido e esta leitura.
+    vk::Result post = vk::Result::eErrorUnknown;
+    try {
+        post = ctx->device->device.getFenceStatus(fence);
+    } catch (...) {
+        post = vk::Result::eErrorUnknown;
+    }
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        if (post == vk::Result::eNotReady) {
+            g_cap.witness = true;
+            g_cap.state = "PASS_PENDING_DRAIN";
+        } else if (post == vk::Result::eSuccess) {
+            g_cap.state = "INCONCLUSIVE_COMPLETED_DURING_REQUEST";
+        } else {
+            g_cap.state = "ERROR_FENCE_STATUS";
+        }
+        emit_cap("FENCE_POST", "fence_post_request", fence_state_name(post));
+    }
+}
+
+// No ponto de sincronizacao REAL (depois de ctx->fence sinalizar).
+// Nunca destroi fence em voo: sem SUCCESS a fence fica para a proxima passagem.
+static void drain(ggml_backend_vk_context * ctx) {
+    if (!enabled()) return;
+    if (ctx == nullptr || ctx->device == nullptr) return;
+    vk::Fence fence;
+    vk::Device device;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        if (!g_cap.attached || !g_cap.fence) return;
+        fence = g_cap.fence;
+        device = g_cap.device;
+    }
+    vk::Result r = vk::Result::eErrorUnknown;
+    try {
+        r = ctx->device->device.getFenceStatus(fence);
+    } catch (...) {
+        r = vk::Result::eErrorUnknown;
+    }
+    std::lock_guard<std::recursive_mutex> lk(g_lock);
+    emit_cap("DRAIN", "drain", fence_state_name(r));
+    if (r == vk::Result::eSuccess) {
+        try {
+            device.destroyFence(fence);
+        } catch (...) {}
+        g_cap.fence = vk::Fence{};
+        g_cap.attached = false;
+        g_cap.armed = false;
+        if (g_cap.witness) g_cap.state = "PASS";
+    } else {
+        g_cap.state = "DRAIN_PENDING";
+        emit_cap("DRAIN_INCOMPLETE", "drain_incomplete", fence_state_name(r));
+    }
+}
+
+// Ultimo recurso no free do backend, apos ggml_vk_synchronize (nada pendente
+// esperado): garante que nenhuma fence DIAG seja destruida em voo.
+static void finalize_for_destroy(ggml_backend_vk_context * ctx) {
+    if (!enabled()) return;
+    if (ctx == nullptr || ctx->device == nullptr) return;
+    vk::Fence fence;
+    vk::Device device;
+    {
+        std::lock_guard<std::recursive_mutex> lk(g_lock);
+        if (!g_cap.attached || !g_cap.fence) return;
+        fence = g_cap.fence;
+        device = g_cap.device;
+    }
+    try {
+        const vk::Result r = ctx->device->device.waitForFences({ fence }, true, UINT64_MAX);
+        if (r != vk::Result::eSuccess) {
+            GGML_LOG_WARN("ggml_vulkan: [VK-INFLIGHT] drenagem final: waitForFences=%s\n",
+                          to_string(r).c_str());
+        }
+    } catch (...) {}
+    try {
+        device.destroyFence(fence);
+    } catch (...) {}
+    std::lock_guard<std::recursive_mutex> lk(g_lock);
+    g_cap.fence = vk::Fence{};
+    g_cap.attached = false;
+    g_cap.armed = false;
+}
+
+} // namespace sig_vk_inflight
+
+// ---------------------------------------------------------------------------
+// API C explicita (DIAG). O chamador (JNI, so no DIAG) declara estes simbolos
+// como fracos e checa nullptr: em NORMAL eles nao existem.
+// ---------------------------------------------------------------------------
+extern "C" int sig_vk_inflight_diag_register_cancel_bridge(
+        sig_vk_inflight::cancel_bridge_fn fn, void * opaque);
+extern "C" int sig_vk_inflight_diag_register_sink(
+        sig_vk_inflight::event_sink_fn fn, void * opaque);
+extern "C" int sig_vk_inflight_diag_arm(void * backend, const char * owner,
+                                        unsigned long long job, int attempt);
+extern "C" void sig_vk_inflight_diag_disarm(void);
+extern "C" int sig_vk_inflight_diag_state(char * buf, int cap);
+
+// R22/B1 — configuracao de POLITICA dentro do processo (o app nasce com o
+// ambiente do zygote; setenv do adb shell nao o alcanca). Copia o valor para o
+// ambiente e ele passa a ser lido a cada decisao, sem retencao de ponteiro.
+extern "C" void sig_vk_set_inflight_k(int k) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%d", k);
+    setenv("SIG_VK_INFLIGHT_K", buf, 1);
+    fprintf(stderr, "[sig_vk] set_inflight_k=%d\n", k);
+}
+extern "C" void sig_vk_set_serial(int on) {
+    setenv("SIG_VK_SERIAL_BATCH", on ? "1" : "0", 1);
+    fprintf(stderr, "[sig_vk] set_serial=%d\n", on);
+}
+
+extern "C" int sig_vk_inflight_diag_register_cancel_bridge(
+        sig_vk_inflight::cancel_bridge_fn fn, void * opaque) {
+    if (!sig_vk_inflight::enabled()) return -2;
+    std::lock_guard<std::recursive_mutex> lk(sig_vk_inflight::g_lock);
+    sig_vk_inflight::g_cancel_bridge = fn;
+    sig_vk_inflight::g_cancel_bridge_opaque = opaque;
+    return 1;
+}
+
+extern "C" int sig_vk_inflight_diag_register_sink(
+        sig_vk_inflight::event_sink_fn fn, void * opaque) {
+    if (!sig_vk_inflight::enabled()) return -2;
+    std::lock_guard<std::recursive_mutex> lk(sig_vk_inflight::g_lock);
+    sig_vk_inflight::g_event_sink = fn;
+    sig_vk_inflight::g_event_sink_opaque = opaque;
+    return 1;
+}
+
+// Arma UMA captura: o proximo lote COMPUTE com dispatch_count > 0 deste backend.
+// owner/job/attempt vem do job real (nao inferidos pelo n-esimo evento).
+extern "C" int sig_vk_inflight_diag_arm(void * backend, const char * owner,
+                                        unsigned long long job, int attempt) {
+    if (!sig_vk_inflight::enabled()) return -2;
+    if (backend == nullptr || owner == nullptr || owner[0] == '\0' || job == 0 || attempt <= 0) {
+        return -3;
+    }
+    ggml_backend_vk_context * ctx =
+        (ggml_backend_vk_context *) ((ggml_backend_t) backend)->context;
+    if (ctx == nullptr || ctx->device == nullptr) return -3;
+    std::lock_guard<std::recursive_mutex> lk(sig_vk_inflight::g_lock);
+    // uma captura por vez: nao herda ponte/fence de job anterior
+    if (sig_vk_inflight::g_cap.armed || sig_vk_inflight::g_cap.attached) return -4;
+    sig_vk_inflight::g_cap = sig_vk_inflight::capture{};
+    sig_vk_inflight::g_cap.armed = true;
+    sig_vk_inflight::g_cap.owner = owner;
+    sig_vk_inflight::g_cap.job = job;
+    sig_vk_inflight::g_cap.attempt = attempt;
+    sig_vk_inflight::g_cap.state = "ARMED";
+    sig_vk_inflight::emit_cap("ARM", "arm", "NONE");
+    return 1;
+}
+
+extern "C" void sig_vk_inflight_diag_disarm(void) {
+    if (!sig_vk_inflight::enabled()) return;
+    std::lock_guard<std::recursive_mutex> lk(sig_vk_inflight::g_lock);
+    sig_vk_inflight::g_cap.armed = false;
+    if (!sig_vk_inflight::g_cap.attached) {
+        sig_vk_inflight::g_cap = sig_vk_inflight::capture{};
+    } else {
+        // fence anexada: so a drenagem real pode destruir
+        sig_vk_inflight::g_cap.state = "DISARMED_PENDING_DRAIN";
+    }
+}
+
+extern "C" int sig_vk_inflight_diag_state(char * buf, int cap) {
+    if (!sig_vk_inflight::enabled()) return -1;
+    if (buf == nullptr || cap <= 0) return 0;
+    std::lock_guard<std::recursive_mutex> lk(sig_vk_inflight::g_lock);
+    const sig_vk_inflight::capture & c = sig_vk_inflight::g_cap;
+    return snprintf(buf, (size_t) cap,
+        "state=%s armed=%d attached=%d witness=%d owner=%s job=%llu attempt=%d "
+        "graph=%llu batch=%u dispatch_count=%u submit_seq=%llu fence_generation=%llu "
+        "b4_submits=%u b4_nodes=%llu b4_nodes_total=%llu b4_mulmat_bytes=%llu "
+        "b4_max_nodes_per_submit=%u b4_lote_max_ms=%u b4_t_first_ms=%llu "
+        "b4_t_last_ms=%llu b4_pending=NA b4_fences=NA",
+        c.state, (int) c.armed, (int) c.attached, (int) c.witness, c.owner.c_str(),
+        (unsigned long long) c.job, c.attempt, (unsigned long long) c.graph,
+        (unsigned) c.batch, (unsigned) c.dispatch_count,
+        (unsigned long long) c.submit_seq, (unsigned long long) c.fence_generation,
+        (unsigned) c.b4_submits, (unsigned long long) c.b4_nodes,
+        (unsigned long long) c.b4_nodes_total,
+        (unsigned long long) c.b4_mulmat_bytes, (unsigned) c.b4_max_nodes_per_submit,
+        (unsigned) c.b4_lote_max_ms,
+        (unsigned long long) c.b4_t_first_ms, (unsigned long long) c.b4_t_last_ms);
+}
+// <<< SIG_VK_INFLIGHT_DIAG_END
+#endif // SIG_WHISPER_DUMP_HOOK
 
 static void * const vk_ptr_base = (void *)(uintptr_t) 0x1000;  // NOLINT
 
@@ -2126,6 +2775,31 @@ static VkDeviceSize ggml_vk_get_max_buffer_range(const ggml_backend_vk_context *
 
 // Wait for ctx->fence to be signaled.
 static void ggml_vk_wait_for_fence(ggml_backend_vk_context * ctx) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R21/B1 — watermark capturado ANTES de esperar: so o que ja estava
+    // submetido pode ser marcado como concluido.
+    const uint64_t wm = sig_vk_inflight::submit_watermark();
+#endif
+    // R20/B1 — ao RETORNAR desta funcao, o trabalho submetido ja terminou.
+    struct CompletedGuard {
+        uint64_t watermark = 0;
+        bool proved = false;
+        // R28/A2 — a conclusao só é contabilizada com PROVA explícita. Antes o
+        // destrutor atualizava a contagem mesmo quando a função saía por exceção
+        // (VK_CHECK do almost_ready) sem nunca observar a fence sinalizada.
+        void prove() { proved = true; }
+        ~CompletedGuard() {
+#ifdef SIG_WHISPER_DUMP_HOOK
+            if (proved) {
+                sig_vk_inflight::note_completion_after_wait(watermark);
+            }
+#endif
+        }
+    };
+    CompletedGuard completed_guard;
+#ifdef SIG_WHISPER_DUMP_HOOK
+    completed_guard.watermark = wm;
+#endif
     // Use waitForFences while most of the graph executes. Hopefully the CPU can sleep
     // during this wait.
     if (ctx->almost_ready_fence_pending) {
@@ -2138,8 +2812,11 @@ static void ggml_vk_wait_for_fence(ggml_backend_vk_context * ctx) {
     vk::Result result;
     while ((result = ctx->device->device.getFenceStatus(ctx->fence)) != vk::Result::eSuccess) {
         if (result != vk::Result::eNotReady) {
-            fprintf(stderr, "ggml_vulkan: error %s at %s:%d\n", to_string(result).c_str(), __FILE__, __LINE__);
-            exit(1);
+            // R28/A2 — erro previsível da GPU não encerra o app: chega como
+            // falha tipada à fronteira segura existente.
+            throw std::runtime_error(
+                std::string("ggml_vulkan: wait fence: ") + to_string(result) +
+                " at " + __FILE__ + ":" + std::to_string(__LINE__));
         }
         for (uint32_t i = 0; i < 100; ++i) {
             YIELD();
@@ -2154,7 +2831,44 @@ static void ggml_vk_wait_for_fence(ggml_backend_vk_context * ctx) {
             YIELD();
         }
     }
+#ifdef SIG_WHISPER_DUMP_HOOK
+    completed_guard.prove();   // R28/A2: fence observada sinalizada
+#endif
     ctx->device->device.resetFences({ ctx->fence });
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R25/GPU-K1 — a partir daqui a fence foi reciclada: unidades submetidas
+    // ate esta geracao nao podem ser provadas por ela.
+    sig_vk_inflight::g_fence_reset_gen.store(
+        sig_vk_inflight::g_fence_gen.load(std::memory_order_relaxed),
+        std::memory_order_relaxed);
+#endif
+}
+
+// R13/D1 — leitura do pedido de cancelamento nas fronteiras seguras.
+// Não bloqueia, não toca no mutex do compute e não aloca: só consulta o seam.
+static bool ggml_vk_abort_poll(ggml_backend_vk_context * ctx) {
+    return ctx->abort_gate.poll();
+}
+
+// R13/D1 — mesmo contrato dos outros backends (CPU/Metal): o dono do scheduler
+// instala o callback por proc. `nullptr` desinstala (fim do job). O estado
+// observado pertence a UM grafo e é zerado no começo do próximo.
+static void ggml_backend_vk_set_abort_callback(ggml_backend_t backend,
+                                               ggml_abort_callback abort_callback,
+                                               void * abort_callback_data) {
+    ggml_backend_vk_context * ctx = (ggml_backend_vk_context *) backend->context;
+    // R18/B1 — RASTRO: o poll só chama o callback se ele estiver instalado.
+    // Sem esta marca, "callback nunca chamado" e "gate não armado" são
+    // indistinguíveis no bruto.
+    fprintf(stderr, "SIGABORT ev=%s backend=%p cb=%p\n",
+            abort_callback != nullptr ? "gate_armed" : "gate_unarmed",
+            (void *) backend, (void *) abort_callback);
+    fflush(stderr);
+    ctx->abort_gate.cb       = abort_callback;
+    ctx->abort_gate.data     = abort_callback_data;
+    ctx->abort_gate.observed = false;
+    // R29/P0 — o gate pertence ao backend context; o submit o alcança pelo
+    // `vk_context::owner`. Não há mais "último gate instalado" global.
 }
 
 // variables to track number of compiles in progress
@@ -2162,9 +2876,255 @@ static uint32_t compile_count = 0;
 static std::mutex compile_count_mutex;
 static std::condition_variable compile_count_cond;
 
+// R2/fase C (C1): pipelines da família Flash Attention (flash_attn_*, fa_*).
+// São as únicas cuja recusa por op é tratada individualmente no supports_op.
+static bool ggml_vk_pipeline_name_is_flash_attn(const std::string & name) {
+    return name.rfind("flash_attn", 0) == 0 || name.rfind("fa_", 0) == 0;
+}
+
+// R3/fase D (D2): registra a falha de uma pipeline (nome + estágio) e marca a
+// família. NUNCA aborta: a recuperação é do supports_op (recusa segura) e do
+// detector de despacho (status FAILED, sem resultado parcial).
+// R7/fase D (D4) — estado ESTRUTURADO de Flash Attention / rota SOFT_MAX.
+// Contadores por processo, alimentados APENAS nos pontos de decisão REAIS
+// (dispatch fa_r6, recusa FA, rota softmax wg64/CPU). NUNCA por parse de texto.
+// O JNI lê isto via sig_vk_fa_status() para montar a linha SIG_FA_STATUS do
+// aviso/diagnóstico (distinguir GPU_EXECUTED x CPU_FALLBACK x MIXED). Compilado
+// no NORMAL e no DIAG (custo: poucos atomics por op FA/softmax).
+// R14/B4 — MEDIÇÃO do trabalho em voo, em estado PRÓPRIO (o capture do
+// DIAG de in-flight é desarmado no fim do job e a medição precisa sobreviver
+// a isso). Contadores do ÚLTIMO grafo e do ACUMULADO do processo.
+namespace sig_b4_state {
+static std::atomic<uint32_t> g_submits{0};
+static std::atomic<uint32_t> g_nodes{0};
+static std::atomic<uint64_t> g_mulmat_bytes{0};
+static std::atomic<uint32_t> g_max_nodes_per_submit{0};
+static std::atomic<uint32_t> g_graphs{0};
+} // namespace sig_b4_state
+
+namespace sig_fa_state {
+// R8/fase A (A2) — SEPARAÇÃO EXECUÇÃO x PLACEMENT:
+//  - EXECUÇÃO REAL (dispatches de fato computados): fa_r6_dispatches (GPU
+//    compacto) e fa_generic_dispatches (GPU genérico); a execução no CPU vem
+//    do contador do backend CPU (sig_fa_cpu_exec_count, ggml-cpu/ops.cpp).
+//  - PLACEMENT (decisões de supports_op, consultáveis VÁRIAS vezes por op):
+//    fa_r6_accepts/fa_generic_accepts (aceites) e fa_placement_refusals
+//    (recusa por família reprovada). RECUSA NÃO É EXECUÇÃO: jamais somar
+//    recusa como CPU_FALLBACK.
+//  - CAPACIDADE/CONTEXTO: fa_generic_failed (família genérica reprovada
+//    neste driver/contexto) + motivos.
+static std::atomic<uint64_t> fa_r6_dispatches{0};
+static std::atomic<uint64_t> fa_generic_dispatches{0};
+static std::atomic<uint64_t> fa_placement_refusals{0};
+static std::atomic<uint64_t> fa_r6_accepts{0};
+static std::atomic<uint64_t> fa_generic_accepts{0};
+static std::atomic<uint64_t> fa_generic_failed{0};
+static std::atomic<uint64_t> sm_gpu_wg64{0};
+static std::atomic<uint64_t> sm_cpu_refused{0};
+static std::mutex reason_mutex;
+static std::string fa_last_reason = "nao exercitada";
+static std::string sm_last_reason = "nao exercitada";
+static void set_fa_reason(const std::string & r) {
+    std::lock_guard<std::mutex> lock(reason_mutex);
+    fa_last_reason = r;
+}
+static void set_sm_reason(const std::string & r) {
+    std::lock_guard<std::mutex> lock(reason_mutex);
+    sm_last_reason = r;
+}
+static std::string get_fa_reason() {
+    std::lock_guard<std::mutex> lock(reason_mutex);
+    return fa_last_reason;
+}
+static std::string get_sm_reason() {
+    std::lock_guard<std::mutex> lock(reason_mutex);
+    return sm_last_reason;
+}
+} // namespace sig_fa_state
+
+#if defined(SIG_VK_SOFTMAX_TRACE)
+// R5/fase B (B2) — trace de diagnostico SOMENTE (nunca compilado no build normal;
+// guardado tambem pela macro). Separa KERNEL x DISPATCH x COPIA da familia SOFT_MAX:
+// parametros da op, pipeline escolhida, spec constants, push constants (bytes/valores),
+// grid/workgroups efetivos, descritores (buffer/offset/range; alias in/out), marcador
+// de despacho e copias host<->device. Ativacao em runtime: SIG_VK_SOFTMAX_TRACE=1.
+static bool sig_vk_softmax_trace_on() {
+    static const bool on = getenv("SIG_VK_SOFTMAX_TRACE") != nullptr;
+    return on;
+}
+static uint64_t sig_vk_fnv64(const void * data, size_t len) {
+    uint64_t h = 1469598103934665603ULL;
+    const uint8_t * p = (const uint8_t *) data;
+    for (size_t i = 0; i < len; i++) { h ^= p[i]; h *= 1099511628211ULL; }
+    return h;
+}
+#endif
+
+// R5/fase B (B3) — W13: SOFT_MAX passthrough no Vulkan comprovado (R4/D3 + replay
+// B1). Escopo do contorno: SOMENTE este device/driver (conferidos em runtime;
+// NAO estender a outras GPUs sem prova). R6/fase A (A1): a acao do contorno muda —
+// em vez de recusar a familia, SELECIONA a variante segura wg64 (spec real 64).
+// Valores de bancada (R4/fase-e logs E1-diag + enumeracao Vulkan):
+//   vendor=0x5143 (Qualcomm), driverVersion=0x802A4000, deviceName="Adreno (TM) 740".
+// R6: o DeviceID foi conferido na propriedade RUNTIME = 0x43050a01 (trace SM-TRACE
+// dev={...} do replay R5-B; re-conferido no trace R6). A condicao permanece
+// vendor+driver+nome (escopo GPU/driver, NAO de um telefone fisico): estreitar por
+// deviceID deixaria unidades do mesmo GPU/driver sem a rota segura, e a variante
+// wg64 e a selecao correta tambem onde o defeito do driver nao se manifeste. O
+// deviceID segue registrado no trace/log para identidade.
+static bool ggml_vk_soft_max_passthrough_quirk(const vk_device & device) {
+    return device->properties.vendorID == 0x5143u &&
+           device->properties.driverVersion == 0x802A4000u &&
+           strstr(device->properties.deviceName.data(), "Adreno (TM) 740") != nullptr;
+}
+
+// R6/fase A (A1): chave do contorno em RUNTIME. No NORMAL e sempre a condicao do
+// device; no DIAG (SIG_VK_SOFTMAX_TRACE) SIG_VK_SOFTMAX_QUIRK=0 desliga o contorno
+// INTEIRO (selecao volta a upstream _wg512/large, gate de dispatch e recusa do
+// scheduler desligados) para o contraste bruto do defeito do driver.
+static bool ggml_vk_soft_max_quirk_enabled(const vk_device & device) {
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    if (const char * q = getenv("SIG_VK_SOFTMAX_QUIRK"); q != nullptr && q[0] == '0') {
+        return false;
+    }
+#endif
+    return ggml_vk_soft_max_passthrough_quirk(device);
+}
+
+// R6/fase A (A1) — rota GPU do SOFT_MAX no escopo da quirk.
+// Familia simples (kernel soft_max.comp, ncols<=16384): SOMENTE a especializacao
+// spec=64 foi validada no replay R5-B (mesmo SPIR-V soft_max_f32.spv; max_abs
+// 2,98e-7 vs f64 no t20). A _wg512 (spec 512) NAO ESCREVE neste driver.
+// Familia large (ncols>16384, kernels soft_max_large* com geometria PROPRIA -
+// spec {128,4}, 3 dispatches): NAO foi validada neste driver; NAO herda o
+// aceite/rota da familia simples e fica SEM rota segura ate prova propria.
+enum sig_vk_softmax_route {
+    SIG_VK_SM_ROUTE_DEFAULT = 0, // device fora do escopo da quirk: selecao upstream intacta
+    SIG_VK_SM_ROUTE_WG64,        // quirk + familia simples: variante wg64 (spec real 64)
+    SIG_VK_SM_ROUTE_LARGE,       // quirk + ncols>16384: caminho large (sem rota validada)
+    SIG_VK_SM_ROUTE_UNSAFE,      // quirk + variante wg64 indisponivel (reprovada/ausente)
+};
+
+static bool ggml_vk_soft_max_wg64_available(const vk_device & device, bool f16_mask) {
+    vk_pipeline p = f16_mask ? device->pipeline_soft_max_f32_f16_wg64 : device->pipeline_soft_max_f32_wg64;
+    return p != nullptr && !p->failed;
+}
+
+static sig_vk_softmax_route ggml_vk_soft_max_route(const vk_device & device, const ggml_tensor * src0, const ggml_tensor * src1) {
+    if (!ggml_vk_soft_max_passthrough_quirk(device)) {
+        return SIG_VK_SM_ROUTE_DEFAULT;
+    }
+    if ((uint32_t) src0->ne[0] > 16384u) {
+        return SIG_VK_SM_ROUTE_LARGE;
+    }
+    const bool f16_mask = src1 != nullptr && src1->type == GGML_TYPE_F16;
+    if (!ggml_vk_soft_max_wg64_available(device, f16_mask)) {
+        return SIG_VK_SM_ROUTE_UNSAFE;
+    }
+    return SIG_VK_SM_ROUTE_WG64;
+}
+
+static const char * ggml_vk_softmax_route_name(sig_vk_softmax_route route) {
+    switch (route) {
+        case SIG_VK_SM_ROUTE_WG64:   return "wg64(spec64)";
+        case SIG_VK_SM_ROUTE_LARGE:  return "large>16384(sem rota validada;R6-A1)";
+        case SIG_VK_SM_ROUTE_UNSAFE: return "wg64-indisponivel(reprovada/ausente)";
+        default:                     return "default(upstream)";
+    }
+}
+
+static void ggml_vk_pipeline_record_failure(vk_device & device, const std::string & phase, const std::string & name, const char * stage) {
+    {
+        std::lock_guard<std::mutex> guard(device->failed_pipelines_mutex);
+        device->failed_pipeline_names.insert(name + " [" + stage + "]");
+    }
+    device->pipeline_failures.fetch_add(1, std::memory_order_relaxed);
+    if (ggml_vk_pipeline_name_is_flash_attn(name)) {
+        device->flash_attn_pipelines_failed.store(true, std::memory_order_relaxed);
+    } else {
+        device->non_fa_pipelines_failed.store(true, std::memory_order_relaxed);
+    }
+    GGML_LOG_WARN("ggml_vulkan: [D2] pipeline %s REPROVADA (%s; estagio=%s) - recuperacao: recusa segura + detector de despacho\n",
+                  name.c_str(), phase.c_str(), stage);
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    if (sig_vk_softmax_trace_on() && name.find("soft_max") != std::string::npos) {
+        GGML_LOG_WARN("[SM-TRACE] create pipeline=%s result=FAIL stage=%s phase=%s\n", name.c_str(), stage, phase.c_str());
+    }
+#endif
+}
+
+
 static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipeline, size_t spv_size, const void* spv_data, const std::string entrypoint,
                                          uint32_t parameter_count, std::array<uint32_t, 3> wg_denoms, std::vector<uint32_t> specialization_constants,
                                          bool disable_robustness, bool require_full_subgroups, uint32_t required_subgroup_size) {
+    // R2/fase C (C5): o decremento de compile_count existia SÓ no caminho de
+    // sucesso; TODO return antecipado por falha de compilação VAZAVA uma
+    // "vaga". Acumuladas >= N (hardware_concurrency), o ggml_vk_load_shaders
+    // bloqueava para sempre em compile_count_cond — era o travamento do passo
+    // FA-off da recuperação (8 falhas com nproc=6 neste device). RAII: uma
+    // liberação garantida por chamada, em qualquer caminho de saída.
+    struct compile_permit_guard {
+        ~compile_permit_guard() {
+            {
+                std::lock_guard<std::mutex> guard(compile_count_mutex);
+                if (compile_count > 0) {
+                    compile_count--;
+                }
+            }
+            compile_count_cond.notify_all();
+        }
+    } compile_permit_guard_;
+
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    const bool sig_trace_sm = sig_vk_softmax_trace_on() && pipeline->name.find("soft_max") != std::string::npos;
+    if (sig_trace_sm) {
+        std::string spec_list;
+        for (uint32_t sc : specialization_constants) { spec_list += std::to_string(sc); spec_list += " "; }
+        GGML_LOG_WARN("[SM-TRACE] create pipeline=%s stage=begin spv_bytes=%zu spv_fnv64=%016llx entrypoint=%s param_count=%u push_const_size=%u wg_denoms={%u,%u,%u} spec_consts=[%s] req_subgroup=%u\n",
+                      pipeline->name.c_str(), spv_size, (unsigned long long) sig_vk_fnv64(spv_data, spv_size), entrypoint.c_str(),
+                      parameter_count, pipeline->push_constant_size, wg_denoms[0], wg_denoms[1], wg_denoms[2],
+                      spec_list.c_str(), required_subgroup_size);
+    }
+#endif
+
+#if defined(SIG_VK_FA_FAIL_INJECT)
+    // R3/fase D (D2) — injeção AMPLIADA (somente diag). Contrato:
+    //   SIG_VK_FA_FAIL_INJECT  (mantido): falha da família FA DENTRO da
+    //     pré-checagem (janela flash_attn_preflight_running) — teste legado.
+    //   SIG_VK_FAIL_INJECT=<v>: arma a injeção em QUALQUER janela (permite
+    //     testar "variante FA fora da preflight" e pipelines não-FA).
+    //   SIG_VK_FAIL_INJECT_NAME=<substr>: filtra por substring do nome
+    //     (default: qualquer pipeline NÃO-FA).
+    //   SIG_VK_FAIL_INJECT_STAGE=module|pipeline|alloc (default pipeline):
+    //     module   = falha logo após createShaderModule;
+    //     pipeline = falha antes de createComputePipeline (default);
+    //     alloc    = falha logo após createComputePipeline (simula falha de
+    //                alocação pós-criação: pipeline destruída e marcada).
+    const bool vk_fa_inject_armed =
+        device->flash_attn_preflight_running.load(std::memory_order_relaxed) &&
+        getenv("SIG_VK_FA_FAIL_INJECT") != nullptr &&
+        ggml_vk_pipeline_name_is_flash_attn(pipeline->name);
+
+    bool vk_inject_armed = false;
+    std::string vk_inject_stage = "pipeline";
+    {
+        const char * env = getenv("SIG_VK_FAIL_INJECT");
+        const char * env_name = getenv("SIG_VK_FAIL_INJECT_NAME");
+        const char * env_stage = getenv("SIG_VK_FAIL_INJECT_STAGE");
+        if (env_stage != nullptr && env_stage[0] != '\0') {
+            vk_inject_stage = env_stage;
+        }
+        if (env != nullptr && env[0] != '\0' && env[0] != '0') {
+            const std::string name = pipeline->name;
+            if (env_name != nullptr && env_name[0] != '\0') {
+                vk_inject_armed = name.find(env_name) != std::string::npos;
+            } else {
+                vk_inject_armed = !ggml_vk_pipeline_name_is_flash_attn(name);
+            }
+        }
+    }
+#endif
+
     VK_LOG_DEBUG("ggml_vk_create_pipeline(" << device->name << ", " << pipeline->name << ", " << entrypoint << ", " << parameter_count <<
                  ", (" << wg_denoms[0] << "," << wg_denoms[1] << "," << wg_denoms[2] << "), specialization_constants, " <<
                  disable_robustness << ", " << require_full_subgroups << ", " << required_subgroup_size << ")");
@@ -2234,6 +3194,17 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
     }
 
     pipeline->shader_module = device->device.createShaderModule(shader_module_create_info);
+
+#if defined(SIG_VK_FA_FAIL_INJECT)
+    if (vk_inject_armed && vk_inject_stage == "module") {
+        GGML_LOG_WARN("ggml_vulkan: [SIG_VK_FAIL_INJECT] falha simulada (module) da pipeline %s\n", pipeline->name.c_str());
+        ggml_vk_pipeline_record_failure(device, "injecao-diag", pipeline->name, "module");
+        device->device.destroyShaderModule(pipeline->shader_module);
+        pipeline->shader_module = VK_NULL_HANDLE;
+        pipeline->failed = true;
+        return;
+    }
+#endif
 
     vk::PushConstantRange pcr(
         vk::ShaderStageFlagBits::eCompute,
@@ -2307,23 +3278,63 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
     }
 #endif
 
+#if defined(SIG_VK_FA_FAIL_INJECT)
+    // R2/fase C (C1) — hook legado SOMENTE de diagnóstico (mantido): dentro da
+    // pré-checagem (flash_attn_preflight_running), falha qualquer pipeline da
+    // família FA.
+    if (vk_fa_inject_armed) {
+        GGML_LOG_WARN("ggml_vulkan: [SIG_VK_FA_FAIL_INJECT] falha simulada da pipeline %s\n", pipeline->name.c_str());
+        ggml_vk_pipeline_record_failure(device, "injecao-diag-fa", pipeline->name, "preflight");
+        device->device.destroyShaderModule(pipeline->shader_module);
+        pipeline->shader_module = VK_NULL_HANDLE;
+        pipeline->failed = true;
+        return;
+    }
+    // R3/fase D (D2) — injeção ampliada (não-FA e FA fora da preflight).
+    if (vk_inject_armed && vk_inject_stage != "module" && vk_inject_stage != "alloc") {
+        GGML_LOG_WARN("ggml_vulkan: [SIG_VK_FAIL_INJECT] falha simulada (pipeline) da pipeline %s\n", pipeline->name.c_str());
+        ggml_vk_pipeline_record_failure(device, "injecao-diag", pipeline->name, "pipeline");
+        device->device.destroyShaderModule(pipeline->shader_module);
+        pipeline->shader_module = VK_NULL_HANDLE;
+        pipeline->failed = true;
+        return;
+    }
+#endif
+
     try {
         pipeline->pipeline = device->device.createComputePipeline(VK_NULL_HANDLE, compute_pipeline_create_info).value;
     } catch (const vk::SystemError& e) {
         GGML_LOG_WARN("ggml_vulkan: compute pipeline creation failed for %s: %s\n",
                       pipeline->name.c_str(), e.what());
-        device->pipeline_failures.fetch_add(1, std::memory_order_relaxed);
+        ggml_vk_pipeline_record_failure(device, "createComputePipeline", pipeline->name, "pipeline");
         device->device.destroyShaderModule(pipeline->shader_module);
         pipeline->shader_module = VK_NULL_HANDLE;
+        pipeline->failed = true;
         return;
     }
     if (!pipeline->pipeline) {
         GGML_LOG_WARN("ggml_vulkan: compute pipeline is null for %s\n", pipeline->name.c_str());
-        device->pipeline_failures.fetch_add(1, std::memory_order_relaxed);
+        ggml_vk_pipeline_record_failure(device, "createComputePipeline-nulo", pipeline->name, "pipeline");
         device->device.destroyShaderModule(pipeline->shader_module);
         pipeline->shader_module = VK_NULL_HANDLE;
+        pipeline->failed = true;
         return;
     }
+#if defined(SIG_VK_FA_FAIL_INJECT)
+    // R3/fase D (D2): estágio "alloc" — pipeline CRIADA, falha simulada de
+    // alocação pós-criação (destrói e marca reprovada).
+    if (vk_inject_armed && vk_inject_stage == "alloc") {
+        GGML_LOG_WARN("ggml_vulkan: [SIG_VK_FAIL_INJECT] falha simulada (alloc) da pipeline %s\n", pipeline->name.c_str());
+        ggml_vk_pipeline_record_failure(device, "injecao-diag", pipeline->name, "alloc");
+        device->device.destroyPipeline(pipeline->pipeline);
+        pipeline->pipeline = VK_NULL_HANDLE;
+        device->device.destroyShaderModule(pipeline->shader_module);
+        pipeline->shader_module = VK_NULL_HANDLE;
+        pipeline->compiled = false;
+        pipeline->failed = true;
+        return;
+    }
+#endif
     pipeline->compiled = true;
 
     if (vk_instance.debug_utils_support) {
@@ -2374,13 +3385,11 @@ static void ggml_vk_create_pipeline_func(vk_device& device, vk_pipeline& pipelin
     }
 
     device->all_pipelines.push_back(pipeline);
-
-    {
-        std::lock_guard<std::mutex> guard(compile_count_mutex);
-        assert(compile_count > 0);
-        compile_count--;
-    }
-    compile_count_cond.notify_all();
+    // R2/fase C (C5): compile_count é liberado pelo compile_permit_guard no
+    // fim da função (todos os caminhos), não mais aqui.
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    if (sig_trace_sm) GGML_LOG_WARN("[SM-TRACE] create pipeline=%s result=OK compiled=%d\n", pipeline->name.c_str(), (int) pipeline->compiled);
+#endif
 }
 
 static void ggml_vk_destroy_pipeline(vk::Device& device, vk_pipeline& pipeline) {
@@ -2451,13 +3460,101 @@ static vk_command_buffer* ggml_vk_create_cmd_buffer(vk_device& device, vk_comman
     return &p.cmd_buffers[p.cmd_buffers.size()-1];
 }
 
-static void ggml_vk_submit(vk_context& ctx, vk::Fence fence) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+// R26/K — espera pela UNIDADE (timeline do próprio submit ou fence), usada na
+// fronteira do submit. O dispositivo vem do global capturado na criação.
+static sig_vk_ledger::Wait sig_vk_wait_unit(const sig_vk_ledger::Unit & u) {
+    if (g_diag_completion_tl && u.resource == sig_vk_ledger::Resource::TIMELINE &&
+        u.fence == (uint64_t) static_cast<VkSemaphore>(g_diag_completion_tl)) {
+        uint64_t atual = 0;
+        try {
+            atual = g_diag_device.getSemaphoreCounterValue(g_diag_completion_tl);
+        } catch (...) {
+            return sig_vk_ledger::Wait::ERROR;
+        }
+        if (atual >= u.fence_gen) {
+            return sig_vk_ledger::Wait::SUCCESS;
+        }
+        vk::SemaphoreWaitInfo wi{};
+        wi.semaphoreCount = 1;
+        wi.pSemaphores = &g_diag_completion_tl;
+        wi.pValues = &u.fence_gen;
+        vk::Result r = vk::Result::eErrorUnknown;
+        try {
+            r = g_diag_device.waitSemaphores(wi, 50ull * 1000ull * 1000ull);
+        } catch (...) {
+            return sig_vk_ledger::Wait::ERROR;
+        }
+        if (r == vk::Result::eSuccess) {
+            return sig_vk_ledger::Wait::SUCCESS;
+        }
+        if (r == vk::Result::eTimeout) {
+            return sig_vk_ledger::Wait::NOT_READY;
+        }
+        return sig_vk_ledger::Wait::ERROR;
+    }
+    const vk::Fence f = vk::Fence(reinterpret_cast<VkFence>(static_cast<uintptr_t>(u.fence)));
+    if (!f) {
+        return sig_vk_ledger::Wait::ERROR;
+    }
+    try {
+        vk::Result r = g_diag_device.getFenceStatus(f);
+        if (r == vk::Result::eSuccess) {
+            return sig_vk_ledger::Wait::SUCCESS;
+        }
+        if (r != vk::Result::eNotReady) {
+            return sig_vk_ledger::Wait::ERROR;
+        }
+        r = g_diag_device.waitForFences({ f }, true, 50ull * 1000ull * 1000ull);
+        if (r == vk::Result::eSuccess) {
+            return sig_vk_ledger::Wait::SUCCESS;
+        }
+        if (r == vk::Result::eTimeout) {
+            return sig_vk_ledger::Wait::NOT_READY;
+        }
+    } catch (...) {
+        return sig_vk_ledger::Wait::ERROR;
+    }
+    return sig_vk_ledger::Wait::ERROR;
+}
+#endif
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+// R29/P0 — RECONCILIAÇÃO no fechamento REAL do domínio: saldo por estado até o
+// último envio. Snapshot não é prova de conclusão: o saldo é emitido como está
+// (submitted>0 no fim significa trabalho não provado, não "tudo certo").
+static void sig_vk_emit_recon(const char * where, uint64_t queue) {
+    const sig_vk_ledger::Ledger::Recon r = sig_vk_ledger::global().reconcile();
+    const sig_vk_ledger::Stats st = sig_vk_ledger::global().stats();
+    fprintf(stderr,
+            "[sig_vk] SIGRECON where=%s q=%llu total=%llu completed=%llu submitted=%llu "
+            "pending=%llu failed=%llu abandoned=%llu stale=%llu fecha=%d submits=%llu "
+            "cancelled=%llu quarantined=%llu epochs=%llu\n",
+            where, (unsigned long long) queue,
+            (unsigned long long) r.total, (unsigned long long) r.completed,
+            (unsigned long long) r.submitted, (unsigned long long) r.pending,
+            (unsigned long long) r.failed, (unsigned long long) r.abandoned,
+            (unsigned long long) r.stale, r.fecha() ? 1 : 0,
+            (unsigned long long) st.submits, (unsigned long long) st.cancelled,
+            (unsigned long long) st.quarantined, (unsigned long long) st.epochs);
+    fflush(stderr);
+}
+#endif
+
+static sig_vk_cycle::Outcome ggml_vk_submit(vk_context& ctx, vk::Fence fence) {
     if (ctx->seqs.empty()) {
         if (fence) {
             std::lock_guard<std::mutex> guard(queue_mutex);
             ctx->p->q->queue.submit({}, fence);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // R13/B2 — DIAG: submit VAZIO (marcador): conta sequencia, nunca e prova.
+            sig_vk_inflight::note_queue_submit(fence);
+#endif
         }
-        return;
+        // R30/A2 - o marcador VAZIO com fence foi realmente enviado: tem ciclo de
+        // fence a acompanhar, mas nao e inferencia util nem cancelamento. Sem
+        // marcador nao houve emissao alguma (NO_WORK).
+        return fence ? sig_vk_cycle::Outcome::MARKER : sig_vk_cycle::Outcome::NO_WORK;
     }
     VK_LOG_DEBUG("ggml_vk_submit(" << ctx << ", " << fence << ")");
 
@@ -2471,6 +3568,39 @@ static void ggml_vk_submit(vk_context& ctx, vk::Fence fence) {
     std::vector<std::vector<vk::PipelineStageFlags>> stage_flags;
 
     size_t reserve = 0;
+    int tl_slot_idx = -1;   // R32/C1 — indice cujo ultimo sinal e o do DIAG
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R31/B3 - o dominio e resolvido ANTES de montar as SubmitInfo. Assim a
+    // timeline de conclusao NAO e sinalizada por uma fila fora do dominio
+    // medido (a R30 checava depois e ainda preparava/incrementava o valor).
+    const uint64_t sub_qid = (uint64_t) static_cast<VkQueue>(ctx->p->q->queue);
+    bool sub_in_domain = true;
+    {
+        static std::once_flag dom_once2;
+        std::call_once(dom_once2, [&]() {
+            const uint64_t dev = ctx->owner != nullptr
+                ? (uint64_t) static_cast<VkDevice>(ctx->owner->device->device)
+                : sub_qid;
+            sig_vk_ledger::global().configure_domain(dev, sub_qid);
+        });
+        const uint64_t dev = ctx->owner != nullptr
+            ? (uint64_t) static_cast<VkDevice>(ctx->owner->device->device)
+            : sub_qid;
+        sub_in_domain = sig_vk_ledger::global().domain_ok(dev, sub_qid);
+    }
+#endif
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R25/GPU-K1 — recurso de conclusao por submissao: o sinal da timeline vai
+    // na ULTIMA SubmitInfo real (nao num submit-marcador separado, que morreu
+    // em 0% na k1e).
+    static const bool tl_on = []() {
+        const char * v = getenv("SIG_VK_LEDGER_TL");
+        return v != nullptr && v[0] == '1' && v[1] == '\0';
+    }();
+    uint64_t tl_valor = 0;
+#endif
 
     for (const auto& sequence : ctx->seqs) {
         reserve += sequence.size();
@@ -2502,21 +3632,37 @@ static void ggml_vk_submit(vk_context& ctx, vk::Fence fence) {
                 tl_signal_vals[idx].push_back(submission.signal_semaphores[i].value);
                 tl_signal_semaphores[idx].push_back(submission.signal_semaphores[i].s);
             }
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // R25/GPU-K1 — sinal de conclusao anexado ao PROPRIO submit: a
+            // ultima SubmitInfo do lote tambem sinaliza a timeline com um valor
+            // novo. Assim a unidade tem recurso proprio, provado por valor.
+            // R29/P0 — o VALOR da timeline é atribuído no commit, sob o lock da
+            // fila (antes ele era preparado fora do lock: dois emissores podiam
+            // reservar 1/2 e sinalizar em ordem incompatível). Aqui só se reserva
+            // o LUGAR do sinal no último SubmitInfo.
+            tl_slot_idx = sig_vk_cycle::tl_slot_owner(
+                tl_on, g_diag_completion_tl != nullptr, sub_in_domain,
+                idx, (int) reserve);
+            if (tl_slot_idx >= 0) {
+                tl_signal_semaphores[idx].push_back(g_diag_completion_tl);
+                tl_signal_vals[idx].push_back(0);   // placeholder: valor no commit
+            }
+#endif
             tl_submit_infos.push_back({
-                (uint32_t) submission.wait_semaphores.size(),
+                (uint32_t) tl_wait_vals[idx].size(),
                 tl_wait_vals[idx].data(),
-                (uint32_t) submission.signal_semaphores.size(),
+                (uint32_t) tl_signal_vals[idx].size(),
                 tl_signal_vals[idx].data(),
             });
             tl_submit_infos[idx].sType = vk::StructureType::eTimelineSemaphoreSubmitInfo;
             tl_submit_infos[idx].pNext = nullptr;
             vk::SubmitInfo si{
-                (uint32_t) submission.wait_semaphores.size(),
+                (uint32_t) tl_wait_semaphores[idx].size(),
                 tl_wait_semaphores[idx].data(),
                 stage_flags[idx].data(),
                 1,
                 &submission.buffer->buf,
-                (uint32_t) submission.signal_semaphores.size(),
+                (uint32_t) tl_signal_semaphores[idx].size(),
                 tl_signal_semaphores[idx].data(),
             };
             si.setPNext(&tl_submit_infos[idx]);
@@ -2524,10 +3670,344 @@ static void ggml_vk_submit(vk_context& ctx, vk::Fence fence) {
         }
     }
 
-    std::lock_guard<std::mutex> guard(queue_mutex);
-    ctx->p->q->queue.submit(submit_infos, fence);
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R26/GPU-H2 — estado da FENCE antes do submit: fence sinalizada e NAO
+    // resetada e uso invalido (VK_ERROR_DEVICE_LOST no submit). Registra o
+    // estado para comparar E1 (falha) x E2 (sync na fronteira).
+    if (fence) {
+        static std::atomic<uint64_t> n_sub{0};
+        const uint64_t n = n_sub.fetch_add(1, std::memory_order_relaxed);
+        if (n < 64 || (n % 128) == 0) {
+            vk::Result fr = vk::Result::eErrorUnknown;
+            try {
+                fr = g_diag_device.getFenceStatus(fence);
+            } catch (...) {
+                fr = vk::Result::eErrorUnknown;
+            }
+            fprintf(stderr,
+                "[sig_vk] SIGSUBMIT n=%llu fence=%p status=%d seqs=%zu pool_in_use=%zu\n",
+                (unsigned long long) n, (void *) static_cast<VkFence>(fence), (int) fr,
+                ctx->seqs.size(),
+                ctx->p != nullptr ? ctx->p->buffers_in_use() : (size_t) 0);
+            fflush(stderr);
+        }
+    }
+#endif
+    // ------------------------------------------------------------------
+    // R29/P0 — CICLO REAL DO SUBMIT (admissão → commit → emissão).
+    // O adaptador é o MESMO nos dois builds; só a contabilidade do ledger é
+    // exclusiva do DIAG. O CANCELAMENTO vale no NORMAL.
+    // ------------------------------------------------------------------
+    ggml_backend_vk_context * sub_owner = ctx->owner;
+    sig_vk_ledger::Ledger * led = nullptr;
+#ifdef SIG_WHISPER_DUMP_HOOK
+    led = &sig_vk_ledger::global();
+#endif
+
+    sig_vk_cycle::Cancel cancel;
+    if (sub_owner != nullptr && sub_owner->abort_gate.armed()) {
+        sig_vk_abort_gate * g = &sub_owner->abort_gate;   // gate DESTE envio
+        cancel.poll = [g]() { return g->poll(); };
+    }
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R30/A4 - identidade de NEGOCIO (owner/job/attempt) viaja com a unidade.
+    // Ponteiro de contexto NAO e geracao de tentativa (defeito da R29).
+    {
+        std::lock_guard<std::recursive_mutex> lk(sig_vk_inflight::g_lock);
+        cancel.ident.owner_hash = sig_vk_ledger::owner_hash(sig_vk_inflight::g_cap.owner.c_str());
+        cancel.ident.job        = sig_vk_inflight::g_cap.job;
+        cancel.ident.attempt    = sig_vk_inflight::g_cap.attempt;
+        cancel.ident.gen        = sig_vk_inflight::g_cap.graph;
+    }
+#endif
+
+    uint64_t k_lim = 0;
+    {
+        const char * k_env = getenv("SIG_VK_INFLIGHT_K");
+        if (k_env != nullptr && k_env[0] != '\0') {
+            const long kv = atol(k_env);
+            k_lim = kv > 0 ? (uint64_t) kv : 0;
+        }
+    }
+
+    sig_vk_cycle::Request rq;
+    rq.device = sub_owner != nullptr
+        ? (uint64_t) static_cast<VkDevice>(sub_owner->device->device)
+        : (uint64_t) static_cast<VkQueue>(ctx->p->q->queue);
+    rq.queue  = (uint64_t) static_cast<VkQueue>(ctx->p->q->queue);
+    rq.k      = k_lim;
+#ifdef SIG_WHISPER_DUMP_HOOK
+    rq.resource = sig_vk_ledger::Resource::TIMELINE;
+    rq.handle   = (uint64_t) static_cast<VkSemaphore>(g_diag_completion_tl);
+    rq.graph_gen = ctx->diag_dispatch_count;
+#else
+    rq.resource = sig_vk_ledger::Resource::FENCE;
+    rq.handle   = (uint64_t) static_cast<VkFence>(fence);
+#endif
+    rq.deadline_us = 5000000;   // 5 s: NOT_READY/admissão têm prazo
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // Domínio real do ledger: uma vez, com o device/fila DESTE envio.
+    {
+        static std::once_flag dom_once;
+        std::call_once(dom_once, [&]() {
+            // R30/A4 - o dominio e a FILA VERIFICADA (device + queue). A R29
+            // aceitou "qualquer fila do device" e passou a compartilhar uma
+            // unica timeline entre filas sem prova de ordem GPU.
+            sig_vk_ledger::global().configure_domain(rq.device, rq.queue);
+            fprintf(stderr, "[sig_vk] SIGDOMAIN dev=%llu q=%llu k=%llu tl=%d\n",
+                    (unsigned long long) rq.device, (unsigned long long) rq.queue,
+                    (unsigned long long) k_lim, (int) tl_on);
+            fflush(stderr);
+        });
+    }
+#endif
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    if (k_lim > 0 && (!tl_on || !g_diag_completion_tl)) {
+        // K pedido sem o recurso que comprova conclusão: recusa ANTES do submit.
+        throw std::runtime_error("sig_vk_ledger: K>0 sem timeline (UNSUPPORTED)");
+    }
+#endif
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // Fila fora do dominio verificado: segue SEM contabilidade de ledger (o K e
+    // experimental e vale para a fila medida), preservando o cancelamento.
+    if (led != nullptr && !sig_vk_ledger::global().domain_ok(rq.device, rq.queue)) {
+        static std::atomic<uint64_t> n_fora{0};
+        if (n_fora.fetch_add(1, std::memory_order_relaxed) < 2) {
+            fprintf(stderr, "[sig_vk] SIGDOMAINSKIP dev=%llu q=%llu (fila fora do dominio)\n",
+                    (unsigned long long) rq.device, (unsigned long long) rq.queue);
+            fflush(stderr);
+        }
+        led = nullptr;
+    }
+#endif
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R32/C3 — sem recurso de conclusao suportado (TL desligado), o ledger NAO
+    // registra unidade: registrar produziria "449 SUBMITTED, zero DONE" sem
+    // prova possivel (o que a R31CAPGPU mostrou). O caminho de sincronizacao e
+    // de cancelamento continua intacto; so a contabilidade sai.
+    if (led != nullptr && (!tl_on || g_diag_completion_tl == nullptr)) {
+        static std::atomic<uint64_t> n_off{0};
+        if (n_off.fetch_add(1, std::memory_order_relaxed) < 2) {
+            fprintf(stderr, "[sig_vk] SIGLEDGEROFF reason=no_completion_resource k=%llu\n",
+                    (unsigned long long) k_lim);
+            fflush(stderr);
+        }
+        led = nullptr;
+    }
+#endif
+
+    sig_vk_cycle::Ticket ticket = sig_vk_cycle::admit(
+        led, rq,
+#ifdef SIG_WHISPER_DUMP_HOOK
+        k_lim > 0 ? sig_vk_ledger::WaitFn(sig_vk_wait_unit) : sig_vk_ledger::WaitFn(),
+#else
+        sig_vk_ledger::WaitFn(),
+#endif
+        cancel);
+
+    if (ticket.outcome != sig_vk_cycle::Outcome::ADMITTED) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+        fprintf(stderr,
+                "[sig_vk] SIGCYCLE ev=admit result=%s admit=%s k=%llu dev=%llu q=%llu\n",
+                sig_vk_cycle::outcome_name(ticket.outcome),
+                sig_vk_ledger::admit_name(ticket.admit),
+                (unsigned long long) k_lim, (unsigned long long) rq.device,
+                (unsigned long long) rq.queue);
+        fflush(stderr);
+#endif
+        if (ticket.outcome == sig_vk_cycle::Outcome::CANCELLED) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // R30/C2 — WITNESS CONTEMPORANEO: no INSTANTE em que o pedido foi
+            // observado, fotografa a unidade emitida ainda nao provada. Na R29 a
+            // prova era a ultima amostra esparsa (3,19 s antes do pedido), o que
+            // nao fecha a correspondencia. `observed < 0` = leitura indisponivel.
+            {
+                const auto wc = sig_vk_ledger::global().witness_pending(
+                    [](uint64_t h, sig_vk_ledger::Resource res) -> int64_t {
+                        if (res != sig_vk_ledger::Resource::TIMELINE || h == 0) {
+                            return -1;
+                        }
+                        try {
+                            return (int64_t) g_diag_device.getSemaphoreCounterValue(
+                                vk::Semaphore((VkSemaphore) h));
+                        } catch (...) {
+                            return -1;
+                        }
+                    });
+                fprintf(stderr,
+                        "[sig_vk] SIGWITNESSCANCEL ev=at_cancel valid=%d id=%llu dev=%llu "
+                        "q=%llu epoch=%llu target=%llu observed=%lld completed=%d state=%s "
+                        "owner=%llu job=%llu attempt=%d ts_us=%lld k=%llu\n",
+                        wc.valid ? 1 : 0, (unsigned long long) wc.submit_id,
+                        (unsigned long long) wc.device, (unsigned long long) wc.queue,
+                        (unsigned long long) wc.epoch, (unsigned long long) wc.target,
+                        (long long) wc.observed, wc.completed ? 1 : 0,
+                        sig_vk_ledger::state_name(wc.state),
+                        (unsigned long long) wc.ident.owner_hash,
+                        (unsigned long long) wc.ident.job, (int) wc.ident.attempt,
+                        (long long) wc.ts_us, (unsigned long long) k_lim);
+                fflush(stderr);
+            }
+#endif
+            // Nenhum trabalho útil novo. O gate do dono já registrou `observed`;
+            // o grafo termina pelo caminho ABORTED existente.
+            return sig_vk_cycle::Outcome::CANCELLED;
+        }
+        // Recusa por K/quarentena/erro: falha tipada, nunca submit silencioso.
+        throw std::runtime_error(std::string("sig_vk_cycle: admissão ") +
+                                 sig_vk_ledger::admit_name(ticket.admit));
+    }
+
+    uint64_t led_value = 0;
+    {
+        std::lock_guard<std::mutex> guard(queue_mutex);
+
+        // Fronteira final, com o lock da fila retido e NADA emitido ainda.
+        if (!sig_vk_cycle::precommit(ticket, led, cancel)) {
+#ifdef SIG_WHISPER_DUMP_HOOK
+            fprintf(stderr, "[sig_vk] SIGCYCLE ev=precommit result=CANCELLED k=%llu\n",
+                    (unsigned long long) k_lim);
+            fflush(stderr);
+#endif
+            return sig_vk_cycle::Outcome::CANCELLED;
+        }
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // R32/C1 — so TOCA o sinal que esta montagem realmente anexou. Conferir
+        // o indice, o tamanho e o vetor interno evita sobrescrever o ultimo
+        // sinal de outra fila e evita incrementar o contador DIAG sem recurso.
+        if (tl_slot_idx >= 0 && tl_slot_idx < (int) tl_signal_vals.size() &&
+            !tl_signal_vals[tl_slot_idx].empty() &&
+            tl_slot_idx < (int) tl_signal_semaphores.size() &&
+            !tl_signal_semaphores[tl_slot_idx].empty() &&
+            tl_signal_semaphores[tl_slot_idx].back() == g_diag_completion_tl) {
+            tl_valor = g_diag_completion_value.fetch_add(1) + 1;
+            tl_signal_vals[tl_slot_idx].back() = tl_valor;
+            led_value = tl_valor;
+        }
+#endif
+        try {
+            ctx->p->q->queue.submit(submit_infos, fence);
+        } catch (...) {
+            // Efeito INCERTO: quarentena (não finge conclusão nem libera slot).
+            sig_vk_cycle::fail(ticket, led);
+            throw;
+        }
+        // A unidade só vira SUBMITTED DEPOIS do envio efetivado.
+        const sig_vk_cycle::Outcome fim = sig_vk_cycle::commit(ticket, led, led_value);
+        if (ticket.ledger_failed) {
+            // R30/A3 - o envio aconteceu e a contabilidade falhou: a divida de
+            // dreno PERMANECE (quem chama nao pode achar que nada foi emitido).
+#ifdef SIG_WHISPER_DUMP_HOOK
+            fprintf(stderr, "[sig_vk] SIGLEDGERFAIL id=%llu k=%llu (envio mantido, quarentena)\n",
+                    (unsigned long long) ticket.id, (unsigned long long) k_lim);
+            fflush(stderr);
+#endif
+        }
+        (void) fim;
+    }
+
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R29/P0 — WITNESS de unidade EMITIDA (SUBMITTED). Amostragem: o gatilho
+    // (SIG_VK_WITNESS=1) imprime as primeiras amostras e depois esparso — sem
+    // centenas de linhas por submit. `-1` = leitura indisponível, nunca zero.
+    if (getenv("SIG_VK_WITNESS") != nullptr) {
+        static std::atomic<uint64_t> n_wit{0};
+        const uint64_t nw = n_wit.fetch_add(1, std::memory_order_relaxed);
+        if (nw < 8 || (nw % 256) == 0) {
+            const auto w = sig_vk_ledger::global().witness_pending(
+                [](uint64_t h, sig_vk_ledger::Resource res) -> int64_t {
+                    if (res != sig_vk_ledger::Resource::TIMELINE || h == 0) {
+                        return -1;
+                    }
+                    try {
+                        return (int64_t) g_diag_device.getSemaphoreCounterValue(
+                            vk::Semaphore((VkSemaphore) h));
+                    } catch (...) {
+                        return -1;
+                    }
+                });
+            if (w.valid) {
+                fprintf(stderr,
+                    "[sig_vk] SIGWITNESS n=%llu id=%llu dev=%llu q=%llu epoch=%llu "
+                    "res=%s handle=%llu target=%llu observed=%lld completed=%d state=%s "
+                    "owner=%llu job=%llu attempt=%d ts_us=%lld\n",
+                    (unsigned long long) nw,
+                    (unsigned long long) w.submit_id,
+                    (unsigned long long) w.device, (unsigned long long) w.queue,
+                    (unsigned long long) w.epoch,
+                    w.resource == sig_vk_ledger::Resource::TIMELINE ? "TL" : "FENCE",
+                    (unsigned long long) w.handle, (unsigned long long) w.target,
+                    (long long) w.observed, w.completed ? 1 : 0,
+                    sig_vk_ledger::state_name(w.state),
+                    (unsigned long long) w.ident.owner_hash,
+                    (unsigned long long) w.ident.job, (int) w.ident.attempt,
+                    (long long) w.ts_us);
+                fflush(stderr);
+            }
+        }
+    }
+    // Atestado periódico do ledger (esparso).
+    {
+        static std::atomic<uint64_t> n_atest{0};
+        const uint64_t na = n_atest.fetch_add(1, std::memory_order_relaxed);
+        if (na < 4 || (na % 64) == 0) {
+            const sig_vk_ledger::Stats st = sig_vk_ledger::global().stats();
+            fprintf(stderr,
+                "[sig_vk] LEDGER k=%llu n=%llu submits=%llu submitted=%llu waits=%llu "
+                "completed=%llu stale=%llu errors=%llu not_ready=%llu abandoned=%llu "
+                "cancelled=%llu peer_waits=%llu max_pending=%llu\n",
+                (unsigned long long) k_lim, (unsigned long long) na,
+                (unsigned long long) st.submits, (unsigned long long) st.submitted,
+                (unsigned long long) st.admission_waits, (unsigned long long) st.completed,
+                (unsigned long long) st.stale, (unsigned long long) st.errors,
+                (unsigned long long) st.not_ready, (unsigned long long) st.abandoned,
+                (unsigned long long) st.cancelled, (unsigned long long) st.peer_waits,
+                (unsigned long long) st.max_pending);
+            fflush(stderr);
+        }
+    }
+#endif
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R26/GPU-H3 — INTERVENÇÃO DE DIAGNÓSTICO: dreno a cada N submits. Se a
+    // perda de dispositivo desaparecer com a janela de 6 MB, a causa é a
+    // PROFUNDIDADE da fila do encoder (não fence, não fronteira).
+    {
+        const char * each = getenv("SIG_WHISPER_DRAIN_EACH");
+        const char * n_env = getenv("SIG_WHISPER_DRAIN_N");
+        const long drain_n = n_env != nullptr ? atol(n_env) : 0;
+        static std::atomic<uint64_t> n_drain{0};
+        const uint64_t nd = n_drain.fetch_add(1, std::memory_order_relaxed);
+        const bool drenar = (each != nullptr) ||
+                            (drain_n > 0 && (nd % (uint64_t) drain_n) == 0);
+        if (drenar) {
+            const int64_t t0 = ggml_time_us();
+            ctx->p->q->queue.waitIdle();
+            if (nd < 8 || (nd % 64) == 0) {
+                fprintf(stderr, "[sig_vk] SIGDRAIN n=%llu depth=%llu wait_us=%lld\n",
+                        (unsigned long long) nd,
+                        (unsigned long long) sig_vk_inflight::outstanding(),
+                        (long long) (ggml_time_us() - t0));
+                fflush(stderr);
+            }
+        }
+    }
+#endif
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R13/B2 — DIAG: registra a sequencia DEPOIS de queue.submit retornar.
+    sig_vk_inflight::note_queue_submit(fence);
+    // R27/K — a unidade DESTE submit ja foi registrada por reserve() antes do
+    // envio; registrar de novo duplicaria a contagem (e o pending).
+    // O lote foi submetido: zera a contagem para o proximo lote deste contexto.
+    ctx->diag_dispatch_count = 0;
+#endif
 
     ctx->seqs.clear();
+    return sig_vk_cycle::Outcome::SUBMITTED;
 }
 
 static uint32_t ggml_vk_find_queue_family_index(std::vector<vk::QueueFamilyProperties>& queue_family_props, const vk::QueueFlags& required, const vk::QueueFlags& avoid, int32_t compute_index, uint32_t min_num_queues) {
@@ -2595,6 +4075,7 @@ static vk_context ggml_vk_create_context(ggml_backend_vk_context * ctx, vk_comma
     VK_LOG_DEBUG("ggml_vk_create_context(" << result << ")");
     ctx->gc.contexts.emplace_back(result);
     result->p = &p;
+    result->owner = ctx;   // R29/P0 — vínculo com o gate/identidade do DONO
     return result;
 }
 
@@ -3389,6 +4870,10 @@ static bool ggml_vk_fa_scalar_uses_mmq(const vk_device& device, ggml_type k_type
 #endif
 }
 
+// R15/C1 — o parser do modo R6 vive em ggml-vulkan-fa-r6-mode.h, incluído por
+// este arquivo E pelo teste de tabela de estados (mesmo código, sem cópia).
+#include "ggml-vulkan-fa-r6-mode.h"
+
 static void ggml_vk_load_shaders(vk_device& device) {
     VK_LOG_DEBUG("ggml_vk_load_shaders(" << device->name << ")");
 
@@ -3634,6 +5119,9 @@ static void ggml_vk_load_shaders(vk_device& device) {
                 pipeline->parameter_count = parameter_count;
                 pipeline->push_constant_size = push_constant_size;
                 pipeline->wg_denoms = wg_denoms;
+                // R6/fase A (A1): guarda as especializacoes REAIS desta pipeline
+                // (reportadas no trace SM-TRACE).
+                pipeline->spec_constants = specialization_constants;
                 pipeline->align = align;
                 pipeline->initialized = true;
 #if defined(VK_EXT_shader_64bit_indexing)
@@ -3642,6 +5130,22 @@ static void ggml_vk_load_shaders(vk_device& device) {
             }
 
             if (!pipeline->needed || pipeline->compiled) {
+                continue;
+            }
+
+            // R2/fase C (C5): família FA já REPROVADA neste device — não
+            // re-tentar a compilação a cada load_shaders. Sem isto, `needed`
+            // permanece true para sempre e cada chamada re-atacava as mesmas
+            // pipelines condenadas (createComputePipeline real + mensagem),
+            // em runs FA-off inclusive. O veredito que supports_op usa é o
+            // mesmo (flash_attn_pipelines_failed).
+            if (device->flash_attn_pipelines_failed.load(std::memory_order_relaxed) &&
+                ggml_vk_pipeline_name_is_flash_attn(name)) {
+                continue;
+            }
+            // R3/fase D (D2): não re-tentar QUALQUER pipeline já reprovada
+            // (não-FA incluído) a cada load_shaders.
+            if (pipeline->failed) {
                 continue;
             }
             // TODO: We're no longer benefitting from the async compiles (shaders are
@@ -3704,11 +5208,121 @@ static void ggml_vk_load_shaders(vk_device& device) {
             }
         }
         const char *name = aligned ? "flash_attn_f32_f16_aligned" : "flash_attn_f32_f16";
+#ifdef SIG_VK_FA_FAIL_INJECT
+        // R4/E1 (SÓ DIAG): identidade EXATA do SPIR-V escolhido p/ esta
+        // tentativa (size + fnv1a64) + especializações efetivas.
+        {
+            uint64_t fnv = 1469598103934665603ull;
+            const unsigned char * bytes = (const unsigned char *) spv_data;
+            for (size_t i = 0; i < spv_size; ++i) { fnv ^= bytes[i]; fnv *= 1099511628211ull; }
+            GGML_LOG_INFO("ggml_vulkan: [E1-diag] FA tentativa name=%s spv_size=%zu spv_fnv1a64=%016llx aligned=%d f32acc=%d fp16=%d use_mmq=%d "
+                          "k_type=%d v_type=%d Br=%u Bc=%u D_split=%u row_split=%u wg=%u sgs=%u flags=%u\n",
+                          name, spv_size, (unsigned long long) fnv, (int) aligned, (int) f32acc, (int) device->fp16, (int) use_mmq,
+                          (int) fa.first.k_type, (int) fa.first.v_type, Br, Bc, fa.first.D_split, fa.first.row_split,
+                          fa.first.workgroup_size, fa_sgs, fa.first.flags);
+        }
+#endif
         ggml_vk_create_pipeline(device, fa.second, name, spv_size, spv_data, "main", 7,
                                 sizeof(vk_flash_attn_push_constants), {Br, 1, 1},
                                 get_fa_spec_constants(fa.first), aligned ? Bc : 1, true,
                                 !fa_ds, !fa_ds ? fa_sgs : 0);
     }
+
+    // ---------------------------------------------------------------------
+    // R6/fase F (F2): variante compacta fa_r6 — SPIR-V embutido, criada DIRETO
+    // (sem o gerador universal). Cobre Q f32 / K,V f16 / head_dim 64 / O f32 do
+    // whisper; online softmax em F32; 1 workgroup por (linha, head) com WG=64.
+    // Nome FORA dos prefixos "flash_attn"/"fa_": o skip de re-tentativa da
+    // familia FA (flash_attn_pipelines_failed) NAO deve impedir esta variante
+    // especifica de ser tentada (e o veredito dela e proprio: compiled/failed).
+    // R7/A3: o CRIADOR exige TODAS as capacidades que o kernel assume —
+    // subgroup_size=64 executável E requiredSubgroupSize=64 enforçável
+    // (VK_EXT_subgroup_size_control + 64 em [min,max] + requiredSubgroupSizeStages
+    // com COMPUTE, já dobrado em device->subgroup_size_control) E
+    // computeFullSubgroups (1 subgroup CHEIO por workgroup). Só
+    // `subgroup_size == 64` NÃO basta: sem essas features o required size era
+    // silenciosamente ignorado e o kernel rodava com semântica de redução errada.
+    ggml_fa_r6_caps fa_r6_caps {};
+    fa_r6_caps.subgroup_size         = device->subgroup_size;
+    fa_r6_caps.subgroup_size_control = device->subgroup_size_control;
+    fa_r6_caps.subgroup_min_size     = device->subgroup_min_size;
+    fa_r6_caps.subgroup_max_size     = device->subgroup_max_size;
+    fa_r6_caps.subgroup_full_support = device->subgroup_require_full_support;
+    fa_r6_caps.max_wg_count[0] = device->properties.limits.maxComputeWorkGroupCount[0];
+    fa_r6_caps.max_wg_count[1] = device->properties.limits.maxComputeWorkGroupCount[1];
+    fa_r6_caps.max_wg_count[2] = device->properties.limits.maxComputeWorkGroupCount[2];
+    std::string fa_r6_creator_why;
+    if (ggml_fa_r6_creator_check(fa_r6_caps, fa_r6_creator_why)) {
+        const char * env_r6 = getenv("GGML_VK_FA_R6");
+        if (device->fa_r6_mode.load(std::memory_order_relaxed) < 0) {
+            // R15/C1 — parser UNICO (o mesmo consultado por
+            // sig_vk_fa_r6_available). Nada de interpretacao paralela.
+            const int mode_r6 = ggml_vk_fa_r6_parse_mode(env_r6);
+            device->fa_r6_mode.store(mode_r6, std::memory_order_relaxed);
+            GGML_LOG_INFO("ggml_vulkan: [R6-F] fa_r6 modo=%d (%s) (env GGML_VK_FA_R6='%s')\n",
+                          mode_r6, ggml_vk_fa_r6_mode_name(mode_r6),
+                          env_r6 ? env_r6 : "");
+        }
+        if (!device->pipeline_fa_r6_mask0) device->pipeline_fa_r6_mask0 = std::make_shared<vk_pipeline_struct>();
+        if (!device->pipeline_fa_r6_mask1) device->pipeline_fa_r6_mask1 = std::make_shared<vk_pipeline_struct>();
+        device->pipeline_fa_r6_mask0->needed = true;
+        device->pipeline_fa_r6_mask1->needed = true;
+        ggml_vk_create_pipeline(device, device->pipeline_fa_r6_mask0, "r6fa_stream_mask0",
+                                ggml_vk_fa_r6_spv_len, ggml_vk_fa_r6_spv, "main", 7,
+                                sizeof(vk_flash_attn_push_constants), {1, 1, 1}, {0}, 1, true, true, device->subgroup_size);
+        ggml_vk_create_pipeline(device, device->pipeline_fa_r6_mask1, "r6fa_stream_mask1",
+                                ggml_vk_fa_r6_spv_len, ggml_vk_fa_r6_spv, "main", 7,
+                                sizeof(vk_flash_attn_push_constants), {1, 1, 1}, {1}, 1, true, true, device->subgroup_size);
+
+        // R7/fase G (G2d): variantes focais BC2/BC4 (header gerado em A3). Aqui so
+        // compilamos as pipelines quando habilitadas; a escolha por SHAPE x controle
+        // acontece no dispatch (ggml_vk_fa_r6_choose). Env GGML_VK_FA_R6_BC:
+        // "0"=somente o controle R6 (byte a byte) — DEFAULT de produto desde a R8/F
+        //   (a politica automatica por shape foi REPROVADA por qualidade: C01 +2,2 pp
+        //   e C02 +5,2 pp vs controle; ver build/whisper-rodada8/.../fase-f/SUMMARY-F.md);
+        // "2"/"4"=forca variante (experimental/diag);
+        // "auto"/"1"=selecao automatica por shape com fallback ao controle
+        //   (EXPERIMENTAL; nao e default enquanto nao passar por numerico E qualidade).
+        const char * env_bc = getenv("GGML_VK_FA_R6_BC");
+        if (device->fa_r6_bc_mode.load(std::memory_order_relaxed) < 0) {
+            int mode_bc = 0;  // R8/F (F3): controle = default seguro; auto vira opt-in
+            if (env_bc != nullptr && env_bc[0] != '\0') {
+                if (!strcmp(env_bc, "0") || !strcmp(env_bc, "off")) mode_bc = 0;
+                else if (!strcmp(env_bc, "2")) mode_bc = 2;
+                else if (!strcmp(env_bc, "4")) mode_bc = 4;
+                else if (!strcmp(env_bc, "auto") || !strcmp(env_bc, "1")) mode_bc = 1;
+            }
+            device->fa_r6_bc_mode.store(mode_bc, std::memory_order_relaxed);
+            GGML_LOG_INFO("ggml_vulkan: [R7-G] fa_r6_bc modo=%d (env GGML_VK_FA_R6_BC='%s')\n",
+                          mode_bc, env_bc ? env_bc : "");
+        }
+        if (device->fa_r6_bc_mode.load(std::memory_order_relaxed) != 0) {
+            if (!device->pipeline_fa_r6_bc2_mask0) device->pipeline_fa_r6_bc2_mask0 = std::make_shared<vk_pipeline_struct>();
+            if (!device->pipeline_fa_r6_bc2_mask1) device->pipeline_fa_r6_bc2_mask1 = std::make_shared<vk_pipeline_struct>();
+            if (!device->pipeline_fa_r6_bc4_mask0) device->pipeline_fa_r6_bc4_mask0 = std::make_shared<vk_pipeline_struct>();
+            if (!device->pipeline_fa_r6_bc4_mask1) device->pipeline_fa_r6_bc4_mask1 = std::make_shared<vk_pipeline_struct>();
+            device->pipeline_fa_r6_bc2_mask0->needed = true;
+            device->pipeline_fa_r6_bc2_mask1->needed = true;
+            device->pipeline_fa_r6_bc4_mask0->needed = true;
+            device->pipeline_fa_r6_bc4_mask1->needed = true;
+            ggml_vk_create_pipeline(device, device->pipeline_fa_r6_bc2_mask0, "r6fa_bc2_mask0",
+                                    ggml_vk_fa_r6_bc2_spv_len, ggml_vk_fa_r6_bc2_spv, "main", 7,
+                                    sizeof(vk_flash_attn_push_constants), {1, 1, 1}, {0}, 1, true, true, device->subgroup_size);
+            ggml_vk_create_pipeline(device, device->pipeline_fa_r6_bc2_mask1, "r6fa_bc2_mask1",
+                                    ggml_vk_fa_r6_bc2_spv_len, ggml_vk_fa_r6_bc2_spv, "main", 7,
+                                    sizeof(vk_flash_attn_push_constants), {1, 1, 1}, {1}, 1, true, true, device->subgroup_size);
+            ggml_vk_create_pipeline(device, device->pipeline_fa_r6_bc4_mask0, "r6fa_bc4_mask0",
+                                    ggml_vk_fa_r6_bc4_spv_len, ggml_vk_fa_r6_bc4_spv, "main", 7,
+                                    sizeof(vk_flash_attn_push_constants), {1, 1, 1}, {0}, 1, true, true, device->subgroup_size);
+            ggml_vk_create_pipeline(device, device->pipeline_fa_r6_bc4_mask1, "r6fa_bc4_mask1",
+                                    ggml_vk_fa_r6_bc4_spv_len, ggml_vk_fa_r6_bc4_spv, "main", 7,
+                                    sizeof(vk_flash_attn_push_constants), {1, 1, 1}, {1}, 1, true, true, device->subgroup_size);
+        }
+    } else {
+        GGML_LOG_WARN("ggml_vulkan: [R6-F] fa_r6 indisponivel: %s\n", fa_r6_creator_why.c_str());
+        device->fa_r6_mode.store(0, std::memory_order_relaxed);
+    }
+    // ---------------------------------------------------------------------
 
 #if defined(VK_KHR_cooperative_matrix) && defined(GGML_VULKAN_COOPMAT_GLSLC_SUPPORT)
     if (device->coopmat1_fa_support) {
@@ -4772,6 +6386,15 @@ static void ggml_vk_load_shaders(vk_device& device) {
     ggml_vk_create_pipeline(device, device->pipeline_soft_max_f32_wg512, "soft_max_f32_wg512", soft_max_f32_len, soft_max_f32_data, "main", 4, sizeof(vk_op_soft_max_push_constants), {1, 1, 1}, { 512 }, 1);
     ggml_vk_create_pipeline(device, device->pipeline_soft_max_f32_f16, "soft_max_f32_f16", soft_max_f32_f16_len, soft_max_f32_f16_data, "main", 4, sizeof(vk_op_soft_max_push_constants), {1, 1, 1}, { device->subgroup_size }, 1);
     ggml_vk_create_pipeline(device, device->pipeline_soft_max_f32_f16_wg512, "soft_max_f32_f16_wg512", soft_max_f32_f16_len, soft_max_f32_f16_data, "main", 4, sizeof(vk_op_soft_max_push_constants), {1, 1, 1}, { 512 }, 1);
+    // R6/fase A (A1): variantes SEGURAS (spec real 64) SOMENTE no escopo da quirk.
+    // Mesmo SPIR-V e mesmo contrato das demais da familia (wg_denoms={1,1,1}, push
+    // constants, align=1; sem required subgroup size - get_subgroup_size() nao tem
+    // config para Adreno). Fora do escopo nada e criado: a selecao upstream segue
+    // intacta (soft_max_f32 spec=subgroup_size / _wg512 p/ ncols>1024).
+    if (ggml_vk_soft_max_passthrough_quirk(device)) {
+        ggml_vk_create_pipeline(device, device->pipeline_soft_max_f32_wg64, "soft_max_f32_wg64", soft_max_f32_len, soft_max_f32_data, "main", 4, sizeof(vk_op_soft_max_push_constants), {1, 1, 1}, { 64 }, 1);
+        ggml_vk_create_pipeline(device, device->pipeline_soft_max_f32_f16_wg64, "soft_max_f32_f16_wg64", soft_max_f32_f16_len, soft_max_f32_f16_data, "main", 4, sizeof(vk_op_soft_max_push_constants), {1, 1, 1}, { 64 }, 1);
+    }
     ggml_vk_create_pipeline(device, device->pipeline_soft_max_back_f32, "soft_max_back_f32", soft_max_back_f32_len, soft_max_back_f32_data, "main", 3, sizeof(vk_op_push_constants), {1, 1, 1}, { device->subgroup_size }, 1, true);
 
     ggml_vk_create_pipeline(device, device->pipeline_soft_max_large1_f32,     "soft_max_large1_f32",     soft_max_large1_f32_len,     soft_max_large1_f32_data,     "main", 6, sizeof(vk_op_soft_max_push_constants), {1, 1, 1}, { 128, 4 }, 1, true);
@@ -5289,6 +6912,27 @@ static vk_device ggml_vk_get_device(size_t idx) {
 
         device->fp16 = !force_disable_f16 && fp16_storage && fp16_compute;
 
+#ifdef SIG_VK_FA_FAIL_INJECT
+        // R4/E1 (SÓ DIAG): features/limits efetivos do VkDevice escolhido,
+        // para o relatório da falha de compilação FA (ErrorUnknown).
+        GGML_LOG_INFO("ggml_vulkan: [E1-diag] device=%s api=%u driver=%u vendor=%u arch=%d fp16_storage=%d fp16_compute=%d fp16=%d "
+                      "coopmat=%d coopmat2=%d sgs=%u shuffle=%d vote=%d ballot=%d "
+                      "maxWGInvocations=%u maxWGSize=[%u,%u,%u] maxSharedMem=%u maxPushConst=%u maxStorageBuf=%llu\n",
+                      device->name.c_str(), device->properties.apiVersion, device->properties.driverVersion,
+                      device->properties.vendorID, (int) device->architecture,
+                      (int) fp16_storage, (int) fp16_compute, (int) device->fp16,
+                      (int) device->coopmat_support, (int) device->coopmat2,
+                      device->subgroup_size,
+                      (int) device->subgroup_shuffle, (int) device->subgroup_vote, (int) device->subgroup_ballot,
+                      device->properties.limits.maxComputeWorkGroupInvocations,
+                      device->properties.limits.maxComputeWorkGroupSize[0],
+                      device->properties.limits.maxComputeWorkGroupSize[1],
+                      device->properties.limits.maxComputeWorkGroupSize[2],
+                      device->properties.limits.maxComputeSharedMemorySize,
+                      device->properties.limits.maxPushConstantsSize,
+                      (unsigned long long) device->properties.limits.maxStorageBufferRange);
+#endif
+
         if (!ggml_vk_khr_cooperative_matrix_support(device->properties, driver_props, device->architecture)) {
             device->coopmat_support = false;
         }
@@ -5446,6 +7090,22 @@ static vk_device ggml_vk_get_device(size_t idx) {
 #endif
 
         ggml_vk_get_physical_device_features_2(device->physical_device, &device_features2);
+
+#ifdef SIG_VK_FA_FAIL_INJECT
+        // R4/E1 (SÓ DIAG): feature bits efetivos (é o mesmo chain passado ao
+        // createDevice — "enables all supported features" — então refletem o
+        // que o pipeline pode usar de fato).
+        GGML_LOG_INFO("ggml_vulkan: [E1-diag] features: shaderInt8=%d shaderInt16=%d shaderFloat16=%d storage16=%d storage8=%d "
+                      "shaderInt64=%d shaderFloat64=%d subgroup=%u\n",
+                      (int) vk12_features.shaderInt8,
+                      (int) device_features2.features.shaderInt16,
+                      (int) vk12_features.shaderFloat16,
+                      (int) vk11_features.storageBuffer16BitAccess,
+                      (int) vk12_features.storageBuffer8BitAccess,
+                      (int) device_features2.features.shaderInt64,
+                      (int) device_features2.features.shaderFloat64,
+                      device->subgroup_size);
+#endif
 
         device->pipeline_executable_properties_support = pipeline_executable_properties_support;
 
@@ -5701,6 +7361,16 @@ static vk_device ggml_vk_get_device(size_t idx) {
             .setPEnabledExtensionNames(device_extensions);
         device_create_info.setPNext(&device_features2);
         device->device = device->physical_device.createDevice(device_create_info);
+#ifdef SIG_WHISPER_DUMP_HOOK
+        g_diag_device = device->device;
+        if (!g_diag_completion_tl) {
+            vk::SemaphoreTypeCreateInfo tci{ vk::SemaphoreType::eTimeline, 0 };
+            vk::SemaphoreCreateInfo sci{};
+            sci.setPNext(&tci);
+            g_diag_completion_tl = device->device.createSemaphore(sci);
+            g_diag_completion_value.store(0, std::memory_order_relaxed);
+        }
+#endif
 
         // Queues
         ggml_vk_create_queue(device, device->compute_queue, compute_queue_family_index, 0, { vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eTransfer }, false);
@@ -6456,6 +8126,142 @@ static vk_matmul_pipeline ggml_vk_get_mul_mat_mat_pipeline(ggml_backend_vk_conte
     return (ctx->device->fp16 && prec == GGML_PREC_DEFAULT) ? ctx->device->pipeline_dequant_mul_mat_mat[src0_type].f16acc : ctx->device->pipeline_dequant_mul_mat_mat[src0_type].f32acc;
 }
 
+// ---------------------------------------------------------------- R55/MM-PLAN
+// Ponte entre o backend e o plano do laboratorio (sig-whisper-lab-mm-plan.h).
+// Tudo o que e' decisao de produto/observacao fica no header; aqui so' ha'
+// traducao de estruturas do Vulkan/ggml para as estruturas puras do plano.
+//
+// A regra da FAMILIA nao e' reescrita: `ggml_vk_get_mul_mat_mat_pipeline`
+// resolve o ponteiro real e o rotulo sai da IDENTIDADE desse ponteiro.
+static sig_lab_mm::Family ggml_vk_lab_family_tag(const vk_device & device, const vk_matmul_pipeline & fam) {
+    if (!fam) {
+        return sig_lab_mm::Family::NENHUMA;
+    }
+    if (fam == device->pipeline_matmul_f32)         return sig_lab_mm::Family::F32;
+    if (fam == device->pipeline_matmul_f32_f16)     return sig_lab_mm::Family::F32_F16;
+    if (fam == device->pipeline_matmul_bf16)        return sig_lab_mm::Family::BF16;
+    if (fam == device->pipeline_matmul_f16_f32.f16acc) return sig_lab_mm::Family::F16ACC;
+    if (fam == device->pipeline_matmul_f16_f32.f32acc) return sig_lab_mm::Family::F32ACC;
+    if (fam == device->pipeline_matmul_f16.f16acc)  return sig_lab_mm::Family::F16ACC;
+    if (fam == device->pipeline_matmul_f16.f32acc)  return sig_lab_mm::Family::F32ACC;
+    return sig_lab_mm::Family::QUANT;
+}
+
+static sig_lab_mm::FamilyCaps ggml_vk_lab_family_caps(ggml_backend_vk_context * ctx, const vk_matmul_pipeline & fam, ggml_type src0_type, ggml_type src1_type) {
+    sig_lab_mm::FamilyCaps caps;
+    if (ctx == nullptr || !fam) {
+        return caps;
+    }
+    caps.family = ggml_vk_lab_family_tag(ctx->device, fam);
+    // O caminho q8_1 (integer dot) tem mascaras proprias; o perfil de laboratorio
+    // e' F16xF32, mas a leitura precisa ser a da familia REAL usada.
+    const bool is_q8_1 = (src1_type == GGML_TYPE_Q8_1);
+    const bool mask[3] = {
+        is_q8_1 ? ctx->device->mul_mat_s_int[src0_type] : ctx->device->mul_mat_s[src0_type],
+        is_q8_1 ? ctx->device->mul_mat_m_int[src0_type] : ctx->device->mul_mat_m[src0_type],
+        is_q8_1 ? ctx->device->mul_mat_l_int[src0_type] : ctx->device->mul_mat_l[src0_type],
+    };
+    vk_pipeline * const plain[3]   = { &fam->s,   &fam->m,   &fam->l   };
+    vk_pipeline * const aligned[3] = { &fam->a_s, &fam->a_m, &fam->a_l };
+    for (int i = 0; i < 3; ++i) {
+        sig_lab_mm::VariantCaps & c = caps.v[i];
+        const vk_pipeline & p  = *plain[i];
+        const vk_pipeline & pa = *aligned[i];
+        c.mask = mask[i];
+        c.ptr = (p != nullptr);
+        c.ptr_aligned = (pa != nullptr);
+        c.initialized = c.ptr && p->initialized;
+        c.initialized_aligned = c.ptr_aligned && pa->initialized;
+        c.failed = c.ptr && p->failed;
+        c.failed_aligned = c.ptr_aligned && pa->failed;
+        // compiled=false NAO e' recusa: a pipeline pode ser preguicosa e ser
+        // compilada em needed->load_shaders antes do submit.
+        c.compiled = c.ptr && p->compiled.load(std::memory_order_relaxed);
+        c.compiled_aligned = c.ptr_aligned && pa->compiled.load(std::memory_order_relaxed);
+        c.align = c.ptr ? p->align : 0;
+        c.align_aligned = c.ptr_aligned ? pa->align : 0;
+    }
+    return caps;
+}
+
+// Leitura minima de um no'. `src0_type`/`src1_type` sao os tipos EFETIVOS que o
+// seletor vai usar (apos dequant/quantize), nao necessariamente os do tensor.
+static sig_lab_mm::OpView ggml_vk_lab_op_view(const ggml_tensor * nd, ggml_type src0_type, ggml_type src1_type, bool quantize_y, bool vazio) {
+    sig_lab_mm::OpView v;
+    if (nd == nullptr) {
+        return v;
+    }
+    v.vazio      = vazio;
+    v.mul_mat    = (nd->op == GGML_OP_MUL_MAT);
+    v.compute    = (nd->flags & GGML_TENSOR_FLAG_COMPUTE) != 0;
+    v.quantize_y = quantize_y;
+    const ggml_tensor * a = nd->src[0];
+    const ggml_tensor * b = nd->src[1];
+    v.fontes = (a != nullptr && b != nullptr);
+    if (v.fontes) {
+        v.src0_type   = (int) src0_type;
+        v.src1_type   = (int) src1_type;
+        v.src0_contig = ggml_is_contiguous(a);
+        v.src1_contig = ggml_is_contiguous(b);
+        v.ne00 = a->ne[0]; v.ne01 = a->ne[1]; v.ne02 = a->ne[2]; v.ne03 = a->ne[3];
+        v.ne10 = b->ne[0]; v.ne11 = b->ne[1]; v.ne12 = b->ne[2]; v.ne13 = b->ne[3];
+    }
+    v.d_ne0 = nd->ne[0]; v.d_ne1 = nd->ne[1]; v.d_ne2 = nd->ne[2]; v.d_ne3 = nd->ne[3];
+    v.prec = (int) nd->op_params[0];
+    return v;
+}
+
+// Preflight: a familia de cada no' alvo vem do GETTER REAL (tipo/precisao).
+static sig_lab_mm::FamilyCaps ggml_vk_lab_caps_for_op(void * user, const sig_lab_mm::OpView & op) {
+    ggml_backend_vk_context * ctx = (ggml_backend_vk_context *) user;
+    const int s0i = op.src0_type;
+    const int s1i = op.src1_type;
+    if (ctx == nullptr || s0i < 0 || s0i >= (int) GGML_TYPE_COUNT || s1i < 0 || s1i >= (int) GGML_TYPE_COUNT) {
+        return sig_lab_mm::FamilyCaps();   // fail-closed: sem tipo valido nao ha' familia
+    }
+    const ggml_type s0 = (ggml_type) s0i;
+    const ggml_type s1 = (ggml_type) s1i;
+    const vk_matmul_pipeline fam = ggml_vk_get_mul_mat_mat_pipeline(ctx, s0, s1, (ggml_prec) op.prec);
+    return ggml_vk_lab_family_caps(ctx, fam, s0, s1);
+}
+
+// Emissao do trace: so' com SIG_WHISPER_LAB_MM_TRACE presente e uma vez por
+// (estagio, contexto, chave) DENTRO DA TENTATIVA. O dedupe mora no contexto e e'
+// limpo a cada grafo — nao existe mais o `static std::set` global ilimitado que
+// suprimia estagios distintos.
+#if defined(__GNUC__) || defined(__clang__)
+#  define SIG_LAB_MM_PRINTF(fmt_idx, arg_idx) __attribute__((format(printf, fmt_idx, arg_idx)))
+#else
+#  define SIG_LAB_MM_PRINTF(fmt_idx, arg_idx)
+#endif
+static void ggml_vk_lab_emit(ggml_backend_vk_context * ctx, const std::string & chave, const char * fmt, ...) SIG_LAB_MM_PRINTF(3, 4);
+static void ggml_vk_lab_emit(ggml_backend_vk_context * ctx, const std::string & chave, const char * fmt, ...) {
+    if (ctx == nullptr || !ctx->lab.request.trace) {
+        return;
+    }
+    if (!ctx->lab.dedup.primeira(chave)) {
+        return;
+    }
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fflush(stderr);
+}
+
+static std::string ggml_vk_lab_spec_str(const vk_pipeline & p) {
+    std::string s;
+    if (!p) {
+        return s;
+    }
+    char tmp[16];
+    for (size_t i = 0; i < p->spec_constants.size(); ++i) {
+        snprintf(tmp, sizeof tmp, "%s%u", i == 0 ? "" : ",", p->spec_constants[i]);
+        s += tmp;
+    }
+    return s;
+}
+
 static vk_pipeline ggml_vk_get_dequantize_mul_mat_vec(ggml_backend_vk_context * ctx, ggml_type a_type, ggml_type b_type, uint32_t num_cols, uint32_t m, uint32_t k) {
     VK_LOG_DEBUG("ggml_vk_get_dequantize_mul_mat_vec()");
     GGML_ASSERT(b_type == GGML_TYPE_F32 || b_type == GGML_TYPE_F16 || b_type == GGML_TYPE_Q8_1);
@@ -6842,12 +8648,77 @@ template <typename T, uint32_t N> const T *push_constant_data(const std::array<T
 
 template <typename T>
 static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& subctx, vk_pipeline& pipeline, std::initializer_list<vk::DescriptorBufferInfo> const& descriptor_buffer_infos, const T &push_constants, std::array<uint32_t, 3> elements) {
+    // R18/B2 — FRONTEIRA DE DISPATCH.
+    // Medido na R18: o encoder emite ~195 submits DENTRO de uma única unidade do
+    // laço externo (`unit`=1, submits +195, 50 s). O poll por unidade não
+    // alcança esse trecho — por isso o cancelamento esperava ~50 s. Aqui
+    // alcança: se o pedido já foi observado, nenhuma submissão nova é emitida.
+    // O fim do grafo converte `observed` em GGML_STATUS_ABORTED (drain + retorno).
+    // R19/B2 — DIAG: o hook e incondicional, mas o encoder terminou com
+    // status=success depois do pedido. Log throttled prova se ele e ALCANCADO
+    // e se o poll enxerga o pedido.
+    if (ctx != nullptr) {
+        static std::atomic<uint32_t> r19_disp_n{0};
+        const uint32_t dn = r19_disp_n.fetch_add(1, std::memory_order_relaxed);
+        if (dn < 4 || (dn % 64u) == 0u) {
+            fprintf(stderr, "SIGABORT ev=disp n=%u armed=%d observed=%d\n",
+                    dn, ctx->abort_gate.armed() ? 1 : 0, ctx->abort_gate.observed ? 1 : 0);
+        }
+    }
+    if (ctx != nullptr && sig_vk_next_action(ctx->abort_gate, false) == SIG_VK_UNIT_ABORT) {
+        return;
+    }
     if (!pipeline || !pipeline->compiled) {
+        // R3/fase D (D2): o skip silencioso virava "resultado parcial ok".
+        // Conta e loga; o graph_compute converte em GGML_STATUS_FAILED.
+        if (ctx != nullptr && ctx->device) {
+            ctx->device->dispatch_skipped.fetch_add(1, std::memory_order_relaxed);
+            static std::atomic<uint32_t> d2_skip_logged {0};
+            if (d2_skip_logged.fetch_add(1, std::memory_order_relaxed) < 16) {
+                GGML_LOG_ERROR("ggml_vulkan: [D2] dispatch PULADO: pipeline %s indisponivel (nao compilada)\n",
+                               pipeline ? pipeline->name.c_str() : "(nula)");
+            }
+        }
         return;
     }
     const uint32_t wg0 = CEIL_DIV(elements[0], pipeline->wg_denoms[0]);
     const uint32_t wg1 = CEIL_DIV(elements[1], pipeline->wg_denoms[1]);
     const uint32_t wg2 = CEIL_DIV(elements[2], pipeline->wg_denoms[2]);
+
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    static std::atomic<uint32_t> g_sm_trace_dispatch_seq {0};
+    if (sig_vk_softmax_trace_on() && pipeline->name.rfind("soft_max", 0) == 0) {
+        const uint32_t seqn = g_sm_trace_dispatch_seq.fetch_add(1, std::memory_order_relaxed) + 1;
+        std::string dbufs;
+        {
+            uint32_t di = 0;
+            for (auto & b : descriptor_buffer_infos) {
+                char tmp[112];
+                snprintf(tmp, sizeof(tmp), "d%u={buf=%p off=%llu range=%llu} ", di++, (void*) static_cast<VkBuffer>(b.buffer),
+                         (unsigned long long) b.offset, (unsigned long long) b.range);
+                dbufs += tmp;
+            }
+        }
+        const void * pc_data = push_constant_data(push_constants);
+        const size_t pc_size = push_constant_size(push_constants);
+        const auto * spc = (const vk_op_soft_max_push_constants *) pc_data; // familia soft_max
+        bool alias = false;
+        if (descriptor_buffer_infos.size() >= 4) {
+            auto it = descriptor_buffer_infos.begin();
+            alias = (static_cast<VkBuffer>(it[0].buffer) == static_cast<VkBuffer>(it[3].buffer)) && (it[0].offset == it[3].offset);
+        }
+        // R6/fase A (A1): spec REAL da pipeline despachada (nao inferida).
+        std::string spec_list;
+        for (uint32_t sc : pipeline->spec_constants) { spec_list += std::to_string(sc); spec_list += " "; }
+        GGML_LOG_WARN("[SM-TRACE] dispatch #%u pipeline=%s spec=[%s] wg_denoms={%u,%u,%u} elements={%u,%u,%u} grid={%u,%u,%u} descs=[%s] pc_size=%zu pc_fnv64=%016llx pc{KX=%u KY=%u ne00=%u ne01=%u ne02=%u ne12=%u ne13=%u nb11=%u nb12=%u nb13=%u scale=%.9g max_bias=%.9g m0=%.9g m1=%.9g n_head_log2=%u nrows_x=%u has_sinks=%u} alias_in_out=%d\n",
+                      seqn, pipeline->name.c_str(), spec_list.c_str(), pipeline->wg_denoms[0], pipeline->wg_denoms[1], pipeline->wg_denoms[2],
+                      elements[0], elements[1], elements[2], wg0, wg1, wg2, dbufs.c_str(),
+                      pc_size, (unsigned long long) sig_vk_fnv64(pc_data, pc_size),
+                      spc->KX, spc->KY, spc->ne00, spc->ne01, spc->ne02, spc->ne12, spc->ne13, spc->nb11, spc->nb12, spc->nb13,
+                      spc->scale, spc->max_bias, spc->m0, spc->m1, spc->n_head_log2, spc->nrows_x, spc->has_sinks, (int) alias);
+    }
+#endif
+
     VK_LOG_DEBUG("ggml_vk_dispatch_pipeline(" << pipeline->name << ", {";
     for (auto& buffer : descriptor_buffer_infos) {
         std::cerr << "(" << buffer.buffer << ", " << buffer.offset << ", " << buffer.range << "), ";
@@ -6873,6 +8744,10 @@ static void ggml_vk_dispatch_pipeline(ggml_backend_vk_context* ctx, vk_context& 
                                 { descriptor_set },
                                 {});
     subctx->s->buffer->buf.dispatch(wg0, wg1, wg2);
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R13/B2 — DIAG: conta dispatch REAL gravado (o submit vazio nao conta).
+    subctx->diag_dispatch_count++;
+#endif
 }
 
 static void ggml_vk_end_submission(vk_submission& s, std::vector<vk_semaphore> wait_semaphores, std::vector<vk_semaphore> signal_semaphores) {
@@ -7420,8 +9295,11 @@ static uint32_t ggml_vk_guess_split_k(ggml_backend_vk_context * ctx, uint32_t m,
     return split_k;
 }
 
-static vk_pipeline ggml_vk_guess_matmul_pipeline(ggml_backend_vk_context * ctx, vk_matmul_pipeline& mmp, uint32_t m, uint32_t n, bool aligned, ggml_type src0_type, ggml_type src1_type) {
-    VK_LOG_DEBUG("ggml_vk_guess_matmul_pipeline(" << m << ", " << n << ", " << aligned << ", " << ggml_type_name(src0_type) << ", " << ggml_type_name(src1_type) << ")");
+// Regra do AUTO — UNICA copia (extraida do seletor que ja existia). Devolve
+// 0 = s, 1 = m, 2 = l. Preflight, align, selecao e despacho olham esta mesma
+// decisao; nao ha' segunda heuristica de variante no arquivo.
+static int ggml_vk_guess_matmul_variant_index(ggml_backend_vk_context * ctx, vk_matmul_pipeline& mmp, uint32_t m, uint32_t n, ggml_type src0_type, ggml_type src1_type) {
+    VK_LOG_DEBUG("ggml_vk_guess_matmul_pipeline(" << m << ", " << n << ", " << ggml_type_name(src0_type) << ", " << ggml_type_name(src1_type) << ")");
 
     // The q8_1 (integer dot) mmq path uses a different shader with its own
     // shared-memory layout, so use the int-specific availability flags.
@@ -7430,7 +9308,7 @@ static vk_pipeline ggml_vk_guess_matmul_pipeline(ggml_backend_vk_context * ctx, 
     const bool mm_m = is_q8_1 ? ctx->device->mul_mat_m_int[src0_type] : ctx->device->mul_mat_m[src0_type];
     const bool mm_s = is_q8_1 ? ctx->device->mul_mat_s_int[src0_type] : ctx->device->mul_mat_s[src0_type];
 
-    if (ctx->device->coopmat2) {
+    if (ctx->device->coopmat2 && mmp->a_l && mmp->a_m && mmp->s && mmp->m) {
         const uint32_t shader_core_count = ctx->device->shader_core_count;
         const uint32_t tiles_l = CEIL_DIV(m, mmp->a_l->wg_denoms[0]) * CEIL_DIV(n, mmp->a_l->wg_denoms[1]);
         const uint32_t tiles_m = CEIL_DIV(m, mmp->a_m->wg_denoms[0]) * CEIL_DIV(n, mmp->a_m->wg_denoms[1]);
@@ -7447,28 +9325,68 @@ static vk_pipeline ggml_vk_guess_matmul_pipeline(ggml_backend_vk_context * ctx, 
                             (tiles_l <= shader_core_count / 3 && tiles_m > shader_core_count / 2);
 
         if ((mm_l && (n > crossover_large && prefer_large)) || (!mm_m && !mm_s)) {
-            return aligned ? mmp->a_l : mmp->l;
+            return 2;
         }
         // Use medium shader when the N dimension is greater than the small shader's tile size
         uint32_t crossover_medium = mmp->s->wg_denoms[1];
         if ((mm_m && (n > crossover_medium)) || !mm_s) {
-            return aligned ? mmp->a_m : mmp->m;
+            return 1;
         }
-        return aligned ? mmp->a_s : mmp->s;
+        return 0;
     }
 
     if ((mm_s && (m <= 32 || n <= 32)) || (!mm_m && !mm_l)) {
-        return aligned ? mmp->a_s : mmp->s;
+        return 0;
     }
     if ((mm_m && (m <= 64 || n <= 64)) || !mm_l) {
-        return aligned ? mmp->a_m : mmp->m;
+        return 1;
     }
-    return aligned ? mmp->a_l : mmp->l;
+    return 2;
 }
 
-static uint32_t ggml_vk_guess_matmul_pipeline_align(ggml_backend_vk_context * ctx, vk_matmul_pipeline& mmp, int m, int n, ggml_type src0_type, ggml_type src1_type) {
+// Selecao final da pipeline. `plano` so' e' diferente de nullptr para um no' com
+// pedido de laboratorio APLICAVEL; nesse caso a variante vem do plano (que ja'
+// validou mascara + shared_ptr + initialized + failed da familia REAL). Fora
+// disso o caminho e' exatamente o AUTO de sempre.
+static vk_pipeline ggml_vk_guess_matmul_pipeline(ggml_backend_vk_context * ctx, vk_matmul_pipeline& mmp, uint32_t m, uint32_t n, bool aligned, ggml_type src0_type, ggml_type src1_type, const sig_lab_mm::OpPlan * plano) {
+    const int auto_idx = ggml_vk_guess_matmul_variant_index(ctx, mmp, m, n, src0_type, src1_type);
+    const int idx = (plano != nullptr && plano->aplicavel) ? plano->efetiva_idx : auto_idx;
+
+    vk_pipeline p = nullptr;
+    if (idx == 0)      { p = aligned ? mmp->a_s : mmp->s; }
+    else if (idx == 1) { p = aligned ? mmp->a_m : mmp->m; }
+    else               { p = aligned ? mmp->a_l : mmp->l; }
+
+    if (p == nullptr) {
+        // Nunca devolver nullptr a quem acessa ->align/->wg_denoms: procura a
+        // mesma variante na outra forma (aligned/nao-aligned) e, por fim, a
+        // primeira existente. Se nem isso, o chamador recusa o despacho.
+        if (idx == 0)      { p = aligned ? mmp->s   : mmp->a_s; }
+        else if (idx == 1) { p = aligned ? mmp->m   : mmp->a_m; }
+        else               { p = aligned ? mmp->l   : mmp->a_l; }
+    }
+    if (p == nullptr) {
+        for (int k = 0; k < 3 && p == nullptr; ++k) {
+            const vk_pipeline & cand = aligned
+                ? (k == 0 ? mmp->a_s : k == 1 ? mmp->a_m : mmp->a_l)
+                : (k == 0 ? mmp->s   : k == 1 ? mmp->m   : mmp->l);
+            p = cand;
+        }
+    }
+    if (p == nullptr) {
+        GGML_LOG_ERROR("ggml_vulkan: [R55] sem pipeline de mul_mat para %s x %s (aligned=%d)\n",
+                       ggml_type_name(src0_type), ggml_type_name(src1_type), (int) aligned);
+    }
+    return p;
+}
+
+// Alinhamento da variante que o seletor devolveria para o MESMO plano. Mantido
+// porque o caminho sem pedido de laboratorio continua usando exatamente esta
+// conta (igual a antes da R55); com pedido, o plano manda.
+static uint32_t ggml_vk_guess_matmul_pipeline_align(ggml_backend_vk_context * ctx, vk_matmul_pipeline& mmp, int m, int n, ggml_type src0_type, ggml_type src1_type, const sig_lab_mm::OpPlan * plano) {
     VK_LOG_DEBUG("ggml_vk_guess_matmul_pipeline_align(" << m << ", " << n << ", " << ggml_type_name(src0_type) << ", " << ggml_type_name(src1_type) << ")");
-    return ggml_vk_guess_matmul_pipeline(ctx, mmp, m, n, true, src0_type, src1_type)->align;
+    const vk_pipeline p = ggml_vk_guess_matmul_pipeline(ctx, mmp, m, n, true, src0_type, src1_type, plano);
+    return p != nullptr ? p->align : 0;
 }
 
 static void ggml_vk_matmul(
@@ -7773,7 +9691,7 @@ static vk_pipeline ggml_vk_get_64b_indexing_pipeline(ggml_backend_vk_context * c
     return pipeline;
 }
 
-static void ggml_vk_mul_mat_q_f16(ggml_backend_vk_context * ctx, vk_context& subctx, const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst, bool disable_split_k) {
+static void ggml_vk_mul_mat_q_f16(ggml_backend_vk_context * ctx, vk_context& subctx, const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst, bool disable_split_k, int lab_node) {
     VK_LOG_DEBUG("ggml_vk_mul_mat_q_f16((" << src0 << ", name=" << src0->name << ", type=" << ggml_type_name(src0->type) << ", ne0=" << src0->ne[0] << ", ne1=" << src0->ne[1] << ", ne2=" << src0->ne[2] << ", ne3=" << src0->ne[3] << ", nb0=" << src0->nb[0] << ", nb1=" << src0->nb[1] << ", nb2=" << src0->nb[2] << ", nb3=" << src0->nb[3];
     std::cerr << "), (" << src1 << ", name=" << src1->name << ", type=" << ggml_type_name(src1->type) << ", ne0=" << src1->ne[0] << ", ne1=" << src1->ne[1] << ", ne2=" << src1->ne[2] << ", ne3=" << src1->ne[3] << ", nb0=" << src1->nb[0] << ", nb1=" << src1->nb[1] << ", nb2=" << src1->nb[2] << ", nb3=" << src1->nb[3];
     std::cerr << "), (" << dst << ", name=" << dst->name << ", type=" << ggml_type_name(dst->type) << ", ne0=" << dst->ne[0] << ", ne1=" << dst->ne[1] << ", ne2=" << dst->ne[2] << ", ne3=" << dst->ne[3] << ", nb0=" << dst->nb[0] << ", nb1=" << dst->nb[1] << ", nb2=" << dst->nb[2] << ", nb3=" << dst->nb[3];
@@ -7852,14 +9770,101 @@ static void ggml_vk_mul_mat_q_f16(ggml_backend_vk_context * ctx, vk_context& sub
     GGML_ASSERT(y_non_contig || !qy_needs_dequant);  // NOLINT
 
     const ggml_type effective_src1_type = quantize_y ? GGML_TYPE_Q8_1 : (y_f32_kernel ? GGML_TYPE_F32 : src1->type);
+    const ggml_type effective_src0_type = qx_needs_dequant ? f16_type : src0->type;
 
-    const uint32_t kpad = quantize_y ? 0 : ggml_vk_align_size(ne10, ggml_vk_guess_matmul_pipeline_align(ctx, mmp, ne01, ne11, qx_needs_dequant ? f16_type : src0->type, effective_src1_type));
-    const bool aligned = !quantize_y && ne10 == kpad && ne01 > 8 && ne11 > 8;
+    // ------------------------------------------------------------ R55/MM-PLAN
+    // Uma unica leitura do pedido (feita no preflight, guardada no contexto) e
+    // UM plano por no', usado pelo align abaixo, pelo seletor e pelo trace. Sem
+    // pedido nao ha' trabalho extra: o caminho e' o de antes da R55.
+    const bool lab_ativo = ctx->lab.request.tem_pedido();
+    const sig_lab_mm::OpView lab_op = lab_ativo
+        ? ggml_vk_lab_op_view(dst, effective_src0_type, effective_src1_type, quantize_y, false)
+        : sig_lab_mm::OpView();
+    const sig_lab_mm::FamilyCaps lab_caps = lab_ativo
+        ? ggml_vk_lab_family_caps(ctx, mmp, effective_src0_type, effective_src1_type)
+        : sig_lab_mm::FamilyCaps();
+    const int lab_auto_idx = (lab_ativo && mmp != nullptr)
+        ? ggml_vk_guess_matmul_variant_index(ctx, mmp, (uint32_t) ne01, (uint32_t) ne11, effective_src0_type, effective_src1_type)
+        : 0;
+    const sig_lab_mm::OpPlan lab_plan = sig_lab_mm::plan_op(ctx->lab.request, lab_op, lab_auto_idx, lab_caps);
 
-    vk_pipeline pipeline = ggml_vk_guess_matmul_pipeline(ctx, mmp, ne01, ne11, aligned, qx_needs_dequant ? f16_type : src0->type, effective_src1_type);
+    if (mmp == nullptr) {
+        // Sem familia resolvida nao ha' pipeline para despachar: recusa (o grafo
+        // termina FAILED) em vez de desreferenciar ponteiro nulo.
+        ctx->device->dispatch_skipped.fetch_add(1, std::memory_order_relaxed);
+        ggml_vk_lab_emit(ctx, "recusa|sem_familia",
+                "SIG_MM_PLAN stage=select ctx=%p run=%llu attempt=%llu node=%d pedido=%s aplicado=0 motivo=sem_familia familia=nenhuma src0=%s src1=%s M=%llu N=%llu K=%llu\n",
+                (void *) ctx, (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt,
+                lab_node, ctx->lab.request.nome(), ggml_type_name(effective_src0_type),
+                ggml_type_name(effective_src1_type),
+                (unsigned long long) ne01, (unsigned long long) ne11, (unsigned long long) ne10);
+        return;
+    }
 
-    if (ggml_nbytes(src0) > ctx->device->properties.limits.maxStorageBufferRange) {
-        pipeline = ggml_vk_get_64b_indexing_pipeline(ctx, pipeline);
+    if (lab_plan.status == sig_lab_mm::Status::ALVO_RECUSADO) {
+        // Alvo pedido e indisponivel no despacho: NAO cai para auto/M (isso seria
+        // substituir o experimento). Conta e nao despacha; o grafo termina FAILED.
+        ctx->lab.recusados++;
+        ctx->lab.recusa = true;
+        ctx->lab.motivo = lab_plan.motivo;
+        ggml_vk_lab_emit(ctx, "recusa|" + std::to_string(lab_node) + "|" + lab_plan.motivo,
+                "SIG_MM_PLAN stage=select ctx=%p run=%llu attempt=%llu node=%d pedido=%s aplicado=0 motivo=indisponivel detalhe=%s familia=%s variante=%s src0=%s src1=%s M=%llu N=%llu K=%llu\n",
+                (void *) ctx, (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt,
+                lab_node, ctx->lab.request.nome(), lab_plan.motivo,
+                sig_lab_mm::familia_nome(lab_plan.family),
+                sig_lab_mm::variante_nome(lab_plan.efetiva_idx),
+                ggml_type_name(effective_src0_type), ggml_type_name(effective_src1_type),
+                (unsigned long long) ne01, (unsigned long long) ne11, (unsigned long long) ne10);
+        return;
+    }
+
+    const uint32_t align_auto = quantize_y ? 0
+        : (lab_plan.aplicavel
+               ? lab_plan.align
+               : ggml_vk_guess_matmul_pipeline_align(ctx, mmp, (int) ne01, (int) ne11, effective_src0_type, effective_src1_type, nullptr));
+    const uint32_t kpad = quantize_y ? 0 : ggml_vk_align_size(ne10, align_auto != 0 ? align_auto : 1u);
+    const bool aligned = quantize_y ? false
+        : (lab_plan.aplicavel ? lab_plan.aligned : (ne10 == kpad && ne01 > 8 && ne11 > 8));
+
+    vk_pipeline pipeline = ggml_vk_guess_matmul_pipeline(ctx, mmp, ne01, ne11, aligned, effective_src0_type, effective_src1_type, &lab_plan);
+
+    if (pipeline == nullptr) {
+        ctx->device->dispatch_skipped.fetch_add(1, std::memory_order_relaxed);
+        return;
+    }
+
+    // Troca para indexacao de 64 bits SO' quando o buffer nao cabe no limite do
+    // dispositivo (condicao preservada da versao anterior).
+    const bool precisa_64b = ggml_nbytes(src0) > ctx->device->properties.limits.maxStorageBufferRange;
+    const vk_pipeline pipeline_64b = precisa_64b ? ggml_vk_get_64b_indexing_pipeline(ctx, pipeline) : pipeline;
+    const bool idx64 = precisa_64b && pipeline_64b.get() != pipeline.get();
+    if (idx64) {
+        pipeline = pipeline_64b;
+    }
+    const uint32_t align_efetiva = pipeline->align;
+
+    // Trace do plano: shape/ne/nb completos, familia/precisao reais, align/kpad
+    // coerentes com a variante EFETIVA e a pipeline que vai ser despachada.
+    {
+        char chave[160];
+        snprintf(chave, sizeof chave, "select|%d|%s|%d|%d|%llu", lab_node, lab_plan.efetiva_nome(), (int) aligned, (int) lab_plan.aplicavel,
+                 (unsigned long long) ne01);
+        const std::string spec = ggml_vk_lab_spec_str(pipeline);
+        ggml_vk_lab_emit(ctx, chave,
+                "SIG_MM_PLAN stage=select ctx=%p run=%llu attempt=%llu node=%d pedido=%s aplicado=%d forcado=%d motivo=%s familia=%s prec=%d src0=%s src1=%s M=%llu N=%llu K=%llu a_ne=[%llu,%llu,%llu,%llu] a_nb=[%zu,%zu,%zu,%zu] b_ne=[%llu,%llu,%llu,%llu] b_nb=[%zu,%zu,%zu,%zu] d_ne=[%llu,%llu,%llu,%llu] align=%u kpad=%u aligned=%d auto=%s efetiva=%s pipeline=%s spec=%s\n",
+                (void *) ctx, (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt,
+                lab_node, ctx->lab.request.nome(), (int) lab_plan.aplicavel, (int) lab_plan.forcado,
+                lab_plan.motivo, sig_lab_mm::familia_nome(lab_plan.family), lab_plan.prec_efetiva,
+                ggml_type_name(effective_src0_type), ggml_type_name(effective_src1_type),
+                (unsigned long long) ne01, (unsigned long long) ne11, (unsigned long long) ne10,
+                (unsigned long long) src0->ne[0], (unsigned long long) src0->ne[1], (unsigned long long) src0->ne[2], (unsigned long long) src0->ne[3],
+                src0->nb[0], src0->nb[1], src0->nb[2], src0->nb[3],
+                (unsigned long long) src1->ne[0], (unsigned long long) src1->ne[1], (unsigned long long) src1->ne[2], (unsigned long long) src1->ne[3],
+                src1->nb[0], src1->nb[1], src1->nb[2], src1->nb[3],
+                (unsigned long long) dst->ne[0], (unsigned long long) dst->ne[1], (unsigned long long) dst->ne[2], (unsigned long long) dst->ne[3],
+                (unsigned) align_efetiva, (unsigned) kpad, (int) aligned,
+                sig_lab_mm::variante_nome(lab_plan.auto_idx), sig_lab_mm::variante_nome(lab_plan.efetiva_idx),
+                pipeline->name.c_str(), spec.c_str());
     }
 
     // Reserve extra storage in the N dimension for the Y matrix, so we can avoid bounds-checking
@@ -8017,6 +10022,35 @@ static void ggml_vk_mul_mat_q_f16(ggml_backend_vk_context * ctx, vk_context& sub
 
     if (!ggml_vk_dim01_contiguous(src1) && !qy_needs_dequant && !quantize_y) {
         stride_batch_y = src1->nb[0] / ggml_type_size(src1->type);
+    }
+
+    // ------------------------------------------------------------ R55/MM-PLAN
+    // Trace do DESPACHO: a pipeline REAL usada (depois da eventual troca para
+    // indexacao de 64 bits), especificacoes, tile/wg_denoms, grid, split-k,
+    // conversoes e UMA. Entrar no seletor nao prova nada; isto e' o que sai.
+    if (lab_plan.aplicavel) {
+        ctx->lab.despachados++;
+        char chave[224];
+        snprintf(chave, sizeof chave, "dispatch|%d|%s|%u|%llu", lab_node, pipeline->name.c_str(), split_k, (unsigned long long) ne01);
+        const std::string spec = ggml_vk_lab_spec_str(pipeline);
+        const uint32_t wg0 = pipeline->wg_denoms[0];
+        const uint32_t wg1 = pipeline->wg_denoms[1];
+        const uint32_t wg2 = pipeline->wg_denoms[2];
+        const uint32_t grid0 = CEIL_DIV((uint32_t) ne01, wg0) * (split_k > 1 ? split_k : 1u);
+        const uint32_t grid1 = CEIL_DIV((uint32_t) ne11, wg1);
+        const uint32_t grid2 = CEIL_DIV((uint32_t) (ne12 * ne13), wg2);
+        ggml_vk_lab_emit(ctx, chave,
+                "SIG_MM_DISPATCH stage=dispatch ctx=%p run=%llu attempt=%llu node=%d pipeline=%s variante=%s familia=%s spec=%s align=%u wg=[%u,%u,%u] grid=[%u,%u,%u] split_k=%u batch=%llu batch1=%d aligned=%d kpad=%u conv_x=%s conv_y=%s q8_y=%d uma_x=%d uma_y=%d idx64=%d\n",
+                (void *) ctx, (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt,
+                lab_node, pipeline->name.c_str(), sig_lab_mm::variante_nome(lab_plan.efetiva_idx),
+                sig_lab_mm::familia_nome(lab_plan.family), spec.c_str(), (unsigned) align_efetiva,
+                (unsigned) wg0, (unsigned) wg1, (unsigned) wg2,
+                (unsigned) grid0, (unsigned) grid1, (unsigned) grid2,
+                (unsigned) split_k, (unsigned long long) (ne12 * ne13),
+                (int) (ne12 == 1 && ne13 == 1), (int) aligned, (unsigned) kpad,
+                (qx_needs_dequant && to_fp16_vk_0) ? to_fp16_vk_0->name.c_str() : "none",
+                (qy_needs_dequant && to_fp16_vk_1) ? to_fp16_vk_1->name.c_str() : "none",
+                (int) quantize_y, (int) src0_uma, (int) src1_uma, (int) idx64);
     }
 
     // compute
@@ -8564,7 +10598,7 @@ static void ggml_vk_mul_mat(ggml_backend_vk_context * ctx, vk_context& subctx, c
             dst2.ne[0] = cur_M_size;
             src02.ne[1] = cur_M_size;
 
-            ggml_vk_mul_mat_q_f16(ctx, subctx, &src02, src1, &dst2, true);
+            ggml_vk_mul_mat_q_f16(ctx, subctx, &src02, src1, &dst2, true, node_idx);
 
             m_offset += cur_M_size;
         }
@@ -8593,7 +10627,7 @@ static void ggml_vk_mul_mat(ggml_backend_vk_context * ctx, vk_context& subctx, c
                (src0->type == GGML_TYPE_F32 || src0->type == GGML_TYPE_F16 || src0->type == GGML_TYPE_BF16 || ggml_is_quantized(src0->type))) {
         ggml_vk_mul_mat_vec_q_f16(ctx, subctx, cgraph, node_idx);
     } else {
-        ggml_vk_mul_mat_q_f16(ctx, subctx, src0, src1, dst, false);
+        ggml_vk_mul_mat_q_f16(ctx, subctx, src0, src1, dst, false, node_idx);
     }
 }
 
@@ -9235,6 +11269,124 @@ static bool ggml_vk_flash_attn_coopmat_shmem_support(const vk_device& device, co
     return supported;
 }
 
+// ---------------------------------------------------------------------------
+// R6/fase F (F2): guardas da variante compacta fa_r6 (contrato do whisper).
+// Regras = as testadas no replay (T1..T10): Q f32; K/V f16; head_dim 64; O f32;
+// sem sinks; sem ALiBi (max_bias==0); sem logit_softcap; sem GQA; linhas
+// contiguas; mascara f16 com ne0==KV e ne1==N (broadcast por head/batch OK).
+// Refusos recaem no caminho generico/CPU (fallback explicito, sem tolerancia).
+static bool ggml_vk_fa_r6_mode_ok(const vk_device& device) {
+    // R15/C1 — coleta os FATOS aqui; a DECISÃO é a função pura do header (a
+    // mesma que o teste de tabela de estados cobre, sem GPU).
+    const int mode = device->fa_r6_mode.load(std::memory_order_relaxed);
+    const bool present = device->pipeline_fa_r6_mask0 && device->pipeline_fa_r6_mask1;
+    const int compiled = (present && device->pipeline_fa_r6_mask0->compiled &&
+                          device->pipeline_fa_r6_mask1->compiled) ? 1 : 0;
+    const int failed   = (present && (device->pipeline_fa_r6_mask0->failed ||
+                                      device->pipeline_fa_r6_mask1->failed)) ? 1 : 0;
+    return ggml_fa_r6_available_from(mode, present ? 1 : 0, compiled, failed) != 0;
+}
+
+static bool ggml_vk_fa_r6_force(const vk_device& device) {
+    return device->fa_r6_mode.load(std::memory_order_relaxed) == 2;
+}
+
+// R7/A3 — o contrato COMPLETO do shape vive em ggml-vulkan-fa-r6-guards.h
+// (mesmo código do teste de host). Aqui só mapeamos os tensores para a struct e
+// garantimos um ponteiro de razão ESTÁVEL (thread_local) para o chamador.
+static bool ggml_vk_fa_r6_op_ok(const vk_device& device, const ggml_tensor * q, const ggml_tensor * k, const ggml_tensor * v,
+                                const ggml_tensor * mask, const ggml_tensor * sinks, const ggml_tensor * dst,
+                                float max_bias, float logit_softcap, const char ** why) {
+    if (q == nullptr || k == nullptr || v == nullptr || dst == nullptr) { *why = "tensor nulo"; return false; }
+    ggml_fa_r6_shape sh {};
+    for (int i = 0; i < 4; ++i) {
+        sh.ne_q[i] = q->ne[i];    sh.nb_q[i] = q->nb[i];
+        sh.ne_k[i] = k->ne[i];    sh.nb_k[i] = k->nb[i];
+        sh.ne_v[i] = v->ne[i];    sh.nb_v[i] = v->nb[i];
+        sh.ne_o[i] = dst->ne[i];  sh.nb_o[i] = dst->nb[i];
+        if (mask != nullptr) { sh.ne_m[i] = mask->ne[i]; sh.nb_m[i] = mask->nb[i]; }
+    }
+    sh.sz_q = ggml_type_size(q->type);   sh.sz_k = ggml_type_size(k->type);
+    sh.sz_v = ggml_type_size(v->type);   sh.sz_o = ggml_type_size(dst->type);
+    sh.type_q_f32 = q->type == GGML_TYPE_F32;   sh.type_k_f16 = k->type == GGML_TYPE_F16;
+    sh.type_v_f16 = v->type == GGML_TYPE_F16;   sh.type_o_f32 = dst->type == GGML_TYPE_F32;
+    sh.has_mask  = mask != nullptr;
+    sh.has_sinks = sinks != nullptr;
+    sh.max_bias = max_bias;
+    sh.logit_softcap = logit_softcap;
+    if (mask != nullptr) {
+        sh.sz_m = ggml_type_size(mask->type);
+        sh.type_m_f16 = mask->type == GGML_TYPE_F16;
+    }
+    ggml_fa_r6_caps caps {};
+    caps.subgroup_size         = device->subgroup_size;
+    caps.subgroup_size_control = device->subgroup_size_control;
+    caps.subgroup_min_size     = device->subgroup_min_size;
+    caps.subgroup_max_size     = device->subgroup_max_size;
+    caps.subgroup_full_support = device->subgroup_require_full_support;
+    caps.max_wg_count[0] = device->properties.limits.maxComputeWorkGroupCount[0];
+    caps.max_wg_count[1] = device->properties.limits.maxComputeWorkGroupCount[1];
+    caps.max_wg_count[2] = device->properties.limits.maxComputeWorkGroupCount[2];
+    static thread_local std::string fa_r6_why;
+    const bool ok = ggml_fa_r6_shape_check(sh, caps, fa_r6_why);
+    *why = ok ? "ok" : fa_r6_why.c_str();
+    return ok;
+}
+
+// R7/fase G (G2d) — escolha DETERMINISTICA da pipeline fa_r6 de UM op pelo SHAPE.
+// Regra (medida no replay da fase G): shape de ENCODER = N>=1024 e KV>=1024 SEM
+// mascara -> BC2; demais shapes (decoder/cross: N pequeno/medio) -> BC4. Usa SO
+// ne/mask — nunca o conteudo reconhecido — e e O(1) (sem retry). Env
+// GGML_VK_FA_R6_BC: "0" = so controle R6 (byte a byte, opcao preservada);
+// "2"/"4" = forca (diagnostico); vazio = auto por shape. Variante ausente ou
+// reprovada cai PARA O CONTROLE R6; se o proprio gate (mask0/mask1) nao compilou,
+// ggml_vk_fa_r6_mode_ok ja recusou antes e esta funcao nao e chamada.
+static vk_pipeline ggml_vk_fa_r6_pipe_ok(const vk_pipeline & p) {
+    return (p && !p->failed && p->compiled) ? p : nullptr;
+}
+
+static vk_pipeline ggml_vk_fa_r6_choose(const vk_device& device, uint32_t N, uint32_t KV, bool has_mask, int * bc_tag) {
+    const int mode_bc = device->fa_r6_bc_mode.load(std::memory_order_relaxed);
+    vk_pipeline pick = nullptr;
+    int tag = 0;
+    if (mode_bc != 0) {
+        if (mode_bc == 2) {
+            pick = ggml_vk_fa_r6_pipe_ok(has_mask ? device->pipeline_fa_r6_bc2_mask1 : device->pipeline_fa_r6_bc2_mask0);
+            tag = 2;
+        } else if (mode_bc == 4) {
+            pick = ggml_vk_fa_r6_pipe_ok(has_mask ? device->pipeline_fa_r6_bc4_mask1 : device->pipeline_fa_r6_bc4_mask0);
+            tag = 4;
+        } else if (N >= 1024 && KV >= 1024 && !has_mask) {
+            pick = ggml_vk_fa_r6_pipe_ok(device->pipeline_fa_r6_bc2_mask0);
+            tag = 2;
+        } else {
+            pick = ggml_vk_fa_r6_pipe_ok(has_mask ? device->pipeline_fa_r6_bc4_mask1 : device->pipeline_fa_r6_bc4_mask0);
+            tag = 4;
+        }
+    }
+    if (pick == nullptr) {
+        pick = ggml_vk_fa_r6_pipe_ok(has_mask ? device->pipeline_fa_r6_mask1 : device->pipeline_fa_r6_mask0);
+        tag = 0;
+    }
+    if (bc_tag != nullptr) {
+        *bc_tag = tag;
+    }
+    return pick;
+}
+
+// verdadeiro quando o caminho fa_r6 deve atender este OP agora
+static bool ggml_vk_fa_r6_usable(const vk_device& device, const ggml_tensor * q, const ggml_tensor * k, const ggml_tensor * v,
+                                 const ggml_tensor * mask, const ggml_tensor * sinks, const ggml_tensor * dst,
+                                 float max_bias, float logit_softcap) {
+    if (!ggml_vk_fa_r6_mode_ok(device)) return false;
+    // auto: so entra quando a familia FA generica REPROVOU neste driver.
+    // forcado (env GGML_VK_FA_R6=1): entra sempre que o shape casa.
+    if (!ggml_vk_fa_r6_force(device) &&
+        !device->flash_attn_pipelines_failed.load(std::memory_order_relaxed)) return false;
+    const char * why = "";
+    return ggml_vk_fa_r6_op_ok(device, q, k, v, mask, sinks, dst, max_bias, logit_softcap, &why);
+}
+
 static void ggml_vk_flash_attn(ggml_backend_vk_context * ctx, vk_context& subctx, const ggml_tensor * q, const ggml_tensor * k, const ggml_tensor * v, const ggml_tensor * mask, const ggml_tensor * sinks, ggml_tensor * dst) {
     VK_LOG_DEBUG("ggml_vk_flash_attn((" << q << ", name=" << q->name << ", type=" << q->type << ", ne0=" << q->ne[0] << ", ne1=" << q->ne[1] << ", ne2=" << q->ne[2] << ", ne3=" << q->ne[3] << ", nb0=" << q->nb[0] << ", nb1=" << q->nb[1] << ", nb2=" << q->nb[2] << ", nb3=" << q->nb[3];
     std::cerr << "), (" << k << ", name=" << k->name << ", type=" << k->type << ", ne0=" << k->ne[0] << ", ne1=" << k->ne[1] << ", ne2=" << k->ne[2] << ", ne3=" << k->ne[3] << ", nb0=" << k->nb[0] << ", nb1=" << k->nb[1] << ", nb2=" << k->nb[2] << ", nb3=" << k->nb[3];
@@ -9343,6 +11495,59 @@ static void ggml_vk_flash_attn(ggml_backend_vk_context * ctx, vk_context& subctx
 
     if (logit_softcap != 0) {
         scale /= logit_softcap;
+    }
+
+    // R13/B1: ramo R6 ANTES de qualquer preparacao generica. O fa_r6 consome
+    // a mascara ORIGINAL e nunca o buffer otimizado; compilar o pipeline
+    // generico e despachar fa_mask_opt antes herdava falha/custo de um
+    // auxiliar que o R6 nao precisa (o PAD sentinela g2 morria em grafo
+    // FAILED mesmo com linha R6 EXEC). O ramo generico abaixo segue intacto
+    // para os casos que o R6 nao atende.
+    if (ggml_vk_fa_r6_usable(ctx->device, q, k, v, mask, sinks, dst, max_bias, logit_softcap)) {
+        const uint32_t r6_n_head_kv   = neq2;
+        const uint32_t r6_n_head_log2 = 1u << (uint32_t) floorf(log2f((float) r6_n_head_kv));
+        const float r6_m0 = powf(2.0f, -(max_bias       ) / r6_n_head_log2);
+        const float r6_m1 = powf(2.0f, -(max_bias / 2.0f) / r6_n_head_log2);
+        vk_subbuffer r6_q_buf = ggml_vk_tensor_subbuffer(ctx, q);
+        vk_subbuffer r6_k_buf = ggml_vk_tensor_subbuffer(ctx, k);
+        vk_subbuffer r6_v_buf = ggml_vk_tensor_subbuffer(ctx, v);
+        vk_subbuffer r6_dst_buf = ggml_vk_tensor_subbuffer(ctx, dst);
+        vk_subbuffer r6_mask_buf = mask ? ggml_vk_tensor_subbuffer(ctx, mask) : r6_q_buf;
+        vk_subbuffer r6_sinks_buf = sinks ? ggml_vk_tensor_subbuffer(ctx, sinks) : r6_q_buf;
+        vk_subbuffer r6_mask_opt_buf = r6_q_buf;
+        uint32_t r6_mask_n_head_log2 = ((sinks != nullptr) << 24) | r6_n_head_log2;
+        // Mesmos campos do pc generico; split inaplicavel ao R6 (sem split_k).
+        const vk_flash_attn_push_constants r6_pc = { N, KV,
+                                              (uint32_t)ne1, (uint32_t)ne2, (uint32_t)ne3,
+                                              (uint32_t)neq2, (uint32_t)neq3,
+                                              (uint32_t)nek2, (uint32_t)nek3,
+                                              (uint32_t)nev2, (uint32_t)nev3,
+                                              nem1, nem2, nem3,
+                                              q_stride, (uint32_t)nbq2, (uint32_t)nbq3,
+                                              k_stride, (uint32_t)nbk2, (uint32_t)nbk3,
+                                              v_stride, (uint32_t)nbv2, (uint32_t)nbv3,
+                                              scale, max_bias, logit_softcap,
+                                              r6_mask_n_head_log2, r6_m0, r6_m1,
+                                              gqa_ratio, KV, 1u };
+        int r6_bc_tag = 0;
+        vk_pipeline r6_pipe = ggml_vk_fa_r6_choose(ctx->device, (uint32_t)neq1, KV, mask != nullptr, &r6_bc_tag);
+        ggml_pipeline_request_descriptor_sets(ctx, r6_pipe, 1);
+        static std::atomic<uint32_t> fa_r6_n_early {0};
+        const uint32_t n_r6 = fa_r6_n_early.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (!ctx->device->flash_attn_preflight_running.load(std::memory_order_relaxed)) {
+            sig_fa_state::fa_r6_dispatches.fetch_add(1, std::memory_order_relaxed);
+            sig_fa_state::set_fa_reason("ok");
+        }
+        const bool r6_verbose = getenv("GGML_VK_FA_R6_LOG") != nullptr;
+        if (r6_verbose || n_r6 <= 6 || (n_r6 % 2000) == 0) {
+            GGML_LOG_INFO("ggml_vulkan: [R6-F] FA fa_r6 EXEC (n=%u) mask=%d N=%u KV=%u heads=%u grid=(%u,%u,%u) bc=%d\n",
+                          n_r6, (int)(mask != nullptr), (uint32_t)neq1, KV, (uint32_t)neq2,
+                          (uint32_t)neq1, (uint32_t)neq2, (uint32_t)neq3, r6_bc_tag);
+        }
+        ggml_vk_dispatch_pipeline(ctx, subctx, r6_pipe,
+                                  {r6_q_buf, r6_k_buf, r6_v_buf, r6_mask_buf, r6_sinks_buf, r6_dst_buf, r6_mask_opt_buf},
+                                  r6_pc, { (uint32_t)neq1, (uint32_t)neq2, (uint32_t)neq3 });
+        return;
     }
 
     // Only use mask opt when the mask is fairly large. This hasn't been tuned extensively.
@@ -9484,6 +11689,13 @@ static void ggml_vk_flash_attn(ggml_backend_vk_context * ctx, vk_context& subctx
                                               scale, max_bias, logit_softcap,
                                               mask_n_head_log2, m0, m1,
                                               gqa_ratio, split_kv, split_k };
+
+    // R8/fase A (A2): EXECUÇÃO REAL da rota GENÉRICA na GPU (o ramo r6 acima tem
+    // o próprio marcador e sai antes). A pré-checagem de carga não conta como
+    // job real — mesma guarda do contador r6.
+    if (!ctx->device->flash_attn_preflight_running.load(std::memory_order_relaxed)) {
+        sig_fa_state::fa_generic_dispatches.fetch_add(1, std::memory_order_relaxed);
+    }
 
     if (split_k > 1) {
         ggml_pipeline_request_descriptor_sets(ctx, ctx->device->pipeline_flash_attn_split_k_reduce, 1);
@@ -9857,9 +12069,19 @@ static vk_pipeline ggml_vk_op_get_pipeline(ggml_backend_vk_context * ctx, const 
         }
 
         if (src0->type == GGML_TYPE_F32 && (src1 == nullptr || src1->type == GGML_TYPE_F32) && dst->type == GGML_TYPE_F32) {
+            // R6/fase A (A1): no escopo da quirk, TODA a familia simples (ncols<=16384
+            // chega aqui; >16384 vai p/ o caminho large) usa a variante segura wg64
+            // (SPEC REAL 64) — nunca a _wg512 (nao escreve neste driver) nem o corte
+            // por ncols>1024 do upstream. Fora do escopo: selecao upstream intacta.
+            if (ggml_vk_soft_max_quirk_enabled(ctx->device)) {
+                return ctx->device->pipeline_soft_max_f32_wg64;
+            }
             return src0->ne[0] > 1024 ? ctx->device->pipeline_soft_max_f32_wg512 : ctx->device->pipeline_soft_max_f32;
         }
         if (src0->type == GGML_TYPE_F32 && src1->type == GGML_TYPE_F16 && dst->type == GGML_TYPE_F32) {
+            if (ggml_vk_soft_max_quirk_enabled(ctx->device)) {
+                return ctx->device->pipeline_soft_max_f32_f16_wg64;
+            }
             return src0->ne[0] > 1024 ? ctx->device->pipeline_soft_max_f32_f16_wg512 : ctx->device->pipeline_soft_max_f32_f16;
         }
         return nullptr;
@@ -11524,6 +13746,37 @@ static void ggml_vk_diag_mask_inf(ggml_backend_vk_context * ctx, vk_context& sub
 }
 
 static void ggml_vk_soft_max(ggml_backend_vk_context * ctx, vk_context& subctx, const ggml_tensor * src0, const ggml_tensor * src1, const ggml_tensor * src2, ggml_tensor * dst) {
+    // R6/fase A (A1): decisao de rota NO PONTO DE DISPATCH. Cobre os caminhos que
+    // NAO passam pela recusa seletiva do scheduler (supports_op): saida residente/
+    // prealocada e execucao direct. Regras no escopo da quirk:
+    //  - familia simples (ncols<=16384): rota wg64 (spec real 64) -> execucao correta;
+    //  - familia large (ncols>16384): SEM rota validada -> NUNCA submeter kernel
+    //    suspeito; marca dispatch_skipped e retorna (graph_compute => GGML_STATUS_FAILED,
+    //    sem abort, sem resultado parcial, sem texto/contagem como sucesso);
+    //  - variante wg64 reprovada/ausente (injecao de falha): idem FAILED limpo.
+    {
+        const bool quirk_on = ggml_vk_soft_max_quirk_enabled(ctx->device);
+        if (quirk_on) {
+            const sig_vk_softmax_route route = ggml_vk_soft_max_route(ctx->device, src0, src1);
+            if (route != SIG_VK_SM_ROUTE_WG64) {
+                // R7/fase D (D4): contador estruturado — SOFT_MAX rejeitado na GPU
+                // neste ponto de dispatch (rota sem prova) => execução no CPU.
+                sig_fa_state::sm_cpu_refused.fetch_add(1, std::memory_order_relaxed);
+                sig_fa_state::set_sm_reason(ggml_vk_softmax_route_name(route));
+                static std::atomic<uint32_t> sig_r6_softmax_unsafe_logged {0};
+                if (sig_r6_softmax_unsafe_logged.fetch_add(1, std::memory_order_relaxed) < 4u) {
+                    GGML_LOG_ERROR("ggml_vulkan: [R6-A1] SOFT_MAX Vulkan SEM rota segura (ncols=%u rota=%s) - kernel NAO submetido; graph_compute=FAILED\n",
+                                   (unsigned) src0->ne[0], ggml_vk_softmax_route_name(route));
+                }
+                ctx->device->dispatch_skipped.fetch_add(1, std::memory_order_relaxed);
+                return;
+            }
+            // R7/fase D (D4): SOFT_MAX despachado na GPU com a variante wg64(spec64).
+            sig_fa_state::sm_gpu_wg64.fetch_add(1, std::memory_order_relaxed);
+            sig_fa_state::set_sm_reason("wg64(spec64)");
+        }
+    }
+
     float * op_params = (float *)dst->op_params;
 
     float scale = op_params[0];
@@ -11557,6 +13810,41 @@ static void ggml_vk_soft_max(ggml_backend_vk_context * ctx, vk_context& subctx, 
         nrows_x,
         src2 != nullptr
     };
+
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    if (sig_vk_softmax_trace_on()) {
+        // R6/fase A (A1): reportar pipeline/spec REALMENTE selecionadas (nao rotulo
+        // inferido de ncols). ncols<=16384 resolve pela MESMA funcao do dispatch
+        // (ggml_vk_op_get_pipeline); >16384 e o caminho large (kernels PROPRIOS,
+        // spec {128,4}, 3 dispatches - nao confundir com a familia simples).
+        std::string sel_desc;
+        if (ncols <= 16384 && ctx->num_additional_fused_ops == 0) {
+            vk_pipeline sel = ggml_vk_op_get_pipeline(ctx, src0, src1, src2, dst, GGML_OP_SOFT_MAX);
+            if (sel != nullptr) {
+                std::string spec;
+                for (uint32_t sc : sel->spec_constants) { spec += std::to_string(sc); spec += " "; }
+                sel_desc = sel->name + " spec=[" + spec + "]";
+            } else {
+                sel_desc = "(nil)";
+            }
+        } else if (ncols > 16384) {
+            sel_desc = "soft_max_large1/2/3 spec=[128 4 ]";
+        } else {
+            sel_desc = "(fused-topk)";
+        }
+        GGML_LOG_WARN("[SM-TRACE] op SOFT_MAX src0_ne={%lld,%lld,%lld,%lld} src0_nb={%zu,%zu,%zu,%zu} dst_ne={%lld,%lld,%lld,%lld} src1=%s(%d) src2=%s(%d) has_sinks=%u KX=%u KY=%u ne00=%u ne01=%u ne02=%u ne12=%u ne13=%u nb11=%u nb12=%u nb13=%u scale=%.9g max_bias=%.9g m0=%.9g m1=%.9g n_head_log2=%u nrows_x=%u variant=%s pc_size=%zu pc_fnv64=%016llx dev={vid=%04x did=%04x drv=%08x api=%08x name=\"%s\" subgroup=%u}\n",
+                      (long long)src0->ne[0], (long long)src0->ne[1], (long long)src0->ne[2], (long long)src0->ne[3],
+                      src0->nb[0], src0->nb[1], src0->nb[2], src0->nb[3],
+                      (long long)dst->ne[0], (long long)dst->ne[1], (long long)dst->ne[2], (long long)dst->ne[3],
+                      src1 ? "yes" : "no", src1 ? (int)src1->type : -1,
+                      src2 ? "yes" : "no", src2 ? (int)src2->type : -1,
+                      pc.has_sinks, pc.KX, pc.KY, pc.ne00, pc.ne01, pc.ne02, pc.ne12, pc.ne13, pc.nb11, pc.nb12, pc.nb13,
+                      pc.scale, pc.max_bias, pc.m0, pc.m1, pc.n_head_log2, pc.nrows_x, sel_desc.c_str(),
+                      sizeof(pc), (unsigned long long) sig_vk_fnv64(&pc, sizeof(pc)),
+                      ctx->device->properties.vendorID, ctx->device->properties.deviceID, ctx->device->properties.driverVersion,
+                      ctx->device->properties.apiVersion, ctx->device->properties.deviceName.data(), ctx->device->subgroup_size);
+    }
+#endif
 
     if (ncols <= 16384) {
         ggml_vk_op_f32<vk_op_soft_max_push_constants>(ctx, subctx, src0, src1, src2, nullptr, dst, GGML_OP_SOFT_MAX, std::move(pc));
@@ -13141,8 +15429,10 @@ static void ggml_vk_preallocate_buffers(ggml_backend_vk_context * ctx, vk_contex
     if (subctx) {
         // Submit and wait for any pending work before reallocating the buffers
         ggml_vk_ctx_end(subctx);
-        ggml_vk_submit(subctx, {});
-        ctx->submit_pending = true;
+        const bool sub_ok = sig_vk_cycle::emitted(ggml_vk_submit(subctx, {}));
+        if (sub_ok) {
+            ctx->submit_pending = true;   // divida acumulada (nunca zera aqui)
+        }
         ggml_vk_synchronize(ctx);
         GGML_ASSERT(ctx->compute_ctx.expired());
         ggml_vk_ctx_begin(ctx->device, subctx);
@@ -13711,13 +16001,45 @@ static void ggml_vk_compute_forward(ggml_backend_vk_context * ctx, ggml_cgraph *
             memset(mset.dst, mset.val, mset.n);
         }
 
-        if (almost_ready && !ctx->almost_ready_fence_pending) {
-            ggml_vk_submit(subctx, ctx->almost_ready_fence);
-            ctx->almost_ready_fence_pending = true;
-        } else {
-            ggml_vk_submit(subctx, {});
+        // R13/D1 — fronteira segura: IMEDIATAMENTE antes de qualquer submit.
+        // Observado o pedido aqui, este lote NÃO é submetido: as cópias de
+        // staging e a descrição de submit são descartadas, nenhum comando novo
+        // chega à fila e o chamador (graph_compute) drena o que já estava em voo.
+        if (ggml_vk_abort_poll(ctx)) {
+            subctx->seqs.clear();
+            subctx->in_memcpys.clear();
+            subctx->out_memcpys.clear();
+            subctx->memsets.clear();
+            return;
         }
-        ctx->submit_pending = true;
+
+        // R29/P0 — o resultado do submit é TIPADO: `submit_pending` só pode
+        // dizer a verdade. Cancelado antes da emissão não há trabalho pendente.
+        sig_vk_cycle::Outcome sub_res = sig_vk_cycle::Outcome::SUBMITTED;
+        if (almost_ready && !ctx->almost_ready_fence_pending) {
+            sub_res = ggml_vk_submit(subctx, ctx->almost_ready_fence);
+            ctx->almost_ready_fence_pending = sig_vk_cycle::emitted(sub_res);
+        } else {
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // R13/B2 — DIAG: a fence DEDICADA (mesma fila) ocupa apenas o lugar
+            // da fence VAZIA deste submit. A almost_ready acima nao e tocada.
+            ctx->diag_batch_idx++;
+            sub_res = ggml_vk_submit(subctx, sig_vk_inflight::prepare(ctx, subctx));
+#else
+            sub_res = ggml_vk_submit(subctx, {});
+#endif
+        }
+        // R30/A1 - DIVIDA DE DRENO: um resultado cancelado/sem trabalho NAO
+        // apaga trabalho anterior ainda nao provado. O flag so pode ser limpo
+        // por prova real (ggml_vk_wait_for_fence).
+        ctx->submit_pending = sig_vk_cycle::debt_after(ctx->submit_pending, sub_res);
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // Sondas somente APOS o submit real retornar (nunca sobre recording) e
+        // somente quando algo foi realmente emitido.
+        if (sub_res == sig_vk_cycle::Outcome::SUBMITTED) {
+            sig_vk_inflight::after_submit(ctx);
+        }
+#endif
 
 #ifdef GGML_VULKAN_CHECK_RESULTS
         ggml_vk_synchronize(ctx);
@@ -13780,6 +16102,10 @@ static void ggml_vk_cleanup(ggml_backend_vk_context * ctx) {
     ctx->compute_ctx.reset();
     // wait for any pending command buffers to finish
     ggml_vk_synchronize(ctx);
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R13/B2 — DIAG: nenhuma fence DIAG e destruida em voo no free do backend.
+    sig_vk_inflight::finalize_for_destroy(ctx);
+#endif
 
     ggml_vk_graph_cleanup(ctx);
 
@@ -13890,6 +16216,16 @@ static void ggml_backend_vk_buffer_set_tensor(ggml_backend_buffer_t buffer, ggml
         return;
     }
 
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    static std::atomic<uint32_t> g_sm_trace_copy_seq {0};
+    if (sig_vk_softmax_trace_on() && size >= (1u << 20)) {
+        const uint32_t seqn = g_sm_trace_copy_seq.fetch_add(1, std::memory_order_relaxed) + 1;
+        GGML_LOG_WARN("[SM-TRACE] copy #%u host2dev size=%zu dev_off=%llu data_fnv64=%016llx\n", seqn, size,
+                      (unsigned long long)(vk_tensor_offset(tensor) + tensor->view_offs + offset),
+                      (unsigned long long) sig_vk_fnv64(data, size));
+    }
+#endif
+
     ggml_vk_buffer_write(buf, vk_tensor_offset(tensor) + tensor->view_offs + offset, data, size);
 }
 
@@ -13918,6 +16254,16 @@ static void ggml_backend_vk_buffer_get_tensor(ggml_backend_buffer_t buffer, cons
     vk_buffer buf = buf_ctx->dev_buffer;
 
     ggml_vk_buffer_read(buf, vk_tensor_offset(tensor) + tensor->view_offs + offset, data, size);
+
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    static std::atomic<uint32_t> g_sm_trace_copy_seq2 {0};
+    if (sig_vk_softmax_trace_on() && size >= (1u << 20)) {
+        const uint32_t seqn = g_sm_trace_copy_seq2.fetch_add(1, std::memory_order_relaxed) + 1;
+        GGML_LOG_WARN("[SM-TRACE] copy #%u dev2host size=%zu dev_off=%llu data_fnv64=%016llx\n", seqn, size,
+                      (unsigned long long)(vk_tensor_offset(tensor) + tensor->view_offs + offset),
+                      (unsigned long long) sig_vk_fnv64(data, size));
+    }
+#endif
 }
 
 static void ggml_backend_vk_buffer_get_tensor_2d(ggml_backend_buffer_t buffer, const ggml_tensor * tensor, void * data, size_t offset,
@@ -14114,6 +16460,10 @@ static void ggml_backend_vk_free(ggml_backend_t backend) {
     ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
     VK_LOG_DEBUG("ggml_backend_vk_free(" << ctx->name << ")");
 
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R29/P0 — fechamento real: saldo final do domínio (uma linha).
+    sig_vk_emit_recon("backend_free", 0);
+#endif
     ggml_vk_cleanup(ctx);
 
     delete ctx;
@@ -14319,7 +16669,7 @@ static void ggml_vk_synchronize(ggml_backend_vk_context * ctx) {
     bool do_transfer = !ctx->compute_ctx.expired();
 
     if (ggml_vk_submit_transfer_ctx(ctx)) {
-        ctx->submit_pending = true;
+        ctx->submit_pending = true;   // divida acumulada
     }
 
     vk_context compute_ctx;
@@ -14336,11 +16686,18 @@ static void ggml_vk_synchronize(ggml_backend_vk_context * ctx) {
             memcpy(cpy.dst, cpy.src, cpy.n);
         }
 
-        ggml_vk_submit(compute_ctx, {});
-        ctx->submit_pending = true;
+        if (sig_vk_cycle::emitted(ggml_vk_submit(compute_ctx, {}))) {
+            ctx->submit_pending = true;
+        }
     }
 
     if (ctx->submit_pending) {
+        // R31/B1 — LIMITE DA PROVA: capturado sob o queue_mutex, imediatamente
+        // antes do marcador. O que for emitido DEPOIS do marcador nao esta
+        // coberto pela fence dele (caso A -> marcador -> B).
+        uint64_t proof_limit = 0;
+        uint64_t proof_epoch = 0;
+        const uint64_t proof_qid = (uint64_t) static_cast<VkQueue>(ctx->device->compute_queue.queue);
         if (ctx->device->async_use_transfer_queue && ctx->transfer_semaphore_last_submitted < ctx->transfer_semaphore.value) {
             vk::TimelineSemaphoreSubmitInfo tl_info{
                 1, &ctx->transfer_semaphore.value,
@@ -14354,14 +16711,44 @@ static void ggml_vk_synchronize(ggml_backend_vk_context * ctx) {
             };
             si.setPNext(&tl_info);
             std::lock_guard<std::mutex> guard(queue_mutex);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            proof_epoch = sig_vk_ledger::global().current_epoch();
+            proof_limit = sig_vk_ledger::global().last_emitted_value(proof_qid, proof_epoch);
+#endif
             ctx->device->compute_queue.queue.submit({ si }, ctx->fence);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            sig_vk_inflight::note_queue_submit(ctx->fence);
+#endif
             ctx->transfer_semaphore_last_submitted = ctx->transfer_semaphore.value;
         } else {
             std::lock_guard<std::mutex> guard(queue_mutex);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            proof_epoch = sig_vk_ledger::global().current_epoch();
+            proof_limit = sig_vk_ledger::global().last_emitted_value(proof_qid, proof_epoch);
+#endif
             ctx->device->compute_queue.queue.submit({}, ctx->fence);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            sig_vk_inflight::note_queue_submit(ctx->fence);
+#endif
         }
         ggml_vk_wait_for_fence(ctx);
-        ctx->submit_pending = false;
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // R13/B2 — DIAG: drenagem da fence DIAG DEPOIS da conclusao real.
+        // Nao espera (nenhum sleep): so destroi se ja estiver SUCCESS.
+        sig_vk_inflight::drain(ctx);
+        // R30/A4 — a espera REAL na fila e a prova que conclui as unidades
+        // emitidas daquele dominio no ledger (a R29 deixava a ultima em
+        // SUBMITTED para sempre, mesmo depois do sync).
+        {
+            // R31/B1 — conclui SO o prefixo coberto pelo marcador (nao "tudo").
+            const uint64_t n_prov = sig_vk_ledger::global().note_proven(
+                proof_qid, proof_limit, proof_epoch);
+            if (n_prov != 0) {
+                sig_vk_emit_recon("sync_proof", proof_qid);
+            }
+        }
+#endif
+        ctx->submit_pending = false;   // limpeza LEGITIMA: houve prova
         if (cmd_buf) {
             cmd_buf->in_use = false;
             cmd_buf->buf.reset();
@@ -14373,6 +16760,21 @@ static void ggml_vk_synchronize(ggml_backend_vk_context * ctx) {
             memcpy(cpy.dst, cpy.src, cpy.n);
         }
         ctx->compute_ctx.reset();
+    }
+
+    // ---------------------------------------------------------------- R55/MM-PLAN
+    // Ponto de sincronizacao REAL: so' aqui a conclusao das unidades despachadas
+    // e' observavel no host. Emite uma vez por tentativa, depois da fence/out
+    // memcpys, e nunca substitui a emissao do fim do grafo (origem diferente).
+    if (ctx->lab.despachados > 0 && !ctx->lab.complete_sincronizado) {
+        const char * st = (ctx->lab.recusados > 0) ? "FAILED" : "SUCCESS";
+        fprintf(stderr,
+                "SIG_MM_COMPLETE stage=complete ctx=%p run=%llu attempt=%llu alvos=%d despachados=%d "
+                "recusados=%d sincronizado=1 status=%s motivo=%s origem=sync\n",
+                (void *) ctx, (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt,
+                ctx->lab.alvos, ctx->lab.despachados, ctx->lab.recusados, st, ctx->lab.motivo);
+        fflush(stderr);
+        ctx->lab.complete_sincronizado = true;
     }
 }
 
@@ -14797,9 +17199,191 @@ static int32_t find_first_set(uint32_t x) {
     return ret;
 }
 
+// R13/D1 — desfecho de um cancelamento observado DENTRO do grafo Vulkan.
+//
+// Ordem obrigatória (regras do D1):
+//   1. o que está GRAVADO e não submetido é descartado: o comando é fechado sem
+//      queue.submit e as descrições de submit são limpas => nenhuma unidade nova
+//      chega à fila depois da observação;
+//   2. o que JÁ FOI SUBMETIDO é drenado antes de liberar/reusar tensor, buffer ou
+//      contexto: fence vazia na MESMA fila (não executa comando nenhum, só marca
+//      o fim do que já estava em voo) + waitForFences, igual a
+//      ggml_vk_synchronize();
+//   3. pools/estado do grafo são limpos aqui, então o próximo job não herda
+//      comando, semáforo, memcpy pendente nem descritor do job cancelado.
+//
+// Nada de kill, detach de thread, IDLE antecipado ou liberação forçada: a função
+// só retorna quando não há mais trabalho em voo neste contexto.
+static void ggml_vk_abort_finish(ggml_backend_vk_context * ctx) {
+    if (!ctx->compute_ctx.expired()) {
+        vk_context compute_ctx = ctx->compute_ctx.lock();
+        ggml_vk_ctx_end(compute_ctx);   // fecha o comando; NÃO submete
+        compute_ctx->seqs.clear();
+        compute_ctx->in_memcpys.clear();
+        compute_ctx->out_memcpys.clear();
+        compute_ctx->memsets.clear();
+        ctx->compute_ctx.reset();
+    }
+
+    // Mesma regra para a fila de transferência: o que estava gravado e não
+    // submetido é descartado, para não existir NENHUM submit novo depois da
+    // observação (o semáforo de timeline não avança, então nada fica pendente).
+    if (ctx->device->async_use_transfer_queue && !ctx->transfer_ctx.expired()) {
+        vk_context cpy_ctx = ctx->transfer_ctx.lock();
+        ggml_vk_ctx_end(cpy_ctx);
+        cpy_ctx->seqs.clear();
+        cpy_ctx->in_memcpys.clear();
+        cpy_ctx->out_memcpys.clear();
+        cpy_ctx->memsets.clear();
+        ctx->transfer_ctx.reset();
+    }
+
+    if (ctx->submit_pending) {
+        uint64_t proof_limit = 0;
+        uint64_t proof_epoch = 0;
+        const uint64_t proof_qid = (uint64_t) static_cast<VkQueue>(ctx->device->compute_queue.queue);
+        // Mesmo dreno de ggml_vk_synchronize() sem o submit do compute_ctx.
+        if (ctx->device->async_use_transfer_queue && ctx->transfer_semaphore_last_submitted < ctx->transfer_semaphore.value) {
+            vk::TimelineSemaphoreSubmitInfo tl_info{
+                1, &ctx->transfer_semaphore.value,
+                0, nullptr,
+            };
+            vk::PipelineStageFlags stage = ctx->device->transfer_queue.stage_flags;
+            vk::SubmitInfo si{
+                1, &ctx->transfer_semaphore.s, &stage,
+                0, nullptr,
+                0, nullptr,
+            };
+            si.setPNext(&tl_info);
+            std::lock_guard<std::mutex> guard(queue_mutex);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            proof_epoch = sig_vk_ledger::global().current_epoch();
+            proof_limit = sig_vk_ledger::global().last_emitted_value(proof_qid, proof_epoch);
+#endif
+            ctx->device->compute_queue.queue.submit({ si }, ctx->fence);
+            ctx->transfer_semaphore_last_submitted = ctx->transfer_semaphore.value;
+        } else {
+            std::lock_guard<std::mutex> guard(queue_mutex);
+#ifdef SIG_WHISPER_DUMP_HOOK
+            proof_epoch = sig_vk_ledger::global().current_epoch();
+            proof_limit = sig_vk_ledger::global().last_emitted_value(proof_qid, proof_epoch);
+#endif
+            ctx->device->compute_queue.queue.submit({}, ctx->fence);
+        }
+        ggml_vk_wait_for_fence(ctx);
+#ifdef SIG_WHISPER_DUMP_HOOK
+        // R31/B1 — o abort drena pela MESMA prova limitada: a ultima unidade
+        // nao fica em SUBMITTED so porque houve terminal.
+        {
+            const uint64_t n_prov = sig_vk_ledger::global().note_proven(
+                proof_qid, proof_limit, proof_epoch);
+            if (n_prov != 0) {
+                sig_vk_emit_recon("abort_proof", proof_qid);
+            }
+        }
+#endif
+        ctx->submit_pending = false;
+    }
+
+    ggml_vk_graph_cleanup(ctx);
+}
+
 static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {
     VK_LOG_DEBUG("ggml_backend_vk_graph_compute(" << cgraph->n_nodes << " nodes)");
     ggml_backend_vk_context * ctx = (ggml_backend_vk_context *)backend->context;
+    // R13/D1 — fronteira segura 0: grafo novo, decisão nova. Pedido já pendente
+    // aqui significa que NADA deste grafo é gravado nem submetido (aborta antes do
+    // primeiro comando e drena o que ainda estiver em voo do grafo anterior).
+    ctx->abort_gate.reset();
+    if (ggml_vk_abort_poll(ctx)) {
+        ggml_vk_abort_finish(ctx);
+        return GGML_STATUS_ABORTED;
+    }
+    // ------------------------------------------------------------------ R55/D1
+    // PREFLIGHT do pedido de laboratorio: ANTES de gravar comandos/descritores e
+    // antes de submit_transfer deste grafo. A decisao vem do MESMO helper usado
+    // pelo align, pela selecao e pelo despacho (sig-whisper-lab-mm-plan.h):
+    //
+    //   * pedido desconhecido        -> FAILED (inclusive com TRACE unset);
+    //   * grafo sem no' no perfil     -> FORA DE ESCOPO: segue AUTO, candidato
+    //                                   NAO aplicado, sem FAILED;
+    //   * alvo com variante/familia indisponivel -> FAILED, sem M substituto.
+    //
+    // TILE e TRACE sao lidos UMA vez por entrada de grafo; o texto e' copiado
+    // para o estado do contexto e nao ha' segundo getenv no seletor.
+    {
+        ctx->lab.begin_graph();
+        const sig_lab_mm::Request lab_req = sig_lab_mm::make_request(
+                getenv("SIG_WHISPER_LAB_MM_TILE"), getenv("SIG_WHISPER_LAB_MM_TRACE"));
+        ctx->lab.begin_request(lab_req);
+
+        if (lab_req.tem_pedido()) {
+            std::vector<sig_lab_mm::OpView> lab_ops;
+            lab_ops.reserve((size_t) cgraph->n_nodes);
+            for (int i = 0; i < cgraph->n_nodes; ++i) {
+                ggml_tensor * nd = cgraph->nodes[i];
+                if (nd == nullptr) {
+                    lab_ops.push_back(sig_lab_mm::OpView());
+                    continue;
+                }
+                const bool vazio = ggml_vk_is_empty(nd);
+                const ggml_type s0 = nd->src[0] != nullptr ? nd->src[0]->type : GGML_TYPE_COUNT;
+                const ggml_type s1 = nd->src[1] != nullptr ? nd->src[1]->type : GGML_TYPE_COUNT;
+                lab_ops.push_back(ggml_vk_lab_op_view(nd, s0, s1, false, vazio));
+            }
+            sig_lab_mm::CapsProvider lab_prov;
+            lab_prov.fn = &ggml_vk_lab_caps_for_op;
+            lab_prov.user = ctx;
+            const sig_lab_mm::GraphDecision lab_dec =
+                sig_lab_mm::decide_graph(lab_req, lab_ops.data(), lab_ops.size(), lab_prov);
+
+            ctx->lab.alvos = lab_dec.alvos;
+            ctx->lab.motivo = lab_dec.motivo;
+
+            if (lab_dec.status == sig_lab_mm::Status::PEDIDO_INVALIDO ||
+                lab_dec.status == sig_lab_mm::Status::ALVO_RECUSADO) {
+                ctx->lab.recusa = true;
+                // Emissao ESTRUTURADA e independente do trace: e' o terminal da recusa.
+                fprintf(stderr,
+                        "SIG_MM_PREFLIGHT_REJECT pedido=%s motivo=%s detalhe=%s alvos=%d fora=%d nodes=%d "
+                        "ctx=%p run=%llu attempt=%llu status=FAILED\n",
+                        lab_req.nome(), lab_dec.motivo, lab_dec.detalhe, lab_dec.alvos, lab_dec.fora,
+                        cgraph->n_nodes, (void *) ctx,
+                        (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt);
+                fflush(stderr);
+                // Drena o que ja estava pendente de antes; nao executa M substituto.
+                ggml_backend_vk_synchronize(backend);
+                return GGML_STATUS_FAILED;
+            }
+
+            if (lab_dec.status == sig_lab_mm::Status::FORA_DE_ESCOPO) {
+                // Sem alvo: candidato NAO aplicado. Nao e' falha do grafo e nao
+                // aprova S/M/L — o recibo tem de dizer NOT_APPLICABLE.
+                fprintf(stderr,
+                        "SIG_MM_PREFLIGHT_SKIP pedido=%s motivo=%s alvos=%d fora=%d nodes=%d "
+                        "ctx=%p run=%llu attempt=%llu status=NOT_APPLICABLE\n",
+                        lab_req.nome(), lab_dec.motivo, lab_dec.alvos, lab_dec.fora, cgraph->n_nodes,
+                        (void *) ctx, (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt);
+                fflush(stderr);
+            } else {
+                ctx->lab.preflight_aplicado = true;
+                ggml_vk_lab_emit(ctx, "preflight",
+                        "SIG_MM_PREFLIGHT_OK pedido=%s trace=%d alvos=%d fora=%d nodes=%d "
+                        "ctx=%p run=%llu attempt=%llu status=%s motivo=%s\n",
+                        lab_req.nome(), (int) lab_req.trace, lab_dec.alvos, lab_dec.fora, cgraph->n_nodes,
+                        (void *) ctx, (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt,
+                        sig_lab_mm::status_nome(lab_dec.status), lab_dec.motivo);
+            }
+        }
+    }
+
+    // R3/fase D (D2): baseline do detector de despacho pulado.
+    const uint32_t d2_dispatch_skipped_at_start = ctx->device->dispatch_skipped.load(std::memory_order_relaxed);
+#ifdef SIG_WHISPER_DUMP_HOOK
+    // R13/B2 — DIAG: identidade do graph e reinicio da numeracao de lote.
+    ctx->diag_graph_seq++;
+    ctx->diag_batch_idx = 0;
+#endif
 
     if (vk_instance.debug_utils_support) {
         vk::DebugUtilsLabelEXT dul = {};
@@ -14876,9 +17460,44 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     int nodes_per_submit = 100;
     int submitted_nodes = 0;
     int submit_count = 0;
+    // R14/B4 — MEDIÇÃO do trabalho em voo (observação pura, não muda a política):
+    // quantos submits o grafo faz, quantos nós e quantos bytes de mul_mat.
+    // ZERADO ANTES do laço para ACUMULAR durante o grafo.
+    ctx->diag_submit_count = 0;
+    ctx->diag_nodes_total = (uint64_t) cgraph->n_nodes;
+    // R17/D2 — o delta de submissões do QUANTUM começa a contar AQUI (início do
+    // grafo). Sem isto o primeiro grafo do processo somava as submissões da
+    // carga do modelo e o quociente dava 0.
+#ifdef SIG_WHISPER_DUMP_HOOK
+    sig_vk_inflight::g_last_graph_submits = sig_vk_inflight::g_submits_real.load(std::memory_order_relaxed);
+#endif
+    ctx->diag_mul_mat_bytes = 0;
+    ctx->diag_max_nodes_per_submit = 0;
+    ctx->diag_nodes_submitted = 0;
+    ctx->diag_t_first_submit_us = 0;
+    ctx->diag_t_last_submit_us = 0;
+    ctx->diag_lote_max_us = 0;
     uint64_t mul_mat_bytes = 0;
     uint64_t total_mul_mat_bytes = 0;
     uint64_t mul_mat_bytes_per_submit = std::min(uint64_t(100*1000*1000), ctx->last_total_mul_mat_bytes / 40u);
+    // R19/B2 — JANELA EM VOO configuravel (DIAG). Medido: 967 nos / 1,26 GB
+    // enfileirados em ~2 s e 42 s de execucao; o pedido de cancelamento chega
+    // quando nao ha mais nada a submeter. Reduzir a janela encurta o drain.
+    {
+        // R24/NUM — ATESTADO do valor que REALMENTE executou. Sem isto, "numB"
+        // era atribuicao por nome de arquivo, nao configuracao comprovada.
+        const char * mb_override = getenv("SIG_VK_SUBMIT_MB");
+        const long v = mb_override != nullptr ? atol(mb_override) : 0;
+        static std::atomic<long> mb_logado{-999};
+        if (v != mb_logado.load(std::memory_order_relaxed)) {
+            fprintf(stderr, "[sig_vk] SUBMIT_MB efetivo=%ld (env=%s)\n", v,
+                    mb_override != nullptr ? mb_override : "ausente");
+            mb_logado.store(v, std::memory_order_relaxed);
+        }
+        if (v > 0) {
+            mul_mat_bytes_per_submit = (uint64_t) v * 1000ull * 1000ull;
+        }
+    }
     for (int i = 0; i < cgraph->n_nodes; i++) {
         if (first_node_in_batch) {
             submit_node_idx = i;
@@ -14888,6 +17507,8 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
             auto bytes = ggml_nbytes(cgraph->nodes[i]->src[0]);
             mul_mat_bytes += bytes;
             total_mul_mat_bytes += bytes;
+            // R14/B4 — MEDIÇÃO: bytes de mul_mat acumulados no grafo.
+            ctx->diag_mul_mat_bytes += bytes;
         }
 
         // op_srcs_fused_elementwise indicates whether an op's srcs all contribute to
@@ -15078,14 +17699,41 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
 
         // Signal the almost_ready fence when the graph is mostly complete (< 20% remaining)
         bool almost_ready = (cgraph->n_nodes - i) < cgraph->n_nodes / 5;
-        bool submit = (submitted_nodes >= nodes_per_submit) ||
-                      (mul_mat_bytes_per_submit != 0 && mul_mat_bytes >= mul_mat_bytes_per_submit) ||
-                      (i + ctx->num_additional_fused_ops >= last_node) ||
-                      (almost_ready && !ctx->almost_ready_fence_pending);
+        bool submit_due = (submitted_nodes >= nodes_per_submit) ||
+                          (mul_mat_bytes_per_submit != 0 && mul_mat_bytes >= mul_mat_bytes_per_submit) ||
+                          (i + ctx->num_additional_fused_ops >= last_node) ||
+                          (almost_ready && !ctx->almost_ready_fence_pending);
+
+        // R13/D1 — fronteira segura 1: ENTRE unidades (nó/fusão) DENTRO do lote,
+        // antes de gravar o primeiro comando da unidade seguinte. A política de
+        // submit acima é a existente e não muda; o gate só pode vetá-la. Observado
+        // o pedido, o lote gravado é descartado e o trabalho em voo é drenado.
+        const sig_vk_unit_action unit_action = sig_vk_next_action(ctx->abort_gate, submit_due);
+        // R18/B1 — RASTRO de granularidade: uma linha a cada 250 ms no máximo.
+        // Diz se o laço de unidades está iterando durante a espera do cancel.
+        // R26/CHECK — rastro SÓ no DIAG: no NORMAL não há consumidor e o custo
+        // de fprintf/fflush por unidade não pertence ao caminho de produção.
+#ifdef SIG_WHISPER_DUMP_HOOK
+        {
+            static thread_local int64_t last_unit_trace_us = 0;
+            const int64_t now_us = ggml_time_us();
+            if (now_us - last_unit_trace_us > 250000) {
+                last_unit_trace_us = now_us;
+                fprintf(stderr, "SIGABORT ev=unit n=%d armed=%d t_us=%lld\n",
+                        (int) i, (int) ctx->abort_gate.armed(), (long long) now_us);
+                fflush(stderr);
+            }
+        }
+#endif
+        if (unit_action == SIG_VK_UNIT_ABORT) {
+            ggml_vk_abort_finish(ctx);
+            return GGML_STATUS_ABORTED;
+        }
+        const bool submit = (unit_action == SIG_VK_UNIT_SUBMIT);
 
         bool enqueued = ggml_vk_build_graph(ctx, cgraph, i, cgraph->nodes[submit_node_idx], submit_node_idx, i + ctx->num_additional_fused_ops >= last_node, almost_ready, submit);
 
-        if (vk_perf_logger_enabled && enqueued) {
+        if (vk_perf_logger_enabled && enqueued && !ctx->abort_gate.observed) {
             compute_ctx = ggml_vk_get_compute_ctx(ctx);
             if (!vk_perf_logger_concurrent) {
                 // track a single node/fusion for the current query
@@ -15112,12 +17760,90 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
 
         if (submit && enqueued) {
             first_node_in_batch = true;
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // R14/B4 — MEDIÇÃO: nós do lote e submits em voo.
+            ctx->diag_submit_count += 1;
+            ctx->diag_nodes_submitted += (uint64_t) submitted_nodes;
+            if ((uint32_t) submitted_nodes > ctx->diag_max_nodes_per_submit) {
+                ctx->diag_max_nodes_per_submit = (uint32_t) submitted_nodes;
+            }
+            // R15/C3 — tempo de cada submit e maior intervalo entre lotes.
+            // ggml_time_us() e' monotonico: serve para medir o lote, nao a hora.
+            {
+                const int64_t now_us = ggml_time_us();
+                if (ctx->diag_t_first_submit_us == 0) {
+                    ctx->diag_t_first_submit_us = now_us;
+                }
+                if (ctx->diag_t_last_submit_us > 0) {
+                    const int64_t d = now_us - ctx->diag_t_last_submit_us;
+                    if (d > ctx->diag_lote_max_us) ctx->diag_lote_max_us = d;
+                }
+                ctx->diag_t_last_submit_us = now_us;
+            }
+#endif
             submitted_nodes = 0;
             mul_mat_bytes = 0;
             if (submit_count < 3) {
                 mul_mat_bytes_per_submit *= 2;
             }
             submit_count++;
+#ifdef SIG_WHISPER_DUMP_HOOK
+            // R21/B2 — LIMITE FIXO K de submissões EM VOO (DIAG).
+            // Antes de emitir a próxima unidade, se já existem K submissões não
+            // reconhecidas como concluídas, espera a fila (que só contém
+            // trabalho JÁ SUBMETIDO — não antecipa sinal futuro).
+            {
+                // R22/B1 — SEM `static const char *`: o ponteiro retinha o valor
+                // da primeira leitura (o confundidor que a revisao reproduziu).
+                // Le a cada decisao e registra a MUDANCA do valor efetivo.
+                const char * k_env = getenv("SIG_VK_INFLIGHT_K");
+                const long k_lim = k_env ? atol(k_env) : 0;
+                {
+                    static std::atomic<long> k_logado{-1};
+                    if (k_lim != k_logado.load(std::memory_order_relaxed)) {
+                        fprintf(stderr, "[sig_vk] K efetivo=%ld (env=%s)\n", k_lim,
+                                k_env ? k_env : "ausente");
+                        k_logado.store(k_lim, std::memory_order_relaxed);
+                    }
+                }
+                // R27/K — política única na fronteira do submit (ggml_vk_submit).
+                // Este bloco duplicava admissão/fallback e imprimia "recusado"
+                // enquanto o submit seguia; removido.
+            }
+            // R20/B2 — CONTROLE SERIAL (DIAG): espera o LOTE JÁ SUBMETIDO
+            // terminar antes de gravar o próximo. Não antecipa dependência
+            // (waitIdle só espera o que já está na fila), ao contrário da
+            // tentativa anterior com a fence do contexto, que travou.
+            // É um controle de diagnóstico, não a política de produção.
+            {
+                const char * serial_env = getenv("SIG_VK_SERIAL_BATCH");   // R22/B1: sem static
+                {
+                    static std::atomic<int> s_logado{-1};
+                    const int s_atual = (serial_env != nullptr && serial_env[0] == '1') ? 1 : 0;
+                    if (s_atual != s_logado.load(std::memory_order_relaxed)) {
+                        fprintf(stderr, "[sig_vk] SERIAL efetivo=%d\n", s_atual);
+                        s_logado.store(s_atual, std::memory_order_relaxed);
+                    }
+                }
+                if (serial_env != nullptr && serial_env[0] == '1') {
+                    // R21/B1 — o serial tambem precisa CONTABILIZAR a conclusao:
+                    // watermark antes da espera, avanca completed depois.
+                    const uint64_t wm_serial = sig_vk_inflight::submit_watermark();
+                    ctx->device->compute_queue.queue.waitIdle();
+                    sig_vk_inflight::note_completion_after_wait(wm_serial);
+                    // R29 — fila comprovadamente ociosa: fallback EXPLÍCITO de
+                    // conclusão para as unidades emitidas (contabilizado).
+                    {
+                        const uint64_t qid = (uint64_t) static_cast<VkQueue>(
+                            ctx->device->compute_queue.queue);
+                        const uint64_t n_idle = sig_vk_ledger::global().note_queue_idle(qid);
+                        if (n_idle != 0) {
+                            sig_vk_emit_recon("queue_idle", qid);
+                        }
+                    }
+                }
+            }
+#endif
         }
         i += ctx->num_additional_fused_ops;
         ctx->num_additional_fused_ops = 0;
@@ -15125,6 +17851,42 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     }
 
     ctx->last_total_mul_mat_bytes = total_mul_mat_bytes;
+    // R17/D2 — QUANTUM por grafo: dispatches executados / submissões REAIS
+    // feitas durante ESTE grafo. `b4_nodes` é o tamanho do grafo e
+    // `b4_submits` é cumulativo — a razão entre eles não significa nada; o
+    // quociente correto é por grafo.
+#ifdef SIG_WHISPER_DUMP_HOOK
+    {
+        const uint64_t subs_now = sig_vk_inflight::g_submits_real.load(std::memory_order_relaxed);
+        const uint64_t subs_graph = (subs_now >= sig_vk_inflight::g_last_graph_submits)
+            ? (subs_now - sig_vk_inflight::g_last_graph_submits) : 0;
+        sig_vk_inflight::g_last_graph_submits = subs_now;
+        if (subs_graph > 0) {
+            // nós SUBMETIDOS neste grafo / submissões deste grafo = quantum real
+            const uint64_t disp = ctx->diag_nodes_submitted;
+            const uint32_t q = (uint32_t) (disp / subs_graph);
+            sig_vk_inflight::g_quantum_last.store(q, std::memory_order_relaxed);
+            sig_vk_inflight::g_quantum_sum.fetch_add(q, std::memory_order_relaxed);
+            sig_vk_inflight::g_quantum_count.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+#endif
+    // R14/B4 — publica a medição do grafo em estado PRÓPRIO (sobrevive ao
+    // disarm do capture de in-flight).
+    sig_b4_state::g_submits.store(ctx->diag_submit_count, std::memory_order_relaxed);
+    sig_b4_state::g_nodes.store(ctx->diag_nodes_total, std::memory_order_relaxed);
+    sig_b4_state::g_mulmat_bytes.store(ctx->diag_mul_mat_bytes, std::memory_order_relaxed);
+    sig_b4_state::g_max_nodes_per_submit.store(ctx->diag_max_nodes_per_submit, std::memory_order_relaxed);
+    sig_b4_state::g_graphs.fetch_add(1, std::memory_order_relaxed);
+
+    // R14/B3 — FRONTEIRA FINAL do cancelamento: um abort observado DURANTE a
+    // última unidade (dentro de compute_forward/build_graph) não pode cair no
+    // retorno SUCCESS abaixo. Drena o que está em voo e devolve ABORTED.
+    if (ctx->abort_gate.observed) {
+        GGML_LOG_WARN("ggml_vulkan: [B3] abort observado no fim do grafo - drenando e retornando ABORTED\n");
+        ggml_vk_abort_finish(ctx);
+        return GGML_STATUS_ABORTED;
+    }
 
     if (vk_perf_logger_enabled) {
         // End the command buffer and submit/wait
@@ -15172,6 +17934,50 @@ static ggml_status ggml_backend_vk_graph_compute(ggml_backend_t backend, ggml_cg
     if (!ctx->device->support_async) {
         ggml_vk_synchronize(ctx);
     }
+
+    // R3/fase D (D2): algum despacho foi PULADO por pipeline indisponível =>
+    // falha explícita do grafo (nunca resultado parcial "de sucesso").
+    const bool d2_pulado = ctx->device->dispatch_skipped.load(std::memory_order_relaxed) != d2_dispatch_skipped_at_start;
+    if (d2_pulado) {
+        GGML_LOG_ERROR("ggml_vulkan: [D2] grafo com despacho pulado (pipeline indisponivel) - status FAILED (sem resultado parcial)\n");
+    }
+
+    // ------------------------------------------------------------ R55/MM-PLAN
+    // CONCLUSAO associada ao conjunto realmente despachado. Nao e' prova de GPU
+    // concluida quando o backend e' assincrono: nesse caso `sincronizado=0` e o
+    // estagio e' repetido pelo ponto de sync real (ggml_vk_synchronize).
+    if (ctx->lab.request.tem_pedido() || ctx->lab.despachados > 0 || ctx->lab.recusados > 0) {
+        const bool recusado = ctx->lab.recusados > 0 || d2_pulado;
+        ctx->lab.recusa = ctx->lab.recusa || recusado;
+        // Pedido que nao despachou NADA no perfil nao aprova variante alguma: o
+        // recibo tem de dizer NOT_APPLICABLE, nao "aplicado" (inclusive quando o
+        // grafo nao tinha alvo — preflight ja' registrou SKIP/sem_alvo).
+        const bool nao_aplicado = !recusado && ctx->lab.despachados == 0;
+        const char * st = recusado ? "FAILED" : (nao_aplicado ? "NOT_APPLICABLE" : "SUCCESS");
+        fprintf(stderr,
+                "SIG_MM_COMPLETE stage=complete ctx=%p run=%llu attempt=%llu alvos=%d despachados=%d "
+                "recusados=%d sincronizado=%d status=%s motivo=%s origem=graph\n",
+                (void *) ctx, (unsigned long long) ctx->lab.run, (unsigned long long) ctx->lab.attempt,
+                ctx->lab.alvos, ctx->lab.despachados, ctx->lab.recusados,
+                ctx->device->support_async ? 0 : 1, st, ctx->lab.motivo);
+        fflush(stderr);
+        ctx->lab.complete_sincronizado = !ctx->device->support_async;
+    }
+    if (ctx->lab.recusados > 0) {
+        // Alvo pedido indisponivel no despacho: FAILED. Sem auto/M substituto e
+        // sem readback aprovado.
+        return GGML_STATUS_FAILED;
+    }
+    if (d2_pulado) {
+        return GGML_STATUS_FAILED;
+    }
+
+#if defined(SIG_VK_SOFTMAX_TRACE)
+    if (sig_vk_softmax_trace_on()) {
+        GGML_LOG_WARN("[SM-TRACE] graph_compute done nodes=%d dispatch_skipped=%u result=SUCCESS\n", cgraph->n_nodes,
+                      ctx->device->dispatch_skipped.load(std::memory_order_relaxed));
+    }
+#endif
 
     return GGML_STATUS_SUCCESS;
 
@@ -15496,6 +18302,22 @@ static ggml_guid_t ggml_backend_vk_guid() {
 ggml_backend_t ggml_backend_vk_init(size_t dev_num) {
     VK_LOG_DEBUG("ggml_backend_vk_init(" << dev_num << ")");
 
+#ifndef SIG_WHISPER_DUMP_HOOK
+    // R29/P0 — K é knob EXPERIMENTAL do build DIAG. Pedido no NORMAL é recusado
+    // ANTES da inferência (init do backend): não se aceita pedido e se anuncia
+    // uma configuração que este build não aplica.
+    {
+        const char * k_env = getenv("SIG_VK_INFLIGHT_K");
+        const long k_val = k_env != nullptr ? atol(k_env) : 0;
+        if (k_val > 0) {
+            fprintf(stderr, "[sig_vk] SIGKUNSUPPORTED build=NORMAL k=%ld\n", k_val);
+            fflush(stderr);
+            throw std::runtime_error(
+                "SIG_VK_INFLIGHT_K>0 requer build DIAG (UNSUPPORTED no NORMAL)");
+        }
+    }
+#endif
+
     ggml_backend_vk_context * ctx = new ggml_backend_vk_context;
     ggml_vk_init(ctx, dev_num);
 
@@ -15677,14 +18499,90 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
     ggml_backend_vk_device_context * ctx = (ggml_backend_vk_device_context *)dev->context;
     const vk_device& device = ggml_vk_get_device(ctx->device);
 
-    // If any compute pipelines failed to compile, the GPU driver is broken
-    // for these shaders. Return false for all ops so the backend scheduler
-    // routes everything to the CPU backend instead of dispatching to
-    // null pipelines.
-    if (device->pipeline_failures.load(std::memory_order_relaxed) > 0) {
-        return false;
+    // R6/fase A (A1) — contorno W13/R6: neste device/driver a rota GPU CORRETA e a
+    // variante wg64 (spec real 64), que atende TODA a familia simples (ncols<=16384).
+    // Corrige a logica do contorno R5, que recusava qualquer SOFT_MAX movel sem
+    // condicao de ncols (mit-u-nc512 foi p/ CPU embora <=1024; SUMMARY-B dizia GPU).
+    // Config SEM rota segura (familia large >16384 ainda sem prova neste driver;
+    // variante wg64 reprovada/ausente) e recusada APENAS com saida MOVEL: e a unica
+    // recusa que o scheduler aceita sem abort (tensor ja residente em buffer Vulkan
+    // nao migra; ggml-backend.cpp:898). A decisao ocorre AQUI, na fase de split do
+    // scheduler, ANTES de residencia/alocacao; o ponto de dispatch (ggml_vk_soft_max)
+    // repete a decisao p/ residente/direct com FAILED limpo.
+    if (op->op == GGML_OP_SOFT_MAX && ggml_vk_soft_max_quirk_enabled(device) &&
+        op->buffer == nullptr && (op->view_src == nullptr || op->view_src->buffer == nullptr)) {
+        const sig_vk_softmax_route route = ggml_vk_soft_max_route(device, op->src[0], op->src[1]);
+        if (route != SIG_VK_SM_ROUTE_WG64) {
+            static std::atomic<uint32_t> sig_r6_softmax_refused_logged {0};
+            if (sig_r6_softmax_refused_logged.fetch_add(1, std::memory_order_relaxed) < 4u) {
+                GGML_LOG_WARN("ggml_vulkan: [R6-A1] SOFT_MAX requested=Vulkan effective=CPU reason=sem-rota-segura(%s; ncols=%u; vid=%04x did=%04x drv=%08x device=%s) - recusa seletiva; restante do grafo segue na GPU\n",
+                              ggml_vk_softmax_route_name(route), (unsigned) op->src[0]->ne[0],
+                              device->properties.vendorID, device->properties.deviceID, device->properties.driverVersion,
+                              device->properties.deviceName.data());
+            }
+            return false;
+        }
+        // rota wg64: o SOFT_MAX executa na GPU com a variante segura; nada mais
+        // a recusar aqui (a familia simples inteira tem rota no escopo da quirk).
     }
 
+    // R2/fase C (C1): ANTES, qualquer falha de pipeline recusava o dispositivo
+    // INTEIRO — inclusive GGML_OP_NONE — e o agendador abortava quando existia
+    // tensor já residente em buffer Vulkan (ggml-backend.cpp:898; evidência em
+    // fase-c/BTRACE-C1.md). Agora a recusa é POR OP: só a família cujas
+    // pipelines falharam (Flash Attention, abaixo) é recusada; o agendador
+    // copia essa op para o CPU e preserva o restante do grafo na GPU.
+    //
+    // R3/fase D (D2) — recusa além de FA, SEGURA pela regra do abort: recusa
+    // apenas ops cujo tensor de SAÍDA é MÓVEL (buffer nulo). Op com output
+    // pré-alocado/residente NÃO é recusado (o abort do agendador vem de
+    // tensor pré-alocado — ggml-backend.cpp:898); nesses o detector de
+    // despacho garante GGML_STATUS_FAILED em vez de resultado parcial.
+    if (device->non_fa_pipelines_failed.load(std::memory_order_relaxed) &&
+        op->buffer == nullptr &&
+        (op->view_src == nullptr || op->view_src->buffer == nullptr)) {
+        return false;
+    }
+#if defined(SIG_VK_FA_FAIL_INJECT)
+    // R4/fase D (D3): recusa SELETIVA env-gated - isola o produtor da explosao
+    // do encoder FA-off recusando SO uma familia de ops (o resto segue na GPU),
+    // sem recusa indiscriminada (assert do scheduler: nunca recusar op com
+    // saida residente). Ativacao: SIG_VK_REFUSE_FAMILY=<familia>.
+    //   big_mulmat  : MUL_MAT com saida >= 64 MiB (caso QK^T 1500x1500x8 f32)
+    //   all_mulmat  : todo MUL_MAT
+    //   f16a_mulmat : MUL_MAT com src0 f16
+    //   softmax     : todo SOFT_MAX
+    //   big_softmax : SOFT_MAX com saida >= 64 MiB (atencao 1500x1500x8 do encoder)
+    {
+        const char * refuse = getenv("SIG_VK_REFUSE_FAMILY");
+        if (refuse != nullptr && op->buffer == nullptr &&
+            (op->view_src == nullptr || op->view_src->buffer == nullptr)) {
+            bool match = false;
+            if (op->op == GGML_OP_MUL_MAT) {
+                if (strcmp(refuse, "big_mulmat") == 0) {
+                    match = ggml_nbytes(op) >= (64ull << 20);
+                } else if (strcmp(refuse, "all_mulmat") == 0) {
+                    match = true;
+                } else if (strcmp(refuse, "f16a_mulmat") == 0) {
+                    match = op->src[0] != nullptr && op->src[0]->type == GGML_TYPE_F16;
+                }
+            } else if (op->op == GGML_OP_SOFT_MAX) {
+                if (strcmp(refuse, "softmax") == 0) {
+                    match = true;
+                } else if (strcmp(refuse, "big_softmax") == 0) {
+                    match = ggml_nbytes(op) >= (64ull << 20);
+                } else if (strcmp(refuse, "small_softmax") == 0) {
+                    match = ggml_nbytes(op) < (64ull << 20);
+                }
+            }
+            if (match) {
+                GGML_LOG_WARN("ggml_vulkan: [SIG_VK_REFUSE_FAMILY=%s] %s recusado (recusa seletiva, vai p/ CPU)\n",
+                              refuse, ggml_op_name(op->op));
+                return false;
+            }
+        }
+    }
+#endif
     const bool uses_bda = (op->op == GGML_OP_IM2COL || op->op == GGML_OP_IM2COL_3D) &&
                           device->shader_int64 && device->buffer_device_address;
 
@@ -15822,6 +18720,41 @@ static bool ggml_backend_vk_device_supports_op(ggml_backend_dev_t dev, const ggm
             }
         case GGML_OP_FLASH_ATTN_EXT:
             {
+                // R6/fase F (F2): variante compacta fa_r6 — quando REALMENTE
+                // disponivel (pipelines compiladas) e o contrato do whisper casa,
+                // o FA fica na GPU mesmo com a familia generica reprovada.
+                const char * why_r6 = "modo/pipelines indisponiveis";
+                {
+                    const float * fa_params = (const float *) op->op_params;
+                    if (ggml_vk_fa_r6_mode_ok(device) &&
+                        (ggml_vk_fa_r6_force(device) ||
+                         device->flash_attn_pipelines_failed.load(std::memory_order_relaxed)) &&
+                        ggml_vk_fa_r6_op_ok(device, op->src[0], op->src[1], op->src[2], op->src[3], op->src[4], op,
+                                            fa_params[1], fa_params[2], &why_r6)) {
+                        // R8/A2: DECISÃO de placement (aceite) — não é execução.
+                        sig_fa_state::fa_r6_accepts.fetch_add(1, std::memory_order_relaxed);
+                        return true;
+                    }
+                }
+                // R2/fase C (C1): recusa POR OP — a pipeline FA falhou ao
+                // compilar neste driver (ex.: flash_attn_f32_f16_aligned no
+                // Adreno 740); o agendador roteia FA para o CPU via cópia.
+                if (device->flash_attn_pipelines_failed.load(std::memory_order_relaxed)) {
+                    // R7/fase D (D4) + R8/A2: estado estruturado — família genérica
+                    // reprovada neste driver e a op FA não tem rota fa_r6 para ESTA
+                    // chamada. Isto é uma DECISÃO DE PLACEMENT (recusa), NÃO uma
+                    // execução CPU: o contador de execução é o do backend que
+                    // REALMENTE computar o op.
+                    sig_fa_state::fa_generic_failed.store(1, std::memory_order_relaxed);
+                    sig_fa_state::fa_placement_refusals.fetch_add(1, std::memory_order_relaxed);
+                    sig_fa_state::set_fa_reason(why_r6 != nullptr ? why_r6 : "familia generica reprovada");
+                    static std::atomic<uint32_t> fa_r6_refusals {0};
+                    const uint32_t nr6 = fa_r6_refusals.fetch_add(1, std::memory_order_relaxed) + 1;
+                    if (nr6 <= 3) {
+                        GGML_LOG_WARN("ggml_vulkan: [R6-F] FA sem rota Vulkan nesta op; recusa delimitada (fa_r6: %s)\n", why_r6);
+                    }
+                    return false;
+                }
                 bool coopmat2 = device->coopmat2;
                 uint32_t HSK = op->src[1]->ne[0];
                 uint32_t HSV = op->src[2]->ne[0];
@@ -16426,11 +19359,291 @@ static ggml_backend_dev_t ggml_backend_vk_reg_get_device(ggml_backend_reg_t reg,
     return devices[device];
 }
 
+// R2/fase C (C1) — pré-checagem de Flash Attention em Vulkan.
+//
+// Executa UMA minicomputação FA (formas fixas HSK=HSV=64, K/V F16, KV=128)
+// no dispositivo Vulkan selecionado — o MESMO caminho de dispatch real
+// (ggml_vk_flash_attn -> ggml_pipeline_request_descriptor_sets ->
+// ggml_vk_load_shaders -> createComputePipeline), portanto cobre exatamente a
+// falha de compilação das pipelines FA (variante `_aligned`, a que falha no
+// Adreno 740). Devolve false SOMENTE quando a família FA falhou neste
+// dispositivo; true quando o dispositivo não é Vulkan ou quando tudo compilou.
+// Se já rodou neste processo, não repete (flash_attn_preflight_done).
+//
+// Chamada do whisper via símbolo FRACO (whisper_model_load, antes de alocar
+// pesos). O consumidor não-Vulkan (OpenCL etc.) mantém a guarda do JNI.
+extern "C" bool sig_vk_flash_attn_preflight(int gpu_device) {
+    if (gpu_device < 0) {
+        return true;
+    }
+
+    // Mesma enumeração de whisper_backend_init_gpu: gpu_device é o índice
+    // relativo a dispositivos GPU/IGPU.
+    ggml_backend_dev_t target = nullptr;
+    int cnt = 0;
+    const size_t n_dev = ggml_backend_dev_count();
+    for (size_t i = 0; i < n_dev; ++i) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        if (dev == nullptr) {
+            continue;
+        }
+        const enum ggml_backend_dev_type type = ggml_backend_dev_type(dev);
+        if (type != GGML_BACKEND_DEVICE_TYPE_GPU && type != GGML_BACKEND_DEVICE_TYPE_IGPU) {
+            continue;
+        }
+        if (cnt == gpu_device) {
+            target = dev;
+            break;
+        }
+        ++cnt;
+    }
+    if (target == nullptr) {
+        return true;
+    }
+
+    const char * dev_name = ggml_backend_dev_name(target);
+    if (dev_name == nullptr || strncmp(dev_name, GGML_VK_NAME, strlen(GGML_VK_NAME)) != 0) {
+        return true; // não é Vulkan
+    }
+
+    auto * dctx = (ggml_backend_vk_device_context *) target->context;
+    if (dctx == nullptr) {
+        // R3/fase D (D2): falha de preparação NÃO é veredito aprovado.
+        GGML_LOG_WARN("ggml_vulkan: pre-checagem FA: contexto do device indisponivel (veredito NAO aprovado)\n");
+        return false;
+    }
+    vk_device device = ggml_vk_get_device(dctx->device);
+
+    if (device->flash_attn_preflight_done.exchange(true, std::memory_order_relaxed)) {
+        // R3/fase D (D2): veredito SÓ após conclusão; enquanto desconhecido
+        // (-1) a resposta conservadora é "não aprovado".
+        const int verdict = device->flash_attn_preflight_verdict.load(std::memory_order_relaxed);
+        if (verdict < 0) {
+            GGML_LOG_WARN("ggml_vulkan: pre-checagem FA ainda sem veredito concluido (NAO aprovado por ora)\n");
+            return false;
+        }
+        return verdict > 0;
+    }
+
+    // R2/fase C (C1): janela da injeção — o hook de falha simulada
+    // (SIG_VK_FA_FAIL_INJECT, em ggml_vk_create_pipeline_func) só dispara
+    // enquanto esta pré-checagem executa. Aqui estão as compilações reais das
+    // pipelines FA, que é exatamente o que o hook simula.
+    struct preflight_scope {
+        std::atomic<bool> & flag;
+        explicit preflight_scope(std::atomic<bool> & f) : flag(f) { flag.store(true, std::memory_order_relaxed); }
+        ~preflight_scope() { flag.store(false, std::memory_order_relaxed); }
+    } preflight_scope_guard(device->flash_attn_preflight_running);
+
+    struct ggml_init_params ip = {
+        /*.mem_size   =*/ 4 * 1024 * 1024,
+        /*.mem_buffer =*/ nullptr,
+        /*.no_alloc   =*/ true,
+    };
+    ggml_context * ctx = ggml_init(ip);
+
+    // R3/fase D (D2): o veredito é publicado SOMENTE após a conclusão da
+    // minicomputação. Preparação falha/desconhecida NÃO aprova (conservador:
+    // FA é recusado e a carga segue FA-off, nunca "FA aprovado" sem prova).
+    bool ok = false;
+    bool concluded = false;
+    if (ctx != nullptr) {
+        ggml_tensor * q = ggml_new_tensor_4d(ctx, GGML_TYPE_F32, 64, 2, 4, 1);
+        ggml_tensor * k = ggml_new_tensor_4d(ctx, GGML_TYPE_F16, 64, 128, 4, 1);
+        ggml_tensor * v = ggml_new_tensor_4d(ctx, GGML_TYPE_F16, 64, 128, 4, 1);
+        ggml_tensor * fa = ggml_flash_attn_ext(ctx, q, k, v, nullptr, 1.0f / 8.0f, 0.0f, 0.0f);
+        ggml_cgraph * gf = ggml_new_graph(ctx);
+        ggml_build_forward_expand(gf, fa);
+
+        ggml_backend_t backend = ggml_backend_dev_init(target, nullptr);
+        if (backend != nullptr) {
+            ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
+            if (buffer != nullptr) {
+                const ggml_status st = ggml_backend_graph_compute(backend, gf);
+                concluded = true;
+                // R6/fase F (F2): aprovado quando a familia generica compilou OU
+                // quando a variante compacta fa_r6 esta REALMENTE disponivel
+                // (pipelines compiladas; o caso da pre-checagem e elegivel nela).
+                ok = (st == GGML_STATUS_SUCCESS) &&
+                     (!device->flash_attn_pipelines_failed.load(std::memory_order_relaxed) ||
+                      ggml_vk_fa_r6_mode_ok(device));
+                ggml_backend_buffer_free(buffer);
+            } else {
+                GGML_LOG_WARN("ggml_vulkan: pre-checagem FA: alocacao do caso pequeno falhou (NAO aprovado)\n");
+            }
+            ggml_backend_free(backend);
+        } else {
+            GGML_LOG_WARN("ggml_vulkan: pre-checagem FA: init do backend falhou (NAO aprovado)\n");
+        }
+        ggml_free(ctx);
+    } else {
+        GGML_LOG_WARN("ggml_vulkan: pre-checagem FA: ggml_init falhou (NAO aprovado)\n");
+    }
+
+    // publica o veredito APÓS a conclusão (ou desconhecido = não aprovado)
+    device->flash_attn_preflight_verdict.store(concluded && ok ? 1 : 0, std::memory_order_relaxed);
+
+    GGML_LOG_INFO("ggml_vulkan: pre-checagem de Flash Attention (%s): %s\n",
+                  device->name.c_str(),
+                  (concluded && ok) ? "pipelines FA compilaram (veredito aprovado)" :
+                  (concluded ? "PIPELINE FA FALHOU (FA sera recusado)" :
+                               "INCONCLUSIVA/falha de preparacao (FA NAO aprovado)"));
+    return concluded && ok;
+}
+
+// R7/fase D (D4) — estado ESTRUTURADO de FA/softmax para o aviso e o diagnóstico.
+// R8/fase A (A2) — estado ESTRUTURADO de FA/softmax para o aviso e o diagnóstico.
+// SEPARAÇÃO: execução (r6/genérico na GPU + CPU real) x placement (recusas e
+// aceites de supports_op) x capacidade (família reprovada neste driver).
+// Devolve uma linha key=value (sem newline; NUNCA parse de texto de log).
+// Símbolo NORMAL (weak-linkado pelo JNI): se ausente (lib antiga), o JNI
+// reporta estado estruturado indisponível.
+extern "C" uint64_t sig_fa_cpu_exec_count(void) __attribute__((weak));
+
+// R8/fase A (A2) — SNAPSHOT CRU dos contadores para DELTA POR JOB (o JNI lê
+// antes/depois de cada transcribe; nada é resetado aqui).
+// out[0]=r6_exec out[1]=generic_exec out[2]=placement_refusals
+// out[3]=cap_generic_failed out[4]=r6_accepts out[5]=generic_accepts.
+// R14/C2 — o R6 está DISPONÍVEL para este device?
+// 1 = sim (modo auto ou forçado); 0 = desligado por decisão explícita.
+// O chamador (JNI) usa isto para NÃO desligar o FA quando a família GENÉRICA
+// reprova, mas a rota R6 (que tem kernel próprio) está disponível.
+extern "C" int sig_vk_fa_r6_available(void) {
+    // R15/C1 — DISPONIBILIDADE, nao preferencia.
+    //
+    // 1 = existe device com a rota R6 REALMENTE utilizavel: modo != 0 (auto ou
+    //     forcado) E os dois pipelines R6 criados sem falha e compilados.
+    // 0 = nenhuma rota R6 utilizavel — entao o chamador DEVE recusar/recarregar
+    //     com FAoff, em vez de achar que ha fallback.
+    //
+    // A checagem por device ja existia em `ggml_vk_fa_r6_mode_ok` (guarda de
+    // modo + pipelines); o que faltava era a consulta publica usa-la.
+    for (int i = 0; i < GGML_VK_MAX_DEVICES; ++i) {
+        const vk_device & d = vk_instance.devices[i];
+        if (d == nullptr) break;
+        if (ggml_vk_fa_r6_mode_ok(d)) return 1;
+    }
+    return 0;
+}
+
+extern "C" int sig_vk_fa_counters(uint64_t * out, int n) {
+    if (out == nullptr || n < 6) {
+        return -1;
+    }
+    out[0] = sig_fa_state::fa_r6_dispatches.load(std::memory_order_relaxed);
+    out[1] = sig_fa_state::fa_generic_dispatches.load(std::memory_order_relaxed);
+    out[2] = sig_fa_state::fa_placement_refusals.load(std::memory_order_relaxed);
+    out[3] = sig_fa_state::fa_generic_failed.load(std::memory_order_relaxed);
+    out[4] = sig_fa_state::fa_r6_accepts.load(std::memory_order_relaxed);
+    out[5] = sig_fa_state::fa_generic_accepts.load(std::memory_order_relaxed);
+    return 6;
+}
+
+// R18/B1 — contador de submissões reais exposto ao rastro de estágio do whisper.
+// R21/D3 — NORMAL nao compila a secao DIAG (sig_vk_inflight nao existe la):
+// stubs mantem o simbolo e o build normal.
+#ifdef SIG_WHISPER_DUMP_HOOK
+extern "C" uint64_t sig_vk_submits_real(void) {
+    return sig_vk_inflight::g_submits_real.load(std::memory_order_relaxed);
+}
+#else
+extern "C" uint64_t sig_vk_submits_real(void) { return 0; }
+#endif
+
+// R14/B4 — leitura da medição do trabalho em voo (por qualquer consumidor).
+#ifdef SIG_WHISPER_DUMP_HOOK
+extern "C" int sig_vk_b4_inflight_state(char * buf, int cap) {
+    if (buf == nullptr || cap <= 0) return 0;
+    return snprintf(buf, (size_t) cap,
+        "b4_submits=%llu b4_nodes=%u b4_mulmat_bytes=%llu b4_max_nodes_per_submit=%u b4_graphs=%u "
+        "fence_generation=%llu b4_quantum_last=%u b4_quantum_avg=%u "
+        "b4_issued=%llu b4_completed=%llu b4_outstanding=%llu b4_max_outstanding=%llu",
+        // R17/D2 — submissões REAIS à GPU (contadas em note_queue_submit, fora
+        // do gate do diag). O contador por contexto ficava 0 no caminho usado.
+        (unsigned long long) sig_vk_inflight::g_submits_real.load(std::memory_order_relaxed),
+        (unsigned) sig_b4_state::g_nodes.load(std::memory_order_relaxed),
+        (unsigned long long) sig_b4_state::g_mulmat_bytes.load(std::memory_order_relaxed),
+        (unsigned) sig_b4_state::g_max_nodes_per_submit.load(std::memory_order_relaxed),
+        (unsigned) sig_b4_state::g_graphs.load(std::memory_order_relaxed),
+        // R20/B1 — fence_generation agora e a do sinal REAL observado:
+        // conta apenas submits com fence nao nula.
+        (unsigned long long) sig_vk_inflight::g_fence_gen.load(std::memory_order_relaxed),
+        // R17/D2 — quantum por grafo (dispatches / submissões do grafo).
+        (unsigned) sig_vk_inflight::g_quantum_last.load(std::memory_order_relaxed),
+        (unsigned) (sig_vk_inflight::g_quantum_count.load(std::memory_order_relaxed) > 0
+            ? (sig_vk_inflight::g_quantum_sum.load(std::memory_order_relaxed) /
+               sig_vk_inflight::g_quantum_count.load(std::memory_order_relaxed))
+            : 0),
+        // R21/B1 — issued / completed / outstanding / max observado.
+        (unsigned long long) sig_vk_inflight::g_submits_real.load(std::memory_order_relaxed),
+        (unsigned long long) sig_vk_inflight::g_completed.load(std::memory_order_relaxed),
+        (unsigned long long) sig_vk_inflight::outstanding_now(),
+        (unsigned long long) sig_vk_inflight::g_max_outstanding.load(std::memory_order_relaxed));
+}
+#else
+extern "C" int sig_vk_b4_inflight_state(char * buf, int cap) {
+    if (buf == nullptr || cap <= 0) return 0;
+    return snprintf(buf, (size_t) cap, "b4_state=unavailable");
+}
+#endif
+
+extern "C" int sig_vk_fa_status(char * buf, int cap) {
+    if (buf == nullptr || cap <= 0) {
+        return 0;
+    }
+    const uint64_t fa_gpu_r6 = sig_fa_state::fa_r6_dispatches.load(std::memory_order_relaxed);
+    const uint64_t fa_gpu_generic = sig_fa_state::fa_generic_dispatches.load(std::memory_order_relaxed);
+    const uint64_t fa_gpu = fa_gpu_r6 + fa_gpu_generic;
+    const uint64_t gen_failed = sig_fa_state::fa_generic_failed.load(std::memory_order_relaxed);
+    const uint64_t refusals = sig_fa_state::fa_placement_refusals.load(std::memory_order_relaxed);
+    const uint64_t r6_accepts = sig_fa_state::fa_r6_accepts.load(std::memory_order_relaxed);
+    const uint64_t generic_accepts = sig_fa_state::fa_generic_accepts.load(std::memory_order_relaxed);
+    // CPU: EXECUÇÃO real do backend CPU (símbolo opcional) — NUNCA a contagem
+    // de recusas de placement.
+    const bool cpu_available = (sig_fa_cpu_exec_count != nullptr);
+    const uint64_t fa_cpu = cpu_available ? sig_fa_cpu_exec_count() : 0;
+    const uint64_t sm_gpu = sig_fa_state::sm_gpu_wg64.load(std::memory_order_relaxed);
+    const uint64_t sm_cpu = sig_fa_state::sm_cpu_refused.load(std::memory_order_relaxed);
+    const std::string fa_reason = sig_fa_state::get_fa_reason();
+    const std::string sm_reason = sig_fa_state::get_sm_reason();
+    const char * exec = (fa_gpu > 0 && fa_cpu > 0) ? "MIXED"
+                      : (fa_gpu > 0)                ? "GPU_EXECUTED"
+                      : (fa_cpu > 0)                ? "CPU_FALLBACK"
+                      : (refusals > 0)              ? "REFUSED_NO_EXEC"
+                      :                               "NOT_RUN";
+    return snprintf(buf, (size_t) cap,
+                    "fa_r6_dispatches=%llu fa_generic_dispatches=%llu fa_placement_refusals=%llu "
+                    "fa_r6_accepts=%llu fa_generic_accepts=%llu "
+                    "fa_cpu_executed=%llu fa_cpu_exec_source=%s "
+                    "fa_generic_failed=%llu sm_gpu_wg64=%llu sm_cpu_refused=%llu "
+                    "fa_exec=%s fa_reason=\"%s\" sm_route=\"%s\"",
+                    (unsigned long long) fa_gpu_r6, (unsigned long long) fa_gpu_generic,
+                    (unsigned long long) refusals,
+                    (unsigned long long) r6_accepts, (unsigned long long) generic_accepts,
+                    (unsigned long long) fa_cpu, cpu_available ? "ggml-cpu" : "unavailable",
+                    (unsigned long long) gen_failed,
+                    (unsigned long long) sm_gpu, (unsigned long long) sm_cpu,
+                    exec, fa_reason.c_str(), sm_reason.c_str());
+}
+
+// R13/D1 — proc do contrato de abort. Este fork só usava o contrato no CPU
+// (ggml_backend_cpu_get_proc_address); com ele exposto aqui, o dono do scheduler
+// (whisper.cpp: sig_abort_binding) instala o MESMO callback no backend Vulkan,
+// sem cast para tipo de backend específico e sem que o whisper conheça Vulkan.
+static void * ggml_backend_vk_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
+    GGML_UNUSED(reg);
+    if (strcmp(name, "ggml_backend_set_abort_callback") == 0) {
+        ggml_backend_set_abort_callback_t fct = ggml_backend_vk_set_abort_callback;
+        return (void *) fct;
+    }
+    return nullptr;
+}
+
 static const struct ggml_backend_reg_i ggml_backend_vk_reg_i = {
     /* .get_name         = */ ggml_backend_vk_reg_get_name,
     /* .get_device_count = */ ggml_backend_vk_reg_get_device_count,
     /* .get_device       = */ ggml_backend_vk_reg_get_device,
-    /* .get_proc_address = */ NULL,
+    /* .get_proc_address = */ ggml_backend_vk_reg_get_proc_address,
 };
 
 ggml_backend_reg_t ggml_backend_vk_reg() {
