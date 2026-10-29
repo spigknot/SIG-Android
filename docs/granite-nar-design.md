@@ -114,14 +114,18 @@ Modelo (12 arquivos + 1 gerado por nós):
   `Float16` e indexar `[token][:]` — ou, se o download for pesado, transpor é
   feito uma vez no carregamento. Memória: 100352×2048×2 = 411MB em float16
   (ou 822MB em float32). Manter fp16 e converter só os vetores usados.
-- **Chunking**: como o encoder é T=2000 fixo (~37,5s de áudio por janela), áudios
-  longos precisam de janelamento. v1: limitar a ~37s (T≤2000) com mensagem clara;
-  chunking com overlap fica para depois (mesmo problema do TurboCTC, ver §6).
+- **Chunking**: o encoder é T=2000 fixo, equivalente a até 40s por inferência
+  (`2000 × 2 × hop 160 / 16.000 Hz`). Arquivos maiores são lidos e processados em
+  janelas de até 40s, com sobreposição de 2s; a junção remove o maior sufixo/prefixo
+  de até 32 palavras iguais para reduzir repetição nas bordas. O percentual de progresso
+  acompanha a duração total do arquivo.
 
 ## 6. Limites conhecidos (v1)
 
-- **T fixo = 2000** (~37,5s por encoder call). Áudio > 37,5s: chunking (depois).
+- **T fixo = 2000** (até 40s por encoder call). Arquivos longos passam por várias
+  inferências com sobreposição; não há mais teto total de 40s no app. A duração prática
+  depende do armazenamento e do tempo/capacidade do aparelho.
 - **Peso total ~4,4 GB** (encoder 1GB + projector 0,3GB + llm 3,3GB + embed 0,4GB).
   Requer flagship 12GB+; CPU faz upcast FP16→FP32 (RAM ~dobra nos logits).
-- OOM de áudio longo = mesmo problema do TurboCTC (front-end processa tudo antes
-  do janelamento). Fica para o chunking unificado.
+- O front-end processa uma janela por vez a partir do WAV, sem materializar todo o PCM
+  nem os recursos acústicos do arquivo inteiro em memória.

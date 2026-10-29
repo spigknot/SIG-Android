@@ -11,6 +11,7 @@ import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
@@ -275,6 +276,77 @@ object GraniteNarBuckets {
     )
 }
 
+/** Divide WAVs longos em janelas NAR e remove as palavras repetidas na sobreposição. */
+object GraniteNarChunking {
+    const val CHUNK_SIZE_SECONDS = GraniteNarEngine.MAX_CHUNK_SECONDS
+    const val OVERLAP_SECONDS = 2
+    private const val MAX_OVERLAP_WORDS = 32
+
+    data class SampleRange(val start: Long, val endExclusive: Long) {
+        val size: Long get() = endExclusive - start
+    }
+
+    /** Planeja janelas sobrepostas, cada uma dentro do limite da entrada estática do modelo. */
+    fun plan(
+        totalSamples: Long,
+        sampleRate: Int = GraniteNarEngine.SAMPLE_RATE,
+        chunkSeconds: Int = CHUNK_SIZE_SECONDS,
+        overlapSeconds: Int = OVERLAP_SECONDS,
+    ): List<SampleRange> {
+        require(totalSamples >= 0L) { "totalSamples não pode ser negativo" }
+        require(sampleRate > 0 && chunkSeconds > 0) { "sampleRate e chunkSeconds devem ser positivos" }
+        require(chunkSeconds <= CHUNK_SIZE_SECONDS) {
+            "chunkSeconds excede o limite de entrada do modelo ($CHUNK_SIZE_SECONDS s)"
+        }
+        require(overlapSeconds >= 0 && overlapSeconds < chunkSeconds) {
+            "overlapSeconds deve ser não negativo e menor que chunkSeconds"
+        }
+        if (totalSamples == 0L) return emptyList()
+
+        val maxSamples = sampleRate.toLong() * chunkSeconds
+        val overlapSamples = sampleRate.toLong() * overlapSeconds
+        val ranges = ArrayList<SampleRange>()
+        var start = 0L
+        while (start < totalSamples) {
+            val end = minOf(totalSamples, start + maxSamples)
+            ranges += SampleRange(start, end)
+            if (end == totalSamples) break
+            start = end - overlapSamples
+        }
+        check(ranges.all { it.size in 1..maxSamples })
+        check(ranges.zipWithNext().all { (a, b) -> b.start < a.endExclusive })
+        return ranges
+    }
+
+    /** Junta transcrições removendo o maior sufixo/prefixo de palavras repetidas. */
+    fun merge(previous: String, next: String): String {
+        val left = previous.trim()
+        val right = next.trim()
+        if (left.isEmpty()) return right
+        if (right.isEmpty()) return left
+
+        val leftWords = left.split(Regex("\\s+"))
+        val rightWords = right.split(Regex("\\s+"))
+        val maxOverlap = minOf(MAX_OVERLAP_WORDS, leftWords.size, rightWords.size)
+        for (count in maxOverlap downTo 1) {
+            var matches = true
+            for (offset in 0 until count) {
+                val leftKey = normalizeWord(leftWords[leftWords.size - count + offset])
+                val rightKey = normalizeWord(rightWords[offset])
+                if (leftKey.isEmpty() || leftKey != rightKey) {
+                    matches = false
+                    break
+                }
+            }
+            if (matches) return (leftWords + rightWords.drop(count)).joinToString(" ").trim()
+        }
+        return "$left $right"
+    }
+
+    private fun normalizeWord(word: String): String =
+        word.lowercase(Locale.ROOT).filter { it.isLetterOrDigit() }
+}
+
 /**
  * Variantes do LLM editor — o trade-off que o usuário escolhe.
  *
@@ -464,26 +536,15 @@ object GraniteNarEngine {
     const val HIDDEN = 2048
     const val BLANK = 100257
 
-    /** Bucket padrão (maior): usado no load e como teto de duração. */
+    /** Bucket padrão (maior): usado no load e como teto de duração de cada inferência. */
     const val T_FIXED = 2000
     const val EMBEDDING_MULTIPLIER = 12.0f
 
     /** Taxa de amostragem exigida do WAV (`readWav16kMono`). */
     const val SAMPLE_RATE = 16000
 
-    /**
-     * Duração máxima aceita, em segundos — o número que a mensagem de erro mostra.
-     *
-     * O limite é `frames <= T_FIXED`, e `frames = amostras / (2 * HOP)`
-     * (`GraniteNarFrontend.outFrames`). Logo `amostras <= T_FIXED * 2 * HOP`, ou
-     * `T_FIXED * 2 * HOP / SAMPLE_RATE` segundos.
-     *
-     * ⚠️ A mensagem já usou `T_FIXED * HOP / SAMPLE_RATE` (HOP cru, sem o fator 2 do
-     * empilhamento) e anunciava **20 s** quando o limite real é **40 s**. O usuário evitaria
-     * áudios de 25-30 s que funcionam — um limite anunciado errado é pior que limite nenhum,
-     * porque ele decide por você.
-     */
-    const val MAX_AUDIO_SECONDS = T_FIXED * 2 * GraniteNarFrontend.HOP / SAMPLE_RATE
+    /** Maior duração de uma janela de inferência, determinada pelo shape estático exportado. */
+    const val MAX_CHUNK_SECONDS = T_FIXED * 2 * GraniteNarFrontend.HOP / SAMPLE_RATE
 
     /**
      * Folga exigida além do tamanho do download antes de começar.
@@ -1340,12 +1401,7 @@ object GraniteNarEngine {
         }
     }
 
-    /**
-     * Transcreve um WAV 16 kHz mono (single shot).
-     *
-     * O bucket do encoder/projector é escolhido pelo tamanho do áudio (o menor que caiba —
-     * ver [GraniteNarBuckets]); o teto de duração continua sendo [T_FIXED] frames.
-     */
+    /** Transcreve um WAV 16 kHz mono, dividindo arquivos longos em janelas compatíveis com o NAR. */
     fun transcribeFile(
         wavFile: File,
         onProgress: (Int) -> Unit = {},
@@ -1369,23 +1425,66 @@ object GraniteNarEngine {
         val pieces = vocab ?: throw IllegalStateException("vocab não carregado")
         val dir = sessDir ?: throw IllegalStateException("pacote não carregado")
 
-        val totalStartedAt = android.os.SystemClock.elapsedRealtime()
-        var stageStartedAt = totalStartedAt
+        val info = GraniteBinarySupport.readWav16kMonoInfo(wavFile, TAG)
+            ?: throw IllegalStateException("WAV inválido: esperado PCM 16-bit, mono, 16 kHz")
+        if (info.sampleCount == 0L) return ""
+        val ranges = GraniteNarChunking.plan(info.sampleCount)
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        onLog(
+            "NAR entrada: samples=${info.sampleCount} duração=" +
+                "${"%.1f".format(Locale.US, info.sampleCount / SAMPLE_RATE.toDouble())}s " +
+                "trechos=${ranges.size} janela=${GraniteNarChunking.CHUNK_SIZE_SECONDS}s " +
+                "sobreposição=${GraniteNarChunking.OVERLAP_SECONDS}s",
+        )
+        var transcript = ""
+        var lastProgress = 0
+        for ((index, range) in ranges.withIndex()) {
+            val wav = GraniteBinarySupport.readWav16kMonoChunk(
+                wavFile, info, range.start, range.size.toInt(), TAG,
+            ) ?: throw IllegalStateException("não consegui ler o trecho ${index + 1}/${ranges.size} do WAV")
+            val frontendStartedAt = android.os.SystemClock.elapsedRealtime()
+            val features = fe.compute(wav)
+            onLog("NAR trecho ${index + 1}/${ranges.size}: samples=${range.size} frames=${features.frames}")
+            onLog("NAR etapa frontend: ${android.os.SystemClock.elapsedRealtime() - frontendStartedAt}ms")
+            if (features.frames == 0) continue
+            if (features.frames > T_FIXED) {
+                throw IllegalStateException("trecho NAR excedeu o limite interno de $MAX_CHUNK_SECONDS segundos")
+            }
+
+            val coveredBefore = if (index == 0) 0L else ranges[index - 1].endExclusive
+            val newlyCoveredSamples = (range.endExclusive - coveredBefore).coerceAtLeast(0L)
+            val audioText = transcribeFeatures(
+                features = features,
+                pieces = pieces,
+                dir = dir,
+                onProgress = { localPercent ->
+                    val covered = coveredBefore + newlyCoveredSamples * localPercent / 100L
+                    val overall = ((covered.toDouble() * 100.0) / info.sampleCount)
+                        .toInt().coerceIn(lastProgress, 100)
+                    lastProgress = overall
+                    onProgress(overall)
+                },
+                onLog = onLog,
+            )
+            transcript = GraniteNarChunking.merge(transcript, audioText)
+        }
+        onProgress(100)
+        onLog("NAR inferência total: ${android.os.SystemClock.elapsedRealtime() - startedAt}ms")
+        return transcript.trim()
+    }
+
+    private fun transcribeFeatures(
+        features: GraniteFeatures,
+        pieces: List<String>,
+        dir: File,
+        onProgress: (Int) -> Unit,
+        onLog: (String) -> Unit,
+    ): String {
+        var stageStartedAt = android.os.SystemClock.elapsedRealtime()
         fun markStage(name: String) {
             val now = android.os.SystemClock.elapsedRealtime()
             onLog("NAR etapa $name: ${now - stageStartedAt}ms")
             stageStartedAt = now
-        }
-
-        val wav = GraniteBinarySupport.readWav16kMono(wavFile, TAG) ?: throw IllegalStateException("WAV inválido")
-        val features = fe.compute(wav)
-        markStage("frontend")
-        if (features.frames == 0) return ""
-        onLog("NAR entrada: samples=${wav.size} frames=${features.frames}")
-        if (features.frames > T_FIXED) {
-            throw IllegalStateException(
-                "áudio muito longo para o Granite 4.1 NAR nesta versão " +
-                    "(máx ~${MAX_AUDIO_SECONDS}s)")
         }
         val realFrames = features.frames
 
@@ -1494,7 +1593,6 @@ object GraniteNarEngine {
 
         val decoded = decodeByteLevel(pred, pieces)
         markStage("ctc final + decode")
-        onLog("NAR inferência total: ${android.os.SystemClock.elapsedRealtime() - totalStartedAt}ms")
         onProgress(100)
         return decoded.trim()
     }

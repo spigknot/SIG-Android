@@ -14,6 +14,11 @@ import java.io.RandomAccessFile
  */
 internal object GraniteBinarySupport {
 
+    /** Metadados do bloco PCM de um WAV mono/16 kHz, sem carregar as amostras na memória. */
+    data class Wav16kMonoInfo(val dataOffset: Long, val dataBytes: Long) {
+        val sampleCount: Long get() = dataBytes / 2L
+    }
+
     /**
      * Tabela de conversao caractere->byte do vocabulario byte-level: imprimiveis
      * ASCII/ISO-8859-1 mantem o codigo; os demais bytes recebem codepoints
@@ -134,6 +139,92 @@ internal object GraniteBinarySupport {
             }
         } catch (e: Throwable) {
             Log.e(logTag, "readWav16kMono failed", e)
+            null
+        }
+    }
+
+    /**
+     * Lê o cabeçalho RIFF e valida PCM 16-bit mono/16 kHz. O offset permite processar WAVs
+     * longos em janelas sem alocar um FloatArray para a gravação inteira.
+     */
+    fun readWav16kMonoInfo(file: File, logTag: String): Wav16kMonoInfo? {
+        return try {
+            RandomAccessFile(file, "r").use { raf ->
+                if (raf.length() < 12L) return null
+                val tag = ByteArray(4)
+                raf.readFully(tag)
+                if (String(tag) != "RIFF") return null
+                raf.skipBytes(4)
+                raf.readFully(tag)
+                if (String(tag) != "WAVE") return null
+
+                var format = 0
+                var channels = 0
+                var sampleRate = 0
+                var blockAlign = 0
+                var bits = 0
+                var dataOffset = -1L
+                var dataBytes = -1L
+                while (raf.filePointer + 8L <= raf.length()) {
+                    raf.readFully(tag)
+                    val chunkBytes = LittleEndianIo.leInt(raf).toLong() and 0xFFFF_FFFFL
+                    val chunkStart = raf.filePointer
+                    val chunkEnd = chunkStart + chunkBytes
+                    if (chunkEnd < chunkStart || chunkEnd > raf.length()) return null
+                    when (String(tag)) {
+                        "fmt " -> {
+                            if (chunkBytes < 16L) return null
+                            format = LittleEndianIo.leShort(raf).toInt() and 0xFFFF
+                            channels = LittleEndianIo.leShort(raf).toInt() and 0xFFFF
+                            sampleRate = LittleEndianIo.leInt(raf)
+                            raf.skipBytes(4) // byteRate
+                            blockAlign = LittleEndianIo.leShort(raf).toInt() and 0xFFFF
+                            bits = LittleEndianIo.leShort(raf).toInt() and 0xFFFF
+                        }
+                        "data" -> {
+                            dataOffset = chunkStart
+                            dataBytes = chunkBytes
+                        }
+                    }
+                    raf.seek(chunkEnd + (chunkBytes and 1L)) // RIFF chunks are word-aligned.
+                    if (dataOffset >= 0L && format != 0) break
+                }
+                if (format != 1 || channels != 1 || sampleRate != 16000 || blockAlign != 2 || bits != 16) {
+                    return null
+                }
+                if (dataOffset < 0L || dataBytes < 0L || dataBytes % 2L != 0L) return null
+                Wav16kMonoInfo(dataOffset, dataBytes)
+            }
+        } catch (e: Throwable) {
+            Log.e(logTag, "readWav16kMonoInfo failed", e)
+            null
+        }
+    }
+
+    /** Lê apenas [sampleCount] amostras PCM começando em [startSample]. */
+    fun readWav16kMonoChunk(
+        file: File,
+        info: Wav16kMonoInfo,
+        startSample: Long,
+        sampleCount: Int,
+        logTag: String,
+    ): FloatArray? {
+        return try {
+            if (startSample < 0L || sampleCount < 0 || startSample + sampleCount > info.sampleCount) return null
+            val bytes = ByteArray(sampleCount * 2)
+            val samples = FloatArray(sampleCount)
+            RandomAccessFile(file, "r").use { raf ->
+                raf.seek(info.dataOffset + startSample * 2L)
+                raf.readFully(bytes)
+            }
+            for (i in 0 until sampleCount) {
+                val lo = bytes[i * 2].toInt() and 0xFF
+                val hi = bytes[i * 2 + 1].toInt() and 0xFF
+                samples[i] = ((lo or (hi shl 8)).toShort() / 32768f)
+            }
+            samples
+        } catch (e: Throwable) {
+            Log.e(logTag, "readWav16kMonoChunk failed", e)
             null
         }
     }

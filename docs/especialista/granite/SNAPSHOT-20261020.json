@@ -1,0 +1,144 @@
+{
+  "schema_version": "sig-granite-planning-snapshot/v2",
+  "captured_at": "2026-10-20T19:08:05.0865334-03:00",
+  "timezone": "America/Sao_Paulo",
+  "scope": "documental; inventario somente leitura; sem novos benchmarks",
+  "repository": {
+    "root": "D:\\Projetos\\SIG",
+    "branch": "main",
+    "head": "d439008e549a5193c781f0a1ffd087be1378b730",
+    "dirty_before": true
+  },
+  "preserved_local_changes": [
+    {
+      "path": "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteBinarySupport.kt",
+      "bytes": 9441,
+      "sha256": "784365d922e78548aaf85ec325aca9fddb7867907f314ea3643437fb3243c327"
+    },
+    {
+      "path": "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteNarEngine.kt",
+      "bytes": 78918,
+      "sha256": "b72938ecdc8aadc4b965f65dc73bcc29d07aac2df81003d1c95c15739e9f48d2"
+    },
+    {
+      "path": "app/src/test/java/br/gov/sp/pcsp/launcher/GraniteBinarySupportTest.kt",
+      "bytes": 6421,
+      "sha256": "fa78d5482d9a71585a2540808517234ca1f85a332e7a01ddb9e76d8c96bdd962"
+    },
+    {
+      "path": "app/src/test/java/br/gov/sp/pcsp/launcher/GraniteNarEngineTest.kt",
+      "bytes": 23947,
+      "sha256": "1b4607d2aac3d6b45eb09228fbc357ccfd9019aaa9a7674485fecdad837eb443"
+    },
+    {
+      "path": "docs/granite-nar-design.md",
+      "bytes": 7233,
+      "sha256": "77c4d600cba8482f99b862d5e2e28f295ac74d9272e2e2ababd439156325b5b5"
+    }
+  ],
+  "reference_inputs": [
+    {
+      "path": "AGENTS.md",
+      "bytes": 6910,
+      "sha256": "495c511155bd579102e3ff22a8f93a46305b8393af115ee1b27e291ba69e5b9e"
+    },
+    {
+      "path": "MODULE-MAP.md",
+      "bytes": 12303,
+      "sha256": "16656da5caacacdeea2f941187a1317e26e148fc5434ef25bb9a81edd1c3315d"
+    },
+    {
+      "path": "docs/especialista/granite/PLANO-GRANITE-20261009.md",
+      "bytes": 47993,
+      "sha256": "71af0d5fa5eb468753d83041efbb0cf6025165a83d0ded3cb3c201f143722e27"
+    },
+    {
+      "path": "docs/especialista/granite/ORDEM-G01-20261009.md",
+      "bytes": 17548,
+      "sha256": "488f3aab8d9da16f72eb505220159af4a1dabbc1a3eb402825c6377e086ff8d3"
+    },
+    {
+      "path": "docs/especialista/DOSSIE-TRANSFERENCIA-HYMT2-PARA-WHISPER-NPU.txt",
+      "bytes": 9140,
+      "sha256": "e8ab5420a280b995c324c35f23234de991c0d533de022ad0225d531b0f984244"
+    },
+    {
+      "path": "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt",
+      "bytes": 38578,
+      "sha256": "cc17bffc60e85ec533188bb92f62846937cdd42228cff1c5be0a59f35beb577d"
+    },
+    {
+      "path": "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteActivity.kt",
+      "bytes": 116077,
+      "sha256": "f2f8c4a1a4285f58fb633995214f9d7e14d86f63cca118bf2f666acb7bb64952"
+    },
+    {
+      "path": "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteNarManifest.kt",
+      "bytes": 6691,
+      "sha256": "52a949583b55f5d26206c599d68e14087409116dfc3b39108b03c394e088eb01"
+    },
+    {
+      "path": "app/src/main/java/br/gov/sp/pcsp/launcher/QairtDependencyManager.kt",
+      "bytes": 18337,
+      "sha256": "920e4a60c16fefc5c3d519788211869de4b8bff9a96689db86a15a11dab61855"
+    },
+    {
+      "path": "app/src/main/java/br/gov/sp/pcsp/launcher/NativeDependencyManager.kt",
+      "bytes": 24298,
+      "sha256": "ce1fd26ccc3facf2b18671fdb4e1066becde613f959430637479f354e1df1075"
+    },
+    {
+      "path": "app/src/debug/java/br/gov/sp/pcsp/launcher/GraniteNarSmokeTestActivity.kt",
+      "bytes": 14713,
+      "sha256": "aa653200247cb9a43a467ed06d044252fcd29f2285c4501d8b8ae37d3f7f5f21"
+    },
+    {
+      "path": "app/src/debug/java/br/gov/sp/pcsp/launcher/GraniteNarBenchmarkProtocol.kt",
+      "bytes": 5053,
+      "sha256": "b0800db7f9971bcaa70432249efbcafa7371fd55d037dd3ae99a820fcb721623"
+    },
+    {
+      "path": "scripts/run-granite-nar-adb-benchmark.ps1",
+      "bytes": 10610,
+      "sha256": "4c6cdfdb9cec197f7a883f3574661543d710f94a9ff44b30be383601c96ecad1"
+    },
+    {
+      "path": "tools/granite/nar/export_static.py",
+      "bytes": 9048,
+      "sha256": "0b853391cb4ccc367b147f1817faaac9d2cbf4842b5f749708298f3865ba3557"
+    }
+  ],
+  "device_inventory": {
+    "command": "adb devices -l",
+    "exit_code": 0,
+    "raw": "List of devices attached\r\n1164a04                device product:PJA110 model:PJA110 device:OP5943L1 transport_id:38",
+    "reserved": false,
+    "mutations_performed": false
+  },
+  "disk": [
+    {
+      "drive": "C",
+      "free_bytes": 266179424256,
+      "used_bytes": 756932952064
+    },
+    {
+      "drive": "D",
+      "free_bytes": 140064788480,
+      "used_bytes": 884143349760
+    }
+  ],
+  "historical_paths": [
+    "D:/SIG-perfis-20260914-123811",
+    "D:/SIG-granite-nar-lab-rebuild/nar-next-20260914-0950"
+  ],
+  "primary_sources_consulted_on": "2026-10-20",
+  "first_order": "PROMPTS-20261020/FASE-00-REBASELINE.md",
+  "external_executor_dispatched": false,
+  "model_weights_downloaded": false,
+  "production_source_edited_by_this_delivery": false,
+  "limitations": [
+    "Inventario nao reserva dispositivo nem comprova runtime carregado",
+    "F00 deve confirmar mudancas posteriores e proveniencia dos modelos",
+    "Testes e inferencias historicos nao foram reexecutados nesta entrega"
+  ]
+}

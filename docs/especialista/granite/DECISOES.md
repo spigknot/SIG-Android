@@ -20,3 +20,22 @@ Registro inicial de 09/10/2026, plano v1.0. Decisões prospectivas não mudam ve
 Hipóteses refutadas no histórico: Android 16 impede universalmente FastRPC sem root; nome fp16 prova dtype; rótulo NPU prova execução integral; título sessão reutilizada prova warm; end mede memória antes de release; ausência de amostra no extrator prova ausência no stream; extensão/bits declarados provam quantização; referência do modelo é verdade humana. O [histórico auditado](HISTORICO-EVIDENCIAS-20261008.md) limita cada refutação aos seus dados.
 
 Novas decisões acrescentam linha com data, evidência e escopo. Não remover hipóteses refutadas nem trocar critérios depois de olhar o resultado para aprovar o mesmo candidato.
+
+## Adições da revisão v2 — 20/10/2026
+
+| ID | Decisão e status | Fundamento | Condição para rever |
+|---|---|---|---|
+| D13 | Rebaseline F00 antes da nova campanha | main e alterações locais diferem do snapshot de 09/10; disponibilidade de aparelho mudou | Inventário/parecer F00 fixa a base efetiva |
+| D14 | Dossiê Hy-MT2 transfere metodologia, não comandos nem aprovação | Documento é referência para Whisper; encerra com kernel/Smart sem aprovação global | Evidência nova identificada pode informar decisão Granite própria |
+| D15 | Smart principal é encoder HTP e editor bidirecional OpenCL/Vulkan | Arquitetura NAR de passagem única | Modelo AR separado na ordem FAR; nunca mudar causalidade do NAR para imitar Hy-MT2 |
+| D16 | Áudio longo primeiro sobre janela validada; 60 s é investigação independente | Chunking local de 40 s ainda sem aceitação real; T3000/S maior mudam custo/contrato | F03/F04 demonstram cobertura/qualidade/memória e teto por perfil |
+| D17 | Janela de arquivo, T, S e contexto interno são dimensões distintas | Código frontend/export e config oficial | Outro frontend/modelo exige nova derivação versionada |
+| D18 | Deduplicação global ou igualdade lexical isolada não aprova junção | Repetições legítimas podem ser removidas | Alinhamento/ownership e corpus dirigido comprovam a estratégia de fronteira |
+| D19 | MNN é primeiro piloto comum GPU, sem promessa de suporte NAR | Conversão e APIs OpenCL/Vulkan disponíveis no projeto oficial | Bloqueio mínimo concreto justifica alternativa, com controle idêntico |
+| D20 | HTP começa com sonda e buckets pequenos protegidos | Histórico de crash t2000 e compatibilidade de runtime específica | Prova isolada/parecer por bucket e versão |
+| D21 | Provar backend efetivo por estágio e fallback | Labels, bibliotecas e provider registrado não são execução | Evidência de partição/profiling completa fecha a atribuição |
+| D22 | Atenção fundida/Flash será avaliada no backend Android real | Pacote FlashAttention CUDA/ROCm não é implementação Adreno pronta | Kernel equivalente correto e dispatch real permitem ablação |
+| D23 | Comparação por qualidade/cortes iguais e por configuração de produto em braços separados | Evita atribuir a hardware mudança de modelo/chunk/padding | Novo desenho pode melhorar controle sem perder atribuição |
+| D24 | Critérios numéricos/qualidade/performance prospectivos, antes da confirmação | Evita selecionar tolerância após resultado; corpus CPU não é verdade humana | Revisão de critério exige nova versão e não reaprova legado |
+| D25 | A→B→A e gerações íntegras obrigatórios na integração | Pedido original de cache/progresso e novas variantes de artefato | Contrato diferente precisa preservar persistência e rollback |
+| D26 | Uma fase por despacho, relatório e parecer | Fluxo explicitamente pedido pelo usuário | Usuário altera o fluxo; prompts futuros continuam condicionais até lá |

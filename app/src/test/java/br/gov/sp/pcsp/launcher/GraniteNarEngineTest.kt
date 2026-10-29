@@ -457,35 +457,77 @@ class GraniteNarEngineTest {
         }
     }
 
-    /**
-     * A duração máxima ANUNCIADA tem de ser o limite REAL.
-     *
-     * O limite é `frames <= T_FIXED` e `frames = amostras / (2*HOP)`. A mensagem de erro já usou
-     * o HOP cru e anunciava **20 s** quando o limite real é **40 s** — o usuário evitaria áudios
-     * de 25-30 s que funcionam. Este teste chama a função de PRODUÇÃO (`outFrames`) para provar
-     * que o número anunciado é exatamente o ponto onde o áudio para de caber: se alguém mudar o
-     * `HOP`, o empilhamento ou o `T_FIXED`, o teste falha junto com a mensagem.
-     */
+    /** O tamanho de cada janela deve corresponder ao limite real dos grafos estáticos. */
     @Test
-    fun `max audio seconds equals the real frame limit`() {
+    fun `max chunk seconds equals the real frame limit`() {
         val frontend = GraniteNarFrontend(
             FloatArray(GraniteNarFrontend.N_MELS * GraniteNarFrontend.N_FREQS),
             FloatArray(GraniteNarFrontend.N_FFT),
         )
         // 2000 frames * 2 * hop 160 / 16000 Hz = 40 s
-        assertEquals(40, GraniteNarEngine.MAX_AUDIO_SECONDS)
+        assertEquals(40, GraniteNarEngine.MAX_CHUNK_SECONDS)
+        assertEquals(GraniteNarEngine.MAX_CHUNK_SECONDS, GraniteNarChunking.CHUNK_SIZE_SECONDS)
 
-        val noLimite = GraniteNarEngine.MAX_AUDIO_SECONDS * GraniteNarEngine.SAMPLE_RATE
+        val noLimite = GraniteNarEngine.MAX_CHUNK_SECONDS * GraniteNarEngine.SAMPLE_RATE
         assertTrue(
-            "audio EXATAMENTE no limite anunciado tem de caber",
+            "trecho EXATAMENTE no limite do grafo tem de caber",
             frontend.outFrames(noLimite) <= GraniteNarEngine.T_FIXED,
         )
-        // Um segundo a mais nao cabe: prova que o limite anunciado nao esta folgado demais.
+        // Um segundo a mais não cabe em uma inferência; o planejador divide o arquivo.
         assertTrue(
-            "um segundo alem do limite anunciado NAO pode caber",
+            "um segundo além do limite não cabe em uma única inferência",
             frontend.outFrames(noLimite + GraniteNarEngine.SAMPLE_RATE) > GraniteNarEngine.T_FIXED,
         )
-        // E um audio curto tem de sobrar espaco (guarda contra limite anunciado pequeno demais).
+        // Um trecho curto deve sobrar espaço (guarda contra limite pequeno demais).
         assertTrue(frontend.outFrames(10 * GraniteNarEngine.SAMPLE_RATE) < GraniteNarEngine.T_FIXED)
+    }
+
+    @Test
+    fun `audio longo e dividido em janelas sobrepostas sem lacunas`() {
+        val sampleRate = GraniteNarEngine.SAMPLE_RATE.toLong()
+        val chunk = GraniteNarChunking.CHUNK_SIZE_SECONDS * sampleRate
+        val overlap = GraniteNarChunking.OVERLAP_SECONDS * sampleRate
+        val total = chunk * 2 + 7 * sampleRate
+
+        val ranges = GraniteNarChunking.plan(total)
+
+        assertEquals(3, ranges.size)
+        assertEquals(0L, ranges.first().start)
+        assertEquals(chunk, ranges.first().endExclusive)
+        assertEquals(chunk - overlap, ranges[1].start)
+        assertEquals(total, ranges.last().endExclusive)
+        assertTrue(ranges.all { it.size <= chunk })
+        assertTrue(ranges.zipWithNext().all { (a, b) -> b.start < a.endExclusive })
+    }
+
+    @Test
+    fun `audio de ate um chunk permanece em uma unica janela`() {
+        val total = GraniteNarChunking.CHUNK_SIZE_SECONDS * GraniteNarEngine.SAMPLE_RATE.toLong()
+        val ranges = GraniteNarChunking.plan(total)
+
+        assertEquals(1, ranges.size)
+        assertEquals(0L, ranges.single().start)
+        assertEquals(total, ranges.single().endExclusive)
+        assertTrue(GraniteNarChunking.plan(0L).isEmpty())
+    }
+
+    @Test
+    fun `merge remove palavras repetidas na sobreposicao`() {
+        assertEquals(
+            "falamos sobre o rio ontem",
+            GraniteNarChunking.merge("falamos sobre o rio", "o rio ontem"),
+        )
+        assertEquals(
+            "Falamos sobre o rio ontem.",
+            GraniteNarChunking.merge("Falamos sobre o rio", "O rio ontem."),
+        )
+    }
+
+    @Test
+    fun `merge preserva os dois trechos sem sobreposicao`() {
+        assertEquals(
+            "primeira parte segunda parte",
+            GraniteNarChunking.merge("primeira parte", "segunda parte"),
+        )
     }
 }

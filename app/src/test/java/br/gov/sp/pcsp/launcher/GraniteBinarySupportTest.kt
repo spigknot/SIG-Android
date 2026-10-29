@@ -131,10 +131,26 @@ class GraniteBinarySupportTest {
     }
 
     @Test
+    fun readWav16kMonoChunk_leApenasFaixaSolicitada() {
+        val f = File(temp.root, "chunk.wav")
+        f.writeBytes(wav16kMono(shortArrayOf(0, 8192, -16384, 32767)))
+        val info = GraniteBinarySupport.readWav16kMonoInfo(f, "Teste")!!
+
+        assertEquals(4L, info.sampleCount)
+        assertArrayEquals(
+            floatArrayOf(8192 / 32768f, -16384 / 32768f),
+            GraniteBinarySupport.readWav16kMonoChunk(f, info, 1L, 2, "Teste")!!,
+            1e-6f,
+        )
+        assertNull(GraniteBinarySupport.readWav16kMonoChunk(f, info, 3L, 2, "Teste"))
+    }
+
+    @Test
     fun readWav16kMono_taxdiferente_devolveNull() {
         val f = File(temp.root, "b.wav")
         f.writeBytes(wav16kMono(shortArrayOf(1, 2), sampleRate = 8000))
         assertNull(GraniteBinarySupport.readWav16kMono(f, "Teste"))
+        assertNull(GraniteBinarySupport.readWav16kMonoInfo(f, "Teste"))
     }
 
     @Test
@@ -142,6 +158,7 @@ class GraniteBinarySupportTest {
         val f = File(temp.root, "c.wav")
         f.writeBytes(wav16kMono(shortArrayOf(1, 2, 3, 4), channels = 2))
         assertNull(GraniteBinarySupport.readWav16kMono(f, "Teste"))
+        assertNull(GraniteBinarySupport.readWav16kMonoInfo(f, "Teste"))
     }
 
     @Test
@@ -149,5 +166,6 @@ class GraniteBinarySupportTest {
         val f = File(temp.root, "d.wav")
         f.writeBytes("NOPE".toByteArray() + ByteArray(60))
         assertNull(GraniteBinarySupport.readWav16kMono(f, "Teste"))
+        assertNull(GraniteBinarySupport.readWav16kMonoInfo(f, "Teste"))
     }
 }
