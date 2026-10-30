@@ -116,6 +116,7 @@ também é bloqueado.
 | `RequestModelLabel.kt` | Rótulo curto do modelo usado numa requisição. |
 | `TextModelStream.kt` | Parsing incremental SSE/NDJSON dos modelos de texto, com prévias e validação de término. |
 | `LocalTextModel.kt` | Identificador e nome legível do modelo anunciado em /v1/models. |
+| `LocalGraniteModel.kt` | Identificador do modelo Granite NAR anunciado em /health. |
 | `ServiceEndpoints.kt` | Endpoints oficiais embutidos no app. |
 | `LittleEndianIo.kt` | Leitura/escrita little-endian (WAV/pacotes). |
 | `GraniteBinarySupport.kt` | Byte↔codepoint, cadeia de erro, WAV 16k mono, floats. |
@@ -180,7 +181,7 @@ também é bloqueado.
 | Arquivo | Responsabilidade |
 |---|---|
 | `ModelServerStore.kt` | Servidores/modelos configurados (texto e transcrição). |
-| `TranscriptionModelStore.kt` | Modelos de transcrição selecionados. |
+| `TranscriptionModelStore.kt` | Modelos de transcrição selecionados e cache em memória do modelo Granite NAR anunciado. |
 | `PromptTemplateStore.kt` | Prompts em uso da ferramenta Ocorrência + prompts legados de partes/qualificação. |
 | `GrokApiSettings.kt` | Preferências e chaves das integrações de API. |
 | `GeminiSttQuotaStore.kt` | Persistencia privada da cota Gemini por hash da chave, sem segredos. |

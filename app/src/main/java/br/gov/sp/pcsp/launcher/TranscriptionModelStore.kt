@@ -10,6 +10,15 @@ import org.json.JSONObject
 object TranscriptionModelStore {
     const val SERVER_NAME = "servidor"
 
+    @Volatile private var discoveredGraniteModel = ""
+
+    internal fun graniteModelId(): String = discoveredGraniteModel
+
+    internal fun updateGraniteModel(modelId: String) {
+        val normalized = modelId.trim()
+        if (normalized.isNotEmpty()) discoveredGraniteModel = normalized
+    }
+
     data class Config(
         val name: String,
         val url: String,
@@ -24,6 +33,8 @@ object TranscriptionModelStore {
         val isAlibabaApi: Boolean = false
     ) {
         val modelName: String get() = parameters.optString("model").ifBlank { "modelo não informado" }
+        val displayModelName: String
+            get() = if (name == SERVER_NAME) graniteModelId().ifBlank { modelName } else modelName
     }
 
     fun readConfigs(): List<Config> {
