@@ -147,6 +147,25 @@ object SttLanguageSettings {
 
     fun isValidAlibaba(code: String): Boolean = code in ALIBABA_CODES
 
+    /** Nemotron (servidor STT local): códigos aceitos em `language=`.
+     *  `fil`/`tl` e `nb`/`nn`/`no` são sinônimos aceitos pelo servidor; o
+     *  código vai SEMPRE em minúsculas. */
+    val NEMOTRON_CODES: Set<String> = setOf(
+        "ar", "bg", "bn", "cs", "da", "de", "el", "en", "es", "et", "fi", "fil",
+        "tl", "fr", "he", "hi", "hr", "hu", "hy", "id", "it", "ja", "ko", "lt",
+        "lv", "mt", "nb", "nn", "no", "nl", "pl", "pt", "ro", "ru", "sk", "sl",
+        "sv", "ta", "th", "tr", "uk", "vi", "zh"
+    )
+
+    /** Código do Nemotron normalizado (minúsculo); null = não aceito. */
+    fun normalizeNemotronCode(code: String): String? {
+        // `lowercase()` do Kotlin é independente de locale (Locale.ROOT).
+        val normalized = code.trim().lowercase()
+        return normalized.takeIf { it.isNotEmpty() && it in NEMOTRON_CODES }
+    }
+
+    fun isValidNemotron(code: String): Boolean = normalizeNemotronCode(code) != null
+
     /** Códigos inválidos para o provedor (lista vazia = tudo válido). */
     fun invalidCodes(provider: String, codes: List<String>): List<String> = codes.filter { code ->
         when (provider) {
@@ -157,6 +176,7 @@ object SttLanguageSettings {
             "grok" -> !isValidGrok(code)
             "metamuse", "muse" -> !isValidMuse(code)
             "alibaba" -> !isValidAlibaba(code)
+            "nemotron" -> !isValidNemotron(code)
             else -> false
         }
     }
@@ -170,6 +190,22 @@ object SttLanguageSettings {
         deepgramLanguageParam(
             mode = GrokApiSettings.deepgramLanguageMode(),
             custom = GrokApiSettings.deepgramCustomLanguage()
+        )
+
+    // ---------------- Nemotron (servidor local): language=<código> ----------------
+
+    /** `language=<código>`; null = detecção automática (o campo é OMITIDO).
+     *  Um único idioma por requisição: em "custom" vale o primeiro código. */
+    fun nemotronLanguageParam(mode: String, custom: String): String? = when {
+        mode == "multi" -> null
+        mode == "custom" -> parseCodes(custom).firstOrNull()?.let(::normalizeNemotronCode)
+        else -> normalizeNemotronCode(mode)
+    }
+
+    fun nemotronLanguageParam(): String? =
+        nemotronLanguageParam(
+            mode = GrokApiSettings.nemotronLanguageMode(),
+            custom = GrokApiSettings.nemotronCustomLanguage()
         )
 
     // ---------------- AssemblyAI: language_code (REST) / language_codes (WS) ----------------

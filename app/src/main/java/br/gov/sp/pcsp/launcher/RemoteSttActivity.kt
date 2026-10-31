@@ -199,6 +199,11 @@ class RemoteSttActivity : AppCompatActivity() {
     private lateinit var grokDiarizeRow: View
     private lateinit var checkboxLiveDiarize: CheckBox
     private var checkboxGeminiTimestamps: CheckBox? = null
+
+    /** "Tempos por palavra" da Ocorrência: só existe no motor Nemotron. */
+    private var checkboxLiveTimestamps: CheckBox? = null
+    private var serverModelCall: Call? = null
+    private var serverModelCheckedAt = 0L
     private lateinit var buttonLiveDiarizeHelp: TextView
     private lateinit var buttonLiveDiarizeRealtimeHelp: TextView
     private lateinit var buttonLiveKeywords: TextView
@@ -511,6 +516,11 @@ class RemoteSttActivity : AppCompatActivity() {
             isChecked = GrokApiSettings.geminiTimestamps()
             setOnCheckedChangeListener { _, checked -> GrokApiSettings.setGeminiTimestamps(checked) }
         }
+        checkboxLiveTimestamps = findViewById(R.id.checkbox_live_timestamps)
+        checkboxLiveTimestamps?.apply {
+            isChecked = GrokApiSettings.nemotronTimestamps()
+            setOnCheckedChangeListener { _, checked -> GrokApiSettings.setNemotronTimestamps(checked) }
+        }
         buttonLiveDiarizeHelp = findViewById(R.id.button_live_diarize_help)
         buttonLiveDiarizeRealtimeHelp = findViewById(R.id.button_live_diarize_realtime_help)
         buttonLiveKeywords = findViewById(R.id.button_live_keywords)
@@ -812,6 +822,7 @@ class RemoteSttActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         handler.post(progressTicker)
+        refreshServerModelAsync()
         refreshGrokApiControls()
         updateBatchOptionVisibility()
         refreshModelSummaryStatusIfIdle()
@@ -819,10 +830,44 @@ class RemoteSttActivity : AppCompatActivity() {
 
     override fun onPause() {
         saveInMemoryDraft()
+        serverModelCall?.cancel()
+        serverModelCall = null
         handler.removeCallbacks(progressTicker)
         pausePreview()
         setPlaybackButtonPlaying(false)
         super.onPause()
+    }
+
+    /**
+     * Relê o modelo ativo do servidor local para as telas refletirem a troca
+     * de motor feita no painel do servidor. Usa a MESMA detecção do `/health`
+     * ([LocalGraniteModel]) — este app não tem outra forma de descobrir modelo.
+     */
+    private fun refreshServerModelAsync() {
+        serverModelCall?.cancel()
+        serverModelCall = LocalGraniteModel.fetch(client) { result ->
+            result.onSuccess { modelId ->
+                TranscriptionModelStore.updateGraniteModel(modelId)
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        refreshGrokApiControls()
+                        refreshModelSummaryStatusIfIdle()
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Relê o modelo antes de enviar áudio (fora da UI). Um cache curto evita
+     * uma consulta por arquivo/fatia, mas o envio nunca usa um motor que o
+     * painel do servidor já trocou: falha de `/health` mantém o último lido.
+     */
+    private fun refreshServerModelBeforeRequest() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - serverModelCheckedAt < SERVER_MODEL_FRESH_MILLIS) return
+        serverModelCheckedAt = now
+        LocalGraniteModel.fetchBlocking(client)?.let(TranscriptionModelStore::updateGraniteModel)
     }
 
     override fun onDestroy() {
@@ -2739,20 +2784,6 @@ class RemoteSttActivity : AppCompatActivity() {
         )
     }
 
-    private fun MultipartBody.Builder.addTranscriptionParameters(
-        config: TranscriptionModelStore.Config
-    ): MultipartBody.Builder {
-        val keys = config.parameters.keys()
-        while (keys.hasNext()) {
-            val key = keys.next()
-            if (key.equals("file", true) || key.equals("files", true)) continue
-            val value = config.parameters.opt(key)
-            if (value == null || value == JSONObject.NULL) continue
-            addFormDataPart(key, if (value is String) value else value.toString())
-        }
-        return this
-    }
-
     private fun buildMultipartBody(spec: SttRequestSpec, uploadFile: UploadFile): RequestBody {
         val fileField = requireNotNull(spec.fileField) { "Contrato STT sem campo de arquivo." }
         return MultipartBody.Builder()
@@ -2792,16 +2823,20 @@ class RemoteSttActivity : AppCompatActivity() {
         if (config.isMetamuseApi) return sendMetamuseApiTranscription(uploadFile, isFinal)
         if (config.isGeminiApi) return sendGeminiApiTranscription(uploadFile, isFinal)
         if (config.isAlibabaApi) return sendAlibabaApiTranscription(uploadFile, isFinal)
-        val requestBody = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addTranscriptionParameters(config)
-            .addFormDataPart("files", uploadFile.file.name, uploadFile.file.asRequestBody(uploadFile.mime.toMediaType()))
-            .build()
-        val request = Request.Builder()
-            .url(config.url)
-            .addHeader("accept", "application/json")
-            .post(requestBody)
-            .build()
+        refreshServerModelBeforeRequest()
+        // O servidor local muda de contrato com o motor anunciado em /health:
+        // Granite -> /transcribe + `files`, sem campos avançados; Nemotron ->
+        // /v1/audio/transcriptions + `file` + só o que estiver marcado.
+        val nemotron = TranscriptionModelStore.nemotronActive()
+        val diarize = nemotron && checkboxLiveDiarize.isChecked && checkboxLiveDiarize.isEnabled
+        val timestamps = nemotron && isLiveTimestampsChecked()
+        val spec = SttRequestBuilders.localServerOccurrence(
+            engine = if (nemotron) LocalServerEngine.NEMOTRON else LocalServerEngine.GRANITE,
+            language = if (nemotron) SttLanguageSettings.nemotronLanguageParam() else null,
+            diarize = diarize,
+            timestamps = timestamps
+        )
+        val request = buildPostRequest(spec, buildMultipartBody(spec, uploadFile))
         // A requisição FINAL (áudio integral) usa client com timeout: um servidor
         // que não responde não pode travar a finalização para sempre.
         val call = (if (isFinal) finalizationClient else client).newCall(request)
@@ -2817,6 +2852,9 @@ class RemoteSttActivity : AppCompatActivity() {
                     throw IllegalStateException("servidor respondeu ${response.code}")
                 }
                 val bodyText = response.body?.string().orEmpty()
+                if (nemotron) {
+                    return SttResponseParsers.formatLocalServerTranscript(bodyText, diarize, timestamps)
+                }
                 return SttResponseParsers.parseResponseItems(bodyText).joinToString("\n") { it.text.trim() }
             }
         } finally {
@@ -3293,6 +3331,10 @@ class RemoteSttActivity : AppCompatActivity() {
             config.isGeminiApi -> "gemini"
             config.isAlibabaApi -> "alibaba"
             config.isGrokApi -> "grok"
+            // Servidor local no motor Nemotron: único caso do servidor com
+            // seletor de idioma (o Granite não aceita `language`).
+            config.name == TranscriptionModelStore.SERVER_NAME &&
+                TranscriptionModelStore.nemotronActive() -> "nemotron"
             else -> null
         }
         if (apiProvider == null) {
@@ -3337,6 +3379,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "metamuse" -> GrokApiSettings.setMetamuseLanguageMode(mode)
             "alibaba" -> GrokApiSettings.setAlibabaLanguageMode(mode)
             "grok" -> GrokApiSettings.setGrokLanguageMode(mode)
+            "nemotron" -> GrokApiSettings.setNemotronLanguageMode(mode)
         }
     }
 
@@ -3349,6 +3392,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "metamuse" -> GrokApiSettings.metamuseLanguageMode() to GrokApiSettings.metamuseCustomLanguage()
             "alibaba" -> GrokApiSettings.alibabaLanguageMode() to GrokApiSettings.alibabaCustomLanguage()
             "grok" -> GrokApiSettings.grokLanguageMode() to GrokApiSettings.grokCustomLanguage()
+            "nemotron" -> GrokApiSettings.nemotronLanguageMode() to GrokApiSettings.nemotronCustomLanguage()
             else -> return selectedLiveLanguage.shortLabel
         }
         return if (mode == "custom" && custom.isNotBlank()) custom else languageLabel(mode, provider)
@@ -3361,9 +3405,11 @@ class RemoteSttActivity : AppCompatActivity() {
         }
         val edit = EditText(this).apply {
             if (provider == "gemini") setText(GrokApiSettings.geminiCustomLanguage())
+            if (provider == "nemotron") setText(GrokApiSettings.nemotronCustomLanguage())
             hint = when (provider) {
                 "gemini" -> "Ex: pt-BR, en-US"
                 "deepgram" -> "código do idioma (ex.: fr-CA)"
+                "nemotron" -> "um código (ex.: pt, en, de)"
                 else -> "Ex: en, es, pt"
             }
             setSingleLine(true)
@@ -3391,6 +3437,8 @@ class RemoteSttActivity : AppCompatActivity() {
             .setTitle("Código do idioma")
             .setMessage(
                 if (provider == "deepgram") "Digite o código do idioma desejado."
+                // Nemotron aceita UM idioma por requisição.
+                else if (provider == "nemotron") "Digite um código de idioma aceito pelo Nemotron."
                 else "Digite um ou mais códigos, separados por vírgula."
             )
             .setView(container)
@@ -3412,6 +3460,7 @@ class RemoteSttActivity : AppCompatActivity() {
                         "metamuse", "muse" -> "Muse Voice"
                         "alibaba" -> "Alibaba Fun ASR/Qwen"
                         "grok" -> "Grok"
+                        "nemotron" -> "Nemotron 3.5 Transcribe"
                         else -> "Scribe v2"
                     }
                     val listed = invalid.joinToString(", ")
@@ -3449,6 +3498,10 @@ class RemoteSttActivity : AppCompatActivity() {
                             GrokApiSettings.setGrokCustomLanguage(normalized)
                             GrokApiSettings.setGrokLanguageMode("custom")
                         }
+                        "nemotron" -> {
+                            GrokApiSettings.setNemotronCustomLanguage(normalized)
+                            GrokApiSettings.setNemotronLanguageMode("custom")
+                        }
                     }
                     refreshLiveLanguageButton()
                     dialog.dismiss()
@@ -3466,6 +3519,7 @@ class RemoteSttActivity : AppCompatActivity() {
             "metamuse", "muse" -> SttLanguageSettings.MUSE_CODE_TO_LANGUAGE.keys.sorted().joinToString(", ")
             "alibaba" -> SttLanguageSettings.ALIBABA_CODES.sorted().joinToString(", ")
             "grok" -> SttLanguageSettings.GROK_CODES.sorted().joinToString(", ")
+            "nemotron" -> SttLanguageSettings.NEMOTRON_CODES.sorted().joinToString(", ")
             // ElevenLabs: a tela "?" mostra APENAS os códigos de 2 letras.
             else -> SttLanguageSettings.ELEVENLABS_CODES_2.sorted().joinToString(", ")
         }
@@ -3488,6 +3542,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     "metamuse", "muse" -> "Códigos aceitos pelo Muse Voice"
                     "alibaba" -> "Códigos aceitos pelo Alibaba Fun ASR/Qwen"
                     "grok" -> "Códigos aceitos pelo Grok (xAI)"
+                    "nemotron" -> "Códigos aceitos pelo Nemotron 3.5 Transcribe"
                     else -> "Códigos de idioma do Scribe v2"
                 }
             )
@@ -3779,17 +3834,21 @@ class RemoteSttActivity : AppCompatActivity() {
         val apiTranscription = config.isGrokApi || config.isDeepgramApi ||
             config.isAssemblyaiApi || config.isElevenlabsApi || config.isMetamuseApi ||
             config.isAlibabaApi || config.isGeminiApi
-        // Granite (servidor/NAR) não oferece seleção de idioma nem
-        // diarização; todos os demais modelos exibem ambos.
-        val graniteModel = config.name == TranscriptionModelStore.SERVER_NAME
+        // Servidor local: com Granite não há idioma, diarização nem tempos por
+        // palavra (o motor não aceita esses parâmetros). Com Nemotron há
+        // idioma nas DUAS abas e diarização/tempos SÓ na Ocorrência.
+        val localServer = config.name == TranscriptionModelStore.SERVER_NAME
+        val nemotron = localServer && TranscriptionModelStore.nemotronActive()
         // Regra de diarização por provedor: Deepgram, AssemblyAI, Grok e Muse
         // sempre; Scribe v2 só em REST (a Ocorrência usa WebSocket/Realtime);
-        // granite não exibe a checkbox.
+        // Granite nunca; Nemotron só na Ocorrência.
         val apiProvider = currentApiProvider()
-        val diarizeEnabled = apiProvider != null &&
-            SttDiarization.supportsDiarize(apiProvider, isLive = !transcriptionMode)
-        // A checkbox nem aparece apenas para o granite (não suporta).
-        val diarizeHidden = graniteModel
+        val diarizeEnabled = (apiProvider != null &&
+            SttDiarization.supportsDiarize(apiProvider, isLive = !transcriptionMode)) ||
+            (nemotron && !transcriptionMode)
+        // A checkbox nem aparece para o Granite e, no Nemotron, fica fora da
+        // Transcrição (lá o único campo avançado é o idioma).
+        val diarizeHidden = localServer && (!nemotron || transcriptionMode)
         // Para o granite, escondemos apenas os filhos (idioma/diarização); o
         // cronômetro vive na mesma linha e precisa continuar visível na
         // Ocorrência. Na Transcrição o row só existe para API (o timer não aparece).
@@ -3798,10 +3857,14 @@ class RemoteSttActivity : AppCompatActivity() {
         // O "?" vermelho (aviso REST vs WebSocket) só existe para o ElevenLabs.
         buttonLiveDiarizeRealtimeHelp.visibility =
             if (!diarizeHidden && config.isElevenlabsApi) View.VISIBLE else View.GONE
-        buttonLiveLanguage.visibility = if (graniteModel) View.GONE else View.VISIBLE
+        buttonLiveLanguage.visibility = if (localServer && !nemotron) View.GONE else View.VISIBLE
+        // "Tempos por palavra": campo avançado do Nemotron, só na Ocorrência.
+        // Ausente no layout da Transcrição (findViewById devolve null).
+        checkboxLiveTimestamps?.visibility =
+            if (nemotron && !transcriptionMode) View.VISIBLE else View.GONE
         refreshLiveLanguageButton()
         grokDiarizeRow.visibility =
-            if (graniteModel && transcriptionMode) View.GONE else View.VISIBLE
+            if (localServer && !nemotron && transcriptionMode) View.GONE else View.VISIBLE
         // Desabilitar a checkbox (Scribe Realtime) não destrói a
         // preferência: o valor é guardado e restaurado ao voltar a um
         // provedor que suporta.
@@ -3817,6 +3880,11 @@ class RemoteSttActivity : AppCompatActivity() {
         // (o servidor local não tem parâmetro de reforço).
         val keywordsSupported = apiProvider != null && SttKeywords.supportsKeywords(apiProvider)
         buttonLiveKeywords.visibility = if (keywordsSupported) View.VISIBLE else View.GONE
+        // O "?" do Keywords acompanha o seletor — e nunca aparece para um
+        // modelo do SERVIDOR (qualquer motor, atual ou futuro): ali não há
+        // parâmetro de reforço e o "?" ficaria órfão.
+        buttonLiveKeywordsHelp.visibility =
+            if (keywordsSupported && !localServer) View.VISIBLE else View.GONE
         refreshKeywordsButton()
         // O seletor t= e seus botões existem apenas para o Granite NAR.
         val narModel = config.name == TranscriptionModelStore.SERVER_NAME
@@ -3856,10 +3924,20 @@ class RemoteSttActivity : AppCompatActivity() {
                 config.isGeminiApi -> providerLanguageLabel("gemini")
                 config.isAlibabaApi -> providerLanguageLabel("alibaba")
                 config.isGrokApi -> providerLanguageLabel("grok")
+                // Nemotron: idioma próprio do servidor local (Granite não tem).
+                config.name == TranscriptionModelStore.SERVER_NAME &&
+                    TranscriptionModelStore.nemotronActive() -> providerLanguageLabel("nemotron")
                 else -> selectedLiveLanguage.shortLabel
             }
             buttonLiveLanguage.text = "Idioma: $label"
         }
+    }
+
+    /** A caixa "Tempos por palavra" só vale quando está visível (Nemotron na
+     *  Ocorrência): no layout da Transcrição ela não existe. */
+    private fun isLiveTimestampsChecked(): Boolean {
+        val box = checkboxLiveTimestamps ?: return false
+        return box.visibility == View.VISIBLE && box.isChecked
     }
 
     private fun updateLiveTranscriptWindow(text: String, isFinal: Boolean, generation: Int) {
@@ -4930,20 +5008,32 @@ class RemoteSttActivity : AppCompatActivity() {
         appendTerminal(terminalLines, "ZIP pronto: ${humanFileSize(requestZip.length())}")
         runOnUiThread { status.text = "Enviando ZIP e aguardando o servidor..." }
 
+        refreshServerModelBeforeRequest()
+        // Lote em ZIP: mesma rota `/transcribe` e o mesmo campo `files`. No
+        // Nemotron o `language` escolhido vai junto; o Granite não recebe
+        // campo avançado nenhum.
+        val zipSpec = SttRequestBuilders.localServerTranscription(
+            engine = if (TranscriptionModelStore.nemotronActive()) {
+                LocalServerEngine.NEMOTRON
+            } else {
+                LocalServerEngine.GRANITE
+            },
+            language = SttLanguageSettings.nemotronLanguageParam()
+        )
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .apply {
-                addTranscriptionParameters(config)
+                zipSpec.multipartFields.forEach { field -> addFormDataPart(field.name, field.value) }
                 val zipBody = requestZip.asRequestBody("application/zip".toMediaType())
                 addFormDataPart(
-                    "files",
+                    requireNotNull(zipSpec.fileField) { "Contrato STT sem campo de arquivo." },
                     requestZip.name,
                     timings?.let { acc -> UploadTimingBody(zipBody) { acc.recordUploadWritten(it) } } ?: zipBody
                 )
             }
             .build()
         val request = Request.Builder()
-            .url(config.url)
+            .url(zipSpec.url)
             .addHeader("accept", "application/zip, application/octet-stream")
             .post(requestBody)
             .build()
@@ -5227,25 +5317,33 @@ class RemoteSttActivity : AppCompatActivity() {
                 TranscriptionResult(prepared.index, prepared.item.name, text)
             }
         }
+        refreshServerModelBeforeRequest()
+        // Transcrição (arquivos) no servidor local: sempre `/transcribe`, com o
+        // campo `files`. Granite não recebe idioma; Nemotron recebe
+        // `language=<código>` quando há idioma escolhido — e nunca `model`.
+        val spec = SttRequestBuilders.localServerTranscription(
+            engine = if (TranscriptionModelStore.nemotronActive()) {
+                LocalServerEngine.NEMOTRON
+            } else {
+                LocalServerEngine.GRANITE
+            },
+            language = SttLanguageSettings.nemotronLanguageParam()
+        )
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .apply {
-                addTranscriptionParameters(config)
+                spec.multipartFields.forEach { field -> addFormDataPart(field.name, field.value) }
                 preparedUploads.forEach { prepared ->
                     val fileBody = prepared.uploadFile.file.asRequestBody(prepared.uploadFile.mime.toMediaType())
                     addFormDataPart(
-                        "files",
+                        requireNotNull(spec.fileField) { "Contrato STT sem campo de arquivo." },
                         prepared.uploadFile.file.name,
                         timings?.let { acc -> UploadTimingBody(fileBody) { acc.recordUploadWritten(it) } } ?: fileBody
                     )
                 }
             }
             .build()
-        val request = Request.Builder()
-            .url(config.url)
-            .addHeader("accept", "application/json")
-            .post(requestBody)
-            .build()
+        val request = buildPostRequest(spec, requestBody)
 
         val call = client.newCall(request)
         currentCalls.add(call)
@@ -7255,6 +7353,10 @@ class RemoteSttActivity : AppCompatActivity() {
         private const val LIVE_UPLOAD_WORKERS = 1
         private const val LIVE_SAMPLE_RATE = 16_000
         private const val DEFAULT_LIVE_DRAFT_INTERVAL_MILLIS = 1000
+
+        /** Validade do modelo lido em `/health` antes de um envio: evita uma
+         *  consulta por arquivo/fatia sem ficar cego a uma troca de motor. */
+        private const val SERVER_MODEL_FRESH_MILLIS = 60_000L
         private const val GROK_REPLAY_BUFFER_SECONDS = 8
         private const val GROK_PCM_BYTES_PER_SECOND = LIVE_SAMPLE_RATE * 2
         private const val GROK_REPLAY_BUFFER_BYTES = GROK_PCM_BYTES_PER_SECOND * GROK_REPLAY_BUFFER_SECONDS

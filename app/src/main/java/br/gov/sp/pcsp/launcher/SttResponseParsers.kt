@@ -347,6 +347,108 @@ object SttResponseParsers {
         return output.toString().trim().ifBlank { fallback }
     }
 
+    /** Resposta do Nemotron para a aba Ocorrência (`/v1/audio/transcriptions`
+     *  com `verbose_json`), formatada conforme as CAIXAS marcadas.
+     *
+     * O servidor devolve `words` com `word`, `start`, `end` e `speaker` sempre
+     * que recebe `verbose_json` — inclusive quando só a diarização foi pedida.
+     * Então o que aparece depende só da caixa:
+     *  - diarização: turnos "Interlocutor N:" (N como o servidor rotula, a
+     *    partir de 1 — verificado no `/v1/audio/transcriptions` real);
+     *  - tempos por palavra: "[início -> fim] frase";
+     *  - as duas: "[início -> fim] Interlocutor N: fala";
+     *  - nenhuma: o `text` da resposta, sem tocar em `words`.
+     * Sem `words` (ou JSON inesperado) cai no `text`; sem `text`, no parser
+     * genérico — nunca inventa conteúdo. Os tempos são os do áudio enviado
+     * (numa fatia ao vivo, relativos àquela fatia).
+     */
+    fun formatLocalServerTranscript(
+        responseText: String,
+        diarize: Boolean,
+        timestamps: Boolean
+    ): String {
+        val trimmed = responseText.trim()
+        if (trimmed.isEmpty()) return ""
+        val json = runCatching { JSONObject(trimmed) }.getOrNull() ?: return trimmed
+        val plain = json.optString("text").trim().ifBlank {
+            parseResponseItems(trimmed).firstOrNull()?.text.orEmpty().trim()
+        }
+        if (!diarize && !timestamps) return plain
+        val words = json.optJSONArray("words") ?: return plain
+        val turns = speechTurns(words, splitSpeakers = diarize, splitPhrases = timestamps)
+        if (turns.isEmpty()) return plain
+        return turns.joinToString("\n") { turn -> turn.render(diarize, timestamps) }
+    }
+
+    /** Trecho contínuo de fala de um mesmo interlocutor. */
+    private data class SpeechTurn(
+        val text: String,
+        val startSeconds: Double,
+        val endSeconds: Double,
+        val speaker: Int
+    ) {
+        fun render(diarize: Boolean, timestamps: Boolean): String {
+            val output = StringBuilder()
+            if (timestamps) {
+                output.append('[')
+                    .append(formatTimestamp((startSeconds * 1000).toLong()))
+                    .append(" -> ")
+                    .append(formatTimestamp((endSeconds * 1000).toLong()))
+                    .append("] ")
+            }
+            if (diarize) output.append("Interlocutor ").append(label()).append(": ")
+            return output.append(text).toString()
+        }
+
+        /** O Nemotron rotula os falantes a partir de 1; sem rótulo = 1. */
+        private fun label(): Int = if (speaker >= 1) speaker else 1
+    }
+
+    /** Agrupa palavras em trechos: novo trecho a cada troca de falante (só com
+     *  [splitSpeakers]) e a cada fim de frase (só com [splitPhrases]). */
+    private fun speechTurns(
+        words: JSONArray,
+        splitSpeakers: Boolean,
+        splitPhrases: Boolean
+    ): List<SpeechTurn> {
+        val turns = mutableListOf<SpeechTurn>()
+        val text = StringBuilder()
+        var start = 0.0
+        var end = 0.0
+        var speaker = NO_SPEAKER
+        for (index in 0 until words.length()) {
+            val word = words.optJSONObject(index) ?: continue
+            val value = word.optString("word").trim().ifBlank { word.optString("text").trim() }
+            if (value.isBlank()) continue
+            val wordStart = word.optFiniteDouble("start")
+            val wordEnd = word.optFiniteDouble("end")
+            val wordSpeaker = word.optInt("speaker", NO_SPEAKER)
+            val newTurn = text.isNotEmpty() && (
+                (splitSpeakers && wordSpeaker != speaker) ||
+                    (splitPhrases && (text.last() == '.' || text.last() == '!' || text.last() == '?'))
+                )
+            if (newTurn) {
+                turns += SpeechTurn(text.toString().trim(), start, end, speaker)
+                text.setLength(0)
+            }
+            if (text.isEmpty()) {
+                start = wordStart ?: end
+                speaker = wordSpeaker
+            } else if (!isStandalonePunctuation(value)) {
+                text.append(' ')
+            }
+            text.append(value)
+            end = wordEnd ?: start
+        }
+        if (text.isNotEmpty()) turns += SpeechTurn(text.toString().trim(), start, end, speaker)
+        return turns.filter { it.text.isNotEmpty() }
+    }
+
+    private fun isStandalonePunctuation(value: String): Boolean =
+        value.matches(Regex("^[,.;:!?]$"))
+
+    private const val NO_SPEAKER = Int.MIN_VALUE
+
     /** Prefixa o texto ao vivo do Muse com "Interlocutor N:" quando a
      *  diarização está marcada e já há um falante corrente (letras A, B...).
      *  Fora da diarização, devolve o texto intacto. [speakerNumbers] é o mapa

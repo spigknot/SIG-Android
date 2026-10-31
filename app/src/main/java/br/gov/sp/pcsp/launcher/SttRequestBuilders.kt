@@ -46,6 +46,70 @@ object SttRequestBuilders {
         fileField = fileField,
     )
 
+    /**
+     * Servidor STT local — ABA TRANSCRIÇÃO (`POST /transcribe`).
+     *
+     * Granite: SOMENTE as partes de arquivo no campo `files`; idioma,
+     * diarização e timestamps não existem nesse motor e nunca entram na
+     * requisição. Nemotron: `files` + `language=<código>` quando há um idioma
+     * escolhido (detecção automática omite o campo).
+     *
+     * O campo `model` nunca é enviado: quem escolhe o motor é o painel do
+     * servidor, não um nome interno no multipart.
+     */
+    fun localServerTranscription(
+        engine: LocalServerEngine,
+        language: String?,
+    ): SttRequestSpec = SttRequestSpec(
+        url = LOCAL_SERVER_URL + LOCAL_TRANSCRIBE_PATH,
+        headers = listOf(SttRequestHeader("accept", "application/json")),
+        multipartFields = buildList {
+            if (engine == LocalServerEngine.NEMOTRON) {
+                language?.takeIf { it.isNotBlank() }?.let { add(SttMultipartField("language", it)) }
+            }
+        },
+        fileField = LOCAL_FILES_FIELD,
+    )
+
+    /**
+     * Servidor STT local — ABA OCORRÊNCIA.
+     *
+     * Granite mantém o contrato de lote (`/transcribe` + `files`, nenhum campo
+     * avançado). Nemotron usa a rota compatível com a API de transcrições, com
+     * o campo de arquivo SINGULAR `file`, e só envia o que está marcado:
+     * `response_format=verbose_json` é obrigatório quando há diarização ou
+     * timestamps (sem ele o servidor responde 400), `diarization=true` só com
+     * a caixa de diarização e `timestamp_granularities[]=word` só com a caixa
+     * de tempos. O prompt interno da diarização é inserido pelo SERVIDOR — o
+     * app não envia `prompt`.
+     */
+    fun localServerOccurrence(
+        engine: LocalServerEngine,
+        language: String?,
+        diarize: Boolean,
+        timestamps: Boolean,
+    ): SttRequestSpec {
+        if (engine == LocalServerEngine.GRANITE) {
+            return SttRequestSpec(
+                url = LOCAL_SERVER_URL + LOCAL_TRANSCRIBE_PATH,
+                headers = listOf(SttRequestHeader("accept", "application/json")),
+                fileField = LOCAL_FILES_FIELD,
+            )
+        }
+        val fields = buildList {
+            if (diarize || timestamps) add(SttMultipartField("response_format", LOCAL_VERBOSE_JSON))
+            if (diarize) add(SttMultipartField("diarization", "true"))
+            if (timestamps) add(SttMultipartField("timestamp_granularities[]", "word"))
+            language?.takeIf { it.isNotBlank() }?.let { add(SttMultipartField("language", it)) }
+        }
+        return SttRequestSpec(
+            url = LOCAL_SERVER_URL + LOCAL_TRANSCRIPTIONS_PATH,
+            headers = listOf(SttRequestHeader("accept", "application/json")),
+            multipartFields = fields,
+            fileField = LOCAL_FILE_FIELD,
+        )
+    }
+
     fun grokRest(
         apiKey: String,
         language: String?,
@@ -503,6 +567,15 @@ object SttRequestBuilders {
         url = ServiceEndpoints.ALIBABA_STT_WEBSOCKET,
         header = SttRequestHeader("Authorization", "Bearer $apiKey"),
     )
+
+    // Servidor STT LOCAL (Granite/Nemotron): a API pública é um único host e a
+    // rota muda com a aba, nunca com um nome de modelo no multipart.
+    private const val LOCAL_SERVER_URL = ServiceEndpoints.GRANITE_STT_REST
+    private const val LOCAL_TRANSCRIBE_PATH = "/transcribe"
+    private const val LOCAL_TRANSCRIPTIONS_PATH = "/v1/audio/transcriptions"
+    private const val LOCAL_FILES_FIELD = "files"
+    private const val LOCAL_FILE_FIELD = "file"
+    private const val LOCAL_VERBOSE_JSON = "verbose_json"
 
     private fun queryUrl(base: String, params: List<Pair<String, String>>): String =
         base + params.joinToString(prefix = "?", separator = "&") { (name, value) ->

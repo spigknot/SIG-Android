@@ -73,6 +73,18 @@ object GrokApiSettings {
     fun geminiCustomLanguage(): String = preferences().getString("gemini_language_custom", "").orEmpty()
     fun setGeminiCustomLanguage(value: String) { preferences().edit().putString("gemini_language_custom", value.trim()).apply() }
 
+    // Servidor STT LOCAL no motor Nemotron: um único idioma, compartilhado
+    // pelas abas Transcrição e Ocorrência. "multi" = detecção automática
+    // (o campo `language` é omitido da requisição).
+    fun nemotronLanguageMode(): String = preferences().getString("nemotron_language_mode", "pt").orEmpty()
+    fun setNemotronLanguageMode(value: String) { preferences().edit().putString("nemotron_language_mode", value).apply() }
+    fun nemotronCustomLanguage(): String = preferences().getString("nemotron_language_custom", "").orEmpty().trim()
+    fun setNemotronCustomLanguage(value: String) { preferences().edit().putString("nemotron_language_custom", value.trim()).apply() }
+
+    /** Caixa "Tempos por palavra" da Ocorrência, que só existe no Nemotron. */
+    fun nemotronTimestamps(): Boolean = preferences().getBoolean("nemotron_timestamps", false)
+    fun setNemotronTimestamps(value: Boolean) { preferences().edit().putBoolean("nemotron_timestamps", value).apply() }
+
     fun apiKey(): String = xaiApiKey()
 
     fun xaiApiKey(): String = ApiKeyStore.get(preferences(), KEY_XAI_API)

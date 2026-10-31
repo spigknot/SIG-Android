@@ -19,6 +19,12 @@ object TranscriptionModelStore {
         if (normalized.isNotEmpty()) discoveredGraniteModel = normalized
     }
 
+    /** O servidor local está anunciando o motor Nemotron em `/health`?
+     *
+     * Só classifica o modelo JÁ descoberto ([LocalGraniteModel]); não há outra
+     * chamada nem outra fonte de verdade do modelo ativo. */
+    fun nemotronActive(): Boolean = LocalGraniteModel.isNemotron(discoveredGraniteModel)
+
     data class Config(
         val name: String,
         val url: String,

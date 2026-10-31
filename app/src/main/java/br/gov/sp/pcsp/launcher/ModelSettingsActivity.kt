@@ -13,13 +13,8 @@ import android.widget.ImageButton
 import android.widget.RadioButton
 import android.widget.RadioGroup
 import androidx.appcompat.app.AppCompatActivity
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
 
 /** Tela de configuracao de modelos e servidores.
  *
@@ -63,7 +58,7 @@ class ModelSettingsActivity : AppCompatActivity() {
                     }
                 }
             }
-            graniteModelCall = refreshGraniteModel { result ->
+            graniteModelCall = LocalGraniteModel.fetch(modelClient) { result ->
                 runOnUiThread {
                     if (generation == modelRefreshGeneration && !isFinishing && !isDestroyed) {
                         val modelId = result.getOrNull() ?: return@runOnUiThread
@@ -129,36 +124,6 @@ class ModelSettingsActivity : AppCompatActivity() {
         modelCall?.cancel()
         graniteModelCall?.cancel()
         super.onPause()
-    }
-
-    private fun refreshGraniteModel(callback: (Result<String>) -> Unit): Call {
-        val request = Request.Builder()
-            .url(ServiceEndpoints.GRANITE_STT_REST.trimEnd('/') + "/health")
-            .header("Accept", "application/json")
-            .build()
-        val metadataClient = modelClient.newBuilder()
-            .callTimeout(3, TimeUnit.SECONDS)
-            .readTimeout(3, TimeUnit.SECONDS)
-            .build()
-        return metadataClient.newCall(request).also { call ->
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, error: IOException) {
-                    callback(Result.failure(error))
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    val result = response.use {
-                        runCatching {
-                            check(it.isSuccessful) {
-                                "Não foi possível consultar o modelo Granite NAR: HTTP ${it.code}."
-                            }
-                            LocalGraniteModel.parseId(it.body?.string().orEmpty())
-                        }
-                    }
-                    callback(result)
-                }
-            })
-        }
     }
 
     private fun populateAll() {
