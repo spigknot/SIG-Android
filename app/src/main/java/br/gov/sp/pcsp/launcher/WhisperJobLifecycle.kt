@@ -237,8 +237,23 @@ object WhisperJobLifecycle {
         UNKNOWN,
     }
 
+    /**
+     * Traduz o nome do terminal no que ele PROVA.
+     *
+     * WORKER_ACK significa "o worker terminou e devolveu o controle" — não
+     * significa sucesso da transcrição. Por isso PARTIAL e NO_SPEECH entram aqui:
+     * são desfechos REAIS do worker (ele rodou e retornou), e antes caíam em
+     * UNKNOWN, o que mantinha a reserva presa e impedia o sucessor depois de uma
+     * transcrição parcial ou de um áudio sem fala.
+     *
+     * O outcome original continua no resultado/ledger — nada é renomeado para
+     * SUCCESS. Nome desconhecido segue UNKNOWN: nenhum evento arbitrário vira ACK.
+     *
+     * BUSY também é término do worker: ele retornou sem computar (sessão ocupada);
+     * deixar a reserva presa nesse caso seria vazamento.
+     */
     fun terminalKind(terminal: String): TerminalKind = when (terminal) {
-        "SUCCESS", "CANCELLED", "ERROR" -> TerminalKind.WORKER_ACK
+        "SUCCESS", "CANCELLED", "ERROR", "PARTIAL", "NO_SPEECH", "BUSY" -> TerminalKind.WORKER_ACK
         "LIVE_TERMINAL" -> TerminalKind.OWNER_DECLARED
         else -> TerminalKind.UNKNOWN
     }

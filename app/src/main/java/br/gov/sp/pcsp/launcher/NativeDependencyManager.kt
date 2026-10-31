@@ -369,6 +369,32 @@ object NativeDependencyManager {
         }
     }
 
+    /**
+     * Carrega o ONNX Runtime do pacote v14 pelo fluxo comum.
+     *
+     * Espelha o padrão da produção (GraniteEngine.loadOnnxRuntimeNatives): ativa o
+     * pacote, resolve o diretório via `sig.native.library.dir` e carrega por caminho
+     * absoluto NA ORDEM DE DEPENDÊNCIA. O `System.loadLibrary("onnxruntime4j_jni")`
+     * puro falha no namespace do classloader (`DT_NEEDED libonnxruntime.so`), por
+     * isso a carga explícita — chamar antes de qualquer referência a OrtEnvironment.
+     * Tolera "already loaded" (processo que já carregou).
+     */
+    fun loadOrtRuntime(context: Context, onLog: (String) -> Unit = {}): Result<Unit> = runCatching {
+        check(activateIfInstalled(context)) { "Dependências do SIG não instaladas." }
+        val abi = supportedAbi() ?: throw IllegalStateException("ABI sem pacote: ${Build.SUPPORTED_ABIS.toList()}")
+        val libDir = File(installedRoot(context, abi), "lib")
+        for (name in listOf("libonnxruntime.so", "libonnxruntime4j_jni.so")) {
+            val lib = File(libDir, name)
+            check(lib.isFile) { "lib nativa ausente: ${lib.absolutePath}" }
+            try {
+                System.load(lib.absolutePath)
+                onLog("nativo carregado: $name")
+            } catch (e: Throwable) {
+                if (e.message?.contains("already loaded", ignoreCase = true) != true) throw e
+            }
+        }
+    }
+
     fun sileroModelFile(context: Context): File {
         val abi = supportedAbi().orEmpty()
         return File(File(installedRoot(context, abi), "models"), SILERO_MODEL)

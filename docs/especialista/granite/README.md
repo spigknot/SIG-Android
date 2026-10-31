@@ -1,39 +1,46 @@
-# Granite Android: programa de execução
+# Granite Android — programa de execução
 
-Atualizado em 20/10/2026. Especialista: este chat. Execução: uma fase por ordem encaminhada ao agente executor, seguida de relatório e parecer.
+Atualizado em 29/10/2026. O [plano v3.0](PLANO-GRANITE-20261029.md) é o documento vigente: CPU, Vulkan, NPU e Smart NPU → Vulkan; arquivo longo, investigação de janela de 60 s e transcrição ao vivo. OpenCL/F05 e Smart NPU → OpenCL estão suspensos.
 
-O documento vigente é o [plano v2.0](PLANO-GRANITE-20261020.md). Ele amplia o [plano v1.0](PLANO-GRANITE-20261009.md), preservando suas auditorias e decisões. Os documentos datados de 08 e 09/10 continuam como evidência histórica, sem presumir que seus ambientes ainda sejam os atuais.
-
-Para começar, encaminhe ao executor o conteúdo integral do [prompt da fase 00](PROMPTS-20261020/FASE-00-REBASELINE.md). Ele contém as leituras obrigatórias e a primeira entrega. Os demais prompts ficam preparados, condicionados à revisão dos relatórios anteriores.
+Há **16 fases e 128 tarefas**, com prompts completos. Executar uma fase por ordem, devolver relatório e aguardar parecer. Os prompts estão preparados; nenhuma fase desta campanha v3 foi despachada nesta entrega. Começar pelo [prompt integral F00](PROMPTS-20261029/FASE-00-REBASELINE.md).
 
 | Documento | Uso |
 |---|---|
-| [Plano v2.0](PLANO-GRANITE-20261020.md) | Arquitetura, dependências, metas e critérios de conclusão |
-| [Diagnóstico e fontes](DIAGNOSTICO-E-FONTES-20261020.md) | Estado observado, limites de 40/60 segundos e lições do Hy-MT2 |
-| [Contrato do executor](CONTRATO-EXECUTOR-20261020.md) | Proveniência, testes, métricas, recursos e regras comuns às fases |
-| [Modelo de relatório](MODELO-RELATORIO-FASE-20261020.md) | Relatório que deve voltar ao especialista ao terminar cada fase |
-| [Modelo de parecer](MODELO-PARECER-20261020.md) | Revisão do relatório e emissão da próxima ordem |
-| [Estado](ESTADO.md) e [decisões](DECISOES.md) | Progresso efetivo e decisões com evidência |
-| [Snapshot](SNAPSHOT-20261020.json) | Identidade da base inspecionada e dos arquivos locais preservados |
-| [Validação documental](VALIDACAO-20261020.md) | Checagens desta entrega; não é resultado de novos experimentos |
+| [Plano v3](PLANO-GRANITE-20261029.md) | Arquitetura, prioridades, dependências, metas e quatro fases live |
+| [Diagnóstico e fontes](DIAGNOSTICO-E-FONTES-20261029.md) | Código atual, pesquisa primária e lições transferíveis |
+| [Contrato do executor](CONTRATO-EXECUTOR-20261029.md) | Provas, métricas, qualidade, ownership, gates e limites |
+| [Campanha estruturada](CAMPANHA-20261029.json) | IDs, tarefas, prioridades e dependências |
+| [Modelo de relatório](MODELO-RELATORIO-FASE-20261029.md) / [schema v3](SCHEMA-RELATORIO-FASE-v3.json) | Entrega obrigatória do executor |
+| [Modelo de parecer](MODELO-PARECER-20261029.md) | Decisão e próxima ordem pelo especialista |
+| [Estado](ESTADO.md) / [decisões](DECISOES.md) | Progresso observado e decisões preservadas |
+| [Snapshot](SNAPSHOT-20261029.json) / [fontes fixadas](FONTES-20261029.json) | Identidade dos materiais desta revisão |
+| [Validação](VALIDACAO-20261029.md) / [manifesto de hashes](SHA256SUMS-PLANO-20261029.txt) | Conferência do pacote documental |
 
-## Prompts por fase
+## Prompts preparados
 
-| Fase | Ordem completa | Entrega central |
-|---|---|---|
-| 00 | [Rebaseline](PROMPTS-20261020/FASE-00-REBASELINE.md) | Inventário atual e condições reais de reprodução |
-| 01 | [Evidências e medição](PROMPTS-20261020/FASE-01-EVIDENCIAS.md) | G01 corrigida, protocolo confiável e corpus separado |
-| 02 | [Referência CPU](PROMPTS-20261020/FASE-02-CPU-CONTRATOS.md) | Pipeline correto, contratos e sessões observáveis |
-| 03 | [Áudio longo](PROMPTS-20261020/FASE-03-AUDIO-LONGO.md) | Segmentação automática sem truncamento ou deduplicação indevida |
-| 04 | [Janela de 60 segundos](PROMPTS-20261020/FASE-04-JANELA-60S.md) | Viabilidade real e política de janela por perfil |
-| 05 | [OpenCL](PROMPTS-20261020/FASE-05-OPENCL.md) | Piloto numérico e pipeline com execução OpenCL comprovada |
-| 06 | [Vulkan](PROMPTS-20261020/FASE-06-VULKAN.md) | Piloto e pipeline Vulkan medidos sobre as mesmas entradas |
-| 07 | [NPU](PROMPTS-20261020/FASE-07-NPU.md) | HTP por estágio, partição observada e limites de bucket |
-| 08 | [Smart NPU → GPU](PROMPTS-20261020/FASE-08-SMART.md) | Encoder HTP, ponte íntegra e editor OpenCL/Vulkan |
-| 09 | [Otimizações](PROMPTS-20261020/FASE-09-OTIMIZACOES.md) | Ablações de atenção, precisão, memória e cache |
-| 10 | [Comparação formal](PROMPTS-20261020/FASE-10-COMPARACAO.md) | Qualidade, desempenho e estabilidade; seleção por aparelho |
-| 11 | [Integração no app](PROMPTS-20261020/FASE-11-PRODUTO.md) | Capacidades, downloads persistentes, fallback e UX verificáveis |
-| 12 | [Prontidão de entrega](PROMPTS-20261020/FASE-12-ENTREGA.md) | Pacote reproduzível, regressão e rollback; promoção separada |
-| AR | [Investigação AR opcional](PROMPTS-20261020/FASE-AR-OPCIONAL.md) | Somente se for necessário decode autoregressivo literal |
+| Fase | Assunto |
+|---|---|
+| [F00](PROMPTS-20261029/FASE-00-REBASELINE.md) | Rebaseline e reserva de escopo |
+| [F01](PROMPTS-20261029/FASE-01-PROTOCOLO.md) | Protocolo, referências e corpus |
+| [F02](PROMPTS-20261029/FASE-02-CPU-CONTRATOS.md) | CPU, referência e política de backends |
+| [F03](PROMPTS-20261029/FASE-03-AUDIO-LONGO.md) | Áudio longo e junção de chunks |
+| [F04](PROMPTS-20261029/FASE-04-JANELA-60S.md) | Viabilidade da janela de 60 segundos |
+| [F06](PROMPTS-20261029/FASE-06-VULKAN.md) | Vulkan: runtime, conversão e piloto independente |
+| [F07](PROMPTS-20261029/FASE-07-NPU.md) | HTP/NPU com escalada de buckets |
+| [F08](PROMPTS-20261029/FASE-08-SMART.md) | Smart: encoder HTP → editor Vulkan |
+| [F09](PROMPTS-20261029/FASE-09-OTIMIZACOES.md) | Otimizações com ablação e semântica preservada |
+| [F10](PROMPTS-20261029/FASE-10-COMPARACAO.md) | Comparação formal e escolha por perfil |
+| [F11](PROMPTS-20261029/FASE-11-PRODUTO.md) | Integração do produto, cache e downloads |
+| [F12](PROMPTS-20261029/FASE-12-ENTREGA.md) | Candidato de entrega por arquivo |
+| [F13](PROMPTS-20261029/FASE-13-LIVE-CONTRATO.md) | Ao vivo: contrato, reaproveitamento e experiência |
+| [F14](PROMPTS-20261029/FASE-14-LIVE-CPU.md) | Ao vivo: captura e pipeline incremental CPU |
+| [F15](PROMPTS-20261029/FASE-15-LIVE-ACELERADO.md) | Ao vivo: aceleração, fila e integração |
+| [F16](PROMPTS-20261029/FASE-16-LIVE-QUALIFICACAO.md) | Ao vivo: qualificação e candidato final |
 
-Nenhuma fase experimental foi executada por esta entrega documental. Preparar estes prompts não inicia agentes, benchmarks, automações, downloads de pesos ou publicação.
+F05 não tem prompt v3; o ID permanece reservado para o histórico OpenCL. F06 é independente e contém conversão/piloto completos. F13–F16 acrescentam o modo ao vivo sem depender da janela de 60 s. A numeração preserva as fases antigas para evitar executar o prompt errado.
+
+## Histórico
+
+[Plano v2](PLANO-GRANITE-20261020.md) e [plano v1](PLANO-GRANITE-20261009.md) permanecem como registro, não ordens vigentes. O [índice v2 arquivado](README-20261020-ARQUIVADO.md), [estado v2 arquivado](ESTADO-20261020-ARQUIVADO.md) e [decisões v2 arquivadas](DECISOES-20261020-ARQUIVADO.md) preservam os bytes locais anteriores à atualização dos ponteiros. Os links internos dessas cópias mantêm o endereço original; usar a data para distinguir histórico de vigente.
+
+O manifesto v2 listava README/ESTADO/DECISOES mutáveis; para recuperar seus conteúdos desta base, usar as cópias arquivadas e o snapshot v3. Os documentos datados e prompts antigos não foram editados. A entrega atual altera documentação, não o aplicativo.

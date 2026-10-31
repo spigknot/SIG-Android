@@ -135,8 +135,8 @@ android {
         applicationId "br.gov.sp.pcsp.launcher"
         minSdk 24
         targetSdk 35
-        versionCode 77
-        versionName "1.514"
+        versionCode 78
+        versionName "1.515"
         // R6/VACINA: teste instrumentado de contrato de locks (ANR).
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 

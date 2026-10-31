@@ -71,6 +71,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private lateinit var selectedFileView: TextView
     private lateinit var buttonModel: TextView
     private lateinit var buttonTranscribe: ImageButton
+    private var buttonTranscribeOrt: ImageButton? = null
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
     private lateinit var logToggle: TextView
@@ -112,6 +113,42 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private lateinit var buttonOutputFolder: ImageButton
     private lateinit var advancedToggle: TextView
     private lateinit var advancedPanel: LinearLayout
+    /**
+     * URI escolhida no seletor interno (snapshot da seleção).
+     *
+     * `transcribeSelectedMedia` consultava só a URI do intent; quando o arquivo
+     * vinha do picker, a rota recebia A enquanto a tela mostrava B, ou caía no
+     * CPP por "faltar URI no intent". Este campo congela a escolha real.
+     */
+    private var uriEscolhida: android.net.Uri? = null
+
+    /**
+     * Consentimento "usar whisper.cpp NESTE arquivo".
+     *
+     * Ligado apenas pelo diálogo de fallback e consumido no despacho seguinte. Não
+     * mexe na preferência geral: o próximo arquivo volta ao default (ORT).
+     */
+    private var cppParaEstaEntrada: android.net.Uri? = null
+
+    /** Job ORT cujo resultado esta tela está exibindo (§4: identidade do observador). */
+    private var jobOrtNaTela: WhisperOrtAdmission.Job? = null
+    private var ortObserverGeneration = 0L
+    private var ortDownload: WhisperOrtDownloadOwner.Attempt? = null
+    private var ortDownloadDialog: android.app.AlertDialog? = null
+
+    /**
+     * Último despacho efetivo da ferramenta (`ORT:<uri>`, `CPP:<uri>` ou `NENHUM`).
+     *
+     * Costura de teste autorizada: registra QUAL motor atendeu QUAL entrada, para
+     * provar seleção, checkbox e consentimento sem dirigir o seletor do sistema.
+     */
+    var ultimoDespacho: String = "NENHUM"
+        private set
+
+    /** Diálogo de fallback em exibição (costura de teste: permite clicar os botões). */
+    var dialogoFallbackEmExibicao: android.app.AlertDialog? = null
+        private set
+
     private lateinit var checkboxVad: CheckBox
     private lateinit var checkboxFlashAttention: CheckBox
     private lateinit var checkboxWordTimestamps: CheckBox
@@ -317,11 +354,66 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
         setContentView(R.layout.activity_whisper)
+        // Reentrega do que ficou sem confirmação (Activity recriada/após erro).
+        runCatching { recuperarEntregasPendentes() }
+        // ORT1/M4 (a): botao proprio da rota ORT (arquivo/CPU), ao lado do
+        // existente. Nao substitui o botao de transcricao nem o default do app.
+        // "usar whisper.cpp": desliga o ORT (que e o padrao) e explica no "!".
+        val cbCpp = findViewById<android.widget.CheckBox?>(R.id.checkbox_usar_cpp)
+        cbCpp?.isChecked = !WhisperOrtRoute.isEnabled(this)
+        cbCpp?.setOnCheckedChangeListener { _, marcado ->
+            WhisperOrtRoute.setEnabled(this, !marcado)
+            // Reflete a escolha imediatamente (habilitação e botão), sem esperar
+            // por outra interação.
+            runCatching { updateTranscribeEnabled() }
+        }
+        findViewById<android.view.View?>(R.id.help_usar_cpp)?.setOnClickListener {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("usar whisper.cpp")
+                .setMessage(
+                    "Desmarcado (padrao): a transcricao de arquivo roda em ONNX Runtime na CPU.\n\n" +
+                        "Marcado: volta ao whisper.cpp (CPU/Vulkan), que continua disponivel como " +
+                        "alternativa e como compatibilidade.\n\n" +
+                        "O ORT usa Turbo INT8, português e busca greedy; os controles de VAD, " +
+                        "beam e timestamps do whisper.cpp não se aplicam. Áudio longo usa janelas.\n\n" +
+                        "Se o ORT nao puder atender o arquivo (formato ou pacote ausente), o app PERGUNTA antes de usar o whisper.cpp - nunca troca " +
+                        "de motor em silencio.",
+                )
+                .setPositiveButton("Entendi", null)
+                .show()
+        }
+        // Controle de threads ORT (pedido do usuário): default 4, máximo 8.
+        // Faixa 1–8, persistida; a rota lê via `threadsEfetivos` a cada despacho.
+        val inputOrtThreads = findViewById<android.widget.TextView?>(R.id.input_ort_threads)
+        inputOrtThreads?.text = WhisperOrtRoute.threadsEfetivos(this).toString()
+        fun ajustarThreads(delta: Int) {
+            val atual = inputOrtThreads?.text?.toString()?.toIntOrNull()
+                ?: WhisperOrtRoute.threadsEfetivos(this)
+            val novo = (atual + delta).coerceIn(WhisperOrtRoute.THREADS_MIN, WhisperOrtRoute.THREADS_MAX)
+            WhisperOrtRoute.setThreads(this, novo)
+            inputOrtThreads?.text = novo.toString()
+        }
+        findViewById<android.view.View?>(R.id.btn_ort_threads_dec)?.setOnClickListener { ajustarThreads(-1) }
+        findViewById<android.view.View?>(R.id.btn_ort_threads_inc)?.setOnClickListener { ajustarThreads(1) }
+        findViewById<android.view.View?>(R.id.button_transcribe_ort)?.setOnClickListener {
+            // NÃO altera a preferência: gravar setEnabled(true) aqui deixava a
+            // checkbox "usar whisper.cpp" marcada enquanto a preferência ia para
+            // o lado contrário.
+            val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(android.content.Intent.CATEGORY_OPENABLE)
+                type = "audio/*"
+            }
+            startActivityForResult(intent, REQUEST_PICK_MEDIA_ORT)
+        }
 
         whisperScroll = findViewById(R.id.whisper_scroll)
         selectedFileView = findViewById(R.id.selected_file)
         buttonModel = findViewById(R.id.button_model)
         buttonTranscribe = findViewById(R.id.button_transcribe)
+        // Herdou `gone` do botão original (que só aparece com mídia escolhida):
+        // sem isto o controle existia no layout mas nunca era visto — o teste
+        // instrumentado do §7 reprovou exatamente isso.
+        buttonTranscribeOrt = findViewById(R.id.button_transcribe_ort)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
         logToggle = findViewById(R.id.log_toggle)
@@ -540,6 +632,13 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     }
 
     override fun onDestroy() {
+        ortObserverGeneration++
+        ortDownload?.cancel()
+        ortDownload = null
+        ortDownloadDialog?.dismiss()
+        ortDownloadDialog = null
+        dialogoFallbackEmExibicao?.dismiss()
+        dialogoFallbackEmExibicao = null
         modelImportSelection.invalidate()
         // R3/B2: INVALIDA o owner ANTES do cleanup — posts/callbacks tardios
         // deste ciclo de vida morrem no runIfCurrent mesmo sem sucessor (a
@@ -624,6 +723,24 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     @Deprecated("Deprecated Android callback kept for this legacy XML activity.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        // ORT1/M4 (a): botao PROPRIO da rota ORT. O botao existente e o
+        // default do app continuam intocados.
+        if (requestCode == REQUEST_PICK_MEDIA_ORT && resultCode == Activity.RESULT_OK) {
+            val ortUri = data?.data
+            if (ortUri != null) {
+                uriEscolhida = ortUri
+                // Honra o "forçar whisper.cpp": o botão de caminho alternativo não
+                // pode burlar a escolha feita na caixa.
+                if (WhisperOrtRoute.isEnabled(this)) {
+                    despacharOrt(ortUri, data)
+                } else {
+                    ultimoDespacho = "CPP:$ortUri"
+                    loadPickedMedia(data)
+                    transcribeSelectedMedia()
+                }
+                return
+            }
+        }
         if (resultCode != Activity.RESULT_OK) return
 
         when (requestCode) {
@@ -710,7 +827,43 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         }
     }
 
+    /**
+     * Fallback de compatibilidade: PERGUNTA antes de usar o whisper.cpp.
+     *
+     * ORT e o padrao; se ele recusar/falhar (formato, canais, duracao, pacote),
+     * o usuario decide. Nunca troca de motor em silencio.
+     */
+    private fun confirmarFallbackCpp(motivo: String, data: Intent?) {
+        if (isFinishing || isDestroyed || data == null) {
+            WhisperOrtRoute.avisar(this, "ORT indisponivel: $motivo")
+            return
+        }
+        // Aceitar cria o pedido CPP DESTA entrada com override explícito (a
+        // preferência geral continua ORT); recusar não mexe em nada. BUSY, dreno e
+        // cancelamento nunca chegam aqui (ver `isFallbackElegivel`).
+        dialogoFallbackEmExibicao = android.app.AlertDialog.Builder(this)
+            .setTitle("Nao foi possivel usar o ORT")
+            .setMessage("$motivo\n\nUsar o whisper.cpp para este arquivo?")
+            .setPositiveButton("Usar whisper.cpp") { dialogo, _ ->
+                val alvo = data.data ?: uriEscolhida
+                cppParaEstaEntrada = alvo
+                loadPickedMedia(data)
+                transcribeSelectedMedia()
+                dialogo.dismiss()
+                dialogoFallbackEmExibicao = null
+            }
+            .setNegativeButton("Cancelar") { dialogo, _ ->
+                dialogo.dismiss()
+                dialogoFallbackEmExibicao = null
+            }
+            .setOnCancelListener { dialogoFallbackEmExibicao = null }
+            .show()
+    }
+
     private fun loadPickedMedia(data: Intent) {
+        // Congela a escolha real: o despacho ORT e o CPP passam a ver o MESMO
+        // arquivo, em vez de "A por intent, B na tela".
+        uriEscolhida = data.data ?: data.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
         selectedItems.clear()
         data.clipData?.let { clip ->
             for (index in 0 until clip.itemCount) {
@@ -1099,7 +1252,308 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         }
     }
 
+    /**
+     * Publica o desfecho da rota ORT na ferramenta.
+     *
+     * Texto COMPLETO, não um toast de 200 caracteres. CANCELLED, PARTIAL e ERROR
+     * aparecem com o rótulo real: um resultado parcial nunca é apresentado como
+     * sucesso integral.
+     */
+    private fun publicarResultadoOrt(resultado: WhisperOrtRoute.Result) {
+        // §4 — OBSERVADOR: resultado de uma tela que já morreu não pode escrever em
+        // view morta nem confirmar entrega. O recibo fica pendente para a próxima
+        // Activity recuperar (recuperarEntregasPendentes).
+        if (isFinishing || isDestroyed) return
+        val rotulo = when (resultado) {
+            is WhisperOrtRoute.Result.Done -> resultado.outcome
+            is WhisperOrtRoute.Result.Cancelled -> if (resultado.partial) "CANCELLED (parcial)" else "CANCELLED"
+            is WhisperOrtRoute.Result.Refused -> "RECUSADO"
+            is WhisperOrtRoute.Result.Failed -> "ERRO"
+        }
+        val texto = when (resultado) {
+            is WhisperOrtRoute.Result.Done -> resultado.text
+            is WhisperOrtRoute.Result.Cancelled -> resultado.text
+            else -> ""
+        }
+        val detalhe = when (resultado) {
+            is WhisperOrtRoute.Result.Refused -> resultado.reason
+            is WhisperOrtRoute.Result.Failed -> resultado.reason
+            else -> null
+        }
+        // O grupo começa GONE no layout: preencher o TextView sem exibir o container
+        // não mostra nada ao usuário (defeito apontado no adendo 10).
+        findViewById<android.view.View?>(R.id.live_transcript_container)?.visibility = View.VISIBLE
+        findViewById<android.view.View?>(R.id.live_transcript_clipboard_actions)?.visibility = View.VISIBLE
+        findViewById<android.widget.TextView?>(R.id.live_transcript_text)?.text = texto
+        val resumo = "ORT/CPU [$rotulo] ${texto.length} caracteres"
+        WhisperOrtRoute.avisar(this, detalhe?.let { "$resumo - $it" } ?: resumo)
+        // Recibo da PRÓPRIA tentativa (não o global): o global confirmava o job mais
+        // recente e deixava o exibido pendente. Terminais sem texto (NO_SPEECH,
+        // cancel antes do 1º token, erro) também são entrega válida. A identidade
+        // (recibo deste job) já foi conferida pelo chamador, ANTES de qualquer
+        // escrita — aqui só se entrega e confirma.
+        val recibo = resultado.recibo
+        if (recibo == null) {
+            // Recusa na porta não publica terminal: nada a persistir, nada a avisar
+            // além do motivo já exibido. Done/Cancelled sem recibo é falha de
+            // entrega e fica observável.
+            if (resultado is WhisperOrtRoute.Result.Done || resultado is WhisperOrtRoute.Result.Cancelled) {
+                WhisperOrtRoute.avisar(this, "resultado NAO persistido (entrega falhou)")
+            }
+        } else {
+            WhisperOrtRoute.confirmarEntrega(this, recibo)
+        }
+    }
+
+    /**
+     * Fluxo gerenciado do pacote ORT (§4): quando o pacote não está pronto, oferece
+     * baixar (com tamanho, progresso e cancelamento), usar o whisper.cpp só para
+     * este arquivo, ou cancelar. Nada é transcrito sem pacote válido.
+     */
+    private fun oferecerDownloadModeloOrt(uri: android.net.Uri) {
+        if (isFinishing || isDestroyed) return
+        val totalMb = WhisperOrtModelCatalog.active.sumOf { it.sizeBytes } / 1_048_576L
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Modelo ORT não instalado")
+            .setMessage(
+                "A transcrição por ONNX Runtime precisa do pacote de modelo " +
+                    "(${totalMb} MB, Hugging Face, revisão congelada). " +
+                    "O que fazer com este arquivo?",
+            )
+            .setPositiveButton("Baixar modelo") { dialogo, _ ->
+                dialogo.dismiss()
+                baixarModeloOrt(uri)
+            }
+            .setNeutralButton("Usar whisper.cpp") { dialogo, _ ->
+                dialogo.dismiss()
+                cppParaEstaEntrada = uri
+                loadPickedMedia(Intent().setData(uri))
+                transcribeSelectedMedia()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    /**
+     * Baixa o pacote com progresso e cancelamento, valida e ativa atomicamente.
+     *
+     * A versão atual continua utilizável se cancelar/falhar; o pacote em uso fica
+     * protegido (staging à parte, ativação pelo `install` existente). Ao concluir,
+     * despacha o arquivo que originou o pedido.
+     */
+    private fun baixarModeloOrt(uri: android.net.Uri) {
+        val attempt = WhisperOrtDownloadOwner.begin()
+        if (attempt == null) {
+            status.text = "Um download ORT ainda está em andamento; aguarde o encerramento."
+            return
+        }
+        ortDownload = attempt
+        val generation = ++ortObserverGeneration
+        val dialogo = android.app.AlertDialog.Builder(this)
+            .setTitle("Baixando modelo ORT")
+            .setMessage("preparando…")
+            .setNegativeButton("Cancelar") { _, _ -> attempt.cancel() }
+            .setCancelable(false).show()
+        ortDownloadDialog = dialogo
+        val app = applicationContext
+        val observer = java.lang.ref.WeakReference(this)
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        // O worker só retém app, token e referência fraca. Tela destruída cancela
+        // a tentativa; o owner global permanece ocupado até fechar rede/staging.
+        fun enviar(action: (WhisperActivity) -> Unit) {
+            handler.post {
+                val tela = observer.get()
+                if (tela != null && !tela.isDestroyed && !tela.isFinishing &&
+                    tela.ortObserverGeneration == generation && tela.ortDownload === attempt
+                ) action(tela)
+            }
+        }
+        Thread({
+            val staging = File(app.filesDir, "ort-staging-${attempt.id}")
+            try {
+                val root = WhisperOrtPackageFlow.raiz(app)
+                val baixado = WhisperOrtModelDownload.baixar(
+                    WhisperOrtModelCatalog.active, staging,
+                    isCancelada = attempt::isCancelled,
+                    onProgresso = { p ->
+                        enviar { tela ->
+                            tela.ortDownloadDialog?.setMessage(
+                                "${p.arquivoAtual}: ${p.baixadosTotal / 1_048_576} de ${p.total / 1_048_576} MB",
+                            )
+                        }
+                    },
+                )
+                val instalado = if (baixado is WhisperOrtModelDownload.Resultado.Pronto && !attempt.isCancelled()) {
+                    WhisperOrtPackageInstaller.install(
+                        baixado.staging, root, WhisperOrtModelCatalog.identity(),
+                        WhisperOrtModelCatalog.active, isCancelled = attempt::isCancelled,
+                        withPublication = { action ->
+                            attempt.publish(action) ?: WhisperOrtPackageInstaller.Outcome.Refused("CANCELADO", "cancelado antes de ativar")
+                        },
+                    )
+                } else null
+                enviar { tela ->
+                    tela.ortDownloadDialog?.dismiss()
+                    tela.ortDownloadDialog = null
+                    tela.ortDownload = null
+                    when {
+                        attempt.isCancelled() || baixado is WhisperOrtModelDownload.Resultado.Cancelado ->
+                            tela.status.text = "Download ORT cancelado."
+                        instalado is WhisperOrtPackageInstaller.Outcome.Ready -> {
+                            tela.status.text = "Modelo ORT pronto."
+                            if (tela.uriEscolhida == uri) tela.despacharOrt(uri, null)
+                        }
+                        else -> tela.status.text = when {
+                            baixado is WhisperOrtModelDownload.Resultado.Falhou -> "Download ORT: ${baixado.motivo}"
+                            instalado is WhisperOrtPackageInstaller.Outcome.Refused -> "Pacote ORT: ${instalado.detail}"
+                            else -> "Download ORT não concluído."
+                        }
+                    }
+                }
+            } catch (failure: Exception) {
+                enviar { tela ->
+                    tela.ortDownloadDialog?.dismiss()
+                    tela.ortDownloadDialog = null
+                    tela.ortDownload = null
+                    tela.status.text = "Download ORT: ${failure.message}"
+                }
+            } finally {
+                staging.deleteRecursively()
+                WhisperOrtDownloadOwner.finish(attempt)
+            }
+        }, "whisper-ort-download").apply { isDaemon = true }.start()
+    }
+
+    /** Despacho único da rota ORT (picker normal, botão ORT e intent). */
+    private fun despacharOrt(uri: android.net.Uri, data: Intent?) {
+        if (jobOrtNaTela != null || isBusy) {
+            status.text = "Aguarde o encerramento do trabalho atual."
+            return
+        }
+        // O caminho do botão normal não tem Intent: sintetiza um com a URI congelada
+        // para o consentimento de fallback valer em TODOS os caminhos.
+        val contexto = data ?: Intent().setData(uri)
+        // §4: se o pacote não está pronto, o usuário sabe ANTES — a rota ainda
+        // recusa com motivo tipado e o diálogo de fallback continua valendo.
+        val estadoPacote = runCatching { WhisperOrtPackageFlow.estado(this) }.getOrNull()
+        if (estadoPacote != null && estadoPacote !is WhisperOrtPackageFlow.Estado.Pronto) {
+            WhisperOrtRoute.avisar(this, WhisperOrtPackageFlow.explicar(estadoPacote))
+            oferecerDownloadModeloOrt(uri)
+            return
+        }
+        // A identidade do evento é capturada AQUI (thread chamadora), antes de
+        // qualquer escrita em view, progresso, confirmação ou diálogo. Só o
+        // resultado COM o recibo deste job passa; callback antigo não escreve,
+        // não confirma e não oferece fallback sobre outro pedido.
+        val generation = ++ortObserverGeneration
+        var meuJob: WhisperOrtAdmission.Job? = null
+        meuJob = WhisperOrtRoute.transcribe(
+            this,
+            uri,
+            // Progresso do preparo (cópia/conversão) no status: a tela deixa de
+            // ficar parada sem sinal de vida durante a conversão.
+            onProgresso = { etapa -> runOnUiThread {
+                if (!isDestroyed && !isFinishing && ortObserverGeneration == generation && jobOrtNaTela == meuJob) {
+                    status.text = "ORT: $etapa"
+                }
+            } },
+            // Threads do controle da ferramenta (default 4, máx 8, pedido do usuário).
+            threads = WhisperOrtRoute.threadsEfetivos(this),
+            onResult = { resultado ->
+            if (isDestroyed || isFinishing || ortObserverGeneration != generation) return@transcribe
+            if (meuJob == null) {
+                // Recusa ANTES de enfileirar: sem job e sem recibo, só informa.
+                // Não apaga a identidade do job que já está rodando.
+                if (resultado is WhisperOrtRoute.Result.Refused || resultado is WhisperOrtRoute.Result.Failed) {
+                    publicarResultadoOrt(resultado)
+                }
+                return@transcribe
+            }
+            val dono = meuJob
+            val recibo = resultado.recibo
+            if (dono == null || jobOrtNaTela != dono ||
+                (recibo != null && (recibo.jobId != dono.jobId || recibo.generation != dono.generation))) {
+                return@transcribe
+            }
+            isTranscribing = false
+            cancelRequested = false
+            setBusy(false)
+            jobOrtNaTela = null
+            publicarResultadoOrt(resultado)
+            // Fallback SOMENTE quando elegível (recusa por capacidade): BUSY,
+            // dreno e cancelamento não oferecem troca de motor.
+            if (resultado is WhisperOrtRoute.Result.Refused &&
+                WhisperOrtRoute.isFallbackElegivel(resultado.reason)
+            ) {
+                confirmarFallbackCpp(resultado.reason, contexto)
+            }
+            },
+        )
+        // Recusa na porta NÃO apaga a identidade do que já está rodando.
+        if (meuJob != null) {
+            jobOrtNaTela = meuJob
+            cancelRequested = false
+            isTranscribing = true
+            setBusy(true)
+            buttonTranscribe.visibility = View.VISIBLE
+            ultimoDespacho = "ORT:$uri"
+        }
+    }
+
+    /**
+     * Reentrega o resultado que ficou pendente.
+     *
+     * Se a Activity morreu antes de confirmar, o terminal está no sink sem ACK.
+     * Aqui ele é exibido e SÓ ENTÃO confirmado — a recuperação não depende do
+     * callback antigo nem de a tela ter sobrevivido.
+     */
+    private fun recuperarEntregasPendentes() {
+        val fila = runCatching { WhisperOrtRoute.pendentes(this) }.getOrDefault(emptyList())
+            .sortedByDescending { it.publicadoEmMillis }
+        if (fila.isEmpty()) return
+        // Exibe o mais recente e confirma SÓ ele. Antes, um terminal sem texto
+        // retornava sem confirmar e BLOQUEAVA os anteriores para sempre.
+        val pendente = fila.first()
+        val json = runCatching {
+            org.json.JSONObject(java.io.File(pendente.caminho).readText(Charsets.UTF_8))
+        }.getOrNull() ?: return
+        val texto = json.optString("texto", "")
+        val outcome = json.optString("outcome", "?")
+        findViewById<android.view.View?>(R.id.live_transcript_container)?.visibility = View.VISIBLE
+        findViewById<android.widget.TextView?>(R.id.live_transcript_text)?.text =
+            if (texto.isBlank()) "[$outcome] sem texto (fala ausente, cancelamento ou erro)" else texto
+        WhisperOrtRoute.confirmarEntrega(this, pendente)
+    }
+
     private fun transcribeSelectedMedia() {
+        // ORT1/M4 - rota opt-in (arquivo/CPU/uma janela). Default continua CPP;
+        // falha ORT NAO cai para CPP silenciosamente.
+        // Override por arquivo vence o default: consentimento do usuário no fallback.
+        val forcadoCpp = WhisperOrtSelecao.forcarCpp(
+            cppParaEstaEntrada?.toString(),
+            uriEscolhida?.toString(),
+        )
+        cppParaEstaEntrada = null
+        if (WhisperOrtRoute.isEnabled(this) && !forcadoCpp) {
+            if (selectedItems.size > 1) {
+                confirmarFallbackCpp("ORT recebe um arquivo por vez. Para este lote, use whisper.cpp.",
+                    Intent().setData(uriEscolhida))
+                return
+            }
+            // Snapshot da seleção: o arquivo escolhido no picker vence o intent.
+            val ortUri = WhisperOrtSelecao.resolver(
+                uriEscolhida?.toString(),
+                WhisperOrtRoute.resolveUri(this)?.toString(),
+            )?.let { android.net.Uri.parse(it) }
+            if (ortUri != null) {
+                despacharOrt(ortUri, null)
+                return
+            }
+        } else if (forcadoCpp) {
+            // Pedido CPP efetivo desta entrada (override do consentimento): registra
+            // a identidade para prova e segue o fluxo CPP da ferramenta.
+            ultimoDespacho = "CPP:${uriEscolhida}"
+        }
         val model = selectedModel ?: return
         // R16/A2 — GATE DE IDENTIDADE (pedido x selecionado).
         //
@@ -2573,14 +3027,28 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private fun updateTranscribeEnabled() {
         val hasMedia = selectedItems.isNotEmpty()
         buttonTranscribe.visibility = if (hasMedia) View.VISIBLE else View.GONE
-        val enabled = !isBusy && hasMedia && selectedModel?.let { DownloadFileStorage.isComplete(modelFile(it), it.bytes) } == true && !whiteRecordingActive && !liveMicActive
+        // Com ORT o motor da rota não usa GGML: exigir o modelo do CPP deixava o
+        // botão desabilitado mesmo havendo pacote ORT válido e entrada escolhida.
+        val temModeloCpp = selectedModel?.let { DownloadFileStorage.isComplete(modelFile(it), it.bytes) } == true
+        val temMotorOrt = WhisperOrtRoute.isEnabled(this)
+        val enabled = !isBusy && hasMedia && (temModeloCpp || temMotorOrt) && !whiteRecordingActive && !liveMicActive
         buttonTranscribe.alpha = if (enabled) 1f else 0.45f
         buttonTranscribe.isClickable = enabled
         buttonTranscribe.isFocusable = enabled
+        // O botão ORT abre o próprio seletor, então não depende de mídia prévia:
+        // aparece sempre que a rota está ligada e respeita o mesmo estado de ocupado.
+        buttonTranscribeOrt?.let { botao ->
+            botao.visibility = if (WhisperOrtRoute.isEnabled(this)) View.VISIBLE else View.GONE
+            val podeClicar = !isBusy && !whiteRecordingActive && !liveMicActive
+            botao.alpha = if (podeClicar) 1f else 0.45f
+            botao.isClickable = podeClicar
+            botao.isFocusable = podeClicar
+        }
     }
 
     private fun setBusy(busy: Boolean) {
         isBusy = busy
+        buttonTranscribeOrt?.isEnabled = !busy
         progress.visibility = if (busy) View.VISIBLE else View.GONE
         buttonModel.isEnabled = !busy
         buttonModel.alpha = if (busy) 0.45f else 1f
@@ -2688,6 +3156,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     }
 
     private fun cancelTranscription() {
+        if (jobOrtNaTela != null) {
+            if (WhisperOrtRoute.cancelar(jobOrtNaTela)) status.text = "Cancelando ORT; aguardando término…"
+            return
+        }
         if (!isTranscribing || cancelRequested) return
         cancelRequested = true
         setTranscriptionStatus("Cancelando transcrição...")
@@ -4931,6 +5403,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             firstSilenceCutMs = 600,
         )
         private const val REQUEST_PICK_MEDIA = 6101
+
+        /** Seletor do botao ORT (rota opt-in arquivo/CPU). */
+        private const val REQUEST_PICK_MEDIA_ORT = 6107
         private const val REQUEST_PICK_FOLDER = 6102
         private const val REQUEST_PICK_MODEL = 6103
         private const val REQUEST_CHOOSE_OUTPUT_DIR = 6104

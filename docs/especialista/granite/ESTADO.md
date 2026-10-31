@@ -1,46 +1,39 @@
-# Estado da execução do Granite STT
+# Estado da execução Granite STT
 
-Atualização vigente: 20/10/2026, São Paulo. Plano vigente: [v2.0](PLANO-GRANITE-20261020.md). Este quadro registra progresso real; não inicia agentes nem tarefas em segundo plano. Registro anterior preservado em [arquivo histórico](ESTADO-20261009-ARQUIVADO.md).
+Atualização vigente: 29/10/2026, São Paulo. [Plano v3](PLANO-GRANITE-20261029.md). Registro anterior preservado no [estado v2](ESTADO-20261020-ARQUIVADO.md). Este quadro não inicia agentes ou tarefas.
 
-| Trabalho | Estado real | Próxima ação e dependência | Evidência |
-|---|---|---|---|
-| Auditorias G00 de 08/09 de outubro | Históricas, preservadas | Revalidar identidades antes de editar/medir | Mapa, histórico e runtimes de 08/10 |
-| Revisão do plano com dossiê, áudio longo e seis rotas | Entrega documental preparada | Encaminhar F00 ao executor | [Índice](README.md), [diagnóstico](DIAGNOSTICO-E-FONTES-20261020.md) |
-| F00 Rebaseline | Prompt pronto; não despachado | Executor lê fontes e devolve inventário | [F00](PROMPTS-20261020/FASE-00-REBASELINE.md) |
-| F01 Evidências | Condicional | Parecer F00; absorve G01 se ainda pendente | [F01](PROMPTS-20261020/FASE-01-EVIDENCIAS.md) |
-| F02 CPU/contratos | Condicional | Parecer F01; integra G02/G03 por unidade | [F02](PROMPTS-20261020/FASE-02-CPU-CONTRATOS.md) |
-| F03 Áudio longo | Patch local anterior existe; aceitação real pendente | Auditar após contratos, preservar o diff atual | [F03](PROMPTS-20261020/FASE-03-AUDIO-LONGO.md), snapshot |
-| F04 Janela 60 s | Hipótese; nenhum novo export/run nesta revisão | Shapes, memória e qualidade F02/F03 | [F04](PROMPTS-20261020/FASE-04-JANELA-60S.md) |
-| F05/F06 GPU | Pilotos planejados; não executados nesta revisão | Referência, runtime e dispositivo | [OpenCL](PROMPTS-20261020/FASE-05-OPENCL.md), [Vulkan](PROMPTS-20261020/FASE-06-VULKAN.md) |
-| F07 HTP/NPU | Piloto planejado; guard de bucket permanece | Dispositivo reservado, libs e contrato | [F07](PROMPTS-20261020/FASE-07-NPU.md) |
-| F08 Smart | Hipótese NAR por estágios | Encoder HTP e editor GPU comprovados | [F08](PROMPTS-20261020/FASE-08-SMART.md) |
-| F09/F10 Otimizar/comparar | Condicionais | Rotas funcionais e corpus separado | [F09](PROMPTS-20261020/FASE-09-OTIMIZACOES.md), [F10](PROMPTS-20261020/FASE-10-COMPARACAO.md) |
-| F11/F12 Produto/entrega | Condicionais | Seleção de perfis e revisão | [F11](PROMPTS-20261020/FASE-11-PRODUTO.md), [F12](PROMPTS-20261020/FASE-12-ENTREGA.md) |
-| FAR | Opcional; não aberta | Somente decisão explícita de investigar outro modelo AR | [FAR](PROMPTS-20261020/FASE-AR-OPCIONAL.md) |
+## Estado real
 
-Executor externo não está vinculado nesta entrega; nenhuma mensagem foi enviada a outro chat. O primeiro prompt pode ser encaminhado manualmente. Cada fase termina com relatório ao especialista, que emitirá parecer e a ordem seguinte revisada.
+- Planejamento v3 com 16 fases/128 tarefas preparado; nenhuma fase nova despachada.
+- OpenCL/F05 e Smart NPU → OpenCL suspensos por decisão do usuário. Não houve remoção de biblioteca ou alteração de aplicativo nesta entrega documental.
+- HEAD observado 254b4a2; chunking 40 s/2 s está commitado em a2b4d58. Sua aceitação funcional integral continua sendo trabalho F03; não é mais correto descrevê-lo como patch local pendente.
+- NativeDependencyManager indica pacote 14; Gradle declara ORT Android QNN 1.29.0. Biblioteca nativa carregada e runtime efetivo serão revalidados em F00/F02.
+- CPU é o caminho NAR disponível; UI acelerada continua indisponível no código inspecionado. Vulkan, NPU integral e Smart não ganharam validação por este planejamento.
+- 60 s por janela ainda é hipótese F04. Áudio longo não depende dela.
+- Live Granite é objetivo novo F13–F16; nomes de editor live no layout não comprovam implementação. Whisper fornece componentes candidatos a reaproveitamento.
+- Nenhum benchmark, instalação, microfone, publicação, commit ou push foi executado nesta revisão.
 
-ADB em inventário de leitura listou somente PJA110/1164a04. A disponibilidade atual do CPH2747/SM8850 não foi demonstrada. Nenhum dispositivo foi reservado ou alterado, e não houve instalação/force-stop/benchmark.
+## Fases
 
-As cinco alterações locais anteriores de chunks de 40 s foram preservadas por SHA. Arquivos e dossiês de outras campanhas ficaram fora desta edição. Ver [validação desta entrega](VALIDACAO-20261020.md). Nenhuma rota acelerada ou janela 60 s recebeu nova aprovação por este plano.
+| Fase | Estado | Ordem |
+|---|---|---|
+| F00 | Pronta para despacho | [Prompt](PROMPTS-20261029/FASE-00-REBASELINE.md) |
+| F01 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-01-PROTOCOLO.md) |
+| F02 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-02-CPU-CONTRATOS.md) |
+| F03 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-03-AUDIO-LONGO.md) |
+| F04 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-04-JANELA-60S.md) |
+| F06 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-06-VULKAN.md) |
+| F07 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-07-NPU.md) |
+| F08 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-08-SMART.md) |
+| F09 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-09-OTIMIZACOES.md) |
+| F10 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-10-COMPARACAO.md) |
+| F11 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-11-PRODUTO.md) |
+| F12 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-12-ENTREGA.md) |
+| F13 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-13-LIVE-CONTRATO.md) |
+| F14 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-14-LIVE-CPU.md) |
+| F15 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-15-LIVE-ACELERADO.md) |
+| F16 | Condicional; não executada | [Prompt](PROMPTS-20261029/FASE-16-LIVE-QUALIFICACAO.md) |
+| F05 | Suspensa; sem ordem v3 | Histórico v2 apenas |
+| FAR | Fora da campanha ativa | Modelo AR separado exigiria nova decisão |
 
-## Registro anterior de 09/10 — histórico, não estado atual
-
-Atualizado em 09/10/2026, São Paulo. Plano v1.0. Este quadro descreve trabalho real; não inicia execução em segundo plano.
-
-| Tarefa | Responsável | Estado | Dependência ou bloqueio | Próxima ação | Evidência |
-|---|---|---|---|---|---|
-| G00 Inspeção main e experimental | Especialista e subagente de código | Concluída | Snapshot de 08/10; reconfirmar ao editar | Integrar por unidade, preservando main | [Mapa](MAPA-CODIGO-20261008.md) |
-| G00 Auditoria de setembro | Especialista e subagente de evidências | Concluída | Recomputação offline, sem novos runs | Substituir interpretação do extrator | [Histórico](HISTORICO-EVIDENCIAS-20261008.md) |
-| G00 Pesquisa de runtimes | Especialista e subagente de pesquisa | Concluída | Fontes oficiais; compatibilidade NAR Android ainda experimental | Preparar G04 após contratos | [Runtimes](RUNTIMES-E-PILOTOS-20261008.md) |
-| Plano e primeira ordem | Especialista | Entrega documental validada | Versionamento em checkout isolado | Receber identificação ou entrega do executor | [Plano](PLANO-GRANITE-20261009.md), [ordem](ORDEM-G01-20261009.md), [validação](VALIDACAO-20261009.md) |
-| G01 Extrator offline | Executor externo ainda não vinculado | Pronta, não despachada | Usuário indica chat executor ou encaminha manualmente | Executar ordem e devolver patch/manifestos | [Ordem G01](ORDEM-G01-20261009.md) |
-| G02 Parser de vocabulário | Executor a definir | Planejada | Revisão de G01; checkout limpo | Emitir ordem pequena, sem portar engine inteiro | Plano F1 |
-| G03 Contratos, sessão e bucket | Executor a definir | Planejada | Parser e instrumentação definida | Tornar configuração imutável e provar sessão real | Plano F1/F2 |
-| G04 Pilotos de hardware | Especialista decide, executor mede | Condicional | Contratos e reserva do telefone; versão nativa efetiva | Selecionar micrografo e controle por API | Plano F3 e matriz de runtimes |
-
-Executor externo: não identificado. O chat `Solucionar deadend GPU NPU` foi lido; preparou o handoff e estava fazendo inventário de arquivos. Nenhuma mensagem foi enviada a ele. Os três subagentes fizeram auditorias neste chat e não representam vínculo com o executor externo.
-
-Telefone: CPH2747/SM8850 acessível por ADB na leitura; serial físico conferido. Nenhum lock, exclusividade, instalação, force-stop ou benchmark foi realizado. APK SHA observado está no snapshot; proveniência e libs efetivas pendentes.
-
-Arquivos de outras tarefas e todos os históricos foram preservados. G01 não requer telefone, modelos novos, R2 ou aprovação de release. O documento da ordem permite encaminhamento manual imediato.
+Próxima ação: encaminhar F00 ao executor. Após cada relatório, o especialista emite parecer e ajusta a próxima ordem. Aprovação parcial de encoder HTP/editor Vulkan pode liberar F08 sem aprovar NPU integral. Resultados de arquivo não aprovam automaticamente live.

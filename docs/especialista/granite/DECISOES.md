@@ -39,3 +39,24 @@ Novas decisões acrescentam linha com data, evidência e escopo. Não remover hi
 | D24 | Critérios numéricos/qualidade/performance prospectivos, antes da confirmação | Evita selecionar tolerância após resultado; corpus CPU não é verdade humana | Revisão de critério exige nova versão e não reaprova legado |
 | D25 | A→B→A e gerações íntegras obrigatórios na integração | Pedido original de cache/progresso e novas variantes de artefato | Contrato diferente precisa preservar persistência e rollback |
 | D26 | Uma fase por despacho, relatório e parecer | Fluxo explicitamente pedido pelo usuário | Usuário altera o fluxo; prompts futuros continuam condicionais até lá |
+
+
+## Adições da revisão v3 — 29/10/2026
+
+As decisões abaixo atualizam o escopo; linhas anteriores permanecem como histórico. D27 substitui a parte OpenCL de D09/D15/D19. D29 atualiza a situação do patch citada em D16.
+
+| ID | Decisão e estado | Fundamento | Condição para rever |
+|---|---|---|---|
+| D27 | OpenCL e Smart NPU→OpenCL suspensos; F05 sem prompt v3 | Pedido explícito do usuário | Nova decisão explícita do usuário |
+| D28 | F06 contém seleção/conversão/bloco/piloto completos, sem F05 | Vulkan deve avançar de forma independente | Bloqueio mínimo pode abrir a reserva ExecuTorch Vulkan |
+| D29 | Rebaseline em HEAD 254b4a2, pacote v14; chunks já commitados | Código e histórico a2b4d58 | Novo inventário F00 registra evolução sem apagar evidência |
+| D30 | 60 s e auditoria histórica ampla fora do caminho crítico dos pilotos/live | Áudio longo usa janela comprovada; prova nova pode ser independente | Uma alegação específica pode exigir histórico/shape de 60 s |
+| D31 | F08 requer encoder HTP e editor Vulkan aprovados, não NPU integral | Particionamento NAR por estágios | Artefato ou contrato incompatível exige correção própria |
+| D32 | Validar máscara/oráculo antes de conversão e atenção fundida | Card e código oficial exigem atenção à semântica bidirecional | Nova implementação oficial exige nova prova versionada |
+| D33 | Convivência com Whisper/ORT exige identidade de libs, owner e ACK físico | Carregador e recursos compartilhados; cancel visual não encerra compute | Arquitetura isolada comprovada pode reduzir a matriz |
+| D34 | Live por janelas NAR é extensão F13–F16, sem causalizar modelo | Pedido explícito de transcrição ao vivo como no Whisper | Outro modelo/arquitetura depende de decisão própria |
+| D35 | Reaproveitar componentes live somente com contrato e regressão | PCM/spool/publicação existem; timestamps/decoder não são intercambiáveis | Auditoria F13 define adaptações necessárias |
+| D36 | Qualificação live separada de arquivo, com backlog/latência/qualidade | RTF isolado não inclui frequência de reprocessamento | Critério revisado prospectivamente, nunca para aprovar o mesmo resultado |
+| D37 | Spool limitado preserva áudio pendente; prévia obsoleta não é áudio descartável | Integridade e experiência contínua | Mudança de retenção precisa de contrato explícito |
+| D38 | Download/cache A→B→A e progresso por identidade permanecem gates | Pedido original e novos artefatos/caches | Revalidação por todos os consumidores do componente alterado |
+| D39 | 16 fases/128 tarefas preparadas; uma ordem e parecer por vez | Processo de execução pedido pelo usuário | Usuário altera o fluxo |

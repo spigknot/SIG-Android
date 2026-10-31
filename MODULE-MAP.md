@@ -223,3 +223,31 @@ também é bloqueado.
 
 Mapa deliberadamente **grosso** (uma linha por arquivo). Detalhe de comportamento
 mora no KDoc do arquivo e nos testes, não aqui.
+
+| `WhisperOrtFrontend.kt` | ORT1/C03-C07: frontend Whisper do motor ORT — STFT 400/hop 160, pad reflect, potência sem a última coluna, `[128][3000]` log-mel e planejamento de janelas de 30 s com cauda parcial preservada. |
+| `WhisperOrtMelFilters.kt` | ORT1/C04: banco mel Slaney (128×201) CALCULADO e conferido contra o `mel_filters.npz` oficial do openai/whisper. |
+| `WhisperOrtPcm.kt` | ORT1/C01/C02: contrato de PCM (16 kHz mono, int16↔float por 32768, duração/SHA, pico/RMS, silêncio digital) e recusa tipada de taxa/canais diferentes. |
+| `WhisperOrtTokenizer.kt` | ORT1/D05: decodificação byte-level BPE do Whisper (concatena bytes e decodifica UTF-8 uma vez; acentos e multi-byte íntegros; especiais descartados). |
+| `WhisperOrtPrompt.kt` | ORT1/D02: ids reais do prefixo (sot/idioma/tarefa/notimestamps) do export congelado e validação que recusa prefixo sem idioma. |
+| `WhisperOrtGeneration.kt` | ORT1/D03/D04/D06: laço greedy sobre backend injetável, supressão de tokens de controle e terminal tipado (EOS/MAX_TOKENS/CANCELLED/RECOVERABLE/ERROR), recusando logits não finitos e fora do vocabulário. |
+| `WhisperOrtGenerationConfig.kt` | ORT1/D04: configuração efetiva do export (suppress_tokens, begin_suppress_tokens, max_length TOTAL e ids de eos/start) lida do `generation_config.json`, com orçamento de tokens que desconta o prefixo. |
+| `WhisperOrtTextMerge.kt` | ORT1/D07/G04: junção de janelas com sobreposição — remove a maior repetição exata de palavras na fronteira e NUNCA apaga por semelhança aproximada. |
+| `WhisperOrtTranscriber.kt` | ORT1/D07/E01/F06: orquestra janelas→log-mel→geração, junção de texto e agregação do desfecho (SUCCESS/NO_SPEECH/PARTIAL/CANCELLED/ERROR/NO_AUDIO). |
+| `WhisperOrtModelPackage.kt` | ORT1/B03/B04/B07: identidade do pacote, validação tipada (ausente/tamanho/SHA/external data/caminho), detecção de external data e promoção atômica que não sobrescreve pacote ativo. |
+| `WhisperOrtSegments.kt` | ORT1-M2: segmentação por timestamp interno do Whisper (início/fim em segundos por janela) e junção por TEMPO ABSOLUTO — preserva falas iguais em instantes distintos e descarta só a sobreposição. |
+| `WhisperOrtTranscriptionProducer.kt` | ORT1-M4: produtor COMUM — recebe pacote validado, deriva a chave do cache, adquire lease, exige compute exclusivo, transcreve e libera no finally; devolve Done/BUSY/Failed com job/attempt. |
+| `WhisperOrtSessionCache.kt` | ORT1-M3: cache de sessões com chave engine/provider/runtime/modelo/revisão/config/threads, hits/misses, custo de load e posse serializada; invalidate recusa fechar sessão em uso. |
+| `WhisperOrtRoute.kt` | ORT1-M4: rota PADRÃO de ARQUIVO/CPU na ferramenta normal — resolve a URI, converte mídia para 16 kHz mono, valida o pacote pelo marcador e despacha no produtor comum com cache de processo; áudio longo é janelado (30 s/hop 26 s); falha ORT nunca cai para CPP sem perguntar. |
+| `WhisperOrtMediaConverter.kt` | ORT1-C02: conversão FFmpeg para PCM 16 kHz mono (o mesmo comando do fluxo CPP), síncrona e com erro tipado; é o que permite MP3, estéreo e 44,1 kHz entrarem na rota ORT. |
+| `WhisperOrtTerminalSink.kt` | ORT1-M4/§3: sink de terminais com recibo — arquivo atômico por job/geração, fila de reentrega (`pendentes`), ack vinculado ao SHA do conteúdo; o JSONL é só índice. |
+| `WhisperOrtModelDownload.kt` | ORT1-B03/§2: entrega gerenciada do pacote (origem HF congelada, espaço, progresso, cancelamento, SHA por arquivo); a ativação continua no install atômico. |
+| `WhisperOrtPorta.kt` | ORT1-M4/§2.6: porta de admissão pura (decidir → só então enfileirar); é o ponto que garante recusa ANTES de a tarefa entrar no executor, verificável sem Android. |
+| `WhisperOrtPackageFlow.kt` | ORT1-M4/§4: estado do pacote para a UI (Pronto/Ausente/Inválido) usando a MESMA validação da rota; explica a recusa em linguagem de tela sem prometer transcrição. |
+| `WhisperOrtSelecao.kt` | ORT1-M4/§4: precedência pura seleção-da-tela > intent e consentimento de fallback por entrada; torna as duas regras verificáveis em teste JVM em vez de só por clique. |
+| `WhisperOrtPackageInstaller.kt` | ORT1-B04/M3: fronteira ÚNICA de pacote validado — mede tamanho e SHA-256 reais (ninguém fornece hash), confere dependências, grava marcador com identidade e promove atomicamente preservando o pacote anterior;  é o caminho quente sem rehash. |
+| `WhisperOrtModelCatalog.kt` | ORT1-B03/M3: catálogo RESTRITO do export congelado (nome/tamanho/SHA-256/papel dos 3 grafos, tokenizer e config, com licença MIT) — recusa import fora do export em vez de tentar validar grafo desconhecido. |
+| `WhisperOrtSelection.kt` | ORT1/A03/A08/F05: matriz motor×provider×rota (CPP default; ORT só CPU/arquivo) e motivos explícitos dos knobs não suportados, sem renumerar `backendKind`. |
+| `WhisperOrtSession.kt` | ORT1/D01/D03/F01: sessões ORT/CPU reais do Whisper (assinaturas conferidas no grafo), decoder merged com `use_cache_branch`, posse de `Result`/tensores e environment compartilhado que nunca é fechado. |
+| `WhisperOrtAdmission.kt` | Admissão single-flight, identidade e terminal da rota ORT. |
+| `WhisperOrtAtomicFileStore.kt` | Gravação atômica e recuperação de arquivos ORT. |
+| `WhisperOrtDownloadOwner.kt` | Posse de download por processo e cancelamento serializado com ativação. |
