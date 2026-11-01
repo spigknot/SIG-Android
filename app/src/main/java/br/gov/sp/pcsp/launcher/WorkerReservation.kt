@@ -110,6 +110,97 @@ object WorkerReservation {
             return anterior
         }
     }
+
+    /**
+     * ALOCADOR DE TOKENS DE RESERVA (adendo 18 §2).
+     *
+     * Um domínio ÚNICO para todos os produtores (arquivo CPP, ORT, gravação e
+     * live), separado da geração lógica do controller e do owner nativo.
+     * `State.reserve` recusa `gen <= lastTerminalGen`: com produtores ainda
+     * misturando relógio/gravação (`maxOf`) e geração lógica pequena (1, 2, 3),
+     * um job de arquivo condenava a gravação/live seguinte a
+     * `REFUSED_STALE_GENERATION` para sempre, e dois jobs no mesmo milissegundo
+     * podiam receber a mesma "identidade".
+     *
+     * O token é `maxOf(agoraMs, anterior + 1)`: estritamente crescente e único
+     * mesmo quando dois jobs começam no mesmo tick — relógio só estabelece a
+     * BASE (acima de qualquer valor do domínio antigo), nunca reuso.
+     * Alocar UMA vez por job, no produtor, e transportar a mesma identidade por
+     * todo o ciclo (start/adopt/reserve/workerStarted/renovação/progresso/
+     * notificação/cancel/terminal/ACK/finish).
+     */
+    object Tokens {
+        private var ultimo: Long = 0L
+
+        /** Token MONOTÔNICO e ÚNICO deste processo. Chamado uma vez por job. */
+        @Synchronized
+        fun alocar(agoraMs: Long): Long {
+            val novo = maxOf(agoraMs, ultimo + 1L)
+            ultimo = novo
+            return novo
+        }
+
+        /** Só para teste: volta ao estado inicial (com clear() do Store junto). */
+        @Synchronized
+        fun resetParaTeste() {
+            ultimo = 0L
+        }
+    }
+}
+
+/**
+ * ADENDO 18 §2 — ponte de DOMÍNIO entre o token de reserva (todos os
+ * produtores) e a geração LÓGICA da sessão do controller.
+ *
+ * O produtor aloca o token uma vez e o transporta por todo o ciclo do serviço
+ * (start/mark/finish/forwarders). Quem fala com o controller (cancelamento da
+ * sessão, ACK por binding) continua hablando na geração lógica — o cancelamento
+ * tem de alcançar a sessão nativa certa MESMO quando o token de reserva difere
+ * da geração lógica. Sem esta ponte, `WhisperSessions.shared.cancel(token)`
+ * não encontra o job do controller (`jobFor` é por geração lógica) e o
+ * "Cancelar" da notização de um job de arquivo caía em no-op com o FGS preso.
+ *
+ * O mapa é TETO limitado (evicted FIFO): id de token nunca se repete e um
+ * ACK/cancelamento atrasado de A nunca libera B — pior caso de evicted é
+ * "manifestação desconhecida → no-op registrado", nunca reciclagem de dono.
+ */
+object ReservationJobIdentity {
+    private val mapa = java.util.LinkedHashMap<Long, Long>()
+    private val lock = Any()
+
+    /** Evicted mais antigo primeiro; teto baixo basta (jobs de reserva vivos). */
+    private const val MAX_RETENIDOS = 32
+
+    /** Registra o PAR (token ⇄ geração lógica) — chamado uma vez, no admite. */
+    fun registrar(token: Long, logico: Long) {
+        if (token <= 0L || logico <= 0L) return
+        synchronized(lock) {
+            mapa[token] = logico
+            while (mapa.size > MAX_RETENIDOS) {
+                val maisAntigo = mapa.keys.firstOrNull() ?: break
+                if (maisAntigo == token) break
+                mapa.remove(maisAntigo)
+            }
+        }
+    }
+
+    /** Geração lógica do dono deste token (`null` = token fora do mapa). */
+    fun logicoDe(token: Long): Long? = synchronized(lock) { mapa[token] }
+
+    /**
+     * Esquece o PAR pelo TOKEN (chave do domínio da reserva), idempotente.
+     *
+     * ADENDO 19 §1.4 — os dois lados do PAR são DOMÍNIOS DISTINTOS (token do
+     * alocador de reserva × geração lógica do controller): remover por
+     * coincidência numérica com a geração LÓGICA apagaria o PAR de outro job.
+     * Só `esquecer(token)` — com o token exato — remove o par dele.
+     */
+    fun esquecer(token: Long) {
+        if (token <= 0L) return
+        synchronized(lock) {
+            mapa.remove(token)
+        }
+    }
 }
 
 /**

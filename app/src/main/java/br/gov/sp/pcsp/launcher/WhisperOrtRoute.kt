@@ -53,6 +53,17 @@ object WhisperOrtRoute {
     @Volatile
     var cacheParaTeste: WhisperOrtSessionCache? = null
 
+    /**
+     * Motor FFmpeg e prazo de conversão injetáveis (testes instrumentados).
+     * Produção usa o [WhisperOrtMediaConverter.MotorFfmpeg] real com o prazo
+     * de 60 s; o dreno continua idêntico — só o relógio/músculo mudam.
+     */
+    @Volatile
+    var motorConversaoParaTeste: WhisperOrtMediaConverter.Motor? = null
+
+    @Volatile
+    var timeoutConversaoMsParaTeste: Long? = null
+
     private val cacheEfetivo: WhisperOrtSessionCache
         get() = cacheParaTeste ?: cache
 
@@ -65,19 +76,43 @@ object WhisperOrtRoute {
         WhisperOrtPorta.isFallbackElegivel(motivoRecusa)
 
     /**
-     * Threads da sessão ORT (1–8).
+     * Threads do compute (1–8) — seletor COMPARTILHADO ORT + whisper.cpp.
      *
      * Pedido do usuário: controle na ferramenta com default 4 (confirmado pela
-     * varredura 1–8 no PJA110, §66) e máximo 8. A rota lê via [threadsEfetivos].
+     * varredura 1–8 no PJA110, §66) e máximo 8. A rota lê via [threadsEfetivos]
+     * a cada despacho ORT; o caminho CPP aplica o mesmo valor por job via
+     * seam one-shot (sem virar config global). A chave é neutra (`whisper_threads`);
+     * a legada (`whisper_ort_threads`) é migrada uma vez e depois ignorada.
      */
     const val THREADS_MIN = 1
     const val THREADS_MAX = 8
-    private const val PREF_THREADS = "whisper_ort_threads"
+    private const val PREF_THREADS = "whisper_threads"
+    private const val PREF_THREADS_LEGADO = "whisper_ort_threads"
 
-    fun threadsEfetivos(context: Context): Int =
-        context.getSharedPreferences("whisper", Context.MODE_PRIVATE)
-            .getInt(PREF_THREADS, WhisperOrtSession.DEFAULT_THREADS)
-            .coerceIn(THREADS_MIN, THREADS_MAX)
+    fun threadsEfetivos(context: Context): Int {
+        val prefs = context.getSharedPreferences("whisper", Context.MODE_PRIVATE)
+        val nova: Int? = if (prefs.contains(PREF_THREADS)) prefs.getInt(PREF_THREADS, 0) else null
+        val legada: Int? = if (prefs.contains(PREF_THREADS_LEGADO)) {
+            prefs.getInt(PREF_THREADS_LEGADO, WhisperOrtSession.DEFAULT_THREADS)
+        } else null
+        val efetivas = WhisperOrtSelecao.resolverThreads(
+            nova, legada, WhisperOrtSession.DEFAULT_THREADS,
+            WhisperOrtRoute.THREADS_MIN, WhisperOrtRoute.THREADS_MAX,
+        )
+        if (nova == null && legada != null) {
+            // Migração única: preserva o ajuste de quem já usava a chave antiga.
+            prefs.edit().putInt(PREF_THREADS, efetivas).apply()
+        }
+        return efetivas
+    }
+
+    /**
+     * Lógica pura do seletor compartilhado (sem Android, testável em JVM).
+     *
+     * Precedência: chave nova > chave legada > default; tudo coagido a 1–8.
+     */
+    fun resolverThreads(nova: Int?, legada: Int?, padrao: Int): Int =
+        (nova ?: legada ?: padrao).coerceIn(THREADS_MIN, THREADS_MAX)
 
     fun setThreads(context: Context, threads: Int) {
         context.getSharedPreferences("whisper", Context.MODE_PRIVATE)
@@ -209,12 +244,13 @@ object WhisperOrtRoute {
         onProgresso: (String) -> Unit = { },
         onResult: (Result) -> Unit,
         threads: Int = WhisperOrtSession.DEFAULT_THREADS,
+        modelo: String = WhisperOrtModelCatalog.MODEL,
     ): WhisperOrtAdmission.Job? {
         val app = activity.applicationContext
         val porta = despachar(uri.toString()) { job ->
             jobAtual = job
             worker.execute {
-                val resultado = runCatching { executar(app, uri, job, onProgresso, threads) }
+                val resultado = runCatching { executar(app, uri, job, onProgresso, threads, modelo) }
                     .getOrElse { Result.Failed("${it.javaClass.simpleName}: ${it.message}") }
                 main.post { onResult(resultado) }
             }
@@ -250,6 +286,7 @@ object WhisperOrtRoute {
         job: WhisperOrtAdmission.Job,
         onProgresso: (String) -> Unit,
         threads: Int = WhisperOrtSession.DEFAULT_THREADS,
+        modelo: String = WhisperOrtModelCatalog.MODEL,
     ): Result {
         val inicio = SystemClock.elapsedRealtime()
         jobAtual = job
@@ -257,7 +294,11 @@ object WhisperOrtRoute {
         // §2.1 — RESERVA/FGS/ENCAMINHAMENTO ANTES de copiar, converter, ler e hashear.
         // O preparo consome CPU e disco: se outro compute (ORT ou CPP) já tem a
         // reserva, este pedido tem de morrer aqui, não depois de preparar tudo.
-        val geracaoFgs = SystemClock.elapsedRealtime()
+        // Adendo 18 §2 — token do alocador COMUM (antes era elapsedRealtime
+        // puro: relógio não é único no mesmo milissegundo e o domínio devia
+        // ser comum a todos os produtores). Mesmo valor de domínio do
+        // relógio, mas única/monotônica por chamada.
+        val geracaoFgs = WorkerReservation.Tokens.alocar(SystemClock.elapsedRealtime())
         val inicioFgs = WhisperJobService.startJobOutcome(
             app, geracaoFgs, WhisperJobLifecycle.KIND_FILE, "Preparando (ORT/CPU)…",
         )
@@ -303,7 +344,15 @@ object WhisperOrtRoute {
                 text = texto,
                 totalMillis = SystemClock.elapsedRealtime() - inicio,
                 partial = parcial,
-                error = (resultado as? Result.Failed)?.reason,
+                // Recusa também viaja no terminal: "BUSY" sem motivo não permite
+                // distinguir porta/serviço/pacote/sessão no diagnóstico.
+                error = (resultado as? Result.Failed)?.reason
+                    ?: (resultado as? Result.Refused)?.reason,
+                // Seletor compartilhado (§3): ORT aplica direto (pedidas ==
+                // efetivas); recusa antes do despacho registra 0.
+                threads = threads,
+                // Modelo efetivo do compute (adendo 17 §1): prova small→small.
+                model = modelo,
             )
             val recibo = if (terminal != null) gravarTerminal(app, terminal) else null
             resultado.recibo = recibo
@@ -321,23 +370,36 @@ object WhisperOrtRoute {
             return resultado
         }
 
+        // Modelo desconhecido recusa antes de qualquer preparo (sem fallback):
+        // nunca cai em compute de outro pacote por engano.
+        try {
+            WhisperOrtModelCatalog.conjuntoPara(modelo)
+        } catch (e: IllegalArgumentException) {
+            return encerrar(Result.Refused("modelo sem suporte ORT validado: $modelo"))
+        }
+
         try {
 
-        // 1) pacote validado (marcador medido na instalação)
+        // 1) pacote validado (marcador medido na instalação), NA IDENTIDADE DO
+        // MODELO PEDIDO (adendo 17 §1): turbo e small têm pacotes, sessões e
+        // chaves de cache distintos; nunca se misturam.
         val root = File(app.filesDir, "ort-model")
-        val identidade = WhisperOrtModelCatalog.identity()
-        val pacote = when (val aberto = WhisperOrtPackageInstaller.open(root, identidade)) {
+        val identidade = WhisperOrtModelCatalog.identity(modelo)
+        val pacote = when (val aberto = WhisperOrtPackageInstaller.open(
+            root, identidade, WhisperOrtModelCatalog.conjuntoPara(modelo),
+        )) {
             is WhisperOrtPackageInstaller.Outcome.Refused ->
                 return encerrar(Result.Refused("pacote: ${aberto.reason}: ${aberto.detail}"))
             is WhisperOrtPackageInstaller.Outcome.Ready -> aberto.validated
         }
 
         // 2) áudio: cópia CANCELÁVEL e com ORÇAMENTO antes das alocações (§2.3).
-        onProgresso("preparando áudio…")
+        // Falha de observador nunca decide o desfecho (adendo 16 §1).
+        runCatching { onProgresso("preparando áudio…") }
         val pcm = try {
             val arquivo = copiarParaTemporario(app, uri, job, onProgresso)
             copiaTemp = arquivo
-            onProgresso("lendo áudio…")
+            runCatching { onProgresso("lendo áudio…") }
             try {
                 lerWav16kMono(arquivo)
             } catch (precisaConversao: WavPrecisaConversao) {
@@ -347,17 +409,33 @@ object WhisperOrtRoute {
                     destino = convertido,
                     isCancelada = { admission.isCancelRequested(job) },
                     onProgresso = onProgresso,
+                    motor = motorConversaoParaTeste ?: WhisperOrtMediaConverter.MotorFfmpeg,
+                    timeoutMs = timeoutConversaoMsParaTeste ?: 60_000L,
                 )
                 when (desfecho) {
                     is WhisperOrtMediaConverter.Resultado.Cancelada -> throw CancelamentoNoPreparo()
                     is WhisperOrtMediaConverter.Resultado.SessaoAtiva -> {
                         // Mantém admissão, job, forwarder, entrada e FGS até o
                         // callback físico. Timeout/cancelamento não liberam posse.
+                        // O dreno encaminha cancelamentos TARDIOS à sessão dona
+                        // (nunca global); pedido não equivale a recurso encerrado.
                         convertidoTemp = desfecho.destino
-                        onProgresso("aguardando término da conversão cancelada…")
-                        WhisperOrtMediaConverter.aguardarTermino(desfecho)
-                        if (admission.isCancelRequested(job)) throw CancelamentoNoPreparo()
-                        return encerrar(Result.Failed("conversao: ${desfecho.motivo}"))
+                        // Falha de observador NÃO é prova de término do conversor:
+                        // nunca pode desviar para o encerramento prematuro.
+                        runCatching { onProgresso("aguardando término da conversão…") }
+                        val fimFisico = WhisperOrtMediaConverter.drenar(
+                            desfecho,
+                            isCancelada = { admission.isCancelRequested(job) },
+                            onProgresso = onProgresso,
+                        )
+                        if (fimFisico.cancelada || admission.isCancelRequested(job)) {
+                            throw CancelamentoNoPreparo()
+                        }
+                        if (!fimFisico.ok) {
+                            return encerrar(Result.Failed("conversao: ${desfecho.motivo}"))
+                        }
+                        // Sucesso tardio: o arquivo estabilizou (término observado),
+                        // então o pipeline prossegue e o terminal sai normal.
                     }
                     is WhisperOrtMediaConverter.Resultado.Falhou ->
                         throw IllegalStateException(desfecho.motivo, precisaConversao)
@@ -405,7 +483,10 @@ object WhisperOrtRoute {
         // §2.2 — vínculo ÚNICO do hash medido, na transição para entrada pronta.
         // Se o vínculo for recusado (job não é mais o dono, hash inválido ou já
         // vinculado), a rota NÃO segue: seguir publicaria identidade errada.
+        // Adendo 17 §3 — quantidade e hash do PCM que REALMENTE entrou no
+        // modelo (só log: correlaciona arquivo→PCM→janelas sem tocar o contrato).
         val hashMedido = WhisperOrtPcm.sha256(WhisperOrtPcm.toInt16Le(pcm))
+        android.util.Log.i(TAG, "ort-pcm amostras=${pcm.size} sha256=$hashMedido")
         if (!admission.vincularEntrada(job, hashMedido)) {
             return encerrar(Result.Failed("entrada ja vinculada ou job nao e mais o dono"))
         }
@@ -435,7 +516,10 @@ object WhisperOrtRoute {
                 val vocab = JSONObject(pacote.vocab.readText(Charsets.UTF_8))
                 val mapa = HashMap<String, Int>(vocab.length())
                 for (chave in vocab.keys()) mapa[chave] = vocab.getInt(chave)
-                WhisperOrtTokenizer.fromVocab(mapa)
+                // Adendo 17 §1 — especiais por modelo (51865 small, 51866
+                // turbo): o vocab.json só traz o texto; com o teto do turbo
+                // no small, os logits (51865) nunca batiam no tokenizer.
+                WhisperOrtTokenizer.fromVocab(mapa, WhisperOrtModelCatalog.especiaisPara(modelo))
             }
             // INÍCIO REAL do trabalho nativo (§2.1: a FGS já está tomada desde antes
             // do preparo; aqui só se registra o começo do compute).
@@ -445,14 +529,21 @@ object WhisperOrtRoute {
                 jobId = job.jobId,
                 attempt = job.attempt,
                 pcm = pcm,
+                // ADENDO 23 §1 — o ID de TAREFA vem da FAMÍLIA do pacote
+                // (task_to_id medido nos metadados congelados); só Turbo
+                // mantém o default 50360. Prompt divergente recusa antes do compute.
                 policy = WhisperOrtGenerationPolicy(
                     prompt = intArrayOf(
                         WhisperOrtPrompt.START_OF_TRANSCRIPT,
                         WhisperOrtPrompt.LANGUAGE_PT,
-                        WhisperOrtPrompt.TRANSCRIBE,
+                        WhisperOrtModelCatalog.taskIdsPara(modelo).transcribe,
                     ),
                     config = config,
                     timestampMode = true,
+                    // ADENDO 23 §1 — IDs por família (tiny/base 50359/50363).
+                    transcribeTokenId = WhisperOrtModelCatalog.taskIdsPara(modelo).transcribe,
+                    translateTokenId = WhisperOrtModelCatalog.taskIdsPara(modelo).translate,
+                    noTimestampsTokenId = WhisperOrtModelCatalog.taskIdsPara(modelo).noTimestamps,
                 ),
                 threads = threads,
                 isCancelled = { admission.isCancelRequested(job) },
@@ -463,6 +554,11 @@ object WhisperOrtRoute {
                     val fim = SystemClock.elapsedRealtime() - inicio
                     if (t.outcome == WhisperOrtOutcome.CANCELLED) {
                         Result.Cancelled(t.text, partial = true, millis = fim)
+                    } else if (t.outcome == WhisperOrtOutcome.ERROR) {
+                        // Adendo 17 §1 — erro do transcriber viajava como Done
+                        // (texto vazio + outcome ERROR) e o motivo se perdia
+                        // (terminal com error=null). Falha carrega o motivo.
+                        Result.Failed(t.error ?: "transcriber devolveu ERROR sem detalhe")
                     } else {
                         Result.Done(
                             t.text, t.outcome.name, fim, desfecho.cacheHit,
@@ -563,7 +659,7 @@ object WhisperOrtRoute {
                         }
                         saida.write(buffer, 0, lidos)
                         if (total >= proximoAviso) {
-                            onProgresso("copiando ${total / (1024 * 1024)} MB…")
+                            runCatching { onProgresso("copiando ${total / (1024 * 1024)} MB…") }
                             proximoAviso += 4L * 1024 * 1024
                         }
                     }
@@ -599,61 +695,14 @@ object WhisperOrtRoute {
                 "arquivo de ${arquivo.length() / (1024 * 1024)} MB acima do limite desta rota",
             )
         }
-        val bytes = arquivo.readBytes()
-        if (bytes.size <= 44) throw WavCorrompido("arquivo pequeno demais")
-        if (String(bytes, 0, 4, Charsets.US_ASCII) != "RIFF") throw WavPrecisaConversao("nao e RIFF")
-        if (String(bytes, 8, 4, Charsets.US_ASCII) != "WAVE") throw WavPrecisaConversao("nao e WAVE")
-        var canais = 0
-        var taxa = 0
-        var bits = 0
-        var inicioDados = -1
-        var tamDados = 0
-        var i = 12
-        while (i + 8 <= bytes.size) {
-            val id = String(bytes, i, 4, Charsets.US_ASCII)
-            val tamanho = (bytes[i + 4].toInt() and 0xFF) or
-                ((bytes[i + 5].toInt() and 0xFF) shl 8) or
-                ((bytes[i + 6].toInt() and 0xFF) shl 16) or
-                ((bytes[i + 7].toInt() and 0xFF) shl 24)
-            if (id == "fmt ") {
-                // Validação ESTRUTURAL: o chunk precisa ter ao menos 16 bytes para
-                // os campos abaixo existirem; sem isso a leitura estourava o buffer.
-                if (tamanho < 16) throw WavCorrompido("chunk fmt com $tamanho bytes (< 16)")
-                if (i + 24 > bytes.size) throw WavCorrompido("chunk fmt além do fim do arquivo")
-                val formato = (bytes[i + 8].toInt() and 0xFF) or ((bytes[i + 9].toInt() and 0xFF) shl 8)
-                // Só PCM inteiro é lido aqui; float/extensível vai para conversão.
-                if (formato != 1) throw WavPrecisaConversao("formato WAV $formato: esta rota exige PCM")
-                canais = (bytes[i + 10].toInt() and 0xFF) or ((bytes[i + 11].toInt() and 0xFF) shl 8)
-                taxa = (bytes[i + 12].toInt() and 0xFF) or ((bytes[i + 13].toInt() and 0xFF) shl 8) or
-                    ((bytes[i + 14].toInt() and 0xFF) shl 16) or ((bytes[i + 15].toInt() and 0xFF) shl 24)
-                bits = (bytes[i + 22].toInt() and 0xFF) or ((bytes[i + 23].toInt() and 0xFF) shl 8)
-            } else if (id == "data") {
-                inicioDados = i + 8
-                val disponivel = bytes.size - inicioDados
-                // Arquivo TRUNCADO não é "um WAV mais curto": o cabeçalho promete
-                // mais amostras do que existem. O minOf anterior aceitava isso em
-                // silêncio (16.000 declaradas, 8.000 lidas) e transcrevia metade
-                // da fala como se fosse o arquivo inteiro.
-                if (tamanho < 0) throw WavCorrompido("chunk data com tamanho invalido")
-                if (tamanho > disponivel) {
-                    throw WavCorrompido(
-                        "arquivo WAV truncado: cabecalho declara $tamanho bytes de audio, existem $disponivel",
-                    )
-                }
-                tamDados = tamanho
-                break
-            }
-            // Chunk corrompido não pode prender o worker (avanço negativo/zero).
-            if (tamanho < 0 || tamanho > bytes.size) throw WavCorrompido("chunk $id com tamanho invalido")
-            i += 8 + tamanho + (tamanho and 1)
+        // Adendo 17 §3 — caminhamento de chunks no seam puro (testável em JVM
+        // com RIFF real, inclusive LIST); aqui só o mapeamento para o erro
+        // tipado da rota.
+        return when (val lido = WhisperOrtWav.ler(arquivo.readBytes())) {
+            is WhisperOrtWav.Leitura.Pcm -> lido.amostras
+            is WhisperOrtWav.Leitura.PrecisaConversao -> throw WavPrecisaConversao(lido.motivo)
+            is WhisperOrtWav.Leitura.Corrompido -> throw WavCorrompido(lido.motivo)
         }
-        WhisperOrtPcm.rejectionForSampleRate(taxa)?.let { throw WavPrecisaConversao(it) }
-        if (canais != 1) throw WavPrecisaConversao("audio com $canais canais: esta rota exige mono")
-        if (bits != 16) throw WavPrecisaConversao("audio com $bits bits: esta rota exige PCM 16")
-        if (inicioDados <= 0 || tamDados <= 0) throw WavCorrompido("chunk data ausente ou vazio")
-        val pcm = ByteArray(tamDados)
-        System.arraycopy(bytes, inicioDados, pcm, 0, tamDados)
-        return WhisperOrtPcm.fromInt16Le(pcm, channels = 1)
     }
 
     /** Aviso curto na main (a Activity só observa). */

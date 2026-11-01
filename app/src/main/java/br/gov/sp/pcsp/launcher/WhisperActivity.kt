@@ -211,6 +211,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      * stop encaminha o cancelamento para ELA, nunca para a geração global lida
      * tarde demais (um sucessor não pode ser atingido). */
     @Volatile private var liveMicGeneration = 0L
+    /** Adendo 18 §2 — TOKEN de RESERVA do job ao vivo (dono do serviço FGS);
+     * paralelo à geração lógica (`liveMicGeneration`), que continua a falar
+     * com o controller/sessão. Capturado na admissão, zerado no terminal. */
+    @Volatile private var liveReservaToken = 0L
     // R56/B01-B07 (adendo8 §1-2) — ACK TERMINAL INDEPENDENTE DA ACTIVITY.
     // Guarda a geração já confirmada para o terminal do live: o sink do worker
     // e o caminho de UI podem chamar; só o primeiro emite, e só da própria
@@ -295,8 +299,13 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      * Chamado pela ponte quando um cancelamento foi ACEITO. Seguro depois do
      * destroy (não mexe em views): só marca o pedido e atualiza status na UI
      * viva, pela geração.
+     * ADENDO 19 §1.2 — o aviso chega com a GERAÇÃO LÓGICA traduzida e ACEITO
+     * comprovado; encaminhamento alheio/atrasado (de A expirado ou da rota
+     * ORT) NÃO pode bater no job do CPP successor: sem ACK ou sem ser a
+     * sessão CORRENTE desta Activity, nada muda a flag nem o status.
      */
-    override fun onJobCancelForwarded(generation: Long) {
+    override fun onJobCancelForwarded(generation: Long, aceito: Boolean) {
+        if (!aceito || generation != currentSessionGeneration) return
         cancelRequested = true
         if (isFinishing || isDestroyed) return
         runOnUiThread {
@@ -374,7 +383,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     "Desmarcado (padrao): a transcricao de arquivo roda em ONNX Runtime na CPU.\n\n" +
                         "Marcado: volta ao whisper.cpp (CPU/Vulkan), que continua disponivel como " +
                         "alternativa e como compatibilidade.\n\n" +
-                        "O ORT usa Turbo INT8, português e busca greedy; os controles de VAD, " +
+                        "O ORT usa a versão INT8 do modelo selecionado, em português e com busca greedy; os controles de VAD, " +
                         "beam e timestamps do whisper.cpp não se aplicam. Áudio longo usa janelas.\n\n" +
                         "Se o ORT nao puder atender o arquivo (formato ou pacote ausente), o app PERGUNTA antes de usar o whisper.cpp - nunca troca " +
                         "de motor em silencio.",
@@ -382,8 +391,13 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 .setPositiveButton("Entendi", null)
                 .show()
         }
-        // Controle de threads ORT (pedido do usuário): default 4, máximo 8.
-        // Faixa 1–8, persistida; a rota lê via `threadsEfetivos` a cada despacho.
+        // Controle de threads COMPARTILHADO (pedido do usuário): default 4, máximo 8.
+        // Faixa 1–8, persistida; ORT lê via `threadsEfetivos` a cada despacho e o
+        // whisper.cpp aplica o mesmo valor por job (seam one-shot, adendo 16 §3).
+        // O provedor é ligado uma vez: o singleton é de processo e o valor é
+        // lido do seletor a cada tentativa (troca de seleção vale no próximo job).
+        val appParaThreads = applicationContext
+        whisperSession.threadsForJob = { WhisperOrtRoute.threadsEfetivos(appParaThreads) }
         val inputOrtThreads = findViewById<android.widget.TextView?>(R.id.input_ort_threads)
         inputOrtThreads?.text = WhisperOrtRoute.threadsEfetivos(this).toString()
         fun ajustarThreads(delta: Int) {
@@ -632,6 +646,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     }
 
     override fun onDestroy() {
+        // ADENDO 27 §2 — FLUSH do recibo: a UI está morrendo, então a
+        // finalização não virá por post. Marca o fato (ausente) e persiste a
+        // linha final das tentativas que já têm o terminal, no destino delas.
+        runCatching { publicarRecibosPendentesNoDestroy() }
         ortObserverGeneration++
         ortDownload?.cancel()
         ortDownload = null
@@ -732,7 +750,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 // Honra o "forçar whisper.cpp": o botão de caminho alternativo não
                 // pode burlar a escolha feita na caixa.
                 if (WhisperOrtRoute.isEnabled(this)) {
-                    despacharOrt(ortUri, data)
+                    despacharOrt(ortUri, data, selectedModel?.label)
                 } else {
                     ultimoDespacho = "CPP:$ortUri"
                     loadPickedMedia(data)
@@ -1306,23 +1324,77 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     }
 
     /**
-     * Fluxo gerenciado do pacote ORT (§4): quando o pacote não está pronto, oferece
-     * baixar (com tamanho, progresso e cancelamento), usar o whisper.cpp só para
-     * este arquivo, ou cancelar. Nada é transcrito sem pacote válido.
+     * Adendo 17 §1 — ativa o pacote do modelo efetivo JÁ instalado (sem novo
+     * download) e despacha a entrada com o override consentido.
+     *
+     * Usado ao trocar de modelo com pacote válido em disco e no aceite de
+     * turbo para entrada small com turbo instalado. Nada é transcrito sem
+     * pacote válido; se a ativação falhar, cai no download.
      */
-    private fun oferecerDownloadModeloOrt(uri: android.net.Uri) {
+    private fun ativarModeloOrt(uri: android.net.Uri, pedido: String?, efetivo: String) {
         if (isFinishing || isDestroyed) return
-        val totalMb = WhisperOrtModelCatalog.active.sumOf { it.sizeBytes } / 1_048_576L
+        val attempt = WhisperOrtDownloadOwner.begin()
+        if (attempt == null) {
+            status.text = "Uma operação ORT ainda está em andamento; aguarde o encerramento."
+            return
+        }
+        android.util.Log.i(TAG, "ativarModeloOrt pedido=$pedido efetivo=$efetivo")
+        val app = applicationContext
+        Thread({
+            try {
+                val root = WhisperOrtPackageFlow.raiz(app)
+                val ativado = WhisperOrtPackageInstaller.ativar(
+                    root, WhisperOrtModelCatalog.identity(efetivo),
+                    WhisperOrtModelCatalog.conjuntoPara(efetivo),
+                    withPublication = { action ->
+                        attempt.publish(action) ?: WhisperOrtPackageInstaller.Outcome.Refused("CANCELADO", "cancelado antes de ativar")
+                    },
+                )
+                runOnUiThread {
+                    WhisperOrtDownloadOwner.finish(attempt)
+                    if (isDestroyed || isFinishing) return@runOnUiThread
+                    when (ativado) {
+                        is WhisperOrtPackageInstaller.Outcome.Ready -> {
+                            status.text = "Modelo ORT pronto ($efetivo)."
+                            if (uriEscolhida == uri) despacharOrt(uri, null, efetivo, efetivo)
+                        }
+                        is WhisperOrtPackageInstaller.Outcome.Refused ->
+                            oferecerDownloadModeloOrt(uri, pedido, efetivo)
+                    }
+                }
+            } catch (falha: Throwable) {
+                WhisperOrtDownloadOwner.finish(attempt)
+                runOnUiThread {
+                    if (!isDestroyed && !isFinishing) {
+                        oferecerDownloadModeloOrt(uri, pedido, efetivo)
+                    }
+                }
+            }
+        }, "whisper-ort-ativar").apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Fluxo gerenciado do pacote ORT (§4 + adendo 17 §1): quando o pacote do
+     * modelo efetivo não está pronto, oferece baixar (com tamanho, progresso
+     * e cancelamento), usar o whisper.cpp só para este arquivo, ou cancelar.
+     * Nada é transcrito sem pacote válido. Pedido e efetivo viajam juntos
+     * para o redispatch não trocar o modelo no meio do caminho.
+     */
+    private fun oferecerDownloadModeloOrt(uri: android.net.Uri, pedido: String?, efetivo: String) {
+        if (isFinishing || isDestroyed) return
+        val totalMb = WhisperOrtModelCatalog.tamanhoPacoteBytes(efetivo) / 1_048_576L
+        val identidade = runCatching { WhisperOrtModelCatalog.identity(efetivo) }.getOrNull()
+        val revisao = identidade?.revision?.take(8) ?: "?"
         android.app.AlertDialog.Builder(this)
             .setTitle("Modelo ORT não instalado")
             .setMessage(
-                "A transcrição por ONNX Runtime precisa do pacote de modelo " +
-                    "(${totalMb} MB, Hugging Face, revisão congelada). " +
+                "Pedido: ${pedido ?: "?"} × ORT a usar: $efetivo " +
+                    "(${totalMb} MB, Hugging Face, revisão $revisao). " +
                     "O que fazer com este arquivo?",
             )
-            .setPositiveButton("Baixar modelo") { dialogo, _ ->
+            .setPositiveButton("Baixar $efetivo ($totalMb MB)") { dialogo, _ ->
                 dialogo.dismiss()
-                baixarModeloOrt(uri)
+                baixarModeloOrt(uri, pedido, efetivo)
             }
             .setNeutralButton("Usar whisper.cpp") { dialogo, _ ->
                 dialogo.dismiss()
@@ -1335,14 +1407,107 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     }
 
     /**
-     * Baixa o pacote com progresso e cancelamento, valida e ativa atomicamente.
+     * Adendo 17 §1 — pacote do modelo efetivo JÁ instalado (outra versão
+     * ativa): oferece usar sem novo download.
      *
+     * O aceite ativa a versão existente ([ativarModeloOrt]) e redispatcha com
+     * o override consentido da entrada. Nada é transcrito sem pacote válido.
+     */
+    private fun oferecerAtivarModeloOrt(uri: android.net.Uri, pedido: String?, efetivo: String) {
+        if (isFinishing || isDestroyed) return
+        val totalMb = WhisperOrtModelCatalog.tamanhoPacoteBytes(efetivo) / 1_048_576L
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Modelo ORT já instalado")
+            .setMessage(
+                "Pedido: ${pedido ?: "?"} × ORT a usar: $efetivo " +
+                    "($totalMb MB, já instalado e válido). " +
+                    "O que fazer com este arquivo?",
+            )
+            .setPositiveButton("Usar $efetivo instalado") { dialogo, _ ->
+                dialogo.dismiss()
+                ativarModeloOrt(uri, pedido, efetivo)
+            }
+            .setNeutralButton("Usar whisper.cpp") { dialogo, _ ->
+                dialogo.dismiss()
+                cppParaEstaEntrada = uri
+                loadPickedMedia(Intent().setData(uri))
+                transcribeSelectedMedia()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    /**
+     * Adendo 17 §1 — pedido fora do catálogo ORT (ex.: tiny/base).
+     *
+     * Mostra pedido × turbo com os tamanhos reais ANTES de qualquer download.
+     * Se o turbo já está instalado e válido, oferece USÁ-LO (sem novo download
+     * de 1,4 GB); senão, baixar. Nada inicia sem clique, e o aceite viaja como
+     * override consentido da ENTRADA (não muda a preferência geral).
+     */
+    private fun oferecerModeloNaoSuportadoOrt(uri: android.net.Uri, pedido: String) {
+        if (isFinishing || isDestroyed) return
+        val efetivo = WhisperOrtModelCatalog.MODEL
+        val ggmlBytes = officialModels().firstOrNull { it.label == pedido }?.bytes
+        val pedidoTamanho = if (ggmlBytes != null && ggmlBytes > 0L) {
+            "GGML ${ggmlBytes / 1_048_576L} MB, só whisper.cpp"
+        } else {
+            "sem pacote nesta ferramenta"
+        }
+        val turboMb = WhisperOrtModelCatalog.tamanhoPacoteBytes(efetivo) / 1_048_576L
+        val turboPronto = runCatching {
+            WhisperOrtPackageFlow.estado(this, efetivo) is WhisperOrtPackageFlow.Estado.Pronto
+        }.getOrDefault(false)
+        // Instalado mas inativo: ativar é instantâneo (sem novo download).
+        val turboInstalado = !turboPronto && runCatching {
+            WhisperOrtPackageFlow.temVersaoInstalada(this, efetivo)
+        }.getOrDefault(false)
+        val acaoTurbo = when {
+            turboPronto -> "Usar turbo instalado"
+            turboInstalado -> "Ativar turbo instalado"
+            else -> "Baixar turbo ($turboMb MB)"
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Modelo sem pacote ORT")
+            .setMessage(
+                "Pedido: $pedido ($pedidoTamanho) × ORT disponível: " +
+                    "$efetivo ($turboMb MB, revisão congelada). " +
+                    "O que fazer com este arquivo?",
+            )
+            .setPositiveButton(acaoTurbo) { dialogo, _ ->
+                dialogo.dismiss()
+                when {
+                    turboPronto ->
+                        despacharOrt(uri, null, efetivo, efetivo)
+                    turboInstalado ->
+                        ativarModeloOrt(uri, pedido, efetivo)
+                    else ->
+                        baixarModeloOrt(uri, pedido, efetivo)
+                }
+            }
+            .setNeutralButton("Usar whisper.cpp") { dialogo, _ ->
+                dialogo.dismiss()
+                cppParaEstaEntrada = uri
+                loadPickedMedia(Intent().setData(uri))
+                transcribeSelectedMedia()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
+    }
+
+    /**
+     * Baixa o pacote do MODELO EFETIVO com progresso e cancelamento, valida e
+     * ativa atomicamente.
+     *
+     * Pedido e efetivo ficam CONGELADOS na chamada (não relidos no fim): se a
+     * seleção mudar (B) enquanto A baixa, o redispatch usa o efetivo de A.
      * A versão atual continua utilizável se cancelar/falhar; o pacote em uso fica
      * protegido (staging à parte, ativação pelo `install` existente). Ao concluir,
-     * despacha o arquivo que originou o pedido.
+     * despacha o arquivo que originou o pedido com o override consentido.
      */
-    private fun baixarModeloOrt(uri: android.net.Uri) {
+    private fun baixarModeloOrt(uri: android.net.Uri, pedidoOriginal: String?, efetivo: String) {
         val attempt = WhisperOrtDownloadOwner.begin()
+        android.util.Log.i(TAG, "baixarModeloOrt pedido=$pedidoOriginal efetivo=$efetivo attempt=${attempt != null}")
         if (attempt == null) {
             status.text = "Um download ORT ainda está em andamento; aguarde o encerramento."
             return
@@ -1350,8 +1515,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         ortDownload = attempt
         val generation = ++ortObserverGeneration
         val dialogo = android.app.AlertDialog.Builder(this)
-            .setTitle("Baixando modelo ORT")
-            .setMessage("preparando…")
+            .setTitle("Baixando modelo ORT ($efetivo)")
+            .setMessage("pedido: ${pedidoOriginal ?: "?"} → pacote: $efetivo")
             .setNegativeButton("Cancelar") { _, _ -> attempt.cancel() }
             .setCancelable(false).show()
         ortDownloadDialog = dialogo
@@ -1370,10 +1535,14 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         }
         Thread({
             val staging = File(app.filesDir, "ort-staging-${attempt.id}")
+            android.util.Log.i(TAG, "baixarModeloOrt worker inicio efetivo=$efetivo staging=${staging.path}")
+            val entradas = WhisperOrtModelCatalog.conjuntoPara(efetivo)
+            val identidade = WhisperOrtModelCatalog.identity(efetivo)
             try {
                 val root = WhisperOrtPackageFlow.raiz(app)
                 val baixado = WhisperOrtModelDownload.baixar(
-                    WhisperOrtModelCatalog.active, staging,
+                    entradas, staging,
+                    urlDe = { nome -> WhisperOrtModelDownload.urlDe(efetivo, nome) },
                     isCancelada = attempt::isCancelled,
                     onProgresso = { p ->
                         enviar { tela ->
@@ -1385,8 +1554,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 )
                 val instalado = if (baixado is WhisperOrtModelDownload.Resultado.Pronto && !attempt.isCancelled()) {
                     WhisperOrtPackageInstaller.install(
-                        baixado.staging, root, WhisperOrtModelCatalog.identity(),
-                        WhisperOrtModelCatalog.active, isCancelled = attempt::isCancelled,
+                        baixado.staging, root, identidade,
+                        entradas, isCancelled = attempt::isCancelled,
                         withPublication = { action ->
                             attempt.publish(action) ?: WhisperOrtPackageInstaller.Outcome.Refused("CANCELADO", "cancelado antes de ativar")
                         },
@@ -1396,12 +1565,16 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     tela.ortDownloadDialog?.dismiss()
                     tela.ortDownloadDialog = null
                     tela.ortDownload = null
+                    android.util.Log.i(TAG, "baixarModeloOrt fim efetivo=$efetivo cancelado=${attempt.isCancelled()} baixado=$baixado instalado=$instalado")
                     when {
                         attempt.isCancelled() || baixado is WhisperOrtModelDownload.Resultado.Cancelado ->
                             tela.status.text = "Download ORT cancelado."
                         instalado is WhisperOrtPackageInstaller.Outcome.Ready -> {
-                            tela.status.text = "Modelo ORT pronto."
-                            if (tela.uriEscolhida == uri) tela.despacharOrt(uri, null)
+                            tela.status.text = "Modelo ORT pronto ($efetivo)."
+                            // Override consentido CONGELADO: o redispatch carrega
+                            // o efetivo desta entrada, sem reler a seleção atual
+                            // (que pode ser outra — ex.: B enquanto A baixava).
+                            if (tela.uriEscolhida == uri) tela.despacharOrt(uri, null, efetivo, efetivo)
                         }
                         else -> tela.status.text = when {
                             baixado is WhisperOrtModelDownload.Resultado.Falhou -> "Download ORT: ${baixado.motivo}"
@@ -1425,7 +1598,12 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     }
 
     /** Despacho único da rota ORT (picker normal, botão ORT e intent). */
-    private fun despacharOrt(uri: android.net.Uri, data: Intent?) {
+    private fun despacharOrt(
+        uri: android.net.Uri,
+        data: Intent?,
+        modeloPedido: String? = null,
+        modeloEfetivoConsentido: String? = null,
+    ) {
         if (jobOrtNaTela != null || isBusy) {
             status.text = "Aguarde o encerramento do trabalho atual."
             return
@@ -1433,12 +1611,34 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // O caminho do botão normal não tem Intent: sintetiza um com a URI congelada
         // para o consentimento de fallback valer em TODOS os caminhos.
         val contexto = data ?: Intent().setData(uri)
-        // §4: se o pacote não está pronto, o usuário sabe ANTES — a rota ainda
-        // recusa com motivo tipado e o diálogo de fallback continua valendo.
-        val estadoPacote = runCatching { WhisperOrtPackageFlow.estado(this) }.getOrNull()
+        // Adendo 17 §1 — o override consentido viaja com a ENTRADA (4º
+        // parâmetro), sem tocar a preferência geral; sem ele, o pedido resolve
+        // para o modelo do catálogo. Nada é transcrito nem baixado sem clique.
+        val efetivo = modeloEfetivoConsentido
+            ?: WhisperOrtModelCatalog.modeloParaPedido(modeloPedido)
+        if (efetivo == null) {
+            val pedido = modeloPedido ?: "?"
+            val estado = WhisperOrtPackageFlow.Estado.ModeloNaoSuportado(
+                pedido = pedido,
+                detalhe = "sem export ONNX validado; ORT atende ${WhisperOrtModelCatalog.MODEL} e ${WhisperOrtModelCatalog.MODEL_SMALL}",
+            )
+            status.text = "ORT sem pacote validado para “$pedido”."
+            WhisperOrtRoute.avisar(this, WhisperOrtPackageFlow.explicar(estado))
+            oferecerModeloNaoSuportadoOrt(uri, pedido)
+            return
+        }
+        // §4: se o pacote DO MODELO EFETIVO não está pronto, o usuário sabe
+        // ANTES — a rota ainda recusa com motivo tipado e o diálogo de fallback
+        // continua valendo. Com pacote válido em disco (outra versão ativa),
+        // oferece ATIVAR em vez de baixar de novo (adendo 17 §1).
+        val estadoPacote = runCatching { WhisperOrtPackageFlow.estado(this, efetivo) }.getOrNull()
         if (estadoPacote != null && estadoPacote !is WhisperOrtPackageFlow.Estado.Pronto) {
             WhisperOrtRoute.avisar(this, WhisperOrtPackageFlow.explicar(estadoPacote))
-            oferecerDownloadModeloOrt(uri)
+            if (runCatching { WhisperOrtPackageFlow.temVersaoInstalada(this, efetivo) }.getOrDefault(false)) {
+                oferecerAtivarModeloOrt(uri, modeloPedido, efetivo)
+            } else {
+                oferecerDownloadModeloOrt(uri, modeloPedido, efetivo)
+            }
             return
         }
         // A identidade do evento é capturada AQUI (thread chamadora), antes de
@@ -1457,8 +1657,11 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     status.text = "ORT: $etapa"
                 }
             } },
-            // Threads do controle da ferramenta (default 4, máx 8, pedido do usuário).
+            // Threads do seletor compartilhado (default 4, máx 8, pedido do usuário).
             threads = WhisperOrtRoute.threadsEfetivos(this),
+            // Modelo efetivo desta entrada (adendo 17 §1): override consentido
+            // ou resolução do pedido — nunca outro pacote por engano.
+            modelo = efetivo,
             onResult = { resultado ->
             if (isDestroyed || isFinishing || ortObserverGeneration != generation) return@transcribe
             if (meuJob == null) {
@@ -1541,12 +1744,15 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 return
             }
             // Snapshot da seleção: o arquivo escolhido no picker vence o intent.
+            // Adendo 16 §2 — o MODELO selecionado viaja junto: small nunca
+            // baixa turbo silenciosamente (gate dentro de despacharOrt).
+            val modeloPedido = selectedModel?.label
             val ortUri = WhisperOrtSelecao.resolver(
                 uriEscolhida?.toString(),
                 WhisperOrtRoute.resolveUri(this)?.toString(),
             )?.let { android.net.Uri.parse(it) }
             if (ortUri != null) {
-                despacharOrt(ortUri, null)
+                despacharOrt(ortUri, null, modeloPedido)
                 return
             }
         } else if (forcadoCpp) {
@@ -1627,6 +1833,21 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // W02: nova sessão descarta cancelamentos e callbacks da anterior.
         currentSessionGeneration = whisperSession.beginSession()
         val sessionGeneration = currentSessionGeneration
+        // Adendo 17 §4 — a RESERVA da via ARQUIVO vive no domínio único
+        // comparável:
+        // Adendo 18 §2 — o token agora vem do alocador COMUM de todos os
+        // produtores (arquivo/ORT/gravação/live): estritamente crescente e
+        // único, separado da geração lógica e do owner nativo. O adendo 17
+        // já tinha unificado em maxOf(sessão, relógio); com a alocação
+        // comum, dois jobs no mesmo milissegundo recebem identidades
+        // diferentes e nenhum produtor volta a ficar stale permanentemente.
+        val reservaGeneration =
+            WorkerReservation.Tokens.alocar(SystemClock.elapsedRealtime())
+        // Adendo 18 §2 — a ponte token⇄gen lógica sai do ciclo completo:
+        // o FGS/cancelamento da notização precisa invocar a sessão do
+        // controller na geração LÓGICA mesmo com o Serviço ownership no
+        // token, e o cancelamento tem de seguir ao nativo certo.
+        ReservationJobIdentity.registrar(reservaGeneration, sessionGeneration)
         // R12/A2: identidade do job no PRODUTOR — o resultado publicado leva
         // job_id/owner/input_id/attempt_id; export e relatório leem daqui
         // (nunca do widget, que pode estar vazio ou ser de outro job).
@@ -1642,7 +1863,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // ser candidato ao congelador: o job vai a terminal em vez de congelar
         // em "Carregando…".
         val admissaoArquivo = WhisperJobService.startJobOutcome(
-            this, sessionGeneration, WhisperJobLifecycle.KIND_FILE, "Preparando arquivos…",
+            this, reservaGeneration, WhisperJobLifecycle.KIND_FILE, "Preparando arquivos…",
             // R15/B1 — prazo curto só quando o ENSAIO pede (produção = padrão).
             timeoutMs = WhisperLabSeams.leaseTimeoutMs()
                 ?: WhisperJobService.DEFAULT_LOCK_TIMEOUT_MS
@@ -1651,6 +1872,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // FGS não subiu e o terminal seria recusado depois. Antes, o fluxo
         // continuava e deixava a reserva em quarentena.
         if (admissaoArquivo == WhisperJobService.StartOutcome.ADMISSAO_RECUSADA) {
+            // Adendo 18 §2 — sem dono, o PAR (token⇄lógico) morre com o job.
+            ReservationJobIdentity.esquecer(reservaGeneration)
             isTranscribing = false
             stopTranscriptionTimer()
             setBusy(false)
@@ -1658,6 +1881,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             return
         }
         val startedAt = SystemClock.elapsedRealtime()
+        // Adendo 17 §2 — threads CONGELADAS no despacho deste job (antes do
+        // compute): UI alterada no meio vale só no próximo; relatório e fases
+        // usam este fato, nunca releem a preferência no fim.
+        val threadsCongeladasJob = WhisperOrtRoute.threadsEfetivos(this@WhisperActivity)
         val liveText = StringBuilder()
         val logLines = StringBuilder()
         val terminalLines = StringBuilder()
@@ -1670,6 +1897,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             var sessionDir: File? = null
             var tempWavDir: File? = null
             var modelLoadMs = 0L
+            // ADENDO 27 §2 — observador da última tentativa, visível também nos
+            // caminhos de CANCEL/ERRO (o recibo fecha nos três desfechos).
+            var observadorUltimoArquivo: WhisperApresentacaoObservador? = null
             try {
                 sessionDir = createSessionDir()
                 val perFileDir = File(sessionDir, "Transcricoes").apply { mkdirs() }
@@ -1717,7 +1947,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 // (REFUSED_STALE_GENERATION) passava e o job computava sem
                 // reserva, disputando o worker com a geração viva.
                 val porta = WhisperJobLifecycle.admission(
-                    WorkerReservationStore.reserve(sessionGeneration)
+                    WorkerReservationStore.reserve(reservaGeneration)
                 )
                 if (!porta.start) {
                     liveEvent(
@@ -1826,6 +2056,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 TranscriptionReport.appendLog(logLines, "Transcrevendo...")
                 updateGlobalLogText()
 
+                // Adendo 17 §4 — instantes do ÚLTIMO arquivo (o M2 do job mede o
+                // pós do lote; cada arquivo já tem sua linha de fases).
+                var ultimoRetornoEm = 0L
+                var ultimoParseEm = 0L
                 convertedItems.forEachIndexed { index, converted ->
                     checkNotCancelled()
                     val item = converted.item
@@ -1861,8 +2095,11 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                         updateGlobalLogText()
                     }
 
-                    fun makeCallback(languageLabel: String): WhisperNative.Callback {
+                    fun makeCallback(languageLabel: String, fases: FasesArquivo): WhisperNative.Callback {
                         val lastTerminalUpdateMs = longArrayOf(0L)
+                        // ADENDO 26 §2 — sequência IMUTÁVEL por segmento desta
+                        // tentativa: emissão e apresentação falam do MESMO id.
+                        var seqSegmento = 0L
                         fun updateTerminalThrottled(force: Boolean = false) {
                             val now = SystemClock.elapsedRealtime()
                             if (force || now - lastTerminalUpdateMs[0] >= 250L) {
@@ -1880,6 +2117,14 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                             override fun onSegment(text: String, startMs: Long, endMs: Long) {
                                 val segment = text.trim()
                                 if (segment.isBlank()) return
+                                // ADENDO 26 §2 — EMISSÃO (post agendado) com
+                                // sequência própria; o id vale para a tentativa.
+                                val sequencia = ++seqSegmento
+                                fases.observador.emitido(sequencia)
+                                // Adendo 17 §4 — último segmento apresentado e seu
+                                // fim: separa "texto na tela" do retorno do compute.
+                                fases.ultimoSegmentoEm = SystemClock.elapsedRealtime()
+                                if (endMs > fases.ultimoSegmentoFimMs) fases.ultimoSegmentoFimMs = endMs
                                 // R12/A2: o ledger do PRODUTOR recebe o segmento
                                 // com a identidade desta tentativa. Segmento de um
                                 // job/tentativa antiga é recusado (false) e NÃO
@@ -1891,16 +2136,49 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                                     liveText.append(segment).append('\n')
                                 }
                                 runOnUiThread {
-                                    whisperSession.runIfCurrent(sessionGeneration) {
-                                        if (liveTranscriptContainer.visibility != View.VISIBLE) {
-                                            liveTranscriptContainer.visibility = View.VISIBLE
-                                            liveTranscriptClipboardActions.visibility = View.VISIBLE
-                                        }
-                                        val cur = liveTranscriptText.text.toString()
-                                        val sep = if (cur.isEmpty() || cur.endsWith("\n") || cur.endsWith(" ")) "" else " "
-                                        liveTranscriptText.append(sep + segment)
-                                        liveTranscriptText.setSelection(liveTranscriptText.text.length)
+                                    if (isDestroyed || isFinishing) {
+                                        // ADENDO 26 §2 — ausência por DESTROY:
+                                        // registrada, não confundida com "ainda na fila".
+                                        fases.observador.recusar(
+                                            sequencia, WhisperApresentacaoObservador.MotivoRecusa.DESTROY
+                                        )
+                                        // ADENDO 27 §2 — a UI morreu: fato TIPADO,
+                                        // não espera por um post que não vai rodar.
+                                        fases.observador.finalizacaoAusente()
+                                        publicarReciboFinalSeFechado(
+                                            fases.observador, terminalLines, sessionGeneration
+                                        )
+                                        return@runOnUiThread
                                     }
+                                    val executou = whisperSession.runIfCurrent(sessionGeneration) {
+                                        // ADENDO 26 §2 — a escrita da view acontece
+                                        // DENTRO de `apresentar`: identidade divergente
+                                        // NÃO escreve no sucessor.
+                                        fases.observador.apresentar(sequencia, attemptKey) {
+                                            if (liveTranscriptContainer.visibility != View.VISIBLE) {
+                                                liveTranscriptContainer.visibility = View.VISIBLE
+                                                liveTranscriptClipboardActions.visibility = View.VISIBLE
+                                            }
+                                            val cur = liveTranscriptText.text.toString()
+                                            val sep = if (cur.isEmpty() || cur.endsWith("\n") || cur.endsWith(" ")) "" else " "
+                                            liveTranscriptText.append(sep + segment)
+                                            liveTranscriptText.setSelection(liveTranscriptText.text.length)
+                                            // ADENDO 21 §3 — APRESENTAÇÃO REAL: dentro
+                                            // do post EXECUTADO, DEPOIS de atualizar a
+                                            // view (diferente do callback emitido).
+                                            fases.ultimoSegmentoApresentadoEm = SystemClock.elapsedRealtime()
+                                            // ADENDO 22 §3 — observável pelo teste:
+                                            ultimoApresentadoGlobal = fases.ultimoSegmentoApresentadoEm
+                                        }
+                                    }
+                                    if (!executou) {
+                                        // Geração trocada: o post executou, mas a view
+                                        // deste job já não é corrente — nada foi escrito.
+                                        fases.observador.recusar(
+                                            sequencia, WhisperApresentacaoObservador.MotivoRecusa.GERACAO_TROCADA
+                                        )
+                                    }
+                                    publicarReciboFinalSeFechado(fases.observador, terminalLines, sessionGeneration)
                                 }
                                 appendTerminal(terminalLines, "${formatTime(startMs)} --> ${formatTime(endMs)}  $segment")
                                 updateTerminalThrottled()
@@ -1908,6 +2186,16 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
 
                             override fun onProgress(progress: Int) {
                                 val safeProgress = progress.coerceIn(0, 100)
+                                if (safeProgress >= 99) {
+                                    // Adendo 17 §4 — primeiro E último 99%: a
+                                    // permanência em 99 é o intervalo entre eles.
+                                    val agora = SystemClock.elapsedRealtime()
+                                    if (fases.primeiro99Em == 0L) fases.primeiro99Em = agora
+                                    fases.ultimo99Em = agora
+                                    // ADENDO 26 §2 — primeiro/último 99 no MESMO
+                                    // relógio/origem do recibo final.
+                                    fases.observador.progresso99(agora)
+                                }
                                 appendTerminal(terminalLines, "whisper.cpp: progress $safeProgress%")
                                 runOnUiThread {
                                     whisperSession.runIfCurrent(sessionGeneration) {
@@ -1934,12 +2222,24 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     appendTerminal(terminalLines, WhisperNative.buildInfo())
                     appendTerminal(terminalLines, "system_info: ${WhisperNative.systemInfo()}")
                     appendTerminal(terminalLines, "whisper.cpp: calling whisper_full_parallel")
+                    // Adendo 16 §3 — pedidas do seletor compartilhado; o efetivo
+                    // nativo sai no log (`native params … threads=`).
+                    appendTerminal(terminalLines, "whisper.cpp: threads_pedidas=${threadsCongeladasJob} (seletor compartilhado ORT/CPP)")
                     postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
                     val transcribeStartedAt = SystemClock.elapsedRealtime()
                     // R18/C1 — início real do worker (caminho de lote/import).
-                    runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, sessionGeneration) }
+                    runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, reservaGeneration) }
                     // R2/B2: texto+status do MESMO job numa única chamada (par
                     // protegido); o callback é envolvido pelo controller.
+                    // Adendo 17 §4 — cronômetros DESTE arquivo/tentativa (nunca
+                    // compartilhados entre arquivos do lote).
+                    val fases = FasesArquivo(
+                        registrarObservadorApresentacao(attemptKey, sessionDir?.let { File(it, "terminal.txt") })
+                    )
+                    observadorUltimoArquivo = fases.observador
+                    // ADENDO 26 §2 — ORIGEM do recibo: o compute começa AQUI,
+                    // depois do preparo/abertura (não no início do teste).
+                    fases.observador.inicioCompute(transcribeStartedAt)
                     val (returnedRaw, transcribeStatus) = whisperSession.transcribeAndStatus(
                         sessionGeneration,
                         converted.wavFile.absolutePath,
@@ -1949,12 +2249,40 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                         settings.wordTimestamps,
                         settings.vadFilter,
                         if (settings.vadFilter) vadModelFile().absolutePath else "",
-                        makeCallback(selectedLanguage.code)
+                        makeCallback(selectedLanguage.code, fases)
                     )
+                    val retornoEm = SystemClock.elapsedRealtime()
+                    // ADENDO 26 §2 — retorno do compute no mesmo domínio do recibo.
+                    fases.observador.retorno(retornoEm)
+                    // Depois do retorno não há mais segmento a emitir; posts já
+                    // emitidos continuam válidos (o último pode executar depois).
+                    fases.observador.fecharEmissao()
                     val returnedText = returnedRaw.trim()
-                    appendTerminal(terminalLines, "whisper.cpp: whisper_full_parallel returned in ${formatElapsedCompact(SystemClock.elapsedRealtime() - transcribeStartedAt)}")
+                    appendTerminal(terminalLines, "whisper.cpp: whisper_full_parallel returned in ${formatElapsedCompact(retornoEm - transcribeStartedAt)}")
+                    // Adendo 17 §4 — separa compute do pós-retorno POR ARQUIVO:
+                    // primeiro/último 99 (permanência), último segmento exibido.
+                    // Nada aqui simula conclusão: só nomeia a fase real.
+                    val fasesLinha =
+                        "whisper.cpp: fases job=$sessionGeneration arquivo=${item.name} " +
+                            "compute_ms=${retornoEm - transcribeStartedAt} " +
+                            "p99_primeiro_ms=${if (fases.primeiro99Em > 0) fases.primeiro99Em - transcribeStartedAt else -1} " +
+                            "p99_ultimo_ms=${if (fases.ultimo99Em > 0) fases.ultimo99Em - transcribeStartedAt else -1} " +
+                            "ultimo_segmento_ms=${if (fases.ultimoSegmentoEm > 0) fases.ultimoSegmentoEm - transcribeStartedAt else -1} " +
+                            "ultimo_segmento_apresentado_ms=${if (fases.ultimoSegmentoApresentadoEm > 0) fases.ultimoSegmentoApresentadoEm - transcribeStartedAt else -1} " +
+                            "ultimo_segmento_fim_audio_ms=${fases.ultimoSegmentoFimMs}"
+                    appendTerminal(terminalLines, fasesLinha)
+                    Log.i(TAG, fasesLinha)
+                    runOnUiThread {
+                        if (!isDestroyed && !isFinishing) {
+                            setTranscriptionStatus("Processando resultado de ${item.name}...")
+                        }
+                    }
                     postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
                     val parsed = WhisperResultParser.parse(returnedText, transcribeStatus)
+                    val parseEm = SystemClock.elapsedRealtime()
+                    fases.observador.parse(parseEm)
+                    ultimoRetornoEm = retornoEm
+                    ultimoParseEm = parseEm
                     // R8/A2: o aviso de FA ATUALIZA com o estado ESTRUTURADO do
                     // MESMO job (SIG_FA_EXEC deste transcribe) — distingue CARGA
                     // (SIG_FA_STATUS) de EXECUÇÃO e não herda do job anterior.
@@ -2011,6 +2339,15 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     val text = fileText.toString().trim()
                     val individual = uniqueOutputFile(perFileDir, "${TranscriptionReport.safeBaseName(item.name)}.txt")
                     individual.writeText(text, Charsets.UTF_8)
+                    // ADENDO 26 §2 — PERSISTÊNCIA do arquivo, mesma origem.
+                    fases.observador.persistencia(SystemClock.elapsedRealtime())
+                    // Fotografia do worker: pode sair PENDENTE se o post do
+                    // último segmento ainda não executou — o fechamento real é
+                    // publicado quando o post executa (rotulo=final).
+                    fases.observador.linha("fase1").let { linha ->
+                        appendTerminal(terminalLines, linha)
+                        Log.i(TAG, linha)
+                    }
                     results += TranscriptionResult(item.name, text, individual, converted.durationSeconds)
 
                     TranscriptionReport.appendLog(logLines, "Concluído: ${item.name}")
@@ -2049,10 +2386,26 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     )
                 }
 
-                val report = buildReport(model, backend, items.size, totalAudioSeconds, elapsedMs, modelLoadMs)
+                val report = buildReport(model, backend, items.size, totalAudioSeconds, elapsedMs, modelLoadMs, threadsCongeladasJob)
                 TranscriptionReport.appendLog(logLines, report)
                 sessionLogFile.writeText(logLines.toString(), Charsets.UTF_8)
                 sessionTerminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
+                // Adendo 17 §4 — fim dos writes: retorno→parse e parse→writes do
+                // ÚLTIMO arquivo (o M1 de cada arquivo já separou compute de
+                // retorno). Re-snapshot para a linha entrar no terminal.txt.
+                val fimWritesEm = SystemClock.elapsedRealtime()
+                val m2Linha =
+                    "whisper.cpp: fases job=$sessionGeneration retorno_ate_parse_ms=${ultimoParseEm - ultimoRetornoEm} " +
+                        "parse_ate_writes_ms=${fimWritesEm - ultimoParseEm}"
+                appendTerminal(terminalLines, m2Linha)
+                Log.i(TAG, m2Linha)
+                sessionTerminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
+                observadorUltimoArquivo?.persistencia()
+                runOnUiThread {
+                    if (!isDestroyed && !isFinishing) {
+                        setTranscriptionStatus("Finalizando transcrição...")
+                    }
+                }
                 appendGlobalLog(logLines.toString())
 
                 val outputSession = OutputSession(sessionDir, txtFile, htmlFile, sessionLogFile)
@@ -2084,10 +2437,27 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     updateTerminalText(terminalLines)
                     whisperScroll.post { whisperScroll.smoothScrollTo(0, outputActions.bottom) }
                     updateTranscribeEnabled()
+                    // ADENDO 26 §2 — finalização no MESMO domínio do recibo; se o
+                    // último post de segmento já executou, o recibo final sai aqui.
+                    observadorUltimoArquivo?.let { obs ->
+                        obs.finalizacao()
+                        publicarReciboFinalSeFechado(obs, terminalLines, sessionGeneration)
+                    }
                     }
                 }
                 // R11/D4 — TERMINAL do job de arquivo: libera lock/notificação.
-                WhisperJobService.finishJob(sessionGeneration, "SUCCESS")
+                WhisperJobService.finishJob(reservaGeneration, "SUCCESS")
+                // ADENDO 26 §2 — terminal/liberação: só marca LIBERACAO quando a
+                // reserva DESTE job realmente não está mais presa.
+                observadorUltimoArquivo?.let { obs ->
+                    if (isDestroyed || isFinishing || !whisperSession.isCurrent(sessionGeneration)) {
+                        obs.finalizacaoAusente()
+                    }
+                    obs.terminal(
+                        liberacaoConfirmada = !WorkerReservationStore.heldBy(reservaGeneration)
+                    )
+                    publicarReciboFinalSeFechado(obs, terminalLines, sessionGeneration)
+                }
             } catch (e: CancellationException) {
                 Log.i(TAG, "Transcription cancelled", e)
                 // R12/A2: terminal do PRODUTOR. Sem decode deste job o texto é
@@ -2117,6 +2487,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                         cancelResult?.let { r ->
                             File(it, "job.json").writeText(r.toJsonString(), Charsets.UTF_8)
                         }
+                        observadorUltimoArquivo?.persistencia()
                         appendGlobalLog(logLines.toString())
                     } catch (_: Throwable) {
                     }
@@ -2149,7 +2520,16 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     }
                 }
                 // R11/D4 — TERMINAL tipado (cancel): libera lock/notificação.
-                WhisperJobService.finishJob(sessionGeneration, "CANCELLED")
+                WhisperJobService.finishJob(reservaGeneration, "CANCELLED")
+                // ADENDO 27 §2 — o recibo fecha no CANCEL/ERRO com o mesmo
+                // contrato do sucesso (terminal + liberação provada).
+                observadorUltimoArquivo?.let { obs ->
+                    obs.finalizacaoAusente()
+                    obs.terminal(
+                        liberacaoConfirmada = !WorkerReservationStore.heldBy(reservaGeneration)
+                    )
+                    publicarReciboFinalSeFechado(obs, terminalLines, sessionGeneration)
+                }
             } catch (e: Throwable) {
                 Log.e(TAG, "Transcription failed", e)
                 val errorResult = TranscriptionJobResults.ledger.publishJob(
@@ -2176,6 +2556,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                         errorResult?.let { r ->
                             File(it, "job.json").writeText(r.toJsonString(), Charsets.UTF_8)
                         }
+                        observadorUltimoArquivo?.persistencia()
                         appendGlobalLog(logLines.toString())
                     } catch (_: Throwable) {
                     }
@@ -2207,7 +2588,16 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     }
                 }
                 // R11/D4 — TERMINAL tipado (erro): libera lock/notificação.
-                WhisperJobService.finishJob(sessionGeneration, "ERROR")
+                WhisperJobService.finishJob(reservaGeneration, "ERROR")
+                // ADENDO 27 §2 — o recibo fecha no CANCEL/ERRO com o mesmo
+                // contrato do sucesso (terminal + liberação provada).
+                observadorUltimoArquivo?.let { obs ->
+                    obs.finalizacaoAusente()
+                    obs.terminal(
+                        liberacaoConfirmada = !WorkerReservationStore.heldBy(reservaGeneration)
+                    )
+                    publicarReciboFinalSeFechado(obs, terminalLines, sessionGeneration)
+                }
             }
         }.start()
     }
@@ -2523,12 +2913,16 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         fileCount: Int,
         totalAudioSeconds: Double,
         elapsedMs: Long,
-        modelLoadMs: Long
+        modelLoadMs: Long,
+        threadsPedidas: Int = 0,
     ): String {
         val elapsedSeconds = (elapsedMs / 1000.0).coerceAtLeast(0.001)
         val efficiency = totalAudioSeconds / elapsedSeconds
         return listOf(
             "Modelo: ${model.label} (${backend.reportLabel})",
+            // Adendo 16 §3/§5 — pedidas do seletor compartilhado; a efetiva do
+            // CPP sai no log (`native params … threads=`).
+            "Threads pedidas: $threadsPedidas (seletor compartilhado ORT/CPP)",
             "Arquivos: $fileCount",
             "Total de áudio processado: ${formatSeconds(totalAudioSeconds)}",
             "Tempo de carregamento do modelo: ${formatElapsedCompact(modelLoadMs)}",
@@ -3667,10 +4061,17 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         val sessionGeneration = currentSessionGeneration
         // R11/D4 — a transcrição da gravação é um job de ARQUIVO de verdade:
         // mesmo dono de lifecycle do caminho de arquivo (FGS `dataSync`).
+        // Adendo 18 §2 — RESERVA no alocador COMUM: com geração lógica pura,
+        // `State.reserve` recusava a gravação como stale para sempre depois
+        // de qualquer job de arquivo (`gen <= lastTerminalGen`), e um token
+        // de relógio puro não é único no mesmo milissegundo.
+        val tokenGravacao = WorkerReservation.Tokens.alocar(SystemClock.elapsedRealtime())
+        ReservationJobIdentity.registrar(tokenGravacao, sessionGeneration)
         val admissaoGravacao = WhisperJobService.startJobOutcome(
-            this, sessionGeneration, WhisperJobLifecycle.KIND_FILE, "Carregando modelo e transcrevendo…"
+            this, tokenGravacao, WhisperJobLifecycle.KIND_FILE, "Carregando modelo e transcrevendo…"
         )
         if (admissaoGravacao == WhisperJobService.StartOutcome.ADMISSAO_RECUSADA) {
+            ReservationJobIdentity.esquecer(tokenGravacao)
             status.text = "Job recusado: outra geração é dona da reserva."
             progress.visibility = View.GONE
             return
@@ -3768,7 +4169,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 // R18/C1 — INÍCIO REAL do worker ANTES do trabalho nativo. O
                 // serviço passa a saber que existe worker por esta ação, não
                 // pelo primeiro status publicado.
-                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, sessionGeneration) }
+                // Adendo 18 §2 — a marca leva o TOKEN de reserva do job.
+                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, tokenGravacao) }
 
                 // R2/B2: par texto+status do mesmo job, numa única chamada.
                 val (returnedRaw, transcribeStatus) = synchronized(modelLoadLock) {
@@ -3786,6 +4188,14 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 }
                 val returnedText = returnedRaw.trim()
 
+                // Adendo 16 §5 — separa compute do pós-retorno também na
+                // gravação (mesma honestidade de fase do lote; só log).
+                Log.i(TAG, "gravacao: compute_retornou")
+                runOnUiThread {
+                    if (!isDestroyed && !isFinishing) {
+                        status.text = "Processando gravação..."
+                    }
+                }
                 val parsed = WhisperResultParser.parse(returnedText, transcribeStatus)
                 // R56/B03 (checkpoint9) — DESFECHO CALCULADO UMA VEZ NO WORKER,
                 // ANTES de enfileirar qualquer atualização visual. Antes, quem
@@ -3876,7 +4286,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 // R11/D4 — TERMINAL do job de transcrição da gravação.
                 // R56/B03 — desfecho TIPADO (o literal antigo caía em UNKNOWN e
                 // o dono ficava sem ACK).
-                WhisperJobService.finishJob(sessionGeneration, desfechoGravacao)
+                // Adendo 18 §2 — terminal no TOKEN de reserva do job.
+                ReservationJobIdentity.esquecer(tokenGravacao)
+                WhisperJobService.finishJob(tokenGravacao, desfechoGravacao)
             }
         }.start()
     }
@@ -3954,21 +4366,31 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             // R11/D4 — execução iniciada pelo usuário e observável: FGS tipo
             // `microphone` (RECORD_AUDIO já autorizado por checkAudioPermission),
             // com wake lock e notificação de status/cancelar.
+            // Adendo 18 §2 — RESERVA no alocador COMUM: a geração lógica pura
+            // era recusada como stale depois de qualquer job de arquivo.
+            val tokenLive = WorkerReservation.Tokens.alocar(SystemClock.elapsedRealtime())
+            ReservationJobIdentity.registrar(tokenLive, liveGeneration)
             val admissaoLive = WhisperJobService.startJobOutcome(
-                this, liveGeneration, WhisperJobLifecycle.KIND_LIVE, "Preparando transcrição ao vivo…"
+                this, tokenLive, WhisperJobLifecycle.KIND_LIVE, "Preparando transcrição ao vivo…"
             )
             if (admissaoLive == WhisperJobService.StartOutcome.ADMISSAO_RECUSADA) {
                 // Tentativa NAO admitida: desfaz a preparação local e nao abre
                 // áudio nem worker. Nada do dono antigo é cancelado aqui.
+                ReservationJobIdentity.esquecer(tokenLive)
                 desfazPreparacaoLive()
                 status.text = "Job recusado: outra geração é dona da reserva."
             } else {
-                // R56/B01-B07 — sink com a geração IMUTÁVEL deste job, criado
+                // R56/B01-B07 — sink com a identidade IMUTÁVEL deste job, criado
                 // antes de qualquer trabalho que possa terminar cedo. A
                 // INSTÂNCIA viaja com o job (nota11 §2): nenhuma saída de A
                 // pode encontrar o sink de C por lookup em campo mutável.
-                val sinkDoJob = WhisperJobTerminalSink(liveGeneration) { g, d ->
+                // Adendo 18 §2 — a identidade do sink é o TOKEN de reserva
+                // (mesma do dono do serviço); a sessão lógica continua na
+                // geração do controller.
+                liveReservaToken = tokenLive
+                val sinkDoJob = WhisperJobTerminalSink(tokenLive) { g, d ->
                     runCatching {
+                        ReservationJobIdentity.esquecer(g)
                         WhisperJobService.finishJob(g, d)
                         true
                     }.getOrDefault(false)
@@ -3976,7 +4398,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 terminalSinkAtual = sinkDoJob
                 liveMicThread = Thread {
                     runLiveMicLoop(
-                        model, backend, settings, liveSettings, liveGeneration, sinkDoJob
+                        model, backend, settings, liveSettings, liveGeneration, tokenLive, sinkDoJob
                     )
                 }.also { it.start() }
             }
@@ -4111,11 +4533,19 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // chamava `finishJob(currentSessionGeneration, ...)`: se um job novo
         // tinha começado na janela, o terminal ao vivo caía na geração do
         // SUCESSOR (terminal de outra identidade).
+        // Adendo 18 §2 — o dono do serviço é o TOKEN do alocador comum; o
+        // ACK sai por ele (a identidade do sink também é o token), com
+        // fallback na geração lógica para rotas sem PAR registrado.
+        val tokenDesteStop = liveReservaToken
+        liveReservaToken = 0L
         val genDesteStop = liveMicGeneration
         liveMicGeneration = 0L
         // R11/D4 — TERMINAL do job ao vivo (stop do usuário, cancel pela
         // notificação ou erro do worker): libera lock/notificação.
-        if (genDesteStop > 0L) {
+        ReservationJobIdentity.esquecer(tokenDesteStop)
+        if (tokenDesteStop > 0L) {
+            ackTerminalLive(tokenDesteStop, "LIVE_TERMINAL")
+        } else if (genDesteStop > 0L) {
             ackTerminalLive(genDesteStop, "LIVE_TERMINAL")
         }
         buttonLiveMicStop.setImageResource(R.drawable.ic_mic_outline_red)
@@ -4162,6 +4592,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         settings: WhisperAdvancedSettings,
         liveSettings: LiveJobSettings,
         geracaoJob: Long,
+        tokenReserva: Long,
         sinkDoJob: WhisperJobTerminalSink,
     ) {
         // R56/B01-B07 — o ACK só sai com término COMPROVADO e pela INSTÂNCIA do
@@ -4171,7 +4602,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         var corpoConcluiu = false
         try {
             runLiveMicLoopCorpo(
-                model, backend, settings, liveSettings, geracaoJob, sinkDoJob
+                model, backend, settings, liveSettings, geracaoJob, tokenReserva, sinkDoJob
             )
             corpoConcluiu = true
         } catch (t: Throwable) {
@@ -4205,6 +4636,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // R56/B01-B07 — geração e SINK capturados na ADMISSÃO, disponíveis
         // ANTES de qualquer retorno precoce (inclusive checagem de buffer).
         geracaoJob: Long,
+        tokenReserva: Long,
         sinkDoJob: WhisperJobTerminalSink,
     ) {
         val sampleRate = 16000
@@ -4430,7 +4862,13 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         )
         // R6/D2: commit de texto do job (provisório×comprometido) — instância
         // NOVA por job; cancel não publica provisório; stop/EOF drenam a cauda.
-        val committer = LiveTextCommitter()
+        val committer = LiveTextCommitter(
+            // ADENDO 27 §1 — no LAB, os fatos da decisão de áudio da região
+            // retida vão para o log (em produção o seam é inerte e o custo é 0).
+            onRegion = if (WhisperLabSeams.isLab()) {
+                { diag -> WhisperLabSeams.event("live_region", diag.toJson()) }
+            } else null,
+        )
         liveTextCommitter = committer
         liveFirstSpeechMs = -1L
         liveFirstPartialMs = -1L
@@ -4510,7 +4948,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 contextSamples = contextSamples,
                 planner = planner,
                 readBufferBytes = minBuffer.coerceAtLeast(4096),
-                processChunk = { chunk -> transcribeLiveChunk(chunk, liveSettings, sessionGeneration) },
+                processChunk = { chunk -> transcribeLiveChunk(chunk, liveSettings, sessionGeneration, tokenReserva) },
                 silenceCheck = { it is LiveChunkResult.NoSpeech },
                 failureCheck = { it is LiveChunkResult.Failed },
                 maxSpoolBytes = WhisperLabSeams.spoolLimitBytes() ?: DEFAULT_LIVE_SPOOL_MAX_BYTES,
@@ -4629,7 +5067,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     if (!cancelled) {
                         val repairCommitter = liveTextCommitter
                         if (repairCommitter != null && repairCommitter.pendingRepairCount() > 0) {
-                            runLiveRepairPass(repairCommitter, liveSettings, sessionGeneration)
+                            runLiveRepairPass(repairCommitter, liveSettings, sessionGeneration, tokenReserva)
                         }
                     }
                     // R6/D2: stop/EOF DRENAM a cauda provisória; cancel NÃO a
@@ -5014,6 +5452,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         chunk: LivePcmPipeline.Chunk,
         liveSettings: LiveJobSettings,
         sessionGeneration: Long,
+        tokenReserva: Long,
     ): LiveChunkResult {
         // R8/D (integridade/cadência): REPARO DEFERIDO — o passe de reparo do
         // chunk ANTERIOR roda AQUI (thread do worker, FORA do lock do pipeline).
@@ -5022,7 +5461,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // fica serializado com os decodes (mesma thread) — nunca concorrente.
         val repairCommitter = liveTextCommitter
         if (repairCommitter != null && repairCommitter.pendingRepairCount() > 0) {
-            runLiveRepairPass(repairCommitter, liveSettings, sessionGeneration)
+            runLiveRepairPass(repairCommitter, liveSettings, sessionGeneration, tokenReserva)
             postIfCurrent(sessionGeneration) {
                 publishLiveTextNow(sessionGeneration, LiveTextPublication.SOURCE_REPAIR)
             }
@@ -5160,7 +5599,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             // R2/B2: par texto+status do mesmo job, numa única chamada.
             val (rawText, rawStatus) = synchronized(modelLoadLock) {
                 // R18/C1 — início real do worker (caminho ao vivo).
-                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, sessionGeneration) }
+                // Adendo 18 §2 — a marca leva o TOKEN de reserva do job.
+                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, tokenReserva) }
                 whisperSession.transcribeAndStatus(
                     sessionGeneration,
                     chunkWav.absolutePath,
@@ -5229,6 +5669,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         committer: LiveTextCommitter,
         liveSettings: LiveJobSettings,
         sessionGeneration: Long,
+        tokenReserva: Long,
     ) {
         var passes = 0
         while (passes < LIVE_REPAIR_MAX_PER_WINDOW) {
@@ -5243,7 +5684,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 break
             }
             val t0 = SystemClock.elapsedRealtime()
-            val outcome = transcribeLiveRepairPcm(req, liveSettings, sessionGeneration)
+            val outcome = transcribeLiveRepairPcm(req, liveSettings, sessionGeneration, tokenReserva)
             val wallMs = SystemClock.elapsedRealtime() - t0
             val ok = when (outcome) {
                 is LiveChunkResult.Success -> committer.completeRepair(req.regionId, outcome.text, outcome.segments)
@@ -5272,6 +5713,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         req: LiveTextCommitter.RepairRequest,
         liveSettings: LiveJobSettings,
         sessionGeneration: Long,
+        tokenReserva: Long,
     ): LiveChunkResult {
         val pcm = req.pcm
         if (pcm.size < 2) return LiveChunkResult.NoSpeech("reparo vazio (0 amostras)")
@@ -5294,7 +5736,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             }
             val (rawText, rawStatus) = synchronized(modelLoadLock) {
                 // R18/C1 — início real do worker (caminho ao vivo).
-                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, sessionGeneration) }
+                // Adendo 18 §2 — a marca leva o TOKEN de reserva do job.
+                runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, tokenReserva) }
                 whisperSession.transcribeAndStatus(
                     sessionGeneration,
                     repairWav.absolutePath,
@@ -5427,6 +5870,120 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         private const val DEFAULT_BEAM_SIZE = 5
         private const val DEFAULT_BEST_OF = 5
         private const val TAG = "WhisperActivity"
+    }
+
+    /**
+     * Adendo 17 §4 — cronômetros de fase por arquivo/tentativa (lote CPP).
+     *
+     * Uma instância por arquivo: primeiro/último 99% (início vs fim da
+     * permanência em 99), último segmento apresentado e seu fim em ms.
+     * Relógio monotônico; a UI confere geração/dono antes de exibir
+     * (nunca simula conclusão).
+     *
+     * ADENDO 26 §2 — [observador] é o recibo ASSÍNCRONO desta tentativa
+     * (identidade imutável job/attempt + sequência por segmento). Os campos
+     * abaixo continuam alimentando a linha `fases` histórica; o observador é
+     * a fonte do recibo final (último esperado × apresentado).
+     */
+    private class FasesArquivo(val observador: WhisperApresentacaoObservador) {
+        var primeiro99Em: Long = 0L
+        var ultimo99Em: Long = 0L
+        var ultimoSegmentoEm: Long = 0L
+        var ultimoSegmentoFimMs: Long = 0L
+
+        /**
+         * ADENDO 21 §3 — FRONTEIRA de APRESENTAÇÃO: marca DEBAIXO do
+         * `runOnUiThread` EXECUTADO (depois de atualizar a view), no relógio
+         * monotônico. `ultimoSegmentoEm` é o callback ORIGINAL (antes do
+         * post); este separa "texto na tela" de "retorno do compute".
+         */
+        @Volatile var ultimoSegmentoApresentadoEm: Long = 0L
+    }
+
+    /**
+     * ADENDO 22 §3 — observável pelo TESTE/APARELHO: o último `runOnUiThread`
+     * EXECUTADO com atualização de view. Escrito na UI thread; lido pelo
+     * teste após o fim do job. Volátil dá visibilidade entre threads; NÃO
+     * é sincronização.
+     */
+    @Volatile private var ultimoApresentadoGlobal: Long = 0L
+
+    /** Leitura para o teste/aparelho (recibo por tentativa). */
+    fun ultimoApresentadoParaTeste(): Long = ultimoApresentadoGlobal
+
+    /**
+     * ADENDO 26 §2 + ADENDO 27 §2 — registro dos recibos por TENTATIVA:
+     * observador (identidade/segmentos/fases), DESTINO preso à identidade e
+     * reserva de publicação única. Nunca um "último global" nem `tempSessionDir`.
+     */
+    private val registroApresentacao = WhisperApresentacaoRegistro()
+
+    private fun registrarObservadorApresentacao(
+        key: TranscriptionJobKey,
+        destino: File?,
+    ): WhisperApresentacaoObservador {
+        val observador = registroApresentacao.registrar(key) { SystemClock.elapsedRealtime() }
+        if (destino != null) registroApresentacao.vincularDestino(key, destino)
+        return observador
+    }
+
+    /** Destino DESTA tentativa (nunca o de outra). `null` = não persistível. */
+    private fun destinoApresentacao(key: TranscriptionJobKey): File? =
+        registroApresentacao.destino(key)
+
+    /**
+     * ADENDO 26 §2 — recibo da tentativa EXATA (job+attempt). `null` = esta
+     * Activity não observou essa tentativa. O chamador (teste/aparelho) decide
+     * se aguarda o post pendente; nada aqui bloqueia UI ou worker.
+     */
+    fun reciboApresentacaoParaTeste(
+        job: Long,
+        attempt: Long,
+    ): WhisperApresentacaoObservador.Recibo? = registroApresentacao.recibo(job, attempt)
+
+    /**
+     * ADENDO 26 §2 — todos os recibos observados por esta Activity, cada um com
+     * a SUA identidade. O teste escolhe pela identidade (entrada/job/attempt);
+     * não existe "último global" cross-tentativa.
+     */
+    fun recibosApresentacaoParaTeste(): List<WhisperApresentacaoObservador.Recibo> =
+        registroApresentacao.recibos()
+
+    /**
+     * ADENDO 27 §2 — fechamento fora da UI: marca `finalizacao_ausente` em quem
+     * não finalizou e persiste a linha final das tentativas já terminais. Não
+     * depende de post, de geração corrente nem de `tempSessionDir`.
+     */
+    private fun publicarRecibosPendentesNoDestroy() {
+        val pendentes = registroApresentacao.observadoresVivos()
+        for (obs in pendentes) {
+            val r = obs.recibo()
+            if (!obs.recibo().marcasMs.containsKey("finalizacao")) obs.finalizacaoAusente()
+            if (!obs.recibo().podeFechar) continue
+            if (!obs.reservarPublicacaoFinal()) continue
+            val linha = obs.linha("final")
+            destinoApresentacao(obs.identidade)?.let { destino ->
+                runCatching { destino.appendText(linha + "\n", Charsets.UTF_8) }
+            }
+            Log.i(TAG, linha)
+        }
+    }
+
+    private fun publicarReciboFinalSeFechado(
+        obs: WhisperApresentacaoObservador,
+        terminalLines: StringBuilder,
+        sessionGeneration: Long,
+    ) {
+        if (!registroApresentacao.reservarFinal(obs.identidade)) return
+        val linha = obs.linha("final")
+        appendTerminal(terminalLines, linha)
+        Log.i(TAG, linha)
+        // A UI é só apresentação: se o post não rodar (destroy/geração), a
+        // LINHA FINAL ainda é persistida no destino DESTA tentativa.
+        postIfCurrent(sessionGeneration) { updateTerminalText(terminalLines) }
+        destinoApresentacao(obs.identidade)?.let { destino ->
+            runCatching { destino.writeText(snapshotText(terminalLines), Charsets.UTF_8) }
+        }
     }
 
     /**

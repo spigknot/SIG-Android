@@ -32,6 +32,16 @@ object WhisperOrtMelFilters {
     /** Número de bins mel do `whisper-large-v3-turbo` (128, não 80). */
     const val N_MELS = 128
 
+    /**
+     * Bins mel dos exports clássicos (`small`/`base`/`medium`, 80).
+     *
+     * Adendo 17 §1 — o small (`onnx-community/whisper-small`) usa o extrator
+     * padrão do Whisper com 80 bins; o turbo usa 128 (large-v3). A fórmula é
+     * a mesma (Slaney); só a contagem muda, por isso o construtor é
+     * parametrizado e as duas tabelas coexistem.
+     */
+    const val N_MELS_SMALL = 80
+
     /** Bins não redundantes de uma FFT real de 400 pontos (0..200). */
     const val N_FREQ_BINS = N_FFT / 2 + 1
 
@@ -60,17 +70,25 @@ object WhisperOrtMelFilters {
      * Calculada uma única vez por processo (`lazy`), imutável a partir daí: é
      * compartilhada entre jobs sem cópia defensiva.
      */
-    val slaney: Array<FloatArray> by lazy { buildSlaney() }
+    val slaney: Array<FloatArray> by lazy { buildSlaney(N_MELS) }
 
-    private fun buildSlaney(): Array<FloatArray> {
+    /**
+     * Tabela de 80 bins para os exports clássicos (adendo 17 §1: small).
+     *
+     * Mesma fórmula Slaney de [slaney]; só a contagem de bandas muda — é o
+     * que o `WhisperFeatureExtractor` padrão usa para small/base/medium.
+     */
+    val slaney80: Array<FloatArray> by lazy { buildSlaney(N_MELS_SMALL) }
+
+    private fun buildSlaney(nMels: Int = N_MELS): Array<FloatArray> {
         val melMin = hzToMel(FMIN_HZ)
         val melMax = hzToMel(FMAX_HZ)
-        val edges = DoubleArray(N_MELS + 2) { index ->
-            melToHz(melMin + (melMax - melMin) * index / (N_MELS + 1))
+        val edges = DoubleArray(nMels + 2) { index ->
+            melToHz(melMin + (melMax - melMin) * index / (nMels + 1))
         }
-        val step = DoubleArray(N_MELS + 1) { edges[it + 1] - edges[it] }
+        val step = DoubleArray(nMels + 1) { edges[it + 1] - edges[it] }
         val binHz = DoubleArray(N_FREQ_BINS) { it * (SAMPLE_RATE / 2.0) / (N_FREQ_BINS - 1) }
-        return Array(N_MELS) { band ->
+        return Array(nMels) { band ->
             val enorm = 2.0 / (edges[band + 2] - edges[band])
             FloatArray(N_FREQ_BINS) { bin ->
                 val lower = (binHz[bin] - edges[band]) / step[band]

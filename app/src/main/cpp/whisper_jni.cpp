@@ -2095,6 +2095,17 @@ Java_br_gov_sp_pcsp_launcher_WhisperNative_threadsOverridePeek(JNIEnv *, jobject
     return static_cast<jint>(g_threads_override.peek());
 }
 
+// ADENDO 18 §1 — capability do TRANSPORTE DE PEDIDO COM IDENTIDADE.
+// Linha de base e adicionária (não muda assinatura v14): lib sem o símbolo
+// lança UnsatisfiedLinkError e o Kotlin trata como 0 (sem transporte; segue o
+// contrato do adendo 17 via one-shot). v2 = chave `threads=` suportada no fio
+// do pedido da tentativa (sig_attempt_request.h) e aplicada por
+// owner/job/attempt no compute.
+extern "C" JNIEXPORT jint JNICALL
+Java_br_gov_sp_pcsp_launcher_WhisperNative_attemptRequestApiVersion(JNIEnv *, jobject) {
+    return 2;
+}
+
 extern "C" JNIEXPORT jint JNICALL
 Java_br_gov_sp_pcsp_launcher_WhisperNative_setAudioCtxOverride(JNIEnv *, jobject, jint audio_ctx) {
     // R14/D2-D3 — contexto de encoder EXPERIMENTAL. 0 = desliga (default do
@@ -2564,11 +2575,23 @@ static jstring transcribe_impl(
     sig_facts.unknown       = (g_ctx_arch_audio_state <= 0 || g_ctx_arch_audio_layer <= 0);
     // R11/D2: capacidade observável = afinidade REAL do processo ∩ hardware.
     const int sig_avail_cpus = available_cpus_for_process();
+    // ADENDO 18 §1 — APLICAÇÃO COM IDENTIDADE: quando o pedido da tentativa
+    // transporta `threads=<n>`, o override é o PRÓPRIO pedido (owner/job/
+    // attempt conferidos NO parse, acima) e o one-shot global NÃO é CONSUMIDO
+    // — consumir descartaria o valor do escritor/owner dele (bancada). O
+    // produto nunca aplica silenciosamente um valor de laboratório e nunca
+    // consome o pedido de outro dono. Sem pedido de threads, o comportamento
+    // é o do adendo 11/D2 (one-shot consumido no create params).
+    bool sig_threads_via_pedido = tem_req && req.threads_set;
+    const int sig_threads_override_value = sig_threads_via_pedido
+            ? req.threads : g_threads_override.consume();
+    const char * sig_threads_origem = sig_threads_via_pedido
+            ? "attempt-request" : "one-shot-global";
     const sig::ThreadDecision sig_threads = sig::choose_threads(
             static_cast<int>(g_ctx_backend_kind),
             sig_facts,
             static_cast<int>(std::thread::hardware_concurrency()),
-            g_threads_override.consume(),
+            sig_threads_override_value,
             sig_avail_cpus);
     params.n_threads = sig_threads.effective;
     params.beam_search.beam_size = std::max(1, (int) beamSize);
@@ -2598,6 +2621,9 @@ static jstring transcribe_impl(
                   << " vad_model=" << (params.vad_model_path != nullptr ? params.vad_model_path : "")
                   << " threads=" << params.n_threads
                   << " threads_requested=" << sig_threads.requested
+                  << " threads_origin=" << sig_threads_origem
+                  << " threads_requested_identidade="
+                  << (tem_req && req.threads_set ? req.threads : 0)
                   << " threads_capacity=" << sig_threads.capacity
                   << " threads_policy=" << sig_threads.policy
                   << " threads_source=" << sig_threads.source

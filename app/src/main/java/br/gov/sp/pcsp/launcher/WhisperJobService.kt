@@ -423,26 +423,43 @@ class WhisperJobService : Service() {
      * término seguro antes de encerrar (nunca deixa FGS órfão).
      */
     fun onOwnerGone(generation: Long) {
-        if (!WhisperJobLifecycle.isOwner(owner, generation)) {
+        // Adendo 18 §2 — a Activity dona fala na GERAÇÃO LÓGICA; o dono do
+        // serviço é o TOKEN do alocador comum. Resolvo pela ponte (token⇄lógico)
+        // ANTES do conferir a posse; binder desalinhado (job antigo) cai no
+        // isOwner debaixo e continua ignorado — destroy de A não derruba B.
+        val donoVivo = owner
+        val contextoReserva = if (donoVivo > 0L && donoVivo != generation &&
+            ReservationJobIdentity.logicoDe(donoVivo) == generation
+        ) donoVivo else generation
+        if (!WhisperJobLifecycle.isOwner(owner, contextoReserva)) {
             Log.i(TAG, "job_owner_gone_ignorado gen=$generation dono=$owner")
             return
         }
         ownerGoneAt = android.os.SystemClock.elapsedRealtime()
         // R15/B2 — token novo: um agendamento anterior (de outro owner) deixa
         // de valer, e este remember PARA QUE owner.
+        // ADENDO 19 §1.1 — a identidade é resolvida UMA VEZ acima: o
+        // agendamento, o cancelamento e o diagnóstico usam o TOKEN do dono do
+        // serviço (a comparação do timer é sempre token×token); a geração
+        // lógica original via como `gen_logica`, só diagnóstico. Antes, o
+        // timer comparava lógico com token e descartava o próprio destroy.
         ownerGoneToken += 1
-        ownerGoneScheduledFor = generation
+        ownerGoneScheduledFor = contextoReserva
         labEvent(
-            "job_owner_gone", "gen" to generation, "kind" to kind,
+            "job_owner_gone", "gen" to contextoReserva, "gen_logica" to generation,
+            "kind" to kind,
             "lock_held" to (wakeLock?.isHeld == true), "token" to ownerGoneToken
         )
         lastStatus = "Encerrando transcrição…"
         notifyStatus(force = true)
-        // Pede o cancelamento (worker/binding pode já ter sido invalidado).
-        forwardCancel(generation)
+        // Pede o cancelamento (worker/binding pode já ter sido invalidado) no
+        // DONO do serviço (o bridge resolve o token para a sessão do
+        // controller; forwarders próprios, como o da rota ORT, esperam token).
+        forwardCancel(contextoReserva)
         monitorHandler.removeCallbacks(ownerGoneCheck)
         monitorHandler.postDelayed(ownerGoneCheck, OWNER_GONE_GRACE_MS)
-        Log.i(TAG, "job_owner_gone gen=$generation aguardando término (${OWNER_GONE_GRACE_MS} ms)")
+        Log.i(TAG, "job_owner_gone gen=$contextoReserva gen_logica=$generation " +
+            "aguardando término (${OWNER_GONE_GRACE_MS} ms)")
     }
 
     /**
@@ -510,7 +527,11 @@ class WhisperJobService : Service() {
         // R21/C2 — liberação da reserva SÓ no terminal comprovado, e só pelo dono.
         // R55/B02 — o terminal fica REGISTRADO (lastTerminalGen/lastTerminal):
         // estado, não linha de log.
-        WorkerReservationStore.release(generation, terminal)
+        // ADENDO 19 §1.3 — o vínculo token⇄lógico sobrevive enquanto o job
+        // vive: terminal RECUSADO (não é dono / sem término comprovado) NÃO
+        // remove o PAR — o encaminhamento de cancelamento continua alcançável.
+        val liberouAgora = WorkerReservationStore.release(generation, terminal)
+        if (liberouAgora) ReservationJobIdentity.esquecer(generation)
         Log.i(TAG, "job_terminal gen=$owner kind=$kind terminal=$terminal")
         labEvent("job_fgs_terminal", "gen" to owner, "kind" to kind, "terminal" to terminal,
             "lock_held" to (wakeLock?.isHeld == true))
@@ -1014,6 +1035,17 @@ class WhisperJobService : Service() {
         fun owner(): Long = instance?.owner ?: 0L
 
         /**
+         * ADENDO 19 §1.1 — observável APENAS para LOG/TESTE: o dono (TOKEN do
+         * alocador) para o qual o timer do destroy está agendado; 0 = sem
+         * agendamento. Somente leitura: o ciclo do dono atualiza o campo; não
+         * há reset manual. Existe para a prova do método REAL com identidades
+         * distintas (o campo interno `ownerGoneScheduledFor` não é alcançável
+         * fora da classe), de modo que a prova instrumentada confira que o
+         * agendamento saiu no token — não apenas o release da reserva.
+         */
+        fun ownerGoneScheduledFor(): Long = instance?.ownerGoneScheduledFor ?: 0L
+
+        /**
          * R56/B02 — regra ÚNICA consumida pelos três pontos de admissão da
          * atividade: recusa de admissão não deixa prosseguir (a geração não é
          * dona); falta de FGS deixa (o job segue no processo, como antes).
@@ -1080,11 +1112,20 @@ class WhisperJobService : Service() {
             }
         }
 
-        /** Espelha o status vivo do job na notificação (dono conferido). */
+        /** Espelha o status vivo do job na notificação (dono conferido).
+         * Adendo 18 §2 — o chamador da UI fala na GERAÇÃO LÓGICA da sessão;
+         * o dono do serviço é o TOKEN do alocador comum. Resolve pela ponte
+         * (token⇄lógico) antes de conferir: par atrasado do token antigo cai
+         * no `isOwner` de dentro e é ignorado — sessão velha nunca publica
+         * no job atual. */
         fun updateStatus(context: Context, generation: Long, status: String) {
             if (!forceEnabled) return
             val svc = instance ?: return
-            svc.applyStatus(generation, status)
+            val dono = svc.owner
+            val contexto = if (dono > 0L && dono != generation &&
+                ReservationJobIdentity.logicoDe(dono) == generation
+            ) dono else generation
+            svc.applyStatus(contexto, status)
         }
 
         /** Terminal do job: libera o lock e a notificação (dono conferido).
@@ -1114,6 +1155,11 @@ class WhisperJobService : Service() {
                 { gen -> WorkerReservationStore.heldBy(gen) },
                 { gen, term -> WorkerReservationStore.release(gen, term) },
             )
+            // ADENDO 19 §1.3 — terminal sem serviço SÓ fecha o PAR quando a
+            // política ACEITOU o terminal (liberou/registrou a reserva);
+            // recusa (iniciante desconhecido, dono diverso) mantém o vínculo:
+            // um cancelamento pendente continua alcançando a sessão certa.
+            if (resultado.released) ReservationJobIdentity.esquecer(generation)
             Log.i(TAG, "job_terminal_sem_servico gen=$generation terminal=$terminal " +
                 "kind=${resultado.kind.name} liberou=${resultado.released} " +
                 "registrou=${resultado.recorded} reservado=${WorkerReservationStore.heldBy(generation)}")

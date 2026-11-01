@@ -73,8 +73,18 @@ class LiveTextCommitter @JvmOverloads constructor(
     private val maxHeldHypotheses: Int = 4,
     /** Máximo de palavras retidas antes do fechamento tipado da mais antiga. */
     private val maxHeldWords: Int = 240,
-    /** R8/B: teto de amostras do áudio preservado por região (re-decode). */
-    private val maxRepairRegionSamples: Long = 160_000L,
+    /**
+     * R8/B: teto de amostras do áudio preservado por região (re-decode).
+     *
+     * ADENDO 27 §1 — o teto SEGUE a janela máxima do planejador
+     * (`unique_ms=240000`, 15 s @16 kHz). Uma região SEM tempos reais usa o
+     * áudio próprio INTEIRO do chunk como intervalo (`real_words=0` → proxy
+     * `[u0,u1)`); com o teto antigo (160 000 = 10 s) uma janela de 10,3 s caía
+     * em `cap_region` → `REPAIR_NO_AUDIO` e a região ficava sem reparo para
+     * sempre (o defeito do live). 240 000 cobre a janela máxima por construção;
+     * o teto TOTAL continua limitando o consumo (4 hipóteses × 480 kB < 3 MB).
+     */
+    private val maxRepairRegionSamples: Long = 240_000L,
     /** R8/B: teto TOTAL de bytes de áudio preservado para reparo. */
     private val maxRetainedAudioBytes: Long = 3L * 1024 * 1024,
     /**
@@ -95,7 +105,39 @@ class LiveTextCommitter @JvmOverloads constructor(
     private val minRepairAnchorRatio: Double = 0.5,
     /** R9/D-fix: nº MÍNIMO de palavras da hipótese reproduzidas pelo reparo. */
     private val minRepairAnchorWords: Int = 1,
+    /**
+     * ADENDO 27 §1 — DIAGNÓSTICO opcional da decisão de áudio da região retida.
+     * Produção passa `null` (nenhum custo/nenhum caminho novo); o flavor de lab
+     * liga e recebe os FATOS (intervalo, janela, motivo) para localizar por que
+     * uma região fica sem áudio. Não altera a decisão.
+     */
+    private val onRegion: ((RegionDiag) -> Unit)? = null,
 ) {
+
+    /** Fatos da anexação de áudio de UMA região retida (ver [onRegion]). */
+    data class RegionDiag(
+        val windowIndex: Int,
+        val regionId: Long,
+        val words: Int,
+        val realWords: Int,
+        val rStart: Long,
+        val rEnd: Long,
+        val ws: Long,
+        val uniqueStart: Long,
+        val uniqueEnd: Long,
+        val winSamples: Long,
+        val branch: String,
+        val retainedBytes: Int,
+        val text: String = "",
+    ) {
+        fun toJson(): String = "{" +
+            "\"window\":$windowIndex,\"region\":$regionId,\"words\":$words," +
+            "\"real_words\":$realWords,\"r_start\":$rStart,\"r_end\":$rEnd," +
+            "\"ws\":$ws,\"u0\":$uniqueStart,\"u1\":$uniqueEnd," +
+            "\"win_samples\":$winSamples,\"branch\":\"$branch\"," +
+            "\"retained_bytes\":$retainedBytes,\"text\":\"" +
+            text.replace("\\", "\\\\").replace("\"", "\\\"") + "\"}"
+    }
 
     data class WordTime(val word: String, val t0Ms: Long, val t1Ms: Long)
 
@@ -1148,12 +1190,17 @@ class LiveTextCommitter @JvmOverloads constructor(
         val n = consumed.size
         val m = refCovered.size
         if (n == 0 || m == 0) return ClassifyResult(0, 0, ArrayList())
+        // ADENDO 27 §1 — posição da SOBREPOSIÇÃO: o chamador alinha
+        // consumed[0..n) com o FINAL da referência (ref[m-n..m)). Só nessa
+        // diagonal o texto é evidência de MESMA ocorrência para palavras
+        // ESTIMADAS (ver `compativelNaClassificacao`).
+        val offset = m - n
         val cn = consumed.map { norm(it.word) }
         val rn = refCovered.map { norm(it.word) }
         val dp = Array(n + 1) { IntArray(m + 1) }
         for (i in n - 1 downTo 0) {
             for (j in m - 1 downTo 0) {
-                dp[i][j] = if (cn[i] == rn[j] && occCompatible(consumed[i], refCovered[j])) {
+                dp[i][j] = if (cn[i] == rn[j] && compativelNaClassificacao(consumed[i], refCovered[j], j == offset + i)) {
                     dp[i + 1][j + 1] + 1
                 } else {
                     maxOf(dp[i + 1][j], dp[i][j + 1])
@@ -1165,7 +1212,9 @@ class LiveTextCommitter @JvmOverloads constructor(
         var i = 0
         var j = 0
         while (i < n && j < m) {
-            if (cn[i] == rn[j] && occCompatible(consumed[i], refCovered[j]) && dp[i][j] == dp[i + 1][j + 1] + 1) {
+            if (cn[i] == rn[j] && compativelNaClassificacao(consumed[i], refCovered[j], j == offset + i) &&
+                dp[i][j] == dp[i + 1][j + 1] + 1
+            ) {
                 matchC[i] = j
                 matchR[j] = i
                 i++
@@ -1421,33 +1470,61 @@ class LiveTextCommitter @JvmOverloads constructor(
         // Região TOTALMENTE no contexto alheio (não cruza) ou intervalo vazio:
         // NÃO há áudio próprio a que restringir — mantém o áudio PRÓPRIO da região
         // (sem restrição; documentado: aqui o gate de ancoragem NÃO se aplica).
+        val winSamples = if (windowOpt != null) windowOpt.size / 2L else -1L
+        fun report(branch: String) {
+            val cb = onRegion ?: return
+            cb(
+                RegionDiag(
+                    windowIndex = blk.windowIndex,
+                    regionId = blk.regionId,
+                    words = words.size,
+                    realWords = words.count { it.kind != KIND_EST },
+                    rStart = blk.regionStart,
+                    rEnd = blk.regionEnd,
+                    ws = ws,
+                    uniqueStart = uniqueStart,
+                    uniqueEnd = uniqueEnd,
+                    winSamples = winSamples,
+                    branch = branch,
+                    retainedBytes = retainedBytesLocked(),
+                    text = words.joinToString(" ") { it.word },
+                )
+            )
+        }
         if (rEnd <= rStart) {
             blk.regionStart = rStart
             blk.regionEnd = rEnd
             markAudioMissingLocked(blk)
+            report("empty_region")
             return
         }
         blk.regionStart = rStart
         blk.regionEnd = rEnd
         // áudio preservado (re-decode restrito): cópia RECORTADA da região própria
         if (windowOpt != null && windowOpt.size >= 2) {
-            val winSamples = windowOpt.size / 2L
             if (winSamples >= winLen) {
                 val samples = rEnd - rStart
                 val bytes = samples * 2
-                if (samples in 1..maxRepairRegionSamples &&
-                    retainedBytesLocked() + bytes <= maxRetainedAudioBytes
-                ) {
-                    val off = ((rStart - ws) * 2).toInt()
-                    blk.pcm = windowOpt.copyOfRange(off, off + bytes.toInt())
+                if (samples in 1..maxRepairRegionSamples) {
+                    if (retainedBytesLocked() + bytes <= maxRetainedAudioBytes) {
+                        val off = ((rStart - ws) * 2).toInt()
+                        blk.pcm = windowOpt.copyOfRange(off, off + bytes.toInt())
+                        report("retained")
+                    } else {
+                        markAudioMissingLocked(blk)
+                        report("cap_total")
+                    }
                 } else {
                     markAudioMissingLocked(blk)
+                    report("cap_region")
                 }
             } else {
                 markAudioMissingLocked(blk)
+                report("short_window")
             }
         } else {
             markAudioMissingLocked(blk)
+            report("no_pcm")
         }
     }
 
@@ -1654,6 +1731,35 @@ class LiveTextCommitter @JvmOverloads constructor(
      * Sem compatibilidade a palavra NÃO é dedupada: permanece na posição (retida/
      * revisável) e a ambiguidade perde-se por último, nunca em silêncio.
      */
+    /**
+     * ADENDO 27 §1 — COMPATIBILIDADE NA CLASSIFICAÇÃO DO CORTE.
+     *
+     * Uma palavra PROVISÓRIA da cauda (STATE_REVIEWABLE) está, por definição,
+     * aguardando confirmação da janela seguinte. Com palavras ESTIMADAS (sem
+     * `word_times` do motor) cada janela tem o SEU step uniforme, então
+     * `occCompatible` recusava a MESMA ocorrência só porque o span estimado
+     * caía fora do trecho compartilhado — a cauda virava região retida cujo
+     * áudio próprio começa DEPOIS dela (reparo nunca reproduz as palavras →
+     * promovida sem confirmação → live ERROR). Aqui, para a CAUDA PROVISÓRIA,
+     * o TEXTO é a confirmação: mesma palavra, na mesma ordem, no trecho de
+     * sobreposição.
+     *
+     * Para palavras JÁ COMPROMETIDAS a regra antiga permanece intacta:
+     * repetição no trecho único continua sendo ocorrência NOVA (nada é
+     * deduplicado por texto fora da cauda provisória).
+     */
+    private fun compativelNaClassificacao(x: W, y: W, naSobreposicao: Boolean): Boolean {
+        if (occCompatible(x, y)) return true
+        // ADENDO 27 §1 — palavras ESTIMADAS (sem word_times do motor) na
+        // DIAGONAL da sobreposição: cada janela tem step uniforme próprio, então
+        // o span estimado NÃO é comparável entre janelas e `occCompatible`
+        // recusava a MESMA ocorrência (5 palavras comprometidas viravam
+        // "conflito retido" em toda janela com VAD → região sem áudio próprio →
+        // live ERROR). Fora da diagonal a regra antiga permanece: repetição no
+        // trecho único continua sendo ocorrência NOVA.
+        return x.kind == KIND_EST && y.kind == KIND_EST && naSobreposicao
+    }
+
     private fun occCompatible(x: W, y: W): Boolean {
         if (x.kind != KIND_EST && y.kind != KIND_EST) return spanOverlaps(x, y)
         // R11/B2 — IDENTIDADE DE OCORRÊNCIA PARA ESTIMATIVA (KIND_EST).

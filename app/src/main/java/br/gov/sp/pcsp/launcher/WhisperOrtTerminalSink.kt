@@ -87,6 +87,8 @@ object WhisperOrtTerminalSink {
             .put("text_sha256", terminal.textSha256)
             .put("millis", terminal.totalMillis)
             .put("partial", terminal.partial)
+            .put("threads", terminal.threads)
+            .put("model", terminal.model)
             .put("error", terminal.error ?: JSONObject.NULL)
         val bytes = linha.toString().toByteArray(Charsets.UTF_8)
         // IDEMPOTENTE: repetir o MESMO terminal não regrava nem apaga o anterior.

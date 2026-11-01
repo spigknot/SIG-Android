@@ -1,6 +1,7 @@
 package br.gov.sp.pcsp.launcher
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -305,5 +306,100 @@ class WhisperOrtPackageInstallerTest {
         val tokenizer = WhisperOrtTokenizer.fromVocab(completo)
         assertEquals(WhisperOrtTokenizer.VOCAB_SIZE, tokenizer.vocabSize)
         assertNull(WhisperOrtPrompt.validate(WhisperOrtPrompt.portuguese(), tokenizer.vocabSize))
+    }
+
+    // ---- publicação cancelável e serializada (adendo 15 §2) ----------------
+    @Test
+    fun `veredito da publicacao vale mais que o commit local`() {
+        // Falha de ATIVAÇÃO simulada: mesmo com staging íntegro, o veredito
+        // externo decide — e a versão anterior continua ativa.
+        val root = File(temp.root, "pub")
+        val a = WhisperOrtPackageInstaller.install(staging(*base), root, identity, descriptor(*base))
+        val chaveA = (a as WhisperOrtPackageInstaller.Outcome.Ready).validated.versionKey
+        val baseB = base.map { (nome, bytes) -> nome to ByteArray(bytes.size) { 9 } }.toTypedArray()
+        val r = WhisperOrtPackageInstaller.install(
+            staging(*baseB), root, identity.copy(revision = "b"), descriptor(*baseB),
+            withPublication = { _ ->
+                WhisperOrtPackageInstaller.Outcome.Refused("ATIVACAO", "ativador fora do ar")
+            },
+        )
+        assertEquals("ATIVACAO", (r as WhisperOrtPackageInstaller.Outcome.Refused).reason)
+        assertEquals("versão anterior preservada", chaveA, File(root, WhisperOrtPackageInstaller.ACTIVE).readText().trim())
+    }
+
+    @Test
+    fun `cancelado entre pronto e commit nao publica nada`() {
+        val root = File(temp.root, "pub2")
+        var cancelado = false
+        var chegouNaPublicacao = false
+        val r = WhisperOrtPackageInstaller.install(
+            staging(*base), root, identity, descriptor(*base),
+            isCancelled = { cancelado },
+            withPublication = { publicar ->
+                // O instalador já mediu todos os arquivos e chegou ao commit.
+                chegouNaPublicacao = true
+                cancelado = true
+                publicar()
+            },
+        )
+        assertTrue("o cancel deve ocorrer na publicação, não durante o hash", chegouNaPublicacao)
+        assertEquals("CANCELADO", (r as WhisperOrtPackageInstaller.Outcome.Refused).reason)
+        assertTrue(
+            "nada pode ter sido publicado",
+            WhisperOrtPackageInstaller.open(root, identity) is WhisperOrtPackageInstaller.Outcome.Refused,
+        )
+    }
+
+    @Test
+    fun `sha final dos arquivos instalados confere com o catalogo`() {
+        val root = File(temp.root, "pub3")
+        val r = WhisperOrtPackageInstaller.install(staging(*base), root, identity, descriptor(*base))
+        val validado = (r as WhisperOrtPackageInstaller.Outcome.Ready).validated
+        for (fato in validado.files) {
+            val medido = sha(File(validado.directory, fato.name).readBytes())
+            assertEquals("${fato.name} mudou após instalar", fato.sha256.lowercase(), medido.lowercase())
+        }
+    }
+
+    @Test
+    fun `segunda versao nao toca nos arquivos da versao em uso`() {
+        val root = File(temp.root, "pub4")
+        val a = WhisperOrtPackageInstaller.install(staging(*base), root, identity, descriptor(*base))
+        val dirA = (a as WhisperOrtPackageInstaller.Outcome.Ready).validated.directory
+        val snapshot = dirA.listFiles()!!.associate { it.name to sha(it.readBytes()) }
+        val baseB = base.map { (nome, bytes) -> nome to ByteArray(bytes.size) { 11 } }.toTypedArray()
+        val b = WhisperOrtPackageInstaller.install(staging(*baseB), root, identity.copy(revision = "b"), descriptor(*baseB))
+        assertTrue(b is WhisperOrtPackageInstaller.Outcome.Ready)
+        for ((nome, antes) in snapshot) {
+            assertEquals("$nome da versão em uso foi tocado", antes, sha(File(dirA, nome).readBytes()))
+        }
+        assertTrue("marcador da versão em uso intacto", File(dirA, WhisperOrtPackageInstaller.MARKER).isFile)
+    }
+
+    // Adendo 17 §1 — isolamento por modelo (turbo x small) no instalador.
+
+    @Test
+    fun `pacote turbo nao abre com identidade small`() {
+        val root = File(temp.root, "modelos")
+        val instalado = WhisperOrtPackageInstaller.install(staging(*base), root, identity, descriptor(*base))
+        assertTrue(instalado is WhisperOrtPackageInstaller.Outcome.Ready)
+        val small = WhisperOrtModelCatalog.identity(WhisperOrtModelCatalog.MODEL_SMALL)
+        val aberto = WhisperOrtPackageInstaller.open(root, small, descriptor(*base))
+        assertTrue(
+            "abrir pacote turbo com identidade small deve recusar, veio $aberto",
+            aberto is WhisperOrtPackageInstaller.Outcome.Refused,
+        )
+    }
+
+    @Test
+    fun `identidade small instala versao propria`() {
+        val root = File(temp.root, "modelos-small")
+        val small = WhisperOrtModelCatalog.identity(WhisperOrtModelCatalog.MODEL_SMALL)
+        val instalado = WhisperOrtPackageInstaller.install(staging(*base), root, small, descriptor(*base))
+        assertTrue("install com identidade small deveria funcionar, veio $instalado", instalado is WhisperOrtPackageInstaller.Outcome.Ready)
+        val chaveTurbo = WhisperOrtPackageInstaller.install(staging(*base), File(temp.root, "modelos-turbo"), identity, descriptor(*base))
+        val chaveSmall = (instalado as WhisperOrtPackageInstaller.Outcome.Ready).validated.versionKey
+        val chaveTurboV = (chaveTurbo as WhisperOrtPackageInstaller.Outcome.Ready).validated.versionKey
+        assertNotEquals("modelos distintos exigem versoes distintas", chaveTurboV, chaveSmall)
     }
 }

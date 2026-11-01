@@ -61,6 +61,35 @@ class WhisperOrtSession(
     private var layerCount = 0
     private var vocabSize = 0
 
+    /**
+     * Adendo 17 §1 — forma do hidden detectada no grafo do encoder
+     * (`last_hidden_state` = [1, frames, dim]).
+     *
+     * Antes eram constantes do turbo (1500×1280); small usa 1500×768.
+     * Detectar em vez de fixar é o que permite pacotes de outra arquitetura.
+     */
+    private var hiddenFrames = 0
+    private var hiddenDim = 0
+
+    /**
+     * Adendo 17 §1 — canais mel esperados pelo encoder (`input_features` =
+     * [1, mel, 3000]): 128 no turbo (large-v3), 80 no small (extrator
+     * padrão). Detectado no grafo como o hidden, pelo mesmo motivo: com
+     * 128 fixo o `ConvInteger` do small falhava
+     * (`C: 128, kernel channels: 80`).
+     */
+    private var melBins = WhisperOrtFrontend.N_MELS
+
+    /**
+     * Mel-bins declarados pelo PACOTE (adendo 17 §1).
+     *
+     * O cache preenche a partir da identidade validada antes de [open].
+     * Quando o grafo traz a entrada simbólica (`[-1,-1,-1]`, caso do
+     * small), a detecção é impossível e vale o explícito; com forma
+     * concreta, o explícito divergente RECUSA (pacote/grafo trocados).
+     */
+    var melBinsExplicitos: Int? = null
+
     /** Tempo de criação das três sessões (H01), separado de encode/decode. */
     var loadMillis: Long = 0
         private set
@@ -102,6 +131,10 @@ class WhisperOrtSession(
             pastSession = environment.createSession(decoderWithPastModel.path, past)
             layerCount = detectLayerCount(initSession!!)
             vocabSize = detectVocabSize(initSession!!)
+            val (frames, dim) = detectHiddenDims(encoderSession!!)
+            hiddenFrames = frames
+            hiddenDim = dim
+            melBins = resolverMelBins(encoderSession!!)
             loadMillis = (System.nanoTime() - startedAt) / 1_000_000
         } catch (failure: Throwable) {
             // Sessão parcial não fica viva: fecha o que abriu e propaga.
@@ -151,16 +184,22 @@ class WhisperOrtSession(
     /** `true` quando as três sessões estão abertas. */
     val isOpen: Boolean get() = encoderSession != null && initSession != null && pastSession != null
 
-    /** Camadas de decoder detectadas no grafo (deve ser 4). */
+    /** Camadas de decoder detectadas no grafo (turbo: 4; small: 12). */
     val layers: Int get() = layerCount
 
-    /** Vocabulário detectado na saída `logits` (deve ser 51866). */
+    /** Vocabulário detectado na saída `logits` (turbo: 51866). */
     val vocabulary: Int get() = vocabSize
+
+    /** Forma do hidden do encoder ([frames, dim]); 0 = sessão fechada. */
+    val hiddenShape: Pair<Int, Int> get() = hiddenFrames to hiddenDim
+
+    /** Canais mel detectados na entrada do encoder (128 turbo, 80 small). */
+    override val melBinsDetectados: Int get() = melBins
 
     override fun encode(logMel: FloatArray): FloatArray {
         val session = encoderSession ?: error("sessão do encoder não aberta")
-        require(logMel.size == WhisperOrtFrontend.N_MELS * WhisperOrtFrontend.N_FRAMES) {
-            "log-mel com ${logMel.size} valores; esperado ${WhisperOrtFrontend.N_MELS * WhisperOrtFrontend.N_FRAMES}"
+        require(logMel.size == melBins * WhisperOrtFrontend.N_FRAMES) {
+            "log-mel com ${logMel.size} valores; esperado ${melBins * WhisperOrtFrontend.N_FRAMES} (mel=$melBins)"
         }
         val startedAt = System.nanoTime()
         hiddenTensor?.close()
@@ -168,7 +207,7 @@ class WhisperOrtSession(
         val input = OnnxTensor.createTensor(
             environment,
             FloatBuffer.wrap(logMel),
-            longArrayOf(1L, WhisperOrtFrontend.N_MELS.toLong(), WhisperOrtFrontend.N_FRAMES.toLong()),
+            longArrayOf(1L, melBins.toLong(), WhisperOrtFrontend.N_FRAMES.toLong()),
         )
         try {
             val result = guarded("encoder") { session.run(mapOf(ENCODER_INPUT to input)) }
@@ -180,7 +219,7 @@ class WhisperOrtSession(
                 hiddenTensor = OnnxTensor.createTensor(
                     environment,
                     FloatBuffer.wrap(out),
-                    longArrayOf(1L, HIDDEN_FRAMES.toLong(), HIDDEN_DIM.toLong()),
+                    longArrayOf(1L, hiddenFrames.toLong(), hiddenDim.toLong()),
                 )
                 encoderMillis += (System.nanoTime() - startedAt) / 1_000_000
                 return out
@@ -197,7 +236,7 @@ class WhisperOrtSession(
         val hiddenState = hiddenTensor ?: OnnxTensor.createTensor(
             environment,
             FloatBuffer.wrap(hidden),
-            longArrayOf(1L, HIDDEN_FRAMES.toLong(), HIDDEN_DIM.toLong()),
+            longArrayOf(1L, hiddenFrames.toLong(), hiddenDim.toLong()),
         ).also { hiddenTensor = it }
         // Nova janela: os Results anteriores não são mais necessários. Fechar
         // AQUI é seguro porque o run que os usava já terminou (F01).
@@ -325,18 +364,70 @@ class WhisperOrtSession(
         return last.toInt()
     }
 
+    /**
+     * Adendo 17 §1 — forma do `last_hidden_state` do encoder.
+     *
+     * Recusa dims simbólicas/ausentes em vez de presumir o turbo: pacote de
+     * outra arquitetura com forma ilegível não abre sessão silenciosamente.
+     */
+    private fun detectHiddenDims(session: OrtSession): Pair<Int, Int> {
+        val info = session.outputInfo[ENCODER_HIDDEN_OUTPUT]?.info as? TensorInfo
+            ?: error("encoder sem saída '$ENCODER_HIDDEN_OUTPUT'")
+        val shape = info.shape
+        check(shape.size == 3 && shape[1] > 0 && shape[2] > 0) {
+            "hidden com forma inesperada: $shape"
+        }
+        return shape[1].toInt() to shape[2].toInt()
+    }
+
+    /**
+     * Adendo 17 §1 — canais mel da entrada `input_features` ([1, mel, 3000]).
+     *
+     * É o que distingue turbo (128) de small (80) sem presumir o pacote:
+     * forma ilegível recusa a abertura em vez de alimentar o `ConvInteger`
+     * com canais errados. Devolve `null` quando a forma é simbólica
+     * (`[-1,-1,-1]`, caso do small) — aí vale o explícito do pacote.
+     */
+    private fun detectMelBins(session: OrtSession): Int? {
+        val info = session.inputInfo[ENCODER_INPUT]?.info as? TensorInfo
+            ?: error("encoder sem entrada '$ENCODER_INPUT'")
+        val shape = info.shape
+        check(shape.size == 3) {
+            "entrada do encoder com forma inesperada: ${shape.contentToString()}"
+        }
+        return if (shape[1] > 0) shape[1].toInt() else null
+    }
+
+    /**
+     * Resolve os mel-bins: forma concreta manda; forma simbólica usa o
+     * explícito do pacote; sem nenhum dos dois, recusar (nunca presumir).
+     * Explícito divergente da forma concreta também recusa.
+     */
+    private fun resolverMelBins(session: OrtSession): Int {
+        val detectado = detectMelBins(session)
+        val declarado = melBinsExplicitos
+        if (detectado != null) {
+            check(declarado == null || declarado == detectado) {
+                "pacote declara mel=$declarado, grafo traz mel=$detectado"
+            }
+            return detectado
+        }
+        return declarado ?: error(
+            "entrada do encoder simbólica e sem mel-bins do pacote; " +
+                "impossível dimensionar o tensor sem presumir o modelo",
+        )
+    }
+
     companion object {
         /** Threads intra-op default; ajuste só com medida (H03). */
         const val DEFAULT_THREADS = 4
 
         private const val ENCODER_INPUT = "input_features"
+        private const val ENCODER_HIDDEN_OUTPUT = "last_hidden_state"
         private const val INIT_IDS = "input_ids"
         private const val INIT_HIDDEN = "encoder_hidden_states"
         private const val PAST_IDS = "input_ids"
         private const val LOGITS_OUTPUT = "logits"
-
-        private const val HIDDEN_FRAMES = 1_500
-        private const val HIDDEN_DIM = 1_280
 
         private val KINDS = arrayOf("decoder.key", "decoder.value", "encoder.key", "encoder.value")
         private val LAYER_PATTERN = Regex("""present\.(\d+)\.""")

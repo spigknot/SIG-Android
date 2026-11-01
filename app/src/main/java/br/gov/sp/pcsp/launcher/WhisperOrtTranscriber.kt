@@ -51,6 +51,16 @@ class WhisperOrtTranscriber(
                 stop = WhisperOrtStopReason.EOS, totalMillis = (clock() - startedAt) / 1_000_000,
             )
         }
+        // Adendo 17 §1 — o frontend tem de falar a mesma "língua" do encoder:
+        // 80 bins no small, 128 no turbo. Divergência aqui era o ORT_FAIL no
+        // ConvInteger; recusar cedo dá diagnóstico em vez de exceção nativa.
+        if (frontend.nMels != backend.melBinsDetectados) {
+            return WhisperOrtTranscript(
+                text = "", windows = emptyList(), outcome = WhisperOrtOutcome.ERROR,
+                stop = WhisperOrtStopReason.ERROR, totalMillis = (clock() - startedAt) / 1_000_000,
+                error = "frontend com ${frontend.nMels} bins mel, encoder espera ${backend.melBinsDetectados}",
+            )
+        }
         return if (policy.timestampMode) temporal(backend, pcm, isCancelled, startedAt)
         else textual(backend, pcm, isCancelled, startedAt)
     }

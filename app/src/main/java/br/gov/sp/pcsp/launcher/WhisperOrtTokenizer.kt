@@ -72,6 +72,13 @@ class WhisperOrtTokenizer private constructor(
         /** Tamanho do vocabulário do `whisper-large-v3-turbo`. */
         const val VOCAB_SIZE = 51_866
 
+        /**
+         * Vocabulário total do small (adendo 17 §1): UM especial a menos
+         * que o turbo (medido nos logits do decoder). O `vocab.json` só
+         * traz o texto; os especiais são convencionais até este teto.
+         */
+        const val VOCAB_SIZE_SMALL = 51_865
+
         /** Cobertura mínima de tokens de texto para aceitar um vocabulário real. */
         const val MIN_PRODUCTION_TOKENS = 50_000
 
@@ -104,17 +111,22 @@ class WhisperOrtTokenizer private constructor(
             // Contar entradas não basta: um mapa com 50257 chaves e um BURACO no
             // id 67 tem o mesmo tamanho e fazia decode(67) sumir em silêncio.
             // A produção exige cobertura EXATA de 0..FIRST_SPECIAL_ID-1, o que
-            // também garante unicidade dos ids.
+            // também garante unicidade dos ids. Entradas extras (ex.: o
+            // `<|endoftext|>` que alguns exports incluem) são aceitas: o que
+            // importa é não haver buraco nem duplicata no núcleo de texto.
             val ids = vocab.values.sorted()
             require(ids.size >= MIN_PRODUCTION_TOKENS) {
                 "vocab.json parcial: ${ids.size} tokens < $MIN_PRODUCTION_TOKENS exigidos em produção"
             }
             val esperado = (0 until FIRST_SPECIAL_ID).toList()
-            require(ids == esperado) {
-                val faltando = esperado.toSet() - ids.toSet()
-                val duplicados = ids.size - ids.toSet().size
+            val conjunto = ids.toSet()
+            val faltando = esperado.filter { it !in conjunto }
+            require(faltando.isEmpty()) {
                 "vocab.json não cobre 0..${FIRST_SPECIAL_ID - 1} sem buracos " +
-                    "(faltando=${faltando.take(5)}, duplicados=$duplicados)"
+                    "(faltando=${faltando.take(5)}, duplicados=${ids.size - conjunto.size})"
+            }
+            require(ids.size == conjunto.size) {
+                "vocab.json com ids duplicados: ${ids.size - conjunto.size} repetições"
             }
             return fromSubset(vocab, specialIds, eosId)
         }

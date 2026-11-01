@@ -20,7 +20,7 @@ import java.util.zip.ZipInputStream
  */
 
 object NativeDependencyManager {
-    const val COMPONENT_VERSION = "14"
+    const val COMPONENT_VERSION = "15"
     private const val LIBRARY_PROPERTY = "sig.native.library.dir"
     private const val ONNX_NATIVE_PATH_PROPERTY = "onnxruntime.native.path"
     private const val ROOT_NAME = "native_dependencies"
@@ -29,14 +29,14 @@ object NativeDependencyManager {
 
     private val packages = mapOf(
         "arm64-v8a" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v14-arm64-v8a.zip",
-            "6509212f4d777a56d45131161e7bb2a42cf1d418dd4ed77ae29545d477ffa010",
-            49_747_591L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v15-arm64-v8a.zip",
+            "b8f05f4ad46bc27cd148b76962d6955ec3bd3577110649f501b6627769aeb26a",
+            49_748_422L
         ),
         "x86_64" to PackageSpec(
-            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v14-x86_64.zip",
-            "1e57bed133e7aa20beb654fa1c8c2ea6cda9b66757cab8eb3851a1eeb5dec110",
-            55_979_079L
+            "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v15-x86_64.zip",
+            "589aff93a8ce3f095dbff34de53800d25de733692eca51cac74410e8eeac3eab",
+            55_979_740L
         )
     )
 
@@ -103,7 +103,7 @@ object NativeDependencyManager {
             "lib/libonnxruntime4j_jni.so" to 111_504L,
             "lib/libsig_llama.so" to 30_194_712L,
             "lib/libsig_npu_probe.so" to 948_912L,
-            "lib/libsig_whisper.so" to 64_567_856L,
+            "lib/libsig_whisper.so" to 64_570_368L,
             "lib/libswresample.so" to 101_136L,
             "lib/libswscale.so" to 594_472L,
             "models/ggml-silero-v6.2.0.bin" to 885_098L,
@@ -124,7 +124,7 @@ object NativeDependencyManager {
             "lib/libonnxruntime4j_jni.so" to 100_032L,
             "lib/libsig_llama.so" to 31_874_632L,
             "lib/libsig_npu_probe.so" to 916_480L,
-            "lib/libsig_whisper.so" to 64_423_152L,
+            "lib/libsig_whisper.so" to 64_425_688L,
             "lib/libswresample.so" to 141_808L,
             "lib/libswscale.so" to 947_960L,
             "models/ggml-silero-v6.2.0.bin" to 885_098L,

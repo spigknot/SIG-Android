@@ -115,4 +115,38 @@ class WhisperOrtSessionCacheTest {
         assertEquals("configurações distintas abrem sessões distintas", 2, aberturas)
         assertEquals(2, c.stats().live)
     }
+
+    @Test
+    fun `alternancia de threads abre conta e fecha ociosas sem tocar em uso`() {
+        // Política hot (maxEntries=1, a de produção): cada troca fecha a ociosa.
+        var aberturas = 0
+        val criados = mutableListOf<WhisperOrtFakeBackend>()
+        val quente = WhisperOrtSessionCache(
+            factory = { _, _, _, _ -> aberturas++; WhisperOrtFakeBackend(emptyList()).also { criados.add(it) } },
+            open = { },
+            maxEntries = 1,
+        )
+        fun usar(t: Int) {
+            val lease = quente.acquire(chave(threads = t), "v1", arquivo("e"), arquivo("d"), arquivo("p"))!!
+            assertTrue(quente.release(lease))
+        }
+        usar(1); usar(2); usar(3)
+        assertEquals("três aberturas", 3, aberturas)
+        assertEquals("só a quente fica viva", 1, quente.stats().live)
+        assertEquals("duas ociosas fecharam", 2, criados.count { it.closed })
+        // Reuso: a quente dá hit sem reabrir.
+        val deNovo = quente.acquire(chave(threads = 3), "v1", arquivo("e"), arquivo("d"), arquivo("p"))!!
+        assertTrue(deNovo.hit)
+        assertEquals(3, aberturas)
+        assertTrue(quente.release(deNovo))
+        // Em uso não é expulso: segura o lease e força a troca.
+        val emUso = quente.acquire(chave(threads = 3), "v1", arquivo("e"), arquivo("d"), arquivo("p"))!!
+        assertTrue(quente.tryBeginCompute(emUso))
+        val outro = quente.acquire(chave(threads = 4), "v1", arquivo("e"), arquivo("d"), arquivo("p"))
+        assertNull("com a única sessão em compute, a troca é recusada", outro)
+        assertFalse("backend em uso não fechou", criados.last().closed)
+        quente.endCompute(emUso)
+        assertTrue(quente.release(emUso))
+        quente.closeAll()
+    }
 }

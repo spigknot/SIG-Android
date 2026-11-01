@@ -74,8 +74,13 @@ object WhisperOrtMediaConverter {
         }
 
         override fun cancelar(sessao: Sessao) {
-            runCatching { FFmpegKit.cancel(sessao.id) }
+            FFmpegKit.cancel(sessao.id)
         }
+    }
+
+    /** Notifica progresso sem deixar falha de observador virar prova de término. */
+    private fun progressoSeguro(onProgresso: (String) -> Unit, etapa: String) {
+        runCatching { onProgresso(etapa) }
     }
 
     /** Nome do arquivo convertido, derivado do original (mesma pasta). */
@@ -90,14 +95,19 @@ object WhisperOrtMediaConverter {
         /**
          * O prazo estourou ou o cancelamento não teve callback, MAS A SESSÃO PODE
          * ESTAR ATIVA. Não autoriza apagar o arquivo nem liberar a reserva:
-         * [esperarFim] bloqueia até o término real e o dono finaliza e limpa uma
-         * única vez quando ele chegar.
+         * [esperarFim] aguarda o término real em fatias e o dono finaliza e limpa
+         * uma única vez quando ele chegar.
+         *
+         * Carrega [sessao] e [motor] para o dono poder encaminhar um NOVO pedido
+         * de cancelamento ao recurso físico (nunca o cancelamento global).
          */
         data class SessaoAtiva(
             val motivo: String,
             val sessaoId: Long,
             val destino: File,
-            val esperarFim: () -> Final?,
+            val sessao: Sessao,
+            val motor: Motor,
+            val esperarFim: (timeoutMs: Long) -> Final?,
         ) : Resultado()
     }
 
@@ -131,7 +141,7 @@ object WhisperOrtMediaConverter {
             "-f", "wav",
             destino.absolutePath,
         )
-        onProgresso("convertendo para 16 kHz mono…")
+        progressoSeguro(onProgresso, "convertendo para 16 kHz mono…")
         val fim = CountDownLatch(1)
         var final: Final? = null
         val sessao = try {
@@ -145,34 +155,53 @@ object WhisperOrtMediaConverter {
 
         val limiteNs = System.nanoTime() + timeoutMs * 1_000_000L
         var canceladaPorNos = false
-        while (!fim.await(100, TimeUnit.MILLISECONDS)) {
-            if (System.nanoTime() > limiteNs) {
-                // Cancela somente esta sessão; a posse continua até o callback.
-                motor.cancelar(sessao)
-                return sessaoAtiva(
-                    "conversao excedeu ${timeoutMs / 1_000}s sem término observado",
-                    sessao,
-                    destino,
-                    fim,
-                    { final },
-                )
-            }
-            if (!canceladaPorNos && isCancelada()) {
-                canceladaPorNos = true
-                motor.cancelar(sessao)
-                if (!fim.await(ESPERA_CANCELAMENTO_MS, TimeUnit.MILLISECONDS)) {
-                    // Cancelamento pedido, sessão ainda ativa: não apaga, não
-                    // libera — o término real decide.
+        try {
+            while (!fim.await(100, TimeUnit.MILLISECONDS)) {
+                if (System.nanoTime() > limiteNs) {
+                    // Cancela somente esta sessão; a posse continua até o callback.
+                    // Falha do cancel é best-effort: a sessão pode seguir ativa.
+                    runCatching { motor.cancelar(sessao) }
                     return sessaoAtiva(
-                        "cancelamento pedido; sessão ainda ativa após ${ESPERA_CANCELAMENTO_MS / 1_000}s",
+                        "conversao excedeu ${timeoutMs / 1_000}s sem término observado",
                         sessao,
+                        motor,
                         destino,
                         fim,
                         { final },
                     )
                 }
-                break
+                if (!canceladaPorNos && runCatching { isCancelada() }.getOrDefault(false)) {
+                    canceladaPorNos = true
+                    runCatching { motor.cancelar(sessao) }
+                    if (!fim.await(ESPERA_CANCELAMENTO_MS, TimeUnit.MILLISECONDS)) {
+                        // Cancelamento pedido, sessão ainda ativa: não apaga, não
+                        // libera — o término real decide.
+                        return sessaoAtiva(
+                            "cancelamento pedido; sessão ainda ativa após ${ESPERA_CANCELAMENTO_MS / 1_000}s",
+                            sessao,
+                            motor,
+                            destino,
+                            fim,
+                            { final },
+                        )
+                    }
+                    break
+                }
             }
+        } catch (_: InterruptedException) {
+            // Interrupção da espera NÃO libera a posse: o recurso físico pode
+            // seguir ativo sem callback. Devolve SessaoAtiva para o dono drenar
+            // até o término real; o cancel é best-effort.
+            Thread.currentThread().interrupt()
+            runCatching { motor.cancelar(sessao) }
+            return sessaoAtiva(
+                "espera interrompida; sessão ainda ativa sem término observado",
+                sessao,
+                motor,
+                destino,
+                fim,
+                { final },
+            )
         }
         val f = final ?: return Resultado.Falhou("conversor não devolveu término")
         if (f.cancelada) {
@@ -184,7 +213,7 @@ object WhisperOrtMediaConverter {
             return Resultado.Falhou("falha ao converter audio ${f.logsCauda.take(120)}".trim())
         }
         if (!destino.isFile || destino.length() == 0L) return Resultado.Falhou("conversao nao gerou arquivo")
-        onProgresso("conversão concluída")
+        progressoSeguro(onProgresso, "conversão concluída")
         return Resultado.Converteu(destino)
     }
 
@@ -194,7 +223,7 @@ object WhisperOrtMediaConverter {
         try {
             while (true) {
                 try {
-                    val final = ativa.esperarFim()
+                    val final = ativa.esperarFim(Long.MAX_VALUE)
                     if (final != null) return final
                     // Ausência de callback é quarentena, nunca ACK ou sucesso.
                     Thread.sleep(100)
@@ -207,15 +236,75 @@ object WhisperOrtMediaConverter {
         }
     }
 
+    /**
+     * Drena a conversão até o fim físico, encaminhando cancelamentos tardios.
+     *
+     * Diferença para [aguardarTermino]: um cancel pedido DEPOIS do diagnóstico
+     * chega à SESSÃO dona ([SessaoAtiva.motor]/[SessaoAtiva.sessao]), nunca ao
+     * cancelamento global — e a espera continua, porque pedido de cancelamento
+     * não equivale a recurso encerrado. Só o término observado encerra.
+     * Relógio monotônico; falha/interrupção da espera mantém a posse.
+     */
+    fun drenar(
+        ativa: Resultado.SessaoAtiva,
+        isCancelada: () -> Boolean = { false },
+        onProgresso: (String) -> Unit = { },
+    ): Final {
+        var cancelEnviado = false
+        var interrompida = false
+        try {
+            while (true) {
+                if (!cancelEnviado && runCatching { isCancelada() }.getOrDefault(false)) {
+                    // Só marca como enviado quando o cancel CHEGOU ao recurso.
+                    // Se a chamada lançar, a próxima volta tenta de novo — sem
+                    // presumir posse liberada nem recurso encerrado.
+                    val enviado = runCatching { ativa.motor.cancelar(ativa.sessao) }.isSuccess
+                    if (enviado) {
+                        cancelEnviado = true
+                        progressoSeguro(onProgresso, "conversão cancelada; aguardando término físico…")
+                    } else {
+                        // Cancel pedido mas não entregue + espera que falha sem
+                        // intervalo consumiria CPU em laço: pausa breve antes
+                        // da próxima tentativa (posse e cancel preservados).
+                        try {
+                            Thread.sleep(100)
+                        } catch (_: InterruptedException) {
+                            interrompida = true
+                        }
+                        // Mesmo se cancelar falhar, o callback físico pode já
+                        // ter chegado: a espera abaixo precisa observá-lo.
+                    }
+                }
+                val saida = runCatching { ativa.esperarFim(500) }
+                val falha = saida.exceptionOrNull()
+                if (falha != null) {
+                    if (falha is InterruptedException) interrompida = true
+                    // Falha da espera NÃO é término: mantém a posse e evita
+                    // laço quente quando a falha é persistente e imediata.
+                    try {
+                        Thread.sleep(100)
+                    } catch (_: InterruptedException) {
+                        interrompida = true
+                    }
+                    continue
+                }
+                val fim = saida.getOrNull()
+                if (fim != null) return fim
+            }
+        } finally {
+            if (interrompida) Thread.currentThread().interrupt()
+        }
+    }
+
     private fun sessaoAtiva(
         motivo: String,
         sessao: Sessao,
+        motor: Motor,
         destino: File,
         fim: CountDownLatch,
         lerFinal: () -> Final?,
     ): Resultado.SessaoAtiva =
-        Resultado.SessaoAtiva(motivo, sessao.id, destino) {
-            fim.await()
-            lerFinal()
+        Resultado.SessaoAtiva(motivo, sessao.id, destino, sessao, motor) { timeoutMs ->
+            if (fim.await(timeoutMs, TimeUnit.MILLISECONDS)) lerFinal() else null
         }
 }

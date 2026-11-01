@@ -34,12 +34,33 @@ object WhisperOrtModelDownload {
     private const val BASE =
         "https://huggingface.co/onnx-community/whisper-large-v3-turbo/resolve/$REVISION"
 
+    /**
+     * Adendo 17 §1 — base por modelo (mesmo layout `onnx/`+raiz nos dois).
+     *
+     * Turbo e small vivem em repos distintos com a mesma convenção de paths;
+     * só a origem muda. Nenhum bucket/servidor novo.
+     */
+    fun basePara(modelo: String): String = when (modelo) {
+        WhisperOrtModelCatalog.MODEL_SMALL ->
+            "https://huggingface.co/onnx-community/whisper-small/resolve/${WhisperOrtModelCatalog.REVISION_SMALL}"
+        // Adendo 21 §1 — Tiny/Base (mesma convenção de paths onnx/+raiz).
+        WhisperOrtModelCatalog.MODEL_TINY ->
+            "https://huggingface.co/onnx-community/whisper-tiny/resolve/${WhisperOrtModelCatalog.REVISION_TINY}"
+        WhisperOrtModelCatalog.MODEL_BASE ->
+            "https://huggingface.co/onnx-community/whisper-base/resolve/${WhisperOrtModelCatalog.REVISION_BASE}"
+        WhisperOrtModelCatalog.MODEL -> BASE
+        else -> throw IllegalArgumentException("modelo ORT desconhecido: $modelo")
+    }
+
     /** Caminho remoto de [nome] dentro da revisão (onnx/ ou raiz). */
     fun caminhoRemoto(nome: String): String =
         if (nome.endsWith(".onnx")) "onnx/$nome" else nome
 
-    /** URL de download de [nome] na origem adotada. */
-    fun urlDe(nome: String): String = "$BASE/${caminhoRemoto(nome)}"
+    /** URL de download de [nome] na origem adotada (turbo, legado). */
+    fun urlDe(nome: String): String = urlDe(WhisperOrtModelCatalog.MODEL, nome)
+
+    /** URL de download de [nome] do [modelo]. */
+    fun urlDe(modelo: String, nome: String): String = "${basePara(modelo)}/${caminhoRemoto(nome)}"
 
     /** Progresso observável pela ferramenta. */
     data class Progresso(

@@ -44,9 +44,16 @@ class WhisperOrtSessionCache(
         val threads: Int,
         /** Chave da VERSÃO do pacote validado (imutável). */
         val packageVersion: String = "",
+        /**
+         * Canais mel do extrator do modelo (adendo 17 §1): 80 no small,
+         * 128 no turbo. Entra na chave porque sessões de mel distinto não
+         * são intercambiáveis; o cache aplica na sessão antes de abrir
+         * (forma simbólica `[-1,-1,-1]` não permite detectar no grafo).
+         */
+        val melBins: Int = WhisperOrtFrontend.N_MELS,
     ) {
         fun asString(): String =
-            "$engine/$provider/$runtime/$model/$revision/cfg$configHash/t$threads/pkg$packageVersion"
+            "$engine/$provider/$runtime/$model/$revision/cfg$configHash/t$threads/pkg$packageVersion/mel$melBins"
 
         companion object {
             /**
@@ -213,6 +220,11 @@ class WhisperOrtSessionCache(
             ultimaRecusa = "factory: " + failure.javaClass.simpleName + ": " + failure.message
             return ultimaRecusa
         }
+        // Adendo 17 §1 — o explícito do pacote entra na sessão ANTES de
+        // abrir: com entrada simbólica (`[-1,-1,-1]`, small) a detecção no
+        // grafo é impossível e vale o declarado; com forma concreta, o
+        // divergente recusa em vez de alimentar o ConvInteger errado.
+        (criado as? WhisperOrtSession)?.melBinsExplicitos = chave.melBins
         val aberto = try {
             open(criado)
             true
@@ -450,6 +462,11 @@ class WhisperOrtSessionCache(
             configHash = configHash(config),
             threads = threads,
             packageVersion = packageVersion,
+            // Adendo 17 §1 — desconhecido (fakes de bancada) cai no 128;
+            // a sessão valida contra a forma concreta do grafo e recusa
+            // divergência em vez de alimentar o ConvInteger errado.
+            melBins = runCatching { WhisperOrtModelCatalog.melBinsPara(identity.model) }
+                .getOrDefault(WhisperOrtFrontend.N_MELS),
         )
 
         /** Hash curto e estável da configuração de geração. */

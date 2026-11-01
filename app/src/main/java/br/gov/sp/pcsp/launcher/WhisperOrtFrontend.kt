@@ -11,8 +11,10 @@ import kotlin.math.sin
  * Frontend de áudio do Whisper para o motor ORT (ORT1-C01/C03/C04/C06/C07).
  *
  * Converte PCM já em 16 kHz mono (float, faixa -1..1) na matriz log-mel
- * `[128][3000]` que o encoder ONNX consome, exatamente como o
- * `WhisperFeatureExtractor`:
+ * `[nMels][3000]` que o encoder ONNX consome, exatamente como o
+ * `WhisperFeatureExtractor`: 128 bins no turbo (large-v3), 80 no small
+ * (extrator padrão) — a contagem vem da tabela de filtros recebida
+ * (adendo 17 §1).
  *
  * 1. pad/truncate para 30 s = 480000 amostras com valor 0.0 (padding `right`);
  * 2. STFT `n_fft=400`, `hop=160`, janela Hann **periódica**, `center=True`
@@ -38,8 +40,16 @@ class WhisperOrtFrontend(
     private val filters: Array<FloatArray> = WhisperOrtMelFilters.slaney,
 ) {
 
+    /**
+     * Bins mel DESTA instância (adendo 17 §1): 128 no turbo (large-v3),
+     * 80 no small (extrator padrão). Vem da tabela recebida, nunca de
+     * constante global — é o que impede o `ConvInteger` receber 128
+     * canais quando o encoder espera 80.
+     */
+    val nMels: Int = filters.size
+
     init {
-        require(filters.size == N_MELS) { "filtros mel: esperado $N_MELS linhas, veio ${filters.size}" }
+        require(filters.isNotEmpty()) { "tabela de filtros mel vazia" }
         require(filters.all { it.size == N_FREQ_BINS }) {
             "filtros mel: esperado $N_FREQ_BINS colunas por linha"
         }
@@ -47,10 +57,10 @@ class WhisperOrtFrontend(
 
     private val cosTable = DoubleArray(N_FREQ_BINS * N_FFT)
     private val sinTable = DoubleArray(N_FREQ_BINS * N_FFT)
-    private val filterTable = DoubleArray(N_FREQ_BINS * N_MELS)
+    private val filterTable = DoubleArray(N_FREQ_BINS * nMels)
     private val hann = DoubleArray(N_FFT)
     private val windowBuffer = DoubleArray(N_FFT)
-    private val melAccumulator = DoubleArray(N_MELS)
+    private val melAccumulator = DoubleArray(nMels)
 
     init {
         for (k in 0 until N_FREQ_BINS) {
@@ -61,9 +71,9 @@ class WhisperOrtFrontend(
             }
         }
         // Transposta para que o laço interno do mel seja contíguo em memória.
-        for (m in 0 until N_MELS) {
+        for (m in 0 until nMels) {
             for (k in 0 until N_FREQ_BINS) {
-                filterTable[k * N_MELS + m] = filters[m][k].toDouble()
+                filterTable[k * nMels + m] = filters[m][k].toDouble()
             }
         }
         // Hann PERIÓDICA: 0.5 - 0.5*cos(2*pi*n/N). A simétrica (N-1) é outra
@@ -78,16 +88,16 @@ class WhisperOrtFrontend(
      *
      * [pcm] é truncado em [N_SAMPLES] amostras e completado com zeros até lá: a
      * cauda curta NÃO é descartada (C06) e uma entrada maior é fatiada pelo
-     * chamador em janelas de [planWindows]. Devolve `[N_MELS][N_FRAMES]`
+     * chamador em janelas de [planWindows]. Devolve `[nMels][N_FRAMES]`
      * row-major (índice `mel * N_FRAMES + frame`) — o mesmo layout do tensor
-     * `[1, 128, 3000]` do encoder.
+     * `[1, nMels, 3000]` do encoder.
      */
     fun logMel(pcm: FloatArray): FloatArray {
         val audio = DoubleArray(N_SAMPLES)
         val copied = min(pcm.size, N_SAMPLES)
         for (i in 0 until copied) audio[i] = pcm[i].toDouble()
         val padded = reflectPad(audio, N_FFT / 2)
-        val logSpec = DoubleArray(N_MELS * N_FRAMES)
+        val logSpec = DoubleArray(nMels * N_FRAMES)
         var globalMax = -Double.MAX_VALUE
         for (frame in 0 until N_FRAMES) {
             val start = frame * HOP_LENGTH
@@ -104,20 +114,20 @@ class WhisperOrtFrontend(
                 }
                 val power = re * re + im * im
                 if (power != 0.0) {
-                    val filterBase = k * N_MELS
-                    for (m in 0 until N_MELS) {
+                    val filterBase = k * nMels
+                    for (m in 0 until nMels) {
                         melAccumulator[m] += filterTable[filterBase + m] * power
                     }
                 }
             }
-            for (m in 0 until N_MELS) {
+            for (m in 0 until nMels) {
                 val value = log10(max(melAccumulator[m], 1e-10))
                 logSpec[m * N_FRAMES + frame] = value
                 if (value > globalMax) globalMax = value
             }
         }
         val floor = globalMax - 8.0
-        return FloatArray(N_MELS * N_FRAMES) { index ->
+        return FloatArray(nMels * N_FRAMES) { index ->
             val value = max(logSpec[index], floor)
             ((value + 4.0) / 4.0).toFloat()
         }

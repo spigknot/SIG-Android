@@ -92,6 +92,19 @@ class WhisperOrtAdmission(private val clock: () -> Long = { System.nanoTime() })
         val totalMillis: Long,
         val partial: Boolean,
         val error: String?,
+        /**
+         * Adendo 16 §3 — threads pedidas do seletor compartilhado.
+         *
+         * ORT aplica direto (efetivas == pedidas); CPP registra as pedidas e o
+         * efetivo nativo vai no log (`native params … threads=`). Zero = job
+         * anterior à marcação.
+         */
+        val threads: Int = 0,
+        /**
+         * Adendo 17 §1 — modelo efetivo do compute (`whisper-large-v3-turbo`
+         * ou `whisper-small`). Vazio = job anterior à marcação.
+         */
+        val model: String = "",
     )
 
     /** Resultado da tentativa de admissão. */
@@ -223,6 +236,13 @@ class WhisperOrtAdmission(private val clock: () -> Long = { System.nanoTime() })
         totalMillis: Long,
         partial: Boolean,
         error: String? = null,
+        threads: Int = 0,
+        /**
+         * Adendo 17 §1 — modelo efetivo do compute (turbo/small), registrado
+         * no terminal para provar small→small e turbo→turbo de ponta a ponta.
+         * Vazio = job anterior à marcação.
+         */
+        model: String = "",
     ): Terminal? {
         lock.lock()
         try {
@@ -246,6 +266,8 @@ class WhisperOrtAdmission(private val clock: () -> Long = { System.nanoTime() })
                 // cobre o áudio inteiro.
                 partial = partial || outcome == "CANCELLED",
                 error = error,
+                threads = threads,
+                model = model,
             )
             terminais[chave(job)] = terminal
             cancelados.remove(chave(job))

@@ -130,7 +130,14 @@ class WhisperOrtTranscriptionProducer(
             // computing=1/inUse=1 presos: o próximo pedido válido recebia Busy e
             // closeAll recusava.
             return try {
-                val transcriber = WhisperOrtTranscriber(tokenizer, request.policy)
+                // Adendo 17 §1 — frontend com a tabela do MODELO do pacote
+                // (80 bins no small, 128 no turbo): com 128 fixo o encoder
+                // do small falhava no ConvInteger (C: 128, kernel: 80).
+                val transcriber = WhisperOrtTranscriber(
+                    tokenizer,
+                    request.policy,
+                    WhisperOrtFrontend(WhisperOrtModelCatalog.filtrosMelOuDefault(pacote.identity.model)),
+                )
                 val transcript = transcriber.transcribe(lease.backend, request.pcm, request.isCancelled)
                 Outcome.Done(
                     transcript = transcript,
@@ -170,6 +177,9 @@ class WhisperOrtTranscriptionProducer(
             root: File,
             identity: WhisperOrtModelPackage.Identity,
         ): WhisperOrtPackageInstaller.Outcome =
-            WhisperOrtPackageInstaller.open(root, identity)
+            WhisperOrtPackageInstaller.open(
+                root, identity,
+                WhisperOrtModelCatalog.conjuntoPara(identity.model),
+            )
     }
 }

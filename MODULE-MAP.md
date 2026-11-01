@@ -87,6 +87,8 @@ também é bloqueado.
 | `GrokSttRequestPolicy.kt` | Grok STT na Transcrição: pacing compartilhado, cooldown, Retry-After, backoff, métricas e aviso de limite. |
 | `GeminiSttRequestPolicy.kt` | Cota REST Gemini: pacing 8/min, teto 100/dia no Pacifico, backoff e estatisticas locais. |
 | `LiveDiagnosticContext.kt` | Correlação de diagnóstico da sessão ao vivo. |
+| `WhisperApresentacaoObservador.kt` | ADENDO 26 §2: contrato assíncrono segmento→apresentação (identidade job/attempt, emissão × post executado, recusa por destroy/geração, recibo final e fases na mesma origem `compute_inicio`). |
+| `WhisperApresentacaoRegistro.kt` | ADENDO 27 §2: registro do recibo por tentativa — observador + DESTINO preso à identidade (job/attempt/entrada) + reserva de publicação única; nunca `tempSessionDir` nem "último global". |
 | `SttLiveAudioFlow.kt` | Cadência PCM, pausa com silêncio e política de replay por provedor ao vivo. |
 | `TranscriptionReport.kt` | Relatório HTML, log de terminal, nomes e tamanhos. |
 | `DownloadSizeFormat.kt` | Tamanhos de download: base decimal, plano por arquivo e log do download. |
@@ -227,6 +229,7 @@ mora no KDoc do arquivo e nos testes, não aqui.
 | `WhisperOrtFrontend.kt` | ORT1/C03-C07: frontend Whisper do motor ORT — STFT 400/hop 160, pad reflect, potência sem a última coluna, `[128][3000]` log-mel e planejamento de janelas de 30 s com cauda parcial preservada. |
 | `WhisperOrtMelFilters.kt` | ORT1/C04: banco mel Slaney (128×201) CALCULADO e conferido contra o `mel_filters.npz` oficial do openai/whisper. |
 | `WhisperOrtPcm.kt` | ORT1/C01/C02: contrato de PCM (16 kHz mono, int16↔float por 32768, duração/SHA, pico/RMS, silêncio digital) e recusa tipada de taxa/canais diferentes. |
+| `WhisperOrtWav.kt` | Adendo 17 §3: leitura de WAV PCM em decisão pura (RIFF/WAVE, fmt 16+, pula LIST e ancilares, lê só `tamDados` do `data`, truncado é corrupção, float/estéreo vai para conversão) para prova JVM com RIFF real. |
 | `WhisperOrtTokenizer.kt` | ORT1/D05: decodificação byte-level BPE do Whisper (concatena bytes e decodifica UTF-8 uma vez; acentos e multi-byte íntegros; especiais descartados). |
 | `WhisperOrtPrompt.kt` | ORT1/D02: ids reais do prefixo (sot/idioma/tarefa/notimestamps) do export congelado e validação que recusa prefixo sem idioma. |
 | `WhisperOrtGeneration.kt` | ORT1/D03/D04/D06: laço greedy sobre backend injetável, supressão de tokens de controle e terminal tipado (EOS/MAX_TOKENS/CANCELLED/RECOVERABLE/ERROR), recusando logits não finitos e fora do vocabulário. |

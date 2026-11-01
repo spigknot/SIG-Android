@@ -46,7 +46,8 @@ object WhisperOrtPrompt {
     const val NO_SPEECH = 50_362
 
     /** Prefixo desta rodada: português, transcrever, sem timestamps. */
-    fun portuguese(): IntArray = intArrayOf(START_OF_TRANSCRIPT, LANGUAGE_PT, TRANSCRIBE, NO_TIMESTAMPS)
+    fun portuguese(noTimestampsTokenId: Int = NO_TIMESTAMPS): IntArray =
+        intArrayOf(START_OF_TRANSCRIPT, LANGUAGE_PT, TRANSCRIBE, noTimestampsTokenId)
 
     /**
      * Prefixo do MODO TEMPORAL: sem `<|notimestamps|>`.
@@ -66,7 +67,11 @@ object WhisperOrtPrompt {
     }
 
     /** Prefixo para um id de idioma já resolvido. */
-    fun forLanguage(languageTokenId: Int, translate: Boolean = false): IntArray {
+    fun forLanguage(
+        languageTokenId: Int,
+        translate: Boolean = false,
+        noTimestampsTokenId: Int = NO_TIMESTAMPS,
+    ): IntArray {
         require(languageTokenId in LANGUAGE_FIRST..LANGUAGE_LAST) {
             "id de idioma fora da faixa: $languageTokenId"
         }
@@ -74,7 +79,7 @@ object WhisperOrtPrompt {
             START_OF_TRANSCRIPT,
             languageTokenId,
             if (translate) TRANSLATE else TRANSCRIBE,
-            NO_TIMESTAMPS,
+            noTimestampsTokenId,
         )
     }
 
@@ -84,15 +89,30 @@ object WhisperOrtPrompt {
      * Devolve `null` quando aceitável ou a razão textual da recusa. Regras:
      * começa em `<|startoftranscript|>`, segundo token é idioma, terceiro é
      * tarefa, quarto é `<|notimestamps|>` (este motor não produz timestamps) e
-     * nenhum id desconhecido entra no grafo.
+     * nenhum id desconhecido entra no grafo. O id de `<|notimestamps|>` vem do
+     * pacote ([noTimestampsTokenId]; turbo usa [NO_TIMESTAMPS]).
      */
-    fun validate(prompt: IntArray, vocabSize: Int): String? = when {
+    /**
+     * ADENDO 23 §1 — validação COERENTE com a FAMÍLIA do pacote.
+     *
+     * Os IDs de tarefa vêm do modelo configurado (`transcribeTokenId`,
+     * `translateTokenId`, `noTimestampsTokenId` medidos no `task_to_id`),
+     * NÃO das constantes globais do turbo. Um prompt semanticamente errado
+     * (ex.: TRANSLATE no lugar de TRANSCRIBE) continua recusado.
+     */
+    fun validate(
+        prompt: IntArray,
+        vocabSize: Int,
+        noTimestampsTokenId: Int = NO_TIMESTAMPS,
+        transcribeTokenId: Int = TRANSCRIBE,
+        translateTokenId: Int = TRANSLATE,
+    ): String? = when {
         prompt.size < 3 -> "prefixo curto (${prompt.size} < 3): sem idioma/tarefa explícitos"
         prompt[0] != START_OF_TRANSCRIPT -> "prefixo não começa em <|startoftranscript|>"
         prompt[1] !in LANGUAGE_FIRST..LANGUAGE_LAST -> "segundo token não é idioma (${prompt[1]})"
-        prompt[2] != TRANSCRIBE && prompt[2] != TRANSLATE -> "terceiro token não é tarefa (${prompt[2]})"
-        // 3 tokens = modo temporal; com 4, o quarto tem de ser <|notimestamps|>.
-        prompt.size > 3 && prompt[3] != NO_TIMESTAMPS ->
+        prompt[2] != transcribeTokenId && prompt[2] != translateTokenId ->
+            "terceiro token não é tarefa (${prompt[2]}): transcribe=$transcribeTokenId translate=$translateTokenId"
+        prompt.size > 3 && prompt[3] != noTimestampsTokenId ->
             "quarto token não é <|notimestamps|> (${prompt[3]})"
         prompt.any { it < 0 || it >= vocabSize } -> "prefixo tem id fora do vocabulário ($vocabSize)"
         else -> null

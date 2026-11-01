@@ -89,7 +89,7 @@ class WhisperOrtAdendo13Test {
         // O callback tardio finaliza: esperarFim desbloqueia e o dono limpa UMA vez.
         var fim: WhisperOrtMediaConverter.Final? = null
         val vigia = Thread {
-            fim = ativa.esperarFim()
+            fim = ativa.esperarFim(Long.MAX_VALUE)
             saidas.incrementAndGet()
         }.apply { isDaemon = true; start() }
         motor.terminarTarde(ok = true)

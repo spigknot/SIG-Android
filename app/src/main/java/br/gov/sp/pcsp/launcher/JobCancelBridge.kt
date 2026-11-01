@@ -29,17 +29,40 @@ object JobCancelBridge {
 
     /** Quem recebe o aviso de UI (a Activity viva). Abstrato para testar sem Android. */
     fun interface UiSink {
-        fun onJobCancelForwarded(generation: Long)
+        /** [generation] é a GERAÇÃO LÓGICA da sessão (traduzida do token do
+         * serviço); [aceito] = o cancelamento foi aceito pelo controller.
+         * Aviso SEM ACK (token alheio/ORT/escapado) não chega à UI. */
+        fun onJobCancelForwarded(generation: Long, aceito: Boolean)
     }
 
     private val activityRef = AtomicReference<WeakReference<UiSink>?>(null)
     private val registrado = AtomicBoolean(false)
 
+    /**
+     * Fonte de verdade do cancelamento: o singleton do processo. MUTÁVEL
+     * apenas para TESTE (injetar fake de recusa/ACK); `resetForTest` restaura
+     * o default — produção nunca substitui este sink.
+     */
+    @Volatile
+    var sessionSink: (Long) -> Boolean = { gen -> WhisperSessions.shared.cancel(gen) }
+
     /** Identidade estável usada no registro (nunca recriada). */
-    val forwarder: (Long) -> Boolean = { generation ->
+    val forwarder: (Long) -> Boolean = encaminhar@{ generation ->
+        // Adendo 18 §2 — o serviço é dono do TOKEN do alocador comum; a sessão
+        // do controller é indexada pela GERAÇÃO LÓGICA. Resolve o par pela
+        // ponte (token⇄lógico) antes de pedir o cancel: o cancelamento alcança
+        // a sessão nativa certa mesmo quando o token difere da geração. Token
+        // sem PAR não autoriza inferir uma geração lógica pelo mesmo número.
+        // A rota ORT tem forwarder próprio; tokens alheios/expirados são no-op.
+        val alvo = ReservationJobIdentity.logicoDe(generation) ?: return@encaminhar false
         // A sessão é de processo: o ACK continua válido mesmo sem Activity.
-        val aceito = WhisperSessions.shared.cancel(generation)
-        activityRef.get()?.get()?.onJobCancelForwarded(generation)
+        val aceito = sessionSink(alvo)
+        // ADENDO 19 §1.2 — a UI é avisada com a IDENTIDADE DA SESSÃO (lógica,
+        // nunca o token do serviço) e APENAS quando o cancelamento foi ACEITO;
+        // encaminhamento alheio/atrasado/sem ACK (rota ORT, token de A
+        // expirado) NÃO alcança o UiSink — a flag/status do job corrente
+        // (Activity) nunca é movida destes avisos.
+        if (aceito) activityRef.get()?.get()?.onJobCancelForwarded(alvo, aceito)
         aceito
     }
 
@@ -69,6 +92,7 @@ object JobCancelBridge {
     /** Só para teste: volta ao estado inicial. */
     fun resetForTest() {
         activityRef.set(null)
+        sessionSink = { gen -> WhisperSessions.shared.cancel(gen) }
         if (registrado.compareAndSet(true, false)) {
             WhisperJobService.unregisterCancelForwarder(forwarder)
         }

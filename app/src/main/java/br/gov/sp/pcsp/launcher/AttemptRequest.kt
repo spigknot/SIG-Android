@@ -29,6 +29,15 @@ data class AttemptRequest(
     val submitMb: Int? = null,
     val serial: Int? = null,
     val k: Int? = null,
+    /**
+     * Adendo 18 §1 — THREADS DA TENTATIVA (com identidade). `null` = chave
+     * AUSENTE no fio (compatível com libs v14 que rejeitam chave
+     * desconhecida): sem pedido, o comportamento é o do adendo 11/D2
+     * (one-shot consumido se algum escritor o tiver armado). Valor 1–8 =
+     * pedido da tentativa, aplicado por owner/job/attempt no compute e NÃO
+     * consumindo o one-shot global (que pertence a outro escritor).
+     */
+    val threads: Int? = null,
     val capture: Capture? = null,
     val producer: String = "",
     val config: String = ""
@@ -61,7 +70,7 @@ data class AttemptRequest(
     fun isProdDefault(): Boolean =
         ctxMode == CtxMode.DEFAULT && ctxLiteral == 0 &&
             winMode == WinMode.DEFAULT && winSamples == 0L &&
-            submitMb == null && serial == null && k == null && capture == null
+            submitMb == null && serial == null && k == null && threads == null && capture == null
 
     fun validate(): String? {
         if (token.isBlank()) return "token vazio"
@@ -73,6 +82,9 @@ data class AttemptRequest(
         submitMb?.let { if (it < 0 || it > 4096) return "submit fora de [0,4096]" }
         serial?.let { if (it != 0 && it != 1) return "serial fora de {0,1}" }
         k?.let { if (it < 0 || it > 64) return "k fora de [0,64]" }
+        // Adendo 18 §1 — a faixa do seletor compartilhado é 1–8; fora dela o
+        // pedido não pode ser aplicado pela metade.
+        threads?.let { if (it < 1 || it > 8) return "threads fora de [1,8]" }
         capture?.let { c ->
             if (c.kinds.isBlank()) return "captura sem kinds"
             if (c.dir.isBlank() || c.tag.isBlank()) return "captura sem dir/tag"
@@ -103,6 +115,9 @@ data class AttemptRequest(
         sb.append(";submit=").append(submitMb?.toString() ?: "default")
         sb.append(";serial=").append(serial?.toString() ?: "default")
         sb.append(";k=").append(k?.toString() ?: "default")
+        // Adendo 18 §1 — `threads` só viaja quando há pedido da tentativa:
+        // chave ABSENT é compatível com as libs que só conhecem v1 sem ela.
+        if (threads != null) sb.append(";threads=").append(threads)
         if (capture == null) {
             sb.append(";cap=off")
         } else {

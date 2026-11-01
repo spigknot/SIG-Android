@@ -35,7 +35,12 @@ class WhisperOrtGenerator(
 ) {
 
     init {
-        val problem = WhisperOrtPrompt.validate(policy.prompt, tokenizer.vocabSize)
+        val problem = WhisperOrtPrompt.validate(
+            policy.prompt, tokenizer.vocabSize,
+            noTimestampsTokenId = policy.noTimestampsTokenId,
+            transcribeTokenId = policy.transcribeTokenId,
+            translateTokenId = policy.translateTokenId,
+        )
         require(problem == null) { "prefixo inválido: $problem" }
         // A config não é aplicada "quase toda": eos/start/teto/ids têm de bater
         // com o tokenizer e com o prefixo, senão o motor roda com política
@@ -421,6 +426,15 @@ interface WhisperOrtBackend : AutoCloseable {
      * recuperável e com cancelamento não observado.
      */
     fun reopen(): Boolean = false
+
+    /**
+     * Canais mel que o encoder desta sessão espera (adendo 17 §1).
+     *
+     * Default 128 (turbo): fakes e backends estáticos não precisam mudar.
+     * [WhisperOrtSession] sobrescreve com o valor DETECTADO no grafo
+     * (80 no small) — é o que o transcriber usa para escolher o frontend.
+     */
+    val melBinsDetectados: Int get() = WhisperOrtFrontend.N_MELS
 }
 
 /**
@@ -433,6 +447,13 @@ interface WhisperOrtBackend : AutoCloseable {
 data class WhisperOrtGenerationPolicy(
     /** Prefixo obrigatório: idioma + tarefa + `<|notimestamps|>` explícitos. */
     val prompt: IntArray = WhisperOrtPrompt.portuguese(),
+    /** ADENDO 23 §1 — IDs por FAMÍLIA do pacote. */
+    val transcribeTokenId: Int = WhisperOrtPrompt.TRANSCRIBE,
+    /** ADENDO 24 §1 — o TRANSLATE REAL da família (tiny/base/small 50358;
+     * turbo 50359): sem ele o validate confunde a tarefa correta com a
+     * tarefa oposta quando os ids coincidem entre campos. */
+    val translateTokenId: Int = WhisperOrtPrompt.TRANSLATE,
+    val noTimestampsTokenId: Int = WhisperOrtPrompt.NO_TIMESTAMPS,
     /** Configuração efetiva do export (supressões e teto total). */
     val config: WhisperOrtGenerationConfig = WhisperOrtGenerationConfig.frozenExport(),
     /** A partir deste id, o token é de controle e não pode ser escolhido. */

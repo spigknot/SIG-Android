@@ -64,6 +64,13 @@ struct Request {
     bool k_set      = false;
     int  k          = 0;
 
+    // ADENDO 18 §1 — threads COM identidade: `threads_set` = pedido da
+    // tentativa transportado no fio (aplicado por owner/job/attempt no
+    // compute, sem tocar no one-shot global, que pertence a outro writer).
+    // Ausente = sem pedido de threads na tentativa (legado v14).
+    bool threads_set = false;
+    int  threads     = 0;
+
     // captura
     CapMode     cap       = CapMode::OFF;
     std::string cap_kinds;
@@ -170,6 +177,15 @@ inline Result validate(const Request & r) {
         res.status = Status::UNSUPPORTED;
         res.error = "k fora de [0,64] (admissao nao implementada acima disso)";
         res.key_of_error = "k";
+        return res;
+    }
+    if (r.threads_set && (r.threads < 1 || r.threads > 8)) {
+        // Faixa do seletor compartilhado (adendo 16 §3): 1–8. Número válido
+        // fora da faixa que a política implementa = UNSUPPORTED, nunca
+        // "invalidamente silencioso".
+        res.status = Status::UNSUPPORTED;
+        res.error = "threads fora de [1,8] (faixa do seletor compartilhado)";
+        res.key_of_error = "threads";
         return res;
     }
     if (r.cap == CapMode::ON) {
@@ -296,6 +312,12 @@ inline Result parse(const char * text, Request * out) {
                 if (!detail::parse_i32(v, &r.k)) { res.status = Status::INVALID; res.error = "k nao numerico"; res.key_of_error = k; return res; }
                 r.k_set = true;
             }
+        } else if (k == "threads") {
+            // Adendo 18 §1 — threads da tentativa COM identidade. `default`
+            // (vazio no Kotlin) não aparece no fio: o transporte só envia a
+            // chave quando há pedido. Valor numérico = pedido da tentativa.
+            if (!detail::parse_i32(v, &r.threads)) { res.status = Status::INVALID; res.error = "threads nao numerico"; res.key_of_error = k; return res; }
+            r.threads_set = true;
         } else if (k == "cap") {
             if (v == "off") { r.cap = CapMode::OFF; }
             else if (v == "on") { r.cap = CapMode::ON; }

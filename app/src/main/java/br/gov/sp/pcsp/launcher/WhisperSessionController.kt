@@ -68,7 +68,170 @@ class WhisperSessionController(
         { token, owner, gen, job, attempt ->
             WhisperLabSeams.attemptRequest(token, owner, gen, job, attempt)
         },
+    /**
+     * Adendo 17 §2 — fronteira injetável do seam one-shot de threads.
+     *
+     * Produção usa [ThreadsSeam.Jni]; testes injetam fake com contadores. Sem
+     * isso o JNI estático não é observável em JVM e o contrato por tentativa
+     * não teria prova do caminho efetivo.
+     */
+    private val threadsSeam: ThreadsSeam = ThreadsSeam.Jni,
 ) {
+
+    /**
+     * Adendo 17 §2 — contrato de threads por tentativa (sem estado global).
+     *
+     * O one-shot nativo (`g_threads_override`) é consumido perto da criação de
+     * params, DEPOIS de saídas antecipadas (cancel/WAV/owner). Sem dono, um
+     * valor não consumido vaza para outro job. Este seam torna o uso
+     * observável e testável; a produção o preenche via [ThreadsSeam.Jni].
+     */
+    interface ThreadsSeam {
+        /** Valor pendente (0 = nenhum). */
+        fun peek(): Int
+
+        /** Arma para a próxima transcrição; devolve o anterior. */
+        fun set(threads: Int): Int
+
+        /** Limpa sem consumir (0 = vazio). */
+        fun clear()
+
+        /** Adaptador da ABI JNI, injetável para conferir o retorno do setter real. */
+        class NativeAdapter(
+            private val peekNative: () -> Int,
+            private val setNative: (Int) -> Int,
+        ) : ThreadsSeam {
+            override fun peek(): Int = peekNative()
+            override fun set(threads: Int): Int {
+                // A ABI v14 devolve o valor NOVO. O contrato deste adaptador
+                // devolve o anterior; isto não torna peek+set atômicos.
+                val anterior = peekNative()
+                setNative(threads)
+                return anterior
+            }
+            override fun clear() {
+                setNative(0)
+            }
+        }
+
+        /** JNI real; lança em lib antiga (o chamador trata como legado). */
+        object Jni : ThreadsSeam by NativeAdapter(
+            { WhisperNative.threadsOverridePeek() },
+            { WhisperNative.setThreadsOverride(it) },
+        )
+    }
+
+    /**
+     * Posse do pedido de threads desta tentativa.
+     *
+     * [fonte] = "seletor" (valor congelado nosso) ou "lab" (bancada pendente,
+     * nunca clobberada). [via] = "seam" (one-shot global, contrato do
+     * adendo 17) ou "pedido" (threads transportadas no
+     * [AttemptRequest.toWire] com identidade owner/job/attempt — adendo 18 §1;
+     * a aplicação efetiva é observável no log nativo `threads_origin=
+     * attempt-request threads_requested_identidade=`). [pedidoNaoAplicado] =
+     * o seam falhou/está ausente: o compute PODE seguir com defaults, mas o
+     * pedido NUNCA foi declarado aplicado (solicitadas aqui, efetivas só
+     * quando observáveis). [consumida] = o nativo consumiu no compute; quando
+     * o compute saiu antes do `consume()`, [vazamentoEvitado] indica que o
+     * valor foi limpo em [fechar] em vez de vazar; [interferencia] indica
+     * valor alheio no fechamento (não tocado).
+     */
+    inner class ThreadsLease(
+        val pedidas: Int,
+        val fonte: String,
+        private val armou: Boolean,
+        val via: String = "seam",
+        val pedidoNaoAplicado: Boolean = false,
+    ) {
+        var consumida: Boolean = false
+            private set
+        var vazamentoEvitado: Boolean = false
+            private set
+        var interferencia: Boolean = false
+            private set
+        var fechada: Boolean = false
+            private set
+
+        fun fechar() {
+            if (fechada || !armou) return
+            fechada = true
+            val resto = runCatching { threadsSeam.peek() }.getOrDefault(0)
+            consumida = (resto == 0)
+            if (consumida) return
+            if (resto == pedidas) {
+                // Saída antecipada antes do consume: limpa o NOSSO valor.
+                runCatching { threadsSeam.clear() }
+                vazamentoEvitado = runCatching { threadsSeam.peek() }.getOrDefault(-1) == 0
+            } else {
+                // Valor alheio (outra tentativa/bancada correu junto): não toca.
+                interferencia = true
+                logError("threads: interferencia no fechamento (resto=$resto pedidas=$pedidas)", null)
+            }
+        }
+    }
+
+    /**
+     * Adendo 16 §3 — seletor compartilhado de threads (1–8, default 4).
+     *
+     * Provedor do valor pedido para ESTE job (`null` = comportamento legado).
+     * A produção liga uma vez com o seletor persistido; lab e testes usam o
+     * default (seam one-shot só via [WhisperNative.setThreadsOverride]
+     * explícito). Aplicado por tentativa, com a mesma identidade do job.
+     */
+    @Volatile
+    var threadsForJob: (() -> Int?)? = null
+
+    /**
+     * Adendo 17 §2 — posse contabilizada da ÚLTIMA tentativa (para testes e
+     * diagnóstico; `null` = sem pedido/sem seam). Volátil: escrita no worker,
+     * leitura em teste/UI.
+     */
+    @Volatile
+    var ultimoLeaseThreads: ThreadsLease? = null
+        private set
+
+    /**
+     * Adendo 17 §2 — arma o pedido de threads desta tentativa e devolve a
+     * posse ([ThreadsLease]) para contabilização no fechamento.
+     *
+     * [pedidas] já vem congelado (lido uma vez na entrada da tentativa — nunca
+     * relido no fim). Bancada pendente (`peek != 0`) nunca é clobberada: a
+     * tentativa usa o valor do lab e o lease só observa. Seam indisponível
+     * (lib antiga) ou provider ausente devolvem `null` (legado silencioso,
+     * sem throw).
+     */
+    fun armarThreads(pedidas: Int?): ThreadsLease? {
+        // Faixa do seletor compartilhado (constantes inline: sem init Android).
+        val p = pedidas?.coerceIn(WhisperOrtRoute.THREADS_MIN, WhisperOrtRoute.THREADS_MAX) ?: return null
+        val pendente = runCatching { threadsSeam.peek() }.getOrElse {
+            // Adendo 18 §1 — seam indisponível NÃO é legado silencioso: o lease
+            // registra as solicitadas sem aplicação efetiva observável, e o
+            // compute pode seguir com os defaults da política.
+            logError("threads: seam indisponivel, pedido registrado sem aplicacao", it)
+            return ThreadsLease(
+                pedidas = p, fonte = "seletor", armou = false,
+                via = "seam", pedidoNaoAplicado = true,
+            )
+        }
+        if (pendente != 0) {
+            return ThreadsLease(pedidas = pendente, fonte = "lab", armou = false)
+        }
+        val anterior = runCatching { threadsSeam.set(p) }.getOrElse {
+            logError("threads: set falhou, pedido registrado sem aplicacao", it)
+            return ThreadsLease(
+                pedidas = p, fonte = "seletor", armou = false,
+                via = "seam", pedidoNaoAplicado = true,
+            )
+        }
+        if (anterior != 0) {
+            // Alguém armou entre o peek e o set: restaura e não assume a posse.
+            runCatching { threadsSeam.set(anterior) }
+            logError("threads: condicao de corrida no armamento (anterior=$anterior)", null)
+            return ThreadsLease(pedidas = anterior, fonte = "lab", armou = false)
+        }
+        return ThreadsLease(pedidas = p, fonte = "seletor", armou = true)
+    }
 
     /** Fronteira injetável para o nativo; produção delega a [WhisperNative],
      * testes usam um fake com contadores/latches. Os métodos "Owned" (R2/B1)
@@ -134,6 +297,18 @@ class WhisperSessionController(
             callback: WhisperNative.Callback,
             request: String
         ): String = throw UnsatisfiedLinkError("transcribeOwnedReq ausente (lib legada)")
+
+        /**
+         * Adendo 18 §1 — capability do transporte de pedido com identidade.
+         *
+         * Produção consulta [WhisperNative.attemptRequestApiVersion] (símbolo
+         * ADITIVO). Lib sem o símbolo lança [UnsatisfiedLinkError]: o
+         * controller trata como 0 — SEM a chave `threads=` no fio (libs v14
+         * rejeitam chave desconhecida) e com o contrato vigente do adendo 17
+         * (one-shot + lease do seam).
+         */
+        fun attemptRequestApiVersion(): Int =
+            throw UnsatisfiedLinkError("attemptRequestApiVersion ausente (lib legada)")
 
         fun cancelTranscriptionOwned(owner: Long): Unit =
             throw UnsatisfiedLinkError("cancelTranscriptionOwned ausente (lib legada)")
@@ -724,6 +899,10 @@ class WhisperSessionController(
         if (job == null || job.invalidated || !isCurrent(generation)) {
             return Pair(STALE_RESULT_TEXT, STALE_STATUS)
         }
+        // Adendo 17 §2 — threads CONGELADAS na entrada da tentativa (antes do
+        // binding/compute): UI alterada no meio do job vale só no próximo.
+        // Nunca relidas no fim do relatório.
+        val threadsCongeladas = runCatching { threadsForJob?.invoke() }.getOrNull()
         val binding = awaitBindingTimeLimited(job, BINDING_WAIT_MS)
             ?: return Pair("Erro: init nativo falhou (${job.initFailure?.message ?: "sem binding"})", "error")
         coordinator.lock()
@@ -743,6 +922,19 @@ class WhisperSessionController(
                 job.id,
                 attempt
             )
+            // Adendo 18 §1 — capability ADITIVA do transporte de threads com
+            // identidade. 0 = lib v14 sem o símbolo: SEM a chave no fio (v14
+            // rejeita chave desconhecida) e com o contrato do adendo 17.
+            val capTransThreads = runCatching { gateway.attemptRequestApiVersion() }
+                .getOrElse { 0 }
+            // Transporte SÓ quando: binding owned, pedido próprio de produção
+            // (não alterar o pedido do lab), capability presente e pedido
+            // congelado existente. `threads` coerido na faixa do seletor.
+            val transporteThreads = pedidoLab == null && binding.owned && capTransThreads >= 2 &&
+                threadsCongeladas != null
+            val threadsTransportadas: Int? =
+                threadsCongeladas?.coerceIn(WhisperOrtRoute.THREADS_MIN, WhisperOrtRoute.THREADS_MAX)
+                    ?.takeIf { transporteThreads }
             val pedido = pedidoLab ?: if (binding.owned) {
                 AttemptRequest(
                     token = "job-${job.id}-att-$attempt",
@@ -750,6 +942,7 @@ class WhisperSessionController(
                     gen = generation,
                     job = job.id,
                     attempt = attempt,
+                    threads = threadsTransportadas,
                     producer = "app",
                     config = "prod-default"
                 )
@@ -762,7 +955,27 @@ class WhisperSessionController(
                 return Pair("Erro: pedido da tentativa recusado ($recusaLocal)", "error")
             }
             val pedidoValido = pedido
-            val text = if (binding.owned) {
+            // Adendo 17 §2 — o pedido congelado viaja com ESTA tentativa; o
+            // lease contabiliza consume/limpeza no fechamento (nunca global).
+            // Adendo 18 §1 — COM transporte, o pedido de threads vai NA chamada
+            // (owner/job/attempt conferidos no nativo) e o one-shot global não
+            // é armado: idempotente, sem ABA, sem roubar/consumir valor alheio.
+            // SEM transporte (lib v14 ou binding legado): contrato do adendo 17
+            // (lease do seam, com as solicitadas registradas mesmo quando o
+            // seam falha/está ausente — nunca legado silencioso).
+            var leaseThreads: ThreadsLease? = null
+            if (transporteThreads) {
+                leaseThreads = ThreadsLease(
+                    pedidas = threadsTransportadas!!,
+                    fonte = "seletor",
+                    armou = false,
+                    via = "pedido",
+                )
+            } else {
+                leaseThreads = armarThreads(threadsCongeladas)
+            }
+            try {
+                val text = if (binding.owned) {
                 if (pedidoValido != null) {
                     try {
                         gateway.transcribeOwnedReq(
@@ -812,6 +1025,12 @@ class WhisperSessionController(
                 job.markCancelConsumed()
             }
             return Pair(text, status)
+            } finally {
+                // Contabiliza o seam DESTA tentativa (consume/limpeza/nada
+                // alheio) e publica para diagnóstico/testes.
+                leaseThreads?.fechar()
+                ultimoLeaseThreads = leaseThreads
+            }
         } finally {
             coordinator.unlock()
         }
@@ -1021,6 +1240,9 @@ object WhisperNativeGateway : WhisperSessionController.NativeGateway {
             owner, callback, request
         )
     }
+    // Adendo 18 §1 — capability do transporte de pedido com identidade;
+    // símbolo v2 no WhisperNative (lá a lib sem o símbolo lança ULE).
+    override fun attemptRequestApiVersion(): Int = WhisperNative.attemptRequestApiVersion()
     override fun cancelTranscriptionOwned(owner: Long) = WhisperNative.cancelTranscriptionOwned(owner)
     override fun lastTranscribeStatusOwned(owner: Long): String = WhisperNative.lastTranscribeStatusOwned(owner)
     override fun lastError(): String = WhisperNative.lastError()

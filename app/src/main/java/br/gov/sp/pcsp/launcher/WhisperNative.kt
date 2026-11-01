@@ -194,6 +194,15 @@ object WhisperNative {
     /** R11/D2 — leitura do seam (diagnóstico de bancada; 0 = inativo). */
     external fun threadsOverridePeek(): Int
 
+    /**
+     * Adendo 18 §1 — capability ADITIVA do transporte de pedido com
+     * identidade. 0 no Kotlin quando a lib lança [UnsatisfiedLinkError]:
+     * sem a chave `threads=` no fio, o contrato do adendo 17 (one-shot)
+     * continua valendo. ≥2 = [AttemptRequest.toWire] pode levar
+     * `threads=<n>` e o compute aplica por owner/job/attempt.
+     */
+    external fun attemptRequestApiVersion(): Int
+
     external fun filterVad(
         inputWavPath: String,
         outputWavPath: String,

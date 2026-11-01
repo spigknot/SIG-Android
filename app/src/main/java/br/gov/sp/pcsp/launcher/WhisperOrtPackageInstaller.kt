@@ -349,6 +349,57 @@ object WhisperOrtPackageInstaller {
     }
 
     /**
+     * Adendo 17 §1 — `true` quando [identity] tem versão íntegra em disco,
+     * mesmo sem ser a ativa.
+     *
+     * Trocar de modelo com o pacote válido não baixa de novo: confere o
+     * marcador (identidade + arquivos) da versão do modelo, sem rehash.
+     * A revalidação completa (fingerprint do conteúdo) acontece em [ativar].
+     */
+    fun instalado(root: File, identity: WhisperOrtModelPackage.Identity, descriptor: List<WhisperOrtModelCatalog.Entry>): Boolean {
+        val fatos = descriptor.map { FileFact(it.name, it.sizeBytes, it.sha256, "") }
+        val chave = versionKey(identity, fatos)
+        val dir = versionDir(root, chave) ?: return false
+        if (!dir.isDirectory) return false
+        val marcador = File(dir, MARKER)
+        if (!marcador.isFile) return false
+        return true
+    }
+
+    /**
+     * Adendo 17 §1 — ativa uma versão JÁ INSTALADA, sem novo download.
+     *
+     * Trocar de modelo com o pacote válido em disco não baixa de novo:
+     * revalida a versão existente (marcador + arquivos + fingerprint, sem
+     * rehash completo) e republica o ponteiro `active`. Recusa
+     * (`SEM_VERSAO`/`VERSAO_INVALIDA`) quando o modelo não tem versão íntegra,
+     * e o chamador cai no fluxo de download.
+     */
+    fun ativar(
+        root: File,
+        identity: WhisperOrtModelPackage.Identity,
+        descriptor: List<WhisperOrtModelCatalog.Entry> = WhisperOrtModelCatalog.active,
+        withPublication: ((() -> Outcome) -> Outcome) = { it() },
+    ): Outcome {
+        validateDescriptor(descriptor)?.let { return Outcome.Refused("DESCRITOR", it) }
+        val fatos = descriptor.map { FileFact(it.name, it.sizeBytes, it.sha256, "") }
+        val chave = versionKey(identity, fatos)
+        val diretorio = versionDir(root, chave)
+            ?: return Outcome.Refused("SEM_VERSAO", "modelo ${identity.model} sem versão instalada")
+        val confere = validateVersionDir(diretorio, identity, chave, fatos)
+        if (confere != null) {
+            return Outcome.Refused("VERSAO_INVALIDA", "versão $chave não confere: $confere")
+        }
+        return withPublication {
+            publishActive(root, chave)?.let { Outcome.Refused("ATIVACAO", it) }
+                ?: when (val aberto = open(root, identity, descriptor)) {
+                    is Outcome.Ready -> aberto
+                    is Outcome.Refused -> Outcome.Refused("REABRIR", "ativado mas não abre: ${aberto.reason}")
+                }
+        }
+    }
+
+    /**
      * Retira a versão [versionKey] se ninguém mais a aponta como ativa.
      *
      * É o passo de limpeza depois do lease/dreno: recusa retirar a versão ativa

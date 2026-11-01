@@ -21,6 +21,14 @@ object WhisperOrtSelecao {
         escolhidaNaTela?.takeIf { it.isNotBlank() } ?: doIntent?.takeIf { it.isNotBlank() }
 
     /**
+     * Lógica pura do seletor compartilhado de threads (sem Android, testável em JVM).
+     *
+     * Precedência: chave nova > chave legada > default; tudo coagido a [min]–[max].
+     */
+    fun resolverThreads(nova: Int?, legada: Int?, padrao: Int, min: Int = 1, max: Int = 8): Int =
+        (nova ?: legada ?: padrao).coerceIn(min, max)
+
+    /**
      * `true` quando o pedido desta entrada deve ir para o whisper.cpp apesar de o
      * ORT ser o padrão.
      *
