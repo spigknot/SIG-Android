@@ -1,0 +1,460 @@
+{
+  "schema": "sig-granite-f00-inventory/v1",
+  "generated_at": "2026-11-04T15:20:52-03:00",
+  "executor": "agente Hermes (executor)",
+  "phase": "F00",
+  "order_revision": "20261029.1",
+  "repository": {
+    "root": "D:/Projetos/SIG",
+    "branch": "main",
+    "initial_head": "3709d3a4b841f881bacf7bbc454c3ef2a8762f29",
+    "final_head": "3709d3a4b841f881bacf7bbc454c3ef2a8762f29",
+    "own_changes": null,
+    "snapshot_ref": {
+      "path": "docs/especialista/granite/SNAPSHOT-20261029.json",
+      "head": "254b4a2b1e671f36c429259396eaf662b55ac4be"
+    },
+    "commits_after_snapshot": [
+      "b9feb6d Detecta modelo Granite NAR no servidor",
+      "aac84d0 Servidor STT local: requisicoes por motor (Granite/Nemotron) e por aba",
+      "c2b79ca Versao 20261031_001: Whisper ORT e atualizacoes STT",
+      "3709d3a Versao 20261101_001: ORT CPU e Whisper por tentativa"
+    ],
+    "snapshot_hash_comparison": {
+      "total": 44,
+      "equal": 38,
+      "different": 6,
+      "missing": 0
+    },
+    "differing_files": [
+      {
+        "path": "app/src/main/java/br/gov/sp/pcsp/launcher/NativeDependencyManager.kt",
+        "cause": "commit post-snapshot: pacote nativo v14 -> v15 + loadOrtRuntime"
+      },
+      {
+        "path": "app/build.gradle",
+        "cause": "commit post-snapshot: versionCode 77->79, versionName 1.514->1.516"
+      },
+      {
+        "path": "app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt",
+        "cause": "campanha Whisper/ORT"
+      },
+      {
+        "path": "app/src/main/java/br/gov/sp/pcsp/launcher/WhisperJobService.kt",
+        "cause": "campanha Whisper/ORT"
+      },
+      {
+        "path": "app/src/main/java/br/gov/sp/pcsp/launcher/LiveTextCommitter.kt",
+        "cause": "campanha Whisper/ORT"
+      },
+      {
+        "path": "MODULE-MAP.md",
+        "cause": "working tree de outra campanha (nao commitado)"
+      }
+    ],
+    "working_tree": {
+      "modified": 10,
+      "untracked": 1098,
+      "granite_production_modified": 0,
+      "note": "todos os 10 modificados sao Whisper/ORT; nenhum fonte Granite foi tocado"
+    },
+    "chunking_commit": {
+      "sha": "a2b4d58",
+      "present": true,
+      "evidence": "git show a2b4d58:GraniteNarEngine.kt contem OVERLAP_SECONDS=2 e MAX_CHUNK_SECONDS=T_FIXED*2*HOP/SAMPLE_RATE=40s"
+    }
+  },
+  "source_hashes": {
+    "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteActivity.kt": "f2f8c4a1a4285f58fb633995214f9d7e14d86f63cca118bf2f666acb7bb64952",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt": "cc17bffc60e85ec533188bb92f62846937cdd42228cff1c5be0a59f35beb577d",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteNarEngine.kt": "b72938ecdc8aadc4b965f65dc73bcc29d07aac2df81003d1c95c15739e9f48d2",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteNarManifest.kt": "52a949583b55f5d26206c599d68e14087409116dfc3b39108b03c394e088eb01",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteBinarySupport.kt": "784365d922e78548aaf85ec325aca9fddb7867907f314ea3643437fb3243c327",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteNarLlmSettings.kt": "051b35e04d7f1329a2ebb670b3ce31fd53ba2813e5a9d686d938a9e685783a25",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/GraniteParallelismSettings.kt": "af9bcaaf6c9ae35cbebce2b4e6941693bb79c534d394086190604f2682c06d12",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/LocalGraniteModel.kt": "1573359288ee4c88ed2764ecaa94fcda1598ca0fd7e362776936caff9605205d",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/NativeDependencyManager.kt": "95e020662eff34263a5c94faeb83d7035cc52777f4a43767759a97d56dc94351",
+    "app/src/main/java/br/gov/sp/pcsp/launcher/QairtDependencyManager.kt": "920e4a60c16fefc5c3d519788211869de4b8bff9a96689db86a15a11dab61855",
+    "app/src/test/java/br/gov/sp/pcsp/launcher/GraniteNarEngineTest.kt": "1b4607d2aac3d6b45eb09228fbc357ccfd9019aaa9a7674485fecdad837eb443",
+    "app/src/test/java/br/gov/sp/pcsp/launcher/GraniteEngineTest.kt": "948bbb5ba0cc10f34049fb2cc5d7f721f23cc29120a71793a4fab846adf9ec9a",
+    "app/src/test/java/br/gov/sp/pcsp/launcher/GraniteNarBucketPolicyTest.kt": "6a2a00085b1d3d391d8e8300b37f90a06865400afc7852c9acbe10e251ad485d",
+    "app/src/test/java/br/gov/sp/pcsp/launcher/GraniteBackendMappingTest.kt": "e2dd29eb1cb74a4e3d4cafd1c676b39cdda53caca402318928c4e2a9cddddbb3",
+    "app/src/test/java/br/gov/sp/pcsp/launcher/GraniteBinarySupportTest.kt": "fa78d5482d9a71585a2540808517234ca1f85a332e7a01ddb9e76d8c96bdd962",
+    "docs/granite-nar-design.md": "77c4d600cba8482f99b862d5e2e28f295ac74d9272e2e2ababd439156325b5b5",
+    "scripts/run-granite-nar-adb-benchmark.ps1": "4c6cdfdb9cec197f7a883f3574661543d710f94a9ff44b30be383601c96ecad1",
+    "app/build.gradle": "dc3fee001fe03dee69e4388720fab913cdab325e561c071db87fa5c412d523b3"
+  },
+  "native_packages": {
+    "declared_component_version": "15",
+    "arm64-v8a": {
+      "url": "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v15-arm64-v8a.zip",
+      "zip_bytes": 49748422,
+      "sha256": "b8f05f4ad46bc27cd148b76962d6955ec3bd3577110649f501b6627769aeb26a",
+      "local_file_present": true,
+      "local_hash_matches": true
+    },
+    "x86_64": {
+      "url": "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v15-x86_64.zip",
+      "zip_bytes": 55979740,
+      "sha256": "589aff93a8ce3f095dbff34de53800d25de733692eca51cac74410e8eeac3eab",
+      "local_file_present": true,
+      "local_hash_matches": true
+    },
+    "v14_still_on_disk": true,
+    "v14_hashes_match_old_code": true,
+    "delta_v14_v15": "somente libsig_whisper.so (+2.512 B arm64, +2.536 B x86_64); nenhuma lib ORT/QNN/llama alterada",
+    "libs_arm64": {
+      "libonnxruntime.so": 23990744,
+      "libonnxruntime4j_jni.so": 111504,
+      "libsig_whisper.so": 64570368,
+      "libsig_llama.so": 30194712,
+      "libsig_npu_probe.so": 948912,
+      "libggml-htp-v81.so": 747440,
+      "libomp.so": 961440,
+      "libc++_shared.so": 1027408,
+      "libavcodec.so": 15143992,
+      "libavformat.so": 3987320,
+      "libavfilter.so": 4241064,
+      "libavutil.so": 702672,
+      "libswscale.so": 594472,
+      "libswresample.so": 101136,
+      "libavdevice.so": 63192,
+      "libffmpegkit.so": 470040,
+      "libffmpegkit_abidetect.so": 30392,
+      "models/ggml-silero-v6.2.0.bin": 885098
+    }
+  },
+  "runtimes": {
+    "ort_java_aar": {
+      "coordinate": "com.microsoft.onnxruntime:onnxruntime-android-qnn:1.29.0",
+      "source": "app/build.gradle:443"
+    },
+    "ort_native": {
+      "file": "libonnxruntime.so (pacote v15 arm64)",
+      "bytes": 23990744,
+      "version_observed_in_artifact": "1.29.0 (simbolo ELF VERS_1.29.0)",
+      "identity_loaded_at_runtime": "NAO OBSERVADA nesta fase (exigiria execucao)"
+    },
+    "apk_excludes": [
+      "**/libonnxruntime.so",
+      "**/libonnxruntime4j_jni.so"
+    ],
+    "load_order": [
+      "libonnxruntime.so",
+      "libonnxruntime4j_jni.so"
+    ],
+    "qairt": {
+      "package_version": "1",
+      "bytes": 55682231,
+      "sha256": "df879cd794ae0a2339a039d90ced937e08f4094a536d16bc571cf68c5a61a9f0",
+      "libs": [
+        "libQnnSystem.so",
+        "libQnnGpu.so",
+        "libQnnHtp.so",
+        "libQnnHtpPrepare.so",
+        "libQnnHtpV73Stub.so",
+        "libQnnHtpV75Stub.so",
+        "libQnnHtpV79Stub.so",
+        "libQnnHtpV81Stub.so",
+        "libQnnHtpV73Skel.so",
+        "libQnnHtpV75Skel.so",
+        "libQnnHtpV79Skel.so",
+        "libQnnHtpV81Skel.so"
+      ],
+      "installed_on_test_device": false
+    },
+    "toolchain": {
+      "ndk": "27.2.12479018",
+      "compileSdk": 35,
+      "minSdk": 24,
+      "targetSdk": 35,
+      "app_version": {
+        "versionCode": 79,
+        "versionName": "1.516"
+      }
+    },
+    "export_env": {
+      "venv": "tools/granite/venv",
+      "python": "3.11.0",
+      "onnx": "1.22.0",
+      "onnxruntime": "1.29.0",
+      "numpy": "2.4.6",
+      "torch": "2.13.0+cpu"
+    }
+  },
+  "models": {
+    "remote_manifest": {
+      "url": "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/granite/4.1-nar/v2/manifest.json",
+      "cached_copy": "granite_nar_models/manifest-cache.json",
+      "manifest_sha256": "51318838ab07aa2e1a95b2846cbd77d93419f2075a8d67dd86b59be5368c166a",
+      "cached_text_hash_matches": true,
+      "files": 25,
+      "total_bytes": 7431915532,
+      "buckets": [
+        200,
+        400,
+        800,
+        1200,
+        1600,
+        2000
+      ],
+      "variants": [
+        "fp16",
+        "int8b-blk128",
+        "int4b-blk128"
+      ],
+      "validation_level": "context-ready",
+      "phone_validation": false,
+      "backend_aprovado": null,
+      "backend_pretendido": "cpu",
+      "limitacoes": [
+        "Sem validacao Adreno/HTP/contexto QNN.",
+        "Nada foi executado em aparelho: backend pretendido e cpu, nunca 'aprovado'.",
+        "O LLM de producao tem S dinamico por desenho."
+      ]
+    },
+    "test_device_package": {
+      "device": "CPH2747 (OnePlus 15)",
+      "dir": "/sdcard/Android/data/br.gov.sp.pcsp.launcher/files/granite_nar_models",
+      "entries": 24,
+      "bytes": 4166291039,
+      "selected_variant_pref": "int8b-blk128",
+      "installed_variants": [
+        "int8b-blk128",
+        "int4b-blk128"
+      ],
+      "missing_vs_manifest": [
+        "granite-4.1-nar-llm-fp16.onnx (2149128)",
+        "granite-4.1-nar-llm-fp16.onnx.data (3263500288)"
+      ],
+      "sampled_hash_check": {
+        "files_checked": 6,
+        "equal": 6,
+        "different": 0
+      }
+    },
+    "turbo_package_test_device": {
+      "dir": ".../files/granite_models",
+      "complete": false,
+      "present": [
+        "granite-5.0-turboctc-f32-ext.onnx (865408)",
+        "granite-5.0-turboctc-f32-ext.onnx.data.download (1327104, PARCIAL)"
+      ]
+    },
+    "local_pc_copies": [
+      {
+        "path": "tools/granite/out/",
+        "content": "exports turboctc f32/f16 (.onnx + .data), 0,86-1,89 GB"
+      },
+      {
+        "path": "tools/granite/package/",
+        "content": "copias de publicacao turboctc"
+      },
+      {
+        "path": "D:/Projetos/granite-export/package/",
+        "content": "granite-5.0-turboctc-f32-ext.onnx.data 1.891.581.952"
+      }
+    ]
+  },
+  "devices": {
+    "test_target": {
+      "serial": "100.108.27.64:5555",
+      "model": "CPH2747",
+      "device": "OP611FL1",
+      "soc": "SM8850",
+      "manufacturer": "QTI",
+      "board": "canoe",
+      "android": "16 (API 36)",
+      "abi": "arm64-v8a",
+      "ram_total_kb": 15473704,
+      "ram_available_kb": 4762668,
+      "data_total_gb": 932,
+      "data_free_gb": 510,
+      "battery_level": 28,
+      "battery_temp_c": 31.7,
+      "app_installed": {
+        "versionCode": 79,
+        "versionName": "1.516",
+        "lastUpdate": "2026-11-02 00:06:55"
+      },
+      "app_running": false,
+      "native_package_installed": "15",
+      "qairt_installed": false,
+      "packages": [
+        "br.gov.sp.pcsp.launcher",
+        "br.gov.sp.pcsp.launcher.test",
+        "br.gov.sp.pcsp.npuprobe"
+      ],
+      "owner": "usuario designou este aparelho para os testes do projeto (Granite/Smart/NPU)"
+    },
+    "other_device": {
+      "serial": "100.114.88.45:5555",
+      "model": "PJA110",
+      "soc": "SM8550",
+      "android": "13",
+      "ram_total_kb": 23731972,
+      "ram_free_kb": 2923192,
+      "data_free_gb": 519,
+      "app_running": false,
+      "native_package_installed": "14",
+      "granite_models_present": false,
+      "owner": "campanha Whisper lab (br.gov.sp.pcsp.whisperlab e .test ativos durante o inventario)",
+      "usable_for_granite": false
+    }
+  },
+  "ownership": [
+    {
+      "object": "fontes Granite de producao",
+      "owner": "campanha Granite",
+      "evidence": "MODULE-MAP.md; AGENTS.md",
+      "effect": "nao alterados em F00"
+    },
+    {
+      "object": "pipeline live compartilhado (LivePcmPipeline, LiveVadSegmenter, LiveTextCommitter, LiveTextPublication, LiveTerminalPolicy, LiveStopRequest, LiveJobSupport, LiveEventIdentity)",
+      "owner": "campanha Whisper",
+      "evidence": "diagnostico v3 secao 1; LiveTextCommitter mudou pos-snapshot",
+      "effect": "reuso so com contrato e regressao (D35)"
+    },
+    {
+      "object": "libs nativas e pacote v15",
+      "owner": "fluxo de release SIG (NativeDependencyManager -> R2)",
+      "evidence": "COMPONENT_VERSION 15; ZIPs conferidos",
+      "effect": "consumo compartilhado; mudanca exige verificar todos (D33)"
+    },
+    {
+      "object": "ORT Java (AAR) e ORT nativo",
+      "owner": "campanha Whisper/ORT",
+      "evidence": "app/build.gradle:443; loadOrtRuntime",
+      "effect": "Granite e consumidor"
+    },
+    {
+      "object": "QAIRT",
+      "owner": "tools/qairt + QairtDependencyManager",
+      "evidence": "pacote v1 55.682.231 B",
+      "effect": "nao instalado; instalacao pertence a F06/F07"
+    },
+    {
+      "object": "modelo NAR publicado (R2)",
+      "owner": "pipeline tools/granite",
+      "evidence": "manifesto granite-nar-v2",
+      "effect": "fonte de identidade; nao republicar"
+    },
+    {
+      "object": "MODULE-MAP.md",
+      "owner": "harness (scripts/check-module-map.ps1)",
+      "evidence": "AGENTS.md",
+      "effect": "modificado por terceiro; nao commitar junto"
+    },
+    {
+      "object": "CPH2747 (OnePlus 15)",
+      "owner": "usuario (alvo de testes do projeto)",
+      "evidence": "instrucao direta de 2026-11-04",
+      "effect": "reserva proposta"
+    },
+    {
+      "object": "PJA110",
+      "owner": "campanha Whisper lab",
+      "evidence": "whisperlab e .test ativos",
+      "effect": "fora desta campanha"
+    },
+    {
+      "object": "docs/especialista/whisper/",
+      "owner": "campanha Whisper",
+      "evidence": "649 entradas nao rastreadas",
+      "effect": "nao tocar"
+    }
+  ],
+  "tests": {
+    "jvm_granite": {
+      "GraniteBackendMappingTest.kt": 9,
+      "GraniteBinarySupportTest.kt": 13,
+      "GraniteEngineTest.kt": 20,
+      "GraniteNarBucketPolicyTest.kt": 8,
+      "GraniteNarEngineTest.kt": 44
+    },
+    "total": 94,
+    "instrumented_granite_specific": false,
+    "chunking_covered_in_jvm": true,
+    "executed_in_f00": false
+  },
+  "gaps": [
+    {
+      "id": "G-01",
+      "item": "identidade ORT carregada em runtime",
+      "impact": "AAR 1.29.0 e artefato 1.29.0 nao provam a lib efetivamente carregada no processo",
+      "next_check": "log de carga + sonda de versao no primeiro load (F02)"
+    },
+    {
+      "id": "G-02",
+      "item": "QAIRT ausente no OnePlus 15",
+      "impact": "rotas QNN (GPU/HTP) nao podem ser tentadas sem 55,7 MB de download",
+      "next_check": "instalar pacote QAIRT v1 e registrar identidade (F06/F07)"
+    },
+    {
+      "id": "G-03",
+      "item": "variante PADRAO (fp16) ausente no aparelho",
+      "impact": "pacote instalado (4,17 GB) != manifesto (7,43 GB); default exigiria +3,26 GB",
+      "next_check": "A->B->A de variantes com download real (F11)"
+    },
+    {
+      "id": "G-04",
+      "item": "pacote 5.0 Turbo incompleto",
+      "impact": "rota Turbo nao e executavel; .data.download parcial de 1,3 MB",
+      "next_check": "limpar/rebaixar em F02 com autorizacao"
+    },
+    {
+      "id": "G-05",
+      "item": "ambiente ORT global compartilhado com Whisper",
+      "impact": "D33: mesmas libs/processo; troca de carregador afeta os dois motores",
+      "next_check": "teste de convivencia e owner/ACK (F02/F11)"
+    },
+    {
+      "id": "G-06",
+      "item": "cancelamento so entre trechos, sem ACK",
+      "impact": "cancelar durante inferencia espera o trecho atual; nao ha confirmacao de termino",
+      "next_check": "contrato de cancel/ACK medido (F03)"
+    },
+    {
+      "id": "G-07",
+      "item": "sem atribuicao de backend por estagio",
+      "impact": "rotulo de backend nao prova particao neural",
+      "next_check": "profiling/particao por sub-grafo (F02+)"
+    },
+    {
+      "id": "G-08",
+      "item": "sem guarda de memoria/termica no NAR",
+      "impact": "fp16->fp32 e logits grandes podem estourar sob carga concorrente",
+      "next_check": "medir RSS/pico e thermal em F02/F03"
+    },
+    {
+      "id": "G-09",
+      "item": "nenhuma prova de dispositivo nesta fase",
+      "impact": "manifesto declara phone_validation=false e backend_aprovado=null",
+      "next_check": "F02 com oraculo CPU"
+    },
+    {
+      "id": "G-10",
+      "item": "PJA110 indisponivel e desatualizado (v14, sem modelos)",
+      "impact": "nao serve como segundo aparelho sem preparo e sem liberar a campanha Whisper",
+      "next_check": "reserva formal por campanha"
+    },
+    {
+      "id": "G-11",
+      "item": "MODULE-MAP.md modificado por terceiros",
+      "impact": "commit desta campanha pode arrastar alteracao alheia; gate do harness checa o mapa",
+      "next_check": "preservar como esta e revalidar antes de commitar fonte"
+    },
+    {
+      "id": "G-12",
+      "item": "numeros historicos sem log bruto no repositorio",
+      "impact": "conclusoes de 09-14/09 so podem ser citadas como historico, nao como benchmark desta campanha",
+      "next_check": "G01 delimitado em F01"
+    },
+    {
+      "id": "G-13",
+      "item": "*.csv ignorado pelo .gitignore:55",
+      "impact": "os tres CSVs exigidos pela ordem nao entrariam em commit sem excecao explicita",
+      "next_check": "decisao do especialista: excecao estreita no .gitignore ou tabelas incorporadas ao relatorio"
+    }
+  ]
+}

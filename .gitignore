@@ -82,5 +82,9 @@ docs/opencl-hymt2/logs-rodada-opencl/*
 docs/vulkan-hymt2-fusion-round/**
 !docs/vulkan-hymt2-fusion-round/**/*.txt
 !docs/vulkan-hymt2-fusion-round/**/*.md
+# Artefatos das fases Granite: os CSV de inventario/cobertura sao entrega da ordem
+# F00 (inventory, runtime-matrix, capability-map, coverage); o *.csv global acima
+# so e vencido por esta negacao estreita.
+!docs/especialista/granite/*.csv
 # Midia de teste
 emul_test_media/

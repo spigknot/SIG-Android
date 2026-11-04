@@ -1,0 +1,18 @@
+# F00 — manifesto SHA-256 dos entregaveis e insumos
+# Gerado em 2026-11-04T15:34-03:00 (America/Sao_Paulo)
+# Formato: <sha256>  <caminho relativo a D:/Projetos/SIG>
+
+6f24d9e61ca3641efcf9ee72f870a338e22ecb7d6034854a8ee6be3ddcb6e199  docs/especialista/granite/F00-RELATORIO.md
+c5c788ef3e0b7580800e48b69fd0afcba2964d54073f1c3ec99f901d4a1dde3f  docs/especialista/granite/F00-report.json
+b4c271dc23fc33baeebfa3990c7ad9ed6f84a24f263aeb0de8999be02dd74b23  docs/especialista/granite/F00-coverage.csv
+621bc44ba15cd3aed771bfdec52b9b88ee130bc738f696cadeb7e4c02b51534c  docs/especialista/granite/F00-inventory.json
+9406317c118f148d1416ad73a56125f5a8d3d186e6a143b9c2ff8c6dd0a245ef  docs/especialista/granite/F00-runtime-matrix.csv
+5e48099b0721113323b25bdc87e8ffe78e602dcef980eac134455c50718584dd  docs/especialista/granite/F00-capability-map.csv
+a4a4252d3363c03989da263ea844323908f4c99dbcb4796d9d26a2c842ffa405  docs/especialista/granite/F00-lacunas.md
+697e6fd9ea3c89503ba00c7278b68d312386b56909ccf490b197a9928720183e  docs/especialista/granite/F00-evidencias.txt
+c8fcbfb9610b5a82ed945335bc78c44f7724064abfc00e17b27b385e853d52f5  docs/especialista/granite/PROMPTS-20261029/FASE-00-REBASELINE.md
+428362a4ad20cbb7e76c36a29a56ecbde5d3a91e5c2eb9a5306489bda5a417b2  docs/especialista/granite/SNAPSHOT-20261029.json
+bc6c9097f836d03dba7ebb52b7ec6cd81b65a20f0e7b762d9962fd1ab6f31ae7  docs/especialista/granite/SCHEMA-RELATORIO-FASE-v3.json
+b8f05f4ad46bc27cd148b76962d6955ec3bd3577110649f501b6627769aeb26a  native-dependencies/build/sig-android-dependencies-v15-arm64-v8a.zip
+589aff93a8ce3f095dbff34de53800d25de733692eca51cac74410e8eeac3eab  native-dependencies/build/sig-android-dependencies-v15-x86_64.zip
+6509212f4d777a56d45131161e7bb2a42cf1d418dd4ed77ae29545d477ffa010  native-dependencies/build/sig-android-dependencies-v14-arm64-v8a.zip

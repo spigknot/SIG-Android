@@ -1,0 +1,7 @@
+rota,solicitado_plano_v3,exposto_ui_enum,implementado_codigo,comprovado_nesta_fase,evidencia,lacuna
+CPU,sim (baseline e oraculo),sim (padrao),sim (NAR e Turbo),nao executado,GraniteExecutionBackend.CPU; GraniteNarEngine.load; manifesto backend_pretendido=cpu,G-09: nenhuma inferencia nesta fase
+Vulkan,"sim (F06, MNN/ExecuTorch)",nao,nao,nao,nenhuma ocorrencia de Vulkan em Granite*.kt,rota inexistente no app
+NPU/HTP,sim (F07),sim (NPU_QNN_HTP) mas desabilitado no NAR,parcial (Turbo QNN HTP; NAR com politica de bucket),nao,politicaBucket T200/T400; QAIRT nao instalado,"G-02, G-07"
+Smart (encoder HTP -> editor Vulkan),sim (F08),nao,nao,nao,nenhuma implementacao,F06+F07 precisam aprovar antes
+GPU_QNN (legado),nao promovido,sim (GPU (Adreno)),Turbo apenas; NAR desabilitado,nao,GraniteEngine enum + QNN config,"rota legada, distinta de Vulkan"
+OpenCL,suspenso (F05),nao,nao no Granite (existe loader nativo para whisper/llama),n/a,"android-opencl-loader.cpp, CMake ggml-opencl, uses-native-library",suspensao ja efetiva no Granite; nao apagar libs compartilhadas

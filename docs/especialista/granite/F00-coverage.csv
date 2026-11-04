@@ -1,0 +1,9 @@
+tarefa,prioridade,estado,evidencia,limitacao
+F00.01,P0,feita,F00-evidencias.txt E01/E02; F00-inventory.json.repository,HEAD avancou 4 commits desde o snapshot; nada foi revertido
+F00.02,P0,feita,F00-evidencias.txt E05; F00-inventory.json.models,variante fp16 ausente no aparelho; 5.0 Turbo incompleto
+F00.03,P0,feita,F00-evidencias.txt E03; F00-runtime-matrix.csv,identidade carregada em runtime nao observada (sem execucao)
+F00.04,P0,feita,F00-capability-map.csv,comprovacao funcional pertence a F02+; nenhuma rota aprovada
+F00.05,P0,feita,F00-evidencias.txt E04; F00-inventory.json.devices,PJA110 ocupado por Whisper; OnePlus 15 com bateria em 28%
+F00.06,P0,feita,F00-evidencias.txt E06; F00-lacunas.md,sem prova de particao/ACK; testes JVM nao executados nesta fase
+F00.07,P1,feita,F00-RELATORIO.md secao 8; F00-lacunas.md,historico nao reconstruido (deliberado); G01 delimita o que falta
+F00.08,P0,feita,F00-RELATORIO.md secao 9; F00-inventory.json,manifesto inicial e proposta; aprovacao e do especialista

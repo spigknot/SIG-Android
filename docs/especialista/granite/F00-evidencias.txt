@@ -1,0 +1,327 @@
+# F00 — Evidências brutas (comandos executados e saídas)
+# Executor: agente Hermes | Início 2026-11-04T14:5x-03:00 | Fim 2026-11-04T15:2x-03:00
+# Nenhum dado privado, chave ou áudio incluído. Nada foi escrito em fonte rastreada.
+# Formato: comando -> saída relevante (recortada; saídas longas marcadas).
+
+================================================================================
+[E01] Fotografia do repositório
+================================================================================
+$ cd D:/Projetos/SIG && git rev-parse --abbrev-ref HEAD && git rev-parse HEAD
+main
+3709d3a4b841f881bacf7bbc454c3ef2a8762f29
+
+$ git status --porcelain | awk '{print $1}' | sort | uniq -c
+   1098 ??
+     10 M
+
+$ git log --oneline -12
+3709d3a Versao 20261101_001: ORT CPU e Whisper por tentativa
+c2b79ca Versao 20261031_001: Whisper ORT e atualizacoes STT
+aac84d0 Servidor STT local: requisicoes por motor (Granite/Nemotron) e por aba
+b9feb6d Detecta modelo Granite NAR no servidor
+254b4a2 Versao 20261029_001: Whisper R56 CPU/Vulkan e pacote nativo v14
+a2b4d58 Granite: completar engine NAR e documentar plano
+ff7eb3a Melhora fluidez do streaming nos editores
+29410b9 Implementa streaming e descoberta do modelo local
+...
+
+$ git cat-file -t a2b4d58  -> commit
+$ git log --oneline -1 a2b4d58 -> a2b4d58 Granite: completar engine NAR e documentar plano
+
+Modificados (working tree, todos de outra campanha):
+ M MODULE-MAP.md
+ M app/src/androidTest/java/br/gov/sp/pcsp/launcher/WhisperOrtGpuR1Test.kt
+ M app/src/androidTest/java/br/gov/sp/pcsp/launcher/WhisperOrtUiContractTest.kt
+ M app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt
+ M app/src/main/java/br/gov/sp/pcsp/launcher/WhisperOrtAdmission.kt
+ M app/src/main/java/br/gov/sp/pcsp/launcher/WhisperOrtRoute.kt
+ M app/src/main/java/br/gov/sp/pcsp/launcher/WhisperOrtSession.kt
+ M app/src/main/java/br/gov/sp/pcsp/launcher/WhisperOrtTerminalSink.kt
+ M app/src/main/res/layout/activity_whisper.xml
+ M app/src/test/java/br/gov/sp/pcsp/launcher/WhisperOrtTerminalSinkTest.kt
+
+$ git log --format='%h %ad %s' --date=short 254b4a2..HEAD
+3709d3a 2026-11-01 Versao 20261101_001: ORT CPU e Whisper por tentativa
+c2b79ca 2026-10-31 Versao 20261031_001: Whisper ORT e atualizacoes STT
+aac84d0 2026-10-30 Servidor STT local: requisicoes por motor (Granite/Nemotron) e por aba
+b9feb6d 2026-10-30 Detecta modelo Granite NAR no servidor
+
+$ git diff --stat 254b4a2..HEAD   (recorte)
+ app/build.gradle                                   |   4 +-
+ app/src/main/java/.../NativeDependencyManager.kt    |  44 +++-
+ app/src/main/java/.../GraniteActivity.kt?           (inalterado)
+ app/src/main/java/.../GraniteNarEngine.kt?          (inalterado)
+ ... 120 arquivos no total, maioria Whisper/ORT
+ docs/especialista/granite/DECISOES.md              |  21 +
+ docs/especialista/granite/ESTADO.md                |  85 +-
+ docs/especialista/granite/README.md                |  75 +-
+
+$ git diff --stat HEAD  (working tree) -> 10 arquivos, 100% Whisper/ORT + MODULE-MAP.md
+
+$ git status --porcelain docs/especialista/granite | head -20
+?? CAMPANHA-20261029.json
+?? CONTRATO-EXECUTOR-20261029.md
+?? DECISOES-20261020-ARQUIVADO.md
+?? DIAGNOSTICO-E-FONTES-20261029.md
+?? ESTADO-20261020-ARQUIVADO.md
+?? FONTES-20261029.json
+?? MODELO-PARECER-20261029.md
+?? MODELO-RELATORIO-FASE-20261029.md
+?? PLANO-GRANITE-20261029.md
+?? PROMPTS-20261029/
+?? README-20261020-ARQUIVADO.md
+?? SCHEMA-RELATORIO-FASE-v3.json
+?? SHA256SUMS-PLANO-20261029.txt
+?? SNAPSHOT-20261029.json
+?? VALIDACAO-20261029.md
+
+$ git show a2b4d58:.../GraniteNarEngine.kt | grep -nE 'OVERLAP_SECONDS = 2|CHUNK_SIZE_SECONDS|MAX_CHUNK_SECONDS'
+281:    const val CHUNK_SIZE_SECONDS = GraniteNarEngine.MAX_CHUNK_SECONDS
+282:    const val OVERLAP_SECONDS = 2
+547:    const val MAX_CHUNK_SECONDS = T_FIXED * 2 * GraniteNarFrontend.HOP / SAMPLE_RATE
+=> 2000 * 2 * 160 / 16000 = 40 s. Implementação 40/2 confirmada DENTRO do commit a2b4d58.
+
+================================================================================
+[E02] Comparação de hashes contra SNAPSHOT-20261029.json
+================================================================================
+Script: %TMPDIR%/f00_hash_compare.py (leitura + SHA-256)
+snapshot head: 254b4a2b1e671f36c429259396eaf662b55ac4be
+TOTAL=44 IGUAL=38 DIFERENTE=6 AUSENTE=0
+
+DIFERENTES:
+  app/src/main/java/br/gov/sp/pcsp/launcher/NativeDependencyManager.kt   c5b333fc10b1 -> 95e020662eff
+  MODULE-MAP.md                                                          1fd8398a4dea -> e95038a69f5d
+  app/build.gradle                                                       6938af6be828 -> dc3fee001fe0
+  app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt           0773fc3ade73 -> 9b17abe2f62e
+  app/src/main/java/br/gov/sp/pcsp/launcher/WhisperJobService.kt         91ccda3dabdc -> 38d26732f844
+  app/src/main/java/br/gov/sp/pcsp/launcher/LiveTextCommitter.kt         18ce1dbefb50 -> 8d9af929e08f
+
+Documentos mutáveis (esperado):
+  DECISOES.md, ESTADO.md, README.md divergem (revisão v3 de 29/10 + estado v3).
+
+================================================================================
+[E03] Pacote nativo, APK e ORT
+================================================================================
+$ grep -nE 'COMPONENT_VERSION|v1[45]-(arm64|x86_64)' NativeDependencyManager.kt
+23:    const val COMPONENT_VERSION = "15"
+32:  .../sig-android-dependencies-v15-arm64-v8a.zip  sha b8f05f4ad46b...  bytes 49_748_422
+37:  .../sig-android-dependencies-v15-x86_64.zip     sha 589aff93a8ce...  bytes 55_979_740
+
+$ git diff 254b4a2..HEAD -- NativeDependencyManager.kt
+-    const val COMPONENT_VERSION = "14"
++    const val COMPONENT_VERSION = "15"
+-  v14-arm64 sha 6509212f4d77... 49_747_591
++  v15-arm64 sha b8f05f4ad46b... 49_748_422
+-  v14-x86_64 sha 1e57bed133e7... 55_979_079
++  v15-x86_64 sha 589aff93a8ce... 55_979_740
+-  lib/libsig_whisper.so 64_567_856  ->  +  lib/libsig_whisper.so 64_570_368 (arm64)
+-  lib/libsig_whisper.so 64_423_152  ->  +  lib/libsig_whisper.so 64_425_688 (x86_64)
++  fun loadOrtRuntime(context, onLog)  (novo; carga explícita libonnxruntime.so -> libonnxruntime4j_jni.so)
+
+$ cd native-dependencies/build && sha256sum sig-android-dependencies-v1[45]-*.zip
+6509212f4d777a56d45131161e7bb2a42cf1d418dd4ed77ae29545d477ffa010  v14-arm64-v8a.zip
+1e57bed133e7aa20beb654fa1c8c2ea6cda9b66757cab8eb3851a1eeb5dec110  v14-x86_64.zip
+b8f05f4ad46bc27cd148b76962d6955ec3bd3577110649f501b6627769aeb26a  v15-arm64-v8a.zip
+589aff93a8ce3f095dbff34de53800d25de733692eca51cac74410e8eeac3eab  v15-x86_64.zip
+=> os 4 hashes conferem EXATAMENTE com os valores declarados no código (v14 antigos, v15 atuais).
+
+$ unzip -l sig-android-dependencies-v15-arm64-v8a.zip | awk ... (libs)
+15143992 libavcodec.so | 4241064 libavfilter.so | 3987320 libavformat.so | 702672 libavutil.so
+1027408 libc++_shared.so | 470040 libffmpegkit.so | 30392 libffmpegkit_abidetect.so
+961440 libomp.so | 23990744 libonnxruntime.so | 111504 libonnxruntime4j_jni.so
+30194712 libsig_llama.so | 948912 libsig_npu_probe.so | 64570368 libsig_whisper.so
+101136 libswresample.so | 594472 libswscale.so | 885098 models/ggml-silero-v6.2.0.bin
+747440 libggml-htp-v81.so
+
+$ unzip -p v15-arm64.zip lib/libonnxruntime.so | grep -aoE 'onnxruntime[^ ]{0,20}|1\.2[0-9]\.[0-9]' | sort -u
+1.22.0
+1.29.0
+onnxruntime
+onnxruntime\0Version
+onnxruntime.so\0VERS_1.29.0\0libd
+=> biblioteca nativa do pacote é 1.29.0 (símbolo de versão ELF).
+
+$ grep -nE 'onnxruntime|jniLibs|excludes' app/build.gradle
+204:                excludes += [
+205:                    "**/libonnxruntime.so",
+206:                    "**/libonnxruntime4j_jni.so",
+443:        implementation("com.microsoft.onnxruntime:onnxruntime-android-qnn:1.29.0")
+
+$ git diff 254b4a2..HEAD -- app/build.gradle
+-        versionCode 77
+-        versionName "1.514"
++        versionCode 79
++        versionName "1.516"
+
+$ sed -n '40,47p' QairtDependencyManager.kt
+PACKAGE_VERSION = "1"
+URL  = .../packages/qairt/sig-qairt-arm64-v8a-v1.zip
+SHA  = df879cd794ae0a2339a039d90ced937e08f4094a536d16bc571cf68c5a61a9f0
+BYTES= 55_682_231
+requiredLibraries: libQnnSystem, libQnnGpu, libQnnHtp, libQnnHtpPrepare,
+  libQnnHtpV{73,75,79,81}Stub, libQnnHtpV{73,75,79,81}Skel
+
+$ cd tools/granite && ./venv/Scripts/python.exe -c "import sys, onnx, onnxruntime, numpy"
+python 3.11.0 | onnx 1.22.0 | ort 1.29.0 | numpy 2.4.6
+torch 2.13.0+cpu
+
+================================================================================
+[E04] Dispositivos (somente leitura)
+================================================================================
+$ adb devices -l
+100.108.27.64:5555  device product:CPH2747 model:CPH2747 device:OP611FL1 transport_id:8
+100.114.88.45:5555  device product:PJA110  model:PJA110  device:OP5943L1 transport_id:7
+
+--- OnePlus 15 (CPH2747) — aparelho de teste designado pelo usuário ---
+ro.product.model CPH2747 | ro.product.device OP611FL1 | abi arm64-v8a
+ro.build.version.release 16 | sdk 36 | ro.soc.model SM8850 | manufacturer QTI | board canoe
+MemTotal 15_473_704 kB | MemFree 884_532 kB | MemAvailable 4_762_668 kB
+df /data: 932G total, 422G used, 510G avail (46%)
+battery: level 28, temperature 31.7 C, status 3 (discharging)
+versionCode=79 versionName=1.516 lastUpdateTime=2026-11-02 00:06:55
+pidof br.gov.sp.pcsp.launcher -> vazio (app não está rodando)
+pm list packages: br.gov.sp.pcsp.launcher, .launcher.test, br.gov.sp.pcsp.npuprobe
+
+$ adb shell run-as br.gov.sp.pcsp.launcher ls no_backup/native_dependencies
+11-arm64-v8a  12-arm64-v8a  13-arm64-v8a  14-arm64-v8a  15-arm64-v8a
+$ cat .../15-arm64-v8a/.installed -> 15
+$ ls -la .../15-arm64-v8a/lib | grep -E 'onnxruntime|sig_whisper'
+23990744 libonnxruntime.so | 111504 libonnxruntime4j_jni.so | 64570368 libsig_whisper.so
+$ ls no_backup/qairt -> No such file or directory  (QAIRT NÃO instalado)
+
+$ ls /sdcard/Android/data/br.gov.sp.pcsp.launcher/files
+Granite  Granite Speech  Whisper  granite_models  granite_nar_models
+hymt2_models  whisper_models
+
+$ ls -la .../granite_nar_models
+1085993664 encoder-pesos.data
+    719807 granite-4.1-nar-encoder-t0200-fp16.onnx  (idem t0400/t0800/t1200/t1600/t2000)
+   2220834 granite-4.1-nar-llm-int4b-blk128.onnx
+ 841617408 granite-4.1-nar-llm-int4b-blk128.onnx.data
+   2221414 granite-4.1-nar-llm-int8b-blk128.onnx
+1657409536 granite-4.1-nar-llm-int8b-blk128.onnx.data
+     35761 granite-4.1-nar-projector-t0200-fp16.onnx (t0400 35761, t0800 35762, t1200 31433, t1600 35762, t2000 35762)
+     21471 manifest-cache.json
+ 411041792 nar_embed_tokens.bin
+     82240 nar_mel_filters.bin
+      2048 nar_stft_window.bin
+       289 preprocessor_config.json
+ 159535104 projector-pesos.data
+   1612704 vocab.json
+
+$ ls -la .../granite_models   (Granite 5.0 Turbo)
+865408 granite-5.0-turboctc-f32-ext.onnx
+1327104 granite-5.0-turboctc-f32-ext.onnx.data.download   <- PARCIAL (1,3 MB de ~1,89 GB)
+
+$ cat shared_prefs/granite_nar_llm_settings.xml
+<string name="llm_variante">int8b-blk128</string>
+$ cat shared_prefs/granite_parallelism_settings.xml
+<int name="parallel_requests" value="10" />
+
+$ tail -15 files/native_debug.txt
+1793802954865 activateIfInstalled: dir=/data/user/0/br.gov.sp.pcsp.launcher/no_backup/native_dependencies/15-arm64-v8a/lib
+(... 15 linhas, todas do pacote 15; nenhuma linha de carga ORT/QNN ou de sessão)
+
+$ run-as ... ls -laR files/ort-model
+active (17 B) + versions/773ded06d55ed782/{encoder,decoder,decoder_with_past}_model_int8.onnx
+=> modelos ORT do Whisper (consumidor compartilhado do mesmo runtime).
+
+--- PJA110 (100.114.88.45) — NÃO é o aparelho desta campanha ---
+ro.product.model PJA110 | abi arm64-v8a | Android 13 | ro.soc.model SM8550 | QTI
+MemTotal 23_731_972 kB | MemFree 2_923_192 kB
+df /sdcard: 934G, 414G used, 519G avail
+battery level 100, temperature 21.1 C
+ps: br.gov.sp.pcsp.whisperlab.test (PID 27868) e br.gov.sp.pcsp.whisperlab (PID 32159) ATIVOS
+top: Mem 20_286M used / 23_175M total | 740% idle de 800%cpu
+native_dependencies: 11, 13, 14 (SEM 15)
+granite_nar_models: AUSENTE; granite_models: AUSENTE
+=> aparelho ocupado por campanha concorrente (Whisper lab) e sem pacote v15/modelos NAR.
+
+================================================================================
+[E05] Manifesto publicado vs pacote instalado (OnePlus 15)
+================================================================================
+$ adb exec-out cat .../granite_nar_models/manifest-cache.json > f00-manifest-cache.json
+chaves: ['manifesto_sha256', 'manifesto']
+manifesto_sha256 declarado: 51318838ab07aa2e1a95b2846cbd77d93419f2075a8d67dd86b59be5368c166a
+sha256 do texto local   : 51318838ab07aa2e1a95b2846cbd77d93419f2075a8d67dd86b59be5368c166a  (IGUAL)
+
+Campos do manifesto publicado:
+  schema 1 | pacote "granite-nar-v2" | experiment_id "granite-nar-pacote-v2"
+  criado_em 2026-09-11T13:11:04+00:00
+  buckets [200,400,800,1200,1600,2000]
+  variantes_llm ["fp16","int8b-blk128","int4b-blk128"]
+  total_bytes 7_431_915_532
+  validation_level "context-ready"
+  phone_validation false
+  backend_aprovado null
+  backend_pretendido "cpu"
+  limitacoes: ["Sem validacao Adreno/HTP/contexto QNN.",
+               "Nada foi executado em aparelho: backend pretendido e cpu, nunca 'aprovado'.",
+               "O LLM de producao tem `S` dinamico por desenho (o pacote sempre foi assim)."]
+
+$ sha256sum (no aparelho) + comparação com o manifesto
+granite-4.1-nar-encoder-t0200-fp16.onnx    IGUAL
+granite-4.1-nar-projector-t0200-fp16.onnx  IGUAL
+nar_mel_filters.bin                        IGUAL
+nar_stft_window.bin                        IGUAL
+vocab.json                                 IGUAL
+preprocessor_config.json                   IGUAL
+=> 6/6 arquivos amostrados conferem byte-a-byte.
+
+Manifesto: 25 arquivos | disco: 24 entradas (23 do manifesto + manifest-cache.json)
+AUSENTES no disco: granite-4.1-nar-llm-fp16.onnx (2_149_128)
+                   granite-4.1-nar-llm-fp16.onnx.data (3_263_500_288)
+total_bytes declarado 7_431_915_532 | du -sb no aparelho 4_166_291_039
+=> variante instalada é int8b (prefs), não a PADRAO (fp16).
+
+================================================================================
+[E06] Código: contrato do NAR (leitura, sem alteração)
+================================================================================
+GraniteNarFrontend: N_FFT 512, HOP 160, N_MELS 80, N_FREQS 257, STACK 2,
+  INPUT_DIM 160, FLOOR_DB 8.0, T_FIXED 2000
+GraniteNarEngine: SAMPLE_RATE 16000; MAX_CHUNK_SECONDS = T_FIXED*2*HOP/SAMPLE_RATE = 40
+GraniteNarChunking: CHUNK_SIZE_SECONDS = MAX_CHUNK_SECONDS; OVERLAP_SECONDS = 2;
+  MAX_OVERLAP_WORDS = 32; plan(total) com require(chunkSeconds <= 40) e overlap < chunk
+GraniteNarBuckets: TODOS [200,400,800,1200,1600,2000]; escolhe() menor que caiba;
+  LIBERADOS_NO_DSP [200,400]; politicaBucket(bucket, acelerado) -> motivo para > 400
+GraniteNarCtc: BLANK 100257; collapseLogits(FloatBuffer, frames, vocab, frameOffset)
+  (evita materializar ~200 MB de logits no heap)
+GraniteNarInterleave: slots [blank, tok0, blank, tok1, ...], mínimo 8
+GraniteNarLlm: variantes fp16 (3_263_500_288), int8b-blk128 (1_657_409_536),
+  int4b-blk128 (841_617_408), int2b REPROVADO; TODAS = 3; PADRAO = FLOAT (fp16)
+GraniteExecutionBackend: CPU, GPU_QNN(qnnBackend gpu, accelerated), NPU_QNN_HTP(qnnBackend htp, accelerated)
+GraniteActivity.selectModel: NAR + accelerated -> força CPU
+GraniteActivity.showBackendMenu: accelerated && MODEL_NAR -> item desabilitado "indisponível no NAR";
+  accelerated && !isQualcomm -> "?" e diálogo explicativo
+GraniteNarEngine.load(context, backend=CPU, requireFullAcceleration=true, onLog, onFallbackPrompt, warmupBucket=T_FIXED)
+GraniteNarEngine.loadOnnxRuntimeNatives: System.load(libonnxruntime.so) -> libonnxruntime4j_jni.so
+  (tolera "already loaded")
+GraniteNarEngine: encoderSession/projectorSession fechadas na troca de bucket; release() fecha as 3
+GraniteActivity: cancelRequested (volatile) + checkNotCancelled/ensureNotCancelled entre trechos;
+  releaseModel() no exit; NÃO há cancelamento dentro da inferência nem ACK.
+OrtEnvironment.getEnvironment() usado por GraniteNarEngine, GraniteEngine, WhisperOrtSession,
+  WhisperOrtHybridBackend, NativeDependencyManager(loadOrtRuntime) -> ambiente global compartilhado.
+
+Testes JVM existentes (@Test por arquivo):
+  GraniteBackendMappingTest 9 | GraniteBinarySupportTest 13 | GraniteEngineTest 20
+  GraniteNarBucketPolicyTest 8 | GraniteNarEngineTest 44  => 94 total
+Cobertura de chunking no JVM: "max chunk seconds equals the real frame limit",
+  "audio longo e dividido em janelas sobrepostas sem lacunas",
+  "audio de ate um chunk permanece em uma unica janela",
+  "merge remove palavras repetidas na sobreposicao",
+  "merge preserva os dois trechos sem sobreposicao"
+Nenhum teste instrumentado específico de Granite (androidTest só cita Granite em LocalServerOnDeviceTest).
+
+OpenCL no projeto (fora do Granite):
+  app/src/main/cpp/android-opencl-loader.cpp; CMakeLists.txt alvo ggml-opencl (whisper);
+  llama-jni/CMakeLists.txt; AndroidManifest <uses-native-library android:name="libOpenCL.so" required="false"/>
+  Nenhuma ocorrência de OpenCL em Granite*.kt / LocalGraniteModel.kt / app/build.gradle.
+GPU_QNN consumidores: GraniteEngine.kt e GraniteBackendMappingTest.kt (apenas).
+
+================================================================================
+[E07] Comandos NÃO executados (limite da ordem)
+================================================================================
+- Nenhum gradle/build/teste/lint (F00 não pede execução; seriam provas de F02+).
+- Nenhum download, instalação de APK, force-stop, limpeza de log, microfone ou benchmark.
+- Nenhuma escrita em fonte rastreada, modelo, cache, preferência ou dispositivo.
+- Nenhum commit/push/assinatura/publicação.

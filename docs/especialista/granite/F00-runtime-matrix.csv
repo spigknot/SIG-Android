@@ -1,0 +1,11 @@
+runtime,componente,versao_declarada,versao_observada,onde,carregado_nesta_fase,observacao
+ORT Java,com.microsoft.onnxruntime:onnxruntime-android-qnn,1.29.0,1.29.0 (Gradle),app/build.gradle:443,nao,AAR nao prova lib nativa
+ORT nativo,libonnxruntime.so,do pacote v15,1.29.0 (simbolo ELF VERS_1.29.0),native-dependencies/build/v15-arm64-v8a.zip,nao,carregado via System.load; excluido do APK
+ORT JNI,libonnxruntime4j_jni.so,do pacote v15,nao inspecionada,idem,nao,carregada apos libonnxruntime.so
+QAIRT,sig-qairt-arm64-v8a-v1.zip,pacote 1,nao instalado no CPH2747,R2 / no_backup/qairt,nao,55.682.231 B; 12 libs Qnn*
+QNN GPU,libQnnGpu.so,QAIRT v1,nao instalado,QAIRT zip,nao,backend GPU_QNN (legado)
+QNN HTP,libQnnHtp.so + skels v73/75/79/81,QAIRT v1,nao instalado,QAIRT zip,nao,HTP arch detectada em runtime
+llama/ggml,libsig_llama.so + libggml-htp-v81.so,pacote v15,nao executado,pacote nativo,nao,usado por outros motores (NPU llama)
+Whisper,libsig_whisper.so,pacote v15,64.570.368 B no aparelho,pacote nativo,nao,consumidor concorrente do ORT
+FFmpeg,libav*/libsw*,pacote v15,nao executado,pacote nativo,nao,conversao de midia
+Export (PC),python/onnx/ort/torch,venv tools/granite,3.11.0 / 1.22.0 / 1.29.0 / 2.13.0+cpu,tools/granite/venv,n/a,ambiente de exportacao

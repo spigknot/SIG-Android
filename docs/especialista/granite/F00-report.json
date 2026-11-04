@@ -1,0 +1,439 @@
+{
+  "schema_version": "sig-granite-phase-report/v3",
+  "phase_id": "F00",
+  "order_revision": "20261029.1",
+  "attempt_id": "F00-20261104-01",
+  "status": "concluida_para_revisao",
+  "started_at": "2026-11-04T14:52:00-03:00",
+  "finished_at": "2026-11-04T15:26:00-03:00",
+  "baseline": {
+    "initial_head": "3709d3a4b841f881bacf7bbc454c3ef2a8762f29",
+    "final_head": "3709d3a4b841f881bacf7bbc454c3ef2a8762f29",
+    "branch": "main",
+    "dirty_before": true,
+    "preserved_paths": [
+      "MODULE-MAP.md",
+      "app/src/main/java/br/gov/sp/pcsp/launcher/WhisperActivity.kt",
+      "app/src/main/java/br/gov/sp/pcsp/launcher/WhisperOrtAdmission.kt",
+      "app/src/main/java/br/gov/sp/pcsp/launcher/WhisperOrtRoute.kt",
+      "app/src/main/java/br/gov/sp/pcsp/launcher/WhisperOrtSession.kt",
+      "app/src/main/java/br/gov/sp/pcsp/launcher/WhisperOrtTerminalSink.kt",
+      "app/src/main/res/layout/activity_whisper.xml",
+      "app/src/androidTest/java/br/gov/sp/pcsp/launcher/WhisperOrtGpuR1Test.kt",
+      "app/src/androidTest/java/br/gov/sp/pcsp/launcher/WhisperOrtUiContractTest.kt",
+      "app/src/test/java/br/gov/sp/pcsp/launcher/WhisperOrtTerminalSinkTest.kt",
+      "docs/especialista/whisper/"
+    ],
+    "own_patch_ref": null
+  },
+  "prerequisite_refs": [
+    "AGENTS.md",
+    "docs/especialista/granite/PROMPTS-20261029/FASE-00-REBASELINE.md",
+    "docs/especialista/granite/PLANO-GRANITE-20261029.md",
+    "docs/especialista/granite/CONTRATO-EXECUTOR-20261029.md",
+    "docs/especialista/granite/DIAGNOSTICO-E-FONTES-20261029.md",
+    "docs/especialista/granite/ESTADO.md",
+    "docs/especialista/granite/DECISOES.md",
+    "docs/especialista/granite/SNAPSHOT-20261029.json",
+    "docs/especialista/granite/SCHEMA-RELATORIO-FASE-v3.json",
+    "docs/especialista/granite/MODELO-RELATORIO-FASE-20261029.md"
+  ],
+  "configuration_refs": [
+    "head:3709d3a4b841f881bacf7bbc454c3ef2a8762f29",
+    "file:app/src/main/java/br/gov/sp/pcsp/launcher/GraniteNarEngine.kt@b72938ecdc8a",
+    "file:app/src/main/java/br/gov/sp/pcsp/launcher/GraniteActivity.kt@f2f8c4a1a428",
+    "file:app/src/main/java/br/gov/sp/pcsp/launcher/GraniteEngine.kt@cc17bffc60e8",
+    "file:app/src/main/java/br/gov/sp/pcsp/launcher/NativeDependencyManager.kt@95e020662eff",
+    "file:app/src/main/java/br/gov/sp/pcsp/launcher/QairtDependencyManager.kt@920e4a60c16f",
+    "file:app/build.gradle@dc3fee001fe0",
+    "native:sig-android-dependencies-v15-arm64-v8a.zip@b8f05f4ad46bc27cd148b76962d6955ec3bd3577110649f501b6627769aeb26a",
+    "qairt:sig-qairt-arm64-v8a-v1.zip@df879cd794ae0a2339a039d90ced937e08f4094a536d16bc571cf68c5a61a9f0",
+    "device:CPH2747@100.108.27.64:5555",
+    "app:1.516(79)"
+  ],
+  "tasks": [
+    {
+      "id": "F00.01",
+      "priority": "P0",
+      "status": "feita",
+      "evidence_refs": [
+        "F00-evidencias.txt#E01",
+        "F00-evidencias.txt#E02",
+        "F00-inventory.json#repository"
+      ],
+      "result": "HEAD 3709d3a (4 commits apos 254b4a2); 44 arquivos do snapshot conferidos: 38 iguais, 6 diferentes; 10 modificados no working tree, todos Whisper/ORT ou MODULE-MAP; nenhum fonte Granite alterado; commit a2b4d58 presente com chunking 40 s/2 s.",
+      "limitation": "O snapshot v3 identifica 254b4a2/v14; a base efetiva hoje e 3709d3a/v15. Nada foi revertido."
+    },
+    {
+      "id": "F00.02",
+      "priority": "P0",
+      "status": "feita",
+      "evidence_refs": [
+        "F00-evidencias.txt#E05",
+        "F00-inventory.json#models"
+      ],
+      "result": "Manifesto publicado: 25 arquivos/7.431.915.532 B, buckets 200-2000, variantes fp16/int8b/int4b, backend_aprovado=null, phone_validation=false. Pacote no CPH2747: 24 entradas/4.166.291.039 B, variantes int8b e int4b, 6/6 hashes amostrados iguais. Turbo incompleto (grafo + .data.download parcial).",
+      "limitation": "Variante padrao fp16 ausente (3,26 GB). Variante selecionada no aparelho e int8b; pacote completo so para a variante escolhida."
+    },
+    {
+      "id": "F00.03",
+      "priority": "P0",
+      "status": "feita",
+      "evidence_refs": [
+        "F00-evidencias.txt#E03",
+        "F00-runtime-matrix.csv"
+      ],
+      "result": "AAR onnxruntime-android-qnn 1.29.0; lib nativa do pacote v15 com simbolo VERS_1.29.0; libs ORT excluidas do APK e carregadas por caminho absoluto (libonnxruntime.so -> libonnxruntime4j_jni.so); QAIRT v1 (55.682.231 B, 12 libs) nao instalado; venv de export 3.11/onnx 1.22/ort 1.29/torch 2.13.",
+      "limitation": "Identidade carregada em runtime nao observada (exigiria execucao). Versao do AAR nao foi usada como prova da lib nativa."
+    },
+    {
+      "id": "F00.04",
+      "priority": "P0",
+      "status": "feita",
+      "evidence_refs": [
+        "F00-capability-map.csv",
+        "F00-evidencias.txt#E06"
+      ],
+      "result": "Enum tem apenas CPU/GPU_QNN/NPU_QNN_HTP; NAR bloqueia acelerado na UI e forca CPU. Vulkan e Smart nao existem no codigo. OpenCL nao tem entrada no Granite (loader nativo pertence a whisper/llama); suspensao ja efetiva, sem alteracao minima de codigo necessaria.",
+      "limitation": "Comprovacao funcional pertence a F02+; nada foi executado. GPU_QNN e rota legada, distinta de Vulkan."
+    },
+    {
+      "id": "F00.05",
+      "priority": "P0",
+      "status": "feita",
+      "evidence_refs": [
+        "F00-evidencias.txt#E04",
+        "F00-inventory.json#devices"
+      ],
+      "result": "Alvo CPH2747/OnePlus 15: SM8850, Android 16, 15,47 GB RAM, 510 GB livres, app 1.516(79), pacote v15, NAR 4,17 GB, sem QAIRT. PJA110: Android 13, 23,7 GB RAM, whisperlab e .test ativos (20,3/23,2 GB), pacote v14 e sem modelos NAR.",
+      "limitation": "PJA110 indisponivel (owner Whisper). Bateria do alvo em 28% no inventario. Nenhuma acao de escrita/instalacao executada."
+    },
+    {
+      "id": "F00.06",
+      "priority": "P0",
+      "status": "feita",
+      "evidence_refs": [
+        "F00-evidencias.txt#E06",
+        "F00-lacunas.md"
+      ],
+      "result": "Contratos mapeados: frontend 80 mel/hop 160/stack 2/T=2000; janela 40 s/2 s/32 palavras; buckets e politica DSP 200-400; CTC blank 100257; interleave minimo 8; editor com escalas 8/12; parser byte-level 100.352; sessoes fechadas por bucket; 94 testes JVM em 5 arquivos.",
+      "limitation": "Sem atribuicao de backend por estagio, sem ACK de cancelamento e sem teste instrumentado de Granite; testes JVM nao foram executados nesta fase."
+    },
+    {
+      "id": "F00.07",
+      "priority": "P1",
+      "status": "feita",
+      "evidence_refs": [
+        "F00-RELATORIO.md#8",
+        "F00-lacunas.md#G-12"
+      ],
+      "result": "Reutilizaveis como historico: chunking a2b4d58, politica de buckets (10/09 e 14/09), tabela de variantes (11/09), correcao do parser (14/09), contrato dos sub-grafos (28/08). Exigem G01: delta de memoria/tempo, warm real, conclusoes OpenCL/Vulkan antigas e transferencia Hy-MT2.",
+      "limitation": "Historico nao reconstruido por desenho; nao ha log bruto das medicoes de 09-14/09 no repositorio."
+    },
+    {
+      "id": "F00.08",
+      "priority": "P0",
+      "status": "feita",
+      "evidence_refs": [
+        "F00-RELATORIO.md#9",
+        "F00-inventory.json#gaps"
+      ],
+      "result": "Manifesto inicial com verificado x pendente; politica de reserva (CPH2747 unico alvo; PJA110 da campanha Whisper); F05 suspensa e nao dependencia de F06; seis entradas para F01.",
+      "limitation": "Proposta submetida a parecer; nenhuma rota recebe aprovacao por este inventario."
+    }
+  ],
+  "claims": [
+    {
+      "kind": "observado",
+      "text": "O HEAD efetivo e 3709d3a4b841f881bacf7bbc454c3ef2a8762f29 na branch main, 4 commits apos o snapshot v3 (254b4a2).",
+      "evidence_refs": [
+        "F00-evidencias.txt#E01"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "Dos 44 arquivos com hash no SNAPSHOT-20261029.json, 38 sao identicos e 6 divergem; nenhum fonte Granite de producao esta modificado no working tree.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E02",
+        "F00-inventory.json#repository"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "O commit a2b4d58 contem a implementacao de chunking: OVERLAP_SECONDS=2 e MAX_CHUNK_SECONDS = 2000*2*160/16000 = 40 s.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E01"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "O pacote nativo declarado e v15; os quatro ZIPs locais (v14 e v15, arm64 e x86_64) conferem byte-a-byte com os SHA-256 do codigo.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E03"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "A biblioteca libonnxruntime.so do pacote v15 carrega o simbolo ELF VERS_1.29.0 e o AAR declarado e 1.29.0; as libs ORT sao excluidas do APK.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E03"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "QAIRT v1 nao esta instalado no CPH2747 (no_backup/qairt inexistente).",
+      "evidence_refs": [
+        "F00-evidencias.txt#E04"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "O pacote NAR instalado no CPH2747 tem 24 entradas e 4.166.291.039 bytes; 6 de 6 arquivos amostrados tem SHA-256 igual ao manifesto publicado, cujo proprio hash de texto confere.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E05"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "Faltam no aparelho o grafo e o .data da variante fp16 (padrao do codigo); a preferencia salva e int8b-blk128.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E04",
+        "F00-evidencias.txt#E05"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "O manifesto publicado declara validation_level=context-ready, phone_validation=false, backend_aprovado=null e backend_pretendido=cpu.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E05"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "O enum GraniteExecutionBackend tem apenas CPU, GPU_QNN e NPU_QNN_HTP; nao existe Vulkan, OpenCL ou Smart; o NAR bloqueia backend acelerado na UI.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E06"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "Nao ha ocorrencia de OpenCL em Granite*.kt, LocalGraniteModel.kt ou app/build.gradle; o loader OpenCL existe em codigo nativo de whisper/llama e no manifest.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E06"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "O cancelamento do Granite e uma flag de Activity verificada entre trechos; nao ha callback de cancelamento no engine nem ACK de termino.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E06"
+      ]
+    },
+    {
+      "kind": "observado",
+      "text": "O PJA110 esta executando br.gov.sp.pcsp.whisperlab e .test, com 20.286 MB de 23.175 MB em uso, pacote nativo 14 e sem modelos NAR.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E04"
+      ]
+    },
+    {
+      "kind": "inferencia",
+      "text": "Como o pacote instalado so contem int8b e int4b, um usuario sem preferencia salva cairia na variante fp16 e precisaria baixar 3,26 GB antes de transcrever.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E04",
+        "F00-evidencias.txt#E05"
+      ]
+    },
+    {
+      "kind": "inferencia",
+      "text": "A passagem v14->v15 nao deve alterar o comportamento do Granite, porque apenas libsig_whisper.so mudou de tamanho e as libs ORT/QNN permanecem identicas.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E03"
+      ]
+    },
+    {
+      "kind": "inferencia",
+      "text": "O pico de memoria do NAR em CPU tende a crescer com o upcast FP16->FP32 dos pesos e com os logits do editor, o que exige medicao antes de qualquer teto por perfil.",
+      "evidence_refs": [
+        "F00-evidencias.txt#E06",
+        "F00-lacunas.md#G-08"
+      ]
+    },
+    {
+      "kind": "hipotese",
+      "text": "A biblioteca ORT efetivamente carregada no processo e o .so do pacote v15; isso nao foi observado em execucao.",
+      "evidence_refs": [
+        "F00-lacunas.md#G-01"
+      ]
+    },
+    {
+      "kind": "hipotese",
+      "text": "O HTP do SM8850 aceita os buckets 200 e 400 com o QAIRT v1 e os skels publicados; nenhuma sessao foi aberta.",
+      "evidence_refs": [
+        "F00-lacunas.md#G-02"
+      ]
+    }
+  ],
+  "metrics": [],
+  "checks": [
+    {
+      "command": "git rev-parse HEAD && git status --porcelain",
+      "status": "passou",
+      "exit_code": 0,
+      "evidence_ref": "F00-evidencias.txt#E01",
+      "reason": null
+    },
+    {
+      "command": "python f00_hash_compare.py (44 hashes do SNAPSHOT-20261029.json)",
+      "status": "passou",
+      "exit_code": 0,
+      "evidence_ref": "F00-evidencias.txt#E02",
+      "reason": null
+    },
+    {
+      "command": "git show a2b4d58:GraniteNarEngine.kt | grep -E 'OVERLAP_SECONDS|MAX_CHUNK_SECONDS'",
+      "status": "passou",
+      "exit_code": 0,
+      "evidence_ref": "F00-evidencias.txt#E01",
+      "reason": null
+    },
+    {
+      "command": "sha256sum native-dependencies/build/sig-android-dependencies-v1[45]-*.zip",
+      "status": "passou",
+      "exit_code": 0,
+      "evidence_ref": "F00-evidencias.txt#E03",
+      "reason": null
+    },
+    {
+      "command": "unzip -p v15-arm64.zip lib/libonnxruntime.so | grep -a VERS_",
+      "status": "passou",
+      "exit_code": 0,
+      "evidence_ref": "F00-evidencias.txt#E03",
+      "reason": null
+    },
+    {
+      "command": "adb -s 100.108.27.64:5555 shell sha256sum <6 arquivos do pacote NAR>",
+      "status": "passou",
+      "exit_code": 0,
+      "evidence_ref": "F00-evidencias.txt#E05",
+      "reason": null
+    },
+    {
+      "command": "python f00_manifest_diff.py (manifesto vs disco)",
+      "status": "passou",
+      "exit_code": 0,
+      "evidence_ref": "F00-evidencias.txt#E05",
+      "reason": null
+    },
+    {
+      "command": "./gradlew.bat :app:testDebugUnitTest",
+      "status": "nao_executado",
+      "exit_code": null,
+      "evidence_ref": null,
+      "reason": "F00 e inventario; a ordem proibe provas de fases posteriores. Execucao prevista em F02."
+    },
+    {
+      "command": "./gradlew.bat :app:lintDebug",
+      "status": "nao_executado",
+      "exit_code": null,
+      "evidence_ref": null,
+      "reason": "Idem; nenhuma alteracao de codigo nesta fase."
+    },
+    {
+      "command": "benchmark de inferencia (CPU/GPU/HTP)",
+      "status": "nao_executado",
+      "exit_code": null,
+      "evidence_ref": null,
+      "reason": "Proibido pela ordem F00; nenhuma metrica de inferencia foi produzida."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "D:/Projetos/SIG/docs/especialista/granite/F00-RELATORIO.md",
+      "sha256": "6f24d9e61ca3641efcf9ee72f870a338e22ecb7d6034854a8ee6be3ddcb6e199",
+      "purpose": "entrega F00"
+    },
+    {
+      "path": "D:/Projetos/SIG/docs/especialista/granite/F00-coverage.csv",
+      "sha256": "b4c271dc23fc33baeebfa3990c7ad9ed6f84a24f263aeb0de8999be02dd74b23",
+      "purpose": "entrega F00"
+    },
+    {
+      "path": "D:/Projetos/SIG/docs/especialista/granite/F00-inventory.json",
+      "sha256": "621bc44ba15cd3aed771bfdec52b9b88ee130bc738f696cadeb7e4c02b51534c",
+      "purpose": "entrega F00"
+    },
+    {
+      "path": "D:/Projetos/SIG/docs/especialista/granite/F00-runtime-matrix.csv",
+      "sha256": "9406317c118f148d1416ad73a56125f5a8d3d186e6a143b9c2ff8c6dd0a245ef",
+      "purpose": "entrega F00"
+    },
+    {
+      "path": "D:/Projetos/SIG/docs/especialista/granite/F00-capability-map.csv",
+      "sha256": "5e48099b0721113323b25bdc87e8ffe78e602dcef980eac134455c50718584dd",
+      "purpose": "entrega F00"
+    },
+    {
+      "path": "D:/Projetos/SIG/docs/especialista/granite/F00-lacunas.md",
+      "sha256": "a4a4252d3363c03989da263ea844323908f4c99dbcb4796d9d26a2c842ffa405",
+      "purpose": "entrega F00"
+    },
+    {
+      "path": "D:/Projetos/SIG/docs/especialista/granite/F00-evidencias.txt",
+      "sha256": "697e6fd9ea3c89503ba00c7278b68d312386b56909ccf490b197a9928720183e",
+      "purpose": "entrega F00"
+    }
+  ],
+  "proposed_releases": [
+    {
+      "artifact_ref": "F00-inventory.json",
+      "allowed_use": "base de identidade para F01 e conferencia de hashes",
+      "not_proven": [
+        "nenhum backend executado",
+        "nenhuma metrica de inferencia",
+        "nenhuma aprovacao de rota"
+      ]
+    },
+    {
+      "artifact_ref": "F00-runtime-matrix.csv",
+      "allowed_use": "mapa de runtimes declarados x observados",
+      "not_proven": [
+        "identidade da lib carregada em runtime",
+        "compatibilidade QAIRT x SoC"
+      ]
+    },
+    {
+      "artifact_ref": "F00-capability-map.csv",
+      "allowed_use": "estado real das rotas para planejamento",
+      "not_proven": [
+        "Vulkan inexistente",
+        "HTP nao testado",
+        "Smart inexistente",
+        "CPU nao executado"
+      ]
+    },
+    {
+      "artifact_ref": "F00-lacunas.md",
+      "allowed_use": "lista de proximos verificadores por lacuna",
+      "not_proven": [
+        "qualquer uma das lacunas permanece aberta ate a fase indicada"
+      ]
+    }
+  ],
+  "limitations": [
+    "Nenhuma metrica de inferencia foi produzida: a ordem F00 proibe benchmark e a fase nao executou modelo.",
+    "Identidade da biblioteca ORT carregada no processo nao foi observada (G-01).",
+    "QAIRT nao esta instalado no aparelho de teste; rotas QNN nao sao executaveis hoje (G-02).",
+    "A variante padrao fp16 nao esta no aparelho; o pacote instalado cobre apenas int8b/int4b (G-03).",
+    "O pacote 5.0 Turbo esta incompleto no aparelho (G-04).",
+    "O ambiente ORT e global e compartilhado com o Whisper (G-05); nenhuma prova de convivencia foi feita.",
+    "O cancelamento so ocorre entre trechos e nao ha ACK de termino (G-06).",
+    "Nao houve atribuicao de backend por estagio nem medicao de memoria/termica (G-07, G-08).",
+    "O PJA110 esta ocupado pela campanha Whisper e desatualizado (v14, sem modelos) (G-10).",
+    "Os testes JVM existentes (94) nao foram executados nesta fase.",
+    "Numeros historicos de 09-14/09 vivem em KDoc e nao possuem log bruto no repositorio (G-12).",
+    "MODULE-MAP.md esta modificado por outra campanha no working tree; nada foi commitado (G-11).",
+    "Os tres CSVs exigidos pela ordem sao ignorados pelo .gitignore:55 e nao entrariam em commit sem excecao explicita (G-13)."
+  ],
+  "next_recommendation": "Liberar F01 (protocolo, referencias, corpus e metricas prospectivas) com G01 delimitado; manter F05 suspensa e F06 independente. Antes de F02, decidir explicitamente entre baixar a variante fp16 (3,26 GB) ou adotar int8b como controle, instalar QAIRT v1 no CPH2747 e carregar a bateria do aparelho. Nenhuma dessas acoes foi executada."
+}
