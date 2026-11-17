@@ -56,7 +56,11 @@ object WhisperOrtHtpRota {
     /** Contou falha neste processo (o limite é por processo, não por job). */
     @Volatile private var contouFalhaNesteProcesso = false
 
-    /** Idempotente: chamado a cada pedido, guarda o contexto e agenda o pacote. */
+    /**
+     * Idempotente: chamado a cada pedido, guarda o contexto e agenda a
+     * **verificação** do pacote. Não baixa nada (R101 §T03): o download é ação
+     * explícita do usuário na tela.
+     */
     fun iniciar(context: Context) {
         val anterior = app
         app = context.applicationContext
@@ -65,8 +69,8 @@ object WhisperOrtHtpRota {
                 if (!iniciado) {
                     iniciado = true
                     val ctx = app ?: return
-                    runCatching { WhisperOrtNpuPacote.garantirEmSegundoPlano(ctx) }
-                        .onFailure { android.util.Log.w(TAG, "agenda do pacote falhou: ${it.message}") }
+                    runCatching { WhisperOrtNpuPacote.verificarEmSegundoPlano(ctx) }
+                        .onFailure { android.util.Log.w(TAG, "verificacao do pacote falhou: ${it.message}") }
                 }
             }
         }
@@ -111,6 +115,7 @@ object WhisperOrtHtpRota {
         val decisao = WhisperOrtHtpAdmissao.decidir(
             socModelo = socModelo(),
             fabricante = socFabricante(),
+            qairtPresente = QairtDependencyManager.isInstalled(ctx),
             pacotePresente = presente,
             pacoteVerificado = pacoteVerificado,
             desligadoNoProcesso = desligadoNoProcesso,
@@ -135,6 +140,7 @@ object WhisperOrtHtpRota {
             WhisperOrtHtpAdmissao.decidir(
                 socModelo = socModelo(),
                 fabricante = socFabricante(),
+                qairtPresente = QairtDependencyManager.isInstalled(ctx),
                 pacotePresente = presente,
                 pacoteVerificado = pacoteVerificado,
                 desligadoNoProcesso = desligadoNoProcesso,
@@ -159,8 +165,14 @@ object WhisperOrtHtpRota {
         val inicio = System.nanoTime()
         val sessaoHtp = try {
             carregarOrt(ctx)
-            carregarQnn(dir)
-            abrirSessaoHtp(File(dir, WhisperOrtNpuPacote.WRAPPER), dir, pacote.htpArch)
+            // R101 §T02 — um único QAIRT no processo: as libs vêm daqui, e não
+            // do pacote da NPU (que agora só tem contexto e wrapper).
+            carregarQnnQairt(ctx, pacote.htpArch)
+            abrirSessaoHtp(
+                File(dir, WhisperOrtNpuPacote.WRAPPER),
+                QairtDependencyManager.packageDir(ctx),
+                pacote.htpArch,
+            )
         } catch (falha: Throwable) {
             registrarFalha("abertura: ${falha.javaClass.simpleName}: ${falha.message}")
             throw Recusa("abertura: ${falha.message ?: falha.javaClass.simpleName}")
@@ -248,31 +260,37 @@ object WhisperOrtHtpRota {
     }
 
     /**
-     * Carrega as cinco libs V73 do pacote. `cdsprpc` vem do vendor (namespace do
-     * app) e o skel é achado por `ADSP_LIBRARY_PATH` — o mesmo caminho da R97.
+     * R101 §T02 — carrega o QNN pelo pacote QAIRT ÚNICO, com a mesma porta do
+     * Granite.
+     *
+     * [QairtDependencyManager.loadQnnNatives] já faz o que a rota fazia à mão:
+     * registra o diretório no classloader, carrega `cdsprpc` do vendor, aponta
+     * `ADSP_LIBRARY_PATH` para o diretório do QAIRT e pula o que **já está
+     * carregado** no processo. Assim Granite (NPU) e Whisper (NPU) no mesmo
+     * processo compartilham uma instância do runtime e um único caminho de skels.
      */
-    private fun carregarQnn(dir: File) {
+    private fun carregarQnnQairt(ctx: Context, htpArch: String) {
         if (qnnCarregado) return
         synchronized(this) {
             if (qnnCarregado) return
-            for (nome in WhisperOrtNpuPacote.LIBS_V73) {
-                check(File(dir, nome).isFile) { "lib ausente: $nome" }
-            }
-            NativeDependencyManager.registerNativeLibraryDir(dir)
-            System.loadLibrary("cdsprpc")
-            android.system.Os.setenv("ADSP_LIBRARY_PATH", dir.absolutePath, true)
-            for (nome in WhisperOrtNpuPacote.LIBS_V73) {
-                if (nome.endsWith("Skel.so")) continue // o skel é carregado pelo stub no DSP
-                System.load(File(dir, nome).absolutePath)
-            }
+            check(QairtDependencyManager.isInstalled(ctx)) { "QAIRT ausente" }
+            QairtDependencyManager.loadQnnNatives(ctx, "htp", htpArch)
             qnnCarregado = true
         }
     }
 
+    /**
+     * Caminho do backend QNN dentro do pacote QAIRT.
+     *
+     * Função pequena de propósito: é a regra "a rota do Whisper aponta para o
+     * QAIRT, nunca para o pacote da NPU" provada em JVM, sem Android.
+     */
+    internal fun backendHtp(dirQairt: File): File = File(File(dirQairt, "lib"), "libQnnHtp.so")
+
     /** Abre a sessão EPContext no QNN HTP estrito (sem fallback para CPU do EP). */
     private fun abrirSessaoHtp(
         wrapper: File,
-        dir: File,
+        dirQairt: File,
         htpArch: String,
     ): WhisperOrtHtpSessao {
         check(wrapper.isFile) { "wrapper ausente" }
@@ -280,7 +298,7 @@ object WhisperOrtHtpRota {
         val opts = OrtSession.SessionOptions()
         opts.addQnn(
             linkedMapOf(
-                "backend_path" to File(dir, "libQnnHtp.so").absolutePath,
+                "backend_path" to backendHtp(dirQairt).absolutePath,
                 "htp_arch" to htpArch,
                 "device_id" to "0",
                 "offload_graph_io_quantization" to "0",

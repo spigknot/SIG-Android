@@ -27,7 +27,7 @@ class WhisperOrtNpuPacoteTest {
     private fun sha(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    private fun manifesto(vararg itens: Pair<String, ByteArray>, versao: String = "1"): String {
+    private fun manifesto(vararg itens: Pair<String, ByteArray>, versao: String = "2"): String {
         val arquivos = JSONArray()
         for ((nome, bytes) in itens) {
             arquivos.put(
@@ -66,7 +66,7 @@ class WhisperOrtNpuPacoteTest {
     }
 
     @Test
-    fun `manifesto sem uma das sete entradas e recusado`() {
+    fun `manifesto sem uma das duas entradas e recusado`() {
         val itens = conteudo().dropLast(1)
         assertNull(WhisperOrtNpuPacote.lerManifesto(manifesto(*itens.toTypedArray())))
     }
@@ -74,7 +74,7 @@ class WhisperOrtNpuPacoteTest {
     @Test
     fun `manifesto de outra versao e recusado`() {
         val itens = conteudo()
-        assertNull(WhisperOrtNpuPacote.lerManifesto(manifesto(*itens.toTypedArray(), versao = "2")))
+        assertNull(WhisperOrtNpuPacote.lerManifesto(manifesto(*itens.toTypedArray(), versao = "3")))
     }
 
     @Test
@@ -104,10 +104,10 @@ class WhisperOrtNpuPacoteTest {
         val itens = conteudo()
         val dir = temp.newFolder("incompleto")
         escrever(dir, itens)
-        File(dir, "libQnnHtpV73Skel.so").delete()
+        File(dir, WhisperOrtNpuPacote.WRAPPER).delete()
         val lido = WhisperOrtNpuPacote.lerManifesto(manifesto(*itens.toTypedArray()))!!
         val motivo = WhisperOrtNpuPacote.conferirArquivos(lido, dir)
-        assertEquals("ausente:libQnnHtpV73Skel.so", motivo)
+        assertEquals("ausente:${WhisperOrtNpuPacote.WRAPPER}", motivo)
     }
 
     @Test
@@ -132,5 +132,58 @@ class WhisperOrtNpuPacoteTest {
         val m2 = WhisperOrtNpuPacote.lerManifesto(manifesto(*outro.toTypedArray()))!!
         assertTrue(WhisperOrtNpuPacote.textoMarcadorEsperado(m1) !=
             WhisperOrtNpuPacote.textoMarcadorEsperado(m2))
+    }
+
+    // ---- R101 §T02: pacote v2 = contexto + wrapper; QNN vem do QAIRT ----
+
+    @Test
+    fun `pacote v2 nao carrega biblioteca QNN`() {
+        assertEquals(
+            listOf(WhisperOrtNpuPacote.CONTEXTO, WhisperOrtNpuPacote.WRAPPER),
+            WhisperOrtNpuPacote.ARQUIVOS,
+        )
+        assertTrue(
+            "nenhuma .so entra no pacote da NPU",
+            WhisperOrtNpuPacote.ARQUIVOS.none { it.endsWith(".so") },
+        )
+    }
+
+    @Test
+    fun `plano de download com QAIRT instalado so tem o pacote da NPU`() {
+        val plano = WhisperOrtNpuPacote.planoDeDownload(qairtInstalado = true)
+        assertEquals(1, plano.arquivos.size)
+        assertEquals(WhisperOrtNpuPacote.BYTES_ZIP, plano.totalBytes)
+        assertEquals(WhisperOrtNpuPacote.BYTES_ZIP, WhisperOrtNpuPacote.bytesParaBaixar(true, false))
+    }
+
+    @Test
+    fun `plano de download sem QAIRT soma os dois pacotes`() {
+        val plano = WhisperOrtNpuPacote.planoDeDownload(qairtInstalado = false)
+        assertEquals(2, plano.arquivos.size)
+        assertEquals(
+            WhisperOrtNpuPacote.BYTES_ZIP + QairtDependencyManager.downloadSize(),
+            plano.totalBytes,
+        )
+        assertEquals(plano.totalBytes, WhisperOrtNpuPacote.bytesParaBaixar(false, false))
+        assertEquals(0L, WhisperOrtNpuPacote.bytesParaBaixar(true, true))
+    }
+
+    @Test
+    fun `espaco necessario cobre ZIP e extracao dos dois pacotes`() {
+        val soNpu = WhisperOrtNpuPacote.espacoNecessario(qairtInstalado = true, npuInstalado = false)
+        assertTrue(soNpu >= WhisperOrtNpuPacote.BYTES_ZIP + WhisperOrtNpuPacote.BYTES_CONTEUDO)
+        val osDois = WhisperOrtNpuPacote.espacoNecessario(qairtInstalado = false, npuInstalado = false)
+        assertTrue(osDois > soNpu)
+        assertTrue(osDois >= soNpu + QairtDependencyManager.downloadSize())
+        assertEquals(0L, WhisperOrtNpuPacote.espacoNecessario(qairtInstalado = true, npuInstalado = true))
+    }
+
+    @Test
+    fun `backend QNN da rota aponta para o QAIRT e nao para o pacote da NPU`() {
+        val qairt = File(temp.root, "qairt/v1")
+        val pacoteNpu = File(temp.root, "whisper-npu/2")
+        val backend = WhisperOrtHtpRota.backendHtp(qairt)
+        assertEquals(File(qairt, "lib/libQnnHtp.so").absolutePath, backend.absolutePath)
+        assertTrue(!backend.absolutePath.startsWith(pacoteNpu.absolutePath))
     }
 }

@@ -55,6 +55,7 @@ import java.util.Locale
 import java.util.concurrent.CancellationException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToLong
 import kotlin.math.sqrt
@@ -390,6 +391,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             // Reflete a escolha imediatamente (habilitação e botão), sem esperar
             // por outra interação.
             runCatching { updateTranscribeEnabled() }
+            // R101 §T03 — entrou no ORT: é AQUI que a aceleração NPU é oferecida,
+            // como o backend acelerado do Granite oferece o QAIRT.
+            if (!marcado) oferecerAceleracaoNpu()
         }
         findViewById<android.view.View?>(R.id.help_usar_cpp)?.setOnClickListener {
             android.app.AlertDialog.Builder(this)
@@ -648,6 +652,123 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             }
             updateTranscribeEnabled()
         }
+        // R101 §T03 — com o ORT ligado e o SoC admitido, a tela OFERECE a
+        // aceleração; nada é baixado sem esta ação do usuário.
+        oferecerAceleracaoNpu()
+    }
+
+    /** Uma oferta por instância da tela: recusar não vira um diálogo a cada volta. */
+    private var npuOferecida = false
+
+    /**
+     * R101 §T03 — a NPU é uma ESCOLHA do usuário, não um download silencioso.
+     *
+     * Só aparece quando o aparelho é admitido (SoC + fabricante) e falta pelo
+     * menos um dos pacotes. O diálogo informa o tamanho EXATO a baixar (só o NPU
+     * v2 quando o QAIRT já está instalado; os dois quando não está), o espaço
+     * livre necessário e, em rede medida, o aviso de consumo. Até concluir, a
+     * transcrição continua na CPU, sem bloqueio.
+     */
+    private fun oferecerAceleracaoNpu() {
+        if (npuOferecida || isFinishing || isDestroyed) return
+        if (!WhisperOrtRoute.isEnabled(this)) return
+        val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            WhisperOrtHtpAdmissao.socDe(Build.SOC_MODEL)
+        } else null
+        if (soc == null || !soc.habilitado) return
+        val fabricante = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MANUFACTURER else null
+        if (!WhisperOrtHtpAdmissao.fabricanteAdmitido(fabricante)) return
+        val qairt = QairtDependencyManager.isInstalled(this)
+        val npu = runCatching { WhisperOrtNpuPacote.estado(this) }.getOrNull() is WhisperOrtNpuPacote.Estado.Pronto
+        if (qairt && npu) return
+        npuOferecida = true
+
+        val plano = WhisperOrtNpuPacote.planoDeDownload(qairt)
+        val livre = DownloadSizeFormat.legivel(WhisperOrtNpuPacote.espacoNecessario(qairt, npu))
+        val baixar = DownloadSizeFormat.legivel(WhisperOrtNpuPacote.bytesParaBaixar(qairt, npu))
+        val rede = runCatching { WhisperOrtNpuPacote.politicaDeRede(this) }.getOrNull()
+        val avisoRede = when (rede) {
+            null -> ""
+            "rede medida" ->
+                "\n\nAtenção: a rede atual é MEDIDA (dados móveis). " +
+                    "O download consome $baixar da sua franquia."
+            else -> "\n\nAgora não há rede adequada ($rede). Você pode repetir a ação no Wi-Fi."
+        }
+        status.text = "Aceleração NPU disponível neste aparelho."
+        DownloadPlanDialog.confirmar(
+            activity = this,
+            plano = plano,
+            negativo = "Agora não",
+            positivo = "Baixar",
+            prefacio = "Este aparelho pode rodar o encoder do Whisper na NPU (Hexagon). " +
+                "Com o pacote instalado, a transcrição usa a NPU; sem ele, continua na CPU, " +
+                "sem erro e sem bloquear o uso.",
+            sufixo = "Espaço livre necessário: $livre.$avisoRede",
+            aoNegar = { status.text = "Aceleração NPU: a transcrição segue na CPU." },
+        ) { baixarPacoteNpu() }
+    }
+
+    /**
+     * Executa a ação confirmada: QAIRT (se faltar) e depois o pacote da NPU, com
+     * progresso e cancelamento. Nada aqui roda na thread da UI.
+     */
+    private fun baixarPacoteNpu() {
+        val qairtInstalado = QairtDependencyManager.isInstalled(this)
+        val npuInstalado = runCatching { WhisperOrtNpuPacote.estado(this) }
+            .getOrNull() is WhisperOrtNpuPacote.Estado.Pronto
+        val plano = WhisperOrtNpuPacote.planoDeDownload(qairtInstalado)
+        val cancelado = AtomicBoolean(false)
+        val progresso = DownloadPlanDialog.progresso(
+            activity = this,
+            plano = plano,
+            titulo = "Ativando aceleração NPU",
+            cancelavel = true,
+            negativo = "Cancelar",
+            aoCancelar = { cancelado.set(true) },
+        )
+        status.text = "Baixando o pacote da NPU…"
+        Thread {
+            val resultado = runCatching {
+                if (!qairtInstalado) {
+                    QairtDependencyManager.install(this) { p ->
+                        runOnUiThread {
+                            progresso.atualizarPacote(p.downloaded, p.total, p.stage, p.baixando)
+                        }
+                    }.getOrThrow()
+                }
+                if (cancelado.get()) throw WhisperOrtNpuPacote.Cancelado()
+                WhisperOrtNpuPacote.instalar(this, cancelado = { cancelado.get() }) { p ->
+                    runOnUiThread {
+                        progresso.atualizarPacote(p.baixados, p.total, p.fase, p.fase == "baixando")
+                    }
+                }.getOrThrow()
+                WhisperOrtNpuPacote.bytesParaBaixar(qairtInstalado, npuInstalado)
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                resultado.fold(
+                    onSuccess = { total ->
+                        progresso.concluirContinuando(total)
+                        status.text = "Aceleração NPU pronta: as próximas transcrições usam o HTP."
+                        runCatching { updateTranscribeEnabled() }
+                    },
+                    onFailure = { falha ->
+                        progresso.fechar()
+                        if (cancelado.get() || falha is WhisperOrtNpuPacote.Cancelado) {
+                            status.text = "Download da NPU cancelado; a transcrição segue na CPU."
+                        } else {
+                            val mensagem = falha.message ?: falha.javaClass.simpleName
+                            status.text = "Falha ao instalar a NPU: $mensagem (a transcrição segue na CPU)."
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle("Aceleração NPU")
+                                .setMessage(mensagem)
+                                .setPositiveButton("OK", null)
+                                .show()
+                        }
+                    },
+                )
+            }
+        }.start()
     }
 
     override fun onDestroy() {

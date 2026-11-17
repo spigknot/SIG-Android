@@ -79,18 +79,24 @@ object DownloadPlanDialog {
     /**
      * Diálogo de progresso com a lista que acumula.
      *
-     * @param concluidos nomes já baixados (para marcar `✓` na lista)
+     * @param plano o que está sendo baixado (a lista marca `✓` conforme conclui)
+     * @param negativo rótulo do botão de cancelamento (R101 §T03); `null` = sem
+     *   botão. Voltar/tocar fora também cancelam quando [cancelavel].
+     * @param aoCancelar chamado UMA vez quando o usuário cancela; quem baixa
+     *   decide o que fazer (o download é cooperativo).
      */
     fun progresso(
         activity: Activity,
         plano: DownloadSizeFormat.Plano,
         titulo: String = plano.rotulo,
         cancelavel: Boolean = false,
+        negativo: String? = null,
+        aoCancelar: (() -> Unit)? = null,
     ): Progresso {
         if (activity.isFinishing) return Progresso(null, null, plano)
         val builder = dialogo(activity)
         val corpo = corpo(builder.context, plano, comProgresso = true)
-        val dialog = builder
+        builder
             .setTitle(titulo)
             .setView(corpo.view)
             .setCancelable(cancelavel)
@@ -99,9 +105,15 @@ object DownloadPlanDialog {
             // liberado por [Progresso.concluirContinuando] no fim, para ele poder
             // ler a lista e o log antes de seguir.
             .setPositiveButton("Continuar", null)
-            .create()
+        if (negativo != null) {
+            builder.setNegativeButton(negativo) { _, _ -> aoCancelar?.invoke() }
+        }
+        val dialog = builder.create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE)?.isEnabled = false
+        }
+        if (cancelavel && aoCancelar != null) {
+            dialog.setOnCancelListener { aoCancelar() }
         }
         dialog.show()
         return Progresso(dialog, corpo, plano)

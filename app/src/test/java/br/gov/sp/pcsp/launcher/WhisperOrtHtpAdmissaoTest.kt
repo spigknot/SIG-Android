@@ -17,6 +17,7 @@ class WhisperOrtHtpAdmissaoTest {
     private fun decidir(
         soc: String? = "SM8550",
         fabricante: String? = "QTI",
+        qairtPresente: Boolean = true,
         pacotePresente: Boolean = true,
         pacoteVerificado: Boolean = true,
         desligadoNoProcesso: Boolean = false,
@@ -25,6 +26,7 @@ class WhisperOrtHtpAdmissaoTest {
     ) = WhisperOrtHtpAdmissao.decidir(
         socModelo = soc,
         fabricante = fabricante,
+        qairtPresente = qairtPresente,
         pacotePresente = pacotePresente,
         pacoteVerificado = pacoteVerificado,
         desligadoNoProcesso = desligadoNoProcesso,
@@ -71,6 +73,20 @@ class WhisperOrtHtpAdmissaoTest {
     }
 
     @Test
+    fun `QAIRT ausente usa CPU mesmo com o pacote pronto`() {
+        val d = decidir(qairtPresente = false)
+        assertFalse(d.usarHtp)
+        assertEquals(WhisperOrtHtpAdmissao.Motivo.QAIRT_AUSENTE, d.motivo)
+    }
+
+    @Test
+    fun `QAIRT vem antes do pacote no diagnostico`() {
+        // Os dois ausentes: o motivo reportado é o PRIMEIRO que impede.
+        val d = decidir(qairtPresente = false, pacotePresente = false)
+        assertEquals(WhisperOrtHtpAdmissao.Motivo.QAIRT_AUSENTE, d.motivo)
+    }
+
+    @Test
     fun `pacote ausente usa CPU`() {
         val d = decidir(pacotePresente = false)
         assertFalse(d.usarHtp)
@@ -93,17 +109,17 @@ class WhisperOrtHtpAdmissaoTest {
 
     @Test
     fun `duas falhas nao desligam e tres desligam ate a proxima versao`() {
-        val duas = WhisperOrtHtpAdmissao.MemoriaFalhas(falhas = 2, versao = "1")
+        val duas = WhisperOrtHtpAdmissao.MemoriaFalhas(falhas = 2, versao = WhisperOrtNpuPacote.VERSAO)
         assertTrue(decidir(memoria = duas).usarHtp)
 
-        val tres = WhisperOrtHtpAdmissao.MemoriaFalhas(falhas = 3, versao = "1")
+        val tres = WhisperOrtHtpAdmissao.MemoriaFalhas(falhas = 3, versao = WhisperOrtNpuPacote.VERSAO)
         val d = decidir(memoria = tres)
         assertFalse(d.usarHtp)
         assertEquals(WhisperOrtHtpAdmissao.Motivo.FALHAS_CONSECUTIVAS, d.motivo)
 
         // Versão nova do pacote libera de novo, mesmo com o contador antigo.
-        val nova = WhisperOrtHtpAdmissao.MemoriaFalhas(falhas = 3, versao = "1")
-        assertTrue(decidir(memoria = nova, versao = "2").usarHtp)
+        val antiga = WhisperOrtHtpAdmissao.MemoriaFalhas(falhas = 3, versao = "1")
+        assertTrue(decidir(memoria = antiga, versao = WhisperOrtNpuPacote.VERSAO).usarHtp)
     }
 
     @Test

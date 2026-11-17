@@ -48,6 +48,9 @@ object WhisperOrtHtpAdmissao {
         SOC_DESLIGADO,
         DESLIGADO_NO_PROCESSO,
         FALHAS_CONSECUTIVAS,
+
+        /** R101 §T02 — o QAIRT (bibliotecas QNN) não está instalado. */
+        QAIRT_AUSENTE,
         PACOTE_AUSENTE,
         PACOTE_NAO_VERIFICADO,
     }
@@ -85,10 +88,15 @@ object WhisperOrtHtpAdmissao {
     /**
      * Decide a rota do pedido. A ordem importa: o motivo reportado é o PRIMEIRO
      * que impede, para o diagnóstico não esconder a causa real atrás de outra.
+     *
+     * R101 §T02 — a rota exige **os dois** pacotes: o QAIRT (bibliotecas QNN,
+     * único no processo, o mesmo do Granite) e o pacote NPU v2 (contexto +
+     * wrapper). Sem qualquer um deles a rota é CPU.
      */
     fun decidir(
         socModelo: String?,
         fabricante: String?,
+        qairtPresente: Boolean,
         pacotePresente: Boolean,
         pacoteVerificado: Boolean,
         desligadoNoProcesso: Boolean,
@@ -111,6 +119,7 @@ object WhisperOrtHtpAdmissao {
                 "${memoriaFalhas.falhas} falhas na versao $versaoPacote",
             )
         }
+        if (!qairtPresente) return Decisao(false, Motivo.QAIRT_AUSENTE, detalheSoc)
         if (!pacotePresente) return Decisao(false, Motivo.PACOTE_AUSENTE, detalheSoc)
         if (!pacoteVerificado) return Decisao(false, Motivo.PACOTE_NAO_VERIFICADO, detalheSoc)
         return Decisao(true, Motivo.ADMITIDO, detalheSoc)

@@ -16,25 +16,31 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.ZipInputStream
 
 /**
- * R100 §2.3 — pacote do encoder W8A16/INT16 do SM8550, entregue sob demanda pelo
+ * R101 §T02 — pacote do encoder W8A16/INT16 do SM8550, entregue sob demanda pelo
  * **R2** (mesma origem e mesmo desenho do pacote QAIRT: ZIP validado por SHA-256,
  * extração em staging, ativação por rename e marcador de versão).
  *
- * O que o pacote leva (cinco libs V73 + contexto + wrapper) está em [ARQUIVOS] e
- * no `manifest.json` interno, que é a fonte de verdade por arquivo: nome, bytes e
- * SHA-256. O SHA do ZIP pinado no código garante o transporte; o manifesto garante
- * cada arquivo extraído. Divergência em qualquer um dos dois = **CPU**, nunca
- * rota HTP com artefato errado.
+ * A v2 leva **só** o contexto EPContext e o wrapper. As cinco bibliotecas V73
+ * saíram do pacote: a T02 comparou, por SHA-256, as libs validadas na M3 com as
+ * do pacote QAIRT do [QairtDependencyManager] e elas são **byte a byte iguais**.
+ * O Whisper passou a carregar do QAIRT — o mesmo runtime, o mesmo diretório e o
+ * mesmo `ADSP_LIBRARY_PATH` do Granite, sem uma segunda instância do QNN no
+ * processo. O que o pacote leva está em [ARQUIVOS] e no `manifest.json` interno,
+ * que é a fonte de verdade por arquivo: nome, bytes e SHA-256. O SHA do ZIP
+ * pinado no código garante o transporte; o manifesto garante cada arquivo
+ * extraído. Divergência em qualquer um dos dois = **CPU**, nunca rota HTP com
+ * artefato errado.
  *
  * Política (a mesma do mecanismo atual, sem UI bloqueante):
- * - só baixa em rede **não medida** (Wi-Fi); rede medida ou ausente = CPU;
+ * - **nunca baixa sozinho**: o download é uma ação explícita do usuário, com
+ *   plano, progresso e cancelamento (R101 §T03); até concluir, a transcrição
+ *   usa a CPU;
  * - confere espaço antes de baixar (ZIP no cache + extração no `no_backup`);
- * - nunca apaga a versão ativa antes do staging estar completo;
- * - nunca bloqueia a transcrição: quem chama agenda e segue em CPU.
+ * - nunca apaga a versão ativa antes do staging estar completo.
  */
 object WhisperOrtNpuPacote {
 
-    const val VERSAO = "1"
+    const val VERSAO = "2"
     const val SOC = WhisperOrtHtpAdmissao.SOC_SM8550
     const val HTP_ARCH = "73"
     const val DTYPE = WhisperOrtHtpConversao.DTYPE_I16
@@ -44,13 +50,19 @@ object WhisperOrtNpuPacote {
      * na T01 (`packages/<familia>/...`), com a versão imutável no caminho.
      */
     const val URL_PACOTE =
-        "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/packages/npu-w8a16/sm8550/1/sig-whisper-w8a16-sm8550-v1.zip"
+        "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/packages/npu-w8a16/sm8550/2/sig-whisper-w8a16-sm8550-v2.zip"
 
     /** SHA-256 do ZIP publicado (transporte). Conferido pelo script da T04. */
-    const val SHA256_ZIP = "4e190542e91c02f650127aa9b86d34ca3cdac13a90ec9f3d37dbe06ed22759e3"
+    const val SHA256_ZIP = "ec25399a3c4ea2911b5142399cee792dc3e6cb5a86a6c1140930b8983bda5a2c"
 
-    /** Bytes do ZIP publicado (777.366.069 = 7 arquivos + manifesto, ZIP_STORED). */
-    const val BYTES_ZIP = 777_366_069L
+    /** Bytes do ZIP publicado (677.532.464 = contexto + wrapper + manifesto, ZIP_STORED). */
+    const val BYTES_ZIP = 677_532_464L
+
+    /** Soma dos bytes extraídos (contexto + wrapper): base do espaço necessário. */
+    const val BYTES_CONTEUDO = 677_531_596L
+
+    /** Nome do objeto QAIRT no R2 — só para o plano de download da tela. */
+    const val NOME_ZIP_QAIRT = "sig-qairt-arm64-v8a-v1.zip"
 
     const val NOME_MANIFESTO = "manifest.json"
     const val MARCADOR = ".installed"
@@ -58,16 +70,11 @@ object WhisperOrtNpuPacote {
     const val CONTEXTO = "sig_whisper_enc_w8a16.bin"
     const val WRAPPER = "sig_whisper_enc_w8a16_i16io.onnx"
 
-    /** As cinco bibliotecas V73 exigidas pela rota (ordem de carga do QNN). */
-    val LIBS_V73 = listOf(
-        "libQnnSystem.so",
-        "libQnnHtp.so",
-        "libQnnHtpPrepare.so",
-        "libQnnHtpV73Stub.so",
-        "libQnnHtpV73Skel.so",
-    )
-
-    val ARQUIVOS: List<String> = listOf(CONTEXTO, WRAPPER) + LIBS_V73
+    /**
+     * Conteúdo do pacote v2. As libs V73 **não** entram aqui: quem as carrega é
+     * o pacote QAIRT único ([QairtDependencyManager]).
+     */
+    val ARQUIVOS: List<String> = listOf(CONTEXTO, WRAPPER)
 
     private const val SCHEMA = "sig-whisper-npu-pacote/v1"
     private const val TAG = "WhisperOrtNpu"
@@ -104,7 +111,7 @@ object WhisperOrtNpuPacote {
     /**
      * Lê o manifesto do texto JSON. Devolve `null` quando o conteúdo não é um
      * manifesto válido DESTE pacote: schema, versão, SoC, arch e dtype têm de
-     * bater, e os sete arquivos exigidos têm de estar listados com bytes > 0 e
+     * bater, e os dois arquivos exigidos têm de estar listados com bytes > 0 e
      * SHA-256 de 64 dígitos. Manifesto parcial é recusa — nunca "quase pronto".
      */
     fun lerManifesto(texto: String): Manifesto? = runCatching {
@@ -162,7 +169,7 @@ object WhisperOrtNpuPacote {
     }
 
     /**
-     * Estado RÁPIDO (sem hash): marcador presente e os sete arquivos com o
+     * Estado RÁPIDO (sem hash): marcador presente e os dois arquivos com o
      * tamanho declarado. A verificação por SHA é a [verificarCompleto], feita uma
      * vez por processo em segundo plano.
      */
@@ -199,72 +206,79 @@ object WhisperOrtNpuPacote {
     }
 
     /**
-     * Garante o pacote em SEGUNDO PLANO: se já está instalado, verifica; se não,
-     * baixa e instala. Nunca lança e nunca bloqueia quem chamou. Uma thread por
-     * processo (single-flight) — `iniciar` pode ser chamado a cada transcrição.
+     * Verifica o pacote em SEGUNDO PLANO, **sem baixar nada** (R101 §T03).
+     *
+     * O download agora é ação explícita do usuário ([instalar] chamado pela
+     * tela). O que continua acontecendo sozinho é a conferência de SHA do pacote
+     * que já está em disco: barata perto da abertura da sessão, uma vez por
+     * processo, e é ela que autoriza a rota HTP. Nunca lança e nunca bloqueia
+     * quem chamou.
      */
-    fun garantirEmSegundoPlano(context: Context) {
+    fun verificarEmSegundoPlano(context: Context) {
         if (!emAndamento.compareAndSet(false, true)) return
         val app = context.applicationContext
         Thread({
             try {
-                val estado = verificarCompleto(app)
-                when (estado) {
-                    is Estado.Pronto -> {
-                        WhisperOrtHtpRota.pacoteVerificado(estado.manifesto)
-                        return@Thread
-                    }
-                    is Estado.Invalido -> {
-                        // Instalação corrompida: apaga e tenta baixar de novo.
-                        android.util.Log.w(TAG, "pacote invalido (${estado.motivo}); reinstalando")
-                        runCatching { dirDaVersao(app).deleteRecursively() }
-                    }
-                    is Estado.Ausente -> Unit
+                when (val estado = verificarCompleto(app)) {
+                    is Estado.Pronto -> WhisperOrtHtpRota.pacoteVerificado(estado.manifesto)
+                    is Estado.Invalido ->
+                        WhisperOrtHtpRota.pacoteIndisponivel("verificacao:" + estado.motivo)
+                    is Estado.Ausente -> WhisperOrtHtpRota.pacoteIndisponivel("ausente")
                 }
-                val politica = politicaDeRede(app)
-                if (politica != null) {
-                    android.util.Log.i(TAG, "download NPU adiado: $politica")
-                    WhisperOrtHtpRota.pacoteIndisponivel(politica)
-                    return@Thread
-                }
-                val resultado = instalar(app) { p ->
-                    android.util.Log.i(
-                        TAG,
-                        "download NPU ${p.fase} ${p.baixados}/${p.total}",
-                    )
-                }
-                resultado.fold(
-                    onSuccess = {
-                        val verificado = verificarCompleto(app)
-                        when (verificado) {
-                            is Estado.Pronto -> WhisperOrtHtpRota.pacoteVerificado(verificado.manifesto)
-                            is Estado.Invalido -> {
-                                android.util.Log.w(TAG, "pacote recem-instalado invalido: ${verificado.motivo}")
-                                WhisperOrtHtpRota.pacoteIndisponivel("verificacao:" + verificado.motivo)
-                            }
-                            is Estado.Ausente -> WhisperOrtHtpRota.pacoteIndisponivel("ausente apos install")
-                        }
-                    },
-                    onFailure = { falha ->
-                        android.util.Log.w(TAG, "download NPU falhou: ${falha.javaClass.simpleName}: ${falha.message}")
-                        WhisperOrtHtpRota.pacoteIndisponivel("download:" + (falha.message ?: "falha"))
-                    },
-                )
             } catch (falha: Throwable) {
-                android.util.Log.w(TAG, "garantia NPU lancou: ${falha.javaClass.simpleName}: ${falha.message}")
+                android.util.Log.w(TAG, "verificacao NPU lancou: ${falha.javaClass.simpleName}: ${falha.message}")
                 WhisperOrtHtpRota.pacoteIndisponivel("interno:" + (falha.message ?: "falha"))
             } finally {
                 emAndamento.set(false)
             }
-        }, "whisper-npu-pacote").apply { isDaemon = true }.start()
+        }, "whisper-npu-verificacao").apply { isDaemon = true }.start()
     }
 
     private val emAndamento = AtomicBoolean(false)
 
     /**
-     * Política de rede: `null` = pode baixar; texto = motivo para NÃO baixar.
-     * Rede medida nunca recebe 685 MiB sem o usuário pedir — a transcrição segue
-     * em CPU.
+     * Plano de download da ação "Ativar aceleração NPU" (regra PURA).
+     *
+     * O QAIRT só entra na lista quando ainda não está instalado: o usuário vê
+     * exatamente o que vai baixar, e o pacote da NPU nunca repete as bibliotecas.
+     */
+    fun planoDeDownload(qairtInstalado: Boolean): DownloadSizeFormat.Plano {
+        val itens = ArrayList<DownloadSizeFormat.Arquivo>(2)
+        itens.add(DownloadSizeFormat.Arquivo("sig-whisper-w8a16-sm8550-v$VERSAO.zip", BYTES_ZIP))
+        if (!qairtInstalado) {
+            itens.add(DownloadSizeFormat.Arquivo(NOME_ZIP_QAIRT, QairtDependencyManager.downloadSize()))
+        }
+        return DownloadSizeFormat.Plano(rotulo = "Aceleração NPU (SM8550)", arquivos = itens)
+    }
+
+    /** Bytes que a ação vai baixar, considerando o que já está instalado. */
+    fun bytesParaBaixar(qairtInstalado: Boolean, npuInstalado: Boolean): Long {
+        val npu = if (npuInstalado) 0L else BYTES_ZIP
+        return npu + if (qairtInstalado) 0L else QairtDependencyManager.downloadSize()
+    }
+
+    /**
+     * Espaço livre necessário para a ação inteira (regra PURA).
+     *
+     * Cada pacote precisa do ZIP **e** da extração: o QAIRT extrai ~148 MB de um
+     * ZIP de ~53 MB e o NPU extrai 677 MB de um ZIP do mesmo tamanho (ZIP_STORED).
+     * A folga de 64 MiB cobre staging e cabeçalhos — o `install` confere de novo
+     * antes de cada etapa, então esta conta é a promessa feita ao usuário.
+     */
+    fun espacoNecessario(qairtInstalado: Boolean, npuInstalado: Boolean): Long {
+        var total = 0L
+        if (!npuInstalado) total += BYTES_ZIP + BYTES_CONTEUDO + 64L * 1024 * 1024
+        if (!qairtInstalado) {
+            total += QairtDependencyManager.downloadSize() + 148L * 1024 * 1024 + 64L * 1024 * 1024
+        }
+        return total
+    }
+
+    /**
+     * Política de rede, agora **informativa**: `null` = rede não medida; texto =
+     * motivo do aviso ("rede medida", "sem rede ativa"...). Quem decide é o
+     * usuário, no diálogo — a R101 tirou o download automático, então esta função
+     * não barra mais nada; ela só deixa a tela dizer a verdade sobre o custo.
      */
     fun politicaDeRede(context: Context): String? {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
@@ -276,12 +290,19 @@ object WhisperOrtNpuPacote {
         return null
     }
 
+    /** Cancelamento cooperativo do download/extracao (a tela tem botao). */
+    class Cancelado : IllegalStateException("download cancelado")
+
     /**
      * Baixa, valida o ZIP, extrai em staging, confere o manifesto por arquivo e
      * ativa por rename. Idempotente quando já está pronto.
+     *
+     * @param cancelado consultado entre blocos do download e entre entradas da
+     *   extração; `true` aborta com [Cancelado] e deixa o pacote anterior intacto.
      */
     fun instalar(
         context: Context,
+        cancelado: () -> Boolean = { false },
         onProgresso: (Progresso) -> Unit = { },
     ): Result<Unit> = runCatching {
         if (estado(context) is Estado.Pronto && verificarCompleto(context) is Estado.Pronto) return@runCatching
@@ -296,7 +317,8 @@ object WhisperOrtNpuPacote {
         if (zipBytes > 0L && context.cacheDir.usableSpace < zipBytes + 32L * 1024 * 1024) {
             error("espaco insuficiente para baixar ${zipBytes / 1_048_576} MB")
         }
-        baixar(arquivoZip, onProgresso)
+        baixar(arquivoZip, cancelado, onProgresso)
+        if (cancelado()) throw Cancelado()
         onProgresso(Progresso(arquivoZip.length(), arquivoZip.length(), "validando"))
         check(sha256(arquivoZip).equals(SHA256_ZIP, ignoreCase = true)) {
             "SHA-256 do pacote NPU nao confere"
@@ -311,7 +333,7 @@ object WhisperOrtNpuPacote {
             check(raiz.usableSpace >= estimado) {
                 "espaco insuficiente para extrair: precisa ${estimado / 1_048_576} MB"
             }
-            extrairZip(arquivoZip, staging)
+            extrairZip(arquivoZip, staging, cancelado)
             val manifesto = runCatching {
                 lerManifesto(File(staging, NOME_MANIFESTO).readText())
             }.getOrNull() ?: error("manifesto ausente/invalido no pacote")
@@ -334,13 +356,15 @@ object WhisperOrtNpuPacote {
             check(ativado) { "falha ao ativar o pacote NPU" }
             check(estado(context) is Estado.Pronto) { "pacote NPU nao ficou ativo" }
             anterior.deleteRecursively()
+            // Instalado E conferido por SHA: só agora a rota pode pedir HTP.
+            WhisperOrtHtpRota.pacoteVerificado(manifesto)
         } finally {
             staging.deleteRecursively()
             arquivoZip.delete()
         }
     }
 
-    private fun baixar(destino: File, onProgresso: (Progresso) -> Unit) {
+    private fun baixar(destino: File, cancelado: () -> Boolean, onProgresso: (Progresso) -> Unit) {
         destino.parentFile?.mkdirs()
         val conn = (URL(URL_PACOTE).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = true
@@ -356,6 +380,7 @@ object WhisperOrtNpuPacote {
                     val buffer = ByteArray(256 * 1024)
                     var baixados = 0L
                     while (true) {
+                        if (cancelado()) throw Cancelado()
                         val n = entrada.read(buffer)
                         if (n < 0) break
                         saida.write(buffer, 0, n)
@@ -371,10 +396,11 @@ object WhisperOrtNpuPacote {
     }
 
     /** Extrai normalizando `\` (ZIP gerado no Windows) e recusando caminho fora da raiz. */
-    private fun extrairZip(arquivo: File, destino: File) {
+    private fun extrairZip(arquivo: File, destino: File, cancelado: () -> Boolean = { false }) {
         val canonico = destino.canonicalFile
         ZipInputStream(BufferedInputStream(FileInputStream(arquivo))).use { zip ->
             while (true) {
+                if (cancelado()) throw Cancelado()
                 val entrada = zip.nextEntry ?: break
                 val nome = entrada.name.replace('\\', '/')
                 val saida = File(destino, nome).canonicalFile
