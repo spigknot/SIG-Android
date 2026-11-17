@@ -135,6 +135,11 @@ class WhisperOrtGenerator(
                 }
                 logits = backend.step(next)
             }
+        } catch (htp: WhisperOrtHtpFalha) {
+            // R100 §2.4 — falha da rota HTP não é resultado: o dono do pedido
+            // fecha o HTP, abre a CPU e transcreve o MESMO pedido. Devolver ERROR
+            // daqui perderia a troca de rota e o texto que a CPU produziria.
+            throw htp
         } catch (runtime: WhisperOrtRuntimeFault) {
             // Sem classe recuperável DEMONSTRADA e segura na arquitetura de 3
             // sessões, falha de runtime é TERMINAL: não há retry genérico nem
@@ -426,6 +431,12 @@ interface WhisperOrtBackend : AutoCloseable {
      * recuperável e com cancelamento não observado.
      */
     fun reopen(): Boolean = false
+
+    /**
+     * Rota efetiva deste backend (`htp`/`cpu`). O produtor grava o rótulo no
+     * recibo e no log; fakes e backends estáticos são CPU por omissão.
+     */
+    val rota: String get() = WhisperOrtHtpAdmissao.ROTA_CPU
 
     /**
      * Canais mel que o encoder desta sessão espera (adendo 17 §1).

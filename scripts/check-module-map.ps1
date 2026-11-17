@@ -55,7 +55,7 @@ function Write-Failure {
     exit 2
 }
 
-$sourcesRaw = (& git -C $root -c core.safecrlf=false ls-files -- $sourceRoot 2>$null | Out-String).Trim()
+$sourcesRaw = (& git -C $root -c core.safecrlf=false ls-files --cached --others --exclude-standard -- $sourceRoot 2>$null | Out-String).Trim()
 $gitExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
 
 if ($gitExitCode -ne 0) {

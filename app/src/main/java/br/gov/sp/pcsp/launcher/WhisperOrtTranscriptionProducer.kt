@@ -29,6 +29,10 @@ class WhisperOrtTranscriptionProducer(
     private val tokenizer: WhisperOrtTokenizer,
     private val runtimeVersion: String = DEFAULT_RUNTIME,
     private val clock: () -> Long = { System.nanoTime() },
+    /** Chamado quando a rota HTP falhou: desliga a rota e conta a falha. */
+    private val aoFalharHtp: (String) -> Unit = { },
+    /** Chamado quando uma transcrição INTEIRA terminou na rota HTP. */
+    private val aoSucessoHtp: () -> Unit = { },
 ) {
 
     /**
@@ -44,6 +48,8 @@ class WhisperOrtTranscriptionProducer(
         val policy: WhisperOrtGenerationPolicy,
         val threads: Int = WhisperOrtSession.DEFAULT_THREADS,
         val isCancelled: () -> Boolean = { false },
+        /** Rota pedida na admissão (`htp`/`cpu`) — a fábrica do cache decide o backend. */
+        val rota: String = WhisperOrtHtpAdmissao.ROTA_CPU,
     )
 
     /** Desfecho do produtor. Nenhum valor implica sucesso por omissão. */
@@ -55,6 +61,8 @@ class WhisperOrtTranscriptionProducer(
             val sessionOpenedMillis: Long,
             val jobId: String,
             val attempt: Long,
+            /** Rota que REALMENTE produziu o texto (`htp`/`cpu`). */
+            val rotaEfetiva: String = WhisperOrtHtpAdmissao.ROTA_CPU,
         ) : Outcome()
 
         /** Sessão ocupada por outro compute: recusa-se a rodar em paralelo. */
@@ -69,27 +77,56 @@ class WhisperOrtTranscriptionProducer(
         data class Cancelled(val jobId: String, val attempt: Long, val zeroOpen: Boolean) : Outcome()
 
         /** Falha de pacote/sessão antes de qualquer token. */
-        data class Failed(val jobId: String, val attempt: Long, val error: String) : Outcome()
+        data class Failed(
+            val jobId: String,
+            val attempt: Long,
+            val error: String,
+            /** `true` quando a causa é da ROTA HTP (então cabe a CPU). */
+            val origemHtp: Boolean = false,
+        ) : Outcome()
     }
 
     /**
      * Executa a transcrição de um pedido.
      *
-     * Nunca lança por falha de motor: devolve [Outcome.Failed] com a causa. O
-     * lease é sempre liberado (idempotente) e o compute sempre encerrado.
+     * Rota HTP (R100 §2.4): qualquer falha da metade HTP — abrir, criar a sessão
+     * ou rodar — devolve [Outcome.Failed] com `origemHtp`, e o pedido é
+     * transcrito de novo **na CPU, do início**. Nunca lança por falha de motor:
+     * o lease é sempre liberado e o compute sempre encerrado.
      */
     fun transcribe(pacote: WhisperOrtPackageInstaller.Validated, request: Request): Outcome {
+        // Preflight: cancelamento já conhecido não abre sessão (nem paga load).
+        if (request.isCancelled()) {
+            return Outcome.Cancelled(request.jobId, request.attempt, zeroOpen = true)
+        }
+        if (request.rota != WhisperOrtHtpAdmissao.ROTA_HTP) {
+            return executar(pacote, request, WhisperOrtHtpAdmissao.ROTA_CPU)
+        }
+        val primeira = executar(pacote, request, WhisperOrtHtpAdmissao.ROTA_HTP)
+        if (primeira !is Outcome.Failed || !primeira.origemHtp) return primeira
+        // Fallback do MESMO pedido: o lease HTP já saiu no finally de
+        // `executar`; desliga a rota (contando a falha) e reabre na CPU.
+        aoFalharHtp(primeira.error)
+        if (request.isCancelled()) {
+            return Outcome.Cancelled(request.jobId, request.attempt, zeroOpen = false)
+        }
+        return executar(pacote, request, WhisperOrtHtpAdmissao.ROTA_CPU)
+    }
+
+    /** Uma passada completa do pedido em UMA rota. */
+    private fun executar(
+        pacote: WhisperOrtPackageInstaller.Validated,
+        request: Request,
+        rota: String,
+    ): Outcome {
         val chave = WhisperOrtSessionCache.keyFor(
             identity = pacote.identity,
             packageVersion = pacote.versionKey,
             runtime = runtimeVersion,
             config = request.policy.config,
             threads = request.threads,
+            rota = rota,
         )
-        // Preflight: cancelamento já conhecido não abre sessão (nem paga load).
-        if (request.isCancelled()) {
-            return Outcome.Cancelled(request.jobId, request.attempt, zeroOpen = true)
-        }
         // Aquisição ATÔMICA vinculada ao pacote: a chave usa o runtime e a config
         // EFETIVOS deste pedido, e a causa da recusa viaja no retorno — sem ler
         // global fora da operação protegida (havia corrida entre `acquire` e a
@@ -100,6 +137,7 @@ class WhisperOrtTranscriptionProducer(
                 threads = request.threads,
                 runtime = runtimeVersion,
                 config = request.policy.config,
+                rota = rota,
             )) {
                 is WhisperOrtSessionCache.Aquisicao.Ok -> aq.lease
                 is WhisperOrtSessionCache.Aquisicao.Recusada ->
@@ -107,6 +145,7 @@ class WhisperOrtTranscriptionProducer(
                         request.jobId,
                         request.attempt,
                         "abertura de sessão recusada: " + aq.motivo,
+                        origemHtp = rota == WhisperOrtHtpAdmissao.ROTA_HTP,
                     )
             }
         } catch (failure: Throwable) {
@@ -114,6 +153,7 @@ class WhisperOrtTranscriptionProducer(
                 request.jobId,
                 request.attempt,
                 "acquire lançou: ${failure.javaClass.simpleName}: ${failure.message}",
+                origemHtp = rota == WhisperOrtHtpAdmissao.ROTA_HTP,
             )
         }
         // Fato da PRÓPRIA tentativa: não depende mais do contador global, que
@@ -139,16 +179,27 @@ class WhisperOrtTranscriptionProducer(
                     WhisperOrtFrontend(WhisperOrtModelCatalog.filtrosMelOuDefault(pacote.identity.model)),
                 )
                 val transcript = transcriber.transcribe(lease.backend, request.pcm, request.isCancelled)
+                val efetiva = lease.backend.rota
+                if (efetiva == WhisperOrtHtpAdmissao.ROTA_HTP) aoSucessoHtp()
                 Outcome.Done(
                     transcript = transcript,
                     cacheHit = hit,
                     sessionOpenedMillis = openMillis,
                     jobId = request.jobId,
                     attempt = request.attempt,
+                    rotaEfetiva = efetiva,
                 )
             } finally {
                 cache.endCompute(lease)
             }
+        } catch (htp: WhisperOrtHtpFalha) {
+            // Falha do encoder HTP: só é fallback se o backend era mesmo HTP.
+            return Outcome.Failed(
+                request.jobId,
+                request.attempt,
+                "htp: ${htp.message}",
+                origemHtp = lease.backend.rota == WhisperOrtHtpAdmissao.ROTA_HTP,
+            )
         } catch (failure: Throwable) {
             return Outcome.Failed(
                 request.jobId,

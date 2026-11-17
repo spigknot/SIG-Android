@@ -26,6 +26,12 @@ class WhisperOrtSessionCache(
     private val factory: (File, File, File, Int) -> WhisperOrtBackend = { encoder, decoder, past, threads ->
         WhisperOrtSession(encoder, decoder, past, threads)
     },
+    /**
+     * R100 — fábrica por ROTA. Quando presente, é ela que decide o backend da
+     * chave (`htp` → encoder EPContext + decoders CPU; `cpu` → sessão normal).
+     * `null` mantém o caminho antigo (testes e provas com backend injetado).
+     */
+    private val abrirPorRota: ((String, File, File, File, Int) -> WhisperOrtBackend)? = null,
     private val open: (WhisperOrtBackend) -> Unit = { backend ->
         (backend as? WhisperOrtSession)?.open()
     },
@@ -51,9 +57,11 @@ class WhisperOrtSessionCache(
          * (forma simbólica `[-1,-1,-1]` não permite detectar no grafo).
          */
         val melBins: Int = WhisperOrtFrontend.N_MELS,
+        /** Rota do backend (`htp`/`cpu`): sessões de rotas distintas nunca se misturam. */
+        val rota: String = WhisperOrtHtpAdmissao.ROTA_CPU,
     ) {
         fun asString(): String =
-            "$engine/$provider/$runtime/$model/$revision/cfg$configHash/t$threads/pkg$packageVersion/mel$melBins"
+            "$engine/$provider/$runtime/$model/$revision/cfg$configHash/t$threads/pkg$packageVersion/mel$melBins/rota$rota"
 
         companion object {
             /**
@@ -68,12 +76,14 @@ class WhisperOrtSessionCache(
                 threads: Int = WhisperOrtSession.DEFAULT_THREADS,
                 runtime: String = WhisperOrtTranscriptionProducer.DEFAULT_RUNTIME,
                 config: WhisperOrtGenerationConfig = WhisperOrtGenerationConfig.frozenExport(),
+                rota: String = WhisperOrtHtpAdmissao.ROTA_CPU,
             ): Key = keyFor(
                 identity = pacote.identity,
                 packageVersion = pacote.versionKey,
                 runtime = runtime,
                 config = config,
                 threads = threads,
+                rota = rota,
             )
         }
     }
@@ -214,7 +224,12 @@ class WhisperOrtSessionCache(
         // factory PODE lançar: antes isso escapava do acquire e virava exceção
         // fora do try do produtor, sem falha tipada por job.
         val criado = try {
-            factory(encoder, decoder, decoderWithPast, chave.threads)
+            val porRota = abrirPorRota
+            if (porRota != null) {
+                porRota(chave.rota, encoder, decoder, decoderWithPast, chave.threads)
+            } else {
+                factory(encoder, decoder, decoderWithPast, chave.threads)
+            }
         } catch (failure: Throwable) {
             refusals++
             ultimaRecusa = "factory: " + failure.javaClass.simpleName + ": " + failure.message
@@ -304,8 +319,11 @@ class WhisperOrtSessionCache(
         threads: Int = WhisperOrtSession.DEFAULT_THREADS,
         runtime: String = WhisperOrtTranscriptionProducer.DEFAULT_RUNTIME,
         config: WhisperOrtGenerationConfig = WhisperOrtGenerationConfig.frozenExport(),
+        rota: String = WhisperOrtHtpAdmissao.ROTA_CPU,
     ): Aquisicao {
-        val chave = Key.fromPackage(pacote = pacote, threads = threads, runtime = runtime, config = config)
+        val chave = Key.fromPackage(
+            pacote = pacote, threads = threads, runtime = runtime, config = config, rota = rota,
+        )
         lock.lock()
         try {
             val existente = entries[chave]
@@ -453,6 +471,7 @@ class WhisperOrtSessionCache(
             runtime: String,
             config: WhisperOrtGenerationConfig,
             threads: Int,
+            rota: String = WhisperOrtHtpAdmissao.ROTA_CPU,
         ): Key = Key(
             engine = "ORT",
             provider = identity.provider,
@@ -467,6 +486,7 @@ class WhisperOrtSessionCache(
             // divergência em vez de alimentar o ConvInteger errado.
             melBins = runCatching { WhisperOrtModelCatalog.melBinsPara(identity.model) }
                 .getOrDefault(WhisperOrtFrontend.N_MELS),
+            rota = rota,
         )
 
         /** Hash curto e estável da configuração de geração. */

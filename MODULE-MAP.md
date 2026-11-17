@@ -212,6 +212,7 @@ também é bloqueado.
 | `AppUpdateChecker.kt` | Atualização via GitHub (release, parse, download). |
 | `NativeDependencyManager.kt` | Pacote nativo: versão/URL/SHA-256 por ABI e ativação. |
 | `QairtDependencyManager.kt` | Dependência QAIRT (Qualcomm NPU): detecção/instalação. |
+| `WhisperOrtNpuPacote.kt` | R100 §2.3: pacote R2 do encoder W8A16 do SM8550 (contexto + wrapper + 5 libs V73) — ZIP validado por SHA-256, manifesto por arquivo, staging/ativação atômica, política de rede medida e de espaço, download em segundo plano que nunca bloqueia a transcrição. |
 | `NativeDependencyPrompt.kt` | Diálogo de download do pacote nativo. |
 | `DownloadPlanDialog.kt` | Diálogo de download com lista rolável e log que acumula (todas as telas). |
 
@@ -233,6 +234,8 @@ mora no KDoc do arquivo e nos testes, não aqui.
 | `WhisperResumo.kt` | Adendo R10 §5: resumo final da transcrição (modelo/hardware efetivos, fontes concluídas, áudio processado, tempo e eficiência) em regra pura e formatável — `null` vira "indisponível", nunca número inventado; a Activity só exibe. |
 | `WhisperOrtTokenizer.kt` | ORT1/D05: decodificação byte-level BPE do Whisper (concatena bytes e decodifica UTF-8 uma vez; acentos e multi-byte íntegros; especiais descartados). |
 | `WhisperOrtPrompt.kt` | ORT1/D02: ids reais do prefixo (sot/idioma/tarefa/notimestamps) do export congelado e validação que recusa prefixo sem idioma. |
+| `WhisperOrtHtpAdmissao.kt` | R100 §2.2: tabela PURA de SoC da rota HTP (SM8550 ligado, SM8850 presente e desligado até a M4, resto CPU) e política de falhas consecutivas entre processos. |
+| `WhisperOrtHtpConversao.kt` | R100 §2.3: dtype do encoder W8A16 do produto — quantização/dequantização INT16 com as constantes da R97 e conversão F16 portátil, sem Android. |
 | `WhisperOrtGeneration.kt` | ORT1/D03/D04/D06: laço greedy sobre backend injetável, supressão de tokens de controle e terminal tipado (EOS/MAX_TOKENS/CANCELLED/RECOVERABLE/ERROR), recusando logits não finitos e fora do vocabulário. |
 | `WhisperOrtGenerationConfig.kt` | ORT1/D04: configuração efetiva do export (suppress_tokens, begin_suppress_tokens, max_length TOTAL e ids de eos/start) lida do `generation_config.json`, com orçamento de tokens que desconta o prefixo. |
 | `WhisperOrtStagePolicy.kt` | R16/§5 (GPU-3): seam PURO de política de estágio do ORT — decide `CPU_INTEGRAL` (default) × `HIBRIDO_QNN_GPU_ENC_CPU_DEC` por modelo/SoC/runtime/segmentos, com motivo tipado por recusa, fallback só com consentimento explícito, rótulo de hardware por estágio e chave de cache que distingue modo/modelo/threads/versões/hash dos segmentos. |
@@ -243,6 +246,8 @@ mora no KDoc do arquivo e nos testes, não aqui.
 | `WhisperOrtSegments.kt` | ORT1-M2: segmentação por timestamp interno do Whisper (início/fim em segundos por janela) e junção por TEMPO ABSOLUTO — preserva falas iguais em instantes distintos e descarta só a sobreposição. |
 | `WhisperOrtTranscriptionProducer.kt` | ORT1-M4: produtor COMUM — recebe pacote validado, deriva a chave do cache, adquire lease, exige compute exclusivo, transcreve e libera no finally; devolve Done/BUSY/Failed com job/attempt. |
 | `WhisperOrtSessionCache.kt` | ORT1-M3: cache de sessões com chave engine/provider/runtime/modelo/revisão/config/threads, hits/misses, custo de load e posse serializada; invalidate recusa fechar sessão em uso. |
+| `WhisperOrtHtpBackend.kt` | R100 §2.4: backend HTP do produto — encoder EPContext W8A16/INT16 no QNN HTP + decoders INT8 do produto em CPU; falha do encoder é TIPADA (`WhisperOrtHtpFalha`) para o dono do pedido trocar de rota. |
+| `WhisperOrtHtpRota.kt` | R100 §2.4: rota HTP de produção — admissão por SoC, carga ORT/QNN do pacote verificado, abertura da sessão QNN, fallback sem exceção e desligamento por falha (processo e 3 processos até nova versão). |
 | `WhisperOrtRoute.kt` | ORT1-M4: rota PADRÃO de ARQUIVO/CPU na ferramenta normal — resolve a URI, converte mídia para 16 kHz mono, valida o pacote pelo marcador e despacha no produtor comum com cache de processo; áudio longo é janelado (30 s/hop 26 s); falha ORT nunca cai para CPP sem perguntar. |
 | `WhisperOrtMediaConverter.kt` | ORT1-C02: conversão FFmpeg para PCM 16 kHz mono (o mesmo comando do fluxo CPP), síncrona e com erro tipado; é o que permite MP3, estéreo e 44,1 kHz entrarem na rota ORT. |
 | `WhisperOrtTerminalSink.kt` | ORT1-M4/§3: sink de terminais com recibo — arquivo atômico por job/geração, fila de reentrega (`pendentes`), ack vinculado ao SHA do conteúdo; o JSONL é só índice. |

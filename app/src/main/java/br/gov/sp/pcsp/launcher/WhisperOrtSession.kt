@@ -270,11 +270,19 @@ class WhisperOrtSession(
 
     override fun start(hidden: FloatArray, prompt: IntArray): FloatArray {
         val session = initSession ?: error("sessão de init não aberta")
-        val hiddenState = hiddenTensor ?: OnnxTensor.createTensor(
-            environment,
-            FloatBuffer.wrap(hidden),
-            longArrayOf(1L, hiddenFrames.toLong(), hiddenDim.toLong()),
-        ).also { hiddenTensor = it }
+        // R100 §2.1 — a janela NUNCA reaproveita o hidden de outra. O tensor
+        // anterior pertence ao encode() desta janela (quando ele roda) ou a uma
+        // janela anterior na rota só-decoders (HTP), onde encode() não existe.
+        // Reusar o tensor fazia o 2º clipe repetir o 1º — defeito provado na
+        // R96/R97 por reflexão; agora a regra é do produto.
+        val hiddenState = trocarHidden(hiddenTensor) {
+            OnnxTensor.createTensor(
+                environment,
+                FloatBuffer.wrap(hidden),
+                longArrayOf(1L, hiddenFrames.toLong(), hiddenDim.toLong()),
+            )
+        }
+        hiddenTensor = hiddenState
         // Nova janela: os Results anteriores não são mais necessários. Fechar
         // AQUI é seguro porque o run que os usava já terminou (F01).
         stepResult?.close()
@@ -469,4 +477,21 @@ class WhisperOrtSession(
         private val KINDS = arrayOf("decoder.key", "decoder.value", "encoder.key", "encoder.value")
         private val LAYER_PATTERN = Regex("""present\.(\d+)\.""")
     }
+}
+
+/**
+ * R100 §2.1 — posse do tensor de hidden entre janelas do decoder.
+ *
+ * `start` NUNCA reaproveita o hidden de outra janela: fecha o anterior e cria o
+ * novo a partir do hidden desta. Quando `encode()` roda, o tensor anterior é o
+ * que ele guardou (mesmos valores); na rota só-decoders (HTP) é o de uma janela
+ * anterior — reaproveitar fazia o 2º clipe repetir o 1º (defeito provado na
+ * R96/R97 por reflexão).
+ *
+ * Função pequena e sem ORT de propósito: a criação do `OnnxTensor` exige runtime
+ * nativo, mas a REGRA de substituição é verificável em JVM.
+ */
+internal fun <T : AutoCloseable> trocarHidden(anterior: T?, novo: () -> T): T {
+    anterior?.let { runCatching { it.close() } }
+    return novo()
 }

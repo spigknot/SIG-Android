@@ -43,8 +43,24 @@ object WhisperOrtRoute {
     /** Limite desta rota: uma janela de 30 s. */
     const val MAX_SECONDS = 30.0
 
-    /** Cache de sessões do processo (mesmo do laboratório). */
-    private val cache = WhisperOrtSessionCache(maxEntries = 1)
+    /**
+     * Cache de sessões do processo (mesmo do laboratório).
+     *
+     * R100 §2.4 — a fábrica pergunta a ROTA: `htp` abre encoder EPContext W8A16 +
+     * decoders CPU (e lança [WhisperOrtHtpRota.Recusa] quando não pode); `cpu`
+     * abre a sessão de sempre. O produtor transforma a recusa em fallback do
+     * MESMO pedido, não em erro para o usuário.
+     */
+    private val cache = WhisperOrtSessionCache(
+        maxEntries = 1,
+        abrirPorRota = { rota, encoder, decoder, past, threads ->
+            if (rota == WhisperOrtHtpAdmissao.ROTA_HTP) {
+                WhisperOrtHtpRota.abrir(encoder, decoder, past, threads)
+            } else {
+                WhisperOrtSession(encoder, decoder, past, threads)
+            }
+        },
+    )
 
     /** Admissão single-flight e terminal do job (M4). */
     private val admission = WhisperOrtAdmission()
@@ -293,6 +309,22 @@ object WhisperOrtRoute {
         return WhisperOrtPorta.despachar(identidade, admissao, enfileirar)
     }
 
+    /**
+     * R100 §2.4 — rótulo HONESTO do hardware efetivo. O recibo não pode dizer
+     * "CPU" quando o encoder rodou no HTP, nem "HTP" quando houve fallback.
+     */
+    private fun rotuloHardware(rota: String): String =
+        if (rota == WhisperOrtHtpAdmissao.ROTA_HTP) "HTP W8A16" else "CPU"
+
+    /**
+     * R100 §2.2 — o encoder W8A16 é do **turbo** (128 bins mel, 1.500 frames).
+     * Pedido de outro modelo usa CPU mesmo com o pacote presente: alimentar o
+     * wrapper com log-mel de 80 bins seria erro de forma, não ganho de NPU.
+     */
+    private fun rotaParaModelo(modelo: String): String =
+        if (modelo == WhisperOrtModelCatalog.MODEL) WhisperOrtHtpRota.rotaDoPedido()
+        else WhisperOrtHtpAdmissao.ROTA_CPU
+
     /** Corpo síncrono (roda na thread de trabalho). */
     private fun executar(
         app: Context,
@@ -304,6 +336,9 @@ object WhisperOrtRoute {
     ): Result {
         val inicio = SystemClock.elapsedRealtime()
         jobAtual = job
+        // R100 §2.4 — idempotente: guarda o Context e agenda o pacote NPU em
+        // segundo plano. Nunca bloqueia: sem pacote verificado, a rota é CPU.
+        WhisperOrtHtpRota.iniciar(app)
 
         // §2.1 — RESERVA/FGS/ENCAMINHAMENTO ANTES de copiar, converter, ler e hashear.
         // O preparo consome CPU e disco: se outro compute (ORT ou CPP) já tem a
@@ -547,7 +582,19 @@ object WhisperOrtRoute {
             // INÍCIO REAL do trabalho nativo (§2.1: a FGS já está tomada desde antes
             // do preparo; aqui só se registra o começo do compute).
             WhisperJobService.markWorkerStarted(app, geracaoFgs)
-            val producer = WhisperOrtTranscriptionProducer(cacheEfetivo, tokenizer, runtimeVersion = ORT_RUNTIME)
+            val producer = WhisperOrtTranscriptionProducer(
+                cacheEfetivo,
+                tokenizer,
+                runtimeVersion = ORT_RUNTIME,
+                aoFalharHtp = { motivo -> WhisperOrtHtpRota.registrarFalha(motivo) },
+                aoSucessoHtp = { WhisperOrtHtpRota.registrarSucesso() },
+            )
+            val rotaPedida = rotaParaModelo(modelo)
+            android.util.Log.i(
+                TAG,
+                "ort-rota pedida=$rotaPedida motivo=${WhisperOrtHtpRota.motivoRota()} " +
+                    "pacote=${WhisperOrtHtpRota.versaoPacote()}",
+            )
             val pedido = WhisperOrtTranscriptionProducer.Request(
                 jobId = job.jobId,
                 attempt = job.attempt,
@@ -570,14 +617,22 @@ object WhisperOrtRoute {
                 ),
                 threads = threads,
                 isCancelled = { admission.isCancelRequested(job) },
+                rota = rotaPedida,
             )
             when (val desfecho = producer.transcribe(pacote, pedido)) {
                 is WhisperOrtTranscriptionProducer.Outcome.Done -> {
                     val t = desfecho.transcript
                     val fim = SystemClock.elapsedRealtime() - inicio
+                    val rotulo = rotuloHardware(desfecho.rotaEfetiva)
+                    android.util.Log.i(
+                        TAG,
+                        "ort-rota efetiva=${desfecho.rotaEfetiva} total_ms=$fim " +
+                            "open_ms=${desfecho.sessionOpenedMillis}",
+                    )
                     if (t.outcome == WhisperOrtOutcome.CANCELLED) {
                         Result.Cancelled(t.text, partial = true, millis = fim,
-                            audioMillis = t.audioMillis, modelLabel = pacote.identity.model)
+                            audioMillis = t.audioMillis, modelLabel = pacote.identity.model,
+                            hardwareLabel = rotulo)
                     } else if (t.outcome == WhisperOrtOutcome.ERROR) {
                         // Adendo 17 §1 — erro do transcriber viajava como Done
                         // (texto vazio + outcome ERROR) e o motivo se perdia
@@ -587,6 +642,9 @@ object WhisperOrtRoute {
                         Result.Done(
                             t.text, t.outcome.name, fim, desfecho.cacheHit,
                             openMillis = desfecho.sessionOpenedMillis,
+                            audioMillis = t.audioMillis,
+                            modelLabel = pacote.identity.model,
+                            hardwareLabel = rotulo,
                         )
                     }
                 }

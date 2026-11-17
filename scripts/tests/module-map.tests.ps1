@@ -86,6 +86,22 @@ try {
     $staleResult = $stale.Output | ConvertFrom-Json
     if ($stale.ExitCode -ne 2 -or $staleResult.staleCount -ne 1 -or $staleResult.stale[0] -ne "Zeta.kt") { throw "etiqueta órfã não foi bloqueada" }
 
+    # Fonte de produção NÃO rastreada (WIP local, fora do índice) existe no disco:
+    # mapeada não é órfã; fora do mapa continua bloqueando.
+    Set-Source -Dir $sourceDir -Name "Delta.kt"
+    New-MapFile -Fixture $fixture -Names @("Alpha.kt", "Beta.kt", "Gamma.kt", "Delta.kt")
+    $untrackedMapped = Invoke-Checker -RepositoryRoot $fixture -Json
+    $untrackedMappedResult = $untrackedMapped.Output | ConvertFrom-Json
+    if ($untrackedMapped.ExitCode -ne 0 -or $untrackedMappedResult.sourceCount -ne 4 -or $untrackedMappedResult.staleCount -ne 0) { throw "fonte não rastreada mapeada foi tratada como órfã" }
+
+    New-MapFile -Fixture $fixture -Names @("Alpha.kt", "Beta.kt", "Gamma.kt")
+    $untrackedMissing = Invoke-Checker -RepositoryRoot $fixture -Json
+    $untrackedMissingResult = $untrackedMissing.Output | ConvertFrom-Json
+    if ($untrackedMissing.ExitCode -ne 2 -or $untrackedMissingResult.missingCount -ne 1 -or $untrackedMissingResult.missing[0] -ne "Delta.kt") { throw "fonte não rastreada fora do mapa não foi bloqueada" }
+    Remove-Item -LiteralPath (Join-Path $sourceDir "Delta.kt") -Force
+
+    New-MapFile -Fixture $fixture -Names @("Alpha.kt", "Beta.kt", "Gamma.kt")
+
     Remove-Item -LiteralPath (Join-Path $fixture "MODULE-MAP.md") -Force
     & git -C $fixture add --all *> $null
     $absent = Invoke-Checker -RepositoryRoot $fixture -Json

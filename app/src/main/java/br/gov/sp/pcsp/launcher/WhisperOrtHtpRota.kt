@@ -1,0 +1,327 @@
+package br.gov.sp.pcsp.launcher
+
+import ai.onnxruntime.OnnxJavaType
+import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtLoggingLevel
+import ai.onnxruntime.OrtSession
+import ai.onnxruntime.TensorInfo
+import android.content.Context
+import android.os.Build
+import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+
+/**
+ * R100 §2.4 — ROTA HTP do PRODUTO: encoder EPContext W8A16 no QNN HTP com os
+ * decoders INT8 do produto em CPU.
+ *
+ * É a rota provada na R97 sem sandbox, sem reflexão e sem job de laboratório:
+ * a Activity, a rota de arquivo e o cache não sabem que ela existe — a fábrica
+ * do cache pergunta, recebe `null`/recusa e segue em CPU.
+ *
+ * Contratos:
+ * - `iniciar` é idempotente e chamado no corpo de `WhisperOrtRoute.executar`;
+ * - a admissão é a [WhisperOrtHtpAdmissao] (SoC, pacote verificado, histórico);
+ * - carregar ORT/QNN e abrir a sessão acontece UMA vez; qualquer falha desliga o
+ *   HTP **no processo** e é contada para o desligamento entre processos;
+ * - o log leva só rota, SoC, versão do pacote, tempos e motivo — nunca texto,
+ *   áudio ou caminho de arquivo do usuário.
+ */
+object WhisperOrtHtpRota {
+
+    private const val TAG = "WhisperOrtHtp"
+    private const val PREFS = "whisper_ort_htp"
+    private const val CHAVE_FALHAS = "falhas"
+    private const val CHAVE_VERSAO = "versao"
+    private const val ENTRADA = "input_features"
+    private const val HTP_MODE = "burst"
+
+    /** Recusa tipada da fábrica: o produtor troca para CPU e registra o motivo. */
+    class Recusa(val motivo: String) : IllegalStateException("htp-recusa: $motivo")
+
+    @Volatile private var app: Context? = null
+    @Volatile private var iniciado = false
+    @Volatile private var desligadoNoProcesso = false
+    @Volatile private var motivoIndisponivel: String? = "nao_avaliado"
+    @Volatile private var manifesto: WhisperOrtNpuPacote.Manifesto? = null
+    @Volatile private var dirPacote: File? = null
+    @Volatile private var ortCarregado = false
+    @Volatile private var qnnCarregado = false
+    @Volatile private var ultimoLoadMs = 0L
+
+    /** `true` quando o pacote já foi conferido por SHA neste processo. */
+    @Volatile private var pacoteVerificado = false
+
+    /** Contou falha neste processo (o limite é por processo, não por job). */
+    @Volatile private var contouFalhaNesteProcesso = false
+
+    /** Idempotente: chamado a cada pedido, guarda o contexto e agenda o pacote. */
+    fun iniciar(context: Context) {
+        val anterior = app
+        app = context.applicationContext
+        if (!iniciado) {
+            synchronized(this) {
+                if (!iniciado) {
+                    iniciado = true
+                    val ctx = app ?: return
+                    runCatching { WhisperOrtNpuPacote.garantirEmSegundoPlano(ctx) }
+                        .onFailure { android.util.Log.w(TAG, "agenda do pacote falhou: ${it.message}") }
+                }
+            }
+        }
+        if (anterior == null) {
+            android.util.Log.i(TAG, "rota HTP inicializada: " + descricaoSoC())
+        }
+    }
+
+    /** Chamado pelo [WhisperOrtNpuPacote] quando a verificação completa passou. */
+    fun pacoteVerificado(manifesto: WhisperOrtNpuPacote.Manifesto) {
+        this.manifesto = manifesto
+        this.dirPacote = app?.let { WhisperOrtNpuPacote.dirDaVersao(it) }
+        pacoteVerificado = true
+        motivoIndisponivel = null
+        android.util.Log.i(
+            TAG,
+            "pacote verificado versao=${manifesto.versao} soc=${manifesto.soc} " +
+                "arquivos=${manifesto.itens.size}",
+        )
+    }
+
+    /** Chamado quando o pacote não está disponível; a rota segue em CPU. */
+    fun pacoteIndisponivel(motivo: String) {
+        pacoteVerificado = false
+        motivoIndisponivel = motivo
+        android.util.Log.i(TAG, "pacote indisponivel: $motivo")
+    }
+
+    fun versaoPacote(): String = manifesto?.versao ?: WhisperOrtNpuPacote.VERSAO
+
+    fun desligadoNoProcesso(): Boolean = desligadoNoProcesso
+
+    /**
+     * Rota efetiva do pedido AGORA. Barata: não hasheia nada (a verificação pesada
+     * roda uma vez, em segundo plano) e não abre sessão.
+     */
+    fun rotaDoPedido(): String {
+        val ctx = app ?: return WhisperOrtHtpAdmissao.ROTA_CPU
+        val presente = runCatching {
+            WhisperOrtNpuPacote.estado(ctx) is WhisperOrtNpuPacote.Estado.Pronto
+        }.getOrDefault(false)
+        val decisao = WhisperOrtHtpAdmissao.decidir(
+            socModelo = socModelo(),
+            fabricante = socFabricante(),
+            pacotePresente = presente,
+            pacoteVerificado = pacoteVerificado,
+            desligadoNoProcesso = desligadoNoProcesso,
+            memoriaFalhas = memoriaDeFalhas(ctx),
+            versaoPacote = versaoPacote(),
+        )
+        motivoIndisponivel = decisao.detalhe + " motivo=" + decisao.motivo.name
+        return decisao.rota
+    }
+
+    /** Motivo estável da última avaliação (vai para log, não para a tela). */
+    fun motivoRota(): String = motivoIndisponivel ?: "admitido"
+
+    /**
+     * Fábrica da rota HTP. Devolve o backend pronto (encoder HTP + decoders CPU
+     * abertos) ou lança [Recusa] — nunca devolve um backend pela metade.
+     */
+    fun abrir(encoder: File, decoder: File, past: File, threads: Int): WhisperOrtBackend {
+        val ctx = app ?: throw Recusa("sem contexto")
+        val decisao = try {
+            val presente = WhisperOrtNpuPacote.estado(ctx) is WhisperOrtNpuPacote.Estado.Pronto
+            WhisperOrtHtpAdmissao.decidir(
+                socModelo = socModelo(),
+                fabricante = socFabricante(),
+                pacotePresente = presente,
+                pacoteVerificado = pacoteVerificado,
+                desligadoNoProcesso = desligadoNoProcesso,
+                memoriaFalhas = memoriaDeFalhas(ctx),
+                versaoPacote = versaoPacote(),
+            )
+        } catch (falha: Throwable) {
+            throw Recusa("admissao: ${falha.javaClass.simpleName}: ${falha.message}")
+        }
+        if (!decisao.usarHtp) throw Recusa(decisao.motivo.name + ":" + decisao.detalhe)
+
+        val pacote = manifesto ?: runCatching {
+            val estado = WhisperOrtNpuPacote.estado(ctx)
+            (estado as? WhisperOrtNpuPacote.Estado.Pronto)?.manifesto
+        }.getOrNull() ?: throw Recusa("pacote sem manifesto")
+        val archEsperada = WhisperOrtHtpAdmissao.socDe(socModelo())?.htpArch
+        if (archEsperada == null || pacote.htpArch != archEsperada) {
+            throw Recusa("arch do pacote ${pacote.htpArch} != SoC ${archEsperada ?: "?"}")
+        }
+
+        val dir = dirPacote ?: WhisperOrtNpuPacote.dirDaVersao(ctx)
+        val inicio = System.nanoTime()
+        val sessaoHtp = try {
+            carregarOrt(ctx)
+            carregarQnn(dir)
+            abrirSessaoHtp(File(dir, WhisperOrtNpuPacote.WRAPPER), dir, pacote.htpArch)
+        } catch (falha: Throwable) {
+            registrarFalha("abertura: ${falha.javaClass.simpleName}: ${falha.message}")
+            throw Recusa("abertura: ${falha.message ?: falha.javaClass.simpleName}")
+        }
+        val decoders = WhisperOrtSession(encoder, decoder, past, threads)
+        try {
+            decoders.openDecodersOnly(
+                melBins = WhisperOrtFrontend.N_MELS,
+                frames = 1500,
+                dim = 1280,
+            )
+        } catch (falha: Throwable) {
+            runCatching { decoders.close() }
+            runCatching { sessaoHtp.close() }
+            registrarFalha("decoders: ${falha.javaClass.simpleName}: ${falha.message}")
+            throw Recusa("decoders: ${falha.message}")
+        }
+        ultimoLoadMs = (System.nanoTime() - inicio) / 1_000_000
+        android.util.Log.i(
+            TAG,
+            "rota=htp soc=${WhisperOrtHtpAdmissao.normalizarSoc(socModelo())} " +
+                "pacote=${pacote.versao} arch=${pacote.htpArch} load_ms=$ultimoLoadMs",
+        )
+        return WhisperOrtHtpBackend(sessaoHtp, decoders, pacote.dtype)
+    }
+
+    /**
+     * Falha de rota: desliga no processo e conta UMA vez por processo. Três
+     * processos seguidos sem sucesso desligam o HTP até a próxima versão.
+     */
+    fun registrarFalha(motivo: String) {
+        desligadoNoProcesso = true
+        motivoIndisponivel = "falha:" + motivo
+        val ctx = app ?: return
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val falhas = prefs.getInt(CHAVE_FALHAS, 0)
+        val versao = prefs.getString(CHAVE_VERSAO, "").orEmpty()
+        var novas = falhas
+        if (!contouFalhaNesteProcesso) {
+            contouFalhaNesteProcesso = true
+            novas = if (versao == versaoPacote()) falhas + 1 else 1
+            prefs.edit().putInt(CHAVE_FALHAS, novas).putString(CHAVE_VERSAO, versaoPacote()).apply()
+        }
+        android.util.Log.w(
+            TAG,
+            "rota=htp DESLIGADA motivo=$motivo falhas=$novas versao=${versaoPacote()} " +
+                "limite=${WhisperOrtHtpAdmissao.FALHAS_PARA_DESLIGAR}",
+        )
+    }
+
+    /** Sucesso completo na rota HTP zera a sequência de falhas. */
+    fun registrarSucesso() {
+        contouFalhaNesteProcesso = false
+        val ctx = app ?: return
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getInt(CHAVE_FALHAS, 0) != 0 || prefs.getString(CHAVE_VERSAO, "").orEmpty().isNotEmpty()) {
+            prefs.edit().putInt(CHAVE_FALHAS, 0).putString(CHAVE_VERSAO, versaoPacote()).apply()
+        }
+    }
+
+    private fun memoriaDeFalhas(ctx: Context): WhisperOrtHtpAdmissao.MemoriaFalhas {
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return WhisperOrtHtpAdmissao.MemoriaFalhas(
+            falhas = prefs.getInt(CHAVE_FALHAS, 0),
+            versao = prefs.getString(CHAVE_VERSAO, "").orEmpty(),
+        )
+    }
+
+    private fun socModelo(): String? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else null
+
+    private fun socFabricante(): String? =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MANUFACTURER else null
+
+    private fun descricaoSoC(): String =
+        "soc=${WhisperOrtHtpAdmissao.normalizarSoc(socModelo())} fabricante=${socFabricante().orEmpty()}"
+
+    private fun carregarOrt(ctx: Context) {
+        if (ortCarregado) return
+        synchronized(this) {
+            if (ortCarregado) return
+            NativeDependencyManager.loadOrtRuntime(ctx, onLog = { }).getOrThrow()
+            ortCarregado = true
+        }
+    }
+
+    /**
+     * Carrega as cinco libs V73 do pacote. `cdsprpc` vem do vendor (namespace do
+     * app) e o skel é achado por `ADSP_LIBRARY_PATH` — o mesmo caminho da R97.
+     */
+    private fun carregarQnn(dir: File) {
+        if (qnnCarregado) return
+        synchronized(this) {
+            if (qnnCarregado) return
+            for (nome in WhisperOrtNpuPacote.LIBS_V73) {
+                check(File(dir, nome).isFile) { "lib ausente: $nome" }
+            }
+            NativeDependencyManager.registerNativeLibraryDir(dir)
+            System.loadLibrary("cdsprpc")
+            android.system.Os.setenv("ADSP_LIBRARY_PATH", dir.absolutePath, true)
+            for (nome in WhisperOrtNpuPacote.LIBS_V73) {
+                if (nome.endsWith("Skel.so")) continue // o skel é carregado pelo stub no DSP
+                System.load(File(dir, nome).absolutePath)
+            }
+            qnnCarregado = true
+        }
+    }
+
+    /** Abre a sessão EPContext no QNN HTP estrito (sem fallback para CPU do EP). */
+    private fun abrirSessaoHtp(
+        wrapper: File,
+        dir: File,
+        htpArch: String,
+    ): WhisperOrtHtpSessao {
+        check(wrapper.isFile) { "wrapper ausente" }
+        val env = OrtEnvironment.getEnvironment(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING, TAG)
+        val opts = OrtSession.SessionOptions()
+        opts.addQnn(
+            linkedMapOf(
+                "backend_path" to File(dir, "libQnnHtp.so").absolutePath,
+                "htp_arch" to htpArch,
+                "device_id" to "0",
+                "offload_graph_io_quantization" to "0",
+                "enable_htp_fp16_precision" to "0",
+                "htp_performance_mode" to HTP_MODE,
+            ),
+        )
+        opts.addConfigEntry("session.disable_cpu_ep_fallback", "1")
+        opts.addConfigEntry("session.log_severity_level", "3")
+        opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        val sessao = env.createSession(wrapper.absolutePath, opts)
+        return object : WhisperOrtHtpSessao {
+            override fun rodar(entrada: ByteArray): ByteArray {
+                val info = sessao.inputInfo[ENTRADA]?.info as? TensorInfo
+                    ?: throw IllegalStateException("metadata de entrada ausente")
+                val tipo = when (info.onnxType) {
+                    TensorInfo.OnnxTensorType.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16 ->
+                        OnnxJavaType.FLOAT16
+                    TensorInfo.OnnxTensorType.ONNX_TENSOR_ELEMENT_DATA_TYPE_INT16,
+                    TensorInfo.OnnxTensorType.ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16,
+                    -> OnnxJavaType.INT16
+                    else -> throw IllegalStateException("dtype de entrada inesperado: ${info.onnxType}")
+                }
+                val buffer = ByteBuffer.allocateDirect(entrada.size).order(ByteOrder.LITTLE_ENDIAN)
+                buffer.put(entrada)
+                buffer.rewind()
+                OnnxTensor.createTensor(env, buffer, info.shape, tipo).use { tensor ->
+                    sessao.run(mapOf(ENTRADA to tensor)).use { resultado ->
+                        val saida = resultado.get(0) as OnnxTensor
+                        val bytes = saida.byteBuffer
+                        val copia = ByteArray(bytes.remaining())
+                        bytes.get(copia)
+                        return copia
+                    }
+                }
+            }
+
+            override fun close() {
+                runCatching { sessao.close() }
+                runCatching { opts.close() }
+            }
+        }
+    }
+}
