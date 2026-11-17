@@ -119,4 +119,44 @@ class WhisperOrtTerminalSinkTest {
         val recibo = WhisperOrtTerminalSink.publicar(arquivoNoLugarDaPasta, terminal("jobA"))
         assertNull("sem diretório não há entrega", recibo)
     }
+
+    /**
+     * R13/§4 — os metadados de resumo viajam no recibo do job que produziu o
+     * texto (duração de áudio e hardware efetivos), para a reentrega exibir o
+     * MESMO cartão sem reler a seleção atual.
+     */
+    @Test
+    fun reciboGravaMetadadosDeResumo() {
+        val base = temp.newFolder("sink-meta")
+        val t = terminal("job-meta").copy(audioMillis = 17_000L, hardware = "CPU")
+        val recibo = WhisperOrtTerminalSink.publicar(base, t)
+        assertNotNull("terminal não foi publicado", recibo)
+        val json = org.json.JSONObject(File(recibo!!.caminho).readText(Charsets.UTF_8))
+        assertEquals("duração de áudio não persistida", 17_000L, json.optLong("audio_ms", -1L))
+        assertEquals("hardware não persistido", "CPU", json.optString("hardware", ""))
+        assertEquals("modelo não persistido", "", json.optString("model", ""))
+    }
+
+    /**
+     * R13/§4 — recibo ANTIGO (sem as chaves novas) continua legível: a ausência
+     * vira "sem dado", nunca zero inventado.
+     */
+    @Test
+    fun reciboAntigoSemMetadadosLeComoAusente() {
+        val base = temp.newFolder("sink-antigo")
+        val t = terminal("job-antigo")
+        val recibo = WhisperOrtTerminalSink.publicar(base, t)
+        assertNotNull(recibo)
+        // Simula o arquivo gravado por uma versão anterior: remove as chaves novas.
+        val arquivo = File(recibo!!.caminho)
+        val json = org.json.JSONObject(arquivo.readText(Charsets.UTF_8))
+        json.remove("audio_ms")
+        json.remove("hardware")
+        arquivo.writeText(json.toString(), Charsets.UTF_8)
+
+        val relido = org.json.JSONObject(arquivo.readText(Charsets.UTF_8))
+        assertEquals("audio ausente deve virar -1", -1L, relido.optLong("audio_ms", -1L))
+        assertEquals("hardware ausente deve virar vazio", "", relido.optString("hardware", ""))
+        assertEquals("texto do recibo antigo preservado", t.text, relido.optString("texto", ""))
+    }
 }

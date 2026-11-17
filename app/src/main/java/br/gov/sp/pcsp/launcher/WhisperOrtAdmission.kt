@@ -105,6 +105,13 @@ class WhisperOrtAdmission(private val clock: () -> Long = { System.nanoTime() })
          * ou `whisper-small`). Vazio = job anterior à marcação.
          */
         val model: String = "",
+        /**
+         * R13/§4 — metadados de resumo congelados no job que produziu o texto:
+         * duração de áudio efetiva (ms) e hardware efetivo. Nulos quando o job
+         * não os tinha; gravados no recibo para a reentrega exibir o mesmo resumo.
+         */
+        val audioMillis: Long? = null,
+        val hardware: String? = null,
     )
 
     /** Resultado da tentativa de admissão. */
@@ -243,6 +250,8 @@ class WhisperOrtAdmission(private val clock: () -> Long = { System.nanoTime() })
          * Vazio = job anterior à marcação.
          */
         model: String = "",
+        audioMillis: Long? = null,
+        hardware: String? = null,
     ): Terminal? {
         lock.lock()
         try {
@@ -268,6 +277,8 @@ class WhisperOrtAdmission(private val clock: () -> Long = { System.nanoTime() })
                 error = error,
                 threads = threads,
                 model = model,
+                audioMillis = audioMillis,
+                hardware = hardware,
             )
             terminais[chave(job)] = terminal
             cancelados.remove(chave(job))

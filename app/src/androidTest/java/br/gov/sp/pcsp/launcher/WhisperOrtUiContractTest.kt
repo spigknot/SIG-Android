@@ -54,23 +54,48 @@ class WhisperOrtUiContractTest {
         WhisperOrtRoute.setEnabled(ctx, preferenciaOriginal)
     }
 
+    /**
+     * R11 §2/§4 — contrato NOVO da tela: um único "Transcrever", seletor de
+     * arquivos identificado, opções avançadas acessíveis desde a abertura e as
+     * duas caixas de log fora da tela (ids preservados para diagnóstico).
+     */
     @Test
-    fun ferramentaMostraEExibeOsTresControlesDoMotorOrt() {
+    fun ferramentaTemUmUnicoTranscreverOpcoesELogsForaDaTela() {
         ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
             cenario.onActivity { activity ->
+                val recursos = activity.resources
+                fun id(nome: String) = recursos.getIdentifier(nome, "id", activity.packageName)
+
                 val caixa = activity.findViewById<CheckBox>(R.id.checkbox_usar_cpp)
                 val ajuda = activity.findViewById<View>(R.id.help_usar_cpp)
-                val botao = activity.findViewById<View>(R.id.button_transcribe_ort)
+                val transcrever = activity.findViewById<View>(R.id.button_transcribe)
+                val seletor = activity.findViewById<View>(R.id.button_select_media)
+                val avancadas = activity.findViewById<View>(R.id.advanced_toggle)
+                val logTexto = activity.findViewById<View>(R.id.log_text)
+                val terminal = activity.findViewById<View>(R.id.terminal_text)
 
-                assertNotNull("checkbox 'usar whisper.cpp' ausente do layout", caixa)
-                assertNotNull("ajuda '!' ausente do layout", ajuda)
-                assertNotNull("botao ORT ausente do layout", botao)
+                assertNotNull("checkbox 'usar whisper.cpp' ausente", caixa)
+                assertNotNull("ajuda '!' ausente", ajuda)
+                assertNotNull("botão Transcrever ausente", transcrever)
+                assertNotNull("seletor de arquivos ausente", seletor)
+                assertNotNull("opções avançadas ausentes", avancadas)
 
-                // Existir no XML e ficar GONE/INVISIBLE não serve: o usuário precisa
-                // ver e alcançar os controles.
-                assertTrue("checkbox existe mas nao esta visivel", caixa!!.visibility == View.VISIBLE)
-                assertTrue("ajuda '!' nao esta visivel", ajuda!!.visibility == View.VISIBLE)
-                assertTrue("botao ORT nao esta visivel", botao!!.visibility == View.VISIBLE)
+                // §2 — o segundo botão verde sumiu do layout (nem id existe).
+                assertEquals("segundo botão 'Transcrever' ainda presente", 0, id("button_transcribe_ort"))
+
+                // §1 — avançadas acessíveis desde a abertura, sem arquivo.
+                assertEquals("opções avançadas escondidas na abertura",
+                    View.VISIBLE, avancadas!!.visibility)
+
+                // §4 — as duas caixas de log não aparecem mais.
+                assertEquals("cabeçalho de log ainda visível", View.GONE,
+                    activity.findViewById<View>(R.id.log_toggle).visibility)
+                assertEquals("caixa de log ainda visível", View.GONE, logTexto!!.visibility)
+                assertEquals("terminal (2ª caixa) ainda visível", View.GONE, terminal!!.visibility)
+
+                // Controles do motor ORT continuam visíveis na rota.
+                assertEquals("checkbox existe mas nao esta visivel", View.VISIBLE, caixa!!.visibility)
+                assertEquals("ajuda '!' nao esta visivel", View.VISIBLE, ajuda!!.visibility)
             }
         }
     }
@@ -125,20 +150,49 @@ class WhisperOrtUiContractTest {
             text = "texto reentregue apos destroy",
             textBytes = 28,
             textSha256 = "sha",
-            totalMillis = 10L,
+            totalMillis = 1_500L,
             partial = false,
             error = null,
+            model = "whisper-large-v3-turbo",
+            audioMillis = 3_000L,
+            hardware = "CPU (6 threads)",
         )
         val recibo = WhisperOrtTerminalSink.publicar(ctx, terminal)
         assertNotNull("publicação precisa devolver recibo", recibo)
 
         ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
+            // R14 — a reentrega publica o cartão num POST da main: espera o estado
+            // observável (visibilidade) antes de ler, sem dormir dentro da main.
+            val limite = System.currentTimeMillis() + 15_000L
+            while (System.currentTimeMillis() < limite) {
+                var visivel = false
+                cenario.onActivity { a ->
+                    visivel = a.findViewById<View>(R.id.resumo_text)?.visibility == View.VISIBLE
+                }
+                if (visivel) break
+                Thread.sleep(200)
+            }
             cenario.onActivity { activity ->
                 val texto = activity.findViewById<android.widget.TextView>(R.id.live_transcript_text)
                     ?.text?.toString().orEmpty()
                 val container = activity.findViewById<View>(R.id.live_transcript_container)
+                val resumo = activity.findViewById<android.widget.TextView>(R.id.resumo_text)
+                val resumoTexto = resumo?.text?.toString().orEmpty()
                 assertTrue("resultado pendente nao foi exibido: '$texto'", texto.contains("reentregue"))
                 assertEquals("container precisa ficar visivel", View.VISIBLE, container?.visibility)
+                assertEquals("resumo precisa ficar visivel na reentrega", View.VISIBLE, resumo?.visibility)
+                assertTrue("resumo reentregue sem modelo: '$resumoTexto'", resumoTexto.contains("whisper-large-v3-turbo"))
+                assertTrue("resumo reentregue sem hardware: '$resumoTexto'", resumoTexto.contains("CPU (6 threads)"))
+                // R14 — o formato do cartão mostrado pelo produto é "N" quando
+                // concluídos == total (spec de WhisperResumoTest: 3, 1 (Streaming),
+                // "2 de 3" só quando difere). A reentrega segue a MESMA regra.
+                assertTrue(
+                    "resumo reentregue sem contagem: '$resumoTexto'",
+                    resumoTexto.contains("Áudios transcritos: 1") ||
+                        resumoTexto.contains("1 de 1"),
+                )
+                assertTrue("resumo reentregue sem eficiencia: '$resumoTexto'", resumoTexto.contains("2,000x"))
+                assertTrue("resumo reentregue sem status Concluído: '$resumoTexto'", resumoTexto.contains("Concluído"))
             }
         }
         // Depois de exibir, a entrega tem de estar confirmada (fora da fila).

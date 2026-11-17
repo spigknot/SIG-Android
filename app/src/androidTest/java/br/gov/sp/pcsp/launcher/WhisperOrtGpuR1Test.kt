@@ -117,7 +117,7 @@ class WhisperOrtGpuR1Test {
         val perfil = File(dir(), "canary_profile_${System.currentTimeMillis()}.json")
         val opts = OrtSession.SessionOptions()
         opts.setIntraOpNumThreads(4)
-        opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+        opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
         val qnn = HashMap<String, String>()
         qnn["backend_path"] = "libQnnGpu.so"
         opts.addQnn(qnn)
@@ -190,6 +190,8 @@ class WhisperOrtGpuR1Test {
         }.getOrDefault("erro ao ler")
         // PROVA de backend: a lib carregada no processo (não só o nome do EP).
         val maps = runCatching { File("/proc/self/maps").readText() }.getOrDefault("")
+
+
         val gpuNoProcesso = maps.contains("libQnnGpu.so")
         val htpNoProcesso = maps.contains("libQnnHtp.so")
 
@@ -287,24 +289,40 @@ class WhisperOrtGpuR1Test {
 
     @Test
     fun encoderFp16Gpu() {
+        recibo("etapa", JSONObject().put("passo", "inicio"))
         assumeTrue("aparelho não Qualcomm", QairtDependencyManager.isQualcommDevice())
+        recibo("etapa", JSONObject().put("passo", "qualcomm_ok"))
         assumeTrue("deps nativas", NativeDependencyManager.activateIfInstalled(ctx))
-        assumeTrue("ORT", NativeDependencyManager.loadOrtRuntime(ctx).isSuccess)
-        assumeTrue("QAIRT", QairtDependencyManager.isInstalled(ctx))
+        recibo("etapa", JSONObject().put("passo", "deps_ok"))
+        val ortLoad = NativeDependencyManager.loadOrtRuntime(ctx)
+        recibo("etapa", JSONObject().put("passo", "ort_load").put("ok", ortLoad.isSuccess)
+            .put("erro", ortLoad.exceptionOrNull()?.message ?: ""))
+        assumeTrue("ORT", ortLoad.isSuccess)
+        val qInst = QairtDependencyManager.isInstalled(ctx)
+        recibo("etapa", JSONObject().put("passo", "qairt_check").put("instalado", qInst))
+        assumeTrue("QAIRT", qInst)
         QairtDependencyManager.loadQnnNatives(ctx, "gpu")
+        recibo("etapa", JSONObject().put("passo", "qnn_carregado"))
 
         val pasta = ctx.getExternalFilesDir("gpu-r1") ?: error("sem external files dir")
-        val modelo = File(pasta, "encoder_fp16.onnx")
-        assumeTrue("encoder fp16 ausente em ${modelo.absolutePath}", modelo.isFile)
-        assumeTrue("encoder fp16 com tamanho inesperado: ${modelo.length()}", modelo.length() == 1_274_342_603L)
+        val modelo = File(pasta, "encoder_fp16_gelu20_static.onnx")
+        assumeTrue("encoder transformado ausente em ${modelo.absolutePath}", modelo.isFile)
+        assumeTrue("encoder transformado com tamanho inesperado: ${modelo.length()}", modelo.length() == 1_274_315_485L)
 
+        recibo("etapa", JSONObject().put("passo", "modelo_ok").put("path", modelo.absolutePath))
+        val tMel = System.currentTimeMillis()
         val mel = melDeD01() ?: error("d01.wav ausente/sem PCM")
+        recibo("etapa", JSONObject().put("passo", "mel_ok").put("ms", System.currentTimeMillis() - tMel))
         val env = OrtEnvironment.getEnvironment()
 
         fun abrir(gpu: Boolean): OrtSession {
             val opts = OrtSession.SessionOptions()
             opts.setIntraOpNumThreads(4)
-            opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            // ORT funde Div/Erf/Add/Mul em com.microsoft.Gelu, que NÃO tem kernel
+            // fp16 no CPU EP do 1.29 e derruba a sessão. A fusão é só otimização:
+            // desabilitá-la preserva a matemática e deixa o grafo original (Erf).
+            opts.addConfigEntry("session.disable_specified_optimizers", "GeluFusion")
             if (gpu) {
                 val qnn = HashMap<String, String>()
                 qnn["backend_path"] = "libQnnGpu.so"
@@ -331,33 +349,11 @@ class WhisperOrtGpuR1Test {
         }
 
         val rec = JSONObject().put("modelo_bytes", modelo.length())
-        // -------- CPU (mesma candidata fp16) --------
-        var cpuOut: FloatArray? = null
-        var cpuErro: String? = null
-        var cpuLoad = 0L
-        var cpuMs = 0L
-        try {
-            val t0 = System.currentTimeMillis()
-            abrir(gpu = false).use { sess ->
-                cpuLoad = System.currentTimeMillis() - t0
-                val nome = sess.inputNames.first()
-                rec.put("input_nome", nome)
-                rec.put("input_tipo", tipoDe(sess.inputInfo[nome]?.info))
-                rec.put("input_shape", shapeDe(sess.inputInfo[nome]?.info))
-                rec.put("output_tipo_cpu", tipoDe(sess.outputInfo.values.first().info))
-                OnnxTensor.createTensor(env, FloatBuffer.wrap(mel), longArrayOf(1, 128, 3000)).use { t ->
-                    val (o, ms) = rodar(sess, t, nome, 1)
-                    cpuOut = o
-                    cpuMs = ms
-                }
-            }
-        } catch (t: Throwable) {
-            cpuErro = "${t.javaClass.simpleName}: ${t.message}"
-        }
-        rec.put("cpu_load_ms", cpuLoad).put("cpu_run_ms", cpuMs).put("cpu_erro", cpuErro ?: "")
-        rec.put("cpu_out_bytes", cpuOut?.size ?: 0)
-        cpuOut?.let { File(dir(), "encoder_cpu_out_f32.bin").writeBytes(floatParaBytes(it)) }
-
+        // -------- CPU no APARELHO: NÃO executável (fp16 sem kernel no CPU EP 1.29)
+        // A referência numérica é o HOST (mesma candidata, ORT 1.31, CPU) — ver
+        // ref_encoder_fp16.py. Registrar o motivo em vez de mascarar.
+        val cpuOut: FloatArray? = null
+        rec.put("cpu_device", "nao_executavel: CPU EP 1.29 sem kernel fp16 para com.microsoft.Gelu")
         // -------- GPU (QNN Adreno) --------
         val perfil = File(dir(), "encoder_profile_${System.currentTimeMillis()}.json")
         var gpuOut: FloatArray? = null
@@ -368,14 +364,20 @@ class WhisperOrtGpuR1Test {
         try {
             val opts = OrtSession.SessionOptions()
             opts.setIntraOpNumThreads(4)
-            opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+            opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            opts.addConfigEntry("session.disable_specified_optimizers", "GeluFusion")
             val qnn = HashMap<String, String>()
             qnn["backend_path"] = "libQnnGpu.so"
             opts.addQnn(qnn)
+            // Sem Erf no grafo, o QNN deve assumir TODOS os nós: fallback CPU
+            // desabilitado para que qualquer sobra falhe em vez de mascarar.
+            opts.addConfigEntry("session.disable_cpu_ep_fallback", "1")
             opts.enableProfiling(perfil.absolutePath)
+            recibo("etapa", JSONObject().put("passo", "sessao_gpu_inicio"))
             val t0 = System.currentTimeMillis()
             env.createSession(modelo.absolutePath, opts).use { sess ->
                 gpuLoad = System.currentTimeMillis() - t0
+                recibo("etapa", JSONObject().put("passo", "sessao_gpu_ok").put("ms", gpuLoad))
                 val nome = sess.inputNames.first()
                 rec.put("gpu_input_tipo", tipoDe(sess.inputInfo[nome]?.info))
                 rec.put("gpu_input_shape", shapeDe(sess.inputInfo[nome]?.info))
@@ -417,6 +419,41 @@ class WhisperOrtGpuR1Test {
             "qnn=$qnn cpu=$cpu"
         }.getOrDefault("erro")
         val maps = runCatching { File("/proc/self/maps").readText() }.getOrDefault("")
+        // Nós que caíram na CPU (op_type + nome) e prova ESTRITA sem fallback.
+        val cpuNodes = ArrayList<String>()
+        runCatching {
+            if (perfilReal == null) return@runCatching
+            val arr = org.json.JSONArray(perfilReal.readText(Charsets.UTF_8))
+            for (i in 0 until arr.length()) {
+                val e = arr.optJSONObject(i) ?: continue
+                if (e.optString("cat") != "Node") continue
+                val a = e.optJSONObject("args") ?: continue
+                if (a.optString("provider").startsWith("CPU")) {
+                    cpuNodes.add((a.optString("op_name").ifBlank { e.optString("name") }) + ":" + a.optString("node_index"))
+                }
+            }
+        }
+        rec.put("cpu_nodes_count", cpuNodes.size)
+        rec.put("cpu_nodes", cpuNodes.take(12).joinToString("|"))
+        var estrito: String? = null
+        if (cpuNodes.isEmpty()) {
+            try {
+                val so2 = OrtSession.SessionOptions()
+                so2.setIntraOpNumThreads(4)
+                so2.addConfigEntry("session.disable_specified_optimizers", "GeluFusion")
+                val q2 = HashMap<String, String>()
+                q2["backend_path"] = "libQnnGpu.so"
+                so2.addQnn(q2)
+                so2.addConfigEntry("session.disable_cpu_ep_fallback", "1")
+                env.createSession(modelo.absolutePath, so2).use { }
+                estrito = "ok"
+                so2.close()
+            } catch (t: Throwable) {
+                estrito = "${t.javaClass.simpleName}: ${t.message}"
+            }
+        }
+        rec.put("sessao_estrita_sem_cpu", estrito ?: "nao_tentada")
+
 
         rec.put("gpu_load_ms", gpuLoad)
         rec.put("gpu_run_ms", gpuMs)
@@ -441,5 +478,126 @@ class WhisperOrtGpuR1Test {
         assertEquals("shape da saída do encoder", 1500 * 1280, gpuOut!!.size)
         assertTrue("libQnnGpu.so não está no processo", maps.contains("libQnnGpu.so"))
         assertTrue("QNN não executou nós: $provedores", provedores.startsWith("qnn=") && !provedores.startsWith("qnn=0"))
+    }
+
+    @Test
+    fun encoderFp16GpuEstrito() {
+        assumeTrue("deps", NativeDependencyManager.activateIfInstalled(ctx))
+        assumeTrue("ORT", NativeDependencyManager.loadOrtRuntime(ctx).isSuccess)
+        assumeTrue("QAIRT", QairtDependencyManager.isInstalled(ctx))
+        QairtDependencyManager.loadQnnNatives(ctx, "gpu")
+        val pasta = ctx.getExternalFilesDir("gpu-r1") ?: error("sem external")
+        val modelo = File(pasta, "encoder_fp16_gelu20_static.onnx")
+        assumeTrue("modelo", modelo.isFile)
+        val env = OrtEnvironment.getEnvironment()
+        val perfil = File(ctx.filesDir, "gpu-r1/estrito_${System.currentTimeMillis()}.json")
+        var erro: String? = null
+        var loadMs = 0L
+        val t0 = System.currentTimeMillis()
+        try {
+            val o = OrtSession.SessionOptions()
+            o.setIntraOpNumThreads(4)
+            o.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            val q = HashMap<String, String>()
+            q["backend_path"] = "libQnnGpu.so"
+            o.addQnn(q)
+            o.setSessionLogLevel(ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE)
+            o.setSessionLogVerbosityLevel(1)
+            o.enableProfiling(perfil.absolutePath)
+            env.createSession(modelo.absolutePath, o).use { }
+            loadMs = System.currentTimeMillis() - t0
+            runCatching { o.disableProfiling() }
+        } catch (t: Throwable) {
+            erro = "${t.javaClass.simpleName}: ${t.message}"
+        }
+        recibo("encoder_estrito", org.json.JSONObject()
+            .put("ok", erro == null).put("erro", erro ?: "").put("load_ms", loadMs)
+            .put("modo", "NO_OPT + log verbose (particao)"))
+        assertEquals("sessão estrita falhou: ${erro ?: ""}", "", erro ?: "")
+    }
+
+    /**
+     * Controle de ESCALA: mesmo EP/driver, encoder Tiny (497 nós, sem Erf).
+     * Separa "grafo grande do Turbo" de "QNN GPU quebrado neste runtime".
+     */
+    @Test
+    fun encoderTinyGpuControle() {
+        assumeTrue("deps", NativeDependencyManager.activateIfInstalled(ctx))
+        assumeTrue("ORT", NativeDependencyManager.loadOrtRuntime(ctx).isSuccess)
+        assumeTrue("QAIRT", QairtDependencyManager.isInstalled(ctx))
+        QairtDependencyManager.loadQnnNatives(ctx, "gpu")
+        val pasta = ctx.getExternalFilesDir("gpu-r1") ?: error("sem external")
+        val modelo = File(pasta, "tiny_encoder_static.onnx")
+        assumeTrue("tiny ausente", modelo.isFile)
+        val env = OrtEnvironment.getEnvironment()
+        val rec = JSONObject().put("modelo", "tiny_encoder_static.onnx").put("bytes", modelo.length())
+        var erro: String? = null
+        var loadMs = 0L
+        var runMs = 0L
+        var finito = false
+        var shape = ""
+        try {
+            val o = OrtSession.SessionOptions()
+            o.setIntraOpNumThreads(4)
+            o.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            val q = HashMap<String, String>()
+            q["backend_path"] = "libQnnGpu.so"
+            o.addQnn(q)
+            o.setSessionLogLevel(ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE)
+            o.setSessionLogVerbosityLevel(1)
+            val t0 = System.currentTimeMillis()
+            env.createSession(modelo.absolutePath, o).use { sess ->
+                loadMs = System.currentTimeMillis() - t0
+                val nome = sess.inputNames.first()
+                OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(80 * 3000)), longArrayOf(1, 80, 3000)).use { t ->
+                    val t1 = System.currentTimeMillis()
+                    sess.run(mapOf(nome to t)).use { res ->
+                        val tt = res[0] as OnnxTensor
+                        val arr = lerSaida(tt, (sess.outputInfo.values.first().info as ai.onnxruntime.TensorInfo).type)
+                        runMs = System.currentTimeMillis() - t1
+                        finito = arr.all { it.isFinite() }
+                        shape = arr.size.toString()
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            erro = "${t.javaClass.simpleName}: ${t.message?.take(300)}"
+        }
+        rec.put("load_ms", loadMs).put("run_ms", runMs).put("finito", finito)
+            .put("out_size", shape).put("erro", erro ?: "").put("modo", "estrito NO_OPT")
+        recibo("tiny_gpu", rec)
+        assertEquals("Tiny GPU falhou: ${erro ?: ""}", "", erro ?: "")
+        assertTrue("saída não finita", finito)
+    }
+
+    /** Diagnóstico: quais operadores do Tiny o QNN EP recusa (só abre a sessão). */
+    @Test
+    fun tinyParticao() {
+        assumeTrue("deps", NativeDependencyManager.activateIfInstalled(ctx))
+        assumeTrue("ORT", NativeDependencyManager.loadOrtRuntime(ctx).isSuccess)
+        assumeTrue("QAIRT", QairtDependencyManager.isInstalled(ctx))
+        QairtDependencyManager.loadQnnNatives(ctx, "gpu")
+        val modelo = File(ctx.getExternalFilesDir("gpu-r1")!!, "tiny_encoder_static.onnx")
+        assumeTrue("tiny ausente", modelo.isFile)
+        val env = OrtEnvironment.getEnvironment()
+        var erro: String? = null
+        var ms = 0L
+        try {
+            val o = OrtSession.SessionOptions()
+            o.setIntraOpNumThreads(4)
+            o.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT)
+            o.setSessionLogLevel(ai.onnxruntime.OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE)
+            o.setSessionLogVerbosityLevel(1)
+            val q = HashMap<String, String>()
+            q["backend_path"] = "libQnnGpu.so"
+            o.addQnn(q)
+            val t0 = System.currentTimeMillis()
+            env.createSession(modelo.absolutePath, o).use { }
+            ms = System.currentTimeMillis() - t0
+        } catch (t: Throwable) {
+            erro = "${t.javaClass.simpleName}: ${t.message?.take(200)}"
+        }
+        recibo("tiny_particao", JSONObject().put("ok", erro == null).put("erro", erro ?: "").put("ms", ms))
+        assertEquals("sessão de diagnóstico falhou: ${erro ?: ""}", "", erro ?: "")
     }
 }

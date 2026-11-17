@@ -89,6 +89,11 @@ object WhisperOrtTerminalSink {
             .put("partial", terminal.partial)
             .put("threads", terminal.threads)
             .put("model", terminal.model)
+            // R13/§4 — metadados de resumo do job: gravados para a reentrega
+            // exibir o MESMO cartão, sem reler seleção atual. Ausentes = NULL;
+            // recibo antigo simplesmente não tem a chave (leitura compatível).
+            .put("audio_ms", terminal.audioMillis ?: JSONObject.NULL)
+            .put("hardware", terminal.hardware ?: JSONObject.NULL)
             .put("error", terminal.error ?: JSONObject.NULL)
         val bytes = linha.toString().toByteArray(Charsets.UTF_8)
         // IDEMPOTENTE: repetir o MESMO terminal não regrava nem apaga o anterior.

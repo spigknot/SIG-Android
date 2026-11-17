@@ -175,6 +175,12 @@ object WhisperOrtRoute {
             val cacheHit: Boolean,
             /** Custo de abertura DESTA tentativa (0 no hit). */
             val openMillis: Long = 0L,
+            /** R12/§3 — áudio efetivamente processado (nulo = não medido). */
+            val audioMillis: Long? = null,
+            /** Modelo EFETIVO do pacote que rodou (nulo em recibo antigo). */
+            val modelLabel: String? = null,
+            /** Hardware efetivo da rota ORT (CPU por construção). */
+            val hardwareLabel: String? = "CPU",
         ) : Result()
 
         /**
@@ -184,7 +190,15 @@ object WhisperOrtRoute {
          * cobre o áudio. Cancelamento NÃO é falha de compatibilidade: nunca deve
          * virar ERROR nem oferecer fallback de motor.
          */
-        data class Cancelled(val text: String, val partial: Boolean, val millis: Long) : Result()
+        data class Cancelled(
+            val text: String,
+            val partial: Boolean,
+            val millis: Long,
+            /** R12/§3 — áudio processado até o cancelamento (nulo = não medido). */
+            val audioMillis: Long? = null,
+            val modelLabel: String? = null,
+            val hardwareLabel: String? = "CPU",
+        ) : Result()
 
         data class Refused(val reason: String) : Result()
         data class Failed(val reason: String) : Result()
@@ -353,6 +367,15 @@ object WhisperOrtRoute {
                 threads = threads,
                 // Modelo efetivo do compute (adendo 17 §1): prova small→small.
                 model = modelo,
+                // R13/§4 — duração/hardware do resumo viajam no terminal para o
+                // recibo; cancelado NÃO herda o PCM inteiro como áudio transcrito.
+                audioMillis = (resultado as? Result.Done)
+                    ?.takeIf { it.outcome == "SUCCESS" }?.audioMillis,
+                hardware = when (resultado) {
+                    is Result.Done -> resultado.hardwareLabel
+                    is Result.Cancelled -> resultado.hardwareLabel
+                    else -> null
+                },
             )
             val recibo = if (terminal != null) gravarTerminal(app, terminal) else null
             resultado.recibo = recibo
@@ -553,7 +576,8 @@ object WhisperOrtRoute {
                     val t = desfecho.transcript
                     val fim = SystemClock.elapsedRealtime() - inicio
                     if (t.outcome == WhisperOrtOutcome.CANCELLED) {
-                        Result.Cancelled(t.text, partial = true, millis = fim)
+                        Result.Cancelled(t.text, partial = true, millis = fim,
+                            audioMillis = t.audioMillis, modelLabel = pacote.identity.model)
                     } else if (t.outcome == WhisperOrtOutcome.ERROR) {
                         // Adendo 17 §1 — erro do transcriber viajava como Done
                         // (texto vazio + outcome ERROR) e o motivo se perdia

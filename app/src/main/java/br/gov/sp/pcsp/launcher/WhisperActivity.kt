@@ -71,9 +71,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private lateinit var selectedFileView: TextView
     private lateinit var buttonModel: TextView
     private lateinit var buttonTranscribe: ImageButton
-    private var buttonTranscribeOrt: ImageButton? = null
     private lateinit var progress: ProgressBar
     private lateinit var status: TextView
+    private lateinit var resumoText: TextView
     private lateinit var logToggle: TextView
     private lateinit var logText: TextView
     private lateinit var terminalText: TextView
@@ -202,6 +202,12 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private var whiteRecordingStartedAt = 0L
 
     @Volatile private var liveMicActive = false
+    /**
+     * R13/§3 — o cartão do job live já foi publicado? Cobre o cancelamento
+     * DURANTE A CARGA, quando o laço (`runLiveMicLoopCorpo`) nunca chegou a rodar
+     * e, sem esta marca, nenhum resumo aparecia.
+     */
+    @Volatile private var liveResumoPublicado = false
     private var liveMicThread: Thread? = null
     private var liveMicAudioRecord: AudioRecord? = null
     /** R3/C1: pipeline leitor->spool->worker do caminho ao vivo (cancel em
@@ -235,6 +241,14 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     @Volatile private var liveReaderReason: String = ""
     /** R4/C2: o pipeline terminou por cancel (teardown) — entra no retrato. */
     @Volatile private var liveWasCancelled = false
+    /**
+     * R14/§1.3 — o stop do usuário ABORTA o job em voo no motor (por desenho),
+     * mas para o CARTÃO ele é encerramento NORMAL: `Concluído` com o texto
+     * produzido. Só o cancelamento explícito (botão de cancelar) marca CANCELADO.
+     */
+    @Volatile private var liveStopFoiCancelamento = false
+    /** R14/§1.3 — o usuário pediu PARADA normal (dreno) desta sessão. */
+    @Volatile private var liveStopDoUsuario = false
     /** R3/C1: teto VISÍVEL antes de anunciar "worker ainda ativo" no stop (inj.)
      * — a espera continua e nada é liberado até o worker terminal. */
     @Volatile private var liveMicDrainTimeoutMs: Long = LIVE_MIC_DRAIN_TIMEOUT_MS
@@ -363,8 +377,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         super.onCreate(savedInstanceState)
         keepContentInsideSystemBars()
         setContentView(R.layout.activity_whisper)
-        // Reentrega do que ficou sem confirmação (Activity recriada/após erro).
-        runCatching { recuperarEntregasPendentes() }
+        // R14/§1.1 — a reentrega ficou DEPOIS das ligações de view (abaixo): aqui o
+        // `resumoText` ainda não existe e `mostrarResumo` estourava dentro do
+        // runCatching, exibindo o texto sem cartão e SEM confirmar a entrega.
         // ORT1/M4 (a): botao proprio da rota ORT (arquivo/CPU), ao lado do
         // existente. Nao substitui o botao de transcricao nem o default do app.
         // "usar whisper.cpp": desliga o ORT (que e o padrao) e explica no "!".
@@ -409,27 +424,17 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         }
         findViewById<android.view.View?>(R.id.btn_ort_threads_dec)?.setOnClickListener { ajustarThreads(-1) }
         findViewById<android.view.View?>(R.id.btn_ort_threads_inc)?.setOnClickListener { ajustarThreads(1) }
-        findViewById<android.view.View?>(R.id.button_transcribe_ort)?.setOnClickListener {
-            // NÃO altera a preferência: gravar setEnabled(true) aqui deixava a
-            // checkbox "usar whisper.cpp" marcada enquanto a preferência ia para
-            // o lado contrário.
-            val intent = android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
-                addCategory(android.content.Intent.CATEGORY_OPENABLE)
-                type = "audio/*"
-            }
-            startActivityForResult(intent, REQUEST_PICK_MEDIA_ORT)
-        }
 
         whisperScroll = findViewById(R.id.whisper_scroll)
         selectedFileView = findViewById(R.id.selected_file)
         buttonModel = findViewById(R.id.button_model)
         buttonTranscribe = findViewById(R.id.button_transcribe)
-        // Herdou `gone` do botão original (que só aparece com mídia escolhida):
-        // sem isto o controle existia no layout mas nunca era visto — o teste
-        // instrumentado do §7 reprovou exatamente isso.
-        buttonTranscribeOrt = findViewById(R.id.button_transcribe_ort)
         progress = findViewById(R.id.progress)
         status = findViewById(R.id.status)
+        resumoText = findViewById(R.id.resumo_text)
+        // R14/§1.1 — reentrega do que ficou sem confirmação (Activity recriada/
+        // após erro). Precisa rodar DEPOIS de `resumoText` estar ligado.
+        runCatching { recuperarEntregasPendentes() }
         logToggle = findViewById(R.id.log_toggle)
         logText = findViewById(R.id.log_text)
         terminalText = findViewById(R.id.terminal_text)
@@ -565,7 +570,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
 
         buttonLanguage.text = selectedLanguage.shortLabel
         buttonBackend.text = selectedBackend.shortLabel
-        logToggle.visibility = View.VISIBLE
+        logToggle.visibility = View.GONE
         val exitHandler = installCancelAndExitGuard(
             isTaskRunning = { isTranscribing || isBusy || whiteRecordingActive || liveMicActive },
             cancelTask = { cancelRunningTaskForExit() }
@@ -591,7 +596,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 startActivityForResult(intent, REQUEST_CHOOSE_OUTPUT_DIR)
             }
         }
-        // logToggle remains visible and static; no click listener needed
+        // Diagnóstico permanece interno; o cabeçalho de log não é exibido.
         buttonModel.setOnClickListener { showModelMenu() }
         buttonLanguage.setOnClickListener { showLanguageMenu() }
         buttonBackend.setOnClickListener { showBackendMenu() }
@@ -1282,6 +1287,66 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // view morta nem confirmar entrega. O recibo fica pendente para a próxima
         // Activity recuperar (recuperarEntregasPendentes).
         if (isFinishing || isDestroyed) return
+        // R12/§3 — resumo do job ORT: sai do PRÓPRIO resultado (identidade do
+        // job), nunca da seleção atual; campos ausentes viram "indisponível".
+        run {
+            val concluidos: Int
+            val total: Int
+            val statusResumo: WhisperResumoStatus
+            when (resultado) {
+                // R13/§2 — o status sai do TERMINAL real, não de "qualquer coisa
+                // diferente de SUCCESS vira 1". Só SUCCESS conta fonte concluída.
+                is WhisperOrtRoute.Result.Done -> {
+                    total = 1
+                    when (resultado.outcome) {
+                        "SUCCESS" -> {
+                            concluidos = 1
+                            statusResumo = WhisperResumoStatus.CONCLUIDO
+                        }
+                        "NO_SPEECH" -> {
+                            concluidos = 0
+                            statusResumo = WhisperResumoStatus.PARCIAL
+                        }
+                        else -> {
+                            concluidos = 0
+                            statusResumo = WhisperResumoStatus.ERRO
+                        }
+                    }
+                }
+                // R13/§2 — CANCELADO não declara fonte concluída. `audioMillis`
+                // aqui é o PCM INTEIRO da entrada, não o que foi processado:
+                // vira `indisponível` em vez de virar "áudio transcrito".
+                is WhisperOrtRoute.Result.Cancelled -> {
+                    concluidos = 0; total = 1; statusResumo = WhisperResumoStatus.CANCELADO
+                }
+                else -> {
+                    concluidos = 0; total = 1; statusResumo = WhisperResumoStatus.ERRO
+                }
+            }
+            val audio = when (resultado) {
+                is WhisperOrtRoute.Result.Done ->
+                    resultado.audioMillis.takeIf { resultado.outcome == "SUCCESS" }
+                is WhisperOrtRoute.Result.Cancelled -> null
+                else -> null
+            }
+            val tempo = when (resultado) {
+                is WhisperOrtRoute.Result.Done -> resultado.millis
+                is WhisperOrtRoute.Result.Cancelled -> resultado.millis
+                else -> null
+            }
+            val modeloResumo = when (resultado) {
+                is WhisperOrtRoute.Result.Done -> resultado.modelLabel
+                is WhisperOrtRoute.Result.Cancelled -> resultado.modelLabel
+                else -> null
+            }
+            val hw = when (resultado) {
+                is WhisperOrtRoute.Result.Done -> resultado.hardwareLabel
+                is WhisperOrtRoute.Result.Cancelled -> resultado.hardwareLabel
+                // R13/§2 — Refused NÃO prova execução em CPU: fica desconhecido.
+                else -> null
+            }
+            mostrarResumo(modeloResumo, hw, concluidos, total, audio, tempo, statusResumo)
+        }
         val rotulo = when (resultado) {
             is WhisperOrtRoute.Result.Done -> resultado.outcome
             is WhisperOrtRoute.Result.Cancelled -> if (resultado.partial) "CANCELLED (parcial)" else "CANCELLED"
@@ -1711,6 +1776,13 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      * callback antigo nem de a tela ter sobrevivido.
      */
     private fun recuperarEntregasPendentes() {
+        // R13/§4 — nunca atropelar sessão ativa na tela: se houver job em voo,
+        // o recibo permanece em `pendentes/` para entrega quando a tela estiver livre.
+        if (jobOrtNaTela != null ||
+            isBusy || isTranscribing || liveMicActive || liveMicStopping || whiteRecordingActive
+        ) {
+            return
+        }
         val fila = runCatching { WhisperOrtRoute.pendentes(this) }.getOrDefault(emptyList())
             .sortedByDescending { it.publicadoEmMillis }
         if (fila.isEmpty()) return
@@ -1725,10 +1797,39 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         findViewById<android.view.View?>(R.id.live_transcript_container)?.visibility = View.VISIBLE
         findViewById<android.widget.TextView?>(R.id.live_transcript_text)?.text =
             if (texto.isBlank()) "[$outcome] sem texto (fala ausente, cancelamento ou erro)" else texto
+        // R13/§4 — reentrega consome o que o recibo PERSISTIU no job que produziu
+        // o texto (modelo, millis, áudio e hardware). Recibo antigo simplesmente
+        // não tem a chave: vira `indisponível`, nunca número inventado.
+        val modeloPersistido = json.optString("model", "").takeIf { it.isNotBlank() }
+        val hardwarePersistido = json.optString("hardware", "").takeIf { it.isNotBlank() }
+        val millisPersistido = json.optLong("millis", -1L).takeIf { it > 0L }
+        val audioPersistido = json.optLong("audio_ms", -1L).takeIf { it > 0L }
+        // Terminal autoritativo: só SUCCESS conta fonte concluída; NO_SPEECH e
+        // erro NÃO viram Parcial por padrão.
+        val (concluidosRecibo, statusRecibo) = when (outcome.uppercase()) {
+            "SUCCESS" -> 1 to WhisperResumoStatus.CONCLUIDO
+            "CANCELLED" -> 0 to WhisperResumoStatus.CANCELADO
+            "NO_SPEECH" -> 0 to WhisperResumoStatus.PARCIAL
+            "PARTIAL" -> 0 to WhisperResumoStatus.PARCIAL
+            "ERROR", "FAILED", "REFUSED" -> 0 to WhisperResumoStatus.ERRO
+            else -> 0 to WhisperResumoStatus.ERRO
+        }
+        mostrarResumo(
+            modelo = modeloPersistido,
+            backendLabel = hardwarePersistido,
+            concluidos = concluidosRecibo,
+            total = 1,
+            duracaoMs = audioPersistido,
+            tempoMs = millisPersistido,
+            statusResumo = statusRecibo,
+        )
         WhisperOrtRoute.confirmarEntrega(this, pendente)
     }
 
     private fun transcribeSelectedMedia() {
+        // R11 §5 — resumo pertence ao job encerrado: nada de herdar o anterior.
+        resumoText.text = ""
+        resumoText.visibility = View.GONE
         // ORT1/M4 - rota opt-in (arquivo/CPU/uma janela). Default continua CPP;
         // falha ORT NAO cai para CPP silenciosamente.
         // Override por arquivo vence o default: consentimento do usuário no fallback.
@@ -1900,6 +2001,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             // ADENDO 27 §2 — observador da última tentativa, visível também nos
             // caminhos de CANCEL/ERRO (o recibo fecha nos três desfechos).
             var observadorUltimoArquivo: WhisperApresentacaoObservador? = null
+            // R12/§3 — contagem POR FONTE, visível também nos desfechos de
+            // CANCEL/ERRO: só conta arquivo cujo texto foi aceito (SUCCESS).
+            val fontesConcluidas = java.util.concurrent.atomic.AtomicInteger(0)
             try {
                 sessionDir = createSessionDir()
                 val perFileDir = File(sessionDir, "Transcricoes").apply { mkdirs() }
@@ -1919,7 +2023,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 TranscriptionReport.appendLog(logLines, "CPU: ${cpuName()}")
 
                 postIfCurrent(sessionGeneration) {
-                    logToggle.visibility = View.VISIBLE
+                    logToggle.visibility = View.GONE
                     updateGlobalLogText()
                     updateTerminalText(terminalLines)
                 }
@@ -2331,6 +2435,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                             TranscriptionJobResults.ledger.finishAttempt(
                                 attemptKey, JobTerminalState.SUCCESS, transcribeStatus
                             )
+                            fontesConcluidas.incrementAndGet()
                         }
                     }
 
@@ -2401,6 +2506,22 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 Log.i(TAG, m2Linha)
                 sessionTerminalFile.writeText(snapshotText(terminalLines), Charsets.UTF_8)
                 observadorUltimoArquivo?.persistencia()
+                val duracaoTranscritaMs =
+                    (results.sumOf { it.durationSeconds } * 1000.0).toLong().takeIf { it > 0L }
+                mostrarResumo(
+                    modelo = model.label,
+                    backendLabel = backend.reportLabel,
+                    concluidos = fontesConcluidas.get(),
+                    total = items.size,
+                    duracaoMs = duracaoTranscritaMs,
+                    tempoMs = elapsedMs,
+                    // Parcial = nem toda fonte produziu texto (NoSpeech, falha
+                    // recuperada); nunca chamar a seleção inteira de concluída.
+                    statusResumo =
+                        if (fontesConcluidas.get() == items.size) WhisperResumoStatus.CONCLUIDO
+                        else WhisperResumoStatus.PARCIAL,
+                    geracao = sessionGeneration,
+                )
                 runOnUiThread {
                     if (!isDestroyed && !isFinishing) {
                         setTranscriptionStatus("Finalizando transcrição...")
@@ -2471,6 +2592,20 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 releaseLoadedModel()
                 tempWavDir?.deleteRecursively()
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+                val duracaoTranscritaCancelMs =
+                    (results.sumOf { it.durationSeconds } * 1000.0).toLong().takeIf { it > 0L }
+                // R12/§3 — cancelado com a contagem REAL do que já tinha sido
+                // aceito (lote interrompido não pode dizer "0 de N" nem "N de N").
+                mostrarResumo(
+                    modelo = model.label,
+                    backendLabel = backend.reportLabel,
+                    concluidos = fontesConcluidas.get(),
+                    total = items.size,
+                    duracaoMs = duracaoTranscritaCancelMs,
+                    tempoMs = elapsedMs,
+                    statusResumo = WhisperResumoStatus.CANCELADO,
+                    geracao = sessionGeneration,
+                )
                 val cancelReport = buildErrorReport(
                     title = "Transcrição cancelada pelo usuário.",
                     elapsedMs = elapsedMs,
@@ -2515,7 +2650,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     }
                     updateGlobalLogText()
                     updateTerminalText(terminalLines)
-                    logToggle.visibility = View.VISIBLE
+                    logToggle.visibility = View.GONE
                     updateTranscribeEnabled()
                     }
                 }
@@ -2540,6 +2675,20 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 tempWavDir?.deleteRecursively()
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
                 val errorMessage = e.message ?: "falha inesperada"
+                val duracaoTranscritaErroMs =
+                    (results.sumOf { it.durationSeconds } * 1000.0).toLong().takeIf { it > 0L }
+                // R12/§3 — erro com a contagem REAL do que foi aceito antes da
+                // falha; o status é Erro, não Concluído/Parcial.
+                mostrarResumo(
+                    modelo = model.label,
+                    backendLabel = backend.reportLabel,
+                    concluidos = fontesConcluidas.get(),
+                    total = items.size,
+                    duracaoMs = duracaoTranscritaErroMs,
+                    tempoMs = elapsedMs,
+                    statusResumo = WhisperResumoStatus.ERRO,
+                    geracao = sessionGeneration,
+                )
                 val errorReport = buildErrorReport(
                     title = "Erro: $errorMessage",
                     elapsedMs = elapsedMs,
@@ -2583,7 +2732,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     }
                     updateGlobalLogText()
                     updateTerminalText(terminalLines)
-                    logToggle.visibility = View.VISIBLE
+                    logToggle.visibility = View.GONE
                     updateTranscribeEnabled()
                     }
                 }
@@ -2905,6 +3054,53 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
 
     private fun globalLogFile(): File {
         return File(whisperOutputRoot(), GLOBAL_LOG_NAME)
+    }
+
+    /**
+     * R11 §5 — resumo do job encerrado. Valores congelados; dado não mensurável
+     * vira "indisponível" dentro de [WhisperResumo], nunca número inventado.
+     */
+    /**
+     * R12/§3 — resumo pertence ao job encerrado: nova rota começa sem resumo na
+     * tela. [transcribeSelectedMedia] já fazia isso; aqui cobre os microfones.
+     */
+    private fun limparResumo() {
+        resumoText.text = ""
+        resumoText.visibility = View.GONE
+    }
+
+    private fun mostrarResumo(
+        modelo: String?,
+        backendLabel: String?,
+        concluidos: Int,
+        total: Int,
+        duracaoMs: Long?,
+        tempoMs: Long?,
+        statusResumo: WhisperResumoStatus,
+        streaming: Boolean = false,
+        geracao: Long? = null,
+    ) {
+        val resumo = WhisperResumo(
+            modelo = modelo,
+            hardware = WhisperResumo.hardwareDe(backendLabel),
+            concluidos = concluidos,
+            total = total,
+            duracaoAudioMs = duracaoMs,
+            tempoProcessamentoMs = tempoMs,
+            status = statusResumo,
+            streaming = streaming,
+        )
+        runOnUiThread {
+            if (isDestroyed || isFinishing) return@runOnUiThread
+            // R12/§3 — identidade do job: callback de geração antiga NÃO publica.
+            // `geracao == null` só é aceito para recibo pendente/rota sem job vivo.
+            if (geracao != null && geracao != currentSessionGeneration) {
+                Log.i(TAG, "resumo descartado: geração $geracao != atual $currentSessionGeneration")
+                return@runOnUiThread
+            }
+            resumoText.text = resumo.texto()
+            resumoText.visibility = View.VISIBLE
+        }
     }
 
     private fun buildReport(
@@ -3407,7 +3603,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         outputFileName.visibility = View.GONE
         outputActions.visibility = View.GONE
         logText.text = readGlobalLog()
-        logToggle.visibility = View.VISIBLE
+        logToggle.visibility = View.GONE
         terminalText.text = "$ whisper --aguardando arquivo"
         // R12/A2: o painel de transcrição é do JOB ATUAL. Sem esta limpeza um
         // job cancelado/errado deixava na tela o texto do job anterior, sem
@@ -3431,18 +3627,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonTranscribe.isFocusable = enabled
         // O botão ORT abre o próprio seletor, então não depende de mídia prévia:
         // aparece sempre que a rota está ligada e respeita o mesmo estado de ocupado.
-        buttonTranscribeOrt?.let { botao ->
-            botao.visibility = if (WhisperOrtRoute.isEnabled(this)) View.VISIBLE else View.GONE
-            val podeClicar = !isBusy && !whiteRecordingActive && !liveMicActive
-            botao.alpha = if (podeClicar) 1f else 0.45f
-            botao.isClickable = podeClicar
-            botao.isFocusable = podeClicar
-        }
     }
 
     private fun setBusy(busy: Boolean) {
         isBusy = busy
-        buttonTranscribeOrt?.isEnabled = !busy
         progress.visibility = if (busy) View.VISIBLE else View.GONE
         buttonModel.isEnabled = !busy
         buttonModel.alpha = if (busy) 0.45f else 1f
@@ -3552,6 +3740,18 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private fun cancelTranscription() {
         if (jobOrtNaTela != null) {
             if (WhisperOrtRoute.cancelar(jobOrtNaTela)) status.text = "Cancelando ORT; aguardando término…"
+            return
+        }
+        // R13/§3 — cancelar a sessão VERMELHA, inclusive durante a carga do
+        // modelo. Antes, este caminho só conhecia a transcrição de arquivo: o
+        // pedido do usuário não chegava ao job live e o terminal saía como Erro
+        // (falha do leitor) em vez de Cancelado.
+        if (liveMicActive || liveMicStopping) {
+            liveWasCancelled = true
+            liveStopFoiCancelamento = true
+            liveStopRequest?.request(liveMicGeneration)
+            runCatching { stopLiveMicTranscription() }
+                .onFailure { Log.w(TAG, "falha ao cancelar sessão live: $it") }
             return
         }
         if (!isTranscribing || cancelRequested) return
@@ -3867,6 +4067,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
 
     private fun startWhiteRecording() {
         if (liveMicActive || isBusy || isTranscribing) return
+        limparResumo()
         // R4/C3: no laboratório a fonte de gravação pode ser injetada (arquivo
         // PCM); o caminho de permissão só é pulado quando HÁ injeção — em
         // produção o seam devolve null e o AudioRecord segue obrigatório.
@@ -4065,7 +4266,11 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // `State.reserve` recusava a gravação como stale para sempre depois
         // de qualquer job de arquivo (`gen <= lastTerminalGen`), e um token
         // de relógio puro não é único no mesmo milissegundo.
-        val tokenGravacao = WorkerReservation.Tokens.alocar(SystemClock.elapsedRealtime())
+        // R13/§2 — relógio MONOTÔNICO do job de transcrição da gravação: começa
+        // depois do stop (a captura já terminou) e termina no terminal, então
+        // cobre preparo+carga+compute+finalização, sem espera de download.
+        val inicioWorkerGravacao = SystemClock.elapsedRealtime()
+        val tokenGravacao = WorkerReservation.Tokens.alocar(inicioWorkerGravacao)
         ReservationJobIdentity.registrar(tokenGravacao, sessionGeneration)
         val admissaoGravacao = WhisperJobService.startJobOutcome(
             this, tokenGravacao, WhisperJobLifecycle.KIND_FILE, "Carregando modelo e transcrevendo…"
@@ -4114,6 +4319,17 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     // R56/adendo19 — falha PRÉ-PARSE também publica o resultado
                     // do próprio job (antes só havia ACK ERROR, sem payload).
                     finalizador.publicar(JobTerminalState.ERROR, "model_load_failed")
+                    val tempoFalhaCargaMs = SystemClock.elapsedRealtime() - inicioWorkerGravacao
+                    mostrarResumo(
+                        modelo = model.label,
+                        backendLabel = backend.reportLabel,
+                        concluidos = 0,
+                        total = 1,
+                        duracaoMs = null,
+                        tempoMs = tempoFalhaCargaMs,
+                        statusResumo = WhisperResumoStatus.ERRO,
+                        geracao = sessionGeneration,
+                    )
                     // R5/A1: texto IMUTÁVEL capturado no worker; o post confere o
                     // lease NA EXECUÇÃO — sessão substituída/destruída não muda a
                     // UI nem consulta diagnóstico global de outra sessão.
@@ -4232,6 +4448,12 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 }
                 runCatching { finalizador.publicar(terminalGravacao, transcribeStatus) }
                     .onFailure { Log.w(TAG, "falha ao publicar resultado da gravacao: $it") }
+                // Congelar antes do post: o finally pode remover o WAV antes de a UI executar.
+                val duracaoWavMs =
+                    ((wavFile.length() - 44).coerceAtLeast(0L) / 32L).takeIf { it > 0L }
+                // R13/§2 — tempo de processamento MEDIDO (monotônico), não
+                // `indisponível` por falta de variável: preparo+carga+compute+fim.
+                val tempoGravacaoMs = SystemClock.elapsedRealtime() - inicioWorkerGravacao
                 runOnUiThread {
                     // Post visual: só exibe, nunca decide o terminal. Se a
                     // Activity morreu ou a geração mudou, o retrato é
@@ -4239,6 +4461,27 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     if (isDestroyed) return@runOnUiThread
                     whisperSession.runIfCurrent(sessionGeneration) {
                         progress.visibility = View.GONE
+                        // R13/§3 — microfone branco: 1 fonte, duração do WAV
+                        // gravado só quando concluída com fala (`Success`).
+                        run {
+                            val statusResumo = when (parsed) {
+                                is WhisperTranscriptResult.Cancelled -> WhisperResumoStatus.CANCELADO
+                                is WhisperTranscriptResult.Error -> WhisperResumoStatus.ERRO
+                                is WhisperTranscriptResult.NoSpeech -> WhisperResumoStatus.PARCIAL
+                                is WhisperTranscriptResult.Success -> WhisperResumoStatus.CONCLUIDO
+                            }
+                            val concluida = parsed is WhisperTranscriptResult.Success
+                            mostrarResumo(
+                                modelo = model.label,
+                                backendLabel = backend.reportLabel,
+                                concluidos = if (concluida) 1 else 0,
+                                total = 1,
+                                duracaoMs = duracaoWavMs.takeIf { concluida },
+                                tempoMs = tempoGravacaoMs,
+                                statusResumo = statusResumo,
+                                geracao = sessionGeneration,
+                            )
+                        }
                         when (parsed) {
                             is WhisperTranscriptResult.Cancelled ->
                                 status.text = "Transcrição cancelada."
@@ -4262,6 +4505,17 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 runCatching {
                     finalizador.publicar(JobTerminalState.ERROR, e.message ?: "exception")
                 }.onFailure { Log.w(TAG, "falha ao publicar erro da gravacao: $it") }
+                val tempoErroGravacaoMs = SystemClock.elapsedRealtime() - inicioWorkerGravacao
+                mostrarResumo(
+                    modelo = model.label,
+                    backendLabel = backend.reportLabel,
+                    concluidos = 0,
+                    total = 1,
+                    duracaoMs = null,
+                    tempoMs = tempoErroGravacaoMs,
+                    statusResumo = WhisperResumoStatus.ERRO,
+                    geracao = sessionGeneration,
+                )
                 runOnUiThread {
                     if (isDestroyed) return@runOnUiThread
                     whisperSession.runIfCurrent(sessionGeneration) {
@@ -4295,6 +4549,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
 
     private fun startLiveMicTranscription() {
         if (whiteRecordingActive || isBusy || isTranscribing) return
+        limparResumo()
+        liveResumoPublicado = false
         checkAudioPermission {
             val model = selectedModel ?: run {
                 status.text = "Selecione um modelo."
@@ -4317,7 +4573,6 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             // recusa, a preparação é DESFEITA localmente (idempotente, sem
             // tocar no dono antigo).
             liveMicActive = true
-            liveMicStartedAt = SystemClock.elapsedRealtime()
             buttonLiveMicStop.setImageResource(R.drawable.ic_ffmpeg_cancel_red)
             buttonLiveMicStop.setBackgroundResource(R.drawable.ffmpeg_outline_red_button_bg)
             buttonLiveMicStop.contentDescription = "Parar transcrição ao vivo"
@@ -4333,7 +4588,6 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             recordingTimer.text = "00:00.000"
             liveTranscriptContainer.visibility = View.VISIBLE
             liveTranscriptClipboardActions.visibility = View.VISIBLE
-            timerHandler.post(recordingTicker)
 
             val backend = selectedBackend
             // R4/C1: SNAPSHOT dos settings/idioma/modelo/backend no INÍCIO do job;
@@ -4353,6 +4607,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             liveTerminalSnapshot = null
             liveReaderReason = ""
             liveWasCancelled = false
+            liveStopFoiCancelamento = false
+            liveStopDoUsuario = false
             val terminalLines = StringBuilder()
             liveTerminalLines = terminalLines
             appendTerminal(terminalLines, "$ whisper-live --model ${model.fileName} --language ${liveSettings.language}")
@@ -4434,6 +4690,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private fun stopLiveMicTranscription() {
         if (!liveMicActive) return
         liveMicActive = false
+        // R14/§1.3 — parada NORMAL: para o cartão não é cancelamento.
+        liveStopDoUsuario = true
         timerHandler.removeCallbacks(recordingTicker)
 
         // R13/F2-fix (achado F2: pedido→terminal 29.044 ms): parar NÃO é só
@@ -4524,6 +4782,31 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     }
 
     private fun completeLiveMicStop() {
+        // R13/§3 — cancelamento/erro durante a CARGA: o laço nunca rodou, então
+        // nenhum resumo foi publicado. Publica o terminal correto aqui (0 fonte
+        // concluída, sem duração inventada) em vez de deixar a tela sem cartão.
+        val settingsDesteStop = liveMicSettings
+        val genDesteStopResumo = liveMicGeneration.takeIf { it > 0L }
+        if (!liveResumoPublicado) {
+            val statusCarga = if (liveWasCancelled) {
+                WhisperResumoStatus.CANCELADO
+            } else {
+                WhisperResumoStatus.ERRO
+            }
+            mostrarResumo(
+                modelo = settingsDesteStop?.modelLabel,
+                backendLabel = settingsDesteStop?.backendLabel,
+                concluidos = 0,
+                total = 1,
+                duracaoMs = null,
+                tempoMs = liveDecodeWallMsTotal.takeIf { it > 0L },
+                statusResumo = statusCarga,
+                streaming = true,
+                geracao = genDesteStopResumo,
+            )
+            liveResumoPublicado = true
+            Log.i(TAG, "resumo live na carga: status=$statusCarga cancelado=$liveWasCancelled")
+        }
         liveMicStopping = false
         liveMicThread = null
         // R13/F2-fix: o pedido é do job que terminou — o próximo job cria o seu.
@@ -4648,6 +4931,18 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         val injectedSource = WhisperLabSeams.injectedLiveSource(this)
         val minBuffer = if (injectedSource != null) 8192 else AudioRecord.getMinBufferSize(sampleRate, channelConfig, encoding)
         if (minBuffer <= 0) {
+            mostrarResumo(
+                modelo = liveSettings.modelLabel,
+                backendLabel = liveSettings.backendLabel,
+                concluidos = 0,
+                total = 1,
+                duracaoMs = null,
+                tempoMs = null,
+                statusResumo = WhisperResumoStatus.ERRO,
+                streaming = true,
+                geracao = geracaoJob,
+            )
+            liveResumoPublicado = true
             runOnUiThread {
                 status.text = "Microfone indisponível."
                 stopLiveMicTranscription()
@@ -4754,6 +5049,20 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 decodeWallMs = 0L,
                 summary = null,
             )
+            mostrarResumo(
+                modelo = liveSettings.modelLabel,
+                backendLabel = liveSettings.backendLabel,
+                concluidos = 0,
+                total = 1,
+                duracaoMs = null,
+                tempoMs = null,
+                statusResumo =
+                    if (supersededOnRefusal != null) WhisperResumoStatus.CANCELADO
+                    else WhisperResumoStatus.ERRO,
+                streaming = true,
+                geracao = sessionGeneration,
+            )
+            liveResumoPublicado = true
             runOnUiThread {
                 if (isDestroyed) {
                     liveEvent("stale_post_dropped", sessionGeneration, fields = "\"kind\":\"live_load_refused\",\"why\":\"destroyed\"")
@@ -4810,6 +5119,18 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 decodeWallMs = 0L,
                 summary = null,
             )
+            mostrarResumo(
+                modelo = liveSettings.modelLabel,
+                backendLabel = liveSettings.backendLabel,
+                concluidos = 0,
+                total = 1,
+                duracaoMs = null,
+                tempoMs = null,
+                statusResumo = WhisperResumoStatus.CANCELADO,
+                streaming = true,
+                geracao = sessionGeneration,
+            )
+            liveResumoPublicado = true
             return
         }
 
@@ -4898,6 +5219,20 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 liveMicAudioRecord = recorder
                 recorder.startRecording()
                 source = AudioRecordPcmSource(recorder)
+            }
+
+            // R12/§2 — ordem carga→captura→relógio: a preparação/carga acontece
+            // antes; o marco de CAPTURA só é armado aqui, quando a fonte está
+            // efetivamente pronta (AudioRecord.startRecording() OK ou fonte
+            // injetada criada). Identidade do job obrigatória: worker antigo não
+            // liga o relógio de outro job; cancelamento durante a carga impede o
+            // início tardio porque liveMicActive já é falso.
+            runOnUiThread {
+                if (currentSessionGeneration == geracaoJob && liveMicActive) {
+                    liveMicStartedAt = SystemClock.elapsedRealtime()
+                    recordingTimer.text = "00:00.000"
+                    timerHandler.post(recordingTicker)
+                }
             }
 
             // R3/C1: coordenador ÚNICO (mesma rota do laboratório): leitor ->
@@ -5058,7 +5393,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     }
                 },
                 terminal = { cancelled ->
-                    liveWasCancelled = cancelled
+                    // R14/§1.3 — cancelamento do MOTOR por stop do usuário não é
+                    // "Cancelado" no cartão; só o cancel explícito é.
+                    liveWasCancelled = cancelled && liveStopFoiCancelamento
                     val c = liveMicPipeline?.counters()
                     // R8/D (integridade): o reparo DEFERIDO do ÚLTIMO chunk roda
                     // AQUI (terminal = pós-loop do worker, FORA do lock) ANTES do
@@ -5336,15 +5673,19 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                         "incertas=${planStats.uncertainWindows}(${planStats.uncertainSamples}amostras) " +
                         "silencioIgnorado=${planStats.skippedSilenceSamples}amostras"
                 } else ""
+                // R12/§2 — captura que nunca começou não pode virar duração enorme
+                val capturaIniciada = liveMicStartedAt
+                val duracaoCapturaMs =
+                    if (capturaIniciada > 0L) SystemClock.elapsedRealtime() - capturaIniciada else 0L
                 val snapshot = LiveTerminalSummary.of(
                     cancelled = liveWasCancelled,
-                    durationMs = SystemClock.elapsedRealtime() - liveMicStartedAt,
+                    durationMs = duracaoCapturaMs,
                     counters = countersNow,
                     readerReason = liveReaderReason,
                     tally = liveChunkTally ?: LiveChunkTally(),
                     lastError = countersNow.workerError,
                     effective = listOfNotNull(
-                        liveMicSettings?.describe().takeIf { !it.isNullOrBlank() },
+                        liveSettings.describe().takeIf { it.isNotBlank() },
                         liveWindowDesc.takeIf { it.isNotBlank() }
                     ).joinToString(" | "),
                     identity = jobIdentity.shortForm,
@@ -5353,6 +5694,51 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 )
                 liveTerminalSnapshot = snapshot
                 terminalSummary = snapshot
+                // R13/§2 — duração por AMOSTRAS PCM (sem overlap/padding), não
+                // por relógio de parede: `capturedSamples` é o capturado e
+                // `okSamples` é o efetivamente transcrito. O numerador do cartão
+                // ("áudio transcrito") é o TRANSCRITO; o capturado não entra no
+                // numerador silenciosamente.
+                val amostrasParaMs = { amostras: Long -> amostras * 1000L / 16_000L }
+                val capturadoMs = amostrasParaMs(countersNow.capturedSamples)
+                val transcritoMs = amostrasParaMs(countersNow.okSamples)
+                val temTextoLive = countersNow.okSamples > 0L
+                // R13/§3 — status do resultado AUTORITATIVO: `snapshot.interrupted`
+                // distingue falha real de leitor (`source-error`/`stalled`/
+                // `pipeline-rejected`) de encerramento normal (`stopped`/`eof`);
+                // falhas de chunk/worker e `jobFailure` entram como `ERRO`.
+                val statusLive = when {
+                    snapshot.cancelled || liveStopFoiCancelamento -> WhisperResumoStatus.CANCELADO
+                    // Falha real do job sempre é Erro.
+                    jobFailure != null -> WhisperResumoStatus.ERRO
+                    // R14/§1.3 — quando o usuário PAROU normalmente, o abort da
+                    // cauda é consequência do stop, não falha: não vira Erro.
+                    !liveStopDoUsuario && (snapshot.interrupted || snapshot.lastError != null ||
+                        snapshot.failedChunks > 0 || snapshot.failedSamples > 0L) -> WhisperResumoStatus.ERRO
+                    snapshot.hasLoss || snapshot.listenerErrors > 0 || !temTextoLive -> WhisperResumoStatus.PARCIAL
+                    else -> WhisperResumoStatus.CONCLUIDO
+                }
+                Log.i(
+                    TAG,
+                    "resumo live: capturado=${capturadoMs}ms transcrito=${transcritoMs}ms " +
+                        "ok=${countersNow.okSamples} captura_parede=${duracaoCapturaMs}ms " +
+                        "decode_wall=${liveDecodeWallMsTotal}ms removido=${countersNow.silenceSamples}amostras " +
+                        "status=$statusLive reader=$liveReaderReason"
+                )
+                mostrarResumo(
+                    modelo = liveSettings.modelLabel,
+                    backendLabel = liveSettings.backendLabel,
+                    concluidos = if (statusLive == WhisperResumoStatus.CONCLUIDO) 1 else 0,
+                    total = 1,
+                    duracaoMs = transcritoMs.takeIf { it > 0L },
+                    // Tempo ativo de decode acumulado do job; `null` só se nada
+                    // foi decodificado. A espera de captura NÃO entra aqui.
+                    tempoMs = liveDecodeWallMsTotal.takeIf { it > 0L },
+                    statusResumo = statusLive,
+                    streaming = true,
+                    geracao = sessionGeneration,
+                )
+                liveResumoPublicado = true
                 // Campos extras (compat R7): SÓ do pipeline DESTE job.
                 terminalExtra = (planStats?.let {
                     "\"vad_windows\":${it.windows},\"vad_forced_cuts\":${it.forcedCuts}," +
@@ -5364,6 +5750,30 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     "\"idx_peak\":${countersNow.indexHighWatermark},\"spool_peak\":${countersNow.spoolBytesPeak}," +
                     "\"pending_samples\":${countersNow.pendingSamples()}," +
                     "\"first_partial_ms\":$liveFirstPartialMs,\"first_speech_ms\":$liveFirstSpeechMs"
+            } else {
+                // R13/§3 — carga cancelada ou falha ANTES de existir pipeline: não
+                // há contadores, mas o cartão precisa do terminal correto
+                // (Cancelado/Erro), 0 fonte concluída e nenhuma duração inventada.
+                mostrarResumo(
+                    modelo = liveSettings.modelLabel,
+                    backendLabel = liveSettings.backendLabel,
+                    concluidos = 0,
+                    total = 1,
+                    duracaoMs = null,
+                    tempoMs = liveDecodeWallMsTotal.takeIf { it > 0L },
+                    statusResumo = when {
+                        liveWasCancelled -> WhisperResumoStatus.CANCELADO
+                        else -> WhisperResumoStatus.ERRO
+                    },
+                    streaming = true,
+                    geracao = sessionGeneration,
+                )
+                liveResumoPublicado = true
+                Log.i(
+                    TAG,
+                    "resumo live sem pipeline: cancelado=$liveWasCancelled " +
+                        "reader=$liveReaderReason falha=$jobFailure"
+                )
             }
             // R8/A1: TERMINAL ÚNICO do job — emitido para TODOS os desfechos,
             // inclusive quando o pipeline NUNCA existiu (cancel/erro na carga):

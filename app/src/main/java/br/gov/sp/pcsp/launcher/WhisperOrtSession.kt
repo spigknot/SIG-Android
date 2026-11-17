@@ -184,6 +184,43 @@ class WhisperOrtSession(
     /** `true` quando as três sessões estão abertas. */
     val isOpen: Boolean get() = encoderSession != null && initSession != null && pastSession != null
 
+    /** `true` quando as duas sessões de decoder estão abertas (encoder pode não estar). */
+    val isDecodersOpen: Boolean get() = initSession != null && pastSession != null
+
+    /**
+     * R18/§1.1 — abre **apenas** os dois decoders (`init` e `with_past`) em CPU.
+     *
+     * Motivo: quando o encoder roda em outro backend (`WhisperOrtHybridBackend`),
+     * abrir `encoder_model_int8.onnx` custava ~1,1 GB de RAM **antes** do primeiro
+     * segmento GPU — e essa sessão nunca era usada. Aqui o decoder entra só depois
+     * do encoder terminar, que é o momento em que ele é realmente necessário.
+     */
+    fun openDecodersOnly(
+        melBins: Int = WhisperOrtFrontend.N_MELS,
+        frames: Int = 1500,
+        dim: Int = 1280,
+    ) {
+        if (isDecodersOpen) return
+        require(decoderModel.isFile) { "decoder init ausente: ${decoderModel.path}" }
+        require(decoderWithPastModel.isFile) { "decoder with_past ausente: ${decoderWithPastModel.path}" }
+        val startedAt = System.nanoTime()
+        try {
+            val init = newOptions()
+            val past = newOptions()
+            initSession = environment.createSession(decoderModel.path, init)
+            pastSession = environment.createSession(decoderWithPastModel.path, past)
+            layerCount = detectLayerCount(initSession!!)
+            vocabSize = detectVocabSize(initSession!!)
+            hiddenFrames = frames
+            hiddenDim = dim
+            this.melBins = melBins
+            loadMillis = (System.nanoTime() - startedAt) / 1_000_000
+        } catch (failure: Throwable) {
+            close()
+            throw failure
+        }
+    }
+
     /** Camadas de decoder detectadas no grafo (turbo: 4; small: 12). */
     val layers: Int get() = layerCount
 

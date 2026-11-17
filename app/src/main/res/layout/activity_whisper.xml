@@ -227,21 +227,7 @@
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_whisper_transcribe"
                 android:visibility="gone" />
-            <ImageButton
-                android:id="@+id/button_transcribe_ort"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
-                android:layout_marginTop="8dp"
-                android:alpha="0.45"
-                android:background="@drawable/ffmpeg_outline_green_button_bg"
-                android:clickable="false"
-                android:contentDescription="Transcrever (ORT/CPU)"
-                android:focusable="false"
-                android:foreground="?attr/selectableItemBackground"
-                android:padding="8dp"
-                android:scaleType="fitCenter"
-                android:src="@drawable/ic_whisper_transcribe"
-                android:visibility="gone" />
+
 
             <FrameLayout
                 android:id="@+id/live_transcript_container"
@@ -348,7 +334,7 @@
                 android:text="$ whisper --aguardando arquivo ou microfone"
                 android:textColor="#FFB8F7FF"
                 android:textIsSelectable="false"
-                android:textSize="11sp" />
+                android:textSize="11sp" android:visibility="gone" />
 
             <TextView
                 android:id="@+id/advanced_toggle"
@@ -361,7 +347,7 @@
                 android:textColor="#FF5EDAF2"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:visibility="gone" />
+                android:visibility="visible" />
 
             <LinearLayout
                 android:id="@+id/advanced_panel"
@@ -647,6 +633,23 @@
                 android:text=""
                 android:textColor="#DDFFFFFF"
                 android:textSize="13sp" />
+            <TextView
+                android:id="@+id/resumo_text"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="20dp"
+                android:layout_marginEnd="20dp"
+                android:layout_marginTop="10dp"
+                android:background="#66101820"
+                android:fontFamily="monospace"
+                android:lineSpacingExtra="2dp"
+                android:padding="10dp"
+                android:text=""
+                android:textColor="#FFD6F5FF"
+                android:textIsSelectable="true"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
 
             <TextView
                 android:id="@+id/output_file_name"
@@ -715,7 +718,7 @@
                 android:textColor="#CCFFFFFF"
                 android:textSize="13sp"
                 android:textStyle="bold"
-                android:visibility="visible" />
+                android:visibility="gone" />
 
             <TextView
                 android:id="@+id/log_text"
@@ -734,7 +737,7 @@
                 android:text=""
                 android:textColor="#CCFFFFFF"
                 android:textSize="11sp"
-                android:visibility="visible" />
+                android:visibility="gone" />
 
         </LinearLayout>
     </ScrollView>
