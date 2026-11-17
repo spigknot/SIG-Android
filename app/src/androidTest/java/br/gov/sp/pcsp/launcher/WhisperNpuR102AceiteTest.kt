@@ -45,7 +45,7 @@ class WhisperNpuR102AceiteTest {
         get() = InstrumentationRegistry.getInstrumentation().targetContext
 
     private val args
-        get() = InstrumentationRegistry.getInstrumentation().arguments
+        get() = InstrumentationRegistry.getArguments()
 
     private val dispositivo: UiDevice
         get() = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
@@ -237,13 +237,24 @@ class WhisperNpuR102AceiteTest {
     @Test
     fun c12_fluidez_sem_anr() {
         val pkg = ctx.packageName
-        val gfx = InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("dumpsys gfxinfo $pkg framestats")
-        val anr = InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("dumpsys activity processes | grep -i 'ANR'")
+        // Nesta API o shell devolve ParcelFileDescriptor, não InputStream.
+        val gfx = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("dumpsys gfxinfo $pkg framestats")
+        )
+        val anr = android.os.ParcelFileDescriptor.AutoCloseInputStream(
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("dumpsys activity processes | grep -i 'ANR'")
+        )
         // O bruto de gfxinfo vai para o EV pelo coletor de logcat; aqui
         // só a classificação binária entra no recibo.
-        val comAnr = anr.use { it.bufferedReader().readText() }.contains("ProcessRecord")
+        // Tipo explícito evita a ambiguidade das extensões bufferedReader()
+        // entre File e InputStream.
+        val leitor = java.io.BufferedReader(java.io.InputStreamReader(anr, "UTF-8"))
+        val textoAnr = leitor.readText()
+        leitor.close()
+        anr.close()
+        val comAnr = textoAnr.contains("ProcessRecord")
         gravar(
             WhisperNpuAceiteReceipt.Dados(
                 celula = "C12", rotaPedida = "ui", rotaEfetiva = "ui",
