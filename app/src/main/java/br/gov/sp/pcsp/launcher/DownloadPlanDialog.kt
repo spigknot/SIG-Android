@@ -56,6 +56,8 @@ object DownloadPlanDialog {
         prefacio: String? = null,
         sufixo: String? = null,
         aoNegar: (() -> Unit)? = null,
+        /** R102/T01 — fechar com Voltar também conta como recusa da oferta. */
+        aoCancelar: (() -> Unit)? = null,
         aoConfirmar: () -> Unit,
     ) {
         if (activity.isFinishing) return
@@ -73,6 +75,7 @@ object DownloadPlanDialog {
                 aoConfirmar()
             }
         }
+        if (aoCancelar != null) dialog.setOnCancelListener { aoCancelar() }
         dialog.show()
     }
 

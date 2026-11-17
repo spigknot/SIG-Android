@@ -213,6 +213,8 @@ também é bloqueado.
 | `NativeDependencyManager.kt` | Pacote nativo: versão/URL/SHA-256 por ABI e ativação. |
 | `QairtDependencyManager.kt` | Dependência QAIRT (Qualcomm NPU): detecção/instalação. |
 | `WhisperOrtNpuPacote.kt` | R100 §2.3: pacote R2 do encoder W8A16 do SM8550 (contexto + wrapper + 5 libs V73) — ZIP validado por SHA-256, manifesto por arquivo, staging/ativação atômica, política de rede medida e de espaço, download em segundo plano que nunca bloqueia a transcrição. |
+| `WhisperNpuOferta.kt` | R102 §T01: oferta única da aceleração NPU (recusa persistida e entrada fixa que abre o mesmo diálogo). |
+| `WhisperNpuAceiteReceipt.kt` | R102 §T01: recibo do harness de aceite (roteada/efetiva, versões, tempos, três instantes do cancelamento) com texto restrito ao arquivo do EV. |
 | `NativeDependencyPrompt.kt` | Diálogo de download do pacote nativo. |
 | `DownloadPlanDialog.kt` | Diálogo de download com lista rolável e log que acumula (todas as telas). |
 

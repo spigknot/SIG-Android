@@ -652,13 +652,36 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             }
             updateTranscribeEnabled()
         }
+        // R102 §T01 — entrada FIXA: abre o mesmo diálogo mesmo depois de uma
+        // recusa, e some quando os dois pacotes já estão prontos.
+        findViewById<android.view.View?>(R.id.button_ativar_npu)?.setOnClickListener {
+            oferecerAceleracaoNpu(entradaFixa = true)
+        }
+        atualizarEntradaNpu()
         // R101 §T03 — com o ORT ligado e o SoC admitido, a tela OFERECE a
         // aceleração; nada é baixado sem esta ação do usuário.
         oferecerAceleracaoNpu()
     }
 
-    /** Uma oferta por instância da tela: recusar não vira um diálogo a cada volta. */
-    private var npuOferecida = false
+    /** Evita dois diálogos sobrepostos na mesma tela (o persistente é o da oferta). */
+    private var npuDialogoAberto = false
+
+    /** Os dois pacotes instalados e verificados: não há mais nada para ativar. */
+    private fun pacotesNpuProntos(): Boolean =
+        QairtDependencyManager.isInstalled(this) &&
+            (runCatching { WhisperOrtNpuPacote.estado(this) }.getOrNull() is WhisperOrtNpuPacote.Estado.Pronto)
+
+    /** A entrada fixa some (ou passa a dizer "NPU ativa") quando tudo está pronto. */
+    private fun atualizarEntradaNpu() {
+        val botao = findViewById<android.view.View?>(R.id.button_ativar_npu) ?: return
+        val prontos = pacotesNpuProntos()
+        val visivel = WhisperNpuOferta.entradaFixaVisivel(
+            WhisperNpuOferta.Preferencias(this), prontos,
+        )
+        botao.visibility = if (visivel) android.view.View.VISIBLE else android.view.View.GONE
+        (botao as? android.widget.TextView)?.text =
+            if (prontos) "NPU ativa" else "Ativar aceleração NPU"
+    }
 
     /**
      * R101 §T03 — a NPU é uma ESCOLHA do usuário, não um download silencioso.
@@ -669,8 +692,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      * livre necessário e, em rede medida, o aviso de consumo. Até concluir, a
      * transcrição continua na CPU, sem bloqueio.
      */
-    private fun oferecerAceleracaoNpu() {
-        if (npuOferecida || isFinishing || isDestroyed) return
+    private fun oferecerAceleracaoNpu(entradaFixa: Boolean = false) {
+        if (npuDialogoAberto || isFinishing || isDestroyed) return
         if (!WhisperOrtRoute.isEnabled(this)) return
         val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             WhisperOrtHtpAdmissao.socDe(Build.SOC_MODEL)
@@ -680,8 +703,17 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         if (!WhisperOrtHtpAdmissao.fabricanteAdmitido(fabricante)) return
         val qairt = QairtDependencyManager.isInstalled(this)
         val npu = runCatching { WhisperOrtNpuPacote.estado(this) }.getOrNull() is WhisperOrtNpuPacote.Estado.Pronto
-        if (qairt && npu) return
-        npuOferecida = true
+        val prontos = qairt && npu
+        if (prontos) {
+            atualizarEntradaNpu()
+            return
+        }
+        val armazenamento = WhisperNpuOferta.Preferencias(this)
+        // A automática só uma vez; a entrada fixa é justamente a saída para
+        // quem recusou e depois mudou de ideia.
+        if (!entradaFixa && !WhisperNpuOferta.deveOferecerAutomaticamente(armazenamento, false)) return
+        npuDialogoAberto = true
+        atualizarEntradaNpu()
 
         val plano = WhisperOrtNpuPacote.planoDeDownload(qairt)
         val livre = DownloadSizeFormat.legivel(WhisperOrtNpuPacote.espacoNecessario(qairt, npu))
@@ -704,8 +736,22 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 "Com o pacote instalado, a transcrição usa a NPU; sem ele, continua na CPU, " +
                 "sem erro e sem bloquear o uso.",
             sufixo = "Espaço livre necessário: $livre.$avisoRede",
-            aoNegar = { status.text = "Aceleração NPU: a transcrição segue na CPU." },
-        ) { baixarPacoteNpu() }
+            aoNegar = {
+                armazenamento.registrarRecusa()
+                npuDialogoAberto = false
+                atualizarEntradaNpu()
+                status.text = "Aceleração NPU: a transcrição segue na CPU."
+            },
+            // Fechar com Voltar também é "agora não": não pode reaparecer.
+            aoCancelar = {
+                armazenamento.registrarRecusa()
+                npuDialogoAberto = false
+                atualizarEntradaNpu()
+            },
+        ) {
+            npuDialogoAberto = false
+            baixarPacoteNpu()
+        }
     }
 
     /**
@@ -751,6 +797,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                         progresso.concluirContinuando(total)
                         status.text = "Aceleração NPU pronta: as próximas transcrições usam o HTP."
                         runCatching { updateTranscribeEnabled() }
+                        atualizarEntradaNpu()
                     },
                     onFailure = { falha ->
                         progresso.fechar()

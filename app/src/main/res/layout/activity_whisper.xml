@@ -349,6 +349,25 @@
                 android:textStyle="bold"
                 android:visibility="visible" />
 
+            <!-- R102/T01: entrada fixa da oferta de NPU. Abre o mesmo diálogo
+                 mesmo depois de "Agora não"; some com os dois pacotes prontos. -->
+            <Button
+                android:id="@+id/button_ativar_npu"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start"
+                android:layout_marginStart="20dp"
+                android:layout_marginTop="2dp"
+                android:background="?attr/selectableItemBackground"
+                android:minHeight="0dp"
+                android:paddingStart="0dp"
+                android:paddingEnd="0dp"
+                android:text="Ativar aceleração NPU"
+                android:textAllCaps="false"
+                android:textColor="#FF5EDAF2"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
             <LinearLayout
                 android:id="@+id/advanced_panel"
                 android:layout_width="match_parent"

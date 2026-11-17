@@ -453,5 +453,7 @@ dependencies {
     // getters de UI (roda apenas via connectedAndroidTest, no device).
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    // R102/T01 — células de diálogo/download/fluidez do harness instrumentado.
+    androidTestImplementation("androidx.test.uiautomator:uiautomator:2.3.0")
 
 }
