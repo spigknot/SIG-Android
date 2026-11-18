@@ -280,6 +280,34 @@ object WhisperOrtNpuPacote {
     private const val SEGREDO_MARCADOR_FORMATO = "formato=sig-whisper-npu-marcador/v2"
 
     /**
+     * Grava o marcador de forma ATÔMICA: arquivo temporário no mesmo diretório e
+     * `rename` por cima (no POSIX o rename substitui de forma atômica).
+     *
+     * R105 — vacina da C1: `writeText` trunca antes de escrever, e a conferência
+     * rápida de OUTRA thread/processo (a tela abre enquanto a verificação completa
+     * roda) lia o `.installed` pela metade, devolvia `marcador_ilegivel` e deixava
+     * a rota em CPU com o pacote íntegro. Com rename, quem lê vê o marcador
+     * anterior ou o novo — nunca um truncado.
+     */
+    internal fun gravarMarcador(dir: File, texto: String): Boolean = runCatching {
+        val destino = File(dir, MARCADOR)
+        val temporario = File(dir, "$MARCADOR.tmp")
+        temporario.writeText(texto)
+        // POSIX (Android): rename por cima SUBSTITUI de forma atômica — o leitor
+        // vê o marcador anterior ou o novo, nunca um truncado.
+        if (temporario.renameTo(destino)) {
+            true
+        } else if (runCatching { destino.delete() }.getOrDefault(false) && temporario.renameTo(destino)) {
+            // Host de teste Windows não substitui no rename; a garantia de
+            // atomicidade que importa é a do aparelho (POSIX).
+            true
+        } else {
+            runCatching { temporario.delete() }
+            false
+        }
+    }.getOrDefault(false)
+
+    /**
      * Lê o marcador. Devolve `null` quando nem a assinatura do manifesto está
      * presente ou quando uma linha `item=` está malformada — nesse caso a
      * verificação completa (e não a rápida) decide.
@@ -397,10 +425,7 @@ object WhisperOrtNpuPacote {
                 if (motivo != null) {
                     Estado.Invalido(motivo)
                 } else {
-                    val gravou = runCatching {
-                        File(dir, MARCADOR).writeText(montarMarcador(manifesto, dir))
-                    }
-                    if (gravou.isFailure) {
+                    if (!gravarMarcador(dir, montarMarcador(manifesto, dir))) {
                         Estado.Invalido("marcador_nao_gravado")
                     } else {
                         runCatching { File(raiz, REVERIFICAR).delete() }
@@ -591,7 +616,7 @@ object WhisperOrtNpuPacote {
             }
             val motivo = conferirArquivos(manifesto, staging)
             check(motivo == null) { "pacote incompleto: $motivo" }
-            File(staging, MARCADOR).writeText(textoMarcadorEsperado(manifesto))
+            gravarMarcador(staging, textoMarcadorEsperado(manifesto))
 
             val anterior = File(raiz, ".previous")
             anterior.deleteRecursively()
@@ -606,7 +631,9 @@ object WhisperOrtNpuPacote {
             // modificação de cada arquivo só é estável depois da ativação (o
             // fallback por cópia não preserva mtime). É essa impressão que a
             // conferência de cada processo compara.
-            File(destino, MARCADOR).writeText(montarMarcador(manifesto, destino))
+            check(gravarMarcador(destino, montarMarcador(manifesto, destino))) {
+                "marcador do pacote NPU nao gravado"
+            }
             check(estadoEm(destino) is Estado.Pronto) { "pacote NPU nao ficou ativo" }
             anterior.deleteRecursively()
             // Instalado E conferido por SHA: só agora a rota pode pedir HTP.

@@ -416,4 +416,47 @@ class WhisperOrtNpuPacoteTest {
             !File(dir, WhisperOrtNpuPacote.MARCADOR).isFile,
         )
     }
+
+    /**
+     * R105 — VACINA DA C1: a gravação do marcador é atômica (temporário + rename).
+     *
+     * O `writeText` truncava antes de escrever e a conferência rápida de outra
+     * thread lia o `.installed` pela metade, devolvendo `marcador_ilegivel` e
+     * derrubando a rota para CPU com o pacote íntegro. Aqui: temporário órfão não
+     * engana a conferência, a gravação não deixa temporário para trás, e um
+     * marcador truncado é reconhecido como ilegível (o estado que a gravação
+     * atômica impede que exista).
+     */
+    @Test
+    fun `marcador e gravado de forma atomica e temporario orfao nao engana`() {
+        val raiz = temp.newFolder("raiz-atomica")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        val manifesto = pacoteBruto(dir, conteudo())
+        // Marcador anterior válido (formato legado) + temporário de uma gravação
+        // interrompida: a leitura NUNCA pode usar o temporário.
+        File(dir, WhisperOrtNpuPacote.MARCADOR).writeText(WhisperOrtNpuPacote.textoMarcadorEsperado(manifesto))
+        File(dir, "${WhisperOrtNpuPacote.MARCADOR}.tmp").writeText("versao=9 lixo")
+        val comOrfao = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue("temporário órfão não pode derrubar a conferência: $comOrfao",
+            comOrfao is WhisperOrtNpuPacote.Conferencia.Ok)
+
+        assertTrue(
+            "gravação atômica tem de substituir o marcador",
+            WhisperOrtNpuPacote.gravarMarcador(dir, WhisperOrtNpuPacote.montarMarcador(manifesto, dir)),
+        )
+        assertTrue(
+            "não pode sobrar temporário",
+            !File(dir, "${WhisperOrtNpuPacote.MARCADOR}.tmp").exists(),
+        )
+        val migrado = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue("marcador novo tem de valer: $migrado", migrado is WhisperOrtNpuPacote.Conferencia.Ok)
+        assertTrue(!(migrado as WhisperOrtNpuPacote.Conferencia.Ok).legado)
+
+        File(dir, WhisperOrtNpuPacote.MARCADOR).writeBytes(ByteArray(0))
+        assertTrue(
+            "marcador truncado tem de pedir verificação (o que a gravação atômica evita)",
+            WhisperOrtNpuPacote.conferenciaEm(raiz, dir) is WhisperOrtNpuPacote.Conferencia.Reverificar,
+        )
+    }
 }
