@@ -459,4 +459,143 @@ class WhisperOrtNpuPacoteTest {
             WhisperOrtNpuPacote.conferenciaEm(raiz, dir) is WhisperOrtNpuPacote.Conferencia.Reverificar,
         )
     }
+
+    // ------------------------------------------------------------------ R106
+
+    /**
+     * R106/T02 — DATA alterada com SHA íntegro: a conferência rápida recusa (é o
+     * critério), a verificação completa agendada sozinha confere o SHA, REGRAVA o
+     * marcador com a impressão de disco ATUAL (atômica, sem temporário) e o pacote
+     * volta a ser admitido — sem download e sem ação do usuário.
+     */
+    @Test
+    fun `R106 data alterada com SHA integro e readmitida pela verificacao completa`() {
+        val raiz = temp.newFolder("r106-raiz-data")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        pacoteBruto(dir, conteudo())
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto)
+
+        val arquivo = File(dir, WhisperOrtNpuPacote.CONTEXTO)
+        val original = arquivo.readBytes()
+        arquivo.writeBytes(original) // mesmo conteúdo, data de modificação nova
+        assertTrue(arquivo.setLastModified(arquivo.lastModified() + 5_000L))
+        val recusa = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue(
+            "data divergente tem de recusar o pedido atual: $recusa",
+            recusa is WhisperOrtNpuPacote.Conferencia.Recusar && recusa.motivo.startsWith("data:"),
+        )
+        assertNull("recusa por data ainda não é corrupção", WhisperOrtNpuPacote.corrompido(raiz))
+
+        val completo = WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir)
+        assertTrue("SHA íntegro tem de readmitir: $completo", completo is WhisperOrtNpuPacote.Estado.Pronto)
+        assertNull("SHA íntegro não pode marcar corrompido", WhisperOrtNpuPacote.corrompido(raiz))
+        val depois = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue("o pedido seguinte tem de ser admitido: $depois", depois is WhisperOrtNpuPacote.Conferencia.Ok)
+        val marcador = File(dir, WhisperOrtNpuPacote.MARCADOR).readText()
+        assertTrue(
+            "o marcador tem de ser regravado com a data ATUAL do arquivo",
+            marcador.contains("mtime=${arquivo.lastModified()}"),
+        )
+        assertTrue(
+            "a regravação é atômica: nenhum temporário pode sobrar",
+            !File(dir, "${WhisperOrtNpuPacote.MARCADOR}.tmp").exists(),
+        )
+    }
+
+    /**
+     * R106/T02 — SHA corrompido: a verificação completa marca o pacote, NÃO grava
+     * marcador novo, NÃO apaga nenhum arquivo do pacote e mantém a recusa mesmo
+     * com o marcador antigo em ordem (a rápida não readmite um corrompido).
+     */
+    @Test
+    fun `R106 SHA corrompido marca e nao readmite sem apagar nada`() {
+        val raiz = temp.newFolder("r106-raiz-sha")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        val itens = conteudo()
+        pacoteBruto(dir, itens)
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto)
+        val marcadorAntes = File(dir, WhisperOrtNpuPacote.MARCADOR).readText()
+        val inventarioAntes = dir.listFiles().orEmpty().associate { it.name to it.length() }
+
+        val arquivo = File(dir, WhisperOrtNpuPacote.CONTEXTO)
+        val original = arquivo.readBytes()
+        val alterado = original.copyOf()
+        alterado[0] = (alterado[0].toInt() xor 0x01).toByte()
+        arquivo.writeBytes(alterado) // mesmo TAMANHO, SHA diferente, data nova
+        assertEquals("o teste exige mesmo tamanho", original.size.toLong(), arquivo.length())
+
+        val estado = WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir)
+        assertTrue("SHA divergente não pode ficar Pronto: $estado", estado is WhisperOrtNpuPacote.Estado.Invalido)
+        val motivo = WhisperOrtNpuPacote.corrompido(raiz)
+        assertNotNull("o pacote tem de ser marcado como corrompido", motivo)
+        assertTrue("o motivo tem de vir do SHA: $motivo", motivo!!.startsWith("sha:"))
+        assertEquals(
+            "nada pode ser apagado nem criado dentro do pacote",
+            inventarioAntes,
+            dir.listFiles().orEmpty().associate { it.name to it.length() },
+        )
+        assertEquals(
+            "não pode haver marcador novo depois de SHA divergente",
+            marcadorAntes, File(dir, WhisperOrtNpuPacote.MARCADOR).readText(),
+        )
+        val recusa = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue(
+            "pacote marcado não pode ser readmitido pela conferência rápida: $recusa",
+            recusa is WhisperOrtNpuPacote.Conferencia.Recusar && recusa.motivo.startsWith("corrompido:"),
+        )
+        assertTrue(
+            "a verificação completa de novo continua recusando: " +
+                WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir),
+            WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Invalido,
+        )
+    }
+
+    /**
+     * R106/T02 — "Verificar novamente": com o conteúdo bom de volta, a verificação
+     * completa limpa o sinal de corrompido e readmite o pacote (é o caminho do
+     * botão da entrada fixa, sem download).
+     */
+    @Test
+    fun `R106 verificacao completa limpa o corrompido quando o conteudo volta`() {
+        val raiz = temp.newFolder("r106-raiz-volta")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        pacoteBruto(dir, conteudo())
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto)
+        val arquivo = File(dir, WhisperOrtNpuPacote.CONTEXTO)
+        val original = arquivo.readBytes()
+        val alterado = original.copyOf()
+        alterado[original.size - 1] = (alterado[original.size - 1].toInt() xor 0x01).toByte()
+        arquivo.writeBytes(alterado)
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Invalido)
+        assertNotNull(WhisperOrtNpuPacote.corrompido(raiz))
+
+        arquivo.writeBytes(original) // original de volta
+        val volta = WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir)
+        assertTrue("com o conteúdo original a verificação passa: $volta", volta is WhisperOrtNpuPacote.Estado.Pronto)
+        assertNull("o sinal de corrompido tem de sumir", WhisperOrtNpuPacote.corrompido(raiz))
+        assertTrue(
+            "o pacote volta a ser admitido",
+            WhisperOrtNpuPacote.conferenciaEm(raiz, dir) is WhisperOrtNpuPacote.Conferencia.Ok,
+        )
+    }
+
+    /**
+     * R106/T02 — uma ÚNICA verificação agendada por processo: o agendador só
+     * executa no primeiro `agendar`; chamadas seguintes devolvem `false` sem
+     * rodar nada (é o que impede uma varredura de 646 MiB por recusa).
+     */
+    @Test
+    fun `R106 uma unica verificacao agendada por processo`() {
+        val agendador = WhisperOrtNpuPacote.AgendamentoUnico()
+        var execucoes = 0
+        assertTrue("a primeira chamada agenda", agendador.agendar { execucoes++ })
+        assertTrue("o primeiro agendamento marca o processo", agendador.jaAgendada)
+        repeat(5) {
+            assertTrue("as seguintes não podem agendar", !agendador.agendar { execucoes++ })
+        }
+        assertEquals("só a primeira chamada pode executar", 1, execucoes)
+    }
 }

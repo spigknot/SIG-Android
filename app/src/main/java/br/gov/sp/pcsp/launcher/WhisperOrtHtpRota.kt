@@ -125,6 +125,21 @@ object WhisperOrtHtpRota {
             is WhisperOrtNpuPacote.Conferencia.Recusar -> {
                 detalheConferencia = "recusa:" + resultado.motivo
                 pacoteIndisponivel("conferencia:" + resultado.motivo)
+                // R106/T02 — a recusa continua mandando ESTE pedido para a CPU,
+                // mas a verificação completa por SHA é agendada sozinha (uma vez
+                // por processo). Se o SHA conferir, o marcador é regravado com a
+                // impressão de disco atual e a HTP volta no pedido seguinte, sem
+                // ação do usuário e sem download.
+                //
+                // Exceção deliberada: pacote JÁ marcado como CORROMPIDO não é
+                // reverificado sozinho — a verificação completa já rodou e falhou,
+                // nada é apagado, e a saída é a ação explícita do usuário na
+                // entrada fixa ("Verificar novamente" ou "Reinstalar"). Sem isso,
+                // cada abertura da tela varreria 646 MiB e readmitiria sozinha.
+                if (!resultado.motivo.startsWith("corrompido:")) {
+                    runCatching { WhisperOrtNpuPacote.verificarEmSegundoPlano(ctx) }
+                        .onFailure { android.util.Log.w(TAG, "revalidacao do pacote falhou: ${it.message}") }
+                }
             }
             null -> {
                 detalheConferencia = "erro:conferencia"
@@ -155,6 +170,19 @@ object WhisperOrtHtpRota {
         pacoteVerificado = false
         motivoIndisponivel = motivo
         android.util.Log.i(TAG, "pacote indisponivel: $motivo")
+    }
+
+    /**
+     * R106/T02 — a verificação completa passou para um pacote que a conferência
+     * rápida havia RECUSADO (data/tamanho/marcador). O marcador já foi regravado
+     * com a impressão de disco atual; aqui o detalhe da conferência passa a
+     * refletir a revalidação, para o recibo não carregar a recusa antiga, e a HTP
+     * é admitida já no pedido seguinte do processo.
+     */
+    fun pacoteRevalidado(manifesto: WhisperOrtNpuPacote.Manifesto, detalhe: String) {
+        detalheConferencia = detalhe
+        pacoteVerificado(manifesto)
+        android.util.Log.i(TAG, "pacote revalidado ($detalhe) versao=${manifesto.versao}")
     }
 
     fun versaoPacote(): String = manifesto?.versao ?: WhisperOrtNpuPacote.VERSAO

@@ -239,6 +239,31 @@ object WhisperOrtNpuPacote {
     const val REVERIFICAR = ".reverificar"
 
     /**
+     * Arquivo-sinal de pacote CORROMPIDO (R106).
+     *
+     * Gravado quando a verificação completa por SHA terminou e o conteúdo em
+     * disco NÃO é o do manifesto (SHA, bytes ou arquivo ausente). Fica FORA do
+     * diretório da versão, como o [REVERIFICAR], e **nada é apagado por causa
+     * dele**: a entrada fixa passa a oferecer "Reinstalar aceleração NPU" e o
+     * usuário decide. É apagado quando uma verificação completa passa (botão
+     * "Verificar novamente") ou quando uma instalação nova conclui.
+     */
+    const val CORROMPIDO = ".corrompido"
+
+    /** Motivo registrado quando o pacote está marcado como corrompido. */
+    fun corrompido(raiz: File): String? = File(raiz, CORROMPIDO)
+        .takeIf { it.isFile }
+        ?.let { runCatching { it.readText() }.getOrNull()?.trim() }
+
+    fun corrompido(context: Context): String? = corrompido(raiz(context))
+
+    /** Grava (atomicamente) o sinal de corrompido com o motivo da verificação. */
+    internal fun marcarCorrompido(raiz: File, motivo: String) {
+        raiz.mkdirs()
+        gravarAtomico(raiz, CORROMPIDO, motivo)
+    }
+
+    /**
      * Estado RÁPIDO do pacote (sem hash): marcador presente, arquivos com o
      * tamanho e a data registrados na instalação. É a conferência de CADA
      * processo; a verificação por SHA é a [verificarCompleto].
@@ -289,9 +314,22 @@ object WhisperOrtNpuPacote {
      * a rota em CPU com o pacote íntegro. Com rename, quem lê vê o marcador
      * anterior ou o novo — nunca um truncado.
      */
-    internal fun gravarMarcador(dir: File, texto: String): Boolean = runCatching {
-        val destino = File(dir, MARCADOR)
-        val temporario = File(dir, "$MARCADOR.tmp")
+    internal fun gravarMarcador(dir: File, texto: String): Boolean =
+        gravarAtomico(dir, MARCADOR, texto)
+
+    /**
+     * Grava um arquivo pequeno do controle do pacote (marcador ou sinal) de
+     * forma ATÔMICA: temporário no mesmo diretório + `rename` por cima.
+     *
+     * R105 — vacina da C1: `writeText` trunca antes de escrever, e a conferência
+     * rápida de OUTRA thread/processo (a tela abre enquanto a verificação completa
+     * roda) lia o `.installed` pela metade, devolvia `marcador_ilegivel` e deixava
+     * a rota em CPU com o pacote íntegro. Com rename, quem lê vê o marcador
+     * anterior ou o novo — nunca um truncado.
+     */
+    private fun gravarAtomico(dir: File, nome: String, texto: String): Boolean = runCatching {
+        val destino = File(dir, nome)
+        val temporario = File(dir, "$nome.tmp")
         temporario.writeText(texto)
         // POSIX (Android): rename por cima SUBSTITUI de forma atômica — o leitor
         // vê o marcador anterior ou o novo, nunca um truncado.
@@ -341,6 +379,10 @@ object WhisperOrtNpuPacote {
     internal fun conferenciaEm(raiz: File, dir: File): Conferencia {
         // Falha de sessão no processo anterior: o SHA decide antes de nova rota.
         if (File(raiz, REVERIFICAR).isFile) return Conferencia.Reverificar("sessao_anterior")
+        // R106 — pacote já marcado como corrompido pela verificação completa: a
+        // conferência rápida NÃO readmite (nem com marcador e data em ordem); a
+        // rota volta pelo botão "Verificar novamente" ou por uma reinstalação.
+        corrompido(raiz)?.let { return Conferencia.Recusar("corrompido:$it") }
         return conferenciaMarcador(dir)
     }
 
@@ -419,16 +461,26 @@ object WhisperOrtNpuPacote {
         val manifesto = runCatching { lerManifesto(textoManifesto.readText()) }.getOrNull()
         return when {
             manifesto == null && !textoManifesto.isFile -> Estado.Ausente("sem manifesto em $dir")
-            manifesto == null -> Estado.Invalido("manifesto ilegivel")
+            manifesto == null -> {
+                // O manifesto em disco não é o contrato do pacote: corrompido.
+                marcarCorrompido(raiz, "manifesto_ilegivel")
+                Estado.Invalido("manifesto ilegivel")
+            }
             else -> {
                 val motivo = conferirArquivos(manifesto, dir, hash)
                 if (motivo != null) {
+                    // R106 — o conteúdo em disco não é o do manifesto. Marca (sem
+                    // apagar NADA) e mantém a rota em CPU até o usuário agir.
+                    marcarCorrompido(raiz, motivo)
                     Estado.Invalido(motivo)
                 } else {
                     if (!gravarMarcador(dir, montarMarcador(manifesto, dir))) {
                         Estado.Invalido("marcador_nao_gravado")
                     } else {
                         runCatching { File(raiz, REVERIFICAR).delete() }
+                        // R106 — pacote conferido por SHA: a marca de corrompido
+                        // não vale mais (é ela que barrava a conferência rápida).
+                        runCatching { File(raiz, CORROMPIDO).delete() }
                         Estado.Pronto(dir, manifesto)
                     }
                 }
@@ -446,20 +498,46 @@ object WhisperOrtNpuPacote {
      *
      * O download agora é ação explícita do usuário ([instalar] chamado pela
      * tela). O que continua acontecendo sozinho é a conferência de SHA do pacote
-     * que já está em disco: barata perto da abertura da sessão, uma vez por
-     * processo, e é ela que autoriza a rota HTP. Nunca lança e nunca bloqueia
-     * quem chamou.
+     * que já está em disco: barata perto da abertura da sessão e é ela que
+     * autoriza a rota HTP.
+     *
+     * R106/T02 — a chamada é IDEMPOTENTE por processo: a primeira agenda, as
+     * seguintes não fazem nada (nem quando a conferência rápida recusa de novo).
+     * Devolve `true` quando ESTA chamada agendou.
+     *
+     * Nunca lança e nunca bloqueia quem chamou.
      */
-    fun verificarEmSegundoPlano(context: Context) {
+    fun verificarEmSegundoPlano(context: Context): Boolean =
+        verificacaoDoProcesso.agendar { iniciarVerificacao(context, "automatica", null) }
+
+    /**
+     * Verificação completa pedida pelo USUÁRIO ("Verificar novamente"), sem
+     * download. Diferente da automática, não é limitada pela marca de processo:
+     * é uma ação explícita e pode ser repetida. O resultado é devolvido na
+     * thread chamadora (a de fundo criada aqui), para a tela atualizar o rótulo.
+     */
+    fun verificarAgora(context: Context, aoTerminar: (Estado) -> Unit = {}) {
+        iniciarVerificacao(context, "manual", aoTerminar)
+    }
+
+    private fun iniciarVerificacao(
+        context: Context,
+        origem: String,
+        aoTerminar: ((Estado) -> Unit)?,
+    ) {
         if (!emAndamento.compareAndSet(false, true)) return
         val app = context.applicationContext
         val raiz = raiz(app)
         Thread({
+            var estado: Estado = Estado.Invalido("interno")
             try {
-                when (val estado = verificarCompletoEm(raiz, File(raiz, VERSAO))) {
-                    is Estado.Pronto -> WhisperOrtHtpRota.pacoteVerificado(estado.manifesto)
+                val atual = verificarCompletoEm(raiz, File(raiz, VERSAO))
+                estado = atual
+                when (atual) {
+                    is Estado.Pronto ->
+                        WhisperOrtHtpRota.pacoteRevalidado(atual.manifesto, "revalidado:$origem")
                     is Estado.Invalido ->
-                        WhisperOrtHtpRota.pacoteIndisponivel("verificacao:" + estado.motivo)
+                        WhisperOrtHtpRota.pacoteIndisponivel("verificacao:" + atual.motivo)
                     is Estado.Ausente -> WhisperOrtHtpRota.pacoteIndisponivel("ausente")
                 }
             } catch (falha: Throwable) {
@@ -468,9 +546,31 @@ object WhisperOrtNpuPacote {
             } finally {
                 emAndamento.set(false)
             }
+            runCatching { aoTerminar?.invoke(estado) }
         }, "whisper-npu-verificacao").apply { isDaemon = true }.start()
     }
 
+    /**
+     * Agendador de UMA execução por processo (R106/T02).
+     *
+     * O `AtomicBoolean` que guardava a verificação era liberado no `finally`, o
+     * que permitia uma nova rodada a cada recusa; a ordem exige **uma única
+     * verificação agendada por processo**. Este seam é puro e testado em JVM:
+     * `agendar` devolve `true` só na primeira vez e executa o bloco na hora.
+     */
+    internal class AgendamentoUnico {
+        private val agendada = AtomicBoolean(false)
+
+        fun agendar(executar: () -> Unit): Boolean {
+            if (!agendada.compareAndSet(false, true)) return false
+            executar()
+            return true
+        }
+
+        val jaAgendada: Boolean get() = agendada.get()
+    }
+
+    private val verificacaoDoProcesso = AgendamentoUnico()
     private val emAndamento = AtomicBoolean(false)
 
     /**
@@ -636,6 +736,9 @@ object WhisperOrtNpuPacote {
             }
             check(estadoEm(destino) is Estado.Pronto) { "pacote NPU nao ficou ativo" }
             anterior.deleteRecursively()
+            // R106 — instalação nova e conferida: nenhum sinal de corrupção vale.
+            runCatching { File(raiz, CORROMPIDO).delete() }
+            runCatching { File(raiz, REVERIFICAR).delete() }
             // Instalado E conferido por SHA: só agora a rota pode pedir HTP.
             aoMarcarVerificado(manifesto)
         } finally {

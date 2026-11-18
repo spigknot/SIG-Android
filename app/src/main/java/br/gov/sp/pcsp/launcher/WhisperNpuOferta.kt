@@ -64,4 +64,41 @@ object WhisperNpuOferta {
 
     fun entradaFixaVisivel(armazenamento: Armazenamento, pacotesProntos: Boolean): Boolean =
         acaoEntradaFixa(pacotesProntos) == Acao.ABRIR_ENTRADA_FIXA
+
+    // -------------------------------------------------------------- R106/T02
+
+    /**
+     * Situação do pacote da NPU para a ENTRADA FIXA (R106). Distingue o pacote
+     * que nunca foi instalado ([AUSENTE]) do que está em disco mas não passou na
+     * conferência ([RECUSADO], ex.: data/tamanho) e do que a verificação completa
+     * marcou como corrompido ([CORROMPIDO]) — cada um oferece uma saída
+     * diferente, e nada é apagado sem ação do usuário.
+     */
+    enum class Situacao { PRONTO, AUSENTE, RECUSADO, CORROMPIDO }
+
+    /**
+     * Rótulo da entrada fixa. "Reinstalar aceleração NPU" só quando o pacote em
+     * disco foi marcado como corrompido; recusado pela data continua "Ativar
+     * aceleração NPU" (a conferência de novo pode resolver sem download algum).
+     */
+    fun rotuloEntradaFixa(situacao: Situacao, qairtInstalado: Boolean = true): String = when {
+        situacao == Situacao.PRONTO && qairtInstalado -> "NPU ativa"
+        situacao == Situacao.CORROMPIDO -> "Reinstalar aceleração NPU"
+        else -> "Ativar aceleração NPU"
+    }
+
+    /**
+     * A entrada fixa oferece "Verificar novamente" quando há pacote em disco que
+     * não está pronto: a verificação completa por SHA decide, SEM download.
+     */
+    fun ofereceVerificarNovamente(situacao: Situacao): Boolean =
+        situacao == Situacao.RECUSADO || situacao == Situacao.CORROMPIDO
+
+    /**
+     * Oferta AUTOMÁTICA (R106): só quando ainda não há pacote em disco. Com o
+     * pacote presente e recusado/corrompido, quem decide é a entrada fixa — nada
+     * de diálogo de download sozinho em cima de um pacote que já existe.
+     */
+    fun deveOferecerAutomaticamente(armazenamento: Armazenamento, situacao: Situacao): Boolean =
+        situacao == Situacao.AUSENTE && !armazenamento.recusado()
 }

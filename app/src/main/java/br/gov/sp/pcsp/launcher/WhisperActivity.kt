@@ -671,16 +671,29 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         QairtDependencyManager.isInstalled(this) &&
             (runCatching { WhisperOrtNpuPacote.estado(this) }.getOrNull() is WhisperOrtNpuPacote.Estado.Pronto)
 
-    /** A entrada fixa some (ou passa a dizer "NPU ativa") quando tudo está pronto. */
+    /** Situação do pacote da NPU para a entrada fixa (R106). */
+    private fun situacaoNpu(): WhisperNpuOferta.Situacao {
+        val corrompido = runCatching { WhisperOrtNpuPacote.corrompido(this) }.getOrNull()
+        if (corrompido != null) return WhisperNpuOferta.Situacao.CORROMPIDO
+        return when (runCatching { WhisperOrtNpuPacote.estado(this) }.getOrNull()) {
+            is WhisperOrtNpuPacote.Estado.Pronto -> WhisperNpuOferta.Situacao.PRONTO
+            is WhisperOrtNpuPacote.Estado.Ausente -> WhisperNpuOferta.Situacao.AUSENTE
+            else -> WhisperNpuOferta.Situacao.RECUSADO
+        }
+    }
+
+    /** A entrada fixa some (ou passa a dizer "NPU ativa"/"Reinstalar…") conforme a situação. */
     private fun atualizarEntradaNpu() {
         val botao = findViewById<android.view.View?>(R.id.button_ativar_npu) ?: return
-        val prontos = pacotesNpuProntos()
+        val situacao = situacaoNpu()
+        val qairt = QairtDependencyManager.isInstalled(this)
+        val prontos = qairt && situacao == WhisperNpuOferta.Situacao.PRONTO
         val visivel = WhisperNpuOferta.entradaFixaVisivel(
             WhisperNpuOferta.Preferencias(this), prontos,
         )
         botao.visibility = if (visivel) android.view.View.VISIBLE else android.view.View.GONE
         (botao as? android.widget.TextView)?.text =
-            if (prontos) "NPU ativa" else "Ativar aceleração NPU"
+            WhisperNpuOferta.rotuloEntradaFixa(situacao, qairt)
     }
 
     /**
@@ -702,16 +715,24 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         val fabricante = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MANUFACTURER else null
         if (!WhisperOrtHtpAdmissao.fabricanteAdmitido(fabricante)) return
         val qairt = QairtDependencyManager.isInstalled(this)
-        val npu = runCatching { WhisperOrtNpuPacote.estado(this) }.getOrNull() is WhisperOrtNpuPacote.Estado.Pronto
+        val situacao = situacaoNpu()
+        val npu = situacao == WhisperNpuOferta.Situacao.PRONTO
         val prontos = qairt && npu
         if (prontos) {
             atualizarEntradaNpu()
             return
         }
+        // R106/T02 — pacote em disco que não passou na conferência: a entrada
+        // fixa abre o diálogo de "Verificar novamente"/"Reinstalar aceleração
+        // NPU", nunca o download direto. Nada é apagado.
+        if (entradaFixa && situacao != WhisperNpuOferta.Situacao.AUSENTE) {
+            dialogoPacoteRecusado(situacao)
+            return
+        }
         val armazenamento = WhisperNpuOferta.Preferencias(this)
-        // A automática só uma vez; a entrada fixa é justamente a saída para
-        // quem recusou e depois mudou de ideia.
-        if (!entradaFixa && !WhisperNpuOferta.deveOferecerAutomaticamente(armazenamento, false)) return
+        // A automática só uma vez e só quando ainda não há pacote em disco; a
+        // entrada fixa é a saída para quem recusou e depois mudou de ideia.
+        if (!entradaFixa && !WhisperNpuOferta.deveOferecerAutomaticamente(armazenamento, situacao)) return
         npuDialogoAberto = true
         atualizarEntradaNpu()
 
@@ -751,6 +772,68 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         ) {
             npuDialogoAberto = false
             baixarPacoteNpu()
+        }
+    }
+
+    /**
+     * R106/T02 — pacote em disco RECUSADO pela conferência rápida (data/tamanho)
+     * ou marcado como CORROMPIDO pela verificação completa.
+     *
+     * Nada é apagado e nenhum download começa sozinho: "Verificar novamente"
+     * roda a verificação completa por SHA sem baixar nada; "Reinstalar aceleração
+     * NPU" é o download explícito de sempre; "Agora não" mantém a CPU.
+     */
+    private fun dialogoPacoteRecusado(situacao: WhisperNpuOferta.Situacao) {
+        npuDialogoAberto = true
+        val corrompido = situacao == WhisperNpuOferta.Situacao.CORROMPIDO
+        val motivo = runCatching { WhisperOrtNpuPacote.corrompido(this) }.getOrNull()
+        val mensagem = if (corrompido) {
+            "O pacote da aceleração NPU está corrompido" +
+                (motivo?.takeIf { it.isNotBlank() }?.let { " ($it)" } ?: "") +
+                ". Nada foi apagado. Você pode conferir de novo ou reinstalar o pacote."
+        } else {
+            "A conferência do pacote da aceleração NPU não passou: a data ou o tamanho " +
+                "de um arquivo mudou depois da instalação. A transcrição segue na CPU. " +
+                "Você pode conferir de novo (sem baixar nada) ou reinstalar o pacote."
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Aceleração NPU")
+            .setMessage(mensagem)
+            .setPositiveButton("Verificar novamente") { _, _ ->
+                npuDialogoAberto = false
+                verificarPacoteNpu()
+            }
+            .setNeutralButton("Reinstalar aceleração NPU") { _, _ ->
+                npuDialogoAberto = false
+                baixarPacoteNpu()
+            }
+            .setNegativeButton("Agora não") { _, _ -> npuDialogoAberto = false }
+            .setOnCancelListener { npuDialogoAberto = false }
+            .show()
+    }
+
+    /**
+     * R106/T02 — "Verificar novamente": verificação completa por SHA do pacote em
+     * disco, **sem download**. Se o SHA conferir, o marcador é regravado com a
+     * impressão de disco atual e a HTP volta já no pedido seguinte; se não, o
+     * pacote fica marcado como corrompido e a entrada fixa oferece a reinstalação.
+     */
+    private fun verificarPacoteNpu() {
+        status.text = "Conferindo o pacote da NPU (sem download)…"
+        WhisperOrtNpuPacote.verificarAgora(this) { estado ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                atualizarEntradaNpu()
+                status.text = when (estado) {
+                    is WhisperOrtNpuPacote.Estado.Pronto ->
+                        "Pacote conferido: as próximas transcrições usam o HTP."
+                    is WhisperOrtNpuPacote.Estado.Invalido ->
+                        "O pacote da NPU está corrompido; nada foi apagado. " +
+                            "Use \"Reinstalar aceleração NPU\" quando quiser."
+                    is WhisperOrtNpuPacote.Estado.Ausente ->
+                        "O pacote da NPU não está instalado."
+                }
+            }
         }
     }
 

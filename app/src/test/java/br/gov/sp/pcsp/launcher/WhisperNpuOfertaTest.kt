@@ -76,4 +76,53 @@ class WhisperNpuOfertaTest {
             WhisperNpuOferta.acaoAutomatica(recusado = false, pacotesProntos = true),
         )
     }
+
+    // ------------------------------------------------------------------ R106
+
+    /**
+     * R106/T02 — a entrada fixa distingue pacote ausente, recusado pela
+     * conferência e corrompido: só o corrompido pede REINSTALAÇÃO; os dois
+     * primeiros aceitam "Verificar novamente" (SHA, sem download).
+     */
+    @Test
+    fun `R106 entrada fixa distingue recusado de corrompido`() {
+        val ausente = WhisperNpuOferta.Situacao.AUSENTE
+        val recusado = WhisperNpuOferta.Situacao.RECUSADO
+        val corrompido = WhisperNpuOferta.Situacao.CORROMPIDO
+        val pronto = WhisperNpuOferta.Situacao.PRONTO
+
+        assertEquals("Ativar aceleração NPU", WhisperNpuOferta.rotuloEntradaFixa(ausente))
+        assertEquals("Ativar aceleração NPU", WhisperNpuOferta.rotuloEntradaFixa(recusado))
+        assertEquals("Reinstalar aceleração NPU", WhisperNpuOferta.rotuloEntradaFixa(corrompido))
+        assertEquals("NPU ativa", WhisperNpuOferta.rotuloEntradaFixa(pronto))
+
+        assertFalse(WhisperNpuOferta.ofereceVerificarNovamente(ausente))
+        assertFalse(WhisperNpuOferta.ofereceVerificarNovamente(pronto))
+        assertTrue(WhisperNpuOferta.ofereceVerificarNovamente(recusado))
+        assertTrue(WhisperNpuOferta.ofereceVerificarNovamente(corrompido))
+
+        // Com o QAIRT faltando não se anuncia "NPU ativa" (ainda há o que baixar).
+        assertEquals(
+            "Ativar aceleração NPU",
+            WhisperNpuOferta.rotuloEntradaFixa(pronto, qairtInstalado = false),
+        )
+    }
+
+    @Test
+    fun `R106 oferta automatica so quando o pacote ainda nao esta em disco`() {
+        val memoria = Memoria()
+        assertTrue(
+            WhisperNpuOferta.deveOferecerAutomaticamente(memoria, WhisperNpuOferta.Situacao.AUSENTE),
+        )
+        assertFalse(
+            WhisperNpuOferta.deveOferecerAutomaticamente(memoria, WhisperNpuOferta.Situacao.RECUSADO),
+        )
+        assertFalse(
+            WhisperNpuOferta.deveOferecerAutomaticamente(memoria, WhisperNpuOferta.Situacao.CORROMPIDO),
+        )
+        memoria.registrarRecusa()
+        assertFalse(
+            WhisperNpuOferta.deveOferecerAutomaticamente(memoria, WhisperNpuOferta.Situacao.AUSENTE),
+        )
+    }
 }
