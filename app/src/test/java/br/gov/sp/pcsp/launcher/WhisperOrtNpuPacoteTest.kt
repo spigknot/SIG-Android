@@ -277,4 +277,143 @@ class WhisperOrtNpuPacoteTest {
         assertTrue("ZIP divergente tem de falhar", resultado.isFailure)
         assertTrue(".zip.download tem de ser apagado após falha", !baixado.exists())
     }
+
+    // ---- R105/T01: conferência rápida por processo + SHA na instalação ----
+
+    /** Pacote íntegro em disco (manifesto + arquivos sem marcador). */
+    private fun pacoteBruto(dir: File, itens: List<Pair<String, ByteArray>>): WhisperOrtNpuPacote.Manifesto {
+        escrever(dir, itens)
+        File(dir, WhisperOrtNpuPacote.NOME_MANIFESTO).writeText(manifesto(*itens.toTypedArray()))
+        return WhisperOrtNpuPacote.lerManifesto(manifesto(*itens.toTypedArray()))!!
+    }
+
+    @Test
+    fun `marcador ausente dispara a verificacao completa e depois passa`() {
+        val raiz = temp.newFolder("raiz-sem-marcador")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        val manifesto = pacoteBruto(dir, conteudo())
+        val antes = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue(
+            "sem marcador a conferência rápida tem de pedir nova verificação: $antes",
+            antes is WhisperOrtNpuPacote.Conferencia.Reverificar && antes.motivo == "marcador_ausente",
+        )
+        val completo = WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir)
+        assertTrue("verificação completa tem de passar: $completo", completo is WhisperOrtNpuPacote.Estado.Pronto)
+        val depois = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue("depois da verificação a conferência rápida passa: $depois", depois is WhisperOrtNpuPacote.Conferencia.Ok)
+        assertEquals(manifesto.versao, (depois as WhisperOrtNpuPacote.Conferencia.Ok).manifesto.versao)
+    }
+
+    @Test
+    fun `marcador de versao diferente dispara a verificacao completa`() {
+        val raiz = temp.newFolder("raiz-versao")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        pacoteBruto(dir, conteudo())
+        // Assinatura de OUTRA versão do pacote (v3) no arquivo do marcador.
+        File(dir, WhisperOrtNpuPacote.MARCADOR).writeText(
+            "versao=3 arquivos=2 sha=${"a".repeat(64)},${"b".repeat(64)}",
+        )
+        val c = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue("versão diferente tem de reverificar: $c", c is WhisperOrtNpuPacote.Conferencia.Reverificar)
+        assertTrue(
+            "verificação completa reescreve o marcador e passa",
+            WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto,
+        )
+    }
+
+    @Test
+    fun `tamanho diferente do marcador recusa sem reverificar`() {
+        val raiz = temp.newFolder("raiz-tamanho")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        pacoteBruto(dir, conteudo())
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto)
+        File(dir, WhisperOrtNpuPacote.WRAPPER).appendBytes(ByteArray(3))
+        val c = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue(
+            "tamanho divergente tem de RECUSAR (não reverificar): $c",
+            c is WhisperOrtNpuPacote.Conferencia.Recusar && c.motivo.startsWith("tamanho:"),
+        )
+    }
+
+    @Test
+    fun `data diferente do marcador recusa sem reverificar`() {
+        val raiz = temp.newFolder("raiz-data")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        pacoteBruto(dir, conteudo())
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto)
+        val arquivo = File(dir, WhisperOrtNpuPacote.CONTEXTO)
+        // 1 byte trocado no lugar, mesmo tamanho: só a DATA denuncia.
+        val original = arquivo.readBytes()
+        arquivo.writeBytes(original)
+        assertTrue(arquivo.setLastModified(arquivo.lastModified() + 5_000L))
+        val c = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue(
+            "data divergente tem de RECUSAR (não reverificar): $c",
+            c is WhisperOrtNpuPacote.Conferencia.Recusar && c.motivo.startsWith("data:"),
+        )
+    }
+
+    @Test
+    fun `falha de sessao marca o pacote para nova verificacao completa`() {
+        val raiz = temp.newFolder("raiz-falha-sessao")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        pacoteBruto(dir, conteudo())
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto)
+        assertTrue(WhisperOrtNpuPacote.conferenciaEm(raiz, dir) is WhisperOrtNpuPacote.Conferencia.Ok)
+
+        // Falha de sessão HTP no processo: marca para reverificação.
+        WhisperOrtNpuPacote.marcarParaReverificacao(raiz)
+        assertTrue(WhisperOrtNpuPacote.precisaReverificar(raiz))
+        val marcado = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue(
+            "pacote marcado tem de reverificar antes de nova rota: $marcado",
+            marcado is WhisperOrtNpuPacote.Conferencia.Reverificar && marcado.motivo == "sessao_anterior",
+        )
+
+        // A verificação completa rearma o pacote e apaga o sinal.
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto)
+        assertTrue("o sinal tem de ser apagado", !WhisperOrtNpuPacote.precisaReverificar(raiz))
+        assertTrue(WhisperOrtNpuPacote.conferenciaEm(raiz, dir) is WhisperOrtNpuPacote.Conferencia.Ok)
+    }
+
+    @Test
+    fun `marcador do formato anterior admite uma vez e a completa grava a data`() {
+        val raiz = temp.newFolder("raiz-legado")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        val manifesto = pacoteBruto(dir, conteudo())
+        // Marcador da R104: só a assinatura, sem impressão de disco.
+        File(dir, WhisperOrtNpuPacote.MARCADOR).writeText(WhisperOrtNpuPacote.textoMarcadorEsperado(manifesto))
+        val legado = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue("marcador anterior admite o processo: $legado", legado is WhisperOrtNpuPacote.Conferencia.Ok)
+        assertTrue((legado as WhisperOrtNpuPacote.Conferencia.Ok).legado)
+
+        assertTrue(WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir) is WhisperOrtNpuPacote.Estado.Pronto)
+        val texto = File(dir, WhisperOrtNpuPacote.MARCADOR).readText()
+        assertTrue("a completa grava a impressão de disco", texto.contains("mtime="))
+        val atual = WhisperOrtNpuPacote.conferenciaEm(raiz, dir)
+        assertTrue("depois de migrar, admite sem legado: $atual", atual is WhisperOrtNpuPacote.Conferencia.Ok)
+        assertTrue(!(atual as WhisperOrtNpuPacote.Conferencia.Ok).legado)
+    }
+
+    @Test
+    fun `SHA divergente na verificacao completa nao grava marcador`() {
+        val raiz = temp.newFolder("raiz-sha-completa")
+        val dir = File(raiz, WhisperOrtNpuPacote.VERSAO)
+        dir.mkdirs()
+        val itens = conteudo()
+        pacoteBruto(dir, itens)
+        File(dir, WhisperOrtNpuPacote.CONTEXTO).writeBytes(ByteArray(itens[0].second.size) { 0x5A })
+        val estado = WhisperOrtNpuPacote.verificarCompletoEm(raiz, dir)
+        assertTrue("SHA divergente não pode ficar Pronto: $estado", estado is WhisperOrtNpuPacote.Estado.Invalido)
+        assertTrue(
+            "sem SHA conferido não pode haver marcador",
+            !File(dir, WhisperOrtNpuPacote.MARCADOR).isFile,
+        )
+    }
 }

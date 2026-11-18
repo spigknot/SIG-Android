@@ -182,41 +182,239 @@ object WhisperOrtNpuPacote {
     }
 
     /**
-     * Estado RÁPIDO (sem hash): marcador presente e os dois arquivos com o
-     * tamanho declarado. A verificação por SHA é a [verificarCompleto], feita uma
-     * vez por processo em segundo plano.
+     * Marcador do pacote: a ASSINATURA do manifesto (mesma linha do formato
+     * original, para o pacote instalado antes desta rodada continuar legível) e,
+     * a partir da R105, a impressão de disco de cada arquivo — bytes, data de
+     * modificação e SHA. É essa impressão que permite a conferência rápida de
+     * cada processo sem rehash de 646 MiB, no mesmo desenho do QAIRT e das
+     * dependências nativas.
      */
-    fun estado(context: Context): Estado {
-        val dir = dirDaVersao(context)
-        val marcador = File(dir, MARCADOR)
-        if (!marcador.isFile) return Estado.Ausente("sem marcador em $dir")
-        val manifesto = runCatching {
-            lerManifesto(File(dir, NOME_MANIFESTO).readText())
-        }.getOrNull() ?: return Estado.Invalido("manifesto ilegivel")
-        if (marcador.readText().trim() != textoMarcadorEsperado(manifesto)) {
-            return Estado.Invalido("marcador divergente")
-        }
-        for (item in manifesto.itens) {
-            val arquivo = File(dir, item.nome)
-            if (!arquivo.isFile) return Estado.Ausente("ausente:${item.nome}")
-            if (arquivo.length() != item.bytes) return Estado.Invalido("tamanho:${item.nome}")
-        }
-        return Estado.Pronto(dir, manifesto)
+    data class Marcador(
+        /** Linha de assinatura, idêntica a [textoMarcadorEsperado]. */
+        val assinatura: String,
+        val itens: List<ItemMarcador>,
+    ) {
+        /** Marcador do formato anterior (só a assinatura): autoriza 1 processo. */
+        val legado: Boolean get() = itens.isEmpty()
     }
+
+    /** Impressão de disco de um arquivo do pacote. */
+    data class ItemMarcador(val nome: String, val bytes: Long, val mtime: Long, val sha256: String)
+
+    /**
+     * Resultado da conferência rápida (por processo). Três desfechos, distintos
+     * de propósito:
+     *
+     * - [Ok]: marcador da versão instalada confere com o manifesto e cada arquivo
+     *   existe, com o tamanho e a data registrados. A rota HTP PODE ser admitida
+     *   já no primeiro pedido do processo;
+     * - [Reverificar]: falta o marcador, o formato/versão é anterior, ou o pacote
+     *   foi marcado por falha de sessão. A verificação completa (SHA de todos os
+     *   arquivos, que reescreve o marcador) decide — enquanto ela não termina, a
+     *   rota é CPU;
+     * - [Recusar]: o tamanho ou a data de um arquivo DIVERGE do que foi instalado.
+     *   Não há o que reverificar: o pacote em disco não é o pacote conferido, e a
+     *   rota é CPU até nova instalação.
+     */
+    sealed class Conferencia {
+        data class Ok(
+            val dir: File,
+            val manifesto: Manifesto,
+            /** Marcador do formato anterior: admite 1 processo e manda regravar. */
+            val legado: Boolean = false,
+        ) : Conferencia()
+
+        data class Reverificar(val motivo: String) : Conferencia()
+        data class Recusar(val motivo: String) : Conferencia()
+    }
+
+    /**
+     * Arquivo-sinal de "reverificação completa pendente".
+     *
+     * Gravado quando a sessão HTP falha ao abrir (ou quando uma ordem já rodou
+     * pela metade no QNN) e lido no início do processo seguinte: o pacote volta a
+     * ser conferido por SHA antes de autorizar a rota. Fica FORA do diretório da
+     * versão para não confundir a conferência rápida do que foi instalado.
+     */
+    const val REVERIFICAR = ".reverificar"
+
+    /**
+     * Estado RÁPIDO do pacote (sem hash): marcador presente, arquivos com o
+     * tamanho e a data registrados na instalação. É a conferência de CADA
+     * processo; a verificação por SHA é a [verificarCompleto].
+     *
+     * `Ausente` quando não há marcador ou falta um arquivo; `Invalido` quando o
+     * marcador não confere com o manifesto ou quando tamanho/data divergem. A UI
+     * usa este estado para "NPU ativa" — por isso ele nunca hasheia.
+     */
+    fun estado(context: Context): Estado = estadoEm(dirDaVersao(context))
 
     /** Texto canônico do marcador: versão + hash do manifesto (sem tocar em arquivos). */
     fun textoMarcadorEsperado(manifesto: Manifesto): String =
         "versao=${manifesto.versao} arquivos=${manifesto.itens.size} " +
             "sha=${manifesto.itens.joinToString(",") { it.sha256 }}"
 
-    /** Verificação COMPLETA (todos os SHA). Usada no install e 1x por processo. */
-    @VisibleForTesting
-    internal fun verificarCompleto(context: Context, hash: (File) -> String = this::sha256): Estado {
-        val estado = estado(context)
-        if (estado !is Estado.Pronto) return estado
-        val motivo = conferirArquivos(estado.manifesto, estado.dir, hash)
-        return if (motivo == null) estado else Estado.Invalido(motivo)
+    /**
+     * Marcador completo, com a impressão de disco de cada arquivo do manifesto.
+     *
+     * A primeira linha é EXATAMENTE [textoMarcadorEsperado] — o pacote instalado
+     * pela R104 tem só essa linha e continua sendo reconhecido (formato legado),
+     * o que evita rebaixar um pacote íntegro a "não instalado" só pela mudança de
+     * formato. As linhas `item=` são lidas do DIRETÓRIO FINAL: a data de
+     * modificação só é estável depois da ativação por rename.
+     */
+    internal fun montarMarcador(manifesto: Manifesto, dir: File): String = buildString {
+        appendLine(textoMarcadorEsperado(manifesto))
+        appendLine(SEGREDO_MARCADOR_FORMATO)
+        for (item in manifesto.itens) {
+            val arquivo = File(dir, item.nome)
+            append("item=").append(item.nome)
+                .append(" bytes=").append(arquivo.length())
+                .append(" mtime=").append(arquivo.lastModified())
+                .append(" sha=").append(item.sha256)
+                .appendLine()
+        }
+    }.trimEnd()
+
+    /** Formato do marcador desta versão (a presença da linha já é o "v2"). */
+    private const val SEGREDO_MARCADOR_FORMATO = "formato=sig-whisper-npu-marcador/v2"
+
+    /**
+     * Lê o marcador. Devolve `null` quando nem a assinatura do manifesto está
+     * presente ou quando uma linha `item=` está malformada — nesse caso a
+     * verificação completa (e não a rápida) decide.
+     */
+    internal fun lerMarcador(texto: String): Marcador? {
+        val linhas = texto.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+        val assinatura = linhas.firstOrNull() ?: return null
+        if (!assinatura.startsWith("versao=")) return null
+        if (linhas.size == 1) return Marcador(assinatura, emptyList())
+        if (linhas[1] != SEGREDO_MARCADOR_FORMATO) return null
+        val itens = ArrayList<ItemMarcador>(linhas.size - 2)
+        for (linha in linhas.drop(2)) {
+            if (!linha.startsWith("item=")) return null
+            val campos = linha.removePrefix("item=").split(" ")
+            // nome é o único campo que pode conter espaço; os três últimos são fixos.
+            if (campos.size < 4) return null
+            val nome = campos.dropLast(3).joinToString(" ")
+            val bytes = campos[campos.size - 3].removePrefix("bytes=").toLongOrNull() ?: return null
+            val mtime = campos[campos.size - 2].removePrefix("mtime=").toLongOrNull() ?: return null
+            val sha = campos.last().removePrefix("sha=")
+            if (nome.isBlank() || sha.length != 64) return null
+            itens.add(ItemMarcador(nome, bytes, mtime, sha.lowercase()))
+        }
+        return Marcador(assinatura, itens)
     }
+
+    /**
+     * Conferência rápida de um diretório instalado, com a raiz onde vive o sinal
+     * de reverificação. É o seam sem `Context` do que roda em cada processo.
+     */
+    internal fun conferenciaEm(raiz: File, dir: File): Conferencia {
+        // Falha de sessão no processo anterior: o SHA decide antes de nova rota.
+        if (File(raiz, REVERIFICAR).isFile) return Conferencia.Reverificar("sessao_anterior")
+        return conferenciaMarcador(dir)
+    }
+
+    /** Conferência do marcador contra o disco (sem o sinal de reverificação). */
+    internal fun conferenciaMarcador(dir: File): Conferencia {
+        val marcador = File(dir, MARCADOR)
+        if (!marcador.isFile) return Conferencia.Reverificar("marcador_ausente")
+        val lido = runCatching { lerMarcador(marcador.readText()) }.getOrNull()
+            ?: return Conferencia.Reverificar("marcador_ilegivel")
+        val manifesto = runCatching {
+            lerManifesto(File(dir, NOME_MANIFESTO).readText())
+        }.getOrNull() ?: return Conferencia.Reverificar("manifesto_ilegivel")
+        if (lido.assinatura != textoMarcadorEsperado(manifesto)) {
+            return Conferencia.Reverificar("marcador_divergente")
+        }
+        // Existência e tamanho valem SEMPRE; a data só quando o marcador a tem.
+        for (item in manifesto.itens) {
+            val arquivo = File(dir, item.nome)
+            if (!arquivo.isFile) return Conferencia.Recusar("ausente:${item.nome}")
+            if (arquivo.length() != item.bytes) {
+                return Conferencia.Recusar("tamanho:${item.nome}:${arquivo.length()}!=${item.bytes}")
+            }
+        }
+        if (lido.legado) {
+            // Formato anterior: a assinatura confere, mas a data não foi gravada.
+            // Admite ESTE processo e agenda a verificação completa, que regrava o
+            // marcador com a impressão de disco (e derruba a rota se o SHA falhar).
+            return Conferencia.Ok(dir, manifesto, legado = true)
+        }
+        val porNome = lido.itens.associateBy { it.nome }
+        for (item in manifesto.itens) {
+            val registro = porNome[item.nome] ?: return Conferencia.Reverificar("marcador_incompleto")
+            if (registro.bytes != item.bytes || registro.sha256 != item.sha256) {
+                return Conferencia.Reverificar("marcador_divergente")
+            }
+            val arquivo = File(dir, item.nome)
+            if (arquivo.lastModified() != registro.mtime) {
+                return Conferencia.Recusar("data:${item.nome}")
+            }
+        }
+        if (lido.itens.size != manifesto.itens.size) return Conferencia.Reverificar("marcador_incompleto")
+        return Conferencia.Ok(dir, manifesto)
+    }
+
+    /** Conferência rápida do pacote instalado, no padrão de cada processo. */
+    fun conferenciaRapida(context: Context): Conferencia =
+        conferenciaEm(raiz(context), dirDaVersao(context))
+
+    /**
+     * Marca o pacote para verificação COMPLETA no próximo processo (falha de
+     * sessão HTP). Barato e sem efeito imediato: quem lê é [conferenciaEm].
+     */
+    fun marcarParaReverificacao(raiz: File) {
+        runCatching {
+            raiz.mkdirs()
+            File(raiz, REVERIFICAR).writeText("sessao")
+        }
+    }
+
+    /** `true` quando há reverificação completa pendente. */
+    fun precisaReverificar(raiz: File): Boolean = File(raiz, REVERIFICAR).isFile
+
+    /**
+     * Verificação COMPLETA (todos os SHA) sobre um diretório, sem exigir marcador
+     * prévio: é ela que MIGRA o marcador do formato anterior, confere a instalação
+     * e rearma o pacote depois de uma falha de sessão. Em sucesso, regrava o
+     * marcador com a impressão de disco atual e apaga o sinal de reverificação.
+     */
+    @VisibleForTesting
+    internal fun verificarCompletoEm(
+        raiz: File,
+        dir: File,
+        hash: (File) -> String = this::sha256,
+    ): Estado {
+        val textoManifesto = File(dir, NOME_MANIFESTO)
+        val manifesto = runCatching { lerManifesto(textoManifesto.readText()) }.getOrNull()
+        return when {
+            manifesto == null && !textoManifesto.isFile -> Estado.Ausente("sem manifesto em $dir")
+            manifesto == null -> Estado.Invalido("manifesto ilegivel")
+            else -> {
+                val motivo = conferirArquivos(manifesto, dir, hash)
+                if (motivo != null) {
+                    Estado.Invalido(motivo)
+                } else {
+                    val gravou = runCatching {
+                        File(dir, MARCADOR).writeText(montarMarcador(manifesto, dir))
+                    }
+                    if (gravou.isFailure) {
+                        Estado.Invalido("marcador_nao_gravado")
+                    } else {
+                        runCatching { File(raiz, REVERIFICAR).delete() }
+                        Estado.Pronto(dir, manifesto)
+                    }
+                }
+            }
+        }
+    }
+
+    /** Verificação COMPLETA (todos os SHA) do pacote instalado. */
+    @VisibleForTesting
+    internal fun verificarCompleto(context: Context, hash: (File) -> String = this::sha256): Estado =
+        verificarCompletoEm(raiz(context), dirDaVersao(context), hash)
 
     /**
      * Verifica o pacote em SEGUNDO PLANO, **sem baixar nada** (R101 §T03).
@@ -230,9 +428,10 @@ object WhisperOrtNpuPacote {
     fun verificarEmSegundoPlano(context: Context) {
         if (!emAndamento.compareAndSet(false, true)) return
         val app = context.applicationContext
+        val raiz = raiz(app)
         Thread({
             try {
-                when (val estado = verificarCompleto(app)) {
+                when (val estado = verificarCompletoEm(raiz, File(raiz, VERSAO))) {
                     is Estado.Pronto -> WhisperOrtHtpRota.pacoteVerificado(estado.manifesto)
                     is Estado.Invalido ->
                         WhisperOrtHtpRota.pacoteIndisponivel("verificacao:" + estado.motivo)
@@ -318,10 +517,22 @@ object WhisperOrtNpuPacote {
         cancelado: () -> Boolean = { false },
         onProgresso: (Progresso) -> Unit = { },
     ): Result<Unit> = runCatching {
-        if (estado(context) is Estado.Pronto && verificarCompleto(context) is Estado.Pronto) return@runCatching
+        val raiz = raiz(context)
+        val dir = File(raiz, VERSAO)
+        // R105/T01 — o SHA completo é conferido NA INSTALAÇÃO e na troca de versão.
+        // Pacote já extraído e íntegro NÃO é baixado de novo: a verificação
+        // completa reescreve o marcador (inclusive o de formato anterior) e libera
+        // a rota. Só conteúdo divergente volta ao download.
+        when (val completo = verificarCompletoEm(raiz, dir)) {
+            is Estado.Pronto -> {
+                WhisperOrtHtpRota.pacoteVerificado(completo.manifesto)
+                return@runCatching
+            }
+            else -> Unit
+        }
         instalarEm(
             cacheDir = context.cacheDir,
-            raiz = raiz(context),
+            raiz = raiz,
             cancelado = cancelado,
             onProgresso = onProgresso,
         ).getOrThrow()
@@ -391,6 +602,11 @@ object WhisperOrtNpuPacote {
                 destino.exists()
             }.getOrDefault(false)
             check(ativado) { "falha ao ativar o pacote NPU" }
+            // R105/T01 — o marcador é REGRAVADO no diretório final: a data de
+            // modificação de cada arquivo só é estável depois da ativação (o
+            // fallback por cópia não preserva mtime). É essa impressão que a
+            // conferência de cada processo compara.
+            File(destino, MARCADOR).writeText(montarMarcador(manifesto, destino))
             check(estadoEm(destino) is Estado.Pronto) { "pacote NPU nao ficou ativo" }
             anterior.deleteRecursively()
             // Instalado E conferido por SHA: só agora a rota pode pedir HTP.
@@ -401,22 +617,23 @@ object WhisperOrtNpuPacote {
         }
     }
 
-    /** Estado rápido sobre um diretório já instalado (seam puro, sem Context). */
-    internal fun estadoEm(destino: File): Estado {
-        val marcador = File(destino, MARCADOR)
-        if (!marcador.isFile) return Estado.Ausente("sem marcador em $destino")
-        val manifesto = runCatching {
-            lerManifesto(File(destino, NOME_MANIFESTO).readText())
-        }.getOrNull() ?: return Estado.Invalido("manifesto ilegivel")
-        if (marcador.readText().trim() != textoMarcadorEsperado(manifesto)) {
-            return Estado.Invalido("marcador divergente")
+    /**
+     * Estado rápido sobre um diretório já instalado (seam puro, sem Context).
+     *
+     * R105/T01 — mapeia a conferência do marcador: marcador/formato ausente vira
+     * `Ausente` (a UI oferece a instalação), divergência de tamanho ou de data
+     * vira `Invalido` (a rota é CPU e a tela não diz "NPU ativa").
+     */
+    internal fun estadoEm(destino: File): Estado = when (val c = conferenciaMarcador(destino)) {
+        is Conferencia.Ok -> Estado.Pronto(destino, c.manifesto)
+        is Conferencia.Reverificar -> when (c.motivo) {
+            "marcador_ausente" -> Estado.Ausente("sem marcador em $destino")
+            else -> Estado.Invalido(c.motivo)
         }
-        for (item in manifesto.itens) {
-            val arquivo = File(destino, item.nome)
-            if (!arquivo.isFile) return Estado.Ausente("ausente:${item.nome}")
-            if (arquivo.length() != item.bytes) return Estado.Invalido("tamanho:${item.nome}")
+        is Conferencia.Recusar -> when {
+            c.motivo.startsWith("ausente:") -> Estado.Ausente(c.motivo)
+            else -> Estado.Invalido(c.motivo)
         }
-        return Estado.Pronto(destino, manifesto)
     }
 
     private fun baixar(

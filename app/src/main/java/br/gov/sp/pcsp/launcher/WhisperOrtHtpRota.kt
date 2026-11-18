@@ -53,13 +53,19 @@ object WhisperOrtHtpRota {
     /** `true` quando o pacote já foi conferido por SHA neste processo. */
     @Volatile private var pacoteVerificado = false
 
+    /** Duração da conferência rápida feita no início deste processo. */
+    @Volatile private var conferenciaMs = 0L
+
+    /** Detalhe da conferência rápida (motivo da recusa/reverificação). */
+    @Volatile private var detalheConferencia: String? = null
+
     /** Contou falha neste processo (o limite é por processo, não por job). */
     @Volatile private var contouFalhaNesteProcesso = false
 
     /**
-     * Idempotente: chamado a cada pedido, guarda o contexto e agenda a
-     * **verificação** do pacote. Não baixa nada (R101 §T03): o download é ação
-     * explícita do usuário na tela.
+     * Idempotente: chamado a cada pedido, guarda o contexto e faz a
+     * **conferência rápida** do pacote da NPU. Não baixa nada (R101 §T03): o
+     * download é ação explícita do usuário na tela.
      */
     fun iniciar(context: Context) {
         val anterior = app
@@ -69,8 +75,7 @@ object WhisperOrtHtpRota {
                 if (!iniciado) {
                     iniciado = true
                     val ctx = app ?: return
-                    runCatching { WhisperOrtNpuPacote.verificarEmSegundoPlano(ctx) }
-                        .onFailure { android.util.Log.w(TAG, "verificacao do pacote falhou: ${it.message}") }
+                    conferirPacote(ctx)
                 }
             }
         }
@@ -78,6 +83,59 @@ object WhisperOrtHtpRota {
             android.util.Log.i(TAG, "rota HTP inicializada: " + descricaoSoC())
         }
     }
+
+    /**
+     * R105/T01 — CONFERÊNCIA RÁPIDA no início do processo, no padrão do QAIRT e
+     * das dependências nativas: marcador da versão + existência + tamanho + data
+     * de cada arquivo. Sem hash de 646 MiB, ela cabe antes do primeiro pedido e é
+     * o que permite ADMITIR a HTP já na primeira transcrição do processo.
+     *
+     * Os três desfechos ([WhisperOrtNpuPacote.Conferencia]):
+     * - conformidade: admitido na hora; marcador do formato anterior também é
+     *   admitido e a verificação completa é agendada só para regravar a data;
+     * - reverificação: a rota fica em CPU até a verificação completa (SHA) passar;
+     * - recusa (tamanho/data divergentes): a rota fica em CPU — o pacote em disco
+     *   não é o pacote conferido e não há o que reverificar.
+     */
+    private fun conferirPacote(ctx: Context) {
+        val inicio = System.nanoTime()
+        val resultado = runCatching { WhisperOrtNpuPacote.conferenciaRapida(ctx) }.getOrNull()
+        conferenciaMs = (System.nanoTime() - inicio) / 1_000_000
+        when (resultado) {
+            is WhisperOrtNpuPacote.Conferencia.Ok -> {
+                detalheConferencia = if (resultado.legado) "marcador_legado" else "ok"
+                pacoteVerificado(resultado.manifesto)
+                android.util.Log.i(
+                    TAG,
+                    "conferencia rapida ok legado=${resultado.legado} ms=$conferenciaMs " +
+                        "versao=${resultado.manifesto.versao} arquivos=${resultado.manifesto.itens.size}",
+                )
+                if (resultado.legado) {
+                    // Marcador do formato anterior: já foi admitido este processo
+                    // e a verificação completa só grava a impressão de disco.
+                    runCatching { WhisperOrtNpuPacote.verificarEmSegundoPlano(ctx) }
+                }
+            }
+            is WhisperOrtNpuPacote.Conferencia.Reverificar -> {
+                detalheConferencia = "reverificar:" + resultado.motivo
+                pacoteIndisponivel("verificacao:" + resultado.motivo)
+                runCatching { WhisperOrtNpuPacote.verificarEmSegundoPlano(ctx) }
+                    .onFailure { android.util.Log.w(TAG, "verificacao do pacote falhou: ${it.message}") }
+            }
+            is WhisperOrtNpuPacote.Conferencia.Recusar -> {
+                detalheConferencia = "recusa:" + resultado.motivo
+                pacoteIndisponivel("conferencia:" + resultado.motivo)
+            }
+            null -> {
+                detalheConferencia = "erro:conferencia"
+                pacoteIndisponivel("verificacao:conferencia_falhou")
+                runCatching { WhisperOrtNpuPacote.verificarEmSegundoPlano(ctx) }
+            }
+        }
+    }
+
+    /** Tempo da conferência rápida deste processo (vai para o recibo da C14). */
+    fun conferenciaMs(): Long = conferenciaMs
 
     /** Chamado pelo [WhisperOrtNpuPacote] quando a verificação completa passou. */
     fun pacoteVerificado(manifesto: WhisperOrtNpuPacote.Manifesto) {
@@ -122,7 +180,8 @@ object WhisperOrtHtpRota {
             memoriaFalhas = memoriaDeFalhas(ctx),
             versaoPacote = versaoPacote(),
         )
-        motivoIndisponivel = decisao.detalhe + " motivo=" + decisao.motivo.name
+        motivoIndisponivel = decisao.detalhe + " motivo=" + decisao.motivo.name +
+            (detalheConferencia?.let { " conferencia=$it" } ?: "")
         return decisao.rota
     }
 
@@ -202,11 +261,16 @@ object WhisperOrtHtpRota {
     /**
      * Falha de rota: desliga no processo e conta UMA vez por processo. Três
      * processos seguidos sem sucesso desligam o HTP até a próxima versão.
+     *
+     * R105/T01 — a falha (inclusive a de ABERTURA da sessão HTP) marca o pacote
+     * para verificação COMPLETA: o próximo processo confere o SHA de cada arquivo
+     * antes de autorizar a rota, e o fallback para CPU continua valendo aqui.
      */
     fun registrarFalha(motivo: String) {
         desligadoNoProcesso = true
         motivoIndisponivel = "falha:" + motivo
         val ctx = app ?: return
+        runCatching { WhisperOrtNpuPacote.marcarParaReverificacao(WhisperOrtNpuPacote.raiz(ctx)) }
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val falhas = prefs.getInt(CHAVE_FALHAS, 0)
         val versao = prefs.getString(CHAVE_VERSAO, "").orEmpty()

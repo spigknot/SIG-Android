@@ -47,11 +47,23 @@ object WhisperNpuAceiteReceipt {
         val soc: String,
         val timers: Timers = Timers(0L),
         val texto: String? = null,
+        /**
+         * R105/T01 — ID DO CLIPE da linha (ou da célula, quando a linha não é de
+         * um clipe). Antes o id só existia dentro de `motivo_fallback`, e mapear
+         * 202 textos exigia casar a string; agora é campo próprio em TODA linha.
+         */
+        val id: String? = null,
+        /**
+         * R105/T01 — duração da conferência rápida do pacote da NPU no início
+         * deste processo (C14). É o custo que decide se o 1º pedido pode ir à HTP.
+         */
+        val conferenciaMs: Long = 0L,
     ) {
         /** Serialização completa, inclusive texto: destino = arquivo do EV. */
         fun json(): String = JSONObject()
             .put("schema", SCHEMA)
             .put("celula", celula)
+            .put("id", id ?: JSONObject.NULL)
             .put("rota_pedida", rotaPedida)
             .put("rota_efetiva", rotaEfetiva ?: JSONObject.NULL)
             .put("versao_npu", versaoNpu)
@@ -65,14 +77,16 @@ object WhisperNpuAceiteReceipt {
             .put("terminal_ms", timers.terminalMs ?: JSONObject.NULL)
             .put("atraso_ms", timers.atrasoMs ?: JSONObject.NULL)
             .put("pos_sinal_ms", timers.posSinalMs ?: JSONObject.NULL)
+            .put("conferencia_ms", conferenciaMs)
             .put("texto", texto ?: JSONObject.NULL)
             .toString()
 
         /** Resumo SEM texto, seguro para logcat e terminal. */
         fun resumo(): String =
-            "celula=$celula rota_pedida=$rotaPedida rota_efetiva=$rotaEfetiva " +
+            "celula=$celula id=${id ?: "-"} rota_pedida=$rotaPedida rota_efetiva=$rotaEfetiva " +
                 "versao_npu=$versaoNpu versao_qairt=$versaoQairt " +
-                "motivo=$motivoFallback open_ms=$openMs total_ms=$totalMs soc=$soc"
+                "motivo=$motivoFallback open_ms=$openMs total_ms=$totalMs " +
+                "conferencia_ms=$conferenciaMs soc=$soc"
     }
 
     /** Relógio monotônico; injetável para a prova JVM do timer. */
