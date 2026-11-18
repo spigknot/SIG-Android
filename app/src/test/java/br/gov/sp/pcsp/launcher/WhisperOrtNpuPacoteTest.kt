@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -42,7 +43,8 @@ class WhisperOrtNpuPacoteTest {
             .put("versao", versao)
             .put("soc", WhisperOrtHtpAdmissao.SOC_SM8550)
             .put("htp_arch", "73")
-            .put("dtype", WhisperOrtHtpConversao.DTYPE_I16)
+            // R103/T02: o manifesto publicado do v2 grava "i16".
+            .put("dtype", "i16")
             .put("arquivos", arquivos)
             .toString()
     }
@@ -185,5 +187,94 @@ class WhisperOrtNpuPacoteTest {
         val backend = WhisperOrtHtpRota.backendHtp(qairt)
         assertEquals(File(qairt, "lib/libQnnHtp.so").absolutePath, backend.absolutePath)
         assertTrue(!backend.absolutePath.startsWith(pacoteNpu.absolutePath))
+    }
+
+    // ---- R103/T02: contrato do manifesto PUBLICADO e instalação de ponta a ponta ----
+
+    private fun manifestoPublicadoBytes(): ByteArray =
+        javaClass.getResourceAsStream("/npu/manifesto-publicado-v2.json")!!.use { it.readBytes() }
+
+    @Test
+    fun `bytes do manifesto publicado sao aceitos e dtype i16 e traduzido`() {
+        val bytes = manifestoPublicadoBytes()
+        assertEquals(
+            "9011fde9817f5ba90e82cad0ea0c999fcd87523282e3e285c1decddff61b277d",
+            sha(bytes),
+        )
+        val lido = WhisperOrtNpuPacote.lerManifesto(bytes.toString(Charsets.UTF_8))
+        assertNotNull("manifesto publicado do v2 tem de ser aceito", lido)
+        assertEquals("2", lido!!.versao)
+        assertEquals(WhisperOrtHtpAdmissao.SOC_SM8550, lido.soc)
+        assertEquals("73", lido.htpArch)
+        assertEquals("i16", JSONObject(bytes.toString(Charsets.UTF_8)).optString("dtype"))
+        assertEquals(
+            "o valor publicado i16 vira o dtype canonico da conversao",
+            WhisperOrtHtpConversao.DTYPE_I16,
+            lido.dtype,
+        )
+        assertEquals(2, lido.itens.size)
+    }
+
+    @Test
+    fun `manifesto publicado alterado em qualquer campo e recusado`() {
+        val original = JSONObject(manifestoPublicadoBytes().toString(Charsets.UTF_8))
+        val mutacoes = listOf(
+            "schema" to { o: JSONObject -> o.put("schema", "outro/v1") },
+            "versao" to { o: JSONObject -> o.put("versao", "3") },
+            "soc" to { o: JSONObject -> o.put("soc", "SM8750") },
+            "htp_arch" to { o: JSONObject -> o.put("htp_arch", "75") },
+            "dtype" to { o: JSONObject -> o.put("dtype", WhisperOrtHtpConversao.DTYPE_I16) },
+            "arquivos.nome" to { o: JSONObject -> o.getJSONArray("arquivos").getJSONObject(0).put("nome", "outro.bin") },
+            "arquivos.bytes" to { o: JSONObject -> o.getJSONArray("arquivos").getJSONObject(0).put("bytes", 0L) },
+            "arquivos.sha256" to { o: JSONObject -> o.getJSONArray("arquivos").getJSONObject(0).put("sha256", "g".repeat(64)) },
+            "arquivos.extra" to { o: JSONObject -> o.getJSONArray("arquivos").put(JSONObject().put("nome", "extra.bin").put("bytes", 1L).put("sha256", "a".repeat(64))) },
+            "arquivos.removido" to { o: JSONObject -> o.getJSONArray("arquivos").remove(1) },
+        )
+        for ((campo, mutar) in mutacoes) {
+            val alterado = JSONObject(original.toString())
+            mutar(alterado)
+            assertNull("alterar $campo tem de recusar", WhisperOrtNpuPacote.lerManifesto(alterado.toString()))
+        }
+    }
+
+    @Test
+    fun `instalacao ponta a ponta do ZIP publicado termina Pronto e limpa o download`() {
+        val zip = File(System.getProperty("r103.zip", "D:/tmp/r101/download/sig-whisper-w8a16-sm8550-v2.zip"))
+        Assume.assumeTrue("ZIP publicado ausente no host — teste pulado explicitamente", zip.isFile)
+        assertEquals(
+            "tem de ser o ZIP publicado pinado",
+            WhisperOrtNpuPacote.SHA256_ZIP,
+            WhisperOrtNpuPacote.sha256(zip),
+        )
+        val cache = temp.newFolder("cache-e2e")
+        val raiz = temp.newFolder("raiz-e2e")
+        val baixado = File(cache, "whisper-npu-v${WhisperOrtNpuPacote.VERSAO}.zip.download")
+        val avisos = mutableListOf<String>()
+        val resultado = WhisperOrtNpuPacote.instalarEm(
+            cacheDir = cache,
+            raiz = raiz,
+            urlPacote = zip.toURI().toString(),
+            aoMarcarVerificado = { avisos.add(it.dtype) },
+        )
+        assertTrue("instalar de ponta a ponta falhou: ${resultado.exceptionOrNull()}", resultado.isSuccess)
+        assertTrue(WhisperOrtNpuPacote.estadoEm(File(raiz, WhisperOrtNpuPacote.VERSAO)) is WhisperOrtNpuPacote.Estado.Pronto)
+        assertEquals(listOf(WhisperOrtHtpConversao.DTYPE_I16), avisos)
+        assertTrue(".zip.download tem de ser apagado após sucesso", !baixado.exists())
+    }
+
+    @Test
+    fun `zip de download e apagado tambem depois de falha de SHA`() {
+        val falso = File(temp.root, "falso.zip")
+        falso.writeBytes(ByteArray(1024) { 7 })
+        val cache = temp.newFolder("cache-falha")
+        val raiz = temp.newFolder("raiz-falha")
+        val baixado = File(cache, "whisper-npu-v${WhisperOrtNpuPacote.VERSAO}.zip.download")
+        val resultado = WhisperOrtNpuPacote.instalarEm(
+            cacheDir = cache,
+            raiz = raiz,
+            urlPacote = falso.toURI().toString(),
+        )
+        assertTrue("ZIP divergente tem de falhar", resultado.isFailure)
+        assertTrue(".zip.download tem de ser apagado após falha", !baixado.exists())
     }
 }

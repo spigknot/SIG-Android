@@ -1,0 +1,20 @@
+{
+ "schema": "sig-whisper-npu-pacote/v1",
+ "versao": "2",
+ "soc": "SM8550",
+ "htp_arch": "73",
+ "dtype": "i16",
+ "criado_em": "2026-11-17T16:26:01-0300",
+ "arquivos": [
+  {
+   "nome": "sig_whisper_enc_w8a16.bin",
+   "bytes": 677531160,
+   "sha256": "0994c2a9969f525616ec0586c4e2dcb0a996544db0c51701bbb9e5eafcb598bf"
+  },
+  {
+   "nome": "sig_whisper_enc_w8a16_i16io.onnx",
+   "bytes": 436,
+   "sha256": "78ad673dc6510d6c602391918706cd01839be3efbddd269da747f72e7bea333e"
+  }
+ ]
+}

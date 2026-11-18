@@ -46,6 +46,17 @@ object WhisperOrtNpuPacote {
     const val DTYPE = WhisperOrtHtpConversao.DTYPE_I16
 
     /**
+     * R103/T02 — o manifesto PUBLICADO do v2 grava `dtype: "i16"`, enquanto o
+     * conversor da rota trabalha com `int16_le`. Tabela explícita e fechada:
+     * somente o valor publicado é aceito e ele é traduzido para o dtype canônico
+     * guardado em [Manifesto]. Nenhuma correspondência "por parecido" e nenhuma
+     * republicação do pacote: o ZIP `ec25399a…` continua intocável.
+     */
+    private val DTYPE_PUBLICADO_PARA_CONVERSAO: Map<String, String> = mapOf(
+        "i16" to DTYPE,
+    )
+
+    /**
      * Pacote publicado no bucket do projeto. O prefixo segue o padrão descoberto
      * na T01 (`packages/<familia>/...`), com a versão imutável no caminho.
      */
@@ -120,8 +131,10 @@ object WhisperOrtNpuPacote {
         val versao = raiz.optString("versao")
         val soc = raiz.optString("soc")
         val arch = raiz.optString("htp_arch")
-        val dtype = raiz.optString("dtype")
-        if (versao != VERSAO || soc != SOC || arch != HTP_ARCH || dtype != DTYPE) return null
+        // Tabela fechada: "i16" (publicado) -> DTYPE canônico; qualquer outro
+        // valor, inclusive o dtype canônico escrito direto, é recusado.
+        val dtype = DTYPE_PUBLICADO_PARA_CONVERSAO[raiz.optString("dtype")] ?: return null
+        if (versao != VERSAO || soc != SOC || arch != HTP_ARCH) return null
         val lista = raiz.optJSONArray("arquivos") ?: return null
         val itens = ArrayList<Item>(lista.length())
         for (i in 0 until lista.length()) {
@@ -306,29 +319,53 @@ object WhisperOrtNpuPacote {
         onProgresso: (Progresso) -> Unit = { },
     ): Result<Unit> = runCatching {
         if (estado(context) is Estado.Pronto && verificarCompleto(context) is Estado.Pronto) return@runCatching
+        instalarEm(
+            cacheDir = context.cacheDir,
+            raiz = raiz(context),
+            cancelado = cancelado,
+            onProgresso = onProgresso,
+        ).getOrThrow()
+    }
+
+    /**
+     * R103/T02 — o mesmo fluxo de [instalar] com diretórios, origem do ZIP e o
+     * aviso à rota injetados. É o seam usado pelo teste JVM de ponta a ponta
+     * contra o ZIP publicado; a lógica de produção não muda, só recebe parâmetros.
+     */
+    @VisibleForTesting
+    internal fun instalarEm(
+        cacheDir: File,
+        raiz: File,
+        urlPacote: String = URL_PACOTE,
+        cancelado: () -> Boolean = { false },
+        onProgresso: (Progresso) -> Unit = { },
+        aoMarcarVerificado: (Manifesto) -> Unit = { WhisperOrtHtpRota.pacoteVerificado(it) },
+    ): Result<Unit> = runCatching {
         check(SHA256_ZIP.length == 64 && SHA256_ZIP.any { it != '0' }) {
             "SHA-256 do pacote NPU nao configurado"
         }
         val zipBytes = if (BYTES_ZIP > 0L) BYTES_ZIP else 0L
-        val raiz = raiz(context).apply { mkdirs() }
-        val destino = dirDaVersao(context)
-        val arquivoZip = File(context.cacheDir, "whisper-npu-v$VERSAO.zip.download")
+        raiz.mkdirs()
+        val destino = File(raiz, VERSAO)
+        val arquivoZip = File(cacheDir, "whisper-npu-v$VERSAO.zip.download")
 
-        if (zipBytes > 0L && context.cacheDir.usableSpace < zipBytes + 32L * 1024 * 1024) {
+        if (zipBytes > 0L && cacheDir.usableSpace < zipBytes + 32L * 1024 * 1024) {
             error("espaco insuficiente para baixar ${zipBytes / 1_048_576} MB")
         }
-        baixar(arquivoZip, cancelado, onProgresso)
-        if (cancelado()) throw Cancelado()
-        onProgresso(Progresso(arquivoZip.length(), arquivoZip.length(), "validando"))
-        check(sha256(arquivoZip).equals(SHA256_ZIP, ignoreCase = true)) {
-            "SHA-256 do pacote NPU nao confere"
-        }
-
         val staging = File(raiz, ".staging-${System.nanoTime()}")
         staging.deleteRecursively()
-        staging.mkdirs()
+        // R103/T02.4: o try cobre também download e validação do SHA. Qualquer
+        // saída (sucesso, SHA divergente, cancelamento, espaço, extração) apaga
+        // o .zip.download do cache.
         try {
+            baixar(arquivoZip, urlPacote, cancelado, onProgresso)
+            if (cancelado()) throw Cancelado()
+            onProgresso(Progresso(arquivoZip.length(), arquivoZip.length(), "validando"))
+            check(sha256(arquivoZip).equals(SHA256_ZIP, ignoreCase = true)) {
+                "SHA-256 do pacote NPU nao confere"
+            }
             onProgresso(Progresso(arquivoZip.length(), arquivoZip.length(), "instalando"))
+            staging.mkdirs()
             val estimado = maxOf(arquivoZip.length(), BYTES_ZIP) + 96L * 1024 * 1024
             check(raiz.usableSpace >= estimado) {
                 "espaco insuficiente para extrair: precisa ${estimado / 1_048_576} MB"
@@ -354,19 +391,49 @@ object WhisperOrtNpuPacote {
                 destino.exists()
             }.getOrDefault(false)
             check(ativado) { "falha ao ativar o pacote NPU" }
-            check(estado(context) is Estado.Pronto) { "pacote NPU nao ficou ativo" }
+            check(estadoEm(destino) is Estado.Pronto) { "pacote NPU nao ficou ativo" }
             anterior.deleteRecursively()
             // Instalado E conferido por SHA: só agora a rota pode pedir HTP.
-            WhisperOrtHtpRota.pacoteVerificado(manifesto)
+            aoMarcarVerificado(manifesto)
         } finally {
             staging.deleteRecursively()
             arquivoZip.delete()
         }
     }
 
-    private fun baixar(destino: File, cancelado: () -> Boolean, onProgresso: (Progresso) -> Unit) {
+    /** Estado rápido sobre um diretório já instalado (seam puro, sem Context). */
+    internal fun estadoEm(destino: File): Estado {
+        val marcador = File(destino, MARCADOR)
+        if (!marcador.isFile) return Estado.Ausente("sem marcador em $destino")
+        val manifesto = runCatching {
+            lerManifesto(File(destino, NOME_MANIFESTO).readText())
+        }.getOrNull() ?: return Estado.Invalido("manifesto ilegivel")
+        if (marcador.readText().trim() != textoMarcadorEsperado(manifesto)) {
+            return Estado.Invalido("marcador divergente")
+        }
+        for (item in manifesto.itens) {
+            val arquivo = File(destino, item.nome)
+            if (!arquivo.isFile) return Estado.Ausente("ausente:${item.nome}")
+            if (arquivo.length() != item.bytes) return Estado.Invalido("tamanho:${item.nome}")
+        }
+        return Estado.Pronto(destino, manifesto)
+    }
+
+    private fun baixar(
+        destino: File,
+        url: String,
+        cancelado: () -> Boolean,
+        onProgresso: (Progresso) -> Unit,
+    ) {
         destino.parentFile?.mkdirs()
-        val conn = (URL(URL_PACOTE).openConnection() as HttpURLConnection).apply {
+        if (url.startsWith("file:", ignoreCase = true)) {
+            val origem = File(java.net.URI(url))
+            BufferedInputStream(FileInputStream(origem)).use { entrada ->
+                gravarComProgresso(destino, entrada, origem.length(), cancelado, onProgresso)
+            }
+            return
+        }
+        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
             instanceFollowRedirects = true
             connectTimeout = 20_000
             readTimeout = 300_000
@@ -376,22 +443,32 @@ object WhisperOrtNpuPacote {
             check(conn.responseCode in 200..299) { "download NPU retornou HTTP ${conn.responseCode}" }
             val total = conn.contentLengthLong.takeIf { it > 0L } ?: BYTES_ZIP
             BufferedInputStream(conn.inputStream).use { entrada ->
-                FileOutputStream(destino).use { saida ->
-                    val buffer = ByteArray(256 * 1024)
-                    var baixados = 0L
-                    while (true) {
-                        if (cancelado()) throw Cancelado()
-                        val n = entrada.read(buffer)
-                        if (n < 0) break
-                        saida.write(buffer, 0, n)
-                        baixados += n
-                        onProgresso(Progresso(baixados, total, "baixando"))
-                    }
-                    saida.fd.sync()
-                }
+                gravarComProgresso(destino, entrada, total, cancelado, onProgresso)
             }
         } finally {
             conn.disconnect()
+        }
+    }
+
+    private fun gravarComProgresso(
+        destino: File,
+        entrada: java.io.InputStream,
+        total: Long,
+        cancelado: () -> Boolean,
+        onProgresso: (Progresso) -> Unit,
+    ) {
+        FileOutputStream(destino).use { saida ->
+            val buffer = ByteArray(256 * 1024)
+            var baixados = 0L
+            while (true) {
+                if (cancelado()) throw Cancelado()
+                val n = entrada.read(buffer)
+                if (n < 0) break
+                saida.write(buffer, 0, n)
+                baixados += n
+                onProgresso(Progresso(baixados, total, "baixando"))
+            }
+            saida.fd.sync()
         }
     }
 
