@@ -11,7 +11,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -33,7 +32,8 @@ import java.util.concurrent.atomic.AtomicLong
  *   instrumentado ([BackendMedido]);
  * - `residuo_ns` = parede − (frontend + encoder + start + soma dos step);
  * - `tokens`, `tokens_ts` e `janelas`;
- * - `pss_pico_kb` (amostrado a cada 50 ms), `t_antes_c`/`t_depois_c` e o
+ * - `pss_antes_kb`/`pss_depois_kb` (uma leitura de cada lado), `rss_pico_kb`
+ *   (`VmHWM` zerado por clipe), `t_antes_c`/`t_depois_c` e o
  *   `thermal_status` do Android.
  *
  * O texto NÃO vai para o logcat: a linha de log leva só o id. O texto vai para o
@@ -179,34 +179,32 @@ class WhisperR109LatenciaTest {
         override val melBinsDetectados: Int get() = real.melBinsDetectados
     }
 
-    /** Amostra o PSS a cada 50 ms para pegar o PICO, não só as pontas. */
-    private class AmostraPss {
-        private val ativo = AtomicBoolean(true)
-        private val pico = AtomicLong(0L)
-        private val thread = Thread {
-            while (ativo.get()) {
-                val kb = runCatching { Debug.getPss().toLong() }.getOrDefault(0L)
-                pico.updateAndGet { atual -> if (kb > atual) kb else atual }
-                try {
-                    Thread.sleep(50)
-                } catch (_: InterruptedException) {
-                    return@Thread
-                }
-            }
-        }
+    /**
+     * Medida de memória NÃO INVASIVA.
+     *
+     * Antes havia uma thread chamando `Debug.getPss()` a cada 50 ms durante a
+     * inferência. `getPss()` percorre `/proc/self/smaps_rollup` e toma o
+     * `mmap_sem`; o `fastrpc`/QNN mapeia memória compartilhada para o DSP pelo
+     * mesmo caminho, e o processo morria ou travava depois de 3–4 clipes (a rota
+     * do produto, sem sampler, durou 138). Aqui:
+     *
+     * - `pss` é lido UMA vez antes e UMA depois de cada clipe (barato, fora da
+     *   janela de inferência);
+     * - `rss_pico_kb` vem de `VmHWM` (high-water mark do kernel), zerado antes de
+     *   cada clipe por `/proc/self/clear_refs` — é o PICO de verdade, sem
+     *   amostragem e sem lock.
+     */
+    private fun pssKb(): Long = runCatching { Debug.getPss().toLong() }.getOrDefault(-1L)
 
-        fun iniciar() {
-            pico.set(runCatching { Debug.getPss().toLong() }.getOrDefault(0L))
-            thread.isDaemon = true
-            thread.start()
-        }
-
-        fun parar(): Long {
-            ativo.set(false)
-            thread.join(500)
-            return pico.get()
-        }
+    private fun zerarPicoRss() {
+        runCatching { File("/proc/self/clear_refs").writeText("5\n") }
     }
+
+    private fun rssPicoKb(): Long = runCatching {
+        File("/proc/self/status").readLines()
+            .firstOrNull { it.startsWith("VmHWM:") }
+            ?.split(Regex("\\s+"))?.getOrNull(1)?.toLong() ?: -1L
+    }.getOrDefault(-1L)
 
     @Test
     fun latencia() {
@@ -291,14 +289,15 @@ class WhisperR109LatenciaTest {
                 val id = fonte.nameWithoutExtension
                 val medido = BackendMedido(backend)
                 val transcriber = WhisperOrtTranscriber(tokenizer, policy, frontend)
-                val pss = AmostraPss()
+                zerarPicoRss()
+                val pssAntes = pssKb()
                 val tAntes = temperaturaC()
                 val statusAntes = thermalStatus()
-                pss.iniciar()
                 val inicio = System.nanoTime()
                 val transcript = transcriber.transcribe(medido, pcm)
                 val paredeNs = System.nanoTime() - inicio
-                val pssPico = pss.parar()
+                val pssDepois = pssKb()
+                val rssPico = rssPicoKb()
                 val tDepois = temperaturaC()
                 val statusDepois = thermalStatus()
 
@@ -332,7 +331,9 @@ class WhisperR109LatenciaTest {
                     .put("tokens", tokens)
                     .put("tokens_ts", tokensTs)
                     .put("audio_ms", transcript.audioMillis)
-                    .put("pss_pico_kb", pssPico)
+                    .put("pss_antes_kb", pssAntes)
+                    .put("pss_depois_kb", pssDepois)
+                    .put("rss_pico_kb", rssPico)
                     .put("t_antes_c", if (tAntes.isNaN()) JSONObject.NULL else tAntes)
                     .put("t_depois_c", if (tDepois.isNaN()) JSONObject.NULL else tDepois)
                     .put("thermal_antes", statusAntes)
