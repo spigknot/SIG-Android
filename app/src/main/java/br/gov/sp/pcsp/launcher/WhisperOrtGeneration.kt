@@ -19,6 +19,12 @@ package br.gov.sp.pcsp.launcher
  *    `begin_suppress_tokens` só na primeira posição (é o que impede nascer vazio).
  * 5. **Cancelamento antes das etapas caras**: um cancel já conhecido não roda
  *    encoder nem inicializa o decoder.
+ * 6. **Busca sem boxing (R109)**: a supressão por posição é materializada em
+ *    `BooleanArray` pré-calculados e a recusa de logit não finito acontece na
+ *    MESMA passada do argmax. A ordem de visita dos ids, as operações em ponto
+ *    flutuante e as exceções são as de antes — o `choose` anterior ficou em
+ *    `app/src/test` como oráculo e a igualdade é provada por teste de
+ *    propriedade em 200 000 vetores de logits, nos dois modos de política.
  *
  * Classificação de falha: [WhisperOrtRuntimeFault] (erro de runtime do ORT) é
  * RECUPERÁVEL; shape, não finito, config e cancelamento são definitivos e nunca
@@ -52,6 +58,44 @@ class WhisperOrtGenerator(
             policy.prompt.size,
         )
         require(incoerencia == null) { "config incoerente: $incoerencia" }
+    }
+
+    /**
+     * Supressão por posição MATERIALIZADA (R109).
+     *
+     * A regra de [WhisperOrtGenerationPolicy.isSuppressed] era consultada em
+     * toda posição do vocabulário — 51 866 por passo, contra um `Set<Int>` de 88
+     * ids, com boxing por consulta. Aqui a MESMA regra é calculada uma vez por
+     * gerador em dois `BooleanArray`: [suprimidoBase] para as posições > 0 e
+     * [suprimidoPrimeira] para a posição 0, que também sofre
+     * `begin_suppress_tokens`.
+     *
+     * A igualdade com [WhisperOrtGenerationPolicy.isSuppressed] em todo id e em
+     * toda posição é provada por teste de propriedade: os dois caminhos não
+     * podem divergir sem reprovar.
+     */
+    private val suprimidoBase: BooleanArray = mascaraDeSupressao(primeira = false)
+
+    /** Mesma máscara, com `begin_suppress_tokens` somado (posição 0). */
+    private val suprimidoPrimeira: BooleanArray = mascaraDeSupressao(primeira = true)
+
+    private fun mascaraDeSupressao(primeira: Boolean): BooleanArray {
+        val vocabSize = tokenizer.vocabSize
+        val eos = tokenizer.eosTokenId
+        val config = policy.config
+        val mask = BooleanArray(vocabSize)
+        // Conjuntos do export percorridos UMA vez, fora do laço quente.
+        for (id in config.suppressTokens) if (id in 0 until vocabSize) mask[id] = true
+        if (primeira) {
+            for (id in config.beginSuppressTokens) if (id in 0 until vocabSize) mask[id] = true
+        }
+        // Regra de política, com a isenção do EOS que [isSuppressed] aplica
+        // DEPOIS da config.
+        for (id in 0 until vocabSize) {
+            if (id == eos) continue
+            if (policy.pelaPolitica(id)) mask[id] = true
+        }
+        return mask
     }
 
     /**
@@ -171,6 +215,14 @@ class WhisperOrtGenerator(
      *
      * Devolve `null` quando não há candidato elegível — o chamador transforma em
      * ERROR com motivo, nunca em texto vazio silencioso.
+     *
+     * **R109:** a recusa de logit não finito entrou na MESMA passada do argmax e
+     * a supressão vem de `BooleanArray` (sem `Set<Int>`, sem boxing). O que NÃO
+     * mudou: a ordem de visita dos ids (0..vocabSize-1), o `>` do argmax, a
+     * soma `somaExpTs` em `Double` relativa ao maior logit de timestamp, o `ln`
+     * e a comparação com `textoRelativo`. A recusa continua acontecendo para o
+     * PRIMEIRO id não finito em ordem de índice, elegível ou não — é o que
+     * mantém a mensagem idêntica à da versão anterior.
      */
     private fun choose(
         logits: FloatArray,
@@ -184,13 +236,7 @@ class WhisperOrtGenerator(
                 "logits com ${logits.size} posições != vocabulário ${tokenizer.vocabSize}",
             )
         }
-        // Não finito inválido: NaN e +Inf são defeito do modelo. -Inf é máscara.
-        for (i in logits.indices) {
-            val value = logits[i]
-            if (value.isNaN() || value == Float.POSITIVE_INFINITY) {
-                throw InvalidInput("logit não finito na posição $i ($value)")
-            }
-        }
+        val suprimido = if (position == 0) suprimidoPrimeira else suprimidoBase
         var best = -1
         var bestValue = Float.NEGATIVE_INFINITY
         // Massa temporal (referência): avaliada DEPOIS de todas as máscaras —
@@ -201,7 +247,14 @@ class WhisperOrtGenerator(
         var somaExpTs = 0.0
         val primeiroTs = WhisperOrtSegments.timestampBegin(policy.config.noTimestampsTokenId)
         for (id in 0 until tokenizer.vocabSize) {
-            if (policy.isSuppressed(id, position, tokenizer.eosTokenId)) continue
+            val value = logits[id]
+            // Não finito inválido: NaN e +Inf são defeito do modelo. -Inf é
+            // máscara. A checagem vem ANTES da supressão de propósito: a recusa
+            // não depende de o id ser elegível.
+            if (value.isNaN() || value == Float.POSITIVE_INFINITY) {
+                throw InvalidInput("logit não finito na posição $id ($value)")
+            }
+            if (suprimido[id]) continue
             if (policy.timestampMode &&
                 !timestampAllowed(
                     id, position, primeiroTs, ultimoTimestamp,
@@ -210,7 +263,6 @@ class WhisperOrtGenerator(
             ) {
                 continue
             }
-            val value = logits[id]
             if (value > bestValue) {
                 bestValue = value
                 best = id
@@ -487,19 +539,37 @@ data class WhisperOrtGenerationPolicy(
      * posição 0 (`begin_suppress_tokens`). A isenção do EOS vale só para a faixa
      * de controle — antes ela vinha antes da config e o EOS ganhava a primeira
      * posição, devolvendo texto vazio apesar de `config_suppressed=true`.
+     *
+     * Esta é a forma ESCALAR da regra e continua sendo o ORÁCULO dela: o laço
+     * quente do [WhisperOrtGenerator] usa [pelaPolitica] materializada em
+     * `BooleanArray` (R109), e um teste de propriedade exige que os dois
+     * caminhos concordem em todo id e em toda posição.
      */
     fun isSuppressed(id: Int, position: Int, eosTokenId: Int): Boolean {
         if (config.isSuppressed(id, position)) return true
         if (id == eosTokenId) return false
+        return pelaPolitica(id)
+    }
+
+    /**
+     * Só a parte de POLÍTICA da supressão (sem a config do export e sem a
+     * isenção do EOS, que o chamador aplica antes).
+     *
+     * No modo temporal, tokens de controle seguem proibidos (idioma/tarefa/
+     * no_timestamps) e os `<|t|>` a partir de `<|0.00|>` são liberados; no modo
+     * sem timestamps, tudo de [suppressFrom] em diante é controle.
+     */
+    internal fun pelaPolitica(id: Int): Boolean {
         if (timestampMode) {
-            // Controle segue proibido (idioma/tarefa/no_timestamps); timestamp é
-            // permitido a partir de <|0.00|>.
-            val primeiroTimestamp = WhisperOrtSegments.timestampBegin(config.noTimestampsTokenId)
             if (id >= primeiroTimestamp) return false
             return id >= suppressFrom
         }
         return id >= suppressFrom
     }
+
+    /** `<|0.00|>` do pacote: base da faixa de timestamps do modo temporal. */
+    private val primeiroTimestamp: Int =
+        WhisperOrtSegments.timestampBegin(config.noTimestampsTokenId)
 }
 
 /** Como a geração terminou. Só [EOS] significa transcrição integral. */
