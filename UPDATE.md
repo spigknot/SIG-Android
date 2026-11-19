@@ -69,6 +69,12 @@ Se esta for uma release somente do APK, confirmar que `NativeDependencyManager.k
 e o contrato dos ZIPs não foram alterados. Nesse caso, os pacotes existentes no
 R2 serão reutilizados; não gerar ZIPs locais.
 
+Quando o diff tocar arquivos publicados no R2 (pacote NPU, QAIRT ou nativo),
+verificar ANTES do bump: `HEAD` do objeto com o tamanho declarado, download com
+SHA-256 igual ao constante do código e, se o ZIP tiver `manifest.json`, bytes e
+SHA-256 de CADA arquivo listado. Divergência = parar e reportar; nunca publicar
+APK que referencia artefato divergente.
+
 ## 3. Build (gate completo)
 
 ```bash
@@ -224,6 +230,7 @@ a fonte da verdade e deve evoluir com a prática.
 | `cp /o/sig.apk` falha com "No such file or directory" (release 20261005_001) | O: = SMB do celular (`\\100.108.27.64\Celular`) caiu — o tailnet/adaptador desmonta a unidade sem aviso (pitfall #57) | IGNORAR (UPDATE.md §4 — destino menos importante); seguir com commit/GitHub. O APK local em `app/build/outputs/apk/debug/sig.apk` é a fonte. `ls /o/` ANTES do `cp` para conferir montagem |
 | `assembleDebug` "UP-TO-DATE" após commit que só mudou docs/relatório | o APK já reflete o código (build anterior ao commit de doc-only) — Gradle não reempacota sem mudança de fonte | Se precisar provar que o APK == HEAD, fazer `./gradlew clean :app:assembleDebug` (rebuild completo, ~1min); o APK de saída tem o mesmo SHA quando só docs mudaram |
 | Dependência nativa baixando do Drive | `NativeDependencyManager.kt` com URL antiga | usar `https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/sig-android-dependencies-v2-<abi>.zip` |
+| HEAD/GET no `pub-*.r2.dev` devolve 403 só para o script de verificação | Cloudflare recusa o UA padrão `Python-urllib/3.x`; `curl` e o app passam | enviar `User-Agent` de navegador (ou usar `curl`); conferir `Content-Length` por HEAD, baixar e comparar SHA-256, e validar `manifest.json` (bytes+SHA por arquivo) quando o ZIP tiver um |
 | Transcrição no emulador morre em segundos com `UnknownHostException: Unable to resolve host "servidor"` | o nome `servidor` só existe no arquivo hosts do PC (`100.70.207.12`); o emulador tem resolução própria e não enxerga esse arquivo (e não dá para editar `/system/etc/hosts`: build de produção) | subir o emulador com `-dns-server 100.100.100.100` (o MagicDNS responde o nome curto E o FQDN) e conferir com `adb shell ping -c 2 -W 3 servidor` antes de testar o APK |
 | `EPERM` ao salvar TXT do Whisper/Ocorrência ou ao enviar texto para gerenciador de arquivos | Android com armazenamento segmentado: a pasta pública `SIG` não está autorizada e `ACTION_SEND` recebeu somente `EXTRA_TEXT` | usar o diretório externo privado como fallback e compartilhar um `.txt` real por `FileProvider`/`EXTRA_STREAM`; exportar para a pasta escolhida via SAF |
 | Commit saiu com a MENSAGEM de outra mudança (conteúdo correto) | script de commit reaproveitado de uma mudança anterior sem reescrever a mensagem | escrever a mensagem `Versao YYYYMMDD_NNN: ...` NOVO padrão no script a cada uso — corrigir depois exige force push (proibido) |
