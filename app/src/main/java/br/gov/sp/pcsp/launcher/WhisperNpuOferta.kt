@@ -20,10 +20,18 @@ object WhisperNpuOferta {
     /** Chave da recusa, no mesmo arquivo de preferências da ferramenta. */
     const val PREF_CHAVE = "whisper_npu_oferta_recusada"
 
+    /** R115 — recusa da oferta de ATUALIZAÇÃO (v2 → v3), independente da primeira. */
+    const val PREF_CHAVE_ATUALIZACAO = "whisper_npu_atualizacao_recusada"
+
     /** Porta de persistência — a Activity usa [Preferencias]; o teste usa memória. */
     interface Armazenamento {
         fun recusado(): Boolean
         fun registrarRecusa()
+
+        /** R115: o usuário já disse "agora não" à atualização para o v3. */
+        fun atualizacaoRecusada(): Boolean = false
+
+        fun registrarRecusaAtualizacao() {}
     }
 
     /** Implementação de produção: sobrevive ao fechamento e recriação da tela. */
@@ -35,6 +43,12 @@ object WhisperNpuOferta {
 
         override fun registrarRecusa() {
             prefs.edit().putBoolean(PREF_CHAVE, true).apply()
+        }
+
+        override fun atualizacaoRecusada(): Boolean = prefs.getBoolean(PREF_CHAVE_ATUALIZACAO, false)
+
+        override fun registrarRecusaAtualizacao() {
+            prefs.edit().putBoolean(PREF_CHAVE_ATUALIZACAO, true).apply()
         }
     }
 
@@ -101,4 +115,33 @@ object WhisperNpuOferta {
      */
     fun deveOferecerAutomaticamente(armazenamento: Armazenamento, situacao: Situacao): Boolean =
         situacao == Situacao.AUSENTE && !armazenamento.recusado()
+
+    // -------------------------------------------------------------- R115/T02.4
+
+    /** O que está instalado, para a oferta de ATUALIZAÇÃO. */
+    enum class Instalado { NENHUM, V2, V3 }
+
+    /** Rótulo da oferta/entrada quando o v3 ainda não chegou e o v2 está em uso. */
+    const val ROTULO_ATUALIZACAO = "Atualizar aceleração NPU"
+
+    /**
+     * Oferta automática de ATUALIZAÇÃO (R115): **uma vez**, só com o v2 instalado
+     * e o v3 ausente. Recusou, não pergunta de novo — a entrada fixa continua
+     * abrindo o MESMO diálogo. Sem pacote nenhum, vale a oferta normal; com o v3
+     * pronto, não há o que oferecer.
+     */
+    fun deveOferecerAtualizacao(armazenamento: Armazenamento, instalado: Instalado): Boolean =
+        instalado == Instalado.V2 && !armazenamento.atualizacaoRecusada()
+
+    /** A entrada fixa vira "Atualizar aceleração NPU" com o v2 instalado. */
+    fun rotuloEntradaFixa(
+        situacao: Situacao,
+        qairtInstalado: Boolean = true,
+        instalado: Instalado = Instalado.NENHUM,
+    ): String = when {
+        situacao == Situacao.PRONTO && qairtInstalado && instalado != Instalado.V2 -> "NPU ativa"
+        instalado == Instalado.V2 -> ROTULO_ATUALIZACAO
+        situacao == Situacao.CORROMPIDO -> "Reinstalar aceleração NPU"
+        else -> "Ativar aceleração NPU"
+    }
 }

@@ -8,6 +8,7 @@ import ai.onnxruntime.OrtSession
 import ai.onnxruntime.TensorInfo
 import android.content.Context
 import android.os.Build
+import androidx.annotation.VisibleForTesting
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -152,17 +153,63 @@ object WhisperOrtHtpRota {
     /** Tempo da conferência rápida deste processo (vai para o recibo da C14). */
     fun conferenciaMs(): Long = conferenciaMs
 
-    /** Chamado pelo [WhisperOrtNpuPacote] quando a verificação completa passou. */
+    /**
+     * Chamado pelo [WhisperOrtNpuPacote] quando a verificação completa passou.
+     *
+     * R117 §T01 (correção da C6 da R116) — o diretório do pacote é o **da versão
+     * do manifesto verificado**. Antes desta correção ele vinha de
+     * `dirDaVersao(app)`, que sempre aponta para o v3: com o v2 ativo e o v3
+     * ausente a sessão procurava o wrapper no lugar errado, recusava com
+     * "wrapper ausente" e a transcrição caía para a CPU sem aceleração.
+     */
     fun pacoteVerificado(manifesto: WhisperOrtNpuPacote.Manifesto) {
-        this.manifesto = manifesto
-        this.dirPacote = app?.let { WhisperOrtNpuPacote.dirDaVersao(it) }
-        pacoteVerificado = true
-        motivoIndisponivel = null
+        pacoteVerificadoEm(app?.let { WhisperOrtNpuPacote.raiz(it) }, manifesto)
         android.util.Log.i(
             TAG,
             "pacote verificado versao=${manifesto.versao} soc=${manifesto.soc} " +
-                "arquivos=${manifesto.itens.size}",
+                "arquivos=${manifesto.itens.size} dir=${dirPacote?.name ?: "-"}",
         )
+    }
+
+    /**
+     * Seam da anotação de pacote verificado, sem Android: recebe a RAIZ do pacote
+     * e resolve o diretório pela versão do manifesto. O produto passa
+     * `raiz(context)`; o teste JVM passa um diretório temporário e prova a C6
+     * (v2 verificado com o v3 ausente), o v3 verificado e a troca no meio do
+     * processo.
+     */
+    @VisibleForTesting
+    internal fun pacoteVerificadoEm(raiz: File?, manifesto: WhisperOrtNpuPacote.Manifesto) {
+        this.manifesto = manifesto
+        this.dirPacote = raiz?.let { WhisperOrtNpuPacote.dirDoManifesto(it, manifesto) }
+        pacoteVerificado = true
+        motivoIndisponivel = null
+    }
+
+    /** Diretório do pacote em uso (v2 verificado quando o v3 não chegou). */
+    @VisibleForTesting
+    internal fun dirPacoteAtual(): File? = dirPacote
+
+    /** `true` quando a conferência deste processo terminou com pacote verificado. */
+    @VisibleForTesting
+    internal fun pacoteVerificadoNesteProcesso(): Boolean = pacoteVerificado
+
+    /** Zera o estado do singleton entre casos de teste (JVM, mesmo processo). */
+    @VisibleForTesting
+    internal fun reiniciarEstadoParaTeste() {
+        app = null
+        iniciado = false
+        desligadoNoProcesso = false
+        motivoIndisponivel = "nao_avaliado"
+        manifesto = null
+        dirPacote = null
+        ortCarregado = false
+        qnnCarregado = false
+        ultimoLoadMs = 0L
+        pacoteVerificado = false
+        conferenciaMs = 0L
+        detalheConferencia = null
+        contouFalhaNesteProcesso = false
     }
 
     /** Chamado quando o pacote não está disponível; a rota segue em CPU. */
@@ -248,8 +295,30 @@ object WhisperOrtHtpRota {
             throw Recusa("arch do pacote ${pacote.htpArch} != SoC ${archEsperada ?: "?"}")
         }
 
-        val dir = dirPacote ?: WhisperOrtNpuPacote.dirDaVersao(ctx)
+        val dir = dirPacote ?: WhisperOrtNpuPacote.dirAtivo(WhisperOrtNpuPacote.raiz(ctx))
         val inicio = System.nanoTime()
+        val qairt = QairtDependencyManager.packageDir(ctx)
+
+        // R115 §T02 — pacote v3 verificado: rota HTP de PONTA A PONTA (Q′).
+        if (pacote.pontaAPonta) {
+            val backend = try {
+                carregarOrt(ctx)
+                carregarQnnQairt(ctx, pacote.htpArch)
+                abrirPontaAPonta(dir, qairt, pacote.htpArch, encoder, decoder, past, threads)
+            } catch (falha: Throwable) {
+                registrarFalha("abertura v3: ${falha.javaClass.simpleName}: ${falha.message}")
+                throw Recusa("abertura v3: ${falha.message ?: falha.javaClass.simpleName}")
+            }
+            ultimoLoadMs = (System.nanoTime() - inicio) / 1_000_000
+            android.util.Log.i(
+                TAG,
+                "rota=htp-ponta-a-ponta soc=${WhisperOrtHtpAdmissao.normalizarSoc(socModelo())} " +
+                    "pacote=${pacote.versao} arch=${pacote.htpArch} load_ms=$ultimoLoadMs",
+            )
+            return backend
+        }
+
+        // Pacote v2 (só o encoder): rota antiga — encoder HTP + decoders CPU.
         val sessaoHtp = try {
             carregarOrt(ctx)
             // R101 §T02 — um único QAIRT no processo: as libs vêm daqui, e não
@@ -257,7 +326,7 @@ object WhisperOrtHtpRota {
             carregarQnnQairt(ctx, pacote.htpArch)
             abrirSessaoHtp(
                 File(dir, WhisperOrtNpuPacote.WRAPPER),
-                QairtDependencyManager.packageDir(ctx),
+                qairt,
                 pacote.htpArch,
             )
         } catch (falha: Throwable) {
@@ -284,6 +353,65 @@ object WhisperOrtHtpRota {
                 "pacote=${pacote.versao} arch=${pacote.htpArch} load_ms=$ultimoLoadMs",
         )
         return WhisperOrtHtpBackend(sessaoHtp, decoders, pacote.dtype)
+    }
+
+    /**
+     * R115 — limite ARTIFICIAL de passos HTP por janela, só para o teste da volta
+     * forçada para a CPU (T04.5). `null` (produção) usa o contrato: 199 posições.
+     * Não é alcançável pela UI nem por preferência; quem escreve é o
+     * instrumentation, no mesmo processo.
+     */
+    @VisibleForTesting
+    internal var limiteHtpParaTeste: Int? = null
+
+    /**
+     * R115 §T02.1 — abre as três sessões EPContext do pacote v3 e monta o
+     * backend de ponta a ponta. Os decoders CPU do produto entram como provider
+     * PREGUIÇOSO: só carregam na primeira volta para a CPU.
+     */
+    private fun abrirPontaAPonta(
+        dir: File,
+        dirQairt: File,
+        htpArch: String,
+        encoder: File,
+        decoder: File,
+        past: File,
+        threads: Int,
+    ): WhisperOrtBackend {
+        val env = OrtEnvironment.getEnvironment(OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING, TAG)
+        val sessaoEncoder = abrirSessaoHtp(File(dir, WhisperOrtNpuPacote.WRAPPER), dirQairt, htpArch)
+        val sessaoProjetor = try {
+            WhisperOrtHtpSessoesOrt.abrir(
+                env, File(dir, WhisperOrtNpuPacote.PROJETOR_WRAPPER), dirQairt, htpArch,
+            )
+        } catch (falha: Throwable) {
+            runCatching { sessaoEncoder.close() }
+            throw falha
+        }
+        val sessaoDecoder = try {
+            WhisperOrtHtpSessoesOrt.abrir(
+                env, File(dir, WhisperOrtNpuPacote.DECODER_WRAPPER), dirQairt, htpArch,
+            )
+        } catch (falha: Throwable) {
+            runCatching { sessaoProjetor.close() }
+            runCatching { sessaoEncoder.close() }
+            throw falha
+        }
+        return WhisperOrtHtpLoopBackend(
+            encoder = sessaoEncoder,
+            projetor = WhisperOrtHtpSessoesOrt.projetor(env, sessaoProjetor),
+            decoder = WhisperOrtHtpSessoesOrt.decoder(env, sessaoDecoder),
+            limiteHtp = limiteHtpParaTeste ?: WhisperOrtHtpContrato.POSICOES_CACHE_SELF,
+            decodersCpu = {
+                WhisperOrtSession(encoder, decoder, past, threads).also { cpu ->
+                    cpu.openDecodersOnly(
+                        melBins = WhisperOrtFrontend.N_MELS,
+                        frames = 1500,
+                        dim = 1280,
+                    )
+                }
+            },
+        )
     }
 
     /**

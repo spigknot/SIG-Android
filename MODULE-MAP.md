@@ -212,8 +212,8 @@ também é bloqueado.
 | `AppUpdateChecker.kt` | Atualização via GitHub (release, parse, download). |
 | `NativeDependencyManager.kt` | Pacote nativo: versão/URL/SHA-256 por ABI e ativação. |
 | `QairtDependencyManager.kt` | Dependência QAIRT (Qualcomm NPU): detecção/instalação. |
-| `WhisperOrtNpuPacote.kt` | R100 §2.3: pacote R2 do encoder W8A16 do SM8550 (contexto + wrapper + 5 libs V73) — ZIP validado por SHA-256, manifesto por arquivo, staging/ativação atômica, política de rede medida e de espaço, download em segundo plano que nunca bloqueia a transcrição. |
-| `WhisperNpuOferta.kt` | R102 §T01: oferta única da aceleração NPU (recusa persistida e entrada fixa que abre o mesmo diálogo). |
+| `WhisperOrtNpuPacote.kt` | R100 §2.3 + R115 §T02: pacote R2 da aceleração NPU do SM8550 — v3 (encoder + projetor + decoder W8A16) com contrato de tipos no manifesto, v2 aceito até o v3 verificar, remoção atômica do v2, ZIP validado por SHA-256, staging/ativação atômica e download só por ação do usuário. |
+| `WhisperNpuOferta.kt` | R102 §T01 + R115 §T02.4: oferta única da aceleração NPU e oferta de ATUALIZAÇÃO v2→v3 (recusas persistidas em separado e entrada fixa que abre o mesmo diálogo). |
 | `WhisperNpuAceiteReceipt.kt` | R102 §T01: recibo do harness de aceite (roteada/efetiva, versões, tempos, três instantes do cancelamento) com texto restrito ao arquivo do EV. |
 | `NativeDependencyPrompt.kt` | Diálogo de download do pacote nativo. |
 | `DownloadPlanDialog.kt` | Diálogo de download com lista rolável e log que acumula (todas as telas). |
@@ -238,6 +238,10 @@ mora no KDoc do arquivo e nos testes, não aqui.
 | `WhisperOrtPrompt.kt` | ORT1/D02: ids reais do prefixo (sot/idioma/tarefa/notimestamps) do export congelado e validação que recusa prefixo sem idioma. |
 | `WhisperOrtHtpAdmissao.kt` | R100 §2.2: tabela PURA de SoC da rota HTP (SM8550 ligado, SM8850 presente e desligado até a M4, resto CPU) e política de falhas consecutivas entre processos. |
 | `WhisperOrtHtpConversao.kt` | R100 §2.3: dtype do encoder W8A16 do produto — quantização/dequantização INT16 com as constantes da R97 e conversão F16 portátil, sem Android. |
+| `WhisperOrtHtpContrato.kt` | R115 §T02: contrato numérico da rota HTP de ponta a ponta — escala/offset dos logits (R111), máscara de 200 alinhada à direita, hidden do encoder e janela de 199 posições antes da volta para a CPU. |
+| `WhisperOrtFeedbackDireto.kt` | R115 §T02.1: realimentação direta entre passos do decoder HTP — saídas viram entradas, zeros no primeiro passo, resultado anterior fechado só DEPOIS do run, com recusa registrada e queda para cópia. |
+| `WhisperOrtHtpLoopBackend.kt` | R115 §T02: backend HTP de ponta a ponta (encoder → projetor → decoder O3 no cache fixo), prompt token a token, logits pelo contrato e volta da janela inteira para o decoder CPU INT8 na posição 199 ou em falha da HTP, com decoders CPU preguiçosos. |
+| `WhisperOrtHtpSessoesOrt.kt` | R115 §T02.1: as três sessões EPContext da rota de ponta a ponta em ORT (opções QNN únicas), projetor 1→8 K/V e decoder 19→9 com realimentação direta e modo cópia de reserva. |
 | `WhisperOrtGeneration.kt` | ORT1/D03/D04/D06: laço greedy sobre backend injetável, supressão de tokens de controle e terminal tipado (EOS/MAX_TOKENS/CANCELLED/RECOVERABLE/ERROR), recusando logits não finitos e fora do vocabulário. |
 | `WhisperOrtGenerationConfig.kt` | ORT1/D04: configuração efetiva do export (suppress_tokens, begin_suppress_tokens, max_length TOTAL e ids de eos/start) lida do `generation_config.json`, com orçamento de tokens que desconta o prefixo. |
 | `WhisperOrtStagePolicy.kt` | R16/§5 (GPU-3): seam PURO de política de estágio do ORT — decide `CPU_INTEGRAL` (default) × `HIBRIDO_QNN_GPU_ENC_CPU_DEC` por modelo/SoC/runtime/segmentos, com motivo tipado por recusa, fallback só com consentimento explícito, rótulo de hardware por estágio e chave de cache que distingue modo/modelo/threads/versões/hash dos segmentos. |
