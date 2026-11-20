@@ -153,17 +153,63 @@ object WhisperOrtHtpRota {
     /** Tempo da conferência rápida deste processo (vai para o recibo da C14). */
     fun conferenciaMs(): Long = conferenciaMs
 
-    /** Chamado pelo [WhisperOrtNpuPacote] quando a verificação completa passou. */
+    /**
+     * Chamado pelo [WhisperOrtNpuPacote] quando a verificação completa passou.
+     *
+     * R117 §T01 (correção da C6 da R116) — o diretório do pacote é o **da versão
+     * do manifesto verificado**. Antes desta correção ele vinha de
+     * `dirDaVersao(app)`, que sempre aponta para o v3: com o v2 ativo e o v3
+     * ausente a sessão procurava o wrapper no lugar errado, recusava com
+     * "wrapper ausente" e a transcrição caía para a CPU sem aceleração.
+     */
     fun pacoteVerificado(manifesto: WhisperOrtNpuPacote.Manifesto) {
-        this.manifesto = manifesto
-        this.dirPacote = app?.let { WhisperOrtNpuPacote.dirDaVersao(it) }
-        pacoteVerificado = true
-        motivoIndisponivel = null
+        pacoteVerificadoEm(app?.let { WhisperOrtNpuPacote.raiz(it) }, manifesto)
         android.util.Log.i(
             TAG,
             "pacote verificado versao=${manifesto.versao} soc=${manifesto.soc} " +
-                "arquivos=${manifesto.itens.size}",
+                "arquivos=${manifesto.itens.size} dir=${dirPacote?.name ?: "-"}",
         )
+    }
+
+    /**
+     * Seam da anotação de pacote verificado, sem Android: recebe a RAIZ do pacote
+     * e resolve o diretório pela versão do manifesto. O produto passa
+     * `raiz(context)`; o teste JVM passa um diretório temporário e prova a C6
+     * (v2 verificado com o v3 ausente), o v3 verificado e a troca no meio do
+     * processo.
+     */
+    @VisibleForTesting
+    internal fun pacoteVerificadoEm(raiz: File?, manifesto: WhisperOrtNpuPacote.Manifesto) {
+        this.manifesto = manifesto
+        this.dirPacote = raiz?.let { WhisperOrtNpuPacote.dirDoManifesto(it, manifesto) }
+        pacoteVerificado = true
+        motivoIndisponivel = null
+    }
+
+    /** Diretório do pacote em uso (v2 verificado quando o v3 não chegou). */
+    @VisibleForTesting
+    internal fun dirPacoteAtual(): File? = dirPacote
+
+    /** `true` quando a conferência deste processo terminou com pacote verificado. */
+    @VisibleForTesting
+    internal fun pacoteVerificadoNesteProcesso(): Boolean = pacoteVerificado
+
+    /** Zera o estado do singleton entre casos de teste (JVM, mesmo processo). */
+    @VisibleForTesting
+    internal fun reiniciarEstadoParaTeste() {
+        app = null
+        iniciado = false
+        desligadoNoProcesso = false
+        motivoIndisponivel = "nao_avaliado"
+        manifesto = null
+        dirPacote = null
+        ortCarregado = false
+        qnnCarregado = false
+        ultimoLoadMs = 0L
+        pacoteVerificado = false
+        conferenciaMs = 0L
+        detalheConferencia = null
+        contouFalhaNesteProcesso = false
     }
 
     /** Chamado quando o pacote não está disponível; a rota segue em CPU. */

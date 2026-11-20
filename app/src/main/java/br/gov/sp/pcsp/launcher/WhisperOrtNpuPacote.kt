@@ -157,7 +157,16 @@ object WhisperOrtNpuPacote {
 
     fun raiz(context: Context): File = File(context.noBackupFilesDir, "whisper-npu")
 
-    fun dirDaVersao(context: Context): File = File(raiz(context), VERSAO)
+    /**
+     * R117 §T01 — diretório da versão do manifesto **VERIFICADO**.
+     *
+     * É a única fonte aceita para a rota: o v2 continua servindo a rota antiga
+     * enquanto o v3 não chega, e a versão que a sessão abre tem de ser a da
+     * verificação, nunca a versão implícita do código. A variante sem versão do
+     * diretório foi REMOVIDA na R117: com ela, a C6 da R116 apontou a sessão
+     * para o diretório do v3 com o v2 ativo e a rota caiu para a CPU.
+     */
+    fun dirDoManifesto(raiz: File, manifesto: Manifesto): File = File(raiz, manifesto.versao)
 
     fun dirDaVersao(context: Context, versao: String): File = File(raiz(context), versao)
 
