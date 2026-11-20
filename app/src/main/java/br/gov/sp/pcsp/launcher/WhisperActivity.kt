@@ -682,19 +682,34 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         }
     }
 
-    /** A entrada fixa some (ou passa a dizer "NPU ativa"/"Reinstalar…") conforme a situação. */
+    /** A entrada fixa some (ou passa a dizer "NPU ativa"/"Atualizar…") conforme a situação. */
     private fun atualizarEntradaNpu() {
         val botao = findViewById<android.view.View?>(R.id.button_ativar_npu) ?: return
         val situacao = situacaoNpu()
         val qairt = QairtDependencyManager.isInstalled(this)
-        val prontos = qairt && situacao == WhisperNpuOferta.Situacao.PRONTO
+        val instalado = instaladoNpu()
+        // R115 — com o v2 instalado o v3 ainda não chegou: a entrada continua
+        // visível dizendo "Atualizar aceleração NPU".
+        val prontos = qairt && situacao == WhisperNpuOferta.Situacao.PRONTO &&
+            instalado == WhisperNpuOferta.Instalado.V3
         val visivel = WhisperNpuOferta.entradaFixaVisivel(
             WhisperNpuOferta.Preferencias(this), prontos,
         )
         botao.visibility = if (visivel) android.view.View.VISIBLE else android.view.View.GONE
         (botao as? android.widget.TextView)?.text =
-            WhisperNpuOferta.rotuloEntradaFixa(situacao, qairt)
+            WhisperNpuOferta.rotuloEntradaFixa(situacao, qairt, instalado)
     }
+
+    /** R115 — qual pacote da NPU está instalado (v2, v3 ou nenhum). */
+    private fun instaladoNpu(): WhisperNpuOferta.Instalado =
+        when (val estado = runCatching { WhisperOrtNpuPacote.estado(this) }.getOrNull()) {
+            is WhisperOrtNpuPacote.Estado.Pronto -> when (estado.manifesto.versao) {
+                WhisperOrtNpuPacote.VERSAO -> WhisperNpuOferta.Instalado.V3
+                WhisperOrtNpuPacote.VERSAO_ANTERIOR -> WhisperNpuOferta.Instalado.V2
+                else -> WhisperNpuOferta.Instalado.NENHUM
+            }
+            else -> WhisperNpuOferta.Instalado.NENHUM
+        }
 
     /**
      * R101 §T03 — a NPU é uma ESCOLHA do usuário, não um download silencioso.
@@ -716,7 +731,12 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         if (!WhisperOrtHtpAdmissao.fabricanteAdmitido(fabricante)) return
         val qairt = QairtDependencyManager.isInstalled(this)
         val situacao = situacaoNpu()
-        val npu = situacao == WhisperNpuOferta.Situacao.PRONTO
+        val instalado = instaladoNpu()
+        // R115 — o v2 instalado NÃO conta como "pronto": o v3 é que fecha a rota
+        // de ponta a ponta, e é ele que a oferta/entrada fixa oferece.
+        val atualizacao = instalado == WhisperNpuOferta.Instalado.V2
+        val npu = situacao == WhisperNpuOferta.Situacao.PRONTO &&
+            instalado == WhisperNpuOferta.Instalado.V3
         val prontos = qairt && npu
         if (prontos) {
             atualizarEntradaNpu()
@@ -724,19 +744,26 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         }
         // R106/T02 — pacote em disco que não passou na conferência: a entrada
         // fixa abre o diálogo de "Verificar novamente"/"Reinstalar aceleração
-        // NPU", nunca o download direto. Nada é apagado.
-        if (entradaFixa && situacao != WhisperNpuOferta.Situacao.AUSENTE) {
+        // NPU", nunca o download direto. Nada é apagado. Com o v2 instalado, a
+        // entrada fixa abre a ATUALIZAÇÃO (o pacote atual está íntegro).
+        if (entradaFixa && situacao != WhisperNpuOferta.Situacao.AUSENTE && !atualizacao) {
             dialogoPacoteRecusado(situacao)
             return
         }
         val armazenamento = WhisperNpuOferta.Preferencias(this)
-        // A automática só uma vez e só quando ainda não há pacote em disco; a
-        // entrada fixa é a saída para quem recusou e depois mudou de ideia.
-        if (!entradaFixa && !WhisperNpuOferta.deveOferecerAutomaticamente(armazenamento, situacao)) return
+        // A automática só uma vez: a de atualização tem recusa própria (R115).
+        if (!entradaFixa) {
+            val oferecer = if (atualizacao) {
+                WhisperNpuOferta.deveOferecerAtualizacao(armazenamento, instalado)
+            } else {
+                WhisperNpuOferta.deveOferecerAutomaticamente(armazenamento, situacao)
+            }
+            if (!oferecer) return
+        }
         npuDialogoAberto = true
         atualizarEntradaNpu()
 
-        val plano = WhisperOrtNpuPacote.planoDeDownload(qairt)
+        val plano = WhisperOrtNpuPacote.planoDeDownload(qairt, atualizacao)
         val livre = DownloadSizeFormat.legivel(WhisperOrtNpuPacote.espacoNecessario(qairt, npu))
         val baixar = DownloadSizeFormat.legivel(WhisperOrtNpuPacote.bytesParaBaixar(qairt, npu))
         val rede = runCatching { WhisperOrtNpuPacote.politicaDeRede(this) }.getOrNull()
@@ -747,25 +774,38 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     "O download consome $baixar da sua franquia."
             else -> "\n\nAgora não há rede adequada ($rede). Você pode repetir a ação no Wi-Fi."
         }
-        status.text = "Aceleração NPU disponível neste aparelho."
+        status.text = if (atualizacao) {
+            "Atualização da aceleração NPU disponível neste aparelho."
+        } else {
+            "Aceleração NPU disponível neste aparelho."
+        }
+        val prefacio = if (atualizacao) {
+            "O pacote novo leva o decoder do Whisper para a NPU (Hexagon): a janela de " +
+                "transcrição fica ~30% mais curta. O pacote v2 continua funcionando até a " +
+                "verificação do novo terminar; depois disso ele é removido do aparelho."
+        } else {
+            "Este aparelho pode rodar o encoder do Whisper na NPU (Hexagon). " +
+                "Com o pacote instalado, a transcrição usa a NPU; sem ele, continua na CPU, " +
+                "sem erro e sem bloquear o uso."
+        }
         DownloadPlanDialog.confirmar(
             activity = this,
             plano = plano,
             negativo = "Agora não",
             positivo = "Baixar",
-            prefacio = "Este aparelho pode rodar o encoder do Whisper na NPU (Hexagon). " +
-                "Com o pacote instalado, a transcrição usa a NPU; sem ele, continua na CPU, " +
-                "sem erro e sem bloquear o uso.",
+            prefacio = prefacio,
             sufixo = "Espaço livre necessário: $livre.$avisoRede",
             aoNegar = {
-                armazenamento.registrarRecusa()
+                if (atualizacao) armazenamento.registrarRecusaAtualizacao()
+                else armazenamento.registrarRecusa()
                 npuDialogoAberto = false
                 atualizarEntradaNpu()
                 status.text = "Aceleração NPU: a transcrição segue na CPU."
             },
             // Fechar com Voltar também é "agora não": não pode reaparecer.
             aoCancelar = {
-                armazenamento.registrarRecusa()
+                if (atualizacao) armazenamento.registrarRecusaAtualizacao()
+                else armazenamento.registrarRecusa()
                 npuDialogoAberto = false
                 atualizarEntradaNpu()
             },
@@ -843,14 +883,17 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      */
     private fun baixarPacoteNpu() {
         val qairtInstalado = QairtDependencyManager.isInstalled(this)
-        val npuInstalado = runCatching { WhisperOrtNpuPacote.estado(this) }
-            .getOrNull() is WhisperOrtNpuPacote.Estado.Pronto
-        val plano = WhisperOrtNpuPacote.planoDeDownload(qairtInstalado)
+        // R115 — só o v3 conta como "instalado" para o plano: com o v2 em disco
+        // o download é o pacote inteiro novo.
+        val instalado = instaladoNpu()
+        val npuInstalado = instalado == WhisperNpuOferta.Instalado.V3
+        val atualizacao = instalado == WhisperNpuOferta.Instalado.V2
+        val plano = WhisperOrtNpuPacote.planoDeDownload(qairtInstalado, atualizacao)
         val cancelado = AtomicBoolean(false)
         val progresso = DownloadPlanDialog.progresso(
             activity = this,
             plano = plano,
-            titulo = "Ativando aceleração NPU",
+            titulo = if (atualizacao) "Atualizando aceleração NPU" else "Ativando aceleração NPU",
             cancelavel = true,
             negativo = "Cancelar",
             aoCancelar = { cancelado.set(true) },

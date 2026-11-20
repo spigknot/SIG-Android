@@ -1,0 +1,605 @@
+{
+ "schema": "sig-whisper-npu-pacote/v1",
+ "versao": "3",
+ "soc": "SM8550",
+ "htp_arch": "73",
+ "dtype": "i16",
+ "qairt": "2.49.0.260730",
+ "criado_em": "2026-11-19T00:00:00-0300",
+ "qairt_build_id": "v2.49.0.260730134355",
+ "cache_posicoes": 200,
+ "cache_self_passado": 199,
+ "arquivos": [
+  {
+   "nome": "sig_whisper_enc_w8a16.bin",
+   "papel": "encoder",
+   "grafo": "sig_whisper_enc_w8a16",
+   "bytes": 677531160,
+   "sha256": "0994c2a9969f525616ec0586c4e2dcb0a996544db0c51701bbb9e5eafcb598bf",
+   "nota": "contexto EPContext do encoder W8A16 (R99/R100)"
+  },
+  {
+   "nome": "sig_whisper_enc_w8a16_i16io.onnx",
+   "papel": "encoder",
+   "grafo": "sig_whisper_enc_w8a16",
+   "bytes": 436,
+   "sha256": "78ad673dc6510d6c602391918706cd01839be3efbddd269da747f72e7bea333e",
+   "nota": "wrapper EPContext i16 do encoder (R100)"
+  },
+  {
+   "nome": "sig_r112_cross_kv_projector.bin",
+   "papel": "projetor",
+   "grafo": "sig_r112_cross_kv_projector",
+   "bytes": 13837280,
+   "sha256": "67a9836b8ba4586f8421cb2cb768728c6cd89d8e3b64352d0c19d43d1d799c38",
+   "nota": "contexto O3 do projetor de K/V cruzadas (R112)"
+  },
+  {
+   "nome": "sig_r112_cross_kv_projector.onnx",
+   "papel": "projetor",
+   "grafo": "sig_r112_cross_kv_projector",
+   "bytes": 878,
+   "sha256": "22eee26ba27bb7515372010a1d0dfd0ce7a03a0c35041d2de46bc245ee902f91",
+   "nota": "wrapper EPContext i16 do projetor (R112, proj-i16)"
+  },
+  {
+   "nome": "decoder_o3.bin",
+   "papel": "decoder",
+   "grafo": "sig_whisper_dec_w8a16",
+   "bytes": 295856024,
+   "sha256": "f44623b39d2e0d81d772a3a723777edf19163afa0887e2de12eed436a04bdfe1",
+   "nota": "contexto O3 do decoder W8A16 (R109-O3)"
+  },
+  {
+   "nome": "sig_whisper_dec_w8a16.onnx",
+   "papel": "decoder",
+   "grafo": "sig_whisper_dec_w8a16",
+   "bytes": 2002,
+   "sha256": "8b7c7c0b7479c621f255a1a1140edd73a3720c0bf264220d3dc87b3d8f537fb2",
+   "nota": "wrapper EPContext i16 do decoder (R110, o3-i16)"
+  }
+ ],
+ "grafos": [
+  {
+   "nome": "sig_whisper_enc_w8a16",
+   "papel": "encoder",
+   "arquivo_contexto": "sig_whisper_enc_w8a16.bin",
+   "arquivo_wrapper": "sig_whisper_enc_w8a16_i16io.onnx",
+   "otimizacao": 2,
+   "vtcm_mb": 8,
+   "spill_fill_bytes": 97648640,
+   "const_bytes": 653438976,
+   "io_bytes": 4612096,
+   "entradas": [
+    {
+     "nome": "input_features",
+     "dtype": "UFIXED_POINT_16",
+     "forma": [
+      1,
+      128,
+      3000
+     ]
+    }
+   ],
+   "saidas": [
+    {
+     "nome": "sig_hidden_after_layer_norm",
+     "dtype": "UFIXED_POINT_16",
+     "forma": [
+      1,
+      1500,
+      1280
+     ],
+     "escala": 0.0003499292361084372,
+     "offset": -31745
+    }
+   ]
+  },
+  {
+   "nome": "sig_r112_cross_kv_projector",
+   "papel": "projetor",
+   "arquivo_contexto": "sig_r112_cross_kv_projector.bin",
+   "arquivo_wrapper": "sig_r112_cross_kv_projector.onnx",
+   "otimizacao": 3,
+   "vtcm_mb": 8,
+   "spill_fill_bytes": 3735552,
+   "const_bytes": 13279232,
+   "io_bytes": 19243008,
+   "entradas": [
+    {
+     "nome": "sig_hidden_after_layer_norm",
+     "dtype": "UFIXED_POINT_16",
+     "forma": [
+      1,
+      1500,
+      1280
+     ],
+     "escala": 0.0003499292361084372,
+     "offset": -31745
+    }
+   ],
+   "saidas": [
+    {
+     "nome": "k_cache_cross_0",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      1500
+     ],
+     "escala": 0.12609827518463135,
+     "offset": 128
+    },
+    {
+     "nome": "v_cache_cross_0",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      1500,
+      64
+     ],
+     "escala": 0.022534141317009926,
+     "offset": 128
+    },
+    {
+     "nome": "k_cache_cross_1",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      1500
+     ],
+     "escala": 0.07086604833602905,
+     "offset": 128
+    },
+    {
+     "nome": "v_cache_cross_1",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      1500,
+      64
+     ],
+     "escala": 0.01209748163819313,
+     "offset": 128
+    },
+    {
+     "nome": "k_cache_cross_2",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      1500
+     ],
+     "escala": 0.06425176560878754,
+     "offset": 128
+    },
+    {
+     "nome": "v_cache_cross_2",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      1500,
+      64
+     ],
+     "escala": 0.015134074725210667,
+     "offset": 128
+    },
+    {
+     "nome": "k_cache_cross_3",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      1500
+     ],
+     "escala": 0.04914793744683266,
+     "offset": 128
+    },
+    {
+     "nome": "v_cache_cross_3",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      1500,
+      64
+     ],
+     "escala": 0.029431624338030815,
+     "offset": 128
+    }
+   ]
+  },
+  {
+   "nome": "sig_whisper_dec_w8a16",
+   "papel": "decoder",
+   "arquivo_contexto": "decoder_o3.bin",
+   "arquivo_wrapper": "sig_whisper_dec_w8a16.onnx",
+   "otimizacao": 3,
+   "vtcm_mb": 8,
+   "spill_fill_bytes": 0,
+   "const_bytes": 294928384,
+   "io_bytes": 19726336,
+   "entradas": [
+    {
+     "nome": "input_ids",
+     "dtype": "INT_32",
+     "forma": [
+      1,
+      1
+     ]
+    },
+    {
+     "nome": "position_ids",
+     "dtype": "INT_32",
+     "forma": [
+      1
+     ]
+    },
+    {
+     "nome": "k_cache_self_0_in",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      199
+     ]
+    },
+    {
+     "nome": "v_cache_self_0_in",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      199,
+      64
+     ]
+    },
+    {
+     "nome": "attention_mask",
+     "dtype": "UFIXED_POINT_16",
+     "forma": [
+      1,
+      1,
+      1,
+      200
+     ],
+     "escala": 0.0015259021893143654,
+     "offset": 65535
+    },
+    {
+     "nome": "k_cache_cross_0",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      1500
+     ],
+     "escala": 0.12609827518463135,
+     "offset": 128
+    },
+    {
+     "nome": "v_cache_cross_0",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      1500,
+      64
+     ],
+     "escala": 0.022534141317009926,
+     "offset": 128
+    },
+    {
+     "nome": "k_cache_self_1_in",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      199
+     ]
+    },
+    {
+     "nome": "v_cache_self_1_in",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      199,
+      64
+     ]
+    },
+    {
+     "nome": "k_cache_cross_1",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      1500
+     ],
+     "escala": 0.07086604833602905,
+     "offset": 128
+    },
+    {
+     "nome": "v_cache_cross_1",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      1500,
+      64
+     ],
+     "escala": 0.01209748163819313,
+     "offset": 128
+    },
+    {
+     "nome": "k_cache_self_2_in",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      199
+     ]
+    },
+    {
+     "nome": "v_cache_self_2_in",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      199,
+      64
+     ]
+    },
+    {
+     "nome": "k_cache_cross_2",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      1500
+     ],
+     "escala": 0.06425176560878754,
+     "offset": 128
+    },
+    {
+     "nome": "v_cache_cross_2",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      1500,
+      64
+     ],
+     "escala": 0.015134074725210667,
+     "offset": 128
+    },
+    {
+     "nome": "k_cache_self_3_in",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      199
+     ]
+    },
+    {
+     "nome": "v_cache_self_3_in",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      199,
+      64
+     ]
+    },
+    {
+     "nome": "k_cache_cross_3",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      1500
+     ],
+     "escala": 0.04914793744683266,
+     "offset": 128
+    },
+    {
+     "nome": "v_cache_cross_3",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      1500,
+      64
+     ],
+     "escala": 0.029431624338030815,
+     "offset": 128
+    }
+   ],
+   "saidas": [
+    {
+     "nome": "k_cache_self_0_out",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      199
+     ]
+    },
+    {
+     "nome": "v_cache_self_0_out",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      199,
+      64
+     ]
+    },
+    {
+     "nome": "k_cache_self_1_out",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      199
+     ]
+    },
+    {
+     "nome": "v_cache_self_1_out",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      199,
+      64
+     ]
+    },
+    {
+     "nome": "k_cache_self_2_out",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      199
+     ]
+    },
+    {
+     "nome": "v_cache_self_2_out",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      199,
+      64
+     ]
+    },
+    {
+     "nome": "k_cache_self_3_out",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      64,
+      199
+     ]
+    },
+    {
+     "nome": "v_cache_self_3_out",
+     "dtype": "UFIXED_POINT_8",
+     "forma": [
+      20,
+      1,
+      199,
+      64
+     ]
+    },
+    {
+     "nome": "logits",
+     "dtype": "UFIXED_POINT_16",
+     "forma": [
+      1,
+      51866,
+      1,
+      1
+     ],
+     "escala": 0.0007861469688191425,
+     "offset": 23109
+    }
+   ]
+  }
+ ],
+ "contrato": {
+  "logits": {
+   "dtype": "UFIXED_POINT_16",
+   "forma": [
+    1,
+    51866,
+    1,
+    1
+   ],
+   "escala": 0.0007861469688191425,
+   "offset": 23109,
+   "escala_encodings": 0.0007861469639465213,
+   "decisao": "contrato R111/T01 (mesmo de R113/R114); delta relativo 6e-9"
+  },
+  "mascara": {
+   "dtype": "UFIXED_POINT_16",
+   "forma": [
+    1,
+    1,
+    1,
+    200
+   ],
+   "escala": 0.0015259021893143654,
+   "offset": 65535,
+   "valido": 65535,
+   "vazio": 0,
+   "alinhamento": "direita",
+   "coluna": "199 - posicao"
+  },
+  "projetor_entrada": {
+   "nome": "sig_hidden_after_layer_norm",
+   "dtype": "UFIXED_POINT_16",
+   "forma": [
+    1,
+    1500,
+    1280
+   ],
+   "bytes": 3840000,
+   "escala": 0.0003499292361084372,
+   "offset": -31745,
+   "fonte": "saida do encoder EPContext do produto, sem passar por float"
+  },
+  "kv_cruzadas": {
+   "n": 8,
+   "dtype": "UFIXED_POINT_8",
+   "offsets": {
+    "projetor": -128,
+    "decoder": 128
+   },
+   "nota": "offset -128 do projetor e bit-compativel com 128 do decoder (sem requantizacao)",
+   "escalas": {
+    "k_cache_cross_0": 0.12609827518463135,
+    "k_cache_cross_1": 0.07086604833602905,
+    "k_cache_cross_2": 0.06425176560878754,
+    "k_cache_cross_3": 0.04914793744683266,
+    "v_cache_cross_0": 0.022534141317009926,
+    "v_cache_cross_1": 0.01209748163819313,
+    "v_cache_cross_2": 0.015134074725210667,
+    "v_cache_cross_3": 0.029431624338030815
+   },
+   "iguais_ao_decoder": "8/8",
+   "origem": "decoder-w8a16.encodings (R107/T01)"
+  },
+  "realimentacao": {
+   "regra": "saidas k/v_cache_self_i_out do passo entram como k/v_cache_self_i_in do passo seguinte",
+   "primeiro_passo": "caches self zerados proprios",
+   "fechamento": "o Result anterior so e fechado DEPOIS do run seguinte"
+  },
+  "volta_cpu": {
+   "limite": 200,
+   "regra": "posicao >= 200 antes do EOS refaz a janela inteira no decoder CPU INT8",
+   "decoders_cpu": "carregam so na primeira volta"
+  }
+ }
+}

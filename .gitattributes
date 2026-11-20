@@ -2,3 +2,17 @@
 *.sh text eol=lf
 gradlew text eol=lf
 *.bat text eol=crlf
+
+# R115/T03 - fixtures binarios de teste pinados por SHA: nunca normalizar
+app/src/test/resources/ort/*.bin -text
+app/src/test/resources/ort/*.f32 -text
+
+# R115/T03 - manifestos publicados pinados por SHA nos testes
+app/src/test/resources/npu/*.json -text
+
+# R115/T03 - fixtures JSON de teste pinados por SHA
+app/src/test/resources/ort/*.json -text
+app/src/test/resources/protocolo-r6*-fixture.json -text
+
+# R115/T03 - evidencias pinadas por SHA: checkout NUNCA converte (autocrlf=true)
+docs/especialista/whisper/npu/evidencias-*/** -text

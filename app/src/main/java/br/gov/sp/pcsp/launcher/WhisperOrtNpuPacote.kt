@@ -40,17 +40,31 @@ import java.util.zip.ZipInputStream
  */
 object WhisperOrtNpuPacote {
 
-    const val VERSAO = "2"
+    /**
+     * R115 §T02 — pacote **v3**: encoder + projetor de K/V cruzadas + decoder
+     * W8A16, para a rota HTP de ponta a ponta (desenho Q′ da R114). O v2
+     * (`encoder + wrapper`) continua sendo aceito e servindo a rota antiga
+     * (encoder HTP + decoder CPU) até o v3 estar VERIFICADO; depois disso o app
+     * remove os arquivos do v2 de forma atômica.
+     */
+    const val VERSAO = "3"
+
+    /** Versão anterior, aceita enquanto o v3 não estiver verificado. */
+    const val VERSAO_ANTERIOR = "2"
+
     const val SOC = WhisperOrtHtpAdmissao.SOC_SM8550
     const val HTP_ARCH = "73"
     const val DTYPE = WhisperOrtHtpConversao.DTYPE_I16
 
+    /** QAIRT que compilou os três contextos (único no processo, via QAIRT do app). */
+    const val QAIRT = "2.49.0.260730"
+
     /**
-     * R103/T02 — o manifesto PUBLICADO do v2 grava `dtype: "i16"`, enquanto o
+     * R103/T02 — o manifesto PUBLICADO grava `dtype: "i16"`, enquanto o
      * conversor da rota trabalha com `int16_le`. Tabela explícita e fechada:
      * somente o valor publicado é aceito e ele é traduzido para o dtype canônico
      * guardado em [Manifesto]. Nenhuma correspondência "por parecido" e nenhuma
-     * republicação do pacote: o ZIP `ec25399a…` continua intocável.
+     * republicação do pacote.
      */
     private val DTYPE_PUBLICADO_PARA_CONVERSAO: Map<String, String> = mapOf(
         "i16" to DTYPE,
@@ -61,16 +75,21 @@ object WhisperOrtNpuPacote {
      * na T01 (`packages/<familia>/...`), com a versão imutável no caminho.
      */
     const val URL_PACOTE =
-        "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/packages/npu-w8a16/sm8550/2/sig-whisper-w8a16-sm8550-v2.zip"
+        "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/packages/npu-w8a16/sm8550/3/sig-whisper-w8a16-sm8550-v3.zip"
 
-    /** SHA-256 do ZIP publicado (transporte). Conferido pelo script da T04. */
-    const val SHA256_ZIP = "ec25399a3c4ea2911b5142399cee792dc3e6cb5a86a6c1140930b8983bda5a2c"
+    /** SHA-256 do ZIP v3 publicado (transporte). */
+    const val SHA256_ZIP = "9a1b9e9712cce61c82b37160bd9690e567cd83d7d6162224317c835448b75a16"
 
-    /** Bytes do ZIP publicado (677.532.464 = contexto + wrapper + manifesto, ZIP_STORED). */
-    const val BYTES_ZIP = 677_532_464L
+    /** Bytes do ZIP v3 publicado (987.240.133 = 6 arquivos + manifesto, ZIP_STORED). */
+    const val BYTES_ZIP = 987_240_133L
 
-    /** Soma dos bytes extraídos (contexto + wrapper): base do espaço necessário. */
-    const val BYTES_CONTEUDO = 677_531_596L
+    /** Soma dos bytes extraídos do v3 (encoder + projetor + decoder). */
+    const val BYTES_CONTEUDO = 987_227_780L
+
+    /** ZIP v2 (o que quem já tem o pacote baixou) — só para o plano da atualização. */
+    const val NOME_ZIP_ANTERIOR = "sig-whisper-w8a16-sm8550-v2.zip"
+    const val BYTES_ZIP_ANTERIOR = 677_532_464L
+    const val BYTES_CONTEUDO_ANTERIOR = 677_531_596L
 
     /** Nome do objeto QAIRT no R2 — só para o plano de download da tela. */
     const val NOME_ZIP_QAIRT = "sig-qairt-arm64-v8a-v1.zip"
@@ -78,14 +97,30 @@ object WhisperOrtNpuPacote {
     const val NOME_MANIFESTO = "manifest.json"
     const val MARCADOR = ".installed"
 
+    // Encoder (mesmos nomes do v2: o SHA identifica o conteúdo).
     const val CONTEXTO = "sig_whisper_enc_w8a16.bin"
     const val WRAPPER = "sig_whisper_enc_w8a16_i16io.onnx"
 
+    // Projetor de K/V cruzadas (R112) e decoder W8A16 (R109-O3/R110).
+    const val PROJETOR_CONTEXTO = "sig_r112_cross_kv_projector.bin"
+    const val PROJETOR_WRAPPER = "sig_r112_cross_kv_projector.onnx"
+    const val DECODER_CONTEXTO = "decoder_o3.bin"
+    const val DECODER_WRAPPER = "sig_whisper_dec_w8a16.onnx"
+
     /**
-     * Conteúdo do pacote v2. As libs V73 **não** entram aqui: quem as carrega é
+     * Conteúdo do pacote v3. As libs V73 **não** entram aqui: quem as carrega é
      * o pacote QAIRT único ([QairtDependencyManager]).
      */
-    val ARQUIVOS: List<String> = listOf(CONTEXTO, WRAPPER)
+    val ARQUIVOS: List<String> = listOf(
+        CONTEXTO, WRAPPER, PROJETOR_CONTEXTO, PROJETOR_WRAPPER, DECODER_CONTEXTO, DECODER_WRAPPER,
+    )
+
+    /** Conteúdo do pacote v2 (encoder apenas). */
+    val ARQUIVOS_ANTERIOR: List<String> = listOf(CONTEXTO, WRAPPER)
+
+    /** Arquivos exigidos por versão — o manifesto é recusado se não bater. */
+    fun arquivosDe(versao: String): List<String> =
+        if (versao == VERSAO_ANTERIOR) ARQUIVOS_ANTERIOR else ARQUIVOS
 
     private const val SCHEMA = "sig-whisper-npu-pacote/v1"
     private const val TAG = "WhisperOrtNpu"
@@ -100,9 +135,14 @@ object WhisperOrtNpuPacote {
         val htpArch: String,
         val dtype: String,
         val itens: List<Item>,
+        /** Contrato de tipos do v3 (nulo no v2, que não o publica). */
+        val contrato: JSONObject? = null,
     ) {
         fun item(nome: String): Item? = itens.firstOrNull { it.nome == nome }
         fun bytesDescompactados(): Long = itens.sumOf { it.bytes }
+
+        /** `true` quando este pacote serve a rota HTP de ponta a ponta (v3). */
+        val pontaAPonta: Boolean get() = versao == VERSAO
     }
 
     /** Situação do pacote para a admissão. */
@@ -119,11 +159,30 @@ object WhisperOrtNpuPacote {
 
     fun dirDaVersao(context: Context): File = File(raiz(context), VERSAO)
 
+    fun dirDaVersao(context: Context, versao: String): File = File(raiz(context), versao)
+
+    /**
+     * Diretório da versão ATIVA (R115 §T02.3): a v3 quando ela tem manifesto em
+     * disco; senão a v2, que continua servindo a rota antiga; senão a v3 (vazia),
+     * para a UI tratar como ausente.
+     */
+    fun dirAtivo(raiz: File): File {
+        val v3 = File(raiz, VERSAO)
+        if (File(v3, NOME_MANIFESTO).isFile) return v3
+        val anterior = File(raiz, VERSAO_ANTERIOR)
+        if (File(anterior, NOME_MANIFESTO).isFile) return anterior
+        return v3
+    }
+
     /**
      * Lê o manifesto do texto JSON. Devolve `null` quando o conteúdo não é um
      * manifesto válido DESTE pacote: schema, versão, SoC, arch e dtype têm de
-     * bater, e os dois arquivos exigidos têm de estar listados com bytes > 0 e
-     * SHA-256 de 64 dígitos. Manifesto parcial é recusa — nunca "quase pronto".
+     * bater, e os arquivos exigidos da versão têm de estar listados com bytes > 0
+     * e SHA-256 de 64 dígitos. Manifesto parcial é recusa — nunca "quase pronto".
+     *
+     * R115 §T02 — o v3 exige, além disso, o **contrato de tipos** (logits,
+     * máscara, entrada do projetor, 8 escalas de K/V cruzadas e o cache de 200):
+     * um v3 sem contrato não autoriza a rota de ponta a ponta.
      */
     fun lerManifesto(texto: String): Manifesto? = runCatching {
         val raiz = JSONObject(texto)
@@ -134,7 +193,9 @@ object WhisperOrtNpuPacote {
         // Tabela fechada: "i16" (publicado) -> DTYPE canônico; qualquer outro
         // valor, inclusive o dtype canônico escrito direto, é recusado.
         val dtype = DTYPE_PUBLICADO_PARA_CONVERSAO[raiz.optString("dtype")] ?: return null
-        if (versao != VERSAO || soc != SOC || arch != HTP_ARCH) return null
+        if (versao != VERSAO && versao != VERSAO_ANTERIOR) return null
+        if (soc != SOC || arch != HTP_ARCH) return null
+        val exigidos = arquivosDe(versao)
         val lista = raiz.optJSONArray("arquivos") ?: return null
         val itens = ArrayList<Item>(lista.length())
         for (i in 0 until lista.length()) {
@@ -147,10 +208,43 @@ object WhisperOrtNpuPacote {
             itens.add(Item(nome, bytes, sha.lowercase()))
         }
         val nomes = itens.map { it.nome }.toSet()
-        if (!nomes.containsAll(ARQUIVOS)) return null
-        if (itens.size != ARQUIVOS.size) return null
-        Manifesto(versao, soc, arch, dtype, itens)
+        if (!nomes.containsAll(exigidos)) return null
+        if (itens.size != exigidos.size) return null
+        val contrato = raiz.optJSONObject("contrato")
+        if (versao == VERSAO) {
+            if (raiz.optInt("cache_posicoes", 0) != WhisperOrtHtpContrato.TAMANHO_MASCARA) return null
+            if (!contratoConfere(contrato)) return null
+        }
+        Manifesto(versao, soc, arch, dtype, itens, contrato)
     }.getOrNull()
+
+    /**
+     * Contrato de tipos do v3, em regra PURA: escala/offset dos logits, valor da
+     * máscara, entrada do projetor com a escala do encoder do produto e as 8
+     * escalas das K/V cruzadas. É o que o teste JVM confere no manifesto
+     * publicado e o que separa "v3 de verdade" de "ZIP com nome v3".
+     */
+    fun contratoConfere(contrato: JSONObject?): Boolean {
+        if (contrato == null) return false
+        val logits = contrato.optJSONObject("logits") ?: return false
+        if (logits.optDouble("escala", -1.0) != WhisperOrtHtpContrato.ESCALA_LOGIT) return false
+        if (logits.optInt("offset", Int.MIN_VALUE) != WhisperOrtHtpContrato.OFFSET_LOGIT) return false
+        val mascara = contrato.optJSONObject("mascara") ?: return false
+        if (mascara.optInt("valido", -1) != WhisperOrtHtpContrato.MASCARA_VALIDO) return false
+        if (mascara.optInt("vazio", -1) != WhisperOrtHtpContrato.MASCARA_VAZIO) return false
+        val entrada = contrato.optJSONObject("projetor_entrada") ?: return false
+        if (entrada.optString("nome") != "sig_hidden_after_layer_norm") return false
+        if (entrada.optDouble("escala", -1.0) != WhisperOrtHtpContrato.ESCALA_OCULTO) return false
+        if (entrada.optInt("offset", Int.MIN_VALUE) != WhisperOrtHtpContrato.OFFSET_QNN_OCULTO) return false
+        val kv = contrato.optJSONObject("kv_cruzadas") ?: return false
+        if (kv.optInt("n", 0) != 8) return false
+        val escalas = kv.optJSONObject("escalas") ?: return false
+        for (i in 0 until 4) {
+            if (escalas.optDouble("k_cache_cross_$i", -1.0) <= 0.0) return false
+            if (escalas.optDouble("v_cache_cross_$i", -1.0) <= 0.0) return false
+        }
+        return true
+    }
 
     /**
      * Confere os arquivos extraídos contra o manifesto.
@@ -272,7 +366,7 @@ object WhisperOrtNpuPacote {
      * marcador não confere com o manifesto ou quando tamanho/data divergem. A UI
      * usa este estado para "NPU ativa" — por isso ele nunca hasheia.
      */
-    fun estado(context: Context): Estado = estadoEm(dirDaVersao(context))
+    fun estado(context: Context): Estado = estadoEm(dirAtivo(raiz(context)))
 
     /** Texto canônico do marcador: versão + hash do manifesto (sem tocar em arquivos). */
     fun textoMarcadorEsperado(manifesto: Manifesto): String =
@@ -428,8 +522,10 @@ object WhisperOrtNpuPacote {
     }
 
     /** Conferência rápida do pacote instalado, no padrão de cada processo. */
-    fun conferenciaRapida(context: Context): Conferencia =
-        conferenciaEm(raiz(context), dirDaVersao(context))
+    fun conferenciaRapida(context: Context): Conferencia {
+        val raiz = raiz(context)
+        return conferenciaEm(raiz, dirAtivo(raiz))
+    }
 
     /**
      * Marca o pacote para verificação COMPLETA no próximo processo (falha de
@@ -490,8 +586,10 @@ object WhisperOrtNpuPacote {
 
     /** Verificação COMPLETA (todos os SHA) do pacote instalado. */
     @VisibleForTesting
-    internal fun verificarCompleto(context: Context, hash: (File) -> String = this::sha256): Estado =
-        verificarCompletoEm(raiz(context), dirDaVersao(context), hash)
+    internal fun verificarCompleto(context: Context, hash: (File) -> String = this::sha256): Estado {
+        val raiz = raiz(context)
+        return verificarCompletoEm(raiz, dirAtivo(raiz), hash)
+    }
 
     /**
      * Verifica o pacote em SEGUNDO PLANO, **sem baixar nada** (R101 §T03).
@@ -531,7 +629,7 @@ object WhisperOrtNpuPacote {
         Thread({
             var estado: Estado = Estado.Invalido("interno")
             try {
-                val atual = verificarCompletoEm(raiz, File(raiz, VERSAO))
+                val atual = verificarCompletoEm(raiz, dirAtivo(raiz))
                 estado = atual
                 when (atual) {
                     is Estado.Pronto ->
@@ -579,13 +677,19 @@ object WhisperOrtNpuPacote {
      * O QAIRT só entra na lista quando ainda não está instalado: o usuário vê
      * exatamente o que vai baixar, e o pacote da NPU nunca repete as bibliotecas.
      */
-    fun planoDeDownload(qairtInstalado: Boolean): DownloadSizeFormat.Plano {
+    fun planoDeDownload(qairtInstalado: Boolean, atualizacao: Boolean = false): DownloadSizeFormat.Plano {
         val itens = ArrayList<DownloadSizeFormat.Arquivo>(2)
         itens.add(DownloadSizeFormat.Arquivo("sig-whisper-w8a16-sm8550-v$VERSAO.zip", BYTES_ZIP))
         if (!qairtInstalado) {
             itens.add(DownloadSizeFormat.Arquivo(NOME_ZIP_QAIRT, QairtDependencyManager.downloadSize()))
         }
-        return DownloadSizeFormat.Plano(rotulo = "Aceleração NPU (SM8550)", arquivos = itens)
+        // R115 §T02.4 — quem já tem o v2 lê "Atualizar aceleração NPU (~990 MB)".
+        val rotulo = if (atualizacao) {
+            "Atualizar aceleração NPU (~990 MB)"
+        } else {
+            "Aceleração NPU (SM8550)"
+        }
+        return DownloadSizeFormat.Plano(rotulo = rotulo, arquivos = itens)
     }
 
     /** Bytes que a ação vai baixar, considerando o que já está instalado. */
@@ -651,6 +755,8 @@ object WhisperOrtNpuPacote {
         when (val completo = verificarCompletoEm(raiz, dir)) {
             is Estado.Pronto -> {
                 WhisperOrtHtpRota.pacoteVerificado(completo.manifesto)
+                // v3 já verificado: o v2 não tem mais razão de ocupar ~677 MB.
+                if (completo.manifesto.versao == VERSAO) removerVersaoAnterior(raiz)
                 return@runCatching
             }
             else -> Unit
@@ -741,6 +847,8 @@ object WhisperOrtNpuPacote {
             runCatching { File(raiz, REVERIFICAR).delete() }
             // Instalado E conferido por SHA: só agora a rota pode pedir HTP.
             aoMarcarVerificado(manifesto)
+            // R115 §T02.4 — e só DEPOIS disso o v2 sai do disco, de forma atômica.
+            if (manifesto.versao == VERSAO) removerVersaoAnterior(raiz)
         } finally {
             staging.deleteRecursively()
             arquivoZip.delete()
@@ -764,6 +872,30 @@ object WhisperOrtNpuPacote {
             c.motivo.startsWith("ausente:") -> Estado.Ausente(c.motivo)
             else -> Estado.Invalido(c.motivo)
         }
+    }
+
+    /**
+     * R115 §T02.4 — remove a versão anterior depois de a nova estar VERIFICADA,
+     * de forma atômica: o diretório inteiro é renomeado para um túmulo e só
+     * então apagado. Se o rename falhar, NADA é apagado — o v2 continua inteiro,
+     * nunca "meio apagado". Se o apagamento falhar no meio, o túmulo é lixo
+     * visível só para o app e a rota já está na v3.
+     *
+     * [apagar] é injetável para o teste provar a falha no meio sem tocar em
+     * arquivos reais grandes.
+     */
+    internal fun removerVersaoAnterior(
+        raiz: File,
+        versao: String = VERSAO_ANTERIOR,
+        renomear: (File, File) -> Boolean = { de, para -> de.renameTo(para) },
+        apagar: (File) -> Boolean = { it.deleteRecursively() },
+    ): Boolean {
+        val antigo = File(raiz, versao)
+        if (!antigo.exists()) return true
+        val tumulo = File(raiz, ".remover-$versao-${System.nanoTime()}")
+        if (!renomear(antigo, tumulo)) return false
+        runCatching { apagar(tumulo) }
+        return !antigo.exists()
     }
 
     private fun baixar(

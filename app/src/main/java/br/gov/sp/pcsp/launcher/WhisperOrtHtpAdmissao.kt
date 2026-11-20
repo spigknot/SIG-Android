@@ -63,6 +63,22 @@ object WhisperOrtHtpAdmissao {
     const val ROTA_HTP = "htp"
     const val ROTA_CPU = "cpu"
 
+    /**
+     * R115 §T02.3 — rota que o pacote VERIFICADO permite:
+     * - **v3**: HTP de ponta a ponta (encoder + projetor + decoder na HTP);
+     * - **só v2**: rota atual (encoder HTP + decoders CPU);
+     * - **nenhum**: CPU.
+     *
+     * Regra pura, sem Android: a versão vem do manifesto verificado.
+     */
+    enum class RotaNpu { PONTA_A_PONTA, ENCODER_HTP, CPU }
+
+    fun rotaDaVersao(versaoVerificada: String?): RotaNpu = when (versaoVerificada) {
+        WhisperOrtNpuPacote.VERSAO -> RotaNpu.PONTA_A_PONTA
+        WhisperOrtNpuPacote.VERSAO_ANTERIOR -> RotaNpu.ENCODER_HTP
+        else -> RotaNpu.CPU
+    }
+
     /** `SM8550-AB` e `sm8550` caem na mesma entrada; sufixo de variante é ignorado. */
     fun normalizarSoc(modelo: String?): String =
         modelo.orEmpty().trim().uppercase().substringBefore('-').trim()

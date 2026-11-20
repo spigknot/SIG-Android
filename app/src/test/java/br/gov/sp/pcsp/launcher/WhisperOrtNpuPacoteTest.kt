@@ -28,7 +28,7 @@ class WhisperOrtNpuPacoteTest {
     private fun sha(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
-    private fun manifesto(vararg itens: Pair<String, ByteArray>, versao: String = "2"): String {
+    private fun manifesto(vararg itens: Pair<String, ByteArray>, versao: String = WhisperOrtNpuPacote.VERSAO): String {
         val arquivos = JSONArray()
         for ((nome, bytes) in itens) {
             arquivos.put(
@@ -43,10 +43,39 @@ class WhisperOrtNpuPacoteTest {
             .put("versao", versao)
             .put("soc", WhisperOrtHtpAdmissao.SOC_SM8550)
             .put("htp_arch", "73")
-            // R103/T02: o manifesto publicado do v2 grava "i16".
+            // R103/T02: o manifesto publicado grava "i16".
             .put("dtype", "i16")
+            .put("cache_posicoes", WhisperOrtHtpContrato.TAMANHO_MASCARA)
+            .put("contrato", contrato())
             .put("arquivos", arquivos)
             .toString()
+    }
+
+    /** Contrato de tipos do v3, com os números do produto (as escalas reais). */
+    private fun contrato(): JSONObject {
+        val escalas = JSONObject()
+        for (i in 0 until 4) {
+            escalas.put("k_cache_cross_$i", 0.1 + i)
+            escalas.put("v_cache_cross_$i", 0.01 + i)
+        }
+        return JSONObject()
+            .put(
+                "logits",
+                JSONObject().put("escala", WhisperOrtHtpContrato.ESCALA_LOGIT)
+                    .put("offset", WhisperOrtHtpContrato.OFFSET_LOGIT),
+            )
+            .put(
+                "mascara",
+                JSONObject().put("valido", WhisperOrtHtpContrato.MASCARA_VALIDO)
+                    .put("vazio", WhisperOrtHtpContrato.MASCARA_VAZIO),
+            )
+            .put(
+                "projetor_entrada",
+                JSONObject().put("nome", "sig_hidden_after_layer_norm")
+                    .put("escala", WhisperOrtHtpContrato.ESCALA_OCULTO)
+                    .put("offset", WhisperOrtHtpContrato.OFFSET_QNN_OCULTO),
+            )
+            .put("kv_cruzadas", JSONObject().put("n", 8).put("escalas", escalas))
     }
 
     private fun conteudo(): List<Pair<String, ByteArray>> = WhisperOrtNpuPacote.ARQUIVOS.mapIndexed { i, nome ->
@@ -74,9 +103,9 @@ class WhisperOrtNpuPacoteTest {
     }
 
     @Test
-    fun `manifesto de outra versao e recusado`() {
+    fun `manifesto de versao desconhecida e recusado`() {
         val itens = conteudo()
-        assertNull(WhisperOrtNpuPacote.lerManifesto(manifesto(*itens.toTypedArray(), versao = "3")))
+        assertNull(WhisperOrtNpuPacote.lerManifesto(manifesto(*itens.toTypedArray(), versao = "4")))
     }
 
     @Test
@@ -142,8 +171,9 @@ class WhisperOrtNpuPacoteTest {
     fun `pacote v2 nao carrega biblioteca QNN`() {
         assertEquals(
             listOf(WhisperOrtNpuPacote.CONTEXTO, WhisperOrtNpuPacote.WRAPPER),
-            WhisperOrtNpuPacote.ARQUIVOS,
+            WhisperOrtNpuPacote.ARQUIVOS_ANTERIOR,
         )
+        assertTrue("o v3 tem os seis arquivos", WhisperOrtNpuPacote.ARQUIVOS.size == 6)
         assertTrue(
             "nenhuma .so entra no pacote da NPU",
             WhisperOrtNpuPacote.ARQUIVOS.none { it.endsWith(".so") },
@@ -239,7 +269,7 @@ class WhisperOrtNpuPacoteTest {
 
     @Test
     fun `instalacao ponta a ponta do ZIP publicado termina Pronto e limpa o download`() {
-        val zip = File(System.getProperty("r103.zip", "D:/tmp/r101/download/sig-whisper-w8a16-sm8550-v2.zip"))
+        val zip = File(System.getProperty("r115.zip", "D:/tmp/r115/download/sig-whisper-w8a16-sm8550-v3.zip"))
         Assume.assumeTrue("ZIP publicado ausente no host — teste pulado explicitamente", zip.isFile)
         assertEquals(
             "tem de ser o ZIP publicado pinado",
