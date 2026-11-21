@@ -924,8 +924,7 @@ object WhisperLabDrive {
             }
         }
 
-        // Campos reais da UI avançada: o produto lê readAdvancedSettings()
-        // DESTES widgets — o lab não inventa um segundo caminho de settings.
+        // São os mesmos controles que o produto lê ao iniciar o job.
         beamToSet?.let { v ->
             runCatching {
                 activity.findViewById<TextView>(R.id.input_beam_size).text = v.toString()
@@ -939,10 +938,12 @@ object WhisperLabDrive {
             }.onFailure { log("prep_bestof_fail", "error" to it.toString()) }
         }
         vadToSet?.let { v ->
-            runCatching {
-                activity.findViewById<CheckBox>(R.id.checkbox_vad).isChecked = v
-                log("prep_vad", "checked" to v)
-            }
+            val mode = if (v) LocalVad.Mode.SILERO_CPU else LocalVad.Mode.NONE
+            val prefs = activity.getSharedPreferences("whisper", android.content.Context.MODE_PRIVATE)
+            prefs.edit().putString("vad_mode", mode.preferenceKey).apply()
+            val level = prefs.getInt("vad_level", 1).coerceIn(LocalVad.levels)
+            activity.findViewById<TextView>(R.id.button_whisper_vad).text = LocalVad.Selection(mode, level).label
+            log("prep_vad", "checked" to v)
         }
 
         // STOP por fase "Ouvindo": robusto ao tempo de load (o clique fixo podia
@@ -1182,7 +1183,7 @@ object WhisperLabDrive {
         // Views genéricas de propósito: os widgets são AppCompat* (ImageButton/
         // Button) — um cast para android.widget.Button quebraria em runtime.
         fun enabled(id: Int): Boolean = runCatching { activity.findViewById<View>(id)?.isEnabled == true }.getOrDefault(false)
-        val vad = runCatching { activity.findViewById<CheckBox>(R.id.checkbox_vad)?.isChecked == true }.getOrDefault(false)
+        val vad = text(R.id.button_whisper_vad).let { it.isNotEmpty() && it != LocalVad.Selection().label }
         val liveBtn = activity.findViewById<View>(R.id.button_live_mic_stop)
         val recordingPanel = activity.findViewById<View>(R.id.recording_panel)
         val back = activity.findViewById<View>(R.id.btnBack)
