@@ -36,14 +36,32 @@ internal object WhisperSelectors {
         else -> Choice.DOWNLOAD
     }
 
+    /**
+     * Hardware EFETIVO da tela.
+     *
+     * R123/T01 — sem escolha salva, o padrão é a melhor rota PRONTA, na ordem
+     * `NPU` (v3) → `NPU→CPU` (v2 ou v3) → `CPU`. Antes o padrão era `NPU` e o
+     * pacote v2 caía em `CPU`: a 81 usa o encoder na HTP com o v2, e a 82
+     * tiraria a NPU de quem ainda está no v2, sem aviso (revisão R122 §3).
+     *
+     * Com escolha salva, a escolha vale se estiver pronta; senão, `CPU` — como
+     * antes, para não surpreender quem escolheu.
+     */
     fun effective(
         saved: Hardware?,
         admitted: Boolean,
         turbo: Boolean,
         verifiedVersion: Int,
     ): Hardware {
-        val requested = saved ?: Hardware.NPU
-        return if (choice(requested, admitted, turbo, verifiedVersion) == Choice.READY) requested
-        else Hardware.CPU
+        if (saved != null) {
+            return if (choice(saved, admitted, turbo, verifiedVersion) == Choice.READY) saved
+            else Hardware.CPU
+        }
+        return PADRAO_SEM_ESCOLHA.firstOrNull {
+            choice(it, admitted, turbo, verifiedVersion) == Choice.READY
+        } ?: Hardware.CPU
     }
+
+    /** Ordem do padrão sem escolha salva: a melhor rota pronta primeiro. */
+    private val PADRAO_SEM_ESCOLHA = listOf(Hardware.NPU, Hardware.HYBRID, Hardware.CPU)
 }

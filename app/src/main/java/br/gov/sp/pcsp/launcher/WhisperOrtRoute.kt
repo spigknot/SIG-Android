@@ -166,6 +166,16 @@ object WhisperOrtRoute {
         return admission.requestCancel(job)
     }
 
+    /**
+     * R123/T02 — terminal REGISTRADO de [job], ou `null`.
+     *
+     * A célula de fumaça da tela precisa do recibo do job que ela mesma
+     * despachou: o terminal é a fonte de verdade do outcome e do hardware
+     * efetivo, e o `Result` que chega ao callback não carrega o recibo.
+     */
+    internal fun terminalDe(job: WhisperOrtAdmission.Job): WhisperOrtAdmission.Terminal? =
+        admission.terminalOf(job)
+
     private val worker = Executors.newSingleThreadExecutor { r ->
         Thread(r, "whisper-ort-route").apply { isDaemon = true }
     }
@@ -791,6 +801,15 @@ object WhisperOrtRoute {
 
     /** Arquivo inválido: converter só esconderia a causa. Nunca vira texto. */
     private class WavCorrompido(motivo: String) : IllegalArgumentException(motivo)
+
+    /**
+     * R123/T02 — PCM 16 kHz mono de [arquivo] pelo MESMO leitor da rota.
+     *
+     * A célula de fumaça da tela precisa do áudio que a rota vai receber para
+     * conferir o hash do terminal (`input`); usar outro leitor faria a prova
+     * comparar coisas diferentes.
+     */
+    internal fun pcmDoArquivo(arquivo: File): FloatArray = lerWav16kMono(arquivo)
 
     /**
      * Lê WAV PCM16 16 kHz mono.

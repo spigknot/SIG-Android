@@ -39,6 +39,61 @@ class WhisperSelectorsTest {
         assertEquals(Hardware.CPU, WhisperSelectors.effective(Hardware.HYBRID, true, false, 3))
     }
 
+    /**
+     * R123/T01 — matriz COMPLETA do hardware efetivo: escolha salva
+     * (`null`, `CPU`, `HYBRID`, `NPU`) × SoC admitido × turbo × versão
+     * verificada (0, 2, 3). A tabela é a regra escrita à mão, independente da
+     * implementação: sem escolha salva vale a melhor rota PRONTA
+     * (`NPU` → `NPU→CPU` → `CPU`); com escolha salva, a escolha se pronta,
+     * senão `CPU`.
+     */
+    @Test
+    fun `matriz completa do hardware efetivo`() {
+        val esperado = mapOf(
+            // escolha salva = null: melhor rota pronta
+            Triple(null, true, true) to mapOf(0 to Hardware.CPU, 2 to Hardware.HYBRID, 3 to Hardware.NPU),
+            Triple(null, true, false) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(null, false, true) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(null, false, false) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            // escolha salva = CPU: sempre pronta
+            Triple(Hardware.CPU, true, true) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(Hardware.CPU, true, false) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(Hardware.CPU, false, true) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(Hardware.CPU, false, false) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            // escolha salva = HYBRID: pronta com v2 ou v3, turbo e SoC admitido
+            Triple(Hardware.HYBRID, true, true) to mapOf(0 to Hardware.CPU, 2 to Hardware.HYBRID, 3 to Hardware.HYBRID),
+            Triple(Hardware.HYBRID, true, false) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(Hardware.HYBRID, false, true) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(Hardware.HYBRID, false, false) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            // escolha salva = NPU: só pronta com v3
+            Triple(Hardware.NPU, true, true) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.NPU),
+            Triple(Hardware.NPU, true, false) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(Hardware.NPU, false, true) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+            Triple(Hardware.NPU, false, false) to mapOf(0 to Hardware.CPU, 2 to Hardware.CPU, 3 to Hardware.CPU),
+        )
+        var casos = 0
+        for ((entrada, porVersao) in esperado) {
+            val (salvo, admitido, turbo) = entrada
+            for ((versao, hardware) in porVersao) {
+                assertEquals(
+                    "salvo=$salvo admitido=$admitido turbo=$turbo versao=$versao",
+                    hardware,
+                    WhisperSelectors.effective(salvo, admitido, turbo, versao),
+                )
+                casos++
+            }
+        }
+        assertEquals("a matriz tem de cobrir 4 x 2 x 2 x 3", 48, casos)
+    }
+
+    /** R123/T01 — o defeito da R122 §3: o v2 sem escolha salva NÃO pode cair em CPU. */
+    @Test
+    fun `pacote v2 sem escolha salva mantem a NPU hibrida`() {
+        assertEquals(Hardware.HYBRID, WhisperSelectors.effective(null, true, true, 2))
+        assertEquals(Hardware.NPU, WhisperSelectors.effective(null, true, true, 3))
+        assertEquals(Hardware.CPU, WhisperSelectors.effective(null, true, true, 0))
+    }
+
     @Test
     fun `ORT ignora o valor salvo do Flash Attention`() {
         assertFalse(WhisperSelectors.flashAttention(true, true))
