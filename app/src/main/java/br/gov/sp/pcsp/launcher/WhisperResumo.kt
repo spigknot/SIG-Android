@@ -5,9 +5,7 @@ package br.gov.sp.pcsp.launcher
  *
  * Regras que este arquivo garante (e que a UI apenas exibe):
  *  - **Modelo**: o efetivamente usado no job, congelado no encerramento.
- *  - **Hardware**: execução efetiva; nunca o provider *solicitado*. Só existem
- *    os rótulos implementados hoje (CPU e GPU/Vulkan); combinações e NPU não são
- *    anunciadas sem implementação e prova.
+ *  - **Hardware**: rótulo da execução efetiva informado pelo motor.
  *  - **Quantidade**: fontes concluídas (um streaming = uma fonte), não janelas,
  *    segmentos ou tokens. Em lote, separa concluídos de total.
  *  - **Duração**: áudio efetivamente processado, somado sem overlaps/padding.
@@ -79,7 +77,8 @@ data class WhisperResumo(
                 // R16/§5 — híbrido do laboratório: encoder QNN GPU + decoder CPU.
                 // Preserva o rótulo completo (identidade por estágio, não é "GPU" puro).
                 m.startsWith("gpu (qnn") -> bruto
-                // NPU/HTP não implementados: nunca anunciar como disponível.
+                m == "npu→cpu" -> "NPU→CPU"
+                m == "htp w8a16" -> "NPU (HTP W8A16)"
                 else -> INDISPONIVEL
             }
         }

@@ -127,6 +127,7 @@ class WhisperNpuR115AtualizacaoTest {
         assertEquals(WhisperOrtHtpAdmissao.ROTA_HTP, rota)
         // Reabrir a tela não oferece de novo e a entrada diz "NPU ativa".
         ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
+            selecionarNpuParaAceite(dispositivo, cenario)
             repeat(8) {
                 assertTrue(
                     "a oferta não pode reaparecer com o v3 verificado",
@@ -136,10 +137,10 @@ class WhisperNpuR115AtualizacaoTest {
             }
             var rotulo: String? = null
             cenario.onActivity { atividade ->
-                rotulo = atividade.findViewById<android.widget.TextView>(R.id.button_ativar_npu)
+                rotulo = atividade.findViewById<android.widget.TextView>(R.id.button_backend)
                     ?.text?.toString()
             }
-            assertEquals("NPU ativa", rotulo)
+            assertEquals("NPU", rotulo)
         }
     }
 
@@ -167,7 +168,8 @@ class WhisperNpuR115AtualizacaoTest {
 
         val inicio = System.currentTimeMillis()
         ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
-            // 1) a oferta de ATUALIZAÇÃO aparece uma vez, com o título do v3.
+            selecionarNpuParaAceite(dispositivo, cenario)
+            // 1) a escolha de NPU oferece atualização para o v3.
             val oferta = dispositivo.wait(
                 Until.findObject(By.textContains("Atualizar aceleração NPU (~990 MB)")), 20_000L,
             )
@@ -239,11 +241,11 @@ class WhisperNpuR115AtualizacaoTest {
             // 6) a entrada fixa passa a dizer "NPU ativa".
             var rotulo: String? = null
             cenario.onActivity { atividade ->
-                rotulo = atividade.findViewById<android.widget.TextView>(R.id.button_ativar_npu)
+                rotulo = atividade.findViewById<android.widget.TextView>(R.id.button_backend)
                     ?.text?.toString()
             }
             linha(JSONObject().put("schema", SCHEMA).put("tipo", "entrada").put("rotulo", rotulo ?: ""))
-            assertEquals("NPU ativa", rotulo)
+            assertEquals("NPU", rotulo)
         }
 
         // 7) pós-condições (reabrir não oferece de novo; entrada "NPU ativa"; rota HTP).

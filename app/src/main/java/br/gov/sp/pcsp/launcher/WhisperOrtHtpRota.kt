@@ -267,7 +267,13 @@ object WhisperOrtHtpRota {
      * Fábrica da rota HTP. Devolve o backend pronto (encoder HTP + decoders CPU
      * abertos) ou lança [Recusa] — nunca devolve um backend pela metade.
      */
-    fun abrir(encoder: File, decoder: File, past: File, threads: Int): WhisperOrtBackend {
+    fun abrir(
+        encoder: File,
+        decoder: File,
+        past: File,
+        threads: Int,
+        rota: String = WhisperOrtHtpAdmissao.ROTA_HTP,
+    ): WhisperOrtBackend {
         val ctx = app ?: throw Recusa("sem contexto")
         val decisao = try {
             val presente = WhisperOrtNpuPacote.estado(ctx) is WhisperOrtNpuPacote.Estado.Pronto
@@ -300,7 +306,7 @@ object WhisperOrtHtpRota {
         val qairt = QairtDependencyManager.packageDir(ctx)
 
         // R115 §T02 — pacote v3 verificado: rota HTP de PONTA A PONTA (Q′).
-        if (pacote.pontaAPonta) {
+        if (pacote.pontaAPonta && rota != WhisperOrtHtpAdmissao.ROTA_HTP_CPU) {
             val backend = try {
                 carregarOrt(ctx)
                 carregarQnnQairt(ctx, pacote.htpArch)
@@ -352,7 +358,7 @@ object WhisperOrtHtpRota {
             "rota=htp soc=${WhisperOrtHtpAdmissao.normalizarSoc(socModelo())} " +
                 "pacote=${pacote.versao} arch=${pacote.htpArch} load_ms=$ultimoLoadMs",
         )
-        return WhisperOrtHtpBackend(sessaoHtp, decoders, pacote.dtype)
+        return WhisperOrtHtpBackend(sessaoHtp, decoders, pacote.dtype, route = rota)
     }
 
     /**

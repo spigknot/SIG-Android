@@ -1871,9 +1871,11 @@ object WhisperLabDrive {
                 }
                 when (phase) {
                     0 -> {
-                        val panel = a.findViewById<View>(R.id.advanced_panel)
-                        if (panel == null || panel.visibility != View.VISIBLE) {
-                            click(ref, R.id.advanced_toggle, "fa_seq_expand")
+                        if (uiText(a, R.id.button_engine) != "Whisper.cpp") {
+                            click(ref, R.id.button_engine, "fa_seq_engine")
+                            main.postDelayed({ clickDialogItemByText("Whisper.cpp", "fa_seq_engine_item") }, 450L)
+                            main.postDelayed(this, 900L)
+                            return
                         }
                         val cb = a.findViewById<CheckBox>(R.id.checkbox_flash_attention)
                         if (cb != null && cb.isChecked != step.faOn) {
@@ -1882,7 +1884,7 @@ object WhisperLabDrive {
                         val curBtn = uiText(a, R.id.button_backend)
                         if (curBtn != step.short) {
                             click(ref, R.id.button_backend, "fa_seq_backend_click")
-                            main.postDelayed({ clickDialogItemByText(step.backend, "fa_seq_backend_item") }, 450L)
+                            main.postDelayed({ clickDialogItemByText(step.short, "fa_seq_backend_item") }, 450L)
                         }
                         // R16/C3 — mídia própria do passo (sequência de 6 fases na
                         // mesma Activity): troca via produto antes do início.

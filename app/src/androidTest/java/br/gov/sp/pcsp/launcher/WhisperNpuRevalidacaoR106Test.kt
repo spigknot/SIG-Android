@@ -260,25 +260,7 @@ class WhisperNpuRevalidacaoR106Test {
 
         val dispositivo = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
-            val entrada = dispositivo.wait(
-                androidx.test.uiautomator.Until.findObject(
-                    By.res(ctx.packageName, "button_ativar_npu"),
-                ),
-                20_000L,
-            )
-            assertNotNull("a entrada fixa tem de estar na tela", entrada)
-            val rotulo = entrada!!.text ?: ""
-            linha(
-                JSONObject().put("schema", SCHEMA).put("etapa", "C15B-ENTRADA")
-                    .put("rotulo", rotulo).put("pid", android.os.Process.myPid()),
-            )
-            assertEquals("Reinstalar aceleração NPU", rotulo)
-            // Clique no MESMO listener da tela, pela view: o toque por
-            // coordenadas dependia da posição do botão dentro do ScrollView e
-            // não abria o diálogo de forma confiável no aparelho (R106).
-            cenario.onActivity { a ->
-                a.findViewById<android.view.View>(R.id.button_ativar_npu)?.performClick()
-            }
+            selecionarNpuParaAceite(dispositivo, cenario)
 
             val verificar = dispositivo.wait(
                 androidx.test.uiautomator.Until.findObject(By.text(VERIFICAR_NOVAMENTE)),

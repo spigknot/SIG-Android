@@ -99,10 +99,10 @@ class WhisperOrtTranscriptionProducer(
         if (request.isCancelled()) {
             return Outcome.Cancelled(request.jobId, request.attempt, zeroOpen = true)
         }
-        if (request.rota != WhisperOrtHtpAdmissao.ROTA_HTP) {
+        if (!WhisperOrtHtpAdmissao.isHtp(request.rota)) {
             return executar(pacote, request, WhisperOrtHtpAdmissao.ROTA_CPU)
         }
-        val primeira = executar(pacote, request, WhisperOrtHtpAdmissao.ROTA_HTP)
+        val primeira = executar(pacote, request, request.rota)
         if (primeira !is Outcome.Failed || !primeira.origemHtp) return primeira
         // Fallback do MESMO pedido: o lease HTP já saiu no finally de
         // `executar`; desliga a rota (contando a falha) e reabre na CPU.
@@ -145,7 +145,7 @@ class WhisperOrtTranscriptionProducer(
                         request.jobId,
                         request.attempt,
                         "abertura de sessão recusada: " + aq.motivo,
-                        origemHtp = rota == WhisperOrtHtpAdmissao.ROTA_HTP,
+                        origemHtp = WhisperOrtHtpAdmissao.isHtp(rota),
                     )
             }
         } catch (failure: Throwable) {
@@ -153,7 +153,7 @@ class WhisperOrtTranscriptionProducer(
                 request.jobId,
                 request.attempt,
                 "acquire lançou: ${failure.javaClass.simpleName}: ${failure.message}",
-                origemHtp = rota == WhisperOrtHtpAdmissao.ROTA_HTP,
+                origemHtp = WhisperOrtHtpAdmissao.isHtp(rota),
             )
         }
         // Fato da PRÓPRIA tentativa: não depende mais do contador global, que
@@ -180,7 +180,7 @@ class WhisperOrtTranscriptionProducer(
                 )
                 val transcript = transcriber.transcribe(lease.backend, request.pcm, request.isCancelled)
                 val efetiva = lease.backend.rota
-                if (efetiva == WhisperOrtHtpAdmissao.ROTA_HTP) aoSucessoHtp()
+                if (WhisperOrtHtpAdmissao.isHtp(efetiva)) aoSucessoHtp()
                 Outcome.Done(
                     transcript = transcript,
                     cacheHit = hit,
@@ -198,7 +198,7 @@ class WhisperOrtTranscriptionProducer(
                 request.jobId,
                 request.attempt,
                 "htp: ${htp.message}",
-                origemHtp = lease.backend.rota == WhisperOrtHtpAdmissao.ROTA_HTP,
+                origemHtp = WhisperOrtHtpAdmissao.isHtp(lease.backend.rota),
             )
         } catch (failure: Throwable) {
             return Outcome.Failed(

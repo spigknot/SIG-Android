@@ -4,4 +4,5 @@
     <string name="increase_start_time">Aumentar tempo inicial</string>
     <string name="decrease_end_time">Diminuir tempo final</string>
     <string name="increase_end_time">Aumentar tempo final</string>
+    <string name="whisper_threads_value">Threads: %1$d</string>
 </resources>

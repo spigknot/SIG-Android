@@ -112,8 +112,12 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private lateinit var outputActions: View
     private lateinit var buttonOutputExport: ImageButton
     private lateinit var buttonOutputFolder: ImageButton
-    private lateinit var advancedToggle: TextView
-    private lateinit var advancedPanel: LinearLayout
+    private lateinit var buttonEngine: TextView
+    private lateinit var buttonThreads: TextView
+    private lateinit var buttonVad: TextView
+    private lateinit var cppDecodingControls: LinearLayout
+    private val selectorPrefs by lazy { getSharedPreferences("whisper", MODE_PRIVATE) }
+    private var npuDownloadActive = false
     /**
      * URI escolhida no seletor interno (snapshot da seleção).
      *
@@ -150,12 +154,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     var dialogoFallbackEmExibicao: android.app.AlertDialog? = null
         private set
 
-    private lateinit var checkboxVad: CheckBox
     private lateinit var checkboxFlashAttention: CheckBox
     private lateinit var checkboxWordTimestamps: CheckBox
     private lateinit var inputBeamSize: TextView
     private lateinit var inputBestOf: TextView
-    private lateinit var resetAdvanced: TextView
 
     // Controles de gravação de microfone (branco) e transcrição ao vivo (vermelho)
     private lateinit var buttonRecordingAction: ImageButton
@@ -381,53 +383,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // R14/§1.1 — a reentrega ficou DEPOIS das ligações de view (abaixo): aqui o
         // `resumoText` ainda não existe e `mostrarResumo` estourava dentro do
         // runCatching, exibindo o texto sem cartão e SEM confirmar a entrega.
-        // ORT1/M4 (a): botao proprio da rota ORT (arquivo/CPU), ao lado do
-        // existente. Nao substitui o botao de transcricao nem o default do app.
-        // "usar whisper.cpp": desliga o ORT (que e o padrao) e explica no "!".
-        val cbCpp = findViewById<android.widget.CheckBox?>(R.id.checkbox_usar_cpp)
-        cbCpp?.isChecked = !WhisperOrtRoute.isEnabled(this)
-        cbCpp?.setOnCheckedChangeListener { _, marcado ->
-            WhisperOrtRoute.setEnabled(this, !marcado)
-            // Reflete a escolha imediatamente (habilitação e botão), sem esperar
-            // por outra interação.
-            runCatching { updateTranscribeEnabled() }
-            // R101 §T03 — entrou no ORT: é AQUI que a aceleração NPU é oferecida,
-            // como o backend acelerado do Granite oferece o QAIRT.
-            if (!marcado) oferecerAceleracaoNpu()
-        }
-        findViewById<android.view.View?>(R.id.help_usar_cpp)?.setOnClickListener {
-            android.app.AlertDialog.Builder(this)
-                .setTitle("usar whisper.cpp")
-                .setMessage(
-                    "Desmarcado (padrao): a transcricao de arquivo roda em ONNX Runtime na CPU.\n\n" +
-                        "Marcado: volta ao whisper.cpp (CPU/Vulkan), que continua disponivel como " +
-                        "alternativa e como compatibilidade.\n\n" +
-                        "O ORT usa a versão INT8 do modelo selecionado, em português e com busca greedy; os controles de VAD, " +
-                        "beam e timestamps do whisper.cpp não se aplicam. Áudio longo usa janelas.\n\n" +
-                        "Se o ORT nao puder atender o arquivo (formato ou pacote ausente), o app PERGUNTA antes de usar o whisper.cpp - nunca troca " +
-                        "de motor em silencio.",
-                )
-                .setPositiveButton("Entendi", null)
-                .show()
-        }
-        // Controle de threads COMPARTILHADO (pedido do usuário): default 4, máximo 8.
-        // Faixa 1–8, persistida; ORT lê via `threadsEfetivos` a cada despacho e o
-        // whisper.cpp aplica o mesmo valor por job (seam one-shot, adendo 16 §3).
-        // O provedor é ligado uma vez: o singleton é de processo e o valor é
-        // lido do seletor a cada tentativa (troca de seleção vale no próximo job).
         val appParaThreads = applicationContext
         whisperSession.threadsForJob = { WhisperOrtRoute.threadsEfetivos(appParaThreads) }
-        val inputOrtThreads = findViewById<android.widget.TextView?>(R.id.input_ort_threads)
-        inputOrtThreads?.text = WhisperOrtRoute.threadsEfetivos(this).toString()
-        fun ajustarThreads(delta: Int) {
-            val atual = inputOrtThreads?.text?.toString()?.toIntOrNull()
-                ?: WhisperOrtRoute.threadsEfetivos(this)
-            val novo = (atual + delta).coerceIn(WhisperOrtRoute.THREADS_MIN, WhisperOrtRoute.THREADS_MAX)
-            WhisperOrtRoute.setThreads(this, novo)
-            inputOrtThreads?.text = novo.toString()
-        }
-        findViewById<android.view.View?>(R.id.btn_ort_threads_dec)?.setOnClickListener { ajustarThreads(-1) }
-        findViewById<android.view.View?>(R.id.btn_ort_threads_inc)?.setOnClickListener { ajustarThreads(1) }
 
         whisperScroll = findViewById(R.id.whisper_scroll)
         selectedFileView = findViewById(R.id.selected_file)
@@ -466,30 +423,48 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonCopyLiveTranscript = findViewById(R.id.button_copy_live_transcript)
         buttonPasteTranscript = findViewById(R.id.button_paste_transcript)
 
-        advancedToggle = findViewById(R.id.advanced_toggle)
-        advancedPanel = findViewById(R.id.advanced_panel)
-        checkboxVad = findViewById(R.id.checkbox_vad)
+        buttonEngine = findViewById(R.id.button_engine)
+        buttonThreads = findViewById(R.id.button_threads)
+        buttonVad = findViewById(R.id.button_whisper_vad)
+        cppDecodingControls = findViewById(R.id.cpp_decoding_controls)
         checkboxFlashAttention = findViewById(R.id.checkbox_flash_attention)
         checkboxWordTimestamps = findViewById(R.id.checkbox_word_timestamps)
         inputBeamSize = findViewById(R.id.input_beam_size)
         inputBestOf = findViewById(R.id.input_best_of)
-        resetAdvanced = findViewById(R.id.reset_advanced)
+        checkboxFlashAttention.isChecked = selectorPrefs.getBoolean("flash_attention", false)
+        checkboxWordTimestamps.isChecked = selectorPrefs.getBoolean("word_timestamps", false)
+        inputBeamSize.text = selectorPrefs.getInt("beam_size", DEFAULT_BEAM_SIZE).coerceIn(1, 16).toString()
+        inputBestOf.text = selectorPrefs.getInt("best_of", DEFAULT_BEST_OF).coerceIn(1, 16).toString()
+        checkboxFlashAttention.setOnCheckedChangeListener { _, enabled ->
+            selectorPrefs.edit().putBoolean("flash_attention", enabled).apply()
+        }
+        checkboxWordTimestamps.setOnCheckedChangeListener { _, enabled ->
+            selectorPrefs.edit().putBoolean("word_timestamps", enabled).apply()
+        }
 
         findViewById<View>(R.id.btn_beam_size_dec).setOnClickListener {
             val current = inputBeamSize.text.toString().toIntOrNull() ?: DEFAULT_BEAM_SIZE
-            inputBeamSize.text = (current - 1).coerceIn(1, 16).toString()
+            val value = (current - 1).coerceIn(1, 16)
+            inputBeamSize.text = value.toString()
+            selectorPrefs.edit().putInt("beam_size", value).apply()
         }
         findViewById<View>(R.id.btn_beam_size_inc).setOnClickListener {
             val current = inputBeamSize.text.toString().toIntOrNull() ?: DEFAULT_BEAM_SIZE
-            inputBeamSize.text = (current + 1).coerceIn(1, 16).toString()
+            val value = (current + 1).coerceIn(1, 16)
+            inputBeamSize.text = value.toString()
+            selectorPrefs.edit().putInt("beam_size", value).apply()
         }
         findViewById<View>(R.id.btn_best_of_dec).setOnClickListener {
             val current = inputBestOf.text.toString().toIntOrNull() ?: DEFAULT_BEST_OF
-            inputBestOf.text = (current - 1).coerceIn(1, 16).toString()
+            val value = (current - 1).coerceIn(1, 16)
+            inputBestOf.text = value.toString()
+            selectorPrefs.edit().putInt("best_of", value).apply()
         }
         findViewById<View>(R.id.btn_best_of_inc).setOnClickListener {
             val current = inputBestOf.text.toString().toIntOrNull() ?: DEFAULT_BEST_OF
-            inputBestOf.text = (current + 1).coerceIn(1, 16).toString()
+            val value = (current + 1).coerceIn(1, 16)
+            inputBestOf.text = value.toString()
+            selectorPrefs.edit().putInt("best_of", value).apply()
         }
 
         findViewById<View>(R.id.help_beam_size).setOnClickListener {
@@ -573,7 +548,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonBackend.visibility = View.VISIBLE
 
         buttonLanguage.text = selectedLanguage.shortLabel
-        buttonBackend.text = selectedBackend.shortLabel
+        refreshSelectors()
         logToggle.visibility = View.GONE
         val exitHandler = installCancelAndExitGuard(
             isTaskRunning = { isTranscribing || isBusy || whiteRecordingActive || liveMicActive },
@@ -604,9 +579,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonModel.setOnClickListener { showModelMenu() }
         buttonLanguage.setOnClickListener { showLanguageMenu() }
         buttonBackend.setOnClickListener { showBackendMenu() }
-        advancedToggle.setOnClickListener { toggleAdvancedSettings() }
-        resetAdvanced.setOnClickListener { resetAdvancedSettings() }
-        resetAdvancedSettings()
+        buttonEngine.setOnClickListener { showEngineMenu() }
+        buttonThreads.setOnClickListener { showThreadsMenu() }
+        buttonVad.setOnClickListener { showVadMenu() }
 
         updateTranscribeEnabled()
 
@@ -652,24 +627,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             }
             updateTranscribeEnabled()
         }
-        // R102 §T01 — entrada FIXA: abre o mesmo diálogo mesmo depois de uma
-        // recusa, e some quando os dois pacotes já estão prontos.
-        findViewById<android.view.View?>(R.id.button_ativar_npu)?.setOnClickListener {
-            oferecerAceleracaoNpu(entradaFixa = true)
-        }
-        atualizarEntradaNpu()
-        // R101 §T03 — com o ORT ligado e o SoC admitido, a tela OFERECE a
-        // aceleração; nada é baixado sem esta ação do usuário.
-        oferecerAceleracaoNpu()
     }
 
-    /** Evita dois diálogos sobrepostos na mesma tela (o persistente é o da oferta). */
     private var npuDialogoAberto = false
-
-    /** Os dois pacotes instalados e verificados: não há mais nada para ativar. */
-    private fun pacotesNpuProntos(): Boolean =
-        QairtDependencyManager.isInstalled(this) &&
-            (runCatching { WhisperOrtNpuPacote.estado(this) }.getOrNull() is WhisperOrtNpuPacote.Estado.Pronto)
 
     /** Situação do pacote da NPU para a entrada fixa (R106). */
     private fun situacaoNpu(): WhisperNpuOferta.Situacao {
@@ -680,24 +640,6 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             is WhisperOrtNpuPacote.Estado.Ausente -> WhisperNpuOferta.Situacao.AUSENTE
             else -> WhisperNpuOferta.Situacao.RECUSADO
         }
-    }
-
-    /** A entrada fixa some (ou passa a dizer "NPU ativa"/"Atualizar…") conforme a situação. */
-    private fun atualizarEntradaNpu() {
-        val botao = findViewById<android.view.View?>(R.id.button_ativar_npu) ?: return
-        val situacao = situacaoNpu()
-        val qairt = QairtDependencyManager.isInstalled(this)
-        val instalado = instaladoNpu()
-        // R115 — com o v2 instalado o v3 ainda não chegou: a entrada continua
-        // visível dizendo "Atualizar aceleração NPU".
-        val prontos = qairt && situacao == WhisperNpuOferta.Situacao.PRONTO &&
-            instalado == WhisperNpuOferta.Instalado.V3
-        val visivel = WhisperNpuOferta.entradaFixaVisivel(
-            WhisperNpuOferta.Preferencias(this), prontos,
-        )
-        botao.visibility = if (visivel) android.view.View.VISIBLE else android.view.View.GONE
-        (botao as? android.widget.TextView)?.text =
-            WhisperNpuOferta.rotuloEntradaFixa(situacao, qairt, instalado)
     }
 
     /** R115 — qual pacote da NPU está instalado (v2, v3 ou nenhum). */
@@ -711,57 +653,20 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             else -> WhisperNpuOferta.Instalado.NENHUM
         }
 
-    /**
-     * R101 §T03 — a NPU é uma ESCOLHA do usuário, não um download silencioso.
-     *
-     * Só aparece quando o aparelho é admitido (SoC + fabricante) e falta pelo
-     * menos um dos pacotes. O diálogo informa o tamanho EXATO a baixar (só o NPU
-     * v2 quando o QAIRT já está instalado; os dois quando não está), o espaço
-     * livre necessário e, em rede medida, o aviso de consumo. Até concluir, a
-     * transcrição continua na CPU, sem bloqueio.
-     */
-    private fun oferecerAceleracaoNpu(entradaFixa: Boolean = false) {
-        if (npuDialogoAberto || isFinishing || isDestroyed) return
-        if (!WhisperOrtRoute.isEnabled(this)) return
-        val soc = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            WhisperOrtHtpAdmissao.socDe(Build.SOC_MODEL)
-        } else null
-        if (soc == null || !soc.habilitado) return
-        val fabricante = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MANUFACTURER else null
-        if (!WhisperOrtHtpAdmissao.fabricanteAdmitido(fabricante)) return
+    private fun oferecerAceleracaoNpu(hardware: WhisperSelectors.Hardware) {
+        if (npuDialogoAberto || npuDownloadActive || isFinishing || isDestroyed) return
         val qairt = QairtDependencyManager.isInstalled(this)
         val situacao = situacaoNpu()
         val instalado = instaladoNpu()
-        // R115 — o v2 instalado NÃO conta como "pronto": o v3 é que fecha a rota
-        // de ponta a ponta, e é ele que a oferta/entrada fixa oferece.
         val atualizacao = instalado == WhisperNpuOferta.Instalado.V2
-        val npu = situacao == WhisperNpuOferta.Situacao.PRONTO &&
-            instalado == WhisperNpuOferta.Instalado.V3
-        val prontos = qairt && npu
-        if (prontos) {
-            atualizarEntradaNpu()
+        val npu = instalado == WhisperNpuOferta.Instalado.V3
+        if (situacao == WhisperNpuOferta.Situacao.RECUSADO ||
+            situacao == WhisperNpuOferta.Situacao.CORROMPIDO
+        ) {
+            dialogoPacoteRecusado(situacao, hardware)
             return
-        }
-        // R106/T02 — pacote em disco que não passou na conferência: a entrada
-        // fixa abre o diálogo de "Verificar novamente"/"Reinstalar aceleração
-        // NPU", nunca o download direto. Nada é apagado. Com o v2 instalado, a
-        // entrada fixa abre a ATUALIZAÇÃO (o pacote atual está íntegro).
-        if (entradaFixa && situacao != WhisperNpuOferta.Situacao.AUSENTE && !atualizacao) {
-            dialogoPacoteRecusado(situacao)
-            return
-        }
-        val armazenamento = WhisperNpuOferta.Preferencias(this)
-        // A automática só uma vez: a de atualização tem recusa própria (R115).
-        if (!entradaFixa) {
-            val oferecer = if (atualizacao) {
-                WhisperNpuOferta.deveOferecerAtualizacao(armazenamento, instalado)
-            } else {
-                WhisperNpuOferta.deveOferecerAutomaticamente(armazenamento, situacao)
-            }
-            if (!oferecer) return
         }
         npuDialogoAberto = true
-        atualizarEntradaNpu()
 
         val plano = WhisperOrtNpuPacote.planoDeDownload(qairt, atualizacao)
         val livre = DownloadSizeFormat.legivel(WhisperOrtNpuPacote.espacoNecessario(qairt, npu))
@@ -779,15 +684,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         } else {
             "Aceleração NPU disponível neste aparelho."
         }
-        val prefacio = if (atualizacao) {
-            "O pacote novo leva o decoder do Whisper para a NPU (Hexagon): a janela de " +
-                "transcrição fica ~30% mais curta. O pacote v2 continua funcionando até a " +
-                "verificação do novo terminar; depois disso ele é removido do aparelho."
-        } else {
-            "Este aparelho pode rodar o encoder do Whisper na NPU (Hexagon). " +
-                "Com o pacote instalado, a transcrição usa a NPU; sem ele, continua na CPU, " +
-                "sem erro e sem bloquear o uso."
-        }
+        val prefacio = "A opção ${hardware.label} usa a NPU Hexagon. " +
+            "Até concluir a instalação, a transcrição usa a CPU."
         DownloadPlanDialog.confirmar(
             activity = this,
             plano = plano,
@@ -795,23 +693,11 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             positivo = "Baixar",
             prefacio = prefacio,
             sufixo = "Espaço livre necessário: $livre.$avisoRede",
-            aoNegar = {
-                if (atualizacao) armazenamento.registrarRecusaAtualizacao()
-                else armazenamento.registrarRecusa()
-                npuDialogoAberto = false
-                atualizarEntradaNpu()
-                status.text = "Aceleração NPU: a transcrição segue na CPU."
-            },
-            // Fechar com Voltar também é "agora não": não pode reaparecer.
-            aoCancelar = {
-                if (atualizacao) armazenamento.registrarRecusaAtualizacao()
-                else armazenamento.registrarRecusa()
-                npuDialogoAberto = false
-                atualizarEntradaNpu()
-            },
+            aoNegar = { recusarNpu() },
+            aoCancelar = { recusarNpu() },
         ) {
             npuDialogoAberto = false
-            baixarPacoteNpu()
+            baixarPacoteNpu(hardware)
         }
     }
 
@@ -823,7 +709,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      * roda a verificação completa por SHA sem baixar nada; "Reinstalar aceleração
      * NPU" é o download explícito de sempre; "Agora não" mantém a CPU.
      */
-    private fun dialogoPacoteRecusado(situacao: WhisperNpuOferta.Situacao) {
+    private fun dialogoPacoteRecusado(
+        situacao: WhisperNpuOferta.Situacao,
+        hardware: WhisperSelectors.Hardware,
+    ) {
         npuDialogoAberto = true
         val corrompido = situacao == WhisperNpuOferta.Situacao.CORROMPIDO
         val motivo = runCatching { WhisperOrtNpuPacote.corrompido(this) }.getOrNull()
@@ -841,14 +730,14 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             .setMessage(mensagem)
             .setPositiveButton("Verificar novamente") { _, _ ->
                 npuDialogoAberto = false
-                verificarPacoteNpu()
+                verificarPacoteNpu(hardware)
             }
             .setNeutralButton("Reinstalar aceleração NPU") { _, _ ->
                 npuDialogoAberto = false
-                baixarPacoteNpu()
+                baixarPacoteNpu(hardware)
             }
-            .setNegativeButton("Agora não") { _, _ -> npuDialogoAberto = false }
-            .setOnCancelListener { npuDialogoAberto = false }
+            .setNegativeButton("Agora não") { _, _ -> recusarNpu() }
+            .setOnCancelListener { recusarNpu() }
             .show()
     }
 
@@ -858,15 +747,17 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      * impressão de disco atual e a HTP volta já no pedido seguinte; se não, o
      * pacote fica marcado como corrompido e a entrada fixa oferece a reinstalação.
      */
-    private fun verificarPacoteNpu() {
+    private fun verificarPacoteNpu(hardware: WhisperSelectors.Hardware) {
         status.text = "Conferindo o pacote da NPU (sem download)…"
         WhisperOrtNpuPacote.verificarAgora(this) { estado ->
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
-                atualizarEntradaNpu()
+                if (hardwareChoice(hardware) == WhisperSelectors.Choice.READY) {
+                    selectOrtHardware(hardware)
+                }
                 status.text = when (estado) {
                     is WhisperOrtNpuPacote.Estado.Pronto ->
-                        "Pacote conferido: as próximas transcrições usam o HTP."
+                        "Pacote da NPU conferido."
                     is WhisperOrtNpuPacote.Estado.Invalido ->
                         "O pacote da NPU está corrompido; nada foi apagado. " +
                             "Use \"Reinstalar aceleração NPU\" quando quiser."
@@ -881,7 +772,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      * Executa a ação confirmada: QAIRT (se faltar) e depois o pacote da NPU, com
      * progresso e cancelamento. Nada aqui roda na thread da UI.
      */
-    private fun baixarPacoteNpu() {
+    private fun baixarPacoteNpu(hardware: WhisperSelectors.Hardware) {
+        if (npuDownloadActive) return
+        npuDownloadActive = true
         val qairtInstalado = QairtDependencyManager.isInstalled(this)
         // R115 — só o v3 conta como "instalado" para o plano: com o v2 em disco
         // o download é o pacote inteiro novo.
@@ -918,12 +811,12 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             }
             runOnUiThread {
                 if (isFinishing || isDestroyed) return@runOnUiThread
+                npuDownloadActive = false
                 resultado.fold(
                     onSuccess = { total ->
                         progresso.concluirContinuando(total)
-                        status.text = "Aceleração NPU pronta: as próximas transcrições usam o HTP."
-                        runCatching { updateTranscribeEnabled() }
-                        atualizarEntradaNpu()
+                        selectOrtHardware(hardware)
+                        status.text = "Aceleração NPU pronta."
                     },
                     onFailure = { falha ->
                         progresso.fechar()
@@ -1204,7 +1097,6 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonLanguage.visibility = View.VISIBLE
         buttonBackend.visibility = View.VISIBLE
         buttonTranscribe.visibility = View.VISIBLE
-        advancedToggle.visibility = View.VISIBLE
         status.text = "Escolha um modelo."
         clearOutput()
         updateTranscribeEnabled()
@@ -1256,7 +1148,6 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonLanguage.visibility = View.VISIBLE
         buttonBackend.visibility = View.VISIBLE
         buttonTranscribe.visibility = View.VISIBLE
-        advancedToggle.visibility = View.VISIBLE
         status.text = "Escolha um modelo."
         clearOutput()
         updateTranscribeEnabled()
@@ -1546,24 +1437,123 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         }
     }
 
+    private fun vadSelection() = LocalVad.Selection(
+        LocalVad.Mode.fromPreference(selectorPrefs.getString("vad_mode", null)),
+        selectorPrefs.getInt("vad_level", 1).coerceIn(LocalVad.levels),
+    )
+
+    private fun showVadMenu() {
+        PopupMenu(this, buttonVad).apply {
+            LocalVad.addModes(this, separateLevel = false) { mode, level ->
+                selectorPrefs.edit().putString("vad_mode", mode.preferenceKey)
+                    .putInt("vad_level", level ?: vadSelection().level).apply()
+                refreshSelectors()
+            }
+            show()
+        }
+    }
+
+    private fun showEngineMenu() {
+        PopupMenu(this, buttonEngine).apply {
+            for ((label, ort) in listOf("Onnx RT" to true, "Whisper.cpp" to false)) {
+                menu.add(label).setOnMenuItemClickListener {
+                    WhisperOrtRoute.setEnabled(this@WhisperActivity, ort)
+                    updateTranscribeEnabled()
+                    true
+                }
+            }
+            show()
+        }
+    }
+
+    private fun showThreadsMenu() {
+        PopupMenu(this, buttonThreads).apply {
+            for (threads in WhisperOrtRoute.THREADS_MIN..WhisperOrtRoute.THREADS_MAX) {
+                menu.add(threads.toString()).setOnMenuItemClickListener {
+                    WhisperOrtRoute.setThreads(this@WhisperActivity, threads)
+                    refreshSelectors()
+                    true
+                }
+            }
+            show()
+        }
+    }
+
+    private fun admittedNpu(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            WhisperOrtHtpAdmissao.socDe(Build.SOC_MODEL)?.habilitado == true &&
+            WhisperOrtHtpAdmissao.fabricanteAdmitido(Build.SOC_MANUFACTURER)
+
+    private fun verifiedNpuVersion(): Int {
+        if (!QairtDependencyManager.isInstalled(this)) return 0
+        val check = runCatching { WhisperOrtNpuPacote.conferenciaRapida(this) }.getOrNull()
+        if (check !is WhisperOrtNpuPacote.Conferencia.Ok) return 0
+        return if (check.manifesto.pontaAPonta) 3 else 2
+    }
+
+    private fun hardwareChoice(hardware: WhisperSelectors.Hardware): WhisperSelectors.Choice {
+        val turbo = selectedModel?.label?.let(WhisperOrtModelCatalog::modeloParaPedido) == WhisperOrtModelCatalog.MODEL
+        return WhisperSelectors.choice(hardware, admittedNpu(), turbo, verifiedNpuVersion())
+    }
+
+    private fun ortHardware(): WhisperSelectors.Hardware {
+        val saved = WhisperSelectors.Hardware.fromPreference(selectorPrefs.getString("ort_hardware", null))
+        val turbo = selectedModel?.label?.let(WhisperOrtModelCatalog::modeloParaPedido) == WhisperOrtModelCatalog.MODEL
+        return WhisperSelectors.effective(saved, admittedNpu(), turbo, verifiedNpuVersion())
+    }
+
+    private fun selectOrtHardware(hardware: WhisperSelectors.Hardware) {
+        selectorPrefs.edit().putString("ort_hardware", hardware.name).apply()
+        refreshSelectors()
+    }
+
+    private fun recusarNpu() {
+        npuDialogoAberto = false
+        selectOrtHardware(WhisperSelectors.Hardware.CPU)
+        status.text = "A transcrição segue na CPU."
+    }
+
+    private fun refreshSelectors() {
+        val ort = WhisperOrtRoute.isEnabled(this)
+        buttonEngine.text = if (ort) "Onnx RT" else "Whisper.cpp"
+        buttonBackend.text = if (ort) ortHardware().label else selectedBackend.shortLabel
+        buttonThreads.text = getString(R.string.whisper_threads_value, WhisperOrtRoute.threadsEfetivos(this))
+        buttonVad.text = vadSelection().label
+        cppDecodingControls.visibility = if (ort) View.GONE else View.VISIBLE
+    }
+
     private fun showBackendMenu() {
         PopupMenu(this, buttonBackend).apply {
-            // R56/adendo20 — política central: OpenCL (nativeKind 2) fica
-            // temporariamente desativado; o menu oferece só o que está ativo.
-            // O enum não é reindexado: reativar é mudar a política, não a UI.
-            val visiveis = WhisperBackend.values().filter {
-                WhisperBackendDisponibilidade.disponivel(it.nativeKind)
-            }
-            visiveis.forEach { backend -> menu.add(backend.label) }
-            setOnMenuItemClickListener { item ->
-                val backend = visiveis.first { it.label == item.title.toString() }
-                if (backend == WhisperBackend.VULKAN && !supportsVulkanCompute()) {
-                    status.text = "Este aparelho não anuncia suporte a Vulkan Compute."
-                    return@setOnMenuItemClickListener true
+            if (WhisperOrtRoute.isEnabled(this@WhisperActivity)) {
+                for (hardware in WhisperSelectors.Hardware.entries) {
+                    val choice = hardwareChoice(hardware)
+                    val reason = choice.reason
+                    val label = if (reason == null) hardware.label else "${hardware.label} — $reason"
+                    menu.add(label).setEnabled(reason == null).setOnMenuItemClickListener {
+                        when (hardwareChoice(hardware)) {
+                            WhisperSelectors.Choice.READY -> selectOrtHardware(hardware)
+                            WhisperSelectors.Choice.DOWNLOAD -> {
+                                selectOrtHardware(WhisperSelectors.Hardware.CPU)
+                                oferecerAceleracaoNpu(hardware)
+                            }
+                            else -> refreshSelectors()
+                        }
+                        true
+                    }
                 }
-                selectedBackend = backend
-                buttonBackend.text = selectedBackend.shortLabel
-                true
+            } else {
+                for (kind in WhisperBackendDisponibilidade.ativos) {
+                    val backend = WhisperBackend.entries.first { it.nativeKind == kind }
+                    menu.add(backend.shortLabel).setOnMenuItemClickListener {
+                        if (backend == WhisperBackend.VULKAN && !supportsVulkanCompute()) {
+                            status.text = "Este aparelho não anuncia suporte a Vulkan Compute."
+                        } else {
+                            selectedBackend = backend
+                            refreshSelectors()
+                        }
+                        true
+                    }
+                }
             }
             show()
         }
@@ -1662,7 +1652,13 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         findViewById<android.view.View?>(R.id.live_transcript_container)?.visibility = View.VISIBLE
         findViewById<android.view.View?>(R.id.live_transcript_clipboard_actions)?.visibility = View.VISIBLE
         findViewById<android.widget.TextView?>(R.id.live_transcript_text)?.text = texto
-        val resumo = "ORT/CPU [$rotulo] ${texto.length} caracteres"
+        val hardware = when (resultado) {
+            is WhisperOrtRoute.Result.Done -> resultado.hardwareLabel
+            is WhisperOrtRoute.Result.Cancelled -> resultado.hardwareLabel
+            else -> null
+        }
+        val rota = hardware?.let { "ORT/$it" } ?: "ORT"
+        val resumo = "$rota [$rotulo] ${texto.length} caracteres"
         WhisperOrtRoute.avisar(this, detalhe?.let { "$resumo - $it" } ?: resumo)
         // Recibo da PRÓPRIA tentativa (não o global): o global confirmava o job mais
         // recente e deixava o exibido pendente. Terminais sem texto (NO_SPEECH,
@@ -2018,6 +2014,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             } },
             // Threads do seletor compartilhado (default 4, máx 8, pedido do usuário).
             threads = WhisperOrtRoute.threadsEfetivos(this),
+            hardware = ortHardware(),
+            vad = vadSelection(),
             // Modelo efetivo desta entrada (adendo 17 §1): override consentido
             // ou resolução do pedido — nunca outro pacote por engano.
             modelo = efetivo,
@@ -2041,6 +2039,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             cancelRequested = false
             setBusy(false)
             jobOrtNaTela = null
+            updateSelectorAvailability()
             publicarResultadoOrt(resultado)
             // Fallback SOMENTE quando elegível (recusa por capacidade): BUSY,
             // dreno e cancelamento não oferecem troca de motor.
@@ -2054,6 +2053,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // Recusa na porta NÃO apaga a identidade do que já está rodando.
         if (meuJob != null) {
             jobOrtNaTela = meuJob
+            updateSelectorAvailability()
             cancelRequested = false
             isTranscribing = true
             setBusy(true)
@@ -2200,7 +2200,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             ?: WhisperBackend.values()
                 .firstOrNull { it.nativeKind == WhisperBackendDisponibilidade.resolver(selectedBackend.nativeKind) }
             ?: WhisperBackend.CPU
-        val settings = readAdvancedSettings().let { st ->
+        val settings = readDecodingSettings().let { st ->
             WhisperLabSeams.forcedFlashAttention(this)?.let { fa -> st.copy(flashAttention = fa) } ?: st
         }
         if (items.isEmpty()) return
@@ -2211,10 +2211,6 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             }
             status.text = "Escolha um modelo existente."
             updateTranscribeEnabled()
-            return
-        }
-        if (settings.vadFilter && !DownloadFileStorage.isComplete(vadModelFile(), VAD_MODEL_BYTES)) {
-            confirmVadDownload { transcribeSelectedMedia() }
             return
         }
         if (backend == WhisperBackend.VULKAN && !supportsVulkanCompute()) {
@@ -2294,6 +2290,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             var modelLoadMs = 0L
             // ADENDO 27 §2 — observador da última tentativa, visível também nos
             // caminhos de CANCEL/ERRO (o recibo fecha nos três desfechos).
+            var hardwareEfetivo: String? = null
             var observadorUltimoArquivo: WhisperApresentacaoObservador? = null
             // R12/§3 — contagem POR FONTE, visível também nos desfechos de
             // CANCEL/ERRO: só conta arquivo cujo texto foi aceito (SUCCESS).
@@ -2324,6 +2321,11 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
 
                 TranscriptionReport.appendLog(logLines, "Convertendo arquivos para WAV temporário...")
                 val convertedItems = prepareWavFiles(items, tempWavDir, terminalLines, logLines, sessionGeneration)
+                    .map { item ->
+                        checkNotCancelled()
+                        val wav = filterWhisperWav(item.wavFile, settings.vad)
+                        item.copy(wavFile = wav)
+                    }
                 checkNotCancelled()
                 val totalAudioSeconds = convertedItems.sumOf { it.durationSeconds }
                 currentTotalAudioSeconds = totalAudioSeconds
@@ -2381,6 +2383,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     //    registrado — jamais vira "célula inválida".
                     val getterOk = runCatching { WhisperNative.effectiveBackendKind() }.isSuccess
                     val efetivo = runCatching { WhisperNative.effectiveBackendKind() }.getOrDefault(-1)
+                    hardwareEfetivo = WhisperBackend.entries.firstOrNull { it.nativeKind == efetivo }?.reportLabel
+                    Log.i(TAG, "whisper-cpp backend_pedido=${backend.nativeKind} backend_efetivo=$efetivo threads=$threadsCongeladasJob")
                     val faGetterOk = runCatching { WhisperNative.effectiveFlashGraph() }.isSuccess
                     val faEfetiva = runCatching { WhisperNative.effectiveFlashGraph() }.getOrNull()
                     val lab = WhisperLabSeams.isLab()
@@ -2645,8 +2649,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                         settings.beamSize,
                         settings.bestOf,
                         settings.wordTimestamps,
-                        settings.vadFilter,
-                        if (settings.vadFilter) vadModelFile().absolutePath else "",
+                        false,
+                        "",
                         makeCallback(selectedLanguage.code, fases)
                     )
                     val retornoEm = SystemClock.elapsedRealtime()
@@ -2804,7 +2808,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                     (results.sumOf { it.durationSeconds } * 1000.0).toLong().takeIf { it > 0L }
                 mostrarResumo(
                     modelo = model.label,
-                    backendLabel = backend.reportLabel,
+                    backendLabel = hardwareEfetivo,
                     concluidos = fontesConcluidas.get(),
                     total = items.size,
                     duracaoMs = duracaoTranscritaMs,
@@ -2892,7 +2896,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 // aceito (lote interrompido não pode dizer "0 de N" nem "N de N").
                 mostrarResumo(
                     modelo = model.label,
-                    backendLabel = backend.reportLabel,
+                    backendLabel = hardwareEfetivo,
                     concluidos = fontesConcluidas.get(),
                     total = items.size,
                     duracaoMs = duracaoTranscritaCancelMs,
@@ -2975,7 +2979,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 // falha; o status é Erro, não Concluído/Parcial.
                 mostrarResumo(
                     modelo = model.label,
-                    backendLabel = backend.reportLabel,
+                    backendLabel = hardwareEfetivo,
                     concluidos = fontesConcluidas.get(),
                     total = items.size,
                     duracaoMs = duracaoTranscritaErroMs,
@@ -3231,20 +3235,19 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         terminalText.scrollTo(0, scrollAmount.coerceAtLeast(0))
     }
 
-    private fun toggleAdvancedSettings() {
-        advancedPanel.visibility = if (advancedPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+    private fun filterWhisperWav(input: File, vad: LocalVad.Selection): File {
+        if (vad.mode == LocalVad.Mode.NONE) return input
+        val filtered = File(input.parentFile, "${input.nameWithoutExtension}_vad.wav")
+        try {
+            LocalVad.filter(this, input, filtered, vad)
+            return filtered
+        } catch (failure: Exception) {
+            filtered.delete()
+            throw failure
+        }
     }
 
-    private fun resetAdvancedSettings() {
-        checkboxVad.isChecked = true
-        checkboxFlashAttention.isChecked = false
-        checkboxWordTimestamps.isChecked = false
-        inputBeamSize.setText(DEFAULT_BEAM_SIZE.toString())
-        inputBestOf.setText(DEFAULT_BEST_OF.toString())
-    }
-
-    private fun setAdvancedEnabled(enabled: Boolean) {
-        checkboxVad.isEnabled = enabled
+    private fun setDecodingEnabled(enabled: Boolean) {
         checkboxFlashAttention.isEnabled = enabled
         checkboxWordTimestamps.isEnabled = enabled
         inputBeamSize.isEnabled = enabled
@@ -3253,18 +3256,19 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         findViewById<View>(R.id.btn_beam_size_inc).isEnabled = enabled
         findViewById<View>(R.id.btn_best_of_dec).isEnabled = enabled
         findViewById<View>(R.id.btn_best_of_inc).isEnabled = enabled
-        resetAdvanced.isEnabled = enabled
-        advancedPanel.alpha = if (enabled) 1f else 0.55f
+        cppDecodingControls.alpha = if (enabled) 1f else 0.55f
     }
 
-    private fun readAdvancedSettings(): WhisperAdvancedSettings {
+    private fun readDecodingSettings(): WhisperDecodingSettings {
         val beam = inputBeamSize.text.toString().toIntOrNull()?.coerceIn(1, 16) ?: DEFAULT_BEAM_SIZE
         val bestOf = inputBestOf.text.toString().toIntOrNull()?.coerceIn(1, 16) ?: DEFAULT_BEST_OF
         inputBeamSize.setText(beam.toString())
         inputBestOf.setText(bestOf.toString())
-        return WhisperAdvancedSettings(
-            vadFilter = checkboxVad.isChecked,
-            flashAttention = checkboxFlashAttention.isChecked,
+        return WhisperDecodingSettings(
+            vad = vadSelection(),
+            flashAttention = WhisperSelectors.flashAttention(
+                WhisperOrtRoute.isEnabled(this), checkboxFlashAttention.isChecked,
+            ),
             wordTimestamps = checkboxWordTimestamps.isChecked,
             beamSize = beam,
             bestOf = bestOf
@@ -3555,121 +3559,6 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         )
     }
 
-    private fun vadModelFile(): File {
-        val bundled = NativeDependencyManager.sileroModelFile(this)
-        return if (bundled.isFile) bundled else File(File(modelsDir(), "silero"), VAD_MODEL_NAME)
-    }
-
-    private fun confirmVadDownload(onReady: () -> Unit) {
-        // O VAD é pequeno (885 KB) e o diálogo não dizia nada — sem o número o
-        // usuário não sabe se vale a pena aceitar.
-        val destino = vadModelFile()
-        DownloadPlanDialog.confirmar(
-            activity = this,
-            plano = DownloadSizeFormat.Plano(
-                rotulo = "VAD Silero",
-                arquivos = listOf(
-                    DownloadSizeFormat.Arquivo(VAD_MODEL_NAME, VAD_MODEL_BYTES, jaBaixado = DownloadFileStorage.isComplete(destino, VAD_MODEL_BYTES))
-                ),
-            ),
-            negativo = "Não",
-            positivo = "Sim",
-            prefacio = "O VAD filter usa o modelo Silero.",
-            sufixo = "Baixar agora?",
-            aoNegar = {
-                checkboxVad.isChecked = false
-                status.text = "VAD desativado. Toque em transcrever novamente."
-            },
-            aoConfirmar = {
-                downloadFile(
-                    label = "VAD Silero",
-                    urls = listOf(VAD_MODEL_URL, VAD_MODEL_URL_ALTERNATIVA),
-                    destination = destino,
-                    onSuccess = onReady
-                )
-            },
-        )
-    }
-
-    /** Baixa [urls] em ordem (primaria = R2; alternativa = HuggingFace) para
-     *  [destination]. Usado pelo VAD Silero: se a fonte primaria estiver
-     *  indisponivel, a alternativa assume sem intervencao do usuario. */
-    private fun downloadFile(label: String, urls: List<String>, destination: File, onSuccess: () -> Unit) {
-        if (DownloadFileStorage.isComplete(destination, VAD_MODEL_BYTES)) { onSuccess(); return }
-        val plano = DownloadSizeFormat.Plano(label, listOf(DownloadSizeFormat.Arquivo(destination.name, VAD_MODEL_BYTES)))
-        val progresso = DownloadPlanDialog.progresso(this, plano, titulo = "Baixando $label")
-        Thread {
-            var ultimaFalha: Throwable? = null
-            var sucesso = false
-            for (url in urls) {
-                try {
-                    baixarUmaFonte(url, destination) { downloaded, total ->
-                        runOnUiThread { progresso.atualizarPacote(downloaded, total, "Baixando $label", true) }
-                    }
-                    sucesso = true
-                    break
-                } catch (e: Throwable) {
-                    ultimaFalha = e
-                    Log.w(TAG, "Fonte indisponivel ($url): ${e.message ?: "falha"}")
-                }
-            }
-            if (sucesso) {
-                runOnUiThread {
-                    progresso.concluirContinuando(destination.length())
-                    status.text = "$label pronto."
-                    onSuccess()
-                }
-            } else {
-                val erro = ultimaFalha
-                Log.e(TAG, "Download failed", erro)
-                runOnUiThread {
-                    progresso.fechar()
-                    status.text = "Erro ao baixar $label: ${erro?.message ?: "falha inesperada"}"
-                }
-            }
-        }.start()
-    }
-
-    /** Baixa UMA fonte para [destination] (via temporario .download). Lanca
-     *  excecao em falha — o chamador decide se tenta a proxima fonte. */
-    private fun baixarUmaFonte(url: String, destination: File, onProgress: (Long, Long) -> Unit) {
-        destination.parentFile?.mkdirs()
-        val temp = File(destination.parentFile, "${destination.name}.download")
-        URL(url).openConnection().apply {
-            connectTimeout = 15000
-            readTimeout = 30000
-        }.let { connection ->
-            val total = connection.contentLengthLong.takeIf { it > 0L } ?: VAD_MODEL_BYTES
-            connection.getInputStream().use { input ->
-                FileOutputStream(temp).use { output ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var copied = 0L
-                    var lastUi = 0L
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        copied += read
-                        val now = SystemClock.elapsedRealtime()
-                        if (now - lastUi > 500L) {
-                            lastUi = now
-                            onProgress(copied, total)
-                        }
-                    }
-                }
-            }
-        }
-        DownloadFileStorage.activate(temp, destination, VAD_MODEL_BYTES)
-    }
-
-    /**
-     * Tamanho conhecido do modelo, para a lista do diálogo.
-     *
-     * Usa a tabela do catálogo ([WhisperModel.bytes], medida no R2) e cai no
-     * arquivo local quando o modelo já está no aparelho. Sem nenhum dos dois
-     * (modelo escolhido pelo seletor, nunca baixado) devolve 0 — a lista mostra
-     * o item sem tamanho em vez de inventar um número.
-     */
     private fun bytesConhecidos(url: String, destination: File): Long {
         officialModels().firstOrNull { it.downloadUrl == url }?.bytes?.takeIf { it > 0L }?.let { return it }
         return destination.takeIf { it.isFile }?.length() ?: 0L
@@ -3909,6 +3798,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     }
 
     private fun updateTranscribeEnabled() {
+        refreshSelectors()
+        updateSelectorAvailability()
         val hasMedia = selectedItems.isNotEmpty()
         buttonTranscribe.visibility = if (hasMedia) View.VISIBLE else View.GONE
         // Com ORT o motor da rota não usa GGML: exigir o modelo do CPP deixava o
@@ -3923,6 +3814,16 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         // aparece sempre que a rota está ligada e respeita o mesmo estado de ocupado.
     }
 
+    private fun updateSelectorAvailability() {
+        val enabled = !isBusy && !whiteRecordingActive && !liveMicActive && jobOrtNaTela == null
+        buttonEngine.isEnabled = enabled
+        buttonThreads.isEnabled = enabled
+        buttonVad.isEnabled = enabled
+        buttonBackend.isEnabled = enabled
+        buttonBackend.alpha = if (enabled) 1f else 0.45f
+        setDecodingEnabled(enabled)
+    }
+
     private fun setBusy(busy: Boolean) {
         isBusy = busy
         progress.visibility = if (busy) View.VISIBLE else View.GONE
@@ -3930,11 +3831,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonModel.alpha = if (busy) 0.45f else 1f
         buttonLanguage.isEnabled = !busy
         buttonLanguage.alpha = if (busy) 0.45f else 1f
-        buttonBackend.isEnabled = !busy
-        buttonBackend.alpha = if (busy) 0.45f else 1f
-        advancedToggle.isEnabled = !busy
-        advancedToggle.alpha = if (busy) 0.45f else 1f
-        setAdvancedEnabled(!busy)
+        updateSelectorAvailability()
         buttonRecordingAction.isEnabled = !busy && !liveMicActive
         buttonRecordingAction.alpha = if (busy || liveMicActive) 0.45f else 1f
         buttonLiveMicStop.isEnabled = !busy && !whiteRecordingActive
@@ -4394,7 +4291,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         findViewById<View>(R.id.button_select_media).isEnabled = false
         buttonTranscribe.isEnabled = false
         buttonModel.isEnabled = false
-        buttonBackend.isEnabled = false
+        updateSelectorAvailability()
 
         recordingPanel.visibility = View.VISIBLE
         recordingTimer.text = "00:00.000"
@@ -4428,7 +4325,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonLiveMicStop.alpha = 1.0f
         findViewById<View>(R.id.button_select_media).isEnabled = true
         buttonModel.isEnabled = true
-        buttonBackend.isEnabled = true
+        updateSelectorAvailability()
         updateTranscribeEnabled()
 
         val pcm = whiteRecordingPcmFile
@@ -4550,7 +4447,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private fun transcribeRecordedWav(wavFile: File) {
         val model = selectedModel ?: return
         val backend = selectedBackend
-        val settings = readAdvancedSettings()
+        val settings = readDecodingSettings()
         // W02: nova sessão descarta cancelamentos e callbacks da anterior.
         currentSessionGeneration = whisperSession.beginSession()
         val sessionGeneration = currentSessionGeneration
@@ -4682,17 +4579,18 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 // Adendo 18 §2 — a marca leva o TOKEN de reserva do job.
                 runCatching { WhisperJobService.markWorkerStarted(this@WhisperActivity, tokenGravacao) }
 
+                val wavParaTranscrever = filterWhisperWav(wavFile, settings.vad)
                 // R2/B2: par texto+status do mesmo job, numa única chamada.
                 val (returnedRaw, transcribeStatus) = synchronized(modelLoadLock) {
                     whisperSession.transcribeAndStatus(
                         sessionGeneration,
-                        wavFile.absolutePath,
+                        wavParaTranscrever.absolutePath,
                         selectedLanguage.code,
                         settings.beamSize,
                         settings.bestOf,
                         settings.wordTimestamps,
-                        settings.vadFilter,
-                        if (settings.vadFilter) vadModelFile().absolutePath else "",
+                        false,
+                        "",
                         cb
                     )
                 }
@@ -4831,6 +4729,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 // `delete()` falhar, o ACK do worker ainda tem de sair.
                 runCatching { wavFile.delete() }
                     .onFailure { Log.w(TAG, "falha ao apagar wav temporário: $it") }
+                runCatching { File(wavFile.parentFile, "${wavFile.nameWithoutExtension}_vad.wav").delete() }
                 // R11/D4 — TERMINAL do job de transcrição da gravação.
                 // R56/B03 — desfecho TIPADO (o literal antigo caía em UNKNOWN e
                 // o dono ficava sem ACK).
@@ -4854,15 +4753,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 confirmModelDownload(model)
                 return@checkAudioPermission
             }
-            // R4/C1: VAD pedido exige o modelo na MESMA rota do arquivo (download
-            // explícito); falta = config/erro explícito, nunca silêncio.
-            val settings = readAdvancedSettings()
-            if (settings.vadFilter && !vadModelFile().exists()) {
-                status.text = "VAD ativo, mas o modelo Silero não está baixado — baixe para transcrever."
-                confirmVadDownload { startLiveMicTranscription() }
-                return@checkAudioPermission
-            }
-
+            val settings = readDecodingSettings()
             // R56/B02 — a admissão é feita depois da preparação e, em caso de
             // recusa, a preparação é DESFEITA localmente (idempotente, sem
             // tocar no dono antigo).
@@ -4876,7 +4767,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             findViewById<View>(R.id.button_select_media).isEnabled = false
             buttonTranscribe.isEnabled = false
             buttonModel.isEnabled = false
-            buttonBackend.isEnabled = false
+            updateSelectorAvailability()
 
             recordingPanel.visibility = View.VISIBLE
             recordingTimer.text = "00:00.000"
@@ -4893,8 +4784,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
                 beamSize = settings.beamSize,
                 bestOf = settings.bestOf,
                 wordTimestamps = settings.wordTimestamps,
-                vadFilter = settings.vadFilter,
-                vadModelPath = if (settings.vadFilter) vadModelFile().absolutePath else "",
+                vadFilter = false,
+                vadModelPath = "",
             )
             liveMicSettings = liveSettings
             liveChunkTally = LiveChunkTally()
@@ -5134,7 +5025,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         buttonRecordingAction.alpha = 1.0f
         findViewById<View>(R.id.button_select_media).isEnabled = true
         buttonModel.isEnabled = true
-        buttonBackend.isEnabled = true
+        updateSelectorAvailability()
         updateTranscribeEnabled()
 
         // R4/C2: NUNCA sobrescrever erro/parcial/cancelado com "finalizada"
@@ -5166,7 +5057,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private fun runLiveMicLoop(
         model: WhisperModel,
         backend: WhisperBackend,
-        settings: WhisperAdvancedSettings,
+        settings: WhisperDecodingSettings,
         liveSettings: LiveJobSettings,
         geracaoJob: Long,
         tokenReserva: Long,
@@ -5208,7 +5099,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     private fun runLiveMicLoopCorpo(
         model: WhisperModel,
         backend: WhisperBackend,
-        settings: WhisperAdvancedSettings,
+        settings: WhisperDecodingSettings,
         liveSettings: LiveJobSettings,
         // R56/B01-B07 — geração e SINK capturados na ADMISSÃO, disponíveis
         // ANTES de qualquer retorno precoce (inclusive checagem de buffer).
@@ -6563,13 +6454,9 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         private const val SIG_OUTPUT_FOLDER = "SIG"
         private const val WHISPER_OUTPUT_FOLDER = "Whisper"
         private const val GLOBAL_LOG_NAME = "whisper_log.txt"
-        private const val VAD_MODEL_NAME = "ggml-silero-v6.2.0.bin"
         /** Primario: espelho no R2 (mesma pasta dos modelos do Whisper).
          *  Alternativa: HuggingFace (origem) — usada se o R2 falhar. */
-        private const val VAD_MODEL_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/whisper/ggml-silero-v6.2.0.bin"
-        private const val VAD_MODEL_URL_ALTERNATIVA = "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
         /** Tamanho real do VAD publicado (HEAD no HuggingFace, 25/09/2026). */
-        private const val VAD_MODEL_BYTES = 885_098L
         private const val MODEL_BASE_URL = "https://pub-6476622beda24c82875cb84f11f660ea.r2.dev/models/whisper"
         private const val DEFAULT_BEAM_SIZE = 5
         private const val DEFAULT_BEST_OF = 5
@@ -6740,8 +6627,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         val logFile: File
     )
 
-    private data class WhisperAdvancedSettings(
-        val vadFilter: Boolean,
+    private data class WhisperDecodingSettings(
+        val vad: LocalVad.Selection,
         val flashAttention: Boolean,
         val wordTimestamps: Boolean,
         val beamSize: Int,
@@ -6749,7 +6636,7 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
     ) {
         fun describe(): String {
             return "beam_search=$beamSize; best_of=$bestOf; flash_attn=${if (flashAttention) "on" else "off"}; " +
-                "word_timestamps=${if (wordTimestamps) "on" else "off"}; vad=${if (vadFilter) "on" else "off"}"
+                "word_timestamps=${if (wordTimestamps) "on" else "off"}; vad=${vad.mode.preferenceKey} nivel=${vad.level}"
         }
     }
 

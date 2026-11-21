@@ -261,7 +261,7 @@ class RemoteSttActivity : AppCompatActivity() {
     private var zipFile: File? = null
     private var playWhenSeekCompletes = false
     private var selectedPrepareMode: PrepareMode? = null
-    private var selectedVadMode: VadMode = VadMode.NONE
+    private var selectedVadMode: LocalVad.Mode = LocalVad.Mode.NONE
     private var selectedVadLevel: Int = 1
     private var selectedZipLevel: Int = 1
     private var serverBaseUrl: String = ""
@@ -701,8 +701,8 @@ class RemoteSttActivity : AppCompatActivity() {
         buttonPrepareHelp?.setOnClickListener { showPrepareModeHelp() }
         buttonReadyFiles?.setOnClickListener { selectPrepareMode(PrepareMode.READY) }
         buttonOriginalFiles?.setOnClickListener { selectPrepareMode(PrepareMode.ORIGINAL) }
-        selectedVadMode = VadMode.fromPreference(
-            getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE).getString(VAD_MODE_KEY, VadMode.NONE.preferenceKey)
+        selectedVadMode = LocalVad.Mode.fromPreference(
+            getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE).getString(VAD_MODE_KEY, LocalVad.Mode.NONE.preferenceKey)
         )
         selectedVadLevel = getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE)
             .getInt(VAD_LEVEL_KEY, 1)
@@ -4388,7 +4388,7 @@ class RemoteSttActivity : AppCompatActivity() {
         checkboxSendZip?.visibility = if (zipAllowed) View.VISIBLE else View.GONE
         if (!zipAllowed && checkboxSendZip?.isChecked == true) checkboxSendZip?.isChecked = false
         buttonZipLevel?.visibility = if (zipAllowed && checkboxSendZip?.isChecked == true) View.VISIBLE else View.GONE
-        checkboxOnlyVad?.isEnabled = selectedVadMode != VadMode.NONE
+        checkboxOnlyVad?.isEnabled = selectedVadMode != LocalVad.Mode.NONE
         checkboxOnlyVad?.alpha = if (checkboxOnlyVad?.isEnabled == true) 1f else 0.38f
         if (checkboxOnlyVad?.isEnabled != true && checkboxOnlyVad?.isChecked == true) checkboxOnlyVad?.isChecked = false
     }
@@ -4410,18 +4410,15 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun showVadModeMenu() {
         val anchor = buttonVadMode ?: return
         PopupMenu(this, anchor).apply {
-            VadMode.entries.forEach { mode ->
-                menu.add(mode.label).setOnMenuItemClickListener {
-                    selectedVadMode = mode
-                    getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE)
-                        .edit()
-                        .putString(VAD_MODE_KEY, mode.preferenceKey)
-                        .apply()
-                    updateVadModeButton()
-                    updateBatchOptionVisibility()
-                    updateTranscribeEnabled()
-                    true
-                }
+            LocalVad.addModes(this, separateLevel = true) { mode, _ ->
+                selectedVadMode = mode
+                getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE)
+                    .edit()
+                    .putString(VAD_MODE_KEY, mode.preferenceKey)
+                    .apply()
+                updateVadModeButton()
+                updateBatchOptionVisibility()
+                updateTranscribeEnabled()
             }
             show()
         }
@@ -4430,14 +4427,14 @@ class RemoteSttActivity : AppCompatActivity() {
     private fun updateVadModeButton() {
         buttonVadMode?.text = selectedVadMode.label
         buttonVadLevel?.text = "Nível: $selectedVadLevel"
-        buttonVadLevel?.isEnabled = selectedVadMode != VadMode.NONE
+        buttonVadLevel?.isEnabled = selectedVadMode != LocalVad.Mode.NONE
         buttonVadLevel?.alpha = if (buttonVadLevel?.isEnabled == true) 1f else 0.38f
     }
 
     private fun showVadLevelMenu() {
         val anchor = buttonVadLevel ?: return
         PopupMenu(this, anchor).apply {
-            (0..3).forEach { level ->
+            LocalVad.levels.forEach { level ->
                 menu.add(level.toString()).setOnMenuItemClickListener {
                     selectedVadLevel = level
                     getSharedPreferences(VAD_PREFERENCES, MODE_PRIVATE)
@@ -4553,7 +4550,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val onlyConvert = checkboxOnlyConvert?.isChecked ?: false
         val onlyVad = checkboxOnlyVad?.isChecked ?: false
         val sendZip = checkboxSendZip?.isChecked == true && items.size > 1
-        if (onlyVad && selectedVadMode == VadMode.NONE) {
+        if (onlyVad && selectedVadMode == LocalVad.Mode.NONE) {
             status.text = "Escolha um VAD antes de usar Apenas VAD."
             return
         }
@@ -4640,7 +4637,7 @@ class RemoteSttActivity : AppCompatActivity() {
                     prepareCompletion.submit(
                         prepareUploadTask(
                             items, snapshotPrepareMode, tempDir, terminalLines, index, item, vadStats, runTimings,
-                            applyVad = !onlyConvert && !whiteRecording && snapshotVadMode != VadMode.NONE,
+                            applyVad = !onlyConvert && !whiteRecording && snapshotVadMode != LocalVad.Mode.NONE,
                             useTimeline = !whiteRecording,
                             timelineStartMs = snapshotTimelineStartMs,
                             timelineEndMs = snapshotTimelineEndMs,
@@ -4819,7 +4816,7 @@ class RemoteSttActivity : AppCompatActivity() {
         useTimeline: Boolean = true,
         timelineStartMs: Long = 0L,
         timelineEndMs: Long = 0L,
-        vadMode: VadMode = selectedVadMode,
+        vadMode: LocalVad.Mode = selectedVadMode,
         vadLevel: Int = selectedVadLevel
     ): Callable<PreparedUpload> {
         return Callable {
@@ -5428,11 +5425,11 @@ class RemoteSttActivity : AppCompatActivity() {
         durationMs: Long,
         terminalLines: StringBuilder,
         vadStats: VadRunStats,
-        vadMode: VadMode = selectedVadMode,
+        vadMode: LocalVad.Mode = selectedVadMode,
         vadLevel: Int = selectedVadLevel
     ): UploadFile {
         val mode = vadMode
-        if (mode == VadMode.NONE) return preparedUploadFile
+        if (mode == LocalVad.Mode.NONE) return preparedUploadFile
 
         ensureNotCancelled()
         val startedAt = SystemClock.elapsedRealtime()
@@ -5452,23 +5449,9 @@ class RemoteSttActivity : AppCompatActivity() {
             }
         }
         val filteredWav = File(tempDir, "${index}_${TranscriptionReport.safeBaseName(item.name)}_vad.wav")
-        val modelPath = if (mode.usesSilero) ensureBundledSileroVadModel().absolutePath else ""
-        val nativeResult = WhisperNative.filterVad(
-            readyWav.absolutePath,
-            filteredWav.absolutePath,
-            modelPath,
-            mode.nativeMode,
-            vadLevel
+        val (originalSamples, filteredSamples, segments, backend) = LocalVad.filter(
+            this, readyWav, filteredWav, LocalVad.Selection(mode, vadLevel), ::ensureNotCancelled,
         )
-        ensureNotCancelled()
-        val fields = nativeResult.split("|")
-        if (fields.firstOrNull() != "OK" || fields.size < 5) {
-            throw IllegalStateException(nativeResult.removePrefix("ERRO|").ifBlank { "falha no VAD local" })
-        }
-        val originalSamples = fields[1].toLongOrNull() ?: 0L
-        val filteredSamples = fields[2].toLongOrNull() ?: 0L
-        val segments = fields[3].toIntOrNull() ?: 0
-        val backend = fields.drop(4).joinToString("|")
         val reducedSamples = (originalSamples - filteredSamples).coerceAtLeast(0L)
         val reductionPercent = if (originalSamples > 0L) reducedSamples * 100.0 / originalSamples else 0.0
         val elapsed = SystemClock.elapsedRealtime() - startedAt
@@ -5481,12 +5464,6 @@ class RemoteSttActivity : AppCompatActivity() {
         )
         runOnUiThread { updateTerminalText(terminalLines) }
         return UploadFile(filteredWav, "audio/wav", "WAV 16 kHz mono PCM s16le filtrado por ${mode.label}")
-    }
-
-    private fun ensureBundledSileroVadModel(): File {
-        return NativeDependencyManager.sileroModelFile(this).also {
-            check(it.isFile && it.length() > 100_000L) { "Modelo Silero não instalado." }
-        }
     }
 
     private fun prepareOriginalUpload(
@@ -5717,7 +5694,7 @@ class RemoteSttActivity : AppCompatActivity() {
         val enabled = selectedItems.isNotEmpty() &&
             selectedItems.all { MediaTypeRules.isSupportedMedia(it.mime, it.name) } &&
             selectedPrepareMode != null &&
-            (checkboxOnlyVad?.isChecked != true || selectedVadMode != VadMode.NONE)
+            (checkboxOnlyVad?.isChecked != true || selectedVadMode != LocalVad.Mode.NONE)
         buttonTranscribe?.visibility = if (selectedItems.isNotEmpty() && selectedItems.all { MediaTypeRules.isSupportedMedia(it.mime, it.name) }) {
             View.VISIBLE
         } else {
@@ -7206,24 +7183,6 @@ class RemoteSttActivity : AppCompatActivity() {
         COMPACT("Enviar compactado", "ogg opus 16 kHz mono 32k"),
         ORIGINAL("Enviar como está", "arquivo original, sem conversão local"),
         READY("Arquivos prontos", "wav 16 kHz mono PCM s16le")
-    }
-
-    private enum class VadMode(
-        val preferenceKey: String,
-        val label: String,
-        val nativeMode: Int,
-        val usesSilero: Boolean
-    ) {
-        NONE("none", "Sem VAD", 0, false),
-        SILERO_CPU("silero_cpu", "Silero VAD (CPU)", 1, true),
-        SILERO_GPU("silero_gpu", "Silero VAD (GPU)", 2, true),
-        WEBRTC("webrtc", "WebRTC VAD", 3, false);
-
-        companion object {
-            fun fromPreference(value: String?): VadMode {
-                return entries.firstOrNull { it.preferenceKey == value } ?: NONE
-            }
-        }
     }
 
     private enum class LiveLanguage(

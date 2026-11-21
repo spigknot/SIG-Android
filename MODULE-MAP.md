@@ -47,6 +47,8 @@ também é bloqueado.
 | `RemoteSttActivity.kt` | **HOTSPOT**: transcrição remota REST + ao vivo (WS) e Ocorrência; UI e orquestração. |
 | `GraniteActivity.kt` | Transcrição/geração local com Granite (STT/TTS) + assistente. |
 | `WhisperActivity.kt` | Transcrição local com Whisper. |
+| `LocalVad.kt` | Menus e filtro PCM local compartilhados por Transcrição e Whisper. |
+| `WhisperSelectors.kt` | Política de seleção de motor e hardware do Whisper. |
 | `FfmpegActivity.kt` | Hub das ferramentas FFmpeg. |
 | `FfmpegCutActivity.kt` | Cortar vídeo. |
 | `FfmpegJoinVideosActivity.kt` | Juntar vídeos. |

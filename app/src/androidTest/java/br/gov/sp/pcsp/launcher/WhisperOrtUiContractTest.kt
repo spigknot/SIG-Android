@@ -2,7 +2,10 @@ package br.gov.sp.pcsp.launcher
 
 import android.content.Context
 import android.view.View
-import android.widget.CheckBox
+import android.widget.TextView
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -15,26 +18,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/**
- * Adendo 9 §7 — prova de UI da rota ORT na ferramenta REAL, por teste instrumentado.
- *
- * Por que instrumentado: a `WhisperActivity` não é exportada (o shell não a inicia)
- * e o APK da worktree não instala por cima do release do aparelho
- * (INSTALL_FAILED_VERSION_DOWNGRADE). O teste roda no mesmo processo do app e
- * exercita os controles por clique, sem depender de `adb` nem de versionCode.
- *
- * O que é verificado:
- * 1. a tela da ferramenta mostra `checkbox_usar_cpp`, `help_usar_cpp` e
- *    `button_transcribe_ort` — os três controles do M4;
- * 2. os controles estão VISÍVEIS (não basta existirem escondidos no layout);
- * 3. marcar a caixa desliga o ORT e desmarcar religa, pela preferência real
- *    (`WhisperOrtRoute.isEnabled`), que é o que o despacho consulta.
- *
- * Rodar (variante de lab, applicationId próprio):
- *   ./gradlew :app:assembleWhisperlabDebug :app:assembleWhisperlabDebugAndroidTest -PwhisperLab=true
- *   adb shell am instrument -w -e class br.gov.sp.pcsp.launcher.WhisperOrtUiContractTest \
- *       br.gov.sp.pcsp.whisperlab.test/androidx.test.runner.AndroidJUnitRunner
- */
+/** Contrato instrumentado dos seletores e da entrega de resultado na tela Whisper. */
 @RunWith(AndroidJUnit4::class)
 class WhisperOrtUiContractTest {
 
@@ -54,83 +38,41 @@ class WhisperOrtUiContractTest {
         WhisperOrtRoute.setEnabled(ctx, preferenciaOriginal)
     }
 
-    /**
-     * R11 §2/§4 — contrato NOVO da tela: um único "Transcrever", seletor de
-     * arquivos identificado, opções avançadas acessíveis desde a abertura e as
-     * duas caixas de log fora da tela (ids preservados para diagnóstico).
-     */
     @Test
-    fun ferramentaTemUmUnicoTranscreverOpcoesELogsForaDaTela() {
-        ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
-            cenario.onActivity { activity ->
-                val recursos = activity.resources
-                fun id(nome: String) = recursos.getIdentifier(nome, "id", activity.packageName)
-
-                val caixa = activity.findViewById<CheckBox>(R.id.checkbox_usar_cpp)
-                val ajuda = activity.findViewById<View>(R.id.help_usar_cpp)
-                val transcrever = activity.findViewById<View>(R.id.button_transcribe)
-                val seletor = activity.findViewById<View>(R.id.button_select_media)
-                val avancadas = activity.findViewById<View>(R.id.advanced_toggle)
-                val logTexto = activity.findViewById<View>(R.id.log_text)
-                val terminal = activity.findViewById<View>(R.id.terminal_text)
-
-                assertNotNull("checkbox 'usar whisper.cpp' ausente", caixa)
-                assertNotNull("ajuda '!' ausente", ajuda)
-                assertNotNull("botão Transcrever ausente", transcrever)
-                assertNotNull("seletor de arquivos ausente", seletor)
-                assertNotNull("opções avançadas ausentes", avancadas)
-
-                // §2 — o segundo botão verde sumiu do layout (nem id existe).
-                assertEquals("segundo botão 'Transcrever' ainda presente", 0, id("button_transcribe_ort"))
-
-                // §1 — avançadas acessíveis desde a abertura, sem arquivo.
-                assertEquals("opções avançadas escondidas na abertura",
-                    View.VISIBLE, avancadas!!.visibility)
-
-                // §4 — as duas caixas de log não aparecem mais.
-                assertEquals("cabeçalho de log ainda visível", View.GONE,
-                    activity.findViewById<View>(R.id.log_toggle).visibility)
-                assertEquals("caixa de log ainda visível", View.GONE, logTexto!!.visibility)
-                assertEquals("terminal (2ª caixa) ainda visível", View.GONE, terminal!!.visibility)
-
-                // Controles do motor ORT continuam visíveis na rota.
-                assertEquals("checkbox existe mas nao esta visivel", View.VISIBLE, caixa!!.visibility)
-                assertEquals("ajuda '!' nao esta visivel", View.VISIBLE, ajuda!!.visibility)
-            }
-        }
-    }
-
-    @Test
-    fun marcarCaixaDesligaOrtEDesmarcarReliga() {
-        // Estado de partida explícito: ORT ligado (default do produto).
+    fun telaMantemUmTranscreverEControlesDeCadaMotor() {
         WhisperOrtRoute.setEnabled(ctx, true)
-        ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
-            cenario.onActivity { activity ->
-                val caixa = activity.findViewById<CheckBox>(R.id.checkbox_usar_cpp)!!
-                assertFalse("com ORT ligado a caixa deve comecar desmarcada", caixa.isChecked)
-
-                caixa.performClick()
-                assertTrue("marcar a caixa deveria marcar", caixa.isChecked)
-                assertFalse("marcar 'usar whisper.cpp' deve desligar o ORT", WhisperOrtRoute.isEnabled(activity))
-
-                caixa.performClick()
-                assertFalse("desmarcar deveria desmarcar", caixa.isChecked)
-                assertTrue("desmarcar deve religar o ORT", WhisperOrtRoute.isEnabled(activity))
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        ActivityScenario.launch(WhisperActivity::class.java).use { scenario ->
+            fun checkScreen(ort: Boolean) {
+                scenario.onActivity { activity ->
+                    assertEquals(ort, WhisperOrtRoute.isEnabled(activity))
+                    assertEquals(if (ort) "Onnx RT" else "Whisper.cpp",
+                        activity.findViewById<TextView>(R.id.button_engine).text.toString())
+                    val decoding = activity.findViewById<View>(R.id.cpp_decoding_controls)
+                    assertEquals(if (ort) View.GONE else View.VISIBLE, decoding.visibility)
+                    for (id in listOf(R.id.button_transcribe, R.id.button_select_media,
+                        R.id.button_threads, R.id.button_whisper_vad)) {
+                        assertNotNull(activity.findViewById<View>(id))
+                    }
+                    for (name in listOf("button_transcribe_ort", "advanced_toggle", "advanced_panel")) {
+                        assertEquals(0, activity.resources.getIdentifier(name, "id", activity.packageName))
+                    }
+                    for (id in listOf(R.id.log_toggle, R.id.log_text, R.id.terminal_text)) {
+                        assertEquals(View.GONE, activity.findViewById<View>(id).visibility)
+                    }
+                }
             }
-        }
-    }
-
-    @Test
-    fun ajudaAbreExplicacaoSemQuebrar() {
-        ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
-            cenario.onActivity { activity ->
-                val ajuda = activity.findViewById<View>(R.id.help_usar_cpp)!!
-                // O "!" abre um AlertDialog explicando a opção. Se o listener
-                // quebrar, o processo do teste cai — o clique é a prova de que o
-                // caminho existe e executa.
-                ajuda.performClick()
-                activity.runOnUiThread { }
+            fun selectEngine(label: String) {
+                scenario.onActivity { it.findViewById<View>(R.id.button_engine).performClick() }
+                val option = device.wait(Until.findObject(By.text(label)), 5_000L)
+                assertNotNull(option)
+                option!!.click()
             }
+            checkScreen(ort = true)
+            selectEngine("Whisper.cpp")
+            checkScreen(ort = false)
+            selectEngine("Onnx RT")
+            checkScreen(ort = true)
         }
     }
 

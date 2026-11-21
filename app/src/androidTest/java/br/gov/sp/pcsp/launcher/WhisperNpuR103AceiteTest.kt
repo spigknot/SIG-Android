@@ -285,70 +285,38 @@ class WhisperNpuR103AceiteTest {
 
     // ---------------------------------------------------------------- C1
 
-    /**
-     * C1 — oferta única. Com o pacote da NPU ausente, o diálogo aparece sozinho
-     * e oferece SÓ o NPU v2 (o QAIRT já está instalado); a recusa é persistida e
-     * não reaparece; a entrada fixa continua na tela. Com o pacote instalado
-     * (ensaio já baixou), a oferta não aparece e a entrada fixa diz "NPU ativa".
-     */
+    /** C1 — download por escolha explícita, com recusa levando a CPU. */
     @Test
     fun a_c1_oferta_unica() {
         assumeTrue("C1 exige SoC admitido", admitido())
         preCondicao("C1", exigeAudio = false)
-        val chave = WhisperNpuOferta.PREF_CHAVE
-        val tinha = prefs.contains(chave)
-        val valor = prefs.getBoolean(chave, false)
-        val npu = pacoteNpuPronto()
-        val detalhe: String
-        if (!npu) {
-            prefs.edit().remove(chave).commit()
-            ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
-                val dialogo = dispositivo.wait(Until.findObject(textoContem("Aceleração NPU")), 20_000L)
-                assertNotNull("oferta única deve aparecer", dialogo)
-                val texto = dialogo!!.text ?: ""
-                assertFalse("o diálogo não pode oferecer QAIRT: $texto", texto.contains("QAIRT", true))
-                val agoraNao = dispositivo.wait(Until.findObject(textoExato("Agora não")), 5_000L)
-                assertNotNull("botão de recusa ausente", agoraNao)
-                agoraNao!!.click()
-                Thread.sleep(500L)
-                assertTrue("a recusa tem de persistir", prefs.getBoolean(chave, false))
-                cenario.close()
-                ActivityScenario.launch(WhisperActivity::class.java).use {
-                    assertNull(
-                        "recusa persistida não pode reaparecer",
-                        dispositivo.wait(Until.findObject(textoExato("Agora não")), 4_000L),
-                    )
-                    assertNotNull(
-                        "entrada fixa continua na tela",
-                        dispositivo.wait(Until.findObject(textoExato("Ativar aceleração NPU")), 5_000L),
-                    )
+        val hardware = prefs.getString("ort_hardware", null)
+        try {
+            ActivityScenario.launch(WhisperActivity::class.java).use { scenario ->
+                assertFalse(dispositivo.hasObject(textoExato("Agora não")))
+                selecionarNpuParaAceite(dispositivo, scenario)
+                val state = WhisperOrtNpuPacote.estado(ctx)
+                val v3 = state is WhisperOrtNpuPacote.Estado.Pronto && state.manifesto.pontaAPonta
+                if (!v3) {
+                    val negar = dispositivo.wait(Until.findObject(textoExato("Agora não")), 5_000L)
+                    assertNotNull("a escolha explícita deve oferecer download", negar)
+                    negar!!.click()
                 }
-            }
-            detalhe = "oferta=so_npu_v2 recusa=persistida entrada_fixa=visivel"
-        } else {
-            ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
-                assertNull(
-                    "com pacote Pronto a oferta não aparece",
-                    dispositivo.wait(Until.findObject(textoExato("Agora não")), 5_000L),
-                )
-                cenario.onActivity { a ->
-                    assertEquals(
-                        "NPU ativa",
-                        a.findViewById<TextView>(R.id.button_ativar_npu)?.text?.toString(),
-                    )
+                scenario.onActivity {
+                    assertEquals(if (v3) "NPU" else "CPU",
+                        it.findViewById<TextView>(R.id.button_backend).text.toString())
                 }
+                val (vn, vq) = versoes()
+                gravar(WhisperNpuAceiteReceipt.Dados(
+                    celula = "C1", rotaPedida = "NPU", rotaEfetiva = if (v3) "htp" else "cpu",
+                    versaoNpu = vn, versaoQairt = vq,
+                    motivoFallback = if (v3) null else "download_recusado",
+                    openMs = 0L, totalMs = 0L, soc = soc(),
+                ))
             }
-            detalhe = "pacote=Pronto oferta=ausente entrada_fixa=NPU_ativa"
+        } finally {
+            prefs.edit().putString("ort_hardware", hardware).commit()
         }
-        val (vn, vq) = versoes()
-        gravar(WhisperNpuAceiteReceipt.Dados(
-            celula = "C1", rotaPedida = "-", rotaEfetiva = "-", versaoNpu = vn, versaoQairt = vq,
-            motivoFallback = "$detalhe inicial=presente:$tinha/$valor " +
-                "final=presente:${prefs.contains(chave)}/${prefs.getBoolean(chave, false)}",
-            openMs = 0L, totalMs = 0L, soc = soc(),
-        ))
-        // Devolve a chave ao estado encontrado (a recusa é do teste, não do usuário).
-        prefs.edit().apply { if (tinha) putBoolean(chave, valor) else remove(chave) }.commit()
     }
 
     // ---------------------------------------------------------------- C2

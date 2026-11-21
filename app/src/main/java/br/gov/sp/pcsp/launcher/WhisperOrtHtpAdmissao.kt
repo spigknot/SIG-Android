@@ -61,6 +61,9 @@ object WhisperOrtHtpAdmissao {
     }
 
     const val ROTA_HTP = "htp"
+    const val ROTA_HTP_CPU = "htp-cpu"
+
+    fun isHtp(rota: String): Boolean = rota == ROTA_HTP || rota == ROTA_HTP_CPU
     const val ROTA_CPU = "cpu"
 
     /**

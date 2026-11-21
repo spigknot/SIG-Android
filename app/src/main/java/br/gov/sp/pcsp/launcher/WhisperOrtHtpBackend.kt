@@ -26,9 +26,10 @@ internal class WhisperOrtHtpBackend(
     private val decoders: WhisperOrtBackend,
     private val dtype: String = WhisperOrtHtpConversao.DTYPE_I16,
     private val relogio: () -> Long = { System.nanoTime() },
+    private val route: String = WhisperOrtHtpAdmissao.ROTA_HTP,
 ) : WhisperOrtBackend {
 
-    override val rota: String get() = WhisperOrtHtpAdmissao.ROTA_HTP
+    override val rota: String get() = route
     override val melBinsDetectados: Int get() = decoders.melBinsDetectados
 
     var encodes: Int = 0

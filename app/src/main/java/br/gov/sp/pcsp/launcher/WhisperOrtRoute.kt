@@ -54,8 +54,8 @@ object WhisperOrtRoute {
     private val cache = WhisperOrtSessionCache(
         maxEntries = 1,
         abrirPorRota = { rota, encoder, decoder, past, threads ->
-            if (rota == WhisperOrtHtpAdmissao.ROTA_HTP) {
-                WhisperOrtHtpRota.abrir(encoder, decoder, past, threads)
+            if (WhisperOrtHtpAdmissao.isHtp(rota)) {
+                WhisperOrtHtpRota.abrir(encoder, decoder, past, threads, rota)
             } else {
                 WhisperOrtSession(encoder, decoder, past, threads)
             }
@@ -229,8 +229,9 @@ object WhisperOrtRoute {
      */
     fun isEnabled(context: Context): Boolean {
         val prefs = context.getSharedPreferences("whisper", Context.MODE_PRIVATE)
-        if (prefs.contains(PREF_CPP)) return !prefs.getBoolean(PREF_CPP, false)
-        return prefs.getBoolean(PREF_KEY, true)
+        val cpp = if (prefs.contains(PREF_CPP)) prefs.getBoolean(PREF_CPP, false) else null
+        val legacyOrt = if (cpp == null && prefs.contains(PREF_KEY)) prefs.getBoolean(PREF_KEY, true) else null
+        return WhisperSelectors.useOrt(cpp, legacyOrt)
     }
 
     /** Liga/desliga a rota. [enabled] `false` grava "usar whisper.cpp". */
@@ -268,19 +269,21 @@ object WhisperOrtRoute {
      * porta e não entra na fila do executor (a fila serial não substitui a
      * reserva). [onProgresso] leva o estado do preparo para a tela.
      */
-    fun transcribe(
+    internal fun transcribe(
         activity: Activity,
         uri: Uri,
         onProgresso: (String) -> Unit = { },
         onResult: (Result) -> Unit,
         threads: Int = WhisperOrtSession.DEFAULT_THREADS,
         modelo: String = WhisperOrtModelCatalog.MODEL,
+        hardware: WhisperSelectors.Hardware? = null,
+        vad: LocalVad.Selection = LocalVad.Selection(),
     ): WhisperOrtAdmission.Job? {
         val app = activity.applicationContext
         val porta = despachar(uri.toString()) { job ->
             jobAtual = job
             worker.execute {
-                val resultado = runCatching { executar(app, uri, job, onProgresso, threads, modelo) }
+                val resultado = runCatching { executar(app, uri, job, onProgresso, threads, modelo, hardware, vad) }
                     .getOrElse { Result.Failed("${it.javaClass.simpleName}: ${it.message}") }
                 main.post { onResult(resultado) }
             }
@@ -314,16 +317,24 @@ object WhisperOrtRoute {
      * "CPU" quando o encoder rodou no HTP, nem "HTP" quando houve fallback.
      */
     private fun rotuloHardware(rota: String): String =
-        if (rota == WhisperOrtHtpAdmissao.ROTA_HTP) "HTP W8A16" else "CPU"
+        when (rota) {
+            WhisperOrtHtpAdmissao.ROTA_HTP -> "HTP W8A16"
+            WhisperOrtHtpAdmissao.ROTA_HTP_CPU -> "NPU→CPU"
+            else -> "CPU"
+        }
 
     /**
      * R100 §2.2 — o encoder W8A16 é do **turbo** (128 bins mel, 1.500 frames).
      * Pedido de outro modelo usa CPU mesmo com o pacote presente: alimentar o
      * wrapper com log-mel de 80 bins seria erro de forma, não ganho de NPU.
      */
-    private fun rotaParaModelo(modelo: String): String =
-        if (modelo == WhisperOrtModelCatalog.MODEL) WhisperOrtHtpRota.rotaDoPedido()
-        else WhisperOrtHtpAdmissao.ROTA_CPU
+    private fun rotaParaModelo(modelo: String, hardware: WhisperSelectors.Hardware?): String {
+        if (modelo != WhisperOrtModelCatalog.MODEL || hardware == WhisperSelectors.Hardware.CPU) {
+            return WhisperOrtHtpAdmissao.ROTA_CPU
+        }
+        val admitida = WhisperOrtHtpRota.rotaDoPedido()
+        return if (WhisperOrtHtpAdmissao.isHtp(admitida)) hardware?.route ?: admitida else admitida
+    }
 
     /** Corpo síncrono (roda na thread de trabalho). */
     private fun executar(
@@ -333,6 +344,8 @@ object WhisperOrtRoute {
         onProgresso: (String) -> Unit,
         threads: Int = WhisperOrtSession.DEFAULT_THREADS,
         modelo: String = WhisperOrtModelCatalog.MODEL,
+        hardware: WhisperSelectors.Hardware? = null,
+        vad: LocalVad.Selection = LocalVad.Selection(),
     ): Result {
         val inicio = SystemClock.elapsedRealtime()
         jobAtual = job
@@ -367,6 +380,7 @@ object WhisperOrtRoute {
         // Temporários cujo DONO é este job; o encerramento limpa.
         var copiaTemp: File? = null
         var convertidoTemp: File? = null
+        var vadTemp: File? = null
 
         // Encerramento apenas após o retorno físico do preparo/compute.
         // Durante dreno a mesma thread mantém admissão, arquivos e forwarder.
@@ -422,6 +436,7 @@ object WhisperOrtRoute {
             }
             runCatching { copiaTemp?.delete() }
             runCatching { convertidoTemp?.delete() }
+            runCatching { vadTemp?.delete() }
             WhisperJobService.unregisterCancelForwarder(encaminhadorCancelamento)
             WhisperJobService.finishJob(geracaoFgs, terminal?.outcome ?: outcome)
             jobAtual = null
@@ -458,7 +473,8 @@ object WhisperOrtRoute {
             val arquivo = copiarParaTemporario(app, uri, job, onProgresso)
             copiaTemp = arquivo
             runCatching { onProgresso("lendo áudio…") }
-            try {
+            var ready = arquivo
+            val unfiltered = try {
                 lerWav16kMono(arquivo)
             } catch (precisaConversao: WavPrecisaConversao) {
                 val convertido = WhisperOrtMediaConverter.wavDeSaida(arquivo)
@@ -511,7 +527,20 @@ object WhisperOrtRoute {
                         }
                     }
                 }
-                lerWav16kMono(convertido)
+                ready = convertido
+                lerWav16kMono(ready)
+            }
+            if (vad.mode == LocalVad.Mode.NONE) {
+                unfiltered
+            } else {
+                if (admission.isCancelRequested(job)) throw CancelamentoNoPreparo()
+                runCatching { onProgresso("filtrando voz com VAD…") }
+                val filtered = File.createTempFile("whisper_vad_", ".wav", app.cacheDir)
+                vadTemp = filtered
+                LocalVad.filter(app, ready, filtered, vad) {
+                    if (admission.isCancelRequested(job)) throw CancelamentoNoPreparo()
+                }
+                lerWav16kMono(filtered)
             }
         } catch (cancelado: CancelamentoNoPreparo) {
             return encerrar(Result.Cancelled("", partial = false, millis = SystemClock.elapsedRealtime() - inicio))
@@ -589,7 +618,7 @@ object WhisperOrtRoute {
                 aoFalharHtp = { motivo -> WhisperOrtHtpRota.registrarFalha(motivo) },
                 aoSucessoHtp = { WhisperOrtHtpRota.registrarSucesso() },
             )
-            val rotaPedida = rotaParaModelo(modelo)
+            val rotaPedida = rotaParaModelo(modelo, hardware)
             android.util.Log.i(
                 TAG,
                 "ort-rota pedida=$rotaPedida motivo=${WhisperOrtHtpRota.motivoRota()} " +

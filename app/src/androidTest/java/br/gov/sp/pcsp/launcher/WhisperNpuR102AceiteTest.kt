@@ -137,6 +137,7 @@ class WhisperNpuR102AceiteTest {
         assumeTrue("o download exige o SoC admitido", admitido())
         val inicio = System.nanoTime() / 1_000_000L
         ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
+            selecionarNpuParaAceite(dispositivo, cenario)
             val oferta = dispositivo.wait(Until.findObject(By.textContains("Aceleração NPU")), 15_000L)
             assertNotNull("o diálogo de download deve aparecer uma vez", oferta)
             val baixar = dispositivo.wait(Until.findObject(By.text("Baixar")), 5_000L)
@@ -147,8 +148,8 @@ class WhisperNpuR102AceiteTest {
             var pronto = false
             while (System.currentTimeMillis() < limite) {
                 cenario.onActivity { atividade ->
-                    pronto = atividade.findViewById<android.widget.TextView>(R.id.button_ativar_npu)
-                        ?.text?.toString() == "NPU ativa"
+                    pronto = atividade.findViewById<android.widget.TextView>(R.id.button_backend)
+                        ?.text?.toString() == "NPU"
                 }
                 if (pronto) break
                 Thread.sleep(1_000L)
@@ -267,4 +268,19 @@ class WhisperNpuR102AceiteTest {
         gfx.close()
         assertTrue("C12 reprova com ANR", !comAnr)
     }
+}
+
+
+internal fun selecionarNpuParaAceite(device: UiDevice, scenario: ActivityScenario<WhisperActivity>) {
+    scenario.onActivity {
+        it.findViewById<android.view.View>(R.id.button_model).performClick()
+    }
+    val turbo = device.wait(Until.findObject(By.textContains("v3Turbo")), 5_000L)
+        ?: error("v3Turbo ausente no seletor")
+    turbo.click()
+    scenario.onActivity {
+        it.findViewById<android.view.View>(R.id.button_backend).performClick()
+    }
+    val npu = device.wait(Until.findObject(By.text("NPU")), 5_000L) ?: error("NPU ausente no seletor")
+    npu.click()
 }

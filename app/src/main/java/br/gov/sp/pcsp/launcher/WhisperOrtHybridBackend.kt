@@ -51,7 +51,7 @@ class WhisperOrtHybridBackend(
         val pluginQnnPath: File,
         val backendGpuPath: File,
         val epRegistrationName: String = "qnn",
-        val threadsCpu: Int = 6,
+        val threadsCpu: Int = WhisperOrtSession.DEFAULT_THREADS,
         val profilingDir: File? = null,
         /**
          * R18/§1.2 — partição mista: `null` = todos os segmentos no QNN GPU;

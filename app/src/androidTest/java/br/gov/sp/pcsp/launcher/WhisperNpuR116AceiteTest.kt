@@ -440,6 +440,7 @@ class WhisperNpuR116AceiteTest {
             var rotuloFixa = ""
             ActivityScenario.launch(WhisperActivity::class.java).use { cenario ->
                 asActivity(cenario)
+                selecionarNpuParaAceite(dispositivo, cenario)
                 val baixar = dispositivo.wait(Until.findObject(By.textContains("AIXAR")), 20_000L)
                 dialogoApareceu = baixar != null
                 assertNotNull("a oferta do v3 tem de aparecer uma vez", baixar)
@@ -448,7 +449,7 @@ class WhisperNpuR116AceiteTest {
                 assertNotNull("o botão da recusa tem de estar no diálogo", agora)
                 agora!!.click()
                 Thread.sleep(500L)
-                recusou = prefs().getBoolean(chave, false)
+                recusou = prefs().getString("ort_hardware", null) == "CPU"
                 assertTrue("a recusa tem de persistir", recusou)
                 linha(JSONObject()
                     .put("schema", SCHEMA).put("etapa", "C1-DIALOGO")
@@ -461,7 +462,7 @@ class WhisperNpuR116AceiteTest {
                 asActivity(cenario)
                 Thread.sleep(3_000L)
                 reapareceuSemRecusa = dispositivo.hasObject(By.textContains("AIXAR"))
-                val entrada = dispositivo.findObject(By.res(ctx.packageName, "button_ativar_npu"))
+                val entrada = dispositivo.findObject(By.res(ctx.packageName, "button_backend"))
                 entradaFixaVisivel = entrada != null
                 rotuloFixa = entrada?.text ?: ""
             }
@@ -474,7 +475,7 @@ class WhisperNpuR116AceiteTest {
             val estadoDepois = WhisperOrtNpuPacote.estado(ctx)
             assertTrue("a oferta não pode reaparecer após a recusa", !reapareceuSemRecusa)
             assertTrue("a entrada fixa tem de continuar na tela", entradaFixaVisivel)
-            assertEquals("a entrada fixa continua oferecendo", "Ativar aceleração NPU", rotuloFixa)
+            assertEquals("o seletor retorna à CPU", "CPU", rotuloFixa)
             assertTrue("recusar não pode baixar nada", estadoDepois is WhisperOrtNpuPacote.Estado.Ausente)
         } finally {
             prefs().edit().apply {
@@ -494,13 +495,7 @@ class WhisperNpuR116AceiteTest {
             .putBoolean(WhisperNpuOferta.PREF_CHAVE, true)
             .putBoolean(WhisperNpuOferta.PREF_CHAVE_ATUALIZACAO, true)
             .commit()
-        val entrada = dispositivo.wait(Until.findObject(By.res(ctx.packageName, "button_ativar_npu")), 20_000L)
-        assertNotNull("a entrada fixa tem de estar na tela", entrada)
-        val rotulo = entrada!!.text ?: ""
-        assertEquals("a entrada fixa tem de oferecer o download", rotuloFixa, rotulo)
-        cenario.onActivity { a ->
-            a.findViewById<android.view.View>(R.id.button_ativar_npu)?.performClick()
-        }
+        selecionarNpuParaAceite(dispositivo, cenario)
         val baixar = dispositivo.wait(Until.findObject(By.textContains("AIXAR")), 20_000L)
         assertNotNull("o diálogo tem de oferecer Baixar", baixar)
     }

@@ -142,6 +142,27 @@ class WhisperOrtHtpFallbackTest {
     }
 
     @Test
+    fun `rota hibrida abre com as threads capturadas no job`() {
+        val aberturas = mutableListOf<Pair<String, Int>>()
+        val cache = WhisperOrtSessionCache(
+            abrirPorRota = { rota, _, _, _, threads ->
+                aberturas.add(rota to threads)
+                Fake(rota)
+            },
+            open = { },
+        )
+        val rota = WhisperOrtHtpAdmissao.ROTA_HTP_CPU
+        val producer = WhisperOrtTranscriptionProducer(cache = cache, tokenizer = tokenizer())
+        val pacote = pacoteValido()
+        for (threads in listOf(1, 4, 8)) {
+            val pedido = request("hibrido-$threads").copy(rota = rota, threads = threads)
+            val resultado = producer.transcribe(pacote, pedido) as WhisperOrtTranscriptionProducer.Outcome.Done
+            assertEquals(rota, resultado.rotaEfetiva)
+        }
+        assertEquals(listOf(rota to 1, rota to 4, rota to 8), aberturas)
+    }
+
+    @Test
     fun `chaves de cache de rotas diferentes nao colidem`() {
         val pkg = pacoteValido()
         val cpu = WhisperOrtSessionCache.keyFor(
