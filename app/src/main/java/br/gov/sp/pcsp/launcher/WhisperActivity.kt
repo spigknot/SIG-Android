@@ -1551,13 +1551,30 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
      * sem passar pelo seletor de arquivos. `@VisibleForTesting` só existe para
      * dar esse acesso; a produção chega aqui pelo picker, pelo botão ORT e pelo
      * intent, como antes.
+     *
+     * [aoTerminar] recebe o `Result` final; em produção, `null` — a tela trata
+     * o resultado pelo seu próprio observador.
      */
     @VisibleForTesting
     internal fun despacharOrtParaTeste(
         uri: android.net.Uri,
         modeloPedido: String?,
         modeloEfetivoConsentido: String? = null,
-    ) = despacharOrt(uri, null, modeloPedido, modeloEfetivoConsentido)
+        aoTerminar: ((WhisperOrtRoute.Result) -> Unit)? = null,
+    ): WhisperOrtAdmission.Job? {
+        observadorDeTeste = aoTerminar
+        despacharOrt(uri, null, modeloPedido, modeloEfetivoConsentido)
+        // `despacharOrt` guarda o job aceito em `jobOrtNaTela`; a recusa na porta
+        // não cria job e devolve `null`.
+        return jobOrtNaTela
+    }
+
+    /** Observador da célula (R124/T03); `null` em produção. */
+    private var observadorDeTeste: ((WhisperOrtRoute.Result) -> Unit)? = null
+
+    /** Job ORT que a tela está acompanhando agora (`null` = nenhum em voo). */
+    @VisibleForTesting
+    internal fun jobOrtDaTelaParaTeste(): WhisperOrtAdmission.Job? = jobOrtNaTela
 
     private fun selectOrtHardware(hardware: WhisperSelectors.Hardware) {
         selectorPrefs.edit().putString("ort_hardware", hardware.name).apply()
@@ -2080,6 +2097,8 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             // ou resolução do pedido — nunca outro pacote por engano.
             modelo = efetivo,
             onResult = { resultado ->
+            // R124/T03 — observador da célula (null em produção).
+            runCatching { observadorDeTeste?.invoke(resultado) }
             if (isDestroyed || isFinishing || ortObserverGeneration != generation) return@transcribe
             if (meuJob == null) {
                 // Recusa ANTES de enfileirar: sem job e sem recibo, só informa.
