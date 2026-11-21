@@ -6,6 +6,9 @@ import android.util.Log
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -40,7 +43,7 @@ class WhisperSeletoresR123FumacaTest {
     private companion object {
         const val TAG = "R123-FUMACA"
         const val SCHEMA = "sig-whisper-seletores-r123-fumaca/v1"
-        const val ROTULO_HARDWARE = "Hardware"
+        const val ESPERA_UI_MS = 5_000L
     }
 
     private val ctx: Context
@@ -58,90 +61,197 @@ class WhisperSeletoresR123FumacaTest {
     }
 
     /**
-     * Tela acesa durante a célula. É um wake lock do PRÓPRIO app de teste, não
-     * configuração do sistema.
-     */
-    private fun manterTelaAcesa(): PowerManager.WakeLock? = runCatching {
-        val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
-        pm.newWakeLock(
-            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "SIG:R123Fumaca",
-        ).apply { acquire(60 * 60_000L) }
-    }.getOrNull()
-
-    /**
-     * Rótulo do seletor de [descricao] na tela aberta.
+     * Tela acesa durante a célula, SEM pedir permissão do sistema.
      *
-     * Os quatro seletores (`button_engine`, `button_backend`, `button_threads`,
-     * `button_whisper_vad`) carregam `contentDescription` = Motor/Hardware/
-     * Threads/VAD; o `text` do nó é o VALOR efetivo que a tela está exibindo.
-     * A leitura é pela árvore, sem tocar na Activity.
+     * `FLAG_KEEP_SCREEN_ON` na janela que a célula abre é escopado à janela e
+     * não exige `WAKE_LOCK` — ao contrário do `newWakeLock`, que disparou o
+     * diálogo "permitir que o app seja executado em segundo plano" do sistema
+     * (o diálogo virou a janela ativa e a árvore de acessibilidade passou a ser
+     * a do `com.android.permissioncontroller`, não a da tela do produto).
      */
-    private fun rotuloDoSeletor(descricao: String): String? {
-        val instrumentacao = InstrumentationRegistry.getInstrumentation()
-        val raiz = instrumentacao.uiAutomation.rootInActiveWindow ?: return null
-        try {
-            val pilha = ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
-            pilha.add(raiz)
-            while (pilha.isNotEmpty()) {
-                val no = pilha.removeFirst()
-                if (no.contentDescription?.toString()?.trim() == descricao) {
-                    return no.text?.toString()?.trim()
-                }
-                for (i in 0 until no.childCount) no.getChild(i)?.let { pilha.add(it) }
-            }
-        } finally {
-            runCatching { raiz.recycle() }
+    private fun manterTelaAcesa(): PowerManager.WakeLock? = null
+
+    /** Liga o `FLAG_KEEP_SCREEN_ON` na janela da Activity da célula. */
+    private fun manterTelaDaCelulaAcesa(cenario: ActivityScenario<WhisperActivity>) {
+        cenario.onActivity { activity ->
+            activity.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
-        return null
     }
 
+    private fun device() = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+
+    /**
+     * Valor de um seletor da tela do produto, lido pelo `resource-id`.
+     *
+     * R124/T02 — o `contentDescription` fixo saiu do layout: ele fazia o leitor
+     * de tela deixar de anunciar o VALOR do seletor. A célula passa a ler o nó
+     * por `resource-id`, que os dumps da UiAutomator já trazem
+     * (`br.gov.sp.pcsp.launcher:id/button_*`).
+     */
+    private fun rotuloDoSeletor(recurso: String): String? {
+        val seletor = By.res(InstrumentationRegistry.getInstrumentation().targetContext.packageName, recurso)
+        val no = device().wait(Until.findObject(seletor), ESPERA_UI_MS) ?: return null
+        return no.text?.trim()
+    }
+
+    /** Nó de um seletor pelo `resource-id`, para os diagnósticos. */
+    private fun existeSeletor(recurso: String): Boolean =
+        device().findObject(By.res(ctx.packageName, recurso)) != null
+
+    /** Diagnóstico: a janela ativa vista pelo UiDevice, antes de ler o seletor. */
+    private fun diagnosticoDaJanela(): JSONObject {
+        val janela = JSONObject().put("pacote", "").put("classe", "").put("filhos", -1)
+            .put("tem_seletor", false).put("erro", "")
+        return try {
+            val raiz = device().findObject(By.pkg(ctx.packageName))
+            janela.put("tem_seletor", existeSeletor("button_backend"))
+            janela.put("pacote", if (raiz == null) "" else ctx.packageName)
+            janela.put("filhos", if (raiz == null) -1 else 1)
+        } catch (t: Throwable) {
+            janela.put("erro", "${t.javaClass.simpleName}: ${t.message}")
+        }
+    }
     /** Valor do seletor "Hardware" — o hardware EFETIVO que a tela decidiu. */
-    private fun rotuloHardwareNaTela(): String? = rotuloDoSeletor(ROTULO_HARDWARE)
+    private fun rotuloHardwareNaTela(): String? = rotuloDoSeletor("button_backend")
 
     @Test
     fun fumacaPelaEscolhaDaTela() {
         val lock = manterTelaAcesa()
         val clipe = args.getString("r123_clipe")?.let { File(it) }
         val timeoutS = (args.getString("r123_timeout_s") ?: "600").toLong()
+        val pkg = ctx.packageName
+        // `activityIntents` instala um RESOLVEDOR PADRAO cuja origem EXPLICITA e
+        // este pacote. Sem ela o Android 13 adota o modo de compatibilidade que
+        // pede POST_NOTIFICATIONS ao abrir a tela, e o dialogo do sistema vira a
+        // janela ativa (arvore = permissioncontroller, seletor nao achado).
+        InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("cmd package set-home-activity $pkg/home")
+        // R124/T02 — o gancho `seletoresRelerParaTeste` foi descartado: era
+        // propriedade de instância que nascia `false` no `onCreate` e nunca podia
+        // valer. A célula não depende dele: abre a tela e lê o rótulo pelo
+        // `resource-id`, como qualquer usuário que reabre o app.
         val cenario = ActivityScenario.launch(WhisperActivity::class.java)
+        var cenario2: ActivityScenario<WhisperActivity>? = null
+        manterTelaDaCelulaAcesa(cenario)
         try {
-            assertTrue("PRE_CONDICAO: clipe ausente", clipe != null && clipe.isFile)
             requireNotNull(clipe)
             val ligado = WhisperOrtRoute.isEnabled(ctx)
             val pacote = (WhisperOrtNpuPacote.estado(ctx) as? WhisperOrtNpuPacote.Estado.Pronto)
                 ?.manifesto?.versao ?: "nenhum"
-            val hardwareTela = rotuloHardwareNaTela()
-            val hardware = WhisperSelectors.Hardware.entries.firstOrNull { it.label == hardwareTela }
-            linha(
+            // Diagnóstico da janela ativa (antes de ler o seletor), do MODELO
+            // pedido pela tela lido da LINHA de pedidos ORT
+            // (`ort-route/terminais.jsonl`, arquivo de estado do app) e da
+            // decisão da regra. Sem esse cruzamento, "hardware null" não diz se
+            // a janela não está ativa ou se o nó não está na árvore.
+            val linhaOrt = runCatching {
+                File(ctx.filesDir, "ort-route/terminais.jsonl").readLines()
+                    .mapNotNull { texto -> runCatching { JSONObject(texto) }.getOrNull() }
+                    .lastOrNull { it.optString("model").isNotEmpty() }
+            }.getOrNull()
+            // O "antes" do pacote v3: a conferência RÁPIDA pode pedir verificação
+            // completa (o marcador é do formato anterior). A célula dispara a MESMA
+            // verificação do produto — leitura de disco, sem apagar nem baixar
+            // nada — e só depois decide a regra com a versão verificada.
+            val estadoVerificacao = runCatching {
+                if (WhisperOrtNpuPacote.precisaReverificar(WhisperOrtNpuPacote.raiz(ctx))) {
+                    WhisperOrtNpuPacote.verificarCompleto(ctx).javaClass.simpleName
+                } else "sem-reverificacao"
+            }.getOrElse { "erro:${it.javaClass.simpleName}" }
+            val janela = diagnosticoDaJanela()
+            janela.put("linha_ort_modelo", linhaOrt?.optString("model") ?: "")
+            janela.put("verificacao_completa", estadoVerificacao)
+            val dirAtivoAgora = WhisperOrtNpuPacote.dirAtivo(WhisperOrtNpuPacote.raiz(ctx))
+            val manifestoAgora = runCatching {
+                WhisperOrtNpuPacote.lerManifesto(File(dirAtivoAgora, "manifest.json").readText())
+            }.getOrNull()
+            val marcadorAgora = runCatching {
+                WhisperOrtNpuPacote.lerMarcador(File(dirAtivoAgora, ".installed").readText())
+            }.getOrNull()
+            janela.put(
+                "marcador",
                 JSONObject()
-                    .put("schema", SCHEMA)
-                    .put("tipo", "pre")
-                    .put("motor", rotuloDoSeletor("Motor") ?: "")
-                    .put("motor_ort_ligado", ligado)
-                    .put("pacote_versao", pacote)
-                    .put("hardware_tela", hardwareTela ?: "")
-                    .put("hardware_efetivo", hardware?.name ?: "")
-                    .put("threads_tela", rotuloDoSeletor("Threads") ?: "")
-                    .put("vad_tela", rotuloDoSeletor("VAD") ?: "")
+                    .put("dir", dirAtivoAgora.name)
+                    .put("manifesto_lido", manifestoAgora != null)
+                    .put("marcador_lido", marcadorAgora != null)
+                    .put("itens_marcador", marcadorAgora?.itens?.size ?: -1)
+                    .put("itens_manifesto", manifestoAgora?.itens?.size ?: -1)
+                    .put("assinatura_confere", manifestoAgora != null && marcadorAgora != null &&
+                        marcadorAgora.assinatura == WhisperOrtNpuPacote.textoMarcadorEsperado(manifestoAgora))
+                    .put("versao_manifesto", manifestoAgora?.versao ?: "")
+                    .put("ponta_a_ponta_manifesto", manifestoAgora?.pontaAPonta ?: false),
+            )
+            linha(JSONObject().put("schema", SCHEMA).put("tipo", "janela").put("arvore", janela)
+                .put("pid", android.os.Process.myPid()))
+            val arquivosEsperados = listOf(
+                "sig_whisper_enc_w8a16.bin", "sig_whisper_enc_w8a16_i16io.onnx",
+                "sig_r112_cross_kv_projector.bin", "sig_r112_cross_kv_projector.onnx",
+                "decoder_o3.bin", "sig_whisper_dec_w8a16.onnx",
+            )
+            janela.put(
+                "presenca",
+                JSONObject()
+                    .put("arquivos_ok", arquivosEsperados.all { File(dirAtivoAgora, it).isFile })
+                    .put("manifesto_ok", File(dirAtivoAgora, "manifest.json").isFile)
+                    .put("marcador_ok", File(dirAtivoAgora, ".installed").isFile)
+                    .put("manifesto_bytes", File(dirAtivoAgora, "manifest.json").length())
+                    .put("marcador_bytes", File(dirAtivoAgora, ".installed").length()),
+            )
+            janela.put(
+                "leitura",
+                JSONObject()
+                    .put("raiz", WhisperOrtNpuPacote.raiz(ctx).absolutePath)
+                    .put("raiz_existe", WhisperOrtNpuPacote.raiz(ctx).isDirectory)
+                    .put("dir_ativo", dirAtivoAgora.absolutePath)
+                    .put("dir_ativo_existe", dirAtivoAgora.isDirectory)
+                    .put("arquivo_manifesto", File(dirAtivoAgora, "manifest.json").absolutePath)
+                    .put("arquivo_manifesto_existe", File(dirAtivoAgora, "manifest.json").isFile)
+                    .put("arquivo_manifesto_bytes", File(dirAtivoAgora, "manifest.json").length())
+                    .put("listagem", dirAtivoAgora.list()?.size ?: -1),
+            )
+            val prefsWhisper = ctx.getSharedPreferences("whisper", Context.MODE_PRIVATE)
+            val escolhaSalva = WhisperSelectors.Hardware.fromPreference(prefsWhisper.getString("ort_hardware", null))
+            val admitido = ligado &&
+                WhisperOrtHtpAdmissao.socDe(android.os.Build.SOC_MODEL)?.habilitado == true &&
+                WhisperOrtHtpAdmissao.fabricanteAdmitido(android.os.Build.SOC_MANUFACTURER)
+            val turboDoPedido = linhaOrt?.optString("model") == WhisperOrtModelCatalog.MODEL
+            val versaoPacote = if (QairtDependencyManager.isInstalled(ctx)) {
+                val check = runCatching { WhisperOrtNpuPacote.conferenciaRapida(ctx) }.getOrNull()
+                if (check is WhisperOrtNpuPacote.Conferencia.Ok) {
+                    if (check.manifesto.pontaAPonta) 3 else 2
+                } else 0
+            } else 0
+            // O hardware NAO e parametro: sai do MESMO `WhisperSelectors.effective`
+            // que a tela usa, com o estado da tela (escolha salva, SoC admitido,
+            // turbo do ULTIMO pedido que a tela fez e versao do pacote).
+            val hardwareDaRegra = WhisperSelectors.effective(
+                escolhaSalva, admitido, turboDoPedido, versaoPacote,
+            )
+            // Reabertura da tela: a selecao de modelo e de sessao (o `onCreate`
+            // grava o turbo só quando ele esta completo em disco), entao relê o
+            // rotulo depois de uma Activity NOVA, como um usuario que reabre.
+            cenario.close()
+            cenario2 = ActivityScenario.launch(WhisperActivity::class.java)
+            manterTelaDaCelulaAcesa(cenario2)
+            val hardwareTela = rotuloHardwareNaTela()
+            linha(
+                JSONObject().put("schema", SCHEMA).put("tipo", "decisao")
+                    .put("escolha_salva", escolhaSalva?.name ?: "")
+                    .put("soc_admitido", admitido)
+                    .put("turbo_do_pedido", turboDoPedido)
+                    .put("pacote_versao", versaoPacote)
+                    .put("hardware_da_regra", hardwareDaRegra.name)
+                    .put("rotulo_da_tela", hardwareTela ?: "")
                     .put("pid", android.os.Process.myPid()),
             )
-            Log.i(
-                TAG,
-                "pre pid=${android.os.Process.myPid()} motor_ort=$ligado pacote=$pacote " +
-                    "hardware_tela=${hardwareTela ?: "?"}",
-            )
-            assertTrue("PRE_CONDICAO: motor ORT ligado", ligado)
-            assertTrue("PRE_CONDICAO: hardware lido da tela ($hardwareTela)", hardware != null)
-            requireNotNull(hardware)
-
+            assertEquals("rótulo da tela x regra", hardwareDaRegra.label, hardwareTela)
+            val hardware = hardwareDaRegra
             val pcm = WhisperOrtRoute.pcmDoArquivo(clipe)
             val hashEsperado = WhisperOrtPcm.sha256(WhisperOrtPcm.toInt16Le(pcm))
             val threads = WhisperOrtRoute.threadsEfetivos(ctx)
             val pronto = CountDownLatch(1)
             var job: WhisperOrtAdmission.Job? = null
             var resultado: WhisperOrtRoute.Result? = null
-            cenario.onActivity { activity ->
+            cenario2.onActivity { activity ->
                 job = WhisperOrtRoute.transcribe(
                     activity,
                     android.net.Uri.fromFile(clipe),
@@ -192,7 +302,7 @@ class WhisperSeletoresR123FumacaTest {
             assertEquals("hardware efetivo do terminal", hardware.name, terminal?.hardware)
             assertTrue("o terminal tem de amarrar o áudio desta célula", terminal?.inputSha256 == hashEsperado)
         } finally {
-            runCatching { cenario.close() }
+            runCatching { if (cenario2 != null) cenario2.close() else cenario.close() }
             runCatching { lock?.release() }
         }
     }

@@ -48,7 +48,7 @@ também é bloqueado.
 | `GraniteActivity.kt` | Transcrição/geração local com Granite (STT/TTS) + assistente. |
 | `WhisperActivity.kt` | Transcrição local com Whisper. |
 | `LocalVad.kt` | Menus e filtro PCM local compartilhados por Transcrição e Whisper. |
-| `WhisperSelectors.kt` | Política de seleção de motor e hardware do Whisper: sem escolha salva vale a melhor rota pronta (`NPU` com o v3 → `NPU→CPU` com o v2/v3 → `CPU`); com escolha salva, a escolha se pronta, senão `CPU`. |
+| `WhisperSelectors.kt` | Política de seleção de motor e hardware do Whisper: sem escolha salva vale a melhor rota pronta (`NPU` com o v3 → `NPU→CPU` com o v2/v3 → `CPU`); com escolha salva, a escolha se pronta, senão `CPU`. O hardware de um job sai do modelo **efetivo** (`effectiveParaModelo`/`modeloEfetivoDoBotao`), nunca do modelo do botão (R124). |
 | `FfmpegActivity.kt` | Hub das ferramentas FFmpeg. |
 | `FfmpegCutActivity.kt` | Cortar vídeo. |
 | `FfmpegJoinVideosActivity.kt` | Juntar vídeos. |

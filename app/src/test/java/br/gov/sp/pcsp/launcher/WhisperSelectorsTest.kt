@@ -94,6 +94,64 @@ class WhisperSelectorsTest {
         assertEquals(Hardware.CPU, WhisperSelectors.effective(null, true, true, 0))
     }
 
+    /**
+     * R124/T02 — VACINA da regressão da revisão R123 §3: o hardware é decidido
+     * pelo modelo que o JOB roda, não pelo modelo do BOTÃO.
+     *
+     * O caso real do PJA110: botão em um modelo do whisper.cpp, turbo aceito
+     * pela oferta de modelo sem pacote ORT e o pacote v3 instalado. Na 81 isso
+     * rodava na NPU; na candidata ia para a CPU porque o "turbo" era calculado
+     * pelo modelo do botão.
+     */
+    @Test
+    fun `hardware pelo modelo efetivo do job e nao pelo modelo do botao`() {
+        // Botão em modelo SEM pacote ORT (o catálogo só atende turbo/small/tiny/base).
+        assertEquals(null, WhisperOrtModelCatalog.modeloParaPedido("ggml-medium"))
+        val turboDaOferta = WhisperSelectors.modeloEfetivoDoBotao("ggml-medium", WhisperOrtModelCatalog::modeloParaPedido)
+        assertEquals(WhisperOrtModelCatalog.MODEL, turboDaOferta)
+        // v3 instalado e SoC admitido: NPU, como na 81.
+        assertEquals(Hardware.NPU, WhisperSelectors.effectiveParaModelo(null, true, turboDaOferta, 3))
+
+        // O MESMO botão sem a oferta aceita continua em CPU: a NPU só atende o
+        // turbo, e o `tiny` não tem encoder W8A16 (tem export ORT e vai para a CPU).
+        assertEquals(WhisperOrtModelCatalog.MODEL_TINY, WhisperOrtModelCatalog.modeloParaPedido("tiny"))
+        assertEquals(Hardware.CPU, WhisperSelectors.effectiveParaModelo(null, true, WhisperOrtModelCatalog.MODEL_TINY, 3))
+    }
+
+    /** R124/T02 — mesmo botão sem pacote ORT com oferta aceita e pacote v2: `NPU→CPU`, nunca `CPU`. */
+    @Test
+    fun `modelo efetivo turbo com pacote v2 fica na rota hibrida`() {
+        val turboDaOferta = WhisperSelectors.modeloEfetivoDoBotao("ggml-medium", WhisperOrtModelCatalog::modeloParaPedido)
+        assertEquals(Hardware.HYBRID, WhisperSelectors.effectiveParaModelo(null, true, turboDaOferta, 2))
+    }
+
+    /** R124/T02 — o `small` tem pacote ORT próprio e roda na CPU (nunca NPU). */
+    @Test
+    fun `modelo small com pacote ORT fica na CPU`() {
+        val small = WhisperSelectors.modeloEfetivoDoBotao("small", WhisperOrtModelCatalog::modeloParaPedido)
+        assertEquals(WhisperOrtModelCatalog.MODEL_SMALL, small)
+        assertEquals(Hardware.CPU, WhisperSelectors.effectiveParaModelo(null, true, small, 3))
+    }
+
+    /** R124/T02 — a escolha salva de CPU vence o turbo do job. */
+    @Test
+    fun `escolha salva de CPU vence o turbo do job`() {
+        val turboDaOferta = WhisperSelectors.modeloEfetivoDoBotao("ggml-medium", WhisperOrtModelCatalog::modeloParaPedido)
+        assertEquals(Hardware.CPU, WhisperSelectors.effectiveParaModelo(Hardware.CPU, true, turboDaOferta, 3))
+    }
+
+    /**
+     * R124/T02 — o pedido sem modelo resolvível (nenhum pacote ORT no botão)
+     * cai no turbo, que é a única rota que a oferta consentida deixa rodar.
+     */
+    @Test
+    fun `pedido sem pacote ORT resolve para o turbo pela oferta`() {
+        val semPacote: (String?) -> String? = { null }
+        assertEquals(WhisperSelectors.MODELO_TURBO, WhisperSelectors.modeloEfetivoDoBotao("qualquer", semPacote))
+        // A constante pura tem de acompanhar o catálogo do produto.
+        assertEquals(WhisperOrtModelCatalog.MODEL, WhisperSelectors.MODELO_TURBO)
+    }
+
     @Test
     fun `ORT ignora o valor salvo do Flash Attention`() {
         assertFalse(WhisperSelectors.flashAttention(true, true))

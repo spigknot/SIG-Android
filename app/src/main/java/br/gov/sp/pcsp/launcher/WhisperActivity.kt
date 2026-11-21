@@ -39,6 +39,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
 import com.arthenica.ffmpegkit.FFmpegKit
@@ -1491,16 +1492,72 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
         return if (check.manifesto.pontaAPonta) 3 else 2
     }
 
-    private fun hardwareChoice(hardware: WhisperSelectors.Hardware): WhisperSelectors.Choice {
-        val turbo = selectedModel?.label?.let(WhisperOrtModelCatalog::modeloParaPedido) == WhisperOrtModelCatalog.MODEL
-        return WhisperSelectors.choice(hardware, admittedNpu(), turbo, verifiedNpuVersion())
-    }
+    /**
+     * Modelo EFETIVO que o despacho usaria para o modelo do BOTÃO.
+     *
+     * R124/T02 — o rótulo, o menu e o despacho têm de decidir pelo mesmo
+     * modelo. `modeloParaPedido(botão)` ou, quando ele é nulo (pedido sem
+     * pacote ORT), o turbo, que é o único modelo que a oferta consentida
+     * deixa rodar. Usar o modelo do BOTÃO aqui era o defeito da revisão
+     * R123 §3: `tiny` no botão + turbo aceito dava `CPU` no lugar da NPU.
+     */
+    private fun modeloEfetivoDoDespacho(): String? = WhisperSelectors.modeloEfetivoDoBotao(
+        selectedModel?.label,
+        WhisperOrtModelCatalog::modeloParaPedido,
+    )
 
-    private fun ortHardware(): WhisperSelectors.Hardware {
-        val saved = WhisperSelectors.Hardware.fromPreference(selectorPrefs.getString("ort_hardware", null))
-        val turbo = selectedModel?.label?.let(WhisperOrtModelCatalog::modeloParaPedido) == WhisperOrtModelCatalog.MODEL
-        return WhisperSelectors.effective(saved, admittedNpu(), turbo, verifiedNpuVersion())
-    }
+    private fun hardwareChoice(hardware: WhisperSelectors.Hardware): WhisperSelectors.Choice =
+        WhisperSelectors.choice(
+            hardware,
+            admittedNpu(),
+            modeloEfetivoDoDespacho() == WhisperOrtModelCatalog.MODEL,
+            verifiedNpuVersion(),
+        )
+
+    /**
+     * Hardware da TELA (rótulo e menu): o mesmo que o despacho usaria.
+     *
+     * R124/T02 — antes calculava o "turbo" pelo `selectedModel`; agora pelo
+     * modelo EFETIVO do despacho ([modeloEfetivoDoDespacho]).
+     */
+    private fun ortHardware(): WhisperSelectors.Hardware = WhisperSelectors.effectiveParaModelo(
+        WhisperSelectors.Hardware.fromPreference(selectorPrefs.getString("ort_hardware", null)),
+        admittedNpu(),
+        modeloEfetivoDoDespacho(),
+        verifiedNpuVersion(),
+    )
+
+    /**
+     * Hardware de um JOB: sempre pelo modelo EFETIVO resolvido no despacho.
+     *
+     * R124/T02 — o despacho chamava `ortHardware()`, que decide pelo modelo do
+     * BOTÃO. Com `tiny` no botão e o turbo aceito pela oferta, o job rodava o
+     * turbo e viajava `hardware = CPU`: a NPU da 81 se perdia na atualização
+     * (revisão R123 §3). O modelo e o hardware saem da mesma resolução.
+     */
+    private fun hardwareDoJob(modeloEfetivo: String?): WhisperSelectors.Hardware =
+        WhisperSelectors.effectiveParaModelo(
+            WhisperSelectors.Hardware.fromPreference(selectorPrefs.getString("ort_hardware", null)),
+            admittedNpu(),
+            modeloEfetivo,
+            verifiedNpuVersion(),
+        )
+
+    /**
+     * Despacho da rota ORT a partir da TELA — o método que a tela usa.
+     *
+     * R124/T03 — a célula do aparelho precisa despachar pelo MESMO caminho da
+     * tela (resolver o modelo efetivo e chamar [WhisperOrtRoute.transcribe]),
+     * sem passar pelo seletor de arquivos. `@VisibleForTesting` só existe para
+     * dar esse acesso; a produção chega aqui pelo picker, pelo botão ORT e pelo
+     * intent, como antes.
+     */
+    @VisibleForTesting
+    internal fun despacharOrtParaTeste(
+        uri: android.net.Uri,
+        modeloPedido: String?,
+        modeloEfetivoConsentido: String? = null,
+    ) = despacharOrt(uri, null, modeloPedido, modeloEfetivoConsentido)
 
     private fun selectOrtHardware(hardware: WhisperSelectors.Hardware) {
         selectorPrefs.edit().putString("ort_hardware", hardware.name).apply()
@@ -2014,7 +2071,10 @@ class WhisperActivity : AppCompatActivity(), JobCancelBridge.UiSink {
             } },
             // Threads do seletor compartilhado (default 4, máx 8, pedido do usuário).
             threads = WhisperOrtRoute.threadsEfetivos(this),
-            hardware = ortHardware(),
+            // R124/T02 — o hardware sai do modelo EFETIVO deste job, o mesmo
+            // que vai em `modelo` logo abaixo. O modelo do BOTÃO não decide
+            // mais a rota (revisão R123 §3).
+            hardware = hardwareDoJob(efetivo),
             vad = vadSelection(),
             // Modelo efetivo desta entrada (adendo 17 §1): override consentido
             // ou resolução do pedido — nunca outro pacote por engano.

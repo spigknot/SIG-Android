@@ -62,6 +62,49 @@ internal object WhisperSelectors {
         } ?: Hardware.CPU
     }
 
+    /**
+     * Hardware EFETIVO de um JOB, pelo modelo que o job vai rodar.
+     *
+     * R124/T02 — a tela decidia o hardware com o modelo do BOTÃO
+     * (`selectedModel`) enquanto o job rodava o modelo EFETIVO
+     * (`modeloEfetivoConsentido ?: modeloParaPedido(...)`). Com `tiny` no botão
+     * e o turbo aceito pela oferta, a 81 rodava na NPU e a candidata caía na
+     * CPU: regressão que bloqueava a 82 (revisão R123 §3).
+     *
+     * A regra é [effective] com o "turbo" vindo do modelo efetivo, e vale
+     * tanto para o DESPACHO quanto para o rótulo e o menu, que precisam mostrar
+     * a mesma decisão que o despacho usaria.
+     */
+    fun effectiveParaModelo(
+        saved: Hardware?,
+        admitted: Boolean,
+        modeloEfetivo: String?,
+        verifiedVersion: Int,
+    ): Hardware = effective(saved, admitted, modeloEfetivo == MODELO_TURBO, verifiedVersion)
+
+    /**
+     * Modelo efetivo que o DESPACHO usaria para [rotuloDoBotao], sem oferta
+     * consentida.
+     *
+     * R124/T02 — é `modeloParaPedido(botão)` (`resolverDoPedido`) ou, quando
+     * ele é nulo (pedido sem pacote ORT, que só roda pela oferta consentida do
+     * turbo), o próprio [MODELO_TURBO].
+     *
+     * Existe porque o rótulo e o menu da tela têm de mostrar o hardware que o
+     * despacho usaria, e o modelo EFETIVO não está no rótulo do botão.
+     */
+    fun modeloEfetivoDoBotao(
+        rotuloDoBotao: String?,
+        resolverDoPedido: (String?) -> String?,
+    ): String? = resolverDoPedido(rotuloDoBotao) ?: MODELO_TURBO
+
     /** Ordem do padrão sem escolha salva: a melhor rota pronta primeiro. */
     private val PADRAO_SEM_ESCOLHA = listOf(Hardware.NPU, Hardware.HYBRID, Hardware.CPU)
+
+    /**
+     * Rótulo do turbo no catálogo ORT. O `WhisperSelectors` é puro (sem
+     * Android), por isso repete a constante do catálogo, e o teste garante que
+     * as duas não divergem.
+     */
+    const val MODELO_TURBO = "whisper-large-v3-turbo"
 }
